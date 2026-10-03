@@ -12,8 +12,12 @@ either way.
 import os
 import threading
 
+import vmn_exp.core.index as experiment_index
+from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.status import run_state_observed_at
 from vmn_exp.ui import index as ui_index
+from vmn_exp.ui.cache_health import SqliteHealth
+from vmn_exp.ui.cache_resync import WorkspaceCache
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.refresher import InlineRefresher
@@ -58,7 +62,6 @@ def _latest_memoized(snap):
 
 
 def _open_journal(ws, storage, cache_path):
-    from vmn_exp.core.index_store import SqliteStore
     from vmn_exp.storage.journal_sinks import journal_list_fn
     from vmn_exp.ui.journal_follow import WorkspaceJournal
 
@@ -77,6 +80,7 @@ class ExperimentSource:
         self.refresher = refresher or InlineRefresher()
         self._indexes = {}  # workspace name -> WorkspaceIndex
         self._journals = {}  # store workspace name -> WorkspaceJournal
+        self._caches = {}  # workspace name -> WorkspaceCache
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
         self._lock = threading.Lock()
@@ -93,11 +97,56 @@ class ExperimentSource:
         metrics *schema* when one is given."""
         if s3_storage is not None:
             cache_path = ui_index.s3_cache_path(self._db_dir, ws)
-            return ui_index.app_snapshot(
+            snap = ui_index.app_snapshot(
                 s3_storage, app_name, cache_path, self.refresher, schema,
                 self._journal(ws, s3_storage, cache_path), ws.reconcile_sec,
             )
-        return self.workspace_index(ws).snapshot(app_name, self.refresher, schema)
+            self._heal(ws, app_name, s3_storage, cache_path, lambda: experiment_index.shared_index(
+                s3_storage, app_name, cache_path))
+            return snap
+        index = self.workspace_index(ws)
+        snap = index.snapshot(app_name, self.refresher, schema)
+        self._heal(ws, app_name, index.storage, index.db_path, lambda: index.index_of(app_name))
+        return snap
+
+    def cache(self, ws, cache_path=None):
+        """The workspace's :class:`WorkspaceCache` (resync, status, healing)."""
+        with self._lock:
+            if ws.name not in self._caches:
+                self._caches[ws.name] = self._new_cache(ws, cache_path)
+            return self._caches[ws.name]
+
+    def caches(self):
+        with self._lock:
+            return dict(self._caches)
+
+    def _new_cache(self, ws, cache_path):
+        if cache_path is None and ws.kind != "git":
+            cache_path = ui_index.s3_cache_path(self._db_dir, ws)
+        elif cache_path is None:
+            cache_path = self._indexes[ws.name].db_path if ws.name in self._indexes else None
+        health = SqliteHealth(cache_path) if cache_path else None
+        # Inline refreshes check on every request, background ones per tick.
+        cache = WorkspaceCache(ws.name, cache_path, health,
+                               journal_of=lambda: self._journals.get(ws.name),
+                               check_sec=getattr(self.refresher, "interval_sec", 0))
+        if cache_path:
+            cache.on_swapped(lambda: self._reopen(ws.name, cache_path))
+        return cache
+
+    def _reopen(self, ws_name, cache_path):
+        """A rebuild renamed a new file over *cache_path*: reconnect to it."""
+        journal = self._journals.get(ws_name)
+        if journal is not None:
+            journal.use_cache(SqliteStore(cache_path))
+        if ws_name in self._indexes:
+            self._indexes[ws_name].reopen()
+
+    def _heal(self, ws, app_name, storage, cache_path, index_of):
+        """Note what *app_name* is served from, and check the cache's health."""
+        cache = self.cache(ws, cache_path)
+        cache.note(app_name, storage, index_of)
+        cache.tick()
 
     def _journal(self, ws, storage, cache_path):
         """The store workspace's journal reader (background refresh only)."""
@@ -137,3 +186,4 @@ class ExperimentSource:
         with self._lock:
             self._indexes.pop(ws_name, None)
             self._journals.pop(ws_name, None)
+            self._caches.pop(ws_name, None)

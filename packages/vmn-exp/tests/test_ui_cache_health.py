@@ -57,3 +57,9 @@ def test_rearm_accepts_the_current_file(tmp_path):
     _cache(tmp_path)
     health.rearm()
     assert health.problem() is None
+
+
+def test_a_cache_created_after_arming_is_accepted(tmp_path):
+    health = SqliteHealth(str(tmp_path / "cache.sqlite"))
+    _cache(tmp_path)
+    assert health.problem() is None

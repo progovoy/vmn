@@ -96,6 +96,21 @@ class WorkspaceIndex:
         self._storage = exp_reader.experiment_storage(root_path)
 
     @property
+    def db_path(self):
+        return self._db_path
+
+    def index_of(self, app_name):
+        """The index :meth:`snapshot` serves *app_name* from."""
+        if self._db_path:
+            return experiment_index.shared_index(self._storage, app_name, self._db_path)
+        return self._in_memory_index(app_name)
+
+    def reopen(self):
+        """Reconnect the versions cache (a rebuild swapped the file)."""
+        with self._lock:
+            self._cache = SqliteStore(self._db_path or ":memory:")
+
+    @property
     def storage(self):
         """The workspace's experiment storage, shared by every request."""
         return self._storage

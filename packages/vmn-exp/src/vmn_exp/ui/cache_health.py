@@ -43,6 +43,10 @@ class SqliteHealth:
 
     def problem(self):
         identity = _identity(self.path)
+        if self._identity is None:  # not created yet when armed: the first one counts
+            self._identity = identity
+            if identity is None:
+                return None
         if identity is None:
             return "missing"
         if identity != self._identity:

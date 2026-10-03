@@ -20,6 +20,7 @@ from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.ui import (
     routes_admin,
+    routes_cache,
     routes_leaderboard,
     routes_lineage,
     routes_media,
@@ -524,6 +525,14 @@ def create_app(
         return _git_workspace(ws_name).path, _app_name(app_tag)
 
     routes_admin.register(app, API_PREFIX)
+
+    def _cache_of(ws_name):
+        ws = _experiment_workspace(ws_name)
+        if ws.kind == "git":
+            source.workspace_index(ws)
+        return source.cache(ws)
+
+    routes_cache.register(app, API_PREFIX, _cache_of, source.caches)
     def _report_index(ws_name):
         ws = _experiment_workspace(ws_name)
         return report_indexes.get(ws, _any_exp_storage(ws))

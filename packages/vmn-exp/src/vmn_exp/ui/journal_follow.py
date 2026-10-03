@@ -34,6 +34,11 @@ class WorkspaceJournal:
         self._indexes = {}  # (area, app key) -> index
         self._lock = threading.Lock()
 
+    def use_cache(self, cache):
+        """Keep the cursor in *cache* from now on (the cache was rebuilt)."""
+        self._cache = cache
+        self._cache.kv_put(self._scope, _CURSOR_FINGERPRINT, self._reader.cursor)
+
     @property
     def cursor(self):
         return self._reader.cursor
