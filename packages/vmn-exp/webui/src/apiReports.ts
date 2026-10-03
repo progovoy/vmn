@@ -1,5 +1,5 @@
 /** Reports and comments API (plan 13 §8.1), all under /workspaces/{ws}. */
-import { del, get, patch, post } from "./http";
+import { appTag, del, get, patch, post } from "./http";
 
 export interface ReportRow {
   rid: string;
@@ -74,6 +74,11 @@ const cmt = (ws: string, target: string, id: string) =>
 export const apiReports = {
   listReports: (ws: string, archived = false) =>
     get<{ reports: ReportRow[] }>(`${ws_(ws)}/reports?archived=${archived}`),
+  /** Reports whose panels show *app* (or, with *verstr*, that run). */
+  reportsUsing: (ws: string, app: string, verstr?: string) =>
+    get<{ reports: ReportRow[] }>(
+      `${ws_(ws)}/apps/${appTag(app)}/reports${verstr ? `?verstr=${encodeURIComponent(verstr)}` : ""}`,
+    ),
   getReport: (ws: string, rid: string) => get<ReportDetail>(rep(ws, rid)),
   getRevision: (ws: string, rid: string, n: number) => get<Revision>(`${rep(ws, rid)}/revisions/${n}`),
   getPanelData: (ws: string, rid: string, n: number, panel: string) =>

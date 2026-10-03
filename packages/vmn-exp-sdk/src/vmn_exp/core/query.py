@@ -73,7 +73,7 @@ ROW_FIELDS = frozenset(
 # ``metrics`` holds the numeric fold, which is what sorting and charts use;
 # ``tags`` holds the run's current tags, always strings.
 # ``env`` holds the environment summary dict (python, packages, …).
-DICT_PREFIXES = ("metrics", "params", "tags", "env")
+DICT_PREFIXES = ("metrics", "params", "tags", "env", "comments")
 
 # Three-part fields: ``inputs.<name>.<sub>`` and ``outputs.<artifact path>.<sub>``
 # (quote a key with a dot or slash in it: ``outputs."model.pkl".digest``).
@@ -217,30 +217,40 @@ def tokenize(text):
 # ---------------------------------------------------------------------------
 
 
-def _getter(name, pos):
+def _field(name, pos):
+    """The AST field node *name* reads: ``("path", keys)`` or
+    ``("env_packages", package)``."""
     if isinstance(name, tuple) and len(name) == 3:
-        return _nested_getter(*name, pos)
+        return _nested_field(*name, pos)
     if isinstance(name, tuple):
         prefix, key = name
         if prefix in DICT_PREFIXES:
-            return lambda row: (row.get(prefix) or {}).get(key)
+            return ("path", (prefix, key))
         _fail(f"unknown field '{prefix}.{key}'", pos)
     parts = name.split(".")
     if len(parts) == 1:
         if name not in ROW_FIELDS:
             _fail(f"unknown field '{name}'", pos)
-        return lambda row: row.get(name)
+        return ("path", (name,))
     if len(parts) == 2 and parts[0] in DICT_PREFIXES:
-        prefix, key = parts
-        return lambda row: (row.get(prefix) or {}).get(key)
+        return ("path", tuple(parts))
     if len(parts) == 3:
         p0, p1, p2 = parts
         if p0 in NESTED_SUBFIELDS:
-            return _nested_getter(p0, p1, p2, pos)
+            return _nested_field(p0, p1, p2, pos)
         if p0 == "env" and p1 == "packages":
-            return lambda row: _env_packages(row).get(p2)
-        _fail(f"unknown field '{name}'", pos)
+            return ("env_packages", p2)
     _fail(f"unknown field '{name}'", pos)
+
+
+def _nested_field(prefix, key, sub, pos):
+    """``inputs.<name>.<sub>`` / ``outputs.<artifact path>.<sub>``."""
+    allowed = NESTED_SUBFIELDS.get(prefix)
+    if allowed is None:
+        _fail(f"unknown field '{prefix}.\"{key}\".{sub}'", pos)
+    if sub not in allowed:
+        _fail(f"{prefix}.{key}.{sub}: sub-field must be {', '.join(allowed)}", pos)
+    return ("path", (prefix, key, sub))
 
 
 def _env_packages(row):
@@ -249,14 +259,18 @@ def _env_packages(row):
     return env.get("packages") or env.get("key_packages") or {}
 
 
-def _nested_getter(prefix, key, sub, pos):
-    """``inputs.<name>.<sub>`` / ``outputs.<artifact path>.<sub>``."""
-    allowed = NESTED_SUBFIELDS.get(prefix)
-    if allowed is None:
-        _fail(f"unknown field '{prefix}.\"{key}\".{sub}'", pos)
-    if sub not in allowed:
-        _fail(f"{prefix}.{key}.{sub}: sub-field must be {', '.join(allowed)}", pos)
-    return lambda row: ((row.get(prefix) or {}).get(key) or {}).get(sub)
+def _getter(field):
+    kind, arg = field
+    if kind == "env_packages":
+        return lambda row: _env_packages(row).get(arg)
+
+    def get(row):
+        value = row
+        for key in arg:
+            value = (value or {}).get(key)
+        return value
+
+    return get
 
 
 def _is_number(value):
@@ -302,6 +316,27 @@ _COMPARISONS = {
 }
 
 
+_CANONICAL_OPS = {"==": "=", "contains": "~"}
+
+
+def _predicate(node):
+    """Compile an AST *node* (see :func:`parse_query`) to ``row -> bool``."""
+    kind = node[0]
+    if kind in ("or", "and"):
+        terms = [_predicate(term) for term in node[1]]
+        combine = any if kind == "or" else all
+        return lambda row: combine(term(row) for term in terms)
+    if kind == "not":
+        inner = _predicate(node[1])
+        return lambda row: not inner(row)
+    get = _getter(node[1])
+    if kind == "in":
+        values = node[2]
+        return lambda row: any(_equal(get(row), value) for value in values)
+    compare, literal = _COMPARISONS[node[2]], node[3]
+    return lambda row: compare(get(row), literal)
+
+
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
@@ -340,28 +375,24 @@ class _Parser:
         return token
 
     def parse(self):
-        predicate = self.parse_or()
+        tree = self.parse_or()
         if self.peek()[0] != "end":
             _fail(f"unexpected {_describe(self.peek())}", self.peek()[2])
-        return predicate
+        return tree
 
-    # A chain of and/or terms is one flat predicate, not a nested closure per
-    # term, so a 20k-term query evaluates without deep recursion.
+    # A chain of and/or terms is one flat node, not a nested one per term, so
+    # a 20k-term query evaluates without deep recursion.
     def parse_or(self):
         terms = [self.parse_and()]
         while self.accept("kw", "or"):
             terms.append(self.parse_and())
-        if len(terms) == 1:
-            return terms[0]
-        return lambda row: any(term(row) for term in terms)
+        return terms[0] if len(terms) == 1 else ("or", tuple(terms))
 
     def parse_and(self):
         terms = [self.parse_not()]
         while self.accept("kw", "and"):
             terms.append(self.parse_not())
-        if len(terms) == 1:
-            return terms[0]
-        return lambda row: all(term(row) for term in terms)
+        return terms[0] if len(terms) == 1 else ("and", tuple(terms))
 
     def parse_not(self):
         token = self.peek()
@@ -377,8 +408,7 @@ class _Parser:
 
     def _parse_nested(self):
         if self.accept("kw", "not"):
-            inner = self.parse_not()
-            return lambda row: not inner(row)
+            return ("not", self.parse_not())
         self.expect("(", "(", "'('")
         inner = self.parse_or()
         self.expect(")", ")", "')'")
@@ -389,16 +419,12 @@ class _Parser:
         if token[0] != "name":
             _fail(f"expected a field name, found {_describe(token)}", token[2])
         self.next()
-        get = _getter(token[1], token[2])
+        field = _field(token[1], token[2])
 
         negate = bool(self.accept("kw", "not"))
         if self.accept("kw", "in"):
-            values = self.parse_literal_list()
-
-            def matches(row):
-                return any(_equal(get(row), value) for value in values)
-
-            return (lambda row: not matches(row)) if negate else matches
+            node = ("in", field, tuple(self.parse_literal_list()))
+            return ("not", node) if negate else node
         if negate:
             _fail("expected 'in' after 'not'", self.peek()[2])
 
@@ -409,8 +435,7 @@ class _Parser:
         literal = self.parse_literal()
         if operator[1] in ("~", "!~", "contains") and not isinstance(literal, str):
             _fail(f"'{operator[1]}' needs a string on the right", operator[2])
-        compare = _COMPARISONS[operator[1]]
-        return lambda row: compare(get(row), literal)
+        return ("cmp", field, _CANONICAL_OPS.get(operator[1], operator[1]), literal)
 
     def parse_literal(self):
         token = self.next()
@@ -435,6 +460,19 @@ class _Parser:
 
 
 @functools.lru_cache(maxsize=256)
+def parse_query(text):
+    """The AST of query *text*: ``("or"|"and", [nodes])``, ``("not", node)``,
+    ``("in", field, [literals])`` or ``("cmp", field, op, literal)``, with
+    ``op`` one of ``= != < <= > >= ~ !~`` and ``field`` either
+    ``("path", keys)`` (nested dict keys from the row) or
+    ``("env_packages", package)``. Raises :class:`QueryError` like
+    :func:`compile_query`; the SQL backend compiles the same tree."""
+    if not text or not text.strip():
+        raise QueryError("empty query")
+    return _Parser(text).parse()
+
+
+@functools.lru_cache(maxsize=256)
 def compile_query(text):
     """Compile query *text* into a ``row -> bool`` predicate.
 
@@ -445,9 +483,7 @@ def compile_query(text):
     stateless closure over the parsed expression, so it is safe to share. An
     exception is not cached — a bad query re-raises from a fresh parse.
     """
-    if not text or not text.strip():
-        raise QueryError("empty query")
-    return _Parser(text).parse()
+    return _predicate(parse_query(text))
 
 
 @functools.lru_cache(maxsize=256)

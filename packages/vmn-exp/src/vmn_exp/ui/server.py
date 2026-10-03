@@ -26,6 +26,7 @@ from vmn_exp.ui import (
     routes_comments,
     routes_models,
     routes_reports,
+    routes_search,
     routes_series,
     routes_sweep,
     routes_tree,
@@ -35,11 +36,13 @@ from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
+from vmn_exp.ui.tenancy import install_org_middleware
 from vmn_exp.ui.readers import changelog as changelog_reader
 from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -71,6 +74,7 @@ def create_app(
     auth=None,
     role_mappings=(),
     control_plane=None,
+    search_dsn=None,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -80,7 +84,8 @@ def create_app(
     static *token*; with neither the API is open. *role_mappings* map OIDC
     groups to roles (``{group, workspace or "*", role}``). A *control_plane*
     enables API tokens (``vmnx_...`` bearer tokens, managed under
-    ``/api/v1/tokens``) and the audit log."""
+    ``/api/v1/tokens``) and the audit log. A Postgres *search_dsn* answers
+    ``/api/v1/search`` in SQL."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.jobs import JobRunner, build_command
@@ -114,6 +119,9 @@ def create_app(
     app.state.refresher = refresher
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher)
     leaderboards = LeaderboardCache()
+    report_indexes = ReportIndexes(
+        os.path.join(manager.data_dir, "index") if use_index else None, background_refresh
+    )
     app_lists = TTLCache(APPS_TTL_SEC)
     # One client per store workspace: building one resolves credentials, and its
     # prefix probes are worth keeping across requests.
@@ -124,6 +132,7 @@ def create_app(
         app.include_router(router)
 
     install_audit_middleware(app)
+    install_org_middleware(app, getattr(manager, "tenancy", "single"))
 
     @app.middleware("http")
     async def _authenticate(request: Request, call_next):
@@ -240,6 +249,7 @@ def create_app(
             raise HTTPException(404, str(e))
         # A later workspace of the same name may point elsewhere.
         source.forget(ws_name)
+        report_indexes.forget(ws_name)
         app_lists.pop(ws_name)
         store_storages.pop(ws_name, None)
         edit_storages.pop(ws_name, None)
@@ -344,6 +354,9 @@ def create_app(
         # Record-relative paths (artifacts/a/b/c.txt), each part one segment.
         if not valid_artifact_path(filename):
             raise HTTPException(400, f"Invalid artifact name '{filename}'")
+        redirect = routes_media.signed_redirect(ws, app_name, verstr, filename)
+        if redirect is not None:
+            return redirect
         download_name = filename.rsplit("/", 1)[-1]
         # The backend resolves the file — a local path, or an S3 object streamed
         # straight through — and refuses names that leave the run's dir.
@@ -511,7 +524,16 @@ def create_app(
         return _git_workspace(ws_name).path, _app_name(app_tag)
 
     routes_admin.register(app, API_PREFIX)
-    routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards)
+    def _report_index(ws_name):
+        ws = _experiment_workspace(ws_name)
+        return report_indexes.get(ws, _any_exp_storage(ws))
+
+    def _comment_counts(ws_name, app_tag):
+        index = _report_index(ws_name)
+        return index.comment_counts(_app_name(app_tag)), index.generation
+
+    routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
+                                _comment_counts)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
@@ -522,8 +544,23 @@ def create_app(
         return _any_exp_storage(_experiment_workspace(ws_name))
 
     routes_models.register(app, API_PREFIX, _ws_storage)
-    routes_reports.register(app, API_PREFIX, _ws_storage)
+    routes_reports.register(app, API_PREFIX, _ws_storage, _report_index)
     routes_comments.register(app, API_PREFIX, _ws_storage)
+
+    def _search_scopes(ws_names):
+        for ws_name in ws_names:
+            ws = _workspace(ws_name)
+            for row in sorted(list_apps(ws_name), key=lambda r: r["name"]):
+                name = row["name"]
+                schema = _app_schema(ws, name)
+                yield ws_name, name, source.snapshot(ws, name, _exp_storage_for(ws), schema)
+
+    search_sql = None
+    if search_dsn:
+        from vmn_exp.ui.search_pg import PgRowSearch
+
+        search_sql = PgRowSearch(search_dsn)
+    routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
