@@ -73,7 +73,7 @@ ROW_FIELDS = frozenset(
 # ``metrics`` holds the numeric fold, which is what sorting and charts use;
 # ``tags`` holds the run's current tags, always strings.
 # ``env`` holds the environment summary dict (python, packages, …).
-DICT_PREFIXES = ("metrics", "params", "tags", "env")
+DICT_PREFIXES = ("metrics", "params", "tags", "env", "comments")
 
 # Three-part fields: ``inputs.<name>.<sub>`` and ``outputs.<artifact path>.<sub>``
 # (quote a key with a dot or slash in it: ``outputs."model.pkl".digest``).

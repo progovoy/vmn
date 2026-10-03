@@ -14,6 +14,7 @@ import AppendMetrics from "../components/AppendMetrics";
 import LiveToggle from "../components/LiveToggle";
 import NoteEditor from "../components/NoteEditor";
 import Comments from "../components/Comments";
+import ReportsUsing from "../components/ReportsUsing";
 import { commentTarget } from "../apiReports";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
@@ -165,6 +166,7 @@ export default function Run() {
       </div>
 
       {detail ? <RunBody ws={ws} app={app} appName={appName} detail={detail} /> : <Skeleton />}
+      <ReportsUsing ws={ws} app={appName} verstr={summary.verstr} />
       <aside className="card run-comments" aria-label="Comments">
         <div className="eyebrow">Comments</div>
         <Comments ws={ws} target={commentTarget.run(appName, summary.verstr)} />

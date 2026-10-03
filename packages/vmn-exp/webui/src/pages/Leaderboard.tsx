@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { appName as toAppName } from "../api";
+import ReportsUsing from "../components/ReportsUsing";
 import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
 import { branchClause, combineQueries, searchClause } from "../util/searchQuery";
 import { metricGoal, pollIntervalMs } from "../util";
@@ -235,6 +236,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
               {data.moreError && <span className="error">{data.moreError}</span>}
             </div>
           )}
+          <ReportsUsing ws={ws} app={appName} />
           <div className="cli-card">
             vmn-exp list {appName}{sortLabel ? ` --sort ${sortLabel}` : ""}
           </div>
