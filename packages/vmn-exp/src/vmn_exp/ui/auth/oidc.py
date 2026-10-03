@@ -12,7 +12,7 @@ import hashlib
 import json
 import secrets
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from urllib.parse import urlencode
 
 from vmn_exp.ui.auth.oidc_http import UrllibHttp
@@ -57,8 +57,10 @@ def jwt_claims(token):
 
 
 def roles_for_groups(groups, mappings):
+    """*mappings*: ``{group, workspace, role}`` dicts or config ``RoleMapping``s."""
     roles = {}
     for m in mappings:
+        m = asdict(m) if is_dataclass(m) else m
         if m["group"] in groups:
             roles[m["workspace"]] = stronger(roles.get(m["workspace"]), m["role"])
     return check_roles(roles)

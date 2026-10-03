@@ -11,16 +11,24 @@ from vmn_exp.core.index import ExperimentIndex
 
 
 class ElectedIndex:
-    def __init__(self, storage, app_name, cache_store, election):
+    def __init__(self, storage, app_name, cache_store, election, workspace_id=0, org_id=None):
         self.app_name = app_name
+        self.workspace_id = workspace_id
+        self.org_id = org_id
         self._election = election
+        self._cache_store = cache_store
         self._leader = ExperimentIndex(storage, app_name, cache_store=cache_store)
         self._follower = ExperimentIndex.follower(cache_store, app_name)
         self.leading = False
 
     @property
     def scope(self):
-        return f"index:{self.app_name}"
+        return f"index:{self.org_id or 0}:{self.workspace_id}:{self.app_name}"
+
+    @property
+    def wake_key(self):
+        """The ``vmn_gen`` payload its leader's saves notify."""
+        return f"{self.workspace_id}:{self.app_name}"
 
     @property
     def full_sweep_sec(self):
@@ -37,6 +45,26 @@ class ElectedIndex:
     @journaled.setter
     def journaled(self, value):
         self._leader.journaled = value
+
+    @property
+    def generation(self):
+        return self._current().generation
+
+    @property
+    def record_count(self):
+        return self._current().record_count
+
+    @property
+    def drift(self):
+        return self._leader.drift
+
+    @property
+    def last_reconcile_at(self):
+        return self._leader.last_reconcile_at
+
+    def adopt(self, other, store=None):
+        """A rebuild's records, persisted into the shared cache by default."""
+        self._leader.adopt(other, store or self._cache_store)
 
     def hint(self, name):
         self._leader.hint(name)
