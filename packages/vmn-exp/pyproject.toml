@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,8 @@ name = "vmn-exp"
 version = "0.1.3"  # written by `vmn stamp vmn_exp`, shared with vmn-exp-sdk
 description = "vmn experiment platform: the vmn-exp CLI, dashboard and git-mode capture"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE.txt"]
 authors = [{ name = "Pavel Rogovoy", email = "p.rogovoy@gmail.com" }]
 requires-python = ">=3.8"
 dependencies = [

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,8 @@ name = "vmn"
 version = "0.10.2-rc.13"  # written by `vmn stamp` (version_backends in .vmn/vmn/conf.yml)
 description = "Stamping utility"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE.txt"]
 authors = [{ name = "Pavel Rogovoy", email = "p.rogovoy@gmail.com" }]
 requires-python = ">=3.8"
 dependencies = [
