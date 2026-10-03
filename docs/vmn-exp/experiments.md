@@ -373,7 +373,7 @@ leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
 `vmn exp list my_app` with vmn-exp installed). Actions: `create`, `run`,
 `add`, `list`, `show`, `compare`, `diff`, `restore`, `export`, `prune`,
 `tag`, `archive`, `unarchive`, `rewind`, `rerun`, `push`, `watch`,
-`importance`, `lineage`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
+`compact`, `importance`, `lineage`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
 ([sweeps.md](sweeps.md)), `vmn-exp model` ([models.md](models.md)),
 `vmn-exp ui` ([ui.md](ui.md)).
 
@@ -389,7 +389,7 @@ Flags shared by most actions:
 
 | Flag | Description |
 |---|---|
-| `-v, --version <ref>` | the run (repeatable for `compare`/`diff`/`prune`/`push`) |
+| `-v, --version <ref>` | the run (repeatable for `compare`/`diff`/`prune`/`push`/`compact`) |
 | `--latest` | the most recent run |
 | `--store <uri>` | experiment store URI; see [Storage](#storage-local-s3-gcs-azure-plugins) |
 | `--bucket` / `--prefix` / `--endpoint-url` | shorthand for an `s3://` store |
@@ -716,7 +716,9 @@ Needs `-v`/`--latest` and `--step N` (≥ 0). Nothing is deleted: a
 `{"type": "rewind", "step": N}` entry is appended, and every reader (`show`,
 `list`, the index, the UI, `list_runs`) ignores earlier entries with a step
 past N. Step-less entries (params, notes, tags) are never hidden. A run that
-derives `running` is refused. Takes the repo lock, honours the store flags,
+derives `running` is refused. A run whose metrics are already
+[compacted](#metric-storage) gets its `.vmx` rebuilt without the hidden
+points. Takes the repo lock, honours the store flags,
 and works git-free. The UI's `exp_rewind` job action runs it. To rewind and
 continue in one go, use `start_run(run_id=<ref>, rewind_to_step=N)`
 ([sdk.md](sdk.md#rewinding-a-run)); to branch instead, `--fork-from`.
@@ -800,6 +802,27 @@ delivered alert is recorded in the run's `alerts_sent.yml` (keyed by
 `finished_at` or the last heartbeat), so a run that recovers and stalls again
 alerts again, and a `failed` alert the supervisor already sent is not
 repeated. An alert no sink accepted is retried on the next pass.
+
+`--compact` also [compacts](#compact) the metrics of every `failed` or
+`stuck` run on each pass (a writer that died never compacted itself); with
+it, no alert sink is needed.
+
+### `compact`
+
+Build the compacted metric file (`metrics/<writer>.vmx`, see
+[Metric storage](#metric-storage)) of runs whose writer ended before doing so:
+
+```sh
+vmn-exp compact my_app -v @3 -v @4      # these runs
+vmn-exp compact my_app --all-finished   # every succeeded or failed run
+```
+
+Takes run refs (`-v`, repeatable) or `--all-finished`, exactly one of the two.
+Prints `<verstr> compacted (N writers)` or `<verstr> up-to-date` per run and
+exits 1 when one failed. A named run that is `running` is refused (it compacts
+itself at its end); `--all-finished` never picks running or stuck runs. Already
+compacted writers are left alone. `vmn-exp watch --compact` does the same for
+failed/stuck runs.
 
 ### `importance`
 
@@ -1066,7 +1089,8 @@ factory)` does the same at runtime. The contract:
 
 - **Records**: `<root>/<area>/<scope>/<name>/` (scope = app key, model name,
   ...) holding `metadata.yml`, patch files, per-writer
-  `log/<writer>[@<seq>].jsonl`, `run_state.yml`, `outputs/` and `artifacts/`.
+  `log/<writer>[@<seq>].jsonl`, `metrics/` (see [Metric storage](#metric-storage)),
+  `run_state.yml`, `outputs/` and `artifacts/`.
   `metadata.yml` makes a record exist: write it last, delete it first.
   Implement the abstract methods (`save`, `load_record`, `list_snapshots`,
   `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
@@ -1101,7 +1125,7 @@ backends are built.
 
 - **One directory (or key prefix) per run**: `metadata.yml`, `run_state.yml`,
   `env.yml`, `alerts_sent.yml`, one append-only `log/<writer>.jsonl` per
-  writer, `outputs/` (vmn's own files: `output.log`, `media/<name>/<step>.png`,
+  writer, its metric files under `metrics/` ([below](#metric-storage)), `outputs/` (vmn's own files: `output.log`, `media/<name>/<step>.png`,
   `tables/<name>/<step>.json`) and `artifacts/` (the user's only, so any name
   is free). `metadata.yml` is written last, so a half-created run is never
   listed. Local writes are atomic (temp + rename).
@@ -1131,10 +1155,38 @@ backends are built.
   listable and downloadable. Names may be nested relative paths; absolute
   paths, `..`, `.`, empty components, backslashes and NUL are refused.
 - **Format version**: new runs (and registry records) store `format_version`
-  (currently 1) covering metadata, log lines and `run_state.yml`. `list`,
+  (currently 2) covering metadata, log lines, metric files and `run_state.yml`. `list`,
   `show`, the UI and the SDK skip records from a newer format with a warning
   to upgrade, and records without it (v1) with a warning to run
   `vmn-exp migrate`.
+
+### Metric storage
+
+Metric values are not JSONL log lines. Each writer records them columnar
+(int64 steps and microsecond timestamps, float64 values, per key):
+
+- **While the run is live**: an append-only stream `metrics/<writer>.vms`, one
+  block per flush (the SDK batches like the log). A remote store gets the
+  appended blocks as segments `metrics/<writer>@<seq>.vms` on each sync. A
+  long writer also seals a part `metrics/<writer>@p<k>.vmx` every 10M points it
+  appends, so live readers don't decode the whole stream.
+- **Compacted at the end**: when a writer finishes (`finish()`/exit of an SDK
+  run within its final upload wait, `vmn-exp run` at the child's exit, the
+  importers), its points become one indexed file `metrics/<writer>.vmx`, which
+  replaces its stream objects and parts. Per key it holds the points sorted on
+  the key's axis in separately compressed chunks plus a level-of-detail pyramid
+  of min/max buckets, and a footer indexing all of it, so a chart of any length
+  reads the footer and one small slice (byte-range reads on object stores).
+  Rewinds known at that time are applied; a later `rewind` rebuilds the file.
+- **Writers that died** keep their stream; it reads the same, just slower.
+  `vmn-exp compact` or `vmn-exp watch --compact` compacts them later. If
+  compaction does not finish within the final upload wait, the run warns
+  `metrics stay uncompacted (vmn-exp compact)`.
+
+Readers (`show`, the index, the UI, the SDK readers) merge every writer's
+files, and show the points as `metrics` entries in log views, so nothing
+reading a run changes. They still read the `metrics` entries of older JSONL
+logs.
 
 ### `migrate`
 

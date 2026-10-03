@@ -59,6 +59,36 @@ def evaluate(report, profile_name):
     return [] if budget["report_only"] else violations(report, budget)
 
 
+SERIES_BUDGETS = {
+    "bigseries": {"series_p95_ms": 150, "zoom_p95_ms": 150,
+                  "first_paint_max_bytes": 1_000_000, "overlay_max_ms": 2000},
+}
+# Tiny data, but a shared CI machine running tests in parallel: loose latencies.
+SERIES_BUDGETS["bigseries-tiny"] = dict(
+    SERIES_BUDGETS["bigseries"], series_p95_ms=2000, zoom_p95_ms=2000, overlay_max_ms=20_000)
+
+
+def series_violations(result, budget):
+    """Breaches of a :mod:`uiload.probe_series` *result* under *budget*."""
+    out = []
+    for route in ("series", "zoom"):
+        p95, limit = result[route].get("p95"), budget[f"{route}_p95_ms"]
+        if p95 is None or p95 > limit:
+            out.append(f"{route} p95 {p95}ms > {limit}ms")
+    if result["first_paint_bytes"] > budget["first_paint_max_bytes"]:
+        out.append(f"run page first paint {result['first_paint_bytes']} bytes"
+                   f" > {budget['first_paint_max_bytes']}")
+    if result["overlay_ms"] > budget["overlay_max_ms"]:
+        out.append(f"overlay {result['overlay_ms']:.0f}ms > {budget['overlay_max_ms']}ms")
+    if result["errors"]:
+        out.append(f"{result['errors']} failed requests")
+    return out
+
+
+def series_evaluate(result, profile_name):
+    return series_violations(result, SERIES_BUDGETS[profile_name])
+
+
 def correctness(api_counts, expected_counts, ambiguous_n, tolerance=0):
     """Statuses whose API count differs from the oracle's by more than the
     *ambiguous_n* jobs it could not decide (plus *tolerance*)."""

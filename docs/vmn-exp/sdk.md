@@ -59,7 +59,7 @@ registry functions `register_model`, `set_alias`, `remove_alias`,
 | Metrics you measured by hand | `vmn-exp create … --metrics k=v` |
 
 **An SDK run is indistinguishable from a CLI run on disk**: same verstr scheme,
-`metadata.yml`, per-writer JSONL log and `run_state.yml`. `vmn-exp
+`metadata.yml`, per-writer JSONL log, per-writer metric files and `run_state.yml`. `vmn-exp
 list/show/compare`, the dashboard and remote sync work on SDK runs unchanged,
 and mixing the two is fine (`vmn-exp add` a number to a run your script opened).
 
@@ -217,6 +217,14 @@ finished sees everything it logged). A reader never sees half a line, and live
 readers (`vmn-exp show`, the UI) see a metric within about a second. A forked
 child writing through an inherited `Run`, or a write after `finish()`, goes
 straight to the store.
+
+**Metrics are not JSONL lines.** `log_metric`/`log_metrics` values go to the
+writer's columnar metric stream (`metrics/<writer>.vms`, one block per batch),
+and `finish()` compacts it into an indexed `metrics/<writer>.vmx` within the
+final upload wait (`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`); a run killed first
+keeps its stream until `vmn-exp compact`. See
+[Metric storage](experiments.md#metric-storage). The JSONL log keeps
+everything else (params, notes, tags, artifacts, media entries).
 
 Metric values are stored as floats:
 
@@ -657,7 +665,7 @@ only when a checkout is found and `app_name`/`storage` are not both given.
 | `get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)` | see [Lineage](#lineage) |
 | `param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None, include_archived=False)` | `[{"param", "importance", "correlation", "spearman", "kind", "n"}]`, most important first, over the runs `list_runs` would return. `importance` is a random-forest share (sums to 1); correlations are `None` for categorical params ([details](experiments.md#importance)). `ValueError` when no run carries `metric` |
 | `runs_dataframe(app_name=None, **list_runs_kwargs)` | pandas, below |
-| `get_metric_history(metric, app_name=None, ref="latest", *, storage=None)` | pandas, below |
+| `get_metric_history(metric, app_name=None, ref="latest", *, storage=None, step_range=None, max_points=None)` | pandas, below |
 
 A row carries each metric's [summary](#metric-goals-and-summaries) (the last
 value unless declared otherwise), `params`, `tags`, `inputs`, `outputs`, `name`,
@@ -695,6 +703,11 @@ loss = get_metric_history("loss", "my_app", ref="@3")   # columns: step, timesta
   `metrics.<k>` is the fold the query language sees, numeric params included.
 - `get_metric_history` is every logged value of one metric in one run, in log
   order (`step` is `None` where none was logged); empty if never logged.
+  `step_range=(lo, hi)` (inclusive) keeps only those steps; `max_points`
+  min/max-thins the series to about that many points.
+- The readers' API and output did not change when metrics moved out of the
+  JSONL log: `get_run()["log"]` still lists `metrics` entries (rebuilt from the
+  metric files), and `series`, row metrics and summaries read the same.
 
 ### Lineage
 

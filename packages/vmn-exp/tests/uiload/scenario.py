@@ -81,6 +81,42 @@ def get_profile(name):
     return PROFILES[name]
 
 
+@dataclasses.dataclass(frozen=True)
+class SeriesProfile:
+    """A static (no live jobs) metric-volume profile (plan 12 §10 4b): *big*
+    runs with long series, *wide* runs with many keys, and *overlay* runs a
+    comparison chart overlays one key of. Seeded by :mod:`uiload.seed_series`
+    and measured by :mod:`uiload.probe_series` against ``slo.SERIES_BUDGETS``."""
+    name: str
+    big_runs: int
+    big_steps: int
+    big_keys: int
+    wide_runs: int
+    wide_steps: int
+    wide_keys: int
+    overlay_runs: int
+    overlay_steps: int
+    series_points: int  # max_points of a series / zoom request
+    probe_requests: int  # requests per measured route
+
+    @property
+    def seeded_runs(self):
+        return self.big_runs + self.wide_runs + self.overlay_runs
+
+
+SERIES_PROFILES = {
+    p.name: p
+    for p in (
+        SeriesProfile("bigseries", 50, 1_000_000, 50, 1, 10_000, 5000, 1000, 10_000, 2000, 200),
+        SeriesProfile("bigseries-tiny", 2, 5000, 4, 1, 50, 300, 30, 100, 2000, 10),
+    )
+}
+
+
+def get_series_profile(name):
+    return SERIES_PROFILES[name]
+
+
 def flatten(jobs):
     """Yield every job, each outer followed by its nested children."""
     for job in jobs:
