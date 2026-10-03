@@ -285,7 +285,8 @@ def auto_init(vmn_ctx):
 
 # Actions that never write the store (they take no repo lock either).
 READ_ONLY_ACTIONS = frozenset({"list", "show", "compare", "diff", "export", "import-mlflow",
-                               "watch", "lineage", "importance"})
+                               "watch", "lineage", "importance",
+                               "export-metrics"})
 
 
 def _open_checked_storage(vcs, params, action, args=None):
@@ -363,6 +364,10 @@ def handle_experiment(vmn_ctx):
         return experiment_watch(vcs, storage, _app_name(vcs, args), args)
     elif action == "rewind":
         return experiment_rewind(vcs, params, storage, args)
+    elif action == "export-metrics":
+        from vmn_exp.cli.export_metrics import experiment_export_metrics
+
+        return experiment_export_metrics(storage, _app_name(vcs, args), args)
     elif action == "compact":
         from vmn_exp.cli.compact import experiment_compact
 

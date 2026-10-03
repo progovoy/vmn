@@ -826,6 +826,25 @@ numeric param counts as its median, a missing categorical value as its own
 category. Past 5000 runs a deterministic sample of 5000 is scored. An unknown
 metric or bad query exits 1. SDK: `reader.param_importance`.
 
+### `export-metrics`
+
+```sh
+vmn-exp export-metrics my_app -v <ref> [-v <ref>...] [--keys loss acc] [-o metrics.parquet] [--format parquet|csv]
+```
+
+Writes the named runs' metric series as one long table with the columns
+`run, writer, key, step, ts, value` (`ts` in microseconds since the epoch; a
+step-less point has an empty `step`), so DuckDB, Polars or pandas can read it.
+`--keys` keeps only those metric keys. The format comes from `--format`, else
+from the `-o` suffix (`.csv` gives CSV); the default is `metrics.parquet`.
+Parquet needs pyarrow (`pip install "vmn-exp[parquet]"`); without it the command
+exits 1 and suggests `--format csv`, which needs nothing extra. Read-only (no
+repo lock).
+
+`vmn-exp compact my_app -v <ref>... | --all-finished` builds the compacted
+metric index of runs whose writer died before doing it itself (running runs are
+refused); `vmn-exp watch --compact` does the same for failed/stuck runs.
+
 ### `import-mlflow`
 
 Import runs from an MLflow FileStore or tracking server:

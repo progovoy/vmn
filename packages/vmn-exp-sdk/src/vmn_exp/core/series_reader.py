@@ -264,6 +264,13 @@ class SeriesReader:
                                                       min(start + size, len(cols) - 1)))]
         return kept + [_point(cols, len(cols) - 1)]
 
+    def rows(self, keys=None):
+        """``(writer, key, step, ts_us, value)`` of *keys* (default all), each
+        key in series order."""
+        for key in sorted(self.keys()) if keys is None else keys:
+            for ts, rank, step, value, _ in self._merged(key):
+                yield self._sources[rank][0], key, step, ts, value
+
     def entries_by_writer(self):
         """``{writer: metrics entries}`` for log views (rewinds not applied)."""
         return {writer: source.entries() for writer, source in self._sources}
