@@ -13,7 +13,10 @@ from vmn_exp.core.metric_files import (
     METRICS_DIR,
     group_metric_objects,
     indexed_name,
+    is_part_file,
     is_stream_file,
+    metric_writer,
+    part_name,
     stream_name,
     stream_writer_and_seq,
 )
@@ -62,18 +65,21 @@ class S3Metrics:
                 VMN_LOGGER.debug(f"Error reading {key}", exc_info=True)
             return None
 
-    def put_indexed(self, app_name, verstr, writer_id, path):
-        """Upload *path* as the writer's ``.vmx``; False if one is there."""
+    def put_indexed(self, app_name, verstr, writer_id, path, part=None, replace=False):
+        """Upload *path* as the writer's ``.vmx`` (or sealed *part*); False
+        if one is there and not *replace*."""
         prefix = self._record_prefix(app_name, verstr)
+        name = indexed_name(writer_id) if part is None else part_name(writer_id, part)
         with open(path, "rb") as f:
             data = f.read()
         try:
-            self._put(f"{prefix}/{indexed_name(writer_id)}", data, IfNoneMatch="*")
+            self._put(f"{prefix}/{name}", data, **({} if replace else {"IfNoneMatch": "*"}))
         except Exception as e:
             if is_taken(e):
                 return False
             raise
-        streams = [n for n in self._metric_sizes(app_name, verstr)
-                   if is_stream_file(n) and stream_writer_and_seq(n)[0] == writer_id]
-        self._delete_keys([f"{prefix}/{n}" for n in streams])
+        superseded = [n for n in self._metric_sizes(app_name, verstr)
+                      if (is_stream_file(n) or (part is None and is_part_file(n)))
+                      and metric_writer(n) == writer_id]
+        self._delete_keys([f"{prefix}/{n}" for n in superseded])
         return True

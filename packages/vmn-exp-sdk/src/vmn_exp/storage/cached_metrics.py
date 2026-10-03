@@ -12,6 +12,7 @@ stream and the remote base segment share a name.
 from vmn_exp.core.metric_block import intact_length
 from vmn_exp.core.metric_files import (
     is_indexed_file,
+    is_stream_file,
     metric_writer,
     stream_name,
     stream_writer_and_seq,
@@ -60,7 +61,7 @@ class CachedMetrics:
             return self._remote.read_range(app_name, verstr, name, offset, length)
         return data
 
-    def put_indexed(self, app_name, verstr, writer_id, path):
+    def put_indexed(self, app_name, verstr, writer_id, path, part=None, replace=False):
         """The ``.vmx`` goes to the remote (when it holds the record) and the
         local copy; the local one takes *path*."""
         if not self._ensure_local_record(app_name, verstr):
@@ -68,9 +69,9 @@ class CachedMetrics:
         stored = True
         remote = self.remote_for(app_name, verstr)
         if remote:
-            stored = remote.put_indexed(app_name, verstr, writer_id, path)
+            stored = remote.put_indexed(app_name, verstr, writer_id, path, part, replace)
         self._metric_state()["synced"].pop((app_name, verstr, writer_id), None)
-        return self._local.put_indexed(app_name, verstr, writer_id, path) and stored
+        return self._local.put_indexed(app_name, verstr, writer_id, path, part, replace) and stored
 
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
         """Ship the writer's intact blocks appended since the last sync."""
@@ -100,6 +101,7 @@ class CachedMetrics:
         objects = remote.metric_objects(app_name, verstr).get(writer_id, [])
         if any(is_indexed_file(n) for n, _ in objects):
             return None
-        seqs = [stream_writer_and_seq(n)[1] for n, _ in objects]
-        offset = sum(size for _, size in objects) if self._local_is_replica else 0
+        streams = [(n, size) for n, size in objects if is_stream_file(n)]
+        seqs = [stream_writer_and_seq(n)[1] for n, _ in streams]
+        offset = sum(size for _, size in streams) if self._local_is_replica else 0
         return offset, (max(seqs) + 1 if seqs else 0)

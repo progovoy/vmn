@@ -202,9 +202,10 @@ class SnapshotStorage(ABC):
         """Append one encoded block to the writer's ``metrics/`` stream."""
         raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
 
-    def put_indexed(self, app_name, verstr, writer_id, path):
-        """Store *path* as the writer's ``.vmx`` (never over one; False then)
-        and drop the stream objects it supersedes."""
+    def put_indexed(self, app_name, verstr, writer_id, path, part=None, replace=False):
+        """Store *path* as the writer's ``.vmx`` (never over one unless
+        *replace*; False then) and drop the stream objects and parts it
+        supersedes. With *part* k: the sealed part k, dropping the streams."""
         raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
 
     def metric_objects(self, app_name, verstr):

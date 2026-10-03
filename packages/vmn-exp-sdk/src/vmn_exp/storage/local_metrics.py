@@ -14,8 +14,10 @@ from vmn_exp.core.metric_files import (
     METRICS_DIR,
     group_metric_objects,
     indexed_name,
+    is_part_file,
     is_stream_file,
     metric_writer,
+    part_name,
     stream_name,
 )
 
@@ -80,29 +82,40 @@ class LocalMetrics:
         except FileNotFoundError:
             return None
 
-    def put_indexed(self, app_name, verstr, writer_id, path):
-        """Move *path* in as the writer's ``.vmx``; False if one is there."""
+    def put_indexed(self, app_name, verstr, writer_id, path, part=None, replace=False):
+        """Move *path* in as the writer's ``.vmx`` (or sealed *part*); False
+        if one is there and not *replace*."""
         if self._refuse_orphan_write(app_name, verstr, "a metric index"):
             return False
         record = self._snapshot_dir(app_name, verstr)
         self._metrics_dir(app_name, verstr, create=True)
-        dest = os.path.join(record, indexed_name(writer_id))
-        try:
-            os.link(path, dest)
-        except FileExistsError:
+        name = indexed_name(writer_id) if part is None else part_name(writer_id, part)
+        if not _move_in(path, os.path.join(record, name), replace):
             return False
-        except OSError:
-            if os.path.exists(dest):
-                return False
-            os.replace(path, dest)  # no hard links here (another filesystem)
-        else:
-            os.unlink(path)
-        self._drop_streams(record, writer_id)
+        self._drop_streams(record, writer_id, parts=part is None)
         os.utime(record)
         return True
 
-    def _drop_streams(self, record, writer_id):
+    def _drop_streams(self, record, writer_id, parts):
         sizes = _sizes(os.path.join(record, METRICS_DIR))
         for name in sizes:
-            if is_stream_file(name) and metric_writer(name) == writer_id:
+            dropped = is_stream_file(name) or (parts and is_part_file(name))
+            if dropped and metric_writer(name) == writer_id:
                 os.unlink(os.path.join(record, name))
+
+
+def _move_in(path, dest, replace):
+    if replace:
+        os.replace(path, dest)
+        return True
+    try:
+        os.link(path, dest)
+    except FileExistsError:
+        return False
+    except OSError:
+        if os.path.exists(dest):
+            return False
+        os.replace(path, dest)  # no hard links here (another filesystem)
+    else:
+        os.unlink(path)
+    return True

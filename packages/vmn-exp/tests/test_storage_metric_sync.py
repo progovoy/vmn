@@ -109,3 +109,22 @@ def test_every_metric_write_is_journaled(tmp_path):
     store.put_indexed(APP, V, W, str(path))
     entries = [decode_key(k) for k in sink.keys[before:]]
     assert [e.name for e in entries] == [V, V]
+
+
+def test_local_first_ships_the_blocks_appended_after_a_sealed_part(host, tmp_path):
+    from vmn_exp.core.metric_files import part_name
+
+    host.append_metric_block(APP, V, W, _block(1.0))
+    host.append_metric_block(APP, V, W, _block(2.0))
+    host.sync_metrics_to_remote(APP, V, W)
+    path = tmp_path / "p.vmx"
+    path.write_bytes(b"part")
+    assert host.put_indexed(APP, V, W, str(path), part=1)
+    assert _metric_keys() == [part_name(W, 1)]
+    host.append_metric_block(APP, V, W, _block(3.0))
+    host.sync_metrics_to_remote(APP, V, W)
+    assert _metric_keys() == sorted([part_name(W, 1), stream_name(W)])
+    remote = s3_storage()
+    [(name, size)] = [o for o in remote.metric_objects(APP, V)[W] if o[0].endswith(".vms")]
+    data = remote.read_range(APP, V, name, 0, size)
+    assert [list(b.keys["x"].values) for b in decode_blocks(data)] == [[3.0]]

@@ -117,3 +117,37 @@ def test_local_appends_truncate_a_torn_tail_first(tmp_path):
     fresh.append_metric_block(APP, V, W, _block(2.0))
     assert _read_all(fresh) == [[1.0], [2.0]]
     assert path.stat().st_size == len(_block(1.0)) + len(_block(2.0))
+
+
+def _file(tmp_path, name, data):
+    path = tmp_path / name
+    path.write_bytes(data)
+    return str(path)
+
+
+def test_a_sealed_part_replaces_the_streams_and_later_blocks_follow_it(store, tmp_path):
+    from vmn_exp.core.metric_files import part_name
+
+    store.append_metric_block(APP, V, W, _block(1.0))
+    assert store.put_indexed(APP, V, W, _file(tmp_path, "p", b"part1"), part=1)
+    store.append_metric_block(APP, V, W, _block(2.0))
+    names = [n for n, _ in store.metric_objects(APP, V)[W]]
+    assert names[0] == part_name(W, 1)
+    assert len(names) == 2 and names[1].endswith(".vms")
+    assert store.put_indexed(APP, V, W, _file(tmp_path, "q", b"again"), part=1) is False
+
+
+def test_the_final_index_drops_the_writers_parts(store, tmp_path):
+    store.append_metric_block(APP, V, W, _block(1.0))
+    store.put_indexed(APP, V, W, _file(tmp_path, "p", b"part1"), part=1)
+    store.append_metric_block(APP, V, W, _block(2.0))
+    assert store.put_indexed(APP, V, W, _file(tmp_path, "f", b"final"))
+    assert store.metric_objects(APP, V)[W] == [(indexed_name(W), 5)]
+    from vmn_exp.core.metric_files import part_name
+    assert store.read_range(APP, V, part_name(W, 1), 0, 5) is None
+
+
+def test_replace_rebuilds_an_indexed_file(store, tmp_path):
+    store.put_indexed(APP, V, W, _file(tmp_path, "a", b"first"))
+    assert store.put_indexed(APP, V, W, _file(tmp_path, "b", b"second"), replace=True)
+    assert store.read_range(APP, V, indexed_name(W), 0, 6) == b"second"
