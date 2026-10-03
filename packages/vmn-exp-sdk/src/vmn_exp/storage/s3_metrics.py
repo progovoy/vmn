@@ -65,6 +65,10 @@ class S3Metrics:
                 VMN_LOGGER.debug(f"Error reading {key}", exc_info=True)
             return None
 
+    def drop_indexed(self, app_name, verstr, writer_id):
+        prefix = self._record_prefix(app_name, verstr)
+        self._delete_keys([f"{prefix}/{indexed_name(writer_id)}"])
+
     def put_indexed(self, app_name, verstr, writer_id, path, part=None, replace=False):
         """Upload *path* as the writer's ``.vmx`` (or sealed *part*); False
         if one is there and not *replace*."""

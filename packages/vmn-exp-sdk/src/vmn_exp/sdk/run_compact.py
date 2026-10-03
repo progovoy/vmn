@@ -7,6 +7,7 @@ import threading
 import time
 
 from vmn_exp.core.metric_compact import compact_writer, record_rewinds
+from vmn_exp.core.metric_compact import reopen_writer as _reopen
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,3 +31,12 @@ def compact_by(storage, app_name, verstr, writer_id, deadline):
     worker.start()
     worker.join(remaining)
     return not worker.is_alive()
+
+
+def reopen_writer(storage, app_name, verstr, writer_id):
+    """Best effort: a resumed run streams on after its writer's ``.vmx``."""
+    try:
+        _reopen(storage, app_name, verstr, writer_id)
+    except Exception:
+        _LOGGER.warning(f"vmn: could not reopen run {verstr}'s compacted metrics",
+                        exc_info=True)

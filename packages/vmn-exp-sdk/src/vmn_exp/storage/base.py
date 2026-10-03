@@ -208,6 +208,10 @@ class SnapshotStorage(ABC):
         supersedes. With *part* k: the sealed part k, dropping the streams."""
         raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
 
+    def drop_indexed(self, app_name, verstr, writer_id):
+        """Delete the writer's final ``.vmx`` (a reopened writer streams on)."""
+        raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
+
     def metric_objects(self, app_name, verstr):
         """``{writer: [(name, size)]}`` of the visible metric objects."""
         return {}

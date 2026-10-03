@@ -106,3 +106,21 @@ def test_writers_seal_a_part_once_they_pass_the_seal_threshold(tmp_path, monkeyp
     names = _names(storage)
     assert is_part_file(names[0]) and is_stream_file(names[-1])
     assert len(_series(storage)["a"]) == 5
+
+
+def test_a_reopened_writer_keeps_its_index_as_a_part_and_streams_on(tmp_path):
+    from vmn_exp.core.metric_compact import reopen_writer
+
+    storage = _storage(tmp_path)
+    entries = _entries(random.Random(10), 200, 1_700_000_000_000_000)
+    _write(storage, "w", entries[:100])
+    compact_writer(storage, APP, V, "w")
+    assert reopen_writer(storage, APP, V, "w") == 1
+    _write(storage, "w", entries[100:])
+    reference = _storage(tmp_path / "ref")
+    _write(reference, "w", entries)
+    _same(_series(storage), _series(reference))
+    assert compact_writer(storage, APP, V, "w")
+    assert _names(storage) == [indexed_name("w")]
+    _same(_series(storage), _series(reference))
+    assert reopen_writer(storage, APP, V, "nobody") is None

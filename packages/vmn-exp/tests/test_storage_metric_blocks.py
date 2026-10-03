@@ -151,3 +151,13 @@ def test_replace_rebuilds_an_indexed_file(store, tmp_path):
     store.put_indexed(APP, V, W, _file(tmp_path, "a", b"first"))
     assert store.put_indexed(APP, V, W, _file(tmp_path, "b", b"second"), replace=True)
     assert store.read_range(APP, V, indexed_name(W), 0, 6) == b"second"
+
+
+def test_drop_indexed_removes_only_the_final_index(store, tmp_path):
+    from vmn_exp.core.metric_files import part_name
+
+    store.put_indexed(APP, V, W, _file(tmp_path, "p", b"part1"), part=1)
+    store.put_indexed(APP, V, W, _file(tmp_path, "f", b"final"))
+    store.put_indexed(APP, V, W, _file(tmp_path, "p2", b"part2"), part=2)
+    store.drop_indexed(APP, V, W)
+    assert store.metric_objects(APP, V)[W] == [(part_name(W, 2), 5)]

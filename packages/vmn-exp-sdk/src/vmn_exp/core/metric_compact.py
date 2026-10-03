@@ -30,15 +30,14 @@ def _objects(storage, app_name, verstr, writer):
 
 def writer_columns(storage, app_name, verstr, objects, rewinds=()):
     """``{stream key: Columns}`` of one writer's *objects*, less what *rewinds* hide."""
+    points = {}
     source = writer_source(storage, app_name, verstr, objects)
-    keys = {}
-    for name in source.counts():
-        points = [p for p in source.points(name) if not hidden(rewinds, p[0], p[1])]
-        if points:
-            stepless = points[0][1] is None
-            keys[name] = Columns(None if stepless else [p[1] for p in points],
-                                 [p[0] for p in points], [p[2] for p in points])
-    return keys
+    for name, ts, step, value in source.named_points():
+        if not hidden(rewinds, ts, step):
+            points.setdefault(name, []).append((ts, step, value))
+    return {name: Columns(None if p[0][1] is None else [x[1] for x in p],
+                          [x[0] for x in p], [x[2] for x in p])
+            for name, p in points.items()}
 
 
 def _put(storage, app_name, verstr, writer, data, **kwargs):
@@ -97,6 +96,22 @@ def seal_writer(storage, app_name, verstr, writer):
         return None
     k = max(parts, default=0) + 1
     return k if _put(storage, app_name, verstr, writer, build_index(writer, keys), part=k) else None
+
+
+def reopen_writer(storage, app_name, verstr, writer):
+    """Turn *writer*'s final ``.vmx`` into its next part, so a resumed writer's
+    new blocks are read after it; the part's number, or None."""
+    objects = _objects(storage, app_name, verstr, writer)
+    final = [(n, s) for n, s in objects if is_indexed_file(n)]
+    if not final:
+        return None
+    (name, size), = final
+    k = max((part_writer_and_k(n)[1] for n, _ in objects if is_part_file(n)), default=0) + 1
+    data = storage.read_range(app_name, verstr, name, 0, size)
+    if not data or not _put(storage, app_name, verstr, writer, data, part=k):
+        return None
+    storage.drop_indexed(app_name, verstr, writer)
+    return k
 
 
 def note_points(storage, app_name, verstr, writer, n):

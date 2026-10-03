@@ -15,6 +15,7 @@ from vmn_exp.core.metric_block import encode_block
 from vmn_exp.core.metric_columns import Columns
 
 _TWIN_SUFFIX = "@nostep"
+_INHERITED_SUFFIX = "@inherited"
 
 
 def stepless_twin(key):
@@ -22,8 +23,19 @@ def stepless_twin(key):
     return key + _TWIN_SUFFIX
 
 
+def inherited_twin(name):
+    """The ``.vmx`` name of a stream key's points a fork copied (plan 12 §5.4)."""
+    return name + _INHERITED_SUFFIX
+
+
+def is_inherited(name):
+    return name.endswith(_INHERITED_SUFFIX)
+
+
 def base_key(name):
-    """The metric a stream key records: *name* less a step-less twin suffix."""
+    """The metric a stream key records: *name* less its twin suffixes."""
+    if is_inherited(name):
+        name = name[: -len(_INHERITED_SUFFIX)]
     return name[: -len(_TWIN_SUFFIX)] if name.endswith(_TWIN_SUFFIX) else name
 
 

@@ -96,6 +96,14 @@ class LocalMetrics:
         os.utime(record)
         return True
 
+    def drop_indexed(self, app_name, verstr, writer_id):
+        record = self._snapshot_dir(app_name, verstr)
+        try:
+            os.unlink(os.path.join(record, indexed_name(writer_id)))
+        except FileNotFoundError:
+            return
+        os.utime(record)
+
     def _drop_streams(self, record, writer_id, parts):
         sizes = _sizes(os.path.join(record, METRICS_DIR))
         for name in sizes:

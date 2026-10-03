@@ -17,7 +17,7 @@ from vmn_exp.core.metric_entries import is_metric_entry, points_to_entries
 from vmn_exp.core.metric_files import INDEXED_SUFFIX
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_lod import emit, summarize
-from vmn_exp.core.metric_stream import base_key
+from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited
 from vmn_exp.core.metric_time import iso_to_us, us_to_iso
 from vmn_exp.core.rewind import rewind_step
 
@@ -36,6 +36,15 @@ class _StreamSource:
             for name, cols in block.keys.items():
                 counts[name] = counts.get(name, 0) + len(cols)
         return counts
+
+    def named_points(self):
+        """``(name, ts, step, value)`` of every point, a fork's copied ones
+        under their :func:`inherited_twin` name."""
+        for block in self.blocks:
+            for name in block.keys:
+                raw = inherited_twin(name) if block.inherited else name
+                for ts, step, value, _ in _StreamSource([block]).points(name):
+                    yield raw, ts, step, value
 
     def points(self, name):
         for block in self.blocks:
@@ -65,10 +74,19 @@ class _IndexedSource:
         for p in self.reader.points(name):
             yield p["ts"], p["step"], p["value"], None
 
+    def named_points(self):
+        for name in self.reader.keys():
+            for ts, step, value, _ in self.points(name):
+                yield name, ts, step, value
+
     def entries(self):
-        points = [(ts, step, base_key(name), value)
-                  for name in self.reader.keys() for ts, step, value, _ in self.points(name)]
-        return points_to_entries(sorted(points, key=lambda p: p[0]))
+        out = []
+        for inherited in (True, False):
+            points = [(ts, step, base_key(name), value)
+                      for name, ts, step, value in self.named_points()
+                      if is_inherited(name) == inherited]
+            out.extend(points_to_entries(sorted(points, key=lambda p: p[0]), inherited))
+        return out
 
 
 class _EntrySource:
@@ -140,6 +158,10 @@ class _ChainedSource:
     def points(self, name):
         for source in self.sources:
             yield from source.points(name)
+
+    def named_points(self):
+        for source in self.sources:
+            yield from source.named_points()
 
     def entries(self):
         return [e for source in self.sources for e in source.entries()]

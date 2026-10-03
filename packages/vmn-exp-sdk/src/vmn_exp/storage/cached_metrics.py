@@ -73,6 +73,13 @@ class CachedMetrics:
         self._metric_state()["synced"].pop((app_name, verstr, writer_id), None)
         return self._local.put_indexed(app_name, verstr, writer_id, path, part, replace) and stored
 
+    def drop_indexed(self, app_name, verstr, writer_id):
+        remote = self.remote_for(app_name, verstr)
+        if remote:
+            remote.drop_indexed(app_name, verstr, writer_id)
+        self._metric_state()["synced"].pop((app_name, verstr, writer_id), None)
+        self._local.drop_indexed(app_name, verstr, writer_id)
+
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
         """Ship the writer's intact blocks appended since the last sync."""
         remote = self.remote_for(app_name, verstr)

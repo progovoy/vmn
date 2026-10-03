@@ -58,7 +58,7 @@ from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
-from vmn_exp.sdk.run_compact import compact_by
+from vmn_exp.sdk.run_compact import compact_by, reopen_writer
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
@@ -188,6 +188,8 @@ def start_run(
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
             app_name, ref, storage
         )
+        # Its new metric blocks must not hide behind the finished run's .vmx.
+        reopen_writer(storage, app_name, verstr, get_writer_id())
         if rewind_to_step is not None:
             start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
     else:
