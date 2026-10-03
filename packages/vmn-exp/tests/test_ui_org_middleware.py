@@ -35,3 +35,13 @@ def test_multi_tenancy_refuses_a_principal_without_org():
 def test_single_tenancy_uses_org_zero():
     client = TestClient(_app(Principal("u", "u"), "single"))
     assert client.get("/api/x").json() == {"org": 0}
+
+
+def test_create_app_binds_orgs_in_multi_tenancy(tmp_path):
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
+
+    manager = WorkspaceManager(str(tmp_path), tenancy="multi")
+    client = TestClient(create_app(manager, token="t"))
+    r = client.get("/api/v1/workspaces", headers={"Authorization": "Bearer t"})
+    assert r.status_code == 403

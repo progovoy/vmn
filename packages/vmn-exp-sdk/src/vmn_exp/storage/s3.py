@@ -26,6 +26,7 @@ from vmn_exp.storage.files import (
     valid_artifact_path,
 )
 from vmn_exp.storage import host_dirs
+from vmn_exp.storage.s3_base import sigv4_client
 from vmn_exp.storage.s3_base import (  # noqa: F401  (re-exported)
     S3Base,
     app_keys,
@@ -187,7 +188,7 @@ class S3SnapshotStorage(S3Listing, S3Records, S3Logs, S3Base, SnapshotStorage):
         params = {"Bucket": self.bucket, "Key": key}
         if disposition:
             params["ResponseContentDisposition"] = disposition
-        return self._s3.generate_presigned_url(
+        return sigv4_client(self.endpoint_url).generate_presigned_url(
             "get_object", Params=params, ExpiresIn=expires, HttpMethod="GET"
         )
 
