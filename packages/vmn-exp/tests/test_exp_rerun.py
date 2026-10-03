@@ -64,7 +64,7 @@ def test_rerun_survives_pruning_original(app_layout):
     assert key not in code_objects(app_layout)
 
 
-def test_rerun_of_legacy_in_record_patches_promotes_code_object(app_layout):
+def test_rerun_refuses_legacy_in_record_patches(app_layout, caplog):
     orig = original_run(app_layout)
     storage = _storage(app_layout)
     app = app_layout.app_name
@@ -74,9 +74,9 @@ def test_rerun_of_legacy_in_record_patches_promotes_code_object(app_layout):
     code_storage(storage).delete(app, source["code"])
 
     rc, new = rerun(app_layout, orig)
-    assert rc == 0 and metric_values(app_layout, new) == [1.0]
-    assert meta(app_layout, new)["code"] == source["code"]
-    assert source["code"] in code_objects(app_layout)
+    assert rc == 1 and new is None
+    assert "vmn-exp migrate" in caplog.text
+    assert source["code"] not in code_objects(app_layout)
 
 
 def test_rerun_of_clean_run(app_layout):

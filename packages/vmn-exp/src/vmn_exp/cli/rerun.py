@@ -20,14 +20,13 @@ from vmn_exp.cli.run import _Supervision, _detect_python_exe
 from vmn_exp.core import rerun as core
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.code_store import (
-    code_key, find_code_key, resolve_code, store_code, stored_code,
+    find_code_key, resolve_code, stored_code,
 )
 from vmn_exp.core.env import capture_env_safe, should_capture
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.storage_resolve import experiment_dir
 from vmn_exp.core.writer import create_run
-from vmn_exp.snapshot import _patch_summary
 from version_stamp.api import VMN_LOGGER, now_iso
 
 
@@ -49,17 +48,6 @@ class Source:
     @property
     def code_verstr(self):
         return core.code_verstr_of(self.metadata)
-
-    @property
-    def code_key(self):
-        """The code object the rerun references: the original's, or — for a
-        legacy record holding its own patches — the one it gets promoted to."""
-        if self.metadata.get("code"):
-            return self.metadata["code"]
-        diff_hash = self.metadata.get("diff_hash")
-        if diff_hash and self.patches:
-            return code_key(self.code_verstr, diff_hash)
-        return None
 
 
 def experiment_rerun(vcs, params, storage, args, repo_lock=None):
@@ -199,7 +187,7 @@ def _claim(storage, args, source, env):
         return None, err
     note = args.note or f"rerun of {source.verstr}"
     template = core.rerun_template(source.metadata, source.verstr, note, now_iso())
-    key = _ensure_code(storage, source)
+    key = source.metadata.get("code")
     if key:
         template["code"] = key
     verstr = create_run(
@@ -209,18 +197,6 @@ def _claim(storage, args, source, env):
     )
     cli._append_inputs(storage, source.app_name, verstr, args.inputs)
     return verstr, None
-
-
-def _ensure_code(storage, source):
-    """The code key the rerun references, promoting a legacy record's
-    in-record patches into a code object once."""
-    if source.metadata.get("code"):
-        return source.metadata["code"]
-    key = source.code_key
-    if key and stored_code(storage, source.app_name, key) is None:
-        store_code(storage, source.app_name, key, source.patches,
-                   _patch_summary(source.patches))
-    return key
 
 
 def _create_data(source, args):

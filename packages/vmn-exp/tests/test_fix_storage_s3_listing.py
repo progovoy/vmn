@@ -1,4 +1,4 @@
-"""S3 listings at 10k+ runs: names by delimiter, files per record, legacy keys merged."""
+"""S3 listings at 10k+ runs: names by delimiter, files per record, the legacy key ignored."""
 import pytest
 from s3_helpers import (
     PREFIX,
@@ -102,39 +102,17 @@ def test_list_run_verstrs_is_empty_for_an_unstamped_code_verstr():
 LEGACY_META = b"verstr: old\napp_name: root/svc\ntimestamp: '2025-01-01T00:00:00Z'\n"
 
 
-def _with_legacy_and_new():
+def test_records_under_the_legacy_underscore_key_are_not_listed():
     put_raw(f"{PREFIX}/runs/root_svc/old/metadata.yml", LEGACY_META)
     s3 = s3_storage()
     s3.save("root/svc", "new", meta("new"), {})
-    return s3
+    assert [m["verstr"] for m in s3.list_snapshots("root/svc")] == ["new"]
+    assert s3.list_record_names("root/svc") == {"new": None}
+    assert set(s3.list_files("root/svc")) == {"new"}
+    assert set(s3.list_files("root/svc", keys=["old", "new"])) == {"new"}
 
 
-def test_legacy_records_stay_visible_next_to_new_ones():
-    s3 = _with_legacy_and_new()
-    assert [m["verstr"] for m in s3.list_snapshots("root/svc")] == ["old", "new"]
-    assert sorted(s3.list_verstrs("root/svc")) == ["new", "old"]
-    assert s3.list_record_names("root/svc") == {"new": None, "old": None}
-    assert set(s3.list_files("root/svc")) == {"new", "old"}
-    assert set(s3.list_files("root/svc", keys=["old", "new"])) == {"new", "old"}
-
-
-def test_another_apps_records_under_the_shared_legacy_key_stay_hidden():
-    s3 = _with_legacy_and_new()
-    put_raw(f"{PREFIX}/runs/root_svc/theirs/metadata.yml", b"verstr: theirs\napp_name: root_svc\n")
-    assert s3.list_record_names("root/svc") == {"new": None, "old": None}
-    assert set(s3.list_files("root/svc")) == {"new", "old"}
-    assert set(s3.list_files("root/svc", keys=["theirs", "old"])) == {"old"}
-
-
-def test_a_record_under_both_keys_is_listed_once_from_the_new_key():
-    put_raw(f"{PREFIX}/runs/root_svc/v/metadata.yml", b"verstr: v\ntimestamp: old\n")
-    s3 = s3_storage()
-    s3.save("root/svc", "v", meta("v", timestamp="new"), {})
-    snaps = s3.list_snapshots("root/svc")
-    assert [(m["verstr"], m["timestamp"]) for m in snaps] == [("v", "new")]
-
-
-def test_the_legacy_probe_is_not_repeated_every_listing():
+def test_a_root_app_listing_is_one_request():
     s3 = s3_storage()
     s3.save("root/svc", "new", meta("new"), {})
     s3.list_files("root/svc")

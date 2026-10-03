@@ -8,31 +8,18 @@
   The ``log/`` folder is part of a record's files (``log/<name>``): it costs a
   second, prefixed listing.
 
-A root app's records may live under the legacy ``root_svc`` key as well as the
-current ``root-svc`` one; every listing merges both, the current key winning.
-Whether the legacy key holds anything is probed once (and re-probed after
-:data:`_PROBE_TTL_SEC` while it holds nothing), so a steady poll stays one
-listing. The legacy key is ambiguous — ``root_svc`` is also a valid app name —
-so a record found there counts as the app's only when its metadata says so
-(or, for a record older than the ``app_name`` field, when the app has nothing
-under its current key: the rule reads used to follow).
 """
-
-import time
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import (
     LOG_DIR,
     METADATA_FILE,
-    checked_app_path,
     is_log_file,
     safe_verstr,
     unsafe_verstr,
 )
-from vmn_exp.storage.s3_base import app_keys, parallel_map
-
-_PROBE_TTL_SEC = 300
+from vmn_exp.storage.s3_base import parallel_map
 
 
 def _signature(obj):
@@ -59,67 +46,8 @@ def _record_relpath(base, key):
 
 
 class S3Listing:
-    def _app_prefixes(self, app_name):
-        """The app's key prefix, then the legacy one when it holds any data."""
-        keys = app_keys(checked_app_path(app_name))
-        prefixes = [self._key_prefix(app_name, app_key=key) for key in keys]
-        if len(prefixes) > 1 and not self._has_data(prefixes[1]):
-            del prefixes[1:]
-        return prefixes
-
-    def _has_data(self, prefix):
-        """Whether anything lives under *prefix*/ — a hit is cached for good
-        (data never moves between encodings), a miss for a while."""
-        found, probed_at = self._probes.get(prefix, (False, None))
-        now = time.monotonic()
-        if found or (probed_at is not None and now - probed_at < _PROBE_TTL_SEC):
-            return found
-        page = self._s3.list_objects_v2(
-            Bucket=self.bucket, Prefix=prefix + "/", MaxKeys=1
-        )
-        found = page.get("KeyCount", 0) > 0
-        self._probes[prefix] = (found, now)
-        return found
-
-    # -- the legacy key is shared: ``root_svc`` is also a valid app name -------
-
-    def _legacy_owner(self, prefix, name):
-        """The ``app_name`` recorded in a legacy record ("" when it predates
-        the field), or None while it has no metadata. Owners never change."""
-        cached = self._legacy_owners.get((prefix, name))
-        if cached is not None:
-            return cached
-        raw = self._get_or_raise(f"{prefix}/{safe_verstr(name)}/{METADATA_FILE}")
-        if raw is None:
-            return None
-        owner = (_base.parse_record_metadata(raw) or {}).get("app_name") or ""
-        self._legacy_owners[(prefix, name)] = owner
-        return owner
-
-    def _owned_legacy(self, app_name, prefix, names):
-        """The legacy-key *names* that are *app_name*'s: those recorded as its,
-        and unlabeled ones while the app has nothing under its current key."""
-        names = list(names)
-        owners = parallel_map(lambda name: self._legacy_owner(prefix, name), names)
-        unlabeled_ok = None
-        owned = set()
-        for name, owner in zip(names, owners):
-            if owner == "" and unlabeled_ok is None:
-                unlabeled_ok = not self._has_data(self._key_prefix(app_name))
-            if owner == app_name or (owner == "" and unlabeled_ok):
-                owned.add(name)
-        return owned
-
-    def _merge_legacy(self, app_name, by_key):
-        """*by_key* ``[(prefix, {verstr: value})]`` (current key first) merged:
-        the current key wins, the legacy one adds only the app's own records."""
-        (_, merged), *legacy = by_key
-        merged = dict(merged)
-        for prefix, found in legacy:
-            extra = {k: v for k, v in found.items() if k not in merged}
-            for key in self._owned_legacy(app_name, prefix, extra):
-                merged[key] = extra[key]
-        return merged
+    def _app_prefix(self, app_name):
+        return self._key_prefix(app_name)
 
     def _app_keys(self):
         base = self.prefix + "/"
@@ -127,7 +55,7 @@ class S3Listing:
 
     def _app_name_of(self, key):
         # The tag form (``root/svc`` → ``root-svc``) is bijective: ``-`` is
-        # illegal in app names. A legacy ``root_svc`` key lists as it is.
+        # illegal in app names.
         return key.replace("-", "/")
 
     def _names_under(self, prefix):
@@ -139,9 +67,7 @@ class S3Listing:
 
     def _names_by_prefix(self, app_name):
         """``{verstr: the app prefix it lives under}``."""
-        return self._merge_legacy(
-            app_name, [(p, self._names_under(p)) for p in self._app_prefixes(app_name)]
-        )
+        return self._names_under(self._app_prefix(app_name))
 
     def list_record_names(self, app_name):
         """``{name: None}`` for every record under the app — claims included —
@@ -160,21 +86,17 @@ class S3Listing:
         stamped. A record actually named *code_verstr* plus "." is a valid
         string prefix match on its own — no other code_verstr can share it
         (``0.0.10`` never matches a listing scoped to ``0.0.1.``) — so this
-        needs one HEAD (the bare name) and one listing (its ``.`` suffixes)
-        per app key, not a listing of the whole app.
+        needs one HEAD (the bare name) and one listing (its ``.`` suffixes),
+        not a listing of the whole app.
         """
         safe_code = safe_verstr(code_verstr)
-
-        def _for_prefix(prefix):
-            base = prefix + "/"
-            found = set()
-            if self._head(f"{base}{safe_code}/{METADATA_FILE}"):
-                found.add(code_verstr)
-            for cp in self._common_prefixes(f"{base}{safe_code}."):
-                found.add(unsafe_verstr(cp[len(base) :].rstrip("/")))
-            return found
-
-        return set().union(*parallel_map(_for_prefix, self._app_prefixes(app_name)))
+        base = self._app_prefix(app_name) + "/"
+        found = set()
+        if self._head(f"{base}{safe_code}/{METADATA_FILE}"):
+            found.add(code_verstr)
+        for cp in self._common_prefixes(f"{base}{safe_code}."):
+            found.add(unsafe_verstr(cp[len(base) :].rstrip("/")))
+        return found
 
     def _load_listed_metadata(self, meta_key):
         meta = _base.parse_record_metadata(self._get_or_raise(meta_key))
@@ -199,13 +121,7 @@ class S3Listing:
         only *keys*' (records that do not exist are left out)."""
         if keys is not None:
             return self._list_files_of(app_name, keys)
-        return self._merge_legacy(
-            app_name,
-            [
-                (p, self._all_record_files(p + "/"))
-                for p in self._app_prefixes(app_name)
-            ],
-        )
+        return self._all_record_files(self._app_prefix(app_name) + "/")
 
     def _all_record_files(self, base):
         """*base*'s record files, keyed by verstr.
@@ -240,17 +156,12 @@ class S3Listing:
             )
 
     def _list_files_of(self, app_name, keys):
-        prefixes = self._app_prefixes(app_name)
+        prefix = self._app_prefix(app_name)
         wanted = [key for key in keys if _base.valid_path_component(key)]
-        jobs = [(key, prefix) for key in wanted for prefix in prefixes]
         listed = parallel_map(
-            lambda job: self._files_at(f"{job[1]}/{safe_verstr(job[0])}/"), jobs
+            lambda key: self._files_at(f"{prefix}/{safe_verstr(key)}/"), wanted
         )
-        by_key = [
-            (prefix, {k: f for (k, p), f in zip(jobs, listed) if p == prefix and f})
-            for prefix in prefixes
-        ]
-        return self._merge_legacy(app_name, by_key)
+        return {key: files for key, files in zip(wanted, listed) if files}
 
     def _files_at(self, record_prefix):
         """One record's own files and logs, delimited: its other subtrees

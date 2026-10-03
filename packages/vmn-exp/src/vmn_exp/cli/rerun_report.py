@@ -26,7 +26,7 @@ def recipe(source):
         "command": list(inv.command),
         "cwd": inv.cwd or ".",
         "code_verstr": source.code_verstr,
-        "code": source.code_key,
+        "code": source.metadata.get("code"),
         "base_commit": source.metadata.get("base_commit"),
         "recipe": f"vmn-exp rerun {source.app_name} -v {source.verstr}",
         "export_recipe": _export_recipe(source),

@@ -3,7 +3,7 @@
 
 Keys: ``<prefix>/<app key>/<safe verstr>/<file>``. The app key is the tag form
 (``root/svc`` → ``root-svc``), which is injective because ``-`` is illegal in
-app names; reads fall back to the legacy ``root_svc`` form, which was not.
+app names. Legacy ``root_svc`` keys are rewritten by ``vmn-exp migrate``.
 
 The backend is assembled from halves that each own one concern: client and key
 helpers (:mod:`snapshot_storage_s3_base`), listings
@@ -28,7 +28,7 @@ from vmn_exp.storage.files import (
 from vmn_exp.storage import host_dirs
 from vmn_exp.storage.s3_base import (  # noqa: F401  (re-exported)
     S3Base,
-    app_keys,
+    app_key,
     error_code,
     is_missing,
 )

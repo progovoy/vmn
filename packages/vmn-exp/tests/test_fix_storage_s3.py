@@ -175,15 +175,14 @@ def test_s3_app_keys_are_injective():
     assert s3.list_verstrs("my/app") == ["v2"]
 
 
-def test_s3_reads_fall_back_to_the_legacy_underscore_prefix():
+def test_s3_reads_ignore_the_legacy_underscore_prefix():
     body = b"verstr: old\ntimestamp: '2025-01-01T00:00:00Z'\n"
     boto3.client("s3").put_object(
         Bucket=BUCKET, Key="exps/runs/root_svc/old/metadata.yml", Body=body
     )
     s3 = _s3()
-    assert [m["verstr"] for m in s3.list_snapshots("root/svc")] == ["old"]
-    assert s3.exists("root/svc", "old")
-    assert s3.load("root/svc", "old")[0]["verstr"] == "old"
+    assert s3.list_snapshots("root/svc") == []
+    assert not s3.exists("root/svc", "old")
 
 
 def test_list_apps_from_storage_decodes_app_names():

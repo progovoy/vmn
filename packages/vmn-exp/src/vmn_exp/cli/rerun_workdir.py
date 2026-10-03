@@ -12,7 +12,7 @@ Public API::
 
 *metadata*/*patches* are what ``storage.load`` returns: a code-store run's
 patches are its code object's (``vmn_exp.core.code_store.resolve_code``), a
-legacy run's are its own, and a run whose object is gone carries
+clean run has none, and a run whose object is gone carries
 ``code_missing`` and is refused. The recorded ``changesets`` place each dep
 at its path relative to the app, as islands do (``island_layout``), so
 ``../repo1`` resolves inside the workspace. Every checkout is a detached
