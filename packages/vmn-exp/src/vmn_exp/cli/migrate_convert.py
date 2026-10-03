@@ -3,14 +3,16 @@
 A record's files are ``{v2 name: source}``, a source being the v1 file name
 (copied or moved as is) or the new bytes. Each converter maps that dict to the
 next one; ``read(source)`` returns a source's bytes. Plan 12's metrics
-conversion is one more entry of :data:`RECORD_CONVERTERS`.
+conversion (:mod:`vmn_exp.cli.migrate_metrics`) is one more entry of
+:data:`RECORD_CONVERTERS`.
 """
 import json
 
 import yaml
 
+from vmn_exp.cli.migrate_metrics import convert_metrics
 from vmn_exp.core.logfiles import LOG_DIR, is_log_file
-from vmn_exp.core.record_format import with_format_version
+from vmn_exp.core.record_format import FORMAT_VERSION_KEY, RECORD_FORMAT_VERSION, stamped
 
 LEGACY_LOG_FILE = "log.yml"
 LEGACY_WRITER = "v1"
@@ -85,14 +87,14 @@ def stamp_format_version(files, read):
     if METADATA not in files:
         return files
     meta = yaml.safe_load(read(files[METADATA]))
-    if not isinstance(meta, dict) or "format_version" in meta:
+    if not isinstance(meta, dict) or meta.get(FORMAT_VERSION_KEY) == RECORD_FORMAT_VERSION:
         return files
-    dumped = yaml.dump(with_format_version(meta), sort_keys=True)
+    dumped = yaml.dump(stamped(meta), sort_keys=True)
     return dict(files, **{METADATA: dumped.encode()})
 
 
 RECORD_CONVERTERS = [move_logs, convert_legacy_log, move_outputs, fix_media_paths,
-                     stamp_format_version]
+                     convert_metrics, stamp_format_version]
 
 
 def convert_record(names, read):
