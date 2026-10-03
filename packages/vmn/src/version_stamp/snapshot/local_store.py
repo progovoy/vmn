@@ -105,13 +105,21 @@ def _v1_parts(kind, app_name):
     return None
 
 
+def _is_snapshot_record(metadata):
+    """A ``vmn snapshot`` record, not a stamp snapshot (``create_snapshots``)
+    that the local file backend keeps in the same ``.vmn/<app>/snapshots/``."""
+    return isinstance(metadata, dict) and "stamping" not in metadata and "vmn_info" not in metadata
+
+
 def _move_v1_record(src, dst):
     raw = _read_file(os.path.join(src, METADATA_FILE))
     if raw is None or os.path.lexists(dst):
         return
-    os.rename(src, dst)
     metadata = yaml_safe_load(raw)
-    if isinstance(metadata, dict) and "format_version" not in metadata:
+    if not _is_snapshot_record(metadata):
+        return
+    os.rename(src, dst)
+    if "format_version" not in metadata:
         _write_metadata(dst, metadata)
 
 

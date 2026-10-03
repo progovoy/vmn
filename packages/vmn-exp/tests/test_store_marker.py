@@ -2,16 +2,17 @@
 import errno
 import os
 import threading
+import time
 
 import boto3
 import pytest
 import yaml
-
 from s3_helpers import BUCKET, PREFIX, mocked_bucket
-from vmn_exp.storage import store_marker
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.store_marker import StoreLayoutError
 from vmn_exp.storage.uri import s3_uri
+
+from vmn_exp.storage import store_marker
 
 
 @pytest.fixture(autouse=True)
@@ -199,3 +200,25 @@ def test_local_marker_without_hard_links_created_once_under_race(tmp_path, monke
 
     _race(open_one)
     assert len(set(seen)) == 1
+
+
+def test_slow_creator_without_hard_links_never_exposes_an_empty_marker(tmp_path, monkeypatch):
+    _no_hard_links(monkeypatch, errno.EPERM)
+    replace = os.replace
+
+    def slow_replace(src, dst):
+        time.sleep(2.5)
+        replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", slow_replace)
+    root = str(tmp_path / "store")
+    seen = []
+
+    def open_one():
+        store_marker.forget_checked()
+        open_storage(None, root, area="runs")
+        seen.append(_read_local(root)["created_at"])
+
+    _race(open_one, n=4)
+    assert len(set(seen)) == 1
+    assert os.listdir(root) == ["store.yml"]

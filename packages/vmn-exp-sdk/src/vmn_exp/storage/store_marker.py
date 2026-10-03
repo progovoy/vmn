@@ -47,19 +47,24 @@ def new_marker():
             "journal": {"partition": "minute"}}
 
 
-def _create_exclusive(path, text, wait_sec=2.0):
-    """Create *path* holding *text* unless it exists — for filesystems
-    without hard links. A loser waits for the winner's content to land."""
+def _publish_locked(path, tmp, wait_sec=30.0):
+    """Publish *tmp* as *path* unless it exists — for filesystems without hard
+    links. An exclusive ``mkdir`` elects the one creator, which publishes with
+    an atomic rename, so no reader ever sees a partial marker; a loser waits
+    for the winner's marker to appear."""
+    lock = path + ".lock"
     try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        os.mkdir(lock)
     except FileExistsError:
         deadline = time.monotonic() + wait_sec
-        while os.path.getsize(path) == 0 and time.monotonic() < deadline:
+        while not os.path.exists(path) and time.monotonic() < deadline:
             time.sleep(0.01)
         return
-    with os.fdopen(fd, "w") as f:
-        os.fchmod(f.fileno(), 0o644)
-        f.write(text)
+    try:
+        if not os.path.exists(path):
+            os.replace(tmp, path)
+    finally:
+        os.rmdir(lock)
 
 
 class LocalRoot:
@@ -88,9 +93,10 @@ class LocalRoot:
         except FileExistsError:
             pass
         except OSError:
-            _create_exclusive(self._path(), text)
+            _publish_locked(self._path(), tmp)
         finally:
-            os.unlink(tmp)
+            if os.path.exists(tmp):
+                os.unlink(tmp)
 
     def entries(self):
         try:
