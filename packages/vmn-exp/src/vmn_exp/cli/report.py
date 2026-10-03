@@ -6,6 +6,7 @@ import json
 import os
 import sys
 
+from vmn_exp.cli import report_export
 from vmn_exp.registry.cli import _get_storage
 from vmn_exp.registry.cli_parser import _add_storage_args
 from vmn_exp.reports import store
@@ -22,8 +23,11 @@ def add_report_parser(subparsers):
     pshow = sub.add_parser("show", help="Print a report's latest revision")
     pshow.add_argument("rid")
     pshow.add_argument("--json", action="store_true", help="Machine-readable output")
-    pexport = sub.add_parser("export", help="Export a report as one HTML file (not yet)")
+    pexport = sub.add_parser("export", help="Export a report as one self-contained HTML file")
     pexport.add_argument("rid")
+    pexport.add_argument("--rev", type=int, default=None, help="Revision (default: the published one, else latest)")
+    pexport.add_argument("-o", "--output", default="report.html", help="Output file (default report.html)")
+    pexport.add_argument("--max-media-mb", type=float, default=20, help="Cap on inlined media (default 20)")
     pput = sub.add_parser("put", help="Save a markdown file as a report's next revision")
     pput.add_argument("rid", nargs="?", default=None)
     pput.add_argument("--new", action="store_true", help="Create a new report")
@@ -64,8 +68,32 @@ def _cmd_show(storage, args):
     return 0
 
 
+def _export_rev(report, args):
+    if args.rev is not None:
+        return args.rev
+    return report.get("published_rev") or report["rev"]
+
+
 def _cmd_export(storage, args):
-    return _error("vmn-exp report export is not yet implemented")
+    report = store.get(storage, args.rid)
+    if report is None:
+        return _error(f"Report {args.rid!r} not found")
+    rev = _export_rev(report, args)
+    revision = store.revision(storage, args.rid, rev)
+    if revision is None:
+        return _error(f"Report {args.rid!r} has no revision {rev}")
+    panels = report_export.panel_payloads(storage, args.rid, rev)
+    if not panels:
+        print(f"Revision {rev} is not published: panels will show no data", file=sys.stderr)
+    media, skipped = report_export.collect_media(storage, panels, int(args.max_media_mb * 1024 * 1024))
+    for uri in skipped:
+        print(f"Not inlined (missing or over --max-media-mb): {uri}", file=sys.stderr)
+    data = {"title": report.get("title") or args.rid, "rev": rev, "body": revision["body"],
+            "panels": panels, "media": media}
+    with open(args.output, "w", encoding="utf-8") as f:
+        f.write(report_export.build_html(data, *report_export.load_bundle()))
+    print(args.output)
+    return 0
 
 
 def _title_of(body, path):

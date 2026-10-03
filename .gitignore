@@ -18,7 +18,7 @@ dist
 !packages/vmn-exp/webui/index.html
 
 .mcp.json
-packages/vmn-exp/webui/node_modules/
+packages/vmn-exp/webui/node_modules
 packages/vmn-exp/webui/tsconfig.tsbuildinfo
 
 .claude/

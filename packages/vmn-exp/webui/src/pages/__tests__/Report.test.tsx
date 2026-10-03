@@ -5,10 +5,12 @@ import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../apiReports", async (orig) => ({
   ...(await orig<typeof import("../../apiReports")>()),
-  apiReports: { getReport: vi.fn(), getRevision: vi.fn(), listComments: vi.fn() },
+  apiReports: { getReport: vi.fn(), getRevision: vi.fn(), listComments: vi.fn(), publish: vi.fn() },
 }));
 vi.mock("../../reports/Panel", () => ({
-  default: ({ spec }: { spec: { id: string } }) => <div>panel {spec.id}</div>,
+  default: ({ spec, published }: { spec: { id: string }; published?: { rev: number } }) => (
+    <div>panel {spec.id}{published ? ` frozen ${published.rev}` : ""}</div>
+  ),
 }));
 
 import { apiReports } from "../../apiReports";
@@ -55,7 +57,7 @@ describe("Report page", () => {
     expect(await screen.findByRole("heading", { name: "Published body" })).toBeTruthy();
     expect(screen.getByText(/published 2026-01-05/)).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
-    expect(document.getElementById("p-loss")?.textContent).toBe("panel loss");
+    expect(document.getElementById("p-loss")?.textContent).toBe("panel loss frozen 1");
     fireEvent.click(screen.getByRole("button", { name: /view live/ }));
     expect(await screen.findByRole("heading", { name: "Draft body" })).toBeTruthy();
   });
@@ -98,5 +100,26 @@ describe("Report page", () => {
     renderReport();
     await screen.findByRole("heading", { name: "Published body" });
     await waitFor(() => expect(m.listComments).toHaveBeenCalledWith("w", "report:r1"));
+  });
+
+  it("renders the published revision's panels from their published data", async () => {
+    renderReport();
+    await screen.findByRole("heading", { name: "Published body" });
+    expect(document.getElementById("p-loss")?.textContent).toBe("panel loss frozen 1");
+  });
+
+  it("lets editors publish the draft with the panels' captured data", async () => {
+    m.getReport.mockResolvedValue(report({ can_edit: true }));
+    m.publish.mockResolvedValue({ rev: 2 });
+    renderReport();
+    await screen.findByRole("heading", { name: "Draft body" });
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(m.publish).toHaveBeenCalledWith("w", "r1", { rev: 2, data: {} }));
+  });
+
+  it("hides Publish from viewers", async () => {
+    renderReport("/ws/w/reports/r1?live=1");
+    await screen.findByRole("heading", { name: "Draft body" });
+    expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });
 });
