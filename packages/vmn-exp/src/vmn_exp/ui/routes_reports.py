@@ -24,8 +24,21 @@ def _check_patch(body):
     title = body.get("title", "x")
     if not isinstance(title, str) or not title.strip():
         raise HTTPException(400, "title must be a non-empty string")
-    if any(not isinstance(body.get(f, False), bool) for f in ("archived", "pinned")):
-        raise HTTPException(400, "archived and pinned must be booleans")
+    check_bools(body, "archived", "pinned")
+
+
+def check_bools(body, *fields):
+    """400 unless every one of *fields* present in *body* is a JSON boolean."""
+    if any(not isinstance(body.get(f, False), bool) for f in fields):
+        raise HTTPException(400, f"{' and '.join(fields)} must be booleans")
+
+
+def _is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _conflict(rev, body, author):
+    return JSONResponse({"rev": rev, "body": body, "author": author or {}}, status_code=409)
 
 
 def register(app, api_prefix, any_exp_storage, report_index):
@@ -101,14 +114,15 @@ def register(app, api_prefix, any_exp_storage, report_index):
         _require_rw()
         body = body or {}
         base_rev, text = body.get("base"), body.get("body")
-        if not isinstance(base_rev, int) or base_rev < 0 or not isinstance(text, str):
+        if not _is_int(base_rev) or base_rev < 0 or not isinstance(text, str):
             raise HTTPException(400, "base (integer) and body (string) are required")
-        storage, _ = _report(ws_name, rid)
+        storage, report = _report(ws_name, rid)
+        if base_rev > report["rev"]:
+            return _conflict(report["rev"], report["body"], report.get("author"))
         result = store.save(storage, rid, base_rev, text, str(body.get("message") or ""),
                             actor=author_of(request))
         if isinstance(result, store.Conflict):
-            return JSONResponse({"rev": result.rev, "body": result.body,
-                                 "author": result.author}, status_code=409)
+            return _conflict(result.rev, result.body, result.author)
         return {"rev": result}
 
     @app.post(f"{base}/{{rid}}/publish", dependencies=[require(EDITOR)])
