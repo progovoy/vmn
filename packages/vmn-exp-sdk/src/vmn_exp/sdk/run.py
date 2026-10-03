@@ -24,6 +24,7 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.metric_compact import compact_by, reopen_writer
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
 from vmn_exp.core.storage_resolve import _try_repo_root
@@ -58,7 +59,6 @@ from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
-from vmn_exp.sdk.run_compact import compact_by, reopen_writer
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
@@ -189,7 +189,7 @@ def start_run(
             app_name, ref, storage
         )
         # Its new metric blocks must not hide behind the finished run's .vmx.
-        reopen_writer(storage, app_name, verstr, get_writer_id())
+        _reopen_metrics(storage, app_name, verstr)
         if rewind_to_step is not None:
             start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
     else:
@@ -226,6 +226,14 @@ def start_run(
     if tags:
         run.set_tags(tags)
     return run
+
+
+def _reopen_metrics(storage, app_name, verstr):
+    try:
+        reopen_writer(storage, app_name, verstr, get_writer_id())
+    except Exception:
+        _LOGGER.warning(f"vmn: could not reopen run {verstr}'s compacted metrics",
+                        exc_info=True)
 
 
 def _record_resume_inputs(run, note, params):
@@ -427,8 +435,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         for what, writer in writers:
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
-        if not compact_by(self._storage, self.app_name, self.id, get_writer_id(), deadline):
-            _LOGGER.warning(f"vmn: run {self.id}'s metrics stay uncompacted (vmn-exp compact)")
+        compact_by(self._storage, self.app_name, self.id, get_writer_id(), deadline)
 
     def _duration(self):
         return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)

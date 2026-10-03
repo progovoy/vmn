@@ -13,6 +13,9 @@ live reader never decodes weeks of stream; the final ``.vmx`` merges them.
 import os
 import tempfile
 import threading
+import time
+
+from vmn_exp._base import VMN_LOGGER
 
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import is_indexed_file, is_part_file, part_writer_and_k
@@ -82,6 +85,30 @@ def compact_record(storage, app_name, verstr, rebuild=False):
     rewinds = record_rewinds(storage, app_name, verstr)
     return [w for w in writers
             if compact_writer(storage, app_name, verstr, w, rewinds, rebuild=rebuild)]
+
+
+def _compact_quietly(storage, app_name, verstr, writer):
+    try:
+        compact_writer(storage, app_name, verstr, writer,
+                       record_rewinds(storage, app_name, verstr))
+    except Exception:
+        VMN_LOGGER.debug("Metric compaction failed; the stream stays", exc_info=True)
+
+
+def compact_by(storage, app_name, verstr, writer, deadline):
+    """Compact *writer* at its end, waiting until *deadline* (monotonic): True
+    when done in time. Past it the stream stays (``vmn-exp compact`` later)."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return False
+    worker = threading.Thread(target=_compact_quietly, args=(storage, app_name, verstr, writer),
+                              name="vmn-metric-compact", daemon=True)
+    worker.start()
+    worker.join(remaining)
+    if worker.is_alive():
+        VMN_LOGGER.warning(f"vmn: run {verstr}'s metrics stay uncompacted (vmn-exp compact)")
+        return False
+    return True
 
 
 def seal_writer(storage, app_name, verstr, writer):

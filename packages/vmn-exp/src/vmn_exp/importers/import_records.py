@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.metric_compact import compact_writer
 from vmn_exp.core.metric_entries import record_metric_entries, split_metric_entries
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.storage.files import user_artifact_path
@@ -210,6 +211,7 @@ def _write_all(
 
     flush_log(storage, app_name, verstr)
     sync_to_remote(storage, app_name, verstr, IMPORT_WRITER)
+    compact_writer(storage, app_name, verstr, IMPORT_WRITER)
 
 
 # ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ from vmn_exp.cli.supervisor import (
 )
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.metric_compact import compact_by
 from vmn_exp.core.rerun import RUNNER_CLI, repo_relative_cwd
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
 from vmn_exp.core.values import sanitize_entry
@@ -431,6 +432,8 @@ class _Supervision:
             ),
         )
         self.sync.final(_FINAL_SYNC_TIMEOUT_SEC)
+        self.guard("metric compaction", compact_by, self.storage, self.app_name,
+                   self.verstr, self.writer_id, time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC)
         self.guard("failure alert", self._alert_if_failed)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
