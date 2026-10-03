@@ -331,6 +331,10 @@ class LeaderboardCache:
             return rows[offset : offset + self.max_page]
         return {"rows": rows[offset : offset + limit], "total": len(rows)}
 
+    def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False):
+        """Every row passing *status* in :meth:`page`'s order, unpaged."""
+        return self._ordered(snapshot, schema, sort, None, status, None, order, archived)
+
     def columns(
         self, snapshot, schema, keys, limit=None, sort=None, status=None,
         query=None, order=None, archived=False,

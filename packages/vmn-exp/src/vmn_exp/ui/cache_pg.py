@@ -3,8 +3,9 @@
 
 Same contract as :class:`~vmn_exp.core.index_store.SqliteStore`: it never
 raises — an unreachable database behaves as empty and reconnects on the next
-call. A scope is an app name or ``(workspace_id, app)``; ``org_id`` is 0 for
-now. Each save is one transaction that bumps the scope's generation and
+call. A scope is an app name or ``(workspace_id, app)``; ``org_id`` is the
+store's org (0 in single tenancy; bound to the session for RLS). Each save
+is one transaction that bumps the scope's generation and
 ``NOTIFY vmn_gen, '<workspace_id>:<app>'`` (delivered on commit). A cache
 schema change TRUNCATEs the cache tables, never the control-plane ones.
 """
@@ -18,22 +19,23 @@ from vmn_exp.core.index_store import _state_of, _without_state
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION
 from vmn_exp.ui import migrations
 from vmn_exp.ui.control_plane_pg import PostgresControlPlane  # noqa: F401
+from vmn_exp.ui.tenancy import set_org
 
 _LOGGER = logging.getLogger(__name__)
 _CACHE_TABLES = "vmn_records, vmn_run_states, vmn_tombstones, vmn_scope_gen, vmn_kv"
 _SCOPE = "org_id = %s AND workspace_id = %s AND app = %s"
 
 
-def scope_key(scope):
+def scope_key(scope, org_id=0):
     """``(org_id, workspace_id, app)`` of *scope*."""
     if isinstance(scope, tuple):
         workspace_id, app = scope
-        return (0, workspace_id, app)
-    return (0, 0, scope)
+        return (org_id, workspace_id, app)
+    return (org_id, 0, scope)
 
 
-def _kv_key(scope):
-    org, workspace_id, name = scope_key(scope)
+def _kv_key(scope, org_id=0):
+    org, workspace_id, name = scope_key(scope, org_id)
     return (org, workspace_id, str(name))
 
 
@@ -60,8 +62,9 @@ def _ensure_cache_version(conn):
 
 
 class PostgresStore:
-    def __init__(self, dsn):
+    def __init__(self, dsn, org_id=0):
         self._dsn = dsn
+        self._org = org_id
         self._lock = threading.Lock()
         self._conn = None
 
@@ -69,6 +72,7 @@ class PostgresStore:
         if self._conn is None or self._conn.closed:
             conn = migrations.connect(self._dsn)
             _ensure_cache_version(conn)
+            set_org(conn, self._org)
             self._conn = conn
         return self._conn
 
@@ -89,29 +93,45 @@ class PostgresStore:
                 pass
             self._conn = None
 
+    def _key(self, scope):
+        return scope_key(scope, self._org)
+
+    def purge_workspace(self, workspace_id):
+        """Drop every cache row of *workspace_id* (a disconnected workspace)."""
+
+        def purge(conn):
+            with conn.transaction():
+                for table in _CACHE_TABLES.split(", "):
+                    conn.execute(
+                        f"DELETE FROM {table} WHERE org_id = %s AND workspace_id = %s",
+                        (self._org, workspace_id),
+                    )
+
+        self._run(purge, None, "purge")
+
     def load(self, scope):
-        return self._run(lambda c: _records(c, scope_key(scope)), {}, "read")
+        return self._run(lambda c: _records(c, self._key(scope)), {}, "read")
 
     def generation(self, scope):
-        return self._run(lambda c: _gen_row(c, scope_key(scope))[0], 0, "read")
+        return self._run(lambda c: _gen_row(c, self._key(scope))[0], 0, "read")
 
     def load_since(self, scope, generation):
         return self._run(
-            lambda c: _delta(c, scope_key(scope), generation), ({}, set(), 0), "read"
+            lambda c: _delta(c, self._key(scope), generation), ({}, set(), 0), "read"
         )
 
     def save(self, scope, changed, removed, states=None):
         states = states or {}
         if not (changed or removed or states):
             return
-        self._run(lambda c: _save(c, scope_key(scope), changed, removed, states), None, "write")
+        self._run(lambda c: _save(c, self._key(scope), changed, removed, states), None, "write")
 
     def kv_get(self, scope, fingerprint):
         def query(conn):
             row = conn.execute(
                 "SELECT fingerprint, payload FROM vmn_kv"
                 " WHERE org_id = %s AND workspace_id = %s AND scope = %s",
-                _kv_key(scope),
+                _kv_key(scope, self._org),
             ).fetchone()
             return row[1] if row and row[0] == fingerprint else None
 
@@ -124,7 +144,7 @@ class PostgresStore:
                 " VALUES (%s, %s, %s, %s, %s::jsonb)"
                 " ON CONFLICT (org_id, workspace_id, scope) DO UPDATE"
                 " SET fingerprint = EXCLUDED.fingerprint, payload = EXCLUDED.payload",
-                _kv_key(scope) + (fingerprint, _jsonable(payload)),
+                _kv_key(scope, self._org) + (fingerprint, _jsonable(payload)),
             ),
             None,
             "write",
