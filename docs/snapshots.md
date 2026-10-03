@@ -133,7 +133,9 @@ A snapshot is a thin record referencing a content-addressed *code object*:
     # untracked_files.tar.gz, deps/<dep>/..., metadata.yml written last
 ```
 
-(`<app-key>` is the app name with `/` replaced by `-`.) Snapshots of
+(`<app-key>` is the app name with `/` replaced by `-`.) Snapshots and code
+objects of the older layout (`.vmn/<app>/snapshots/`,
+`.vmn/vmn-code/<app>/experiments/`) move here on first use. Snapshots of
 the same tree share one code object, and `delete` removes it only when nothing
 else references it. Dependency state feeds into the content hash, so two
 snapshots differing only inside a dep get different version strings; so do
