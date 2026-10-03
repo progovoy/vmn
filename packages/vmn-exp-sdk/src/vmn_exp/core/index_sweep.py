@@ -24,6 +24,12 @@ recently touched ones — never all N: at 100k records a status per record per
 refresh was most of its CPU. The index reports each record it refreshed
 (:meth:`Sweep.track`) so the live set stays current.
 
+A watch that says it is ``rolling`` (the server's I/O helper) never lists
+everything at once after the first listing: each refresh also re-lists the
+next slice of the known records, sized so every one comes round within
+``full_sweep_sec`` — at 100k records one full listing kept a refresh, and so
+every new run, waiting for seconds.
+
 A ``journaled`` sweep (the ui, reading the store's change journal; plan 11
 §5.2) lists no names at all: each refresh lists the files of the records the
 journal named (:meth:`Sweep.hint`) and of the live ones only, so its cost does
@@ -87,6 +93,7 @@ class Sweep:
         self._sigs_known = True  # False once the backend answered only None sigs
         self._live = None  # keys that may change on their own; None: not judged yet
         self._pending = set()  # names listed without metadata yet (claims)
+        self._ring, self._cursor, self._credit, self._rolled_at = [], 0, 0.0, None
         self.journaled = False
         self._hinted = set()  # keys the journal named since the last listing
         self._hint_lock = threading.Lock()
@@ -95,6 +102,7 @@ class Sweep:
         """Forget every baseline: the next listing is full and compares all."""
         self.watch.reset()
         self._last_full, self._sigs, self._live, self._pending = None, {}, None, set()
+        self._ring, self._cursor, self._credit, self._rolled_at = [], 0, 0.0, None
 
     def touch(self, key, now):
         self._touched[key] = now
@@ -138,6 +146,10 @@ class Sweep:
         keys = self._to_list(records, changed, gone_names, now)
         listing = self.watch.files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
+        if self.watch.rolling and self.full_sweep_sec:
+            rolled, rolled_gone = self.watch.slice_changes(self._next_slice(now))
+            listing = {**rolled, **listing}
+            gone |= rolled_gone
         self._pending = {key for key in gone if key in self._sigs and key not in records}
         return listing, [key for key in gone | gone_names if key in records]
 
@@ -204,8 +216,28 @@ class Sweep:
         (self._live.discard if settled else self._live.add)(key)
         return self._changed_since(key, sig, now, settled)
 
+    def _next_slice(self, now):
+        """The known keys due for their periodic re-listing. A refresh lists
+        at most a tenth of them, however long the last one took (a cold load
+        can outlast full_sweep_sec)."""
+        elapsed = now - (self._rolled_at if self._rolled_at is not None else now)
+        elapsed = min(elapsed, self.full_sweep_sec / 10)
+        self._rolled_at = now
+        self._credit = min(
+            self._credit + len(self._sigs) * elapsed / self.full_sweep_sec, len(self._sigs)
+        )
+        due = []
+        while len(due) < int(self._credit):
+            if self._cursor >= len(self._ring):
+                self._ring, self._cursor = sorted(self._sigs), 0
+            taken = self._ring[self._cursor : self._cursor + int(self._credit) - len(due)]
+            self._cursor += len(taken)
+            due += taken
+        self._credit -= len(due)
+        return due
+
     def _full_listing(self, records, now):
-        self._last_full = now
+        self._last_full = self._rolled_at = now
         listing, present = self.watch.full_changes()
         if self._live is None:
             self._live = {
@@ -217,6 +249,9 @@ class Sweep:
     def _full_due(self, now):
         if self._last_full is None:
             return True
+        rolling = self.watch.rolling and not self.journaled
+        if rolling and self._sigs_known and self.full_sweep_sec:
+            return False
         return now - self._last_full >= self.full_sweep_sec
 
     def _may_change(self, records, key, sig, now):

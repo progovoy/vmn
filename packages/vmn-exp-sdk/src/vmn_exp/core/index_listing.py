@@ -6,7 +6,7 @@ At 100k records the listings themselves are cheap next to what a caller does
 with them per record, so this reports only what moved: the names whose
 signature changed (or appeared) and the names gone since the previous
 ``name_changes``, and the records whose files differ from the last time a
-full listing (``full_changes``) saw them. The same class runs in the index's process or, for a plain
+full or sliced listing (``full_changes``/``slice_changes``) saw them. The same class runs in the index's process or, for a plain
 local store, in its I/O helper process (:mod:`experiment_index_io_process`),
 where the baselines live next to the listings and only changes cross the pipe.
 
@@ -33,6 +33,10 @@ def _fingerprint(files):
 
 
 class ListingWatch:
+    # Whether a sweep should re-list known records a slice per refresh
+    # instead of all at once every full_sweep_sec (see Sweep).
+    rolling = False
+
     def __init__(self, storage, app_name):
         self._storage = storage
         self._app_name = app_name
@@ -65,3 +69,18 @@ class ListingWatch:
         before, self._prints = self._prints, prints
         changed = {k: files for k, files in listing.items() if before.get(k) != prints[k]}
         return changed, {k for k, files in listing.items() if METADATA_FILE in files}
+
+    def slice_changes(self, keys):
+        """``(files of those of *keys* that changed since last listed, keys
+        of *keys* gone)`` — a full listing spread over many calls."""
+        listing = self.files(keys)
+        changed = {}
+        for key, files in listing.items():
+            fingerprint = _fingerprint(files)
+            if self._prints.get(key) != fingerprint:
+                self._prints[key] = fingerprint
+                changed[key] = files
+        gone = set(keys).difference(listing)
+        for key in gone:
+            self._prints.pop(key, None)
+        return changed, gone

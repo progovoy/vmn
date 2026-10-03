@@ -135,3 +135,46 @@ def test_storage_the_helper_cannot_read_stays_in_process(tmp_path):
     index = ExperimentIndex(Subclassed(str(tmp_path), area="runs"), APP)
     assert not index.use_io_process()
     index.refresh()
+
+
+def test_the_helper_sweeps_a_slice_per_refresh_never_everything_at_once(
+    offloaded, live_store, clock, monkeypatch
+):
+    """A full listing of 100k records keeps one refresh busy for seconds; the
+    helper re-lists known records a time-proportional slice per refresh, so
+    each is still seen within full_sweep_sec (an in-place edit of a finished
+    run, which no directory signature shows, is caught by it)."""
+    offloaded.refresh()
+    watch = offloaded._io.watch
+    fulls, slices = [], []
+    for name, sink in (("full_changes", fulls), ("slice_changes", slices)):
+        real = getattr(watch, name)
+        monkeypatch.setattr(watch, name, lambda *a, real=real, sink=sink: (sink.append(a), real(*a))[1])
+    quiet = next(r["verstr"] for r in offloaded.snapshot().rows if r["verstr"] not in live_store.live)
+    live_store.log(quiet, 7)  # an append leaves the directory signature alone
+
+    step = FULL_SWEEP_SEC / 10
+    for _ in range(11):
+        clock.now += step
+        offloaded.refresh()
+
+    assert fulls == []
+    total = N + M
+    assert all(len(keys) <= total / 10 + 1 for (keys,) in slices)
+    assert sum(len(keys) for (keys,) in slices) >= total
+    assert offloaded.snapshot().row(quiet)["metrics"]["loss"] == 7
+
+
+def test_a_slow_refresh_does_not_make_the_next_one_sweep_everything(
+    offloaded, live_store, clock, monkeypatch
+):
+    """A cold load can take longer than full_sweep_sec; the refresh after it
+    still lists only a slice, not every record at once."""
+    offloaded.refresh()
+    watch = offloaded._io.watch
+    slices = []
+    real = watch.slice_changes
+    monkeypatch.setattr(watch, "slice_changes", lambda keys: slices.append(keys) or real(keys))
+    clock.now += 5 * FULL_SWEEP_SEC
+    offloaded.refresh()
+    assert slices and all(len(keys) <= (N + M) / 10 + 1 for keys in slices)
