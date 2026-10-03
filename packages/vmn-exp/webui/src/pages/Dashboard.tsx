@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, appTag } from "../api";
 import type { AppRow, Workspace } from "../types";
 import { CopyPath, PageHead, Skeleton, wsLocation } from "../components/ui";
+import CacheResync from "../components/CacheResync";
 
 function AddWorkspace({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState("");
@@ -142,6 +143,7 @@ export function AppsPage() {
       <p className="page-sub">
         {apps.length} app{apps.length === 1 ? "" : "s"} in this workspace
       </p>
+      <CacheResync ws={ws} />
       <div className="grid">
         {apps.map((a) => (
           <Link key={a.name} to={`/ws/${ws}/app/${appTag(a.name)}`}>
