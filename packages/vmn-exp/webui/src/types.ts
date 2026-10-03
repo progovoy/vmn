@@ -108,6 +108,8 @@ export interface ExperimentRow extends Partial<RunStatus> {
   idx: number;
   verstr: string;
   code_verstr: string;
+  /** Comment counts on the run's thread; absent when it has none. */
+  comments?: { total: number; unresolved: number };
   timestamp: string | null;
   note: string | null;
   branch: string | null;
