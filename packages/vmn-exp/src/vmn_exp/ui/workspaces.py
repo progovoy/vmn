@@ -21,6 +21,8 @@ from typing import List, Optional
 
 import yaml
 
+from vmn_exp.ui.workspace_uri import check_workspace_uri
+
 REGISTRY_FILENAME = "workspaces.yml"
 
 # Names become directory names and URL path segments.
@@ -36,6 +38,7 @@ class Workspace:
     downloads: Optional[str] = None  # "stream" | "redirect" (server config)
     reconcile_sec: Optional[int] = None
     capabilities: Optional[List[str]] = None  # probed, store workspaces only
+    disconnected_at: Optional[float] = None  # cache rows purged 7 days later
 
     def to_public_dict(self):
         d = {k: v for k, v in asdict(self).items() if v is not None}
@@ -105,8 +108,10 @@ class DbWorkspaceRegistry(WorkspaceRegistry):
 class WorkspaceManager:
     """Registry of workspaces, persisted under a server data directory."""
 
-    def __init__(self, data_dir, registry=None):
+    def __init__(self, data_dir, registry=None, tenancy="single", endpoint_allowlist=()):
         self.data_dir = data_dir
+        self.tenancy = tenancy
+        self.endpoint_allowlist = tuple(endpoint_allowlist)
         Path(data_dir).mkdir(parents=True, exist_ok=True)
         self.registry = registry or YamlWorkspaceRegistry(
             os.path.join(data_dir, REGISTRY_FILENAME)
@@ -187,6 +192,9 @@ class WorkspaceManager:
     def add_store(self, name, uri, downloads=None, reconcile_sec=None) -> Workspace:
         """Register a read-only experiment store named by a storage URI."""
         self._validate_new_name(name)
+        refused = check_workspace_uri(uri, self.tenancy, self.endpoint_allowlist)
+        if refused:
+            raise WorkspaceError(refused)
         ws = Workspace(name=name, kind="store", store=uri, downloads=downloads,
                        reconcile_sec=reconcile_sec)
         self._workspaces[name] = ws
@@ -197,6 +205,14 @@ class WorkspaceManager:
         """Store the probed capabilities (storage_access) with workspace *name*."""
         ws = self._workspaces[name]
         ws.capabilities = list(capabilities)
+        self._save(ws)
+        return ws
+
+    def disconnect(self, name, now):
+        """Mark workspace *name* disconnected; :mod:`vmn_exp.ui.purge` drops
+        its cache rows (and the workspace) after the grace period."""
+        ws = self._workspaces[name]
+        ws.disconnected_at = now
         self._save(ws)
         return ws
 

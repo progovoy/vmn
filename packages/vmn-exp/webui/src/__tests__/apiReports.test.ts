@@ -58,3 +58,12 @@ describe("apiReports", () => {
     expect(call(3)[1]?.method).toBe("DELETE");
   });
 });
+
+describe("apiReports.reportsUsing", () => {
+  it("asks the app's reports endpoint, with the run when given", async () => {
+    await apiReports.reportsUsing("w", "root/svc");
+    await apiReports.reportsUsing("w", "root/svc", "1.0.0+x");
+    expect(call(0)[0]).toBe("/api/v1/workspaces/w/apps/root-svc/reports");
+    expect(call(1)[0]).toBe("/api/v1/workspaces/w/apps/root-svc/reports?verstr=1.0.0%2Bx");
+  });
+});

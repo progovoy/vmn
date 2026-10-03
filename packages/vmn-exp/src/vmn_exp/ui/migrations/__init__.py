@@ -32,10 +32,14 @@ def apply_migrations(conn):
     """Apply pending migrations on an autocommit *conn*; returns their names."""
     conn.execute("SELECT pg_advisory_lock(%s)", (_LOCK_ID,))
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS vmn_schema_migrations"
-            " (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
-        )
+        # An app role without DDL rights connects to a migrated DB: don't
+        # even attempt the CREATE (it needs the schema privilege).
+        (exists,) = conn.execute("SELECT to_regclass('vmn_schema_migrations')").fetchone()
+        if exists is None:
+            conn.execute(
+                "CREATE TABLE vmn_schema_migrations"
+                " (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+            )
         done = {name for (name,) in conn.execute("SELECT name FROM vmn_schema_migrations")}
         applied = [path.name for path in migration_files() if path.name not in done]
         for name in applied:

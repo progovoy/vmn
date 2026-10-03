@@ -86,3 +86,34 @@ describe("Markdown", () => {
     expect(screen.getByRole("link", { name: "jump" })).not.toHaveAttribute("target");
   });
 });
+
+describe("Markdown rendering", () => {
+  it("renders inline formatting, lists, quotes, code, rules and breaks", () => {
+    const src = "**b** *i* ~~s~~ `c`  \nnext\n\n- one\n  1. two\n\n> q\n\n```js\nx<y\n```\n\n---";
+    const { container } = render(<Markdown source={src} />);
+    for (const sel of ["strong", "em", "del", "p code", "br", "ul > li ol > li", "blockquote p", "pre code.language-js", "hr"]) {
+      expect(container.querySelector(sel), sel).not.toBeNull();
+    }
+    expect(container.querySelector("pre code")).toHaveTextContent("x<y");
+  });
+
+  it("renders unsafe link schemes as plain text", () => {
+    const { container } = render(<Markdown source={"[bad](javascript:alert(1)) [ok](./rel) [m](mailto:a@b.c)"} />);
+    expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+    expect(container).toHaveTextContent("bad");
+    expect(screen.getByRole("link", { name: "ok" })).toHaveAttribute("href", "./rel");
+    expect(screen.getByRole("link", { name: "m" })).toHaveAttribute("href", "mailto:a@b.c");
+  });
+
+  it("accepts JSON vmn-panel specs", () => {
+    const renderPanel = vi.fn(() => <div>PANEL</div>);
+    render(<Markdown source={'```vmn-panel\n{"id": "p1", "keys": ["a"]}\n```'} renderPanel={renderPanel} />);
+    expect(renderPanel).toHaveBeenCalledWith({ id: "p1", keys: ["a"] }, '{"id": "p1", "keys": ["a"]}\n');
+  });
+
+  it("aligns table cells", () => {
+    const { container } = render(<Markdown source={"| a | b |\n|:-:|--:|\n| 1 | 2 |"} />);
+    expect(container.querySelector("th")).toHaveStyle({ textAlign: "center" });
+    expect(container.querySelectorAll("tbody td")[1]).toHaveStyle({ textAlign: "right" });
+  });
+});
