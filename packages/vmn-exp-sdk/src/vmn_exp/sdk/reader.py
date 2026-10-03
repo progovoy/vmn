@@ -32,8 +32,8 @@ from vmn_exp.core.fold import fold_definitions, fold_log, fold_row
 from vmn_exp.core.log import (
     filter_archived,
     filter_by_status,
-    list_artifacts,
     history_points,
+    list_artifacts,
     metric_series,
     sort_by_metric,
 )

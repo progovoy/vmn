@@ -51,13 +51,13 @@ from vmn_exp.core.from_snapshot import (
 )
 from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_metrics
 from vmn_exp.core.log import (
-    merged_log_view,
     DATE_SORTS,
     IDX_SORT,
     effective_params,
     filter_archived,
     summary_metrics,
     load_log,
+    merged_log_view,
     sort_by_metric,
 )
 from vmn_exp.core.metric_entries import is_metric_entry
