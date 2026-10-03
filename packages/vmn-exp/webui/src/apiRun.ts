@@ -80,3 +80,28 @@ export function runLineage(ws: string, app: string, verstr: string, depth: numbe
       `${encodeURIComponent(verstr)}/lineage?depth=${depth}`,
   );
 }
+
+export interface MetricKeysQuery {
+  prefix: string;
+  offset: number;
+  limit: number;
+}
+
+export interface MetricKeysPage {
+  keys: { name: string; count: number }[];
+  /** Names matching the prefix in all, across pages. */
+  total: number;
+  offset: number;
+  limit: number | null;
+}
+
+/** One page of a run's metric names (name-ordered, prefix-filtered). */
+export function metricKeys(
+  ws: string, app: string, verstr: string, { prefix, offset, limit }: MetricKeysQuery,
+): Promise<MetricKeysPage> {
+  const qs = new URLSearchParams({ prefix, offset: String(offset), limit: String(limit) });
+  return get<MetricKeysPage>(
+    `/workspaces/${ws}/apps/${appTag(app)}/experiments/` +
+      `${encodeURIComponent(verstr)}/metric-keys?${qs}`,
+  );
+}

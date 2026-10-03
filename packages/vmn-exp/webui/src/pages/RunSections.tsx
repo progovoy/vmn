@@ -255,6 +255,10 @@ export function MetadataCard({ detail }: { detail: ExperimentDetail }) {
         <div style={{ color: "var(--text-2)" }}>{captured}</div>
         <div className="k">runtime</div>
         <Duration secs={runSecs || null} />
+        {detail.compacted === false && (
+          <><div className="k">metrics</div>
+            <div><span className="badge" title="metric streams not compacted yet: charts read slower (vmn-exp compact)">not compacted</span></div></>
+        )}
         {Boolean(meta.from_snapshot) && (
           <><div className="k">from snapshot</div><div className="mono">{String(meta.from_snapshot)}</div></>
         )}

@@ -257,6 +257,9 @@ export interface ExperimentDetail {
   forked_from?: ForkOrigin | null;
   /** The run this run is a `vmn-exp rerun` of. */
   rerun_of?: string | null;
+  /** Whether every metrics writer has its indexed `.vmx` (fast reads);
+   *  false while one is still on streams, null without metric files. */
+  compacted?: boolean | null;
   /** Rewinds of this run, in log order: history past `step` was hidden. */
   rewinds?: RunRewind[];
 }
