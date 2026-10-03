@@ -2,7 +2,7 @@
 
 The model registry links named, versioned models and datasets to the
 experiment runs and artifacts that produced them. It lives in the experiment
-storage root you already use (under the reserved pseudo-app `vmn-registry`),
+storage root you already use (its `registry/` area),
 so it needs no extra infrastructure.
 
 - [Concepts](#concepts)
@@ -234,7 +234,7 @@ the current run; with no run open they only resolve). Each use writes:
   gets its artifact's `vmn://<app>/<verstr>/<path>` URI and digest (what
   `run.use_artifact` records, so lineage links the run to its producer); a
   reference dataset gets `vmn-registry://<name>@<N>`.
-- a `use` entry in the registry record `<name>-uses` (never the model's own
+- a `use` entry in the registry record `registry/<name>/uses` (never the model's own
   log): `{"type": "use", "version": N, "run": {"app", "verstr"}, "ts",
   "writer", "pos", "actor"}`. Best-effort: a failure is a warning.
 
@@ -250,7 +250,7 @@ run-backed version is an upstream link to its producer (any app) carrying
 `datasets`. From the version,
 `vmn_exp.registry.lineage.version_lineage(storage, name, n)` (also
 `GET .../models/{name}/versions/{n}/lineage`) answers its producer run and
-every consumer in `<name>-uses`, pruned ones marked `found: false`.
+every consumer in `registry/<name>/uses`, pruned ones marked `found: false`.
 
 ---
 
@@ -267,16 +267,15 @@ read-only. The HTTP routes are in [ui.md](ui.md#model-registry-api).
 
 ## Storage and scope
 
-One registry per storage root: models registered in a local `.vmn` directory
-are not visible from a separate bucket root. The `vmn-registry` pseudo-app is
-hidden from experiment app listings (`vmn-exp list`, the UI, `list_runs`).
+One registry per storage root: models registered in a local `.vmn/store`
+are not visible from a separate bucket root. The `registry/` area sits beside
+`runs/`, so it never shows in experiment app listings.
 
 Artifacts are **referenced, not copied**: a version stores the run ref and a
 relative path; the bytes stay in the run's storage.
 
-Records under `vmn-registry`: `<name>` (header: `kind`, `description`),
-`<name>.v<N>` (one per version), `<name>-uses` (the usage log; model names
-never contain `-`, so it cannot collide with a model).
+Records under `registry/<name>/`: `header` (`kind`, `description`), `v<N>`
+(one per version), `uses` (the usage log).
 
 ---
 

@@ -168,7 +168,8 @@ the code objects above. Installing it adds:
 - **A shared store**: `--store <uri>` > `VMN_EXPERIMENT_STORE` > conf
   `experiment.storage.uri` (`s3://`, `gs://`, `az://`, `file://`; see
   [Storage](vmn-exp/experiments.md#storage-local-s3-gcs-azure-plugins)) puts records in
-  the store's `snapshots` subdir and code objects next to the runs', so
+  the store's `snapshots/` area and code objects in its `code/` area (shared
+  with runs), so
   teammates can list, diff, export and restore each other's snapshots.
   `--local` forces the local store; `VMN_EXP_OFFLINE=1` keeps snapshots local
   too. Without vmn-exp, `--store` fails with `remote snapshot stores need

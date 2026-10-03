@@ -121,9 +121,9 @@ The trial run records its params (so `params.lr > 1e-3` queries work), the tags
 
 ## Claims: how agents coordinate
 
-Trial slots are records `t<N>` of the sweep's own pseudo-app
-`vmn-sweeps/<app>~<sweep verstr>` (`/` in the app becomes `~`; the `vmn-sweeps`
-tree is reserved and hidden from app listings). An agent lists them, takes
+Trial slots are records `t<N>` under the store's `sweeps/` area, scope
+`<app-key>~<sweep verstr>` (`<app-key>` is the app in tag form, `/` → `-`;
+the area sits beside `runs/`, so it never shows in app listings). An agent lists them, takes
 `max(N) + 1` (stopping at the trial limit), draws that trial's params, and
 creates the record with `create_exclusive`: an `O_EXCL` mkdir locally or on
 NFS, a conditional `If-None-Match: *` PUT on S3, the equivalent on GCS/Azure.

@@ -3,7 +3,7 @@
 `vmn-exp` is local-first experiment tracking for any versioned app. An
 experiment is a **snapshot of your working tree plus an append-only log of
 metrics and notes** — no required training script, no server, no database.
-Runs are plain files under `.vmn/{app}/experiments/` (git-ignored, never
+Runs are plain files under `.vmn/store/runs/<app-key>/` (git-ignored, never
 committed or pushed), each anchored to an exact version and commit, so
 reproducing a result is one `vmn-exp restore` away.
 
@@ -139,7 +139,7 @@ vmn-exp run my_app --note "batch=64" -- ./perf_test.sh
 ### Console output: `output.log`
 
 `vmn-exp run` tees the command's stdout/stderr: every byte still reaches your
-terminal, and a combined copy is stored as the run's `output.log` artifact
+terminal, and a combined copy is stored as the run's `outputs/output.log`
 (`show` prints an `Output:` line; the UI shows an output card).
 
 - **Cap**: `--output-cap-mb` > `$VMN_EXP_OUTPUT_CAP_MB` > 10. Past it the first
@@ -373,15 +373,16 @@ leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
 `vmn exp list my_app` with vmn-exp installed). Actions: `create`, `run`,
 `add`, `list`, `show`, `compare`, `diff`, `restore`, `export`, `prune`,
 `tag`, `archive`, `unarchive`, `rewind`, `rerun`, `push`, `watch`,
-`importance`, `lineage`, `import-mlflow`. Separate commands: `vmn-exp sweep`
+`importance`, `lineage`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
 ([sweeps.md](sweeps.md)), `vmn-exp model` ([models.md](models.md)),
 `vmn-exp ui` ([ui.md](ui.md)).
 
 Read-only actions — `list`, `show`, `compare`, `diff`, `export`, `watch`,
 `importance`, `lineage` (and `import-mlflow`) — take no repo lock. `list`,
 `show`, `compare` and ref resolution read through the experiment index
-(`.index.sqlite` beside local records; for S3 a per-host cache under
-`$VMN_INDEX_CACHE_DIR`, else `$XDG_CACHE_HOME/vmn` / `~/.cache/vmn`), so
+(a per-host SQLite cache under `$VMN_EXP_CACHE_DIR`, else
+`$XDG_CACHE_HOME/vmn-exp` / `~/Library/Caches/vmn-exp` / `~/.cache/vmn-exp`,
+never inside the store), so
 thousands of runs cost one listing plus whatever changed.
 
 Flags shared by most actions:
@@ -617,7 +618,7 @@ already speak `vmn goto`. `goto --force` matches `restore --force`.
 ### `export`
 
 Package a run (default: latest) — materialized code without `.git`,
-`vmn_metadata.yml`, `vmn_experiment.yml` (metadata + log) and `artifacts/` —
+`vmn_metadata.yml`, `vmn_experiment.yml` (metadata + log), `artifacts/` and `outputs/` —
 into a directory or a `.tar.gz`/`.tgz` (default `<verstr>.tar.gz`). Prints the
 output path. Runs without code are refused.
 
@@ -946,7 +947,7 @@ SDK side: [Metric goals and summaries](sdk.md#metric-goals-and-summaries).
 
 ## Storage (local, S3, GCS, Azure, plugins)
 
-Runs live under `.vmn/{app}/experiments/` by default. To share across a team,
+Runs live in the repo-local store `.vmn/store/` by default. To share across a team,
 point any action at a **store URI**:
 
 ```sh
@@ -965,8 +966,31 @@ vmn-exp run my_app --store file:///mnt/nfs/experiments -- ./t.sh
 | `file:///abs/dir` (or a bare path) | a local/NFS directory | used *as* the local root, no cache in front |
 | `<scheme>://...` | a plugin | see [Storage backends](#storage-backends-plugins) |
 
-A URI without a prefix uses `vmn-experiments`. A missing SDK fails with the
+A URI without a prefix uses the root `vmn`. A missing SDK fails with the
 `pip install` line to run.
+
+**Layout.** Every store (repo-local, `file://`, bucket) has one layout
+under its root:
+
+```
+<root>/
+  store.yml                                  layout marker
+  runs/<app-key>/<verstr>/                   experiment runs
+  snapshots/<app-key>/<verstr>/              vmn snapshot records
+  code/<app-key>/<code_verstr>.<diff_hash>/  shared code objects
+  sweeps/<app-key>~<sweep>/<slot>/           sweep trial claims
+  registry/<model>/<record>/                 model/dataset registry
+  reports/  comments/  journal/
+```
+
+`<app-key>` is the app in tag form (`root_app/service` → `root_app-service`).
+The repo-local root is `<repo>/.vmn/store/` with one `.gitignore` of `*`.
+The first writer creates `store.yml` (`layout: 2`); readers and writers
+refuse an unknown layout, and a v1 store (records but no `store.yml`) is
+refused with a hint to run [`vmn-exp migrate`](#migrate). Per-host state
+(the index cache and the [push](#offline-recording-and-push) ledger) lives
+outside the store, in the user cache/state dirs (`$VMN_EXP_CACHE_DIR`
+overrides both).
 
 **Resolution.** `--store` > `VMN_EXPERIMENT_STORE` > conf
 `experiment.storage.uri`. `--bucket`/`--prefix`/`--endpoint-url` (env
@@ -1014,14 +1038,16 @@ entry-point group:
 mem = "my_pkg.store:open_store"
 ```
 
-`open_store(uri, subdir)` receives a `vmn_exp.storage.uri.StoreURI` (`scheme`,
-`location` = bucket/container, `path` = prefix, `options` = the query string)
-and `subdir` (`"experiments"` or `"snapshots"`), and returns a
+`open_store(uri, area=...)` receives a `vmn_exp.storage.uri.StoreURI` (`scheme`,
+`location` = bucket/container, `path` = root, `options` = the query string)
+and an area (`runs`, `snapshots`, `code`, `sweeps`, `registry`, `reports`,
+`comments`; see `vmn_exp.storage.areas`), and returns a
 `vmn_exp.storage.base.SnapshotStorage`. `vmn_exp.storage.registry.register_store(scheme,
 factory)` does the same at runtime. The contract:
 
-- **Records**: `<base>/<app>/<verstr>/` holding `metadata.yml`, patch files,
-  per-writer `log.<writer>[@<seq>].jsonl`, `run_state.yml` and `artifacts/`.
+- **Records**: `<root>/<area>/<scope>/<name>/` (scope = app key, model name,
+  ...) holding `metadata.yml`, patch files, per-writer
+  `log/<writer>[@<seq>].jsonl`, `run_state.yml`, `outputs/` and `artifacts/`.
   `metadata.yml` makes a record exist: write it last, delete it first.
   Implement the abstract methods (`save`, `load_record`, `list_snapshots`,
   `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
@@ -1055,18 +1081,18 @@ backends are built.
 ### How records are stored
 
 - **One directory (or key prefix) per run**: `metadata.yml`, `run_state.yml`,
-  `env.yml`, `alerts_sent.yml`, `artifacts/` and one append-only
-  `log.<writer>.jsonl` per writer. `metadata.yml` is written last, so a
-  half-created run is never listed. Local writes are atomic (temp + rename).
-  Every storage dir carries a `.gitignore` of `*`.
+  `env.yml`, `alerts_sent.yml`, one append-only `log/<writer>.jsonl` per
+  writer, `outputs/` (vmn's own files: `output.log`, `media/<name>/<step>.png`,
+  `tables/<name>/<step>.json`) and `artifacts/` (the user's only, so any name
+  is free). `metadata.yml` is written last, so a half-created run is never
+  listed. Local writes are atomic (temp + rename).
 - **Atomic allocation**: a new run claims its verstr atomically, so two hosts
   running the same commit against a shared bucket or directory get `…` and
   `….r2`, never one merged run.
-- **S3 keys**: `<prefix>/<app>/<verstr>/<file>`, `<app>` in tag form
-  (`root_app/service` → `root_app-service`; the legacy `root_app_service`
-  form is still read).
+- **Object keys**: `<root>/runs/<app-key>/<verstr>/<file>`, `<app-key>` in tag
+  form (`root_app/service` → `root_app-service`).
 - **Incremental log sync**: a host ships only what it appended since the last
-  sync, as segments `log.<writer>@<n>.jsonl`; readers merge per writer. Log
+  sync, as segments `log/<writer>@<n>.jsonl`; readers merge per writer. Log
   batches are written as whole lines in one write (one PUT), so readers never
   see a partial line.
 - **Caching**: immutable files fetched from a remote (metadata, patches) are
@@ -1086,9 +1112,24 @@ backends are built.
   listable and downloadable. Names may be nested relative paths; absolute
   paths, `..`, `.`, empty components, backslashes and NUL are refused.
 - **Format version**: new runs (and registry records) store `format_version`
-  (currently 1; missing = 1) covering metadata, log lines and
-  `run_state.yml`. `list`, `show`, the UI and the SDK skip records from a
-  newer format with a warning to upgrade.
+  (currently 1) covering metadata, log lines and `run_state.yml`. `list`,
+  `show`, the UI and the SDK skip records from a newer format with a warning
+  to upgrade, and records without it (v1) with a warning to run
+  `vmn-exp migrate`.
+
+### `migrate`
+
+`vmn-exp migrate [--store <uri> | --dir <path>] [--dry-run] [--skip-live]`
+converts a v1 store to layout 2. Without a flag it moves the checkout's v1
+records (`.vmn/<app>/experiments/`, `.vmn/<app>/snapshots/`, the `vmn-code`/
+`vmn-sweeps`/`vmn-registry` pseudo-apps) into `.vmn/store/`; `--dir` takes a
+dir whose v1 records sit under `<dir>/.vmn`; `--store` an object store (or
+`file://`). It sets `migrating: true` in `store.yml` (writers refuse
+meanwhile), copies each record to its v2 path (area, tag-form key, `log/`,
+`outputs/`; `metadata.yml` last) and deletes the old copy, then clears the
+flag. Record by record, so a killed migration resumes on rerun. Running or
+stuck runs stop it with a list unless `--skip-live` (rerun later for those).
+`--dry-run` prints the plan and changes nothing.
 
 ---
 
@@ -1131,8 +1172,9 @@ pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
   claim, other top-level files, each writer's log from where the remote copy
   ends, and missing or resized artifacts. `archived`/`note` merge three-way
   against what was last pushed; on conflict the remote wins, with a warning.
-- **Resumable**: a ledger per remote under
-  `.vmn/<app>/experiments/.push/<remote id>/` records what was sent, so an
+- **Resumable**: a per-host ledger per remote (user state dir,
+  `$XDG_STATE_HOME/vmn-exp/push/...`, or under `$VMN_EXP_CACHE_DIR`) records
+  what was sent, so an
   interrupted push is simply rerun; an unchanged run costs no remote call
   (`up-to-date`) and a changed one ships only what is new (`update`).
 - **Collisions**: when the remote holds a different run under the name, the
@@ -1170,7 +1212,8 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window (default 60) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | [alert](#alerts) sinks and triggers |
 | `VMN_SNAPSHOT_MAX_FILE_MB` / `_TOTAL_MB` | untracked-file capture caps (50 / 200) |
-| `VMN_INDEX_CACHE_DIR` | where S3 index caches live (`none` disables; default `$XDG_CACHE_HOME/vmn` or `~/.cache/vmn`) |
+| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) instead of the XDG cache/state dirs |
+| `VMN_INDEX_CACHE_DIR` | index cache root only (`none` disables) |
 | `VMN_IMAGE_DIGEST` | container image digest recorded by environment capture |
 | `VMN_LOCK_FILE_PATH` | repo lock path (default `.vmn/vmn.lock`) |
 

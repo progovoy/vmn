@@ -245,8 +245,8 @@ run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
 
 | Call | Accepts | Stored as |
 |---|---|---|
-| `log_table(name, data, columns=None, step=None)` | list of dicts (columns in first-seen order), list of lists / 2-D array plus `columns=`, or a DataFrame | `tables/<name>/<step>.json`: `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}` |
-| `log_image(name, image, step=None, caption=None)` | file path, PIL image, numpy `HxW`/`HxWxC` (C = 1-4; `uint8`, or floats in 0..1), matplotlib figure | `media/<name>/<step>.png` |
+| `log_table(name, data, columns=None, step=None)` | list of dicts (columns in first-seen order), list of lists / 2-D array plus `columns=`, or a DataFrame | `outputs/tables/<name>/<step>.json`: `{"columns": [{"name", "type"}], "data": [[column values]], "rows", "truncated"}` |
+| `log_image(name, image, step=None, caption=None)` | file path, PIL image, numpy `HxW`/`HxWxC` (C = 1-4; `uint8`, or floats in 0..1), matplotlib figure | `outputs/media/<name>/<step>.png` |
 | `log_histogram(name, values, step=None, bins=64)` | anything numpy can flatten, or a precomputed `{"bins": edges, "counts": counts}` (`len(bins) == len(counts) + 1`) | a `histogram` log entry only |
 
 - Tables keep at most 10,000 rows (truncated with a warning, `total_rows`
@@ -257,7 +257,7 @@ run.log_histogram("fc1.weight", model.fc1.weight, step=epoch)
   edges); with none, nothing is logged.
 - Images and tables are **outputs** of the run: their entry carries the stored
   bytes' `sha256`/`size`, so they appear in `outputs`, link in
-  [lineage](#lineage), and `use_artifact(ref, "media/samples/3.png")` fetches
+  [lineage](#lineage), and `use_artifact(ref, "outputs/media/samples/3.png")` fetches
   one. Files upload on a background worker, and the entry is logged only once
   the file is stored (keeping the call's step and timestamp). A file that fails
   to store, or is still queued when the final upload wait
@@ -666,9 +666,9 @@ value unless declared otherwise), `params`, `tags`, `inputs`, `outputs`, `name`,
 installed SDK reads are skipped with a warning.
 
 `list_runs` reads through the incremental index `vmn-exp list` and the UI use:
-for a local store `.index.sqlite` in the experiments directory, for S3 a
-per-host cache under `$VMN_INDEX_CACHE_DIR` (default `$XDG_CACHE_HOME/vmn` or
-`~/.cache/vmn`; `none` disables). Each call re-reads only what changed. It is a
+a per-host cache outside the store, under `$VMN_EXP_CACHE_DIR` (default
+`$XDG_CACHE_HOME/vmn-exp`, `~/Library/Caches/vmn-exp` on macOS, else
+`~/.cache/vmn-exp`; `VMN_INDEX_CACHE_DIR=none` disables). Each call re-reads only what changed. It is a
 disposable cache; `use_index=False` reads storage directly and writes no index.
 `get_run` uses the index to resolve refs, then reads just that run.
 
@@ -810,7 +810,7 @@ An invalid query raises `QueryError` (a `ValueError`) with the character offset
 ## Model registry
 
 Named, versioned models and datasets linked to the runs that produced them,
-stored under the reserved pseudo-app `vmn-registry` in the same store as runs.
+stored in the `registry/` area of the same store as runs.
 The full reference (refs, aliases, datasets, use recording, storage, prune
 protection) is [models.md](models.md#sdk).
 
@@ -969,7 +969,7 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_SNAPSHOT_METADATA` | git-free mode against an exported snapshot |
 | `VMN_EXPERIMENT_DIR` | local experiment root |
 | `VMN_EXPERIMENT_STORE` | remote store URI |
-| `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | `s3://` shorthand (prefix default `vmn-experiments`) |
+| `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | `s3://` shorthand (prefix default `vmn`) |
 | `VMN_EXP_OFFLINE` | record locally only; upload later with `vmn-exp push` |
 | `VMN_WRITER_ID` | this writer's id (log segment names, offline verstrs); default `HOSTNAME`, then the host name |
 | `VMN_SYSTEM_METRICS` | `0`/`false`/`no`/`off` disables `sys_*` sampling |
@@ -979,7 +979,8 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | alert sinks and triggers ([experiments.md](experiments.md#alerts)) |
 | `VMN_SWEEP_PARAMS` | sweep trial params, read by `sweep_params()` |
-| `VMN_INDEX_CACHE_DIR` | where S3 index caches live; `none` disables |
+| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) |
+| `VMN_INDEX_CACHE_DIR` | index cache root only; `none` disables |
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window when readers derive status (default 60) |
 
 ---
