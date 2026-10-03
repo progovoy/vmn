@@ -64,3 +64,9 @@ def test_same_state_compares_diff_hash_and_dep_commits():
     assert not identity.same_state(stored, "h", {".": {"hash": "a"}, "../dep": {"hash": "c"}})
     assert not identity.same_state(stored, "other", changesets)
     assert not identity.same_state({"changesets": changesets}, "h", changesets)
+
+
+def test_local_records_carry_a_format_version(tmp_path):
+    stores = open_snapshot_stores(_vcs(tmp_path), {})
+    stores.records.save("app", "v", {"verstr": "v"}, {})
+    assert stores.records.load_metadata("app", "v")["format_version"] == 1
