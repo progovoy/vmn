@@ -33,6 +33,7 @@ class ServerSection:
     port: int = DEFAULT_PORT
     public_url: Optional[str] = None
     tenancy: str = "single"
+    endpoint_allowlist: Tuple[str, ...] = ()  # store endpoint_urls allowed in multi tenancy
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,10 @@ def _choice(value, choices, where):
 
 
 def _server(data):
-    s = _build(ServerSection, data or {}, "server")
+    data = dict(data or {})
+    if "endpoint_allowlist" in data:
+        data["endpoint_allowlist"] = tuple(data["endpoint_allowlist"] or ())
+    s = _build(ServerSection, data, "server")
     _int(s.port, "server.port")
     _choice(s.tenancy, TENANCIES, "server.tenancy")
     return s

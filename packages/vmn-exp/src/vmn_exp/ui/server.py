@@ -35,6 +35,7 @@ from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
+from vmn_exp.ui.tenancy import install_org_middleware
 from vmn_exp.ui.readers import changelog as changelog_reader
 from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
@@ -124,6 +125,7 @@ def create_app(
         app.include_router(router)
 
     install_audit_middleware(app)
+    install_org_middleware(app, getattr(manager, "tenancy", "single"))
 
     @app.middleware("http")
     async def _authenticate(request: Request, call_next):
@@ -344,6 +346,9 @@ def create_app(
         # Record-relative paths (artifacts/a/b/c.txt), each part one segment.
         if not valid_artifact_path(filename):
             raise HTTPException(400, f"Invalid artifact name '{filename}'")
+        redirect = routes_media.signed_redirect(ws, app_name, verstr, filename)
+        if redirect is not None:
+            return redirect
         download_name = filename.rsplit("/", 1)[-1]
         # The backend resolves the file — a local path, or an S3 object streamed
         # straight through — and refuses names that leave the run's dir.
