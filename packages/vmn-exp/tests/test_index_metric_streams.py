@@ -104,3 +104,20 @@ def test_a_grown_stream_reads_only_its_new_headers(tmp_path, monkeypatch):
     assert row["metrics"]["loss"] == 3999.0
     assert row["metric_summary"]["loss"]["min"] == 0.0
     assert 0 < sum(read) < 2000  # a header, not the ~30 KB of points
+
+
+def test_sealed_parts_and_the_final_index_fold_like_the_stream(tmp_path):
+    from vmn_exp.core.metric_compact import compact_writer, seal_writer
+
+    st = _storage(tmp_path)
+    rng = random.Random(9)
+    _log_points(st, "w", 40, rng)
+    index = ExperimentIndex(st, APP)
+    index.refresh()
+    assert seal_writer(st, APP, V, "w") == 1
+    _log_points(st, "w", 40, rng, step0=40)
+    assert _fields(index.refresh().rows()[0]) == _fields(_expected(st))
+    assert _fields(_row(st)) == _fields(_expected(st))
+    expected = _fields(_expected(st))
+    assert compact_writer(st, APP, V, "w")
+    assert _fields(index.refresh().rows()[0]) == expected

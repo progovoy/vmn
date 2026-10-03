@@ -20,6 +20,7 @@ import yaml
 
 from vmn_exp._base import get_repo_lock, now_iso, sha256_file  # noqa: F401
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.metric_compact import note_points
 from vmn_exp.core.metric_entries import (
     is_metric_entry,
     record_metric_entries,
@@ -151,8 +152,13 @@ def append_to_log(storage, app_name, verstr, entry):
 def append_metric_entries(storage, app_name, verstr, entries, inherited=False):
     """Record sanitized ``metrics`` *entries* as one block of this writer's
     metric stream (plan 12 §4.1); True when stored."""
-    writer = MetricWriter(storage, app_name, verstr, get_writer_id())
-    return record_metric_entries(writer, entries, inherited=inherited)
+    writer_id = get_writer_id()
+    writer = MetricWriter(storage, app_name, verstr, writer_id)
+    if not record_metric_entries(writer, entries, inherited=inherited):
+        return False
+    points = sum(len(e.get("values") or {}) for e in entries)
+    note_points(storage, app_name, verstr, writer_id, points)
+    return True
 
 
 def append_entries_to_log(storage, app_name, verstr, entries):

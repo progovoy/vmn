@@ -5,8 +5,9 @@ Like the JSONL logs (:mod:`index_logs`), a writer's ``.vms`` objects only
 grow at the end, so a grown stream costs its new blocks' **headers**: the
 prefix carries the header length, the body is never read (unless a known
 rewind may hide some of the block's points). A ``.vmx`` is folded from its
-footer. Anything but growth — an object gone or shrunk, a ``.vmx``
-replacing streams already folded — asks the caller to refold the record.
+footer, as is a sealed part. Anything but growth — an object gone or
+shrunk (a part sealing the streams), a ``.vmx`` replacing streams already
+folded — asks the caller to refold the record.
 """
 from vmn_exp.core.fold_blocks import (
     apply_block_points,
@@ -17,7 +18,12 @@ from vmn_exp.core.fold_blocks import (
 )
 from vmn_exp.core.metric_block import Block, decode_blocks, header_at
 from vmn_exp.core.metric_columns import Columns
-from vmn_exp.core.metric_files import is_indexed_file, is_metric_file, metric_writer
+from vmn_exp.core.metric_files import (
+    is_indexed_file,
+    is_metric_file,
+    is_part_file,
+    metric_writer,
+)
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 
 
@@ -60,10 +66,16 @@ def _grew_only(state, objects):
     for name, consumed in state["objects"].items():
         if sizes.get(name, -1) < consumed:
             return False
-        if not is_indexed_file(name) and any(
-                is_indexed_file(n) for n, _ in objects.get(metric_writer(name), ())):
+        if not is_indexed_file(name) and _newly_sealed(state, objects, metric_writer(name)):
             return False
     return True
+
+
+def _newly_sealed(state, objects, writer):
+    """Whether a ``.vmx`` or part not yet folded replaced *writer*'s streams
+    (a stream may since have restarted under its old name)."""
+    return any((is_indexed_file(n) or is_part_file(n)) and n not in state["objects"]
+               for n, _ in objects.get(writer, ()))
 
 
 def _fold_growth(fold, state, storage, where):
@@ -81,7 +93,7 @@ def _fold_object(fold, state, storage, where, writer, name, size):
     if consumed >= size:
         return
     read = lambda off, n: storage.read_range(*where, name, off, n)  # noqa: E731
-    if is_indexed_file(name):
+    if is_indexed_file(name) or is_part_file(name):
         _fold_indexed(fold, state, writer, MetricIndexReader(read, size))
         state["objects"][name] = size
         return

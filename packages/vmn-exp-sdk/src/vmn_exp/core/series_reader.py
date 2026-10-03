@@ -14,7 +14,7 @@ import heapq
 from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_entries import is_metric_entry, points_to_entries
-from vmn_exp.core.metric_files import is_indexed_file
+from vmn_exp.core.metric_files import INDEXED_SUFFIX
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_lod import emit, summarize
 from vmn_exp.core.metric_stream import base_key
@@ -112,7 +112,7 @@ def rewind_markers(log):
     return markers
 
 
-def _hidden(rewinds, ts, step):
+def hidden(rewinds, ts, step):
     return step is not None and any(r_step < step and ts < r_ts for r_step, r_ts in rewinds)
 
 
@@ -124,12 +124,45 @@ def _stream_blocks(storage, app_name, verstr, objects):
     return blocks
 
 
-def _source(storage, app_name, verstr, objects):
-    if len(objects) == 1 and is_indexed_file(objects[0][0]):
-        name, size = objects[0]
-        read = lambda off, n: storage.read_range(app_name, verstr, name, off, n)  # noqa: E731
-        return _IndexedSource(MetricIndexReader(read, size))
-    return _StreamSource(_stream_blocks(storage, app_name, verstr, objects))
+class _ChainedSource:
+    """A long writer's sealed parts, then the stream written after them."""
+
+    def __init__(self, sources):
+        self.sources = sources
+
+    def counts(self):
+        counts = {}
+        for source in self.sources:
+            for name, n in source.counts().items():
+                counts[name] = counts.get(name, 0) + n
+        return counts
+
+    def points(self, name):
+        for source in self.sources:
+            yield from source.points(name)
+
+    def entries(self):
+        return [e for source in self.sources for e in source.entries()]
+
+
+def _indexed(storage, app_name, verstr, name, size):
+    read = lambda off, n: storage.read_range(app_name, verstr, name, off, n)  # noqa: E731
+    return _IndexedSource(MetricIndexReader(read, size))
+
+
+def indexed_entries(storage, app_name, verstr, name, size):
+    """The ``metrics`` entries of one ``.vmx`` or sealed part — its log view."""
+    return _indexed(storage, app_name, verstr, name, size).entries()
+
+
+def writer_source(storage, app_name, verstr, objects):
+    """The source of one writer's listed metric *objects* (``[(name, size)]``)."""
+    vmx = [(n, s) for n, s in objects if n.endswith(INDEXED_SUFFIX)]
+    streams = [(n, s) for n, s in objects if not n.endswith(INDEXED_SUFFIX)]
+    sources = [_indexed(storage, app_name, verstr, n, s) for n, s in vmx]
+    if streams or not sources:
+        sources.append(_StreamSource(_stream_blocks(storage, app_name, verstr, streams)))
+    return sources[0] if len(sources) == 1 else _ChainedSource(sources)
 
 
 class SeriesReader:
@@ -145,7 +178,7 @@ class SeriesReader:
         *legacy* are v1 ``metrics`` entries to read along."""
         listing = getattr(storage, "metric_objects", None)
         objects = listing(app_name, verstr) if listing else {}
-        sources = [(w, _source(storage, app_name, verstr, objs)) for w, objs in objects.items()]
+        sources = [(w, writer_source(storage, app_name, verstr, objs)) for w, objs in objects.items()]
         if legacy:
             sources.append((LEGACY_WRITER, _EntrySource(legacy)))
         return cls(sources, rewind_markers(log) if rewinds is None else rewinds)
@@ -177,7 +210,7 @@ class SeriesReader:
         for rank, source, name, _ in self._raw_names().get(key, ()):
             per_rank.setdefault(rank, []).extend(
                 (ts, rank, step, value, iso) for ts, step, value, iso in source.points(name)
-                if not _hidden(self._rewinds, ts, step))
+                if not hidden(self._rewinds, ts, step))
         lists = [sorted(points, key=lambda p: p[0]) for points in per_rank.values()]
         return list(heapq.merge(*lists, key=lambda p: (p[0], p[1])))
 
