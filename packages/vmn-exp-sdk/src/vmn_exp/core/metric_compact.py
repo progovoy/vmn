@@ -20,6 +20,7 @@ from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import is_indexed_file, is_part_file, part_writer_and_k
 from vmn_exp.core.metric_index_file import build_index
+from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited, stepless_twin
 from vmn_exp.core.series_reader import hidden, rewind_markers, writer_source
 
 SEAL_POINTS = 10_000_000
@@ -40,7 +41,26 @@ def writer_columns(storage, app_name, verstr, objects, rewinds=()):
             points.setdefault(name, []).append((ts, step, value))
     return {name: Columns(None if p[0][1] is None else [x[1] for x in p],
                           [x[0] for x in p], [x[2] for x in p])
-            for name, p in points.items()}
+            for name, p in _split_twins(points).items()}
+
+
+def _twin_name(name):
+    twin = stepless_twin(base_key(name))
+    return inherited_twin(twin) if is_inherited(name) else twin
+
+
+def _split_twins(points):
+    """Move the step-less points of a key that also has stepped ones (in
+    other blocks, maybe of other writer instances) to its step-less twin,
+    the live writer's rule."""
+    out = {}
+    for name, p in points.items():
+        stepped = [x for x in p if x[1] is not None]
+        if stepped and len(stepped) < len(p):
+            out.setdefault(_twin_name(name), []).extend(x for x in p if x[1] is None)
+            p = stepped
+        out.setdefault(name, []).extend(p)
+    return out
 
 
 def _put(storage, app_name, verstr, writer, data, **kwargs):
