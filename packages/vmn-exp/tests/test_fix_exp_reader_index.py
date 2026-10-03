@@ -21,7 +21,7 @@ def _write(app_layout, verstr, second, parent=None):
     if parent:
         meta["parent"] = parent
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
 
 
 OUTER, INNER, LONE = "0.0.1-dev.aaaa111", "0.0.1-dev.bbbb222", "0.0.2-dev.cccc333"

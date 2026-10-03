@@ -47,7 +47,7 @@ def _write_experiment(
     if parent:
         meta["parent"] = parent
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f, sort_keys=True)
+        yaml.dump({"format_version": 1, **meta}, f, sort_keys=True)
     if run_state is not None:
         with open(os.path.join(path, "run_state.yml"), "w") as f:
             yaml.dump(run_state, f, sort_keys=False)

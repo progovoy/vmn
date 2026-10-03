@@ -44,7 +44,7 @@ def _write(app_layout, verstr, timestamp):
     os.makedirs(path, exist_ok=True)
     meta = {"verstr": verstr, "code_verstr": verstr, "timestamp": timestamp}
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
 
 
 def _seed(app_layout):

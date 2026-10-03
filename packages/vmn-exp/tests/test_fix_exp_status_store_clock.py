@@ -87,7 +87,7 @@ def _write_run(app_layout, verstr, run_state, store_age_sec=None):
     meta = {"verstr": verstr, "code_verstr": verstr, "branch": "master",
             "timestamp": "2026-09-21T12:00:01", "base_version": "0.0.1"}
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
     state_path = os.path.join(path, "run_state.yml")
     with open(state_path, "w") as f:
         yaml.dump(run_state, f)

@@ -33,7 +33,7 @@ def _write_run(app_layout, verstr, log, parent=None, name=None, run_state=None):
     if name:
         meta["name"] = name
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
     if run_state:
         with open(os.path.join(path, "run_state.yml"), "w") as f:
             yaml.dump(run_state, f)

@@ -62,7 +62,7 @@ def _seed(root):
         meta = {"verstr": verstr, "name": f"hist-{i:06d}", "timestamp": _iso(ts),
                 "params": {"lr": 0.001 * (i % 7), "seed": i}}
         with open(os.path.join(folder, "metadata.yml"), "w") as f:
-            yaml.dump(meta, f)
+            yaml.dump({"format_version": 1, **meta}, f)
         _write_log(os.path.join(folder, "log/w.jsonl"), i, STEPS if i < 20 else 5, now)
         if i == WIDE_RUN:  # enough params to push the charts below the fold
             os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)

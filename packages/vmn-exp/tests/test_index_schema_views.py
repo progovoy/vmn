@@ -26,7 +26,7 @@ def _write(app_layout, verstr, losses, second):
     meta = {"verstr": verstr, "code_verstr": verstr,
             "timestamp": f"2026-09-21T12:00:{second:02d}"}
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
     os.makedirs(os.path.dirname(os.path.join(path, "log/w0.jsonl")), exist_ok=True)
     with open(os.path.join(path, "log/w0.jsonl"), "w") as f:
         for i, loss in enumerate(losses):

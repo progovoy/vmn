@@ -33,7 +33,7 @@ def _write(app_layout, verstr, second, entries=()):
     meta = {"verstr": verstr, "code_verstr": verstr,
             "timestamp": f"2026-09-21T12:00:{second:02d}"}
     with open(os.path.join(_exp_dir(app_layout, verstr), "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
     _append(app_layout, verstr, entries)
 
 
