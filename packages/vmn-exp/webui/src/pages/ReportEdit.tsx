@@ -7,12 +7,17 @@ import { Markdown, type PanelSpec } from "../reports/Markdown";
 import Panel from "../reports/Panel";
 import PanelDialog from "../reports/PanelDialog";
 import { insertPanelBlock, replacePanelBlock } from "../reports/panelBlocks";
+import ConflictResolve from "../reports/ConflictResolve";
+import { merge3, type MergeChunk } from "../reports/merge";
+import type { HttpError } from "../http";
 import { clearDraft, draftKey, loadDraft, useDraftAutosave } from "../reports/useReportDraft";
 
 export { DRAFT_SAVE_MS } from "../reports/useReportDraft";
 
 type Dialog = { mode: "insert"; at: number } | { mode: "edit"; raw: string; spec: PanelSpec };
 interface Editing { body: string; base: number; saved: string }
+interface Theirs { rev: number; body: string; author?: string | null }
+interface Conflict { chunks: MergeChunk[]; theirs: Theirs }
 
 function useEditing(ws: string, rid: string) {
   const query = useQuery({ queryKey: ["report", ws, rid], queryFn: () => apiReports.getReport(ws, rid) });
@@ -39,20 +44,48 @@ export default function ReportEdit() {
 
   const setBody = (body: string) => setEditing((e) => (e ? { ...e, body } : e));
 
-  const save = useCallback(async () => {
-    if (!editing) return;
-    const { body, base } = editing;
+  const [conflict, setConflict] = useState<Conflict | null>(null);
+
+  const write = useCallback(async (body: string, base: number, note: string) => {
+    const { rev } = await apiReports.saveRevision(ws, rid, { base, body, ...(message ? { message } : {}) });
+    clearDraft(key);
+    setEditing((e) => (e ? { ...e, body, base: rev, saved: body } : e));
+    setMessage("");
+    setStatus(`${note}saved revision ${rev}`);
+    client.invalidateQueries({ queryKey: ["report", ws, rid] });
+  }, [message, ws, rid, key, setEditing, client]);
+
+  const onConflict = useCallback(async (theirs: Theirs, base: number, yours: string) => {
+    const { body: baseBody } = await apiReports.getRevision(ws, rid, base);
+    const merged = merge3(baseBody, theirs.body, yours);
+    if (merged.text !== undefined) return write(merged.text, theirs.rev, `merged with revision ${theirs.rev}; `);
+    setEditing((e) => (e ? { ...e, base: theirs.rev } : e));
+    setConflict({ chunks: merged.chunks, theirs });
+  }, [ws, rid, write, setEditing]);
+
+  const attempt = useCallback(async (body: string, base: number) => {
     try {
-      const { rev } = await apiReports.saveRevision(ws, rid, { base, body, ...(message ? { message } : {}) });
-      clearDraft(key);
-      setEditing((e) => (e ? { ...e, base: rev, saved: body } : e));
-      setMessage("");
-      setStatus(`saved revision ${rev}`);
-      client.invalidateQueries({ queryKey: ["report", ws, rid] });
+      await write(body, base, "");
     } catch (err) {
-      setStatus((err as Error).message);
+      const e = err as HttpError;
+      try {
+        if (e.status === 409) await onConflict(e.body as Theirs, base, body);
+        else setStatus(e.message);
+      } catch (inner) {
+        setStatus((inner as Error).message);
+      }
     }
-  }, [editing, message, ws, rid, key, setEditing, client]);
+  }, [write, onConflict]);
+
+  const save = useCallback(async () => {
+    if (editing) await attempt(editing.body, editing.base);
+  }, [editing, attempt]);
+
+  const saveResolved = (body: string) => {
+    if (!conflict) return;
+    setConflict(null);
+    void attempt(body, conflict.theirs.rev);
+  };
 
   const onKeyDown = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -93,6 +126,10 @@ export default function ReportEdit() {
         <button type="button" className="btn" onClick={() => void save()}>Save</button>
         {status && <span role="status">{status}</span>}
       </div>
+      {conflict && (
+        <ConflictResolve chunks={conflict.chunks} theirsAuthor={conflict.theirs.author}
+          onSave={saveResolved} onCancel={() => setConflict(null)} />
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <textarea ref={textarea} aria-label="Report source" className="mono" style={{ minHeight: "70vh" }}
           value={editing.body} onChange={(e) => setBody(e.target.value)} />

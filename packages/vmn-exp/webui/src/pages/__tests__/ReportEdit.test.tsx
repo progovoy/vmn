@@ -5,7 +5,7 @@ import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../apiReports", async (orig) => ({
   ...(await orig<typeof import("../../apiReports")>()),
-  apiReports: { getReport: vi.fn(), saveRevision: vi.fn() },
+  apiReports: { getReport: vi.fn(), saveRevision: vi.fn(), getRevision: vi.fn() },
 }));
 vi.mock("../../reports/Panel", () => ({ default: () => <div>panel-body</div>, PanelError: () => null }));
 
@@ -14,6 +14,9 @@ import ReportEdit, { DRAFT_SAVE_MS } from "../ReportEdit";
 
 const getReport = apiReports.getReport as unknown as ReturnType<typeof vi.fn>;
 const saveRevision = apiReports.saveRevision as unknown as ReturnType<typeof vi.fn>;
+const getRevision = apiReports.getRevision as unknown as ReturnType<typeof vi.fn>;
+const conflict = (rev: number, body: string) =>
+  Object.assign(new Error("conflict"), { status: 409, body: { rev, body, author: "bob" } });
 const KEY = "vmn_report_draft:w/r1";
 const BODY = "# Hi\n\n```vmn-panel\nv: 1\nid: p1\ntype: bar\napp: a\nruns: {query: x = 1}\nmetric: m\n```\n";
 
@@ -86,5 +89,40 @@ describe("ReportEdit", () => {
     expect(editor().value).toContain("metric: loss");
     expect(editor().value).not.toContain("metric: m\n");
     expect(editor().value.match(/```vmn-panel/g)).toHaveLength(1);
+  });
+
+  it("on 409 auto-merges non-overlapping edits and retries with the new base", async () => {
+    getReport.mockResolvedValue({ rid: "r1", title: "T", rev: 3, body: "a\nb\nc" });
+    getRevision.mockResolvedValue({ rev: 3, body: "a\nb\nc" });
+    saveRevision.mockRejectedValueOnce(conflict(5, "A\nb\nc")).mockResolvedValueOnce({ rev: 6 });
+    renderEdit();
+    await waitFor(() => expect(editor().value).toBe("a\nb\nc"));
+    fireEvent.change(editor(), { target: { value: "a\nb\nC" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveRevision).toHaveBeenLastCalledWith("w", "r1", { base: 5, body: "A\nb\nC" }));
+    expect(getRevision).toHaveBeenCalledWith("w", "r1", 3);
+    await waitFor(() => expect(editor().value).toBe("A\nb\nC"));
+    expect(screen.getByRole("status").textContent).toContain("merged");
+  });
+
+  it("on 409 with overlapping edits shows the resolve view and saves on the new base", async () => {
+    getReport.mockResolvedValue({ rid: "r1", title: "T", rev: 3, body: "a\nb\nc" });
+    getRevision.mockResolvedValue({ rev: 3, body: "a\nb\nc" });
+    saveRevision.mockRejectedValueOnce(conflict(5, "a\nT\nc")).mockResolvedValueOnce({ rev: 6 });
+    renderEdit();
+    await waitFor(() => expect(editor().value).toBe("a\nb\nc"));
+    fireEvent.change(editor(), { target: { value: "a\nY\nc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const view = await screen.findByRole("region", { name: "Resolve conflicts" });
+    expect(view.textContent).toContain("T");
+    expect(view.textContent).toContain("Y");
+    fireEvent.click(screen.getByRole("radio", { name: "Hunk 1: both" }));
+    const result = screen.getByLabelText("Merged result") as HTMLTextAreaElement;
+    expect(result.value).toBe("a\nT\nY\nc");
+    fireEvent.change(result, { target: { value: "a\nTY\nc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save resolved" }));
+    await waitFor(() => expect(saveRevision).toHaveBeenLastCalledWith("w", "r1", { base: 5, body: "a\nTY\nc" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Resolve conflicts" })).toBeNull());
+    expect(editor().value).toBe("a\nTY\nc");
   });
 });
