@@ -66,12 +66,16 @@ def _script_safe(text):
     return text.replace("</", "<\\/")
 
 
+def _json_safe(data):
+    return json.dumps(data).replace("<", "\\u003c")
+
+
 def build_html(data, js, css):
     """The page: styles, the report data as JSON, then the renderer."""
     return (
         "<!doctype html>\n<html><head><meta charset=\"utf-8\">"
         f"<title>{html.escape(data['title'])}</title>\n<style>{_script_safe(css)}</style></head>\n"
         "<body><div id=\"root\"></div>\n"
-        f"<script type=\"application/json\" id=\"vmn-report-data\">{_script_safe(json.dumps(data))}</script>\n"
+        f"<script type=\"application/json\" id=\"vmn-report-data\">{_json_safe(data)}</script>\n"
         f"<script>{_script_safe(js)}</script>\n</body></html>\n"
     )

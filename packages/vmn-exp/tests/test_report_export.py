@@ -52,6 +52,15 @@ def test_html_is_self_contained_and_escapes_script_ends():
     assert "<title>T &lt;/script&gt;&lt;b&gt;</title>" in html
 
 
+def test_data_block_hides_html_comment_openers():
+    data = {"title": "t", "body": "<!-- <script> x", "panels": {}, "media": {}}
+    html = rx.build_html(data, js="", css="")
+    start = html.index('id="vmn-report-data">') + len('id="vmn-report-data">')
+    block = html[start:html.index("</script>", start)]
+    assert "<" not in block
+    assert json.loads(block) == data
+
+
 def test_bundle_ships_with_the_package():
     js, css = rx.load_bundle()
     assert "vmn-report-data" in js and css
