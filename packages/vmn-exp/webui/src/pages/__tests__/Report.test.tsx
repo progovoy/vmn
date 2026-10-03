@@ -54,6 +54,7 @@ describe("Report page", () => {
     renderReport();
     expect(await screen.findByRole("heading", { name: "Published body" })).toBeTruthy();
     expect(screen.getByText(/published 2026-01-05/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Edit" })).toBeNull();
     expect(document.getElementById("p-loss")?.textContent).toBe("panel loss");
     fireEvent.click(screen.getByRole("button", { name: /view live/ }));
     expect(await screen.findByRole("heading", { name: "Draft body" })).toBeTruthy();
@@ -63,6 +64,7 @@ describe("Report page", () => {
     m.getReport.mockResolvedValue(report({ can_edit: true }));
     renderReport();
     expect(await screen.findByRole("heading", { name: "Draft body" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Edit" }).getAttribute("href")).toBe("/ws/w/reports/r1/edit");
   });
 
   it("opens live with ?live=1 and a given revision with ?rev=N", async () => {

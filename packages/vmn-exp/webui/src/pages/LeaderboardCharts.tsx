@@ -2,6 +2,8 @@ import { lazy, Suspense } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import type { RowsFilter } from "../queries";
 import { CHART_VIEWS, type ChartView } from "../hooks/useLeaderboardView";
+import AddToReport from "../reports/AddToReport";
+import { leaderboardSpec } from "../reports/viewSpecs";
 
 // Chart code is heavy (uPlot among it); loading them lazily keeps them off the table's
 // critical path — the rows paint while the chart code is still arriving.
@@ -44,6 +46,10 @@ export default function LeaderboardCharts({
   importance: ImportanceSource;
 }) {
   const common = { rows, metricCols, schema };
+  const spec = () => leaderboardSpec({
+    app: importance.app, view, filter: importance.filter, verstrs: rows.map((r) => r.verstr),
+    metricCols, paramCols, defaultMetric: importance.defaultMetric,
+  });
   return (
     <>
       <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
@@ -56,6 +62,7 @@ export default function LeaderboardCharts({
           </button>
         ))}
         {label && <span className="chart-coverage">{label}</span>}
+        <span style={{ marginLeft: "auto" }}><AddToReport ws={importance.ws} spec={spec} /></span>
       </div>
       <Suspense fallback={<ChartFallback />}>
         {view === "trend" && <ParamPlots {...common} />}

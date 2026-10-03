@@ -5,7 +5,7 @@ import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../apiReports", async (orig) => ({
   ...(await orig<typeof import("../../apiReports")>()),
-  apiReports: { listReports: vi.fn() },
+  apiReports: { listReports: vi.fn(), createReport: vi.fn() },
 }));
 
 import { apiReports } from "../../apiReports";
@@ -16,7 +16,10 @@ const listReports = apiReports.listReports as unknown as ReturnType<typeof vi.fn
 function renderReports() {
   return renderWithClient(
     <MemoryRouter initialEntries={["/ws/w/reports"]}>
-      <Routes><Route path="/ws/:ws/reports" element={<Reports />} /></Routes>
+      <Routes>
+        <Route path="/ws/:ws/reports" element={<Reports />} />
+        <Route path="/ws/:ws/reports/:rid/edit" element={<div>editor-page</div>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -50,5 +53,15 @@ describe("Reports page", () => {
     await screen.findByText("LR sweep");
     fireEvent.click(screen.getByLabelText("Show archived"));
     await waitFor(() => expect(listReports).toHaveBeenCalledWith("w", true));
+  });
+
+  it("creates a new report and opens its editor", async () => {
+    (apiReports.createReport as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ rid: "r9", rev: 1 });
+    renderReports();
+    await screen.findByText("LR sweep");
+    fireEvent.change(screen.getByLabelText("New report title"), { target: { value: "Fresh" } });
+    fireEvent.click(screen.getByRole("button", { name: "New report" }));
+    await screen.findByText("editor-page");
+    expect(apiReports.createReport).toHaveBeenCalledWith("w", { title: "Fresh", body: "" });
   });
 });

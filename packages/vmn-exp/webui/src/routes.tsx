@@ -17,6 +17,7 @@ const ModelDetail = lazy(() => import("./pages/ModelDetail"));
 const Tokens = lazy(() => import("./pages/Tokens"));
 const Reports = lazy(() => import("./pages/Reports"));
 const Report = lazy(() => import("./pages/Report"));
+const ReportEdit = lazy(() => import("./pages/ReportEdit"));
 
 function PageFallback() {
   return <div className="route-fallback" aria-label="loading page" />;
@@ -47,6 +48,7 @@ export const routes: RouteObject[] = [
       { path: "ws/:ws/models/:modelName", element: page(ModelDetail), handle: { page: "model" } },
       { path: "ws/:ws/reports", element: page(Reports), handle: { page: "reports" } },
       { path: "ws/:ws/reports/:rid", element: page(Report), handle: { page: "report" } },
+      { path: "ws/:ws/reports/:rid/edit", element: page(ReportEdit), handle: { page: "report" } },
     ],
   },
 ];

@@ -8,7 +8,7 @@ export const BASE = "/api/v1";
 export const appTag = (name: string) => name.replaceAll("/", "-");
 
 /** What `get` and `post` throw: the message plus the HTTP status. */
-export type HttpError = Error & { status?: number };
+export type HttpError = Error & { status?: number; body?: unknown };
 
 export function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = sessionStorage.getItem("vmn_token");
@@ -60,6 +60,7 @@ async function parse<T>(res: Response): Promise<T> {
     // query, say) and is shown next to the input, not as a page error.
     throw Object.assign(new Error(body.detail || `HTTP ${res.status}`), {
       status: res.status,
+      body,
     });
   }
   if (res.status === 204) return undefined as T;

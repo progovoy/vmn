@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiReports, type ReportRow } from "../apiReports";
 import { relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
@@ -36,6 +36,27 @@ function ReportTable({ ws, reports }: { ws: string; reports: ReportRow[] }) {
   );
 }
 
+function NewReport({ ws }: { ws: string }) {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const create = async () => {
+    try {
+      const { rid } = await apiReports.createReport(ws, { title: title.trim() || "Untitled report", body: "" });
+      navigate(`/ws/${ws}/reports/${encodeURIComponent(rid)}/edit`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <span style={{ display: "inline-flex", gap: 6, marginLeft: 16 }}>
+      <input aria-label="New report title" placeholder="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <button type="button" className="btn" onClick={() => void create()}>New report</button>
+      {error && <span role="alert" className="error">{error}</span>}
+    </span>
+  );
+}
+
 export default function Reports() {
   const { ws = "" } = useParams();
   const [archived, setArchived] = useState(false);
@@ -51,6 +72,7 @@ export default function Reports() {
           onChange={(e) => setArchived(e.target.checked)} />
         show archived
       </label>
+      <NewReport ws={ws} />
       {query.error ? <div className="error">{(query.error as Error).message}</div>
         : query.data ? <ReportTable ws={ws} reports={query.data.reports} /> : <Skeleton />}
     </>

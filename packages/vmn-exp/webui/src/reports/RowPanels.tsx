@@ -83,7 +83,8 @@ function plan(spec: RowSpec, ws: string): { view: ChartView; cols: Cols; render:
       return { view: "parallel", cols: splitKeys(spec.columns),
         render: (c) => (rows, schema) => <ParallelCoordinates rows={rows} {...c} schema={schema} /> };
     case "grouped":
-      return { view: "grouped", cols: splitKeys([spec.metric, spec.group_by]),
+      return { view: "grouped", // A bare group_by is a row field (branch, status), not a metric column.
+      cols: splitKeys([spec.metric, ...(spec.group_by.startsWith("params.") ? [spec.group_by] : [])]),
         render: (c) => (rows, schema) => <GroupedMetrics rows={rows} {...c} schema={schema} initialGroup={bareKey(spec.group_by)} /> };
     case "importance": {
       const filter = "verstrs" in spec.runs ? {} : queryFilter(spec.runs);

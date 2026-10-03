@@ -26,7 +26,7 @@ function Curves({ ws, spec, verstrs }: { ws: string; spec: CurvesSpec; verstrs: 
   return (
     <OverlayChart ws={ws} app={spec.app} verstrs={verstrs} keys={spec.keys} maxPoints={spec.max_points}
       smoothing={spec.smoothing} logY={spec.log_y}
-      xMode={x?.mode} x={x?.mode === "metric" && x.metric ? x.metric : AUTO_X} />
+      xMode={x?.mode === "metric" ? "step" : x?.mode} x={x?.mode === "metric" && x.metric ? x.metric : AUTO_X} />
   );
 }
 
