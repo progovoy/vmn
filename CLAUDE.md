@@ -266,4 +266,5 @@ Core vmn and vmn-exp are documented separately (vmn-exp will become a separate p
   - `experiments.md`: `vmn-exp` CLI reference, status/alerts, nesting, storage + plugin contract, offline + `push`, env vars.
   - `sdk.md`: the `vmn_exp.sdk` Python SDK (`start_run`, logging, autolog, readers, query language, integrations).
   - `ui.md`: `vmn-exp ui` deployment + HTTP API. `models.md`: model/dataset registry. `sweeps.md`: sweeps.
+  - `server.md`: `vmn-exp ui` as a central server (`server.yml`, SQLite cache, change journal, resync/rebuild, OIDC/API tokens/roles). `byo-bucket.md`: store areas, the server's permission sets, journal lifecycle rule. `reports.md`: reports, panels, publish/export, comments.
   - `ai-fleet-tracking.md`: for AI agents — which SDK/CLI call moves each UI fleet column. `vmn-vs-mlflow.md`, `migrating-from-mlflow.md`.

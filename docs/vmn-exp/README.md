@@ -37,6 +37,9 @@ Jobs that only record metrics need just `pip install vmn-exp-sdk`
 | [ui.md](ui.md) | `vmn-exp ui`: deployment and the HTTP API |
 | [models.md](models.md) | the model and dataset registry |
 | [sweeps.md](sweeps.md) | `vmn-exp sweep`: grid/random/bayes search |
+| [server.md](server.md) | `vmn-exp ui` as a team server: `server.yml`, cache, change journal, resync/rebuild, OIDC, API tokens, roles |
+| [byo-bucket.md](byo-bucket.md) | bring-your-own-bucket: store areas, the server's read-only and read + edits permission sets, journal lifecycle rule |
+| [reports.md](reports.md) | reports (`vmn-panel` blocks, revisions, publish, HTML export) and comments |
 
 Saving and restoring uncommitted work without a run is core vmn:
 [`vmn snapshot`](../snapshots.md).
