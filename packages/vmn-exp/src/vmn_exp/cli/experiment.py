@@ -287,10 +287,10 @@ READ_ONLY_ACTIONS = frozenset({"list", "show", "compare", "diff", "export", "imp
                                "watch", "lineage", "importance"})
 
 
-def _open_checked_storage(vcs, params, action):
+def _open_checked_storage(vcs, params, action, args=None):
     """The experiment storage; a read-only action refuses a configured store
     that doesn't exist (a mistyped URI) instead of listing nothing."""
-    writer = action not in READ_ONLY_ACTIONS
+    writer = action not in READ_ONLY_ACTIONS or getattr(args, "compact", False)
     storage = _get_experiment_storage(vcs, params, writer=writer)
     if not writer:
         require_store(storage, store_uri(params))
@@ -315,7 +315,7 @@ def handle_experiment(vmn_ctx):
             return err
 
     try:
-        storage = _open_checked_storage(vcs, params, action)
+        storage = _open_checked_storage(vcs, params, action, args)
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
@@ -362,6 +362,10 @@ def handle_experiment(vmn_ctx):
         return experiment_watch(vcs, storage, _app_name(vcs, args), args)
     elif action == "rewind":
         return experiment_rewind(vcs, params, storage, args)
+    elif action == "compact":
+        from vmn_exp.cli.compact import experiment_compact
+
+        return experiment_compact(storage, _app_name(vcs, args), args)
     elif action == "push":
         return experiment_push(vcs, params, storage, args)
     elif action == "lineage":

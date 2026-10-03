@@ -87,6 +87,26 @@ def compact_record(storage, app_name, verstr, rebuild=False):
             if compact_writer(storage, app_name, verstr, w, rewinds, rebuild=rebuild)]
 
 
+def rebuild_compacted(storage, app_name, verstr):
+    """Rebuild the ``.vmx`` of every compacted writer of the record, so a
+    rewind appended after compaction is applied in the file."""
+    listing = getattr(storage, "metric_objects", None)
+    objects = listing(app_name, verstr) if listing else {}
+    rewinds = record_rewinds(storage, app_name, verstr)
+    return [w for w in sorted(objects) if is_compacted(objects[w])
+            and compact_writer(storage, app_name, verstr, w, rewinds, rebuild=True)]
+
+
+def record_compacted(storage, app_name, verstr):
+    """True when every writer of the record is on a ``.vmx``, False when one
+    is still on streams, None when the record has no metric objects."""
+    listing = getattr(storage, "metric_objects", None)
+    objects = listing(app_name, verstr) if listing else {}
+    if not objects:
+        return None
+    return all(is_compacted(objs) for objs in objects.values())
+
+
 def _compact_quietly(storage, app_name, verstr, writer):
     try:
         compact_writer(storage, app_name, verstr, writer,
