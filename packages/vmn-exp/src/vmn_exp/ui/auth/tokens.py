@@ -14,6 +14,7 @@ import time
 from dataclasses import asdict, dataclass
 
 from vmn_exp.ui.auth.principal import Principal, check_roles
+from vmn_exp.ui.tenancy import org_context
 
 PREFIX = "vmnx"
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1}
@@ -100,12 +101,16 @@ class TokenService:
         parsed = parse_token(token)
         if parsed is None:
             return None
-        record = self._get(parsed[0])
+        org_id = self.store.credential_org("token", parsed[0])
+        if org_id is None:
+            return None
+        with org_context(org_id):
+            record = self._get(parsed[0])
         if record is None or record.revoked or not secret_matches(parsed[1], record.secret_hash):
             return None
         if record.expires_at and self.clock() >= record.expires_at:
             return None
-        return Principal(f"token:{record.id}", record.name, dict(record.roles))
+        return Principal(f"token:{record.id}", record.name, dict(record.roles), org_id=org_id)
 
     def revoke(self, token_id):
         record = self._get(token_id)

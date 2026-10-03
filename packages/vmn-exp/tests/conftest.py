@@ -19,7 +19,7 @@ from vmn_fixtures import (  # noqa: E402,F401  (fixtures and hooks pytest collec
     session_uuid,
     vmn_env_guard,
 )
-from pg_fixture import pg_dsn, pg_server_dsn  # noqa: E402,F401
+from pg_fixture import pg_dsn, pg_rls_dsn, pg_server_dsn  # noqa: E402,F401
 
 
 @pytest.fixture(autouse=True)

@@ -71,3 +71,24 @@ def pg_dsn(pg_server_dsn):
     yield pg_server_dsn.rsplit("/", 1)[0] + "/" + name
     with psycopg.connect(pg_server_dsn, autocommit=True) as conn:
         conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
+@pytest.fixture
+def pg_rls_dsn(pg_dsn):
+    """A non-superuser DSN (superusers bypass RLS) on a migrated, RLS-on DB."""
+    import psycopg
+
+    from vmn_exp.ui import migrations, tenancy
+
+    role = f"r_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(pg_dsn, autocommit=True) as conn:
+        migrations.apply_migrations(conn)
+        tenancy.enable_rls(conn)
+        conn.execute(f"CREATE ROLE {role} LOGIN PASSWORD 'x'")
+        conn.execute(f"GRANT ALL ON ALL TABLES IN SCHEMA public TO {role}")
+        conn.execute(f"GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO {role}")
+        conn.execute(f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO {role}")
+    yield pg_dsn.replace("postgres:x@", f"{role}:x@")
+    with psycopg.connect(pg_dsn, autocommit=True) as conn:
+        conn.execute(f"DROP OWNED BY {role}")
+        conn.execute(f"DROP ROLE {role}")

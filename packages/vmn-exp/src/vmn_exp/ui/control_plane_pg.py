@@ -71,6 +71,15 @@ class PostgresControlPlane(ControlPlaneStore):
             )
             return [doc for (doc,) in rows]
 
+    def credential_org(self, kind, key):
+        # tenancy.enable_rls's vmn_credential_lookup policy lets this one id through in any org.
+        with self._lock, self._db.transaction():
+            self._db.execute("SELECT set_config('app.credential_id', %s, true)", (key,))
+            row = self._db.execute(
+                f"SELECT org_id FROM {_TABLES[kind]} WHERE id = %s ORDER BY org_id LIMIT 1", (key,)
+            ).fetchone()
+        return row[0] if row else None
+
     def _get(self, kind, key, now):
         sql = f"SELECT doc FROM {_TABLES[kind]} WHERE org_id = %s AND id = %s"
         args = [self._org, key]
