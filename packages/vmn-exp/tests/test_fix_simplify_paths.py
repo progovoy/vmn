@@ -5,6 +5,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
+from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.storage.files import valid_artifact_path, valid_relative_path
@@ -87,7 +88,7 @@ def test_parse_record_metadata_keeps_records_only():
 
 def test_storage_load_metadata_reads_metadata_alone(local):
     local.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {"untracked_files": b"x"})
-    assert local.load_metadata("app", "v1") == {"verstr": "v1", "timestamp": "t", "format_version": 1}
+    assert local.load_metadata("app", "v1") == {"verstr": "v1", "timestamp": "t", "format_version": RECORD_FORMAT_VERSION}
     assert local.load_metadata("app", "missing") is None
 
 

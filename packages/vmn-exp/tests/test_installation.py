@@ -20,8 +20,12 @@ DISTS = ("vmn", "vmn-exp-sdk", "vmn-exp")
 
 
 def _pip(*args, python=_PY):
+    # The suites' PYTHONPATH holds the src/ dirs, whose in-tree *.egg-info
+    # would make pip treat the wheels as installed already.
+    env = dict(os.environ, PYTHONPATH="", PYTHONNOUSERSITE="1")
     return subprocess.run(
-        [python, "-m", "pip", *args], capture_output=True, text=True, timeout=_TIMEOUT
+        [python, "-m", "pip", *args], capture_output=True, text=True, timeout=_TIMEOUT,
+        env=env,
     )
 
 
