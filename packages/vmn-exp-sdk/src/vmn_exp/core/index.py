@@ -125,6 +125,20 @@ class ExperimentIndex:
         loads it, if new) without listing anything else."""
         self._sweep.hint(name)
 
+    @property
+    def drift(self):
+        """Records the consistency check found changed with no journal entry."""
+        return self._sweep.drift
+
+    @property
+    def last_reconcile_at(self):
+        """Wall time the last full listing or consistency round began."""
+        return self._sweep.last_reconcile_at
+
+    @property
+    def record_count(self):
+        return len(self._records or ())
+
     def reconcile(self):
         """Make the next refresh a full listing."""
         self._sweep.request_full()

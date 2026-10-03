@@ -31,18 +31,20 @@ next slice of the known records, sized so every one comes round within
 every new run, waiting for seconds.
 
 A ``journaled`` sweep (the ui, reading the store's change journal; plan 11
-§5.2) lists no names at all: each refresh lists the files of the records the
-journal named (:meth:`Sweep.hint`) and of the live ones only, so its cost does
-not grow with the number of finished runs. Its full listings — the
-*reconcile* listing, catching what a crashed or clock-skewed writer never
-journaled — happen at the first refresh, every ``full_sweep_sec`` and on
-:meth:`Sweep.request_full`.
+§5.2) lists the files of the records the journal named (:meth:`Sweep.hint`)
+and of the live ones, plus the same rolling slice of every known record — the
+consistency check (plan 11 §4.6), so each comes round once per
+``full_sweep_sec`` (``reconcile_sec``) — and, at the start of each round, the
+record names (for records no journal entry announced). What the check finds
+changed that no hint or live listing explains is counted in :attr:`Sweep.drift`.
+Its only full listings are the first one and :meth:`Sweep.request_full`.
 
 The fast tier is opt-in: ``full_sweep_sec`` defaults to 0, where every refresh
 is a full listing and an in-place write by anyone shows up at once. A server
 that refreshes often sets it (a mutable attribute) and sweeps in the background.
 """
 import threading
+import time
 
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
 from vmn_exp.core.status import (
@@ -54,6 +56,7 @@ from vmn_exp.core.status import (
 DEFAULT_FULL_SWEEP_SEC = 0  # 0: every refresh is a full listing
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
+_wall = time.time
 
 
 def _observed_at(rs_sig):
@@ -97,6 +100,10 @@ class Sweep:
         self.journaled = False
         self._hinted = set()  # keys the journal named since the last listing
         self._hint_lock = threading.Lock()
+        self._explained = set()  # keys listed by a hint or as live since their last check
+        self._wrapped = False  # the rolling slice started a new round
+        self.drift = 0  # records the consistency check found changed unannounced
+        self.last_reconcile_at = None  # wall time a full listing or round last began
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""
@@ -147,7 +154,7 @@ class Sweep:
         listing = self.watch.files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
         if self.watch.rolling and self.full_sweep_sec:
-            rolled, rolled_gone = self.watch.slice_changes(self._next_slice(now))
+            rolled, rolled_gone = self.watch.slice_changes(self._next_slice(now, self._sigs))
             listing = {**rolled, **listing}
             gone |= rolled_gone
         self._pending = {key for key in gone if key in self._sigs and key not in records}
@@ -159,11 +166,37 @@ class Sweep:
             return self._full_listing(records, now)
         candidates = hinted | self._pending | self._live
         keys = [key for key in candidates if key in hinted or self._judge_live(records, key)]
+        self._explained.update(keys)
         listing = self.watch.files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
+        checked, checked_gone = self._consistency_check(records, now)
         self._pending = {key for key in gone if key in hinted | self._pending
                          and key not in records}
-        return listing, [key for key in gone if key in records]
+        self._pending |= {k for k, files in checked.items() if METADATA_FILE not in files}
+        return {**checked, **listing}, [key for key in gone | checked_gone if key in records]
+
+    def _consistency_check(self, records, now):
+        """``(files of the slice's changed records, keys gone)``, counting drift."""
+        due = self._next_slice(now, records)
+        changed, gone = self.watch.slice_changes(due) if due else ({}, set())
+        if self._wrapped:
+            unseen = self._unseen_names(records)
+            new, _ = self.watch.slice_changes(unseen) if unseen else ({}, set())
+            changed = {**new, **changed}
+        unexplained = [
+            k for k, files in changed.items()
+            if k not in self._explained and METADATA_FILE in files
+        ]
+        self.drift += len(unexplained) + len(gone & set(records))
+        self._explained.difference_update(due)
+        return changed, gone
+
+    def _unseen_names(self, records):
+        """Names the store lists that the index does not know (nor waits for)."""
+        changes = self.watch.name_changes()
+        if changes is None:
+            return []
+        return [k for k in changes[0] if k not in records and k not in self._pending]
 
     def _judge_live(self, records, key):
         """Whether *key* — pending or live — is still worth listing."""
@@ -216,20 +249,24 @@ class Sweep:
         (self._live.discard if settled else self._live.add)(key)
         return self._changed_since(key, sig, now, settled)
 
-    def _next_slice(self, now):
-        """The known keys due for their periodic re-listing. A refresh lists
-        at most a tenth of them, however long the last one took (a cold load
-        can outlast full_sweep_sec)."""
+    def _next_slice(self, now, population):
+        """The keys of *population* due for their periodic re-listing. A
+        refresh lists at most a tenth of them, however long the last one took
+        (a cold load can outlast full_sweep_sec)."""
         elapsed = now - (self._rolled_at if self._rolled_at is not None else now)
         elapsed = min(elapsed, self.full_sweep_sec / 10)
         self._rolled_at = now
-        self._credit = min(
-            self._credit + len(self._sigs) * elapsed / self.full_sweep_sec, len(self._sigs)
-        )
+        size = max(len(population), 1)  # an empty one still starts rounds
+        self._credit = min(self._credit + size * elapsed / self.full_sweep_sec, size)
+        self._wrapped = False
         due = []
         while len(due) < int(self._credit):
             if self._cursor >= len(self._ring):
-                self._ring, self._cursor = sorted(self._sigs), 0
+                self._ring, self._cursor = sorted(population), 0
+                self._wrapped, self.last_reconcile_at = True, _wall()
+                if not self._ring:
+                    self._credit = 0
+                    break
             taken = self._ring[self._cursor : self._cursor + int(self._credit) - len(due)]
             self._cursor += len(taken)
             due += taken
@@ -238,6 +275,7 @@ class Sweep:
 
     def _full_listing(self, records, now):
         self._last_full = self._rolled_at = now
+        self.last_reconcile_at = _wall()
         listing, present = self.watch.full_changes()
         if self._live is None:
             self._live = {
@@ -249,6 +287,8 @@ class Sweep:
     def _full_due(self, now):
         if self._last_full is None:
             return True
+        if self.journaled and self.full_sweep_sec:
+            return False
         rolling = self.watch.rolling and not self.journaled
         if rolling and self._sigs_known and self.full_sweep_sec:
             return False

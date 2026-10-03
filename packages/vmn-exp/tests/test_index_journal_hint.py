@@ -1,6 +1,6 @@
 """Plan 11 §5.2 / phase 2c: a journaled index lists only what the journal
 names (``hint``) plus its live records; full listings happen at the first
-load and on ``reconcile`` (or every ``full_sweep_sec``), never per tick."""
+load and on ``reconcile``, never per tick."""
 import pytest
 
 from vmn_exp.core import index as experiment_index
@@ -172,12 +172,17 @@ def test_an_unhinted_new_run_waits_for_reconcile(st, spy, clock):
     assert new in _verstrs(index)
 
 
-def test_the_reconcile_interval_forces_a_full_listing(st, spy, clock):
+def test_a_reconcile_round_finds_an_unhinted_run_without_a_full_listing(st, spy, clock):
+    # Plan 11 §4.6: the rolling consistency check replaced the periodic full
+    # listing; a round (reconcile_sec of ticks) also lists the record names.
     _make(st, 1)
     index = _journaled(st).refresh()
     new = _make(st, 2)
-    clock.now += RECONCILE_SEC
-    index.refresh()
+    _reset(spy)
+    for _ in range(11):
+        clock.now += RECONCILE_SEC / 10
+        index.refresh()
+    assert None not in spy["list_files"]
     assert new in _verstrs(index)
 
 
