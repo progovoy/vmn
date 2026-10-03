@@ -1198,7 +1198,9 @@ dir whose v1 records sit under `<dir>/.vmn`; `--store` an object store (or
 `file://`). It sets `migrating: true` in `store.yml` (writers refuse
 meanwhile), copies each record to its v2 path (area, tag-form key, `log/`,
 `outputs/`; `metadata.yml` last) and deletes the old copy, then clears the
-flag. Record by record, so a killed migration resumes on rerun. Running or
+flag. On the way, each writer's JSONL `metrics` entries move into one
+compacted `metrics/<writer>.vmx` (rewinds applied) and the record gets
+`format_version: 2`. Record by record, so a killed migration resumes on rerun. Running or
 stuck runs stop it with a list unless `--skip-live` (rerun later for those).
 `--dry-run` prints the plan and changes nothing.
 
