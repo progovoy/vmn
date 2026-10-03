@@ -126,6 +126,29 @@ class PostgresStore:
             return
         self._run(lambda c: _save(c, self._key(scope), changed, removed, states), None, "write")
 
+    def cache_version(self):
+        """The ``vmn_cache_meta`` schema version; ``""`` when the row is gone,
+        None when the database is unreachable."""
+
+        def query(conn):
+            row = conn.execute(
+                "SELECT v FROM vmn_cache_meta WHERE k = 'schema_version'").fetchone()
+            return row[0] if row else ""
+
+        return self._run(query, None, "read")
+
+    def reset_cache(self):
+        """Reconnect, re-checking the cache schema (a truncated or foreign
+        cache is emptied and re-stamped)."""
+        with self._lock:
+            self._drop_connection()
+
+    def replace_scope(self, scope, records, floor=0):
+        """Make *records* the scope's whole content in one transaction, under
+        a generation past *floor*: followers see the new set at once, never a
+        half-built one (the rebuild's shadow generation)."""
+        self._run(lambda c: _replace(c, self._key(scope), records, floor), None, "write")
+
     def kv_get(self, scope, fingerprint):
         def query(conn):
             row = conn.execute(
@@ -201,6 +224,22 @@ def _save(conn, key, changed, removed, states):
         _upsert(conn, "vmn_run_states", key, seq, states, _state_of)
         _forget(conn, key, seq, removed)
         _trim_tombstones(conn, key)
+        conn.execute("SELECT pg_notify('vmn_gen', %s)", (f"{key[1]}:{key[2]}",))
+
+
+def _replace(conn, key, records, floor):
+    with conn.transaction():
+        (seq,) = conn.execute(
+            "INSERT INTO vmn_scope_gen (org_id, workspace_id, app, gen) VALUES (%s, %s, %s, %s)"
+            " ON CONFLICT (org_id, workspace_id, app) DO UPDATE"
+            " SET gen = GREATEST(vmn_scope_gen.gen, %s) + 1 RETURNING gen",
+            key + (floor + 1, floor),
+        ).fetchone()
+        stale = {k for (k,) in conn.execute(
+            f"SELECT key FROM vmn_records WHERE {_SCOPE}", key)} - set(records)
+        _upsert(conn, "vmn_records", key, seq, records, _without_state)
+        _upsert(conn, "vmn_run_states", key, seq, records, _state_of)
+        _forget(conn, key, seq, stale)
         conn.execute("SELECT pg_notify('vmn_gen', %s)", (f"{key[1]}:{key[2]}",))
 
 
