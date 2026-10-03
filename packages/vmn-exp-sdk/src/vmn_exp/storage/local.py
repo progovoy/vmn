@@ -21,7 +21,7 @@ from vmn_exp.storage.files import (
     artifact_name_for,
     atomic_write,
     checked_app_path,
-    flatten_logs,
+    merged_log,
     group_log_names,
     log_object_name,
     log_sizes_of,
@@ -373,4 +373,4 @@ class LocalSnapshotStorage(LocalMetrics, SnapshotStorage):
         return log_sizes_of((name, sig[0]) for name, sig in files_in(snap_dir).items())
 
     def load_merged_log(self, app_name, verstr):
-        return flatten_logs(self.load_logs_by_writer(app_name, verstr))
+        return merged_log(self, app_name, verstr, self.load_logs_by_writer(app_name, verstr))

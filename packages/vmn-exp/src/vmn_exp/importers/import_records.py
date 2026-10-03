@@ -27,8 +27,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.metric_entries import record_metric_entries, split_metric_entries
+from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.core.writer import (
+    sync_to_remote,
     claim_record,
     create_tags_entry,
     flush_log,
@@ -195,6 +198,9 @@ def _write_all(
     # Write directly to storage (not via append_entries_to_log) because
     # sanitize_entry is designed for live SDK writes and drops NaN; NaN is
     # valid MLflow data and must be preserved per the import spec.
+    metrics, entries = split_metric_entries(entries)
+    if metrics:
+        record_metric_entries(MetricWriter(storage, app_name, verstr, IMPORT_WRITER), metrics)
     storage.append_log_entries(app_name, verstr, IMPORT_WRITER, entries)
 
     save_run_state(storage, app_name, verstr, _build_run_state(run))
@@ -203,6 +209,7 @@ def _write_all(
         _copy_local_artifacts(storage, app_name, verstr, run.get("artifact_dir"))
 
     flush_log(storage, app_name, verstr)
+    sync_to_remote(storage, app_name, verstr, IMPORT_WRITER)
 
 
 # ---------------------------------------------------------------------------

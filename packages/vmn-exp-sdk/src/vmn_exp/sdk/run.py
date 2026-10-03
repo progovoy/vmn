@@ -35,6 +35,7 @@ from vmn_exp.core.writer import (
     create_tags_entry,
     get_writer_id,
     save_artifact,
+    sync_to_remote,
 )
 from vmn_exp.sdk import (
     _resolve_app_name,  # noqa: F401  (one shared resolver)
@@ -291,7 +292,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             functools.partial(
                 self._chore_guard,
                 "experiment log sync",
-                storage.sync_log_to_remote,
+                sync_to_remote,
+                storage,
                 app_name,
                 verstr,
             ),

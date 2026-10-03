@@ -20,6 +20,12 @@ import yaml
 
 from vmn_exp._base import get_repo_lock, now_iso, sha256_file  # noqa: F401
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.metric_entries import (
+    is_metric_entry,
+    record_metric_entries,
+    split_metric_entries,
+)
+from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.values import sanitize_entry
@@ -126,22 +132,40 @@ def create_tags_entry(tags=None, remove=None):
 
 
 def append_to_log(storage, app_name, verstr, entry):
-    """Append an entry to the experiment log using per-writer JSONL files.
+    """Append an entry to the experiment log using per-writer JSONL files —
+    or, for a ``metrics`` entry, to the writer's metric stream.
 
     Metric values are coerced to floats first (numpy/torch scalars, numeric
     strings); non-numeric ones are dropped, and an entry left with nothing to
     record is skipped. See :mod:`vmn_exp.core.values`.
     """
     entry = sanitize_entry(entry)
-    if entry is not None:
+    if entry is None:
+        return
+    if is_metric_entry(entry):
+        append_metric_entries(storage, app_name, verstr, [entry])
+    else:
         storage.append_log_entry(app_name, verstr, get_writer_id(), entry)
 
 
+def append_metric_entries(storage, app_name, verstr, entries, inherited=False):
+    """Record sanitized ``metrics`` *entries* as one block of this writer's
+    metric stream (plan 12 §4.1); True when stored."""
+    writer = MetricWriter(storage, app_name, verstr, get_writer_id())
+    return record_metric_entries(writer, entries, inherited=inherited)
+
+
 def append_entries_to_log(storage, app_name, verstr, entries):
-    """Append already-sanitized *entries* in one write where the backend can.
+    """Append already-sanitized *entries* in one write where the backend can;
+    ``metrics`` entries go to the metric stream.
 
     A duck-typed backend without ``append_log_entries`` gets them one by one.
     """
+    metrics, entries = split_metric_entries(entries)
+    if metrics and not append_metric_entries(storage, app_name, verstr, metrics):
+        return False
+    if not entries:
+        return True
     writer = get_writer_id()
     batch = getattr(storage, "append_log_entries", None)
     if batch is not None:
@@ -162,9 +186,16 @@ def flush_log(storage, app_name, verstr):
     this right after appending. Backends without the method (a plain S3
     remote, which has nothing to sync) are left alone.
     """
-    sync = getattr(storage, "sync_log_to_remote", None)
-    if sync is not None:
-        sync(app_name, verstr, get_writer_id())
+    sync_to_remote(storage, app_name, verstr, get_writer_id())
+
+
+def sync_to_remote(storage, app_name, verstr, writer_id):
+    """Ship *writer_id*'s new log lines, then its new metric blocks, where
+    the backend syncs them."""
+    for method in ("sync_log_to_remote", "sync_metrics_to_remote"):
+        sync = getattr(storage, method, None)
+        if sync is not None:
+            sync(app_name, verstr, writer_id)
 
 
 # ---------------------------------------------------------------------------

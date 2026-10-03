@@ -3,8 +3,9 @@
 
 The fork is an ordinary new run (its own snapshot of the current tree, its own
 verstr); its ``metadata.yml`` records ``forked_from: {verstr, step}`` and its
-log opens with the source's metrics and params up to and including that step,
-copied with ``"inherited": true`` and their original timestamps, so the fork's
+log opens with the source's params up to and including that step, and its
+metric stream with the source's points (blocks marked inherited), copied with
+``"inherited": true`` and their original timestamps, so the fork's
 own entries — from step + 1 on — always fold over them. A fork is not a child:
 ``parent``, ``kind`` and ``tree_status`` do not change.
 
@@ -19,7 +20,8 @@ import operator
 from vmn_exp.core.resolve_ref import _resolve_verstr
 from vmn_exp.core.rewind import create_rewind_entry, entry_step
 from vmn_exp.core.status import RUNNING, derive_status, run_state_observed_at
-from vmn_exp.core.writer import append_entries_to_log
+from vmn_exp.core.metric_entries import split_metric_entries
+from vmn_exp.core.writer import append_entries_to_log, append_metric_entries
 
 STEP_SUFFIX = "?_step="
 INHERITABLE = ("metrics", "params", "create")
@@ -95,8 +97,11 @@ def seed_fork(storage, app_name, verstr, source, step=None):
     entries, step = inherited_entries(log, step)
     forked_from = {"verstr": source, "step": step}
     storage.update_metadata(app_name, verstr, {"forked_from": forked_from})
-    if entries:
-        append_entries_to_log(storage, app_name, verstr, entries)
+    metrics, others = split_metric_entries(entries)
+    if metrics:  # blocks marked inherited (plan 12 §5.4)
+        append_metric_entries(storage, app_name, verstr, metrics, inherited=True)
+    if others:
+        append_entries_to_log(storage, app_name, verstr, others)
     return forked_from
 
 

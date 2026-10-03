@@ -16,7 +16,7 @@ from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.logfiles import compacted_log_name
 from vmn_exp.storage.files import (
     LEGACY_LOG_FILE,
-    flatten_logs,
+    merged_log,
     group_log_names,
     log_object_name,
     log_sizes_of,
@@ -144,7 +144,7 @@ class S3Logs:
 
     def load_merged_log(self, app_name, verstr):
         try:
-            return flatten_logs(self.load_logs_by_writer(app_name, verstr))
+            return merged_log(self, app_name, verstr, self.load_logs_by_writer(app_name, verstr))
         except Exception:
             VMN_LOGGER.debug("Failed to load S3 experiment log", exc_info=True)
             return []

@@ -12,7 +12,7 @@ backends apply the gate where they parse metadata (``list_snapshots``,
 """
 from vmn_exp._base import VMN_LOGGER
 
-RECORD_FORMAT_VERSION = 1
+RECORD_FORMAT_VERSION = 2
 FORMAT_VERSION_KEY = "format_version"
 
 
