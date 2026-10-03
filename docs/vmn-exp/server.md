@@ -33,8 +33,12 @@ dashboard, see [ui.md](ui.md). For giving a server access to your bucket, see
 
 The control-plane DB holds the workspace registry, API tokens, login sessions
 and the audit log. Unlike the cache, it is not rebuilt from storage, so back it
-up. `--db` accepts only `sqlite:///<path>`. Without it, a configured server
-keeps the DB in the data dir.
+up. `--db` accepts `sqlite:///<path>` or a Postgres DSN
+(`postgresql://user@host/db`; `pip install "psycopg[binary]>=3"`). Without it,
+a configured server keeps a SQLite DB in the data dir. On Postgres the numbered
+migrations under `vmn_exp/ui/migrations/` are applied at startup, and the same
+database also holds the shared cache of store workspaces (see
+[Postgres and replicas](#postgres-and-replicas)).
 
 ## `server.yml`
 
@@ -43,8 +47,10 @@ server:
   host: 0.0.0.0
   port: 8265
   public_url: https://vmn.example.com   # needed for OIDC (redirect URI)
+  tenancy: single                       # single | multi (Postgres, SaaS)
+  endpoint_allowlist: []                # store endpoint_urls allowed in multi tenancy
 data_dir: /var/lib/vmn-exp              # default ~/.vmn-ui
-db: sqlite:////var/lib/vmn-exp/control.db   # optional; default: in data_dir
+db: sqlite:////var/lib/vmn-exp/control.db   # or postgresql://vmn@db/vmn; default: SQLite in data_dir
 auth:
   static_token_env: VMN_UI_TOKEN        # env var holding the static token
   oidc:
@@ -93,6 +99,38 @@ The cache is SQLite, one database file per workspace under
 tags, notes, status), the per-app listing state and the journal cursor. Logs,
 series, artifacts, media and code are not cached. Run pages read them from
 storage on demand. `--no-index` keeps the cache in memory only.
+
+## Postgres and replicas
+
+With `db: postgresql://...` store workspaces are cached in Postgres instead of
+the per-workspace SQLite files, so several replicas can share one cache:
+
+- Each workspace app has one refresh leader, chosen with a Postgres advisory
+  lock. The leader lists and reads the store and saves into the cache; every
+  other replica follows, applying the cache's changes without touching the
+  store. When a leader dies its lock frees and another replica takes over (and
+  reconciles fully first).
+- A save sends `NOTIFY vmn_gen`; followers `LISTEN` and refresh at once,
+  falling back to their once-a-second tick.
+- `GET /api/v1/search` runs the query language as SQL over the synced rows.
+  Queries that read `outputs` (not kept on the synced rows) are filtered in
+  Python instead.
+- Git workspaces keep their SQLite cache under `<data_dir>/index/`, per replica.
+
+Server-side edits (rewind, notes) write log segments under the writer id
+`vmn-server`, unless `VMN_WRITER_ID` names another one, which is what the
+generated edit policy allows (see
+[byo-bucket.md](byo-bucket.md#the-servers-two-permission-sets)).
+
+### Tenancy
+
+`server.tenancy: multi` (Postgres only) turns row-level security on at startup:
+every control-plane and cache row carries an `org_id`, and each transaction is
+bound to the requesting principal's org (`set_config('app.org_id', ..., true)`,
+never for the whole session), so a missing `WHERE` cannot leak rows across
+orgs. A principal with no org gets `403`. Store URIs are limited to `s3://`,
+`gs://` and `az://`, and an `endpoint_url` must be in
+`server.endpoint_allowlist`. Background refreshes use the store's own org.
 
 ## How the cache stays fresh
 
