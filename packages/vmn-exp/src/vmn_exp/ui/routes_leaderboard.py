@@ -13,11 +13,14 @@ repeating it gets an empty ``304`` without the payload ever being built.
 Archived rows are left out of all of them unless the request passes
 ``archived=1``.
 """
+from functools import partial
+
 from fastapi import HTTPException, Request
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.core.query import QueryError
+from vmn_exp.ui.leaderboard_comments import joined, page_by_comments, reads_comments
 from vmn_exp.ui.http_params import clamp_page, key_list
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import ORDERS
@@ -27,9 +30,10 @@ from vmn_exp.ui.responses import json_response, memoized_json_response
 ENCODED_BODIES = 64
 
 
-def register(app, api_prefix, inputs, cache):
+def register(app, api_prefix, inputs, cache, comments_of):
     """*inputs(ws_name, app_tag)* -> ``(snapshot, metrics schema)``, raising
-    the route's HTTP errors for a bad workspace or app."""
+    the route's HTTP errors for a bad workspace or app; *comments_of(ws_name,
+    app_tag)* -> ``({verstr: {total, unresolved}}, generation)``."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
     bodies = LRU(ENCODED_BODIES)
 
@@ -54,7 +58,15 @@ def register(app, api_prefix, inputs, cache):
             sort=sort, last=last, offset=offset, limit=limit,
             status=status, query=q, order=order, archived=archived,
         )
-        return _answer(request, cache.page, snapshot, schema, params)
+        counts, generation = comments_of(ws_name, app_tag)
+        try:
+            by_comments = reads_comments(q)
+        except QueryError as e:
+            raise HTTPException(400, str(e))
+        compute = (partial(page_by_comments, cache, counts=counts) if by_comments
+                   else cache.page)
+        return _answer(request, lambda *a, **p: joined(compute(*a, **p), counts),
+                       snapshot, schema, params, comments=generation)
 
     @app.get(f"{base}/experiments-columns", dependencies=[require(VIEWER)])
     def experiment_columns(
