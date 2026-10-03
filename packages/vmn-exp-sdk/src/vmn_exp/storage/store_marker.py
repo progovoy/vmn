@@ -1,14 +1,16 @@
 """``store.yml``: the marker at a store root (docs/plans/14-store-layout.md §2.3).
 
 The first writer creates it with a create-if-absent put (``O_EXCL``-style
-link locally, ``If-None-Match`` on object stores). Writers and readers refuse
-a root of an unknown ``layout`` and a v1 root (vmn records, no marker);
+link locally, a plain ``O_EXCL`` create without hard links, ``If-None-Match``
+on object stores). Writers and readers refuse a root of an unknown ``layout``
+and a v1 root (vmn records, no marker, also in the v1 places outside the root);
 writers also refuse while ``migrating`` is set.
 """
 import datetime
 import os
 import tempfile
 import threading
+import time
 
 import yaml
 
@@ -45,6 +47,21 @@ def new_marker():
             "journal": {"partition": "minute"}}
 
 
+def _create_exclusive(path, text, wait_sec=2.0):
+    """Create *path* holding *text* unless it exists — for filesystems
+    without hard links. A loser waits for the winner's content to land."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        deadline = time.monotonic() + wait_sec
+        while os.path.getsize(path) == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return
+    with os.fdopen(fd, "w") as f:
+        os.fchmod(f.fileno(), 0o644)
+        f.write(text)
+
+
 class LocalRoot:
     def __init__(self, root):
         self.root = root
@@ -70,6 +87,8 @@ class LocalRoot:
             os.link(tmp, self._path())
         except FileExistsError:
             pass
+        except OSError:
+            _create_exclusive(self._path(), text)
         finally:
             os.unlink(tmp)
 

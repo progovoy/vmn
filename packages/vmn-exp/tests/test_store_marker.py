@@ -1,4 +1,5 @@
 """store.yml at a store root (docs/plans/14-store-layout.md §2.3)."""
+import errno
 import os
 import threading
 
@@ -167,3 +168,34 @@ def test_missing_store_message(tmp_path, monkeypatch):
         assert str(exc.value) == f"no vmn store at {uri}"
         open_storage(uri, area="runs")
         store_marker.require_store(open_storage(uri, area="runs", writer=False), uri)
+
+
+def _no_hard_links(monkeypatch, err):
+    def link(src, dst):
+        raise OSError(err, os.strerror(err))
+
+    monkeypatch.setattr(os, "link", link)
+
+
+@pytest.mark.parametrize("err", [errno.EPERM, errno.ENOTSUP])
+def test_local_marker_without_hard_links(tmp_path, monkeypatch, err):
+    _no_hard_links(monkeypatch, err)
+    root = str(tmp_path / "store")
+    open_storage(None, root, area="runs")
+    assert _read_local(root)["layout"] == 2
+    assert os.stat(os.path.join(root, "store.yml")).st_mode & 0o044 == 0o044
+    assert os.listdir(root) == ["store.yml"]
+
+
+def test_local_marker_without_hard_links_created_once_under_race(tmp_path, monkeypatch):
+    _no_hard_links(monkeypatch, errno.EPERM)
+    root = str(tmp_path / "store")
+    seen = []
+
+    def open_one():
+        store_marker.forget_checked()
+        open_storage(None, root, area="runs")
+        seen.append(_read_local(root)["created_at"])
+
+    _race(open_one)
+    assert len(set(seen)) == 1
