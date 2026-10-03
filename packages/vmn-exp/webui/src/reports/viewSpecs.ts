@@ -5,8 +5,7 @@ import type { RowsFilter } from "../queries";
 import type { XMode } from "../util/chartData";
 import { AUTO_X, NO_X } from "../util/xMetric";
 import type { PanelSpec, PinnedRuns, QueryRuns, XAxis } from "./panelSpec";
-
-export const newPanelId = () => "p" + Math.random().toString(36).slice(2, 6);
+import { newPanelId } from "./panelBlocks";
 
 const base = (appTag: string) => ({ v: 1 as const, id: newPanelId(), app: appName(appTag) });
 

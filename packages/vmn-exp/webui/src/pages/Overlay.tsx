@@ -8,6 +8,8 @@ import OverlayChart from "../components/OverlayChart";
 import OverlayLegend from "../components/OverlayLegend";
 import SmoothingSlider from "../components/SmoothingSlider";
 import { Skeleton } from "../components/ui";
+import AddToReport from "../reports/AddToReport";
+import { overlaySpec } from "../reports/viewSpecs";
 import { useOverlaySeries, type OverlayRunData } from "./overlaySeries";
 
 /** More runs than this make an unreadable chart and a lot of payload. */
@@ -77,6 +79,13 @@ export default function Overlay() {
       {back}
       <div className="page-head" style={{ alignItems: "center", marginBottom: 6 }}>
         <h1 style={{ fontSize: 20 }}>Overlay — {runs.length} runs</h1>
+        {metrics.length > 0 && (
+          <span style={{ marginLeft: "auto" }}>
+            <AddToReport ws={ws} spec={() => overlaySpec({
+              app, verstrs: runs, keys: metrics, smoothing: alpha, xMode, x: xChoice, logY,
+            })} />
+          </span>
+        )}
       </div>
       {requested.length > runs.length && (
         <p style={{ color: "var(--text-2)", margin: "0 0 12px" }}>

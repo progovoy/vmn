@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import QueryInput from "../components/QueryInput";
 import { validate, type PanelType } from "./panelSpec";
-import { queryProblem } from "./panelBlocks";
+import { newPanelId, queryProblem } from "./panelBlocks";
 
 type Spec = Record<string, unknown>;
 type FieldKind = "text" | "list" | "number" | "step";
@@ -26,7 +26,6 @@ const TYPE_FIELDS: Record<PanelType, Field[]> = {
 const TYPES = Object.keys(TYPE_FIELDS) as PanelType[];
 
 const splitList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
-const newId = () => "p" + Math.random().toString(36).slice(2, 6);
 
 function toText(value: unknown): string {
   if (Array.isArray(value)) return value.join(", ");
@@ -66,7 +65,7 @@ function buildSpec(initial: Spec | undefined, form: Form): Spec {
   const runs = form.pinned
     ? { verstrs: splitList(form.verstrs) }
     : { ...("query" in prevRuns ? prevRuns : {}), query: form.query.trim() };
-  const spec: Spec = { ...initial, v: 1, id: initial?.id ?? newId(), type: form.type, app: form.app.trim(), runs };
+  const spec: Spec = { ...initial, v: 1, id: initial?.id ?? newPanelId(), type: form.type, app: form.app.trim(), runs };
   for (const fd of TYPE_FIELDS[form.type]) {
     const value = fromText(fd.kind, form.values[fd.key] ?? "");
     if (value === undefined) delete spec[fd.key];

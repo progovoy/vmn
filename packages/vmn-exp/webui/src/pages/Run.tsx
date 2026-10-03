@@ -16,6 +16,8 @@ import NoteEditor from "../components/NoteEditor";
 import Comments from "../components/Comments";
 import ReportsUsing from "../components/ReportsUsing";
 import { commentTarget } from "../apiReports";
+import AddToReport from "../reports/AddToReport";
+import { runSpec } from "../reports/viewSpecs";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import RunLineage from "../components/RunLineage";
@@ -141,7 +143,8 @@ export default function Run() {
         </h1>
         {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
         {summary.branch && <span className="badge">{summary.branch}</span>}
-        <LiveToggle live={live} onToggle={() => setLive((v) => !v)} style={{ marginLeft: "auto" }} />
+        <span style={{ marginLeft: "auto" }}><AddToReport ws={ws} spec={() => runSpec(app, summary.verstr)} /></span>
+        <LiveToggle live={live} onToggle={() => setLive((v) => !v)} />
       </div>
       {detail && (
         <ForkOrigin forkedFrom={detail.forked_from} rerunOf={detail.rerun_of} rewinds={detail.rewinds} runUrl={runUrl} />

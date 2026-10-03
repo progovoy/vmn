@@ -18,6 +18,8 @@ function stringify(spec: Record<string, unknown>, indent = ""): string {
   }).join("");
 }
 
+export const newPanelId = () => "p" + Math.random().toString(36).slice(2, 6);
+
 export interface PanelBlock {
   /** Offsets of the whole fenced block (fences included). */
   start: number;
