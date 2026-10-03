@@ -165,7 +165,7 @@ def merged_log(storage, app_name, verstr, logs_by_writer):
     logs = {w: list(entries or []) for w, entries in logs_by_writer.items()}
     metrics = SeriesReader.from_storage(storage, app_name, verstr, rewinds=())
     for writer, entries in metrics.entries_by_writer().items():
-        logs.setdefault(writer, []).extend(entries)
+        logs.setdefault(writer, []).extend(dict(e, _writer=writer) for e in entries)
     return flatten_logs(logs)
 
 

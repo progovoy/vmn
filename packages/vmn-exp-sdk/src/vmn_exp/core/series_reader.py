@@ -11,7 +11,7 @@ its key. Pure apart from the duck-typed storage reads of :meth:`from_storage`.
 """
 import heapq
 
-from vmn_exp.core.metric_block import decode_blocks
+from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_entries import is_metric_entry, points_to_entries
 from vmn_exp.core.metric_files import is_indexed_file
@@ -92,6 +92,13 @@ class _EntrySource:
 
     def entries(self):
         return list(self._entries)
+
+
+def stream_entries(data):
+    """``(metrics entries, bytes used)`` of the intact blocks of stream bytes
+    *data* — the log view of a stream's growth."""
+    end = intact_length(data)
+    return _StreamSource(list(decode_blocks(data[:end]))).entries(), end
 
 
 def rewind_markers(log):
