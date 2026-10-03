@@ -298,7 +298,10 @@ def create_app(
         keys: str = None,
         series: bool = True,
         x: str = None,
+        step_min: float = None,
+        step_max: float = None,
     ):
+        bounds = routes_series.step_range(step_min, step_max, x or None)
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)
         _segment(verstr)
@@ -311,6 +314,7 @@ def create_app(
             keys=key_list(keys),
             include_series=series,
             x=x or None,
+            step_range=bounds,
             schema=_app_schema(ws, app_name),
             **_detail_options(ws, app_name),
         )

@@ -29,6 +29,7 @@ from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.histograms import detail_media
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.patches import patch_presence
+from vmn_exp.ui.readers.range_series import range_series
 from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
 
 _ENV_SIZE_CAP = 256 * 1024  # 256 KB
@@ -177,6 +178,7 @@ def experiment_detail(
     read_child_row=None,
     x=None,
     schema=None,
+    step_range=None,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
@@ -189,7 +191,10 @@ def experiment_detail(
     the series on another metric (see :func:`thinned_series`);
     ``step_metrics`` lists what the run and the metrics *schema* declare;
     ``metrics`` (each metric's summary value) and ``metric_summary`` follow
-    the run's and the *schema*'s summary policies.
+    the run's and the *schema*'s summary policies. *step_range* (``(lo, hi)``)
+    keeps that range of each series, read from the metric objects (see
+    :mod:`~vmn_exp.ui.readers.range_series`); ``compacted`` tells whether
+    every metrics writer of the run has its ``.vmx``.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -197,9 +202,13 @@ def experiment_detail(
 
     snapshot = _PARSED.get(storage, app_name, verstr, read_log)
     tail = snapshot.tail(LOG_TAIL)
-    series, series_total = (
-        thinned_series(snapshot, keys, max_points, x=x) if include_series else ({}, {})
-    )
+    series, series_total = {}, {}
+    if include_series and step_range is not None:
+        series, series_total, _ = range_series(
+            storage, app_name, verstr, keys, max_points, None, step_range, schema
+        )
+    elif include_series:
+        series, series_total = thinned_series(snapshot, keys, max_points, x=x)
     metrics, metric_summary = snapshot.summarized_metrics(schema)
     return {
         "metadata": metadata,
