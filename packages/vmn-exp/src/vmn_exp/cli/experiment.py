@@ -51,6 +51,7 @@ from vmn_exp.core.from_snapshot import (
 )
 from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_metrics
 from vmn_exp.core.log import (
+    merged_log_view,
     DATE_SORTS,
     IDX_SORT,
     effective_params,
@@ -59,6 +60,7 @@ from vmn_exp.core.log import (
     load_log,
     sort_by_metric,
 )
+from vmn_exp.core.metric_entries import is_metric_entry
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.core.query import QueryError, filter_rows
@@ -787,8 +789,9 @@ def _print_show_json(
 def _print_log(log, full):
     """The log, newest ``SHOW_LOG_TAIL`` entries unless *full*."""
     print(f"\n  Log ({len(log)} entries):")
-    shown = log if full else log[-SHOW_LOG_TAIL:]
-    hidden = len(log) - len(shown)
+    offset = 0 if full else max(len(log) - SHOW_LOG_TAIL, 0)
+    shown = merged_log_view(log, offset)["entries"]
+    hidden = offset
     if hidden:
         print(f"    ({hidden} earlier entries hidden, use --full-log)")
     for entry in shown:
@@ -798,8 +801,8 @@ def _print_log(log, full):
 
 def _describe_log_entry(entry):
     etype = entry.get("type", "?")
-    if etype in ("metrics", "params"):
-        vals = entry.get("values" if etype == "metrics" else "params") or {}
+    if is_metric_entry(entry) or etype == "params":
+        vals = entry.get("params" if etype == "params" else "values") or {}
         return f"{etype}: " + ", ".join(f"{k}={v}" for k, v in vals.items())
     if etype == "error":
         return f"error: {entry.get('exception', '?')}: {entry.get('message', '')}"

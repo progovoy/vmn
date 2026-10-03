@@ -33,6 +33,7 @@ from vmn_exp.core.log import (
     filter_archived,
     filter_by_status,
     list_artifacts,
+    history_points,
     metric_series,
     sort_by_metric,
 )
@@ -299,14 +300,21 @@ def runs_dataframe(app_name=None, **list_runs_kwargs):
     return frames.to_dataframe(records, frames.run_columns(records))
 
 
-def get_metric_history(metric, app_name=None, ref="latest", *, storage=None):
+def get_metric_history(metric, app_name=None, ref="latest", *, storage=None,
+                       step_range=None, max_points=None):
     """Every recorded value of *metric* in one run, as a DataFrame.
 
     Columns ``step`` (None when logged without one), ``timestamp`` (UTC) and
     ``value``, in log order; empty when the run never logged *metric*. *ref* is
-    resolved like :func:`get_run`'s. Raises ImportError without pandas.
+    resolved like :func:`get_run`'s. *step_range* (``(lo, hi)``, inclusive)
+    keeps only those steps; *max_points* min/max-thins the series to about
+    that many points. Raises ImportError without pandas.
     """
     frames.require_pandas()
-    series = get_run(app_name, ref, storage=storage)["series"]
-    records = frames.history_records(series.get(metric, []))
+    app_name, storage, _ = _resolve(app_name, storage)
+    verstr, err = resolve_experiment(storage, app_name, ref or "latest")
+    if err:
+        raise ValueError(err)
+    points = history_points(_load_log(storage, app_name, verstr), metric, step_range, max_points)
+    records = frames.history_records(points)
     return frames.to_dataframe(records, frames.HISTORY_COLUMNS)

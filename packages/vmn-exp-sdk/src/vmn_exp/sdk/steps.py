@@ -8,7 +8,8 @@ steps).
 """
 import threading
 
-from vmn_exp.core.rewind import drop_rewound, entry_step
+from vmn_exp.core.rewind import drop_rewound
+from vmn_exp.core.series_reader import SeriesReader
 
 
 class StepCounter:
@@ -43,10 +44,7 @@ def first_step(storage, app_name, verstr, start_step, resumed):
 
 
 def resume_next_step(log):
-    """One past the highest step of *log*'s visible metrics entries (0: none)."""
-    steps = [
-        entry_step(e) for e in drop_rewound(log)
-        if isinstance(e, dict) and e.get("type") == "metrics"
-    ]
-    steps = [s for s in steps if s is not None]
+    """One past the highest step of *log*'s visible metric points (0: none)."""
+    reader = SeriesReader.from_entries(drop_rewound(log))
+    steps = [s for key in reader.keys() for s in reader.points(key).steps if s is not None]
     return int(max(steps)) + 1 if steps else 0

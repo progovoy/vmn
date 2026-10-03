@@ -69,6 +69,22 @@ def metric_series(source):
     return {key: reader.series(key) for key in reader.keys()}
 
 
+def history_points(source, metric, step_range=None, max_points=None):
+    """*metric*'s points like :func:`metric_series`'s, within *step_range*
+    (``(lo, hi)``, inclusive) and min/max-thinned to about *max_points*."""
+    reader = source if isinstance(source, SeriesReader) else SeriesReader.from_entries(source)
+    if max_points is None:
+        return reader.series(metric, step_range)
+    return reader.thinned(metric, max_points, step_range)
+
+
+def merged_log_view(log, offset=0, limit=None):
+    """``{"entries", "total"}``: a page of the merged log (metric points back
+    as ``metrics`` entries, see ``storage.files.merged_log``), oldest first."""
+    end = None if limit is None else offset + limit
+    return {"entries": log[offset:end], "total": len(log)}
+
+
 def last_metric_at(log):
     """Timestamp of the newest ``metrics`` entry (the log is time-ordered)."""
     return fold_last_metric_at(fold_log(log))

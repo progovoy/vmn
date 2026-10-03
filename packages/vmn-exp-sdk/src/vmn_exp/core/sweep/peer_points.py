@@ -9,6 +9,7 @@ is kept out of each log.
 from vmn_exp.core.log import load_log
 from vmn_exp.core.metric_files import is_metric_file
 from vmn_exp.core.rewind import drop_rewound
+from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.sweep.early_stop import step_points
 from vmn_exp.storage.files import log_sizes_of
 
@@ -17,11 +18,7 @@ _FINAL = object()
 
 def metric_points(log, name):
     """:func:`step_points` of metric *name* in *log*."""
-    return step_points([
-        {"step": entry.get("step"), "value": entry["values"][name]}
-        for entry in drop_rewound(log)
-        if entry.get("type") == "metrics" and name in (entry.get("values") or {})
-    ])
+    return step_points(SeriesReader.from_entries(drop_rewound(log)).series(name))
 
 
 class PeerPoints:
