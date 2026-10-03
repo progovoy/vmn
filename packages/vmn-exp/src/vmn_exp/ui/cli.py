@@ -87,12 +87,32 @@ def open_control_plane(cfg):
     """The control plane a configured server keeps its state in."""
     from vmn_exp.ui.config import ConfigError
     from vmn_exp.ui.control_plane import SQLiteControlPlane
+    from vmn_exp.ui.pg_mode import is_postgres_dsn
 
     if not cfg.db:
         return SQLiteControlPlane.in_data_dir(cfg.data_dir)
     if cfg.db.startswith("sqlite:///"):
         return SQLiteControlPlane(cfg.db[len("sqlite:///"):])
-    raise ConfigError(f"Unsupported db {cfg.db!r}: only sqlite:///<path> is available")
+    if is_postgres_dsn(cfg.db):
+        from vmn_exp.ui.control_plane_pg import PostgresControlPlane
+
+        return PostgresControlPlane(cfg.db)
+    raise ConfigError(
+        f"Unsupported db {cfg.db!r}: use sqlite:///<path> or postgresql://...")
+
+
+def postgres_dsn(cfg):
+    """*cfg*'s Postgres DSN, or None (SQLite or no config)."""
+    from vmn_exp.ui.pg_mode import is_postgres_dsn
+
+    return cfg.db if cfg is not None and is_postgres_dsn(cfg.db) else None
+
+
+def _enable_tenancy(cfg, control_plane):
+    """Row-level security on, for ``tenancy: multi`` on Postgres."""
+    if cfg.server.tenancy != "multi" or postgres_dsn(cfg) is None:
+        return
+    control_plane.enable_rls()
 
 
 def seed_workspaces(manager, seeds):
@@ -113,7 +133,11 @@ def build_server(args, env=None):
     if cfg is None:
         return build_manager(args), None, None
     control_plane = open_control_plane(cfg)
-    manager = WorkspaceManager(cfg.data_dir, registry=DbWorkspaceRegistry(control_plane))
+    _enable_tenancy(cfg, control_plane)
+    manager = WorkspaceManager(
+        cfg.data_dir, registry=DbWorkspaceRegistry(control_plane),
+        tenancy=cfg.server.tenancy, endpoint_allowlist=cfg.server.endpoint_allowlist,
+    )
     seed_workspaces(manager, cfg.workspaces)
     if getattr(args, "repo", None) or getattr(args, "store", None):
         build_manager(args, manager)
@@ -143,9 +167,14 @@ def _oidc_chain(cfg, control_plane, env):
 
 def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):
     """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
+    from vmn_exp.core.writer import set_default_writer_id
+    from vmn_exp.ui.onboarding import SERVER_WRITER_ID
     from vmn_exp.ui.server import create_app
 
     env = os.environ if env is None else env
+    # The server's own log writes match the edit policy's log/vmn-server*.
+    set_default_writer_id(SERVER_WRITER_ID)
+    dsn = postgres_dsn(cfg)
     auth = _oidc_chain(cfg, control_plane, env) if cfg else None
     host = cfg.server.host if cfg else args.host
     app = create_app(
@@ -157,6 +186,8 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
         allowed_hosts=getattr(args, "allowed_host", None),
         auth=auth,
         control_plane=control_plane,
+        search_dsn=dsn,
+        cache_dsn=dsn,
         **kwargs,
     )
     app.state.config = cfg
@@ -166,8 +197,13 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
 
 def handle_ui(args):
     if getattr(args, "ui_args", None):
+        if args.ui_args[0] == "onboarding":
+            from vmn_exp.ui.onboarding_cli import handle_onboarding
+
+            return handle_onboarding(args)
         if args.ui_args[0] != "cache":
-            VMN_LOGGER.error(f"Unknown ui action {args.ui_args[0]!r} (use: cache)")
+            VMN_LOGGER.error(
+                f"Unknown ui action {args.ui_args[0]!r} (use: cache, onboarding)")
             return 2
         from vmn_exp.ui.cache_cli import handle_cache
 

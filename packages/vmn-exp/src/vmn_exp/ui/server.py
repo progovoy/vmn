@@ -76,6 +76,7 @@ def create_app(
     role_mappings=(),
     control_plane=None,
     search_dsn=None,
+    cache_dsn=None,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -86,7 +87,8 @@ def create_app(
     groups to roles (``{group, workspace or "*", role}``). A *control_plane*
     enables API tokens (``vmnx_...`` bearer tokens, managed under
     ``/api/v1/tokens``) and the audit log. A Postgres *search_dsn* answers
-    ``/api/v1/search`` in SQL."""
+    ``/api/v1/search`` in SQL; a Postgres *cache_dsn* caches store
+    workspaces' indexes there, refreshed by one elected replica."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.jobs import JobRunner, build_command
@@ -118,7 +120,8 @@ def create_app(
 
     refresher = Refresher() if background_refresh else InlineRefresher()
     app.state.refresher = refresher
-    source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher)
+    source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
+                              cache_dsn=cache_dsn)
     leaderboards = LeaderboardCache()
     report_indexes = ReportIndexes(
         os.path.join(manager.data_dir, "index") if use_index else None, background_refresh

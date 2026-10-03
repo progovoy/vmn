@@ -52,9 +52,9 @@ your own access.
 | **Read + edits** | the above, plus put on: `runs/*/*/metadata.yml`, `runs/*/*/log/vmn-server*`, `registry/*`, `reports/*`, `comments/*`, `journal/*`, `server/*` | also tag, note, archive, rewind, model register/alias/deprecate, reports and comments |
 
 - `runs/*/*/log/<writer>*` is the server's own per-writer log, which rewind
-  markers go to. A process's writer id is `VMN_WRITER_ID`, else `$HOSTNAME`,
-  else the host name. Run the server with `VMN_WRITER_ID=vmn-server` to match
-  the policy below, or put your own id in the policy.
+  markers go to. `vmn-exp ui` writes them as `vmn-server`, which matches the
+  policy below. Setting `VMN_WRITER_ID` overrides it, in which case put that
+  id in the policy instead.
 - `journal/*` lets the server's edits show up the way any writer's do.
 - `server/*` holds the probe key. Before the first edit, the server checks
   `read` by listing `runs/` and `edit` by a create-if-absent write under
@@ -115,10 +115,24 @@ an external id in the role's trust policy:
 }
 ```
 
-The same documents, plus CloudFormation and Terraform renderings, come from
-`vmn_exp.ui.onboarding` (`permission_policy(bucket, prefix, edits=)`,
-`trust_policy`, `lifecycle_rule`, `cors_rules`, `cloudformation`,
-`terraform`). These are Python helpers. There is no CLI command for them.
+`vmn-exp ui onboarding` prints the same documents for your bucket:
+
+```sh
+# permission policy + bucket settings (lifecycle rule, CORS) as JSON
+vmn-exp ui onboarding --store s3://acme-ml/vmn [--edits] [--origin https://vmn.acme.com]
+# add the trust policy
+vmn-exp ui onboarding --store s3://acme-ml/vmn --account-id 123456789012 --external-id vmn-...
+# a CloudFormation template or Terraform for the role (and, in Terraform, lifecycle + CORS)
+vmn-exp ui onboarding --store s3://acme-ml/vmn --edits --format cloudformation|terraform \
+    --account-id 123456789012 --external-id vmn-...
+```
+
+`--edits` adds the read + edits puts. `--format cloudformation|terraform` needs
+`--account-id` and `--external-id`. Only `s3://` stores are supported. The same
+helpers are available in Python from `vmn_exp.ui.onboarding`
+(`permission_policy(bucket, prefix, edits=)`, `trust_policy`,
+`lifecycle_rule`, `cors_rules`, `bucket_settings`, `cloudformation`,
+`terraform`).
 
 On GCS and Azure, grant the same prefixes to the server's service account or
 managed identity: object read and list on the prefix, plus object create on
@@ -175,4 +189,6 @@ params, metric summaries, tags, notes, status. Logs, metric series, artifacts,
 media and code are read from the bucket on demand and are only held in bounded
 in-memory caches. The cache can be deleted at any time and is rebuilt from the
 bucket. The control-plane DB holds workspaces, API tokens, sessions and the
-audit log, and no run data.
+audit log, and no run data. With a Postgres `db`, the cache rows live in that
+database, shared by the server's replicas; with `tenancy: multi` row-level
+security keeps each org's rows apart.

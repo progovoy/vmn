@@ -4,7 +4,8 @@
 Same contract as :class:`~vmn_exp.core.index_store.SqliteStore`: it never
 raises — an unreachable database behaves as empty and reconnects on the next
 call. A scope is an app name or ``(workspace_id, app)``; ``org_id`` is the
-store's org (0 in single tenancy; bound to the session for RLS). Each save
+store's org (0 in single tenancy), or the request's
+(:func:`~vmn_exp.ui.tenancy.current_org`), bound per transaction for RLS. Each save
 is one transaction that bumps the scope's generation and
 ``NOTIFY vmn_gen, '<workspace_id>:<app>'`` (delivered on commit). A cache
 schema change TRUNCATEs the cache tables, never the control-plane ones.
@@ -19,7 +20,7 @@ from vmn_exp.core.index_store import _state_of, _without_state
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION
 from vmn_exp.ui import migrations
 from vmn_exp.ui.control_plane_pg import PostgresControlPlane  # noqa: F401
-from vmn_exp.ui.tenancy import set_org
+from vmn_exp.ui.tenancy import bind_org, effective_org
 
 _LOGGER = logging.getLogger(__name__)
 _CACHE_TABLES = "vmn_records, vmn_run_states, vmn_tombstones, vmn_scope_gen, vmn_kv"
@@ -64,7 +65,7 @@ def _ensure_cache_version(conn):
 class PostgresStore:
     def __init__(self, dsn, org_id=0):
         self._dsn = dsn
-        self._org = org_id
+        self._default_org = org_id
         self._lock = threading.Lock()
         self._conn = None
 
@@ -72,14 +73,20 @@ class PostgresStore:
         if self._conn is None or self._conn.closed:
             conn = migrations.connect(self._dsn)
             _ensure_cache_version(conn)
-            set_org(conn, self._org)
             self._conn = conn
         return self._conn
+
+    @property
+    def _org(self):
+        return effective_org(self._default_org)
 
     def _run(self, op, default, what):
         with self._lock:
             try:
-                return op(self._connection())
+                conn = self._connection()
+                with conn.transaction():
+                    bind_org(conn, self._org)
+                    return op(conn)
             except Exception:
                 _LOGGER.debug("Could not %s the Postgres cache", what, exc_info=True)
                 self._drop_connection()

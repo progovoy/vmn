@@ -5,13 +5,14 @@ every workspace the caller may view (plan 11 §4.4).
 Without a database the rows are filtered in Python, app by app; with a
 Postgres ``search_dsn`` they are synced into ``vmn_search_rows`` and the
 query runs as SQL (:mod:`vmn_exp.ui.search_pg`). Archived runs are left
-out unless ``archived=1``. One more row than *limit* is looked for, so
+out unless ``archived=1``. Synced rows carry no ``outputs`` (the index keeps
+them off its lean rows), so a query reading ``outputs`` is answered in Python. One more row than *limit* is looked for, so
 ``truncated`` says whether more matched.
 """
 from fastapi import HTTPException, Request
 
 from vmn_exp.core.log import filter_archived
-from vmn_exp.core.query import QueryError
+from vmn_exp.core.query import QueryError, query_roots
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.auth.authz import allowed, require
 from vmn_exp.ui.auth.principal import VIEWER
@@ -45,6 +46,14 @@ def _python_search(scopes, text, limit, archived):
     return found
 
 
+def references_outputs(text):
+    """Whether query *text* reads a run's ``outputs`` (False when it doesn't parse)."""
+    try:
+        return bool(text and text.strip()) and "outputs" in query_roots(text)
+    except QueryError:
+        return False
+
+
 def _sql_search(sql, scopes, names, text, limit, archived):
     for workspace, app, snapshot in scopes:
         sql.sync(workspace, app, snapshot.generation, lambda s=snapshot: _rows(s))
@@ -60,7 +69,7 @@ def register(app, api_prefix, scopes_of, sql=None):
         limit = max(1, min(limit, MAX_LIMIT))
         names = sorted(_viewable(request, [ws.name for ws in app.state.manager.list()]))
         try:
-            if sql is None:
+            if sql is None or references_outputs(q):
                 found = _python_search(scopes_of(names), q, limit + 1, archived)
             else:
                 found = _sql_search(sql, scopes_of(names), names, q, limit + 1, archived)

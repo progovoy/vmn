@@ -73,6 +73,14 @@ def get_writer_id(conf_writer_id=None):
     return _WRITER_ID
 
 
+def set_default_writer_id(writer_id):
+    """Make *writer_id* the process's writer id unless ``VMN_WRITER_ID`` names one
+    (a server's own edits, whatever an earlier call cached)."""
+    global _WRITER_ID
+    _WRITER_ID = os.environ.get(WRITER_ID_ENV) or writer_id
+    return _WRITER_ID
+
+
 def merge_env_into_params(params):
     """Fill unset storage params from ``VMN_EXPERIMENT_*`` (flags override env).
 
