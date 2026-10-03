@@ -10,7 +10,7 @@ from vmn_exp.reports import comments
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.request_author import author_of, require_author_or_admin
-from vmn_exp.ui.routes_reports import RID_RE
+from vmn_exp.ui.routes_reports import RID_RE, check_bools
 from vmn_exp.ui.security import safe_app_name, safe_segment
 
 
@@ -62,12 +62,13 @@ def register(app, api_prefix, any_exp_storage):
                             request: Request, body: dict = None):
         _require_rw()
         body, parsed = body or {}, parse_target(target)
+        check_bools(body, "resolved")
         storage = any_exp_storage(ws_name)
         require_author_or_admin(request, ws_name, _existing(storage, parsed, comment_id)["author"])
         if isinstance(body.get("text"), str):
             comments.edit(storage, parsed, comment_id, body["text"])
         if "resolved" in body:
-            comments.resolve(storage, parsed, comment_id, bool(body["resolved"]))
+            comments.resolve(storage, parsed, comment_id, body["resolved"])
         return {}
 
     @app.delete(f"{base}/{{target:path}}/{{comment_id}}", dependencies=[require(EDITOR)])

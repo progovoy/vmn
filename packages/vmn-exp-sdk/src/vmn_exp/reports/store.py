@@ -44,18 +44,23 @@ def create(storage, title, body, *, actor=None):
     while not area.create_exclusive(rid, HEADER, _header_metadata(actor), {}):
         rid = new_rid()
     set_title(storage, rid, title, actor=actor)
-    _claim_revision(area, rid, 1, body, "", actor)
+    _claim_revision(area, rid, 1, 0, body, "", actor)
     return rid
 
 
 def save(storage, rid, base, body, message="", *, actor=None):
-    """Save *body* as revision ``base + 1``: its number, or a :class:`Conflict`
-    carrying the latest revision when another save took the slot first."""
+    """Save *body* on top of revision *base*: the new revision's number
+    (``base + 1``, or past claims abandoned unfinished), or a :class:`Conflict`
+    carrying the latest revision when a complete revision above *base* exists."""
     area = reports_area(storage)
-    if _claim_revision(area, rid, base + 1, body, message, actor or actor_identity()):
-        return base + 1
-    latest = _settled_latest(storage, rid)
-    return Conflict(latest["rev"], latest["body"], latest.get("author") or {})
+    actor = actor or actor_identity()
+    n = base + 1
+    while not _claim_revision(area, rid, n, base, body, message, actor):
+        newer = _settled_newer(storage, rid, base)
+        if newer is not None:
+            return Conflict(newer["rev"], newer["body"], newer.get("author") or {})
+        n = latest_rev(storage, rid) + 1
+    return n
 
 
 def latest_rev(storage, rid):
@@ -110,10 +115,10 @@ def delete(storage, rid):
         area.delete(rid, name)
 
 
-def _settled_latest(storage, rid):
-    """The latest revision once its writer has finished it (a claim is
-    published before its metadata and body); after the wait, the newest
-    complete one below an abandoned claim."""
+def _settled_newer(storage, rid, base):
+    """The newest complete revision above *base*, or None when every claim
+    above it is abandoned. Waits for the latest claim's writer to finish it
+    (a claim is published before its metadata and body)."""
     n = latest_rev(storage, rid)
     deadline = time.monotonic() + _SETTLE_SEC
     while time.monotonic() < deadline:
@@ -121,12 +126,12 @@ def _settled_latest(storage, rid):
         if found is not None:
             return found
         time.sleep(0.05)
-    return _newest_complete(storage, rid, n - 1)
+    return _newest_complete(storage, rid, n - 1, above=base)
 
 
-def _newest_complete(storage, rid, n):
-    """The highest complete revision <= *n*, or None."""
-    return next(filter(None, (revision(storage, rid, k) for k in range(n, 0, -1))), None)
+def _newest_complete(storage, rid, n, above=0):
+    """The highest complete revision in ``(above, n]``, or None."""
+    return next(filter(None, (revision(storage, rid, k) for k in range(n, above, -1))), None)
 
 
 def _header_metadata(actor):
@@ -134,8 +139,8 @@ def _header_metadata(actor):
                     "created_by": actor})
 
 
-def _claim_revision(area, rid, n, body, message, actor):
-    metadata = stamped({"verstr": f"v{n}", "type": "report_revision", "base": n - 1,
+def _claim_revision(area, rid, n, base, body, message, actor):
+    metadata = stamped({"verstr": f"v{n}", "type": "report_revision", "base": base,
                         "author": actor, "created_at": now_iso(), "message": message})
     if not area.create_exclusive(rid, f"v{n}", metadata, {}):
         return False
