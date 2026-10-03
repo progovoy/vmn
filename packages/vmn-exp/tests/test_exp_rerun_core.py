@@ -230,3 +230,9 @@ def test_child_env_reexports_sweep_params():
     assert json.loads(env["VMN_SWEEP_PARAMS"]) == {"lr": 0.1}
     assert "VMN_SWEEP_ID" not in env and "VMN_SWEEP_TRIAL" not in env
 
+
+
+def test_in_record_patches_block_with_the_migrate_hint():
+    meta = {"base_commit": "c", "diff_hash": "h", "has_working_tree_patch": True}
+    assert "vmn-exp migrate" in rerun.rerun_blocker(meta)
+    assert rerun.rerun_blocker(dict(meta, code="v.h")) is None

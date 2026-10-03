@@ -1,7 +1,6 @@
 """A run's files other than its logs, for ``vmn exp push``.
 
-- Top-level files (``env.yml``, ``run_state.yml``, ``alerts_sent.yml``, a
-  legacy ``log.yml``, ...) go by sha256 against the ledger. ``run_state.yml``
+- Top-level files (``env.yml``, ``run_state.yml``, ``alerts_sent.yml``, ...) go by sha256 against the ledger. ``run_state.yml``
   is never clobbered when the remote copy changed since this host last pushed
   it (its ETag differs from the ledger's); ``alerts_sent.yml`` is merged as a
   set union on both sides.

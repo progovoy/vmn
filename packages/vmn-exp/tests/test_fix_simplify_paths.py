@@ -87,7 +87,7 @@ def test_parse_record_metadata_keeps_records_only():
 
 def test_storage_load_metadata_reads_metadata_alone(local):
     local.save("app", "v1", {"verstr": "v1", "timestamp": "t"}, {"untracked_files": b"x"})
-    assert local.load_metadata("app", "v1") == {"verstr": "v1", "timestamp": "t"}
+    assert local.load_metadata("app", "v1") == {"verstr": "v1", "timestamp": "t", "format_version": 1}
     assert local.load_metadata("app", "missing") is None
 
 

@@ -248,7 +248,7 @@ def test_rows_are_fresh_copies(tmp_path):
     assert "status" not in index.rows()[0]
 
 
-def test_legacy_log_yml_and_segments_fold_like_the_reader(tmp_path):
+def test_a_v1_log_yml_is_ignored_and_segments_fold_like_the_reader(tmp_path):
     storage = _storage(tmp_path / "repo")
     verstr = _make(storage, 1, {"w0": [_metric("2026-01-01T00:03:00Z", loss=0.3)]})
     folder = storage._local._snapshot_dir(APP, verstr)
@@ -260,6 +260,7 @@ def test_legacy_log_yml_and_segments_fold_like_the_reader(tmp_path):
     index = _index(storage, tmp_path)
     index.refresh()
     assert index.rows() == _direct(storage)[0]
+    assert index.rows()[0]["metrics"]["loss"] == 0.3
 
 
 def test_cached_storage_with_a_remote_folds_like_the_reader(tmp_path, monkeypatch):

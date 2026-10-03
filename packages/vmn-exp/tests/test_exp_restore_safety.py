@@ -115,3 +115,16 @@ def test_goto_of_a_dev_version_refuses_the_same_way(app_layout, capfd, monkeypat
 
     assert _goto(app_layout, target, "--force") == 0
     assert _read(app_layout, "work.txt") == "state A"
+
+
+def test_restore_refuses_legacy_in_record_patches(app_layout, capfd, caplog):
+    _bootstrap(app_layout)
+    target = _recorded(app_layout, capfd, "state A")
+    storage, app = _storage(app_layout), app_layout.app_name
+    source, patches = storage.load(app, target)
+    storage.save(app, target, {k: v for k, v in source.items() if k != "code"}, patches)
+    _write(app_layout, "work.txt", "state B unsaved")
+
+    assert _restore(app_layout, target) == 1
+    assert "vmn-exp migrate" in caplog.text + capfd.readouterr().err
+    assert _read(app_layout, "work.txt") == "state B unsaved"

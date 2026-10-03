@@ -36,7 +36,7 @@ def metadata_yaml(app, meta):
         lines.append("archived: true")
     lines += [f"base_commit: {meta['commit']}", f"base_version: {seed_records.BASE_VERSION}",
               "branch: main", f"code_verstr: {meta['code_verstr']}", "dirty_states:",
-              "- modified", "from_snapshot: true", "has_dep_patches: false",
+              "- modified", "format_version: 1", "from_snapshot: true", "has_dep_patches: false",
               "has_local_commits_patch: false", "has_untracked_files: false",
               "has_working_tree_patch: false", f"name: {meta['name']}", "note: null"]
     if meta["parent"]:

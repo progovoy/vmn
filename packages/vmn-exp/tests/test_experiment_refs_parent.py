@@ -22,7 +22,7 @@ def _storage_with_run(tmp_path):
     path = os.path.join(tmp_path, ".vmn", "store", "runs", APP, RUN)
     os.makedirs(path)
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump({"verstr": RUN, "timestamp": "2026-09-21T12:00:01Z"}, f)
+        yaml.dump({"format_version": 1, **{"verstr": RUN, "timestamp": "2026-09-21T12:00:01Z"}}, f)
     return open_storage(root=local_store_root(str(tmp_path)), area="runs")
 
 

@@ -22,7 +22,7 @@ def _write(app_layout, verstr, second, entries):
     meta = {"verstr": verstr, "code_verstr": verstr, "branch": "master",
             "base_version": "0.0.1", "timestamp": f"2026-09-21T12:00:0{second}Z"}
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
     os.makedirs(os.path.dirname(os.path.join(path, "log/w0.jsonl")), exist_ok=True)
     with open(os.path.join(path, "log/w0.jsonl"), "w") as f:
         for entry in entries:

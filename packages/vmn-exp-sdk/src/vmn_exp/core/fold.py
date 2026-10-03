@@ -5,7 +5,7 @@ A fold keeps, per field, the value carried by the entry with the greatest key.
 :func:`fold_log` keys a log by list position — the last entry wins, which is
 what ``experiment_row`` has always meant. The experiment index keys entries by
 ``(timestamp, writer, position in writer)`` instead: that is the order the
-merged log is in (the legacy ``log.yml`` entries, then each writer's in file
+merged log is in (each writer's in file
 order, stably sorted by timestamp), so entries can arrive in any chunks, per
 writer, and still fold to the same row — a log that grew by one line costs one
 line, not a re-read of the whole log.

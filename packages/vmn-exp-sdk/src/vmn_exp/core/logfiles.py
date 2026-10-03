@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Names and lines of an experiment's log files — the one definition.
 
-A record's log is the legacy ``log.yml`` plus, per writer, ``log/<writer>.jsonl``
+A record's log is, per writer, ``log/<writer>.jsonl``
 and its segments ``log/<writer>@<seq>.jsonl``. Compaction merges a writer's
 files up to segment N into ``log/<writer>@000000-<N>.jsonl``, which supersedes
 every file it covers — so a reader that lists the merged object next to the
@@ -14,7 +14,6 @@ Pure: no I/O.
 """
 import json
 
-LEGACY_LOG_FILE = "log.yml"
 # The record's folder of log files; the names below are record-relative paths.
 LOG_DIR = "log"
 _PREFIX = LOG_DIR + "/"

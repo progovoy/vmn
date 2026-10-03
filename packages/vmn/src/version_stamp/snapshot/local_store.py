@@ -56,7 +56,12 @@ def _read_file(path):
         return None
 
 
+# The record format vmn-exp reads these records as (vmn_exp.core.record_format).
+RECORD_FORMAT_VERSION = 1
+
+
 def _write_metadata(record_dir, metadata):
+    metadata = {"format_version": RECORD_FORMAT_VERSION, **metadata}
     atomic_write(os.path.join(record_dir, METADATA_FILE), yaml.dump(metadata, sort_keys=True))
 
 

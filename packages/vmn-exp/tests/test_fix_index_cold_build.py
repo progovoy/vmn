@@ -70,7 +70,7 @@ def _seed(root):
     # Segments of a second writer and an unterminated last line.
     _write(root, "0.0.1-dev.abc.r1", "log/w2@000001.jsonl", '{"type": "metrics", "values": {"s": 1}}\n')
     _write(root, "0.0.1-dev.abc.r1", "log/w2@000002.jsonl", '{"type": "metrics", "values": {"s": 2}}')
-    # The legacy log.yml, next to a JSONL writer.
+    # A v1 log.yml next to a JSONL writer: both readers ignore it.
     _write(root, "0.0.1-dev.abc.r2", "log.yml", yaml.safe_dump(
         [{"timestamp": "2025-12-31T00:00:00Z", "type": "create", "note": "legacy",
           "params": {"lr": 5}}, {"type": "metrics", "values": {"legacy": 1.5}}]))

@@ -38,7 +38,7 @@ def stored_code(storage, app_name, key):
     """The payload summary of *key*'s complete code object, or None when
     there is none."""
     marker = code_storage(storage).load_metadata(app_name, key)
-    return None if marker is None else {k: v for k, v in marker.items() if k != "verstr"}
+    return None if marker is None else {k: v for k, v in marker.items() if k not in ("verstr", "format_version")}
 
 
 def store_code(storage, app_name, key, payload, summary):

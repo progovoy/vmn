@@ -9,9 +9,12 @@ import json
 
 import yaml
 
-from vmn_exp.core.logfiles import LEGACY_LOG_FILE, LOG_DIR, is_log_file
+from vmn_exp.core.logfiles import LOG_DIR, is_log_file
+from vmn_exp.core.record_format import with_format_version
 
+LEGACY_LOG_FILE = "log.yml"
 LEGACY_WRITER = "v1"
+METADATA = "metadata.yml"
 _OUTPUT_MOVES = {"artifacts/output.log": "outputs/output.log",
                  "artifacts/media/": "outputs/media/",
                  "artifacts/tables/": "outputs/tables/"}
@@ -77,7 +80,19 @@ def fix_media_paths(files, read):
     return out
 
 
-RECORD_CONVERTERS = [move_logs, convert_legacy_log, move_outputs, fix_media_paths]
+def stamp_format_version(files, read):
+    """``metadata.yml`` gains the ``format_version`` v2 readers require."""
+    if METADATA not in files:
+        return files
+    meta = yaml.safe_load(read(files[METADATA]))
+    if not isinstance(meta, dict) or "format_version" in meta:
+        return files
+    dumped = yaml.dump(with_format_version(meta), sort_keys=True)
+    return dict(files, **{METADATA: dumped.encode()})
+
+
+RECORD_CONVERTERS = [move_logs, convert_legacy_log, move_outputs, fix_media_paths,
+                     stamp_format_version]
 
 
 def convert_record(names, read):

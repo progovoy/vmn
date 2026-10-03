@@ -30,7 +30,7 @@ def _seed(root):
             "dirty_states": ["modified"], "changesets": {".": {"hash": "a" * 40}},
         }
         with open(os.path.join(folder, "metadata.yml"), "w") as f:
-            yaml.dump(meta, f)
+            yaml.dump({"format_version": 1, **meta}, f)
         os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
         with open(os.path.join(folder, "log/w.jsonl"), "w") as f:
             f.write(json.dumps({"timestamp": "2026-01-01T00:00:00Z", "type": "create",

@@ -19,7 +19,7 @@ def _record(app_layout, verstr, entries, meta=None):
                 "timestamp": "2026-09-27T10:00:00Z", "base_version": "0.0.1"}
     metadata.update(meta or {})
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(metadata, f, sort_keys=True)
+        yaml.dump({"format_version": 1, **metadata}, f, sort_keys=True)
     os.makedirs(os.path.dirname(os.path.join(path, "log/w0.jsonl")), exist_ok=True)
     with open(os.path.join(path, "log/w0.jsonl"), "a") as f:
         for entry in entries:

@@ -44,7 +44,7 @@ class Store:
         stamp = _iso(datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
                      + datetime.timedelta(seconds=i))
         with open(os.path.join(folder, "metadata.yml"), "w") as f:
-            yaml.dump({"verstr": verstr, "timestamp": stamp, "name": f"run-{i}"}, f)
+            yaml.dump({"format_version": 1, **{"verstr": verstr, "timestamp": stamp, "name": f"run-{i}"}}, f)
         self.log(verstr, 0)
         with open(os.path.join(folder, "run_state.yml"), "w") as f:
             f.write(run_state)

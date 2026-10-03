@@ -4,6 +4,11 @@ Pure functions; no I/O, no storage, no clock.
 """
 from vmn_exp.core.code_store import CODE_MISSING
 
+# Patches a record carried itself before the code store; ``vmn-exp migrate``
+# moves them into a code object.
+_IN_RECORD_PATCH_FLAGS = ("has_working_tree_patch", "has_local_commits_patch",
+                          "has_untracked_files", "has_dep_patches")
+
 
 def no_code_reason(meta):
     """Return None if the run has a code snapshot; else a human-readable message.
@@ -16,6 +21,8 @@ def no_code_reason(meta):
     """
     if meta.get(CODE_MISSING):
         return f"code snapshot {meta.get('code')} is missing from the store"
+    if _has_in_record_patches(meta):
+        return "its patches predate the code store; run vmn-exp migrate"
     if meta.get("base_commit"):
         return None
     imported_from = meta.get("imported_from")
@@ -28,6 +35,13 @@ def no_code_reason(meta):
             msg += f" — source commit {source_commit}"
         return msg
     return "no code snapshot"
+
+
+def _has_in_record_patches(meta):
+    # An exported snapshot names its code verstr only (see core.rerun).
+    if meta.get("code") or meta.get("from_snapshot"):
+        return False
+    return any(meta.get(flag) for flag in _IN_RECORD_PATCH_FLAGS)
 
 
 # ---------------------------------------------------------------------------

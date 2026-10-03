@@ -6,8 +6,7 @@ made a poll cost O(log); here a local record's JSONL logs are read from the
 offset the last poll stopped at, and only the new entries are parsed, appended
 to the series and folded into the params/metrics. The result is always what a
 full parse would give — growth that could reorder the merged log (an entry
-older than the newest one seen, a rewritten or shrunk file, a legacy
-``log.yml``) is simply parsed again from scratch.
+older than the newest one seen, a rewritten or shrunk file) is simply parsed again from scratch.
 
 Entries are appended in place and each poll gets a :class:`LogSnapshot` that
 sees a fixed prefix, so a slow response never observes a later poll's growth.
@@ -31,7 +30,7 @@ from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.metric_schema import hidden_metrics
 from vmn_exp.core.rewind import REWIND
-from vmn_exp.core.logfiles import LEGACY_LOG_FILE, group_log_names, is_log_file
+from vmn_exp.core.logfiles import group_log_names, is_log_file
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
 from vmn_exp.ui.readers.series import SeriesThinner, downsample
@@ -184,7 +183,7 @@ def _log_files(storage, app_name, verstr):
     files = record_files(app_name, verstr) if record_files else None
     if files is None:
         return None
-    return {n: tuple(sig) for n, sig in files.items() if n == LEGACY_LOG_FILE or is_log_file(n)}
+    return {n: tuple(sig) for n, sig in files.items() if is_log_file(n)}
 
 
 def _read_complete_lines(local, app_name, verstr, name, offset, writer):
@@ -295,7 +294,7 @@ class ParsedLogs:
 
     def _refresh(self, parsed, storage, app_name, verstr, read_log, files):
         local = _local(storage)
-        if read_log is not load_log or local is None or LEGACY_LOG_FILE in files:
+        if read_log is not load_log or local is None:
             return _parse_with(read_log, storage, app_name, verstr)
         try:
             if parsed is not None and parsed.offsets is not None:

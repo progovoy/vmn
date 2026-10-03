@@ -41,7 +41,7 @@ def _write_meta(path, verstr, extra=None):
     if extra:
         meta.update(extra)
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f, sort_keys=True)
+        yaml.dump({"format_version": 1, **meta}, f, sort_keys=True)
 
 
 def _write_log(path, entries, writer="w0"):

@@ -2,11 +2,13 @@
 """The on-disk format version of a stored record.
 
 Every new run (and model registry) record carries ``format_version`` in its
-``metadata.yml``. It versions the whole record — metadata, the JSONL log
-entries and ``run_state.yml`` — so log lines carry no version of their own. A
-record without the field predates it and reads as version 1. A reader meeting
-a newer version than :data:`RECORD_FORMAT_VERSION` skips the record with a
-warning rather than mis-read it: upgrade vmn-exp to see it. The storage
+``metadata.yml``; the storage backends stamp any record written without it.
+It versions the whole record — metadata, the JSONL log entries and
+``run_state.yml`` — so log lines carry no version of their own. A record
+without the field is a v1 record: it is skipped with a warning to run
+``vmn-exp migrate``. A reader meeting a newer version than
+:data:`RECORD_FORMAT_VERSION` skips the record with a warning rather than
+mis-read it: upgrade vmn-exp to see it. The storage
 backends apply the gate where they parse metadata (``list_snapshots``,
 ``load_metadata``) and warn once per record per storage, not on every read.
 """
@@ -21,13 +23,20 @@ def stamped(metadata):
     return dict(metadata, **{FORMAT_VERSION_KEY: RECORD_FORMAT_VERSION})
 
 
+def with_format_version(metadata):
+    """*metadata*, stamped with this code's format version unless it has one."""
+    if FORMAT_VERSION_KEY in metadata:
+        return metadata
+    return stamped(metadata)
+
+
 def record_format_version(metadata):
-    """*metadata*'s format version; 1 when the record predates the field."""
-    return metadata.get(FORMAT_VERSION_KEY, 1)
+    """*metadata*'s format version; None for a v1 record (no field)."""
+    return metadata.get(FORMAT_VERSION_KEY)
 
 
 def readable(metadata, name=None, owner=None):
-    """*metadata*, or None when a newer format wrote it.
+    """*metadata*, or None when a newer format (or v1, without the field) wrote it.
 
     The skip is warned about once per record *name* per *owner* (the storage
     the record was read from); without an owner, on every call.
@@ -38,7 +47,14 @@ def readable(metadata, name=None, owner=None):
     if isinstance(version, int) and version <= RECORD_FORMAT_VERSION:
         return metadata
     name = name or metadata.get("verstr")
-    if _first_sighting(owner, name):
+    if not _first_sighting(owner, name):
+        return None
+    if version is None:
+        VMN_LOGGER.warning(
+            f"Skipping record {name}: it has no format_version (a v1 record); "
+            "run `vmn-exp migrate`"
+        )
+    else:
         VMN_LOGGER.warning(
             f"Skipping record {name}: format_version {version} is newer than "
             f"this vmn-exp supports ({RECORD_FORMAT_VERSION}); upgrade vmn-exp "

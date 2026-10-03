@@ -54,7 +54,7 @@ def _seed(root):
             verstr = f"0.0.1-dev.abc1234.def5678.r{i}"
             folder = os.path.join(base, verstr)
             os.makedirs(folder)
-            meta = {"verstr": verstr, "name": name, "timestamp": f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z"}
+            meta = {"format_version": 1, "verstr": verstr, "name": name, "timestamp": f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z"}
             _write(folder, "metadata.yml", yaml.dump(meta))
             params = {"type": "params", "timestamp": _iso(time.time()), "params": {"lr": 0.001 * (i + 1), "opt": "adam"}}
             _write(folder, "log/w.jsonl", json.dumps(params) + "\n")

@@ -11,6 +11,7 @@ leftovers — never a listed record with half its files.
 import yaml
 
 from vmn_exp import _base
+from vmn_exp.core.record_format import with_format_version
 from vmn_exp.storage.files import (
     METADATA_FILE,
     PATCH_FILES,
@@ -18,7 +19,6 @@ from vmn_exp.storage.files import (
     safe_dep_name,
 )
 from vmn_exp.storage.s3_base import (
-    app_keys,
     is_taken,
     parallel_map,
 )
@@ -42,7 +42,7 @@ class S3Records:
     def _put_metadata(self, prefix, metadata, **condition):
         self._put(
             f"{prefix}/{METADATA_FILE}",
-            yaml.dump(metadata, sort_keys=True),
+            yaml.dump(with_format_version(metadata), sort_keys=True),
             **condition,
         )
 
@@ -50,14 +50,6 @@ class S3Records:
         prefix = self._record_prefix(app_name, verstr)
         self._put_record_body(prefix, patches)
         self._put_metadata(prefix, metadata)
-
-    def _has_metadata_anywhere(self, app_name, verstr):
-        return any(
-            self._head(
-                f"{self._key_prefix(app_name, verstr, app_key=key)}/{METADATA_FILE}"
-            )
-            for key in app_keys(app_name)
-        )
 
     def create_exclusive(self, app_name, verstr, metadata, patches, claim_token=None):
         """Create the record only if *verstr* is free; True when created.
@@ -67,10 +59,10 @@ class S3Records:
         is this claimer's own crashed attempt, and is resumed; any other
         claim, and any existing metadata, means taken.
         """
-        # A record written before claims existed has metadata but no claim.
-        if self._has_metadata_anywhere(app_name, verstr):
-            return False
         prefix = self._key_prefix(app_name, verstr)
+        # A record written before claims existed has metadata but no claim.
+        if self._head(f"{prefix}/{METADATA_FILE}"):
+            return False
         if not self._claim(prefix, claim_token):
             return False
         self._put_record_body(prefix, patches)
@@ -93,7 +85,6 @@ class S3Records:
         prefix = self._record_prefix(app_name, verstr)
         # First: from here on the record is invisible, whatever else fails.
         self._s3.delete_object(Bucket=self.bucket, Key=f"{prefix}/{METADATA_FILE}")
-        self._record_prefixes.pop((app_name, verstr), None)
         self._delete_keys([o["Key"] for o in self._objects(prefix + "/")])
 
     def _delete_keys(self, keys):

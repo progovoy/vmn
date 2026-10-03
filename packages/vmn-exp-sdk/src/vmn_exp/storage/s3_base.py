@@ -6,11 +6,7 @@ import copy
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.storage.files import (
-    METADATA_FILE,
-    checked_app_path,
-    safe_verstr,
-)
+from vmn_exp.storage.files import checked_app_path, safe_verstr
 from vmn_exp.storage.registry import missing_extra
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs,
@@ -43,10 +39,9 @@ def parallel_map(fn, items):
         return list(pool.map(fn, items))
 
 
-def app_keys(app_name):
-    """The app's key segment, then the legacy one when it differs."""
-    new, legacy = app_name.replace("/", "-"), app_name.replace("/", "_")
-    return [new] if new == legacy else [new, legacy]
+def app_key(app_name):
+    """The app's key segment: the tag form (``root/svc`` → ``root-svc``)."""
+    return app_name.replace("/", "-")
 
 
 def boto3_client(endpoint_url=None):
@@ -80,9 +75,6 @@ class S3Base:
         self.prefix = prefix
         self.endpoint_url = endpoint_url
         self._s3 = client or boto3_client(endpoint_url)
-        self._record_prefixes = {}
-        self._probes = {}
-        self._legacy_owners = {}
 
     @property
     def area(self):
@@ -93,29 +85,15 @@ class S3Base:
         clone = copy.copy(self)
         clone.__dict__.pop("_areas", None)
         clone.prefix = f"{self.prefix.rpartition('/')[0]}/{name}".lstrip("/")
-        clone._record_prefixes, clone._probes, clone._legacy_owners = {}, {}, {}
         return clone
 
     # -- keys -----------------------------------------------------------------
 
-    def _key_prefix(self, app_name, verstr=None, app_key=None):
-        base = f"{self.prefix}/{app_key or app_keys(checked_app_path(app_name))[0]}"
+    def _key_prefix(self, app_name, verstr=None):
+        base = f"{self.prefix}/{app_key(checked_app_path(app_name))}"
         return f"{base}/{safe_verstr(verstr)}" if verstr else base
 
     def _record_prefix(self, app_name, verstr):
-        """Where *verstr*'s objects live: the current key, or the legacy one
-        for a record written before the encoding changed."""
-        keys = app_keys(app_name)
-        if len(keys) == 1:
-            return self._key_prefix(app_name, verstr)
-        cached = self._record_prefixes.get((app_name, verstr))
-        if cached:
-            return cached
-        for key in keys:
-            prefix = self._key_prefix(app_name, verstr, app_key=key)
-            if self._head(f"{prefix}/{METADATA_FILE}"):
-                self._record_prefixes[(app_name, verstr)] = prefix
-                return prefix
         return self._key_prefix(app_name, verstr)
 
     # -- client ---------------------------------------------------------------

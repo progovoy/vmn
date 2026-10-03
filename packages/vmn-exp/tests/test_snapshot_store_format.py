@@ -29,6 +29,7 @@ PATCHES = {
 
 def _metadata(verstr=VERSTR, **extra):
     return dict(
+        format_version=1,
         verstr=verstr,
         timestamp="2026-01-01T00:00:00Z",
         note="n",

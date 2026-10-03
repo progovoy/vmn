@@ -9,7 +9,6 @@ from vmn_exp._base import valid_app_path, valid_path_component
 # Log file naming and parsing live in core, shared with the experiment index.
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
-    LEGACY_LOG_FILE,
     LOG_DIR,
     group_log_names,
     is_log_file,
@@ -141,15 +140,14 @@ def log_sizes_of(files):
     """``{writer: total bytes}`` over ``(name, size)`` pairs of a record's files,
     counting only the log files a reader sees (not what a compaction superseded)."""
     files = dict(files)
-    sizes = {"": files[LEGACY_LOG_FILE]} if LEGACY_LOG_FILE in files else {}
+    sizes = {}
     for writer, names in group_log_names(files).items():
         sizes[writer] = sum(files[name] for name in names)
     return sizes
 
 
 def flatten_logs(logs_by_writer):
-    """The legacy ``log.yml`` entries (writer ``""``) first, then writers by name,
-    stably sorted by timestamp — less what a rewind hides (see
+    """Writers' entries by writer name, stably sorted by timestamp — less what a rewind hides (see
     :mod:`vmn_exp.core.rewind`)."""
     entries = []
     for writer in sorted(logs_by_writer):

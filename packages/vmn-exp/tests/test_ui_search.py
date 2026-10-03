@@ -23,7 +23,7 @@ def _run(root, app, verstr, loss, note="n"):
         "note": note, "branch": "master", "base_version": "0.0.1",
     }
     with open(os.path.join(path, "metadata.yml"), "w") as f:
-        yaml.dump(meta, f)
+        yaml.dump({"format_version": 1, **meta}, f)
     with open(os.path.join(path, "log", "w0.jsonl"), "w") as f:
         f.write(
             '{"timestamp": "2026-09-21T12:00:01Z", "type": "metrics",'

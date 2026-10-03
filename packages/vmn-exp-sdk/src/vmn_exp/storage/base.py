@@ -185,7 +185,7 @@ class SnapshotStorage(ABC):
         return path if path and os.path.isfile(path) else None
 
     def log_sizes(self, app_name, verstr):
-        """``{writer: bytes}`` of the record's logs (``""`` = legacy ``log.yml``).
+        """``{writer: bytes}`` of the record's logs .
 
         A writer's log only ever grows, so comparing sizes tells which copy of
         it is newer without reading either. Empty when the backend can't tell.
