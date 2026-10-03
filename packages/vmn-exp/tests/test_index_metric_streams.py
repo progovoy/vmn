@@ -121,3 +121,18 @@ def test_sealed_parts_and_the_final_index_fold_like_the_stream(tmp_path):
     expected = _fields(_expected(st))
     assert compact_writer(st, APP, V, "w")
     assert _fields(index.refresh().rows()[0]) == expected
+
+
+def test_a_vmx_rewritten_larger_refolds_like_a_cold_build(tmp_path):
+    from vmn_exp.core.metric_compact import compact_writer, reopen_writer
+
+    st = _storage(tmp_path)
+    rng = random.Random(11)
+    _log_points(st, "w", 40, rng)
+    assert compact_writer(st, APP, V, "w")
+    index = ExperimentIndex(st, APP)
+    index.refresh()
+    assert reopen_writer(st, APP, V, "w") == 1
+    _log_points(st, "w", 40, rng, step0=40)
+    assert compact_writer(st, APP, V, "w")
+    assert _fields(index.refresh().rows()[0]) == _fields(_row(st))
