@@ -49,3 +49,16 @@ def _host_state_in_tmp(monkeypatch, tmp_path_factory):
     """Index caches and push ledgers are per-host state (storage/host_dirs.py);
     keep each test's off the real ~/.cache and away from other tests'."""
     monkeypatch.setenv("VMN_EXP_CACHE_DIR", str(tmp_path_factory.mktemp("hoststate")))
+
+
+_CHECKOUT_STORE = _REPO / ".vmn" / "store"
+
+
+@pytest.fixture(autouse=True)
+def _no_store_in_checkout():
+    """Fail the test that writes a store into the repo checkout itself
+    (``<repo>/.vmn/store``) instead of a tmp dir."""
+    existed = _CHECKOUT_STORE.exists()
+    yield
+    if not existed and _CHECKOUT_STORE.exists():
+        pytest.fail(f"test created {_CHECKOUT_STORE}; use a tmp dir")

@@ -12,11 +12,14 @@ BUCKET = "flags-bkt"
 
 
 @pytest.fixture(autouse=True)
-def clean_env(monkeypatch):
+def clean_env(monkeypatch, tmp_path):
     for key in ("VMN_EXPERIMENT_STORE", "VMN_EXPERIMENT_BUCKET",
                 "VMN_EXPERIMENT_PREFIX", "VMN_EXPERIMENT_ENDPOINT_URL",
-                "VMN_EXPERIMENT_DIR"):
+                "VMN_EXPERIMENT_DIR", "VMN_WORKING_DIR"):
         monkeypatch.delenv(key, raising=False)
+    # Storage without --dir falls back to the enclosing repo's .vmn/store:
+    # keep that off the checkout running the suite.
+    monkeypatch.chdir(tmp_path)
 
 
 @pytest.fixture
