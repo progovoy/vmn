@@ -75,8 +75,10 @@ class PgIndexes:
         key = (org_id, ws.name, app_name)
         with self._lock:
             if key not in self._indexes:
-                cache = WorkspaceScopedCache(self._store, workspace_id(ws), org_id)
-                self._indexes[key] = ElectedIndex(storage, app_name, cache, self._election)
+                ws_id = workspace_id(ws)
+                cache = WorkspaceScopedCache(self._store, ws_id, org_id)
+                self._indexes[key] = ElectedIndex(
+                    storage, app_name, cache, self._election, workspace_id=ws_id, org_id=org_id)
             return self._indexes[key]
 
     def forget(self, ws_name):

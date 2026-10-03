@@ -11,8 +11,10 @@ from vmn_exp.core.index import ExperimentIndex
 
 
 class ElectedIndex:
-    def __init__(self, storage, app_name, cache_store, election):
+    def __init__(self, storage, app_name, cache_store, election, workspace_id=0, org_id=None):
         self.app_name = app_name
+        self.workspace_id = workspace_id
+        self.org_id = org_id
         self._election = election
         self._leader = ExperimentIndex(storage, app_name, cache_store=cache_store)
         self._follower = ExperimentIndex.follower(cache_store, app_name)
@@ -20,7 +22,12 @@ class ElectedIndex:
 
     @property
     def scope(self):
-        return f"index:{self.app_name}"
+        return f"index:{self.org_id or 0}:{self.workspace_id}:{self.app_name}"
+
+    @property
+    def wake_key(self):
+        """The ``vmn_gen`` payload its leader's saves notify."""
+        return f"{self.workspace_id}:{self.app_name}"
 
     @property
     def full_sweep_sec(self):

@@ -88,9 +88,9 @@ class Refresher:
     def wake_scope(self, payload):
         """Refresh at once the watched indexes of ``vmn_gen``'s
         ``<workspace>:<app>`` *payload*, instead of at their next tick."""
-        app = payload.split(":", 1)[-1]
         with self._lock:
-            watches = [w for i, w in self._watches.items() if i.app_name == app]
+            watches = [w for i, w in self._watches.items()
+                       if getattr(i, "wake_key", None) == payload]
         for watch in watches:
             watch.wake.set()
 
