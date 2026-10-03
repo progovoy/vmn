@@ -8,4 +8,3 @@ def test_gitmode_capture_is_the_vmn_capture():
 
     assert capture.Capture is api.SnapshotCapture
     assert capture.capture_snapshot is api.capture_identity
-    assert capture.ensure_code is api.ensure_code

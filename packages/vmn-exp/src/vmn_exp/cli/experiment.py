@@ -35,7 +35,6 @@ from vmn_exp.cli.views import (
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
 from vmn_exp.storage.store_marker import require_store
-from vmn_exp.core.code_store import code_storage
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.checkout import record_run
 from vmn_exp.gitmode.coldstart import DIRTY_OK
@@ -485,7 +484,7 @@ def _experiment_create_core(
     env = (
         capture_env_safe(python_exe) if should_capture(capture_env, exp_conf) else None
     )
-    code = capture.ensure_code(code_storage(storage), vcs, captured)
+    code = capture.ensure_code(storage, vcs, captured)
     verstr = record_run(
         vcs, storage, captured, code, note, extra_create_data, parent, name, env=env
     )
