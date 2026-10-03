@@ -98,8 +98,9 @@ def test_sdk_log_metrics_reach_the_stream_not_the_jsonl(tmp_path):
     run.log_metric("loss", 0.25)
     run.finish()
     assert "metrics" not in _jsonl_types(storage)
-    assert _stream_values(storage, "loss") == [0.5, 0.25]
-    assert [e["step"] for e in _merged_metrics(storage)] == [0, 1]
+    merged = _merged_metrics(storage)
+    assert [e["values"]["loss"] for e in merged] == [0.5, 0.25]
+    assert [e["step"] for e in merged] == [0, 1]
 
 
 def test_mlflow_import_records_metrics_as_a_stream(tmp_path):
