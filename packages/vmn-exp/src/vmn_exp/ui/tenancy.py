@@ -6,8 +6,13 @@ Every control-plane and cache row carries ``org_id``; migration
 setting ``app.org_id``. :func:`enable_rls` turns the policies on (``ENABLE`` +
 ``FORCE``, so the table owner is bound too) for ``tenancy: multi``; a
 connection that never ran :func:`set_org` then sees no rows. The org
-middleware binds the principal's org to each request (``request.state.org_id``).
+middleware binds the principal's org to each request (``request.state.org_id``
+and :func:`current_org`); the Postgres stores bind it per transaction
+(:func:`bind_org`), so one shared connection serves every org and no org
+outlives its transaction.
 """
+import contextlib
+import contextvars
 import secrets
 from dataclasses import dataclass
 
@@ -16,6 +21,29 @@ RLS_TABLES = (
     "vmn_records", "vmn_run_states", "vmn_tombstones", "vmn_scope_gen", "vmn_kv",
     "vmn_api_tokens", "vmn_sessions", "vmn_login_states", "vmn_workspaces", "vmn_audit",
 )
+
+
+_CURRENT_ORG = contextvars.ContextVar("vmn_org_id", default=None)
+
+
+def current_org():
+    """The org the running request is bound to, or None outside one."""
+    return _CURRENT_ORG.get()
+
+
+@contextlib.contextmanager
+def org_context(org_id):
+    token = _CURRENT_ORG.set(org_id)
+    try:
+        yield
+    finally:
+        _CURRENT_ORG.reset(token)
+
+
+def effective_org(default):
+    """The request's org, else *default* (a store's own, for background work)."""
+    org = current_org()
+    return default if org is None else org
 
 
 @dataclass(frozen=True)
@@ -34,6 +62,11 @@ def enable_rls(conn):
 def set_org(conn, org_id):
     """Bind *conn*'s session to *org_id* (the RLS policies read it)."""
     conn.execute("SELECT set_config('app.org_id', %s, false)", (str(int(org_id)),))
+
+
+def bind_org(conn, org_id):
+    """Bind *conn*'s current transaction to *org_id* (``set_config(..., true)``)."""
+    conn.execute("SELECT set_config('app.org_id', %s, true)", (str(int(org_id)),))
 
 
 def create_org(conn, name):
@@ -76,4 +109,7 @@ def install_org_middleware(app, tenancy):
 
             return JSONResponse({"detail": "No organization for this principal"}, 403)
         request.state.org_id = org_id if tenancy == "multi" else SINGLE_TENANT_ORG
-        return await call_next(request)
+        if tenancy != "multi":
+            return await call_next(request)
+        with org_context(org_id):
+            return await call_next(request)

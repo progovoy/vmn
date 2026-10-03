@@ -7,7 +7,8 @@ refresher — the subtree's run states, so a request never lists the storage.
 Git workspaces persist their index under ``<data_dir>/index``
 (:class:`WorkspaceIndex`; in memory only with ``--no-index``), S3 workspaces
 in a database of their own next to it, so a restarted server starts warm
-either way.
+either way. With a Postgres *cache_dsn* store workspaces are cached there
+instead, shared by every replica (:mod:`vmn_exp.ui.pg_mode`).
 """
 import os
 import threading
@@ -73,7 +74,7 @@ def _open_journal(ws, storage, cache_path):
 
 
 class ExperimentSource:
-    def __init__(self, data_dir, use_index=True, refresher=None):
+    def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None):
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -84,6 +85,11 @@ class ExperimentSource:
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
         self._lock = threading.Lock()
+        self._pg = None
+        if cache_dsn:
+            from vmn_exp.ui.pg_mode import PgIndexes
+
+            self._pg = PgIndexes(cache_dsn, self.refresher)
 
     def workspace_index(self, ws):
         """The git workspace's read cache (in memory only with ``--no-index``)."""
@@ -95,6 +101,8 @@ class ExperimentSource:
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):
         """The app's current :class:`IndexSnapshot`, its rows summarized by the
         metrics *schema* when one is given."""
+        if s3_storage is not None and self._pg is not None:
+            return self._pg_snapshot(ws, app_name, s3_storage, schema)
         if s3_storage is not None:
             cache_path = ui_index.s3_cache_path(self._db_dir, ws)
             snap = ui_index.app_snapshot(
@@ -109,6 +117,14 @@ class ExperimentSource:
         self._heal(ws, app_name, index.storage, index.db_path, lambda: index.index_of(app_name))
         return snap
 
+    def _pg_snapshot(self, ws, app_name, storage, schema):
+        index = self._pg.index(ws, app_name, storage)
+        journal = self._journal(ws, storage, ui_index.s3_cache_path(self._db_dir, ws))
+        snap = ui_index.snapshot_of_index(index, storage, app_name, self.refresher, schema,
+                                          journal, ws.reconcile_sec)
+        self._heal(ws, app_name, storage, None, lambda: index)
+        return snap
+
     def cache(self, ws, cache_path=None):
         """The workspace's :class:`WorkspaceCache` (resync, status, healing)."""
         with self._lock:
@@ -121,7 +137,9 @@ class ExperimentSource:
             return dict(self._caches)
 
     def _new_cache(self, ws, cache_path):
-        if cache_path is None and ws.kind != "git":
+        if self._pg is not None and ws.kind != "git":
+            cache_path = None  # Postgres: no cache file to check or rebuild
+        elif cache_path is None and ws.kind != "git":
             cache_path = ui_index.s3_cache_path(self._db_dir, ws)
         elif cache_path is None:
             cache_path = self._indexes[ws.name].db_path if ws.name in self._indexes else None
@@ -159,6 +177,9 @@ class ExperimentSource:
 
     def touched(self, ws, app_name, s3_storage):
         """A server edit changed *app_name* in the store workspace *ws*."""
+        if self._pg is not None:
+            self._pg.index(ws, app_name, s3_storage).refresh()
+            return
         ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws))
 
     def metrics_schema(self, ws, app_name):
@@ -187,3 +208,5 @@ class ExperimentSource:
             self._indexes.pop(ws_name, None)
             self._journals.pop(ws_name, None)
             self._caches.pop(ws_name, None)
+        if self._pg is not None:
+            self._pg.forget(ws_name)

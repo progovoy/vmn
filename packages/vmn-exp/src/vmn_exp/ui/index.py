@@ -52,6 +52,13 @@ def refresh_app(storage, app_name, cache_path):
     experiment_index.shared_index(storage, app_name, cache_path).refresh()
 
 
+def snapshot_of_index(index, storage, app_name, refresher=_INLINE, schema=None,
+                      journal=None, reconcile_sec=None):
+    """:func:`app_snapshot` of an index built elsewhere (the Postgres one)."""
+    return _snapshot_of(lambda: index, storage, app_name, refresher, schema, journal,
+                        reconcile_sec)
+
+
 def _snapshot_of(index_of, storage, app_name, refresher, schema=None, journal=None,
                  reconcile_sec=None):
     try:
