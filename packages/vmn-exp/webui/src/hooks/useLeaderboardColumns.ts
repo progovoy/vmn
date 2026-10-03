@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import type { ExperimentFacets, ExperimentRow, MetricsSchema } from "../types";
 import {
-  FLEET_COLS, PINNED_COLS, anyTags, columnIds, columnStyles, computeColMeta, idLayout, metricColumns,
+  FLEET_COLS, PINNED_COLS, anyComments, anyTags, columnIds, columnStyles, computeColMeta, idLayout, metricColumns,
   orderColumns, paramKey,
 } from "../pages/leaderboardColumns";
 import type { ColumnCell } from "../pages/leaderboardColumns";
@@ -22,6 +22,10 @@ function useStable<T>(value: T): T {
 
 /** The `hide=` entry of the tags column. */
 export const TAGS_COLUMN = "c:tags";
+
+/** The `hide=` entry of the comments column; hidden by default, so listing
+ *  it there shows the column. */
+export const COMMENTS_COLUMN = "c:comments";
 
 const splitKey = (key: string) => (key ? key.split("\u0000") : []);
 
@@ -108,6 +112,8 @@ export function useLeaderboardColumns(
   const showBest = list.length > 1;
   const hasTags = useMemo(() => anyTags(rows), [rows]);
   const showTags = hasTags && !hidden.has(TAGS_COLUMN);
+  const hasComments = useMemo(() => anyComments(rows), [rows]);
+  const showComments = hasComments && hidden.has(COMMENTS_COLUMN);
   const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => !hidden.has(`c:${c}`)), [hidden]);
 
   const { widths, order: savedOrder } = prefs;
@@ -115,7 +121,8 @@ export function useLeaderboardColumns(
     // URL-pinned cells stick right after the experiment column, so they lead
     // the movable columns whatever the saved drag order says.
     const pinnedIds = orderedCellKeys.slice(0, pinnedCount);
-    const moved = orderColumns(columnIds(visibleFleet, orderedCellKeys.slice(pinnedCount), showTags), savedOrder);
+    const movable = columnIds(visibleFleet, orderedCellKeys.slice(pinnedCount), showTags, showComments);
+    const moved = orderColumns(movable, savedOrder);
     const ids = [...PINNED_COLS, ...pinnedIds, ...moved.slice(PINNED_COLS.length)];
     const cl = idLayout(ids, widths, fill);
     return {
@@ -125,7 +132,7 @@ export function useLeaderboardColumns(
       colMeta, showBest, runBase,
     };
   }, [
-    orderedCellKeys, pinnedCount, cells, visibleFleet, visibleMetrics, visibleParams, showTags,
+    orderedCellKeys, pinnedCount, cells, visibleFleet, visibleMetrics, visibleParams, showTags, showComments,
     colMeta, showBest, runBase, widths, savedOrder, fill,
   ]);
 
@@ -134,8 +141,8 @@ export function useLeaderboardColumns(
     param_keys: facets?.param_keys ?? paramCols,
   }), [facets, metricCols, paramCols]);
 
-  const otherCols = [...FLEET_COLS, ...(hasTags ? ["tags"] : [])];
-  const visibleOther = [...visibleFleet, ...(showTags ? ["tags"] : [])];
+  const otherCols = [...FLEET_COLS, ...(hasTags ? ["tags"] : []), ...(hasComments ? ["comments"] : [])];
+  const visibleOther = [...visibleFleet, ...(showTags ? ["tags"] : []), ...(showComments ? ["comments"] : [])];
   return {
     primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, defaultKeys, layout,
     suggestFacets, otherCols, visibleOther,

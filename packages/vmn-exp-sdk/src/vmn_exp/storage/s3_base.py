@@ -45,11 +45,23 @@ def app_key(app_name):
 
 
 def boto3_client(endpoint_url=None):
+    return boto3_client_module().client("s3", **({"endpoint_url": endpoint_url} if endpoint_url else {}))
+
+
+def sigv4_client(endpoint_url=None):
+    """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs)."""
+    from botocore.config import Config
+
+    kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
+    return boto3_client_module().client("s3", config=Config(signature_version="s3v4"), **kwargs)
+
+
+def boto3_client_module():
     try:
         import boto3
     except ImportError:
         raise missing_extra("boto3", "s3") from None
-    return boto3.client("s3", **({"endpoint_url": endpoint_url} if endpoint_url else {}))
+    return boto3
 
 
 class S3Base:

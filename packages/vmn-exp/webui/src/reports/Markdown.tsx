@@ -1,9 +1,9 @@
 import { useMemo, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { parse as parseYaml } from "yaml";
 import Panel from "./Panel";
-import { extractHeadings, makeSlugger, type Heading } from "./headings";
+import { makeSlugger, type Heading } from "./headings";
+import { parseBlocks } from "./markdown/block";
+import { collectHeadings, renderBlocks } from "./markdown/render";
+import { parseYamlLite } from "./yamlLite";
 
 export type PanelSpec = Record<string, unknown>;
 
@@ -18,34 +18,10 @@ export interface MarkdownProps {
 
 const TOC_MIN_HEADINGS = 4;
 
-interface MdNode {
-  type: string;
-  depth?: number;
-  value?: string;
-  children?: MdNode[];
-  data?: { hProperties?: Record<string, unknown> };
-}
-
-function nodeText(node: MdNode): string {
-  if (node.value !== undefined) return node.value;
-  return (node.children ?? []).map(nodeText).join("");
-}
-
-/** Remark plugin: give headings ids matching the precomputed TOC slugs. */
-function remarkHeadingIds(headings: Heading[]) {
-  return () => (tree: MdNode) => {
-    const fallback = makeSlugger();
-    let i = 0;
-    const walk = (node: MdNode) => {
-      if (node.type === "heading") {
-        const id = headings[i]?.slug ?? fallback(nodeText(node));
-        i += 1;
-        node.data = { ...node.data, hProperties: { ...node.data?.hProperties, id } };
-      }
-      node.children?.forEach(walk);
-    };
-    walk(tree);
-  };
+/** A panel block is YAML (a JSON object is valid too). */
+function parseSpec(raw: string): unknown {
+  const text = raw.trim();
+  return text.startsWith("{") ? JSON.parse(text) : parseYamlLite(raw);
 }
 
 function PlaceholderPanel({ spec }: { spec: PanelSpec }) {
@@ -59,7 +35,7 @@ function PlaceholderPanel({ spec }: { spec: PanelSpec }) {
 function PanelBlock({ raw, renderPanel }: { raw: string; renderPanel?: MarkdownProps["renderPanel"] }) {
   let spec: unknown;
   try {
-    spec = parseYaml(raw);
+    spec = parseSpec(raw);
   } catch (e) {
     return <PanelError message={(e as Error).message} />;
   }
@@ -98,50 +74,23 @@ function panelRenderer(props: MarkdownProps): MarkdownProps["renderPanel"] {
   return (spec) => <Panel ws={ws} spec={spec} />;
 }
 
-function buildComponents(props: MarkdownProps): Components {
-  const renderPanel = panelRenderer(props);
-  return {
-    a: ({ node: _n, ...rest }) =>
-      rest.href?.startsWith("#") ? <a {...rest} /> : <a {...rest} target="_blank" rel="noopener noreferrer" />,
-    img: ({ src, alt }) => {
-      if (src?.startsWith("vmn://") && props.resolveMedia) {
-        return <img src={props.resolveMedia(src)} alt={alt ?? ""} />;
-      }
-      return (
-        <a href={src} target="_blank" rel="noopener noreferrer">
-          {alt || src}
-        </a>
-      );
-    },
-    pre: ({ node, children }) => {
-      const code = node?.children[0];
-      const classes = code && "properties" in code ? code.properties.className : undefined;
-      if (Array.isArray(classes) && classes.includes("language-vmn-panel")) {
-        const raw = code && "children" in code ? code.children.map((c) => ("value" in c ? c.value : "")).join("") : "";
-        return <PanelBlock raw={raw} renderPanel={renderPanel} />;
-      }
-      return <pre>{children}</pre>;
-    },
-  };
-}
-
 export function Markdown(props: MarkdownProps) {
-  const { source } = props;
-  const headings = useMemo(() => extractHeadings(source), [source]);
-  const plugins = useMemo(() => [remarkGfm, remarkHeadingIds(headings)], [headings]);
-  const components = useMemo(() => buildComponents(props), [props.resolveMedia, props.renderPanel, props.ws]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { source, resolveMedia } = props;
+  const blocks = useMemo(() => parseBlocks(source), [source]);
+  const headings: Heading[] = useMemo(() => {
+    const slug = makeSlugger();
+    return collectHeadings(blocks).map((h) => ({ ...h, slug: slug(h.text) }));
+  }, [blocks]);
+  const renderPanel = panelRenderer(props);
+  const body = renderBlocks(blocks, {
+    resolveMedia,
+    renderPanelBlock: (raw) => <PanelBlock raw={raw} renderPanel={renderPanel} />,
+    headingId: (i, text) => headings[i]?.slug ?? makeSlugger()(text),
+  });
   return (
     <div className="md-body">
       {headings.length >= TOC_MIN_HEADINGS && <TableOfContents headings={headings} />}
-      <ReactMarkdown remarkPlugins={plugins} components={components} urlTransform={urlTransform}>
-        {source}
-      </ReactMarkdown>
+      {body}
     </div>
   );
-}
-
-/** Keep vmn:// image refs (the default transform strips unknown schemes). */
-function urlTransform(url: string): string {
-  if (url.startsWith("vmn://")) return url;
-  return /^(https?:|mailto:|#|\/|\.|[^:]*$)/i.test(url) ? url : "";
 }

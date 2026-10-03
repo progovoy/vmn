@@ -15,21 +15,47 @@ route of their own: the artifact download serves them as ``image/png``.
 served steps, ``{"name", "steps": [{"step", "bins", "counts"}], "total"}``
 (the run detail lists the names in ``histograms_total``; see
 :mod:`vmn_exp.ui.readers.histograms`).
+
+A store workspace with ``downloads: redirect`` answers artifact, media and
+output downloads with a ``302`` to a presigned GET of that one object
+(:func:`signed_redirect`, plan 11 §7.2), signed with the server's own read
+access; backends that cannot presign keep streaming.
 """
 import json
 
 from fastapi import HTTPException, Request
+from fastapi.responses import RedirectResponse
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.core.tables import table_page
+from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.files import valid_artifact_path
-from vmn_exp.ui.http_params import clamp_page
+from vmn_exp.storage.registry import open_store
+from vmn_exp.ui.http_params import attachment, clamp_page, media_type
 from vmn_exp.ui.readers.experiment_detail import run_media
 from vmn_exp.ui.readers.histograms import histogram_of
 from vmn_exp.ui.responses import json_response
 
 DEFAULT_TABLE_PAGE = 100
+SIGNED_URL_SEC = 300
+REDIRECT = "redirect"
+
+
+def signed_redirect(ws, app_name, verstr, name):
+    """A 302 to a presigned GET of *name* for a ``downloads: redirect`` store
+    workspace, None to stream it instead; 404 when the object is missing."""
+    if ws.kind != "store" or ws.downloads != REDIRECT:
+        return None
+    presign = getattr(open_store(ws.store, RUNS), "presign_artifact", None)
+    if presign is None:
+        return None
+    is_image = media_type(name).startswith("image/")
+    disposition = None if is_image else attachment(name.rsplit("/", 1)[-1])
+    url = presign(app_name, verstr, name, SIGNED_URL_SEC, disposition)
+    if url is None:
+        raise HTTPException(404, f"Artifact {name} not found")
+    return RedirectResponse(url, status_code=302)
 
 
 def load_table(storage, app_name, verstr, path):

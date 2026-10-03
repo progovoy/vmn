@@ -76,6 +76,11 @@ function FleetCell({ r, c, counts, style }: {
   );
 }
 
+function CommentsCell({ counts, style }: { counts: ExperimentRow["comments"]; style: CSSProperties }) {
+  const text = counts ? `${counts.total}${counts.unresolved ? ` (${counts.unresolved} open)` : ""}` : "";
+  return <td data-col-id="c:comments" className="num comments-cell" style={style}>{text}</td>;
+}
+
 /** The layout's column ids, in display order. */
 export function layoutIds(layout: RowLayout): readonly string[] {
   if (layout.ids) return layout.ids;
@@ -209,6 +214,8 @@ function Row({
         );
       case "c:tags":
         return <td key={id} data-col-id={id} className="tags-cell" style={style}><TagChips tags={r.tags} /></td>;
+      case "c:comments":
+        return <CommentsCell key={id} counts={r.comments} style={style} />;
       case "note":
         return <td key={id} data-col-id={id} className="note-cell" style={style}>{r.note}</td>;
       case "when":
