@@ -1,10 +1,11 @@
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { apiReports, commentTarget, type ReportDetail } from "../apiReports";
 import { Markdown, type PanelSpec } from "../reports/Markdown";
 import Panel from "../reports/Panel";
 import ReportHistory from "../reports/ReportHistory";
+import { PanelCaptureProvider, usePanelCapture } from "../reports/publishedData";
 import Comments from "../components/Comments";
 import { Skeleton } from "../components/ui";
 
@@ -43,25 +44,52 @@ function PublishedBanner({ report, rev, onLive }: { report: ReportDetail; rev: n
   );
 }
 
+/** The published revision renders frozen panels unless the editor is on it. */
+function isFrozen(report: ReportDetail, rev: number, params: URLSearchParams): boolean {
+  if (rev !== report.published_rev || params.get("live") === "1") return false;
+  return !(report.can_edit && rev === report.rev);
+}
+
+function PublishButton({ ws, report }: { ws: string; report: ReportDetail }) {
+  const capture = usePanelCapture();
+  const client = useQueryClient();
+  const publish = useMutation({
+    mutationFn: () => apiReports.publish(ws, report.rid, { rev: report.rev, data: capture?.collect() ?? {} }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["report", ws, report.rid] }),
+  });
+  return (
+    <span>
+      <button type="button" className="btn btn-sm" disabled={publish.isPending} onClick={() => publish.mutate()}>
+        Publish
+      </button>
+      {publish.error && <span className="error"> {(publish.error as Error).message}</span>}
+    </span>
+  );
+}
+
 function ReportBody({ ws, report }: { ws: string; report: ReportDetail }) {
   const [params, setParams] = useSearchParams();
   const rev = shownRev(report, params);
   const body = useRevisionBody(ws, report, rev);
   useScrollToHash(body !== undefined);
   const target = commentTarget.report(report.rid);
+  const published = isFrozen(report, rev, params) ? { rid: report.rid, rev } : undefined;
   const renderPanel = (spec: PanelSpec) => {
     const id = String(spec.id ?? "");
     return (
       <>
-        <div id={`p-${id}`}><Panel ws={ws} spec={spec} /></div>
+        <div id={`p-${id}`}><Panel ws={ws} spec={spec} published={published} /></div>
         {id && <Comments ws={ws} target={target} anchor={{ panel: id }} />}
       </>
     );
   };
   return (
-    <>
+    <PanelCaptureProvider>
       <PublishedBanner report={report} rev={rev} onLive={() => setParams({ live: "1" })} />
-      <div className="muted" style={{ marginBottom: 8 }}>v{rev}{rev === report.rev ? " (latest)" : ""}</div>
+      <div className="muted" style={{ marginBottom: 8 }}>
+        v{rev}{rev === report.rev ? " (latest)" : ""}{" "}
+        {report.can_edit && rev === report.rev && <PublishButton ws={ws} report={report} />}
+      </div>
       {body === undefined ? <Skeleton /> : <Markdown source={body} renderPanel={renderPanel} />}
       <ReportHistory ws={ws} rid={report.rid} revisions={report.revisions ?? []}
         defaultBase={report.published_rev ?? Math.max(1, report.rev - 1)} />
@@ -69,7 +97,7 @@ function ReportBody({ ws, report }: { ws: string; report: ReportDetail }) {
         <div className="eyebrow">Comments</div>
         <Comments ws={ws} target={target} />
       </div>
-    </>
+    </PanelCaptureProvider>
   );
 }
 

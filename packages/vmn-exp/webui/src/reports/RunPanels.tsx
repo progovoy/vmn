@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { appTag, artifactUrl } from "../api";
 import { runLineage } from "../apiRun";
+import type { HttpError } from "../http";
 import type { ExperimentDetail } from "../types";
 import { fmtParam, fmtVal } from "../util";
 import MediaImages from "../components/MediaImages";
@@ -23,6 +24,7 @@ function WithDetail({ ws, app, verstr, children }: {
   ws: string; app: string; verstr: string; children: (d: ExperimentDetail) => ReactNode;
 }) {
   const q = useRunDetail(ws, app, verstr);
+  if ((q.error as HttpError | null)?.status === 404) return <div className="muted">run pruned: {verstr}</div>;
   if (q.error) return <div className="error">{String(q.error)}</div>;
   return q.data ? <>{children(q.data)}</> : <div className="muted">Loading…</div>;
 }
