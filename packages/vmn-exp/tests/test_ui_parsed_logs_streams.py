@@ -68,3 +68,15 @@ def test_a_sealed_part_reparses_even_when_the_new_stream_outgrew_the_old(storage
     snap = cache.get(storage, APP, V, load_log)
     assert [p["step"] for p in snap.series()["loss"]] == list(range(20))
     _assert_full(snap, storage)
+
+
+def test_run_detail_reports_whether_the_metrics_are_compacted(storage):
+    from vmn_exp.core.metric_compact import compact_record
+    from vmn_exp.ui.readers.experiment_detail import experiment_detail
+
+    detail, _ = experiment_detail(storage, APP, V, edges=lambda s, a: {})
+    assert detail["compacted"] is None
+    _log(storage, "w", 0, 5)
+    assert experiment_detail(storage, APP, V, edges=lambda s, a: {})[0]["compacted"] is False
+    compact_record(storage, APP, V)
+    assert experiment_detail(storage, APP, V, edges=lambda s, a: {})[0]["compacted"] is True
