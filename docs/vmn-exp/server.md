@@ -128,9 +128,14 @@ generated edit policy allows (see
 every control-plane and cache row carries an `org_id`, and each transaction is
 bound to the requesting principal's org (`set_config('app.org_id', ..., true)`,
 never for the whole session), so a missing `WHERE` cannot leak rows across
-orgs. A principal with no org gets `403`. Store URIs are limited to `s3://`,
-`gs://` and `az://`, and an `endpoint_url` must be in
-`server.endpoint_allowlist`. Background refreshes use the store's own org.
+orgs. A principal with no org gets `403`. Authentication runs before the org
+is known, so an API token or session is first looked up by its id alone (a
+`vmn_credential_lookup` policy lets a transaction naming that one id in
+`app.credential_id` read its row in any org); the request then runs in the
+credential's org. Sessions are stored in their principal's org. Store URIs
+are limited to `s3://`, `gs://` and `az://`, and an `endpoint_url` must be in
+`server.endpoint_allowlist`. A workspace app's cache keeps the org of the
+request that opened it, so background refreshes write its rows under that org.
 
 ## How the cache stays fresh
 

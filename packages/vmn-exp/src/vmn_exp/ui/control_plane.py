@@ -62,6 +62,11 @@ class ControlPlaneStore:
     def list(self, kind):
         raise NotImplementedError
 
+    def credential_org(self, kind, key):
+        """The org a ``token``/``session`` *key* belongs to, looked up before
+        any org is bound; ``None`` if unknown. One org without tenancy."""
+        return 0 if self.get(kind, key) is not None else None
+
 
 class SQLiteControlPlane(ControlPlaneStore):
     def __init__(self, path):

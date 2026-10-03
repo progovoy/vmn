@@ -21,6 +21,7 @@ RLS_TABLES = (
     "vmn_records", "vmn_run_states", "vmn_tombstones", "vmn_scope_gen", "vmn_kv",
     "vmn_api_tokens", "vmn_sessions", "vmn_login_states", "vmn_workspaces", "vmn_audit",
 )
+CREDENTIAL_TABLES = ("vmn_api_tokens", "vmn_sessions")
 
 
 _CURRENT_ORG = contextvars.ContextVar("vmn_org_id", default=None)
@@ -57,6 +58,19 @@ def enable_rls(conn):
     for table in RLS_TABLES:
         conn.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
         conn.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+    _allow_credential_lookup(conn)
+
+
+def _allow_credential_lookup(conn):
+    """Auth runs before a request's org is known: a transaction naming one
+    credential id (token id / session hash) in ``app.credential_id`` may read
+    that row, in any org, to learn its org."""
+    for table in CREDENTIAL_TABLES:
+        conn.execute(f"DROP POLICY IF EXISTS vmn_credential_lookup ON {table}")
+        conn.execute(
+            f"CREATE POLICY vmn_credential_lookup ON {table} FOR SELECT"
+            " USING (id = nullif(current_setting('app.credential_id', true), ''))"
+        )
 
 
 def bind_org(conn, org_id):

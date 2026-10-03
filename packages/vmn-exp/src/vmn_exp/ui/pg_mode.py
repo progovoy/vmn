@@ -14,6 +14,8 @@ first use.
 import hashlib
 import threading
 
+from vmn_exp.ui.tenancy import current_org, org_context
+
 POSTGRES_SCHEMES = ("postgresql://", "postgres://")
 _SCOPED = ("load", "generation", "load_since", "save", "replace_scope", "kv_get", "kv_put")
 
@@ -28,17 +30,27 @@ def workspace_id(ws):
 
 
 class WorkspaceScopedCache:
-    """*store* with every app scope qualified by *ws_id*."""
+    """*store* with every app scope qualified by *ws_id*, each call bound to
+    *org_id* (the workspace's org: refresher threads have no request org)."""
 
-    def __init__(self, store, ws_id):
+    def __init__(self, store, ws_id, org_id=None):
         self._store = store
         self._ws_id = ws_id
+        self._org_id = org_id
 
     def __getattr__(self, name):
         attr = getattr(self._store, name)
-        if name not in _SCOPED:
+        if not callable(attr):
             return attr
-        return lambda scope, *args, **kwargs: attr((self._ws_id, scope), *args, **kwargs)
+        scoped = name in _SCOPED
+
+        def call(*args, **kwargs):
+            if scoped:
+                args = ((self._ws_id, args[0]),) + args[1:]
+            with org_context(self._org_id):
+                return attr(*args, **kwargs)
+
+        return call
 
 
 class PgIndexes:
@@ -48,7 +60,7 @@ class PgIndexes:
 
         self._store = PostgresStore(dsn)
         self._election = AdvisoryElection(dsn)
-        self._indexes = {}  # (workspace name, app) -> ElectedIndex
+        self._indexes = {}  # (org, workspace name, app) -> ElectedIndex
         self._lock = threading.Lock()
         self._listener = None
         if refresher.background:
@@ -59,16 +71,17 @@ class PgIndexes:
     def index(self, ws, app_name, storage):
         from vmn_exp.ui.elected_index import ElectedIndex
 
-        key = (ws.name, app_name)
+        org_id = current_org()
+        key = (org_id, ws.name, app_name)
         with self._lock:
             if key not in self._indexes:
-                cache = WorkspaceScopedCache(self._store, workspace_id(ws))
+                cache = WorkspaceScopedCache(self._store, workspace_id(ws), org_id)
                 self._indexes[key] = ElectedIndex(storage, app_name, cache, self._election)
             return self._indexes[key]
 
     def forget(self, ws_name):
         with self._lock:
-            for key in [k for k in self._indexes if k[0] == ws_name]:
+            for key in [k for k in self._indexes if k[1] == ws_name]:
                 del self._indexes[key]
 
     def close(self):
