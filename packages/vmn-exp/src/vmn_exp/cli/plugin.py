@@ -196,16 +196,18 @@ def _add_ui_parser(subprasers):  # noqa: N802
     pui = subprasers.add_parser(
         "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
     )
-    pui.add_argument("ui_args", nargs="*", metavar="cache resync|rebuild",
+    pui.add_argument("ui_args", nargs="*", metavar="cache resync|rebuild | onboarding",
                      help="Maintenance: 'cache resync' re-checks every record of the "
-                          "cache, 'cache rebuild' rebuilds it")
+                          "cache, 'cache rebuild' rebuilds it; 'onboarding' prints the "
+                          "BYO-bucket IAM policy for --store")
     pui.add_argument("--workspace", default=None,
                      help="cache: the workspace to resync (default: every one)")
     pui.add_argument("--config", default=None,
                      help="Server config file (server.yml); flags override its values")
     pui.add_argument("--db", default=None,
-                     help="Control-plane DB DSN (sqlite:///path; or VMN_UI_DB). "
-                          "Keeps the workspace registry in the DB")
+                     help="Control-plane DB DSN (sqlite:///path or postgresql://...; or "
+                          "VMN_UI_DB). Keeps the workspace registry in the DB; "
+                          "Postgres also holds the shared cache for replicas")
     pui.add_argument("--host", default="127.0.0.1", help="Bind address")
     pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
     pui.add_argument("--allowed-host", action="append", default=None,
@@ -225,6 +227,17 @@ def _add_ui_parser(subprasers):  # noqa: N802
                      help="Do not open a browser on start")
     pui.add_argument("--no-index", action="store_true", default=False,
                      help="Keep no on-disk read cache (the index lives in memory only)")
+    pui.add_argument("--edits", action="store_true", default=False,
+                     help="onboarding: also grant the puts server-side edits need")
+    pui.add_argument("--format", dest="onboarding_format", default="json",
+                     choices=("json", "cloudformation", "terraform"),
+                     help="onboarding: output format (default: json)")
+    pui.add_argument("--account-id", default=None,
+                     help="onboarding: the AWS account the role trusts")
+    pui.add_argument("--external-id", default=None,
+                     help="onboarding: the org's AssumeRole external id")
+    pui.add_argument("--origin", action="append", default=None,
+                     help="onboarding: a browser origin allowed by bucket CORS (repeatable)")
 
 
 # ---------------------------------------------------------------------------
