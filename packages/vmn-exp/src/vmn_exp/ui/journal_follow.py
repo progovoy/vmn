@@ -72,7 +72,7 @@ class WorkspaceJournal:
     def tick(self):
         if not self._lead():
             return
-        before = self._reader.cursor
+        first = self._reader.cursor["last_seen_ms"] is None
         result = self._reader.tick()
         with self._lock:
             indexes = dict(self._indexes)
@@ -86,7 +86,7 @@ class WorkspaceJournal:
             if scope in indexes:
                 indexes[scope].reconcile()
             self._send(scope, "")
-        if self._reader.cursor != before:
+        if first or result.entries or result.overflow:
             self._cache.kv_put(self._scope, _CURSOR_FINGERPRINT, self._reader.cursor)
 
     def _lead(self):

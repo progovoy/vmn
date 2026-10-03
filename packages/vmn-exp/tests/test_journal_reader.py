@@ -122,6 +122,17 @@ def test_cursor_serializes_and_resumes():
     assert r2.cursor["last_seen_ms"] == int(c.t * 1000)
 
 
+def test_resumed_cursor_skips_keys_seen_at_its_boundary_ms():
+    s, c = FakeStore(), Clock(T0)
+    r = _reader(s, c, skew_window_sec=0)
+    r.tick()
+    s.put(c.t * 1000, name="same_ms")
+    assert _names(r.tick()) == ["same_ms"]
+    r2 = JournalReader.from_cursor(r.cursor, s.list, c, skew_window_sec=0)
+    s.put(c.t * 1000, name="later_same_ms", seq=1)
+    assert _names(r2.tick()) == ["later_same_ms"]
+
+
 def test_filters_client_side_and_skips_garbage_keys():
     s, c = FakeStore(), Clock(T0)
     s.put(T0 * 1000 - 100, name="ok")
