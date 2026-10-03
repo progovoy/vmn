@@ -79,6 +79,11 @@ class SqliteStore:
             _LOGGER.debug("Experiment index %s unavailable", path, exc_info=True)
             return None
 
+    def close(self):
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
     def _reset(self):
         """Discard a corrupt connection and reconnect via _open (which deletes
         the unreadable file and rebuilds a fresh one)."""

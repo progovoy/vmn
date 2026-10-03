@@ -136,6 +136,11 @@ class ExperimentIndex:
         return self._sweep.last_reconcile_at
 
     @property
+    def records(self):
+        """A copy of ``{key: record}`` as last refreshed."""
+        return dict(self._records or {})
+
+    @property
     def record_count(self):
         return len(self._records or ())
 
@@ -196,6 +201,22 @@ class ExperimentIndex:
                 self._io = None
                 self._sweep.watch = ListingWatch(self._storage, self.app_name)
                 self._sweep.reset()
+
+    def adopt(self, other, store=None):
+        """Serve *other*'s records (a rebuild of the same app) from now on,
+        persisting into *store* (default: *other*'s). Hints not yet listed
+        carry over; an I/O helper is stopped (refreshes run in-process)."""
+        with self._lock:
+            if self._io is not None:
+                self._io.close()
+                self._io = None
+            for key in self._sweep._take_hints():
+                other._sweep.hint(key)
+            self._records, self._order, self._stamps = other._records, other._order, other._stamps
+            self._rows, self._sweep = other._rows, other._sweep
+            self._store = store or other._store
+            self.generation += 1
+            self._snapshot = self._build_snapshot()
 
     def _refresh_locked(self):
         started = _monotonic()
