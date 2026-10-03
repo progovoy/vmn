@@ -4,7 +4,7 @@ import json
 import pytest
 
 from vmn_exp.cli.main import vmn_exp_run
-from vmn_exp.reports import comments, store
+from vmn_exp.reports import comments, published, store
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 
@@ -66,10 +66,23 @@ def test_list_and_show(store_dir, tmp_path, capsys):
     assert _run("report", "show", "rmissing", "--dir", store_dir) == 1
 
 
-def test_export_not_yet(store_dir, tmp_path, capsys):
+def test_export_writes_one_html_file(store_dir, tmp_path, capsys):
     rid = _put_new(store_dir, tmp_path)["rid"]
-    assert _run("report", "export", rid, "--dir", store_dir) == 1
-    assert "not yet" in capsys.readouterr().err
+    out = tmp_path / "report.html"
+    assert _run("report", "export", rid, "-o", str(out), "--dir", store_dir) == 0
+    html = out.read_text()
+    assert "Sweep summary" in html and 'id="vmn-report-data"' in html
+    assert "not published" in capsys.readouterr().err
+
+
+def test_export_published_revision_and_unknowns(store_dir, tmp_path, capsys):
+    rid = _put_new(store_dir, tmp_path)["rid"]
+    published.publish(_storage(store_dir), rid, 1, {"p1": {"app": "a", "verstrs": [], "media": [], "queries": []}})
+    out = tmp_path / "r.html"
+    assert _run("report", "export", rid, "--rev", "1", "-o", str(out), "--dir", store_dir) == 0
+    assert '"p1"' in out.read_text() and "not published" not in capsys.readouterr().err
+    assert _run("report", "export", rid, "--rev", "9", "-o", str(out), "--dir", store_dir) == 1
+    assert _run("report", "export", "rmissing", "-o", str(out), "--dir", store_dir) == 1
 
 
 def test_delete(store_dir, tmp_path):
