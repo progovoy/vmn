@@ -56,7 +56,7 @@ describe("Report page", () => {
     renderReport();
     expect(await screen.findByRole("heading", { name: "Published body" })).toBeTruthy();
     expect(screen.getByText(/published 2026-01-05/)).toBeTruthy();
-    expect(document.getElementById("p-loss")?.textContent).toBe("panel loss");
+    expect(document.getElementById("p-loss")?.textContent).toBe("panel loss frozen 1");
     fireEvent.click(screen.getByRole("button", { name: /view live/ }));
     expect(await screen.findByRole("heading", { name: "Draft body" })).toBeTruthy();
   });
