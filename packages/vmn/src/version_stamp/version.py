@@ -1,3 +1,3 @@
 name = "vmn"
-version = "0.10.2-rc.14"
-_version = "0.10.2-rc.14"
+version = "0.10.2-rc.15"
+_version = "0.10.2-rc.15"
