@@ -20,6 +20,8 @@ the code-store change, `0096782`).
 | 12 | Columnar metric storage: binary streams + indexed files with LOD, range reads, zoom | design | [12-columnar-metrics.md](12-columnar-metrics.md) |
 | 13 | Reports (markdown + live panels, publish/export) and comments | design | [13-reports-comments.md](13-reports-comments.md) |
 | 14 | Store layout v2: top-level areas, one layout for all backends, `store.yml`, `vmn-exp migrate` (fixes runs/snapshots key collision) | proposal — do before 11–13 | [14-store-layout.md](14-store-layout.md) |
+| 15 | Core CLI speedups: lazy TUI import, bulk tag reads, drop GitPython | proposal | [15-core-cli-speedups.md](15-core-cli-speedups.md) |
+| 16 | Native code (Rust): static core binary, vmn-exp hot paths | evaluation, nothing scheduled | [16-native-code.md](16-native-code.md) |
 
 Paths in the plans are repo paths under `packages/` (re-verified against `0096782`).
 
