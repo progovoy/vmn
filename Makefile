@@ -5,12 +5,6 @@ NAME=vmn
 DIST=${PWD}/dist
 TWINE=twine
 
-ifeq (${NAME},vmn_exp)
-PACKAGES=packages/vmn-exp-sdk packages/vmn-exp
-else
-PACKAGES=packages/vmn
-endif
-
 .PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _build_ui _run_black
 
 build: check _build
@@ -20,9 +14,10 @@ _build_ui:
 	npm install --prefix ${PWD}/packages/vmn-exp/webui
 	npm run build --prefix ${PWD}/packages/vmn-exp/webui
 
+# Builds at the version `vmn show ${NAME}` reports (the release after a
+# `vmn release`, not the rc the stamp wrote into the files); see build_dist.sh.
 _build: clean $(if $(filter vmn_exp,${NAME}),_build_ui)
-	@echo "Building ${PACKAGES}"
-	for pkg in ${PACKAGES}; do uv build --out-dir ${DIST} $${pkg} || exit 1; done
+	${PWD}/build_dist.sh ${NAME} ${DIST}
 
 # Each file goes to its project's ~/.pypirc section (per-project tokens), or to
 # [pypi] when that section is missing (one account-wide token).

@@ -110,11 +110,10 @@ $MUSTER run ci/pipeline.py --cache-dir .mtd/cache --param build=1
 muster rejects an unknown `stamp` value against the declared choices before any
 stage runs, so a typo fails fast rather than silently skipping. `build`
 needs `npm` (UI build) and `upload` needs `twine` on `PATH` — `ctx.run` keeps
-the system `PATH`, so tools installed outside the venv still resolve. When
-`stamp=rc` and `build` are combined, `build` passes the prerelease template
-through to `make _build` (the Makefile's `rc:` target relies on that surviving
-within one make process, which separate stages don't), so the wheel embeds
-`0.10.2-rc.N` rather than `0.10.2`.
+the system `PATH`, so tools installed outside the venv still resolve. `make _build`
+builds at the version `vmn show <app>` reports for HEAD (`build_dist.sh`), so
+after `stamp=rc` the wheel embeds `0.10.2-rc.N`, and after a `vmn release` it
+embeds `0.10.2`; it refuses a HEAD that is not a stamped version.
 
 You can also set these on a schedule via its `params` object, e.g. a weekly
 release schedule with `{"stamp": "patch", "build": "1", "upload": "1"}`.

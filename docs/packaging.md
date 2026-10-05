@@ -177,7 +177,10 @@ the PyPI release.
   `--skip-existing` makes a rerun safe.
 - `make patch` releases vmn; `make patch NAME=vmn_exp` releases vmn-exp and
   vmn-exp-sdk. `_build` runs `uv build` for the matching packages (and builds
-  the web UI for vmn_exp). In `ci/pipeline.py` the `app` param (`vmn` or
+  the web UI for vmn_exp) at the version `vmn show <app>` reports for HEAD
+  (`build_dist.sh` writes it into the files for the build only), so a
+  `vmn release` (a final tag on the rc commit) builds the release; a HEAD that
+  is not a stamped version, or a dirty tree, is refused. In `ci/pipeline.py` the `app` param (`vmn` or
   `vmn_exp`) picks which.
 
 ### PyPI
