@@ -146,6 +146,9 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
     data["unique_id"] = gen_unique_id(
         verstr, data["changesets"]["."]["hash"]
     )
+    data["base_version"] = get_base_vmn_version(
+        verstr, hide_zero_hotfix=vcs.hide_zero_hotfix
+    )
     is_dev = params.get("dev") and params.get("_dev_commit") and dirty_states
 
     if params.get("verbose"):
@@ -161,6 +164,9 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
 
         if params.get("raw"):
             out = data["_version"]
+
+        if params.get("base"):
+            out = data["base_version"]
 
         if params.get("display_unique_id"):
             out = gen_unique_id(out, data["changesets"]["."]["hash"])

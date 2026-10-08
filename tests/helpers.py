@@ -179,6 +179,7 @@ def _show(
     display_type=False,
     template=None,
     dev=False,
+    base=False,
 ):
     args_list = ["show"]
     if verbose is not None:
@@ -187,6 +188,8 @@ def _show(
         args_list.extend(["--version", f"{version}"])
     if raw is not None:
         args_list.append("--raw")
+    if base:
+        args_list.append("--base")
     if root:
         args_list.append("--root")
     if from_file:
