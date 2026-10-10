@@ -470,6 +470,14 @@ yourself when a `with` block doesn't fit. It is idempotent.
   records `N` (0 for no argument).
 - A run still open at interpreter exit is finalized too: succeeded after a
   clean exit, failed after an uncaught exception.
+- A failed run records its exception in the final `run_state.yml` as `error`:
+  `type` (the class, module-qualified unless a builtin, e.g.
+  `torch.cuda.OutOfMemoryError`), `message` (`str(exc)`), `traceback` (capped
+  at 32 KB: head and tail kept) and `source: exception`; the `error` log entry
+  carries the traceback too. Rows expose it as one `error_summary` line
+  (`Type: first message line`, queryable: `error_summary ~ "CUDA"`).
+  `run.finish(exit_code=1, error=exc)` records one yourself; a string gives
+  `{message, source: user}`. An `error` is recorded whatever the exit code.
 - `finish()` never raises for a storage failure (a 503 at the end of a
   ten-hour run is logged as a warning) and always closes the run.
 - The run **heartbeats itself** from a daemon thread (bumping `heartbeat_seq`
@@ -792,7 +800,8 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `status`, `exit_code`, `started_at`, `finished_at`, `heartbeat`,
   `duration_sec`, `pid`, `host`, `command`, `stale_sec`,
   `heartbeat_interval_sec`, `children`, `kind`, `depth`, `tree_status`,
-  `imported_from`, `forked_from`, `forked_from_step`, `rerun_of` (see
+  `imported_from`, `forked_from`, `forked_from_step`, `rerun_of`,
+  `end_reason`, `error_summary`, `signal` (see
   [ui.md](ui.md#experiment-status-fields)). `archived = true` only matters with
   `include_archived=True`.
 - `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
