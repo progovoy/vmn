@@ -18,9 +18,10 @@ _FRONT_MATTER_ENDS = ("---", "...")
 
 def build_intent_entry(text, keywords=None, generator=None) -> dict:
     """The ``intent`` entry: *text* stripped and cut to ``MAX_TEXT_BYTES`` of
-    UTF-8 (``truncated: True`` then), *keywords* (a list, or a comma-separated
-    string) stripped and deduplicated case-insensitively, the first spelling
-    kept, at most ``MAX_KEYWORDS``. ValueError on an empty or non-string text."""
+    UTF-8 (``truncated: True`` then), *keywords* (a list or tuple, or a
+    comma-separated string) stripped and deduplicated case-insensitively, the
+    first spelling kept, at most ``MAX_KEYWORDS``. ValueError on an empty or
+    non-string text and on keywords of any other type."""
     text = text.strip() if isinstance(text, str) else ""
     if not text:
         raise ValueError("An intent needs a non-empty text")
@@ -82,6 +83,9 @@ def _keywords(keywords):
         return []
     if isinstance(keywords, str):
         keywords = _comma_list(keywords)
+    elif not isinstance(keywords, (list, tuple)):
+        raise ValueError("Intent keywords must be a list or a comma-separated "
+                         f"string, got {keywords!r}")
     kept, seen = [], set()
     for keyword in keywords:
         word = _keyword_text(keyword)

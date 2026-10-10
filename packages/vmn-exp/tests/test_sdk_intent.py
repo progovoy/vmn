@@ -88,6 +88,15 @@ def test_a_bad_intent_is_refused_before_a_run_is_created(app_layout, kwargs):
     assert _runs(app_layout) == []
 
 
+@pytest.mark.parametrize("keywords", [5, {"a": 1}])
+def test_intent_keywords_of_another_type_are_refused_before_a_run_is_created(app_layout,
+                                                                             keywords):
+    _bootstrap(app_layout)
+    with pytest.raises(ValueError, match="keywords must be a list"):
+        start_run(app_layout.app_name, intent="x", intent_keywords=keywords)
+    assert _runs(app_layout) == []
+
+
 def test_resuming_with_an_intent_appends_it(app_layout):
     _bootstrap(app_layout)
     with start_run(app_layout.app_name, intent="first idea") as run:

@@ -100,6 +100,16 @@ def test_other_keyword_types_are_refused(keyword):
         build_intent_entry("x", keywords=["ok", keyword])
 
 
+@pytest.mark.parametrize("keywords", [5, 0.5, True, {"a": 1, "b": 2}, b"bytes", {"a"}])
+def test_keywords_that_are_neither_a_list_nor_a_string_are_refused(keywords):
+    with pytest.raises(ValueError, match="keywords must be a list or a comma-separated"):
+        build_intent_entry("x", keywords=keywords)
+
+
+def test_a_keyword_tuple_is_accepted():
+    assert build_intent_entry("x", keywords=("a", "b"))["keywords"] == ["a", "b"]
+
+
 def test_no_keywords_and_no_generator_leave_the_keys_out():
     entry = build_intent_entry("x", keywords=["", " "], generator="  ")
     assert "keywords" not in entry

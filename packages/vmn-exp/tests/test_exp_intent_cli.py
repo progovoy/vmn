@@ -130,6 +130,17 @@ def test_bad_front_matter_creates_no_run(app_layout, capfd, tmp_path):
     assert _runs(app_layout) == []
 
 
+@pytest.mark.parametrize("keywords", ["5", "true", "{a: 1}"])
+def test_front_matter_keywords_of_another_type_create_no_run(app_layout, capfd, tmp_path,
+                                                             keywords):
+    _bootstrap(app_layout)
+    bad = _intent_file(tmp_path, f"---\nkeywords: {keywords}\n---\ntext\n")
+    capfd.readouterr()
+    assert _exp(app_layout.app_name, extra_args=["--intent-file", bad]) == 1
+    assert "keywords must be a list" in capfd.readouterr().err
+    assert _runs(app_layout) == []
+
+
 # -- run ------------------------------------------------------------------------
 
 
