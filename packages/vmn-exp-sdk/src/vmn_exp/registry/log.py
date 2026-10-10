@@ -1,4 +1,6 @@
-"""Registry log writes: actor identity, alias moves, version status changes.
+"""Registry log writes: alias moves, version status changes.
+
+actor_identity (re-exported from vmn_exp.core.identity) stamps each entry.
 
 Each write appends one entry to the model record's per-writer JSONL log (the
 same segments mechanism used by the experiment log) and flushes to the remote
@@ -9,58 +11,17 @@ writers on the same model never corrupt state.
 """
 from __future__ import annotations
 
-import os
-import subprocess
-
-from vmn_exp.core.writer import flush_log, get_writer_id
+from vmn_exp.core.identity import (  # noqa: F401
+    _git_user_email,
+    _os_user,
+    actor_identity,
+)
 from vmn_exp.core.record_format import stamped
-from vmn_exp.registry.fold import fold_registry, fold_uses, now_iso as _reg_ts, next_ts
+from vmn_exp.core.writer import flush_log, get_writer_id
+from vmn_exp.registry.fold import fold_registry, fold_uses, next_ts
+from vmn_exp.registry.fold import now_iso as _reg_ts
 from vmn_exp.registry.names import HEADER_RECORD, USES_RECORD
 from vmn_exp.registry.store import registry_storage
-
-
-# ---------------------------------------------------------------------------
-# Actor identity
-# ---------------------------------------------------------------------------
-
-def actor_identity() -> dict:
-    """Return a plain dict identifying the writer.
-
-    Fields:
-      writer         — experiment-log writer id (VMN_WRITER_ID / HOSTNAME)
-      git_user_email — git config user.email, best-effort (empty on failure)
-      os_user        — $USER / $LOGNAME / os.getlogin(), best-effort
-    """
-    return {
-        "writer": get_writer_id(),
-        "git_user_email": _git_user_email(),
-        "os_user": _os_user(),
-    }
-
-
-def _git_user_email() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "config", "user.email"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout.strip()
-    except Exception:
-        return ""
-
-
-def _os_user() -> str:
-    for key in ("USER", "LOGNAME", "USERNAME"):
-        val = os.environ.get(key)
-        if val:
-            return val
-    try:
-        return os.getlogin()
-    except Exception:
-        return ""
-
 
 # ---------------------------------------------------------------------------
 # Reading entries
