@@ -59,4 +59,15 @@ describe("StatusPill", () => {
     render(<StatusPill status="succeeded" exitCode={0} durationSec={45} />);
     expect(pill().getAttribute("aria-label")).toContain("45s");
   });
+
+  it("adds the error summary to a failed run's tooltip", () => {
+    render(<StatusPill status="failed" exitCode={1} errorSummary="RuntimeError: boom" />);
+    expect(pill().title).toBe("failed — exit 1 — RuntimeError: boom");
+    expect(pill().getAttribute("aria-label")).toBe(pill().title);
+  });
+
+  it("keeps the plain label of a failed run without a summary", () => {
+    render(<StatusPill status="failed" exitCode={1} errorSummary={null} />);
+    expect(pill().title).toBe("failed — exit 1");
+  });
 });

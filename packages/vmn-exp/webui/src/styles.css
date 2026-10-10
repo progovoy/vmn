@@ -652,7 +652,11 @@ td.param-cell {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 td.exp-cell { overflow: hidden; }
-.exp-branch { font-size: 11px; color: var(--text-3); margin-top: 1px; }
+.exp-branch {
+  font-size: 11px; color: var(--text-3); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.exp-error { margin-left: 6px; color: color-mix(in srgb, var(--bad) 75%, var(--text-3)); font-family: var(--mono); }
 a.run-link { color: var(--accent); text-decoration: none; }
 a.run-link:hover, a.run-link:focus-visible { text-decoration: underline; }
 tr.skeleton-row td { border-bottom: 1px solid var(--line); }
@@ -840,3 +844,25 @@ td.fleet-failed:not(:empty) { color: var(--text-2); }
 .lineage-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 3px 0; }
 .lineage-list li > div { flex-basis: 100%; padding-left: 12px; font-size: 12px; }
 .lineage .muted { color: var(--text-3); }
+
+/* ---------- run error card ---------- */
+.run-error-card {
+  border-color: color-mix(in srgb, var(--bad) 50%, var(--line));
+  border-left: 3px solid var(--bad);
+}
+.run-error-card .eyebrow { color: var(--bad); }
+.run-error-headline {
+  font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--bad);
+  white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 6px;
+}
+.run-error-meta, .run-error-none { font-size: 12.5px; color: var(--text-2); margin-bottom: 10px; }
+.run-error-tb-wrap { position: relative; }
+.run-error-copy { position: absolute; top: 6px; right: 14px; padding: 0 8px; font-size: 11px; }
+.run-error-traceback, .run-error-tail {
+  margin: 0; padding: 10px 12px; max-height: 420px; overflow: auto;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.55; white-space: pre;
+}
+.run-error-final { color: var(--bad); font-weight: 600; }
+.run-error-output { margin-top: 10px; }
+.run-error-output summary { cursor: pointer; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }

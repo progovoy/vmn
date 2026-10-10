@@ -87,6 +87,21 @@ export interface RunStatus {
   child_counts?: Record<string, number>;
   last_metric_at: string | null;
   fleet?: Fleet | null;
+  /** One-line `Type: message` of what ended a failed run (rows and detail). */
+  error_summary?: string | null;
+  /** Signal that ended the child, e.g. "SIGKILL". */
+  signal?: string | null;
+  /** The full recorded error — run detail only. */
+  error?: RunError | null;
+}
+
+/** What a failed run recorded about its end. Older servers send none of it. */
+export interface RunError {
+  type?: string | null;
+  message?: string | null;
+  traceback?: string | null;
+  source?: "exception" | "output" | "user";
+  output_tail?: string | null;
 }
 
 export interface FleetChild {
