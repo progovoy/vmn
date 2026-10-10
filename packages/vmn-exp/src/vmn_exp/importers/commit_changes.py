@@ -19,7 +19,6 @@ from version_stamp.api import _commit_exists
 from vmn_exp.core.features import features_from_patches
 
 _GIT_TIMEOUT_SEC = 120
-_UNSET = object()
 
 
 def _git_output(cwd, args) -> str | None:
@@ -69,10 +68,10 @@ class CommitChanges:
 
     def __init__(self, repo):
         self.repo = repo
+        self._branch = default_branch(repo)
         self._lock = threading.Lock()
         self._commit_locks: dict[str, threading.Lock] = {}
         self._results: dict[str, dict[str, Any] | None] = {}
-        self._branch: Any = _UNSET
 
     def __call__(self, commit) -> dict[str, Any] | None:
         if not commit:
@@ -85,13 +84,6 @@ class CommitChanges:
             return self._results[commit]
 
     def _compute(self, commit):
-        if not _commit_exists(self.repo, commit):
+        if not self._branch or not _commit_exists(self.repo, commit):
             return None
-        branch = self._default_branch()
-        return _changes(self.repo, branch, commit) if branch else None
-
-    def _default_branch(self):
-        with self._lock:
-            if self._branch is _UNSET:
-                self._branch = default_branch(self.repo)
-            return self._branch
+        return _changes(self.repo, self._branch, commit)
