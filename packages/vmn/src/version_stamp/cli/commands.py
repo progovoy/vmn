@@ -127,6 +127,18 @@ def _log_no_release_mode(vcs):
     )
 
 
+def _log_checkout_hint(backend):
+    """How to get a detached HEAD onto a branch vmn can commit on."""
+    branch = backend.logical_branch()
+    if branch is None:
+        command = "git checkout <branch>"
+    elif backend.branch_ref() == f"refs/heads/{branch}":
+        command = f"git checkout {branch}"
+    else:
+        command = f"git checkout -B {branch} {backend.remote_active_branch}"
+    VMN_LOGGER.info(f"Check out the branch first: {command}")
+
+
 def _apply_push_credentials(vmn_ctx):
     push_user = vmn_ctx.args.git_push_user or os.environ.get("VMN_GIT_PUSH_USER")
     push_token = vmn_ctx.args.git_push_token or os.environ.get("VMN_GIT_PUSH_TOKEN")
@@ -258,6 +270,7 @@ def handle_stamp(vmn_ctx):
 
     if "detached" in status.state:
         VMN_LOGGER.error("In detached head. Will not stamp new version")
+        _log_checkout_hint(vmn_ctx.vcs.backend)
         return 1
 
     vmn_ctx.vcs.backend.perform_cached_fetch()
@@ -428,6 +441,7 @@ def handle_release(vmn_ctx):
         # so it cannot work in detached HEAD
         if "detached" in status.state:
             VMN_LOGGER.error("Cannot use --stamp in detached HEAD state")
+            _log_checkout_hint(vmn_ctx.vcs.backend)
             return 1
 
         # Deps must be clean — same requirement as regular stamp

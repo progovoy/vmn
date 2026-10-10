@@ -14,6 +14,7 @@ from version_stamp.core.constants import (
     POOL_SIZE_CLONES,
     POOL_SIZE_UPDATES,
     RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE,
+    RELATIVE_TO_CURRENT_VCS_POSITION_TYPE,
     VMN_BE_TYPE_GIT,
 )
 from version_stamp.core.logging import (
@@ -370,6 +371,39 @@ def _goto_dev_version(vcs, params, version):
     return load_dev_version(vcs, params, version)
 
 
+def _head_version_branch(vcs):
+    """The remote branch HEAD's own version of the app was stamped on, else None."""
+    if vcs.root_context or not vcs.backend.in_detached_head():
+        return None
+    tag_name, ver_infos = vcs.get_first_reachable_version_info(
+        vcs.name, type=RELATIVE_TO_CURRENT_VCS_POSITION_TYPE
+    )
+    if tag_name is None or vcs.backend.changeset(tag=tag_name) != vcs.backend.changeset():
+        return None
+    ver_info = ver_infos[tag_name]["ver_info"] or {}
+    return ver_info.get("stamping", {}).get("app", {}).get("stamped_on_remote_branch")
+
+
+def _check_out_goto_branch(vcs):
+    """Put HEAD on the branch `vmn goto` without a version returns to."""
+    backend = vcs.backend
+    if backend.ensure_on_branch(
+        require_tip=False, use_ci_hint=True, version_branch=_head_version_branch(vcs)
+    ):
+        return True
+
+    if backend.in_detached_head() and backend.active_branch is None:
+        VMN_LOGGER.error(
+            "HEAD is not on any branch. Check out the branch to go to first: "
+            "git checkout <branch>"
+        )
+    else:
+        VMN_LOGGER.error(
+            "Failed to checkout branch. Commit or stash your changes first."
+        )
+    return False
+
+
 @measure_runtime_decorator
 def goto_version(vcs, params, version, pull):
     unique_id = None
@@ -384,11 +418,7 @@ def goto_version(vcs, params, version, pull):
 
     if version is None:
         if not params["deps_only"]:
-            ret = vcs.backend.checkout_branch()
-            if ret is None:
-                VMN_LOGGER.error(
-                    "Failed to checkout branch. Commit or stash your changes first."
-                )
+            if not _check_out_goto_branch(vcs):
                 return 1
 
             if pull:
@@ -523,14 +553,15 @@ def _checkout_update_target(client, branch_name, tag, changeset):
         client.checkout(tag=tag)
         return f"tag {tag}"
 
-    rev = client.checkout_branch(branch_name=branch_name)
-    if rev is None:
+    if branch_name is None:
+        if not client.ensure_on_branch(require_tip=False, use_ci_hint=False):
+            raise RuntimeError("No branch to check out")
+        return f"changeset {client.changeset()[:8]}"
+
+    if client.checkout_branch(branch_name=branch_name) is None:
         raise RuntimeError(f"Failed to checkout to branch {branch_name}")
 
-    if branch_name is not None:
-        return f"branch {branch_name}"
-
-    return f"changeset {rev[:8]}"
+    return f"branch {branch_name}"
 
 
 def _log_update(rel_path, target, before, after):
@@ -553,10 +584,11 @@ def _update_repo(args):
 
     client = None
     try:
-        if path == root_path:
-            client, err = get_client(path, VMN_BE_TYPE_GIT, inherit_env=True)
-        else:
-            client, err = get_client(path, VMN_BE_TYPE_GIT)
+        # Only the main repo takes its detached-HEAD branch from the CI's env.
+        is_root = path == root_path
+        client, err = get_client(
+            path, VMN_BE_TYPE_GIT, inherit_env=is_root, use_ci_hint=is_root
+        )
 
         # TODO:: why this is not an error?
         if client is None:
