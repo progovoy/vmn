@@ -1,45 +1,20 @@
 """Which branch a detached HEAD belongs to (plan 17 §3), with no side effects."""
 
 import pytest
-from helpers import _init_app, _run_vmn_init, _stamp_app
-from island_helpers import _commit, _out
-from version_stamp.backends.branch_resolver import CI_BRANCH_ENV_VARS
+from island_helpers import (  # noqa: F401 (_no_ci_env is an autouse fixture)
+    _branches,
+    _ci_checkout,
+    _commit,
+    _no_ci_env,
+    _out,
+    _push_head_as,
+    _stamped_repo,
+)
 from version_stamp.backends.git import GitBackend
 
 
-@pytest.fixture(autouse=True)
-def _no_ci_env(monkeypatch):
-    for name in (*CI_BRANCH_ENV_VARS, "GITHUB_REF_TYPE"):
-        monkeypatch.delenv(name, raising=False)
-
-
-def _stamped_repo(app_layout):
-    _run_vmn_init()
-    _init_app(app_layout.app_name)
-    assert _stamp_app(app_layout.app_name, "patch")[0] == 0
-    repo = app_layout.repo_path
-    return repo, _out(repo, "branch", "--show-current")
-
-
-def _branches(repo):
-    return _out(
-        repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/"
-    ).split()
-
-
-def _ci_checkout(repo, default, rev="HEAD"):
-    """Jenkins-style: detached at rev, no local default branch."""
-    _out(repo, "checkout", "-q", "-f", _out(repo, "rev-parse", rev))
-    _out(repo, "branch", "-q", "-D", default)
-
-
-def _push_head_as(repo, name):
-    _out(repo, "push", "-q", "origin", f"HEAD:refs/heads/{name}")
-    _out(repo, "fetch", "-q", "origin")
-
-
 def test_ci_checkout_resolves_the_remote_branch_without_creating_one(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _ci_checkout(repo, default)
     before = (_branches(repo), _out(repo, "rev-parse", "HEAD"))
 
@@ -61,7 +36,7 @@ def test_ci_checkout_resolves_the_remote_branch_without_creating_one(app_layout)
     ],
 )
 def test_ci_hint_picks_among_tips(app_layout, monkeypatch, var, value):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _push_head_as(repo, "release/1.2")
     _ci_checkout(repo, default)
     monkeypatch.setenv(var, value)
@@ -70,7 +45,7 @@ def test_ci_hint_picks_among_tips(app_layout, monkeypatch, var, value):
 
 
 def test_github_ref_name_counts_only_for_branch_refs(app_layout, monkeypatch):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _push_head_as(repo, "zzz")
     _ci_checkout(repo, default)
     monkeypatch.setenv("GITHUB_REF_NAME", "zzz")
@@ -84,7 +59,7 @@ def test_github_ref_name_counts_only_for_branch_refs(app_layout, monkeypatch):
 def test_ci_hint_is_ignored_for_deps_and_when_it_does_not_qualify(
     app_layout, monkeypatch
 ):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _push_head_as(repo, "zzz")
     _ci_checkout(repo, default)
     monkeypatch.setenv("BRANCH_NAME", "zzz")
@@ -95,7 +70,7 @@ def test_ci_hint_is_ignored_for_deps_and_when_it_does_not_qualify(
 
 
 def test_last_branch_from_reflog_beats_alphabetical(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _out(repo, "branch", "aaa")
     _out(repo, "checkout", "-q", "-b", "feature")
     _out(repo, "checkout", "-q", "--detach")
@@ -105,7 +80,7 @@ def test_last_branch_from_reflog_beats_alphabetical(app_layout):
 
 
 def test_reflog_branch_not_containing_head_falls_through_to_tip_match(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     head = _out(repo, "rev-parse", "HEAD")
     _out(repo, "checkout", "-q", "-b", "aaa")
     _commit(repo, "ahead.txt")
@@ -116,7 +91,7 @@ def test_reflog_branch_not_containing_head_falls_through_to_tip_match(app_layout
 
 
 def test_stamping_branch_decides_between_containers(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     head = _out(repo, "rev-parse", "HEAD")
     for name in ("aaa", "bbb"):
         _out(repo, "checkout", "-q", "-b", name, head)
@@ -134,7 +109,7 @@ def test_stamping_branch_decides_between_containers(app_layout):
 
 
 def test_unique_container(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _ci_checkout(repo, default, rev="HEAD~1")
     backend = GitBackend(repo)
 
@@ -144,7 +119,7 @@ def test_unique_container(app_layout):
 
 
 def test_ambiguous_falls_back_to_the_legacy_alphabetical_pick(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _push_head_as(repo, "aaa")
     _ci_checkout(repo, default)
     backend = GitBackend(repo)
@@ -157,7 +132,7 @@ def test_ambiguous_falls_back_to_the_legacy_alphabetical_pick(app_layout):
 
 
 def test_require_tip_only_accepts_branches_whose_tip_is_head(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     head = _out(repo, "rev-parse", "HEAD")
     _push_head_as(repo, "feature")
     _commit(repo, "ahead.txt")
@@ -174,7 +149,7 @@ def test_require_tip_only_accepts_branches_whose_tip_is_head(app_layout):
 
 
 def test_commit_no_branch_contains_does_not_raise(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     _commit(repo, "orphan.txt")
     _out(repo, "checkout", "-q", "--detach")
     _out(repo, "branch", "-q", "-f", default, "HEAD~1")
@@ -187,7 +162,7 @@ def test_commit_no_branch_contains_does_not_raise(app_layout):
 
 
 def test_logical_branch_of_a_legacy_tracking_branch_is_its_upstream(app_layout):
-    repo, default = _stamped_repo(app_layout)
+    repo, default, _ = _stamped_repo(app_layout)
     legacy = f"vmn_tracking_remote__origin_{default}__from_abcde"
     _out(repo, "checkout", "-q", "-b", legacy, "--track", f"origin/{default}")
 
