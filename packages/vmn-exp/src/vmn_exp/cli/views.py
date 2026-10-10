@@ -3,20 +3,28 @@
 
 A list row is exactly what ``vmn_exp.sdk.reader.list_runs`` returns: the
 index row, its derived status fields and its place in the run tree. ``show
---json`` adds the run's metadata, patch sizes and (the tail of) its log.
+--json`` adds the run's metadata, patch sizes and (the tail of) its log, and
+with ``--patch`` the patch text itself (capped).
 Non-finite metrics are written as ``null`` so the output is strict JSON.
 """
 import json
 import math
+import sys
 
+from version_stamp.api import _list_tarball_members
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.code_store import CODE_MISSING
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.media import media_counts
+from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.status import status_fields
 
 PATCH_TYPES = ("working_tree", "local_commits")
-
+# ``show --patch`` prints at most this much patch text unless ``--max-bytes`` says otherwise.
+PATCH_MAX_BYTES = 200000
+# ``show --patch``'s reason for a run whose code is untracked files only.
+UNTRACKED_ONLY = "untracked_only"
 
 
 def metrics_schema(vcs):
@@ -28,6 +36,106 @@ def metrics_schema(vcs):
 def patch_lines(patches):
     """``{patch type: line count}`` for the patches present."""
     return {p: patches[p].count("\n") for p in PATCH_TYPES if (patches or {}).get(p)}
+
+
+def _patch_sources(patches):
+    """``(label prefix, patches)``: the run's own, then each dep's (``deps/<dep>/``)."""
+    deps = patches.get("deps") or {}
+    return [("", patches)] + [(f"deps/{name}/", deps[name]) for name in sorted(deps)]
+
+
+def _text_patches(patches):
+    """``(label, text)`` per text patch. The untracked tarball is binary, never shown."""
+    return [
+        (prefix + ptype, source[ptype])
+        for prefix, source in _patch_sources(patches)
+        for ptype in PATCH_TYPES
+        if source.get(ptype)
+    ]
+
+
+def _untracked_names(patches):
+    """The paths in the untracked tarballs, dep paths under ``deps/<dep>/``."""
+    return [
+        prefix + name
+        for prefix, source in _patch_sources(patches)
+        if source.get("untracked_files")
+        for name in _list_tarball_members(source["untracked_files"])
+    ]
+
+
+def _section(label, text):
+    return f"=== {label} ===\n{text}" + ("" if text.endswith("\n") else "\n")
+
+
+def _cap_utf8(text, max_bytes):
+    """``(text, truncated)``: *text* cut to *max_bytes* UTF-8 bytes, never
+    mid-character."""
+    raw = text.encode("utf-8")
+    if len(raw) <= max_bytes:
+        return text, False
+    return raw[:max_bytes].decode("utf-8", errors="ignore"), True
+
+
+def _patch_cap(max_bytes):
+    return PATCH_MAX_BYTES if max_bytes is None else max_bytes
+
+
+def _no_text_payload(metadata, patches):
+    if metadata.get(CODE_MISSING):
+        return {"text": None, "reason": CODE_MISSING}
+    untracked = _untracked_names(patches)
+    if untracked:
+        return {"text": None, "reason": UNTRACKED_ONLY, "untracked_files": untracked}
+    return {"text": None, "reason": "no_code"}
+
+
+def patch_payload(metadata, patches, max_bytes=None):
+    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*
+    (default :data:`PATCH_MAX_BYTES`). A run without a text patch gets
+    ``{"text": None, "reason"}``: ``code_missing``, ``untracked_only`` (plus
+    the ``untracked_files`` paths) or ``no_code``."""
+    sections = _text_patches(patches or {})
+    if not sections:
+        return _no_text_payload(metadata or {}, patches or {})
+    text = "".join(_section(*s) for s in sections)
+    text, truncated = _cap_utf8(text, _patch_cap(max_bytes))
+    return {"text": text, "truncated": truncated}
+
+
+def _untracked_only_note(names):
+    shown = ", ".join(names[:3]) + (f", +{len(names) - 3} more" if len(names) > 3 else "")
+    return (
+        f"only untracked files were captured ({shown}), which are not printed; "
+        "vmn-exp export or vmn-exp restore brings them back"
+    )
+
+
+def no_patch_note(verstr, metadata, untracked=None):
+    """One line on why *verstr* has no patch to show; *untracked* are the
+    paths of a run whose code is untracked files only."""
+    reason = no_code_reason(metadata)
+    if reason is None:
+        if untracked:
+            reason = _untracked_only_note(untracked)
+        elif metadata.get("from_snapshot"):
+            reason = "recorded from an exported snapshot, whose patches are not on the record"
+        else:
+            reason = f"clean tree at {(metadata.get('base_commit') or '?')[:7]}"
+    return f"{verstr} has no patch to show: {reason}"
+
+
+def print_patch(verstr, metadata, patches, max_bytes=None):
+    """``show --patch``'s text: the patches, or a one-line note on stderr."""
+    cap = _patch_cap(max_bytes)
+    payload = patch_payload(metadata, patches, cap)
+    if payload["text"] is None:
+        untracked = payload.get("untracked_files")
+        print(no_patch_note(verstr, metadata, untracked), file=sys.stderr)
+        return
+    print("\n" + payload["text"], end="")
+    if payload["truncated"]:
+        print(f"\n[patch truncated at {cap} bytes; raise --max-bytes to see more]")
 
 
 def show_payload(
