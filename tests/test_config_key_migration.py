@@ -174,7 +174,7 @@ def test_dry_run_reports_but_leaves_conf(app_layout, capfd):
 
 
 def _rewritten(tmp_path, text, dry_run=False):
-    from version_stamp.compat.config_keys import rewrite_deprecated_conf_keys
+    from version_stamp.compat.conf_rewrite import rewrite_deprecated_conf_keys
 
     path = tmp_path / "conf.yml"
     path.write_text(text)

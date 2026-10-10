@@ -32,6 +32,7 @@ from version_stamp.core.models import VMN_DEFAULT_CONF, AppConf
 from version_stamp.core.utils import (
     WrongTagFormatException,
     comment_out_jinja,
+    conf_mapping,
     resolve_branch_conf_path,
     yaml_safe_load,
 )
@@ -156,22 +157,21 @@ class IVersionsStamper:
             self.conf_file_exists = True
 
             with open(self.app_conf_path) as f:
-                data = yaml_safe_load(f)
-                if "conf" in data:
-                    if "template" in data["conf"]:
-                        self.raw_template = migrate_old_template(
-                            data["conf"]["template"], VMN_DEFAULT_CONF["template"]
-                        )
+                conf = conf_mapping(yaml_safe_load(f))
+            if "template" in conf:
+                self.raw_template = migrate_old_template(
+                    conf["template"], VMN_DEFAULT_CONF["template"]
+                )
 
-                    self.conf_has_deprecated_keys = migrate_config_keys(
-                        data["conf"], self.app_conf_path
-                    )
+            self.conf_has_deprecated_keys = migrate_config_keys(
+                conf, self.app_conf_path
+            )
 
-                    for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
-                        if conf_key == "template":
-                            continue  # handled above with old-template detection
-                        if conf_key in data["conf"]:
-                            setattr(self, attr_name, data["conf"][conf_key])
+            for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
+                if conf_key == "template":
+                    continue  # handled above with old-template detection
+                if conf_key in conf:
+                    setattr(self, attr_name, conf[conf_key])
 
         self.set_template(self.raw_template)
 
@@ -180,9 +180,9 @@ class IVersionsStamper:
         ):
             self.root_conf_file_exists = True
             with open(self.root_app_conf_path) as f:
-                data = yaml_safe_load(f)
-                if "external_services" in data["conf"]:
-                    self.external_services = data["conf"]["external_services"]
+                conf = conf_mapping(yaml_safe_load(f))
+            if "external_services" in conf:
+                self.external_services = conf["external_services"]
 
     def initialize_paths(self):
         self.app_dir_path = os.path.join(
@@ -693,7 +693,7 @@ class IVersionsStamper:
                 "Would have written to version file:\n" f"version: {version_number}\n"
             )
         else:
-            self._write_version_to_vmn_version_file(version_number)
+            self._write_last_known_version_file(version_number)
 
         if not self.version_backends:
             return
@@ -884,7 +884,7 @@ class IVersionsStamper:
 
             shutil.copy2(tmp_path, final_path)
 
-    def _write_version_to_vmn_version_file(self, verstr):
+    def _write_last_known_version_file(self, verstr):
         file_path = self.version_file_path
         try:
             with open(file_path, "w") as fid:

@@ -5,7 +5,7 @@ import os
 import yaml
 
 from island_helpers import _out, _stamped_repo
-from version_stamp.backends.branch_resolver import LEGACY_TRACKING_PREFIX as LEGACY
+from version_stamp.core.constants import LEGACY_TRACKING_PREFIX as LEGACY
 from version_stamp.cli.entry import vmn_run
 from version_stamp.core.logging import reset_logger
 from version_stamp.core.utils import branch_conf_canonical_path

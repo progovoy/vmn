@@ -10,7 +10,6 @@ import os
 from collections import namedtuple
 
 from version_stamp.backends.git_ops import _strip_prefix
-from version_stamp.core.constants import LEGACY_TRACKING_PREFIX  # noqa: F401
 from version_stamp.core.logging import measure_runtime_decorator
 from version_stamp.core.utils import is_legacy_tracking_branch
 

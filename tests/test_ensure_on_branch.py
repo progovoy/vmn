@@ -14,7 +14,7 @@ from island_helpers import (  # noqa: F401 (_no_ci_env is an autouse fixture)
     _push_head_as,
     _stamped_repo,
 )
-from version_stamp.backends.branch_resolver import LEGACY_TRACKING_PREFIX as LEGACY
+from version_stamp.core.constants import LEGACY_TRACKING_PREFIX as LEGACY
 from version_stamp.backends.git import GitBackend
 
 

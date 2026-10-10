@@ -25,6 +25,13 @@ def yaml_safe_load(stream_or_text):
     return yaml.load(stream_or_text, Loader=_FAST_SAFE_LOADER)
 
 
+def conf_mapping(data):
+    """The ``conf`` mapping of a loaded conf file; ``{}`` for an empty file, a
+    bare ``conf:`` or a file without the key."""
+    conf = data.get("conf") if isinstance(data, dict) else None
+    return conf if isinstance(conf, dict) else {}
+
+
 def parse_record_metadata(raw):
     """A snapshot/experiment record's ``metadata.yml`` dict, or None.
 

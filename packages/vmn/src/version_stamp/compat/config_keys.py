@@ -13,11 +13,7 @@ deprecated keys in the conf file via ``rewrite_deprecated_conf_keys``
 Safe to remove when: all conf.yml files have gone through at least one stamp
 cycle that rewrites them.
 """
-from version_stamp.compat.conf_rewrite import (  # noqa: F401 (re-exported)
-    POLICY_VALUES,
-    VMN_VERSION_FILE,
-    rewrite_deprecated_conf_keys,
-)
+from version_stamp.compat.conf_rewrite import POLICY_VALUES, VMN_VERSION_FILE
 from version_stamp.core.logging import VMN_LOGGER
 
 
