@@ -1,6 +1,6 @@
 # 17 — Detached HEAD, branch inference, goto output and config-key migration
 
-Status: **approved 2026-10-10, in progress.** Fixes four user-visible problems in core vmn.
+Status: **done 2026-10-10** (commits `fcfd49c7`, `b54d0e52`, `30d02779`, `94086722`, `d12fa2f8`, `0639e3c9`). Fixes four user-visible problems in core vmn.
 CI is the main audience: many companies run `vmn goto` (and `vmn stamp`) in every CI job,
 usually in a detached checkout, so every change below must keep today's CI flows working.
 
