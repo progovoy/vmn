@@ -35,16 +35,21 @@ from vmn_exp.core.similar_text import query_weights, shared_reason
 from vmn_exp.core.values import is_finite_number
 
 
-def target_from_snapshot(snapshot, verstr, text=None, text_only=False):
-    """The target dict of the run *verstr* of *snapshot*; KeyError when absent."""
+def target_from_snapshot(snapshot, verstr, text=None, text_only=False, *, app=None):
+    """The target dict of the run *verstr* of *snapshot*; KeyError when absent.
+    *app* names the snapshot's app, so that over several apps
+    (:func:`similar_runs_multi`) the target's exclusions apply in its own only."""
     row = index_for(snapshot).row(verstr)
     if row is None:
         raise KeyError(verstr)
     features_of, intent_of, hypothesis_of = side_tables(snapshot)
     notes = getattr(snapshot, "create_notes", None) or {}
-    return {"row": row, "features": features_of(verstr), "intent": intent_of(verstr),
-            "hypothesis": hypothesis_of(verstr), "text": text, "text_only": bool(text_only),
-            "command": run_command(snapshot, row), "create_note": notes.get(verstr)}
+    target = {"row": row, "features": features_of(verstr), "intent": intent_of(verstr),
+              "hypothesis": hypothesis_of(verstr), "text": text, "text_only": bool(text_only),
+              "command": run_command(snapshot, row), "create_note": notes.get(verstr)}
+    if app is not None:
+        target["app"] = app
+    return target
 
 
 def goal_metric(schema, rows):
