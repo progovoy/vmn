@@ -8,18 +8,15 @@ one. Every read — listings, merged logs, the experiment index's per-file reads
 — takes each writer from that same copy, so an incremental fold of the listed
 files always equals a full re-read.
 
-A local copy can lag the remote one under the same writer id: a fresh clone,
-a cleared cache, another clone on the same host. Before its first append
-under a writer, a cache brings its local copy up to the remote's
-(:meth:`CachedLogs._seed_local_log`), so the prefix holds again and shipping
-resumes past the remote's bytes instead of overwriting them.
+A local copy that lags the remote one under the same writer id is brought up
+to it before it ships (:mod:`cached_log_merge`).
 """
 
 import threading
-from collections import Counter
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.status import run_finished
+from vmn_exp.storage.cached_log_merge import LogMerge, next_seq
 from vmn_exp.storage.files import (
     is_log_file,
     log_object_name,
@@ -27,7 +24,6 @@ from vmn_exp.storage.files import (
     log_writer_and_seq,
     merged_log,
 )
-from vmn_exp.storage.s3_base import parallel_map
 
 LOCAL, REMOTE = "local", "remote"
 
@@ -58,30 +54,7 @@ def _sizes(files):
     return log_sizes_of((name, sig[0]) for name, sig in files.items())
 
 
-def _lines(data):
-    """The complete lines of *data*, each with its newline."""
-    return [line + b"\n" for line in data.split(b"\n")[:-1]]
-
-
-def _with_missing_lines(remote, local):
-    """*remote* followed by the lines of *local* it lacks — counted, so a
-    line logged twice stays twice."""
-    have = Counter(_lines(remote))
-    missing = []
-    for line in _lines(local):
-        if have[line]:
-            have[line] -= 1
-        else:
-            missing.append(line)
-    return remote + b"".join(missing)
-
-
-def _next_seq(objects):
-    seqs = [log_writer_and_seq(name)[1] for name, _ in objects]
-    return max(seqs) + 1 if seqs else 0
-
-
-class CachedLogs:
+class CachedLogs(LogMerge):
     # Whether local log files are complete copies of their writers' logs
     # (False for a buffer that only holds what this process appended).
     _local_is_replica = True
@@ -93,7 +66,7 @@ class CachedLogs:
         self._log_sources = {}
         self._sync_lock = threading.Lock()
         self._compacted = set()  # writers already compacted after their run finished
-        self._seeded = set()  # (app, verstr, writer) whose local log met the remote's
+        self._init_log_merge()
 
     # -- listings ---------------------------------------------------------------
 
@@ -137,49 +110,15 @@ class CachedLogs:
         if not self._ensure_local_record(app_name, verstr):
             return False
         self._seed_local_log(app_name, verstr, writer_id)
-        return self._local.append_log_entry(app_name, verstr, writer_id, entry)
+        with self._local_log_lock:
+            return self._local.append_log_entry(app_name, verstr, writer_id, entry)
 
     def append_log_entries(self, app_name, verstr, writer_id, entries):
         if not self._ensure_local_record(app_name, verstr):
             return False
         self._seed_local_log(app_name, verstr, writer_id)
-        return self._local.append_log_entries(app_name, verstr, writer_id, entries)
-
-    def _seed_local_log(self, app_name, verstr, writer_id):
-        """Before this cache's first append under *writer_id*: when the remote
-        holds more of the writer's log than the local copy, bring the local
-        copy up to it (best effort: shipping catches up too)."""
-        key = (app_name, verstr, writer_id)
-        if not self._local_is_replica or key in self._seeded:
-            return
-        with self._sync_lock:
-            if key in self._seeded:
-                return
-            try:
-                if self.remote_for(app_name, verstr):
-                    self._catch_up_if_behind(app_name, verstr, writer_id)
-            except Exception:
-                VMN_LOGGER.debug("Could not compare the log with the remote", exc_info=True)
-            self._seeded.add(key)
-
-    def _catch_up_if_behind(self, app_name, verstr, writer_id):
-        objects = list(self._remote.log_objects(app_name, verstr, writer_id))
-        local_size = self._local.log_sizes(app_name, verstr).get(writer_id, 0)
-        if sum(size for _, size in objects) > local_size:
-            self._catch_up(app_name, verstr, writer_id, objects)
-
-    def _catch_up(self, app_name, verstr, writer_id, objects):
-        """Rewrite the local log as the remote's *objects* of the writer, then
-        the local lines they lack; returns the sync state past the remote's."""
-        names = [name for name, _ in objects]
-        bodies = parallel_map(lambda n: self._remote.load_file(app_name, verstr, n), names)
-        if any(body is None for body in bodies):
-            raise RuntimeError(f"{verstr}: the remote log of {writer_id!r} changed")
-        remote = b"".join(bodies)
-        base = log_object_name(writer_id)
-        local = self._complete_lines(app_name, verstr, base, 0)
-        self._local.save_file(app_name, verstr, base, _with_missing_lines(remote, local))
-        return len(remote), _next_seq(objects)
+        with self._local_log_lock:
+            return self._local.append_log_entries(app_name, verstr, writer_id, entries)
 
     def _local_logs(self, app_name, verstr):
         if not self._local_is_replica:
@@ -229,7 +168,7 @@ class CachedLogs:
 
     def _remote_log_state(self, app_name, verstr, writer_id):
         objects = list(self._remote.log_objects(app_name, verstr, writer_id))
-        return sum(size for _, size in objects), _next_seq(objects)
+        return sum(size for _, size in objects), next_seq(objects)
 
     def _initial_sync_state(self, app_name, verstr, writer_id):
         """Where shipping resumes: past everything the remote already holds."""
@@ -261,12 +200,8 @@ class CachedLogs:
         if key not in self._synced:
             self._synced[key] = self._initial_sync_state(app_name, verstr, writer_id)
         offset, seq = self._synced[key]
-        if offset > local_size:
-            # The local copy shrank under this cache (dropped, or a buffer
-            # restarted) or its seed failed: merge the remote's lines back in
-            # rather than overwrite them.
-            objects = list(self._remote.log_objects(app_name, verstr, writer_id))
-            self._synced[key] = self._catch_up(app_name, verstr, writer_id, objects)
+        if self._needs_merge(key, offset, local_size):
+            self._synced[key] = self._merge_remote_lines(app_name, verstr, writer_id)
             offset, seq = self._synced[key]
         chunk = self._complete_lines(app_name, verstr, base, offset)
         if chunk:
