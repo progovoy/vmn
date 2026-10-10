@@ -116,6 +116,27 @@ def test_a_clean_tree_run_notes_it_has_no_patch(app_layout, capfd):
     assert payload["patch"] == {"text": None, "reason": "no_code"}
 
 
+def test_an_untracked_only_run_names_its_files_instead_of_a_clean_tree(app_layout, capfd):
+    _bootstrap(app_layout)
+    with open(os.path.join(app_layout.repo_path, "new_script.py"), "w") as f:
+        f.write("print('new')\n")
+    capfd.readouterr()
+    assert _exp(app_layout.app_name) == 0
+    verstr = extract_dev_verstr(capfd.readouterr().out)
+    rc, out = _show(capfd, app_layout, verstr, "--patch")
+    assert rc == 0, out.err
+    assert "===" not in out.out and "print('new')" not in out.out
+    note = [line for line in out.err.splitlines() if verstr in line]
+    assert len(note) == 1
+    assert "clean tree" not in note[0]
+    assert "untracked" in note[0] and "new_script.py" in note[0]
+
+    payload = _show_json(capfd, app_layout, verstr, "--patch")
+    assert payload["patch"] == {
+        "text": None, "reason": "untracked_only", "untracked_files": ["new_script.py"],
+    }
+
+
 def test_an_imported_run_notes_it_has_no_code(app_layout, capfd):
     _bootstrap(app_layout)
     verstr = "0.0.1-dev.r0001"
