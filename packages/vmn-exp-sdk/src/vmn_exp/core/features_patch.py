@@ -6,8 +6,12 @@ the paths of every ``diff --git`` section (renames: new then old path), one
 ``path::name`` per hunk context, each message's ``Subject:`` without git's
 ``[PATCH n/m]`` and its ``From:`` as ``{"name", "email"}``. Headers are read only
 after an mbox ``From <sha> <date>`` line and until the blank line ending them;
-diff content lines always carry a ``+``/``-``/`` `` prefix, so they never look
-like headers, sections or hunks.
+a cover letter (``[PATCH 0/n]``) is skipped whole. A ``diff --git`` line in a
+commit message (before its ``---`` separator) opens no section unless it
+follows a blank line and an extended header line follows it (a ``--no-stat``
+mbox has no separator). Lines end at ``\n`` only; diff content lines always
+carry a ``+``/``-``/`` `` prefix, so they never look like headers, sections or
+hunks.
 """
 from __future__ import annotations
 
@@ -20,6 +24,10 @@ from vmn_exp.core.features_symbols import hunk_symbol
 _MBOX_FROM = re.compile(r"From (?:[0-9a-f]{40}|[0-9a-f]{64})(?: |$)")
 _HUNK = re.compile(r"@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@(.*)")
 _SUBJECT_PREFIX = re.compile(r"^\[[^\]]*\]\s*")
+_COVER_LETTER = re.compile(r"^\[[^\]]*\b0+/\d+\]")
+_EXTENDED_HEADERS = ("index ", "old mode ", "new mode ", "deleted file mode ", "new file mode ",
+                     "similarity index ", "dissimilarity index ", "rename from ", "copy from ",
+                     "Binary files ", "--- ")
 _RENAME = re.compile(r"(rename|copy) (from|to) (.+)")
 _DIFF_GIT = "diff --git "
 _ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
@@ -27,8 +35,9 @@ _ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34,
 
 def parse_patch(text: str, prefix: str = "") -> dict:
     parser = _Parser(prefix)
-    for line in text.splitlines():
-        parser.feed(line)
+    # Not splitlines(): it also splits on \f, \x1c-\x1e, \x85, U+2028/9 within a line.
+    for line in text.split("\n"):
+        parser.feed(line[:-1] if line.endswith("\r") else line)
     parser.close()
     return parser.out
 
@@ -41,6 +50,8 @@ class _Parser:
         self.headers = []
         self.section = None
         self.path = None
+        self.quoted = None  # a message's `diff --git` line, until the next line confirms it
+        self.after_blank = False
 
     def feed(self, line):
         if _MBOX_FROM.match(line):
@@ -48,43 +59,67 @@ class _Parser:
             self.state, self.headers = "headers", []
         elif self.state == "headers":
             self._header_line(line)
+        elif self.state == "message":
+            self._message_line(line)
+        elif self.state == "cover":
+            pass
         elif line.startswith(_DIFF_GIT):
-            self._end_header()
-            self.section = _section(line[len(_DIFF_GIT):])
-            self.state = "section"
+            self._open_section(line)
         elif self.state == "section":
             self._section_line(line)
         elif self.state == "hunks":
             self._hunk(_HUNK.match(line))
 
+    def _open_section(self, line):
+        self._end_header()
+        self.section = _section(line[len(_DIFF_GIT):])
+        self.state = "section"
+
+    def _message_line(self, line):
+        """A commit message's line: it ends at ``---``, or at a ``diff --git``
+        line confirmed as a section by the line after it."""
+        quoted, self.quoted = self.quoted, None
+        if line == "---":
+            self.state = "body"
+        elif quoted and line.startswith(_EXTENDED_HEADERS):
+            self._open_section(quoted)
+            self._section_line(line)
+        elif line.startswith(_DIFF_GIT) and self.after_blank:
+            self.quoted = line
+        self.after_blank = not line
+
     def close(self):
         if self.state == "headers":
             self._read_headers()
         self._end_header()
-        self.state = "start"
+        self.state, self.quoted = "start", None
 
     def _header_line(self, line):
         if not line:
-            self._read_headers()
-            self.state = "body"
+            self.state = "message" if self._read_headers() else "cover"
+            self.after_blank = True
         elif line[:1] in " \t" and self.headers:
             self.headers[-1] += " " + line.strip()
         else:
             self.headers.append(line)
 
     def _read_headers(self):
+        """Record the message's subject and author; False for a cover letter."""
         fields = {}
         for header in self.headers:
             name, _, value = header.partition(":")
             fields.setdefault(name.strip().lower(), value.strip())
+        self.headers = []
         subject = " ".join(_decoded(fields.get("subject", "")).split())
+        if _COVER_LETTER.match(subject):
+            return False
         subject = _SUBJECT_PREFIX.sub("", subject, count=1)
         if subject:
             self.out["commits"].append(subject)
         name, email = parseaddr(fields.get("from", ""))
         if name or email:
             self.out["authors"].append({"name": _decoded(name), "email": email})
-        self.headers = []
+        return True
 
     def _section_line(self, line):
         renamed, hunk = _RENAME.match(line), _HUNK.match(line)
