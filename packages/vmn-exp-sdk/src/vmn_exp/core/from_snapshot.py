@@ -11,15 +11,22 @@ import os
 import yaml
 
 from vmn_exp._base import VMN_LOGGER, now_iso
+from vmn_exp.core.snapshot_features import export_features
 from vmn_exp.core.writer import create_run
 
 SNAPSHOT_METADATA_FILE = "vmn_metadata.yml"
 
 
+def _meta_file(snapshot_meta_path):
+    """The metadata file a snapshot directory or metadata path names."""
+    if os.path.isdir(snapshot_meta_path):
+        return os.path.join(snapshot_meta_path, SNAPSHOT_METADATA_FILE)
+    return snapshot_meta_path
+
+
 def _load_snapshot_meta(snapshot_meta_path):
     """The exported snapshot's metadata dict, or None (logged) when unusable."""
-    if os.path.isdir(snapshot_meta_path):
-        snapshot_meta_path = os.path.join(snapshot_meta_path, SNAPSHOT_METADATA_FILE)
+    snapshot_meta_path = _meta_file(snapshot_meta_path)
     if not os.path.isfile(snapshot_meta_path):
         VMN_LOGGER.error("Snapshot metadata not found: " + snapshot_meta_path)
         return None
@@ -72,9 +79,11 @@ def create_from_snapshot(
     Returns ``(verstr, error_code)``; *error_code* is None on success.
 
     *env* is a pre-captured environment dict; when given it is embedded as a
-    summary in the metadata and written as ``env.yml`` (best-effort).
+    summary in the metadata and written as ``env.yml`` (best-effort). The
+    run's ``features`` entry comes from :mod:`vmn_exp.core.snapshot_features`.
     """
-    snap_meta = _load_snapshot_meta(snapshot_meta_path)
+    meta_file = _meta_file(snapshot_meta_path)
+    snap_meta = _load_snapshot_meta(meta_file)
     if snap_meta is None:
         return None, 1
 
@@ -98,5 +107,6 @@ def create_from_snapshot(
         parent=parent,
         name=name,
         env=env,
+        features=export_features(os.path.dirname(os.path.abspath(meta_file))),
     )
     return verstr, None

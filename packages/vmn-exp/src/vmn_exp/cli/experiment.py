@@ -35,6 +35,8 @@ from vmn_exp.cli.views import (
     show_payload,
 )
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.identity import known_identity
+from vmn_exp.core.snapshot_features import EXPERIMENT_FILE
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.gitmode import capture
@@ -1063,10 +1065,13 @@ def experiment_export(vcs, params, storage, args):
         return rc
 
     log = load_log(storage, app_name, verstr)
+    # Who exported: a git-free run of the tree may name no one else.
+    exported_by = known_identity(vcs.backend.repo_path)
 
     def write_experiment_files(dest):
-        with open(os.path.join(dest, "vmn_experiment.yml"), "w") as f:
-            yaml.dump({"metadata": metadata, "log": log}, f, sort_keys=False)
+        with open(os.path.join(dest, EXPERIMENT_FILE), "w") as f:
+            yaml.dump({"metadata": metadata, "log": log, "exported_by": exported_by},
+                      f, sort_keys=False)
         record_dir = storage.local_record_dir(app_name, verstr)
         for tree in FILE_TREES if record_dir else ():
             src = os.path.join(record_dir, tree)

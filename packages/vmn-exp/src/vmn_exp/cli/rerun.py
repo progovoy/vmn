@@ -27,6 +27,7 @@ from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.storage_resolve import experiment_dir
 from vmn_exp.core.writer import create_run
+from vmn_exp.gitmode.features import rerun_features
 from version_stamp.api import VMN_LOGGER, now_iso
 
 
@@ -150,7 +151,7 @@ def _execute(vcs, params, storage, args, source, repo_lock):
             if err:
                 return _refuse(source, err)
             env = _capture_env(vcs, storage, args, source)
-            verstr, err = _claim(storage, args, source, env)
+            verstr, err = _claim(vcs, storage, args, source, env)
             if err is not None:
                 return err
         if repo_lock is not None:
@@ -178,7 +179,7 @@ def _child_dir(workdir, rel_cwd):
     return path, None
 
 
-def _claim(storage, args, source, env):
+def _claim(vcs, storage, args, source, env):
     """``(new verstr, None)`` or ``(None, exit code)``."""
     import vmn_exp.cli.experiment as cli
 
@@ -194,6 +195,7 @@ def _claim(storage, args, source, env):
         storage, source.app_name, source.code_verstr, template, {}, note=note,
         create_data=_create_data(source, args), parent=parent,
         name=args.run_name, env=env,
+        features=rerun_features(vcs, source.log, source.metadata, source.patches),
     )
     cli._append_inputs(storage, source.app_name, verstr, args.inputs)
     return verstr, None

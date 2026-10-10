@@ -13,6 +13,8 @@ from vmn_exp.core.features_patch import parse_patch
 
 FEATURES_VERSION = 1
 CAPS = {"files": 200, "symbols": 500, "commits": 50, "untracked": 200}
+# Who captured a features value, how and by which version: not facts of the code.
+_PROVENANCE = ("author", "source", "features_version")
 
 
 def features_from_patches(patch_texts) -> dict:
@@ -74,6 +76,12 @@ def build_features_entry(source, author=None, changed=None, commits=None, **extr
     if truncated:
         entry["truncated"] = True
     return entry
+
+
+def code_facts(features) -> dict:
+    """A features value minus its provenance: what a run of the same code
+    (a rerun, a git-free run of an export) copies, ``{}`` for None."""
+    return {k: v for k, v in (features or {}).items() if k not in _PROVENANCE}
 
 
 def _unique(values) -> list:
