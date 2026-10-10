@@ -24,6 +24,7 @@ from vmn_exp.cli.run import (  # noqa: F401
     experiment_run,
 )
 from vmn_exp.cli.define_metric_args import define_metric_entry
+from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     dumps,
@@ -405,6 +406,9 @@ def experiment_create(vcs, params, storage, args):
     source, err = fork.fork_source(storage, app_name, args)
     if err is not None:
         return err
+    intent, err = read_intent(args)
+    if err is not None:
+        return err
 
     verstr, err = _experiment_create_core(
         vcs,
@@ -419,6 +423,8 @@ def experiment_create(vcs, params, storage, args):
     if err is not None:
         return err
     fork.seed(storage, app_name, verstr, source)
+    if intent:
+        append_intent(storage, app_name, verstr, intent)
 
     if getattr(args, "metrics", None):
         append_to_log(
@@ -511,6 +517,9 @@ def experiment_add(vcs, params, storage, args):
     except ValueError as e:
         VMN_LOGGER.error(str(e))
         return 1
+    intent, err = read_intent(args)
+    if err is not None:
+        return err
     if definition:
         append_to_log(storage, app_name, verstr, definition)
         VMN_LOGGER.info(f"Defined metric {definition['name']} for {verstr}")
@@ -542,6 +551,10 @@ def experiment_add(vcs, params, storage, args):
         VMN_LOGGER.info(f"Added structured entry to {verstr}")
 
     _append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))
+
+    if intent:
+        append_intent(storage, app_name, verstr, intent)
+        VMN_LOGGER.info(f"Added intent to {verstr}")
 
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)
