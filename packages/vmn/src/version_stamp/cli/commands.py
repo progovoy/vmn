@@ -132,7 +132,7 @@ def _log_checkout_hint(backend):
     branch = backend.logical_branch()
     if branch is None:
         command = "git checkout <branch>"
-    elif backend.branch_ref() == f"refs/heads/{branch}":
+    elif backend.active_branch_is_local and branch == backend.active_branch:
         command = f"git checkout {branch}"
     else:
         command = f"git checkout -B {branch} {backend.remote_active_branch}"

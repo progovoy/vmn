@@ -9,9 +9,10 @@ See docs/plans/17-detached-head-and-goto.md.
 import os
 from collections import namedtuple
 
+from version_stamp.backends.git_ops import _strip_prefix
+from version_stamp.core.constants import LEGACY_TRACKING_PREFIX  # noqa: F401
 from version_stamp.core.logging import measure_runtime_decorator
-
-LEGACY_TRACKING_PREFIX = "vmn_tracking_remote__"
+from version_stamp.core.utils import is_legacy_tracking_branch
 
 # The branch a CI job builds, in lookup order (main repo only).
 CI_BRANCH_ENV_VARS = (
@@ -38,7 +39,7 @@ def _strip_prefixes(name, remote_name):
         prefixes += [f"refs/remotes/{remote_name}/", f"{remote_name}/"]
     for prefix in prefixes:
         if name.startswith(prefix):
-            return name[len(prefix) :]
+            return _strip_prefix(name, prefix)
     return name
 
 
@@ -62,25 +63,23 @@ class GitBranchResolverMixin:
         return any(head.name == name for head in self._be.heads)
 
     def _refs_containing(self, hexsha):
-        """({local branch: sha}, {selected-remote branch: sha}) containing hexsha."""
-        prefixes = ["refs/heads/"]
-        remote_prefix = None
-        if self.selected_remote is not None:
-            remote_prefix = f"refs/remotes/{self.selected_remote.name}/"
-            prefixes.append(remote_prefix)
+        """({local branch: sha}, {selected-remote branch: sha}) containing
+        hexsha, in ref order (one for-each-ref)."""
+        prefixes = {"refs/heads/": {}}
+        remote_name = self._remote_name()
+        if remote_name is not None:
+            prefixes[f"refs/remotes/{remote_name}/"] = {}
         out = self._be.git.for_each_ref(
             "--contains", hexsha, "--format=%(refname) %(objectname)", *prefixes
         )
-        local, remote = {}, {}
         for line in out.splitlines():
             ref, sha = line.rsplit(" ", 1)
-            if ref.startswith("refs/heads/"):
-                local[ref[len("refs/heads/") :]] = sha
-            elif remote_prefix and ref.startswith(remote_prefix):
-                name = ref[len(remote_prefix) :]
-                if name != "HEAD":
-                    remote[name] = sha
-        return local, remote
+            for prefix, names in prefixes.items():
+                name = ref[len(prefix) :] if ref.startswith(prefix) else None
+                if name and name != "HEAD":
+                    names[name] = sha
+        local, *remote = prefixes.values()
+        return local, (remote[0] if remote else {})
 
     def _last_checked_out_branch(self):
         """The newest existing local branch HEAD was checked out away from."""
@@ -99,32 +98,45 @@ class GitBranchResolverMixin:
 
     @measure_runtime_decorator
     def resolve_branch(
-        self, hexsha, require_tip=False, use_ci_hint=False, version_branch=None
+        self,
+        hexsha,
+        require_tip=False,
+        use_ci_hint=None,
+        version_branch=None,
+        refs=None,
     ):
         """The BranchChoice for hexsha, or None when no branch qualifies.
 
         A branch qualifies when it contains hexsha; with require_tip only
-        selected-remote branches whose tip is hexsha do. No side effects.
+        selected-remote branches whose tip is hexsha do. use_ci_hint defaults
+        to the backend's; version_branch may be a callable, called only when
+        that rule is reached; refs is a _refs_containing(hexsha) result the
+        caller already has. No side effects.
         """
-        local, remote = self._refs_containing(hexsha)
+        local, remote = refs or self._refs_containing(hexsha)
         if require_tip:
             candidates = [b for b, sha in remote.items() if sha == hexsha]
         else:
             candidates = list(dict.fromkeys([*local, *remote]))
         if not candidates:
             return None
+        if len(candidates) == 1:
+            return BranchChoice(candidates[0], candidates, "unique", candidates[0] in local)
 
+        if use_ci_hint is None:
+            use_ci_hint = self.use_ci_hint
         tips = [b for b in candidates if hexsha in (local.get(b), remote.get(b))]
         remote_name = self._remote_name()
-        version = (
-            _strip_prefixes(version_branch, remote_name) if version_branch else None
-        )
+
+        def version():
+            name = version_branch() if callable(version_branch) else version_branch
+            return (_strip_prefixes(name, remote_name) if name else None,)
+
         rules = (
             ("ci", lambda: ci_branch_hints(remote_name) if use_ci_hint else ()),
             ("reflog", lambda: (self._last_checked_out_branch(),)),
             ("tip", lambda: tips if len(tips) == 1 else ()),
-            ("version", lambda: (version,)),
-            ("unique", lambda: candidates if len(candidates) == 1 else ()),
+            ("version", version),
         )
         for rule, names in rules:
             for name in names():
@@ -139,17 +151,13 @@ class GitBranchResolverMixin:
         """The branch name to use as an identity (branch confs, policies,
         stamped_on_branch): a legacy tracking branch counts as its upstream."""
         name = self.active_branch
-        if (
-            name
-            and name.startswith(LEGACY_TRACKING_PREFIX)
-            and self.remote_active_branch
-        ):
+        if is_legacy_tracking_branch(name) and self.remote_active_branch:
             return _strip_prefixes(self.remote_active_branch, self._remote_name())
         return name
 
     def branch_ref(self):
         """The ref of the active branch: local if it exists, else its remote."""
-        if self.active_branch and self._local_branch_exists(self.active_branch):
+        if self.active_branch and self.active_branch_is_local:
             return f"refs/heads/{self.active_branch}"
         if self.remote_active_branch:
             return f"refs/remotes/{self.remote_active_branch}"

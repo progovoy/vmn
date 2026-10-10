@@ -22,7 +22,7 @@ from version_stamp.core.logging import (
     init_stamp_logger,
     measure_runtime_decorator,
 )
-from version_stamp.core.utils import resolve_root_path
+from version_stamp.core.utils import one_line_reason, resolve_root_path
 from version_stamp.core.version_math import (
     deserialize_vmn_tag_name,
     gen_unique_id,
@@ -388,7 +388,7 @@ def _check_out_goto_branch(vcs):
     """Put HEAD on the branch `vmn goto` without a version returns to."""
     backend = vcs.backend
     if backend.ensure_on_branch(
-        require_tip=False, use_ci_hint=True, version_branch=_head_version_branch(vcs)
+        require_tip=False, version_branch=lambda: _head_version_branch(vcs)
     ):
         return True
 
@@ -507,7 +507,7 @@ def goto_version(vcs, params, version, pull):
             vcs.backend.checkout(tag=tag_name)
             status_str = f"You are at version {version} of {vcs.name}"
         except Exception as exc:
-            reason = str(exc).replace("\n", " ").strip()
+            reason = one_line_reason(exc)
             VMN_LOGGER.error(
                 f"Failed to checkout version {version} of {vcs.name}: {reason}"
             )
@@ -554,7 +554,7 @@ def _checkout_update_target(client, branch_name, tag, changeset):
         return f"tag {tag}"
 
     if branch_name is None:
-        if not client.ensure_on_branch(require_tip=False, use_ci_hint=False):
+        if not client.ensure_on_branch(require_tip=False):
             raise RuntimeError("No branch to check out")
         return f"branch {client.active_branch}"
 
@@ -634,7 +634,7 @@ def _update_repo(args):
         target = _checkout_update_target(client, branch_name, tag, changeset)
         _log_update(rel_path, target, cur_changeset, client.changeset())
     except Exception as e:
-        reason = str(e).replace("\n", " ").strip()
+        reason = one_line_reason(e)
         VMN_LOGGER.exception(
             f"Unexpected behaviour:\n"
             f"Trying to abort update operation in {path}\nReason: {reason}\n"

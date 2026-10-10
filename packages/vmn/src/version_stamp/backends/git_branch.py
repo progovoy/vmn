@@ -2,7 +2,7 @@
 """Git backend mixin: branch, checkout, and state-check operations."""
 from version_stamp.core.constants import VMN_READONLY_REMOTE
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.utils import is_island_branch
+from version_stamp.core.utils import is_island_branch, one_line_reason
 
 
 def _is_island_readonly_upstream(local_branch_name, upstream):
@@ -25,44 +25,32 @@ class GitBranchMixin:
     def get_active_branch(self):
         """The checked-out branch; for a detached HEAD the branch resolved for
         it (None when no branch contains it). Never changes the repo."""
-        if not self.in_detached_head():
-            return self._be.active_branch.name
+        return self._resolve_active_branch()[0]
 
-        choice = self.resolve_branch(
-            self._be.head.commit.hexsha, use_ci_hint=self.use_ci_hint
-        )
+    def _resolve_active_branch(self):
+        """(name, remote) of the active branch. remote is the selected-remote
+        branch when a detached HEAD resolved to one with no local branch,
+        else None (the caller looks the upstream up)."""
+        if not self.in_detached_head():
+            return self._be.active_branch.name, None
+
+        choice = self.resolve_branch(self._be.head.commit.hexsha)
         if choice is None:
-            return None
+            return None, None
         if choice.rule == "legacy":
             VMN_LOGGER.debug(
                 f"Detached HEAD is on several branches {choice.candidates}; "
                 f"reporting {choice.name}"
             )
-        if not choice.is_local:
-            self.remote_active_branch = f"{self.selected_remote.name}/{choice.name}"
-        return choice.name
-
-    def _branches_under(self, hexsha, *ref_prefixes):
-        """Names (prefix stripped) of the refs under ref_prefixes containing
-        hexsha, in ref_prefixes order, without duplicates."""
-        out = self._be.git.for_each_ref(
-            "--contains", hexsha, "--format=%(refname)", *ref_prefixes
-        ).splitlines()
-        names = []
-        for prefix in ref_prefixes:
-            for ref in out:
-                name = ref[len(prefix) :] if ref.startswith(prefix) else None
-                if name and name != "HEAD" and name not in names:
-                    names.append(name)
-        return names
+        if choice.is_local:
+            return choice.name, None
+        return choice.name, f"{self.selected_remote.name}/{choice.name}"
 
     @measure_runtime_decorator
     def branches_containing(self, hexsha):
         """Local and selected-remote branches (remote prefix stripped) with hexsha."""
-        prefixes = ["refs/heads/"]
-        if self.selected_remote is not None:
-            prefixes.append(f"refs/remotes/{self.selected_remote.name}/")
-        return self._branches_under(hexsha, *prefixes)
+        local, remote = self._refs_containing(hexsha)
+        return list(dict.fromkeys([*local, *remote]))
 
     @measure_runtime_decorator
     def checkout(self, rev=None, tag=None, branch=None):
@@ -86,8 +74,9 @@ class GitBranchMixin:
 
             self.checkout(branch=branch_name)
         except Exception as e:
-            reason = str(e).replace("\n", " ").strip()
-            VMN_LOGGER.error(f"checkout_branch({branch_name}) failed: {reason}")
+            VMN_LOGGER.error(
+                f"checkout_branch({branch_name}) failed: {one_line_reason(e)}"
+            )
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
             return None

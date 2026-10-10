@@ -145,9 +145,12 @@ class GitBackend(
         # commands fail fast (see cli/entry.py).
         self.selected_remote = select_remote(self._be)
         self.repo_path = repo_path
-        self.remote_active_branch = None
-        self.active_branch = self.get_active_branch()
-        if self.remote_active_branch is None and self.active_branch is not None:
+        self.active_branch, self.remote_active_branch = self._resolve_active_branch()
+        # Whether active_branch names a local branch (else only its remote has it).
+        self.active_branch_is_local = (
+            self.active_branch is not None and self.remote_active_branch is None
+        )
+        if self.active_branch_is_local:
             self.remote_active_branch = self.get_remote_tracking_branch(
                 self.active_branch
             )

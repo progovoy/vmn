@@ -116,7 +116,7 @@ class IVersionsStamper:
 
         # Commands that commit need a branch (CI checkouts are detached).
         if arg_params.get("ensure_branch"):
-            self.backend.ensure_on_branch(require_tip=True, use_ci_hint=True)
+            self.backend.ensure_on_branch(require_tip=True)
 
         if self.name is None:
             self.tracked = False
