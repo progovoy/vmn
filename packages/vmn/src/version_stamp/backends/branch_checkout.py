@@ -26,13 +26,18 @@ class GitBranchCheckoutMixin:
         containing HEAD, checked out at its tip. use_ci_hint defaults to the
         backend's.
         """
+        # A detached HEAD keeps the branch state it had before anything moves
+        # (as when the constructor resolved it); a lookup done just now is reused.
+        resolved_now = self.in_detached_head() and not self._branch_state_loaded()
+        if self.in_detached_head():
+            self._loaded_branch_state()
         checked_out = functools.lru_cache(maxsize=None)(self._checked_out_branches)
         self._delete_stale_tracking_branches(checked_out)
         if not self.in_detached_head():
             return True
 
         hexsha = self._be.head.commit.hexsha
-        refs = self._refs_containing(hexsha)
+        refs = self._refs_for(hexsha) if resolved_now else self._refs_containing(hexsha)
         if require_tip and refs[0]:
             VMN_LOGGER.debug(f"Local branches contain detached HEAD {hexsha}")
             return False
@@ -144,5 +149,6 @@ class GitBranchCheckoutMixin:
                 "-n1", name, "--not", remotes
             ):
                 continue
+            self._before_ref_change()
             self._be.git.branch("-D", name)
             VMN_LOGGER.debug(f"Deleted stale branch {name}")

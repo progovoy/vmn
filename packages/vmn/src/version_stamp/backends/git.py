@@ -18,6 +18,7 @@ import git
 from version_stamp.backends.base import VMNBackend
 from version_stamp.backends.branch_checkout import GitBranchCheckoutMixin
 from version_stamp.backends.branch_resolver import GitBranchResolverMixin
+from version_stamp.backends.branch_state import GitBranchStateMixin
 from version_stamp.backends.git_branch import GitBranchMixin
 from version_stamp.backends.git_history import (
     GitHistoryMixin,
@@ -123,15 +124,15 @@ class GitBackend(
     GitBranchMixin,
     GitBranchResolverMixin,
     GitBranchCheckoutMixin,
+    GitBranchStateMixin,
     GitTagsMixin,
     GitTagParseMixin,
     GitHistoryMixin,
     VMNBackend,
 ):
     @measure_runtime_decorator
-    def __init__(self, repo_path, inherit_env=False, read_only=False, use_ci_hint=False):
+    def __init__(self, repo_path, inherit_env=False, use_ci_hint=False):
         VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
-        self.read_only = read_only
         # The main repo may take its detached-HEAD branch from the CI's env.
         self.use_ci_hint = use_ci_hint
 
@@ -145,15 +146,8 @@ class GitBackend(
         # commands fail fast (see cli/entry.py).
         self.selected_remote = select_remote(self._be)
         self.repo_path = repo_path
-        self.active_branch, self.remote_active_branch = self._resolve_active_branch()
-        # Whether active_branch names a local branch (else only its remote has it).
-        self.active_branch_is_local = (
-            self.active_branch is not None and self.remote_active_branch is None
-        )
-        if self.active_branch_is_local:
-            self.remote_active_branch = self.get_remote_tracking_branch(
-                self.active_branch
-            )
+        # active_branch / remote_active_branch resolve on first use (branch_state.py).
+        self._init_branch_state()
         self.detached_head = self.in_detached_head()
 
     @measure_runtime_decorator

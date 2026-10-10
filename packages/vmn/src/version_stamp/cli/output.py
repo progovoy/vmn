@@ -432,8 +432,7 @@ def goto_version(vcs, params, version, pull):
 
                     return 1
 
-                ret = vcs.backend.checkout_branch()
-                if ret is None:
+                if not vcs.backend.checkout_branch():
                     VMN_LOGGER.error(
                         "Failed to checkout branch after pull. "
                         "Commit or stash your changes first."
@@ -558,7 +557,7 @@ def _checkout_update_target(client, branch_name, tag, changeset):
             raise RuntimeError("No branch to check out")
         return f"branch {client.active_branch}"
 
-    if client.checkout_branch(branch_name=branch_name) is None:
+    if not client.checkout_branch(branch_name=branch_name):
         raise RuntimeError(f"Failed to checkout to branch {branch_name}")
 
     return f"branch {branch_name}"

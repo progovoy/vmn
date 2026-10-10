@@ -221,6 +221,7 @@ class GitOpsMixin:
             self._fetch("--tags", "--prune")
             return
 
+        self._before_ref_change()
         self.selected_remote.pull(ff_only=True)
 
     def _is_shallow(self):
@@ -230,6 +231,7 @@ class GitOpsMixin:
         """git fetch from the selected remote; a no-op without one."""
         if self.selected_remote is None:
             return
+        self._before_ref_change()
         self._be.git.execute(["git", "fetch", *args, self.selected_remote.name])
 
     @measure_runtime_decorator

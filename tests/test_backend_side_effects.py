@@ -71,7 +71,7 @@ def test_read_only_backend_reports_remote_branch_without_creating_one(app_layout
     branch = _detach_past_local_branches(repo)
     before = _repo_state(repo)
 
-    backend = GitBackend(repo, read_only=True)
+    backend = GitBackend(repo)
 
     assert _repo_state(repo) == before
     assert backend.active_branch == branch

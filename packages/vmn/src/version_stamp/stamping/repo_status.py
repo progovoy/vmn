@@ -86,8 +86,7 @@ def dep_backend(vcs, path):
     )
     key = os.path.realpath(path)
     if key not in backends:
-        read_only = {"read_only": True} if getattr(vcs, "read_only", False) else {}
-        be, err = get_client(path, vcs.be_type, **read_only)
+        be, err = get_client(path, vcs.be_type)
         if err:
             err_str = f"Failed to create backend {err}. Exiting"
             VMN_LOGGER.error(err_str)

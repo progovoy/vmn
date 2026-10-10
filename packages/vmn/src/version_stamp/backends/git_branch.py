@@ -24,27 +24,8 @@ class GitBranchMixin:
     @measure_runtime_decorator
     def get_active_branch(self):
         """The checked-out branch; for a detached HEAD the branch resolved for
-        it (None when no branch contains it). Never changes the repo."""
+        it now (None when no branch contains it). Never changes the repo."""
         return self._resolve_active_branch()[0]
-
-    def _resolve_active_branch(self):
-        """(name, remote) of the active branch. remote is the selected-remote
-        branch when a detached HEAD resolved to one with no local branch,
-        else None (the caller looks the upstream up)."""
-        if not self.in_detached_head():
-            return self._be.active_branch.name, None
-
-        choice = self.resolve_branch(self._be.head.commit.hexsha)
-        if choice is None:
-            return None, None
-        if choice.rule == "legacy":
-            VMN_LOGGER.debug(
-                f"Detached HEAD is on several branches {choice.candidates}; "
-                f"reporting {choice.name}"
-            )
-        if choice.is_local:
-            return choice.name, None
-        return choice.name, f"{self.selected_remote.name}/{choice.name}"
 
     @measure_runtime_decorator
     def branches_containing(self, hexsha):
@@ -62,6 +43,7 @@ class GitBranchMixin:
 
         assert rev is not None
 
+        self._before_head_move()
         self._be.git.checkout(rev)
 
         self.detached_head = self.in_detached_head()
@@ -79,9 +61,9 @@ class GitBranchMixin:
             )
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
-            return None
+            return False
 
-        return self._be.active_branch.commit.hexsha
+        return True
 
     @measure_runtime_decorator
     def get_remote_tracking_branch(self, local_branch_name):
@@ -150,6 +132,7 @@ class GitBranchMixin:
             return 1
 
         try:
+            self._before_ref_change()
             self._be.git.execute(
                 [
                     "git",

@@ -102,13 +102,8 @@ class IVersionsStamper:
         # root_context means that the user uses vmn in a context of a root app
         self.root_context = arg_params["root"]
 
-        self.read_only = arg_params.get("read_only", False)
         self.backend, err = get_client(
-            self.vmn_root_path,
-            self.be_type,
-            inherit_env=True,
-            read_only=self.read_only,
-            use_ci_hint=True,
+            self.vmn_root_path, self.be_type, inherit_env=True, use_ci_hint=True
         )
         if err:
             err_str = f"Failed to create backend {err}. Exiting"
