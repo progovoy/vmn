@@ -27,6 +27,7 @@ from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     dumps,
+    error_lines,
     format_metric_lines,
     format_number,
     metrics_schema,
@@ -691,6 +692,11 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
         print(f"  Runner:    pid {fields['pid']} on {fields['host']}")
     if fields["status"] == STUCK:
         print(f"  Heartbeat: last seen {relative_timestamp(fields['heartbeat'])}")
+    error = error_lines((run_state or {}).get("error"))
+    if error:
+        print(f"  Error:     {error[0]}")
+        for line in error[1:]:
+            print(f"  {line}")
 
     if metadata.get("parent"):
         print(f"  Parent:    {metadata['parent']}")

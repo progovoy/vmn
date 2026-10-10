@@ -65,6 +65,7 @@ _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
     "tree_status",
     "last_metric_at",
     "fleet",
+    "error",
 )
 
 
@@ -112,7 +113,10 @@ def status_detail(
     if verstr not in edges_of:  # not indexed yet: overlay, never copy the rest
         parent_of = ChainMap({verstr: metadata.get("parent")}, edges_of)
     children_of = _children_of(edges_of)
-    read_state_fn = lambda v: read_run_state(storage, app_name, v)
+    own_state = read_run_state(storage, app_name, verstr)
+    read_state_fn = lambda v: (  # noqa: E731
+        own_state if v == verstr else read_run_state(storage, app_name, v)
+    )
     observed_at_fn = lambda v: read_observed_at(storage, app_name, v)
     detail = run_status(
         verstr,
@@ -122,6 +126,7 @@ def status_detail(
         children_of=children_of,
     )
     detail["parent"] = metadata.get("parent")
+    detail["error"] = (own_state or {}).get("error")
     detail["last_metric_at"] = (
         log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
     )

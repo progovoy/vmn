@@ -27,6 +27,7 @@ from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.metric_compact import compact_by
 from vmn_exp.core.rerun import RUNNER_CLI, repo_relative_cwd
+from vmn_exp.core.run_error import error_from_output
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
@@ -419,6 +420,10 @@ class _Supervision:
             final["received_signal"] = self.forwarder.received
         if self.stopped_early:
             final["end_reason"] = STOPPED
+        elif exit_code != 0:
+            error = self.guard("output error", self._output_error)
+            if error:
+                final["error"] = error
         self._publish_final(final)
 
         self.guard(
@@ -450,6 +455,10 @@ class _Supervision:
                 self.storage, self.app_name, self.verstr, self.output.seal()
             ),
         )
+
+    def _output_error(self):
+        """The ``error`` parsed from the captured output; None without capture."""
+        return error_from_output(self.output.text()) if self.output else None
 
     def _publish(self, what, **updates):
         self.guard(

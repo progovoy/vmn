@@ -263,8 +263,12 @@ Every row of `.../experiments` and the run detail carry:
 | `kind` | `outer`, `inner` or `single` |
 | `depth` | nesting depth, for indenting the list |
 | `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`) |
+| `signal` / `end_reason` | the signal that ended the run (`SIGTERM`), `stopped` for an early-stopped sweep trial |
+| `error_summary` | `Type: message` of a failed run's recorded `error`, else `null` |
 
-The run detail also groups them under a top-level `status` object. The list
+The run detail also groups them under a top-level `status` object, which also
+carries `error`: the run's full `error` mapping (`type`, `message`,
+`traceback`, `source`, `output_tail`) or `null` — never on list rows. The list
 takes `status=running,stuck` (comma-separated) to filter:
 
 ```sh

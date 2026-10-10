@@ -13,6 +13,7 @@ from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.media import media_counts
 from vmn_exp.core.record_format import record_format_version
+from vmn_exp.core.run_error import error_summary
 from vmn_exp.core.status import status_fields
 
 PATCH_TYPES = ("working_tree", "local_commits")
@@ -46,7 +47,18 @@ def show_payload(
     run["log"] = log[-log_tail:] if log_tail else log
     run["log_total"] = len(log)
     run["media_counts"] = media_counts(log)
+    run["error"] = (run_state or {}).get("error")
     return run
+
+
+def error_lines(error):
+    """``show``'s error block: the ``Type: message`` line, then the traceback
+    (else the output tail) indented; [] without an error."""
+    summary = error_summary(error)
+    if not summary:
+        return []
+    detail = error.get("traceback") or error.get("output_tail") or ""
+    return [summary] + [f"  {line}" for line in detail.splitlines()]
 
 
 def format_number(value):

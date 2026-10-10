@@ -665,7 +665,8 @@ def _system_exit_code(exc):
 
 def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it."""
-    _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
+    name = signal.Signals(signum).name
+    _finalize_open_runs(128 + signum, received_signal=name, signal=name)
 
 
 def install_signal_handlers():

@@ -11,6 +11,11 @@ describe("suggest", () => {
     expect(s).toContain("status");
   });
 
+  it("offers the failure fields", () => {
+    const s = suggest("", 0, facets);
+    expect(s).toEqual(expect.arrayContaining(["error_summary", "signal", "end_reason"]));
+  });
+
   it("narrows fields by the word being typed", () => {
     const s = suggest("metrics.l", 9, facets);
     expect(s).toEqual(["metrics.loss"]);
