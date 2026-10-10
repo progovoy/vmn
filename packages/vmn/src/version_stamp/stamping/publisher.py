@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 from version_stamp.compat.branch_conf import migrate_branch_confs
+from version_stamp.compat.config_keys import rewrite_deprecated_conf_keys
 from version_stamp.core.changelog import group_commits
 from version_stamp.core.constants import (
     BRANCH_CONF_DIR,
@@ -496,6 +497,7 @@ class VersionControlStamper(IVersionsStamper):
 
         version_files_to_add = []
         try:
+            self._migrate_deprecated_conf_keys()
             self.write_version_to_file(version_number=app_version)
 
             version_files_to_add.extend(
@@ -521,6 +523,17 @@ class VersionControlStamper(IVersionsStamper):
             self._record_paths(version_files_to_add, existed=False)
 
         return version_files_to_add
+
+    def _migrate_deprecated_conf_keys(self):
+        path = self.app_conf_path
+        if not os.path.isfile(path):
+            return
+        if not rewrite_deprecated_conf_keys(path, dry_run=self.dry_run):
+            return
+        if self.dry_run:
+            VMN_LOGGER.info(f"Would migrate deprecated keys in {path}")
+        else:
+            VMN_LOGGER.info(f"Migrated deprecated keys in {path}")
 
     def _record_paths(self, paths, existed=None):
         """Remember each path the publish may touch and whether it existed
