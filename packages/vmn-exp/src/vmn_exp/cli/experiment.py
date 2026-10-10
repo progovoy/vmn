@@ -30,6 +30,8 @@ from vmn_exp.cli.views import (
     format_metric_lines,
     format_number,
     metrics_schema,
+    patch_payload,
+    print_patch,
     show_payload,
 )
 from vmn_exp.core.app_conf import experiment_conf
@@ -775,6 +777,8 @@ def experiment_show(vcs, params, storage, args):
 
     if log:
         _print_log(log, getattr(args, "full_log", False))
+    if getattr(args, "patch", False):
+        print_patch(verstr, metadata, patches, getattr(args, "max_bytes", None))
     return 0
 
 
@@ -791,6 +795,8 @@ def _print_show_json(
         idx, metadata, patches, log, run_state, tree, tail,
         observed_at=observed_at, schema=schema,
     )
+    if getattr(args, "patch", False):
+        payload["patch"] = patch_payload(metadata, patches, getattr(args, "max_bytes", None))
     print(dumps(payload))
     return 0
 

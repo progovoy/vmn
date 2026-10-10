@@ -3,20 +3,25 @@
 
 A list row is exactly what ``vmn_exp.sdk.reader.list_runs`` returns: the
 index row, its derived status fields and its place in the run tree. ``show
---json`` adds the run's metadata, patch sizes and (the tail of) its log.
+--json`` adds the run's metadata, patch sizes and (the tail of) its log, and
+with ``--patch`` the patch text itself (capped).
 Non-finite metrics are written as ``null`` so the output is strict JSON.
 """
 import json
 import math
+import sys
 
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.code_store import CODE_MISSING
 from vmn_exp.core.log import experiment_row
 from vmn_exp.core.media import media_counts
+from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.status import status_fields
 
 PATCH_TYPES = ("working_tree", "local_commits")
-
+# ``show --patch`` prints at most this much patch text unless ``--max-bytes`` says otherwise.
+PATCH_MAX_BYTES = 200000
 
 
 def metrics_schema(vcs):
@@ -28,6 +33,73 @@ def metrics_schema(vcs):
 def patch_lines(patches):
     """``{patch type: line count}`` for the patches present."""
     return {p: patches[p].count("\n") for p in PATCH_TYPES if (patches or {}).get(p)}
+
+
+def _text_patches(patches):
+    """``(label, text)`` per text patch: the run's own, then each dep's
+    (``deps/<dep>/<type>``). The untracked tarball is binary, never shown."""
+    deps = patches.get("deps") or {}
+    sources = [("", patches)] + [(f"deps/{name}/", deps[name]) for name in sorted(deps)]
+    return [
+        (prefix + ptype, source[ptype])
+        for prefix, source in sources
+        for ptype in PATCH_TYPES
+        if source.get(ptype)
+    ]
+
+
+def _section(label, text):
+    return f"=== {label} ===\n{text}" + ("" if text.endswith("\n") else "\n")
+
+
+def _cap_utf8(text, max_bytes):
+    """``(text, truncated)``: *text* cut to *max_bytes* UTF-8 bytes, never
+    mid-character."""
+    raw = text.encode("utf-8")
+    if len(raw) <= max_bytes:
+        return text, False
+    return raw[:max_bytes].decode("utf-8", errors="ignore"), True
+
+
+def _patch_cap(max_bytes):
+    return PATCH_MAX_BYTES if max_bytes is None else max_bytes
+
+
+def patch_payload(metadata, patches, max_bytes=None):
+    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*
+    (default :data:`PATCH_MAX_BYTES`); ``{"text": None, "reason": "no_code" |
+    "code_missing"}`` for a run without a text patch."""
+    sections = _text_patches(patches or {})
+    if not sections:
+        reason = CODE_MISSING if (metadata or {}).get(CODE_MISSING) else "no_code"
+        return {"text": None, "reason": reason}
+    text = "".join(_section(*s) for s in sections)
+    text, truncated = _cap_utf8(text, _patch_cap(max_bytes))
+    return {"text": text, "truncated": truncated}
+
+
+def no_patch_note(verstr, metadata):
+    """One line on why *verstr* has no patch to show."""
+    reason = no_code_reason(metadata)
+    if reason is None:
+        reason = (
+            "recorded from an exported snapshot, whose patches are not on the record"
+            if metadata.get("from_snapshot")
+            else f"clean tree at {(metadata.get('base_commit') or '?')[:7]}"
+        )
+    return f"{verstr} has no patch to show: {reason}"
+
+
+def print_patch(verstr, metadata, patches, max_bytes=None):
+    """``show --patch``'s text: the patches, or a one-line note on stderr."""
+    cap = _patch_cap(max_bytes)
+    payload = patch_payload(metadata, patches, cap)
+    if payload["text"] is None:
+        print(no_patch_note(verstr, metadata), file=sys.stderr)
+        return
+    print("\n" + payload["text"], end="")
+    if payload["truncated"]:
+        print(f"\n[patch truncated at {cap} bytes; raise --max-bytes to see more]")
 
 
 def show_payload(

@@ -120,6 +120,12 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="prune: never delete a run carrying this tag key (repeatable)")
     pexp.add_argument("--full-log", action="store_true", default=False,
                       help="show: print every log entry (default: the last 50)")
+    pexp.add_argument("--patch", action="store_true", default=False,
+                      help="show: also print the run's own patches (working tree, local "
+                           "commits, deps; never untracked files)")
+    pexp.add_argument("--max-bytes", type=int, default=None, metavar="N",
+                      help="show --patch: print at most N bytes of patch text "
+                           "(default: 200000)")
     pexp.add_argument("--query", default=None,
                       help="list/importance: filter rows by query (e.g. 'metrics.loss < 0.5'); "
                            "prune: select candidates by query (dry-run unless --yes/-y)")
