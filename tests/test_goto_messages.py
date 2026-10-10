@@ -51,7 +51,8 @@ def test_goto_branch_tip_reports_moved_dep_old_to_new(app_layout, capfd):
 
     out = _goto_output(capfd, app_layout.app_name)
 
-    assert f"Updated ../repo1 to changeset {new[:8]} ({old[:8]} -> {new[:8]})" in out
+    branch = app_layout._repos["repo1"]["_be"].be.get_active_branch()
+    assert f"Updated ../repo1 to branch {branch} ({old[:8]} -> {new[:8]})" in out
 
 
 def test_goto_does_not_log_updating_at_info(app_layout, capfd):

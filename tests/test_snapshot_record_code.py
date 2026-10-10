@@ -10,7 +10,9 @@ COMMIT = "abcdef1" + "0" * 33
 
 
 def _vcs():
-    backend = SimpleNamespace(active_branch="main", remote=lambda: None)
+    backend = SimpleNamespace(
+        active_branch="main", logical_branch=lambda: "main", remote=lambda: None
+    )
     return SimpleNamespace(backend=backend, name="app")
 
 
