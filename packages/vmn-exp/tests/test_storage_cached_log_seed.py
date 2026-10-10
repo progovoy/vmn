@@ -51,11 +51,23 @@ def _texts(storage):
     return [e["text"] for e in storage.load_merged_log(APP, V) if e["type"] == "note"]
 
 
-def _host_a_wrote_three(tmp_path):
+def _host_a_wrote_three(tmp_path, sync_each=False):
+    """Host a's run logged a0..a2 under W: one shipped object, or (with
+    *sync_each*) the base object and two segments."""
     host = cached_host(tmp_path, "a")
     host.save(APP, V, meta(V), {})
     for i in range(3):
         _append(host, f"a{i}", i)
+        if sync_each:
+            host.sync_log_to_remote(APP, V, W)
+    host.sync_log_to_remote(APP, V, W)
+    return host
+
+
+def _fresh_host_appends(tmp_path, text="b0", name="b"):
+    """A cache over the fresh root *name* appends *text* under W and syncs."""
+    host = cached_host(tmp_path, name)
+    _append(host, text, 10)
     host.sync_log_to_remote(APP, V, W)
     return host
 
@@ -63,9 +75,7 @@ def _host_a_wrote_three(tmp_path):
 def test_a_fresh_root_appending_under_the_same_writer_keeps_the_remote_entries(tmp_path):
     a = _host_a_wrote_three(tmp_path)
 
-    b = cached_host(tmp_path, "b")
-    _append(b, "b0", 10)
-    b.sync_log_to_remote(APP, V, W)
+    b = _fresh_host_appends(tmp_path)
 
     assert _remote_texts() == ["a0", "a1", "a2", "b0"]
     assert _texts(a) == ["a0", "a1", "a2", "b0"]
@@ -83,35 +93,23 @@ def test_the_fresh_roots_local_copy_holds_the_remote_entries_once_it_appends(tmp
 
 
 def test_remote_segments_survive_a_fresh_roots_append(tmp_path):
-    a = cached_host(tmp_path, "a")
-    a.save(APP, V, meta(V), {})
-    for i in range(3):
-        _append(a, f"a{i}", i)
-        a.sync_log_to_remote(APP, V, W)  # the base object, then two segments
+    _host_a_wrote_three(tmp_path, sync_each=True)
     assert len(s3_storage().log_objects(APP, V, W)) == 3
 
-    b = cached_host(tmp_path, "b")
-    _append(b, "b0", 10)
-    b.sync_log_to_remote(APP, V, W)
+    _fresh_host_appends(tmp_path)
 
     assert _remote_texts() == ["a0", "a1", "a2", "b0"]
 
 
 def test_a_compacted_remote_log_survives_a_fresh_roots_append(tmp_path):
-    a = cached_host(tmp_path, "a")
-    a.save(APP, V, meta(V), {})
-    for i in range(3):
-        _append(a, f"a{i}", i)
-        a.sync_log_to_remote(APP, V, W)
+    a = _host_a_wrote_three(tmp_path, sync_each=True)
     a.save_file(APP, V, RUN_STATE_FILE, FINISHED)
     a.sync_log_to_remote(APP, V, W)  # the run finished: one merged object
     assert [n for n, _ in s3_storage().log_objects(APP, V, W)] == [
         compacted_log_name(W, 2)
     ]
 
-    b = cached_host(tmp_path, "b")
-    _append(b, "b0", 10)
-    b.sync_log_to_remote(APP, V, W)
+    _fresh_host_appends(tmp_path)
 
     assert _remote_texts() == ["a0", "a1", "a2", "b0"]
 
@@ -123,9 +121,7 @@ def test_clones_taking_turns_under_one_writer_keep_every_entry(tmp_path):
     _append(a, "a1", 1)
     a.sync_log_to_remote(APP, V, W)
 
-    b = cached_host(tmp_path, "b")
-    _append(b, "b0", 10)
-    b.sync_log_to_remote(APP, V, W)
+    _fresh_host_appends(tmp_path)
 
     again = cached_host(tmp_path, "a")  # a later process in the first clone
     _append(again, "a2", 20)
@@ -137,9 +133,7 @@ def test_clones_taking_turns_under_one_writer_keep_every_entry(tmp_path):
 
 def test_a_local_copy_dropped_under_a_live_cache_keeps_the_remote_entries(tmp_path):
     _host_a_wrote_three(tmp_path)
-    b = cached_host(tmp_path, "b")
-    _append(b, "b0", 10)
-    b.sync_log_to_remote(APP, V, W)
+    b = _fresh_host_appends(tmp_path)
 
     b._local.delete(APP, V)  # the cache cleared while this process lives
     _append(b, "b1", 11)

@@ -266,7 +266,8 @@ class CachedLogs:
             # restarted) or its seed failed: merge the remote's lines back in
             # rather than overwrite them.
             objects = list(self._remote.log_objects(app_name, verstr, writer_id))
-            offset, seq = self._catch_up(app_name, verstr, writer_id, objects)
+            self._synced[key] = self._catch_up(app_name, verstr, writer_id, objects)
+            offset, seq = self._synced[key]
         chunk = self._complete_lines(app_name, verstr, base, offset)
         if chunk:
             used = self._ship(app_name, verstr, writer_id, seq, chunk)
