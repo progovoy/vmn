@@ -2,8 +2,9 @@
 
 ``parse_patch(text, prefix="")`` -> ``{"files", "symbols", "commits", "authors"}``,
 in order of appearance with repeats kept (core/features.py dedupes and caps):
-the paths of every ``diff --git`` section (renames: new then old path), one
-``path::name`` per hunk context, each message's ``Subject:`` without git's
+the paths of every ``diff --git`` section (renames: new then old path), a
+``path::name`` per hunk context and per definition an added or removed line
+makes (:func:`~vmn_exp.core.features_symbols.defined_symbol`), each message's ``Subject:`` without git's
 ``[PATCH n/m]`` and its ``From:`` as ``{"name", "email"}``. Headers are read only
 after an mbox ``From <sha> <date>`` line and until the blank line ending them;
 a cover letter (``[PATCH 0/n]``) is skipped whole. A ``diff --git`` line in a
@@ -19,7 +20,7 @@ import re
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 
-from vmn_exp.core.features_symbols import hunk_symbol
+from vmn_exp.core.features_symbols import defined_symbol, hunk_symbol
 
 _MBOX_FROM = re.compile(r"From (?:[0-9a-f]{40}|[0-9a-f]{64})(?: |$)")
 _HUNK = re.compile(r"@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@(.*)")
@@ -68,7 +69,7 @@ class _Parser:
         elif self.state == "section":
             self._section_line(line)
         elif self.state == "hunks":
-            self._hunk(_HUNK.match(line))
+            self._hunk_line(line)
 
     def _open_section(self, line):
         self._end_header()
@@ -137,8 +138,16 @@ class _Parser:
             self.state = "hunks"
             self._hunk(hunk)
 
+    def _hunk_line(self, line):
+        if line[:1] in ("+", "-"):
+            self._symbol(defined_symbol(line[1:], self.path))
+        else:
+            self._hunk(_HUNK.match(line))
+
     def _hunk(self, match):
-        name = hunk_symbol(match.group(1)) if match else None
+        self._symbol(hunk_symbol(match.group(1)) if match else None)
+
+    def _symbol(self, name):
         if name:
             self.out["symbols"].append(f"{self.path}::{name}")
 
