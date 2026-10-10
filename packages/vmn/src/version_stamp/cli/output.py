@@ -513,6 +513,35 @@ def goto_version(vcs, params, version, pull):
     return 0
 
 
+def _checkout_update_target(client, branch_name, tag, changeset):
+    """Check out what goto wants in this repo; return how to describe it."""
+    if changeset is not None:
+        client.checkout(rev=changeset)
+        return f"changeset {changeset[:8]}"
+
+    if tag is not None:
+        client.checkout(tag=tag)
+        return f"tag {tag}"
+
+    rev = client.checkout_branch(branch_name=branch_name)
+    if rev is None:
+        raise RuntimeError(f"Failed to checkout to branch {branch_name}")
+
+    if branch_name is not None:
+        return f"branch {branch_name}"
+
+    return f"changeset {rev[:8]}"
+
+
+def _log_update(rel_path, target, before, after):
+    if before == after:
+        VMN_LOGGER.info(f"{rel_path} is already at {target} ({after[:8]})")
+    else:
+        VMN_LOGGER.info(
+            f"Updated {rel_path} to {target} ({before[:8]} -> {after[:8]})"
+        )
+
+
 @measure_runtime_decorator
 def _update_repo(args):
     root_path = resolve_root_path()
@@ -559,7 +588,7 @@ def _update_repo(args):
                 VMN_LOGGER.info(f"{err}. Aborting update operation")
                 return {"repo": rel_path, "status": 1, "description": err}
 
-        VMN_LOGGER.info(f"Updating {rel_path}")
+        VMN_LOGGER.debug(f"Updating {rel_path}")
 
         if pull:
             try:
@@ -570,27 +599,8 @@ def _update_repo(args):
                 VMN_LOGGER.exception("Failed to pull:")
                 return {"repo": rel_path, "status": 1, "description": "Failed to pull"}
 
-        if changeset is None:
-            if tag is not None:
-                client.checkout(tag=tag)
-                VMN_LOGGER.info(f"Updated {rel_path} to tag {tag}")
-            else:
-                rev = client.checkout_branch(branch_name=branch_name)
-                if rev is None:
-                    raise RuntimeError(f"Failed to checkout to branch {branch_name}")
-
-                if branch_name is not None:
-                    VMN_LOGGER.info(
-                        f"Updated {rel_path} to branch {branch_name}"
-                    )
-                else:
-                    VMN_LOGGER.info(
-                        f"Updated {rel_path} to changeset {rev}"
-                    )
-        else:
-            client.checkout(rev=changeset)
-
-            VMN_LOGGER.info(f"Updated {rel_path} to {changeset}")
+        target = _checkout_update_target(client, branch_name, tag, changeset)
+        _log_update(rel_path, target, cur_changeset, client.changeset())
     except Exception as e:
         reason = str(e).replace("\n", " ").strip()
         VMN_LOGGER.exception(
