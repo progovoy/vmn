@@ -58,9 +58,10 @@ def _tarball(*names):
 
 
 UNREADABLE = [b"\x1f\x8bJUNK", b"not a tarball at all", _tarball("a.py", "b.py")[:30]]
+UNREADABLE_IDS = ["corrupt", "not_gzip", "cut_short"]  # the gzip header holds a mtime
 
 
-@pytest.mark.parametrize("tarball", UNREADABLE)
+@pytest.mark.parametrize("tarball", UNREADABLE, ids=UNREADABLE_IDS)
 def test_an_unreadable_untracked_tarball_is_untracked_only_without_names(tarball):
     payload = patch_payload(META, {"untracked_files": tarball})
     assert payload == {"text": None, "reason": UNTRACKED_ONLY}
@@ -78,7 +79,7 @@ def test_the_note_of_an_unreadable_tarball_says_so_not_clean_tree():
     assert "cannot be read" in note and "clean tree" not in note
 
 
-@pytest.mark.parametrize("tarball", UNREADABLE)
+@pytest.mark.parametrize("tarball", UNREADABLE, ids=UNREADABLE_IDS)
 def test_show_patch_of_an_unreadable_tarball_prints_a_note(capsys, tarball):
     print_patch("v", META, {"untracked_files": tarball})
     out = capsys.readouterr()
