@@ -42,16 +42,6 @@ class S3Logs:
         sizes = self._log_names(f"{self._record_prefix(app_name, verstr)}/")
         return [(n, sizes[n]) for n in group_log_names(sizes).get(writer_id, [])]
 
-    def delete_log_segments(self, app_name, verstr, writer_id):
-        prefix = self._record_prefix(app_name, verstr)
-        self._delete_keys(
-            [
-                f"{prefix}/{name}"
-                for name, _ in self.log_objects(app_name, verstr, writer_id)
-                if log_writer_and_seq(name)[1]
-            ]
-        )
-
     def put_log_segment(self, app_name, verstr, writer_id, seq, data):
         """Store *data* as the writer's segment *seq* — or the next free one,
         so two processes sharing a writer id never overwrite each other.

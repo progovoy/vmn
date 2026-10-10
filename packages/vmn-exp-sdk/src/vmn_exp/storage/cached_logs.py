@@ -7,12 +7,16 @@ the remote one is a prefix of the local one, so the bigger copy is the newer
 one. Every read — listings, merged logs, the experiment index's per-file reads
 — takes each writer from that same copy, so an incremental fold of the listed
 files always equals a full re-read.
+
+A local copy that lags the remote one under the same writer id is brought up
+to it before it ships (:mod:`cached_log_merge`).
 """
 
 import threading
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.status import run_finished
+from vmn_exp.storage.cached_log_merge import LogMerge, next_seq
 from vmn_exp.storage.files import (
     is_log_file,
     log_object_name,
@@ -50,7 +54,7 @@ def _sizes(files):
     return log_sizes_of((name, sig[0]) for name, sig in files.items())
 
 
-class CachedLogs:
+class CachedLogs(LogMerge):
     # Whether local log files are complete copies of their writers' logs
     # (False for a buffer that only holds what this process appended).
     _local_is_replica = True
@@ -62,6 +66,7 @@ class CachedLogs:
         self._log_sources = {}
         self._sync_lock = threading.Lock()
         self._compacted = set()  # writers already compacted after their run finished
+        self._init_log_merge()
 
     # -- listings ---------------------------------------------------------------
 
@@ -104,12 +109,16 @@ class CachedLogs:
     def append_log_entry(self, app_name, verstr, writer_id, entry):
         if not self._ensure_local_record(app_name, verstr):
             return False
-        return self._local.append_log_entry(app_name, verstr, writer_id, entry)
+        self._seed_local_log(app_name, verstr, writer_id)
+        with self._local_log_lock:
+            return self._local.append_log_entry(app_name, verstr, writer_id, entry)
 
     def append_log_entries(self, app_name, verstr, writer_id, entries):
         if not self._ensure_local_record(app_name, verstr):
             return False
-        return self._local.append_log_entries(app_name, verstr, writer_id, entries)
+        self._seed_local_log(app_name, verstr, writer_id)
+        with self._local_log_lock:
+            return self._local.append_log_entries(app_name, verstr, writer_id, entries)
 
     def _local_logs(self, app_name, verstr):
         if not self._local_is_replica:
@@ -159,9 +168,7 @@ class CachedLogs:
 
     def _remote_log_state(self, app_name, verstr, writer_id):
         objects = list(self._remote.log_objects(app_name, verstr, writer_id))
-        offset = sum(size for _, size in objects)
-        seqs = [log_writer_and_seq(name)[1] for name, _ in objects]
-        return offset, (max(seqs) + 1 if seqs else 0)
+        return sum(size for _, size in objects), next_seq(objects)
 
     def _initial_sync_state(self, app_name, verstr, writer_id):
         """Where shipping resumes: past everything the remote already holds."""
@@ -193,14 +200,9 @@ class CachedLogs:
         if key not in self._synced:
             self._synced[key] = self._initial_sync_state(app_name, verstr, writer_id)
         offset, seq = self._synced[key]
-        if offset > local_size:
-            # The remote holds more than this host ever wrote: start over.
-            data = self._complete_lines(app_name, verstr, base, 0)
-            if data:
-                self._remote.save_file(app_name, verstr, base, data)
-                self._remote.delete_log_segments(app_name, verstr, writer_id)
-                self._synced[key] = (len(data), 1)
-            return
+        if self._needs_merge(key, offset, local_size):
+            self._synced[key] = self._merge_remote_lines(app_name, verstr, writer_id)
+            offset, seq = self._synced[key]
         chunk = self._complete_lines(app_name, verstr, base, offset)
         if chunk:
             used = self._ship(app_name, verstr, writer_id, seq, chunk)
