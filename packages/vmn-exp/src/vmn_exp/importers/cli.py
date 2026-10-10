@@ -12,6 +12,7 @@ Boundary: this module is EXPERIMENTS side.  May import from:
 from __future__ import annotations
 
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -73,17 +74,21 @@ def _import_one(
     app_name: str,
     run: Dict[str, Any],
     skip_artifacts: bool,
+    refresh_features: bool = False,
+    commit_changes=None,
 ) -> Tuple[str, str]:
     """Import a single run; return (outcome, run_id).
 
-    *outcome* is one of ``"created"``, ``"skipped"``, ``"resumed"``, or
-    ``"failed"`` (the last only when an exception is raised).
+    *outcome* is one of ``"created"``, ``"skipped"``, ``"resumed"``,
+    ``"refreshed"``, or ``"failed"`` (the last only when an exception is raised).
     """
     from vmn_exp.importers.import_records import import_run
 
     run_id = run.get("run_id", "unknown")
     try:
-        outcome = import_run(storage, app_name, run, skip_artifacts=skip_artifacts)
+        outcome = import_run(storage, app_name, run, skip_artifacts=skip_artifacts,
+                             refresh_features=refresh_features,
+                             commit_changes=commit_changes)
         return outcome, run_id
     except Exception:
         _LOG.exception("import-mlflow: failed to import run %s", run_id)
@@ -107,6 +112,8 @@ def import_mlflow_run_without_repo(args) -> Optional[int]:
     skip_artifacts: bool = bool(getattr(args, "skip_artifacts", False))
     dry_run: bool = bool(getattr(args, "dry_run", False))
     workers: int = int(getattr(args, "workers", 8) or 8)
+    refresh_features: bool = bool(getattr(args, "refresh_features", False))
+    repo: Optional[str] = getattr(args, "repo", None)
 
     # Validate exactly one source.  Argparse's mutually_exclusive_group prevents
     # both from being set in normal CLI use; the "both" branch handles programmatic
@@ -123,6 +130,10 @@ def import_mlflow_run_without_repo(args) -> Optional[int]:
 
     if not app_name:
         print("error: app name is required")
+        return 1
+
+    if repo and not os.path.isdir(repo):
+        print(f"error: --repo {repo} is not a directory")
         return 1
 
     # Collect runs eagerly; needed for dry-run count and pool submission.
@@ -142,15 +153,18 @@ def import_mlflow_run_without_repo(args) -> Optional[int]:
     except (OSError, ValueError) as e:
         print(f"error: cannot open the experiment store: {e}")
         return 1
-    n_created = n_skipped = n_resumed = n_failed = 0
+    commit_changes = None
+    if repo:
+        from vmn_exp.importers.commit_changes import CommitChanges
+        commit_changes = CommitChanges(repo)
+    n_created = n_skipped = n_resumed = n_refreshed = n_failed = 0
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         # Store only run_id in the dict (not the full run) to release run
         # objects as futures complete.
         futures: Dict[Any, str] = {
-            pool.submit(_import_one, storage, app_name, run, skip_artifacts): run.get(
-                "run_id", "unknown"
-            )
+            pool.submit(_import_one, storage, app_name, run, skip_artifacts,
+                        refresh_features, commit_changes): run.get("run_id", "unknown")
             for run in runs
         }
         for future in as_completed(futures):
@@ -162,13 +176,16 @@ def import_mlflow_run_without_repo(args) -> Optional[int]:
                 n_skipped += 1
             elif outcome == "resumed":
                 n_resumed += 1
+            elif outcome == "refreshed":
+                n_refreshed += 1
             else:
                 n_failed += 1
                 # _import_one already logged the exception; count only here.
 
+    refreshed = f"refreshed {n_refreshed}, " if refresh_features else ""
     print(
         f"imported {n_created}, skipped {n_skipped} (already present), "
-        f"resumed {n_resumed}, failed {n_failed}"
+        f"resumed {n_resumed}, {refreshed}failed {n_failed}"
     )
 
     return 1 if n_failed > 0 else 0

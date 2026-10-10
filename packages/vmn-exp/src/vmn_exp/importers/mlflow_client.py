@@ -72,6 +72,19 @@ def _iter_pages_runs(client, experiment_ids: List[str], include_deleted: bool):
 # Neutral-dict builder
 # ---------------------------------------------------------------------------
 
+_DATASET_FIELDS = ("name", "digest", "source_type", "source")
+
+
+def _datasets(run) -> List[dict]:
+    """The run's dataset inputs (``run.inputs.dataset_inputs``, mlflow >= 2.4),
+    shaped like the FileStore reader's."""
+    inputs = getattr(getattr(run, "inputs", None), "dataset_inputs", None) or []
+    return [
+        {key: getattr(dataset_input.dataset, key, None) or "" for key in _DATASET_FIELDS}
+        for dataset_input in inputs
+    ]
+
+
 def _build_run_dict(run, experiment_name: str, client) -> dict:
     info = run.info
     data = run.data
@@ -103,7 +116,7 @@ def _build_run_dict(run, experiment_name: str, client) -> dict:
         "artifact_dir": None,
         "artifact_uri": artifact_uri,
         "artifact_remote": is_remote_uri(artifact_uri),
-        "datasets": [],
+        "datasets": _datasets(run),
         "metrics": _metrics,
     }
 

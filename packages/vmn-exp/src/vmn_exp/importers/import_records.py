@@ -5,8 +5,9 @@ Public API::
     run_verstr(run_id) -> str
         Deterministic verstr ``0.0.0-mlflow.<run_id[:12]>`` for a run.
 
-    import_run(storage, app_name, run, *, skip_artifacts=False)
-        -> "created" | "skipped" | "resumed"
+    import_run(storage, app_name, run, *, skip_artifacts=False,
+               refresh_features=False, commit_changes=None)
+        -> "created" | "skipped" | "resumed" | "refreshed"
 
 Re-import policy:
 - "skipped": metadata already present with the same ``imported_from.run_id``
@@ -15,18 +16,23 @@ Re-import policy:
   (a partial import from a previous crash). The missing log entries are
   written; the result is "resumed".
 - "created": the verstr was free; full import is written.
+- "refreshed": a "skipped" run brought up to date by ``refresh_features``
+  (importers/refresh_features.py).
 
-Tags mapping: ``mlflow.*`` system keys are skipped (runName/parentRunId/
-source.git.commit are already extracted into structured metadata fields).
-All other tags become vmn tags.
+Tags mapping: ``mlflow.*`` system keys never become vmn tags (runName/
+parentRunId/source.git.commit are already extracted into structured metadata
+fields; the note, branch, source, user and entrypoint are mapped by
+importers/mlflow_features.py). All other tags become vmn tags.
 """
 from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.importers import mlflow_features
+from vmn_exp.importers.refresh_features import refresh_record
 from vmn_exp.core.metric_compact import compact_writer
 from vmn_exp.core.metric_entries import record_metric_entries, split_metric_entries
 from vmn_exp.core.metric_stream import MetricWriter
@@ -88,7 +94,9 @@ def _build_metadata(run: Dict[str, Any], verstr: str) -> Dict[str, Any]:
             "experiment_name": run["experiment_name"],
             "source_commit": run.get("source_commit"),
             "artifact_uri": run["artifact_uri"],
+            **mlflow_features.imported_from_fields(run.get("tags")),
         },
+        **mlflow_features.metadata_fields(run.get("tags")),
     }
     if run.get("name"):
         meta["name"] = run["name"]
@@ -100,8 +108,11 @@ def _build_metadata(run: Dict[str, Any], verstr: str) -> Dict[str, Any]:
     return meta
 
 
-def _build_log_entries(run: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Build all log entries for a run in one pass; returned in write order."""
+def _build_log_entries(
+    run: Dict[str, Any], commit: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
+    """Build all log entries for a run in one pass; returned in write order.
+    *commit* is the source commit's changes (``--repo``), for the features."""
     entries: List[Dict[str, Any]] = []
 
     # 1. create entry (with params, timestamp from start_time)
@@ -152,6 +163,10 @@ def _build_log_entries(run: Dict[str, Any]) -> List[Dict[str, Any]]:
             ts=input_ts,
         ))
 
+    # 5. features (who ran it, the entrypoint, the commit's changes)
+    entries.append({"timestamp": input_ts,
+                    **mlflow_features.features_entry(run.get("tags"), commit)})
+
     return entries
 
 
@@ -182,19 +197,25 @@ def _copy_local_artifacts(
             storage.save_artifact_file(app_name, verstr, src, name=user_artifact_path(rel))
 
 
-def _has_import_log(storage, app_name: str, verstr: str) -> bool:
-    """Return True when the mlflow-import writer has already written entries."""
+def _logs_by_writer(storage, app_name: str, verstr: str):
+    """The record's log entries by writer, or None from a backend that cannot list them."""
     by_writer = getattr(storage, "load_logs_by_writer", None)
-    if by_writer is not None:
-        return bool(by_writer(app_name, verstr).get(IMPORT_WRITER))
+    return by_writer(app_name, verstr) if by_writer is not None else None
+
+
+def _has_import_log(storage, app_name: str, verstr: str, logs) -> bool:
+    """Return True when the mlflow-import writer has already written entries."""
+    if logs is not None:
+        return bool(logs.get(IMPORT_WRITER))
     return bool(storage.log_sizes(app_name, verstr).get(IMPORT_WRITER))
 
 
 def _write_all(
-    storage, app_name: str, verstr: str, run: Dict[str, Any], skip_artifacts: bool
+    storage, app_name: str, verstr: str, run: Dict[str, Any], skip_artifacts: bool,
+    commit: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Write log entries + run_state + artifacts for a run."""
-    entries = _build_log_entries(run)
+    entries = _build_log_entries(run, commit)
 
     # Write directly to storage (not via append_entries_to_log) because
     # sanitize_entry is designed for live SDK writes and drops NaN; NaN is
@@ -225,7 +246,9 @@ def import_run(
     run: Dict[str, Any],
     *,
     skip_artifacts: bool = False,
-) -> Literal["created", "skipped", "resumed"]:
+    refresh_features: bool = False,
+    commit_changes: Optional[Callable[[str], Optional[Dict[str, Any]]]] = None,
+) -> Literal["created", "skipped", "resumed", "refreshed"]:
     """Write a vmn-exp record from a neutral MLflow run dict.
 
     Parameters
@@ -240,6 +263,11 @@ def import_run(
     skip_artifacts:
         When ``True``, local artifacts are not copied into storage (remote
         artifact URIs are never copied regardless).
+    refresh_features:
+        When ``True``, an already-imported run lacking them gets its features
+        and note instead of being skipped.
+    commit_changes:
+        ``source_commit -> changes | None`` (``CommitChanges`` over a checkout).
 
     Returns
     -------
@@ -250,24 +278,33 @@ def import_run(
     "resumed":
         The run had been partially imported (metadata written but log empty)
         and the missing entries were now written.
+    "refreshed":
+        With *refresh_features*, an already-imported run got what it lacked.
     """
     verstr = run_verstr(run["run_id"])
     metadata = _build_metadata(run, verstr)
 
+    def commit():  # the source commit's changes, when a checkout tells them
+        return commit_changes(run.get("source_commit")) if commit_changes else None
+
     # Attempt atomic claim
     if not claim_record(storage, app_name, verstr, metadata):
         # Record exists — check for same run and completeness
-        existing = storage.load_metadata(app_name, verstr)
-        existing_if = (existing or {}).get("imported_from", {})
+        existing = storage.load_metadata(app_name, verstr) or {}
+        existing_if = existing.get("imported_from", {})
         if existing_if.get("run_id") == run["run_id"]:
-            if _has_import_log(storage, app_name, verstr):
+            logs = _logs_by_writer(storage, app_name, verstr)
+            if _has_import_log(storage, app_name, verstr, logs):
+                if refresh_features and refresh_record(
+                        storage, app_name, verstr, run, existing, logs, commit()):
+                    return "refreshed"
                 return "skipped"
             # Partial: claimed but log never written — resume
-            _write_all(storage, app_name, verstr, run, skip_artifacts)
+            _write_all(storage, app_name, verstr, run, skip_artifacts, commit())
             return "resumed"
         # Different run mapped to same verstr prefix (collision); treat as skipped
         return "skipped"
 
     # Fresh claim succeeded — write everything
-    _write_all(storage, app_name, verstr, run, skip_artifacts)
+    _write_all(storage, app_name, verstr, run, skip_artifacts, commit())
     return "created"
