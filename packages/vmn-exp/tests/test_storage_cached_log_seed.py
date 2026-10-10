@@ -148,18 +148,34 @@ def test_a_local_copy_dropped_under_a_live_cache_keeps_the_remote_entries(tmp_pa
     assert _remote_texts() == ["a0", "a1", "a2", "b0", "b1"]
 
 
-def test_a_buffered_pod_appending_after_its_run_finished_keeps_the_log(tmp_path):
+def _finished_buffered_pod(lines):
+    """A direct-to-S3 pod whose run logged *lines* and finished: shipped,
+    compacted, its buffer dropped."""
     pod = open_storage(s3_uri("vmn-bucket", "exps"), area="runs", buffer_logs=True)
     assert pod.create_exclusive(APP, V, meta(V), {})
-    for i in range(3):
-        _append(pod, f"a{i}", i)
+    for i, text in enumerate(lines):
+        _append(pod, text, i)
     pod.save_file(APP, V, RUN_STATE_FILE, FINISHED)
-    pod.sync_log_to_remote(APP, V, W)  # ships, compacts, drops the buffer
+    pod.sync_log_to_remote(APP, V, W)
+    return pod
+
+
+def test_a_buffered_pod_appending_after_its_run_finished_keeps_the_log():
+    pod = _finished_buffered_pod(["a0", "a1", "a2"])
 
     _append(pod, "late", 10)
     pod.sync_log_to_remote(APP, V, W)
 
     assert _remote_texts() == ["a0", "a1", "a2", "late"]
+
+
+def test_a_buffered_pod_ships_a_long_line_appended_after_its_run_finished():
+    pod = _finished_buffered_pod(["a0"])
+
+    _append(pod, "x" * 200, 10)  # longer than everything the pod had shipped
+    pod.sync_log_to_remote(APP, V, W)
+
+    assert _remote_texts() == ["a0", "x" * 200]
 
 
 @pytest.fixture

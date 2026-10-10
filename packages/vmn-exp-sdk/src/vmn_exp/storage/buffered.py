@@ -159,9 +159,11 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         super().sync_metrics_to_remote(app_name, verstr, writer_id)
 
     def _cleanup_buffer(self):
-        """Drop the buffer dir. Idempotent: ``rmtree`` on an already-gone
-        directory is a safe no-op, so a later call (``close()``, or another
-        writer's sync) costs nothing."""
+        """Drop the buffer dir, and the log offsets into it: a later append
+        starts a fresh buffer, shipped from its first byte. Idempotent:
+        ``rmtree`` on an already-gone directory is a safe no-op, so a later
+        call (``close()``, or another writer's sync) costs nothing."""
+        self._synced.clear()
         shutil.rmtree(self._buffer_root, ignore_errors=True)
 
     def _initial_sync_state(self, app_name, verstr, writer_id):
@@ -197,5 +199,4 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._flushed_at.clear()
         self._unshipped.clear()
         _PENDING.discard(self)
-        self._synced.clear()
         self._cleanup_buffer()
