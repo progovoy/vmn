@@ -207,3 +207,25 @@ local default branch deleted.
 Docs after C2: README `goto`/CI `<details>` (detached CI checkouts, CI env hint, migration
 note for the old branch names), CLAUDE.md `vmn goto` line, `docs/agent-skill.md` only if
 `cli/skill.py` changes.
+
+---
+
+## 10. Follow-ups (left out of the first pass, 2026-10-11)
+
+Each item is independent; TDD as usual. Paths under `packages/vmn/src/version_stamp/`.
+
+| # | Item | Why it was left out | Plan | Needs approval |
+|---|---|---|---|---|
+| F1 | **Run the old-vmn compat tests** (`tests/compat/test_version_compat.py::test_backward_compatability_with_0_3_9_vmn`, `::test_problem_found_in_real_customer`, `tests/test_release.py::test_backward_compatability_with_0_8_4_vmn`) | They skip without Docker (`tests/vmn_fixtures.py:319`), so nothing in this plan was checked against old vmn | Run on a Docker host first (`./tests/run_pytest.sh --specific_test backward_compatability` and `real_customer`). Add one test: a conf rewritten by the new stamp (`release_mode_policy`, no `vmn_version_file`, `conf: {}`) is read by the previous released vmn (0.10.x image) without error — CI fleets run mixed vmn versions | — |
+| F2 | **`active_branch` carries the identity**; a separate `local_branch` field holds the git ref | Broad: `active_branch` is read for git refs in push (`backends/git_ops.py` refspec), `checkout_branch`, the outgoing range (`git_branch.py`), `prepare_for_remote_operation`, `git_tags.py`, worktree code | Resolve identity once (constructor and end of `ensure_on_branch`), store it in `active_branch`; add `local_branch` for the ref users above; delete `logical_branch()` and its 8 call sites. Grep every `active_branch` reader (core + vmn-exp) and classify ref vs identity first | — |
+| F3 | **Lazy branch resolution** (`active_branch`/`remote_active_branch` as cached properties) | Saves 1–2 git processes per detached dep per command (`for-each-ref --contains`, reflog); the `--contains` cost pre-dates this change | Properties resolved on first read; `repo_status` / `dep_backend` only call `in_detached_head()` for deps. Measure with `GIT_TRACE2_PERF` per plan 15 §1 before/after | — |
+| F4 | **Reuse the constructor's containment lookup in `ensure_on_branch`** | A per-backend cache broke `test_require_tip_only_accepts_branches_whose_tip_is_head` (it moves refs between two calls) | Cache keyed by a ref generation counter bumped by every ref-changing backend op (`checkout`, `branch`, `_fetch`, `pull`, `push`, `tag`); external ref changes between calls are the test's case — keep the cache per command only | — |
+| F5 | **Remove dead `read_only`** from `GitBackend`/`get_client`/stamper/`dep_backend` | `tests/test_backend_side_effects.py:74` passes `read_only=True`; vmn-exp `snapshot/stores.py:62` reads `params["read_only"]` (a params key, unrelated to the backend) | Drop the backend kwarg; keep the params key for vmn-exp (or rename it `lock_free`); change that one test call | Yes (test edit) |
+| F6 | **One "needs a branch" entry point** | CLI passes `ensure_branch` into `IVersionsStamper.__init__`; vmn-exp cold start calls the backend directly and never re-resolves conf paths; the command list is a hard-coded table plugins can't extend | Stamper method `vcs.ensure_on_branch()` = backend call + re-run `initialize_paths` and the conf load when the branch changed; commands declare "commits" in their spec like `read_only_actions` (`cli/plugin_api.py`); cold start uses the method | — |
+| F7 | **Robust conf loader** (`data.get("conf") or {}`) in every conf reader (`stamping/base.py:159,178`, `cli/config_tui.py`, `cli/worktree_freeze.py`, `compat/branch_conf.py`) | The writer's `conf: {}` guard covers vmn's own rewrite; a hand-written bare `conf:` still crashes | Fix the readers; keep the writer guard (older vmn versions read the same committed files) | — |
+| F8 | **Rename `_write_version_to_vmn_version_file`** (e.g. `_write_last_known_version_file`) | Latent trap: the `_write_version_to_<backend>` dispatch would call it with the wrong arguments if a `vmn_version_file` backend ever reached the loop again | Rename + one test that a `vmn_version_file` entry injected after load is ignored | — |
+| F9 | **Test-only re-exports**: `rewrite_deprecated_conf_keys` from `compat/config_keys.py` (`noqa: F401`), `LEGACY_TRACKING_PREFIX` from `backends/branch_resolver.py` | Tests import from those paths | Point the test imports at `compat/conf_rewrite.py` / `core/constants.py`, drop the re-exports | Yes (test edit) |
+| F10 | **`checkout_branch` returns bool** instead of an unused hexsha | Existing API, outside the change | Return `True/False`; callers already only test `is None` | — |
+| F11 | **Git-process budget test** | No guard against the detached paths regressing | One test counting `git` executions (as `tests/test_backend_side_effects.py` does) for: attached stamp = baseline, detached CI stamp ≤ baseline + 2, detached goto ≤ baseline + 2 | — |
+
+Order: F1 first (only one that can reveal a real break), then F8/F7 (small), F2+F3+F4 together (same accessors), F6, the rest.
