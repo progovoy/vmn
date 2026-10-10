@@ -7,7 +7,10 @@ Edits the conf file line by line so comments and key order survive:
 """
 import re
 
-_POLICY_VALUES = ("optional", "strict")
+from version_stamp.core.utils import atomic_write
+
+POLICY_VALUES = ("optional", "strict")
+VMN_VERSION_FILE = "vmn_version_file"
 _CONF_LINE = re.compile(r"^conf:\s*(#.*)?$")
 _KEY_LINE = re.compile(r"^(?P<ind> *)(?P<key>[A-Za-z_]\w*):(?P<rest>.*)$")
 _SCALAR = re.compile(r"""^\s*(['"]?)(?P<val>[\w-]+)\1\s*(#.*)?$""")
@@ -20,13 +23,18 @@ def rewrite_deprecated_conf_keys(path, dry_run=False):
     keeping comments and key order. Returns whether it changes."""
     with open(path) as f:
         lines = f.readlines()
-    new_lines = _rewrite_top_level_policy(_rewrite_nested_policy(lines))
-    new_lines = _keep_conf_a_mapping(lines, _rewrite_version_backends(new_lines))
+    new_lines = _rewrite_conf_child(
+        lines, "conventional_commits", _move_block_policy, _move_flow_policy
+    )
+    new_lines = _rewrite_top_level_policy(new_lines)
+    new_lines = _rewrite_conf_child(
+        new_lines, "version_backends", _drop_block_backend, _drop_flow_backend
+    )
+    new_lines = _keep_conf_a_mapping(lines, new_lines)
     if new_lines == lines:
         return False
     if not dry_run:
-        with open(path, "w") as f:
-            f.writelines(new_lines)
+        atomic_write(path, "".join(new_lines))
     return True
 
 
@@ -74,10 +82,6 @@ def _conf_line(lines):
 def _conf_keys(lines):
     i = _conf_line(lines)
     return [] if i is None else _direct_keys(lines, i)
-
-
-def _has_policy(keys):
-    return any(key == "release_mode_policy" for _, _, key, _ in keys)
 
 
 def _block_end(lines, start):
@@ -140,45 +144,62 @@ def _without_flow_key(rest, key):
     return removed, [e for e in entries if e is not removed], tail
 
 
-def _policy_line(ind, value, has_policy):
-    if value in _POLICY_VALUES and not has_policy:
+def _has_policy(keys):
+    return any(key == "release_mode_policy" for _, _, key, _ in keys)
+
+
+def _policy_line(ind, value, keys):
+    """The ``release_mode_policy`` line a moved policy value becomes, unless the
+    conf already has one."""
+    if value in POLICY_VALUES and not _has_policy(keys):
         return [f"{' ' * ind}release_mode_policy: {value}\n"]
     return []
 
 
-def _rewrite_nested_policy(lines):
+def _find_direct_key(lines, i, name):
+    return next((k for k in _direct_keys(lines, i) if k[2] == name), None)
+
+
+def _flow_head(ind, key, entries, tail, empty):
+    """The line of a flow mapping ``key`` with ``entries``; when none are left,
+    ``key: <empty>``, or no line at all when ``empty`` is None."""
+    if entries:
+        return [f"{' ' * ind}{key}: {{{', '.join(entries)}}}{tail}\n"]
+    return [] if empty is None else [f"{' ' * ind}{key}: {empty}{tail}\n"]
+
+
+def _rewrite_conf_child(lines, key, on_block, on_flow):
+    """Apply ``on_block`` or ``on_flow`` (by the entry's style) to the conf's
+    ``key`` entry; ``lines`` unchanged without one."""
     keys = _conf_keys(lines)
-    for i, ind, key, rest in keys:
-        if key != "conventional_commits":
-            continue
-        if _BLANK_OR_COMMENT.match(rest):
-            return _move_nested_policy(lines, i, ind, rest, _has_policy(keys))
-        return _move_flow_policy(lines, i, ind, rest, _has_policy(keys))
+    for i, ind, name, rest in keys:
+        if name == key:
+            handler = on_block if _BLANK_OR_COMMENT.match(rest) else on_flow
+            return handler(lines, i, ind, rest, keys)
     return lines
 
 
-def _move_nested_policy(lines, i, ind, rest, has_policy):
-    nested = [k for k in _direct_keys(lines, i) if k[2] == "default_release_mode"]
-    if not nested:
+def _move_block_policy(lines, i, ind, rest, keys):
+    found = _find_direct_key(lines, i, "default_release_mode")
+    if found is None:
         return lines
-    j, _, _, value_rest = nested[0]
+    j, _, _, value_rest = found
     end = _block_end(lines, i)
     block = lines[i + 1 : j] + lines[j + 1 : end]
     head = lines[i]
     if not any(_is_content(line) for line in block):
         head = f"{' ' * ind}conventional_commits: true{rest}\n"
-    insert = _policy_line(ind, _scalar(value_rest), has_policy)
+    insert = _policy_line(ind, _scalar(value_rest), keys)
     return lines[:i] + [head] + block + insert + lines[end:]
 
 
-def _move_flow_policy(lines, i, ind, rest, has_policy):
+def _move_flow_policy(lines, i, ind, rest, keys):
     removed, entries, tail = _without_flow_key(rest, "default_release_mode")
     if removed is None:
         return lines
-    value = "true" if not entries else "{" + ", ".join(entries) + "}"
-    head = f"{' ' * ind}conventional_commits: {value}{tail}\n"
-    insert = _policy_line(ind, _scalar(_flow_value(removed)), has_policy)
-    return lines[:i] + [head] + insert + lines[i + 1 :]
+    head = _flow_head(ind, "conventional_commits", entries, tail, empty="true")
+    insert = _policy_line(ind, _scalar(_flow_value(removed)), keys)
+    return lines[:i] + head + insert + lines[i + 1 :]
 
 
 def _rewrite_top_level_policy(lines):
@@ -186,7 +207,7 @@ def _rewrite_top_level_policy(lines):
     has_policy = _has_policy(keys)
     out = list(lines)
     for i, _, key, rest in keys:
-        if key != "default_release_mode" or _scalar(rest) not in _POLICY_VALUES:
+        if key != "default_release_mode" or _scalar(rest) not in POLICY_VALUES:
             continue
         if has_policy:
             out[i] = None
@@ -196,35 +217,23 @@ def _rewrite_top_level_policy(lines):
     return [line for line in out if line is not None]
 
 
-def _rewrite_version_backends(lines):
-    for i, ind, key, rest in _conf_keys(lines):
-        if key != "version_backends":
-            continue
-        if _BLANK_OR_COMMENT.match(rest):
-            return _drop_block_backend(lines, i)
-        return _drop_flow_backend(lines, i, ind, rest)
-    return lines
-
-
-def _drop_block_backend(lines, i):
-    found = [k for k in _direct_keys(lines, i) if k[2] == "vmn_version_file"]
-    if not found:
+def _drop_block_backend(lines, i, ind, rest, keys):
+    found = _find_direct_key(lines, i, VMN_VERSION_FILE)
+    if found is None:
         return lines
-    j = found[0][0]
+    j = found[0]
     out = lines[:j] + lines[_block_end(lines, j) :]
     if not _direct_keys(out, i):
         out = out[:i] + out[i + 1 :]
     return out
 
 
-def _drop_flow_backend(lines, i, ind, rest):
-    removed, entries, tail = _without_flow_key(rest, "vmn_version_file")
+def _drop_flow_backend(lines, i, ind, rest, keys):
+    removed, entries, tail = _without_flow_key(rest, VMN_VERSION_FILE)
     if removed is None:
         return lines
-    if not entries:
-        return lines[:i] + lines[i + 1 :]
-    head = f"{' ' * ind}version_backends: {{{', '.join(entries)}}}{tail}\n"
-    return lines[:i] + [head] + lines[i + 1 :]
+    head = _flow_head(ind, "version_backends", entries, tail, empty=None)
+    return lines[:i] + head + lines[i + 1 :]
 
 
 def _keep_conf_a_mapping(old, new):

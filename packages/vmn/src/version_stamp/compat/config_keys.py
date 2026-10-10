@@ -13,30 +13,27 @@ deprecated keys in the conf file via ``rewrite_deprecated_conf_keys``
 Safe to remove when: all conf.yml files have gone through at least one stamp
 cycle that rewrites them.
 """
-from version_stamp.compat.conf_rewrite import rewrite_deprecated_conf_keys  # noqa: F401
+from version_stamp.compat.conf_rewrite import (  # noqa: F401 (re-exported)
+    POLICY_VALUES,
+    VMN_VERSION_FILE,
+    rewrite_deprecated_conf_keys,
+)
 from version_stamp.core.logging import VMN_LOGGER
-
-_VMN_VERSION_FILE = "vmn_version_file"
 
 
 def migrate_config_keys(data_conf, app_conf_path):
     """Mutate ``data_conf`` dict in place, migrating deprecated keys.
 
-    Returns the (possibly mutated) dict for chaining.
+    Returns whether a key ``rewrite_deprecated_conf_keys`` rewrites on disk
+    was found (``create_verinfo_files`` is only migrated in memory).
     """
     _migrate_create_verinfo_files(data_conf, app_conf_path)
-    _migrate_nested_release_mode_policy(data_conf, app_conf_path)
-    _migrate_top_level_release_mode_policy(data_conf, app_conf_path)
-    _drop_vmn_version_file_backend(data_conf, app_conf_path)
-    return data_conf
-
-
-def warn_vmn_version_file_backend(backend_name):
-    """Whether backend_name is the deprecated vmn_version_file backend (skipped)."""
-    if backend_name == _VMN_VERSION_FILE:
-        VMN_LOGGER.debug("Skipping the deprecated vmn_version_file version backend")
-        return True
-    return False
+    migrated = [
+        _migrate_nested_release_mode_policy(data_conf, app_conf_path),
+        _migrate_top_level_release_mode_policy(data_conf, app_conf_path),
+        _drop_vmn_version_file_backend(data_conf, app_conf_path),
+    ]
+    return any(migrated)
 
 
 def _migrate_create_verinfo_files(data_conf, app_conf_path):
@@ -54,7 +51,7 @@ def _migrate_nested_release_mode_policy(data_conf, app_conf_path):
     cc = data_conf.get("conventional_commits")
     if isinstance(cc, dict) and "default_release_mode" in cc:
         val = cc.pop("default_release_mode")
-        if val in ("optional", "strict"):
+        if val in POLICY_VALUES:
             data_conf.setdefault("release_mode_policy", val)
         if not cc:
             data_conf["conventional_commits"] = True
@@ -63,11 +60,13 @@ def _migrate_nested_release_mode_policy(data_conf, app_conf_path):
             "to top-level 'release_mode_policy' in %s.",
             app_conf_path,
         )
+        return True
+    return False
 
 
 def _migrate_top_level_release_mode_policy(data_conf, app_conf_path):
     drm = data_conf.get("default_release_mode")
-    if drm in ("optional", "strict"):
+    if drm in POLICY_VALUES:
         data_conf.setdefault("release_mode_policy", drm)
         data_conf["default_release_mode"] = ""
         VMN_LOGGER.debug(
@@ -76,13 +75,17 @@ def _migrate_top_level_release_mode_policy(data_conf, app_conf_path):
             drm,
             app_conf_path,
         )
+        return True
+    return False
 
 
 def _drop_vmn_version_file_backend(data_conf, app_conf_path):
     backends = data_conf.get("version_backends")
-    if isinstance(backends, dict) and _VMN_VERSION_FILE in backends:
-        backends.pop(_VMN_VERSION_FILE)
+    if isinstance(backends, dict) and VMN_VERSION_FILE in backends:
+        backends.pop(VMN_VERSION_FILE)
         VMN_LOGGER.debug(
             "Dropping the deprecated vmn_version_file version backend in %s.",
             app_conf_path,
         )
+        return True
+    return False

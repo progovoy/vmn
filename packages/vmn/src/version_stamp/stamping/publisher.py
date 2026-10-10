@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from version_stamp.compat.branch_conf import migrate_branch_confs
-from version_stamp.compat.config_keys import rewrite_deprecated_conf_keys
+from version_stamp.compat.conf_rewrite import rewrite_deprecated_conf_keys
 from version_stamp.core.changelog import group_commits
 from version_stamp.core.constants import (
     BRANCH_CONF_DIR,
@@ -526,7 +526,7 @@ class VersionControlStamper(IVersionsStamper):
 
     def _migrate_deprecated_conf_keys(self):
         path = self.app_conf_path
-        if not os.path.isfile(path):
+        if not self.conf_has_deprecated_keys or not os.path.isfile(path):
             return
         if not rewrite_deprecated_conf_keys(path, dry_run=self.dry_run):
             return

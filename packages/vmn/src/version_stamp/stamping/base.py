@@ -16,7 +16,6 @@ from version_stamp import version as version_mod
 from version_stamp.backends.factory import get_client
 from version_stamp.compat.config_keys import (
     migrate_config_keys,
-    warn_vmn_version_file_backend,
 )
 from version_stamp.compat.template_format import migrate_old_template
 from version_stamp.compat.version_file_084 import read_version_from_old_file
@@ -150,6 +149,8 @@ class IVersionsStamper:
     _CONF_KEY_TO_ATTR = AppConf.conf_key_to_attr()
 
     def update_attrs_from_app_conf_file(self):
+        # Whether the loaded conf has keys `vmn stamp` rewrites on disk.
+        self.conf_has_deprecated_keys = False
         # TODO:: handle deleted app with missing conf file
         if os.path.isfile(self.app_conf_path):
             self.conf_file_exists = True
@@ -162,7 +163,9 @@ class IVersionsStamper:
                             data["conf"]["template"], VMN_DEFAULT_CONF["template"]
                         )
 
-                    migrate_config_keys(data["conf"], self.app_conf_path)
+                    self.conf_has_deprecated_keys = migrate_config_keys(
+                        data["conf"], self.app_conf_path
+                    )
 
                     for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
                         if conf_key == "template":
@@ -696,9 +699,6 @@ class IVersionsStamper:
             return
 
         for backend, backend_conf in self.version_backends.items():
-            if warn_vmn_version_file_backend(backend):
-                continue
-
             if backend in self._STRUCTURED_BACKEND_SPEC:
                 self._write_version_to_structured(version_number, backend_conf, backend)
                 continue
