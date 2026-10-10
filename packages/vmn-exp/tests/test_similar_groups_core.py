@@ -90,3 +90,33 @@ def test_scores_sort_descending():
     items = similar_runs(FakeSnapshot(rows), _target(run("t", params=PARAMS)))
     assert verstrs(items) == ["full", "half"]
     assert items[0]["score"] > items[1]["score"]
+
+
+def _nested_sweep(*losses, outer=True):
+    """outer -> trials t<i> -> the SDK runs s<i> their script opened (auto-parented)."""
+    rows = [run("outer", params={})] if outer else []
+    for i, loss in enumerate(losses, 1):
+        rows.append(run(f"t{i}", parent="outer", params={}))
+        rows.append(run(f"s{i}", parent=f"t{i}", params=PARAMS, metrics={"val_loss": loss}))
+    return rows
+
+
+def test_a_nested_sweep_fills_one_slot_shown_by_its_best_sdk_run():
+    snapshot = FakeSnapshot(_nested_sweep(0.5, 0.2, 0.4), declared={"val_loss": {"goal": "min"}})
+    [item] = similar_runs(snapshot, _target(run("t", params=PARAMS)))
+    assert item["verstr"] == "s2"
+    assert item["group_size"] == 7
+    assert item["goal"] == {"metric": "val_loss", "goal": "min", "value": 0.2}
+
+
+def test_a_nested_sweep_whose_outer_run_is_missing_still_fills_one_slot():
+    rows = _nested_sweep(0.5, 0.9, outer=False)
+    [item] = similar_runs(FakeSnapshot(rows), _target(run("t", params=PARAMS)),
+                          schema={"val_loss": {"goal": "max"}})
+    assert (item["verstr"], item["group_size"]) == ("s2", 4)
+
+
+def test_a_parent_cycle_ends_the_walk_in_one_group():
+    rows = [run("a", parent="b", params=PARAMS), run("b", parent="a", params=PARAMS)]
+    [item] = similar_runs(FakeSnapshot(rows), _target(run("t", params=PARAMS)))
+    assert item["group_size"] == 2

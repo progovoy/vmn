@@ -7,7 +7,9 @@ symbols, input digests and dataset names, param keys, script, objective
 metrics, base commit, and the words of its text document). A query's
 candidates are the runs sharing at least one token with it, taken from the
 rarest token first up to :data:`CANDIDATE_CAP` — no pairwise work over the
-app, and a common token (``pkey:lr``) cannot crowd out a rare one.
+app, and a common token (``pkey:lr``) cannot crowd out a rare one. It also
+knows each run's tree (:meth:`SimilarIndex.root`): a sweep's trials and the
+SDK runs they open are one tree under the sweep's outer run.
 
 An index is built once per snapshot object and kept while the snapshot
 lives (snapshots are immutable; the experiment index swaps in a new one per
@@ -44,6 +46,32 @@ def run_command(snapshot, row):
     return row.get("command") or (states.get(row["verstr"]) or {}).get("command")
 
 
+def _tree_roots(rows):
+    """verstr -> the top of its ``parent`` chain in *rows* (verstr -> row):
+    the first ancestor without a parent, else an ancestor's parent missing
+    from *rows* (it still ties its runs together), else where a cycle closes."""
+    roots = {}
+    for start in rows:
+        if start in roots:
+            continue
+        chain, node = [], start
+        while True:
+            chain.append(node)
+            parent = rows[node].get("parent")
+            if not parent:
+                root = node
+            elif parent in roots:
+                root = roots[parent]
+            elif parent not in rows or parent in chain:
+                root = parent
+            else:
+                node = parent
+                continue
+            break
+        roots.update(dict.fromkeys(chain, root))
+    return roots
+
+
 class SimilarIndex:
     def __init__(self, snapshot):
         features_of, intent_of, hypothesis_of = side_tables(snapshot)
@@ -65,6 +93,7 @@ class SimilarIndex:
             docs += bool(profile.length)
             length += profile.length
         self.bm25 = Bm25(docs, length / docs if docs else 1.0, self._document_frequency)
+        self._roots = _tree_roots(self._rows)
 
     def _document_frequency(self, term):
         return len(self._postings.get("w:" + term, ()))
@@ -75,6 +104,19 @@ class SimilarIndex:
 
     def profile(self, verstr):
         return self._profiles.get(verstr)
+
+    def root(self, row):
+        """The verstr *row*'s tree is filed under (see :func:`_tree_roots`);
+        a run with neither parent nor children is its own. *row* need not
+        be in the snapshot."""
+        verstr, parent = row.get("verstr"), row.get("parent")
+        if verstr in self._roots:
+            return self._roots[verstr]
+        return self._roots.get(parent, parent) if parent else verstr
+
+    def in_tree(self, row):
+        """Whether *row* has a parent or children."""
+        return bool(row.get("parent")) or row.get("verstr") in self.parents
 
     def posting(self, token):
         """The verstrs filed under *token*, in snapshot order."""

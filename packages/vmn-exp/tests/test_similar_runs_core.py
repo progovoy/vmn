@@ -48,6 +48,20 @@ def test_the_children_of_an_outer_target_are_left_out():
     assert verstrs(similar_runs(FakeSnapshot(rows), _target(rows[0]))) == ["other"]
 
 
+def test_the_whole_tree_of_a_nested_target_is_left_out():
+    params = {"lr": 0.1}
+    rows = [
+        run("outer", params={}),
+        run("t1", parent="outer", params={}),
+        run("s1", parent="t1", params=params),
+        run("t2", parent="outer", params={}),
+        run("s2", parent="t2", params=params),
+        run("other", params=params),
+    ]
+    items = similar_runs(FakeSnapshot(rows), _target(rows[2]))
+    assert verstrs(items) == ["other"]
+
+
 def test_a_working_tree_target_without_a_verstr_excludes_nothing():
     rows = [run("a", params={"lr": 0.1})]
     working_tree = {"code_verstr": rows[0]["code_verstr"], "params": {"lr": 0.1}}

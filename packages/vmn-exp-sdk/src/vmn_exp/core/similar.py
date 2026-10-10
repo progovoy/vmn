@@ -11,14 +11,17 @@
 a run (:func:`target_from_snapshot`) or a working tree (a row-like dict
 without a verstr, or None). ``text`` replaces the target's text document
 (``--context``); ``text_only`` scores that text alone. The target run is
-left out, with the runs of its exact code (same ``code_verstr``), its outer
-run, its siblings under that outer run and its own inner runs — in the
-target's ``app`` only, when given.
+left out, with the runs of its exact code (same ``code_verstr``) and its
+whole tree (:meth:`~vmn_exp.core.similar_index.SimilarIndex.root`: its outer
+run, every run under it, its own inner runs) — in the target's ``app`` only,
+when given.
 
-Candidates are grouped — the inner runs of one outer run (with the outer run
-itself), else the runs of one ``code_verstr`` — so a sweep or repeats of one
-code fill one slot, shown by the member best on the group's goal metric
-(:func:`goal_metric`), else the most similar; ``group_size`` counts them.
+Candidates are grouped — the runs of one tree (a sweep's outer run, its
+trials and the SDK runs they open), else the runs of one ``code_verstr`` —
+so a sweep or repeats of one code fill one slot, shown by the member best on
+the group's goal metric (:func:`goal_metric`), else the most similar — a
+container (a run with inner runs) only when the group holds nothing else;
+``group_size`` counts them.
 Items sort by score, then newest, then verstr. Scores are never stored:
 they change with every new run. Pure: no storage.
 """
@@ -72,16 +75,19 @@ class _Query:
         self.weights = query_weights(self.profile.terms)
         self.tokens = profile_tokens(self.profile, structured=not self.text_only)
         self.app = target.get("app")
-        self.verstr, self.parent = row.get("verstr"), row.get("parent")
-        self.code = row.get("code_verstr")
+        self.row, self.verstr, self.code = row, row.get("verstr"), row.get("code_verstr")
 
-    def excluded(self, row):
-        """Whether *row* is the target, its code, its outer run or its sweep."""
+    def exclusion(self, index):
+        """``excluded(row)``: whether *row* is the target, of its code or of
+        its tree in *index*; None for a target without a verstr."""
         if not self.verstr:
-            return False
-        parent = row.get("parent")
-        return (row["verstr"] in (self.verstr, self.parent) or row.get("code_verstr") == self.code
-                or parent == self.verstr or bool(self.parent and parent == self.parent))
+            return None
+        root = index.root(self.row)
+
+        def excluded(row):
+            return (row["verstr"] == self.verstr or row.get("code_verstr") == self.code
+                    or index.root(row) == root)
+        return excluded
 
 
 class _Scope:
@@ -91,11 +97,11 @@ class _Scope:
         self.app, self.index = app, index_for(snapshot)
         declared = getattr(snapshot, "declared_schema", None)
         self.schema = effective_schema(schema, declared() if declared else {})
-        excluding = query.app is None or query.app == app
+        excluded = query.exclusion(self.index) if query.app in (None, app) else None
 
         def keep(verstr):
             row = self.index.row(verstr)
-            return (not (excluding and query.excluded(row))
+            return (not (excluded and excluded(row))
                     and (rows_filter is None or rows_filter(row)))
 
         self.candidates = self.index.candidates(query.tokens, keep=keep)
@@ -139,13 +145,12 @@ class _Scope:
         return [self._item(members) for members in groups.values()]
 
     def _group_key(self, row):
-        verstr = row["verstr"]
-        if row.get("parent"):
-            return row["parent"]
-        return verstr if verstr in self.index.parents else row.get("code_verstr") or verstr
+        if self.index.in_tree(row):
+            return self.index.root(row)
+        return row.get("code_verstr") or row["verstr"]
 
     def _item(self, members):
-        # An outer run is its group's container: it stands in only when alone.
+        # A container (a run with inner runs) stands in only when the group holds nothing else.
         pool = [m for m in members if m["verstr"] not in self.index.parents] or members
         ranked = _ordered(pool)
         best, goal = ranked[0], None
