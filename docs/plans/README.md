@@ -23,6 +23,7 @@ the code-store change, `0096782`).
 | 15 | Core CLI speedups: lazy TUI import, bulk tag reads, drop GitPython | proposal | [15-core-cli-speedups.md](15-core-cli-speedups.md) |
 | 16 | Native code (Rust): static core binary, vmn-exp hot paths | evaluation, nothing scheduled | [16-native-code.md](16-native-code.md) |
 | 17 | Detached HEAD: no invented branches, one branch resolver, CI-safe stamp/goto, silent config-key migration, accurate goto output | proposal | [17-detached-head-and-goto.md](17-detached-head-and-goto.md) |
+| 18 | Similar runs: features on the record at submission, structured similarity + reasons, backfill and MLflow refresh; v2 intent text written by the user's own AI (via a skill), lexical match + agent re-rank | proposal | [18-similar-runs.md](18-similar-runs.md) |
 
 Paths in the plans are repo paths under `packages/` (re-verified against `0096782`).
 
