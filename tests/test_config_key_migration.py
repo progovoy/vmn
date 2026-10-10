@@ -171,3 +171,167 @@ def test_dry_run_reports_but_leaves_conf(app_layout, capfd):
     assert err == 0
     assert _read(conf_path) == TOP_LEVEL
     assert f"Would migrate deprecated keys in {conf_path}" in out
+
+
+def _rewritten(tmp_path, text, dry_run=False):
+    from version_stamp.compat.config_keys import rewrite_deprecated_conf_keys
+
+    path = tmp_path / "conf.yml"
+    path.write_text(text)
+    changed = rewrite_deprecated_conf_keys(str(path), dry_run=dry_run)
+    return changed, path.read_text()
+
+
+def test_rewrite_flow_style_nested_policy(tmp_path):
+    changed, text = _rewritten(
+        tmp_path,
+        "conf:\n"
+        "  conventional_commits: {default_release_mode: strict}  # cc\n"
+        "  template: '[{major}][.{minor}][.{patch}]'\n",
+    )
+
+    assert changed
+    assert text == (
+        "conf:\n"
+        "  conventional_commits: true  # cc\n"
+        "  release_mode_policy: strict\n"
+        "  template: '[{major}][.{minor}][.{patch}]'\n"
+    )
+
+
+def test_rewrite_flow_style_nested_policy_keeps_other_keys(tmp_path):
+    _, text = _rewritten(
+        tmp_path,
+        "conf:\n  conventional_commits: {default_release_mode: 'optional', foo: bar}\n",
+    )
+
+    assert text == (
+        "conf:\n"
+        "  conventional_commits: {foo: bar}\n"
+        "  release_mode_policy: optional\n"
+    )
+
+
+def test_rewrite_flow_style_drops_key_when_policy_exists(tmp_path):
+    _, text = _rewritten(
+        tmp_path,
+        "conf:\n"
+        "  release_mode_policy: optional\n"
+        "  conventional_commits: {default_release_mode: strict}\n",
+    )
+
+    assert text == (
+        "conf:\n  release_mode_policy: optional\n  conventional_commits: true\n"
+    )
+
+
+def test_rewrite_removes_vmn_version_file_block(tmp_path):
+    _, text = _rewritten(
+        tmp_path,
+        "conf:\n"
+        "  version_backends:\n"
+        "    # backends comment\n"
+        "    vmn_version_file:\n"
+        "      path: version.txt\n"
+        "    npm:\n"
+        "      path: package.json  # npm\n"
+        "  template: '[{major}]'\n",
+    )
+
+    assert text == (
+        "conf:\n"
+        "  version_backends:\n"
+        "    # backends comment\n"
+        "    npm:\n"
+        "      path: package.json  # npm\n"
+        "  template: '[{major}]'\n"
+    )
+
+
+def test_rewrite_removes_flow_style_vmn_version_file(tmp_path):
+    _, text = _rewritten(
+        tmp_path,
+        "conf:\n"
+        "  version_backends: {vmn_version_file: {path: v.txt}, npm: {path: package.json}}\n",
+    )
+
+    assert text == "conf:\n  version_backends: {npm: {path: package.json}}\n"
+
+
+def test_rewrite_removes_emptied_version_backends(tmp_path):
+    _, block = _rewritten(
+        tmp_path,
+        "conf:\n  version_backends:\n    vmn_version_file: {}\n  template: '[{major}]'\n",
+    )
+    _, flow = _rewritten(
+        tmp_path,
+        "conf:\n  version_backends: {vmn_version_file: {}}  # old\n  template: '[{major}]'\n",
+    )
+
+    assert block == "conf:\n  template: '[{major}]'\n"
+    assert flow == "conf:\n  template: '[{major}]'\n"
+
+
+def test_rewrite_keeps_an_emptied_conf_a_mapping(tmp_path):
+    _, text = _rewritten(
+        tmp_path, "conf:\n  # only backend\n  version_backends:\n    vmn_version_file: {}\n"
+    )
+
+    assert text == "conf: {}\n  # only backend\n"
+
+
+def test_rewrite_dry_run_reports_vmn_version_file_without_writing(tmp_path):
+    original = "conf:\n  version_backends:\n    vmn_version_file: {}\n"
+
+    changed, text = _rewritten(tmp_path, original, dry_run=True)
+
+    assert changed
+    assert text == original
+
+
+VMN_VERSION_FILE_CONF = """\
+conf:
+  # keep me
+  template: '[{major}][.{minor}][.{patch}]'
+  version_backends:
+    vmn_version_file:
+      path: version.txt
+"""
+VMN_VERSION_FILE_MIGRATED = """\
+conf:
+  # keep me
+  template: '[{major}][.{minor}][.{patch}]'
+"""
+
+
+def test_stamp_drops_vmn_version_file_without_warning(app_layout, capfd):
+    conf_path = _stamped(app_layout)
+    _commit_conf(app_layout, conf_path, VMN_VERSION_FILE_CONF)
+    _change(app_layout)
+
+    capfd.readouterr()
+    err, ver_info, _ = _stamp_app(app_layout.app_name, "patch")
+    out, serr = capfd.readouterr()
+
+    assert err == 0
+    assert ver_info["stamping"]["app"]["_version"] == "0.0.2"
+    assert _read(conf_path) == VMN_VERSION_FILE_MIGRATED
+    assert _committed(app_layout, conf_path) == VMN_VERSION_FILE_MIGRATED
+    assert out.count(f"Migrated deprecated keys in {conf_path}") == 1
+    assert "WARNING" not in out + serr
+
+
+def test_dry_run_with_vmn_version_file_leaves_conf_without_warning(app_layout, capfd):
+    conf_path = _stamped(app_layout)
+    _commit_conf(app_layout, conf_path, VMN_VERSION_FILE_CONF)
+    _change(app_layout)
+
+    capfd.readouterr()
+    reset_logger()
+    err, _ = vmn_run(["stamp", "--dry-run", "-r", "patch", app_layout.app_name])
+    out, serr = capfd.readouterr()
+
+    assert err == 0
+    assert _read(conf_path) == VMN_VERSION_FILE_CONF
+    assert f"Would migrate deprecated keys in {conf_path}" in out
+    assert "WARNING" not in out + serr
