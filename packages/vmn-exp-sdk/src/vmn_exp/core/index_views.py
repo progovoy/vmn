@@ -13,16 +13,29 @@ runs would carry it in every payload); the row copies the reader API and the
 CLI hand out put it back. So do ``outputs`` — a run logging an image per step
 has one per step — which the snapshot keeps per verstr for the lineage index
 and ``outputs.*`` queries (:func:`~vmn_exp.core.query.filter_rows` ``extra``).
+A run's ``features``, ``intent`` and hypothesis are kept the same way, for
+similarity; row copies leave them out (only the row's ``author`` and
+``has_intent`` come from them).
 """
 import json
 import threading
 from collections import OrderedDict
 
-from vmn_exp.core.fold import fold_definitions, fold_row
+from vmn_exp.core.fold import (
+    fold_definitions,
+    fold_features,
+    fold_hypothesis,
+    fold_intent,
+    fold_row,
+)
 from vmn_exp.core.metric_schema import declared_fields, declared_schema
 from vmn_exp.core.metric_summary import with_policies
 
 _SCHEMAS_KEPT = 4
+
+# The IndexSnapshot side tables (``{verstr: value}``, empty values left out)
+# that lean_row's values after the row and create note fill, in order.
+SIDE_TABLES = ("metric_parts", "outputs", "declared_defs", "features", "intents", "hypotheses")
 
 
 def schema_key(schema):
@@ -31,16 +44,22 @@ def schema_key(schema):
 
 
 def lean_row(idx, meta, fold):
-    """``(row, create note, parts, outputs, declared)`` of a folded record:
-    the row without the schema, its ``metric_summary`` or its ``outputs``;
-    *parts* None when no metric repeats, *outputs* None when the run stored
-    none, *declared* the run's ``goal``/``hidden`` declarations (see
-    :func:`~vmn_exp.core.metric_schema.declared_fields`) or None."""
+    """``(row, create note, parts, outputs, declared, features, intent,
+    hypothesis)`` of a folded record: the row without the schema, its
+    ``metric_summary`` or its ``outputs``; *parts* None when no metric
+    repeats, *outputs* None when the run stored none, *declared* the run's
+    ``goal``/``hidden`` declarations (see
+    :func:`~vmn_exp.core.metric_schema.declared_fields`) or None, and the
+    run's folded features/intent/hypothesis or None (see
+    :data:`SIDE_TABLES`)."""
     row = fold_row(idx, meta, fold, with_create_note=True)
     note, summary = row.pop("create_note"), row.pop("metric_summary")
     defs = _definitions(fold)
     parts = (summary, defs or None) if summary else None
-    return row, note, parts, row.pop("outputs") or None, declared_fields(defs) or None
+    return (
+        row, note, parts, row.pop("outputs") or None, declared_fields(defs) or None,
+        fold_features(fold), fold_intent(fold), fold_hypothesis(fold),
+    )
 
 
 def _definitions(fold):
