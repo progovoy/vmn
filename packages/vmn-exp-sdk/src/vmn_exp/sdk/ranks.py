@@ -66,7 +66,7 @@ class NoOpRun:
     def step(self):
         return self._steps.next
 
-    def finish(self, exit_code=0):
+    def finish(self, exit_code=0, error=None):
         return None
 
     def log_metric(self, key, value, step=None, commit=True):

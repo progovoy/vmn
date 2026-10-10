@@ -65,6 +65,7 @@ ROW_FIELDS = frozenset(
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status imported_from forked_from forked_from_step rerun_of
+    end_reason error_summary signal
     """.split()
 )
 
