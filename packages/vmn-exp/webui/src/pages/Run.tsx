@@ -22,7 +22,8 @@ import { runSpec } from "../reports/viewSpecs";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import RunLineage from "../components/RunLineage";
-import RunOutput from "../components/RunOutput";
+import RunOutput, { OUTPUT_LOG } from "../components/RunOutput";
+import RunErrorCard from "../components/RunErrorCard";
 import TrainingCurves from "../components/TrainingCurves";
 import SweepSection, { sweepSpecOf } from "../components/SweepSection";
 import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
@@ -163,6 +164,10 @@ export default function Run() {
       <TagEditor key={`tags-${summary.verstr}`} ws={ws} app={app} verstr={summary.verstr} tags={summary.tags} />
 
       {summary.status && <StatusCard st={summary.status} runUrl={runUrl} />}
+      {summary.status && (
+        <RunErrorCard status={summary.status}
+          hasOutputLog={!!detail?.artifacts?.some((a) => a.name === OUTPUT_LOG)} />
+      )}
       {summary.status?.fleet && <FleetCard fleet={summary.status.fleet} runUrl={runUrl} />}
       {sweepSpec && (
         <SweepSection ws={ws} app={app} verstr={summary.verstr} runUrl={runUrl} />

@@ -132,6 +132,9 @@ function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold }: {
       <div className="exp-branch">
         {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
         {r.branch}
+        {r.status === "failed" && r.error_summary && (
+          <span className="exp-error" title={r.error_summary}>{r.error_summary}</span>
+        )}
       </div>
     </td>
   );
@@ -202,6 +205,7 @@ function Row({
               <StatusPill
                 status={r.status} exitCode={r.exit_code}
                 durationSec={r.duration_sec} staleSec={r.stale_sec}
+                errorSummary={r.error_summary}
               />
             )}
           </td>

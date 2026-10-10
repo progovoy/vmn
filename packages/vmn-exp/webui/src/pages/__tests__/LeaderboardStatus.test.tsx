@@ -86,6 +86,24 @@ beforeEach(() => {
 });
 
 describe("Leaderboard status column", () => {
+  it("surfaces a failed run's error summary in its pill tooltip and under its name", async () => {
+    mockedApi.experiments.mockResolvedValue([
+      row(1, "failed", { exit_code: 1, error_summary: "RuntimeError: dataloader worker died" }),
+      row(2, "succeeded", { error_summary: "ignored" }),
+    ]);
+
+    renderLeaderboard();
+
+    await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
+    const [failed, ok] = [...document.querySelectorAll(".status-pill")] as HTMLElement[];
+    expect(failed.title).toContain("RuntimeError: dataloader worker died");
+    expect(ok.title).not.toContain("ignored");
+    const line = cellOf("0.0.1-rc.1").querySelector(".exp-error") as HTMLElement;
+    expect(line.textContent).toBe("RuntimeError: dataloader worker died");
+    expect(line.title).toBe("RuntimeError: dataloader worker died");
+    expect(cellOf("0.0.2-rc.1").querySelector(".exp-error")).toBeNull();
+  });
+
   it("renders a status pill per row", async () => {
     mockedApi.experiments.mockResolvedValue([
       row(1, "succeeded"), row(2, "failed", { exit_code: 1 }),
