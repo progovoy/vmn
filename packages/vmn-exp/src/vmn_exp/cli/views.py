@@ -7,9 +7,12 @@ index row, its derived status fields and its place in the run tree. ``show
 with ``--patch`` the patch text itself (capped).
 Non-finite metrics are written as ``null`` so the output is strict JSON.
 """
+import argparse
 import json
 import math
 import sys
+import tarfile
+import zlib
 
 from version_stamp.api import _list_tarball_members
 from vmn_exp.core.app_conf import experiment_conf
@@ -54,14 +57,29 @@ def _text_patches(patches):
     ]
 
 
+def positive_max_bytes(text):
+    """argparse type of ``--max-bytes``: an int of at least 1."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {text!r}") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive number of bytes, not {value}")
+    return value
+
+
 def _untracked_names(patches):
-    """The paths in the untracked tarballs, dep paths under ``deps/<dep>/``."""
-    return [
-        prefix + name
-        for prefix, source in _patch_sources(patches)
-        if source.get("untracked_files")
-        for name in _list_tarball_members(source["untracked_files"])
-    ]
+    """The paths in the untracked tarballs, dep paths under ``deps/<dep>/``;
+    None when a tarball cannot be read (corrupt, cut short)."""
+    names = []
+    for prefix, source in _patch_sources(patches):
+        if source.get("untracked_files"):
+            try:
+                members = _list_tarball_members(source["untracked_files"])
+            except (tarfile.TarError, EOFError, OSError, zlib.error):
+                return None
+            names += [prefix + name for name in members]
+    return names
 
 
 def _section(label, text):
@@ -85,6 +103,8 @@ def _no_text_payload(metadata, patches):
     if metadata.get(CODE_MISSING):
         return {"text": None, "reason": CODE_MISSING}
     untracked = _untracked_names(patches)
+    if untracked is None:
+        return {"text": None, "reason": UNTRACKED_ONLY}
     if untracked:
         return {"text": None, "reason": UNTRACKED_ONLY, "untracked_files": untracked}
     return {"text": None, "reason": "no_code"}
@@ -94,7 +114,7 @@ def patch_payload(metadata, patches, max_bytes=None):
     """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*
     (default :data:`PATCH_MAX_BYTES`). A run without a text patch gets
     ``{"text": None, "reason"}``: ``code_missing``, ``untracked_only`` (plus
-    the ``untracked_files`` paths) or ``no_code``."""
+    the ``untracked_files`` paths, unless a tarball cannot be read) or ``no_code``."""
     sections = _text_patches(patches or {})
     if not sections:
         return _no_text_payload(metadata or {}, patches or {})
@@ -104,6 +124,8 @@ def patch_payload(metadata, patches, max_bytes=None):
 
 
 def _untracked_only_note(names):
+    if not names:
+        return "only untracked files were captured, in a tarball that cannot be read"
     shown = ", ".join(names[:3]) + (f", +{len(names) - 3} more" if len(names) > 3 else "")
     return (
         f"only untracked files were captured ({shown}), which are not printed; "
@@ -113,10 +135,11 @@ def _untracked_only_note(names):
 
 def no_patch_note(verstr, metadata, untracked=None):
     """One line on why *verstr* has no patch to show; *untracked* are the
-    paths of a run whose code is untracked files only."""
+    paths of a run whose code is untracked files only ([] when its tarball
+    cannot be read)."""
     reason = no_code_reason(metadata)
     if reason is None:
-        if untracked:
+        if untracked is not None:
             reason = _untracked_only_note(untracked)
         elif metadata.get("from_snapshot"):
             reason = "recorded from an exported snapshot, whose patches are not on the record"
@@ -130,7 +153,8 @@ def print_patch(verstr, metadata, patches, max_bytes=None):
     cap = _patch_cap(max_bytes)
     payload = patch_payload(metadata, patches, cap)
     if payload["text"] is None:
-        untracked = payload.get("untracked_files")
+        untracked = (payload.get("untracked_files", [])
+                     if payload["reason"] == UNTRACKED_ONLY else None)
         print(no_patch_note(verstr, metadata, untracked), file=sys.stderr)
         return
     print("\n" + payload["text"], end="")
