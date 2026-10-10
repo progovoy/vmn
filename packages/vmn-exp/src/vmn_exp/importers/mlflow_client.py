@@ -10,10 +10,9 @@ Install hint: ``pip install "vmn-exp[mlflow]"``
 from __future__ import annotations
 
 import os
-from typing import Callable, Dict, Iterator, List, Optional
+from typing import Callable, Iterator
 
 from vmn_exp.importers._utils import is_remote_uri
-
 
 # ---------------------------------------------------------------------------
 # Lazy mlflow import
@@ -22,7 +21,7 @@ from vmn_exp.importers._utils import is_remote_uri
 def _import_mlflow_client():
     """Lazily import MlflowClient; raise a friendly ImportError if mlflow absent."""
     try:
-        import mlflow.tracking  # noqa: PLC0415
+        import mlflow.tracking
         return mlflow.tracking.MlflowClient
     except ImportError as exc:
         raise ImportError(
@@ -56,7 +55,7 @@ def _iter_pages_experiments(client, include_deleted: bool):
     )
 
 
-def _iter_pages_runs(client, experiment_ids: List[str], include_deleted: bool):
+def _iter_pages_runs(client, experiment_ids: list[str], include_deleted: bool):
     """Yield all Run objects for *experiment_ids*, paging through search_runs."""
     run_view_type = "ALL" if include_deleted else "ACTIVE_ONLY"
     yield from _iter_pages(
@@ -75,7 +74,7 @@ def _iter_pages_runs(client, experiment_ids: List[str], include_deleted: bool):
 _DATASET_FIELDS = ("name", "digest", "source_type", "source")
 
 
-def _datasets(run) -> List[dict]:
+def _datasets(run) -> list[dict]:
     """The run's dataset inputs (``run.inputs.dataset_inputs``, mlflow >= 2.4),
     shaped like the FileStore reader's."""
     inputs = getattr(getattr(run, "inputs", None), "dataset_inputs", None) or []
@@ -88,7 +87,7 @@ def _datasets(run) -> List[dict]:
 def _build_run_dict(run, experiment_name: str, client) -> dict:
     info = run.info
     data = run.data
-    tags: Dict[str, str] = dict(data.tags) if data.tags else {}
+    tags: dict[str, str] = dict(data.tags) if data.tags else {}
 
     artifact_uri: str = info.artifact_uri or ""
     # mlflow stores end_time=0 for still-running runs; normalise to None.
@@ -127,7 +126,7 @@ def _build_run_dict(run, experiment_name: str, client) -> dict:
 
 def iter_runs(
     tracking_uri: str,
-    experiments: Optional[List[str]] = None,
+    experiments: list[str] | None = None,
     include_deleted: bool = False,
     client=None,
 ) -> Iterator[dict]:
@@ -165,7 +164,7 @@ def iter_runs(
     # Collect filtered experiment IDs and a name-lookup map in one pass, then
     # fetch all runs in a single search_runs call sequence (avoids N separate
     # paged requests for N experiments).
-    exp_name_by_id: Dict[str, str] = {}
+    exp_name_by_id: dict[str, str] = {}
     for exp in _iter_pages_experiments(client, include_deleted):
         if experiment_filter is not None and exp.name not in experiment_filter:
             continue

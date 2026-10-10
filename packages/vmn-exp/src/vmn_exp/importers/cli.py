@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Iterator
 
 _LOG = logging.getLogger(__name__)
 
@@ -41,11 +41,11 @@ def _get_storage(args):
 # ---------------------------------------------------------------------------
 
 
-def _stream_runs(args) -> Iterator[Dict[str, Any]]:
+def _stream_runs(args) -> Iterator[dict[str, Any]]:
     """Yield neutral run dicts from the source specified in *args*."""
-    mlruns_path: Optional[str] = getattr(args, "mlruns", None)
-    tracking_uri: Optional[str] = getattr(args, "tracking_uri", None)
-    experiments: List[str] = list(getattr(args, "experiment", None) or [])
+    mlruns_path: str | None = getattr(args, "mlruns", None)
+    tracking_uri: str | None = getattr(args, "tracking_uri", None)
+    experiments: list[str] = list(getattr(args, "experiment", None) or [])
     include_deleted: bool = bool(getattr(args, "include_deleted", False))
 
     if mlruns_path:
@@ -72,11 +72,11 @@ def _stream_runs(args) -> Iterator[Dict[str, Any]]:
 def _import_one(
     storage,
     app_name: str,
-    run: Dict[str, Any],
+    run: dict[str, Any],
     skip_artifacts: bool,
     refresh_features: bool = False,
     commit_changes=None,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """Import a single run; return (outcome, run_id).
 
     *outcome* is one of ``"created"``, ``"skipped"``, ``"resumed"``,
@@ -100,20 +100,20 @@ def _import_one(
 # ---------------------------------------------------------------------------
 
 
-def import_mlflow_run_without_repo(args) -> Optional[int]:
+def import_mlflow_run_without_repo(args) -> int | None:
     """Handler for ``vmn-exp import-mlflow``.
 
     Called via ``run_without_repo`` so the repo lock is never acquired.
     Returns an integer exit code (0 = success, 1 = any run failed or bad args).
     """
-    mlruns_path: Optional[str] = getattr(args, "mlruns", None)
-    tracking_uri: Optional[str] = getattr(args, "tracking_uri", None)
+    mlruns_path: str | None = getattr(args, "mlruns", None)
+    tracking_uri: str | None = getattr(args, "tracking_uri", None)
     app_name: str = getattr(args, "name", "") or ""
     skip_artifacts: bool = bool(getattr(args, "skip_artifacts", False))
     dry_run: bool = bool(getattr(args, "dry_run", False))
     workers: int = int(getattr(args, "workers", 8) or 8)
     refresh_features: bool = bool(getattr(args, "refresh_features", False))
-    repo: Optional[str] = getattr(args, "repo", None)
+    repo: str | None = getattr(args, "repo", None)
 
     # Validate exactly one source.  Argparse's mutually_exclusive_group prevents
     # both from being set in normal CLI use; the "both" branch handles programmatic
@@ -162,7 +162,7 @@ def import_mlflow_run_without_repo(args) -> Optional[int]:
     with ThreadPoolExecutor(max_workers=workers) as pool:
         # Store only run_id in the dict (not the full run) to release run
         # objects as futures complete.
-        futures: Dict[Any, str] = {
+        futures: dict[Any, str] = {
             pool.submit(_import_one, storage, app_name, run, skip_artifacts,
                         refresh_features, commit_changes): run.get("run_id", "unknown")
             for run in runs
@@ -191,7 +191,7 @@ def import_mlflow_run_without_repo(args) -> Optional[int]:
     return 1 if n_failed > 0 else 0
 
 
-def _print_dry_run(runs: List[Dict[str, Any]]) -> None:
+def _print_dry_run(runs: list[dict[str, Any]]) -> None:
     """Print what would be imported without writing anything."""
     from vmn_exp.importers.import_records import run_verstr
 

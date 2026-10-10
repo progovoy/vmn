@@ -28,15 +28,13 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Callable, Literal
 
+from version_stamp.api import now_iso
 from vmn_exp.core.inputs import create_input_entry
-from vmn_exp.importers import mlflow_features
-from vmn_exp.importers.refresh_features import refresh_record
 from vmn_exp.core.metric_compact import compact_writer
 from vmn_exp.core.metric_entries import record_metric_entries, split_metric_entries
 from vmn_exp.core.metric_stream import MetricWriter
-from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.core.writer import (
     claim_record,
     create_tags_entry,
@@ -44,7 +42,9 @@ from vmn_exp.core.writer import (
     save_run_state,
     sync_to_remote,
 )
-from version_stamp.api import now_iso
+from vmn_exp.importers import mlflow_features
+from vmn_exp.importers.refresh_features import refresh_record
+from vmn_exp.storage.files import user_artifact_path
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -82,9 +82,9 @@ _OLD_HEARTBEAT = "1970-01-01T00:00:00.000000Z"
 # ---------------------------------------------------------------------------
 
 
-def _build_metadata(run: Dict[str, Any], verstr: str) -> Dict[str, Any]:
+def _build_metadata(run: dict[str, Any], verstr: str) -> dict[str, Any]:
     """Build the metadata.yml dict for an imported run."""
-    meta: Dict[str, Any] = {
+    meta: dict[str, Any] = {
         "verstr": verstr,
         "code_verstr": verstr,
         "imported_from": {
@@ -109,23 +109,23 @@ def _build_metadata(run: Dict[str, Any], verstr: str) -> Dict[str, Any]:
 
 
 def _build_log_entries(
-    run: Dict[str, Any], commit: Optional[Dict[str, Any]] = None
-) -> List[Dict[str, Any]]:
+    run: dict[str, Any], commit: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     """Build all log entries for a run in one pass; returned in write order.
     *commit* is the source commit's changes (``--repo``), for the features."""
-    entries: List[Dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
 
     # 1. create entry (with params, timestamp from start_time)
     create_ts = (
         _ms_to_iso_us(run["start_time_ms"]) if run.get("start_time_ms") else now_iso()
     )
-    create_entry: Dict[str, Any] = {"timestamp": create_ts, "type": "create"}
+    create_entry: dict[str, Any] = {"timestamp": create_ts, "type": "create"}
     if run.get("params"):
         create_entry["params"] = dict(run["params"])
     entries.append(create_entry)
 
     # 2. metrics grouped by (timestamp_ms, step)
-    grouped: Dict[tuple, Dict[str, Any]] = {}
+    grouped: dict[tuple, dict[str, Any]] = {}
     for key, value, ts_ms, step in run["metrics"]():
         group_key = (ts_ms, step)
         if group_key not in grouped:
@@ -170,10 +170,10 @@ def _build_log_entries(
     return entries
 
 
-def _build_run_state(run: Dict[str, Any]) -> Dict[str, Any]:
+def _build_run_state(run: dict[str, Any]) -> dict[str, Any]:
     """Derive a run_state.yml dict from the MLflow status."""
     status = (run.get("status") or "").upper()
-    state: Dict[str, Any] = {"pid": 0, "host": "mlflow-import"}
+    state: dict[str, Any] = {"pid": 0, "host": "mlflow-import"}
     if status in ("FINISHED", "FAILED", "KILLED"):
         state["exit_code"] = 0 if status == "FINISHED" else 1
         if run.get("start_time_ms"):
@@ -185,7 +185,7 @@ def _build_run_state(run: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _copy_local_artifacts(
-    storage, app_name: str, verstr: str, artifact_dir: Optional[str]
+    storage, app_name: str, verstr: str, artifact_dir: str | None
 ) -> None:
     """Walk *artifact_dir* and upload each file into the experiment record."""
     if not artifact_dir or not os.path.isdir(artifact_dir):
@@ -211,8 +211,8 @@ def _has_import_log(storage, app_name: str, verstr: str, logs) -> bool:
 
 
 def _write_all(
-    storage, app_name: str, verstr: str, run: Dict[str, Any], skip_artifacts: bool,
-    commit: Optional[Dict[str, Any]] = None,
+    storage, app_name: str, verstr: str, run: dict[str, Any], skip_artifacts: bool,
+    commit: dict[str, Any] | None = None,
 ) -> None:
     """Write log entries + run_state + artifacts for a run."""
     entries = _build_log_entries(run, commit)
@@ -243,11 +243,11 @@ def _write_all(
 def import_run(
     storage,
     app_name: str,
-    run: Dict[str, Any],
+    run: dict[str, Any],
     *,
     skip_artifacts: bool = False,
     refresh_features: bool = False,
-    commit_changes: Optional[Callable[[str], Optional[Dict[str, Any]]]] = None,
+    commit_changes: Callable[[str], dict[str, Any] | None] | None = None,
 ) -> Literal["created", "skipped", "resumed", "refreshed"]:
     """Write a vmn-exp record from a neutral MLflow run dict.
 
