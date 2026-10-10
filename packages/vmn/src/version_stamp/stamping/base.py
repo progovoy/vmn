@@ -108,11 +108,16 @@ class IVersionsStamper:
             self.be_type,
             inherit_env=True,
             read_only=self.read_only,
+            use_ci_hint=True,
         )
         if err:
             err_str = f"Failed to create backend {err}. Exiting"
             VMN_LOGGER.error(err_str)
             raise RuntimeError(err_str)
+
+        # Commands that commit need a branch (CI checkouts are detached).
+        if arg_params.get("ensure_branch"):
+            self.backend.ensure_on_branch(require_tip=True, use_ci_hint=True)
 
         if self.name is None:
             self.tracked = False
@@ -184,7 +189,7 @@ class IVersionsStamper:
         self.version_file_path = os.path.join(self.app_dir_path, VER_FILE_NAME)
 
         self.app_conf_path, _ = resolve_branch_conf_path(
-            self.app_dir_path, self.backend.active_branch
+            self.app_dir_path, self.backend.logical_branch()
         )
 
         if self.root_context:
@@ -202,7 +207,7 @@ class IVersionsStamper:
 
             self.root_app_conf_path, _ = resolve_branch_conf_path(
                 self.root_app_dir_path,
-                self.backend.active_branch,
+                self.backend.logical_branch(),
                 root=True,
             )
 

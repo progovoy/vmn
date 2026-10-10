@@ -48,6 +48,15 @@ from version_stamp.stamping.publisher import VersionControlStamper
 from version_stamp.stamping.repo_status import dep_backend
 
 _VERSION_CREATING_COMMANDS = frozenset({"stamp", "release", "add", "init-app"})
+_COMMITTING_COMMANDS = frozenset({"stamp", "init", "init-app"})
+
+
+def _commits(args):
+    """Whether the command creates a commit, so needs HEAD on a branch."""
+    command = getattr(args, "command", None)
+    return command in _COMMITTING_COMMANDS or (
+        command == "release" and bool(getattr(args, "stamp", False))
+    )
 
 
 def _takes_repo_lock(args):
@@ -97,6 +106,7 @@ class VMNContainer:
             "name": None,
             "root_path": root_path,
             "read_only": getattr(self.args, "command", None) == "show",
+            "ensure_branch": _commits(self.args),
         }
 
         if "name" in self.args and self.args.name:

@@ -79,6 +79,36 @@ def test_read_only_backend_reports_remote_branch_without_creating_one(app_layout
     assert backend.in_detached_head()
 
 
+def test_backend_in_a_ci_checkout_changes_nothing(app_layout):
+    _stamped_repo(app_layout)
+    repo = app_layout.repo_path
+    branch = _out(repo, "branch", "--show-current")
+    _out(repo, "checkout", "-q", "-f", _out(repo, "rev-parse", "HEAD"))
+    _out(repo, "branch", "-q", "-D", branch)
+    before = _repo_state(repo)
+
+    backend = GitBackend(repo)
+
+    assert _repo_state(repo) == before
+    assert backend.active_branch == branch
+    assert backend.remote_active_branch == f"origin/{branch}"
+    assert backend.in_detached_head()
+
+
+def test_goto_deps_only_in_a_ci_checkout_changes_nothing(app_layout):
+    _stamped_repo(app_layout)
+    repo = app_layout.repo_path
+    branch = _out(repo, "branch", "--show-current")
+    _out(repo, "checkout", "-q", "-f", _out(repo, "rev-parse", "HEAD"))
+    _out(repo, "branch", "-q", "-D", branch)
+    before = _repo_state(repo)
+
+    reset_logger()
+    assert vmn_run(["goto", "--deps-only", app_layout.app_name])[0] == 0
+
+    assert _repo_state(repo) == before
+
+
 def test_show_on_detached_repo_has_no_side_effects(app_layout, capfd):
     _stamped_repo(app_layout)
     repo = app_layout.repo_path

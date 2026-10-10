@@ -54,8 +54,10 @@ def test_detached_head_picks_branch_of_selected_remote(app_layout, tmp_path):
     _out(repo, "checkout", "-q", "--detach")
     _out(repo, "branch", "-q", "-D", "feature")
     assert default not in _out(repo, "branch", "--contains", "HEAD")
+    branches_before = _local_branches(repo)
 
     backend = GitBackend(repo)
 
-    assert backend.active_branch.startswith("vmn_tracking_remote__origin_feature__")
+    assert backend.active_branch == "feature"
     assert backend.remote_active_branch == "origin/feature"
+    assert _local_branches(repo) == branches_before

@@ -34,7 +34,7 @@ class GitTagsMixin:
             msg_filter = f"^{app_name}: Stamped"
 
         if type == RELATIVE_TO_CURRENT_VCS_BRANCH_TYPE:
-            cmd_suffix = f"refs/heads/{self.active_branch}"
+            cmd_suffix = self.branch_ref()
         elif type == RELATIVE_TO_CURRENT_VCS_POSITION_TYPE:
             cmd_suffix = "HEAD"
         else:

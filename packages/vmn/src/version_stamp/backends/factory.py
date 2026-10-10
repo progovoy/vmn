@@ -8,13 +8,15 @@ from version_stamp.core.logging import measure_runtime_decorator
 
 
 @measure_runtime_decorator
-def get_client(root_path, be_type, inherit_env=False, read_only=False):
+def get_client(root_path, be_type, inherit_env=False, read_only=False, use_ci_hint=False):
     if be_type == VMN_BE_TYPE_LOCAL_FILE:
         be = LocalFileBackend(root_path)
         return be, None
 
     try:
-        be = GitBackend(root_path, inherit_env, read_only=read_only)
+        be = GitBackend(
+            root_path, inherit_env, read_only=read_only, use_ci_hint=use_ci_hint
+        )
         return be, None
     except git.exc.InvalidGitRepositoryError:
         err = f"repository path: {root_path} is not a functional git or repository.\n"

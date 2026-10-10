@@ -23,13 +23,24 @@ class GitBranchMixin:
 
     @measure_runtime_decorator
     def get_active_branch(self):
-        # TODO:: return the full ref name: refs/heads/..
+        """The checked-out branch; for a detached HEAD the branch resolved for
+        it (None when no branch contains it). Never changes the repo."""
         if not self.in_detached_head():
-            active_branch = self._be.active_branch.name
-        else:
-            active_branch = self.get_branch_from_changeset(self._be.head.commit.hexsha)
+            return self._be.active_branch.name
 
-        return active_branch
+        choice = self.resolve_branch(
+            self._be.head.commit.hexsha, use_ci_hint=self.use_ci_hint
+        )
+        if choice is None:
+            return None
+        if choice.rule == "legacy":
+            VMN_LOGGER.debug(
+                f"Detached HEAD is on several branches {choice.candidates}; "
+                f"reporting {choice.name}"
+            )
+        if not choice.is_local:
+            self.remote_active_branch = f"{self.selected_remote.name}/{choice.name}"
+        return choice.name
 
     def _branches_under(self, hexsha, *ref_prefixes):
         """Names (prefix stripped) of the refs under ref_prefixes containing
@@ -52,57 +63,6 @@ class GitBranchMixin:
         if self.selected_remote is not None:
             prefixes.append(f"refs/remotes/{self.selected_remote.name}/")
         return self._branches_under(hexsha, *prefixes)
-
-    @measure_runtime_decorator
-    def get_branch_from_changeset(self, hexsha):
-        active_branches = self._branches_under(hexsha, "refs/heads/")
-
-        if len(active_branches) > 1:
-            VMN_LOGGER.info(
-                f"{hexsha} is "
-                f"related to multiple branches: {active_branches}. "
-                "Using the first one as the active branch"
-            )
-
-        if not active_branches:
-            remote_branches = []
-            if self.selected_remote is not None:
-                remote_branches = self._branches_under(
-                    hexsha, f"refs/remotes/{self.selected_remote.name}/"
-                )
-            if not remote_branches:
-                raise RuntimeError(f"Failed to find remote branch for hex: {hexsha}")
-
-            out = f"{self.selected_remote.name}/{remote_branches[0]}"
-
-            if self.read_only:
-                self.remote_active_branch = out
-                return remote_branches[0]
-
-            local_branch_name = (
-                f"vmn_tracking_remote__{out.replace('/', '_')}__from_{hexsha[:5]}"
-            )
-            self._be.git.branch(local_branch_name, out)
-            self._be.git.branch(f"--set-upstream-to={out}", local_branch_name)
-
-            VMN_LOGGER.debug(
-                f"Setting local branch {local_branch_name} "
-                f"to track remote branch {out}"
-            )
-
-            self.active_branch = local_branch_name
-            self.remote_active_branch = out
-
-            remote_branch_hexsha = self._be.refs[out].commit.hexsha
-            if remote_branch_hexsha == hexsha:
-                ret = self.checkout_branch()
-                assert ret is not None
-
-            active_branches.append(local_branch_name)
-
-        active_branch = active_branches[0]
-
-        return active_branch
 
     @measure_runtime_decorator
     def checkout(self, rev=None, tag=None, branch=None):

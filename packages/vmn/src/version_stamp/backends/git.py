@@ -16,6 +16,8 @@ import time
 import git
 
 from version_stamp.backends.base import VMNBackend
+from version_stamp.backends.branch_checkout import GitBranchCheckoutMixin
+from version_stamp.backends.branch_resolver import GitBranchResolverMixin
 from version_stamp.backends.git_branch import GitBranchMixin
 from version_stamp.backends.git_history import (
     GitHistoryMixin,
@@ -119,15 +121,19 @@ git.cmd.Git.execute = _custom_git_execute
 class GitBackend(
     GitOpsMixin,
     GitBranchMixin,
+    GitBranchResolverMixin,
+    GitBranchCheckoutMixin,
     GitTagsMixin,
     GitTagParseMixin,
     GitHistoryMixin,
     VMNBackend,
 ):
     @measure_runtime_decorator
-    def __init__(self, repo_path, inherit_env=False, read_only=False):
+    def __init__(self, repo_path, inherit_env=False, read_only=False, use_ci_hint=False):
         VMNBackend.__init__(self, VMN_BE_TYPE_GIT)
         self.read_only = read_only
+        # The main repo may take its detached-HEAD branch from the CI's env.
+        self.use_ci_hint = use_ci_hint
 
         self._be = GitBackend.initialize_git_backend(repo_path, inherit_env)
 
@@ -141,7 +147,7 @@ class GitBackend(
         self.repo_path = repo_path
         self.remote_active_branch = None
         self.active_branch = self.get_active_branch()
-        if self.remote_active_branch is None:
+        if self.remote_active_branch is None and self.active_branch is not None:
             self.remote_active_branch = self.get_remote_tracking_branch(
                 self.active_branch
             )
