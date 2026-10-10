@@ -51,7 +51,9 @@ values the run was given verbatim, so ``params.model = "xgb"`` and
 numeric fold the leaderboard sorts and charts. ``tags.x`` reads the run's
 current tags, which are always strings (``tags.stage = "prod"``); a removed
 or never-set tag is missing. ``name ~ "sweep"`` matches the run name and
-``archived = true`` the archived runs.
+``archived = true`` the archived runs. ``author ~ "alice"`` matches who ran it
+(git email, else OS user, else writer) and ``has_intent = false`` the runs
+nobody described yet.
 """
 
 import functools
@@ -65,6 +67,7 @@ ROW_FIELDS = frozenset(
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status imported_from forked_from forked_from_step rerun_of
+    author has_intent
     """.split()
 )
 

@@ -11,13 +11,25 @@ writer, and still fold to the same row — a log that grew by one line costs one
 line, not a re-read of the whole log.
 
 A fold is plain JSON-able data, so the experiment index can persist it as is.
+The run's ``features``, ``intent`` and hypothesis fold too (see
+:mod:`vmn_exp.core.fold_facts`); rows carry only who ran it (``author``) and
+whether it has an intent (``has_intent``).
 Pure: no storage, no clock.
 """
 import math
 
+from vmn_exp.core.fold_facts import (  # noqa: F401  (fold_hypothesis: re-exported)
+    author_display,
+    entry_hypothesis,
+    features_value,
+    fold_features,
+    fold_hypothesis,
+    fold_intent,
+    intent_value,
+)
 from vmn_exp.core.metric_summary import note_param, summarize, track_extrema
-from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
 from vmn_exp.core.rewind import is_rewound, rewind_step
+from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
 
 
 def entry_params(entry):
@@ -154,6 +166,31 @@ def _apply_outputs(fold, entry, key):
     _keep_latest(fold.setdefault("outputs", {}), path, value, key)
 
 
+def _apply_features(fold, entry, key):
+    """The highest ``features_version`` wins, then the latest entry."""
+    found = features_value(entry)
+    if found is not None:
+        version, value = found
+        _keep_latest(fold, "features", value, (version,) + key)
+
+
+def _apply_intent(fold, entry, key):
+    value = intent_value(entry)
+    if value is not None:
+        _keep_latest(fold, "intent", value, key)
+
+
+def _apply_first_create(fold, entry, key):
+    """Keep the note and hypothesis of the first ``create`` entry."""
+    if fold["create_note"] is None or key < tuple(fold["create_note"][1]):
+        fold["create_note"] = (entry.get("note"), key)
+        hypothesis = entry_hypothesis(entry)
+        if hypothesis is None:
+            fold.pop("hypothesis", None)
+        else:
+            fold["hypothesis"] = hypothesis
+
+
 def _apply_metric_values(fold, entry, key):
     metrics = fold["metrics"]
     for name, value in (entry.get("values") or {}).items():
@@ -188,6 +225,10 @@ def _apply(fold, entry, key):
         _apply_outputs(fold, entry, key)
     elif etype == DEFINE_METRIC:
         _apply_definition(fold, entry, key)
+    elif etype == "features":
+        _apply_features(fold, entry, key)
+    elif etype == "intent":
+        _apply_intent(fold, entry, key)
     for name, value in entry_params(entry).items():
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)
@@ -199,8 +240,7 @@ def _apply(fold, entry, key):
         if fold["last_metric"] is None or key >= tuple(fold["last_metric"][1]):
             fold["last_metric"] = (entry.get("timestamp"), key)
     elif etype == "create":
-        if fold["create_note"] is None or key < tuple(fold["create_note"][1]):
-            fold["create_note"] = (entry.get("note"), key)
+        _apply_first_create(fold, entry, key)
 
 
 def apply_entries(fold, writer, first_position, entries):
@@ -305,7 +345,8 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
     ``vmn-exp list`` shows for a run without a metadata note). Each metric's
     value is its summary policy's (see :mod:`vmn_exp.core.metric_summary`,
     *schema* being the app's metrics schema); ``metric_summary`` has the
-    last/min/max of every metric logged more than once.
+    last/min/max of every metric logged more than once. ``author`` is who the
+    run's features name (:func:`author_display`), ``has_intent`` always a bool.
     """
     metrics, metric_summary = fold_metrics(fold, schema)
     row = {
@@ -330,6 +371,8 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
         "imported_from": meta.get("imported_from"),
         **_fork_fields(meta),
         "rerun_of": meta.get("rerun_of"),
+        "author": author_display((fold_features(fold) or {}).get("author")),
+        "has_intent": fold_intent(fold) is not None,
     }
     if with_create_note:
         row["create_note"] = fold["create_note"][0] if fold["create_note"] else None

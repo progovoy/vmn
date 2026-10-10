@@ -12,7 +12,13 @@ is the view a schema gives (see :mod:`vmn_exp.core.index_views`).
 """
 from dataclasses import dataclass, field, replace
 
-from vmn_exp.core.index_views import SchemaRows, lean_row, runs_declared_schema, schema_key
+from vmn_exp.core.index_views import (
+    SIDE_TABLES,
+    SchemaRows,
+    lean_row,
+    runs_declared_schema,
+    schema_key,
+)
 from vmn_exp.core.status import observed_at_from_mtime
 
 _VIEWS_PER_SNAPSHOT = 4
@@ -39,6 +45,11 @@ class IndexSnapshot:
     # {verstr: {metric: {"goal"?, "hidden"?}}} of rows whose run declares
     # any — what declared_schema() merges.
     declared_defs: dict = field(default_factory=dict, repr=False)
+    # {verstr: value} of rows with a folded features entry / intent /
+    # hypothesis (see vmn_exp.core.fold_facts) — off the rows like outputs.
+    features: dict = field(default_factory=dict, repr=False)
+    intents: dict = field(default_factory=dict, repr=False)
+    hypotheses: dict = field(default_factory=dict, repr=False)
     _declared: list = field(default_factory=list, repr=False)  # memo, shared by views
     _by_verstr: dict = field(default_factory=dict, repr=False)
     _schema_rows: SchemaRows = field(default_factory=SchemaRows, repr=False)
@@ -49,6 +60,7 @@ class IndexSnapshot:
     def build(
         cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None,
         metric_parts=None, outputs=None, declared_defs=None,
+        features=None, intents=None, hypotheses=None,
     ):
         rows = tuple(rows)
         return cls(
@@ -62,6 +74,9 @@ class IndexSnapshot:
             metric_parts=metric_parts or {},
             outputs=outputs or {},
             declared_defs=declared_defs or {},
+            features=features or {},
+            intents=intents or {},
+            hypotheses=hypotheses or {},
             _by_verstr={row["verstr"]: row for row in rows},
         )
 
@@ -78,6 +93,20 @@ class IndexSnapshot:
         """``{path: {path, digest, size}}`` of the files *verstr* stored.
         Shared: copy before changing."""
         return self.outputs.get(verstr) or {}
+
+    def features_of(self, verstr):
+        """*verstr*'s folded ``features`` value, or None. Shared: copy
+        before changing."""
+        return self.features.get(verstr)
+
+    def intent_of(self, verstr):
+        """*verstr*'s latest ``intent`` value, or None. Shared: copy before
+        changing."""
+        return self.intents.get(verstr)
+
+    def hypothesis_of(self, verstr):
+        """*verstr*'s hypothesis (its first ``create`` entry's), or None."""
+        return self.hypotheses.get(verstr)
 
     def declared_schema(self):
         """``{metric: {"goal"?, "hidden"?}}`` the runs declare, the latest
@@ -168,7 +197,7 @@ class RowCache:
     """
 
     def __init__(self):
-        self._rows = {}  # key -> (row with idx, create note, metric parts, outputs, declared)
+        self._rows = {}  # key -> lean_row's (row with idx, create note, *side table values)
         self._observed = {}  # key -> (rs_sig, store write time it encodes)
         self._order = []  # the keys of the last snapshot, in order
         self._pos = {}  # key -> its position in _order
@@ -207,9 +236,9 @@ class RowCache:
         return IndexSnapshot(
             app_name=app_name, generation=generation, rows=tuple(self._list),
             run_states=dict(m.states), edges=dict(m.edges), create_notes=dict(m.notes),
-            run_state_observed_at=dict(m.observed), metric_parts=dict(m.parts),
-            outputs=dict(m.outputs), declared_defs=dict(m.declared),
+            run_state_observed_at=dict(m.observed),
             _by_verstr=dict(m.rows), _schema_rows=self._schema_rows,
+            **{name: dict(values) for name, values in m.sides.items()},
         )
 
     def _patch(self, touched, records):
@@ -232,14 +261,14 @@ class RowCache:
             self._put(key, pos, records[key])
 
     def _put(self, key, pos, record):
-        row, note, parts, outputs, declared = self._row(key, pos + 1, record)
+        row, note, *sides = self._row(key, pos + 1, record)
         if pos == len(self._list):
             self._list.append(row)
         else:
             self._list[pos] = row
         self._pos[key] = pos
         observed = self._observed_of(key, record["rs_sig"])
-        self._maps.put(row, note, parts, outputs, declared, record["run_state"], observed)
+        self._maps.put(row, note, sides, record["run_state"], observed)
 
 
 def _put_sparse(values, verstr, value):
@@ -250,20 +279,29 @@ def _put_sparse(values, verstr, value):
         values.pop(verstr, None)
 
 
+def new_side_tables():
+    """Empty side tables, ``{SIDE_TABLES name: {}}``."""
+    return {name: {} for name in SIDE_TABLES}
+
+
+def put_side_tables(tables, verstr, values):
+    """Keep *verstr*'s :func:`lean_row` side table *values* in *tables*."""
+    for name, value in zip(SIDE_TABLES, values):
+        _put_sparse(tables[name], verstr, value)
+
+
 class _Maps:
     """What a snapshot keys by verstr, kept current between snapshots."""
 
     def __init__(self):
         self.rows, self.notes, self.states, self.observed, self.edges = {}, {}, {}, {}, {}
-        self.parts, self.outputs, self.declared = {}, {}, {}
+        self.sides = new_side_tables()
 
-    def put(self, row, note, parts, outputs, declared, state, observed):
+    def put(self, row, note, sides, state, observed):
         verstr = row["verstr"]
         self.rows[verstr] = row
         self.notes[verstr] = note
-        _put_sparse(self.parts, verstr, parts)
-        _put_sparse(self.outputs, verstr, outputs)
-        _put_sparse(self.declared, verstr, declared)
+        put_side_tables(self.sides, verstr, sides)
         self.states[verstr] = state
         self.observed[verstr] = observed
         self.edges[verstr] = row.get("parent")
