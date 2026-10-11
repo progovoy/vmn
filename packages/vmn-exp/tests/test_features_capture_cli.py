@@ -68,7 +68,8 @@ def test_create_writes_the_features_entry_right_after_the_create_entry(app_layou
     assert entry["features_version"] == FEATURES_VERSION
     assert entry["source"] == "capture"
     assert sorted(entry["changed"]["files"]) == ["loss.py", "train.py"]
-    assert entry["changed"]["symbols"] == ["train.py::train_step"]
+    # train_step from the hunk context; focal_loss defined on the new file's added lines
+    assert sorted(entry["changed"]["symbols"]) == ["loss.py::focal_loss", "train.py::train_step"]
     assert entry["changed"]["untracked"] == ["notes.md"]
     assert entry["commits"] == ["try focal loss"]
 
