@@ -105,8 +105,10 @@ entrypoint, metric names and text. You supply the meaning:
    `status`, `goal`, `note`, `intent`, `features` and `group_size` (a sweep,
    or repeats of one code, shows as its best run). `show --patch --json` adds
    `"patch": {"text", "truncated"}`, or `{"text": null, "reason"}`: `no_code`
-   (MLflow imports, clean trees), `code_missing` (code object pruned),
-   `untracked_only` (untracked files only, listed in `untracked_files`).
+   (MLflow imports, clean trees, runs recorded git-free from an exported tree),
+   `code_missing` (code object pruned), `untracked_only` (untracked files only,
+   listed in `untracked_files` when readable). So `no_code` alone does not
+   prove a run changed nothing.
    Re-rank on meaning, not just the score, and tell the user who ran what,
    when, how it scored and how this run differs.
 

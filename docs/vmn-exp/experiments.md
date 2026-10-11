@@ -537,7 +537,8 @@ Changed: src/loss.py::focal_loss (new); src/train.py::train_step uses it.
   Forks and sweep trials start without one.
 - It is not the note: `--note` stays the short line `list` shows, while the
   intent is the long description used for matching (set both if you like).
-  `-f`'s [`hypothesis:`](#structured-notes--params) is matched as text too.
+  On `create`/`run`, `-f`'s [`hypothesis:`](#structured-notes--params) is
+  matched as text too (not `add -f`'s, which is a `structured` entry).
 - Rows carry `has_intent` (a bool on every row), so the runs without one are
   `list my_app --query 'has_intent = false'`. `show --json`'s `log` holds the
   entry; `similar --json` items carry its first 2 KB.
@@ -974,7 +975,7 @@ vmn-exp similar my_app -v @7 --query 'status = "succeeded" and author ~ "alice"'
 
 | Flag | Description |
 |---|---|
-| `-v <ref>` / `--latest` | the target run. Without either: the current working tree, captured without creating a run (unlike `show`/`restore`/`export`, where no ref means the latest run; like `vmn snapshot diff`) |
+| `-v <ref>` / `--latest` | the target run. Without either: the current working tree, captured without creating a run. `similar` is the one action whose missing ref means the working tree (`show`/`restore`/`export` take the latest run), because it is mostly asked before you submit |
 | `--top N` | how many results (default 10) |
 | `--all-apps` | every app of the store, each under its own metrics schema |
 | `--query <expr>` | keep only candidates `list --query` would show (the target is never filtered) |
@@ -1026,7 +1027,7 @@ Each signal is a similarity in [0, 1]; the score is their weighted mean:
 | `entrypoint` | same script 0.7, plus the same subcommand/args 1.0; launchers (`torchrun`, `accelerate launch`, `deepspeed`, `mpirun`, `srun`, `python -m torch.distributed.run`, …) are looked past | 1 |
 | `objective` | Jaccard of the metric names (minus params and `sys_*`) | 1 |
 | `branch` | equality | 0.5 |
-| `text` | BM25 over the intent text, its keywords (×3), name, note, tag keys and values, commit subjects and `-f`'s `hypothesis`, scaled by the best candidate's score | 1.5; code + inputs when the target has an intent or a context |
+| `text` | BM25 over the intent text, its keywords (×3), name, note, tag keys and values, commit subjects and `create`/`run -f`'s `hypothesis`, scaled by the best candidate's score | 1.5; code + inputs when the target has an intent or a context |
 
 A signal missing on either side is left out and the rest renormalised (it is
 unknown, not different), so an MLflow import without code still compares on
@@ -1046,7 +1047,9 @@ conf:
       hint: false                         # no submission hint
 ```
 
-The CLI, the hint, the SDK and the UI routes all honour `weights`.
+The CLI, the hint, the SDK and the UI's run route score every app they search
+under the target app's `weights` (in the UI, git workspaces only); a text-only
+query scores its text alone.
 
 #### The submission hint
 
@@ -1062,9 +1065,11 @@ It leads with the best of them on its goal metric (`closest — …` when none h
 one). Cheap or nothing, and never affecting the run:
 
 - Its candidates are this host's persisted index of the app, as `list`,
-  `similar` or `vmn-exp ui` last refreshed it; it never refreshes from the
-  store, so a cold cache prints nothing and runs since the last refresh are
-  not seen (`vmn-exp similar <app> -v <verstr>` shows them).
+  `show`, `compare`, `similar` or an SDK reader (`list_runs`, `similar_runs`)
+  last refreshed it; `vmn-exp ui` keeps its own index under its data dir,
+  which the hint does not read. It never refreshes from the store, so a cold
+  cache prints nothing and runs since the last refresh are not seen
+  (`vmn-exp similar <app> -v <verstr>` shows them).
 - It is skipped for an app whose persisted index holds more than 4000 runs,
   and prints nothing past a 300 ms budget.
 - Never for inner runs (`--parent`, an enclosing run's `VMN_EXPERIMENT_ID`,
@@ -1195,9 +1200,9 @@ refused); `vmn-exp watch --compact` does the same for failed/stuck runs.
 Import runs from an MLflow FileStore or tracking server:
 
 ```sh
-vmn-exp import-mlflow --mlruns ./mlruns my_app                        # no mlflow package needed
-vmn-exp import-mlflow --tracking-uri http://mlflow:5000 my_app        # needs mlflow-skinny
-vmn-exp import-mlflow --mlruns ./mlruns --experiment my_exp --experiment 3 --dry-run my_app
+vmn-exp import-mlflow my_app --mlruns ./mlruns                        # no mlflow package needed
+vmn-exp import-mlflow my_app --tracking-uri http://mlflow:5000        # needs mlflow-skinny
+vmn-exp import-mlflow my_app --mlruns ./mlruns --experiment my_exp --experiment 3 --dry-run
 ```
 
 | Flag | Description |
@@ -1242,7 +1247,8 @@ tags: [baseline, transformer-v2]
 
 `params` are kept verbatim (strings and bools included; query them as
 `params.<name>`); finite numeric params also fold into `metrics`. `exp diff`
-prints a `params:` delta next to the `metrics:` delta. The `hypothesis` is
+prints a `params:` delta next to the `metrics:` delta. The `hypothesis` of
+`create`/`run` (not `add -f`'s, whose `structured` entry is not matched) is
 matched as text by [`similar`](#similar), like an
 [intent](#intent-what-a-run-is-for) (which can be long and is replaceable later).
 

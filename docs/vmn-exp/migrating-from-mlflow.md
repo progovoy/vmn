@@ -25,19 +25,19 @@ separate apps).
 
 ```sh
 # Import all experiments in mlruns/ into the vmn app "my_app"
-vmn-exp import-mlflow --mlruns ./mlruns my_app
+vmn-exp import-mlflow my_app --mlruns ./mlruns
 
 # Import only one experiment (by name or numeric id)
-vmn-exp import-mlflow --mlruns ./mlruns --experiment "Baseline" my_app
+vmn-exp import-mlflow my_app --mlruns ./mlruns --experiment "Baseline"
 
 # Preview without writing anything
-vmn-exp import-mlflow --mlruns ./mlruns --dry-run my_app
+vmn-exp import-mlflow my_app --mlruns ./mlruns --dry-run
 
 # Skip artifact files (metadata and metrics only)
-vmn-exp import-mlflow --mlruns ./mlruns --skip-artifacts my_app
+vmn-exp import-mlflow my_app --mlruns ./mlruns --skip-artifacts
 
 # Include runs MLflow marked DELETED
-vmn-exp import-mlflow --mlruns ./mlruns --include-deleted my_app
+vmn-exp import-mlflow my_app --mlruns ./mlruns --include-deleted
 ```
 
 ### From a tracking server
@@ -45,9 +45,9 @@ vmn-exp import-mlflow --mlruns ./mlruns --include-deleted my_app
 ```sh
 pip install mlflow-skinny   # or vmn-exp[mlflow]
 
-vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 my_app
-vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 \
-    --experiment "Production" --workers 16 my_app
+vmn-exp import-mlflow my_app --tracking-uri http://mlflow.internal:5000
+vmn-exp import-mlflow my_app --tracking-uri http://mlflow.internal:5000 \
+    --experiment "Production" --workers 16
 ```
 
 `--tracking-uri` uses the MLflow client API (requires `mlflow-skinny`).
@@ -118,8 +118,8 @@ resumed K, refreshed R, failed F`. A second refresh changes nothing.
 `--dry-run` still only counts the runs it would import.
 
 ```sh
-vmn-exp import-mlflow --mlruns ./mlruns --refresh-features my_app
-vmn-exp import-mlflow --tracking-uri http://mlflow:5000 --refresh-features --repo ~/src/project my_app
+vmn-exp import-mlflow my_app --mlruns ./mlruns --refresh-features
+vmn-exp import-mlflow my_app --tracking-uri http://mlflow:5000 --refresh-features --repo ~/src/project
 ```
 
 **Code changes from a checkout.** MLflow keeps no diff, only the commit a run

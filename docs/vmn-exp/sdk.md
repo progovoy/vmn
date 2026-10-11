@@ -787,7 +787,8 @@ similar_runs("my_app", ref=None, context="label smoothing", text_only=True, all_
   There is no working-tree target here (`vmn-exp similar <app>` without `-v`
   has one). `query` narrows the candidates like `list_runs`'s; `all_apps`
   searches every app of the storage. The checkout's conf.yml, when found, gives
-  each app's metrics schema and `experiment.similar.weights`. `ValueError` for
+  each app's metrics schema; every app's candidates are scored under the target
+  app's `experiment.similar.weights`. `ValueError` for
   an unknown ref (or `text_only` without a `context`), `QueryError` on a bad
   `query`.
 - `run.similar(top=10)` flushes the run's pending log first, so its own

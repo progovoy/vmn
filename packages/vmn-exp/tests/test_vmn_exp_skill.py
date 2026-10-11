@@ -166,3 +166,27 @@ def test_vmn_exp_skill_names_the_no_patch_reasons(capfd):
 def test_vmn_exp_skill_description_mentions_similar_runs_and_is_yaml_safe():
     assert "similar" in DESCRIPTION
     assert ": " not in DESCRIPTION and "#" not in DESCRIPTION
+
+
+def _flat_section(capfd):
+    return " ".join(_similar_section(capfd).split())
+
+
+def test_vmn_exp_skill_glosses_no_code_with_runs_recorded_from_an_exported_tree(capfd):
+    from vmn_exp.cli.views import patch_payload
+
+    git_free = {"from_snapshot": True, "base_commit": "a" * 40}
+    assert patch_payload(git_free, {}) == {"text": None, "reason": "no_code"}
+    section = _flat_section(capfd)
+    assert ("`no_code` (MLflow imports, clean trees, runs recorded git-free from an "
+            "exported tree)") in section
+
+
+def test_vmn_exp_skill_says_untracked_files_is_listed_only_when_readable(capfd):
+    from vmn_exp.cli.views import patch_payload
+
+    unreadable = patch_payload({"base_commit": "a" * 40}, {"untracked_files": b"not a tarball"})
+    assert unreadable == {"text": None, "reason": "untracked_only"}
+    section = _flat_section(capfd)
+    assert ("`untracked_only` (untracked files only, listed in `untracked_files` "
+            "when readable)") in section

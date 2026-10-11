@@ -533,9 +533,11 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 
 - `intent` is the first 2 KB of the run's intent text with its keywords, or
   `null`; `truncated` says more runs matched than `top`.
-- Scored from the apps' index snapshots (never the Postgres search rows), under
-  each app's conf `experiment.similar.weights`. Archived runs only with
-  `archived=1`.
+- Scored from the apps' index snapshots (never the Postgres search rows). A
+  run's similar runs, in every app searched, are scored under the target app's
+  (the run's) conf `experiment.similar.weights`, in git workspaces only (a
+  store workspace has no conf); a text query on its text alone. Archived runs
+  only with `archived=1`.
 - `{verstr}` is a full verstr (no `latest`/`@N`). `top` is 1..100; a blank
   `text` or one over 4 KB, a bad app or verstr: 400. An unknown run or
   workspace: 404. Viewer role; ETag/304.

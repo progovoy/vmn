@@ -77,7 +77,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="Version string(s). Repeatable for compare; prune deletes exactly "
                            "the named run(s) instead of applying --keep/--older-than. "
                            "similar: without -v/--latest it compares the current working "
-                           "tree (unlike show/restore/export, where no ref is the latest run)")
+                           "tree, to ask before you submit: the one action whose missing ref "
+                           "means the working tree (show/restore/export take the latest run)")
     pexp.add_argument("--note", default=None, help="Note or description")
     pexp.add_argument("-f", "--file", default=None,
                       help="YAML file with structured notes/params")
