@@ -64,8 +64,12 @@ Defaults live in `core/similar_score.py` (`DEFAULT_WEIGHTS`, `resolve_weights`);
 `experiment.similar.weights.<signal>` overrides them (valid numbers ≥ 0 only; anything
 else is ignored). A signal missing on either side is left out of the score
 (renormalised), not counted as 0, so imported MLflow runs (no code) are still comparable
-on params/inputs/objective. `files`/`symbols` get half weight when either side's changes
-are a branch's cumulative diff (`changed_source: commit`, §3.6). Reasons are the top 3
+on params/inputs/objective. A features entry naming no changes is a clean tree, not
+missing data: two clean trees score 1.0 on `files`/`symbols`, a clean tree against changed
+code 0 (unknown: no features entry, `source: mlflow`, an export's author-only version-0
+entry, a `backfill` entry on a dirty code verstr, i.e. a partial one). `files`/`symbols`
+get half weight when either side's changes are a branch's cumulative diff
+(`changed_source: commit`, §3.6). Reasons are the top 3
 contributions, candidate first (`same dataset imagenet@3`, `2 shared functions:
 loss.py::focal_loss, …`, `lr 3e-4 vs 1e-4`, `shared: focal loss, class imbalance`).
 

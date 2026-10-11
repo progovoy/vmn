@@ -28,17 +28,19 @@ def build_intent_entry(text, keywords=None, generator=None) -> dict:
     comma-separated string) stripped and deduplicated case-insensitively, the
     first spelling kept, at most ``MAX_KEYWORDS``; numbers and dates among
     them, and a number or date *generator*, become text. ValueError on an
-    empty or non-string text and on keywords or a generator of any other type."""
+    empty or non-string text, on keywords or a generator of any other type,
+    and on a lone surrogate (no UTF-8) in any of them."""
     text = text.strip() if isinstance(text, str) else ""
     if not text:
         raise ValueError("An intent needs a non-empty text")
-    text, truncated = _capped_text(text)
+    text, truncated = _capped_text(_utf8(text, "The intent text"))
     entry = {"type": "intent", "text": text}
     kept = clean_keywords(keywords)
     if kept:
         entry["keywords"] = kept
     if generator is not None:
-        generator = _scalar_text(generator, "The intent generator must be a string")
+        generator = _utf8(_scalar_text(generator, "The intent generator must be a string"),
+                          "The intent generator")
     if generator:
         entry["generator"] = generator
     entry["source"] = "user"
@@ -95,7 +97,7 @@ def clean_keywords(keywords):
                          f"string, got {_short_repr(keywords)}")
     kept, seen = [], set()
     for keyword in keywords:
-        word = _scalar_text(keyword, "Intent keywords must be strings")
+        word = _utf8(_scalar_text(keyword, "Intent keywords must be strings"), "An intent keyword")
         if word and word.casefold() not in seen:
             seen.add(word.casefold())
             kept.append(word)
@@ -107,6 +109,17 @@ def _scalar_text(value, what):
     if isinstance(value, bool) or not isinstance(value, _SCALARS):
         raise ValueError(f"{what}, got {_short_repr(value)}")
     return str(value).strip()
+
+
+def _utf8(text, what):
+    """*text*, when it is UTF-8; ValueError naming *what* on a lone
+    surrogate (a cut emoji in JSON, stdin read with ``surrogateescape``)."""
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError(f"{what} is not valid UTF-8 (a lone surrogate): "
+                         f"{_short_repr(text)}") from None
+    return text
 
 
 def _split_if_text(keywords):

@@ -1030,7 +1030,11 @@ Each signal is a similarity in [0, 1]; the score is their weighted mean:
 
 A signal missing on either side is left out and the rest renormalised (it is
 unknown, not different), so an MLflow import without code still compares on
-params, inputs and metrics. `files`/`symbols` count half when either side's
+params, inputs and metrics. A run whose features entry names no changes ran a
+clean tree: two clean trees score 1 on `files`/`symbols`, a clean tree against
+changed code 0. Changes stay unknown without a features entry, for MLflow
+imports, for an export's author-only entry and for a backfill that found the
+code object gone. `files`/`symbols` count half when either side's
 changes are a branch's cumulative diff (`changed_source: commit`, from
 `import-mlflow --repo`). Conf overrides, per app:
 

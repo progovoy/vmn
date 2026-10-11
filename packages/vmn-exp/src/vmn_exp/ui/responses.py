@@ -52,13 +52,15 @@ def _default(value):
 
 
 def _stdlib_dumps(content):
+    # "replace": a lone surrogate (a hand-written log) is no UTF-8; it goes
+    # out as "?" instead of failing the whole answer.
     return json.dumps(
         content,
         ensure_ascii=False,
         allow_nan=False,
         separators=(",", ":"),
         default=_default,
-    ).encode("utf-8")
+    ).encode("utf-8", "replace")
 
 
 def _safe_stdlib(content):
@@ -69,12 +71,12 @@ def _safe_stdlib(content):
 
 
 def render_json(content):
-    """Compact UTF-8 JSON bytes; NaN/inf become ``null``."""
+    """Compact UTF-8 JSON bytes; NaN/inf become ``null``, a lone surrogate ``?``."""
     if orjson is not None:
         try:
             # orjson already writes non-finite floats as null.
             return orjson.dumps(content, default=_default, option=orjson.OPT_NON_STR_KEYS)
-        except TypeError:  # e.g. an int beyond 64 bits
+        except TypeError:  # e.g. an int beyond 64 bits, a lone surrogate
             pass
     return _safe_stdlib(content)
 

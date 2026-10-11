@@ -12,7 +12,9 @@ the optimised metric names), ``branch`` (equality) and ``text`` (BM25,
 normalised by the caller — :mod:`vmn_exp.core.similar`).
 
 A signal missing on either side is left out and the weights of the others
-renormalised: it is unknown, not different. Reasons read candidate first
+renormalised: it is unknown, not different. A clean tree's changes are
+known to be none: two clean trees are alike in ``files`` and ``symbols``,
+and a clean tree against changed code is not. Reasons read candidate first
 (``lr 3e-4 vs 1e-4`` = the candidate's lr vs the target's). Pure; odd
 values (non-finite or extreme params, conf weights of the wrong shape) never
 raise.
@@ -35,6 +37,7 @@ REASONS = 3
 LISTED = 3
 
 SAME_VERSION, SAME_DATASET, SAME_SCRIPT = 0.7, 0.6, 0.7
+CLEAN_TREES = "both clean trees"
 # (low, high] closeness of base versions that first differ at major, minor,
 # patch, hotfix; a version core equal but for a prerelease scores SAME_CORE.
 _VERSION_BANDS = ((0.0, 0.15), (0.15, 0.35), (0.35, 0.55), (0.55, 0.65))
@@ -147,12 +150,28 @@ def _code(a, b):
     return near, (f"base version {b.base} vs {a.base}" if near else None)
 
 
-def _jaccard(a, b, describe):
-    """Jaccard of two sets, with *describe(sorted shared items)* as the reason."""
-    if not a or not b:
-        return None
+def _overlap(a, b, describe):
+    """Jaccard of two sets, not both empty, with *describe(sorted shared
+    items)* as the reason."""
     shared = sorted(a & b)
     return len(shared) / len(a | b), (describe(shared) if shared else None)
+
+
+def _jaccard(a, b, describe):
+    """:func:`_overlap` of two sets; None when either is empty."""
+    return _overlap(a, b, describe) if a and b else None
+
+
+def _changed(a, b, field, describe, clean_reason=None):
+    """The overlap of two runs' changed *field* (``files`` or ``symbols``):
+    1 for two clean trees, 0 for a clean tree against changes naming some;
+    None when a side's changes are unknown or, changed, name none."""
+    if a.clean and b.clean:
+        return 1.0, clean_reason
+    mine, theirs = getattr(a, field), getattr(b, field)
+    if not (mine or a.clean) or not (theirs or b.clean):
+        return None
+    return _overlap(mine, theirs, describe)
 
 
 def _short_symbol(symbol):
@@ -244,8 +263,8 @@ def signal_values(a, b):
     both profiles carry."""
     found = {
         "code": _code(a, b),
-        "files": _jaccard(a.files, b.files, _shared_files),
-        "symbols": _jaccard(a.symbols, b.symbols, _shared_functions),
+        "files": _changed(a, b, "files", _shared_files, CLEAN_TREES),
+        "symbols": _changed(a, b, "symbols", _shared_functions),
         "inputs": _inputs(a, b),
         "params": _params(a, b),
         "entrypoint": _entrypoint(a, b),
