@@ -568,8 +568,12 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         """Say what this run is for: markdown *text* (cut at 16 KiB),
         *keywords* (synonyms, the problem's usual names) and the *generator*
         (model id) that wrote it, if any. Matched by similar-run search; the
-        latest intent wins, also on a finished run."""
+        latest intent wins, also on a finished run — nothing ships its log
+        any more, so the entry is synced to the remote at once."""
         self._append(dict(build_intent_entry(text, keywords, generator), timestamp=now_iso()))
+        if self._finished:
+            self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
+                               self.id, get_writer_id())
 
     # -- internals ---------------------------------------------------------
 
