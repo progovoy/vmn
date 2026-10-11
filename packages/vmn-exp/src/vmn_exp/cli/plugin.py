@@ -39,6 +39,7 @@ EXPERIMENT_ACTIONS = [
     "push",
     "compact",
     "export-metrics",
+    "similar-backfill",
 ]
 
 
@@ -100,7 +101,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
                       help="prune: print what would be deleted, delete nothing; "
                            "rerun: print the plan, create nothing; "
-                           "push: print what would be pushed, write nothing remote")
+                           "push: print what would be pushed, write nothing remote; "
+                           "similar-backfill: print what would be backfilled, write nothing")
     pexp.add_argument("--print", dest="print_only", action="store_true", default=False,
                       help="rerun: print the resolved command, cwd, code identity and a "
                            "recipe (with --json as JSON); runs and creates nothing")
@@ -179,6 +181,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="export-metrics: output format (default: from -o, else parquet)")
     pexp.add_argument("--all-finished", action="store_true", default=False,
                       help="compact: every succeeded or failed run")
+    pexp.add_argument("--all-apps", action="store_true", default=False,
+                      help="similar-backfill: every app of the store, not just <name>")
     pexp.add_argument("--depth", type=int, default=1,
                       help="lineage: follow links this many hops (default: 1)")
     pexp.add_argument("--parent", default=None,
@@ -326,6 +330,7 @@ def _exp_run_without_repo(args):
         experiment_rewind,
         experiment_run,
         experiment_show,
+        experiment_similar_backfill,
         experiment_storage_params,
     )
 
@@ -339,6 +344,7 @@ def _exp_run_without_repo(args):
         "prune": experiment_prune,
         "rewind": experiment_rewind,
         "push": experiment_push,
+        "similar-backfill": experiment_similar_backfill,
     }
 
     handler = dispatch.get(action)

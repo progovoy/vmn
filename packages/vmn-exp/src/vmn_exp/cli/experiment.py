@@ -383,6 +383,8 @@ def handle_experiment(vmn_ctx):
         from vmn_exp.cli.lineage import experiment_lineage
 
         return experiment_lineage(storage, _app_name(vcs, args), args)
+    elif action == "similar-backfill":
+        return experiment_similar_backfill(vcs, params, storage, args)
     else:
         VMN_LOGGER.error(f"Unknown experiment action: {action}")
         return 1
@@ -569,6 +571,12 @@ def experiment_rewind(vcs, params, storage, args):
     from vmn_exp.cli.rewind import experiment_rewind as rewind
 
     return rewind(storage, _app_name(vcs, args), args)
+
+
+def experiment_similar_backfill(vcs, params, storage, args):
+    from vmn_exp.cli.similar_backfill import experiment_similar_backfill as backfill
+
+    return backfill(storage, _app_name(vcs, args), args)
 
 
 def experiment_push(vcs, params, storage, args):
