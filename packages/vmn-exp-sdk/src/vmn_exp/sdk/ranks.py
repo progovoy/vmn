@@ -109,6 +109,10 @@ class NoOpRun:
 
         return resolved_version(_resolve_storage(storage), ref, kind)
 
+    def similar(self, top=10):
+        """No runs: a run that records nothing has nothing to compare."""
+        return []
+
     def _ignore(self, *args, **kwargs):
         return None
 

@@ -26,6 +26,7 @@ from vmn_exp.cli.run import (  # noqa: F401
 from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
+from vmn_exp.cli.similar_hint import print_hint
 from vmn_exp.cli.views import (
     dumps,
     event_log,
@@ -291,7 +292,7 @@ def auto_init(vmn_ctx):
 # Actions that never write the store (they take no repo lock either).
 READ_ONLY_ACTIONS = frozenset({"list", "show", "compare", "diff", "export", "import-mlflow",
                                "watch", "lineage", "importance",
-                               "export-metrics"})
+                               "export-metrics", "similar"})
 
 
 def _open_checked_storage(vcs, params, action, args=None):
@@ -383,6 +384,8 @@ def handle_experiment(vmn_ctx):
         from vmn_exp.cli.lineage import experiment_lineage
 
         return experiment_lineage(storage, _app_name(vcs, args), args)
+    elif action == "similar":
+        return experiment_similar(vcs, params, storage, args)
     elif action == "similar-backfill":
         return experiment_similar_backfill(vcs, params, storage, args)
     else:
@@ -444,6 +447,7 @@ def experiment_create(vcs, params, storage, args):
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)
 
+    print_hint(storage, app_name, verstr, args, experiment_conf(vcs))
     print(verstr)
     return 0
 
@@ -571,6 +575,12 @@ def experiment_rewind(vcs, params, storage, args):
     from vmn_exp.cli.rewind import experiment_rewind as rewind
 
     return rewind(storage, _app_name(vcs, args), args)
+
+
+def experiment_similar(vcs, params, storage, args):
+    from vmn_exp.cli.similar import experiment_similar as similar
+
+    return similar(vcs, storage, _app_name(vcs, args), args)
 
 
 def experiment_similar_backfill(vcs, params, storage, args):

@@ -571,6 +571,15 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         latest intent wins, also on a finished run."""
         self._append(dict(build_intent_entry(text, keywords, generator), timestamp=now_iso()))
 
+    def similar(self, top=10):
+        """The past runs most like this one — its code, changes, params,
+        inputs and intent so far: :func:`vmn_exp.sdk.reader.similar_runs`
+        items, under the checkout's conf."""
+        from vmn_exp.core.similar_search import find
+
+        self._log_buffer.flush()
+        return find(self._storage, self.app_name, self.id, self._exp_conf, top=top)
+
     # -- internals ---------------------------------------------------------
 
     def _append(self, entry):
