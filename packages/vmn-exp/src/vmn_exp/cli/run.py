@@ -243,7 +243,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
         repo_lock.release()
 
     exp_conf = experiment_conf(vcs)
-    print_hint(storage, app_name, verstr, args, exp_conf)
+    print_hint(storage, app_name, verstr, args, exp_conf, command=run_cmd)
     return _Supervision(
         storage, app_name, verstr, args, exp_conf,
         root=getattr(vcs, "vmn_root_path", None),
