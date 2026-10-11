@@ -172,16 +172,17 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
     def _local_files(self, app_name, keys):
         """The local copy's listing; with a remote, its log files carry their
         identity: a merge may rewrite one (:mod:`cached_log_merge`), and a
-        reader may switch between a writer's two copies."""
+        reader may switch between a writer's two copies. Without one, the
+        local root may be a plugin store: its hooks get their base signatures."""
         if not self._local_is_replica:
             return {}
-        identity = self._remote is not None
+        identity = {"identity": True} if self._remote is not None else {}
         if keys is None:
-            return self._local.list_files(app_name, identity=identity)
+            return self._local.list_files(app_name, **identity)
         files = {}
         for key in keys:
             try:
-                found = self._local.record_files(app_name, key, identity)
+                found = self._local.record_files(app_name, key, **identity)
             except ValueError:
                 continue
             if METADATA_FILE in found:
