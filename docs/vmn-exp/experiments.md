@@ -554,8 +554,11 @@ vmn-exp show my_app -v @1 --json
 
 `--json` prints one object: the `list --json` row keys plus `base_commit`,
 `format_version`, `has_dep_patches`, `patches` (`{working_tree|local_commits:
-line count}`), `log` (newest 50, or all with `--full-log`), `log_total` and
-`media_counts`.
+line count}`), `log` (newest 50, or all with `--full-log`), `log_total`,
+`media_counts` and `features` (the run's newest features entry at the highest
+`features_version`, or `null`).
+The `features` entry is a fact about the run, not an event, so neither the
+text log nor `log`/`log_total` include it.
 
 ### `compare`
 
@@ -1281,6 +1284,7 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_WORKING_DIR` | the directory `run` starts the command in |
 | `VMN_MODE` | `disabled`: `run` execs the command without recording |
 | `VMN_CAPTURE_ENV` | `0`/`false`/`no`/`off` disables [environment capture](#environment-capture) |
+| `VMN_EXP_AUTHOR` | who a new run's `features` entry names as its author when git config has no `user.email` |
 | `VMN_SYSTEM_METRICS` | `0`/`false`/`no`/`off` disables `sys_*` sampling |
 | `VMN_EXP_OUTPUT_CAP_MB` | `output.log` cap (`--output-cap-mb`) |
 | `VMN_EXP_KILL_GRACE_SEC` | signal grace (`--kill-grace-sec`) |

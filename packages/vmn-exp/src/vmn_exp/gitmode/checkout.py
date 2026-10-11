@@ -12,6 +12,7 @@ from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.writer import create_run, merge_conf_into_params
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.coldstart import build_vcs, tracked_vcs
+from vmn_exp.gitmode.features import capture_features
 from vmn_exp.sdk import _resolve_app_name
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.sdk.create import _maybe_capture_env, pick_parent
@@ -66,7 +67,8 @@ def record_run(vcs, storage, captured, code, note, create_data, parent, name=Non
     """Claim a verstr for *captured* and write the record and its create entry.
 
     *code* is :func:`capture.ensure_code`'s ``(key, summary)``: the record
-    references the stored code object instead of carrying the patches.
+    references the stored code object instead of carrying the patches. The
+    run's ``features`` entry follows the create entry (best-effort).
     """
     code_verstr = captured.code_verstr
     template = _build_snapshot_metadata(
@@ -92,4 +94,5 @@ def record_run(vcs, storage, captured, code, note, create_data, parent, name=Non
         parent=parent,
         name=name,
         env=env,
+        features=capture_features(vcs, captured),
     )

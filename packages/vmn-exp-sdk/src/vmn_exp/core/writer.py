@@ -382,6 +382,7 @@ def create_run(
     parent=None,
     name=None,
     env=None,
+    features=None,
 ):
     """Claim a run verstr for *template* and write the record and its create entry.
 
@@ -393,6 +394,9 @@ def create_run(
     in the metadata under ``"env"`` and the full dict is written to ``env.yml``
     next to the record.  All env-related failures are best-effort: a write
     error never prevents the run from being created.
+
+    *features*, a ``features`` log entry (``core.features.build_features_entry``),
+    is written right after the create entry, in the same write.
     """
     effective_template = template
     if env is not None:
@@ -430,5 +434,10 @@ def create_run(
     entry = create_log_entry("create", note=note)
     if create_data:
         entry.update(create_data)
-    append_to_log(storage, app_name, verstr, entry)
+    if features is None:
+        append_to_log(storage, app_name, verstr, entry)
+    else:
+        features = {"timestamp": entry["timestamp"], **features}
+        append_entries_to_log(storage, app_name, verstr,
+                              [sanitize_entry(entry), sanitize_entry(features)])
     return verstr
