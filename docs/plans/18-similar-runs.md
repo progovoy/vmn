@@ -112,8 +112,11 @@ truncated: true                 # only when caps cut a list
   features=)` writes it in the same batch as the `create` entry. Email fallbacks:
   `VMN_EXP_AUTHOR` (`env`), then the first local commit's `From:` (`commit`).
 - Git-free (`core/from_snapshot.py` via `core/snapshot_features.py`): an exported tree
-  carries no patches, so the facts are copied from the exported run's own features entry
-  in the sibling `vmn_experiment.yml` (`source: export`, keeping its version). Email: git
+  carries no patches, so the facts are copied from the exported run's own features, which
+  `vmn-exp export` writes with `exported_by` to the sibling `vmn_features.yml` (`source:
+  export`, keeping its version; read before the SDK takes the `VMN_EXPERIMENT_DIR` lock;
+  the exported run's log in `vmn_experiment.yml` is read only for an older export without
+  it, up to 1 MiB). Email: git
   config in the tree, else `exported_by` (which `vmn-exp export` now writes), else
   `VMN_EXP_AUTHOR`. Without a source entry only the author is known and the entry is
   written at `features_version: 0`, so the backfill still selects it.
@@ -421,7 +424,11 @@ fields), `ui.md` (routes, card, search mode), `server.md` (`/api/v1/similar`),
 - Grouping: by run tree root (whole sweep incl. nested SDK runs) rather than direct
   parent; exclusion drops the target's whole tree.
 - Symbols: from hunk headers **and** definitions on added/removed lines (new files and
-  functions appended below a hunk context count).
+  functions appended below a hunk context count); a definition in a hunk's context moves
+  the header's name to it, so 3-line-context patches name what `-U0` does (a hunk whose
+  header names nothing still reads no context definitions).
+- vmn's own commits (`From: vmn`, left unpushed by an SDK cold start) are skipped:
+  `features_from_patches(..., skip_authors=)`, `gitmode/features.py` passes `VMN_USER_NAME`.
 - Entrypoint: looks past launcher executables and `python -m` launcher modules.
 - Intent: the fold lets a blank text clear it; writers cannot write one.
 - No `fold_row` keys for features/intent/hypothesis (side tables), but `author` and

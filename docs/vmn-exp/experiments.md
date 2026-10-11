@@ -720,7 +720,9 @@ already speak `vmn goto`. `goto --force` matches `restore --force`.
 
 Package a run (default: latest) — materialized code without `.git`,
 `vmn_metadata.yml`, `vmn_experiment.yml` (metadata, log and `exported_by`: the
-exporter's writer, git email and OS user), `artifacts/` and `outputs/` —
+exporter's writer, git email and OS user), `vmn_features.yml` (the run's
+[features](#what-a-run-records-for-similar) and `exported_by`: all a git-free
+run of the tree reads), `artifacts/` and `outputs/` —
 into a directory or a `.tar.gz`/`.tgz` (default `<verstr>.tar.gz`). Prints the
 output path. Runs without code are refused.
 
@@ -1102,10 +1104,17 @@ truncated: true                            # only when a cap cut a list
 - A rerun copies the original's facts with the rerunner as the author
   (`source: rerun`); a fork captures its own and inherits neither features nor
   intent. A [git-free](#git-free-mode) run copies the exported run's facts from
-  `vmn_experiment.yml` (`source: export`; author email: git config in the tree,
-  else the export's `exported_by`, else `VMN_EXP_AUTHOR`); without that file
-  only the author is known and the entry has `features_version: 0`, so
-  `similar-backfill` completes it.
+  the export's `vmn_features.yml` (`source: export`; author email: git config in
+  the tree, else the export's `exported_by`, else `VMN_EXP_AUTHOR`). An older
+  export without that file is read from `vmn_experiment.yml`'s log, only while
+  that file is at most 1 MiB; without the facts only the author is known and the
+  entry has `features_version: 0`, so `similar-backfill` completes it.
+- vmn's own commits (init, stamp: authored as `vmn`; an SDK cold start leaves
+  them unpushed) are not the run's: their files, subjects and author are left
+  out of capture, rerun and backfill entries.
+- A change's function is the one its hunk header names (git's funcname, the
+  function above the hunk's context) or, when the hunk's leading context holds
+  a definition, that one: `git diff`'s 3 context lines name what `-U0` does.
 - The fold keeps the entry with the highest `features_version`, then the
   latest. `show` leaves it out of the log; `show --json` gives it as
   `features`.
@@ -1374,7 +1383,7 @@ directory. In this mode `create`, `run`, `add`, `list`, `show`, `compare`,
 `prune`, `rewind`, `push`, `similar-backfill` and `similar` (with `-v`/`--latest`
 or `--text-only`) work; other actions need a checkout. A run recorded this way
 copies the exported run's [features](#what-a-run-records-for-similar) from
-`vmn_experiment.yml`.
+`vmn_features.yml`.
 `start_run()` honours the same variables
 ([sdk.md](sdk.md#runs-without-a-git-checkout-containers)).
 
