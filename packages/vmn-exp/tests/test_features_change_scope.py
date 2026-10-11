@@ -1,7 +1,8 @@
 """The function a change is in, from git's default 3-line-context patches (what
 capture and the backfill parse): a hunk header names the function *above* the
-hunk's leading context, so a definition in that context is the change's scope
-— the name a ``-U0`` diff (``import-mlflow --repo``) gives the same edit."""
+hunk's leading context, so a column-0 definition in that context is the change's
+scope — the name a ``-U0`` diff (``import-mlflow --repo``) gives the same edit
+under git's default funcname, which skips methods and nested defs."""
 import os
 import subprocess
 
@@ -123,3 +124,77 @@ def test_a_dep_files_edit_names_the_dep_function_it_is_in(repo):
     diff, _, _ = _both(repo, "lib.py")
     assert "@@ def helper():" in diff
     assert _symbols(diff, prefix="../dep") == ["../dep/lib.py::other"]
+
+
+NET = """\
+import torch
+
+
+class Net(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc = torch.nn.Linear(4, 4)
+
+    def forward(self, x):
+        h = self.fc(x)
+        h = torch.relu(h)
+        h = self.fc(h)
+        h = torch.relu(h)
+        h = self.fc(h)
+        return h
+
+
+def train(model):
+    def evaluate():
+        return model.eval()
+    for epoch in range(10):
+        lr = 0.1
+    return lr
+"""
+TRAINER = """\
+class Trainer {
+  constructor(m) {
+    this.m = m;
+  }
+
+  step(batch) {
+    const loss = this.m(batch);
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    return loss;
+  }
+}
+"""
+
+
+def _edit_symbols(repo, name, old, new):
+    """The -U3 diff and the -U3 / -U0 symbols of one edit, then the edit undone."""
+    _edit(repo, name, old, new)
+    found = _both(repo, name)
+    repo[1]("checkout", "--", name)
+    return found
+
+
+def test_a_methods_edits_near_its_def_and_deep_in_it_name_what_the_default_driver_does(repo):
+    _commit(repo, {"net.py": NET})
+    near_diff, near, near0 = _edit_symbols(repo, "net.py", "self.fc(x)\n", "self.fc(x) * 2\n")
+    _, deep, deep0 = _edit_symbols(repo, "net.py", "        return h\n", "        return h * 2\n")
+    assert "\n     def forward(self, x):\n" in near_diff
+    assert near == deep == near0 == deep0 == ["net.py::Net"]
+
+
+def test_an_edit_after_a_nested_def_names_the_outer_function(repo):
+    _commit(repo, {"net.py": NET})
+    _edit(repo, "net.py", "lr = 0.1", "lr = 0.2")
+    diff, symbols, unified0 = _both(repo, "net.py")
+    assert "\n     def evaluate():\n" in diff
+    assert symbols == ["net.py::train"] == unified0
+
+
+def test_a_javascript_method_edit_near_its_def_names_its_class_as_git_does(repo):
+    _commit(repo, {"trainer.js": TRAINER})
+    _edit(repo, "trainer.js", "this.m(batch);", "this.m(batch) * 2;")
+    diff, symbols, unified0 = _both(repo, "trainer.js")
+    assert "\n   step(batch) {\n" in diff
+    assert symbols == ["trainer.js::Trainer"] == unified0

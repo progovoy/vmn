@@ -1114,7 +1114,11 @@ truncated: true                            # only when a cap cut a list
   out of capture, rerun and backfill entries.
 - A change's function is the one its hunk header names (git's funcname, the
   function above the hunk's context) or, when the hunk's leading context holds
-  a definition, that one: `git diff`'s 3 context lines name what `-U0` does.
+  a definition at column 0, that one. Without a `diff=` driver in
+  `.gitattributes` (git's default funcname), `git diff`'s 3 context lines then
+  name what `-U0` does: a method's edits all name its class, an edit after a
+  nested def names the outer function. With a driver such as `diff=python`, an
+  edit in the first lines of a method may still name the method above it.
 - The fold keeps the entry with the highest `features_version`, then the
   latest. `show` leaves it out of the log; `show --json` gives it as
   `features`.

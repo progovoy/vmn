@@ -9,8 +9,10 @@ per definition an added or removed line makes
 ``Subject:`` without git's ``[PATCH n/m]`` and its ``From:`` as ``{"name",
 "email"}``. A change is in the function its hunk header names (git's funcname:
 the one *above* the hunk's leading context) or in the one a context line before
-it defines, so a 3-line-context patch names what a ``-U0`` one does; a hunk whose
-header names nothing reads no definitions from its context. Headers are read only
+it defines at column 0 (a line git's default funcname picks itself), so without
+a ``diff=`` driver a 3-line-context patch names what a ``-U0`` one does; a method
+or a nested def in the context leaves the header's name. A hunk whose header
+names nothing reads no definitions from its context. Headers are read only
 after an mbox ``From <sha> <date>`` line and until the blank line ending them;
 a cover letter (``[PATCH 0/n]``) is skipped whole, as is a commit whose ``From:``
 name is one of *skip_authors*. A ``diff --git`` line in a
@@ -35,6 +37,7 @@ from vmn_exp.core.features_symbols import defined_symbol, hunk_symbol
 _MBOX_FROM = re.compile(r"From (?:[0-9a-f]{40}|[0-9a-f]{64})(?: |$)")
 _HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@(.*)")
 _HUNK_LINE = ("+", "-", " ", "\\", "")  # "": a context line a message cleanup stripped
+_FUNCNAME_LINE = re.compile(r"[A-Za-z_$]")  # git's default funcname: not a method, not a nested def
 _SUBJECT_PREFIX = re.compile(r"^\[[^\]]*\]\s*")
 _COVER_LETTER = re.compile(r"^\[[^\]]*\b0+/\d+\]")
 _DIFFSTAT = re.compile(r" \S.* \| +(?:\d|Bin )")  # a diffstat line
@@ -207,8 +210,9 @@ class _Parser:
             self.scope, self.scope_named = hunk_symbol(context), False
 
     def _context_line(self, text):
-        """A definition in the context moves the scope the hunk header named."""
-        name = self.scope and defined_symbol(text, self.path)
+        """A definition in the context moves the scope the hunk header named,
+        when it is a line git's default funcname would name itself."""
+        name = self.scope and _FUNCNAME_LINE.match(text) and defined_symbol(text, self.path)
         if name:
             self.scope, self.scope_named = name, False
 
