@@ -44,7 +44,11 @@ SAME_CORE = 0.65
 def _weight(value):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value) if math.isfinite(value) and value >= 0 else None
+    try:
+        value = float(value)
+    except OverflowError:  # an int no float holds
+        return None
+    return value if math.isfinite(value) and value >= 0 else None
 
 
 def resolve_weights(overrides=None, intent=False):
