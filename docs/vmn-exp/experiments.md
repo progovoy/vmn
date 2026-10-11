@@ -1112,13 +1112,19 @@ truncated: true                            # only when a cap cut a list
 - vmn's own commits (init, stamp: authored as `vmn`; an SDK cold start leaves
   them unpushed) are not the run's: their files, subjects and author are left
   out of capture, rerun and backfill entries.
-- A change's function is the one its hunk header names (git's funcname, the
-  function above the hunk's context) or, when the hunk's leading context holds
-  a definition at column 0, that one. Without a `diff=` driver in
-  `.gitattributes` (git's default funcname), `git diff`'s 3 context lines then
-  name what `-U0` does: a method's edits all name its class, an edit after a
-  nested def names the outer function. With a driver such as `diff=python`, an
-  edit in the first lines of a method may still name the method above it.
+- A change's function is what git's default funcname (no `diff=` driver in
+  `.gitattributes`) names for it: the nearest line above it in the old file
+  that starts with a letter, `_` or `$`. That is a def or class, but also an
+  `if __name__` block, a module constant or a text file's prose, and never a
+  method or a nested def (a method's edits all name its class). A hunk starts
+  with its header's name and each such context or removed line moves it for
+  the changes below, so `git diff`'s 3 context lines name what `-U0`
+  (`import-mlflow --repo`) does. With a driver such as
+  `diff=python`, `-U0` names what the driver picks (methods, not
+  `if __name__` blocks), which can differ. Not handled yet: a hunk at the top
+  of a file, or with only blank, indented or comment lines above it, gets no
+  function (`-U0` names, e.g., the file's first function); it records only
+  the definitions it adds or removes.
 - The fold keeps the entry with the highest `features_version`, then the
   latest. `show` leaves it out of the log; `show --json` gives it as
   `features`.

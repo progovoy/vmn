@@ -424,12 +424,16 @@ fields), `ui.md` (routes, card, search mode), `server.md` (`/api/v1/similar`),
 - Grouping: by run tree root (whole sweep incl. nested SDK runs) rather than direct
   parent; exclusion drops the target's whole tree.
 - Symbols: from hunk headers **and** definitions on added/removed lines (new files and
-  functions appended below a hunk context count); a column-0 definition in a hunk's
-  context moves the header's name to it, so under git's default funcname (no `diff=`
-  driver) 3-line-context patches name what `-U0` does; methods and nested defs keep the
-  header's name, so with a `diff=python`-like driver an edit near a method's def may
-  still name the method above (a hunk whose header names nothing still reads no context
-  definitions).
+  functions appended below a hunk context count). A change's function is what git's
+  default funcname names (`core/features_scope.py`): any column-0 old-file line in a
+  hunk (context, or removed once its change run ends) moves the header's name to it,
+  so 3-line-context patches name what `-U0` does under the default driver (with a
+  `diff=python`-like driver `-U0` can differ); lines past a hunk's `@@` counts
+  (format-patch's `-- ` signature) are no changes. Open gap: a hunk whose header names
+  nothing (top of the file, only comments above) takes no scope from its lines, where
+  `-U0` names e.g. the file's first function; closing it changes what
+  `test_context_lines_and_a_binary_payload_define_nothing` and
+  `test_hunks_without_context_add_no_symbol` assert (pending a decision).
 - vmn's own commits (`From: vmn`, left unpushed by an SDK cold start) are skipped:
   `features_from_patches(..., skip_authors=)`, `gitmode/features.py` passes `VMN_USER_NAME`.
 - Entrypoint: looks past launcher executables and `python -m` launcher modules.
