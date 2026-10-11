@@ -25,11 +25,7 @@ from vmn_exp.core.index_metrics import (
     update_metrics,
 )
 from vmn_exp.core.jsonl_tail import read_complete_lines
-from vmn_exp.core.logfiles import (
-    append_identity,
-    group_log_names,
-    log_writer_and_seq,
-)
+from vmn_exp.core.logfiles import appended, group_log_names, log_writer_and_seq
 
 
 def log_signatures(names):
@@ -43,11 +39,6 @@ def log_signatures(names):
     return sigs
 
 
-def _grew(old_sig, new_sig):
-    """Whether the file *new_sig* may be the file *old_sig* with bytes appended."""
-    return new_sig[0] > old_sig[0] and append_identity(new_sig) == append_identity(old_sig)
-
-
 def _appends_only(old, new):
     """Whether *new* is *old* with bytes appended / segments added at the end."""
     if any(name not in new for name in old):
@@ -57,7 +48,7 @@ def _appends_only(old, new):
         for name in names:
             before = old.get(name)
             if before is None or before["sig"] != new[name]:
-                if before is not None and not _grew(before["sig"], new[name]):
+                if before is not None and not appended(before["sig"], new[name]):
                     return False  # rewritten, truncated or another copy
                 grown = True
             elif grown:

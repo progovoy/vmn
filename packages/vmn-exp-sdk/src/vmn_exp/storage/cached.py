@@ -68,7 +68,9 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
         except Exception:
             self._local.delete(app_name, verstr)
             raise
-        if not claimed:
+        if claimed:
+            self._claimed.add((app_name, verstr))
+        else:
             # Another host holds this name on the shared remote.
             self._local.delete(app_name, verstr)
         self._presence.mark(app_name, verstr, claimed)

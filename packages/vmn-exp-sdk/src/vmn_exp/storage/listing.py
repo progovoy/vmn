@@ -155,9 +155,7 @@ class RecordListings:
         log_sig = sub_sigs[_LOG_AT] if identity else None
         log_mtime_ns = log_sig[0] if log_sig else None
         known = self._settled.get(entry.path)
-        files = None
-        if known and known[0] == sig:
-            files = _stat_again(entry.path, known[1], log_mtime_ns)
+        files = _stat_again(entry.path, known[1], log_mtime_ns) if known and known[0] == sig else None
         if files is None:
             scanned_at = time.time_ns()
             if log_mtime_ns is None:

@@ -28,8 +28,8 @@ from collections import Counter
 from contextlib import contextmanager
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.storage.files import log_object_name, log_writer_and_seq
-from vmn_exp.storage.s3_base import parallel_map
+from vmn_exp.core.logfiles import next_seq
+from vmn_exp.storage.files import log_object_name
 
 # The local log lock is held for local file I/O only, so a holder keeping it
 # this long was interrupted where it stood (the SDK's SIGTERM finalizer runs
@@ -124,12 +124,6 @@ def _with_missing_lines(remote, local):
     return remote + b"".join(missing)
 
 
-def next_seq(objects):
-    """The segment after the writer's remote log *objects*."""
-    seqs = [log_writer_and_seq(name)[1] for name, _ in objects]
-    return max(seqs) + 1 if seqs else 0
-
-
 class LogMerge:
     """Mixed into :class:`~vmn_exp.storage.cached_logs.CachedLogs`, whose
     ``_local`` and ``_remote`` it uses."""
@@ -137,6 +131,7 @@ class LogMerge:
     def _init_log_merge(self):
         self._seeded = set()  # (app, verstr, writer) whose local log met the remote's
         self._seed_failed = set()  # ... whose seed raised: the next ship merges
+        self._claimed = set()  # (app, verstr) this cache created on the remote
         # Held by local appends and the local half of a merge, never across
         # remote I/O: a merge's rewrite must not drop a line appended meanwhile.
         self._local_log_lock = LocalLogLock()
@@ -162,12 +157,13 @@ class LogMerge:
         copy up to it. Tried once, outside the sync lock a ship holds across
         remote I/O: when it fails, the next ship merges the remote's lines in
         instead (the append path never waits on retries). Two first appends
-        seeding at once rewrite the same lines."""
+        seeding at once rewrite the same lines. A record this cache claimed
+        on the remote has no remote log to seed from."""
         key = (app_name, verstr, writer_id)
         if not self._local_is_replica or self._seed_tried(key):
             return
         try:
-            if self.remote_for(app_name, verstr):
+            if (app_name, verstr) not in self._claimed and self.remote_for(app_name, verstr):
                 self._catch_up_if_behind(app_name, verstr, writer_id)
         except Exception:
             VMN_LOGGER.debug("Could not compare the log with the remote", exc_info=True)
@@ -187,6 +183,8 @@ class LogMerge:
     def _catch_up(self, app_name, verstr, writer_id, objects):
         """Rewrite the local log as the remote's *objects* of the writer, then
         the local lines they lack; returns the sync state past the remote's."""
+        from vmn_exp.storage.s3_base import parallel_map
+
         names = [name for name, _ in objects]
         bodies = parallel_map(lambda n: self._remote.load_file(app_name, verstr, n), names)
         if any(body is None for body in bodies):
@@ -213,7 +211,7 @@ class LogMerge:
             return True
         app_name, verstr, writer_id = key
         name = log_object_name(writer_id)
-        data = self._local.read_file_from(app_name, verstr, name, offset - 1)
+        data = self._local.read_range(app_name, verstr, name, offset - 1, 1)
         return not data or data[:1] != b"\n"
 
     def _merge_remote_lines(self, app_name, verstr, writer_id):
