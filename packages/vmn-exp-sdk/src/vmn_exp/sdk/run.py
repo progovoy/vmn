@@ -24,6 +24,7 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
+from vmn_exp.core.intent import build_intent_entry
 from vmn_exp.core.metric_compact import compact_by, reopen_writer
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
@@ -125,6 +126,8 @@ def start_run(
     rewind_to_step=None,
     capture_output=False,
     mode=None,
+    intent=None,
+    intent_keywords=None,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -171,6 +174,10 @@ def start_run(
 
     ``mode="disabled"`` (or ``VMN_MODE=disabled``; an explicit *mode* wins)
     returns a :class:`NoOpRun` without touching git or the store.
+
+    ``intent`` (with ``intent_keywords``) says what the run is for, as with
+    :meth:`Run.set_intent` once the run opens — a resumed run gets one only
+    when given. A bad one raises ValueError before anything is created.
     """
     if is_disabled(mode):
         return NoOpRun(app_name, disabled=True)
@@ -179,6 +186,7 @@ def start_run(
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
     ensure_logger()
+    _check_intent(intent, intent_keywords)
 
     prior_state, start_step = None, None
     ref = resume.requested_run_id(run_id)
@@ -225,7 +233,16 @@ def start_run(
         _record_resume_inputs(run, note, params)
     if tags:
         run.set_tags(tags)
+    if intent is not None:
+        run.set_intent(intent, keywords=intent_keywords)
     return run
+
+
+def _check_intent(intent, keywords):
+    if intent is not None:
+        build_intent_entry(intent, keywords)
+    elif keywords is not None:
+        raise ValueError("intent_keywords needs an intent")
 
 
 def _reopen_metrics(storage, app_name, verstr):
@@ -546,6 +563,13 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
 
     def remove_tag(self, key):
         self._append(create_tags_entry(remove=[key]))
+
+    def set_intent(self, text, keywords=None, generator=None):
+        """Say what this run is for: markdown *text* (cut at 16 KiB),
+        *keywords* (synonyms, the problem's usual names) and the *generator*
+        (model id) that wrote it, if any. Matched by similar-run search; the
+        latest intent wins, also on a finished run."""
+        self._append(dict(build_intent_entry(text, keywords, generator), timestamp=now_iso()))
 
     # -- internals ---------------------------------------------------------
 

@@ -14,6 +14,7 @@ import tempfile
 import time
 
 from vmn_exp.cli import fork
+from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.output_tee import OutputTee, output_artifact, popen_kwargs
 from vmn_exp.cli.supervisor import (
     BackgroundSync,
@@ -221,10 +222,15 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
             "No command to run. Usage: vmn-exp run <app> -- <command> [args...]"
         )
         return 1
+    intent, err = read_intent(args)
+    if err is not None:
+        return err
 
     app_name, verstr, err = _create_experiment(vcs, storage, args)
     if err is not None:
         return err
+    if intent:
+        append_intent(storage, app_name, verstr, intent)
 
     import vmn_exp.cli.experiment as cli
     cli._append_inputs(storage, app_name, verstr, getattr(args, "inputs", None))

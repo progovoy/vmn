@@ -45,6 +45,7 @@ EXPERIMENT_ACTIONS = [
 def _add_experiment_parser(subprasers, name):  # noqa: N802
     from vmn_exp.cli import views
     from vmn_exp.cli.define_metric_args import add_define_metric_flags
+    from vmn_exp.cli.intent_arg import add_intent_flags
     from vmn_exp.cli.sweep.parser import add_experiment_storage_flags
 
     pexp = subprasers.add_parser(
@@ -192,6 +193,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="rewind: hide the run's history past step N")
     add_experiment_storage_flags(pexp)
     add_define_metric_flags(pexp)
+    add_intent_flags(pexp)
     # import-mlflow flags
     _mlf = pexp.add_mutually_exclusive_group()
     _mlf.add_argument("--mlruns", default=None, metavar="DIR",

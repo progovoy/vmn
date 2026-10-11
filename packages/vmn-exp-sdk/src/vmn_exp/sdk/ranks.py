@@ -112,7 +112,7 @@ class NoOpRun:
     def _ignore(self, *args, **kwargs):
         return None
 
-    set_tag = set_tags = remove_tag = define_metric = alert = _ignore
+    set_tag = set_tags = remove_tag = define_metric = alert = set_intent = _ignore
     log_dict = log_text = log_figure = log_artifacts = _ignore
     log_table = log_image = log_histogram = register_model = _ignore
 
