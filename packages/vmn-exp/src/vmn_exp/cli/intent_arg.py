@@ -53,16 +53,18 @@ def append_intent(storage, app_name, verstr, entry):
 def _intent_entry(args):
     path = getattr(args, "intent_file", None)
     if path is not None:
-        return build_intent_entry(*parse_intent_file(_read(path)))
+        return build_intent_entry(*parse_intent_file(read_file_arg(path, "--intent-file")))
     text = getattr(args, "intent", None)
     return None if text is None else build_intent_entry(text)
 
 
-def _read(path):
+def read_file_arg(path, flag):
+    """The text of the file *path* that *flag* names (``-``: stdin);
+    ValueError when it can't be read."""
     if path == "-":
         return sys.stdin.read()
     try:
         with open(path, encoding="utf-8-sig") as f:
             return f.read()
     except (OSError, UnicodeDecodeError) as exc:
-        raise ValueError(f"Cannot read --intent-file {path}: {exc}") from None
+        raise ValueError(f"Cannot read {flag} {path}: {exc}") from None

@@ -3,12 +3,13 @@
 
 ::
 
-    from vmn_exp.sdk.reader import get_lineage, get_run, list_runs, runs_dataframe
+    from vmn_exp.sdk.reader import get_lineage, get_run, list_runs, runs_dataframe, similar_runs
 
     for run in list_runs(status="failed"):
         print(run["verstr"], run["metrics"])
 
     df = runs_dataframe(query="metrics.loss < 0.5")  # needs pandas
+    similar_runs(ref="@3", context="label smoothing")  # runs like run @3
 
 Rows carry exactly what the dashboard shows for a run: its metadata, the latest
 value of every metric, the derived status fields and its place in the run tree.
@@ -47,6 +48,7 @@ from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_storage
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
+from vmn_exp.core.similar_search import find as _find_similar
 from vmn_exp.core.status import (
     load_run_state,
     observed_at_by_verstr,
@@ -280,6 +282,31 @@ def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEF
         )
     except KeyError as e:
         raise ValueError(e.args[0]) from None
+
+
+def similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=None,
+                 context=None, text_only=False, all_apps=False):
+    """The past runs most like run *ref* — what ``vmn-exp similar <app> -v
+    <ref> --json`` prints: ``[{app, verstr, name, score, reasons, signals,
+    group_size, author, timestamp, status, goal, note, intent, features}]``,
+    most similar first (see :mod:`vmn_exp.core.similar_search`).
+
+    The run itself, its exact code and its sweep are left out, and so are
+    archived runs. *context* replaces the run's text with a query text;
+    *text_only* matches that text alone (with *ref* None: no run at all).
+    *query* narrows the candidates like :func:`list_runs`'s; *all_apps*
+    searches every app of the storage. The app's conf.yml (when a checkout is
+    found) gives each app's metrics schema and ``experiment.similar.weights``.
+    Raises ValueError for an unknown *ref*, ``QueryError`` on a bad *query*.
+    """
+    app_name, storage, root_path = _resolve(app_name, storage)
+    exp_conf = read_experiment_conf(app_name, root_path) if root_path else {}
+    return _find_similar(
+        storage, app_name, ref, exp_conf, top=top, query=query, context=context,
+        text_only=text_only, all_apps=all_apps,
+        schema_of=lambda app: _metrics_schema(root_path, app),
+    )
+
 
 # ---------------------------------------------------------------------------
 # pandas views (the optional ``vmn-exp-sdk[pandas]`` extra)

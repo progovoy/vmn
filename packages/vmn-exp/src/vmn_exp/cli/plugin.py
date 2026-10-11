@@ -39,6 +39,7 @@ EXPERIMENT_ACTIONS = [
     "push",
     "compact",
     "export-metrics",
+    "similar",
     "similar-backfill",
 ]
 
@@ -47,6 +48,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     from vmn_exp.cli import views
     from vmn_exp.cli.define_metric_args import add_define_metric_flags
     from vmn_exp.cli.intent_arg import add_intent_flags
+    from vmn_exp.cli.similar_args import add_similar_flags
     from vmn_exp.cli.sweep.parser import add_experiment_storage_flags
 
     pexp = subprasers.add_parser(
@@ -70,10 +72,12 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--remove", action="append", default=None,
                       help="tag: remove this tag key (repeatable)")
     pexp.add_argument("--archived", action="store_true", default=False,
-                      help="list/importance: include archived runs")
+                      help="list/importance/similar: include archived runs")
     pexp.add_argument("-v", "--version", action="append", default=None,
                       help="Version string(s). Repeatable for compare; prune deletes exactly "
-                           "the named run(s) instead of applying --keep/--older-than.")
+                           "the named run(s) instead of applying --keep/--older-than. "
+                           "similar: without -v/--latest it compares the current working "
+                           "tree (unlike show/restore/export, where no ref is the latest run)")
     pexp.add_argument("--note", default=None, help="Note or description")
     pexp.add_argument("-f", "--file", default=None,
                       help="YAML file with structured notes/params")
@@ -86,11 +90,13 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--metric", default=None,
                       help="importance: the metric whose driving params to rank")
     pexp.add_argument("--top", type=int, default=None,
-                      help="Show top N results in list")
+                      help="list: show the top N results; similar: how many runs to show "
+                           "(default 10)")
     pexp.add_argument("--last", type=int, default=None,
                       help="Use the N most recent experiments (for list/compare)")
     pexp.add_argument("--latest", action="store_true", default=False,
-                      help="Use the most recent experiment (for show/compare/restore/export)")
+                      help="Use the most recent experiment (for show/compare/restore/export/"
+                           "similar)")
     pexp.add_argument("--tool", default=None,
                       help="External diff tool for compare. Falls back to git config diff.tool")
     pexp.add_argument("-o", "--output", default=None, help="Output path for export")
@@ -131,12 +137,13 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="show --patch: print at most N bytes of patch text "
                            f"(default: {views.PATCH_MAX_BYTES})")
     pexp.add_argument("--query", default=None,
-                      help="list/importance: filter rows by query (e.g. 'metrics.loss < 0.5'); "
+                      help="list/importance/similar: filter rows by query "
+                           "(e.g. 'metrics.loss < 0.5'); "
                            "prune: select candidates by query (dry-run unless --yes/-y)")
     pexp.add_argument("--yes", "-y", action="store_true", default=False,
                       help="prune --query: confirm deletion")
     pexp.add_argument("--json", action="store_true", default=False,
-                      help="list/show/importance/push: print machine-readable JSON")
+                      help="list/show/importance/push/similar: print machine-readable JSON")
     pexp.add_argument("--from-snapshot", default=None,
                       help="Path to vmn_metadata.yml or directory containing it. "
                            "Records against a tree from 'vmn-exp export' (no git required). "
@@ -182,7 +189,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--all-finished", action="store_true", default=False,
                       help="compact: every succeeded or failed run")
     pexp.add_argument("--all-apps", action="store_true", default=False,
-                      help="similar-backfill: every app of the store, not just <name>")
+                      help="similar/similar-backfill: every app of the store, not just <name>")
     pexp.add_argument("--depth", type=int, default=1,
                       help="lineage: follow links this many hops (default: 1)")
     pexp.add_argument("--parent", default=None,
@@ -198,6 +205,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     add_experiment_storage_flags(pexp)
     add_define_metric_flags(pexp)
     add_intent_flags(pexp)
+    add_similar_flags(pexp)
     # import-mlflow flags
     _mlf = pexp.add_mutually_exclusive_group()
     _mlf.add_argument("--mlruns", default=None, metavar="DIR",
@@ -336,6 +344,7 @@ def _exp_run_without_repo(args):
         experiment_rewind,
         experiment_run,
         experiment_show,
+        experiment_similar,
         experiment_similar_backfill,
         experiment_storage_params,
     )
@@ -350,6 +359,7 @@ def _exp_run_without_repo(args):
         "prune": experiment_prune,
         "rewind": experiment_rewind,
         "push": experiment_push,
+        "similar": experiment_similar,
         "similar-backfill": experiment_similar_backfill,
     }
 

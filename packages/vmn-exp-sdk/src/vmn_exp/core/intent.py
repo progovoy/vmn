@@ -34,7 +34,7 @@ def build_intent_entry(text, keywords=None, generator=None) -> dict:
         raise ValueError("An intent needs a non-empty text")
     text, truncated = _capped_text(text)
     entry = {"type": "intent", "text": text}
-    kept = _keywords(keywords)
+    kept = clean_keywords(keywords)
     if kept:
         entry["keywords"] = kept
     if generator is not None:
@@ -84,7 +84,9 @@ def _capped_text(text):
     return encoded[:MAX_TEXT_BYTES].decode("utf-8", "ignore"), True
 
 
-def _keywords(keywords):
+def clean_keywords(keywords):
+    """*keywords* as an intent entry keeps them (see :func:`build_intent_entry`):
+    a list of strings, ``[]`` for None; ValueError on any other type."""
     if keywords is None:
         return []
     keywords = _split_if_text(keywords)
