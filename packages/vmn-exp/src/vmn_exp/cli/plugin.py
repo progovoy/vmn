@@ -214,6 +214,12 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="import-mlflow: include deleted/trashed runs")
     pexp.add_argument("--workers", type=int, default=8,
                       help="import-mlflow: parallel import workers (default: 8)")
+    pexp.add_argument("--refresh-features", action="store_true", default=False,
+                      help="import-mlflow: give already-imported runs the features "
+                           "(author, entrypoint, branch) and note they lack")
+    pexp.add_argument("--repo", default=None, metavar="PATH",
+                      help="import-mlflow: a checkout holding the runs' source commits, "
+                           "to record what each commit's branch changed")
 
 
 def _add_ui_parser(subprasers):  # noqa: N802
