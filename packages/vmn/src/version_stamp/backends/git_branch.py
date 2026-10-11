@@ -52,7 +52,7 @@ class GitBranchMixin:
     def checkout_branch(self, branch_name=None):
         try:
             if branch_name is None:
-                branch_name = self.active_branch
+                branch_name = self.local_branch
 
             self.checkout(branch=branch_name)
         except Exception as e:
@@ -112,7 +112,7 @@ class GitBranchMixin:
         if self.remote_active_branch is not None:
             return 0
 
-        local_branch_name = self.active_branch
+        local_branch_name = self.local_branch
 
         VMN_LOGGER.warning(
             f"No remote branch for local branch: {local_branch_name} "
@@ -179,13 +179,13 @@ class GitBranchMixin:
         if self.remote_active_branch is None:
             err = (
                 f"No upstream branch found in {self.root()}. "
-                f"for local branch {self.active_branch}. "
+                f"for local branch {self.local_branch}. "
                 f"Probably no upstream branch is set"
             )
 
             return err
 
-        branch_name = self.active_branch
+        branch_name = self.local_branch
         try:
             self._be.git.rev_parse("--verify", f"{self.remote_active_branch}")
         except Exception:

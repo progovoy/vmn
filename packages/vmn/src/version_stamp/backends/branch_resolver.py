@@ -11,7 +11,6 @@ from collections import namedtuple
 
 from version_stamp.backends.git_ops import _strip_prefix
 from version_stamp.core.logging import measure_runtime_decorator
-from version_stamp.core.utils import is_legacy_tracking_branch
 
 # The branch a CI job builds, in lookup order (main repo only).
 CI_BRANCH_ENV_VARS = (
@@ -146,18 +145,10 @@ class GitBranchResolverMixin:
         name = min([b for b in candidates if b in local] or candidates)
         return BranchChoice(name, candidates, "legacy", name in local)
 
-    def logical_branch(self):
-        """The branch name to use as an identity (branch confs, policies,
-        stamped_on_branch): a legacy tracking branch counts as its upstream."""
-        name = self.active_branch
-        if is_legacy_tracking_branch(name) and self.remote_active_branch:
-            return _strip_prefixes(self.remote_active_branch, self._remote_name())
-        return name
-
     def branch_ref(self):
         """The ref of the active branch: local if it exists, else its remote."""
-        if self.active_branch and self.active_branch_is_local:
-            return f"refs/heads/{self.active_branch}"
+        if self.local_branch and self.active_branch_is_local:
+            return f"refs/heads/{self.local_branch}"
         if self.remote_active_branch:
             return f"refs/remotes/{self.remote_active_branch}"
         return "HEAD"

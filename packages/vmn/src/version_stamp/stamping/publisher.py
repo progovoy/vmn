@@ -301,7 +301,7 @@ class VersionControlStamper(IVersionsStamper):
             policy_conf = self.policies["whitelist_release_branches"]
             if (
                 release_mode != "prerelease"
-                and self.backend.logical_branch() not in policy_conf
+                and self.backend.active_branch not in policy_conf
             ):
                 err_msg = (
                     "Policy: whitelist_release_branches was violated. Refusing to stamp"
@@ -341,7 +341,7 @@ class VersionControlStamper(IVersionsStamper):
         self.current_version_info["stamping"]["app"]["info"] = copy.deepcopy(info)
         self.current_version_info["stamping"]["app"][
             "stamped_on_branch"
-        ] = self.backend.logical_branch()
+        ] = self.backend.active_branch
         self.current_version_info["stamping"]["app"][
             "stamped_on_remote_branch"
         ] = self.backend.remote_active_branch
@@ -491,7 +491,7 @@ class VersionControlStamper(IVersionsStamper):
         existing.append(self._changelog_path())
         self._record_paths([p for p in existing if p is not None])
         self._record_paths(
-            self._collect_stale_branch_confs(self.backend.logical_branch()),
+            self._collect_stale_branch_confs(self.backend.active_branch),
             existed=False,
         )
 
@@ -815,7 +815,7 @@ class VersionControlStamper(IVersionsStamper):
 
     @measure_runtime_decorator
     def publish_commit(self, version_files_to_add):
-        cur_branch = self.backend.logical_branch()
+        cur_branch = self.backend.active_branch
         stale_confs = self._collect_stale_branch_confs(cur_branch)
 
         if self.dry_run:

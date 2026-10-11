@@ -168,5 +168,6 @@ def test_logical_branch_of_a_legacy_tracking_branch_is_its_upstream(app_layout):
 
     backend = GitBackend(repo)
 
-    assert backend.active_branch == legacy
+    assert backend.local_branch == legacy
+    assert backend.active_branch == default
     assert backend.logical_branch() == default

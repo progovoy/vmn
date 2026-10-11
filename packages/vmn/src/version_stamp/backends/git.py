@@ -120,11 +120,12 @@ git.cmd.Git.execute = _custom_git_execute
 
 
 class GitBackend(
+    # First, so its local_branch / active_branch win over GitOpsMixin's fallback.
+    GitBranchStateMixin,
     GitOpsMixin,
     GitBranchMixin,
     GitBranchResolverMixin,
     GitBranchCheckoutMixin,
-    GitBranchStateMixin,
     GitTagsMixin,
     GitTagParseMixin,
     GitHistoryMixin,

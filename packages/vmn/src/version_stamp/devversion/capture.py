@@ -37,7 +37,7 @@ def _generate_patches(backend, lightweight=False):
         try:
             local_commits_diff = backend._be.git.format_patch(
                 "--stdout",
-                f"{backend.remote_active_branch}..{backend.active_branch}",
+                f"{backend.remote_active_branch}..{backend.local_branch}",
             )
             if local_commits_diff.strip():
                 patches["local_commits"] = _ensure_trailing_newline(local_commits_diff)

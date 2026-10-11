@@ -187,7 +187,7 @@ class IVersionsStamper:
         self.version_file_path = os.path.join(self.app_dir_path, VER_FILE_NAME)
 
         self.app_conf_path, _ = resolve_branch_conf_path(
-            self.app_dir_path, self.backend.logical_branch()
+            self.app_dir_path, self.backend.active_branch
         )
 
         if self.root_context:
@@ -205,7 +205,7 @@ class IVersionsStamper:
 
             self.root_app_conf_path, _ = resolve_branch_conf_path(
                 self.root_app_dir_path,
-                self.backend.logical_branch(),
+                self.backend.active_branch,
                 root=True,
             )
 

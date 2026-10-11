@@ -88,7 +88,7 @@ def _resolve_conf_target(vmn_ctx):
     app_dir = _root_app_dir(vcs) if root else vcs.app_dir_path
 
     if vmn_ctx.args.branch:
-        branch = vcs.backend.logical_branch()
+        branch = vcs.backend.active_branch
         conf_path = branch_conf_canonical_path(app_dir, branch, root=root)
         if os.path.isfile(conf_path):
             seed_source = conf_path

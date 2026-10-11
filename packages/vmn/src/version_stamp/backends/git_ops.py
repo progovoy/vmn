@@ -34,6 +34,13 @@ class GitOpsMixin:
     _push_user = None
     _push_token = None
 
+    @property
+    def local_branch(self):
+        """The git ref name of the active branch. GitBackend's branch state
+        (listed before this mixin) keeps it apart from the active_branch
+        identity; on its own the mixin has only active_branch."""
+        return self.active_branch
+
     def set_push_credentials(self, user, token):
         """Set alternative credentials for push operations."""
         self._push_user = user
@@ -193,7 +200,7 @@ class GitOpsMixin:
         remote_branch_name = _strip_prefix(
             self.remote_active_branch, f"{self.selected_remote.name}/"
         )
-        refspecs = [f"refs/heads/{self.active_branch}:{remote_branch_name}"]
+        refspecs = [f"refs/heads/{self.local_branch}:{remote_branch_name}"]
         refspecs.extend(f"refs/tags/{tag}" for tag in tags)
 
         try:

@@ -59,7 +59,7 @@ def build_record_metadata(
         "verstr": verstr,
         "base_version": base_version,
         "base_commit": commit_hash,
-        "branch": vcs.backend.logical_branch(),
+        "branch": vcs.backend.active_branch,
         "remote": _remote_url(vcs.backend),
         "timestamp": now_iso(),
         "note": note,

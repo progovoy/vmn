@@ -26,7 +26,7 @@ class VMNBackend(ABC):
         ...
 
     def logical_branch(self):
-        """The branch name used as an identity (branch confs, policies)."""
+        """Alias of active_branch, the branch identity."""
         return self.active_branch
 
     @abstractmethod

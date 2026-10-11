@@ -555,7 +555,7 @@ def _checkout_update_target(client, branch_name, tag, changeset):
     if branch_name is None:
         if not client.ensure_on_branch(require_tip=False):
             raise RuntimeError("No branch to check out")
-        return f"branch {client.active_branch}"
+        return f"branch {client.local_branch}"
 
     if not client.checkout_branch(branch_name=branch_name):
         raise RuntimeError(f"Failed to checkout to branch {branch_name}")

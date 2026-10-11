@@ -63,7 +63,7 @@ class GitBranchCheckoutMixin:
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
             return False
 
-        self.active_branch = name
+        self.local_branch = name
         self.active_branch_is_local = True
         self.remote_active_branch = upstream
         self.detached_head = self.in_detached_head()

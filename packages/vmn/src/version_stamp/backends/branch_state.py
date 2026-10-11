@@ -7,10 +7,17 @@ dep that is only checked for a detached HEAD, a goto checkout. The state is the
 one the eager constructor computed: it is resolved for the HEAD the backend was
 built at, and materialized before any change that could alter that answer
 (leaving a branch, moving refs). Assignments override it, as they did before.
-"""
-from version_stamp.core.logging import VMN_LOGGER
 
-_FIELDS = ("active_branch", "remote_active_branch", "active_branch_is_local")
+local_branch is the git ref name (the checked-out branch, or the branch a
+detached HEAD resolved to); active_branch is the branch identity used for
+branch confs, policies and stamped_on_branch: the same name, except that a
+legacy vmn_tracking_remote__* branch counts as its upstream.
+"""
+from version_stamp.backends.branch_resolver import _strip_prefixes
+from version_stamp.core.logging import VMN_LOGGER
+from version_stamp.core.utils import is_legacy_tracking_branch
+
+_FIELDS = ("local_branch", "remote_active_branch", "active_branch_is_local")
 
 
 def _branch_field(name):
@@ -26,10 +33,21 @@ def _branch_field(name):
 class GitBranchStateMixin:
     """Lazy active-branch state. Mixed into GitBackend."""
 
-    active_branch = _branch_field("active_branch")
+    local_branch = _branch_field("local_branch")
     remote_active_branch = _branch_field("remote_active_branch")
-    # Whether active_branch names a local branch (else only its remote has it).
+    # Whether local_branch names a local branch (else only its remote has it).
     active_branch_is_local = _branch_field("active_branch_is_local")
+
+    @property
+    def active_branch(self):
+        name = self.local_branch
+        if is_legacy_tracking_branch(name) and self.remote_active_branch:
+            return _strip_prefixes(self.remote_active_branch, self._remote_name())
+        return name
+
+    @active_branch.setter
+    def active_branch(self, name):
+        self.local_branch = name
 
     def _init_branch_state(self):
         self._branch_state = None
