@@ -52,29 +52,34 @@ def finalizing():
 class LocalLogLock:
     """Shared by local appends — each is one write of whole lines, so they
     never need to exclude each other — and held alone by a rewrite (read,
-    merge, replace), which must not run while an append lands."""
+    merge, replace), which must not run while an append lands.
+
+    A hold is filed under a ticket the holder made before it waited, and is
+    given back in a ``finally`` entered before that: an exception landing
+    right after the hold was taken (a signal handler's KeyboardInterrupt,
+    before the holder got back control) cannot leave it held."""
 
     def __init__(self):
         self._mutex = threading.Lock()
         self._changed = threading.Condition(self._mutex)
-        self._holders = 0  # appends in flight, or -1 while a rewrite runs
+        self._appends = set()  # tickets of the appends in flight
+        self._rewrites = set()  # the running rewrite's ticket
 
-    def acquire_append(self, wait=None):
-        """Wait for no rewrite to run — at most *wait* seconds (None: for as
-        long as it takes); False when that ran out."""
-        return self._enter(lambda: self._holders >= 0, 1, wait)
+    @contextmanager
+    def held(self, rewrite=False, wait=None):
+        """Hold an append's share — or with *rewrite* the whole lock — for the
+        block; yields whether it got it within *wait* seconds (None: however
+        long it takes)."""
+        ticket = object()
+        try:
+            yield self._enter(ticket, rewrite, wait)
+        finally:
+            self._leave(ticket)
 
-    def release_append(self):
-        self._leave(1)
+    def _free(self, rewrite):
+        return not (self._rewrites or (rewrite and self._appends))
 
-    def acquire_rewrite(self, wait):
-        """Wait at most *wait* seconds to be alone; False when that ran out."""
-        return self._enter(lambda: self._holders == 0, -1, wait)
-
-    def release_rewrite(self):
-        self._leave(-1)
-
-    def _enter(self, free, share, wait):
+    def _enter(self, ticket, rewrite, wait):
         # The mutex too is waited for at most *wait*: a thread a signal froze
         # may hold it.
         start = time.monotonic()
@@ -82,16 +87,20 @@ class LocalLogLock:
             return False
         try:
             left = None if wait is None else max(0.0, wait - (time.monotonic() - start))
-            if not self._changed.wait_for(free, left):
+            if not self._changed.wait_for(lambda: self._free(rewrite), left):
                 return False
-            self._holders += share
+            # One call files the hold under the ticket: either it is held or not.
+            (self._rewrites if rewrite else self._appends).add(ticket)
             return True
         finally:
             self._mutex.release()
 
-    def _leave(self, share):
+    def _leave(self, ticket):
+        if ticket not in self._appends and ticket not in self._rewrites:
+            return  # never got it: and the mutex may be a frozen thread's
         with self._mutex:
-            self._holders -= share
+            self._appends.discard(ticket)
+            self._rewrites.discard(ticket)
             self._changed.notify_all()
 
 
@@ -137,21 +146,13 @@ class LogMerge:
         A rewrite waits at most :data:`LOCAL_LOCK_WAIT_SEC`, then raises (the
         next ship merges again). An append waits for a rewrite to finish —
         while :func:`finalizing`, at most as long, then goes on without it."""
-        lock = self._local_log_lock
-        if rewrite:
-            if not lock.acquire_rewrite(LOCAL_LOCK_WAIT_SEC):
-                raise RuntimeError("the local log is held by an interrupted thread")
-            release = lock.release_rewrite
-        elif lock.acquire_append(LOCAL_LOCK_WAIT_SEC if _FINALIZING.is_set() else None):
-            release = lock.release_append
-        else:
-            VMN_LOGGER.debug("The local log is held by an interrupted rewrite")
-            release = None
-        try:
+        wait = LOCAL_LOCK_WAIT_SEC if rewrite or _FINALIZING.is_set() else None
+        with self._local_log_lock.held(rewrite, wait) as got:
+            if not got:
+                if rewrite:
+                    raise RuntimeError("the local log is held by an interrupted thread")
+                VMN_LOGGER.debug("The local log is held by an interrupted rewrite")
             yield
-        finally:
-            if release is not None:
-                release()
 
     def _seed_local_log(self, app_name, verstr, writer_id):
         """Before this cache's first append under *writer_id*: when the remote
