@@ -71,6 +71,47 @@ def test_real_format_patch_output_with_a_cover_letter_and_a_quoted_header(repo):
         assert result["commit_authors"] == [{"name": "Ann", "email": "ann@x.io"}], flags
 
 
+PASTED_DIFF = ("The upstream fix we port looks like this:\n\n"
+               "diff --git a/vendor/fake.py b/vendor/fake.py\nindex 1111111..2222222 100644\n"
+               "--- a/vendor/fake.py\n+++ b/vendor/fake.py\n@@ -1,2 +1,2 @@ def vendored():\n"
+               " y = 0\n-x = 1\n+x = 2\n")
+
+
+@pytest.mark.parametrize("trailer", ["\nSigned-off-by: Ann <ann@x.io>", ""],
+                         ids=["text-after-the-diff", "message-ends-with-the-diff"])
+def test_a_diff_pasted_into_a_commit_message_names_no_file(repo, trailer):  # noqa: F811
+    path, git = repo
+    with open(path / "model.py", "a") as f:
+        f.write("\n\ndef focal_loss(x):\n    return x\n")
+    git("commit", "-qam", f"add focal loss\n\n{PASTED_DIFF}{trailer}")
+    mbox = git("format-patch", "--stdout", "base..HEAD")
+    assert "\ndiff --git a/vendor/fake.py" in mbox
+    result = features_from_patches([mbox])
+    assert result["changed"] == {"files": ["model.py"],
+                                 "symbols": ["model.py::forward", "model.py::focal_loss"]}
+    no_stat = features_from_patches([git("format-patch", "--stdout", "--no-stat", "base..HEAD")])
+    assert "model.py::focal_loss" in no_stat["changed"]["symbols"]
+
+
+def test_a_pasted_diff_ends_at_the_separator_even_without_a_hunk():
+    message = ["see", "", "diff --git a/fake b/fake", "index 1..2 100644", "", "more"]
+    result = features_from_patches([_mail("[PATCH] real", message, DIFF)])
+    assert result["changed"] == {"files": ["x.py"], "symbols": ["x.py::real"]}
+
+
+def test_a_removed_double_dash_line_is_no_separator_after_a_pasted_diff(repo):  # noqa: F811
+    path, git = repo
+    _write(path, {"q.sql": "-- schema\n--\nselect 1;\n"})
+    git("add", "-A")
+    git("commit", "-qm", "sql")
+    git("tag", "-f", "base")
+    _write(path, {"q.sql": "-- schema\nselect 1;\n"})
+    git("commit", "-qam", f"drop the empty comment\n\n{PASTED_DIFF}")
+    mbox = git("format-patch", "--stdout", "--no-stat", "base..HEAD")
+    assert "\n---\n" in mbox.split("diff --git a/q.sql")[1]
+    assert "q.sql" in features_from_patches([mbox])["changed"]["files"]
+
+
 def test_blank_list_items_are_dropped_from_the_features_entry():
     entry = build_features_entry(
         "capture",

@@ -10,9 +10,11 @@ after an mbox ``From <sha> <date>`` line and until the blank line ending them;
 a cover letter (``[PATCH 0/n]``) is skipped whole. A ``diff --git`` line in a
 commit message (before its ``---`` separator) opens no section unless it
 follows a blank line and an extended header line follows it (a ``--no-stat``
-mbox has no separator). Lines end at ``\n`` only; diff content lines always
-carry a ``+``/``-``/`` `` prefix, so they never look like headers, sections or
-hunks.
+mbox has no separator); such a section, a diff pasted into the message, is
+forgotten when a ``---`` line follows outside a hunk (hunk lengths come from
+the ``@@`` counts, so a removed ``--`` line is no separator). Lines end at
+``\n`` only; diff content lines always carry a ``+``/``-``/`` `` prefix, so they
+never look like headers, sections or hunks.
 """
 from __future__ import annotations
 
@@ -23,7 +25,8 @@ from email.utils import parseaddr
 from vmn_exp.core.features_symbols import defined_symbol, hunk_symbol
 
 _MBOX_FROM = re.compile(r"From (?:[0-9a-f]{40}|[0-9a-f]{64})(?: |$)")
-_HUNK = re.compile(r"@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@(.*)")
+_HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@(.*)")
+_HUNK_LINE = ("+", "-", " ", "\\", "")  # "": a context line a message cleanup stripped
 _SUBJECT_PREFIX = re.compile(r"^\[[^\]]*\]\s*")
 _COVER_LETTER = re.compile(r"^\[[^\]]*\b0+/\d+\]")
 _EXTENDED_HEADERS = ("index ", "old mode ", "new mode ", "deleted file mode ", "new file mode ",
@@ -53,6 +56,8 @@ class _Parser:
         self.path = None
         self.quoted = None  # a message's `diff --git` line, until the next line confirms it
         self.after_blank = False
+        self.pasted = None  # (files, symbols) counts before a diff pasted in a message
+        self.old_left = self.new_left = 0  # the current hunk's lines still to come
 
     def feed(self, line):
         if _MBOX_FROM.match(line):
@@ -66,6 +71,8 @@ class _Parser:
             pass
         elif line.startswith(_DIFF_GIT):
             self._open_section(line)
+        elif line == "---" and self.pasted and self.old_left <= 0:
+            self._forget_pasted()
         elif self.state == "section":
             self._section_line(line)
         elif self.state == "hunks":
@@ -75,6 +82,13 @@ class _Parser:
         self._end_header()
         self.section = _section(line[len(_DIFF_GIT):])
         self.state = "section"
+        self.old_left = self.new_left = 0
+
+    def _forget_pasted(self):
+        """The message's separator ends a diff pasted into it: none of it changed."""
+        files, symbols = self.pasted
+        del self.out["files"][files:], self.out["symbols"][symbols:]
+        self.section, self.pasted, self.state = None, None, "body"
 
     def _message_line(self, line):
         """A commit message's line: it ends at ``---``, or at a ``diff --git``
@@ -83,6 +97,7 @@ class _Parser:
         if line == "---":
             self.state = "body"
         elif quoted and line.startswith(_EXTENDED_HEADERS):
+            self.pasted = (len(self.out["files"]), len(self.out["symbols"]))
             self._open_section(quoted)
             self._section_line(line)
         elif line.startswith(_DIFF_GIT) and self.after_blank:
@@ -93,7 +108,7 @@ class _Parser:
         if self.state == "headers":
             self._read_headers()
         self._end_header()
-        self.state, self.quoted = "start", None
+        self.state, self.quoted, self.pasted = "start", None, None
 
     def _header_line(self, line):
         if not line:
@@ -139,13 +154,22 @@ class _Parser:
             self._hunk(hunk)
 
     def _hunk_line(self, line):
-        if line[:1] in ("+", "-"):
+        kind = line[:1]
+        if kind in _HUNK_LINE:
+            self.old_left -= kind in ("-", " ", "")
+            self.new_left -= kind in ("+", " ", "")
+        else:
+            self.old_left = self.new_left = 0
+        if kind in ("+", "-"):
             self._symbol(defined_symbol(line[1:], self.path))
         else:
             self._hunk(_HUNK.match(line))
 
     def _hunk(self, match):
-        self._symbol(hunk_symbol(match.group(1)) if match else None)
+        if match:
+            old, new, context = match.groups()
+            self.old_left, self.new_left = int(old or 1), int(new or 1)
+            self._symbol(hunk_symbol(context))
 
     def _symbol(self, name):
         if name:
