@@ -7,8 +7,10 @@ and commit subjects of the captured patches (working tree diff, local commits,
 deps under their configured path), the main repo's untracked paths (as the
 capture listed them), and the author — git config's email in the repo (given
 up on after ``GIT_CONFIG_TIMEOUT_SEC``: this runs under the repo lock), else
-``VMN_EXP_AUTHOR``, else the first local commit's ``From:``. ``features_for_working_tree`` gives the same
-facts without creating a run; ``rerun_features`` a rerun's, from the original.
+``VMN_EXP_AUTHOR``, else the first local commit's ``From:``.
+``features_for_working_tree`` gives the same facts without creating a run;
+``rerun_features`` a rerun's, from the original, with the rerunner alone as
+the author.
 
 Best-effort, like env capture: a failure is a warning and no entry.
 """
@@ -79,8 +81,8 @@ def _rerun_entry(vcs, log, metadata, patches):
         untracked = _tarball_paths(patches.get("untracked_files"))
         facts = dict(parsed, changed=dict(parsed["changed"], untracked=untracked))
     # The rerunner's identity only: the original's committer did not rerun it.
-    return build_features_entry("rerun", author=run_author(vcs.backend.repo_path,
-                                                           [env_author()]), **facts)
+    author = run_author(vcs.backend.repo_path, [env_author()])
+    return build_features_entry("rerun", author=author, **facts)
 
 
 def _patch_texts(patches, deps):

@@ -57,26 +57,24 @@ class LocalLogLock:
     def __init__(self):
         self._mutex = threading.Lock()
         self._changed = threading.Condition(self._mutex)
-        self._appends = 0
-        self._rewriting = False
+        self._holders = 0  # appends in flight, or -1 while a rewrite runs
 
     def acquire_append(self, wait=None):
         """Wait for no rewrite to run — at most *wait* seconds (None: for as
         long as it takes); False when that ran out."""
-        return self._enter(lambda: not self._rewriting, self._count_append, wait)
+        return self._enter(lambda: self._holders >= 0, 1, wait)
 
     def release_append(self):
-        self._leave(self._uncount_append)
+        self._leave(1)
 
     def acquire_rewrite(self, wait):
         """Wait at most *wait* seconds to be alone; False when that ran out."""
-        return self._enter(lambda: not self._rewriting and not self._appends,
-                           self._start_rewrite, wait)
+        return self._enter(lambda: self._holders == 0, -1, wait)
 
     def release_rewrite(self):
-        self._leave(self._end_rewrite)
+        self._leave(-1)
 
-    def _enter(self, free, claim, wait):
+    def _enter(self, free, share, wait):
         # The mutex too is waited for at most *wait*: a thread a signal froze
         # may hold it.
         start = time.monotonic()
@@ -86,27 +84,15 @@ class LocalLogLock:
             left = None if wait is None else max(0.0, wait - (time.monotonic() - start))
             if not self._changed.wait_for(free, left):
                 return False
-            claim()
+            self._holders += share
             return True
         finally:
             self._mutex.release()
 
-    def _leave(self, unclaim):
+    def _leave(self, share):
         with self._mutex:
-            unclaim()
+            self._holders -= share
             self._changed.notify_all()
-
-    def _count_append(self):
-        self._appends += 1
-
-    def _uncount_append(self):
-        self._appends -= 1
-
-    def _start_rewrite(self):
-        self._rewriting = True
-
-    def _end_rewrite(self):
-        self._rewriting = False
 
 
 def _lines(data):
