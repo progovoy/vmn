@@ -3,8 +3,13 @@
 ``parse_patch(text, prefix="")`` -> ``{"files", "symbols", "commits", "authors"}``,
 in order of appearance with repeats kept (core/features.py dedupes and caps):
 the paths of every ``diff --git`` section (renames: new then old path), a
-``path::name`` per hunk context and per definition an added or removed line
-makes (:func:`~vmn_exp.core.features_symbols.defined_symbol`), each message's ``Subject:`` without git's
+``path::name`` per function a change is in and per definition an added or
+removed line makes (:func:`~vmn_exp.core.features_symbols.defined_symbol`).
+A change is in the function its hunk header names (git's funcname: the one
+*above* the hunk's leading context), or in the one a context line before it
+defines, so a 3-line-context patch names what a ``-U0`` one does; a hunk
+whose header names nothing reads no definitions from its context. Each
+message's ``Subject:`` without git's
 ``[PATCH n/m]`` and its ``From:`` as ``{"name", "email"}``. Headers are read only
 after an mbox ``From <sha> <date>`` line and until the blank line ending them;
 a cover letter (``[PATCH 0/n]``) is skipped whole. A ``diff --git`` line in a
@@ -62,6 +67,7 @@ class _Parser:
         self.pasted = None  # (files, symbols) counts before a diff pasted in a message
         self.dashes = False  # a pasted hunk's `---` line, until the next line tells what it is
         self.old_left = self.new_left = 0  # the current hunk's lines still to come
+        self.scope, self.scope_named = None, False  # the function a change is in; named yet
 
     def feed(self, line):
         if self.dashes:
@@ -184,7 +190,9 @@ class _Parser:
         else:
             self.old_left = self.new_left = 0
         if kind in ("+", "-"):
-            self._symbol(defined_symbol(line[1:], self.path))
+            self._change_line(line[1:])
+        elif kind == " ":
+            self._context_line(line[1:])
         else:
             self._hunk(_HUNK.match(line))
 
@@ -192,7 +200,19 @@ class _Parser:
         if match:
             old, new, context = match.groups()
             self.old_left, self.new_left = int(old or 1), int(new or 1)
-            self._symbol(hunk_symbol(context))
+            self.scope, self.scope_named = hunk_symbol(context), False
+
+    def _context_line(self, text):
+        """A definition in the context moves the scope the hunk header named."""
+        name = self.scope and defined_symbol(text, self.path)
+        if name:
+            self.scope, self.scope_named = name, False
+
+    def _change_line(self, text):
+        if not self.scope_named:
+            self._symbol(self.scope)
+            self.scope_named = True
+        self._symbol(defined_symbol(text, self.path))
 
     def _symbol(self, name):
         if name:
