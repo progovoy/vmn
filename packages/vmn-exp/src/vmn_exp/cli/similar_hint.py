@@ -8,7 +8,13 @@ Cheap or nothing. Its candidates are the app's index as this host last
 persisted it, and there is no hint without one: it never refreshes the index
 — a cold one means reading every record, and the process exit would wait for
 a refresh's reads (a remote store's run on a thread pool), budget or not. Of
-the store it reads only the new run's own record, which the cache predates.
+the store it reads only the new run's own record, which the cache predates,
+and only where the command just wrote it: the local side of a local-first
+storage (its replica, or a direct-to-remote store's log buffer, which holds
+every line of a run this process created) — never a remote, whose listings
+no deadline can interrupt. ``vmn-exp run`` passes the command it runs (its
+run state records it only once the child starts), so the hint ranks like
+``vmn-exp similar -v`` on the run.
 The budget (:data:`BUDGET_SEC`) bounds the work, not just the wait: the hint
 runs on the calling thread, so nothing is left running past it, and the
 search takes it as a deadline it checks while it builds its index and scores
@@ -36,6 +42,7 @@ from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.log import load_log
 from vmn_exp.core.similar import SimilarDeadlineExceeded, target_from_snapshot
 from vmn_exp.core.similar_search import conf_schema, conf_weights, hint_enabled, search
+from vmn_exp.storage.cached import CachedSnapshotStorage
 
 BUDGET_SEC = 0.3
 # The most runs an index may hold for the hint to load it within the budget
@@ -48,17 +55,18 @@ INNER_RUN_ENVS = ("VMN_EXPERIMENT_ID", "VMN_SWEEP_TRIAL")
 _clock = time.monotonic
 
 
-def print_hint(storage, app_name, verstr, args, exp_conf):
-    """Print the hint for the new run *verstr*, when wanted and found
-    within :data:`BUDGET_SEC`."""
+def print_hint(storage, app_name, verstr, args, exp_conf, command=None):
+    """Print the hint for the new run *verstr* (running *command*, an argv),
+    when wanted and found within :data:`BUDGET_SEC`."""
     deadline = _clock() + BUDGET_SEC
     try:
         if not _wanted(args, exp_conf):
             return
+        local = _local_side(storage)
         path = _cache_path(storage, app_name)
-        if not _searchable_in_budget(path, app_name):
+        if local is None or not _searchable_in_budget(path, app_name):
             return
-        lines = _lines(storage, app_name, verstr, exp_conf, path, deadline)
+        lines = _lines(local, app_name, verstr, exp_conf, path, deadline, command)
     except SimilarDeadlineExceeded:
         VMN_LOGGER.debug("No similar-runs hint: past its time budget")
         return
@@ -86,6 +94,15 @@ def _searchable_in_budget(path, app_name):
         store.close()
 
 
+def _local_side(storage):
+    """The storage the command wrote the new run to locally: a local-first
+    storage's local side, else *storage* unless it is remote (None)."""
+    if isinstance(storage, CachedSnapshotStorage):
+        # Private, but the cache's documented shape; it has no public accessor.
+        return storage._local
+    return None if getattr(storage, "is_remote", lambda: False)() else storage
+
+
 def _cache_path(storage, app_name):
     path_of = getattr(storage, "index_cache_path", None)
     return path_of(app_name) if path_of else None
@@ -104,15 +121,15 @@ def _check(deadline):
         raise SimilarDeadlineExceeded
 
 
-def _lines(storage, app_name, verstr, exp_conf, path, deadline):
-    target = _new_run_target(storage, app_name, verstr)
+def _lines(local, app_name, verstr, exp_conf, path, deadline, command):
+    target = _new_run_target(local, app_name, verstr, command)
     if target["row"].get("parent"):
         return None
     _check(deadline)
     schema = conf_schema(exp_conf)
     snapshot = _cached_snapshot(path, app_name, schema)
     _check(deadline)
-    items = search(storage, app_name, snapshot, target, schema=schema, top=HINT_TOP,
+    items = search(local, app_name, snapshot, target, schema=schema, top=HINT_TOP,
                    weights=conf_weights(exp_conf), deadline=deadline)
     _check(deadline)
     return hint_lines(items)
@@ -128,11 +145,15 @@ def _cached_snapshot(path, app_name, schema=None):
         store.close()
 
 
-def _new_run_target(storage, app_name, verstr):
-    """The similar-runs target of the run *verstr*, from its own record."""
-    meta = storage.load_metadata(app_name, verstr)
-    row, note, *values = lean_row(1, meta, fold_log(load_log(storage, app_name, verstr)))
+def _new_run_target(local, app_name, verstr, command=None):
+    """The similar-runs target of the run *verstr*, running *command*, from
+    its own record in the *local* storage."""
+    meta = local.load_metadata(app_name, verstr)
+    row, note, *values = lean_row(1, meta, fold_log(load_log(local, app_name, verstr)))
     sides = new_side_tables()
     put_side_tables(sides, verstr, values)
     own = IndexSnapshot.build(app_name, 0, [row], {}, {verstr: note}, **sides)
-    return target_from_snapshot(own, verstr, app=app_name)
+    target = target_from_snapshot(own, verstr, app=app_name)
+    if command:
+        target["command"] = list(command)
+    return target
