@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { appName as toAppName } from "../api";
 import ReportsUsing from "../components/ReportsUsing";
 import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
-import { branchClause, combineQueries, searchClause } from "../util/searchQuery";
+import { branchClause, combineQueries, searchClause, statusClause } from "../util/searchQuery";
 import { metricGoal, pollIntervalMs } from "../util";
 import type { ExperimentRow } from "../types";
 import { PageHead } from "../components/ui";
@@ -64,6 +64,14 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     archived: view.archived || undefined,
   }), [view.sort, view.order, view.status, serverQuery, view.archived]);
   const data = useLeaderboardRows(ws, app, filter);
+  // The similar mode keeps the bar's other filters: the box holds its text.
+  const similarQuery = combineQueries(
+    combineQueries(view.query, branchClause(view.branch)), statusClause(view.status),
+  );
+  const similarFilter = useMemo(() => ({
+    query: similarQuery || undefined,
+    archived: view.archived || undefined,
+  }), [similarQuery, view.archived]);
   const rows = data.rows;
 
   // Keep refreshing on our own while a run is still in flight, at the cadence
@@ -213,7 +221,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           />
 
           {similarText !== null ? (
-            <SimilarSearch ws={ws} app={app} text={similarText} />
+            <SimilarSearch ws={ws} app={app} text={similarText} filter={similarFilter} />
           ) : (
             <>
               <LeaderboardCharts

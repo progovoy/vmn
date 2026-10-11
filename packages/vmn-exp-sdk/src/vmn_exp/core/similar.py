@@ -47,7 +47,7 @@ def target_from_snapshot(snapshot, verstr, text=None, text_only=False, *, app=No
     """The target dict of the run *verstr* of *snapshot*; KeyError when absent.
     *app* names the snapshot's app, so that over several apps
     (:func:`similar_runs_multi`) the target's exclusions apply in its own only."""
-    row = index_for(snapshot).row(verstr)
+    row = _row_of(snapshot, verstr)
     if row is None:
         raise KeyError(verstr)
     features_of, intent_of, hypothesis_of = side_tables(snapshot)
@@ -58,6 +58,14 @@ def target_from_snapshot(snapshot, verstr, text=None, text_only=False, *, app=No
     if app is not None:
         target["app"] = app
     return target
+
+
+def _row_of(snapshot, verstr):
+    """*snapshot*'s row of *verstr*, or None — without building its index."""
+    lookup = getattr(snapshot, "row", None)
+    if callable(lookup):
+        return lookup(verstr)
+    return next((row for row in snapshot.rows if row["verstr"] == verstr), None)
 
 
 def goal_metric(schema, rows):
@@ -107,7 +115,8 @@ class _Scope:
     """One app's candidates for a query, with their raw BM25 text scores."""
 
     def __init__(self, app, snapshot, schema, query, rows_filter, deadline=None):
-        self.app, self.index, self._deadline = app, index_for(snapshot, deadline), deadline
+        self.index = index_for(snapshot, deadline, structured=not query.text_only)
+        self.app, self._deadline = app, deadline
         declared = getattr(snapshot, "declared_schema", None)
         self.schema = effective_schema(schema, declared() if declared else {})
         excluded = query.exclusion(self.index) if query.app in (None, app) else None

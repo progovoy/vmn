@@ -23,6 +23,17 @@ export function branchClause(branch: string): string | null {
   return lit && `branch = ${lit}`;
 }
 
+/** The query language's membership test of *field* over values that never
+ *  hold a quote, so plain double quotes are always a valid literal. */
+const inClause = (field: string, values: readonly string[]) =>
+  `${field} in (${values.map((v) => `"${v}"`).join(", ")})`;
+
+/** The `?status=` CSV as a server clause (null for no status). */
+export function statusClause(csv = ""): string | null {
+  const statuses = csv.split(",").filter(Boolean);
+  return statuses.length ? inClause("status", statuses) : null;
+}
+
 /** A typed query and the search clause, ANDed; either may be empty. */
 export function combineQueries(query: string, search: string | null): string {
   const q = query.trim();
@@ -40,7 +51,5 @@ export function runSearchQuery(text: string): string {
   return `verstr ~ ${quote}${safe}${quote} or note ~ ${quote}${safe}${quote}`;
 }
 
-/** The query language's membership test over verstrs. Verstrs never hold a
- *  quote, so plain double quotes are always a valid literal. */
-export const verstrInQuery = (verstrs: readonly string[]) =>
-  `verstr in (${verstrs.map((v) => `"${v}"`).join(", ")})`;
+/** The query language's membership test over verstrs (they never hold a quote). */
+export const verstrInQuery = (verstrs: readonly string[]) => inClause("verstr", verstrs);

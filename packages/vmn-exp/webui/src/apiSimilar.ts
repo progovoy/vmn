@@ -1,7 +1,8 @@
 /** Similar runs (plan 18): `GET .../experiments/{verstr}/similar` — the runs
  *  most like one run — and `GET .../apps/{app}/similar?text=` — the runs whose
  *  intent, name, note, tags or commit subjects match a free text. Both look in
- *  the app, or with `allApps` in every app of the workspace. */
+ *  the app, or with `allApps` in every app of the workspace, among the runs a
+ *  `query` matches (archived ones with `archived`). */
 import { appTag, get } from "./http";
 
 export interface SimilarIntent {
@@ -42,13 +43,19 @@ export interface SimilarRuns {
 export interface SimilarOptions {
   top?: number;
   allApps?: boolean;
+  /** Keep only the candidates this query-language query matches (`q`). */
+  query?: string;
+  /** Let archived runs be candidates. */
+  archived?: boolean;
 }
 
-function query({ top, allApps }: SimilarOptions, text?: string): string {
+function query({ top, allApps, query: q, archived }: SimilarOptions, text?: string): string {
   const p = new URLSearchParams();
   if (text !== undefined) p.set("text", text);
   if (top !== undefined) p.set("top", String(top));
   if (allApps) p.set("all_apps", "1");
+  if (q) p.set("q", q);
+  if (archived) p.set("archived", "1");
   const qs = p.toString();
   return qs ? `?${qs}` : "";
 }
