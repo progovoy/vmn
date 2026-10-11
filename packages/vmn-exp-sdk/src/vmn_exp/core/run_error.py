@@ -122,17 +122,19 @@ def _last_traceback(lines):
     return match.group("type"), "\n".join(message).rstrip(), cap_head_tail(tb)
 
 
-def error_from_output(text):
+def error_from_output(text, traceback_text=None):
     """The ``error`` mapping parsed from a run's captured output.
 
-    The last Python traceback in *text* gives ``type``/``message``/
-    ``traceback`` (chained exceptions end with the one that escaped); without
-    one only the ``output_tail`` is kept. None for empty output.
+    The last Python traceback in *traceback_text* (the child's stderr, where
+    no stdout line can interleave with it; *text* when None) gives ``type``/
+    ``message``/``traceback`` (chained exceptions end with the one that
+    escaped); without one only the ``output_tail`` of *text* is kept. None for
+    empty output.
     """
     if not text or not text.strip():
         return None
     error = {"source": SOURCE_OUTPUT, "output_tail": output_tail(text)}
-    found = _last_traceback(text.splitlines())
+    found = _last_traceback((text if traceback_text is None else traceback_text).splitlines())
     if found is not None:
         error["type"], error["message"], error["traceback"] = found
     return error

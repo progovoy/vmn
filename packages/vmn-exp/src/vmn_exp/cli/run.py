@@ -458,7 +458,10 @@ class _Supervision:
 
     def _output_error(self):
         """The ``error`` parsed from the captured output; None without capture."""
-        return error_from_output(self.output.text()) if self.output else None
+        if not self.output:
+            return None
+        stderr = self.tee.stderr_text() if self.tee else None
+        return error_from_output(self.output.text(), traceback_text=stderr)
 
     def _publish(self, what, **updates):
         self.guard(

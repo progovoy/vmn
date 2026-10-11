@@ -184,3 +184,19 @@ def test_summary_of_nothing_is_none():
 def test_values_are_plain_yaml_types():
     error = error_from_exception(_raised(OSError(2, "missing")))
     assert all(isinstance(v, str) for v in error.values())
+
+
+def test_traceback_text_is_parsed_instead_of_the_mixed_output():
+    # stdout printed before the crash can land after the stderr traceback
+    stderr = "Traceback (most recent call last):\n  File \"a.py\", line 2\nValueError: bad lr\n"
+    mixed = "Traceback (most recent call last):\n  File \"a.py\", line 2\nValueError: bad lr\nepoch 1\n"
+    error = error_from_output(mixed, traceback_text=stderr)
+    assert error["type"] == "ValueError"
+    assert error["message"] == "bad lr"
+    assert "epoch 1" in error["output_tail"]
+
+
+def test_traceback_text_without_a_traceback_keeps_only_the_tail():
+    error = error_from_output("disk full\n", traceback_text="warning: slow\n")
+    assert "type" not in error
+    assert error["output_tail"] == "disk full"
