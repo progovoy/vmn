@@ -268,14 +268,17 @@ def create_app(
             compute = lambda: exp_reader.list_apps(ws.path)  # noqa: E731
         return app_lists.get(ws_name, compute)
 
-    def _leaderboard_inputs(ws_name, app_tag):
-        """``(snapshot, effective metrics schema)`` of an app: rows summarized
-        by the conf schema (none in a store), sorted by it plus what the runs
-        declare (see :mod:`vmn_exp.core.metric_schema`)."""
-        ws = _experiment_workspace(ws_name)
-        app_name = _app_name(app_tag)
+    def _app_inputs(ws_name, app_tag):
+        """``(app name, snapshot, conf metrics schema)`` of an app: rows
+        summarized by the conf schema (none in a store)."""
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         schema = _app_schema(ws, app_name)
-        snapshot = source.snapshot(ws, app_name, _exp_storage_for(ws), schema)
+        return app_name, source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
+
+    def _leaderboard_inputs(ws_name, app_tag):
+        """``(snapshot, effective metrics schema)`` of an app: sorted by the
+        conf schema plus what the runs declare (see :mod:`vmn_exp.core.metric_schema`)."""
+        _, snapshot, schema = _app_inputs(ws_name, app_tag)
         return snapshot, effective_schema(schema, snapshot.declared_schema())
 
     def _app_schema(ws, app_name):
@@ -575,18 +578,13 @@ def create_app(
     def _search_scopes(ws_names):
         return ((ws, name, snap) for ws, name, snap, _ in _app_scopes(ws_names))
 
-    def _similar_inputs(ws_name, app_tag):
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        schema = _app_schema(ws, app_name)
-        return app_name, source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
-
     search_sql = None
     if search_dsn:
         from vmn_exp.ui.search_pg import PgRowSearch
 
         search_sql = PgRowSearch(search_dsn)
     routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
-    routes_similar.register(app, API_PREFIX, _similar_inputs, _app_scopes, _segment)
+    routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 

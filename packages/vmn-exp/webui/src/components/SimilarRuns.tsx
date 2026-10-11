@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
 import { appTag } from "../http";
 import { runSimilar } from "../apiSimilar";
-import type { SimilarItem } from "../apiSimilar";
+import type { SimilarItem, SimilarRuns as SimilarPayload } from "../apiSimilar";
 import type { RunState } from "../types";
 import { fmtVal, relTime, runHref } from "../util";
 import LazyMount from "./LazyMount";
@@ -61,14 +61,32 @@ export function SimilarList({ items, ownApp, truncated }: {
   );
 }
 
-/** "this app" / "all apps": where similar runs are looked for. */
-export function ScopeSelect({ allApps, onChange }: { allApps: boolean; onChange: (all: boolean) => void }) {
+/** What a similar-runs request gave: its error, a loading line, or the list
+ *  (*app* the URL tag of the app asked about). */
+export function SimilarAnswer({ error, data, app }: {
+  error: unknown; data: SimilarPayload | undefined; app: string;
+}) {
+  if (error) return <div className="error" role="alert">{(error as Error).message}</div>;
+  if (!data) return <div className="muted">Looking for similar runs…</div>;
+  return <SimilarList items={data.items} ownApp={toAppName(app)} truncated={data.truncated} />;
+}
+
+/** A "similar runs" card with its this app / all apps choice, which
+ *  *children* is given. */
+export function SimilarCard({ children }: { children: (allApps: boolean) => ReactNode }) {
+  const [allApps, setAllApps] = useState(false);
   return (
-    <select aria-label="Similar runs scope" value={allApps ? "all" : "app"}
-      onChange={(e) => onChange(e.target.value === "all")} style={{ marginLeft: "auto" }}>
-      <option value="app">this app</option>
-      <option value="all">all apps</option>
-    </select>
+    <div className="card similar">
+      <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        similar runs
+        <select aria-label="Similar runs scope" value={allApps ? "all" : "app"}
+          onChange={(e) => setAllApps(e.target.value === "all")} style={{ marginLeft: "auto" }}>
+          <option value="app">this app</option>
+          <option value="all">all apps</option>
+        </select>
+      </div>
+      {children(allApps)}
+    </div>
   );
 }
 
@@ -79,24 +97,19 @@ function RunSimilarList({ ws, app, verstr, allApps }: {
     queryKey: ["similar", ws, app, verstr, allApps],
     queryFn: () => runSimilar(ws, app, verstr, { allApps }),
   });
-  if (query.error) return <div className="error">{String(query.error)}</div>;
-  if (!query.data) return <div className="muted">Looking for similar runs…</div>;
-  return <SimilarList items={query.data.items} ownApp={toAppName(app)} truncated={query.data.truncated} />;
+  return <SimilarAnswer error={query.error} data={query.data} app={app} />;
 }
 
 /** The run page's "similar runs" card: fetched on its own once scrolled near,
  *  so neither the detail nor a run nobody scrolls to pays for the scoring. */
 export default function SimilarRuns({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
-  const [allApps, setAllApps] = useState(false);
   return (
-    <div className="card similar">
-      <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        similar runs
-        <ScopeSelect allApps={allApps} onChange={setAllApps} />
-      </div>
-      <LazyMount height={40}>
-        <RunSimilarList ws={ws} app={app} verstr={verstr} allApps={allApps} />
-      </LazyMount>
-    </div>
+    <SimilarCard>
+      {(allApps) => (
+        <LazyMount height={40}>
+          <RunSimilarList ws={ws} app={app} verstr={verstr} allApps={allApps} />
+        </LazyMount>
+      )}
+    </SimilarCard>
   );
 }
