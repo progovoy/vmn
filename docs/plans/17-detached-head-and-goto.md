@@ -212,6 +212,8 @@ note for the old branch names), CLAUDE.md `vmn goto` line, `docs/agent-skill.md`
 
 ## 10. Follow-ups (left out of the first pass, 2026-10-11)
 
+Status: **done 2026-10-11** except F1 (skipped). Commits `f465f484` (F7 F8 F9), `8586c732` (F3 F4 F5 F10), `992ac429` (F2), `5eb503a8` (F6 F11). F6 also fixed a regression: `vmn-exp create`/`run` auto-init in a detached CI checkout failed to push (now calls `vcs.ensure_on_branch()`).
+
 Each item is independent; TDD as usual. Paths under `packages/vmn/src/version_stamp/`.
 
 | # | Item | Why it was left out | Plan | Needs approval |
