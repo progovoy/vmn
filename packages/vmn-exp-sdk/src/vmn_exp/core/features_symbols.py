@@ -56,12 +56,16 @@ def hunk_symbol(context: str) -> str | None:
     return _declared_name(rest) or _signature_name(rest) or text[:FALLBACK_CHARS].rstrip()
 
 
-def _declared_name(rest: str) -> str | None:
-    for pattern in (_FUNCTION, _IMPL, _ASSIGNED, _PROPERTY):
+def _named_by(patterns, rest: str) -> str | None:
+    for pattern in patterns:
         match = pattern.match(rest)
         if match:
             return match.group(1)
-    return _declared_type(rest)
+    return None
+
+
+def _declared_name(rest: str) -> str | None:
+    return _named_by((_FUNCTION, _IMPL, _ASSIGNED, _PROPERTY), rest) or _declared_type(rest)
 
 
 def _declared_type(rest: str) -> str | None:
@@ -74,18 +78,23 @@ def _declared_type(rest: str) -> str | None:
 def _signature_name(rest: str) -> str | None:
     """``int f(int x)`` / ``void Foo::bar(int)`` / ``  method(args) {``: the name before
     the first ``(``, unless the line reads as a statement or a call."""
-    before, paren, _ = rest.partition("(")
+    found = _name_before_paren(rest)
+    if not found:
+        return None
+    name, lead, _ = found
+    if lead.endswith(".") or "=" in lead or _STATEMENT_WORDS.intersection(lead.split() + [name]):
+        return None
+    return name
+
+
+def _name_before_paren(rest: str):
+    """``(name, what precedes it, what follows its "(")`` of the first ``(``
+    of a line not ending in ``;``, else None."""
+    before, paren, after = rest.partition("(")
     if not paren or rest.rstrip().endswith(";"):
         return None
     match = _NAME_BEFORE_PAREN.search(before)
-    if not match:
-        return None
-    lead = before[: match.start()]
-    if lead.endswith(".") or "=" in lead:
-        return None
-    if _STATEMENT_WORDS.intersection(lead.split() + [match.group(1)]):
-        return None
-    return match.group(1)
+    return (match.group(1), before[: match.start()], after) if match else None
 
 
 _PYTHON_FILES = frozenset("py pyi pyw pyx pxd".split())
@@ -111,6 +120,7 @@ _NOT_TYPES = _STATEMENT_WORDS | frozenset(
 _TYPE_LEAD = re.compile(r"[\w$<>,*&\[\]\s]*")
 _CALL_ARGUMENTS = re.compile(r"[\"'`]|=>|\bfunction\b")
 _MACRO = re.compile(r"[A-Z][A-Z0-9_]*")
+_NAME_START = re.compile(r"[A-Za-z_$~]")
 
 
 def _extension(path: str) -> str:
@@ -122,13 +132,13 @@ def defined_symbol(line: str, path: str) -> str | None:
     """The name *line* — a diff content line without its ``+``/``-`` — defines
     in the file *path*; None for calls, statements, comments, prose and
     files that are not source code."""
-    text = line.strip()
     kind = _extension(path)
+    if kind not in _PYTHON_FILES and kind not in _CODE_FILES:
+        return None
+    text = line.strip()
     if kind in _PYTHON_FILES:
         match = _PY_DEFINITION.match(text)
         return (match.group(1) or match.group(2)) if match else None
-    if kind not in _CODE_FILES:
-        return None
     modifiers = _MODIFIERS.match(text).end()
     rest = text[modifiers:]
     declaring = bool(_DECLARING.intersection(text[:modifiers].split()))
@@ -136,12 +146,9 @@ def defined_symbol(line: str, path: str) -> str | None:
 
 
 def _strict_declared_name(rest: str) -> str | None:
-    for pattern in (_FUNCTION, _IMPL, _ARROW_ASSIGNED, _PROPERTY):
-        match = pattern.match(rest)
-        if match:
-            return match.group(1)
-    if rest.rstrip().endswith(";"):
-        return None  # `struct node head;` declares a variable
+    name = _named_by((_FUNCTION, _IMPL, _ARROW_ASSIGNED, _PROPERTY), rest)
+    if name or rest.rstrip().endswith(";"):  # `struct node head;` declares a variable
+        return name
     return _declared_type(rest)
 
 
@@ -149,13 +156,10 @@ def _defined_signature(rest: str, declaring: bool) -> str | None:
     """``int f(int x)``, ``void A::f() const {``, ``public T f(...)``, or a bare
     ``f(params) {`` (a method or constructor; not a macro or a call taking
     a callback)."""
-    before, paren, after = rest.partition("(")
-    if not paren or not re.match(r"[A-Za-z_$~]", rest) or rest.rstrip().endswith(";"):
+    found = _NAME_START.match(rest) and _name_before_paren(rest)
+    if not found:
         return None
-    match = _NAME_BEFORE_PAREN.search(before)
-    if not match:
-        return None
-    name, lead = match.group(1), before[: match.start()]
+    name, lead, after = found
     if lead.endswith(".") or not _TYPE_LEAD.fullmatch(lead.replace("::", "")):
         return None
     if _NOT_TYPES.intersection(lead.split() + [name]):

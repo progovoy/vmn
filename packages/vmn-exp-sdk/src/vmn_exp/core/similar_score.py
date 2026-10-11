@@ -80,11 +80,6 @@ def _number(value):
     return number if number is not None and math.isfinite(number) else None
 
 
-def _non_finite(value):
-    number = metric_number(value)
-    return number is not None and not math.isfinite(number)
-
-
 def _same(a, b):
     """Equality of two JSON values where a bool never equals a number."""
     return isinstance(a, bool) == isinstance(b, bool) and a == b
@@ -93,9 +88,9 @@ def _same(a, b):
 def value_closeness(a, b):
     """1 for equal values; positive numbers ``1 - min(1, |log10(a/b)| / 2)``;
     0 when either is NaN or infinite (not comparable)."""
-    if _non_finite(a) or _non_finite(b):
+    x, y = metric_number(a), metric_number(b)
+    if any(n is not None and not math.isfinite(n) for n in (x, y)):
         return 0.0
-    x, y = _number(a), _number(b)
     if x is not None and y is not None:
         if x > 0 and y > 0:
             # A difference of logs: the ratio itself under- or overflows.
