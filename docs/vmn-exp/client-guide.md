@@ -355,6 +355,27 @@ vmn-exp tag my_app @9 stage=candidate
 vmn-exp archive my_app @1 @2 @4
 ```
 
+### Has anyone run this before?
+
+Before submitting, ask which past runs (anyone's, any app) are most like your
+uncommitted change; with no `-v` it compares the working tree and creates
+nothing. Each line names who ran it, when, how it did and why it matched:
+
+```sh
+vmn-exp similar my_app --all-apps
+vmn-exp similar my_app -v @9 --query 'status = "succeeded"'            # runs like @9
+vmn-exp similar my_app --context "label smoothing" --text-only --json  # did anyone try X?
+vmn-exp show my_app -v @4 --patch                                      # read a match's change
+vmn-exp run my_app --intent-file intent.md -- python train.py          # say what this run is for
+```
+
+`create`/`run` also print the closest three on stderr. An intent (what the run
+is for, written by you or your AI agent) is matched too, and `vmn-exp skill
+--install` teaches agents the whole loop. Runs recorded before vmn-exp
+captured these facts get them with `vmn-exp similar-backfill my_app`. See
+[`similar`](experiments.md#similar) and
+[Intent](experiments.md#intent-what-a-run-is-for).
+
 ---
 
 ## 7. Reproduce: restore, goto, rerun, export

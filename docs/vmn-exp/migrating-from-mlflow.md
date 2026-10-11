@@ -63,9 +63,9 @@ vmn-exp import-mlflow --tracking-uri http://mlflow.internal:5000 \
 | Params | `params.*` entries in the run log |
 | Metrics (final value) | `metrics.*` entries in the run log |
 | Metric history (value, step, timestamp) | Per-step series in the run log |
-| Tags | `tags.*` entries |
+| Tags | `tags.*` entries; `mlflow.*` tags never become vmn tags (the ones [similar runs](#similar-runs-for-imported-runs) use are mapped below) |
 | Artifacts | Copied into the run's artifact directory (unless `--skip-artifacts`) |
-| Dataset inputs | `inputs.*` entries |
+| Dataset inputs | `inputs.*` entries (name, digest, source), from `--mlruns` and `--tracking-uri` alike |
 | Parent run ID | `parent` field on the inner run |
 | Run status | `run_state.yml` — FINISHED → `succeeded`; FAILED, KILLED → `failed`; RUNNING, SCHEDULED → `stuck` |
 
@@ -87,6 +87,56 @@ Imported runs have no code snapshot and no git ref.  `vmn-exp restore` and `vmn
 exp diff` will refuse with a message explaining that the run has no associated
 code, naming the source (`imported from mlflow run <run_id>; no code snapshot`,
 plus the MLflow source commit when it was recorded).
+
+### Similar runs for imported runs
+
+Imported runs take part in [`vmn-exp similar`](experiments.md#similar): they
+compare on params, inputs and metric names (a missing signal is left out, not
+counted against them), and on what their MLflow tags say:
+
+| MLflow tag | vmn |
+|---|---|
+| `mlflow.user` | the `features` entry's author (row field `author`): an email (contains `@`) as `git_user_email`, anything else as `os_user`; `author.source: mlflow` |
+| `mlflow.note.content` | the record's `note` (part of the text signal) |
+| `mlflow.source.git.branch` | the record's `branch` (row and query field) |
+| `mlflow.project.entryPoint`, else `mlflow.source.name` | the `features` entry's `entrypoint` (the entrypoint signal) |
+| `mlflow.source.name` | `imported_from.source_name` |
+| `mlflow.source.git.repoURL` | `imported_from.repo_url` |
+
+Blank tags count as absent. Every new import gets a `features` entry
+(`source: mlflow`).
+
+**Runs imported before this mapping existed** were skipped on re-import
+without reading their tags. `--refresh-features` brings them up to date in
+place, without rewriting the record: a run without a current `features` entry
+(or whose entry lacks the changes a `--repo` checkout now has) gets one built
+from its tags, carrying the MLflow branch when the record has none; a run
+without a note gets the MLflow note, including a note added in MLflow after the
+import. The entry is appended under this host's writer id; no lock is taken.
+The summary then counts them: `imported N, skipped M (already present),
+resumed K, refreshed R, failed F`. A second refresh changes nothing.
+`--dry-run` still only counts the runs it would import.
+
+```sh
+vmn-exp import-mlflow --mlruns ./mlruns --refresh-features my_app
+vmn-exp import-mlflow --tracking-uri http://mlflow:5000 --refresh-features --repo ~/src/project my_app
+```
+
+**Code changes from a checkout.** MLflow keeps no diff, only the commit a run
+ran at. With `--repo <path>` (on new imports and with `--refresh-features`),
+a run whose source commit exists in that checkout records the files and
+functions of `git diff $(git merge-base <default branch> <commit>) <commit>` as
+its `changed`, marked `changed_source: commit`. That is the branch's
+cumulative change rather than the run's own, so similar runs weighs it half.
+The default branch is origin/HEAD's target, else `main`, `master`,
+`origin/main`, `origin/master`; the diff runs no textconv or external diff
+driver and is read up to 5 MB (`truncated` past it). Nothing is recorded when
+the commit or a default branch is missing, or the commit changes nothing of
+its own. A `--repo` that is not a directory exits 1 before anything is read.
+
+An agent can then add an intent to imported runs like any other (`vmn-exp add
+<app> -v <ref> --intent-file -`, [Intent](experiments.md#intent-what-a-run-is-for));
+`vmn-exp show --patch` prints a one-line no-code note for them.
 
 ### Registry
 

@@ -115,6 +115,13 @@ the per-workspace SQLite files, so several replicas can share one cache:
 - `GET /api/v1/search` runs the query language as SQL over the synced rows.
   Queries that read `outputs` (not kept on the synced rows) are filtered in
   Python instead.
+- `GET /api/v1/similar?text=&top=&archived=` is its free-text sibling: the
+  runs whose intent, keywords, name, note, tags, commit subjects or hypothesis
+  match the text, over every app of every workspace the caller may view (viewer
+  role). It is scored in Python from each app's index snapshot, never from the
+  synced rows (they carry no features or intent); items name their
+  `workspace`. Parameters, limits and the item shape are in
+  [ui.md](ui.md#similar-runs).
 - Git workspaces keep their SQLite cache under `<data_dir>/index/`, per replica.
 
 Server-side edits (rewind, notes) write log segments under the writer id

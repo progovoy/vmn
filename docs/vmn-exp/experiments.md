@@ -43,7 +43,11 @@ Each experiment captures:
    state, so a run records exactly which knobs you changed, committed or not.
 2. **A log** — append-only entries: the initial `create`, then `metrics`,
    `note`, `artifact`, `run`, `structured`, `tags`, `define_metric`, `rewind`,
-   ... The log is never rewritten.
+   `features`, `intent`, ... The log is never rewritten.
+3. **Facts for finding it again** — who ran it and which files, functions and
+   commits the change touched (a `features` entry written at submission), and
+   optionally what it is for (an `intent`). [`similar`](#similar) ranks past
+   runs on them.
 
 Experiments are **content-addressed**:
 
@@ -355,7 +359,7 @@ Every `-v`/ref argument accepts:
 
 | Form | Means |
 |---|---|
-| *(omitted)* | the latest run for `add`/`show`/`restore`/`export`/`lineage`; the latest two for `compare`/`diff`; every local run for `push` |
+| *(omitted)* | the latest run for `add`/`show`/`restore`/`export`/`lineage`; the latest two for `compare`/`diff`; every local run for `push`; the current **working tree** (no run) for `similar` |
 | `--latest` or `latest` | the most recent run |
 | `@N` | the `[N]` row of `vmn-exp list` (1-indexed storage order, oldest first; stable under `--sort`/`--last`) |
 | a unique prefix | e.g. `-v 1.6.0-dev.a1b` |
@@ -373,13 +377,14 @@ leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
 `vmn exp list my_app` with vmn-exp installed). Actions: `create`, `run`,
 `add`, `list`, `show`, `compare`, `diff`, `restore`, `export`, `prune`,
 `tag`, `archive`, `unarchive`, `rewind`, `rerun`, `push`, `watch`,
-`compact`, `importance`, `lineage`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
+`compact`, `importance`, `lineage`, `similar`, `similar-backfill`,
+`export-metrics`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
 ([sweeps.md](sweeps.md)), `vmn-exp model` ([models.md](models.md)),
 `vmn-exp ui` ([ui.md](ui.md)).
 
 Read-only actions — `list`, `show`, `compare`, `diff`, `export`, `watch`,
-`importance`, `lineage` (and `import-mlflow`) — take no repo lock. `list`,
-`show`, `compare` and ref resolution read through the experiment index
+`importance`, `lineage`, `similar`, `export-metrics` (and `import-mlflow`) —
+take no repo lock. `list`, `show`, `compare` and ref resolution read through the experiment index
 (a per-host SQLite cache under `$VMN_EXP_CACHE_DIR`, else
 `$XDG_CACHE_HOME/vmn-exp` / `~/Library/Caches/vmn-exp` / `~/.cache/vmn-exp`,
 never inside the store), so
@@ -396,7 +401,7 @@ Flags shared by most actions:
 | `--experiment-dir <dir>` | local root instead of the checkout's `.vmn/` (or `$VMN_EXPERIMENT_DIR`) |
 | `--writer-id <id>` | this process's writer id; `$VMN_WRITER_ID` > `--writer-id` > conf `experiment.storage.writer_id` > `$HOSTNAME` > the host name |
 | `--from-snapshot <path>` | git-free mode against a tree from `vmn-exp export`; see [Git-free mode](#git-free-mode) |
-| `--json` | machine-readable output (`list`, `show`, `importance`, `lineage`, `push`, `rerun --print`) |
+| `--json` | machine-readable output (`list`, `show`, `importance`, `lineage`, `similar`, `push`, `rerun --print`) |
 
 ### `create`
 
@@ -419,7 +424,12 @@ vmn-exp create my_app --parent @2 --input "train=s3://bucket/train.csv#sha256:ab
 | `--fork-from <ref>` / `--fork-step N` | [fork](#outer--inner-jobs-sweeps) another run |
 | `--input [name=]uri[#digest]` | record an input (repeatable); see [Inputs and lineage](#inputs-and-lineage) |
 | `--no-env` | skip [environment capture](#environment-capture) |
+| `--intent <text>` / `--intent-file <path\|->` | what the run is for, matched by [`similar`](#similar); see [Intent](#intent-what-a-run-is-for) |
+| `--no-similar` | don't print the [similar-runs hint](#the-submission-hint) |
 | `--new-app` | confirm a brand-new app name in a repo that has other apps |
+
+After the claim, `create` prints up to 3 [similar past runs](#the-submission-hint)
+on stderr; stdout still ends with the verstr.
 
 ### `run`
 
@@ -434,6 +444,10 @@ Takes every `create` flag except `--metrics`, plus:
 | `--output-cap-mb <mb>` | `$VMN_EXP_OUTPUT_CAP_MB` or `10` | [`output.log`](#console-output-outputlog) cap |
 | `--no-capture-output` | capture on | don't keep `output.log`; the command inherits the terminal |
 | `--no-system-metrics` | sampling on | don't record `sys_*` metrics |
+
+`run` prints the [similar-runs hint](#the-submission-hint) once the repo lock
+is released, before the command starts. `--intent-file -` reads stdin, which
+the command then no longer gets.
 
 `run` never reopens an existing run. To continue one, use the SDK's
 `start_run(run_id=<ref>)` ([sdk.md](sdk.md#resuming-a-preempted-run)) or
@@ -486,6 +500,62 @@ summary's key packages only (`torch`, `tensorflow`, `jax`, `numpy`,
 `transformers`; other packages live in `env.yml` and never match). Versions are
 strings, so compare with `=`: `env.packages.torch = "2.0.0"`.
 
+### Intent: what a run is for
+
+`--intent "<text>"` or `--intent-file <path|->` (on `create`, `run`, `add`)
+records what a human, or their AI agent, says the run is for. It is matched by
+[`similar`](#similar), lexically: vmn runs no model.
+
+```sh
+vmn-exp run my_app --intent-file intent.md -- python train.py
+vmn-exp add my_app -v @4 --intent "baseline: plain cross-entropy"
+vmn-exp add my_app -v @4 --intent-file - < intent.md       # stdin
+```
+
+```markdown
+---
+keywords: [focal loss, class imbalance, long tail]
+generator: claude-opus-5-5
+---
+Hypothesis: focal loss (gamma=2) fixes the minority-class recall drop.
+Changed: src/loss.py::focal_loss (new); src/train.py::train_step uses it.
+```
+
+- A file may start with YAML front matter between two `---` lines (or `---`
+  … `...`): `keywords` (a list or a comma-separated string) and `generator`
+  (the model id that wrote it; absent means a human). The rest is the text. An
+  unclosed block is plain text; front matter that is not a YAML mapping, or
+  keywords of another type, exits 1. `-` reads stdin.
+- The text is stripped and cut at 16 KB of UTF-8 (`truncated: true`); keywords
+  are stripped, deduplicated case-insensitively and capped at 50; numbers and
+  dates become text. An empty text exits 1.
+- The input is checked before anything is written (a cold start's baseline
+  stamp included), so a bad one creates nothing. Inline text starting with `-`
+  needs `--intent=-x`.
+- `add` writes onto the latest run unless `-v`, like `--note`. Each call
+  appends an entry; the latest wins, so a new intent replaces the old one.
+  Forks and sweep trials start without one.
+- It is not the note: `--note` stays the short line `list` shows, while the
+  intent is the long description used for matching (set both if you like).
+  `-f`'s [`hypothesis:`](#structured-notes--params) is matched as text too.
+- Rows carry `has_intent` (a bool on every row), so the runs without one are
+  `list my_app --query 'has_intent = false'`. `show --json`'s `log` holds the
+  entry; `similar --json` items carry its first 2 KB.
+- SDK: `start_run(intent=, intent_keywords=)` and `run.set_intent(text,
+  keywords=, generator=)` ([sdk.md](sdk.md#similar-runs)).
+
+The entry ([`similar`](#what-a-run-records-for-similar) lists the `features`
+entry next to it):
+
+```yaml
+type: intent
+text: "markdown"          # <= 16384 bytes of UTF-8
+keywords: [..]            # <= 50, optional
+generator: "model id"     # optional
+source: user
+truncated: true           # only when the text was cut
+```
+
 ### `add`
 
 Append to a run (default: latest). Nothing is overwritten.
@@ -498,7 +568,8 @@ vmn-exp add my_app -v @2 --define-metric val_loss --goal min
 ```
 
 Flags: `--metrics`, `--note`, `--attach <file>` (an artifact), `-f <yaml>`,
-`--input`, and `--define-metric NAME [--goal min|max] [--summary
+`--input`, `--intent`/`--intent-file` ([Intent](#intent-what-a-run-is-for)),
+and `--define-metric NAME [--goal min|max] [--summary
 min|max|last|first|mean] [--step-metric M] [--hidden]` (the CLI's
 `run.define_metric`; see [summaries](#best-value-summaries-summary)).
 
@@ -526,15 +597,18 @@ alphabetically. Without `--sort`, the schema's `primary` metric orders rows.
 before `--last`, `--sort` and `--top`; a bad query exits 1 with the offset.
 Besides `metrics.*`, `params.*` and `tags.*` it sees every row field
 (`status`, `kind`, `depth`, `tree_status`, `name`, `archived`, `rerun_of`,
-`forked_from`, `imported_from`, `end_reason`, …), `inputs.*`, `outputs.*` and
-`env.*`.
+`forked_from`, `imported_from`, `end_reason`, `author`, `has_intent`, …),
+`inputs.*`, `outputs.*` and `env.*`. `author` is who ran it (the
+[`features`](#what-a-run-records-for-similar) author's git email, else OS
+user, else writer id; `null` when unknown): `list my_app --query 'author ~
+"alice"'`.
 
 `--json` prints the shown rows as a JSON array (keys sorted, non-finite
 metrics as `null`, `[]` for no runs), one object per run with the keys of an
 SDK [`list_runs`](sdk.md#reading-runs-back) row: `idx`, `verstr`,
-`code_verstr`, `timestamp`, `note`, `create_note`, `name`, `tags`,
-`archived`, `params`, `metrics`, `metric_summary`, `inputs`, `outputs`,
-`parent`, the status fields (`status`, `exit_code`, `started_at`,
+`code_verstr`, `timestamp`, `note`, `create_note`, `name`, `author`,
+`has_intent`, `tags`, `archived`, `params`, `metrics`, `metric_summary`,
+`inputs`, `outputs`, `parent`, the status fields (`status`, `exit_code`, `started_at`,
 `finished_at`, `heartbeat`, `duration_sec`, `pid`, `host`, …) and the tree
 fields (`children`, `kind`, `depth`, `tree_status`).
 
@@ -559,6 +633,30 @@ line count}`), `log` (newest 50, or all with `--full-log`), `log_total`,
 `features_version`, or `null`).
 The `features` entry is a fact about the run, not an event, so neither the
 text log nor `log`/`log_total` include it.
+
+`--patch [--max-bytes N]` also prints the run's own text patches after the
+show block — what to read when inspecting a [similar](#similar) run or writing
+an [intent](#intent-what-a-run-is-for) for an old one:
+
+```sh
+vmn-exp show my_app -v @3 --patch
+vmn-exp show my_app -v @3 --patch --json --max-bytes 50000
+```
+
+- Sections `=== working_tree ===`, `=== local_commits ===`, then each dep's
+  `=== deps/<dep>/<type> ===`. The untracked tarball is never printed.
+- At most `--max-bytes` (default 200000, at least 1) bytes, cut on a UTF-8
+  character boundary; past it a `[patch truncated at N bytes; raise
+  --max-bytes to see more]` line follows.
+- A run with no text patch prints `<verstr> has no patch to show: <reason>` on
+  stderr and exits 0: an MLflow import, a clean tree, a run recorded from an
+  exported tree, a pruned code object, or untracked files only (it names up to
+  three and points at `export`/`restore`).
+- With `--json` the object gains `patch`: `{"text", "truncated"}`, or `{"text":
+  null, "reason"}` with `reason` `no_code`, `code_missing` (the run's code
+  object is gone from the store) or `untracked_only` (plus `untracked_files`,
+  the tarball's paths, deps under `deps/<dep>/`, unless the tarball cannot be
+  read). Without `--patch` there is no `patch` key.
 
 ### `compare`
 
@@ -621,7 +719,8 @@ already speak `vmn goto`. `goto --force` matches `restore --force`.
 ### `export`
 
 Package a run (default: latest) — materialized code without `.git`,
-`vmn_metadata.yml`, `vmn_experiment.yml` (metadata + log), `artifacts/` and `outputs/` —
+`vmn_metadata.yml`, `vmn_experiment.yml` (metadata, log and `exported_by`: the
+exporter's writer, git email and OS user), `artifacts/` and `outputs/` —
 into a directory or a `.tar.gz`/`.tgz` (default `<verstr>.tar.gz`). Prints the
 output path. Runs without code are refused.
 
@@ -852,6 +951,203 @@ numeric param counts as its median, a missing categorical value as its own
 category. Past 5000 runs a deterministic sample of 5000 is scored. An unknown
 metric or bad query exits 1. SDK: `reader.param_importance`.
 
+### `similar`
+
+Has anyone run something like this before? The past runs most like a run, by
+anyone, in this app or (`--all-apps`) every app of the store — or, with no
+ref, like the **current working tree**, so you can ask before creating a run:
+
+```sh
+vmn-exp similar my_app                          # like my uncommitted change; creates nothing
+vmn-exp similar my_app -v @7 --top 5            # like run @7
+vmn-exp similar my_app --context-file intent.md --all-apps --json
+vmn-exp similar my_app --context "label smoothing, soft targets" --text-only
+vmn-exp similar my_app -v @7 --query 'status = "succeeded" and author ~ "alice"'
+```
+
+```
+0.0.3-dev.abc1234.def5678  0.82  alice@x.io  3w ago  succeeded  val_loss=0.31  — 2 shared functions: loss.py::focal_loss, train.py::train_step, same dataset imagenet@3, lr 3e-4 vs 1e-4  (+7 runs)
+0.0.2-dev.9f8e7d6.0000000  0.41  -  5mo ago  failed  —  — same base version 0.0.2, same metrics: val_loss
+```
+
+| Flag | Description |
+|---|---|
+| `-v <ref>` / `--latest` | the target run. Without either: the current working tree, captured without creating a run (unlike `show`/`restore`/`export`, where no ref means the latest run; like `vmn snapshot diff`) |
+| `--top N` | how many results (default 10) |
+| `--all-apps` | every app of the store, each under its own metrics schema |
+| `--query <expr>` | keep only candidates `list --query` would show (the target is never filtered) |
+| `--archived` | include archived runs |
+| `--context <text>` / `--context-file <path\|->` | a text query, combined with the target's code facts; it replaces the target's own text. A file's front matter `keywords` join the query (other keys are ignored) and `-` reads stdin, so an [`intent.md`](#intent-what-a-run-is-for) doubles as the query |
+| `--text-only` | match the context text alone (no code, params or inputs); needs `--context`/`--context-file`, and no working tree or run |
+| `--json` | the results as a JSON array |
+
+- **Output**: one line per result, `<verstr>  <score>  <author|->  <age>
+  <status>  <goal metric>=<value>|—  — <reasons>  (+N runs)`, with `<app>/`
+  before the verstr under `--all-apps`. Reasons are the top 3 contributing
+  signals; a comparison reads candidate first (`lr 3e-4 vs 1e-4` = the
+  candidate's lr vs the target's). No result prints `No similar runs found for
+  <app>` on stderr (exit 0; `--json` prints `[]`).
+- **`--json`** items: `app`, `verstr`, `name`, `score`, `reasons`, `signals`
+  (each signal's similarity), `group_size`, `author`, `timestamp`, `status`,
+  `goal` (`{metric, goal, value}` or `null`), `note` (the record's, else the
+  create note), `intent` (`{text, keywords?, generator?, truncated?}`, the text
+  cut to 2 KB, or `null`) and `features` (the run's
+  [`features`](#what-a-run-records-for-similar) entry or `null`).
+- **Left out**: the target run, every run of its exact code (same
+  `code_verstr`) and its whole run tree (its outer run, the trials and the SDK
+  runs they open, its own inner runs), in the target's app only. A
+  working-tree target excludes nothing.
+- **Grouped**: the runs of one tree (a sweep), else the runs of one
+  `code_verstr` (repeats of one code), fill one slot, shown by the member best
+  on the group's goal metric (the [schema](#metrics-schema-sorting--goals)
+  `goal` metric most of its runs carry), else the most similar one, with `(+N
+  runs)`. Ties sort newest first.
+- **Candidates** are the runs sharing at least one fact with the target (a
+  changed file or function, an input digest or dataset, a param key, the
+  script, a metric name, the base commit, a word of its text), at most 5000,
+  rarest facts first; then each is scored.
+- Read-only and lock-free; reads through the experiment index like `list`.
+  Git-free mode needs `-v`/`--latest` or `--text-only` (a working tree needs a
+  checkout). A bad `--query` exits 1. SDK: `reader.similar_runs`,
+  `run.similar()` ([sdk.md](sdk.md#similar-runs)); UI: the run page's similar
+  runs card and the leaderboard's similar mode ([ui.md](ui.md#similar-runs)).
+
+Each signal is a similarity in [0, 1]; the score is their weighted mean:
+
+| Signal | Similarity | Weight |
+|---|---|---|
+| `code` | same base commit 1.0, same base version 0.7, else decaying with the version distance | 2 |
+| `files` | Jaccard of the changed files (untracked paths included) | 2 |
+| `symbols` | Jaccard of the changed functions (`path::name`, from hunk headers and from definitions on added/removed lines, any language) | 3 |
+| `inputs` | same digest 1.0, same dataset name at another version 0.6 | 2 |
+| `params` | key Jaccard × mean value closeness (positive numbers `1 - min(1, \|log10(a/b)\|/2)`, else equality) | 1.5 |
+| `entrypoint` | same script 0.7, plus the same subcommand/args 1.0; launchers (`torchrun`, `accelerate launch`, `deepspeed`, `mpirun`, `srun`, `python -m torch.distributed.run`, …) are looked past | 1 |
+| `objective` | Jaccard of the metric names (minus params and `sys_*`) | 1 |
+| `branch` | equality | 0.5 |
+| `text` | BM25 over the intent text, its keywords (×3), name, note, tag keys and values, commit subjects and `-f`'s `hypothesis`, scaled by the best candidate's score | 1.5; code + inputs when the target has an intent or a context |
+
+A signal missing on either side is left out and the rest renormalised (it is
+unknown, not different), so an MLflow import without code still compares on
+params, inputs and metrics. `files`/`symbols` count half when either side's
+changes are a branch's cumulative diff (`changed_source: commit`, from
+`import-mlflow --repo`). Conf overrides, per app:
+
+```yaml
+conf:
+  experiment:
+    similar:
+      weights: {symbols: 4, branch: 0}   # merged over the defaults; invalid values ignored
+      hint: false                         # no submission hint
+```
+
+The CLI, the hint, the SDK and the UI routes all honour `weights`.
+
+#### The submission hint
+
+After the claim, `create` and `run` print up to 3 similar runs on stderr (`run`
+once the repo lock is released, before the command starts):
+
+```
+2 similar runs: best val_loss=0.31 — 0.0.3-dev.abc1234.def5678 by alice@x.io, 3w ago (same dataset imagenet@3, 1 shared function: loss.py::focal_loss)
+  0.0.3-dev.9f8e7d6.0000000 by bob@x.io, 2d ago (same base commit 9f8e7d6, same branch main)
+```
+
+It leads with the best of them on its goal metric (`closest — …` when none has
+one). Cheap or nothing, and never affecting the run:
+
+- Its candidates are this host's persisted index of the app, as `list`,
+  `similar` or `vmn-exp ui` last refreshed it; it never refreshes from the
+  store, so a cold cache prints nothing and runs since the last refresh are
+  not seen (`vmn-exp similar <app> -v <verstr>` shows them).
+- It is skipped for an app whose persisted index holds more than 4000 runs,
+  and prints nothing past a 300 ms budget.
+- Never for inner runs (`--parent`, an enclosing run's `VMN_EXPERIMENT_ID`,
+  sweep trials).
+- Off with `--no-similar` or conf `experiment.similar.hint: false`. The SDK
+  prints no hint.
+
+#### What a run records for similar
+
+Every git-mode run (`create`, `run`, sweep trials, `start_run()`) gets a
+`features` entry right after its `create` entry: who ran it and what the
+change touched, read from the captured patches.
+
+```yaml
+type: features
+features_version: 1
+source: capture             # capture | rerun | export | backfill | mlflow
+author: {writer: gpu-07, git_user_email: a@x.io, os_user: alice, source: git}
+changed:
+  files: [src/loss.py, src/train.py]       # deps under their configured path
+  symbols: ["src/loss.py::focal_loss", "src/train.py::train_step"]
+  untracked: [notes/idea.md]               # paths only, at capture only
+commits: ["try focal loss gamma=2"]        # the local commits' subjects
+truncated: true                            # only when a cap cut a list
+```
+
+- Empty values are left out. Caps: 200 files, 500 functions, 50 commits, 200
+  untracked paths. MLflow entries may also carry `entrypoint`, `branch` and
+  `changed_source: commit` ([migrating-from-mlflow.md](migrating-from-mlflow.md#similar-runs-for-imported-runs)).
+- `author.source` says where the email came from: `git` (git config
+  `user.email` in the repo, given up on after 2 s), `env`
+  (`VMN_EXP_AUTHOR`), `commit` (the first local commit's `From:`), `export`
+  (the exporter's, git-free), `mlflow`, or `host` (no email; writer and OS user
+  only). The row field `author` shows the email, else the OS user, else the
+  writer.
+- The branch is not repeated here: every record's metadata has it (row field
+  `branch`).
+- Best-effort, like environment capture: a failure warns and the run is
+  created without the entry; [`similar-backfill`](#similar-backfill) fills it
+  in later.
+- A rerun copies the original's facts with the rerunner as the author
+  (`source: rerun`); a fork captures its own and inherits neither features nor
+  intent. A [git-free](#git-free-mode) run copies the exported run's facts from
+  `vmn_experiment.yml` (`source: export`; author email: git config in the tree,
+  else the export's `exported_by`, else `VMN_EXP_AUTHOR`); without that file
+  only the author is known and the entry has `features_version: 0`, so
+  `similar-backfill` completes it.
+- The fold keeps the entry with the highest `features_version`, then the
+  latest. `show` leaves it out of the log; `show --json` gives it as
+  `features`.
+
+### `similar-backfill`
+
+Give runs the `features` entry their code implies when they lack one at the
+current `features_version`: runs recorded before features existed, whose
+capture failed, or captured by an older vmn-exp.
+
+```sh
+vmn-exp similar-backfill my_app --dry-run
+vmn-exp similar-backfill my_app --all-apps
+```
+
+```
+0.0.1-dev.abc1234.def5678  backfilled (2 files, 2 symbols, 1 commit)
+0.0.1-dev.abc1234.0000000  backfilled (clean tree)
+0.0.2-dev.9f8e7d6.1a2b3c4  partial (code object 0.0.2-dev.9f8e7d6.1a2b3c4.<diff hash> is missing)
+0.0.2-dev.9f8e7d6.5d6e7f8  skipped (running)
+backfilled 2, partial 1, skipped 1, failed 0
+```
+
+- Skips runs that are up to date, `running`/`stuck`, or imported
+  (`imported_from`; MLflow runs use `import-mlflow --refresh-features`).
+- Reads only the text patches of the run's code object (never the untracked
+  tarball), each object parsed once. A clean tree gets a complete entry with
+  nothing changed. A run whose code object is gone is `partial`: its entry has
+  no `changed` (or keeps its older entry's). Code the store lists but cannot
+  read `failed`s the run and writes nothing, so the next backfill retries it.
+- What an older entry observed at submission (author, branch, entrypoint,
+  untracked paths) is carried over; only `changed`/`commits` are recomputed.
+  Without one, the author is the first local commit's `From:` plus the writer
+  that created the run (for a run `migrate` converted from v1, its run state's
+  host).
+- The entry (`source: backfill`) is appended under this host's writer id.
+- Prints `<verstr>  backfilled|partial|skipped|failed[ (detail)]` per run
+  (`<app>:` header lines under `--all-apps`), then `backfilled N, partial P,
+  skipped S, failed F` (plus ` (dry run: nothing written)` with `--dry-run`).
+  Exit 1 when any run failed; a second backfill skips every run.
+- Takes the repo lock like `tag`, honours the store flags, works git-free.
+
 ### `export-metrics`
 
 ```sh
@@ -889,15 +1185,20 @@ vmn-exp import-mlflow --mlruns ./mlruns --experiment my_exp --experiment 3 --dry
 | `--include-deleted` | include deleted/trashed runs |
 | `--dry-run` | preview, write nothing |
 | `--workers N` | parallel workers (default 8) |
+| `--refresh-features` | give already-imported runs the [features](#what-a-run-records-for-similar) (author, entrypoint, branch) and note their MLflow tags hold but the record lacks |
+| `--repo <path>` | a checkout holding the runs' source commits: record what each commit's branch changed (`changed`, `changed_source: commit`) |
 
 Re-import is idempotent: runs are keyed by MLflow `run_id` with a
 deterministic verstr `0.0.0-mlflow.<run_id[:12]>`, so present runs are
 skipped and parents resolve in any order. Prints `imported N, skipped M
-(already present), resumed K, failed F`; exits 1 if any failed. Takes no
-repo lock and never auto-inits; write outside a repo with `--experiment-dir`/
-`VMN_EXPERIMENT_DIR` or straight to a store with `--store`. Imported runs have
+(already present), resumed K, failed F` (with `--refresh-features`: `imported
+N, skipped M (already present), resumed K, refreshed R, failed F`); exits 1 if
+any failed. Takes no repo lock and never auto-inits; write outside a repo with
+`--experiment-dir`/`VMN_EXPERIMENT_DIR` or straight to a store with `--store`. Imported runs have
 no code (`restore`/`export`/`rerun` refuse them) and match
-`imported_from != null`. Guide: [migrating-from-mlflow.md](migrating-from-mlflow.md).
+`imported_from != null`. The MLflow user, note, branch and entrypoint feed
+[`similar`](#similar) ([tag mapping](migrating-from-mlflow.md#similar-runs-for-imported-runs)).
+Guide: [migrating-from-mlflow.md](migrating-from-mlflow.md).
 
 ---
 
@@ -918,7 +1219,9 @@ tags: [baseline, transformer-v2]
 
 `params` are kept verbatim (strings and bools included; query them as
 `params.<name>`); finite numeric params also fold into `metrics`. `exp diff`
-prints a `params:` delta next to the `metrics:` delta.
+prints a `params:` delta next to the `metrics:` delta. The `hypothesis` is
+matched as text by [`similar`](#similar), like an
+[intent](#intent-what-a-run-is-for) (which can be long and is replaceable later).
 
 ---
 
@@ -1068,7 +1371,10 @@ vmn-exp run my_app --from-snapshot /mnt/code --experiment-dir /mnt/runs -- pytho
 
 `--from-snapshot` (or `$VMN_SNAPSHOT_METADATA`) accepts the file or its
 directory. In this mode `create`, `run`, `add`, `list`, `show`, `compare`,
-`prune`, `rewind` and `push` work; other actions need a checkout.
+`prune`, `rewind`, `push`, `similar-backfill` and `similar` (with `-v`/`--latest`
+or `--text-only`) work; other actions need a checkout. A run recorded this way
+copies the exported run's [features](#what-a-run-records-for-similar) from
+`vmn_experiment.yml`.
 `start_run()` honours the same variables
 ([sdk.md](sdk.md#runs-without-a-git-checkout-containers)).
 
@@ -1284,7 +1590,7 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_WORKING_DIR` | the directory `run` starts the command in |
 | `VMN_MODE` | `disabled`: `run` execs the command without recording |
 | `VMN_CAPTURE_ENV` | `0`/`false`/`no`/`off` disables [environment capture](#environment-capture) |
-| `VMN_EXP_AUTHOR` | who a new run's `features` entry names as its author when git config has no `user.email` |
+| `VMN_EXP_AUTHOR` | the email a new run's [`features`](#what-a-run-records-for-similar) author gets when git config has no `user.email` (git-free: after the export's `exported_by`; git mode: before the first local commit's `From:`) |
 | `VMN_SYSTEM_METRICS` | `0`/`false`/`no`/`off` disables `sys_*` sampling |
 | `VMN_EXP_OUTPUT_CAP_MB` | `output.log` cap (`--output-cap-mb`) |
 | `VMN_EXP_KILL_GRACE_SEC` | signal grace (`--kill-grace-sec`) |

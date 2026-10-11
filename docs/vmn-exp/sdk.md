@@ -78,7 +78,7 @@ start_run(
     heartbeat_interval_sec=None, storage=None, system_metrics=None,
     sync_interval_sec=30, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
-    capture_output=False, mode=None,
+    capture_output=False, mode=None, intent=None, intent_keywords=None,
 )
 ```
 
@@ -102,6 +102,7 @@ start_run(
 | `capture_env` | `None`: capture Python version, platform and installed packages unless opted out (`VMN_CAPTURE_ENV=0` > conf `experiment.capture_env: false`); `False`: skip; `True`: capture despite conf.yml, not despite the env var. A resumed run keeps its original env |
 | `capture_output` | tee fds 1/2 (so `print`, logging, C extensions and subprocesses) into the run's [`output.log`](experiments.md#console-output-outputlog) artifact, capped by `$VMN_EXP_OUTPUT_CAP_MB` (default 10; head and tail kept), uploaded every `sync_interval_sec` and at finish. Off by default: the process then writes to pipes, not its TTY, which debuggers and notebooks may not expect. Leave it off under `vmn-exp run`, which captures already |
 | `mode` | `None`: follow `$VMN_MODE`; `"disabled"`: record nothing ([Disabled mode](#disabled-mode)); `"enabled"`: record even under `VMN_MODE=disabled`. Anything else raises `ValueError` |
+| `intent` / `intent_keywords` | what the run is for, matched by [similar runs](#similar-runs): markdown text (cut at 16 KB) and synonyms (a list or a comma-separated string), as `run.set_intent` writes them once the run opens (a resumed run gets one only when given). A bad one, or keywords without an intent, raises `ValueError` before anything is created. No front matter is parsed here (the CLI's `--intent-file` does that) |
 
 Calling `start_run()` again on a thread whose run is still open (a re-run
 notebook cell that never called `finish()`) raises `RuntimeError`; pass
@@ -201,10 +202,12 @@ Every call appends to the run's log; nothing is rewritten.
 | `define_metric(name, step_metric=None, summary=None, goal=None, hidden=None)` | how a metric (or `fnmatch` glob) is charted, ranked and shown: [x axis](#custom-x-axis-step_metric), [goals and summaries](#metric-goals-and-summaries) |
 | `alert(title, text="", level="info", wait_sec=None)` | an [alert](#alerts) |
 | `register_model(...)`, `use_model(ref)`, `use_dataset(ref)` | [registry](#model-registry) shortcuts bound to this run |
+| `set_intent(text, keywords=None, generator=None)` | what the run is for ([similar runs](#similar-runs)); the latest intent wins. Also on a finished run, synced to the remote at once |
 
 `Run` attributes: `id` (verstr), `app_name`, `name`, `step`, `start_step` (the
 step a fork/rewind continues from, else `None`), `pid` (the owning process),
-`disabled`.
+`disabled`. `run.similar(top=10)` reads instead of recording: the past runs
+most like this one so far ([Similar runs](#similar-runs)).
 
 Artifact names may be nested relative paths; absolute paths, `..`, `.`, empty
 components, backslashes and NUL raise `ValueError` (`log_artifacts` checks every
@@ -663,6 +666,7 @@ only when a checkout is found and `app_name`/`storage` are not both given.
 | `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None, query=None, use_index=True, include_archived=False)` | rows, oldest first. `status`: a status or list/comma-separated statuses; `query`: [the query language](#the-query-language) (`QueryError` on a bad one); `last` keeps the last N (before sorting); `sort` orders by a metric (default the configured [primary metric](experiments.md#metrics-schema-sorting--goals)); archived runs only with `include_archived=True` |
 | `get_run(app_name=None, ref="latest", *, storage=None, x=None)` | one row plus `log`, `series` (metric → `[{"step", "ts", "value"}]` in log order), `step_metrics`, `artifacts`, `format_version` and the media indexes. `x=` joins series on a metric ([x axis](#custom-x-axis-step_metric)). `ValueError` for an unknown ref |
 | `get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)` | see [Lineage](#lineage) |
+| `similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=None, context=None, text_only=False, all_apps=False)` | the past runs most like run `ref`, most similar first; see [Similar runs](#similar-runs) |
 | `param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None, include_archived=False)` | `[{"param", "importance", "correlation", "spearman", "kind", "n"}]`, most important first, over the runs `list_runs` would return. `importance` is a random-forest share (sums to 1); correlations are `None` for categorical params ([details](experiments.md#importance)). `ValueError` when no run carries `metric` |
 | `runs_dataframe(app_name=None, **list_runs_kwargs)` | pandas, below |
 | `get_metric_history(metric, app_name=None, ref="latest", *, storage=None, step_range=None, max_points=None)` | pandas, below |
@@ -753,6 +757,46 @@ The other direction, which run made a registry version and which runs used it
 (across apps), is `vmn_exp.registry.lineage.version_lineage(storage, name, n)`;
 see [models.md](models.md#lineage).
 
+### Similar runs
+
+"Has anyone run something like this before?", from Python. Scoring, grouping
+and the signals are in [experiments.md](experiments.md#similar).
+
+```python
+from vmn_exp.sdk import start_run
+from vmn_exp.sdk.reader import similar_runs
+
+with start_run("my_app", params={"gamma": 2},
+               intent="Focal loss (gamma=2) for the minority-class recall drop.",
+               intent_keywords=["focal loss", "class imbalance"]) as run:
+    for item in run.similar(top=3):
+        print(item["verstr"], item["score"], item["author"], item["reasons"])
+    run.set_intent("...", keywords=["focal loss"], generator="claude-opus-5-5")  # replaces it
+
+similar_runs("my_app", ref="@3", top=5)                                # runs like @3
+similar_runs("my_app", ref=None, context="label smoothing", text_only=True, all_apps=True)
+```
+
+- `similar_runs` returns what `vmn-exp similar <app> -v <ref> --json` prints:
+  `[{"app", "verstr", "name", "score", "reasons", "signals", "group_size",
+  "author", "timestamp", "status", "goal", "note", "intent", "features"}]`,
+  most similar first.
+- The run itself, the runs of its exact code, its run tree and archived runs
+  are left out. `context` replaces the run's text with a query text;
+  `text_only=True` matches that text alone, and with `ref=None` needs no run.
+  There is no working-tree target here (`vmn-exp similar <app>` without `-v`
+  has one). `query` narrows the candidates like `list_runs`'s; `all_apps`
+  searches every app of the storage. The checkout's conf.yml, when found, gives
+  each app's metrics schema and `experiment.similar.weights`. `ValueError` for
+  an unknown ref (or `text_only` without a `context`), `QueryError` on a bad
+  `query`.
+- `run.similar(top=10)` flushes the run's pending log first, so its own
+  params, inputs and intent so far count. `NoOpRun.similar()` returns `[]` and
+  `NoOpRun.set_intent()` does nothing.
+- `start_run()` prints no similar-runs hint; `vmn-exp create`/`run` do.
+- Rows carry `author` and `has_intent`, so `list_runs("my_app", query="has_intent
+  = false")` lists the runs still without an intent.
+
 ---
 
 ## The query language
@@ -792,8 +836,11 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `status`, `exit_code`, `started_at`, `finished_at`, `heartbeat`,
   `duration_sec`, `pid`, `host`, `command`, `stale_sec`,
   `heartbeat_interval_sec`, `children`, `kind`, `depth`, `tree_status`,
-  `imported_from`, `forked_from`, `forked_from_step`, `rerun_of` (see
-  [ui.md](ui.md#experiment-status-fields)). `archived = true` only matters with
+  `imported_from`, `forked_from`, `forked_from_step`, `rerun_of`, `author`,
+  `has_intent` (see [ui.md](ui.md#experiment-status-fields)). `author` is who
+  ran it (the [features](experiments.md#what-a-run-records-for-similar)
+  author's git email, else OS user, else writer; `null` when unknown);
+  `has_intent` is a bool on every row. `archived = true` only matters with
   `include_archived=True`.
 - `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
   is missing), `env.<key>` (the captured environment summary: `python`,
@@ -988,6 +1035,7 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_SYSTEM_METRICS` | `0`/`false`/`no`/`off` disables `sys_*` sampling |
 | `VMN_EXP_SUPERVISOR_SAMPLES` | set by `vmn-exp run` when it samples the child; `system_metrics` then defaults off |
 | `VMN_CAPTURE_ENV` | `0`/`false`/`no`/`off` disables environment capture |
+| `VMN_EXP_AUTHOR` | the email a new run's `features` author gets when git config has no `user.email` ([experiments.md](experiments.md#what-a-run-records-for-similar)) |
 | `VMN_EXP_OUTPUT_CAP_MB` | `capture_output` size cap (default 10) |
 | `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | alert sinks and triggers ([experiments.md](experiments.md#alerts)) |

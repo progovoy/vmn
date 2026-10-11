@@ -32,7 +32,7 @@ Jobs that only record metrics need just `pip install vmn-exp-sdk`
 
 | Doc | Covers |
 |---|---|
-| [experiments.md](experiments.md) | the `vmn-exp` CLI, run status and alerts, nesting, storage, offline recording and `push` |
+| [experiments.md](experiments.md) | the `vmn-exp` CLI, run status and alerts, nesting, similar runs and intents, storage, offline recording and `push` |
 | [sdk.md](sdk.md) | the `vmn_exp.sdk` Python SDK: `start_run`, logging, autolog, readers, query language, integrations |
 | [ui.md](ui.md) | `vmn-exp ui`: deployment and the HTTP API |
 | [models.md](models.md) | the model and dataset registry |
