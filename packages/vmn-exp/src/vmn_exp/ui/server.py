@@ -11,50 +11,50 @@ import os
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
-
-from vmn_exp.ui.audit import AuditLog, install_audit_middleware
-from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
-from vmn_exp.ui.auth.authz import require, require_action
-from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
+from vmn_exp.storage.store_marker import require_store
 from vmn_exp.ui import (
     routes_admin,
     routes_cache,
+    routes_comments,
     routes_leaderboard,
     routes_lineage,
     routes_media,
-    routes_comments,
     routes_models,
     routes_reports,
     routes_search,
     routes_series,
+    routes_similar,
     routes_sweep,
     routes_tree,
 )
+from vmn_exp.ui.audit import AuditLog, install_audit_middleware
+from vmn_exp.ui.auth import build_chain
+from vmn_exp.ui.auth.authz import require, require_action
+from vmn_exp.ui.auth.principal import ADMIN, VIEWER
+from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
-from vmn_exp.ui.tenancy import install_org_middleware
 from vmn_exp.ui.readers import changelog as changelog_reader
 from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import experiments as exp_reader
-from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
     GZIP_MIN_BYTES,
     SafeJSONResponse,
     json_response,
 )
-from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
 from vmn_exp.ui.static_files import mount_static
-from vmn_exp.storage.store_marker import require_store
+from vmn_exp.ui.tenancy import install_org_middleware
 from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
 
 API_PREFIX = "/api/v1"
@@ -91,9 +91,9 @@ def create_app(
     workspaces' indexes there, refreshed by one elected replica."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
+    from vmn_exp.ui import storage_access
     from vmn_exp.ui.jobs import JobRunner, build_command
     from vmn_exp.ui.jobs_store import build_store_action
-    from vmn_exp.ui import storage_access
     from vmn_exp.ui.storage_access import EDIT, READ
 
     app = FastAPI(
@@ -563,13 +563,22 @@ def create_app(
     routes_reports.register(app, API_PREFIX, _ws_storage, _report_index)
     routes_comments.register(app, API_PREFIX, _ws_storage)
 
-    def _search_scopes(ws_names):
+    def _app_scopes(ws_names):
+        """``(ws_name, app_name, snapshot, conf schema)`` of every app of *ws_names*."""
         for ws_name in ws_names:
             ws = _workspace(ws_name)
             for row in sorted(list_apps(ws_name), key=lambda r: r["name"]):
                 name = row["name"]
                 schema = _app_schema(ws, name)
-                yield ws_name, name, source.snapshot(ws, name, _exp_storage_for(ws), schema)
+                yield ws_name, name, source.snapshot(ws, name, _exp_storage_for(ws), schema), schema
+
+    def _search_scopes(ws_names):
+        return ((ws, name, snap) for ws, name, snap, _ in _app_scopes(ws_names))
+
+    def _similar_inputs(ws_name, app_tag):
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        schema = _app_schema(ws, app_name)
+        return app_name, source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
 
     search_sql = None
     if search_dsn:
@@ -577,6 +586,7 @@ def create_app(
 
         search_sql = PgRowSearch(search_dsn)
     routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
+    routes_similar.register(app, API_PREFIX, _similar_inputs, _app_scopes, _segment)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
