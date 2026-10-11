@@ -87,8 +87,15 @@ def _inputs(inputs):
 
 _LAUNCHERS = frozenset(
     "python python3 pythonw py ipython uv uvx run poetry pipenv conda torchrun "
-    "accelerate launch deepspeed mpirun srun bash sh zsh env time nohup exec node "
-    "rscript julia".split()
+    "accelerate launch deepspeed mpirun mpiexec srun horovodrun bash sh zsh env time "
+    "nohup exec node rscript julia".split()
+)
+# `python -m <one of these> [its options] <script or program>` runs that script.
+_LAUNCHER_MODULES = frozenset(
+    "torch.distributed.run torch.distributed.launch accelerate.commands.launch "
+    "accelerate.commands.accelerate_cli deepspeed.launcher.runner deepspeed.launcher.launch "
+    "horovod.runner.launch mpi4py torch_xla.distributed.xla_dist pdb debugpy cProfile "
+    "profile".split()
 )
 _PYTHON = re.compile(r"python\d+(\.\d+)*$")
 _SCRIPT = re.compile(r"\.(py|sh|ipynb|r|jl|js|ts|rb|pl|lua)$", re.IGNORECASE)
@@ -108,20 +115,55 @@ def _launcher(token):
             or name in _LAUNCHERS or bool(_PYTHON.match(name)))
 
 
+def _takes_value(token):
+    return token.startswith("-") and "=" not in token and token != "--"
+
+
+def _entry(argv, i):
+    return argv[i].rsplit("/", 1)[-1], tuple(argv[i + 1:])
+
+
 def entrypoint(command):
     """``(script, args)`` of a command line (argv list or string): the first
-    script-looking path, else the module after ``-m``, else the first word
-    that is no launcher, flag or ``K=V``; ``(None, ())`` when there is none."""
+    script-looking path, else the module after ``-m`` — looked past when it is
+    a launcher (``python -m torch.distributed.run ... train.py``) — else the
+    program (:func:`_program`); ``(None, ())`` when there is none."""
     argv = _argv(command)
     for i, token in enumerate(argv):
         if token == "-m" and i + 1 < len(argv):
-            return argv[i + 1], tuple(argv[i + 2:])
+            return _module_entry(argv[i + 1], argv[i + 2:])
         if not token.startswith("-") and "=" not in token and _SCRIPT.search(token):
-            return token.rsplit("/", 1)[-1], tuple(argv[i + 1:])
+            return _entry(argv, i)
+    return _program(argv)
+
+
+def _module_entry(module, rest):
+    if module in _LAUNCHER_MODULES:
+        launched = entrypoint(rest)
+        if launched[0]:
+            return launched
+    return module, tuple(rest)
+
+
+def _program(argv):
+    """The first word that is no launcher, flag, ``K=V`` or flag value (a
+    word right after a flag, unless no other follows: ``srun -p gpu
+    hostname``), or what follows a ``--`` that ends the launchers' options
+    (``srun -p gpu -- ./bench``)."""
+    value = None
     for i, token in enumerate(argv):
-        if not _launcher(token):
-            return token.rsplit("/", 1)[-1], tuple(argv[i + 1:])
-    return None, ()
+        if token == "--":
+            launched = entrypoint(argv[i + 1:])
+            if launched[0]:
+                return launched
+            break
+        if _launcher(token):
+            continue
+        if i and _takes_value(argv[i - 1]):
+            value = i if value is None else value
+            continue
+        return _entry(argv, i)
+    return (None, ()) if value is None else _entry(argv, value)
 
 
 def build_profile(row=None, features=None, intent=None, hypothesis=None,
@@ -132,7 +174,7 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
     (the run state's), else ``features.entrypoint``. *text*, when given,
     replaces the run's text document (a ``--context`` query).
     """
-    row, features = _dict(row), _dict(features)
+    row, features, intent = _dict(row), _dict(features), _dict(intent)
     changed = _dict(features.get("changed"))
     p = Profile()
     p.commit, p.base = _code(row)
@@ -151,7 +193,6 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
         terms = document_terms(row, features, intent, hypothesis, create_note)
         p.keywords = tuple(keyword_phrases(intent))
     p.terms, p.length = Counter(terms), len(terms)
-    intent = _dict(intent)
     p.has_intent = bool((text or "").strip() or intent.get("text") or p.keywords)
     return p
 

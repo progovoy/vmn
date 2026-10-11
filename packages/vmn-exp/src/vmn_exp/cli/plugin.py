@@ -43,6 +43,7 @@ EXPERIMENT_ACTIONS = [
 
 
 def _add_experiment_parser(subprasers, name):  # noqa: N802
+    from vmn_exp.cli import views
     from vmn_exp.cli.define_metric_args import add_define_metric_flags
     from vmn_exp.cli.sweep.parser import add_experiment_storage_flags
 
@@ -123,9 +124,9 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--patch", action="store_true", default=False,
                       help="show: also print the run's own patches (working tree, local "
                            "commits, deps; never untracked files)")
-    pexp.add_argument("--max-bytes", type=int, default=None, metavar="N",
+    pexp.add_argument("--max-bytes", type=views.positive_max_bytes, default=None, metavar="N",
                       help="show --patch: print at most N bytes of patch text "
-                           "(default: 200000)")
+                           f"(default: {views.PATCH_MAX_BYTES})")
     pexp.add_argument("--query", default=None,
                       help="list/importance: filter rows by query (e.g. 'metrics.loss < 0.5'); "
                            "prune: select candidates by query (dry-run unless --yes/-y)")

@@ -52,9 +52,14 @@ def _strings(value):
     return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
 
 
+def _dict(value):
+    return value if isinstance(value, dict) else {}
+
+
 def keyword_phrases(intent):
-    """The intent's keywords, lowercased, in their order."""
-    return [k.strip().lower() for k in _strings((intent or {}).get("keywords")) if k.strip()]
+    """The intent's keywords, lowercased, in their order (none for an intent
+    that is no mapping)."""
+    return [k.strip().lower() for k in _strings(_dict(intent).get("keywords")) if k.strip()]
 
 
 def document_terms(row, features=None, intent=None, hypothesis=None, create_note=None):
@@ -63,11 +68,11 @@ def document_terms(row, features=None, intent=None, hypothesis=None, create_note
     *create_note* — the first ``create`` entry's note — stands in for a
     missing metadata note.
     """
-    row, intent = row or {}, intent or {}
-    tags = row.get("tags") if isinstance(row.get("tags"), dict) else {}
+    row, intent = _dict(row), _dict(intent)
+    tags = _dict(row.get("tags"))
     parts = [intent.get("text"), row.get("name"), row.get("note") or create_note, hypothesis]
     parts += [str(part) for pair in tags.items() for part in pair]
-    parts += _strings((features or {}).get("commits"))
+    parts += _strings(_dict(features).get("commits"))
     terms = [term for part in parts for term in tokenize(part)]
     for phrase in keyword_phrases(intent):
         terms += tokenize(phrase) * KEYWORD_REPEAT

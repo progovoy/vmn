@@ -50,7 +50,7 @@ def author_from_commits(commit_authors) -> dict | None:
 
 def build_features_entry(source, author=None, changed=None, commits=None, **extra) -> dict:
     """The ``features`` log entry: caps applied, empty values (and empty
-    ``author`` keys) dropped. A splatted ``features_from_patches`` result
+    ``author`` keys, blank list items) dropped. A splatted ``features_from_patches`` result
     works: its ``commit_authors`` is not stored and its ``truncated`` is kept."""
     extra.pop("commit_authors", None)
     truncated = bool(extra.pop("truncated", False))
@@ -60,13 +60,13 @@ def build_features_entry(source, author=None, changed=None, commits=None, **extr
         entry["author"] = author
     kept_changed = {}
     for key, values in (changed or {}).items():
-        kept, cut = _capped(_unique(values or ()), key)
+        kept, cut = _capped(_unique(_filled(values)), key)
         truncated = truncated or cut
         if kept:
             kept_changed[key] = kept
     if kept_changed:
         entry["changed"] = kept_changed
-    kept_commits, cut = _capped(list(commits or ()), "commits")
+    kept_commits, cut = _capped(_filled(commits), "commits")
     truncated = truncated or cut
     if kept_commits:
         entry["commits"] = kept_commits
@@ -78,6 +78,11 @@ def build_features_entry(source, author=None, changed=None, commits=None, **extr
 
 def _unique(values) -> list:
     return list(dict.fromkeys(values))
+
+
+def _filled(values) -> list:
+    """*values* without None and blank strings."""
+    return [v for v in values or () if v is not None and not (isinstance(v, str) and not v.strip())]
 
 
 def _capped(values: list, key: str):

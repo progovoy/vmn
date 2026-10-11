@@ -11,14 +11,26 @@ be relied on — the seed failed, here or in an earlier process over the same
 root, or the local copy was dropped under a live cache — shipping merges the
 remote's lines back in first (:meth:`LogMerge._needs_merge`) rather than
 overwrite them or ship from an offset the local copy does not line up with.
+
+Neither the seed nor the local append waits on the sync lock a ship holds
+across remote I/O, and no append waits long on the local log lock: the SDK's
+SIGTERM finalizer appends from a worker thread while the main thread sits
+wherever the signal caught it, maybe holding one
+(:meth:`LogMerge._local_log_held`).
 """
 
 import threading
 from collections import Counter
+from contextlib import contextmanager
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import log_object_name, log_writer_and_seq
 from vmn_exp.storage.s3_base import parallel_map
+
+# The local log lock is held for local file I/O only, so a holder keeping it
+# this long was interrupted where it stood (the SDK's SIGTERM finalizer runs
+# while the main thread sits wherever the signal caught it).
+LOCAL_LOCK_WAIT_SEC = 2.0
 
 
 def _lines(data):
@@ -47,7 +59,7 @@ def next_seq(objects):
 
 class LogMerge:
     """Mixed into :class:`~vmn_exp.storage.cached_logs.CachedLogs`, whose
-    ``_local``, ``_remote`` and ``_sync_lock`` it uses."""
+    ``_local`` and ``_remote`` it uses."""
 
     def _init_log_merge(self):
         self._seeded = set()  # (app, verstr, writer) whose local log met the remote's
@@ -56,25 +68,41 @@ class LogMerge:
         # remote I/O: a merge's rewrite must not drop a line appended meanwhile.
         self._local_log_lock = threading.Lock()
 
+    @contextmanager
+    def _local_log_held(self, rewrite=False):
+        """The local log lock, waited for at most :data:`LOCAL_LOCK_WAIT_SEC`.
+        Its holder is then taken for interrupted: an append goes on without
+        it (a frozen holder rewrites nothing), a *rewrite* raises (the next
+        ship merges again)."""
+        held = self._local_log_lock.acquire(timeout=LOCAL_LOCK_WAIT_SEC)
+        if not held:
+            if rewrite:
+                raise RuntimeError("the local log is held by an interrupted thread")
+            VMN_LOGGER.debug("The local log lock is held by an interrupted thread")
+        try:
+            yield
+        finally:
+            if held:
+                self._local_log_lock.release()
+
     def _seed_local_log(self, app_name, verstr, writer_id):
         """Before this cache's first append under *writer_id*: when the remote
         holds more of the writer's log than the local copy, bring the local
-        copy up to it. Tried once: when it fails, the next ship merges the
-        remote's lines in instead (the append path never waits on retries)."""
+        copy up to it. Tried once, outside the sync lock a ship holds across
+        remote I/O: when it fails, the next ship merges the remote's lines in
+        instead (the append path never waits on retries). Two first appends
+        seeding at once rewrite the same lines."""
         key = (app_name, verstr, writer_id)
         if not self._local_is_replica or self._seed_tried(key):
             return
-        with self._sync_lock:
-            if self._seed_tried(key):
-                return
-            try:
-                if self.remote_for(app_name, verstr):
-                    self._catch_up_if_behind(app_name, verstr, writer_id)
-            except Exception:
-                VMN_LOGGER.debug("Could not compare the log with the remote", exc_info=True)
-                self._seed_failed.add(key)
-                return
-            self._seeded.add(key)
+        try:
+            if self.remote_for(app_name, verstr):
+                self._catch_up_if_behind(app_name, verstr, writer_id)
+        except Exception:
+            VMN_LOGGER.debug("Could not compare the log with the remote", exc_info=True)
+            self._seed_failed.add(key)
+            return
+        self._seeded.add(key)
 
     def _seed_tried(self, key):
         return key in self._seeded or key in self._seed_failed
@@ -94,7 +122,7 @@ class LogMerge:
             raise RuntimeError(f"{verstr}: the remote log of {writer_id!r} changed")
         remote = b"".join(bodies)
         base = log_object_name(writer_id)
-        with self._local_log_lock:
+        with self._local_log_held(rewrite=True):
             local = self._complete_lines(app_name, verstr, base, 0)
             self._local.save_file(app_name, verstr, base, _with_missing_lines(remote, local))
         return len(remote), next_seq(objects)
@@ -102,9 +130,10 @@ class LogMerge:
     def _needs_merge(self, key, offset, local_size):
         """Whether the local log of *key* may lack lines among the *offset*
         bytes the remote holds: its seed failed, or it no longer lines up with
-        them — shorter, or with no line ending right there (a copy dropped and
-        grown back, or grown without the remote's lines, almost always has a
-        line cut there)."""
+        them — shorter, without its base file (other log files of the writer
+        made up *local_size*), or with no line ending right there (a copy
+        dropped and grown back, or grown without the remote's lines, almost
+        always has a line cut there)."""
         if key in self._seed_failed:
             return True
         if not offset:
@@ -113,7 +142,8 @@ class LogMerge:
             return True
         app_name, verstr, writer_id = key
         name = log_object_name(writer_id)
-        return self._local.read_file_from(app_name, verstr, name, offset - 1)[:1] != b"\n"
+        data = self._local.read_file_from(app_name, verstr, name, offset - 1)
+        return not data or data[:1] != b"\n"
 
     def _merge_remote_lines(self, app_name, verstr, writer_id):
         """Merge the remote's lines of the writer into the local log, from a

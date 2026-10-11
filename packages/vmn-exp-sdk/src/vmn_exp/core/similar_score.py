@@ -13,12 +13,19 @@ normalised by the caller — :mod:`vmn_exp.core.similar`).
 
 A signal missing on either side is left out and the weights of the others
 renormalised: it is unknown, not different. Reasons read candidate first
-(``lr 3e-4 vs 1e-4`` = the candidate's lr vs the target's). Pure.
+(``lr 3e-4 vs 1e-4`` = the candidate's lr vs the target's). Pure; odd
+values (non-finite or extreme params, conf weights of the wrong shape) never
+raise.
 """
+import logging
 import math
+from collections.abc import Mapping
 
 from vmn_exp.core.similar_profile import as_profile
-from vmn_exp.core.values import is_finite_number, metric_number
+from vmn_exp.core.values import metric_number
+
+# Stdlib logging, not VMN_LOGGER: the SDK reader scores runs too.
+_LOGGER = logging.getLogger(__name__)
 
 SIGNALS = ("code", "files", "symbols", "inputs", "params", "entrypoint",
            "objective", "branch", "text")
@@ -44,8 +51,12 @@ def resolve_weights(overrides=None, intent=False):
     """:data:`DEFAULT_WEIGHTS` with the valid *overrides* (conf
     ``experiment.similar.weights``: known signals, numbers >= 0) merged over.
     With an *intent* on the target the default ``text`` weight becomes
-    ``code + inputs``; an explicit ``text`` override still wins."""
+    ``code + inputs``; an explicit ``text`` override still wins. Overrides
+    that are no mapping are ignored."""
     weights = dict(DEFAULT_WEIGHTS)
+    if overrides is not None and not isinstance(overrides, Mapping):
+        _LOGGER.debug("Ignoring experiment.similar.weights, not a mapping: %r", overrides)
+        overrides = None
     given = {k: _weight(v) for k, v in (overrides or {}).items() if k in weights}
     weights.update((k, v) for k, v in given.items() if v is not None)
     if intent and given.get("text") is None:
@@ -75,18 +86,23 @@ def _same(a, b):
 
 
 def value_closeness(a, b):
-    """1 for equal values; positive numbers ``1 - min(1, |log10(a/b)| / 2)``."""
-    x, y = _number(a), _number(b)
+    """1 for equal values; positive numbers ``1 - min(1, |log10(a/b)| / 2)``;
+    0 when either is NaN or infinite (not comparable)."""
+    x, y = metric_number(a), metric_number(b)
+    if any(n is not None and not math.isfinite(n) for n in (x, y)):
+        return 0.0
     if x is not None and y is not None:
         if x > 0 and y > 0:
-            return 1 - min(1.0, abs(math.log10(x / y)) / 2)
+            # A difference of logs: the ratio itself under- or overflows.
+            return 1 - min(1.0, abs(math.log10(x) - math.log10(y)) / 2)
         return 1.0 if x == y else 0.0
     return 1.0 if _same(a, b) else 0.0
 
 
 def _fmt(value):
     """A param value as a reason shows it: ``3e-4``, ``0.25``, ``adam``."""
-    number = float(value) if is_finite_number(value) else None
+    plain = isinstance(value, (int, float)) and not isinstance(value, bool)
+    number = _number(value) if plain else None  # an int too big for a float is text
     if number is None:
         text = str(value)
         return text if len(text) <= 24 else text[:23] + "…"

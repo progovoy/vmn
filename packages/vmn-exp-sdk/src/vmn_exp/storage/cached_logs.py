@@ -107,18 +107,21 @@ class CachedLogs(LogMerge):
     # `create --metrics`) must call sync_log_to_remote itself right after
     # appending -- see core.experiment_writer.flush_log.
     def append_log_entry(self, app_name, verstr, writer_id, entry):
-        if not self._ensure_local_record(app_name, verstr):
-            return False
-        self._seed_local_log(app_name, verstr, writer_id)
-        with self._local_log_lock:
-            return self._local.append_log_entry(app_name, verstr, writer_id, entry)
+        return self._append_locally(
+            self._local.append_log_entry, app_name, verstr, writer_id, entry
+        )
 
     def append_log_entries(self, app_name, verstr, writer_id, entries):
+        return self._append_locally(
+            self._local.append_log_entries, app_name, verstr, writer_id, entries
+        )
+
+    def _append_locally(self, append, app_name, verstr, writer_id, payload):
         if not self._ensure_local_record(app_name, verstr):
             return False
         self._seed_local_log(app_name, verstr, writer_id)
-        with self._local_log_lock:
-            return self._local.append_log_entries(app_name, verstr, writer_id, entries)
+        with self._local_log_held():
+            return append(app_name, verstr, writer_id, payload)
 
     def _local_logs(self, app_name, verstr):
         if not self._local_is_replica:

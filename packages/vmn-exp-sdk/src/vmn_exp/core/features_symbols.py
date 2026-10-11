@@ -1,15 +1,26 @@
-"""The name a hunk header's context points at (git's funcname line, any language).
+"""The names a patch's code defines (any language).
 
-``hunk_symbol("def focal_loss(x):")`` -> ``"focal_loss"``. Declarations
+``hunk_symbol("def focal_loss(x):")`` -> ``"focal_loss"``: the name a hunk
+header's context (git's funcname line) points at. Declarations
 (def/class/function/fn/func/impl/struct/..., ``const f = (...) =>``, ``f: function``)
 and C-like signatures (``static int f(int x)``) give their identifier; any other
 context falls back to its trimmed text, cut at 80 characters.
+
+``defined_symbol(line, path)``: the name an added or removed line defines, by
+the same rules made strict — a content line is far more often a call, a
+statement or prose than a funcname line is — and only in source files: Python
+``def``/``class`` alone; elsewhere declarations, arrow functions, and
+signatures with a return type or a declaring modifier (or a bare
+``name(params) {``, a method); no text fallback. A line over 500 characters
+(data, minified code) defines nothing: git cuts a funcname line at 80 bytes,
+a content line has no bound.
 """
 from __future__ import annotations
 
 import re
 
 FALLBACK_CHARS = 80
+DEFINITION_MAX_CHARS = 500
 
 _IDENT = r"[A-Za-z_$][\w$]*"
 _MODIFIERS = re.compile(
@@ -31,7 +42,8 @@ _ASSIGNED = re.compile(
     rf"(?:const|let|var)\s+({_IDENT})\s*=\s*(?:async\s+)?(?:function\b|\(|{_IDENT}\s*=>)"
 )
 _PROPERTY = re.compile(rf"({_IDENT})\s*:\s*(?:async\s+)?function\b")
-_NAME_BEFORE_PAREN = re.compile(rf"(~?{_IDENT})\s*$")
+_WORD_RUN = re.compile(r"[\w$]*")
+_IDENT_START = re.compile(r"[A-Za-z_$]")
 _STATEMENT_WORDS = frozenset(
     "if elif else for foreach while until unless switch case catch return sizeof typeof new "
     "delete throw await yield with assert print do not and or in is lambda super this self "
@@ -48,11 +60,19 @@ def hunk_symbol(context: str) -> str | None:
     return _declared_name(rest) or _signature_name(rest) or text[:FALLBACK_CHARS].rstrip()
 
 
-def _declared_name(rest: str) -> str | None:
-    for pattern in (_FUNCTION, _IMPL, _ASSIGNED, _PROPERTY):
+def _named_by(patterns, rest: str) -> str | None:
+    for pattern in patterns:
         match = pattern.match(rest)
         if match:
             return match.group(1)
+    return None
+
+
+def _declared_name(rest: str) -> str | None:
+    return _named_by((_FUNCTION, _IMPL, _ASSIGNED, _PROPERTY), rest) or _declared_type(rest)
+
+
+def _declared_type(rest: str) -> str | None:
     match = _TYPE.match(rest)
     if match and not (match.group(1) in _C_RETURN_TYPES and "(" in rest):
         return match.group(2)
@@ -62,15 +82,109 @@ def _declared_name(rest: str) -> str | None:
 def _signature_name(rest: str) -> str | None:
     """``int f(int x)`` / ``void Foo::bar(int)`` / ``  method(args) {``: the name before
     the first ``(``, unless the line reads as a statement or a call."""
-    before, paren, _ = rest.partition("(")
+    found = _name_before_paren(rest)
+    if not found:
+        return None
+    name, lead, _ = found
+    if lead.endswith(".") or "=" in lead or _STATEMENT_WORDS.intersection(lead.split() + [name]):
+        return None
+    return name
+
+
+def _name_before_paren(rest: str):
+    """``(name, what precedes it, what follows its "(")`` of the first ``(``
+    of a line not ending in ``;``, else None."""
+    before, paren, after = rest.partition("(")
     if not paren or rest.rstrip().endswith(";"):
         return None
-    match = _NAME_BEFORE_PAREN.search(before)
-    if not match:
+    head = before.rstrip()
+    start = _ident_start(head)
+    return None if start is None else (head[start:], before[:start], after)
+
+
+def _ident_start(head: str):
+    """Where *head*'s trailing identifier (``~`` included) starts, else None:
+    found from the end, as a regex search for ``~?IDENT$`` is quadratic on a
+    long word run (data blobs, minified code)."""
+    run = len(head) - len(_WORD_RUN.match(head[::-1]).group())
+    found = _IDENT_START.search(head, run)
+    if not found:
         return None
-    lead = before[: match.start()]
-    if lead.endswith(".") or "=" in lead:
+    start = found.start()
+    return start - 1 if start == run and head[start - 1: start] == "~" else start
+
+
+_PYTHON_FILES = frozenset("py pyi pyw pyx pxd".split())
+_CODE_FILES = frozenset(
+    "c h cc cpp cxx hh hpp hxx cu cuh m mm java kt kts scala groovy cs swift dart go rs "
+    "js jsx mjs cjs ts tsx mts cts php rb lua pl pm jl ex exs sh bash zsh".split()
+)
+_PY_DEFINITION = re.compile(
+    rf"(?:async\s+)?def\s+({_IDENT})\s*[(\[]|class\s+({_IDENT})\s*[(:\[]"
+)
+_ARROW_ASSIGNED = re.compile(  # `const f = (x) => ...`, not `const n = (a + b) * 2`
+    rf"(?:const|let|var)\s+({_IDENT})\s*(?::[^=]+)?=\s*(?:async\s+)?"
+    rf"(?:function\b|\([^)]*\)\s*(?::[^=]+)?=>|{_IDENT}\s*=>)"
+)
+_DECLARING = frozenset(
+    "public private protected internal static abstract final override virtual async "
+    "suspend open inline extern".split()
+)
+_NOT_TYPES = _STATEMENT_WORDS | frozenset(
+    "synchronized using lock fixed checked unchecked try elseif raise import from except "
+    "del goto then export default".split()
+)
+_TYPE_LEAD = re.compile(r"[\w$<>,*&\[\]\s]*")
+_CALL_ARGUMENTS = re.compile(r"[\"'`]|=>|\bfunction\b")
+_MACRO = re.compile(r"[A-Z][A-Z0-9_]*")
+_NAME_START = re.compile(r"[A-Za-z_$~]")
+
+
+def _extension(path: str) -> str:
+    name = path.rsplit("/", 1)[-1]
+    return name.rsplit(".", 1)[-1].lower() if "." in name else ""
+
+
+def defined_symbol(line: str, path: str) -> str | None:
+    """The name *line* — a diff content line without its ``+``/``-`` — defines
+    in the file *path*; None for calls, statements, comments, prose and
+    files that are not source code."""
+    kind = _extension(path)
+    if kind not in _PYTHON_FILES and kind not in _CODE_FILES:
         return None
-    if _STATEMENT_WORDS.intersection(lead.split() + [match.group(1)]):
+    text = line.strip()
+    if len(text) > DEFINITION_MAX_CHARS:
         return None
-    return match.group(1)
+    if kind in _PYTHON_FILES:
+        match = _PY_DEFINITION.match(text)
+        return (match.group(1) or match.group(2)) if match else None
+    modifiers = _MODIFIERS.match(text).end()
+    rest = text[modifiers:]
+    declaring = bool(_DECLARING.intersection(text[:modifiers].split()))
+    return _strict_declared_name(rest) or _defined_signature(rest, declaring)
+
+
+def _strict_declared_name(rest: str) -> str | None:
+    name = _named_by((_FUNCTION, _IMPL, _ARROW_ASSIGNED, _PROPERTY), rest)
+    if name or rest.rstrip().endswith(";"):  # `struct node head;` declares a variable
+        return name
+    return _declared_type(rest)
+
+
+def _defined_signature(rest: str, declaring: bool) -> str | None:
+    """``int f(int x)``, ``void A::f() const {``, ``public T f(...)``, or a bare
+    ``f(params) {`` (a method or constructor; not a macro or a call taking
+    a callback)."""
+    found = _NAME_START.match(rest) and _name_before_paren(rest)
+    if not found:
+        return None
+    name, lead, after = found
+    if lead.endswith(".") or not _TYPE_LEAD.fullmatch(lead.replace("::", "")):
+        return None
+    if _NOT_TYPES.intersection(lead.split() + [name]):
+        return None
+    if lead.strip() or declaring:
+        return name
+    bare_method = (rest.rstrip().endswith("{") and not _CALL_ARGUMENTS.search(after)
+                   and not _MACRO.fullmatch(name))
+    return name if bare_method else None

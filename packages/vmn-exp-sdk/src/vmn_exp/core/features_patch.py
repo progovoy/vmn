@@ -2,12 +2,21 @@
 
 ``parse_patch(text, prefix="")`` -> ``{"files", "symbols", "commits", "authors"}``,
 in order of appearance with repeats kept (core/features.py dedupes and caps):
-the paths of every ``diff --git`` section (renames: new then old path), one
-``path::name`` per hunk context, each message's ``Subject:`` without git's
+the paths of every ``diff --git`` section (renames: new then old path), a
+``path::name`` per hunk context and per definition an added or removed line
+makes (:func:`~vmn_exp.core.features_symbols.defined_symbol`), each message's ``Subject:`` without git's
 ``[PATCH n/m]`` and its ``From:`` as ``{"name", "email"}``. Headers are read only
 after an mbox ``From <sha> <date>`` line and until the blank line ending them;
-diff content lines always carry a ``+``/``-``/`` `` prefix, so they never look
-like headers, sections or hunks.
+a cover letter (``[PATCH 0/n]``) is skipped whole. A ``diff --git`` line in a
+commit message (before its ``---`` separator) opens no section unless it
+follows a blank line and an extended header line follows it (a ``--no-stat``
+mbox has no separator); such a section, a diff pasted into the message, is
+forgotten at the separator: a ``---`` line outside a hunk (by its ``@@``
+counts), or inside one that lacks only blank context lines git's message
+cleanup drops (as many old as new lines left) when a diffstat or blank
+(``--notes``) line follows; any other ``---`` is a removed ``--`` line. Lines
+end at ``\n`` only; diff content lines always carry a ``+``/``-``/`` `` prefix,
+so they never look like headers, sections or hunks.
 """
 from __future__ import annotations
 
@@ -15,11 +24,17 @@ import re
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 
-from vmn_exp.core.features_symbols import hunk_symbol
+from vmn_exp.core.features_symbols import defined_symbol, hunk_symbol
 
 _MBOX_FROM = re.compile(r"From (?:[0-9a-f]{40}|[0-9a-f]{64})(?: |$)")
-_HUNK = re.compile(r"@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@(.*)")
+_HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@(.*)")
+_HUNK_LINE = ("+", "-", " ", "\\", "")  # "": a context line a message cleanup stripped
 _SUBJECT_PREFIX = re.compile(r"^\[[^\]]*\]\s*")
+_COVER_LETTER = re.compile(r"^\[[^\]]*\b0+/\d+\]")
+_DIFFSTAT = re.compile(r" \S.* \| +(?:\d|Bin )")  # a diffstat line
+_EXTENDED_HEADERS = ("index ", "old mode ", "new mode ", "deleted file mode ", "new file mode ",
+                     "similarity index ", "dissimilarity index ", "rename from ", "copy from ",
+                     "Binary files ", "--- ")
 _RENAME = re.compile(r"(rename|copy) (from|to) (.+)")
 _DIFF_GIT = "diff --git "
 _ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
@@ -27,8 +42,9 @@ _ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34,
 
 def parse_patch(text: str, prefix: str = "") -> dict:
     parser = _Parser(prefix)
-    for line in text.splitlines():
-        parser.feed(line)
+    # Not splitlines(): it also splits on \f, \x1c-\x1e, \x85, U+2028/9 within a line.
+    for line in text.split("\n"):
+        parser.feed(line[:-1] if line.endswith("\r") else line)
     parser.close()
     return parser.out
 
@@ -41,50 +57,108 @@ class _Parser:
         self.headers = []
         self.section = None
         self.path = None
+        self.quoted = None  # a message's `diff --git` line, until the next line confirms it
+        self.after_blank = False
+        self.pasted = None  # (files, symbols) counts before a diff pasted in a message
+        self.dashes = False  # a pasted hunk's `---` line, until the next line tells what it is
+        self.old_left = self.new_left = 0  # the current hunk's lines still to come
 
     def feed(self, line):
+        if self.dashes:
+            self._after_dashes(line)
         if _MBOX_FROM.match(line):
             self.close()
             self.state, self.headers = "headers", []
         elif self.state == "headers":
             self._header_line(line)
+        elif self.state == "message":
+            self._message_line(line)
+        elif self.state == "cover":
+            pass
         elif line.startswith(_DIFF_GIT):
-            self._end_header()
-            self.section = _section(line[len(_DIFF_GIT):])
-            self.state = "section"
+            self._open_section(line)
+        elif line == "---" and self.pasted:
+            self._pasted_dashes()
         elif self.state == "section":
             self._section_line(line)
         elif self.state == "hunks":
-            self._hunk(_HUNK.match(line))
+            self._hunk_line(line)
+
+    def _open_section(self, line):
+        self._end_header()
+        self.section = _section(line[len(_DIFF_GIT):])
+        self.state = "section"
+        self.old_left = self.new_left = 0
+
+    def _pasted_dashes(self):
+        """A ``---`` line after a pasted diff: the separator, a removed ``--``
+        line, or (cleanup-shortened hunk) whichever the next line tells."""
+        if self.old_left <= 0:
+            self._forget_pasted()
+        elif self.old_left == self.new_left:
+            self.dashes = True
+        else:
+            self._hunk_line("---")
+
+    def _after_dashes(self, line):
+        self.dashes = False
+        if not line or _DIFFSTAT.match(line):
+            self._forget_pasted()
+        else:
+            self._hunk_line("---")
+
+    def _forget_pasted(self):
+        """The message's separator ends a diff pasted into it: none of it changed."""
+        files, symbols = self.pasted
+        del self.out["files"][files:], self.out["symbols"][symbols:]
+        self.section, self.pasted, self.state = None, None, "body"
+
+    def _message_line(self, line):
+        """A commit message's line: it ends at ``---``, or at a ``diff --git``
+        line confirmed as a section by the line after it."""
+        quoted, self.quoted = self.quoted, None
+        if line == "---":
+            self.state = "body"
+        elif quoted and line.startswith(_EXTENDED_HEADERS):
+            self.pasted = (len(self.out["files"]), len(self.out["symbols"]))
+            self._open_section(quoted)
+            self._section_line(line)
+        elif line.startswith(_DIFF_GIT) and self.after_blank:
+            self.quoted = line
+        self.after_blank = not line
 
     def close(self):
         if self.state == "headers":
             self._read_headers()
         self._end_header()
-        self.state = "start"
+        self.state, self.quoted, self.pasted, self.dashes = "start", None, None, False
 
     def _header_line(self, line):
         if not line:
-            self._read_headers()
-            self.state = "body"
+            self.state = "message" if self._read_headers() else "cover"
+            self.after_blank = True
         elif line[:1] in " \t" and self.headers:
             self.headers[-1] += " " + line.strip()
         else:
             self.headers.append(line)
 
     def _read_headers(self):
+        """Record the message's subject and author; False for a cover letter."""
         fields = {}
         for header in self.headers:
             name, _, value = header.partition(":")
             fields.setdefault(name.strip().lower(), value.strip())
+        self.headers = []
         subject = " ".join(_decoded(fields.get("subject", "")).split())
+        if _COVER_LETTER.match(subject):
+            return False
         subject = _SUBJECT_PREFIX.sub("", subject, count=1)
         if subject:
             self.out["commits"].append(subject)
         name, email = parseaddr(fields.get("from", ""))
         if name or email:
             self.out["authors"].append({"name": _decoded(name), "email": email})
-        self.headers = []
+        return True
 
     def _section_line(self, line):
         renamed, hunk = _RENAME.match(line), _HUNK.match(line)
@@ -102,8 +176,25 @@ class _Parser:
             self.state = "hunks"
             self._hunk(hunk)
 
+    def _hunk_line(self, line):
+        kind = line[:1]
+        if kind in _HUNK_LINE:
+            self.old_left -= kind in ("-", " ", "")
+            self.new_left -= kind in ("+", " ", "")
+        else:
+            self.old_left = self.new_left = 0
+        if kind in ("+", "-"):
+            self._symbol(defined_symbol(line[1:], self.path))
+        else:
+            self._hunk(_HUNK.match(line))
+
     def _hunk(self, match):
-        name = hunk_symbol(match.group(1)) if match else None
+        if match:
+            old, new, context = match.groups()
+            self.old_left, self.new_left = int(old or 1), int(new or 1)
+            self._symbol(hunk_symbol(context))
+
+    def _symbol(self, name):
         if name:
             self.out["symbols"].append(f"{self.path}::{name}")
 

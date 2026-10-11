@@ -64,11 +64,11 @@ def fold_hypothesis(fold):
 
 def author_display(author):
     """Who a features ``author`` names: its git email, else its OS user, else
-    its writer — empty values count as missing — or None."""
+    its writer (stripped) — blank values count as missing — or None."""
     if not isinstance(author, dict):
         return None
     for key in _AUTHOR_KEYS:
         value = author.get(key)
-        if isinstance(value, str) and value:
-            return value
+        if isinstance(value, str) and value.strip():
+            return value.strip()
     return None
