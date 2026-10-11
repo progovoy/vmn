@@ -1,6 +1,8 @@
 """Symbols from the definitions a patch adds or removes, not only from hunk
 headers: a hunk header names the function *above* a change, so a function
 appended below another one, or a whole new file, would otherwise go unnamed."""
+import time
+
 import pytest
 from test_features_git_patches import _write, repo  # noqa: F401
 from vmn_exp.core.features import features_from_patches
@@ -124,3 +126,34 @@ def test_a_definition_line_names_what_it_defines(path, line, name):
 ])
 def test_calls_statements_comments_and_prose_define_nothing(path, line):
     assert defined_symbol(line, path) is None
+
+
+HEX = "0123456789abcdef" * 3200  # a 51200-character data blob
+
+
+def _new_file(path, lines):
+    return (f"diff --git a/{path} b/{path}\nnew file mode 100644\nindex 0000000..1111111\n"
+            f"--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n"
+            + "".join(f"+{line}\n" for line in lines))
+
+
+def _seconds(patch):
+    started = time.monotonic()
+    features_from_patches([patch])
+    return time.monotonic() - started
+
+
+@pytest.mark.parametrize("path, line", [
+    ("src/blob.ts", f'const sig = "{HEX}".match(/../g)'),
+    ("src/blob.js", "a" * 50000 + "-b(x) {"),
+    ("src/blob.c", f"x {HEX} + (y) {{"),
+    ("src/blob.go", "func" + " " * 30000 + "-"),
+    ("src/blob.rs", "impl a" + " " * 30000 + "-"),
+], ids=["hex-string", "word-run", "hex-expression", "func-spaces", "impl-spaces"])
+def test_a_long_content_line_is_read_quickly(path, line):
+    assert _seconds(_new_file(path, [line])) < 1.0
+
+
+def test_a_data_file_of_many_long_lines_is_read_quickly():
+    line = f'const s = "{HEX[:464]}".match(/../g)'
+    assert _seconds(_new_file("src/data.ts", [line] * 2000)) < 0.5

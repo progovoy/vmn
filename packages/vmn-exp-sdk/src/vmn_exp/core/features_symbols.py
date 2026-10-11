@@ -11,13 +11,16 @@ the same rules made strict — a content line is far more often a call, a
 statement or prose than a funcname line is — and only in source files: Python
 ``def``/``class`` alone; elsewhere declarations, arrow functions, and
 signatures with a return type or a declaring modifier (or a bare
-``name(params) {``, a method); no text fallback.
+``name(params) {``, a method); no text fallback. A line over 500 characters
+(data, minified code) defines nothing: git cuts a funcname line at 80 bytes,
+a content line has no bound.
 """
 from __future__ import annotations
 
 import re
 
 FALLBACK_CHARS = 80
+DEFINITION_MAX_CHARS = 500
 
 _IDENT = r"[A-Za-z_$][\w$]*"
 _MODIFIERS = re.compile(
@@ -39,7 +42,8 @@ _ASSIGNED = re.compile(
     rf"(?:const|let|var)\s+({_IDENT})\s*=\s*(?:async\s+)?(?:function\b|\(|{_IDENT}\s*=>)"
 )
 _PROPERTY = re.compile(rf"({_IDENT})\s*:\s*(?:async\s+)?function\b")
-_NAME_BEFORE_PAREN = re.compile(rf"(~?{_IDENT})\s*$")
+_WORD_RUN = re.compile(r"[\w$]*")
+_IDENT_START = re.compile(r"[A-Za-z_$]")
 _STATEMENT_WORDS = frozenset(
     "if elif else for foreach while until unless switch case catch return sizeof typeof new "
     "delete throw await yield with assert print do not and or in is lambda super this self "
@@ -93,8 +97,21 @@ def _name_before_paren(rest: str):
     before, paren, after = rest.partition("(")
     if not paren or rest.rstrip().endswith(";"):
         return None
-    match = _NAME_BEFORE_PAREN.search(before)
-    return (match.group(1), before[: match.start()], after) if match else None
+    head = before.rstrip()
+    start = _ident_start(head)
+    return None if start is None else (head[start:], before[:start], after)
+
+
+def _ident_start(head: str):
+    """Where *head*'s trailing identifier (``~`` included) starts, else None:
+    found from the end, as a regex search for ``~?IDENT$`` is quadratic on a
+    long word run (data blobs, minified code)."""
+    run = len(head) - len(_WORD_RUN.match(head[::-1]).group())
+    found = _IDENT_START.search(head, run)
+    if not found:
+        return None
+    start = found.start()
+    return start - 1 if start == run and head[start - 1: start] == "~" else start
 
 
 _PYTHON_FILES = frozenset("py pyi pyw pyx pxd".split())
@@ -136,6 +153,8 @@ def defined_symbol(line: str, path: str) -> str | None:
     if kind not in _PYTHON_FILES and kind not in _CODE_FILES:
         return None
     text = line.strip()
+    if len(text) > DEFINITION_MAX_CHARS:
+        return None
     if kind in _PYTHON_FILES:
         match = _PY_DEFINITION.match(text)
         return (match.group(1) or match.group(2)) if match else None
