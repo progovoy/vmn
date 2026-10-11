@@ -199,8 +199,11 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
         return self._local if self._remote is None else self
 
     def record_files(self, app_name, verstr):
-        """One record's file signatures, or None when reads merge a remote too."""
-        return None if self._remote else self._local.record_files(app_name, verstr)
+        """One record's file signatures (as listed), or None when reads merge
+        a remote too."""
+        if self._remote:
+            return None
+        return self._local.record_files(app_name, verstr, **self._listing_identity())
 
     def is_remote(self):
         return self._remote is not None

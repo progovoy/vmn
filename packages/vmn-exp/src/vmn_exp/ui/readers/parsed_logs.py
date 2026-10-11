@@ -6,7 +6,9 @@ made a poll cost O(log); here a local record's JSONL logs are read from the
 offset the last poll stopped at, and only the new entries are parsed, appended
 to the series and folded into the params/metrics. The result is always what a
 full parse would give — growth that could reorder the merged log (an entry
-older than the newest one seen, a rewritten or shrunk file) is simply parsed again from scratch.
+older than the newest one seen, a shrunk file, one rewritten even into a bigger
+file: a local root lists its log files with their identity) is simply parsed
+again from scratch.
 
 Entries are appended in place and each poll gets a :class:`LogSnapshot` that
 sees a fixed prefix, so a slow response never observes a later poll's growth.
@@ -26,7 +28,7 @@ from vmn_exp.core.fold import (
 )
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.log import load_log, metric_series
-from vmn_exp.core.logfiles import group_log_names, is_log_file
+from vmn_exp.core.logfiles import append_identity, group_log_names, is_log_file
 from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.metric_files import (
     INDEXED_SUFFIX,
@@ -270,8 +272,22 @@ def _appends_in_order(entries, new_entries):
     return isinstance(last, str) and min(stamps) > last
 
 
+def _replaced(sig, files):
+    """Whether a file of listing *sig* (the last parse's) was replaced since —
+    its :func:`~vmn_exp.core.logfiles.append_identity` moved, like a log a
+    local-first cache merged — so its bytes past the offset parsed need not
+    follow the ones parsed."""
+    before = dict(sig or ())
+    return any(
+        name in before and append_identity(before[name]) != append_identity(listed)
+        for name, listed in files.items()
+    )
+
+
 def _grow(parsed, local, app_name, verstr, files):
     """*parsed* extended by the logs' new bytes, or None to parse afresh."""
+    if _replaced(parsed.sig, files):
+        return None
     found = _read_growth(local, app_name, verstr, files, parsed.offsets)
     if found is None:
         return None
