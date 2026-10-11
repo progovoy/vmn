@@ -69,14 +69,16 @@ def _tree_entry(vcs, identity):
 
 
 def _rerun_entry(vcs, log, metadata, patches):
-    parsed = features_from_patches(_patch_texts(patches, _stored_deps(metadata, patches)))
     original = fold_features(fold_log(log))
     if original and original.get("features_version") == FEATURES_VERSION:
         facts = code_facts(original)
     else:
+        parsed = features_from_patches(_patch_texts(patches, _stored_deps(metadata, patches)))
         untracked = _tarball_paths(patches.get("untracked_files"))
         facts = dict(parsed, changed=dict(parsed["changed"], untracked=untracked))
-    return build_features_entry("rerun", author=_author(vcs, parsed), **facts)
+    # The rerunner's identity only: the original's committer did not rerun it.
+    return build_features_entry("rerun", author=run_author(vcs.backend.repo_path,
+                                                           [env_author()]), **facts)
 
 
 def _patch_texts(patches, deps):
