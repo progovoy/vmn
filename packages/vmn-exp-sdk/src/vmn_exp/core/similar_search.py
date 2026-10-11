@@ -92,7 +92,7 @@ def search(storage, app_name, snapshot, target, *, schema=None, top=DEFAULT_TOP,
     scopes = [(app_name, snapshot, schema or {})]
     if all_apps:
         scopes += _other_scopes(storage, app_name, schema_of)
-    keep = _candidate_filter(scopes, query, include_archived)
+    keep = candidate_filter(scopes, query, include_archived)
     items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
                                deadline=deadline)
     snapshots = {app: snap for app, snap, _ in scopes}
@@ -108,7 +108,7 @@ def _other_scopes(storage, app_name, schema_of):
     return scopes
 
 
-def _candidate_filter(scopes, query, include_archived):
+def candidate_filter(scopes, query, include_archived):
     """A ``rows_filter`` keeping archived rows only with *include_archived*
     and, with a *query*, the snapshot rows it matches — over status- and
     tree-annotated rows, like ``list --query``; None when it keeps everything.

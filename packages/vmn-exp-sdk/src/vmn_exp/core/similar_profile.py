@@ -206,20 +206,34 @@ def as_profile(run):
                          run.get("hypothesis"), command=run.get("command"), text=run.get("text"))
 
 
+WORD_PREFIX = "w:"
+
+
+def word_tokens(p):
+    """The ``w:`` tokens of a profile: the words of its text document."""
+    return {WORD_PREFIX + term for term in p.terms}
+
+
+def structured_tokens(p):
+    """The ``file:``/``sym:``/``input:``/``ds:``/``pkey:``/``cmd:``/``metric:``/
+    ``commit:`` tokens of a profile."""
+    tokens = {"file:" + f for f in p.files}
+    tokens.update("sym:" + s for s in p.symbols)
+    tokens.update("ds:" + i.dataset for i in p.inputs)
+    tokens.update("input:" + i.digest for i in p.inputs if i.digest)
+    tokens.update("pkey:" + k for k in p.params)
+    tokens.update("metric:" + m for m in p.objective)
+    if p.script:
+        tokens.add("cmd:" + p.script)
+    if p.commit:
+        tokens.add("commit:" + p.commit)
+    return tokens
+
+
 def profile_tokens(p, structured=True):
-    """The inverted-index tokens of a profile: ``w:`` words, and with
-    *structured* ``file:``/``sym:``/``input:``/``ds:``/``pkey:``/``cmd:``/
-    ``metric:``/``commit:`` ones."""
-    tokens = {"w:" + term for term in p.terms}
+    """The inverted-index tokens of a profile: its :func:`word_tokens`, and
+    with *structured* its :func:`structured_tokens`."""
+    tokens = word_tokens(p)
     if structured:
-        tokens.update("file:" + f for f in p.files)
-        tokens.update("sym:" + s for s in p.symbols)
-        tokens.update("ds:" + i.dataset for i in p.inputs)
-        tokens.update("input:" + i.digest for i in p.inputs if i.digest)
-        tokens.update("pkey:" + k for k in p.params)
-        tokens.update("metric:" + m for m in p.objective)
-        if p.script:
-            tokens.add("cmd:" + p.script)
-        if p.commit:
-            tokens.add("commit:" + p.commit)
+        tokens |= structured_tokens(p)
     return tokens
