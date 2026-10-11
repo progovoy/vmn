@@ -135,3 +135,13 @@ def test_kv_get_never_raises_on_undecodable_payload(tmp_path):
         "INSERT INTO exp_index_kv (scope, fingerprint, payload) VALUES ('s', 'f', '{bad')"
     )
     assert cache_store.kv_get("s", "f") is None
+
+
+def test_sqlite_count_is_the_apps_persisted_records_without_loading_them(tmp_path):
+    store = SqliteStore(str(tmp_path / "idx.sqlite"))
+    store.save(APP, {"a": _rec("1"), "b": _rec("2")}, set())
+    store.save("other", {"c": _rec("3")}, set())
+    store.save(APP, {}, {"a"})
+    assert store.count(APP) == 1
+    assert store.count("missing") == 0
+    assert SqliteStore(None).count(APP) == 0

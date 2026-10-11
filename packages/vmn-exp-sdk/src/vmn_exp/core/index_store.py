@@ -130,6 +130,13 @@ class SqliteStore:
                 _LOGGER.debug("Could not read the experiment index", exc_info=True)
             return default
 
+    def count(self, app_name):
+        """How many records are persisted for *app_name*, without reading
+        them; 0 when unavailable."""
+        return self._read(lambda: self._conn.execute(
+            "SELECT COUNT(*) FROM exp_index WHERE app = ?", (app_name,)
+        ).fetchone()[0], 0)
+
     def generation(self, app_name):
         """The scope's generation; 0 before its first save or when unavailable."""
         return self._read(lambda: self._gen_row(app_name)[0], 0)

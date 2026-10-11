@@ -4,6 +4,7 @@ budget, never for inner runs or when turned off, and never failing the run."""
 import argparse
 import os
 import sys
+import threading
 
 import pytest
 from exp_helpers import (
@@ -160,3 +161,59 @@ def test_the_hint_reads_the_index_cache_and_never_lists_the_store(app_layout, ca
 
     [line] = _hints(capfd.readouterr().err)
     assert line.startswith(HEAD + prior)
+
+
+def _record_index_loads(monkeypatch):
+    loads = []
+
+    def follower(cls, *args):
+        loads.append(args)
+        raise AssertionError("the hint loaded the index")
+
+    monkeypatch.setattr(similar_hint.ExperimentIndex, "follower", classmethod(follower))
+    return loads
+
+
+def test_no_hint_and_no_index_load_past_the_runs_it_can_search_in_budget(app_layout, capfd,
+                                                                         monkeypatch):
+    # Waiting at most the budget is not enough: loading a big index past it
+    # would still cost the command its time and memory.
+    _prior_and_dirty_tree(app_layout)
+    seed(_storage(app_layout), app_layout.app_name, verstr(2, commit="0000000"))
+    _warm(app_layout)
+    monkeypatch.setattr(similar_hint, "MAX_INDEXED_RUNS", 1)
+    loads = _record_index_loads(monkeypatch)
+
+    assert _hints(_create(app_layout, capfd).err) == []
+    assert loads == []
+
+
+def test_the_hint_searches_an_index_of_up_to_its_runs_cap(app_layout, capfd, monkeypatch):
+    prior = _prior_and_dirty_tree(app_layout)
+    _warm(app_layout)
+    monkeypatch.setattr(similar_hint, "MAX_INDEXED_RUNS", 1)
+
+    [line] = _hints(_create(app_layout, capfd).err)
+    assert line.startswith(HEAD + prior)
+
+
+def test_a_hint_past_its_budget_stops_before_searching(app_layout, capfd, monkeypatch):
+    _prior_and_dirty_tree(app_layout)
+    _warm(app_layout)
+    monkeypatch.setattr(similar_hint, "BUDGET_SEC", 0.01)
+    command_done, searched = threading.Event(), []
+    load = similar_hint._cached_snapshot
+
+    def load_until_the_command_is_done(*args, **kwargs):
+        command_done.wait(30)
+        return load(*args, **kwargs)
+
+    monkeypatch.setattr(similar_hint, "_cached_snapshot", load_until_the_command_is_done)
+    monkeypatch.setattr(similar_hint, "search", lambda *a, **k: searched.append(a) or [])
+
+    assert _hints(_create(app_layout, capfd).err) == []
+    command_done.set()
+    for thread in threading.enumerate():
+        if thread.name == "vmn-similar-hint":
+            thread.join(30)
+    assert searched == []
