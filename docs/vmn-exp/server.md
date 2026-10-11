@@ -115,7 +115,7 @@ the per-workspace SQLite files, so several replicas can share one cache:
 - `GET /api/v1/search` runs the query language as SQL over the synced rows.
   Queries that read `outputs` (not kept on the synced rows) are filtered in
   Python instead.
-- `GET /api/v1/similar?text=&top=&archived=` is its free-text sibling: the
+- `GET /api/v1/similar?text=&top=&archived=&q=` is its free-text sibling: the
   runs whose intent, keywords, name, note, tags, commit subjects or hypothesis
   match the text, over every app of every workspace the caller may view (viewer
   role). It is scored in Python from each app's index snapshot, never from the

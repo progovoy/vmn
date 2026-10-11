@@ -226,8 +226,8 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `.../experiments/{verstr}/histograms/{name}` | One histogram key's [steps](#media) |
 | `GET` | `.../experiments/{verstr}/lineage` | [Run lineage](#lineage) |
 | `GET` | `.../experiments/{verstr}/sweep` | The sweep's spec, summary and trials ([sweeps.md](sweeps.md#status)) |
-| `GET` | `.../experiments/{verstr}/similar?top=&all_apps=&archived=` | [Runs most like this one](#similar-runs) |
-| `GET` | `ws/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=` | [Runs matching a text](#similar-runs) |
+| `GET` | `.../experiments/{verstr}/similar?top=&all_apps=&archived=&q=` | [Runs most like this one](#similar-runs) |
+| `GET` | `ws/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=&q=` | [Runs matching a text](#similar-runs) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-columns` | [Whole-set chart columns](#columns-for-whole-set-charts) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
@@ -537,17 +537,22 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   run's similar runs, in every app searched, are scored under the target app's
   (the run's) conf `experiment.similar.weights`, in git workspaces only (a
   store workspace has no conf); a text query on its text alone. Archived runs
-  only with `archived=1`.
+  only with `archived=1`. `q=<query>` narrows the candidates with the
+  [query language](sdk.md#the-query-language), like `vmn-exp similar --query`
+  (a bad query: 400).
 - `{verstr}` is a full verstr (no `latest`/`@N`). `top` is 1..100; a blank
   `text` or one over 4 KB, a bad app or verstr: 400. An unknown run or
-  workspace: 404. Viewer role; ETag/304.
+  workspace: 404. Viewer role; ETag/304. A request that cannot answer within
+  10 s (an app's index still building) gets a 503 with `Retry-After`; the build
+  goes on, so the retry is quick.
 - The run page shows a **similar runs** card below lineage (loaded when
   scrolled near, with a *this app* / *all apps* choice): each run's link
   (labelled with its app when it is another), score, status, goal metric,
   author, age, `(+N runs)`, its reasons as chips and its intent, collapsed.
 - The leaderboard's search box has a **similar** toggle: the box text then
-  goes to the per-app text route and a results card replaces the charts and
-  table; leaving the mode restores the previous search and the table.
+  goes to the per-app text route, with the leaderboard's branch, status and
+  query filters as `q` (and its archived toggle), and a results card replaces
+  the charts and table; leaving the mode restores the previous search and the table.
 - The run log describes `features` entries as `features: N files, M functions,
   K commits (author)` and intents as `intent: <first line> [keywords]`.
 
