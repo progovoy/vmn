@@ -8,7 +8,13 @@ and version, the script of the command line, the text document's term counts.
 
 Rows carry the base code as ``code_verstr`` (``<base>-dev.<commit7>.<diff7>``)
 and ``base_version``; an MLflow import has neither, but may name its source
-commit in ``imported_from``. Pure: no storage.
+commit in ``imported_from``. A run whose features entry names no changes ran
+a clean tree (``clean``): its changes are known to be none. They are unknown
+without an entry, and when its writer could not see the code — an MLflow
+import, an export's author-only entry, a backfill that found the code object
+gone (told from a clean tree's backfill by the clean code verstr). Values of
+an unexpected type (a hand-edited record, ``log_input(digest=<int>)``) are
+skipped one by one. Pure: no storage.
 """
 import re
 from collections import Counter, namedtuple
@@ -16,6 +22,10 @@ from collections import Counter, namedtuple
 from vmn_exp.core.similar_text import document_terms, keyword_phrases, tokenize
 
 SYS_PREFIX = "sys_"
+# The diff part of a clean tree's dev verstr (version_stamp's snapshot identity).
+CLEAN_DIFF = "0000000"
+# The version of an export's entry that names only its author (core.snapshot_features).
+_AUTHOR_ONLY_VERSION = 0
 
 Input = namedtuple("Input", "name dataset digest kind")
 
@@ -27,6 +37,7 @@ class Profile:
         "args",
         "base",
         "branch",
+        "clean",
         "commit",
         "commit_changes",
         "files",
@@ -50,12 +61,17 @@ def _strings(value):
     return [v for v in value if isinstance(v, str) and v] if isinstance(value, list) else []
 
 
+def _named(value):
+    """A mapping's string-keyed items, as a dict."""
+    return {k: v for k, v in _dict(value).items() if isinstance(k, str)}
+
+
 def objective_names(row):
     """The metric names a run optimises: its metrics minus its params (which
     the fold copies into metrics) and the ``sys_*`` system metrics."""
     params = _dict(row.get("params"))
     return frozenset(
-        name for name in _dict(row.get("metrics"))
+        name for name in _named(row.get("metrics"))
         if name not in params and not name.startswith(SYS_PREFIX)
     )
 
@@ -71,16 +87,40 @@ def _code(row):
     return (commit[:7] if commit else None), (str(base) if base else None)
 
 
+def _clean_code(row):
+    """Whether the row's ``code_verstr`` is a clean tree's."""
+    _, sep, tail = str(row.get("code_verstr") or "").rpartition("-dev.")
+    return bool(sep) and tail.partition(".")[2] == CLEAN_DIFF
+
+
+def _changes_known(row, features):
+    """Whether *features* — the run's entry, None without one — knows the
+    run's changes (see the module docstring)."""
+    if not isinstance(features, dict) or features.get("features_version") == _AUTHOR_ONLY_VERSION:
+        return False
+    source = features.get("source")
+    if source == "mlflow":  # an import: MLflow never saw the code
+        return False
+    return source != "backfill" or _clean_code(row)
+
+
 def _dataset(name):
     """``imagenet@3`` -> ``imagenet``: a registry input's name without its version."""
     base, sep, version = name.rpartition("@")
     return base if sep and base and version.isdigit() else name
 
 
+def _digest(value):
+    """An input's digest as text: a string, or an integer (a crc32) — else none."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+    return str(value) or None
+
+
 def _inputs(inputs):
     return tuple(
-        Input(name, _dataset(name), value.get("digest") or None, value.get("kind"))
-        for name, value in sorted(_dict(inputs).items())
+        Input(name, _dataset(name), _digest(value.get("digest")), value.get("kind"))
+        for name, value in sorted(_named(inputs).items())
         if isinstance(value, dict)
     )
 
@@ -174,15 +214,17 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
     (the run state's), else ``features.entrypoint``. *text*, when given,
     replaces the run's text document (a ``--context`` query).
     """
-    row, features, intent = _dict(row), _dict(features), _dict(intent)
+    row, intent = _dict(row), _dict(intent)
+    known, features = _changes_known(row, features), _dict(features)
     changed = _dict(features.get("changed"))
     p = Profile()
     p.commit, p.base = _code(row)
     p.files = frozenset(_strings(changed.get("files")) + _strings(changed.get("untracked")))
     p.symbols = frozenset(_strings(changed.get("symbols")))
+    p.clean = known and not (p.files or p.symbols)
     p.commit_changes = features.get("changed_source") == "commit"
     p.inputs = _inputs(row.get("inputs"))
-    p.params = _dict(row.get("params"))
+    p.params = _named(row.get("params"))
     p.script, p.args = entrypoint(row.get("command") or command or features.get("entrypoint"))
     p.objective = objective_names(row)
     branch = row.get("branch") or features.get("branch")
@@ -193,7 +235,8 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
         terms = document_terms(row, features, intent, hypothesis, create_note)
         p.keywords = tuple(keyword_phrases(intent))
     p.terms, p.length = Counter(terms), len(terms)
-    p.has_intent = bool((text or "").strip() or intent.get("text") or p.keywords)
+    context = text.strip() if isinstance(text, str) else ""
+    p.has_intent = bool(context or intent.get("text") or p.keywords)
     return p
 
 

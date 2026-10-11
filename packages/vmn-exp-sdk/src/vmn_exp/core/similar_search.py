@@ -12,9 +12,10 @@ the store, each under its own metrics schema — against a target
      "features"}
 
 ``intent.text`` is the run's intent cut to :data:`INTENT_EXCERPT_BYTES`;
-``note`` the record's note, else its create entry's. A query (the ``list
---query`` language, over status-annotated rows) and the archived flag narrow
-the candidates, never the target. The conf's ``experiment.similar`` section
+``note`` the record's note, else its create entry's. Every string of an
+item is UTF-8 (:func:`utf8_safe`), whatever a hand-written log holds. A
+query (the ``list --query`` language, over status-annotated rows) and the
+archived flag narrow the candidates, never the target. The conf's ``experiment.similar`` section
 holds ``weights`` (merged over the default weights; invalid values are
 ignored) and ``hint`` (``false`` turns the submission hint off).
 """
@@ -135,6 +136,23 @@ def _matching(snap, rows, query):
     return filter_rows(annotated, query, extra={"outputs": outputs_of} if outputs_of else None)
 
 
+def utf8_safe(value):
+    """*value* with ``?`` for each lone surrogate of its strings (dict keys
+    too): no UTF-8 encoder, JSON or stdout, fails on it. Dicts and lists are
+    copied; tuples become lists."""
+    if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            return value.encode("utf-8", "replace").decode("utf-8")
+        return value
+    if isinstance(value, dict):
+        return {utf8_safe(k): utf8_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [utf8_safe(v) for v in value]
+    return copy.deepcopy(value)
+
+
 def item_payload(item, snapshot):
     """A :func:`~vmn_exp.core.similar.similar_runs_multi` item as the JSON
     item the CLI prints (see the module docstring); copies only."""
@@ -143,22 +161,22 @@ def item_payload(item, snapshot):
     states = getattr(snapshot, "run_states", None) or {}
     observed = getattr(snapshot, "run_state_observed_at", None) or {}
     notes = getattr(snapshot, "create_notes", None) or {}
-    return {
+    return utf8_safe({
         "app": item["app"],
         "verstr": verstr,
         "name": row.get("name"),
         "score": item["score"],
-        "reasons": list(item["reasons"]),
-        "signals": dict(item["signals"]),
+        "reasons": item["reasons"],
+        "signals": item["signals"],
         "group_size": item["group_size"],
         "author": row.get("author"),
         "timestamp": row.get("timestamp"),
         "status": derive_status(states.get(verstr), observed_at=observed.get(verstr)),
-        "goal": copy.deepcopy(item.get("goal")),
+        "goal": item.get("goal"),
         "note": row.get("note") or notes.get(verstr),
         "intent": intent_excerpt(intent_of(verstr)),
-        "features": copy.deepcopy(features_of(verstr)),
-    }
+        "features": features_of(verstr),
+    })
 
 
 def intent_excerpt(intent):
@@ -169,7 +187,7 @@ def intent_excerpt(intent):
     if not intent:
         return None
     found = {"keywords": _string_keywords(intent.get("keywords")),
-             "generator": copy.deepcopy(intent.get("generator"))}
+             "generator": utf8_safe(intent.get("generator"))}
     excerpt = {key: value for key, value in found.items() if value}
     raw = str(intent.get("text") or "").encode("utf-8", "replace")
     excerpt["text"] = raw[:INTENT_EXCERPT_BYTES].decode("utf-8", "ignore")
@@ -183,7 +201,7 @@ def _string_keywords(keywords):
     text, and readers (the web UI) take each keyword for a string."""
     if not isinstance(keywords, (list, tuple)):
         return []
-    return [k for k in keywords if isinstance(k, str)]
+    return [utf8_safe(k) for k in keywords if isinstance(k, str)]
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,
