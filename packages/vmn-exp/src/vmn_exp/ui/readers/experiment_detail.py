@@ -19,6 +19,7 @@ from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.metric_compact import record_compacted
 from vmn_exp.core.refs import placement_snapshot
+from vmn_exp.core.run_error import ERROR_SUMMARY
 from vmn_exp.core.status import (
     load_run_state,
     run_state_observed_at,
@@ -88,6 +89,14 @@ def _children_of(parent_of):
     )
 
 
+def _full_error(storage, app_name, verstr, run_state):
+    """The run's whole ``error``: the index keeps only its summary
+    (``slim_run_state``), so a failed run's state is read from storage."""
+    if not run_state or ERROR_SUMMARY not in run_state:
+        return (run_state or {}).get("error")
+    return (load_run_state(storage, app_name, verstr) or {}).get("error")
+
+
 def status_detail(
     storage,
     app_name,
@@ -126,7 +135,7 @@ def status_detail(
         children_of=children_of,
     )
     detail["parent"] = metadata.get("parent")
-    detail["error"] = (own_state or {}).get("error")
+    detail["error"] = _full_error(storage, app_name, verstr, own_state)
     detail["last_metric_at"] = (
         log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
     )

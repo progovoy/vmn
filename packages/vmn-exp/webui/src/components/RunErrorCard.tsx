@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { RunError, RunStatus } from "../types";
-import { copyText } from "../util";
+import { CopyButton } from "./ui";
 
 /** Anchor of the Run page's output card (RunOutput). */
 export const OUTPUT_ANCHOR = "run-output";
@@ -18,21 +18,6 @@ function MetaLine({ status, withExit }: { status: RunStatus; withExit: boolean }
   return <div className="run-error-meta">{parts.join(" · ")}</div>;
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState<string | null>(null);
-  useEffect(() => {
-    if (!copied) return;
-    const t = window.setTimeout(() => setCopied(null), 1500);
-    return () => window.clearTimeout(t);
-  }, [copied]);
-  return (
-    <button className="run-error-copy" aria-label="copy traceback"
-      onClick={() => copyText(text).then((ok) => setCopied(ok ? "copied" : "no clipboard"), () => setCopied("no clipboard"))}>
-      {copied ?? "copy"}
-    </button>
-  );
-}
-
 /** The traceback, scrolled to its end so the raising frame shows first,
  *  with the final `Type: message` line highlighted. */
 function Traceback({ text }: { text: string }) {
@@ -44,8 +29,8 @@ function Traceback({ text }: { text: string }) {
   const last = lines.pop() ?? "";
   return (
     <div className="run-error-tb-wrap">
-      <CopyButton text={text} />
-      <pre ref={ref} className="run-error-traceback">
+      <CopyButton text={text} className="run-error-copy" label="copy traceback" />
+      <pre ref={ref} className="yaml-block run-error-traceback">
         {lines.length > 0 && `${lines.join("\n")}\n`}
         <span className="run-error-final">{last}</span>
       </pre>
@@ -83,7 +68,7 @@ export default function RunErrorCard({ status, hasOutputLog = false }: {
       {tail && (
         <details className="run-error-output" open={!traceback}>
           <summary>last output</summary>
-          <pre className="run-error-tail">{tail}</pre>
+          <pre className="yaml-block run-error-tail">{tail}</pre>
         </details>
       )}
     </section>

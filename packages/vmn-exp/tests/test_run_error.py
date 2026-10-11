@@ -1,9 +1,12 @@
 """``core/run_error``: how a failed run's exception is recorded in its run state."""
 from vmn_exp.core import run_error
 from vmn_exp.core.run_error import (
+    MAX_MESSAGE_BYTES,
     error_from_exception,
     error_from_output,
     error_summary,
+    slim_run_state,
+    state_error_summary,
 )
 
 
@@ -200,3 +203,27 @@ def test_traceback_text_without_a_traceback_keeps_only_the_tail():
     error = error_from_output("disk full\n", traceback_text="warning: slow\n")
     assert "type" not in error
     assert error["output_tail"] == "disk full"
+
+
+def test_a_huge_exception_message_is_capped():
+    error = error_from_exception(ValueError("x" * 200_000))
+    assert len(error["message"].encode()) <= MAX_MESSAGE_BYTES + 100
+    assert error["message"].startswith("xxx")
+
+
+def test_the_slim_run_state_keeps_the_summary_not_the_error():
+    state = {"exit_code": 1, "error": {"type": "ValueError", "message": "bad lr", "traceback": "tb"}}
+    slim = slim_run_state(state)
+    assert "error" not in slim
+    assert slim["exit_code"] == 1
+    assert state_error_summary(slim) == "ValueError: bad lr"
+    assert state_error_summary(state) == "ValueError: bad lr"
+    assert "error" in state  # the caller's mapping is untouched
+
+
+def test_the_slim_run_state_of_a_run_without_an_error_is_unchanged():
+    state = {"exit_code": 0}
+    assert slim_run_state(state) is state
+    assert slim_run_state(None) is None
+    assert state_error_summary(state) is None
+    assert state_error_summary(None) is None

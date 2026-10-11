@@ -13,7 +13,7 @@ import yaml
 from vmn_exp._base import VMN_LOGGER, now_iso, yaml_safe_load
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.alerts.dispatch import make_alert
-from vmn_exp.core.run_error import error_summary
+from vmn_exp.core.run_error import state_error_summary
 from vmn_exp.core.status import FAILED, STUCK, derive_status, parse_iso
 
 ALERTS_FILE = "alerts_sent.yml"
@@ -65,7 +65,7 @@ def transition_alert(app_name, verstr, run_state, status, run_name=None, now=Non
         text = f"exit code {run_state.get('exit_code')}"
         if run_state.get("signal"):
             text += f" ({run_state['signal']})"
-        summary = error_summary(run_state.get("error"))
+        summary = state_error_summary(run_state)
         if summary:
             text += f": {summary}"
         level = "error"

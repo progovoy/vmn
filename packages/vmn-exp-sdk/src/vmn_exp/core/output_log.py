@@ -139,9 +139,10 @@ class OutputArtifact:
             self._next_upload_at = self._clock() + len(data) / UPLOAD_BYTES_PER_SEC
             return True
 
-    def text(self):
-        """The log as it stands, decoded (undecodable bytes replaced)."""
-        return self._log.render().decode("utf-8", errors="replace")
+    def tail_text(self, max_bytes):
+        """The last *max_bytes* of the log as it stands, decoded (undecodable
+        bytes replaced)."""
+        return self._log.render()[-max_bytes:].decode("utf-8", errors="replace")
 
     def artifact_entry(self):
         """The ``artifact`` log entry of the log as it stands now."""

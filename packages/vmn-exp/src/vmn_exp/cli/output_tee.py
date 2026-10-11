@@ -13,7 +13,7 @@ import subprocess
 import threading
 
 from vmn_exp.core.background import join_all
-from vmn_exp.core.output_log import OutputArtifact, OutputLog, output_cap_bytes, pump
+from vmn_exp.core.output_log import OutputArtifact, output_cap_bytes, pump
 
 # How long the end of a run waits for the pipes to drain. A grandchild that
 # inherited them can hold them open past the child's exit; it is not waited for.
@@ -39,14 +39,30 @@ def popen_kwargs(env):
 _STDERR_TAIL_BYTES = 64 * 1024
 
 
+class TailBuffer:
+    """The last *cap* bytes written; one writer thread, read after it ends."""
+
+    def __init__(self, cap):
+        self._cap = cap
+        self._buf = bytearray()
+
+    def write(self, data):
+        self._buf += data
+        if len(self._buf) > 2 * self._cap:  # trim in batches: amortized O(1)
+            del self._buf[:-self._cap]
+
+    def text(self):
+        return bytes(self._buf[-self._cap:]).decode("utf-8", errors="replace")
+
+
 class OutputTee:
     """Pump a child's two pipes until they close."""
 
     def __init__(self, proc, sink):
-        self.stderr = OutputLog(_STDERR_TAIL_BYTES)
+        self._stderr = TailBuffer(_STDERR_TAIL_BYTES)
 
         def stderr_sink(data):
-            self.stderr.write(data)
+            self._stderr.write(data)
             sink(data)
 
         self._threads = [
@@ -65,5 +81,5 @@ class OutputTee:
         join_all(self._threads, timeout)
 
     def stderr_text(self):
-        return self.stderr.render().decode("utf-8", errors="replace")
+        return self._stderr.text()
 

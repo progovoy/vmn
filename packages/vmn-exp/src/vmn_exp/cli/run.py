@@ -47,6 +47,9 @@ DEFAULT_KILL_GRACE_SEC = 30
 _FINAL_SYNC_TIMEOUT_SEC = 60
 _FINAL_STATE_ATTEMPTS = 3
 
+# The end of output.log an error's output_tail is cut from (it keeps far less).
+_ERROR_OUTPUT_BYTES = 64 * 1024
+
 
 def _parse_metrics(metrics_list):
     """Parse ['loss=0.34', 'acc=0.91'] to {'loss': 0.34, 'acc': 0.91}."""
@@ -461,7 +464,9 @@ class _Supervision:
         if not self.output:
             return None
         stderr = self.tee.stderr_text() if self.tee else None
-        return error_from_output(self.output.text(), traceback_text=stderr)
+        return error_from_output(
+            self.output.tail_text(_ERROR_OUTPUT_BYTES), traceback_text=stderr
+        )
 
     def _publish(self, what, **updates):
         self.guard(

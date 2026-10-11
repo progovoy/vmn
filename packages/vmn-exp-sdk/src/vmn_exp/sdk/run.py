@@ -87,21 +87,19 @@ ALERT_DRAIN_SEC = 5
 # ``_note_uncaught_exception`` below) makes it read as failed instead.
 ABANDONED_EXIT_CODE = 1
 
-# Whether an uncaught exception has reached the top of this process. Only
-# this flips the atexit-abandoned default from succeeded to failed:
-# ``SystemExit`` never reaches ``sys.excepthook`` (CPython special-cases it
-# before running atexit handlers), so a bare ``sys.exit(N)`` outside a
-# context-managed run stays indistinguishable from a clean exit here — the
-# same as it would be for any other process without our instrumentation.
-_uncaught_exception_seen = False
-# The exception itself, recorded as the abandoned runs' ``error``.
+# The uncaught exception that reached the top of this process, if any,
+# recorded as the abandoned runs' ``error``. Only it flips the atexit-abandoned
+# default from succeeded to failed: ``SystemExit`` never reaches
+# ``sys.excepthook`` (CPython special-cases it before running atexit
+# handlers), so a bare ``sys.exit(N)`` outside a context-managed run stays
+# indistinguishable from a clean exit here — the same as it would be for any
+# other process without our instrumentation.
 _uncaught_exception = None
 _prev_excepthook = sys.excepthook
 
 
 def _note_uncaught_exception(exc_type, exc_value, tb):
-    global _uncaught_exception_seen, _uncaught_exception
-    _uncaught_exception_seen = True
+    global _uncaught_exception
     _uncaught_exception = exc_value
     _prev_excepthook(exc_type, exc_value, tb)
 
@@ -611,16 +609,16 @@ def _finalize_open_runs(exit_code=None, **final_state):
 
     With no explicit *exit_code* (the atexit case) a clean process exit reads
     as succeeded, and only a genuinely uncaught exception reads as failed —
-    see ``_uncaught_exception_seen``. ``_finalize_signaled`` always passes an
+    see ``_uncaught_exception``. ``_finalize_signaled`` always passes an
     explicit code, so a killed process is unaffected.
 
     Only this process's runs: a forked child exiting normally must not finalize
     — and so mark failed — the parent's still-running run.
     """
+    error = None
     if exit_code is None:
-        exit_code = ABANDONED_EXIT_CODE if _uncaught_exception_seen else 0
-        if _uncaught_exception is not None:
-            final_state.setdefault("error", _uncaught_exception)
+        exit_code = ABANDONED_EXIT_CODE if _uncaught_exception is not None else 0
+        error = _uncaught_exception
     # One shared deadline for every run's uploads: a hung remote must not
     # spend the whole budget on each run in turn. Media files are waited for
     # while recording (their entries must precede the final flush); the rest
@@ -629,7 +627,7 @@ def _finalize_open_runs(exit_code=None, **final_state):
     recorded = [
         run
         for run in reversed(context.open_runs())
-        if _quietly(run._record_final, exit_code, deadline, **final_state)
+        if _quietly(run._record_final, exit_code, deadline, error=error, **final_state)
     ]
     for run in recorded:
         _quietly(run._close_remote_writers, deadline)

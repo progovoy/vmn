@@ -20,7 +20,7 @@ import os
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.run_error import error_summary
+from vmn_exp.core.run_error import state_error_summary
 
 CREATED = "created"  # experiment exists, no run was ever started
 RUNNING = "running"  # heartbeat is fresh
@@ -228,7 +228,7 @@ def status_fields(run_state, now=None, observed_at=None):
         "status": status,
         "exit_code": run_state.get("exit_code"),
         "end_reason": run_state.get("end_reason"),
-        "error_summary": error_summary(run_state.get("error")),
+        "error_summary": state_error_summary(run_state),
         "signal": run_state.get("signal"),
         "started_at": run_state.get("started_at"),
         "finished_at": run_state.get("finished_at"),

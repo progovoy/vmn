@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { api } from "../api";
 import type { Job, Workspace } from "../types";
 import { copyText } from "../util";
@@ -24,25 +24,29 @@ export function wsLocation(w: Pick<Workspace, "path" | "store">): string {
  *  a workspace is named, so the location is always one click from the
  *  clipboard (never truncated in the copied value, even if display wraps). */
 export function CopyPath({ text, className }: { text: string; className?: string }) {
+  return (
+    <div className={`copy-path${className ? ` ${className}` : ""}`} title={text}>
+      <span className="mono">{text}</span>
+      <CopyButton text={text} style={{ padding: "0 8px", fontSize: 11 }} />
+    </div>
+  );
+}
+
+/** A "copy" button that briefly reads "copied" (or "no clipboard"). */
+export function CopyButton({ text, className, style, label }: {
+  text: string; className?: string; style?: CSSProperties; label?: string;
+}) {
   const [copied, setCopied] = useState<"copied" | "no clipboard" | null>(null);
   useEffect(() => {
     if (!copied) return;
     const t = window.setTimeout(() => setCopied(null), 1500);
     return () => window.clearTimeout(t);
   }, [copied]);
-
   return (
-    <div className={`copy-path${className ? ` ${className}` : ""}`} title={text}>
-      <span className="mono">{text}</span>
-      <button
-        style={{ padding: "0 8px", fontSize: 11 }}
-        onClick={() =>
-          copyText(text).then((ok) => setCopied(ok ? "copied" : "no clipboard"))
-        }
-      >
-        {copied ?? "copy"}
-      </button>
-    </div>
+    <button className={className} style={style} aria-label={label}
+      onClick={() => copyText(text).then((ok) => setCopied(ok ? "copied" : "no clipboard"))}>
+      {copied ?? "copy"}
+    </button>
   );
 }
 

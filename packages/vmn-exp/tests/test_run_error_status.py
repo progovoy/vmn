@@ -72,3 +72,23 @@ def test_error_summary_is_queryable():
 def test_signal_and_end_reason_are_queryable():
     assert _verstrs('signal = "SIGTERM"') == ["0.0.3"]
     assert _verstrs('end_reason = "stopped"') == ["0.0.3"]
+
+
+def test_status_fields_of_the_slim_index_state_carry_the_summary():
+    from vmn_exp.core.run_error import slim_run_state
+    fields = status_fields(slim_run_state(_FAILED))
+    assert fields["error_summary"] == "torch.cuda.OutOfMemoryError: CUDA out of memory"
+
+
+def test_the_index_keeps_a_slim_run_state():
+    import yaml
+    from vmn_exp.core.index_record import new_record, _update_run_state
+
+    class Storage:
+        def load_file(self, app_name, verstr, name):
+            return yaml.dump(_FAILED)
+
+    record = new_record()
+    _update_run_state(Storage(), "app", "1.0.0-dev.a", {"run_state.yml": (1, 2)}, record)
+    assert "error" not in record["run_state"]
+    assert record["run_state"]["error_summary"].startswith("torch.cuda.OutOfMemoryError")

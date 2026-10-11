@@ -8,7 +8,8 @@ when it was parsed out of a run's captured output (which also keeps an
 ``output_tail``), ``user`` when ``run.finish(error="...")`` gave a message.
 
 Pure functions only: the SDK and ``vmn-exp run`` build the mapping, readers
-fold it into one ``error_summary`` line for lists and queries.
+fold it into one ``error_summary`` line for lists and queries. The index keeps
+only that line (:func:`slim_run_state`); the run detail reads the full mapping.
 """
 import re
 import traceback as _traceback
@@ -18,6 +19,9 @@ TRACEBACK_HEAD_BYTES = 4 * 1024
 OUTPUT_TAIL_LINES = 50
 MAX_OUTPUT_TAIL_BYTES = 8 * 1024
 MAX_SUMMARY_CHARS = 200
+MAX_MESSAGE_BYTES = 8 * 1024
+MESSAGE_HEAD_BYTES = 4 * 1024
+ERROR_SUMMARY = "error_summary"
 
 SOURCE_EXCEPTION = "exception"
 SOURCE_OUTPUT = "output"
@@ -81,7 +85,7 @@ def error_from_exception(exc):
     """The ``error`` mapping of an exception the run itself caught."""
     return {
         "type": exception_type_name(exc),
-        "message": _message(exc),
+        "message": cap_head_tail(_message(exc), MAX_MESSAGE_BYTES, MESSAGE_HEAD_BYTES),
         "traceback": cap_head_tail(_format_traceback(exc)),
         "source": SOURCE_EXCEPTION,
     }
@@ -141,12 +145,11 @@ def error_from_output(text, traceback_text=None):
 
 
 def _first_line(text):
-    return str(text).strip().splitlines()[0] if text and str(text).strip() else ""
+    return str(text or "").lstrip().partition("\n")[0].strip()
 
 
 def _last_line(text):
-    lines = [line for line in str(text or "").splitlines() if line.strip()]
-    return lines[-1].strip() if lines else ""
+    return str(text or "").rstrip().rpartition("\n")[2].strip()
 
 
 def _truncated(text):
@@ -166,3 +169,21 @@ def error_summary(error):
     else:
         summary = message or _last_line(error.get("output_tail"))
     return _truncated(summary) if summary else None
+
+
+def slim_run_state(run_state):
+    """*run_state* as the index keeps it: the ``error`` folded to its summary."""
+    if not run_state or "error" not in run_state:
+        return run_state
+    slim = {k: v for k, v in run_state.items() if k != "error"}
+    slim[ERROR_SUMMARY] = error_summary(run_state["error"])
+    return slim
+
+
+def state_error_summary(run_state):
+    """The ``error_summary`` of a full or slim *run_state*, or None."""
+    if not run_state:
+        return None
+    if ERROR_SUMMARY in run_state:
+        return run_state[ERROR_SUMMARY]
+    return error_summary(run_state.get("error"))
