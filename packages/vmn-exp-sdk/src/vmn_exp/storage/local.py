@@ -212,22 +212,25 @@ class LocalSnapshotStorage(LocalMetrics, SnapshotStorage):
         sigs = map_dirs(_dir_sig, entries)
         return {unsafe_verstr(entry.name): sig for entry, sig in zip(entries, sigs)}
 
-    def list_files(self, app_name, keys=None):
+    def list_files(self, app_name, keys=None, identity=False):
         """``{verstr: {filename: (size, mtime_ns)}}``; only *keys* when given
-        (a key without a record is left out)."""
+        (a key without a record is left out). With *identity*, a log file's
+        signature also carries what an append keeps and a rewrite moves
+        (:func:`~vmn_exp.core.logfiles.append_identity`)."""
         if keys is None:
-            return self._list_all_files(app_name)
+            return self._list_all_files(app_name, identity)
         keys = list(keys)
-        found = map_dirs(lambda key: self.record_files(app_name, key), keys)
+        found = map_dirs(lambda key: self.record_files(app_name, key, identity), keys)
         return {key: names for key, names in zip(keys, found) if METADATA_FILE in names}
 
-    def _list_all_files(self, app_name):
+    def _list_all_files(self, app_name, identity=False):
         # The same records as _record_dirs, without stat-ing metadata.yml twice.
         base = self._snapshot_base_dir(app_name)
         if not os.path.isdir(base):
             return {}
         listed = self._listings.list_all(
-            base, lambda files: METADATA_FILE in files, scan=self._files_in
+            base, lambda files: METADATA_FILE in files, scan=self._files_in,
+            identity=identity,
         )
         return {unsafe_verstr(name): files for name, files in listed.items()}
 
@@ -323,10 +326,14 @@ class LocalSnapshotStorage(LocalMetrics, SnapshotStorage):
         abs_path = artifact_file_path(self._snapshot_dir(app_name, verstr), path)
         return f"file://{abs_path}"
 
-    def record_files(self, app_name, verstr):
-        """``{filename: (size, mtime_ns)}`` for one record's files — one scandir."""
+    def record_files(self, app_name, verstr, identity=False):
+        """``{filename: (size, mtime_ns)}`` for one record's files — one
+        scandir (*identity*: as :meth:`list_files`)."""
+        path = self._snapshot_dir(app_name, verstr)
         try:
-            return self._files_in(self._snapshot_dir(app_name, verstr))
+            if identity and self._files_in is files_in:
+                return files_in(path, identity=True)
+            return self._files_in(path)
         except FileNotFoundError:
             return {}
 

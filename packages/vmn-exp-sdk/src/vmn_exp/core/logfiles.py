@@ -47,6 +47,25 @@ def log_writer_and_seq(name):
     return writer, last
 
 
+# A local log file lists as ``(size, mtime_ns, inode, log/ mtime_ns)``: an
+# append moves only the first two, while a rewrite (an atomic replace, like a
+# local-first cache merging the remote's lines in) gives the file a new inode
+# and touches its folder. An object store lists ``(size, LastModified, ETag)``:
+# its log objects only grow by new segments.
+_LOCAL_LOG_SIG_LEN = 4
+
+
+def local_log_sig(st, folder_mtime_ns):
+    """The listed signature of a local log file of stat result *st*."""
+    return st.st_size, st.st_mtime_ns, st.st_ino, folder_mtime_ns
+
+
+def append_identity(sig):
+    """The part of log file signature *sig* an append keeps and a rewrite
+    changes; None for a signature without one (an object store's)."""
+    return tuple(sig[2:]) if len(sig) == _LOCAL_LOG_SIG_LEN else None
+
+
 def log_object_name(writer, seq=0):
     return f"{_PREFIX}{writer}.jsonl" if not seq else f"{_PREFIX}{writer}@{seq:06d}.jsonl"
 

@@ -169,15 +169,25 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
             for verstr in [*remote, *(v for v in local if v not in remote)]
         }
 
+    def _listing_identity(self):
+        """How the local copy's files are listed: a local root's log files
+        carry their identity, with a remote or not, as a merge may rewrite one
+        (:mod:`cached_log_merge`) — this cache's, or one by another cache over
+        the root, whose readers persist to the same index file — and a reader
+        may switch between a writer's two copies. A plugin root lists with
+        its base signatures."""
+        return {"identity": True} if isinstance(self._local, LocalSnapshotStorage) else {}
+
     def _local_files(self, app_name, keys):
         if not self._local_is_replica:
             return {}
+        identity = self._listing_identity()
         if keys is None:
-            return self._local.list_files(app_name)
+            return self._local.list_files(app_name, **identity)
         files = {}
         for key in keys:
             try:
-                found = self._local.record_files(app_name, key)
+                found = self._local.record_files(app_name, key, **identity)
             except ValueError:
                 continue
             if METADATA_FILE in found:
@@ -189,8 +199,11 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
         return self._local if self._remote is None else self
 
     def record_files(self, app_name, verstr):
-        """One record's file signatures, or None when reads merge a remote too."""
-        return None if self._remote else self._local.record_files(app_name, verstr)
+        """One record's file signatures (as listed), or None when reads merge
+        a remote too."""
+        if self._remote:
+            return None
+        return self._local.record_files(app_name, verstr, **self._listing_identity())
 
     def is_remote(self):
         return self._remote is not None

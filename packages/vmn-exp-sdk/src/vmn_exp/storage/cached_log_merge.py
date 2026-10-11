@@ -11,6 +11,8 @@ be relied on — the seed failed, here or in an earlier process over the same
 root, or the local copy was dropped under a live cache — shipping merges the
 remote's lines back in first (:meth:`LogMerge._needs_merge`) rather than
 overwrite them or ship from an offset the local copy does not line up with.
+Both rewrite the local log by an atomic replace, which moves the identity its
+listing carries, so an incremental reader folds it again (:mod:`cached_logs`).
 
 Neither the seed nor the local append waits on the sync lock a ship holds
 across remote I/O. Appends share the local log lock, a merge's rewrite holds

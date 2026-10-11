@@ -37,9 +37,12 @@ class ListingWatch:
     # instead of all at once every full_sweep_sec (see Sweep).
     rolling = False
 
-    def __init__(self, storage, app_name):
+    def __init__(self, storage, app_name, identity=False):
         self._storage = storage
         self._app_name = app_name
+        # A plain local store lists its log files with their identity on
+        # request, as a local-first cache over it does (storage.cached).
+        self._listing = {"identity": True} if identity else {}
         self._names = {}  # name -> sig at the last name_changes
         self._prints = {}  # key -> fingerprint of its files when last listed
 
@@ -59,12 +62,14 @@ class ListingWatch:
 
     def files(self, keys):
         """``{key: {filename: signature}}`` of *keys* (records gone are left out)."""
-        return self._storage.list_files(self._app_name, keys=list(keys)) if keys else {}
+        if not keys:
+            return {}
+        return self._storage.list_files(self._app_name, keys=list(keys), **self._listing)
 
     def full_changes(self):
         """``(files of the records that changed since the last full listing,
         keys of every present record)``."""
-        listing = self._storage.list_files(self._app_name)
+        listing = self._storage.list_files(self._app_name, **self._listing)
         prints = {key: _fingerprint(files) for key, files in listing.items()}
         before, self._prints = self._prints, prints
         changed = {k: files for k, files in listing.items() if before.get(k) != prints[k]}
