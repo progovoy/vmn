@@ -7,12 +7,9 @@
 per definition an added or removed line makes
 (:func:`~vmn_exp.core.features_symbols.defined_symbol`), each message's
 ``Subject:`` without git's ``[PATCH n/m]`` and its ``From:`` as ``{"name",
-"email"}``. A change is in the function its hunk header names (git's funcname:
-the one *above* the hunk's leading context) or in the one a context line before
-it defines at column 0 (a line git's default funcname picks itself), so without
-a ``diff=`` driver a 3-line-context patch names what a ``-U0`` one does; a method
-or a nested def in the context leaves the header's name. A hunk whose header
-names nothing reads no definitions from its context. Headers are read only
+"email"}``. A change's function is its hunk's
+:class:`~vmn_exp.core.features_scope.HunkScope`; a line past a hunk's ``@@``
+counts (format-patch's ``-- `` signature) changes nothing. Headers are read only
 after an mbox ``From <sha> <date>`` line and until the blank line ending them;
 a cover letter (``[PATCH 0/n]``) is skipped whole, as is a commit whose ``From:``
 name is one of *skip_authors*. A ``diff --git`` line in a
@@ -32,12 +29,12 @@ import re
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 
-from vmn_exp.core.features_symbols import defined_symbol, hunk_symbol
+from vmn_exp.core.features_scope import HunkScope
+from vmn_exp.core.features_symbols import defined_symbol
 
 _MBOX_FROM = re.compile(r"From (?:[0-9a-f]{40}|[0-9a-f]{64})(?: |$)")
 _HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@(.*)")
 _HUNK_LINE = ("+", "-", " ", "\\", "")  # "": a context line a message cleanup stripped
-_FUNCNAME_LINE = re.compile(r"[A-Za-z_$]")  # git's default funcname: not a method, not a nested def
 _SUBJECT_PREFIX = re.compile(r"^\[[^\]]*\]\s*")
 _COVER_LETTER = re.compile(r"^\[[^\]]*\b0+/\d+\]")
 _DIFFSTAT = re.compile(r" \S.* \| +(?:\d|Bin )")  # a diffstat line
@@ -72,7 +69,7 @@ class _Parser:
         self.pasted = None  # (files, symbols) counts before a diff pasted in a message
         self.dashes = False  # a pasted hunk's `---` line, until the next line tells what it is
         self.old_left = self.new_left = 0  # the current hunk's lines still to come
-        self.scope, self.scope_named = None, False  # the function a change is in; named yet
+        self.scope = HunkScope()
 
     def feed(self, line):
         if self.dashes:
@@ -191,15 +188,18 @@ class _Parser:
 
     def _hunk_line(self, line):
         kind = line[:1]
+        past = self.old_left <= 0 and self.new_left <= 0  # e.g. format-patch's `-- ` signature
         if kind in _HUNK_LINE:
             self.old_left -= kind in ("-", " ", "")
             self.new_left -= kind in ("+", " ", "")
         else:
             self.old_left = self.new_left = 0
+        if past and kind in ("+", "-", " "):
+            return
         if kind in ("+", "-"):
-            self._change_line(line[1:])
+            self._change_line(kind, line[1:])
         elif kind == " ":
-            self._context_line(line[1:])
+            self.scope.context_line(line[1:])
         else:
             self._hunk(_HUNK.match(line))
 
@@ -207,19 +207,10 @@ class _Parser:
         if match:
             old, new, context = match.groups()
             self.old_left, self.new_left = int(old or 1), int(new or 1)
-            self.scope, self.scope_named = hunk_symbol(context), False
+            self.scope = HunkScope(context)
 
-    def _context_line(self, text):
-        """A definition in the context moves the scope the hunk header named,
-        when it is a line git's default funcname would name itself."""
-        name = self.scope and _FUNCNAME_LINE.match(text) and defined_symbol(text, self.path)
-        if name:
-            self.scope, self.scope_named = name, False
-
-    def _change_line(self, text):
-        if not self.scope_named:
-            self._symbol(self.scope)
-            self.scope_named = True
+    def _change_line(self, kind, text):
+        self._symbol(self.scope.change_line(kind, text))
         self._symbol(defined_symbol(text, self.path))
 
     def _symbol(self, name):
