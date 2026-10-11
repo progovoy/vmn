@@ -10,14 +10,12 @@ import contextlib
 import os
 
 import yaml
-
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.env import (
-    CAPTURE_ENV_ENV,
     capture_env_safe,
     should_capture,
 )
-from vmn_exp.core.from_snapshot import create_from_snapshot
+from vmn_exp.core.from_snapshot import create_from_snapshot, exported_features
 from vmn_exp.core.refs import resolve_parent
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.writer import get_repo_lock, merge_env_into_params
@@ -161,8 +159,9 @@ def create_from_snapshot_meta(
     if storage is None:
         storage = snapshot_mode_storage()
 
-    # Capture env OUTSIDE the lock.
+    # Capture env and read the export's features OUTSIDE the lock.
     env = _maybe_capture_env(None, capture_env)
+    features = exported_features(meta_path)
 
     # A shared VMN_EXPERIMENT_DIR is the only thing concurrent git-less workers
     # have in common: serialize verstr allocation on it, like a checkout's lock.
@@ -179,6 +178,7 @@ def create_from_snapshot_meta(
             parent=pick_parent(storage, app_name, parent, nested),
             name=name,
             env=env,
+            features=features,
         )
     return app_name, storage, verstr, err
 

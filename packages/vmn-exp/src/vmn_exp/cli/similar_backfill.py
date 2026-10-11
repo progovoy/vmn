@@ -37,12 +37,12 @@ from vmn_exp.core.features import (
     FEATURES_VERSION,
     author_from_commits,
     build_features_entry,
-    features_from_patches,
 )
 from vmn_exp.core.provenance import _has_in_record_patches
 from vmn_exp.core.rerun import _dirty_snapshot, code_verstr_of
 from vmn_exp.core.status import RUNNING, STUCK, derive_status
 from vmn_exp.core.writer import create_log_entry, flush_log, get_writer_id
+from vmn_exp.gitmode.features import features_from_patches  # without vmn's own commits
 
 BACKFILLED, PARTIAL, SKIPPED, FAILED = "backfilled", "partial", "skipped", "failed"
 SOURCE = "backfill"

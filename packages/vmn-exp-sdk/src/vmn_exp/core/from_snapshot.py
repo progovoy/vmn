@@ -9,12 +9,13 @@ do, so the record is shaped here in core rather than in either entry point.
 import os
 
 import yaml
-
 from vmn_exp._base import VMN_LOGGER, now_iso
 from vmn_exp.core.snapshot_features import export_features
 from vmn_exp.core.writer import create_run
 
 SNAPSHOT_METADATA_FILE = "vmn_metadata.yml"
+# create_from_snapshot reads the run's features from the tree itself.
+_READ_FEATURES = object()
 
 
 def _meta_file(snapshot_meta_path):
@@ -22,6 +23,11 @@ def _meta_file(snapshot_meta_path):
     if os.path.isdir(snapshot_meta_path):
         return os.path.join(snapshot_meta_path, SNAPSHOT_METADATA_FILE)
     return snapshot_meta_path
+
+
+def exported_features(snapshot_meta_path):
+    """The ``features`` entry of a run of the exported tree, or None."""
+    return export_features(os.path.dirname(os.path.abspath(_meta_file(snapshot_meta_path))))
 
 
 def _load_snapshot_meta(snapshot_meta_path):
@@ -73,6 +79,7 @@ def create_from_snapshot(
     parent=None,
     name=None,
     env=None,
+    features=_READ_FEATURES,
 ):
     """Create an experiment from an exported snapshot directory or metadata file.
 
@@ -80,7 +87,8 @@ def create_from_snapshot(
 
     *env* is a pre-captured environment dict; when given it is embedded as a
     summary in the metadata and written as ``env.yml`` (best-effort). The
-    run's ``features`` entry comes from :mod:`vmn_exp.core.snapshot_features`.
+    run's ``features`` entry is *features* when given (:func:`exported_features`,
+    read before a caller's lock), else read here.
     """
     meta_file = _meta_file(snapshot_meta_path)
     snap_meta = _load_snapshot_meta(meta_file)
@@ -107,6 +115,6 @@ def create_from_snapshot(
         parent=parent,
         name=name,
         env=env,
-        features=export_features(os.path.dirname(os.path.abspath(meta_file))),
+        features=exported_features(meta_file) if features is _READ_FEATURES else features,
     )
     return verstr, None

@@ -7,20 +7,28 @@ and commit subjects of the captured patches (working tree diff, local commits,
 deps under their configured path), the main repo's untracked paths (as the
 capture listed them), and the author — git config's email in the repo (given
 up on after ``GIT_CONFIG_TIMEOUT_SEC``: this runs under the repo lock), else
-``VMN_EXP_AUTHOR``, else the first local commit's ``From:``.
+``VMN_EXP_AUTHOR``, else the first local commit's ``From:``. vmn's own
+bookkeeping commits (init, stamp: authored as ``VMN_USER_NAME``; an SDK cold
+start leaves them unpushed) are not the run's: this module's
+``features_from_patches`` (core's, for a run's patches) skips them.
 ``features_for_working_tree`` gives the same facts without creating a run;
 ``rerun_features`` a rerun's, from the original, with the rerunner alone as
 the author.
 
 Best-effort, like env capture: a failure is a warning and no entry.
 """
-from version_stamp.api import VMN_LOGGER, _list_tarball_members, _untracked_candidates
+from version_stamp.api import (
+    VMN_LOGGER,
+    VMN_USER_NAME,
+    _list_tarball_members,
+    _untracked_candidates,
+)
+from vmn_exp.core import features as core_features
 from vmn_exp.core.features import (
     FEATURES_VERSION,
     author_from_commits,
     build_features_entry,
     code_facts,
-    features_from_patches,
 )
 from vmn_exp.core.fold import fold_features, fold_log
 from vmn_exp.core.identity import env_author, run_author
@@ -28,6 +36,11 @@ from vmn_exp.gitmode import capture
 from vmn_exp.storage.files import safe_dep_name
 
 _TEXT_PATCHES = ("working_tree", "local_commits")
+
+
+def features_from_patches(patch_texts) -> dict:
+    """Core's ``features_from_patches`` of a run's patches, minus vmn's commits."""
+    return core_features.features_from_patches(patch_texts, skip_authors=(VMN_USER_NAME,))
 
 
 def capture_features(vcs, captured):
