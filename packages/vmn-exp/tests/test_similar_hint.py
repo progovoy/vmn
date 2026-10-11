@@ -4,7 +4,6 @@ budget, never for inner runs or when turned off, and never failing the run."""
 import argparse
 import os
 import sys
-import threading
 
 import pytest
 from exp_helpers import (
@@ -200,20 +199,17 @@ def test_the_hint_searches_an_index_of_up_to_its_runs_cap(app_layout, capfd, mon
 def test_a_hint_past_its_budget_stops_before_searching(app_layout, capfd, monkeypatch):
     _prior_and_dirty_tree(app_layout)
     _warm(app_layout)
-    monkeypatch.setattr(similar_hint, "BUDGET_SEC", 0.01)
-    command_done, searched = threading.Event(), []
+    now, loaded, searched = [0.0], [], []
+    monkeypatch.setattr(similar_hint, "_clock", lambda: now[0])
     load = similar_hint._cached_snapshot
 
-    def load_until_the_command_is_done(*args, **kwargs):
-        command_done.wait(30)
+    def load_spending_the_budget(*args, **kwargs):
+        loaded.append(args)
+        now[0] += similar_hint.BUDGET_SEC
         return load(*args, **kwargs)
 
-    monkeypatch.setattr(similar_hint, "_cached_snapshot", load_until_the_command_is_done)
+    monkeypatch.setattr(similar_hint, "_cached_snapshot", load_spending_the_budget)
     monkeypatch.setattr(similar_hint, "search", lambda *a, **k: searched.append(a) or [])
 
     assert _hints(_create(app_layout, capfd).err) == []
-    command_done.set()
-    for thread in threading.enumerate():
-        if thread.name == "vmn-similar-hint":
-            thread.join(30)
-    assert searched == []
+    assert len(loaded) == 1 and searched == []
