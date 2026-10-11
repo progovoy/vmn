@@ -203,10 +203,14 @@ def _changed_results(results, sent):
 class _Helper:
     def __init__(self, args, app_name, cache_path):
         from vmn_exp.core.index import ExperimentIndex
+        from vmn_exp.core.index_listing import ListingWatch
         from vmn_exp.storage.local import LocalSnapshotStorage
 
-        self.index = ExperimentIndex(LocalSnapshotStorage(*args), app_name, cache_path)
-        self.watch = self.index._sweep.watch
+        storage = LocalSnapshotStorage(*args)
+        self.index = ExperimentIndex(storage, app_name, cache_path)
+        # Listed as the server's own index lists the root (storage.cached):
+        # log files with their identity, so a merge's rewrite refolds them.
+        self.watch = self.index._sweep.watch = ListingWatch(storage, app_name, identity=True)
 
     def load(self):
         return list(self.index._store.load(self.index.app_name).items())

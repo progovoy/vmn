@@ -169,14 +169,19 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
             for verstr in [*remote, *(v for v in local if v not in remote)]
         }
 
+    def _listing_identity(self):
+        """How the local copy's files are listed: a local root's log files
+        carry their identity, with a remote or not, as a merge may rewrite one
+        (:mod:`cached_log_merge`) — this cache's, or one by another cache over
+        the root, whose readers persist to the same index file — and a reader
+        may switch between a writer's two copies. A plugin root lists with
+        its base signatures."""
+        return {"identity": True} if isinstance(self._local, LocalSnapshotStorage) else {}
+
     def _local_files(self, app_name, keys):
-        """The local copy's listing; with a remote, its log files carry their
-        identity: a merge may rewrite one (:mod:`cached_log_merge`), and a
-        reader may switch between a writer's two copies. Without one, the
-        local root may be a plugin store: its hooks get their base signatures."""
         if not self._local_is_replica:
             return {}
-        identity = {"identity": True} if self._remote is not None else {}
+        identity = self._listing_identity()
         if keys is None:
             return self._local.list_files(app_name, **identity)
         files = {}

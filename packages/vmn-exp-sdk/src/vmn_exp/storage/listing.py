@@ -17,9 +17,9 @@ filesystem (whose clock may still tick every few ms) and waits
 signature, or no longer a regular file, sends the record back to a scan.
 A record's ``log/`` and ``metrics/`` folders count as part of it: their files
 list as ``log/<name>``/``metrics/<name>`` and their own ``(mtime, inode)``
-join the record's signature. Asked for their *identity* (a local-first cache
-with a remote, whose merge may rewrite a local log), log files also carry
-their inode and their folder's mtime
+join the record's signature. Asked for their *identity* (as a local-first
+cache over a local root and an index's I/O helper ask: the cache's merge may
+rewrite a local log), log files also carry their inode and their folder's mtime
 (:func:`~vmn_exp.core.logfiles.local_log_sig`) — no extra syscall on a
 re-listing, one stat of ``log/`` on a scan.
 
