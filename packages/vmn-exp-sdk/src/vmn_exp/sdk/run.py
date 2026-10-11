@@ -61,6 +61,7 @@ from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
+from vmn_exp.storage.cached_log_merge import finalizing
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
 from vmn_exp.sdk.run_media import RunMedia
@@ -669,7 +670,8 @@ def _system_exit_code(exc):
 
 def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it."""
-    _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
+    with finalizing():
+        _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
 
 
 def install_signal_handlers():

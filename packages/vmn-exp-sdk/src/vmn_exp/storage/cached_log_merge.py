@@ -13,13 +13,15 @@ remote's lines back in first (:meth:`LogMerge._needs_merge`) rather than
 overwrite them or ship from an offset the local copy does not line up with.
 
 Neither the seed nor the local append waits on the sync lock a ship holds
-across remote I/O, and no append waits long on the local log lock: the SDK's
-SIGTERM finalizer appends from a worker thread while the main thread sits
-wherever the signal caught it, maybe holding one
-(:meth:`LogMerge._local_log_held`).
+across remote I/O. Appends share the local log lock, a merge's rewrite holds
+it alone (:class:`LocalLogLock`): an append waits for a rewrite, which would
+drop a line appended meanwhile, but only briefly while the SDK's SIGTERM
+finalizer runs (:func:`finalizing`) — it appends from a worker thread while
+the main thread sits wherever the signal caught it, maybe mid-rewrite.
 """
 
 import threading
+import time
 from collections import Counter
 from contextlib import contextmanager
 
@@ -29,8 +31,82 @@ from vmn_exp.storage.s3_base import parallel_map
 
 # The local log lock is held for local file I/O only, so a holder keeping it
 # this long was interrupted where it stood (the SDK's SIGTERM finalizer runs
-# while the main thread sits wherever the signal caught it).
+# while the main thread sits wherever the signal caught it): a rewrite then
+# gives up, and so does an append while finalizing.
 LOCAL_LOCK_WAIT_SEC = 2.0
+_FINALIZING = threading.Event()
+
+
+@contextmanager
+def finalizing():
+    """While the SDK's SIGTERM finalizer runs: every local append waits at
+    most :data:`LOCAL_LOCK_WAIT_SEC` for a rewrite, then goes on without the
+    lock (the rewrite may be the interrupted main thread's)."""
+    _FINALIZING.set()
+    try:
+        yield
+    finally:
+        _FINALIZING.clear()
+
+
+class LocalLogLock:
+    """Shared by local appends — each is one write of whole lines, so they
+    never need to exclude each other — and held alone by a rewrite (read,
+    merge, replace), which must not run while an append lands."""
+
+    def __init__(self):
+        self._mutex = threading.Lock()
+        self._changed = threading.Condition(self._mutex)
+        self._appends = 0
+        self._rewriting = False
+
+    def acquire_append(self, wait=None):
+        """Wait for no rewrite to run — at most *wait* seconds (None: for as
+        long as it takes); False when that ran out."""
+        return self._enter(lambda: not self._rewriting, self._count_append, wait)
+
+    def release_append(self):
+        self._leave(self._uncount_append)
+
+    def acquire_rewrite(self, wait):
+        """Wait at most *wait* seconds to be alone; False when that ran out."""
+        return self._enter(lambda: not self._rewriting and not self._appends,
+                           self._start_rewrite, wait)
+
+    def release_rewrite(self):
+        self._leave(self._end_rewrite)
+
+    def _enter(self, free, claim, wait):
+        # The mutex too is waited for at most *wait*: a thread a signal froze
+        # may hold it.
+        start = time.monotonic()
+        if not self._mutex.acquire(timeout=-1 if wait is None else wait):
+            return False
+        try:
+            left = None if wait is None else max(0.0, wait - (time.monotonic() - start))
+            if not self._changed.wait_for(free, left):
+                return False
+            claim()
+            return True
+        finally:
+            self._mutex.release()
+
+    def _leave(self, unclaim):
+        with self._mutex:
+            unclaim()
+            self._changed.notify_all()
+
+    def _count_append(self):
+        self._appends += 1
+
+    def _uncount_append(self):
+        self._appends -= 1
+
+    def _start_rewrite(self):
+        self._rewriting = True
+
+    def _end_rewrite(self):
+        self._rewriting = False
 
 
 def _lines(data):
@@ -66,24 +142,30 @@ class LogMerge:
         self._seed_failed = set()  # ... whose seed raised: the next ship merges
         # Held by local appends and the local half of a merge, never across
         # remote I/O: a merge's rewrite must not drop a line appended meanwhile.
-        self._local_log_lock = threading.Lock()
+        self._local_log_lock = LocalLogLock()
 
     @contextmanager
     def _local_log_held(self, rewrite=False):
-        """The local log lock, waited for at most :data:`LOCAL_LOCK_WAIT_SEC`.
-        Its holder is then taken for interrupted: an append goes on without
-        it (a frozen holder rewrites nothing), a *rewrite* raises (the next
-        ship merges again)."""
-        held = self._local_log_lock.acquire(timeout=LOCAL_LOCK_WAIT_SEC)
-        if not held:
-            if rewrite:
+        """The local log lock: an append's share, or a *rewrite*'s whole.
+
+        A rewrite waits at most :data:`LOCAL_LOCK_WAIT_SEC`, then raises (the
+        next ship merges again). An append waits for a rewrite to finish —
+        while :func:`finalizing`, at most as long, then goes on without it."""
+        lock = self._local_log_lock
+        if rewrite:
+            if not lock.acquire_rewrite(LOCAL_LOCK_WAIT_SEC):
                 raise RuntimeError("the local log is held by an interrupted thread")
-            VMN_LOGGER.debug("The local log lock is held by an interrupted thread")
+            release = lock.release_rewrite
+        elif lock.acquire_append(LOCAL_LOCK_WAIT_SEC if _FINALIZING.is_set() else None):
+            release = lock.release_append
+        else:
+            VMN_LOGGER.debug("The local log is held by an interrupted rewrite")
+            release = None
         try:
             yield
         finally:
-            if held:
-                self._local_log_lock.release()
+            if release is not None:
+                release()
 
     def _seed_local_log(self, app_name, verstr, writer_id):
         """Before this cache's first append under *writer_id*: when the remote
