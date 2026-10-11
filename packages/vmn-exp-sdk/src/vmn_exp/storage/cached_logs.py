@@ -5,11 +5,16 @@ A writer's log exists in up to two copies: the local file its host appends to
 and the remote objects that host ships as segments. Both only ever grow, and
 the remote one is a prefix of the local one, so the bigger copy is the newer
 one. Every read — listings, merged logs, the experiment index's per-file reads
-— takes each writer from that same copy, so an incremental fold of the listed
-files always equals a full re-read.
+— takes each writer from that same copy.
 
 A local copy that lags the remote one under the same writer id is brought up
-to it before it ships (:mod:`cached_log_merge`).
+to it before it ships (:mod:`cached_log_merge`); until then (a seed that
+failed) the two copies need not line up, and the merge then rewrites the local
+one. So the local copy's log files list with their identity
+(:func:`~vmn_exp.core.logfiles.append_identity`): the experiment index folds
+a writer again when its local copy was rewritten or it switched copies, rather
+than read on from an offset that no longer lines up, and an incremental fold
+of the listed files always equals a full re-read.
 """
 
 import threading
