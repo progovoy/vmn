@@ -269,7 +269,10 @@ now maps the `mlflow.*` tags similar runs uses (values stripped, blank = absent;
   resolves), else `main`, `master`, `origin/main`, `origin/master`. No textconv/external
   diff, at most 5 MB read (`truncated`), each commit diffed once across workers.
 - The tracking-server client now imports dataset inputs (`run.inputs.dataset_inputs`;
-  previously hard-coded `[]`), identical to `--mlruns`.
+  previously hard-coded `[]`), identical to `--mlruns`, which reads MLflow's FileStore
+  layout: each `<run>/inputs/<id>/meta.yaml` with `source_type: DATASET` names a
+  `<exp>/datasets/<source_id>/meta.yaml` (model inputs skipped; the experiment's
+  `tags`/`datasets`/`traces`/`models` folders are not runs).
 
 ### 3.7 Prerequisite: appending to another host's log (P0)
 
