@@ -3,19 +3,20 @@
 [--archived] [--json]``: has anyone run something like this before?
 
 The past runs most like run *ref* — or, with no ``-v``/``--latest``, like the
-current **working tree**, so you can ask before creating a run. That differs
-from ``show``/``restore``/``export``, where no ref means the latest run; it
-follows ``vmn snapshot diff``, whose default is the working state. The run
-itself, its exact code and its sweep are left out; a group (a sweep, repeats
-of one code) shows as its best run on the goal metric.
+current **working tree**, so you can ask before creating a run. ``similar`` is
+the one action whose missing ref means the working tree (``show``/``restore``/
+``export`` take the latest run), because it is mostly asked before submitting.
+The run itself, its exact code and its sweep are left out; a group (a sweep,
+repeats of one code) shows as its best run on the goal metric.
 
 ``--context`` is a text query combined with the target's code facts, its
 text replacing the target's own; ``--text-only`` matches that text alone
 (no working tree needed). ``--all-apps`` searches every app of the store,
 each under its own metrics schema; ``--query`` narrows the candidates like
-``list --query``. Conf ``experiment.similar.weights`` overrides the signal
-weights. Read-only and lock-free. Output: :mod:`vmn_exp.cli.similar_output`;
-``--json`` items: :mod:`vmn_exp.core.similar_search`.
+``list --query``. The target app's conf ``experiment.similar.weights``
+overrides the signal weights for every app searched. Read-only and
+lock-free. Output: :mod:`vmn_exp.cli.similar_output`; ``--json`` items:
+:mod:`vmn_exp.core.similar_search`.
 """
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.cli.similar_args import read_context

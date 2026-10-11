@@ -296,7 +296,8 @@ def similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=Non
     *text_only* matches that text alone (with *ref* None: no run at all).
     *query* narrows the candidates like :func:`list_runs`'s; *all_apps*
     searches every app of the storage. The app's conf.yml (when a checkout is
-    found) gives each app's metrics schema and ``experiment.similar.weights``.
+    found) gives each app's metrics schema; every app's candidates are scored
+    under the target app's ``experiment.similar.weights``.
     Raises ValueError for an unknown *ref*, ``QueryError`` on a bad *query*.
     """
     app_name, storage, root_path = _resolve(app_name, storage)

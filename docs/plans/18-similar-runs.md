@@ -168,8 +168,9 @@ truncated: true                 # only when caps cut a list
   <expr>] [--archived] [--context <text> | --context-file <path|->] [--text-only]
   [--json]` (`cli/similar.py`, `cli/similar_args.py`, `cli/similar_output.py`).
   Read-only (`READ_ONLY_ACTIONS`). No ref = the current working tree (captured without
-  creating a run, `features_for_working_tree`); unlike `show`/`restore`/`export`, this
-  follows `vmn snapshot diff`, and the help says so. In git-free mode it needs `-v`,
+  creating a run, `features_for_working_tree`): the one action whose missing ref means
+  the working tree (`show`/`restore`/`export` take the latest run), because it is
+  mostly asked before submitting; the help says so. In git-free mode it needs `-v`,
   `--latest` or `--text-only`. Output: `<verstr>  <score>  <author|->  <age>  <status>
   <goal>=<v>|—  — <reasons>  (+N runs)` (`<app>/` under `--all-apps`); `--json` items
   `{app, verstr, name, score, reasons, signals, group_size, author, timestamp, status,
@@ -182,9 +183,13 @@ truncated: true                 # only when caps cut a list
   exit would wait for); the new run is read from its own record. Skipped when that
   cache is cold, when it holds more than `MAX_INDEXED_RUNS` (4000) runs (counted, not
   loaded), for inner runs (`--parent`, `VMN_EXPERIMENT_ID`, `VMN_SWEEP_TRIAL`, a parent
-  on the record), with `--no-similar` / conf `experiment.similar.hint: false`; 300 ms
-  budget on a daemon thread, with an `expired` event so a late search stops before
-  scoring. Errors are debug-logged only. The SDK prints no hint.
+  on the record), with `--no-similar` / conf `experiment.similar.hint: false`. 300 ms
+  budget (`BUDGET_SEC`) on the calling thread: the search takes it as a deadline that
+  the index build and the scoring check every 32 rows or candidates
+  (`DEADLINE_CHECK_EVERY`), raising `SimilarDeadlineExceeded`; the steps it cannot
+  interrupt (reading the new run, loading the persisted index) are checked between,
+  and the index-size guard above keeps that load within the budget. Past it nothing is
+  printed. Errors are debug-logged only. The SDK prints no hint.
 - SDK `vmn_exp.sdk.reader.similar_runs(app_name=None, ref="latest", *, storage=None,
   top=10, query=None, context=None, text_only=False, all_apps=False)` (the reader
   convention; no working-tree target), `Run.similar(top=10)` (flushes its log first),
