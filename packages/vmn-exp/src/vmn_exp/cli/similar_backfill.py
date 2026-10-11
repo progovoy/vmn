@@ -11,16 +11,27 @@ alone, never its untracked tarball, each code object read and parsed once, and
 appended under this host's writer id. What an older entry observed at
 submission (author, branch, untracked paths, ...) is carried over; only the
 patch-derived ``changed``/``commits`` are recomputed. Without one, the author
-is the first local commit's ``From:`` and the writer that created the run.
+is the first local commit's ``From:`` and the writer that created the run (a
+run ``vmn-exp migrate`` converted from v1 names its run state's ``host``).
 
 A clean tree's entry, with nothing changed, is complete; a run whose code
-object is gone gets one without ``changed`` and counts as ``partial``.
+object is gone counts as ``partial`` and gets one without ``changed`` — or
+with its older entry's. Code the store lists but could not read fails the run
+(nothing written: the next backfill retries it), as does any other error of
+one run, a malformed run state included.
 """
 from collections import Counter
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.cli.migrate_convert import LEGACY_WRITER
 from vmn_exp.core import index as experiment_index
-from vmn_exp.core.code_patches import code_patch_texts, patch_items, record_patch_texts
+from vmn_exp.core.code_patches import (
+    CodeReadError,
+    code_patch_texts,
+    patch_items,
+    record_patch_texts,
+    unreadable_code_keys,
+)
 from vmn_exp.core.code_store import find_code_key
 from vmn_exp.core.features import (
     FEATURES_VERSION,
@@ -38,6 +49,8 @@ SOURCE = "backfill"
 # What a features entry says that the run's patches can tell again.
 _PATCH_DERIVED = ("features_version", "source", "changed", "commits", "truncated",
                   "changed_source")
+# What the new entry restates whatever it carries over.
+_RESTATED = ("features_version", "source")
 
 
 def experiment_similar_backfill(storage, app_name, args):
@@ -62,13 +75,14 @@ def backfill_app(storage, app_name, dry_run=False):
     code = _CodeFeatures(storage, app_name)
     for row in snap.rows:
         verstr = row["verstr"]
-        reason = _skip_reason(snap, row)
-        if reason:
-            yield verstr, SKIPPED, reason
-            continue
         try:
+            reason = _skip_reason(snap, row)
+            if reason:
+                yield verstr, SKIPPED, reason
+                continue
             status, detail, entry = _derive(storage, app_name, verstr,
-                                            snap.features_of(verstr), code)
+                                            snap.features_of(verstr), code,
+                                            snap.run_states.get(verstr))
             if not dry_run:
                 _append(storage, app_name, verstr, entry)
         except Exception as exc:
@@ -90,41 +104,54 @@ def _skip_reason(snap, row):
     return status if status in (RUNNING, STUCK) else None
 
 
-def _derive(storage, app_name, verstr, older, code):
+def _derive(storage, app_name, verstr, older, code, run_state):
     """``(status, detail, features entry)`` of one run."""
     metadata = storage.load_metadata(app_name, verstr)
     if metadata is None:
         raise RuntimeError("the record is gone")
     parsed, missing = code.of(metadata)
-    entry = _entry(older, parsed or {}, lambda: _creator(storage, app_name, verstr))
+
+    def creator():
+        return _creator(storage, app_name, verstr, run_state)
+
     if missing:
-        return PARTIAL, missing, entry
+        return PARTIAL, missing, _entry(older, None, creator)
+    entry = _entry(older, parsed or {}, creator)
     return BACKFILLED, _counts(entry) if parsed else "clean tree", entry
 
 
 def _entry(older, parsed, creator):
-    """The new entry: *parsed* patches' changes over what *older* observed;
-    *creator* names the run's creating writer when the author is unknown."""
+    """The new entry: *parsed* patches' changes over what *older* observed —
+    all of which it keeps when *parsed* is None (the code is gone); *creator*
+    names the run's creating writer when the author is unknown."""
     older = older or {}
-    carried = {k: v for k, v in older.items() if k not in _PATCH_DERIVED}
+    carried = {k: v for k, v in older.items()
+               if k not in (_RESTATED if parsed is None else _PATCH_DERIVED)}
     if not carried.get("author"):
-        author = dict(author_from_commits(parsed.get("commit_authors")) or {})
+        author = dict(author_from_commits((parsed or {}).get("commit_authors")) or {})
         carried["author"] = dict(author, writer=creator())
+    if parsed is None:
+        return build_features_entry(SOURCE, **carried)
     untracked = (older.get("changed") or {}).get("untracked")
     changed = dict(parsed.get("changed") or {}, untracked=untracked)
     return build_features_entry(SOURCE, changed=changed, commits=parsed.get("commits"),
                                 truncated=parsed.get("truncated", False), **carried)
 
 
-def _creator(storage, app_name, verstr):
-    """The writer whose log holds the run's first ``create`` entry, or None."""
+def _creator(storage, app_name, verstr, run_state):
+    """The writer whose log holds the run's first ``create`` entry, or None.
+    The v1 migration's pseudo-writer is no host: its run state's ``host`` is."""
     creates = sorted(
         (entry.get("timestamp") or "", writer)
         for writer, entries in storage.load_logs_by_writer(app_name, verstr).items()
         for entry in entries
         if entry.get("type") == "create"
     )
-    return creates[0][1].strip() if creates else None
+    writer = creates[0][1].strip() if creates else None
+    if writer != LEGACY_WRITER:
+        return writer
+    host = (run_state or {}).get("host")
+    return str(host).strip() if host else None
 
 
 def _counts(entry):
@@ -163,7 +190,7 @@ class _CodeFeatures:
         if _dirty_snapshot(metadata):
             code_verstr = code_verstr_of(metadata)
             if code_verstr not in self._keys:
-                self._keys[code_verstr] = find_code_key(self._storage, self._app, code_verstr)
+                self._keys[code_verstr] = self._find_key(code_verstr)
             missing = f"no code object of {code_verstr} in the store"
             key = self._keys[code_verstr]
             return self._object(key, metadata, missing) if key else (None, missing)
@@ -172,6 +199,16 @@ class _CodeFeatures:
                                          _dep_paths(metadata))
             return features_from_patches(patch_items(patches)), None
         return None, None
+
+    def _find_key(self, code_verstr):
+        """The one complete code object of *code_verstr*; CodeReadError when
+        there is none to be found because the store could not read one."""
+        key = find_code_key(self._storage, self._app, code_verstr)
+        if key is None:
+            unread = unreadable_code_keys(self._storage, self._app, code_verstr)
+            if unread:
+                raise CodeReadError(f"could not read code object {', '.join(unread)}")
+        return key
 
     def _object(self, key, metadata, missing):
         if key not in self._parsed:
