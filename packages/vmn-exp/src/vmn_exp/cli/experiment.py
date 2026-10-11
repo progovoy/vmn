@@ -39,7 +39,7 @@ from vmn_exp.cli.views import (
 )
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.identity import known_identity
-from vmn_exp.core.snapshot_features import EXPERIMENT_FILE
+from vmn_exp.core.snapshot_features import EXPERIMENT_FILE, write_features_file
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.gitmode import capture
@@ -1108,6 +1108,7 @@ def experiment_export(vcs, params, storage, args):
         with open(os.path.join(dest, EXPERIMENT_FILE), "w") as f:
             yaml.dump({"metadata": metadata, "log": log, "exported_by": exported_by},
                       f, sort_keys=False)
+        write_features_file(dest, log, exported_by)
         record_dir = storage.local_record_dir(app_name, verstr)
         for tree in FILE_TREES if record_dir else ():
             src = os.path.join(record_dir, tree)
