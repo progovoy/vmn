@@ -20,13 +20,14 @@ holds ``weights`` (merged over the default weights; invalid values are
 ignored) and ``hint`` (``false`` turns the submission hint off).
 """
 import copy
-from collections.abc import Mapping
 
 from vmn_exp.core.index import direct_snapshot, indexed_snapshot
+from vmn_exp.core.intent import cap_utf8
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.similar import similar_runs_multi, target_from_snapshot
-from vmn_exp.core.similar_index import side_tables
+from vmn_exp.core.similar_index import run_facts
+from vmn_exp.core.similar_text import _dict
 from vmn_exp.core.status import derive_status
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.storage.areas import app_key
@@ -35,13 +36,9 @@ DEFAULT_TOP = 10
 INTENT_EXCERPT_BYTES = 2048
 
 
-def _mapping(value):
-    return value if isinstance(value, Mapping) else {}
-
-
 def similar_conf(exp_conf):
     """The ``similar`` section of an app's ``experiment`` conf, ``{}`` unless a mapping."""
-    return _mapping(_mapping(exp_conf).get("similar"))
+    return _dict(_dict(exp_conf).get("similar"))
 
 
 def conf_weights(exp_conf):
@@ -55,12 +52,12 @@ def hint_enabled(exp_conf):
 
 def conf_schema(exp_conf):
     """The conf's ``metrics`` schema, ``{}`` unless a mapping."""
-    return _mapping(_mapping(exp_conf).get("metrics"))
+    return _dict(_dict(exp_conf).get("metrics"))
 
 
-def app_snapshot(storage, app_name, schema=None, fallback=direct_snapshot):
+def app_snapshot(storage, app_name, schema=None):
     """An up-to-date index snapshot of *app_name* under the metrics *schema*."""
-    return indexed_snapshot(storage, app_name, wait=True, fallback=fallback, schema=schema)
+    return indexed_snapshot(storage, app_name, wait=True, fallback=direct_snapshot, schema=schema)
 
 
 def run_target(snapshot, storage, app_name, ref, latest=False, context=None, text_only=False):
@@ -157,10 +154,9 @@ def item_payload(item, snapshot):
     """A :func:`~vmn_exp.core.similar.similar_runs_multi` item as the JSON
     item the CLI prints (see the module docstring); copies only."""
     verstr, row = item["verstr"], item["row"]
-    features_of, intent_of, _ = side_tables(snapshot)
+    features, intent, _, _, create_note = run_facts(snapshot)(row)
     states = getattr(snapshot, "run_states", None) or {}
     observed = getattr(snapshot, "run_state_observed_at", None) or {}
-    notes = getattr(snapshot, "create_notes", None) or {}
     return utf8_safe({
         "app": item["app"],
         "verstr": verstr,
@@ -173,9 +169,9 @@ def item_payload(item, snapshot):
         "timestamp": row.get("timestamp"),
         "status": derive_status(states.get(verstr), observed_at=observed.get(verstr)),
         "goal": item.get("goal"),
-        "note": row.get("note") or notes.get(verstr),
-        "intent": intent_excerpt(intent_of(verstr)),
-        "features": features_of(verstr),
+        "note": row.get("note") or create_note,
+        "intent": intent_excerpt(intent),
+        "features": features,
     })
 
 
@@ -189,9 +185,9 @@ def intent_excerpt(intent):
     found = {"keywords": _string_keywords(intent.get("keywords")),
              "generator": utf8_safe(intent.get("generator"))}
     excerpt = {key: value for key, value in found.items() if value}
-    raw = str(intent.get("text") or "").encode("utf-8", "replace")
-    excerpt["text"] = raw[:INTENT_EXCERPT_BYTES].decode("utf-8", "ignore")
-    if len(raw) > INTENT_EXCERPT_BYTES or intent.get("truncated"):
+    excerpt["text"], cut = cap_utf8(utf8_safe(str(intent.get("text") or "")),
+                                    INTENT_EXCERPT_BYTES)
+    if cut or intent.get("truncated"):
         excerpt["truncated"] = True
     return excerpt
 

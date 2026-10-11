@@ -48,15 +48,12 @@ class _Slot:
 
 
 def _slot(snapshot):
-    """*snapshot*'s slot; None when it is neither hashable nor weak-referenceable."""
-    try:
-        with _LOCK:
-            slot = _CACHE.get(snapshot)
-            if slot is None:
-                slot = _CACHE[snapshot] = _Slot()
-            return slot
-    except TypeError:
-        return None
+    """*snapshot*'s slot."""
+    with _LOCK:
+        slot = _CACHE.get(snapshot)
+        if slot is None:
+            slot = _CACHE[snapshot] = _Slot()
+        return slot
 
 
 def _wait(build, deadline):
@@ -117,10 +114,7 @@ def _obtain(slot, structured, deadline, make, background=False):
 def index_for(snapshot, deadline=None, structured=True):
     """The :class:`~vmn_exp.core.similar_index.SimilarIndex` of *snapshot*
     (see the module docstring); *structured* False settles for words only."""
-    slot = _slot(snapshot)
-    if slot is None:
-        return build_index(snapshot, deadline, structured=structured)
-    return _obtain(slot, structured, deadline,
+    return _obtain(_slot(snapshot), structured, deadline,
                    lambda by, own: build_index(snapshot, by, own, structured))
 
 
@@ -130,19 +124,17 @@ class _Lineage:
 
 
 class IndexLineages:
-    """The last index of each lineage of snapshots (at most *kept*, the
-    least recently used dropped), and their builds; see the module docstring."""
+    """The last index of each lineage of snapshots (at most
+    :data:`LINEAGES_KEPT`, the least recently used dropped), and their
+    builds; see the module docstring."""
 
-    def __init__(self, kept=LINEAGES_KEPT):
-        self._kept, self._lock, self._lineages = kept, threading.Lock(), OrderedDict()
+    def __init__(self):
+        self._lock, self._lineages = threading.Lock(), OrderedDict()
 
     def index_for(self, key, snapshot, deadline=None, structured=True):
         """*snapshot*'s index, built in lineage *key*; raises
         :class:`SimilarDeadlineExceeded` when it is not ready by *deadline*."""
-        slot = _slot(snapshot)
-        if slot is None:
-            return build_index(snapshot, deadline, structured=structured)
-        return _obtain(slot, structured, deadline,
+        return _obtain(_slot(snapshot), structured, deadline,
                        lambda _by, own: self._build(key, snapshot, own, structured),
                        background=True)
 
@@ -158,6 +150,6 @@ class IndexLineages:
         with self._lock:
             lineage = self._lineages.pop(key, None) or _Lineage()
             self._lineages[key] = lineage
-            while len(self._lineages) > self._kept:
+            while len(self._lineages) > LINEAGES_KEPT:
                 self._lineages.popitem(last=False)
             return lineage

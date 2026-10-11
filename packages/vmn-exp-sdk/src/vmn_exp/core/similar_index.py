@@ -78,6 +78,20 @@ def run_command(snapshot, row):
     return row.get("command") or (states.get(row["verstr"]) or {}).get("command")
 
 
+def run_facts(snapshot):
+    """``facts(row)``: ``(features, intent, hypothesis, command, create
+    note)`` of a run of *snapshot* (:func:`side_tables`,
+    :func:`run_command`), its accessors looked up once."""
+    features_of, intent_of, hypothesis_of = side_tables(snapshot)
+    notes = getattr(snapshot, "create_notes", None) or {}
+
+    def facts(row):
+        verstr = row["verstr"]
+        return (features_of(verstr), intent_of(verstr), hypothesis_of(verstr),
+                run_command(snapshot, row), notes.get(verstr))
+    return facts
+
+
 def _tree_roots(rows):
     """verstr -> the top of its ``parent`` chain in *rows* (verstr -> row):
     the first ancestor without a parent, else an ancestor's parent missing
@@ -133,17 +147,14 @@ def _scan(snapshot, previous, deadline):
     """Every run's row, facts and profile — *previous*'s profile when its
     row is the same object (or a renumbered copy) and its facts the same
     (side values by identity)."""
-    features_of, intent_of, hypothesis_of = side_tables(snapshot)
-    notes = getattr(snapshot, "create_notes", None) or {}
+    facts_of = run_facts(snapshot)
     old_rows, old_facts, old_profiles = (
         (previous._rows, previous._facts, previous._profiles) if previous is not None
         else ({}, {}, {}))
     rows, facts, profiles, rebuilt, same_rows = {}, {}, {}, {}, True
     for done, row in enumerate(snapshot.rows):
         check_deadline(deadline, done)
-        verstr = row["verstr"]
-        mine = (features_of(verstr), intent_of(verstr), hypothesis_of(verstr),
-                run_command(snapshot, row), notes.get(verstr))
+        verstr, mine = row["verstr"], facts_of(row)
         old = old_rows.get(verstr)
         same_rows = same_rows and old is row
         if _same_row(old, row) and _same_facts(old_facts[verstr], mine):

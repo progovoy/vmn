@@ -9,9 +9,10 @@ Pure: no IO, no git.
 """
 from __future__ import annotations
 
-from vmn_exp.core.features_patch import parse_patch
-
 FEATURES_VERSION = 1
+# The version of an entry naming only its author (an export's without the
+# exported run's features, core.snapshot_features): below every real version.
+AUTHOR_ONLY_VERSION = 0
 CAPS = {"files": 200, "symbols": 500, "commits": 50, "untracked": 200}
 # Who captured a features value, how and by which version: not facts of the code.
 _PROVENANCE = ("author", "source", "features_version")
@@ -25,6 +26,9 @@ def features_from_patches(patch_texts, skip_authors=()) -> dict:
     (a dep's patches); empty items are skipped. A commit whose ``From:`` name
     is one of *skip_authors* adds nothing (vmn's own bookkeeping commits).
     """
+    # Lazily: the parser's email and regex imports stay off the SDK's import path.
+    from vmn_exp.core.features_patch import parse_patch
+
     found = {"files": [], "symbols": [], "commits": [], "authors": []}
     for item in patch_texts:
         prefix, text = item if isinstance(item, tuple) else ("", item)
@@ -40,6 +44,12 @@ def features_from_patches(patch_texts, skip_authors=()) -> dict:
     if cut_files or cut_symbols or cut_commits or cut_authors:
         result["truncated"] = True
     return result
+
+
+def is_current(features) -> bool:
+    """Whether a ``features`` value (None without one) is at the current
+    :data:`FEATURES_VERSION` or above."""
+    return bool(features) and features["features_version"] >= FEATURES_VERSION
 
 
 def author_from_commits(commit_authors) -> dict | None:

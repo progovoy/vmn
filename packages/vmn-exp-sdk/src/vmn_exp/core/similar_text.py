@@ -49,7 +49,8 @@ def tokenize(text):
 
 
 def _strings(value):
-    return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
+    """The non-empty strings of a list (none for anything else)."""
+    return [v for v in value if isinstance(v, str) and v] if isinstance(value, list) else []
 
 
 def _dict(value):
@@ -95,15 +96,22 @@ class Bm25:
         n = self._df(term) or 0
         return math.log(1 + (self.n_docs - n + 0.5) / (n + 0.5))
 
-    def score(self, weights, doc_counts, doc_len):
+    def idfs(self, terms):
+        """``{term: idf}`` of a query's *terms*: computed once for every
+        document the query is scored on."""
+        return {term: self.idf(term) for term in terms}
+
+    def score(self, weights, doc_counts, doc_len, idfs=None):
         """BM25 of one document (its ``Counter`` of terms and length) for the
-        query *weights* (:func:`query_weights`)."""
+        query *weights* (:func:`query_weights`); *idfs* is :meth:`idfs` of
+        them, computed here when not given."""
+        idfs = self.idfs(weights) if idfs is None else idfs
         norm = K1 * (1 - B + B * doc_len / self.avg_len)
         total = 0.0
         for term, weight in weights.items():
             tf = doc_counts.get(term)
             if tf:
-                total += weight * self.idf(term) * tf * (K1 + 1) / (tf + norm)
+                total += weight * idfs[term] * tf * (K1 + 1) / (tf + norm)
         return total
 
 

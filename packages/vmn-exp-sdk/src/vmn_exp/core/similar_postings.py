@@ -12,8 +12,6 @@ snapshots share every list no run of theirs moved in or out of. Pure.
 # Changes past which refiling every run beats patching the lists:
 # max(REFILE_MIN, runs // REFILE_SHARE).
 REFILE_MIN, REFILE_SHARE = 64, 8
-# Runs dropped from one list past which it is rebuilt rather than removed from.
-_REMOVALS = 8
 
 
 def filed(profiles, tokens_of, check=None):
@@ -75,14 +73,7 @@ def refiled(old, pos, changes, tokens_of):
 
 def _without(verstrs, gone):
     """A new list of *verstrs* minus the *gone* ones."""
-    if not gone:
-        return list(verstrs)
-    if len(gone) > _REMOVALS:
-        return [v for v in verstrs if v not in gone]
-    kept = list(verstrs)
-    for verstr in gone:
-        kept.remove(verstr)
-    return kept
+    return [v for v in verstrs if v not in gone] if gone else list(verstrs)
 
 
 def _insert(verstrs, verstr, pos):

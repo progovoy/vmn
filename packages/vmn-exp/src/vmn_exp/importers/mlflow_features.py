@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vmn_exp.core.features import FEATURES_VERSION, build_features_entry
+from vmn_exp.core.features import build_features_entry, is_current
 from vmn_exp.core.fold_facts import features_value
 
 NOTE = "mlflow.note.content"
@@ -68,11 +68,8 @@ def features_entry(tags, commit=None, branch=False) -> dict[str, Any]:
 def needs_features(entries, commit=None) -> bool:
     """Whether a record with log *entries* lacks the features a refresh adds:
     none at the current version, or none with the *commit* changes now known."""
-    current = []
-    for entry in entries:
-        parsed = features_value(entry) if entry.get("type") == "features" else None
-        if parsed and parsed[0] >= FEATURES_VERSION:
-            current.append(parsed[1])
+    found = (features_value(e) for e in entries if e.get("type") == "features")
+    current = [parsed[1] for parsed in found if parsed and is_current(parsed[1])]
     if not current:
         return True
     return bool(commit) and not any(value.get("changed") for value in current)

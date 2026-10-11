@@ -96,7 +96,7 @@ def _target(vcs, storage, app_name, snapshot, args, context):
     return working_tree_target(vcs, context)
 
 
-def working_tree_target(vcs, context=None):
+def working_tree_target(vcs, context):
     """The target of the uncommitted tree (no run is created), or None after
     logging why it could not be read."""
     try:

@@ -25,10 +25,10 @@ from version_stamp.api import (
 )
 from vmn_exp.core import features as core_features
 from vmn_exp.core.features import (
-    FEATURES_VERSION,
     author_from_commits,
     build_features_entry,
     code_facts,
+    is_current,
 )
 from vmn_exp.core.fold import fold_features, fold_log
 from vmn_exp.core.identity import env_author, run_author
@@ -87,7 +87,7 @@ def _tree_entry(vcs, captured):
 
 def _rerun_entry(vcs, log, metadata, patches):
     original = fold_features(fold_log(log))
-    if original and original.get("features_version") == FEATURES_VERSION:
+    if is_current(original):
         facts = code_facts(original)
     else:
         parsed = features_from_patches(_patch_texts(patches, _stored_deps(metadata, patches)))

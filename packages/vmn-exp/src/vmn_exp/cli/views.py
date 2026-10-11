@@ -18,6 +18,7 @@ from version_stamp.api import _list_tarball_members
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.code_store import CODE_MISSING
 from vmn_exp.core.fold import fold_features, fold_log, fold_row
+from vmn_exp.core.intent import cap_utf8
 from vmn_exp.core.media import media_counts
 from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.record_format import record_format_version
@@ -88,15 +89,6 @@ def _section(label, text):
     return f"=== {label} ===\n{text}" + ("" if text.endswith("\n") else "\n")
 
 
-def _cap_utf8(text, max_bytes):
-    """``(text, truncated)``: *text* cut to *max_bytes* UTF-8 bytes, never
-    mid-character."""
-    raw = text.encode("utf-8")
-    if len(raw) <= max_bytes:
-        return text, False
-    return raw[:max_bytes].decode("utf-8", errors="ignore"), True
-
-
 def _patch_cap(max_bytes):
     return PATCH_MAX_BYTES if max_bytes is None else max_bytes
 
@@ -121,7 +113,7 @@ def patch_payload(metadata, patches, max_bytes=None):
     if not sections:
         return _no_text_payload(metadata or {}, patches or {})
     text = "".join(_section(*s) for s in sections)
-    text, truncated = _cap_utf8(text, _patch_cap(max_bytes))
+    text, truncated = cap_utf8(text, _patch_cap(max_bytes))
     return {"text": text, "truncated": truncated}
 
 

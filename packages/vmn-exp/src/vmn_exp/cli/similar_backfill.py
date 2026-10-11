@@ -33,14 +33,10 @@ from vmn_exp.core.code_patches import (
     unreadable_code_keys,
 )
 from vmn_exp.core.code_store import find_code_key
-from vmn_exp.core.features import (
-    FEATURES_VERSION,
-    author_from_commits,
-    build_features_entry,
-)
+from vmn_exp.core.features import author_from_commits, build_features_entry, is_current
 from vmn_exp.core.provenance import _has_in_record_patches
 from vmn_exp.core.rerun import _dirty_snapshot, code_verstr_of
-from vmn_exp.core.status import RUNNING, STUCK, derive_status
+from vmn_exp.core.status import RUNNING, STUCK
 from vmn_exp.core.writer import create_log_entry, flush_log, get_writer_id
 from vmn_exp.gitmode.features import features_from_patches  # without vmn's own commits
 
@@ -94,13 +90,11 @@ def backfill_app(storage, app_name, dry_run=False):
 
 def _skip_reason(snap, row):
     verstr = row["verstr"]
-    features = snap.features_of(verstr)
-    if features and features["features_version"] >= FEATURES_VERSION:
+    if is_current(snap.features_of(verstr)):
         return "up to date"
     if row.get("imported_from"):
         return "imported"
-    status = derive_status(snap.run_states.get(verstr),
-                           observed_at=snap.run_state_observed_at.get(verstr))
+    status = snap.status_of(verstr)
     return status if status in (RUNNING, STUCK) else None
 
 

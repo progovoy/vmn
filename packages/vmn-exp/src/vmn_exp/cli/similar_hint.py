@@ -135,7 +135,7 @@ def _lines(local, app_name, verstr, exp_conf, path, deadline, command):
     return hint_lines(items)
 
 
-def _cached_snapshot(path, app_name, schema=None):
+def _cached_snapshot(path, app_name, schema):
     """*app_name*'s index snapshot as persisted at *path*, under the metrics
     *schema*; reads nothing but that file."""
     store = IndexStore(path)
@@ -145,7 +145,7 @@ def _cached_snapshot(path, app_name, schema=None):
         store.close()
 
 
-def _new_run_target(local, app_name, verstr, command=None):
+def _new_run_target(local, app_name, verstr, command):
     """The similar-runs target of the run *verstr*, running *command*, from
     its own record in the *local* storage."""
     meta = local.load_metadata(app_name, verstr)

@@ -43,7 +43,6 @@ from vmn_exp.core.similar import (
 from vmn_exp.core.similar_cache import IndexLineages
 from vmn_exp.core.similar_search import candidate_filter
 from vmn_exp.core.similar_search import intent_excerpt as _excerpt
-from vmn_exp.core.status import derive_status
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.responses import json_response
@@ -69,13 +68,12 @@ def intent_excerpt(intent):
 
 def _item(found, snapshot):
     (workspace, app), verstr, row = found["app"], found["verstr"], found["row"]
-    status = derive_status(snapshot.run_states.get(verstr),
-                           observed_at=snapshot.run_state_observed_at.get(verstr))
     return {
         "workspace": workspace, "app": app, "verstr": verstr, "name": row.get("name"),
         "score": found["score"], "reasons": found["reasons"], "signals": found["signals"],
         "group_size": found["group_size"], "goal": found["goal"],
-        "author": row.get("author"), "timestamp": row.get("timestamp"), "status": status,
+        "author": row.get("author"), "timestamp": row.get("timestamp"),
+        "status": snapshot.status_of(verstr),
         "note": row.get("note"), "intent": intent_excerpt(snapshot.intent_of(verstr)),
     }
 
