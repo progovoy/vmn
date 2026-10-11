@@ -32,24 +32,24 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set
+from typing import Any, Callable, Iterator
 
 import yaml
 
 # MLflow RunStatus int → str mapping (from mlflow.entities.RunStatus source)
-_INT_STATUS: Dict[int, str] = {
+_INT_STATUS: dict[int, str] = {
     1: "RUNNING",
     2: "SCHEDULED",
     3: "FINISHED",
     4: "FAILED",
     5: "KILLED",
 }
-_VALID_STATUSES: Set[str] = set(_INT_STATUS.values())
+_VALID_STATUSES: set[str] = set(_INT_STATUS.values())
 
 log = logging.getLogger(__name__)
 
 
-def _read_yaml(path: Path) -> Optional[Dict[str, Any]]:
+def _read_yaml(path: Path) -> dict[str, Any] | None:
     """Read and parse a YAML file with yaml.safe_load; return None on any error."""
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -99,7 +99,7 @@ def _is_remote_uri(uri: str) -> bool:
     return any(lower.startswith(s) for s in remote_schemes)
 
 
-def _local_path_from_uri(uri: str) -> Optional[str]:
+def _local_path_from_uri(uri: str) -> str | None:
     """Return a local filesystem path for a file:// or bare-path URI, or None."""
     if not uri:
         return None
@@ -118,14 +118,14 @@ def _local_path_from_uri(uri: str) -> Optional[str]:
 # Tag / param / metric readers
 # ---------------------------------------------------------------------------
 
-def _read_flat_dir(dir_path: Path) -> Dict[str, str]:
+def _read_flat_dir(dir_path: Path) -> dict[str, str]:
     """
     Read a ``params/`` or ``tags/`` directory.
 
     File names are the keys (which may contain '/' represented as nested
     subdirectories).  File contents are the values.
     """
-    result: Dict[str, str] = {}
+    result: dict[str, str] = {}
     if not dir_path.is_dir():
         return result
     for item in dir_path.rglob("*"):
@@ -198,35 +198,57 @@ def _make_metrics_callable(
 # Dataset (inputs) reader (mlflow >= 2.4)
 # ---------------------------------------------------------------------------
 
-def _read_datasets(run_dir: Path) -> List[Dict[str, Any]]:
-    """
-    Read the ``inputs/dataset_inputs/`` subtree.
+# Experiment-dir folders MLflow keeps beside the runs (FileStore
+# RESERVED_EXPERIMENT_FOLDERS): experiment tags, datasets, traces, logged models.
+_RESERVED_EXPERIMENT_FOLDERS = frozenset({"tags", "datasets", "traces", "models"})
+_LEGACY_INPUTS_FOLDER = "dataset_inputs"
 
-    Each entry dir contains a ``meta.yaml`` with ``dataset`` and ``tags`` keys.
-    Returns an empty list when the directory is absent or unreadable.
+
+def _dataset_record(fields: dict[str, Any]) -> dict[str, Any]:
+    return {key: fields.get(key, "") for key in ("name", "digest", "source_type", "source")}
+
+
+def _read_linked_datasets(inputs_dir: Path, datasets_dir: Path) -> list[dict[str, Any]]:
     """
-    datasets: List[Dict[str, Any]] = []
-    inputs_dir = run_dir / "inputs" / "dataset_inputs"
-    if not inputs_dir.is_dir():
+    MLflow's layout: each ``<run>/inputs/<input_id>/meta.yaml`` whose
+    ``source_type`` is ``DATASET`` names the dataset by ``source_id``, a folder
+    of ``<exp>/datasets/`` whose ``meta.yaml`` holds the Dataset fields.  Model
+    inputs (``source_type: MODEL``) are not datasets.
+    """
+    datasets: list[dict[str, Any]] = []
+    for entry in sorted(inputs_dir.iterdir()):
+        if entry.name == _LEGACY_INPUTS_FOLDER or not entry.is_dir():
+            continue
+        link = _read_yaml(entry / "meta.yaml")
+        if link is None or link.get("source_type") != "DATASET" or not link.get("source_id"):
+            continue
+        dataset = _read_yaml(datasets_dir / str(link["source_id"]) / "meta.yaml")
+        if dataset is not None:
+            datasets.append(_dataset_record(dataset))
+    return datasets
+
+
+def _read_legacy_datasets(legacy_dir: Path) -> list[dict[str, Any]]:
+    """The ``inputs/dataset_inputs/<x>/meta.yaml`` layout with a ``dataset`` block."""
+    datasets: list[dict[str, Any]] = []
+    if not legacy_dir.is_dir():
         return datasets
-    for entry in inputs_dir.iterdir():
+    for entry in legacy_dir.iterdir():
         if not entry.is_dir():
             continue
-        meta_path = entry / "meta.yaml"
-        meta = _read_yaml(meta_path)
-        if meta is None:
-            continue
-        ds_block = meta.get("dataset")
-        if not isinstance(ds_block, dict):
-            continue
-        record: Dict[str, Any] = {
-            "name": ds_block.get("name", ""),
-            "digest": ds_block.get("digest", ""),
-            "source_type": ds_block.get("source_type", ""),
-            "source": ds_block.get("source", ""),
-        }
-        datasets.append(record)
+        meta = _read_yaml(entry / "meta.yaml")
+        if meta is not None and isinstance(meta.get("dataset"), dict):
+            datasets.append(_dataset_record(meta["dataset"]))
     return datasets
+
+
+def _read_datasets(run_dir: Path) -> list[dict[str, Any]]:
+    """The run's dataset inputs; empty when ``inputs/`` is absent or unreadable."""
+    inputs_dir = run_dir / "inputs"
+    if not inputs_dir.is_dir():
+        return []
+    return (_read_linked_datasets(inputs_dir, run_dir.parent / "datasets")
+            + _read_legacy_datasets(inputs_dir / _LEGACY_INPUTS_FOLDER))
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +259,7 @@ def _read_run(
     run_dir: Path,
     exp_id: str,
     exp_name: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Build a neutral run dict from a run directory.  Returns None on error."""
     meta_path = run_dir / "meta.yaml"
     meta = _read_yaml(meta_path)
@@ -257,7 +279,7 @@ def _read_run(
 
     start_time = meta.get("start_time", 0) or 0
     end_raw = meta.get("end_time", 0) or 0
-    end_time: Optional[int] = int(end_raw) if end_raw and int(end_raw) > 0 else None
+    end_time: int | None = int(end_raw) if end_raw and int(end_raw) > 0 else None
 
     artifact_uri = str(meta.get("artifact_uri") or "")
     if not artifact_uri:
@@ -272,8 +294,8 @@ def _read_run(
 
     # Derive name: prefer run_name field, then mlflow.runName tag
     name = str(meta.get("run_name") or tags.get("mlflow.runName") or "")
-    parent_run_id: Optional[str] = tags.get("mlflow.parentRunId") or None
-    source_commit: Optional[str] = tags.get("mlflow.source.git.commit") or None
+    parent_run_id: str | None = tags.get("mlflow.parentRunId") or None
+    source_commit: str | None = tags.get("mlflow.source.git.commit") or None
     status = _normalise_status(meta.get("status", "RUNNING"))
 
     return {
@@ -302,11 +324,11 @@ def _read_experiment_runs(
     exp_id: str,
     exp_name: str,
     include_deleted: bool,
-) -> Iterator[Dict[str, Any]]:
+) -> Iterator[dict[str, Any]]:
     """Yield run dicts from a single experiment directory."""
     for item in exp_dir.iterdir():
-        # Skip files, meta.yaml, .trash dir
-        if item.name in ("meta.yaml",) or not item.is_dir():
+        # Skip files (meta.yaml) and MLflow's non-run folders
+        if not item.is_dir() or item.name in _RESERVED_EXPERIMENT_FOLDERS:
             continue
         if item.name.startswith("."):
             continue  # skip .trash and hidden dirs
@@ -327,10 +349,10 @@ def _read_experiment_runs(
 # ---------------------------------------------------------------------------
 
 def iter_runs(
-    mlruns_path: "str | Path",
-    experiments: Optional[List[str]] = None,
+    mlruns_path: str | Path,
+    experiments: list[str] | None = None,
     include_deleted: bool = False,
-) -> Iterator[Dict[str, Any]]:
+) -> Iterator[dict[str, Any]]:
     """
     Iterate neutral run dicts from an MLflow FileStore ``mlruns/`` directory.
 
@@ -352,8 +374,8 @@ def iter_runs(
         return
 
     # Build a filter set from the experiments parameter
-    filter_names: Optional[Set[str]] = None
-    filter_ids: Optional[Set[str]] = None
+    filter_names: set[str] | None = None
+    filter_ids: set[str] | None = None
     if experiments is not None:
         filter_names = set()
         filter_ids = set()
