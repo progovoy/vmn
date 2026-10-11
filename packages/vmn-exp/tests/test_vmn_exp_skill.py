@@ -133,15 +133,17 @@ def test_skill_rejects_unknown_target():
     assert exc.value.code != 0
 
 
-def _section(out, title):
-    start = out.index(title)
-    end = out.find("\n## ", start + len(title))
+def _similar_section(capfd):
+    """The skill's ``## Similar experiments`` section, up to the next H2."""
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    start = out.index("## Similar experiments")
+    end = out.find("\n## ", start + 1)
     return out[start:] if end == -1 else out[start:end]
 
 
 def test_vmn_exp_skill_teaches_the_similar_runs_loop(capfd):
-    assert _skill() == 0
-    section = _section(capfd.readouterr().out, "## Similar experiments")
+    section = _similar_section(capfd)
     # Before submitting: write intent.md, ask, inspect the closest, submit with it.
     assert "keywords:" in section and "generator:" in section
     assert "vmn-exp similar <app_name> --context-file intent.md --all-apps --json" in section
@@ -156,8 +158,7 @@ def test_vmn_exp_skill_teaches_the_similar_runs_loop(capfd):
 
 
 def test_vmn_exp_skill_names_the_no_patch_reasons(capfd):
-    assert _skill() == 0
-    section = _section(capfd.readouterr().out, "## Similar experiments")
+    section = _similar_section(capfd)
     for reason in ("no_code", "code_missing", "untracked_only"):
         assert reason in section
 
