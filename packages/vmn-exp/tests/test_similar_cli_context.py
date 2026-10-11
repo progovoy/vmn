@@ -207,3 +207,21 @@ def test_a_context_joins_the_working_trees_own_facts(app_layout, capfd):
     assert _verstrs(app_layout, capfd) == [changed]
     assert sorted(_verstrs(app_layout, capfd, "--context", "label smoothing")) == sorted(
         [changed, smoothing])
+
+
+def test_a_context_file_takes_number_keywords_like_an_intent_file(
+        app_layout, capfd, texts, tmp_path):
+    year = seed(_storage(app_layout), app_layout.app_name, verstr(4),
+                intent={"text": "the 2024 baseline"})
+    path = tmp_path / "intent.md"
+    path.write_text("---\nkeywords: [2024]\n---\nregularise the outputs\n")
+    assert _verstrs(app_layout, capfd, "--context-file", str(path), "--text-only") == [year]
+
+
+def test_context_file_keywords_of_another_type_are_a_usage_error(
+        app_layout, capfd, texts, tmp_path):
+    path = tmp_path / "intent.md"
+    path.write_text("---\nkeywords: 5\n---\nlabel smoothing\n")
+    code, out = _similar(app_layout, capfd, "--context-file", str(path), "--text-only")
+    assert code == 1
+    assert "keywords" in out.err and "Traceback" not in out.err

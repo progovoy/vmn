@@ -8,7 +8,7 @@ stdin — so the agent's ``intent.md`` doubles as the query.
 """
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.cli.intent_arg import read_file_arg
-from vmn_exp.core.intent import parse_intent_file
+from vmn_exp.core.intent import clean_keywords, parse_intent_file
 
 
 def add_similar_flags(parser):
@@ -41,4 +41,4 @@ def read_context(args):
 
 def _from_file(path):
     text, keywords, _generator = parse_intent_file(read_file_arg(path, "--context-file"))
-    return "\n".join([text] + list(keywords or ()))
+    return "\n".join([text] + clean_keywords(keywords))
