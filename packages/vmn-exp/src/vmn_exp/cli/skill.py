@@ -79,6 +79,73 @@ vmn-exp restore <app_name> --latest
 vmn-exp export <app_name> -o wip.tar.gz   # portable tarball of the captured state
 ```
 
+## Similar experiments
+
+Before submitting a run, check whether anyone already ran something like it.
+vmn ranks past runs (any author, any app of the store) on facts recorded at
+submission (base commit, changed files and functions), params, inputs,
+entrypoint, metric names and text. You supply the meaning:
+
+1. Read the change (`git diff HEAD`, unpushed `git log`) and write `intent.md`:
+   the hypothesis, which functions changed and why, key params, the dataset,
+   the expected effect. Describe the change, not results. Never paste secrets
+   or data; stay under ~2 KB. Matching is lexical, so put synonyms and the
+   problem's usual names in `keywords:`:
+
+   ```markdown
+   ---
+   keywords: [focal loss, class imbalance, long tail, reweighting]
+   generator: <your model id>
+   ---
+   Hypothesis: focal loss (gamma=2) fixes the minority-class recall drop.
+   Changed: src/loss.py::focal_loss (new); src/train.py::train_step uses it.
+   Data: imagenet-lt@3. Expect: val_recall_min up, val_loss roughly flat.
+   ```
+
+2. Ask, then inspect the 1-3 closest (each under its item's `app`):
+
+   ```sh
+   # no -v: compares the current working tree; creates nothing
+   vmn-exp similar <app_name> --context-file intent.md --all-apps --json
+   vmn-exp show <app_name> -v <ref> --patch --json
+   ```
+
+   Items carry `verstr`, `app`, `score`, `reasons`, `author`, `timestamp`,
+   `status`, `goal`, `note`, `intent`, `features` and `group_size` (a sweep,
+   or repeats of one code, shows as its best run). `show --patch --json` adds
+   `"patch": {"text", "truncated"}`, or `{"text": null, "reason"}`: `no_code`
+   (MLflow imports, clean trees), `code_missing` (code object pruned),
+   `untracked_only` (untracked files only, listed in `untracked_files`).
+   Re-rank on meaning, not just the score, and tell the user who ran what,
+   when, how it scored and how this run differs.
+
+3. Submit with the intent (`run`/`create` also print up to 3 similar runs on
+   stderr; `--no-similar` skips that):
+
+   ```sh
+   vmn-exp run <app_name> --intent-file intent.md -- <your command>
+   ```
+
+   SDK: `start_run("<app_name>", intent="<text>", intent_keywords=[...])`, or
+   later `run.set_intent(text, keywords=[...], generator="<model id>")`.
+
+4. Backfilling intents, only when asked (bound the cost with `--last`/`--query`):
+
+   ```sh
+   vmn-exp list <app_name> --query "has_intent = false" --last 20 --json
+   vmn-exp show <app_name> -v <ref> --patch --json   # read it, write intent.md
+   vmn-exp add <app_name> -v <ref> --intent-file - < intent.md   # latest intent wins
+   ```
+
+   Runs missing the automatic code facts (recorded before they existed, or
+   whose capture failed): `vmn-exp similar-backfill <app_name> [--dry-run]`.
+
+5. Questions ("did anyone try X?"): answer citing verstrs from
+
+   ```sh
+   vmn-exp similar <app_name> --context "<X plus synonyms>" --text-only --all-apps --json
+   ```
+
 ## Model registry
 
 Link trained models to the experiment runs that produced them:
@@ -113,7 +180,8 @@ path = download_model("resnet50@production")
 """
 
 DESCRIPTION = (
-    "Use when tracking experiments, driving the vmn-exp UI fleet columns, "
+    "Use when tracking experiments, checking which past runs are similar before "
+    "submitting one, driving the vmn-exp UI fleet columns, "
     "or registering models via the vmn-exp CLI and SDK in this repo."
 )
 

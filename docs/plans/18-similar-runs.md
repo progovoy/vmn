@@ -4,27 +4,39 @@
 > — by anyone, in this app or others — were similar, who ran them, when, and how they
 > did. Nobody should have to tag runs by hand for this to work.
 > Paths are relative to `packages/vmn-exp-sdk/src/vmn_exp/` unless they start with
-> `packages/`, `tests/` or `docs/`.
+> `packages/`, `tests/` or `docs/`; `cli/`, `gitmode/`, `importers/` and `ui/` are under
+> `packages/vmn-exp/src/vmn_exp/`.
+
+Status: **implemented** (2026-10). This document describes what was built; the user
+docs are [experiments.md `similar`](../vmn-exp/experiments.md#similar),
+[Intent](../vmn-exp/experiments.md#intent-what-a-run-is-for),
+[sdk.md](../vmn-exp/sdk.md#similar-runs), [ui.md](../vmn-exp/ui.md#similar-runs) and
+[migrating-from-mlflow.md](../vmn-exp/migrating-from-mlflow.md#similar-runs-for-imported-runs).
+§7 lists what was decided differently from the proposal, §8 the known limits.
 
 ## 1. Decisions
 
 - **Facts on the record, derived data off it.** Things that are true about a run and
-  cheap to keep — who ran it, which files/functions the diff touched, the branch, the
-  commit subjects — are written into the record, because they are only reliably known at
+  cheap to keep — who ran it, which files/functions the diff touched, the commit
+  subjects — are written into the record, because they are only reliably known at
   submission (branches get deleted, containers run git-free, shallow clones lose history)
   and the record is what travels (`push`, buckets, the server). So is an *intent*
   written by a human or their AI (§4): it is authored text, not something we can
   recompute. Similarity *scores* are never written into records, because they change
-  whenever any run is added or the weights change. They live in the rebuildable index, following the
-  architecture rule in [README](README.md) ("storage is the source of truth; everything
-  else is rebuildable").
+  whenever any run is added or the weights change. They are computed from the
+  rebuildable index, following the architecture rule in [README](README.md) ("storage
+  is the source of truth; everything else is rebuildable").
 - **Features are a `features` log entry, not a `metadata.yml` key.** `metadata.yml` is
   written once by the `create_exclusive` claim and `push` merges only `archived`/`note`, so
   old records cannot be given new metadata safely. Log entries are append-only per writer,
   already synced/pushed, and are how tags and rewinds already add to old runs. New runs
-  write the entry next to their `create` entry; backfills append it with their own
-  writer. There is one rule: the fold keeps the entry with the highest `features_version`,
-  and the latest of those wins.
+  write the entry next to their `create` entry; backfills append it under the host's
+  writer id. The fold keeps the entry with the highest `features_version`, and the latest
+  of those.
+- **The branch is already on the record.** `metadata.branch` (`logical_branch()`) is
+  written for every git-mode run and copied by git-free runs and reruns; it is a row and
+  query field. Capture does not repeat it in `features`; only an MLflow refresh puts one
+  there (§3.6).
 - **vmn never needs an AI model.** v1 = structured features + a weighted score + the
   reason each run matched. v2 = the user's own AI (any agent, any model) reads the diff and
   writes an *intent* (`--intent-file` / `--context-file`); vmn stores it on the record and
@@ -35,166 +47,234 @@
 
 ## 2. What "similar" is made of
 
-| Signal | Source | Already on record? | Similarity |
+| Signal | Source | Similarity | Default weight |
 |---|---|---|---|
-| Author | `actor_identity()` at creation (§3.1) | **no** — `run_state` has `host` only (`packages/vmn-exp/src/vmn_exp/cli/run.py:338`); `actor_identity()` already attributes registry writes (`actor`), comments and reports, never runs | shown, not scored (row field `author`, filter with `--query`) |
-| Base code | `code_verstr` (base version + commit) | yes | same commit 1.0; same base version 0.7; version distance decays (git-free proxy for ancestry) |
-| Changed files | snapshot patches | no (derivable from the code object) | Jaccard |
-| Changed symbols | unified-diff hunk headers (`@@ … @@ def focal_loss`): git's own function detection, any language | no (derivable) | Jaccard, weighted above files |
-| Commit subjects | local commits in the snapshot's format-patch `Subject:` lines | no (derivable) | part of the `text` signal only |
-| Branch | `git rev-parse --abbrev-ref HEAD` at creation | no | equality |
-| Inputs | `row["inputs"]` (uri/digest/kind), registry `<name>@<N>` | yes | same digest 1.0; same dataset name, other version 0.6 |
-| Params | `row["params"]` | yes | key Jaccard × mean value closeness (numeric: `1 - min(1, \|log10(a/b)\|/2)`; others: equality) |
-| Entrypoint | `run_state.command` (argv) | yes | same script; same script + subcommand |
-| Objective | metric names + effective schema `goal` | yes | Jaccard over metric names |
-| Text | name, note, tags, commit subjects; v2 adds the `intent` entry (§4.1) | name/note/tags yes | one `text` signal: BM25 (§4.2), already in v1 over the fields v1 has |
+| Author | `features.author` (§3.1) | shown, not scored (row field `author`, filter with `--query`) | — |
+| `code` | `code_verstr` (base version + commit), else `base_version`, else `imported_from.source_commit` | same commit 1.0; same base version 0.7; version distance decays (git-free proxy for ancestry) | 2 |
+| `files` | `features.changed.files` (+ `untracked`) | Jaccard | 2 |
+| `symbols` | `features.changed.symbols`: `@@ … @@ <context>` hunk headers **and** definitions on added/removed lines, any language | Jaccard | 3 |
+| `inputs` | `row["inputs"]` (uri/digest/kind), registry `<name>@<N>` | same digest 1.0; same dataset name, other version 0.6 | 2 |
+| `params` | `row["params"]` | key Jaccard × mean value closeness (positive numbers: `1 - min(1, \|log10(a/b)\|/2)`; others: equality; non-finite/huge values never raise) | 1.5 |
+| `entrypoint` | row/run-state `command`, else `features.entrypoint` | same script 0.7; + same subcommand/args 1.0; launchers (`torchrun`, `accelerate launch`, `deepspeed`, `mpirun`/`mpiexec`, `srun … --`, `horovodrun`, `python -m torch.distributed.run`, …) are looked past | 1 |
+| `objective` | metric names minus `params` keys minus `sys_*` | Jaccard | 1 |
+| `branch` | `row["branch"]`, else `features.branch` | equality | 0.5 |
+| `text` | intent text + keywords ×3, name, note (else create note), tag keys and values, commit subjects, the create entry's `hypothesis` | BM25, normalised per query by the best candidate | 1.5; code + inputs when the target has an intent or a context |
 
-Default weights live in `core/similar_score.py`; conf `experiment.similar.weights.<signal>`
-overrides them. A signal missing on either side is left out of the score (renormalised),
-not counted as 0, so imported MLflow runs (no code) are still comparable on
-params/inputs/objective.
+Defaults live in `core/similar_score.py` (`DEFAULT_WEIGHTS`, `resolve_weights`); conf
+`experiment.similar.weights.<signal>` overrides them (valid numbers ≥ 0 only; anything
+else is ignored). A signal missing on either side is left out of the score
+(renormalised), not counted as 0, so imported MLflow runs (no code) are still comparable
+on params/inputs/objective. `files`/`symbols` get half weight when either side's changes
+are a branch's cumulative diff (`changed_source: commit`, §3.6). Reasons are the top 3
+contributions, candidate first (`same dataset imagenet@3`, `2 shared functions:
+loss.py::focal_loss, …`, `lr 3e-4 vs 1e-4`, `shared: focal loss, class imbalance`).
 
 ## 3. v1 — structured similarity
 
 ### 3.1 Formats
 
 ```yaml
-# log entry, writer = the run's writer (new runs) or "features" (backfill)
+# features log entry
 type: features
-features_version: 1
-source: capture | backfill | mlflow     # where these facts came from
-author: {writer: gpu-07, git_user_email: a@x.io, os_user: alice, source: git | export | env | commit | mlflow}
-branch: feat/focal-loss                  # null when detached / git-free
-changed:
-  files: [src/loss.py, src/train.py]
-  symbols: ["src/loss.py::focal_loss", "src/train.py::train_step"]
-  untracked: [notes/idea.md]             # paths only, never contents
-commits: ["try focal loss gamma=2", "wire loss into trainer"]
+features_version: 1            # core/features.py FEATURES_VERSION
+source: capture | rerun | export | backfill | mlflow
+author: {writer: gpu-07, git_user_email: a@x.io, os_user: alice, source: git | export | env | commit | host | mlflow}
+changed: {files: [...], symbols: ["path::name", ...], untracked: [...]}   # untracked: capture only
+commits: ["subject", ...]
+entrypoint: "train.py"          # MLflow only; vmn runs use their command
+branch: "feat/x"                # MLflow refresh only
+changed_source: commit          # MLflow --repo only
+truncated: true                 # only when caps cut a list
 ```
 
-- `core/features.py` (pure): `features_from_patches(patch_texts, untracked_paths) ->
-  dict` (parses `diff --git`, `@@ … @@ <context>`, `Subject:`; caps: 200 files, 500
-  symbols, 50 commits; `truncated: true` when it cuts).
-- `author` reuses `actor_identity()` (`registry/log.py`, the shape registry `actor`, comments
-  and reports already store) plus `source`, so every "who" in the product renders the same
-  way. Move it to `core/identity.py` (re-exported from `registry/log.py`) so core does not
-  import the registry. `writer` and `os_user` are always filled by it; `git_user_email`
-  falls back: git config → the exporter's email in `vmn_metadata.yml` (git-free runs from
-  `vmn-exp export`) → `VMN_EXP_AUTHOR` (new env var; document it) → the `From:` of the
-  snapshot's first local commit; `source` names the one used.
+- Empty values are omitted (`build_features_entry`). Caps: 200 files, 500 symbols,
+  50 commits, 200 untracked paths.
+- `core/features.py` (pure): `features_from_patches(patch_texts)` over unified diffs and
+  `git format-patch` mboxes (`core/features_patch.py`: `From:` with RFC 2047, folded
+  `Subject:` with one `[PATCH n/m]` stripped, cover letters skipped, `diff --git` paths
+  incl. quoted/renamed/copied/deleted/binary, a diff pasted into a commit message
+  forgotten at the message's `---` separator; `core/features_symbols.py`: `hunk_symbol`,
+  `defined_symbol` — linear-time, lines over 500 characters define nothing). Items may be
+  `(prefix, text)` pairs, so dep files sit under the dep's configured path.
+- `author` comes from `core/identity.py` (`actor_identity`, moved out of `registry/log.py`,
+  which re-exports it): `run_author(cwd, fallbacks)` fills `writer`/`os_user` and takes
+  `git_user_email` from git config (`source: git`, 2 s timeout), else the caller's
+  fallbacks in order, else `source: host` with no email.
+- Row field `author` (`fold.author_display`): `git_user_email`, else `os_user`, else
+  `writer` (blank values count as missing), else null.
 
 ### 3.2 Writing them at submission
 
-- Git mode: `packages/vmn-exp/src/vmn_exp/gitmode/` already holds the capture
-  (`SnapshotCapture`, patches) outside the lock; compute features there and pass them to
-  `writer.create_run` (new `features=` arg → a `features` entry appended with the
-  `create` entry). The branch read goes through `version_stamp.api` (import rule: vmn-exp
-  reaches vmn only through `api`); no new vmn-core API is needed for the author.
-- Git-free (`core/from_snapshot.py`): features from the exported snapshot's patches +
-  `vmn_metadata.yml` author.
-- Rerun (`cli/rerun.py`) calls `create_run` without a capture: it copies the original's
-  `features` (same code) with the rerunner's `author`. Fork captures its own features
-  (`features`/`intent` stay out of `core/fork.py:INHERITABLE`); its intent is not inherited.
+- Git mode: `gitmode/checkout.py:record_run` is the single hook (CLI create/run/sweep,
+  SDK). `gitmode/features.py:capture_features` builds the entry from the capture's
+  in-memory patch texts (the code object is never loaded) plus the capture's own
+  untracked listing (`SnapshotCapture.untracked_paths`), and `writer.create_run(...,
+  features=)` writes it in the same batch as the `create` entry. Email fallbacks:
+  `VMN_EXP_AUTHOR` (`env`), then the first local commit's `From:` (`commit`).
+- Git-free (`core/from_snapshot.py` via `core/snapshot_features.py`): an exported tree
+  carries no patches, so the facts are copied from the exported run's own features entry
+  in the sibling `vmn_experiment.yml` (`source: export`, keeping its version). Email: git
+  config in the tree, else `exported_by` (which `vmn-exp export` now writes), else
+  `VMN_EXP_AUTHOR`. Without a source entry only the author is known and the entry is
+  written at `features_version: 0`, so the backfill still selects it.
+- Rerun (`cli/rerun.py`): copies the original's facts when they are at the current
+  version, else derives them from its patches; the author is the rerunner alone (git
+  config, then `VMN_EXP_AUTHOR`, else `host`), `source: rerun`. Forks capture their own
+  features and inherit neither features nor intent.
 - `vmn snapshot` records are not runs; out of scope.
 - Best-effort like `env`: a failure logs a warning and the run is created without the entry.
+- `vmn-exp show` treats `features` as a fact, not an event (`cli/views.py:FACT_ENTRY_TYPES`):
+  not in the text log or `log`/`log_total`; `show --json` has it as `features`. The UI
+  run log keeps it (paging offsets) and describes it in one line.
 
 ### 3.3 Index
 
-- `core/fold.py`: `_apply_features` (highest `features_version`, then latest by fold key).
-- `IndexSnapshot.features_of(verstr)` — a side table like `outputs_of` (kept off lean rows,
-  so list/leaderboard payloads don't grow). Bump `index_store_schema.SCHEMA_VERSION`.
-- `core/similar_index.py`: an inverted index `token -> verstrs` over `file:`, `sym:`,
-  `input:<digest>`, `ds:<name>`, `pkey:`, `cmd:`, `metric:` tokens, built from the snapshot.
-  Candidates = runs sharing ≥1 token (cap 5k by token rarity), then scored. No
-  O(n²) work, nothing persisted beyond the index cache.
-- `core/similar_score.py` (pure): `score(a, b, weights) -> (float, reasons)`; reasons are
-  the top contributing signals rendered as `same dataset imagenet@3`, `2 shared
-  functions: loss.py::focal_loss, …`, `lr 3e-4 vs 1e-4`.
-- `core/similar.py`: `similar_runs(snapshot, target_features, top, query=…, exclude=…)`;
-  the target is a row or features from the working tree. The target's own `code_verstr`
-  and sweep are excluded, and candidates are grouped by `code_verstr` and by sweep (outer
-  run): each group shows its best run by the goal metric, plus `(+N runs)`, so sweep siblings
-  and repeats of the same code cannot fill the list.
-- Row fields `author` (`git_user_email`, else `os_user`) and `has_intent` (v2) join the
-  query language, so filters reuse `--query` instead of new flags.
+- `core/fold.py` / `core/fold_facts.py`: `features` (highest int `features_version`,
+  then latest), `intent` (latest; a blank text clears it), `hypothesis` (the first create
+  entry's, like `create_note`); accessors `fold_features`, `fold_intent`,
+  `fold_hypothesis`. None is pre-created in `new_fold`; malformed entries fold into nothing.
+- They are **not** row keys (indexed lean rows must equal direct rows): side tables
+  `IndexSnapshot.features_of/intent_of/hypothesis_of(verstr)` filled by
+  `index_views.lean_row` and the direct-snapshot path. `fold_row` adds only `author` and
+  `has_intent` (a bool on every row), which join `core/query.py` ROW_FIELDS and the webui
+  `querySuggest.ts` list. One `SCHEMA_VERSION` bump: `exp-index-12`.
+- `core/similar_profile.py` reads each run's signals once; `core/similar_index.py` is an
+  inverted index `token -> verstrs` over `w:`, `file:`, `sym:`, `input:<digest>`,
+  `ds:<name>`, `pkey:`, `cmd:`, `metric:` and `commit:<sha7>` tokens. Candidates = runs
+  sharing ≥ 1 token, rarest token first, cap 5000. Built once per snapshot object
+  (lock-guarded `WeakKeyDictionary`): ~0.8 s to build and ~0.25 s a query at 20k runs.
+- `core/similar_score.py` (pure): `score(target, candidate, weights=None, text_score=None)
+  -> (float, reasons, signals)`.
+- `core/similar.py`: `similar_runs(snapshot, target, *, top=10, rows_filter=None,
+  schema=None, weights=None, app=None)` and `similar_runs_multi(scopes, target, ...)`
+  over `[(app, snapshot, schema)]`; `target_from_snapshot(snapshot, verstr, text=None,
+  text_only=False, *, app=None)`. The target is `{"row", "features", "intent",
+  "hypothesis", "text", "text_only", "command"?, "create_note"?, "app"?}`.
+  - Excluded: the target, its `code_verstr`, and its whole run tree (outer run, every
+    trial and the SDK runs they open, its own inner runs) — in the target's app only. A
+    working-tree target excludes nothing.
+  - Grouped by **run tree root** (`SimilarIndex.root`: a run with a parent or children;
+    a missing ancestor still roots its subtree; cycles end the walk), else by
+    `code_verstr`. Each group shows its member best on the group's goal metric
+    (`goal_metric`: the schema-goal objective most of its rows carry), else the most
+    similar; a container run only when alone; `group_size` counts them. Items sort by
+    score, then newest, then verstr. Result items carry `goal: {metric, goal, value}`.
+- `core/similar_search.py` (pure SDK) is what the CLI, the hint and the SDK share:
+  `search`, `item_payload`, `find`, `conf_weights`, `hint_enabled`.
 
 ### 3.4 Surfaces
 
 - CLI `vmn-exp similar <app> [-v <ref> | --latest] [--top 10] [--all-apps] [--query
-  <expr>] [--json]` (`packages/vmn-exp/src/vmn_exp/cli/similar.py`). Read-only (add to
-  `READ_ONLY_ACTIONS`). No ref = the current working tree (capture without creating a run).
-  Unlike `show`/`restore`/`export`, where no ref means the latest run, this follows `vmn
-  snapshot diff` (default: the working state); the help text and docs say so explicitly.
-  Output: `<verstr>  <score>  <author>  <age>  <status>  <goal metric>=<v>  — <reasons>`.
-- Submission hint: `vmn-exp run` and `create` print the top 3 after the claim, before the
-  child starts: `3 similar runs: best val_loss=0.31 — t7 by alice@x.io, 3 weeks ago (same
-  dataset, focal_loss changed)`. Uses the local index cache only, with a 300 ms budget, and
-  is skipped silently when the cache is cold. It is not computed for sweep trials or other
-  inner runs (`VMN_SWEEP_TRIAL` / a parent set), which would otherwise pay the budget and
-  print siblings on every trial. Opt out with `--no-similar` / conf
-  `experiment.similar.hint: false`. The SDK only logs it at debug level (it must not
-  print into training stdout).
-- SDK `vmn_exp.sdk.reader.similar_runs(app, ref=None, top=10)`, `run.similar(top=)`.
-- UI `GET .../experiments/{verstr}/similar?top=&all_apps=` (all-apps mode reuses
-  `routes_search.py`'s per-workspace viewability); a "Similar runs" panel on run detail
-  (`webui/src/components/`), with the reasons shown as chips.
+  <expr>] [--archived] [--context <text> | --context-file <path|->] [--text-only]
+  [--json]` (`cli/similar.py`, `cli/similar_args.py`, `cli/similar_output.py`).
+  Read-only (`READ_ONLY_ACTIONS`). No ref = the current working tree (captured without
+  creating a run, `features_for_working_tree`); unlike `show`/`restore`/`export`, this
+  follows `vmn snapshot diff`, and the help says so. In git-free mode it needs `-v`,
+  `--latest` or `--text-only`. Output: `<verstr>  <score>  <author|->  <age>  <status>
+  <goal>=<v>|—  — <reasons>  (+N runs)` (`<app>/` under `--all-apps`); `--json` items
+  `{app, verstr, name, score, reasons, signals, group_size, author, timestamp, status,
+  goal, note, intent (first 2 KB), features}`.
+- Submission hint (`cli/similar_hint.py`): `create` (before printing the verstr) and
+  `run` (after the lock is released, before the child) print up to 3 on stderr: `2
+  similar runs: best val_loss=0.31 — <verstr> by alice@x.io, 3w ago (<reasons>)` (or
+  `closest — …`). Its candidates come only from this host's persisted index
+  (`ExperimentIndex.follower`, never a refresh from the store, whose reads the process
+  exit would wait for); the new run is read from its own record. Skipped when that
+  cache is cold, when it holds more than `MAX_INDEXED_RUNS` (4000) runs (counted, not
+  loaded), for inner runs (`--parent`, `VMN_EXPERIMENT_ID`, `VMN_SWEEP_TRIAL`, a parent
+  on the record), with `--no-similar` / conf `experiment.similar.hint: false`; 300 ms
+  budget on a daemon thread, with an `expired` event so a late search stops before
+  scoring. Errors are debug-logged only. The SDK prints no hint.
+- SDK `vmn_exp.sdk.reader.similar_runs(app_name=None, ref="latest", *, storage=None,
+  top=10, query=None, context=None, text_only=False, all_apps=False)` (the reader
+  convention; no working-tree target), `Run.similar(top=10)` (flushes its log first),
+  `NoOpRun.similar() -> []`.
+- UI (`ui/routes_similar.py`): `GET .../workspaces/{ws}/apps/{app}/experiments/{verstr}/similar?top=&all_apps=&archived=`,
+  `GET .../workspaces/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=` and
+  `GET /api/v1/similar?text=&top=&archived=` (next to `/api/v1/search`, over every
+  viewable workspace via `routes_search.viewable`). `all_apps` on the per-workspace
+  routes means that workspace's apps; scopes are keyed `(workspace, app)`. Scored from
+  index snapshots (never the Postgres search rows), under the conf weights; `{items,
+  truncated}`, ETag/304, viewer role; `top` 1..100, text ≤ 4 KB. Web UI: a "similar
+  runs" card on run detail (this app / all apps, reasons as chips, intent collapsed)
+  and a "similar" toggle on the leaderboard search box.
 
 ### 3.5 Re-deriving features
 
-`vmn-exp similar-backfill <app> [--all-apps] [--dry-run] [--store …]`: a separate writing action, so `similar` stays purely read-only (no `watch --compact`-style exception at `cli/experiment.py:294`).
+`vmn-exp similar-backfill <app> [--all-apps] [--dry-run] [--store …]`
+(`cli/similar_backfill.py`, `core/code_patches.py`): a separate writing action, so
+`similar` stays purely read-only. Registered in the git-free dispatch
+(`_exp_run_without_repo`), takes the repo lock like `tag`.
 
-It is not a one-off migration. It selects every finished run without a `features` entry at
-the **current** `features_version`, which covers:
-- runs whose best-effort capture at submission failed (no entry at all);
-- runs captured by an older version, after a release adds or changes a signal and bumps
-  `features_version`;
-- runs recorded before this plan shipped.
+It selects every run without a `features` entry at (or above) the **current**
+`features_version`, which covers runs whose capture failed, runs captured by an older
+version (or git-free author-only entries at version 0), and runs recorded before this
+plan shipped. Running/stuck runs and imports (`imported_from`) are skipped.
+
+- Load **only the patches** of the run's code object through `load_file` (never the
+  untracked tarball; deps skipped when the marker says there are none), call
+  `features_from_patches`, and append a `features` entry (`source: backfill`) under this
+  host's writer id (`get_writer_id()`), which phase P0 made safe (§3.7).
+- When the run already has an older entry, only the patch-derived fields (`changed`,
+  `commits`, `truncated`, `changed_source`) are recomputed; `author`, `branch`,
+  `entrypoint` and `changed.untracked` are carried over. Without one, the author is the
+  first local commit's `From:` (`source: commit`) plus `writer` = the writer whose log
+  holds the run's first `create` entry (a v1-migrated run: its run state's `host`). The
+  base commit's author is **not** used (it is usually the upstream tip's author).
+- Each code object is read and parsed once; a `from_snapshot` run's code object is found
+  by code verstr (`find_code_key`, memoized). A clean tree gets a complete entry with
+  nothing changed. A code object whose marker is missing → `partial` (no `changed`, or
+  the older entry's). Code the store lists but cannot read → `failed`, nothing written,
+  retried next time; any other per-run error fails only that run.
+- Output: `<verstr>  backfilled|partial|skipped|failed[ (detail)]`, `<app>:` headers
+  under `--all-apps`, then `backfilled N, partial P, skipped S, failed F` (` (dry run:
+  nothing written)`); exit 1 if any failed. Idempotent.
 
 Descriptions are a different path: a run submitted without a comment still gets its
 features at submission, and its intent is added later with `vmn-exp add --intent-file` (§4).
 
-- Load **only the patches** of the run's code object (not the untracked tarball), call
-  `features_from_patches`, and append a `features` entry (`source: backfill`) under this
-  host's normal writer id (`get_writer_id()`, like `tag`/`rewind`). A fixed writer name
-  would make two hosts backfilling the same remote run write the same
-  `log/<writer>@<seq>` files.
-- When the run already has an older entry, only the patch-derived fields (`changed`,
-  `commits`) are recomputed. `author` and `branch` are carried over from it unchanged:
-  they were observed at submission and cannot be re-derived as well. Without an older
-  entry the author comes from the patches' `From:`; if a git checkout is present, the base
-  commit's author is used instead (`author.source: commit`).
-- Runs that share a code object share the computation (memo by `code:` key).
-- Idempotent (a run at the current version is skipped), resumable by construction, takes
-  the repo lock like `tag`/`rewind`, works git-free. Running/stuck runs are skipped.
-- Runs whose code object is missing get features derived from their record only (no
-  `changed`), and are counted as `partial` in the summary:
-  `backfilled N, partial P, skipped S, failed F`.
-
 ### 3.6 MLflow imports
 
-The importer (`packages/vmn-exp/src/vmn_exp/importers/import_records.py`) already maps
-params, metrics, user tags and datasets (as inputs with digests), so input/param/objective
-similarity works for imported runs as soon as v1 lands. It drops every `mlflow.*` tag,
-which includes the fields we need:
+The importer already mapped params, metrics, user tags and datasets. `importers/mlflow_features.py`
+now maps the `mlflow.*` tags similar runs uses (values stripped, blank = absent;
+`mlflow.*` tags still never become vmn tags):
 
 | MLflow tag | Goes to |
 |---|---|
-| `mlflow.user` | `features.author` (`source: mlflow`) |
-| `mlflow.note.content` | record note (via the create entry; `--refresh-features` appends a `note` entry). Already part of the `text` signal, so it is not copied into `intent` |
-| `mlflow.source.git.branch` | `features.branch` |
-| `mlflow.source.name`, `mlflow.project.entryPoint` | `imported_from.source_name` / entrypoint signal |
-| `mlflow.source.git.repoURL` | `imported_from.repo_url` |
+| `mlflow.user` | `features.author`: an email (contains `@`) as `git_user_email`, else `os_user`; `source: mlflow`, no `writer` |
+| `mlflow.note.content` | metadata `note` (new imports; refresh sets it only when the record's note is empty — `push` already merges `note`) |
+| `mlflow.source.git.branch` | metadata `branch` (new imports) / `features.branch` (refresh, when the record has none) |
+| `mlflow.project.entryPoint`, else `mlflow.source.name` | `features.entrypoint` |
+| `mlflow.source.name`, `mlflow.source.git.repoURL` | `imported_from.source_name` / `imported_from.repo_url` |
 
-- New imports write a `features` entry (`source: mlflow`) built from those tags.
-- **Already-imported runs:** `import_run` returns `skipped` before reading anything, and
-  the dropped tags exist only in MLflow. Add `import-mlflow … --refresh-features`: for
-  `skipped` runs with no `features` entry, append one built from the source tags (the source
-  must still be reachable). Nothing else is rewritten.
-- Code signal: MLflow keeps no diff. If `imported_from.source_commit` exists in a local
-  checkout (`--repo <path>`), `changed` = the files and symbols of
-  `git diff $(git merge-base <default branch> <commit>) <commit>`, marked `source:
-  commit` with half weight (it is a branch's cumulative change, not the run's own diff).
-  Without a checkout, this signal is left out.
+- New and resumed imports write a `features` entry (`source: mlflow`) under the
+  `mlflow-import` writer.
+- `--refresh-features` replaces the early `skipped` return for runs this importer wrote:
+  a run without a features entry at the current version (or lacking the changes `--repo`
+  now supplies) gets one, appended under `get_writer_id()` and flushed; outcome
+  `refreshed`. The summary gains `refreshed R` only with the flag. The import writes
+  through `resolve_experiment_storage` (writer mode, no lock) although it is listed in
+  `READ_ONLY_ACTIONS`.
+- `--repo <path>`: when `imported_from.source_commit` exists there
+  (`version_stamp.api._commit_exists`), `changed` = files and symbols of `git diff
+  $(git merge-base <default> <commit>) <commit>` via `features_from_patches`, with
+  `changed_source: commit` (half weight). Default branch: origin/HEAD's target (if it
+  resolves), else `main`, `master`, `origin/main`, `origin/master`. No textconv/external
+  diff, at most 5 MB read (`truncated`), each commit diffed once across workers.
+- The tracking-server client now imports dataset inputs (`run.inputs.dataset_inputs`;
+  previously hard-coded `[]`), identical to `--mlruns`.
+
+### 3.7 Prerequisite: appending to another host's log (P0)
+
+Appending under `get_writer_id()` to a run on a `CachedSnapshotStorage` whose remote
+already held a longer log for that writer took `CachedLogs._ship_new_lines`' start-over
+branch and overwrote the remote log (a fresh clone, a cleared cache, a CI fleet sharing
+one writer id). `storage/cached_logs.py` + `storage/cached_log_merge.py` now seed the
+local log from the remote before the first append per (app, verstr, writer) and replace
+the start-over branch with the same merge (with a newline-alignment guard and a
+`LocalLogLock` that only the SIGTERM finalizer may give up on after
+`LOCAL_LOCK_WAIT_SEC`). This made `add`/`tag`/`rewind`/intent/backfill/refresh appends
+safe; `S3Logs.delete_log_segments` was removed.
 
 ## 4. v2 — bring your own AI: intent text from the user's agent
 
@@ -206,82 +286,90 @@ fact on the record and matches it deterministically. A skill teaches agents the 
 ### 4.1 The `intent` entry
 
 ```yaml
-# log entry; latest wins (fold side table intent_of, like features_of)
+# log entry; latest wins (fold side table intent_of)
 type: intent
-text: |                       # markdown, capped at 16 KB (truncated: true past it)
+text: |                       # markdown, stripped, capped at 16384 UTF-8 bytes
   Hypothesis: focal loss (gamma=2) fixes the minority-class recall drop seen in t4.
   Changed: src/loss.py::focal_loss (new), src/train.py::train_step uses it.
   Data: imagenet-lt@3. Expect: val_recall_min up, val_loss roughly flat.
 keywords: [focal loss, class imbalance, long tail, reweighting, gamma]   # <= 50
-generator: claude-opus-5-5    # optional free string; absent = written by a human
+generator: claude-opus-5-5    # optional; absent = written by a human
 source: user
+truncated: true               # only when the text was cut
 ```
 
-Written through:
-- `vmn-exp create|run <app> --intent "<text>" | --intent-file <path|->`. A file may start
-  with YAML front matter (`keywords:`, `generator:`); the rest is the text.
-- `vmn-exp add <app> -v <ref> --intent-file <path|->`: add or replace an intent later (this
-  is also how old runs are backfilled). It takes the repo lock like `tag`.
-- SDK `start_run(intent=…, intent_keywords=…)`, `run.set_intent(text, keywords=, generator=)`.
+Built by `core/intent.py:build_intent_entry(text, keywords=None, generator=None)`
+(keywords: list/tuple or a comma string, stripped, deduped case-insensitively; numbers
+and dates become text; an empty text or other types raise `ValueError`) and
+`parse_intent_file` (YAML front matter between `---` and `---`/`...`; an unclosed block
+is text). Written through:
+- `vmn-exp create|run <app> --intent "<text>" | --intent-file <path|->`
+  (`cli/intent_arg.py`, `-` = stdin, read once). The input is checked before anything is
+  written, a cold start's baseline stamp included.
+- `vmn-exp add <app> [-v <ref>] --intent-file <path|->`: add or replace an intent later
+  (the latest run without `-v`, like `--note`); this is how old runs are backfilled.
+- SDK `start_run(intent=…, intent_keywords=…)` (checked before anything is created),
+  `run.set_intent(text, keywords=, generator=)` (also after `finish()`, synced at once);
+  `NoOpRun.set_intent` is a no-op. Sweep trials and forks start without one.
 
-It is not the `note`: the note stays the short one-liner `list` shows, while the intent is
-the long description used for matching. An agent may set both.
+The fold lets a blank text clear the intent, but no writer can produce one (the builder
+refuses it); a new intent replaces the old. It is not the `note`: the note stays the
+short one-liner `list` shows, while the intent is the long description used for
+matching. `-f`'s `hypothesis:` (create entry) also feeds the text signal.
 
 ### 4.2 Matching text without a model
 
-- `core/similar_text.py` (pure): BM25 over each run's text document (intent text,
-  keywords ×3, name, note, tags, commit subjects), with `w:` tokens in the §3.3 inverted
+- `core/similar_text.py` (pure): a tokenizer (lowercase; splits on punctuation, `_` and
+  camelCase; stopwords and 1-character tokens dropped) and BM25 (saturating query-term
+  weights) over each run's text document (§2), with `w:` tokens in the §3.3 inverted
   index. Changed symbols stay structured only, so nothing is counted twice. It is the
-  single `text` signal in `similar_score`. v1 already scores it over the fields v1 has;
-  intents raise its default weight to code + inputs combined. Its reasons show
-  the shared keywords (`shared: focal loss, class imbalance`).
+  single `text` signal; an intent or context on the target raises its default weight to
+  code + inputs. Its reasons show the shared keywords (`shared: focal loss, class
+  imbalance`).
 - Lexical matching is enough because the agent expands synonyms twice: once in the
   keywords it writes onto each run, and once in the query it sends. Semantic judgement
   happens in the agent, which re-ranks the candidates it gets back (§4.3).
-- No embeddings, vector cache, plugin or network calls. The UI and server use the same
-  scorer from the index.
 
 ### 4.3 Querying with context
 
-- `vmn-exp similar <app> --context "<text>" | --context-file <path|->`: a text query.
-  It is combined with the target's features: the working tree without `-v`, the run with
-  `-v`; the context text replaces that target's text document. `--text-only` drops the
-  features, for questions like "has anyone tried label smoothing?".
-- `--json` gives an agent everything it needs to re-rank and answer, with no further
-  calls: per candidate `verstr, app, score, reasons, author, timestamp, status, goal
-  metrics, note, intent (first 2 KB), features`.
-- `vmn-exp show <app> -v <ref> --patch [--max-bytes N]`: print a run's own patches (`show`
-  already loads them for `patch_lines`, `cli/views.py:28`). The agent uses this to inspect a
-  candidate, or to write an intent for an old run. MLflow runs have no code, so it prints
-  a one-line note instead of failing.
-- Backfill worklist: `vmn-exp list <app> --query "has_intent = false and status =
-  succeeded" [--last N] --json`. This is the existing list/query path, not a new flag.
-- UI: the run-detail "Similar runs" panel shows the intent. Free text is a "similar" mode
-  of the existing search box (`webui/src/util/searchQuery.ts`, which today sends the query
-  language to `/api/v1/search?q=`), not a second box. That mode calls `GET
-  /api/v1/similar?text=` with the same scorer (`--text-only` semantics).
+- `vmn-exp similar <app> --context "<text>" | --context-file <path|->`: a text query,
+  combined with the target's features (the working tree without `-v`, the run with
+  `-v`); it replaces that target's text document. A context file's front matter
+  `keywords` join the query; other keys are ignored. `--text-only` drops the features
+  (and needs no working tree), for questions like "has anyone tried label smoothing?".
+- `--json` gives an agent everything it needs to re-rank and answer (§3.4).
+- `vmn-exp show <app> -v <ref> --patch [--max-bytes N]` (`cli/views.py`): the show
+  block, then the run's own text patches (`=== working_tree ===`, `=== local_commits
+  ===`, `=== deps/<dep>/<type> ===`; never the untracked tarball), capped at 200000
+  bytes on a UTF-8 boundary with a truncation line. Without a text patch: a one-line
+  note on stderr, exit 0. `--json --patch` adds `"patch": {"text", "truncated"}` or
+  `{"text": null, "reason": "no_code" | "code_missing" | "untracked_only"}` (the last
+  with `untracked_files` when the tarball is readable).
+- Backfill worklist: `vmn-exp list <app> --query "has_intent = false" [--last N] --json`
+  — the existing list/query path, not a new flag.
+- UI: the run-detail card shows the intent; free text is the "similar" mode of the
+  leaderboard search box (per-app text route), and `/api/v1/similar?text=` serves the
+  cross-workspace query.
 
-### 4.4 The skill (`vmn-exp skill`, `packages/vmn-exp/src/vmn_exp/cli/skill.py`)
+### 4.4 The skill (`vmn-exp skill`, `cli/skill.py`)
 
-A new "Similar experiments" section, so any agent that installed the skill does this
-without being prompted:
+A "Similar experiments" section (regenerated into `docs/vmn-exp/agent-skill.md`), so
+any agent that installed the skill does this without being prompted:
 
 1. **Before submitting a run:** read the change (`git diff HEAD`, unpushed `git log`)
    and write `intent.md`: hypothesis, which functions changed and why, key params,
-   dataset, expected effect. Use front matter `keywords:` with synonyms and the
-   problem's usual names, and `generator: <your model id>`. Describe the change, not
-   results. Never paste secrets or data, and stay under ~2 KB.
-2. `vmn-exp similar <app> --context-file intent.md --all-apps --json`. Read the top
-   candidates (`show --patch` for the 1–3 closest) and tell the user who ran what, when,
-   how it scored, and how this run differs. Re-rank on meaning, not just the score.
+   dataset, expected effect, front matter `keywords:` (synonyms, the problem's usual
+   names) and `generator: <model id>`. Describe the change, not results. Never paste
+   secrets or data; stay under ~2 KB.
+2. `vmn-exp similar <app> --context-file intent.md --all-apps --json`; inspect the 1–3
+   closest with `vmn-exp show <app> -v <ref> --patch --json`, tell the user who ran
+   what, when, how it scored and how this run differs; re-rank on meaning.
 3. Submit with `--intent-file intent.md` (CLI) or `start_run(intent=…)` (SDK).
-4. **Backfilling when asked:** take `vmn-exp list <app> --query "has_intent = false" --json`
-   (narrow with `--last`/more `--query` terms to bound the cost), and for each run do `show -v <ref> --json --patch`, write an intent,
-   then `vmn-exp add <app> -v <ref> --intent-file -`.
+4. **Backfilling when asked:** `vmn-exp list <app> --query "has_intent = false" --last N
+   --json`, then `show --patch --json`, write an intent, `vmn-exp add <app> -v <ref>
+   --intent-file -`. Runs missing automatic features: `vmn-exp similar-backfill <app>`.
 5. **For questions** ("did anyone try X?"): `similar --context "<X plus synonyms>"
    --text-only --all-apps --json`, then answer citing verstrs.
-
-`docs/vmn-exp/agent-skill.md` is regenerated from it (never hand-edited).
 
 ### 4.5 Migration for v2
 
@@ -289,36 +377,85 @@ without being prompted:
   the skill's backfill loop (step 4), run by the user's agent at whatever scope and cost
   they choose. Runs without an intent still match on everything else.
 - MLflow runs: their note (imported, or added by `--refresh-features`) already feeds the
-  `text` signal. An agent can then add an intent to them
-  through the same loop (`show --patch` falls back to params/datasets when there is no code).
+  `text` signal. An agent can add an intent to them through the same loop (`show --patch`
+  prints a no-code note for them).
 - Privacy: vmn never sends anything anywhere. Whatever leaves the machine is the user's
   agent's choice, which keeps air-gapped use intact.
 
-## 5. Phases (TDD; parallel worktrees where independent)
+## 5. Phases (as built; TDD, parallel worktrees)
 
-| Phase | Worktree | Content | Depends on |
-|---|---|---|---|
-| 1a | `features-core` | `core/features.py` (patch parsing, caps) + `fold._apply_features` + `features_of` side table + schema bump | — |
-| 1b | `similar-score` | `core/similar_score.py`, `core/similar_index.py`, `core/similar.py`, `core/similar_text.py` (BM25 `text` signal over name/note/tags/commit subjects) (pure, row fixtures) | — |
-| 1c | `features-capture` | gitmode + `from_snapshot` write the entry; `actor_identity()` → `core/identity.py` + email fallbacks; rerun copies features | 1a |
-| 1d | `similar-cli` | `vmn-exp similar` (`--query`, grouping), run/create hint (skipped for inner runs), SDK reader, `author` row field, read-only registration | 1a, 1b |
-| 1e | `similar-backfill` | `vmn-exp similar-backfill` action: runs below the current `features_version` (host writer id, patch-only code load, author/branch carried over, memo, summary) | 1a |
-| 1f | `mlflow-features` | importer tag mapping (note → note), `--refresh-features`, `--repo` commit diff | 1a |
-| 1g | `similar-ui` | route + run-detail panel | 1d |
-| 2a | `intent-entry` | `intent` log entry + fold side table, `--intent`/`--intent-file` (front matter) on create/run/add, SDK `intent=`/`set_intent`, `has_intent` row field | 1a |
-| 2b | `similar-text` | intent text + keywords in the `text` document, `--context`/`--context-file`/`--text-only`, JSON fields, `/api/v1/similar?text=` + search-box mode | 1b, 2a |
-| 2c | `show-patch` | `vmn-exp show --patch [--max-bytes]` (no-code runs: params/datasets note) | — |
-| 2d | `similar-skill` | "Similar experiments" section in `cli/skill.py`; regenerate `docs/vmn-exp/agent-skill.md` | 2a–2c |
+| Phase | Worktree | Content |
+|---|---|---|
+| P0 | `cached-log-seed` | seed/merge instead of start-over in `storage/cached_logs.py` (§3.7) |
+| F | `features-fold` | fold of `features`/`intent`/`hypothesis`, side tables, `author`/`has_intent` rows + query fields, `exp-index-12` |
+| X | `patch-features` | `core/features*.py` patch parsing, `core/identity.py` |
+| S | `similar-core` | `core/similar*.py` (text, profile, score, index, similar) |
+| V | `show-patch` | `show --patch [--max-bytes]` |
+| C | `features-capture` | git-mode / git-free / rerun capture, `exported_by`, `VMN_EXP_AUTHOR`, show's fact entries |
+| B | `similar-backfill` | `vmn-exp similar-backfill`, `core/code_patches.py` |
+| M | `mlflow-features` | MLflow tag mapping, `--refresh-features`, `--repo`, client dataset inputs |
+| I | `intent-writers` | `--intent`/`--intent-file`, `start_run(intent=)`, `set_intent`, `core/intent.py` |
+| L | `similar-cli` | `vmn-exp similar`, the submission hint, `core/similar_search.py`, SDK reader + `Run.similar` |
+| U | `similar-ui` | UI routes, run-page card, leaderboard similar mode, rebuilt bundle |
+| D | `skill-docs` | the skill section, `agent-skill.md`, the vmn-exp docs, CLAUDE.md, this plan |
 
-Docs: `docs/vmn-exp/experiments.md` (CLI + `features` entry), `sdk.md` (`similar_runs`),
-`ui.md` (routes), `migrating-from-mlflow.md` (`--refresh-features`), CLAUDE.md command
-summary + `VMN_EXP_AUTHOR` in its env-var list; regenerate `docs/vmn-exp/agent-skill.md` (2d changes `cli/skill.py`).
+Polish rounds fixed review findings in between (launcher-aware entrypoints, symbols
+from added/removed lines, linear-time symbol parsing, pasted diffs in commit messages,
+lock safety of the local log, the hint's budget bounding its work, malformed intent
+keywords).
 
-## 6. Open questions
+## 6. Docs
 
-- Should the default scope be the current app or all apps? (Proposal: the app for the
-  submission hint, with `--all-apps` on demand; the UI offers both.)
-- Is an author's git email acceptable to show to every viewer of a store? (Proposal: yes. It
-  is already in every commit; the server's roles already gate viewing.)
-- Default weights: tune on a real store before release (the backfill makes that possible on
-  day one).
+`docs/vmn-exp/experiments.md` (`similar`, the hint, `similar-backfill`, `features`/
+`intent` formats, `show --patch`, `--intent*`, import-mlflow flags, `VMN_EXP_AUTHOR`),
+`sdk.md` (`start_run(intent=)`, `set_intent`, `similar_runs`, `run.similar`, query
+fields), `ui.md` (routes, card, search mode), `server.md` (`/api/v1/similar`),
+`migrating-from-mlflow.md` (tag mapping, `--refresh-features`, `--repo`),
+`client-guide.md` ("Has anyone run this before?"), CLAUDE.md, and the regenerated
+`docs/vmn-exp/agent-skill.md`. Core vmn docs carry none of it.
+
+## 7. Decided differently from the proposal
+
+- Branch: already in `metadata.branch`; not captured into `features` (§1).
+- Text: also includes the create entry's `hypothesis` (from `-f`).
+- Grouping: by run tree root (whole sweep incl. nested SDK runs) rather than direct
+  parent; exclusion drops the target's whole tree.
+- Symbols: from hunk headers **and** definitions on added/removed lines (new files and
+  functions appended below a hunk context count).
+- Entrypoint: looks past launcher executables and `python -m` launcher modules.
+- Intent: the fold lets a blank text clear it; writers cannot write one.
+- No `fold_row` keys for features/intent/hypothesis (side tables), but `author` and
+  `has_intent` rows.
+- Backfill author: commit `From:` + creating writer; never the base commit's author;
+  `changed.untracked` is never backfilled (untracked paths exist only at capture).
+- Git-free author-only entries at `features_version: 0`.
+- `show` hides `features` from its log; `--json` exposes it as a key.
+- Rerun author: the rerunner alone, no commit fallback.
+- The hint reads only the persisted index and is skipped above 4000 runs.
+- SDK reader keeps the `(app_name=None, ref="latest", *, storage=None, ...)` convention;
+  no working-tree target in the SDK.
+- `/api/v1/similar` instead of reusing `/api/v1/search`; `all_apps` stays within a
+  workspace on the per-workspace routes.
+- P0 (§3.7) was added as a prerequisite after a probe showed the data loss.
+
+## 8. Known limits and follow-ups
+
+- Metric streams have the same first-append gap P0 fixed for logs: a fresh root
+  appending metrics under a writer whose remote stream exists (`vmn-exp add --metrics`
+  from a fresh clone) does not ship the new point (`CachedMetrics._ship_new_blocks`).
+- Two clones sharing one writer id that both append and ship concurrently can still
+  overwrite each other's segment (sharing a writer id is documented as unsupported).
+- A diff pasted into a `--no-stat` format-patch message (no `---` separator) still
+  counts as changed; vmn's own capture uses the default format.
+- `show`'s text log prints an `intent` entry as its bare type.
+- `--dry-run --refresh-features` only counts would-be imports.
+- Renormalisation lets a sparse run sharing a single signal score as high as a true
+  twin; ties then go to the newest. Tune default weights on a real store (§9).
+
+## 9. Open questions
+
+- Should the default scope be the current app or all apps? (Built: the app for
+  `similar` and the hint, `--all-apps` on demand; the UI offers both.)
+- Is an author's git email acceptable to show to every viewer of a store? (Built: yes.
+  It is already in every commit; the server's roles already gate viewing.)
+- Default weights: tune on a real store (the backfill makes that possible on day one).

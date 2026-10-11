@@ -226,6 +226,8 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `.../experiments/{verstr}/histograms/{name}` | One histogram key's [steps](#media) |
 | `GET` | `.../experiments/{verstr}/lineage` | [Run lineage](#lineage) |
 | `GET` | `.../experiments/{verstr}/sweep` | The sweep's spec, summary and trials ([sweeps.md](sweeps.md#status)) |
+| `GET` | `.../experiments/{verstr}/similar?top=&all_apps=&archived=` | [Runs most like this one](#similar-runs) |
+| `GET` | `ws/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=` | [Runs matching a text](#similar-runs) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-columns` | [Whole-set chart columns](#columns-for-whole-set-charts) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
@@ -501,6 +503,51 @@ each used model/dataset version to its registry page.
 [`version_lineage`](sdk.md#lineage): `{model, version, kind, status, producer,
 consumers}`. Invalid name: 400; a version that never existed: 404. The model
 page shows it with a version picker.
+
+### Similar runs
+
+`GET .../experiments/{verstr}/similar?top=10&all_apps=0&archived=0` answers the
+runs most like that run, as [`vmn-exp similar -v`](experiments.md#similar)
+ranks them: the run itself, the runs of its exact code and its run tree are
+left out, and a sweep or repeats of one code show as their best run.
+`GET ws/{ws}/apps/{app}/similar?text=...` is the text-only query in one app,
+like `vmn-exp similar --context ... --text-only`. With `all_apps=1` either
+covers every app of the workspace; `GET /api/v1/similar?text=` covers every
+workspace you may view ([server.md](server.md#postgres-and-replicas)).
+
+```sh
+curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  --data-urlencode 'text=label smoothing, soft targets' \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/similar?top=5"
+```
+
+```json
+{"items": [{"workspace": "my-repo", "app": "my_app", "verstr": "0.0.3-dev.abc1234.def5678",
+            "name": null, "score": 0.82, "reasons": ["shared: label smoothing"],
+            "signals": {"text": 0.82}, "group_size": 3,
+            "goal": {"metric": "val_loss", "goal": "min", "value": 0.31},
+            "author": "alice@x.io", "timestamp": "2026-09-20T10:02:11Z", "status": "succeeded",
+            "note": "smoothing 0.1", "intent": {"text": "...", "keywords": ["label smoothing"], "truncated": false}}],
+ "truncated": false}
+```
+
+- `intent` is the first 2 KB of the run's intent text with its keywords, or
+  `null`; `truncated` says more runs matched than `top`.
+- Scored from the apps' index snapshots (never the Postgres search rows), under
+  each app's conf `experiment.similar.weights`. Archived runs only with
+  `archived=1`.
+- `{verstr}` is a full verstr (no `latest`/`@N`). `top` is 1..100; a blank
+  `text` or one over 4 KB, a bad app or verstr: 400. An unknown run or
+  workspace: 404. Viewer role; ETag/304.
+- The run page shows a **similar runs** card below lineage (loaded when
+  scrolled near, with a *this app* / *all apps* choice): each run's link
+  (labelled with its app when it is another), score, status, goal metric,
+  author, age, `(+N runs)`, its reasons as chips and its intent, collapsed.
+- The leaderboard's search box has a **similar** toggle: the box text then
+  goes to the per-app text route and a results card replaces the charts and
+  table; leaving the mode restores the previous search and the table.
+- The run log describes `features` entries as `features: N files, M functions,
+  K commits (author)` and intents as `intent: <first line> [keywords]`.
 
 ### Model registry API
 

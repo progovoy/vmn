@@ -3,15 +3,13 @@ import os
 import subprocess
 
 import pytest
-
 from exp_helpers import _PY, _SRC_PATH
-
 from version_stamp.cli.entry import vmn_run
 from version_stamp.cli.skill import BEGIN_MARKER as VMN_BEGIN
 from version_stamp.cli.skill import END_MARKER as VMN_END
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.cli.main import vmn_exp_run
-from vmn_exp.cli.skill import BEGIN_MARKER, END_MARKER
+from vmn_exp.cli.skill import BEGIN_MARKER, DESCRIPTION, END_MARKER
 
 EXP_MARKER = "vmn-exp run"
 CLAUDE_PATH = (".claude", "skills", "vmn-exp", "SKILL.md")
@@ -133,3 +131,38 @@ def test_skill_rejects_unknown_target():
     with pytest.raises(SystemExit) as exc:
         _skill("--install", "--target", "vim")
     assert exc.value.code != 0
+
+
+def _similar_section(capfd):
+    """The skill's ``## Similar experiments`` section, up to the next H2."""
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    start = out.index("## Similar experiments")
+    end = out.find("\n## ", start + 1)
+    return out[start:] if end == -1 else out[start:end]
+
+
+def test_vmn_exp_skill_teaches_the_similar_runs_loop(capfd):
+    section = _similar_section(capfd)
+    # Before submitting: write intent.md, ask, inspect the closest, submit with it.
+    assert "keywords:" in section and "generator:" in section
+    assert "vmn-exp similar <app_name> --context-file intent.md --all-apps --json" in section
+    assert "vmn-exp show <app_name> -v <ref> --patch" in section
+    assert "--intent-file intent.md" in section
+    assert "start_run(" in section and "intent=" in section
+    # Backfilling intents, and answering questions.
+    assert 'has_intent = false' in section
+    assert "vmn-exp add <app_name> -v <ref> --intent-file -" in section
+    assert "--text-only" in section
+    assert "vmn-exp similar-backfill <app_name>" in section
+
+
+def test_vmn_exp_skill_names_the_no_patch_reasons(capfd):
+    section = _similar_section(capfd)
+    for reason in ("no_code", "code_missing", "untracked_only"):
+        assert reason in section
+
+
+def test_vmn_exp_skill_description_mentions_similar_runs_and_is_yaml_safe():
+    assert "similar" in DESCRIPTION
+    assert ": " not in DESCRIPTION and "#" not in DESCRIPTION
