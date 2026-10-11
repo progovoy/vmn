@@ -71,7 +71,7 @@ def _run(slot, build, make, deadline, own, background=False):
         index = make(deadline, own)
     except Exception as e:
         if background:
-            build.error = e
+            build.error = e  # before *done* is set: a woken waiter reads it
         raise
     else:
         with _LOCK:
