@@ -12,7 +12,7 @@ from version_stamp.devversion.untracked import (
 from version_stamp.snapshot.identity import _compute_diff_hash, _format_dev_verstr
 
 
-def _generate_patches(backend, lightweight=False):
+def _generate_patches(backend, lightweight=False, stats=None):
     """Generate patches for dirty working tree state.
 
     Args:
@@ -20,6 +20,8 @@ def _generate_patches(backend, lightweight=False):
         lightweight: When True, skip the untracked tarball and keep only the
             untracked content hash. Much faster for large untracked files,
             suitable for ``show --dev`` where only a stable hash is needed.
+        stats: The repo's untracked files as :func:`_untracked_stats` already
+            listed them, else they are listed here.
     """
     patches = {}
 
@@ -45,7 +47,8 @@ def _generate_patches(backend, lightweight=False):
             VMN_LOGGER.debug("Failed to generate local commits patch", exc_info=True)
 
     try:
-        stats = _untracked_stats(backend.repo_path)
+        if stats is None:
+            stats = _untracked_stats(backend.repo_path)
         content_hash = _hash_untracked_content(backend.repo_path, stats)
         if content_hash:
             patches["untracked_hash"] = content_hash
@@ -127,7 +130,7 @@ def _base_commit(backend, patches):
     return backend.changeset()
 
 
-def gather_create_data(vcs, lightweight=False, status=None):
+def gather_create_data(vcs, lightweight=False, status=None, untracked_stats=None):
     """Gather common data needed by snapshot/experiment create.
 
     Returns (base_version, commit_hash, patches, dirty_states, ver_info, error_code).
@@ -138,7 +141,8 @@ def gather_create_data(vcs, lightweight=False, status=None):
     ``lightweight`` skips the untracked tarball (see :func:`untracked_payload`):
     the patches still carry everything the diff hash is computed from.
     ``status`` is a repo status the caller already computed with the same
-    expected/optional sets, to spare a second one.
+    expected/optional sets, to spare a second one; ``untracked_stats`` the
+    repo's untracked files the caller already listed (``_untracked_stats``).
     """
     from version_stamp.stamping.repo_status import (
         READ_ONLY_EXPECTED,
@@ -176,7 +180,7 @@ def gather_create_data(vcs, lightweight=False, status=None):
         base_version = ver_info["stamping"]["app"]["_version"]
 
     be = vcs.backend
-    patches = _generate_patches(be, lightweight=lightweight)
+    patches = _generate_patches(be, lightweight=lightweight, stats=untracked_stats)
     commit_hash = _base_commit(be, patches)
     dep_patches, dep_bases = _capture_deps(vcs, lightweight=lightweight)
     if dep_patches:
