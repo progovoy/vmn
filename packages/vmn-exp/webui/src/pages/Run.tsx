@@ -22,6 +22,7 @@ import { runSpec } from "../reports/viewSpecs";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
 import RunLineage from "../components/RunLineage";
+import SimilarRuns from "../components/SimilarRuns";
 import RunOutput from "../components/RunOutput";
 import TrainingCurves from "../components/TrainingCurves";
 import SweepSection, { sweepSpecOf } from "../components/SweepSection";
@@ -109,6 +110,7 @@ function RunBody({ ws, app, appName, detail }: {
         importedFrom={detail.imported_from}
       />
       <RunLineage ws={ws} app={app} verstr={verstr} />
+      <SimilarRuns ws={ws} app={app} verstr={verstr} />
     </>
   );
 }

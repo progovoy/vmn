@@ -10,7 +10,6 @@ them off its lean rows), so a query reading ``outputs`` is answered in Python. O
 ``truncated`` says whether more matched.
 """
 from fastapi import HTTPException, Request
-
 from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import QueryError, query_roots
 from vmn_exp.core.tree import annotate_rows
@@ -26,7 +25,8 @@ def _rows(snapshot):
     return annotate_rows(snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at)
 
 
-def _viewable(request, names):
+def viewable(request, names):
+    """The workspaces of *names* the caller may view (all of them without auth)."""
     state = request.app.state
     if not getattr(state, "auth_enabled", False):
         return names
@@ -67,7 +67,7 @@ def register(app, api_prefix, scopes_of, sql=None):
     @app.get(f"{api_prefix}/search", dependencies=[require(VIEWER)])
     def search(request: Request, q: str = "", limit: int = DEFAULT_LIMIT, archived: bool = False):
         limit = max(1, min(limit, MAX_LIMIT))
-        names = sorted(_viewable(request, [ws.name for ws in app.state.manager.list()]))
+        names = sorted(viewable(request, [ws.name for ws in app.state.manager.list()]))
         try:
             if sql is None or references_outputs(q):
                 found = _python_search(scopes_of(names), q, limit + 1, archived)

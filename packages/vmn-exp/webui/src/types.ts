@@ -123,6 +123,10 @@ export interface ExperimentRow extends Partial<RunStatus> {
   name?: string | null;
   tags?: Record<string, string>;
   archived?: boolean;
+  /** Who ran it: the features entry's git email, else OS user, else writer. */
+  author?: string | null;
+  /** Whether the run carries an intent (what a human or agent wrote it tries). */
+  has_intent?: boolean;
 }
 
 /** Chosen columns over a whole filtered set (`/experiments-columns`):

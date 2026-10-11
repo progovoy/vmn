@@ -19,6 +19,35 @@ const DOT_COLOR: Record<string, string> = {
   alert: "var(--bad)",
 };
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const count = (v: unknown) => (Array.isArray(v) ? v.length : 0);
+
+/** Who a features entry's author names, as the row's `author` does: the git
+ *  email, else the OS user, else the writer. */
+function authorOf(author: unknown): string | null {
+  const fields = (author ?? {}) as Record<string, unknown>;
+  for (const key of ["git_user_email", "os_user", "writer"]) {
+    const value = fields[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function describeFeatures(e: LogEntry): string {
+  const changed = (e.changed ?? {}) as Record<string, unknown>;
+  const who = authorOf(e.author);
+  return `features: ${plural(count(changed.files), "file")}, ` +
+    `${plural(count(changed.symbols), "function")}, ${plural(count(e.commits), "commit")}` +
+    (who ? ` (${who})` : "");
+}
+
+function describeIntent(e: LogEntry): string {
+  const text = typeof e.text === "string" ? e.text : "";
+  const first = text.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  const keywords = Array.isArray(e.keywords) ? e.keywords.filter((k) => typeof k === "string") : [];
+  return `intent: ${first}${keywords.length ? ` [${keywords.join(", ")}]` : ""}`;
+}
+
 export function describeEntry(e: LogEntry): string {
   switch (e.type) {
     case "create":
@@ -36,6 +65,10 @@ export function describeEntry(e: LogEntry): string {
       return `artifact: ${e.path} (${e.size} bytes)`;
     case "alert":
       return `alert [${e.level}]: ${e.title}${e.text ? `: ${e.text}` : ""}`;
+    case "features":
+      return describeFeatures(e);
+    case "intent":
+      return describeIntent(e);
     case "run":
       return `ran \`${((e.command as string[]) ?? []).join(" ")}\` — exit ${e.exit_code} in ${e.duration_sec}s`;
     default:

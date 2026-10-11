@@ -12,6 +12,8 @@ const STATUS_ORDER: RunState[] = [
 
 /** The syntax hint on the query box: a query that uses most of the language. */
 const QUERY_EXAMPLE = 'metrics.loss < 0.5 and status = "succeeded"';
+const SEARCH_HINT = "Search note, verstr, branch...";
+const SIMILAR_HINT = "Describe a run: what it changes and why...";
 
 const NO_FACETS: SuggestFacets = {};
 
@@ -31,6 +33,7 @@ const parseStatuses = (csv = "") =>
 export default function LeaderboardFilter({
   rows = [], onStatusChange, onQueryChange, onSearchChange, onBranchChange,
   queryError, branches: knownBranches, facets = NO_FACETS, initial, archived, onArchivedChange,
+  onSimilarChange,
 }: {
   rows?: ExperimentRow[];
   /** Picked statuses as the `?status=` CSV the list endpoint takes. */
@@ -51,12 +54,20 @@ export default function LeaderboardFilter({
   /** Whether archived runs are shown; the toggle appears with *onArchivedChange*. */
   archived?: boolean;
   onArchivedChange?: (on: boolean) => void;
+  /** The "similar" mode's text, debounced and trimmed, or null outside the
+   *  mode; the mode's toggle appears with this callback. The search text is
+   *  kept apart, so leaving the mode restores it. */
+  onSimilarChange?: (text: string | null) => void;
 }) {
   const [search, setSearch] = useState(initial?.search ?? "");
   const [branch, setBranch] = useState(initial?.branch ?? "");
   const [statuses, setStatuses] = useState<RunState[]>(() => parseStatuses(initial?.status));
   const [query, setQuery] = useState(initial?.query ?? "");
+  const [similarOn, setSimilarOn] = useState(false);
+  const [similarText, setSimilarText] = useState("");
   const debouncedSearch = useDebounce(search);
+  // Each change scores the app's runs: wait for a pause, like the query box.
+  const debouncedSimilar = useDebounce(similarText, 300);
   // Long enough that a whole field name is typed before it costs a request.
   const debouncedQuery = useDebounce(query, 300);
 
@@ -88,24 +99,40 @@ export default function LeaderboardFilter({
     onBranchChange?.(branch);
   }, [branch, onBranchChange]);
 
+  useEffect(() => {
+    onSimilarChange?.(similarOn ? debouncedSimilar.trim() : null);
+  }, [similarOn, debouncedSimilar, onSimilarChange]);
+
   const clear = () => {
     setSearch("");
     setBranch("");
     setStatuses([]);
     setQuery("");
+    setSimilarText("");
   };
 
-  const hasFilter = search || branch || query || statuses.length > 0;
+  const hasFilter = search || branch || query || statuses.length > 0 || (similarOn && similarText);
 
   return (
     <div className="toolbar" style={{ gap: 8, marginBottom: 0 }}>
       <input
         type="text"
-        placeholder="Search note, verstr, branch..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        aria-label="Search runs"
+        placeholder={similarOn ? SIMILAR_HINT : SEARCH_HINT}
+        value={similarOn ? similarText : search}
+        onChange={(e) => (similarOn ? setSimilarText : setSearch)(e.target.value)}
         style={{ flex: 1, minWidth: 160, maxWidth: 300 }}
       />
+      {onSimilarChange && (
+        <button
+          className="status-toggle"
+          aria-pressed={similarOn}
+          title="find runs similar to a description (intent, name, note, tags, commits)"
+          onClick={() => setSimilarOn((on) => !on)}
+        >
+          similar
+        </button>
+      )}
       <select
         role="combobox"
         value={branch}
