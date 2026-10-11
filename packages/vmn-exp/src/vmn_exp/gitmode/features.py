@@ -4,10 +4,13 @@
 <vmn_exp.gitmode.checkout.record_run>` writes next to every git-mode run's
 create entry (CLI create/run/sweep, SDK): the files, ``path::name`` functions
 and commit subjects of the captured patches (working tree diff, local commits,
-deps under their configured path), the main repo's untracked paths, and the
-author — git config's email in the repo, else ``VMN_EXP_AUTHOR``, else the
-first local commit's ``From:``. ``features_for_working_tree`` gives the same
-facts without creating a run; ``rerun_features`` a rerun's, from the original.
+deps under their configured path), the main repo's untracked paths (as the
+capture listed them), and the author — git config's email in the repo (given
+up on after ``GIT_CONFIG_TIMEOUT_SEC``: this runs under the repo lock), else
+``VMN_EXP_AUTHOR``, else the first local commit's ``From:``.
+``features_for_working_tree`` gives the same facts without creating a run;
+``rerun_features`` a rerun's, from the original, with the rerunner alone as
+the author.
 
 Best-effort, like env capture: a failure is a warning and no entry.
 """
@@ -29,7 +32,7 @@ _TEXT_PATCHES = ("working_tree", "local_commits")
 
 def capture_features(vcs, captured):
     """The ``features`` entry of *captured* (a run's tree), or None."""
-    return _best_effort(_tree_entry, vcs, captured.identity)
+    return _best_effort(_tree_entry, vcs, captured)
 
 
 def features_for_working_tree(vcs, captured=None) -> dict:
@@ -61,22 +64,25 @@ def _best_effort(build, *args):
         return None
 
 
-def _tree_entry(vcs, identity):
+def _tree_entry(vcs, captured):
+    identity = captured.identity
     parsed = features_from_patches(_patch_texts(identity, identity.get("deps") or {}))
-    changed = dict(parsed["changed"], untracked=_untracked_paths(vcs, identity))
+    changed = dict(parsed["changed"], untracked=_untracked_paths(vcs, captured))
     return build_features_entry("capture", author=_author(vcs, parsed),
                                 **dict(parsed, changed=changed))
 
 
 def _rerun_entry(vcs, log, metadata, patches):
-    parsed = features_from_patches(_patch_texts(patches, _stored_deps(metadata, patches)))
     original = fold_features(fold_log(log))
     if original and original.get("features_version") == FEATURES_VERSION:
         facts = code_facts(original)
     else:
+        parsed = features_from_patches(_patch_texts(patches, _stored_deps(metadata, patches)))
         untracked = _tarball_paths(patches.get("untracked_files"))
         facts = dict(parsed, changed=dict(parsed["changed"], untracked=untracked))
-    return build_features_entry("rerun", author=_author(vcs, parsed), **facts)
+    # The rerunner's identity only: the original's committer did not rerun it.
+    author = run_author(vcs.backend.repo_path, [env_author()])
+    return build_features_entry("rerun", author=author, **facts)
 
 
 def _patch_texts(patches, deps):
@@ -99,10 +105,15 @@ def _author(vcs, parsed):
                       [env_author(), ("commit", commit.get("git_user_email"))])
 
 
-def _untracked_paths(vcs, identity):
-    if not identity.get("untracked_hash"):
+def _untracked_paths(vcs, captured):
+    """The paths the capture hashed; the tree is walked only for a capture
+    that did not keep them."""
+    if not captured.identity.get("untracked_hash"):
         return []
-    return sorted(rel for rel, _, _ in _untracked_candidates(vcs.backend.repo_path))
+    listed = getattr(captured, "untracked_paths", None)
+    if listed is None:
+        listed = [rel for rel, _, _ in _untracked_candidates(vcs.backend.repo_path)]
+    return sorted(listed)
 
 
 def _tarball_paths(tarball):

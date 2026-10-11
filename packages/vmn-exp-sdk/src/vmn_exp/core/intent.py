@@ -8,10 +8,16 @@ its text. Pure: no IO, no clock (writers add the timestamp).
 """
 from __future__ import annotations
 
+import datetime
+
 import yaml
 
 MAX_TEXT_BYTES = 16384
 MAX_KEYWORDS = 50
+# The most of a refused value an error message shows.
+MAX_ERROR_REPR = 200
+# What a keyword or the generator may be: text, or a number or date YAML parsed.
+_SCALARS = (str, int, float, datetime.date)
 _FENCE = "---"
 _FRONT_MATTER_ENDS = ("---", "...")
 
@@ -20,8 +26,9 @@ def build_intent_entry(text, keywords=None, generator=None) -> dict:
     """The ``intent`` entry: *text* stripped and cut to ``MAX_TEXT_BYTES`` of
     UTF-8 (``truncated: True`` then), *keywords* (a list or tuple, or a
     comma-separated string) stripped and deduplicated case-insensitively, the
-    first spelling kept, at most ``MAX_KEYWORDS``. ValueError on an empty or
-    non-string text and on keywords of any other type."""
+    first spelling kept, at most ``MAX_KEYWORDS``; numbers and dates among
+    them, and a number or date *generator*, become text. ValueError on an
+    empty or non-string text and on keywords or a generator of any other type."""
     text = text.strip() if isinstance(text, str) else ""
     if not text:
         raise ValueError("An intent needs a non-empty text")
@@ -30,7 +37,8 @@ def build_intent_entry(text, keywords=None, generator=None) -> dict:
     kept = _keywords(keywords)
     if kept:
         entry["keywords"] = kept
-    generator = "" if generator is None else str(generator).strip()
+    if generator is not None:
+        generator = _scalar_text(generator, "The intent generator must be a string")
     if generator:
         entry["generator"] = generator
     entry["source"] = "user"
@@ -51,9 +59,7 @@ def parse_intent_file(content):
     for end, line in enumerate(lines[1:], 1):
         if line.strip() in _FRONT_MATTER_ENDS:
             meta = _front_matter("".join(lines[1:end]))
-            keywords = meta.get("keywords")
-            if isinstance(keywords, str):
-                keywords = _comma_list(keywords)
+            keywords = _split_if_text(meta.get("keywords"))
             return "".join(lines[end + 1:]), keywords, meta.get("generator")
     return content, None, None
 
@@ -81,25 +87,33 @@ def _capped_text(text):
 def _keywords(keywords):
     if keywords is None:
         return []
-    if isinstance(keywords, str):
-        keywords = _comma_list(keywords)
-    elif not isinstance(keywords, (list, tuple)):
+    keywords = _split_if_text(keywords)
+    if not isinstance(keywords, (list, tuple)):
         raise ValueError("Intent keywords must be a list or a comma-separated "
-                         f"string, got {keywords!r}")
+                         f"string, got {_short_repr(keywords)}")
     kept, seen = [], set()
     for keyword in keywords:
-        word = _keyword_text(keyword)
+        word = _scalar_text(keyword, "Intent keywords must be strings")
         if word and word.casefold() not in seen:
             seen.add(word.casefold())
             kept.append(word)
     return kept[:MAX_KEYWORDS]
 
 
-def _keyword_text(keyword):
-    if isinstance(keyword, bool) or not isinstance(keyword, (str, int, float)):
-        raise ValueError(f"Intent keywords must be strings, got {keyword!r}")
-    return str(keyword).strip()
+def _scalar_text(value, what):
+    """*value* (see :data:`_SCALARS`) as stripped text; else ValueError(*what*)."""
+    if isinstance(value, bool) or not isinstance(value, _SCALARS):
+        raise ValueError(f"{what}, got {_short_repr(value)}")
+    return str(value).strip()
 
 
-def _comma_list(text):
-    return [part.strip() for part in text.split(",") if part.strip()]
+def _split_if_text(keywords):
+    """A comma-separated keyword string as its list; anything else as is."""
+    if not isinstance(keywords, str):
+        return keywords
+    return [part.strip() for part in keywords.split(",") if part.strip()]
+
+
+def _short_repr(value):
+    shown = repr(value)
+    return shown if len(shown) <= MAX_ERROR_REPR else shown[:MAX_ERROR_REPR - 3] + "..."

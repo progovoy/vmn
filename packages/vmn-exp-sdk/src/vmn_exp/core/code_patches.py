@@ -10,31 +10,57 @@ name>/``), through ``load_file``.
 The result has the shape of ``storage.load``'s patches minus the tarballs:
 ``{"working_tree", "local_commits", "deps": {dep path: {...}}}``, the keys
 present only for the patches found.
+
+A read that comes back empty-handed is checked against the store's listing of
+the record (its own files; a dep's are not listed): a file the store lists
+but cannot read — a backend that answers None for any error, S3 among them —
+is a :class:`CodeReadError`, never taken for one that is not there.
 """
 from vmn_exp.core.code_store import code_storage, stored_code
-from vmn_exp.storage.files import PATCH_FILES, safe_dep_name
+from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES, safe_dep_name
 
 _TEXT_PATCHES = tuple((key, name) for key, name, binary in PATCH_FILES if not binary)
 
 
+class CodeReadError(RuntimeError):
+    """A file the store lists could not be read (a transient failure)."""
+
+
 def code_patch_texts(storage, app_name, key, dep_paths=()):
     """The text patches of *key*'s code object, or None when it is missing
-    or incomplete. *dep_paths* are the run's deps (a code object does not
-    name them); none is read when the object holds no dep patches."""
+    or incomplete (its marker is not listed). *dep_paths* are the run's deps
+    (a code object does not name them); none is read when the object holds
+    no dep patches."""
     summary = stored_code(storage, app_name, key)
     if summary is None:
+        if METADATA_FILE in _listed(code_storage(storage), app_name, key):
+            raise CodeReadError(f"could not read code object {key}")
         return None
     if summary.get("has_dep_patches") is False:
         dep_paths = ()
     return record_patch_texts(code_storage(storage), app_name, key, dep_paths)
 
 
+def unreadable_code_keys(storage, app_name, code_verstr):
+    """The code objects of *code_verstr* whose marker the store lists but
+    cannot read (``find_code_key`` counts them as missing)."""
+    area = code_storage(storage)
+    keys = [key for key in area.list_record_names(app_name)
+            if key.rsplit(".", 1)[0] == code_verstr]
+    listed = area.list_files(app_name, keys=keys) if keys else {}
+    return [key for key in keys if METADATA_FILE in (listed.get(key) or ())
+            and stored_code(storage, app_name, key) is None]
+
+
 def record_patch_texts(storage, app_name, verstr, dep_paths=()):
     """The text patches *storage*'s record *verstr* holds itself."""
-    patches = _texts(storage, app_name, verstr, "")
+    patches, unread = _texts(storage, app_name, verstr, "")
+    failed = sorted(set(unread) & _listed(storage, app_name, verstr)) if unread else ()
+    if failed:
+        raise CodeReadError(f"could not read {', '.join(failed)} of {verstr}")
     deps = {}
     for dep_path in sorted(set(dep_paths)):
-        found = _texts(storage, app_name, verstr, f"deps/{safe_dep_name(dep_path)}/")
+        found, _ = _texts(storage, app_name, verstr, f"deps/{safe_dep_name(dep_path)}/")
         if found:
             deps[dep_path] = found
     if deps:
@@ -57,9 +83,17 @@ def patch_items(patches):
 
 
 def _texts(storage, app_name, verstr, prefix):
-    found = {}
+    """``(texts found, names read as None)`` of the text patches at *prefix*."""
+    found, unread = {}, []
     for key, name in _TEXT_PATCHES:
         data = storage.load_file(app_name, verstr, prefix + name)
-        if data:
+        if data is None:
+            unread.append(prefix + name)
+        elif data:
             found[key] = data.decode("utf-8", errors="replace")
-    return found
+    return found, unread
+
+
+def _listed(storage, app_name, verstr):
+    """The names of the files *storage* lists for its record *verstr*."""
+    return set(storage.list_files(app_name, keys=[verstr]).get(verstr) or ())

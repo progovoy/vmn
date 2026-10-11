@@ -317,6 +317,9 @@ def handle_experiment(vmn_ctx):
         "VMN_SNAPSHOT_METADATA"
     )
     if action in ("create", "run") and not from_snapshot:
+        # A bad intent must fail before the cold start stamps a baseline.
+        if read_intent(args)[1]:
+            return 1
         err = auto_init(vmn_ctx)
         if err:
             return err

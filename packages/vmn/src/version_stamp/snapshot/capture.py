@@ -15,7 +15,7 @@ and uploads nothing but its own records.
 Public:
   - ``SnapshotCapture`` — ``base_version``, ``commit_hash``, ``identity``
     (patches minus the untracked tarball), ``dirty_states``, ``ver_info``,
-    ``diff_hash``; ``code_verstr`` property.
+    ``diff_hash``, ``untracked_paths``; ``code_verstr`` property.
   - ``capture_identity(vcs, status=None) -> (SnapshotCapture, None) |
     (None, error_code)``.
   - ``ensure_code(code_store, vcs, captured) -> (key | None, summary)``.
@@ -36,7 +36,9 @@ class SnapshotCapture:
     """What a snapshot or run records about the code in the tree.
 
     *identity* is what the diff hash and code verstr are computed from: the
-    patches minus the untracked tarball.
+    patches minus the untracked tarball. *untracked_paths* are the repo's
+    untracked files it hashed, sorted (None when they could not be listed),
+    for callers that would otherwise walk the tree again.
     """
 
     base_version: str
@@ -45,6 +47,7 @@ class SnapshotCapture:
     dirty_states: list
     ver_info: dict
     diff_hash: str
+    untracked_paths: list = None
 
     @property
     def code_verstr(self):
@@ -55,16 +58,28 @@ def capture_identity(vcs, status=None):
     """``(SnapshotCapture, None)``, or ``(None, error_code)`` when the app is
     not stamped. *status* is a repo status the caller already has (see
     ``gather_create_data``)."""
+    stats = _listed_untracked(vcs.backend.repo_path)
     base_version, commit_hash, identity, dirty_states, ver_info, err = (
-        gather_create_data(vcs, lightweight=True, status=status)
+        gather_create_data(vcs, lightweight=True, status=status, untracked_stats=stats)
     )
     if err is not None:
         return None, err
     diff_hash = _compute_diff_hash(identity)
+    paths = None if stats is None else sorted(rel for rel, _, _ in stats)
     return (
-        SnapshotCapture(base_version, commit_hash, identity, dirty_states, ver_info, diff_hash),
+        SnapshotCapture(base_version, commit_hash, identity, dirty_states, ver_info,
+                        diff_hash, paths),
         None,
     )
+
+
+def _listed_untracked(repo_path):
+    """The repo's untracked files (``_untracked_stats``), None when listing failed."""
+    try:
+        return untracked._untracked_stats(repo_path)
+    except Exception:
+        VMN_LOGGER.debug("Failed to list untracked files", exc_info=True)
+        return None
 
 
 def ensure_code(code_store, vcs, captured):

@@ -14,6 +14,9 @@ import subprocess
 from vmn_exp.core.writer import get_writer_id
 
 AUTHOR_ENV = "VMN_EXP_AUTHOR"
+# A git that cannot answer ``git config user.email`` by then gives no email:
+# run features capture it under the repo lock.
+GIT_CONFIG_TIMEOUT_SEC = 2
 
 
 def actor_identity(cwd: str | None = None) -> dict:
@@ -22,7 +25,8 @@ def actor_identity(cwd: str | None = None) -> dict:
     Fields:
       writer         — experiment-log writer id (VMN_WRITER_ID / HOSTNAME)
       git_user_email — git config user.email in *cwd* (default: the process
-                       cwd), best-effort (empty on failure)
+                       cwd), best-effort (empty on failure or after
+                       GIT_CONFIG_TIMEOUT_SEC)
       os_user        — $USER / $LOGNAME / os.getlogin(), best-effort
     """
     return {
@@ -32,14 +36,14 @@ def actor_identity(cwd: str | None = None) -> dict:
     }
 
 
-def _git_user_email(cwd: str | None = None) -> str:
+def _git_user_email(cwd: str | None = None, timeout: float = GIT_CONFIG_TIMEOUT_SEC) -> str:
     try:
         result = subprocess.run(
             ["git", "config", "user.email"],
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=timeout,
         )
         return result.stdout.strip()
     except Exception:

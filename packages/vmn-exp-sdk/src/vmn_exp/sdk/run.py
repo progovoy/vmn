@@ -61,6 +61,7 @@ from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
+from vmn_exp.storage.cached_log_merge import finalizing
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
 from vmn_exp.sdk.run_media import RunMedia
@@ -568,8 +569,12 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         """Say what this run is for: markdown *text* (cut at 16 KiB),
         *keywords* (synonyms, the problem's usual names) and the *generator*
         (model id) that wrote it, if any. Matched by similar-run search; the
-        latest intent wins, also on a finished run."""
+        latest intent wins, also on a finished run — nothing ships its log
+        any more, so the entry is synced to the remote at once."""
         self._append(dict(build_intent_entry(text, keywords, generator), timestamp=now_iso()))
+        if self._finished:
+            self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
+                               self.id, get_writer_id())
 
     # -- internals ---------------------------------------------------------
 
@@ -665,7 +670,8 @@ def _system_exit_code(exc):
 
 def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it."""
-    _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
+    with finalizing():
+        _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
 
 
 def install_signal_handlers():
