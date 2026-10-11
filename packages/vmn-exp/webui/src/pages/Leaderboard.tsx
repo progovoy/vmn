@@ -10,6 +10,7 @@ import type { ExperimentRow } from "../types";
 import { PageHead } from "../components/ui";
 import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
+import SimilarSearch from "../components/SimilarSearch";
 import { usePolling } from "../hooks/usePolling";
 import { useLeaderboardRows } from "../hooks/useLeaderboardRows";
 import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
@@ -48,6 +49,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const [brushed, setBrushed] = useState<Set<string> | null>(null);
   // Bumped when a saved view replaces the URL, so the filter bar re-reads it.
   const [filterGen, setFilterGen] = useState(0);
+  // The search box's "similar" mode text; null shows the table.
+  const [similarText, setSimilarText] = useState<string | null>(null);
 
   // Search, branch and the typed query all travel to the server as one query.
   const serverQuery = combineQueries(
@@ -206,35 +209,42 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
             queryError={data.queryError}
             archived={view.archived}
             onArchivedChange={view.setArchived}
+            onSimilarChange={setSimilarText}
           />
 
-          <LeaderboardCharts
-            view={view.chart} onView={view.setChart} rows={chart.rows} label={chart.label}
-            metricCols={cols.metricCols} paramCols={chartParams} schema={schema} onBrush={onBrush}
-            importance={{ ws, app, filter, defaultMetric: sortLabel }}
-          />
+          {similarText !== null ? (
+            <SimilarSearch ws={ws} app={app} text={similarText} />
+          ) : (
+            <>
+              <LeaderboardCharts
+                view={view.chart} onView={view.setChart} rows={chart.rows} label={chart.label}
+                metricCols={cols.metricCols} paramCols={chartParams} schema={schema} onBrush={onBrush}
+                importance={{ ws, app, filter, defaultMetric: sortLabel }}
+              />
 
-          <LeaderboardTable
-            rows={tableRows}
-            layout={cols.layout}
-            sort={sortState}
-            selected={view.selected}
-            flash={flash}
-            onToggle={selection.toggle}
-            onPrefetch={onPrefetch}
-            collapsedOf={collapsedOf}
-            onFold={onFold}
-            hasMore={all.length < data.total}
-            onNearEnd={data.loadMore}
-            visibleRef={data.visibleRef}
-            edits={columnEdits}
-            onFit={setTableWidth}
-          />
-          {rows !== undefined && all.length < data.total && (
-            <div className="load-more">
-              <button onClick={data.loadMore}>Load more ({data.total - all.length} remaining)</button>
-              {data.moreError && <span className="error">{data.moreError}</span>}
-            </div>
+              <LeaderboardTable
+                rows={tableRows}
+                layout={cols.layout}
+                sort={sortState}
+                selected={view.selected}
+                flash={flash}
+                onToggle={selection.toggle}
+                onPrefetch={onPrefetch}
+                collapsedOf={collapsedOf}
+                onFold={onFold}
+                hasMore={all.length < data.total}
+                onNearEnd={data.loadMore}
+                visibleRef={data.visibleRef}
+                edits={columnEdits}
+                onFit={setTableWidth}
+              />
+              {rows !== undefined && all.length < data.total && (
+                <div className="load-more">
+                  <button onClick={data.loadMore}>Load more ({data.total - all.length} remaining)</button>
+                  {data.moreError && <span className="error">{data.moreError}</span>}
+                </div>
+              )}
+            </>
           )}
           <ReportsUsing ws={ws} app={appName} />
           <div className="cli-card">
