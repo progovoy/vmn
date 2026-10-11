@@ -23,6 +23,13 @@ export function branchClause(branch: string): string | null {
   return lit && `branch = ${lit}`;
 }
 
+/** The `?status=` CSV as a server clause (null for no status). Statuses
+ *  are plain words, so double quotes are always a valid literal. */
+export function statusClause(csv = ""): string | null {
+  const statuses = csv.split(",").filter(Boolean);
+  return statuses.length ? `status in (${statuses.map((s) => `"${s}"`).join(", ")})` : null;
+}
+
 /** A typed query and the search clause, ANDed; either may be empty. */
 export function combineQueries(query: string, search: string | null): string {
   const q = query.trim();
