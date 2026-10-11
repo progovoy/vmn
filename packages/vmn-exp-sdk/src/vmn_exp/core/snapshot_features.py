@@ -32,11 +32,10 @@ AUTHOR_ONLY_VERSION = 0
 
 
 def write_features_file(dest, log, exported_by):
-    """Write the exported run's folded features (from its *log*) and *exported_by*."""
-    entries = [e for e in log if isinstance(e, dict) and e.get("type") == "features"]
+    """Write the exported run's features (from its *log*) and *exported_by*."""
     with open(os.path.join(dest, FEATURES_FILE), "w") as f:
-        yaml.safe_dump({"features": fold_features(fold_log(entries)),
-                        "exported_by": exported_by}, f, sort_keys=False)
+        yaml.safe_dump({"features": _run_features(log), "exported_by": exported_by},
+                       f, sort_keys=False)
 
 
 def export_features(tree_dir):
@@ -74,8 +73,14 @@ def _older_export(tree_dir):
         VMN_LOGGER.debug(f"Not reading the features of {path}: it is too large")
         return {}
     exported = _load(path) or {}
-    return {"features": fold_features(fold_log(exported.get("log") or [])),
+    return {"features": _run_features(exported.get("log") or []),
             "exported_by": exported.get("exported_by")}
+
+
+def _run_features(log):
+    """The folded features of a run's *log*, folding its ``features`` entries alone."""
+    return fold_features(fold_log(
+        [e for e in log if isinstance(e, dict) and e.get("type") == "features"]))
 
 
 def _load(path):
