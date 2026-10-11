@@ -279,6 +279,10 @@ def auto_init(vmn_ctx):
             VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
             return 1
 
+    # The init commits and pushes: a CI checkout detached at a remote tip
+    # commits on that branch, as `vmn stamp` does.
+    if repo_missing or app_missing:
+        vcs.ensure_on_branch()
     err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
     return err or None
 

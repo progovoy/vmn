@@ -56,3 +56,17 @@ WORKTREES_NAME_REQUIRED = frozenset({"create", "remove", "freeze"})
 SNAPSHOT_ACTIONS = ("create", "list", "show", "note", "diff", "export", "restore", "delete")
 # Built-in commands' actions that never mutate the checkout, so run lock-free.
 READ_ONLY_ACTIONS = {"snapshot": frozenset({"list", "show", "diff", "export"})}
+
+
+def _release_stamps(args):
+    return bool(getattr(args, "stamp", False))
+
+
+# Built-in commands that create a commit (so need HEAD on a branch), as
+# CommandSpec.commits: True or a callable(args). Plain `release` only tags.
+COMMITTING_COMMANDS = {
+    "stamp": True,
+    "init": True,
+    "init-app": True,
+    "release": _release_stamps,
+}

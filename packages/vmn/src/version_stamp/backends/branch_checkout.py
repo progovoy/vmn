@@ -27,8 +27,8 @@ class GitBranchCheckoutMixin:
         backend's.
         """
         # A detached HEAD keeps the branch state it had before anything moves
-        # (as when the constructor resolved it); a lookup done just now is reused.
-        resolved_now = self.in_detached_head() and not self._branch_state_loaded()
+        # (as when the constructor resolved it); its lookup is reused unless a
+        # ref changed since.
         if self.in_detached_head():
             self._loaded_branch_state()
         checked_out = functools.lru_cache(maxsize=None)(self._checked_out_branches)
@@ -37,7 +37,7 @@ class GitBranchCheckoutMixin:
             return True
 
         hexsha = self._be.head.commit.hexsha
-        refs = self._refs_for(hexsha) if resolved_now else self._refs_containing(hexsha)
+        refs = self._refs_for(hexsha)
         if require_tip and refs[0]:
             VMN_LOGGER.debug(f"Local branches contain detached HEAD {hexsha}")
             return False

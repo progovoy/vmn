@@ -77,6 +77,30 @@ class IVersionsStamper:
         self.name: str = arg_params["name"]
         self.be_type = arg_params["be_type"]
 
+        # root_context means that the user uses vmn in a context of a root app
+        self.root_context = arg_params["root"]
+
+        self.backend, err = get_client(
+            self.vmn_root_path, self.be_type, inherit_env=True, use_ci_hint=True
+        )
+        if err:
+            err_str = f"Failed to create backend {err}. Exiting"
+            VMN_LOGGER.error(err_str)
+            raise RuntimeError(err_str)
+
+        self._load_app()
+
+    def ensure_on_branch(self):
+        """Put a detached HEAD on its branch (commands that commit); reload the
+        app when that changes the branch it belongs to. True when on one."""
+        before = self.backend.logical_branch() if self.name is not None else None
+        on_branch = self.backend.ensure_on_branch(require_tip=True)
+        if self.name is not None and self.backend.logical_branch() != before:
+            self._load_app()
+        return on_branch
+
+    def _load_app(self):
+        """The app's conf and repo state, for the branch HEAD belongs to."""
         # Configuration defaults — AppConf is the single source of truth.
         # Individual attributes remain on self for backward compatibility
         # (tests and external code access self.__dict__).
@@ -98,21 +122,6 @@ class IVersionsStamper:
             },
             "stamping": {"msg": "", "app": {"info": {}}, "root_app": {}},
         }
-
-        # root_context means that the user uses vmn in a context of a root app
-        self.root_context = arg_params["root"]
-
-        self.backend, err = get_client(
-            self.vmn_root_path, self.be_type, inherit_env=True, use_ci_hint=True
-        )
-        if err:
-            err_str = f"Failed to create backend {err}. Exiting"
-            VMN_LOGGER.error(err_str)
-            raise RuntimeError(err_str)
-
-        # Commands that commit need a branch (CI checkouts are detached).
-        if arg_params.get("ensure_branch"):
-            self.backend.ensure_on_branch(require_tip=True)
 
         if self.name is None:
             self.tracked = False

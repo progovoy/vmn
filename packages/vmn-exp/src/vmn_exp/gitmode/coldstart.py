@@ -76,7 +76,7 @@ def cold_start(vcs, status):
 
     # The init commits: a CI checkout detached at a remote tip commits on
     # that branch, as `vmn stamp` does.
-    vcs.backend.ensure_on_branch(require_tip=True)
+    vcs.ensure_on_branch()
     with local_only(vcs.backend):
         err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
     if err:

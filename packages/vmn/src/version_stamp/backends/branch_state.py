@@ -61,9 +61,6 @@ class GitBranchStateMixin:
             return True, self._be.head.commit.hexsha
         return False, self._be.active_branch.name
 
-    def _branch_state_loaded(self):
-        return self._branch_state is not None
-
     def _loaded_branch_state(self):
         if self._branch_state is None:
             name, remote, refs = self._resolve_active_branch(self._head_at_init)
@@ -110,7 +107,8 @@ class GitBranchStateMixin:
             self._loaded_branch_state()
 
     def _refs_for(self, hexsha):
-        """The containment lookup a lazy load just ran for hexsha, else a new one."""
+        """The containment lookup the lazy load ran for hexsha (no ref has
+        changed since), else a new one."""
         if self._resolution_refs and self._resolution_refs[0] == hexsha:
             return self._resolution_refs[1]
         return self._refs_containing(hexsha)
