@@ -1,18 +1,19 @@
 """Read a unified diff (``git diff``) or a ``git format-patch --stdout`` mbox.
 
-``parse_patch(text, prefix="")`` -> ``{"files", "symbols", "commits", "authors"}``,
-in order of appearance with repeats kept (core/features.py dedupes and caps):
-the paths of every ``diff --git`` section (renames: new then old path), a
-``path::name`` per function a change is in and per definition an added or
-removed line makes (:func:`~vmn_exp.core.features_symbols.defined_symbol`).
-A change is in the function its hunk header names (git's funcname: the one
-*above* the hunk's leading context), or in the one a context line before it
-defines, so a 3-line-context patch names what a ``-U0`` one does; a hunk
-whose header names nothing reads no definitions from its context. Each
-message's ``Subject:`` without git's
-``[PATCH n/m]`` and its ``From:`` as ``{"name", "email"}``. Headers are read only
+``parse_patch(text, prefix="", skip_authors=())`` -> ``{"files", "symbols",
+"commits", "authors"}``, in order of appearance with repeats kept
+(core/features.py dedupes and caps): the paths of every ``diff --git`` section
+(renames: new then old path), a ``path::name`` per function a change is in and
+per definition an added or removed line makes
+(:func:`~vmn_exp.core.features_symbols.defined_symbol`), each message's
+``Subject:`` without git's ``[PATCH n/m]`` and its ``From:`` as ``{"name",
+"email"}``. A change is in the function its hunk header names (git's funcname:
+the one *above* the hunk's leading context) or in the one a context line before
+it defines, so a 3-line-context patch names what a ``-U0`` one does; a hunk whose
+header names nothing reads no definitions from its context. Headers are read only
 after an mbox ``From <sha> <date>`` line and until the blank line ending them;
-a cover letter (``[PATCH 0/n]``) is skipped whole. A ``diff --git`` line in a
+a cover letter (``[PATCH 0/n]``) is skipped whole, as is a commit whose ``From:``
+name is one of *skip_authors*. A ``diff --git`` line in a
 commit message (before its ``---`` separator) opens no section unless it
 follows a blank line and an extended header line follows it (a ``--no-stat``
 mbox has no separator); such a section, a diff pasted into the message, is
@@ -45,8 +46,8 @@ _DIFF_GIT = "diff --git "
 _ESCAPES = {"a": 7, "b": 8, "t": 9, "n": 10, "v": 11, "f": 12, "r": 13, '"': 34, "\\": 92}
 
 
-def parse_patch(text: str, prefix: str = "") -> dict:
-    parser = _Parser(prefix)
+def parse_patch(text: str, prefix: str = "", skip_authors=()) -> dict:
+    parser = _Parser(prefix, frozenset(skip_authors))
     # Not splitlines(): it also splits on \f, \x1c-\x1e, \x85, U+2028/9 within a line.
     for line in text.split("\n"):
         parser.feed(line[:-1] if line.endswith("\r") else line)
@@ -55,8 +56,9 @@ def parse_patch(text: str, prefix: str = "") -> dict:
 
 
 class _Parser:
-    def __init__(self, prefix):
+    def __init__(self, prefix, skip_authors):
         self.prefix = prefix.rstrip("/") + "/" if prefix else ""
+        self.skip_authors = skip_authors
         self.out = {"files": [], "symbols": [], "commits": [], "authors": []}
         self.state = "start"
         self.headers = []
@@ -149,21 +151,23 @@ class _Parser:
             self.headers.append(line)
 
     def _read_headers(self):
-        """Record the message's subject and author; False for a cover letter."""
+        """Record the message's subject and author; False for a cover letter
+        or a commit of a skipped author."""
         fields = {}
         for header in self.headers:
             name, _, value = header.partition(":")
             fields.setdefault(name.strip().lower(), value.strip())
         self.headers = []
         subject = " ".join(_decoded(fields.get("subject", "")).split())
-        if _COVER_LETTER.match(subject):
+        name, email = parseaddr(fields.get("from", ""))
+        name = _decoded(name)
+        if _COVER_LETTER.match(subject) or name in self.skip_authors:
             return False
         subject = _SUBJECT_PREFIX.sub("", subject, count=1)
         if subject:
             self.out["commits"].append(subject)
-        name, email = parseaddr(fields.get("from", ""))
         if name or email:
-            self.out["authors"].append({"name": _decoded(name), "email": email})
+            self.out["authors"].append({"name": name, "email": email})
         return True
 
     def _section_line(self, line):

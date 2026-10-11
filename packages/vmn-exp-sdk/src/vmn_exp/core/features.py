@@ -17,18 +17,19 @@ CAPS = {"files": 200, "symbols": 500, "commits": 50, "untracked": 200}
 _PROVENANCE = ("author", "source", "features_version")
 
 
-def features_from_patches(patch_texts) -> dict:
+def features_from_patches(patch_texts, skip_authors=()) -> dict:
     """``{"changed": {"files", "symbols"}, "commits", "commit_authors"}`` of every
     text (deduplicated, capped; ``"truncated": True`` when a cap cut a list).
 
     An item may be a ``(prefix, text)`` pair, putting its paths under *prefix*
-    (a dep's patches); empty items are skipped.
+    (a dep's patches); empty items are skipped. A commit whose ``From:`` name
+    is one of *skip_authors* adds nothing (vmn's own bookkeeping commits).
     """
     found = {"files": [], "symbols": [], "commits": [], "authors": []}
     for item in patch_texts:
         prefix, text = item if isinstance(item, tuple) else ("", item)
         if text and text.strip():
-            for key, values in parse_patch(text, prefix).items():
+            for key, values in parse_patch(text, prefix, skip_authors).items():
                 found[key].extend(values)
     files, cut_files = _capped(_unique(found["files"]), "files")
     symbols, cut_symbols = _capped(_unique(found["symbols"]), "symbols")
