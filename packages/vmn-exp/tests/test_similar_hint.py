@@ -1,6 +1,7 @@
 """The submission hint: once ``vmn-exp create``/``run`` claimed a run, the past
 runs most like it on stderr — only from a warm index cache, within its time
 budget, never for inner runs or when turned off, and never failing the run."""
+import argparse
 import os
 import sys
 
@@ -135,3 +136,27 @@ def test_a_failing_hint_never_fails_the_run(app_layout, capfd, monkeypatch):
     monkeypatch.setattr(similar_hint, "search", broken)
     out = _create(app_layout, capfd)
     assert _hints(out.err) == [] and "index on fire" not in out.err
+
+
+def _never(*args, **kwargs):
+    raise AssertionError("the hint listed the store")
+
+
+def test_the_hint_reads_the_index_cache_and_never_lists_the_store(app_layout, capfd,
+                                                                    monkeypatch):
+    # A remote store's refresh reads on a thread pool that the process exit
+    # waits for, budget or not: the hint must not start one.
+    from vmn_exp.storage.local import LocalSnapshotStorage
+
+    prior = _prior_and_dirty_tree(app_layout)
+    _warm(app_layout)
+    new = extract_dev_verstr(_create(app_layout, capfd, "--no-similar").out)
+    monkeypatch.setattr(LocalSnapshotStorage, "is_remote", lambda self: True)
+    for listing in ("list_record_names", "list_files", "list_snapshots"):
+        monkeypatch.setattr(LocalSnapshotStorage, listing, _never)
+
+    similar_hint.print_hint(_storage(app_layout), app_layout.app_name, new,
+                            argparse.Namespace(), {})
+
+    [line] = _hints(capfd.readouterr().err)
+    assert line.startswith(HEAD + prior)
