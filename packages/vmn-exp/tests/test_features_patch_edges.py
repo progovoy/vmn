@@ -112,6 +112,61 @@ def test_a_removed_double_dash_line_is_no_separator_after_a_pasted_diff(repo):  
     assert "q.sql" in features_from_patches([mbox])["changed"]["files"]
 
 
+# Hunks whose blank context lines git's message cleanup drops: the last one
+# (trailing blank lines) and one of two in a row (runs of blank lines merge).
+CLEANED_HUNKS = {
+    "trailing-blank-context": "@@ -1,3 +1,3 @@ def vendored():\n x = 0\n-y = 1\n+y = 2\n \n",
+    "two-blank-context-lines": "@@ -1,4 +1,4 @@ def vendored():\n x = 0\n \n \n-y = 1\n+y = 2\n",
+}
+
+
+def _port_message(subject, hunk):
+    return (f"{subject}\n\nPort of:\n\ndiff --git a/vendor/fake.py b/vendor/fake.py\n"
+            "index 1111111..2222222 100644\n--- a/vendor/fake.py\n+++ b/vendor/fake.py\n"
+            f"{CLEANED_HUNKS[hunk]}")
+
+
+@pytest.mark.parametrize("flags", [[], ["--notes"], ["--notes", "--no-stat"]],
+                         ids=["diffstat", "notes", "notes-without-diffstat"])
+@pytest.mark.parametrize("hunk", sorted(CLEANED_HUNKS))
+def test_a_message_ending_with_a_pasted_hunk_git_shortened_names_no_file(repo, hunk, flags):  # noqa: F811
+    path, git = repo
+    with open(path / "model.py", "a") as f:
+        f.write("\n\ndef focal_loss(x):\n    return x\n")
+    git("commit", "-qam", _port_message("add focal loss", hunk))
+    git("notes", "add", "-m", "a note", "HEAD")
+    mbox = git("format-patch", "--stdout", *flags, "base..HEAD")
+    assert "\n+y = 2\n---\n" in mbox
+    assert features_from_patches([mbox])["changed"] == {
+        "files": ["model.py"], "symbols": ["model.py::forward", "model.py::focal_loss"]}
+
+
+def test_a_binary_file_s_diffstat_line_also_marks_the_separator(repo):  # noqa: F811
+    path, git = repo
+    _write(path, {"a.bin": bytes(range(256))})
+    git("add", "-A")
+    git("commit", "-qm", _port_message("add data", "trailing-blank-context"))
+    mbox = git("format-patch", "--stdout", "base..HEAD")
+    assert "\n+y = 2\n---\n a.bin | Bin 0 -> 256 bytes\n" in mbox
+    assert features_from_patches([mbox])["changed"] == {"files": ["a.bin"], "symbols": []}
+
+
+def test_a_removed_double_dash_line_ending_a_patch_is_no_separator(repo):  # noqa: F811
+    path, git = repo
+    _write(path, {"q.sql": "select 1;\n--\n"})
+    git("add", "-A")
+    git("commit", "-qm", "sql")
+    git("tag", "-f", "base")
+    _write(path, {"q.sql": "select 1;\n"})
+    git("commit", "-qam", f"drop the trailing comment\n\n{PASTED_DIFF}")
+    _write(path, {"z.py": "z = 1\n"})
+    git("add", "-A")
+    git("commit", "-qm", "add z")
+    mbox = git("format-patch", "--stdout", "--no-stat", "--no-signature", "base..HEAD")
+    assert "\n---\n\nFrom " in mbox
+    assert "q.sql" in features_from_patches([mbox])["changed"]["files"]
+
+
 def test_blank_list_items_are_dropped_from_the_features_entry():
     entry = build_features_entry(
         "capture",

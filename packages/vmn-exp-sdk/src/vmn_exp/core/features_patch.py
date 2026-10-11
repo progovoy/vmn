@@ -11,10 +11,12 @@ a cover letter (``[PATCH 0/n]``) is skipped whole. A ``diff --git`` line in a
 commit message (before its ``---`` separator) opens no section unless it
 follows a blank line and an extended header line follows it (a ``--no-stat``
 mbox has no separator); such a section, a diff pasted into the message, is
-forgotten when a ``---`` line follows outside a hunk (hunk lengths come from
-the ``@@`` counts, so a removed ``--`` line is no separator). Lines end at
-``\n`` only; diff content lines always carry a ``+``/``-``/`` `` prefix, so they
-never look like headers, sections or hunks.
+forgotten at the separator: a ``---`` line outside a hunk (by its ``@@``
+counts), or inside one that lacks only blank context lines git's message
+cleanup drops (as many old as new lines left) when a diffstat or blank
+(``--notes``) line follows; any other ``---`` is a removed ``--`` line. Lines
+end at ``\n`` only; diff content lines always carry a ``+``/``-``/`` `` prefix,
+so they never look like headers, sections or hunks.
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ _HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@(.*)")
 _HUNK_LINE = ("+", "-", " ", "\\", "")  # "": a context line a message cleanup stripped
 _SUBJECT_PREFIX = re.compile(r"^\[[^\]]*\]\s*")
 _COVER_LETTER = re.compile(r"^\[[^\]]*\b0+/\d+\]")
+_DIFFSTAT = re.compile(r" \S.* \| +(?:\d|Bin )")  # a diffstat line
 _EXTENDED_HEADERS = ("index ", "old mode ", "new mode ", "deleted file mode ", "new file mode ",
                      "similarity index ", "dissimilarity index ", "rename from ", "copy from ",
                      "Binary files ", "--- ")
@@ -57,9 +60,12 @@ class _Parser:
         self.quoted = None  # a message's `diff --git` line, until the next line confirms it
         self.after_blank = False
         self.pasted = None  # (files, symbols) counts before a diff pasted in a message
+        self.dashes = False  # a pasted hunk's `---` line, until the next line tells what it is
         self.old_left = self.new_left = 0  # the current hunk's lines still to come
 
     def feed(self, line):
+        if self.dashes:
+            self._after_dashes(line)
         if _MBOX_FROM.match(line):
             self.close()
             self.state, self.headers = "headers", []
@@ -71,8 +77,8 @@ class _Parser:
             pass
         elif line.startswith(_DIFF_GIT):
             self._open_section(line)
-        elif line == "---" and self.pasted and self.old_left <= 0:
-            self._forget_pasted()
+        elif line == "---" and self.pasted:
+            self._pasted_dashes()
         elif self.state == "section":
             self._section_line(line)
         elif self.state == "hunks":
@@ -83,6 +89,23 @@ class _Parser:
         self.section = _section(line[len(_DIFF_GIT):])
         self.state = "section"
         self.old_left = self.new_left = 0
+
+    def _pasted_dashes(self):
+        """A ``---`` line after a pasted diff: the separator, a removed ``--``
+        line, or (cleanup-shortened hunk) whichever the next line tells."""
+        if self.old_left <= 0:
+            self._forget_pasted()
+        elif self.old_left == self.new_left:
+            self.dashes = True
+        else:
+            self._hunk_line("---")
+
+    def _after_dashes(self, line):
+        self.dashes = False
+        if not line or _DIFFSTAT.match(line):
+            self._forget_pasted()
+        else:
+            self._hunk_line("---")
 
     def _forget_pasted(self):
         """The message's separator ends a diff pasted into it: none of it changed."""
@@ -108,7 +131,7 @@ class _Parser:
         if self.state == "headers":
             self._read_headers()
         self._end_header()
-        self.state, self.quoted, self.pasted = "start", None, None
+        self.state, self.quoted, self.pasted, self.dashes = "start", None, None, False
 
     def _header_line(self, line):
         if not line:
