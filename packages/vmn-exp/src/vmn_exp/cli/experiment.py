@@ -27,6 +27,7 @@ from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     dumps,
+    event_log,
     format_metric_lines,
     format_number,
     metrics_schema,
@@ -777,8 +778,9 @@ def experiment_show(vcs, params, storage, args):
         for line in media:
             print(f"    {line}")
 
-    if log:
-        _print_log(log, getattr(args, "full_log", False))
+    events = event_log(log)
+    if events:
+        _print_log(events, getattr(args, "full_log", False))
     if getattr(args, "patch", False):
         print_patch(verstr, metadata, patches, getattr(args, "max_bytes", None))
     return 0

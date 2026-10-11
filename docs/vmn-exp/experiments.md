@@ -554,8 +554,11 @@ vmn-exp show my_app -v @1 --json
 
 `--json` prints one object: the `list --json` row keys plus `base_commit`,
 `format_version`, `has_dep_patches`, `patches` (`{working_tree|local_commits:
-line count}`), `log` (newest 50, or all with `--full-log`), `log_total` and
-`media_counts`.
+line count}`), `log` (newest 50, or all with `--full-log`), `log_total`,
+`media_counts` and `features` (the run's newest features entry at the highest
+`features_version`, or `null`).
+The `features` entry is a fact about the run, not an event, so neither the
+text log nor `log`/`log_total` include it.
 
 ### `compare`
 

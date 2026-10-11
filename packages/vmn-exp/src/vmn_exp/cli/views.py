@@ -3,8 +3,8 @@
 
 A list row is exactly what ``vmn_exp.sdk.reader.list_runs`` returns: the
 index row, its derived status fields and its place in the run tree. ``show
---json`` adds the run's metadata, patch sizes and (the tail of) its log, and
-with ``--patch`` the patch text itself (capped).
+--json`` adds the run's metadata, patch sizes, features and (the tail of) its
+log, and with ``--patch`` the patch text itself (capped).
 Non-finite metrics are written as ``null`` so the output is strict JSON.
 """
 import json
@@ -14,7 +14,7 @@ import sys
 from version_stamp.api import _list_tarball_members
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.code_store import CODE_MISSING
-from vmn_exp.core.log import experiment_row
+from vmn_exp.core.fold import fold_features, fold_log, fold_row
 from vmn_exp.core.media import media_counts
 from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.record_format import record_format_version
@@ -25,6 +25,8 @@ PATCH_TYPES = ("working_tree", "local_commits")
 PATCH_MAX_BYTES = 200000
 # ``show --patch``'s reason for a run whose code is untracked files only.
 UNTRACKED_ONLY = "untracked_only"
+# Log entries that record facts about the run rather than events in it.
+FACT_ENTRY_TYPES = frozenset({"features"})
 
 
 def metrics_schema(vcs):
@@ -138,21 +140,30 @@ def print_patch(verstr, metadata, patches, max_bytes=None):
         print(f"\n[patch truncated at {cap} bytes; raise --max-bytes to see more]")
 
 
+def event_log(log):
+    """*log* without its fact entries (:data:`FACT_ENTRY_TYPES`): what
+    ``show`` lists as the run's log."""
+    return [e for e in log if e.get("type") not in FACT_ENTRY_TYPES]
+
+
 def show_payload(
     idx, metadata, patches, log, run_state, tree, log_tail=None, observed_at=None,
     schema=None,
 ):
     """The ``show --json`` object; *log_tail* keeps only the newest entries.
     *schema* is the app's metrics schema."""
-    run = experiment_row(idx, metadata, log, schema=schema)
+    fold = fold_log(log)
+    run = fold_row(idx, metadata, fold, schema=schema)
     run.update(status_fields(run_state, observed_at=observed_at))
     run.update(tree)
     run["base_commit"] = metadata.get("base_commit")
     run["format_version"] = record_format_version(metadata)
     run["has_dep_patches"] = bool(metadata.get("has_dep_patches"))
     run["patches"] = patch_lines(patches)
-    run["log"] = log[-log_tail:] if log_tail else log
-    run["log_total"] = len(log)
+    events = event_log(log)
+    run["log"] = events[-log_tail:] if log_tail else events
+    run["log_total"] = len(events)
+    run["features"] = fold_features(fold)
     run["media_counts"] = media_counts(log)
     return run
 
