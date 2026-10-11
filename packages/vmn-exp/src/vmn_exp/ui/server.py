@@ -11,7 +11,9 @@ import os
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
+from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.metric_schema import effective_schema
+from vmn_exp.core.similar_search import conf_weights
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.ui import (
@@ -284,6 +286,14 @@ def create_app(
     def _app_schema(ws, app_name):
         """The app's conf.yml metrics schema; none in a store."""
         return {} if _exp_storage_for(ws) else source.metrics_schema(ws, app_name)
+
+    def _similar_weights(ws_name, app_name):
+        """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp
+        similar`` and the SDK reader read them; none in a store."""
+        ws = _experiment_workspace(ws_name)
+        if _exp_storage_for(ws):
+            return None
+        return conf_weights(read_experiment_conf(app_name, ws.path))
 
     def _detail_options(ws, app_name):
         """Refs, edges (and in the background, run states) from the app's snapshot."""
@@ -584,7 +594,8 @@ def create_app(
 
         search_sql = PgRowSearch(search_dsn)
     routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
-    routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment)
+    routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment,
+                            _similar_weights)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 

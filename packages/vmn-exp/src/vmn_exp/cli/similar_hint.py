@@ -9,10 +9,13 @@ persisted it, and there is no hint without one: it never refreshes the index
 — a cold one means reading every record, and the process exit would wait for
 a refresh's reads (a remote store's run on a thread pool), budget or not. Of
 the store it reads only the new run's own record, which the cache predates.
-The budget bounds the work, not just the wait: an index of more than
-:data:`MAX_INDEXED_RUNS` runs (counted, not read) is never loaded, and a
-search still loading at :data:`BUDGET_SEC` prints nothing and stops before
-scoring (it runs on a daemon thread, so nothing waits for it). It is never
+The budget (:data:`BUDGET_SEC`) bounds the work, not just the wait: the hint
+runs on the calling thread, so nothing is left running past it, and the
+search takes it as a deadline it checks while it builds its index and scores
+(:class:`~vmn_exp.core.similar.SimilarDeadlineExceeded`); past it, nothing is
+printed. The steps it cannot interrupt — reading the new run, loading the
+persisted index — are checked between, and an index too big to load within
+the budget is never loaded (:func:`_searchable_in_budget`). It is never
 computed for inner runs (``--parent``, an enclosing run's
 ``VMN_EXPERIMENT_ID``, sweep trials), with ``--no-similar`` or with conf
 ``experiment.similar.hint: false``. Errors are logged at debug and never touch
@@ -21,7 +24,6 @@ refreshed index.
 """
 import os
 import sys
-import threading
 import time
 
 from version_stamp.api import VMN_LOGGER
@@ -32,30 +34,34 @@ from vmn_exp.core.index_snapshot import IndexSnapshot, new_side_tables, put_side
 from vmn_exp.core.index_store import IndexStore
 from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.log import load_log
-from vmn_exp.core.similar import target_from_snapshot
+from vmn_exp.core.similar import SimilarDeadlineExceeded, target_from_snapshot
 from vmn_exp.core.similar_search import conf_schema, conf_weights, hint_enabled, search
 
 BUDGET_SEC = 0.3
-# The most runs an index may hold for the hint to load and search it within
-# the budget (about 0.05 ms a run on a laptop, with headroom); a bigger one
-# would cost the command its time and memory, so it is never loaded.
+# The most runs an index may hold for the hint to load it within the budget
+# (about 0.05 ms a run on a laptop, with headroom): see _searchable_in_budget.
 MAX_INDEXED_RUNS = 4000
 HINT_TOP = 3
 # Set in an enclosing run's children (VMN_EXPERIMENT_ID) and in sweep trials.
 INNER_RUN_ENVS = ("VMN_EXPERIMENT_ID", "VMN_SWEEP_TRIAL")
+# The search's clock (time.monotonic): the deadline handed to it is read off this.
 _clock = time.monotonic
 
 
 def print_hint(storage, app_name, verstr, args, exp_conf):
-    """Print the hint for the new run *verstr*, when wanted and cheap."""
+    """Print the hint for the new run *verstr*, when wanted and found
+    within :data:`BUDGET_SEC`."""
+    deadline = _clock() + BUDGET_SEC
     try:
         if not _wanted(args, exp_conf):
             return
         path = _cache_path(storage, app_name)
         if not _searchable_in_budget(path, app_name):
             return
-        lines = _within_budget(
-            lambda expired: _lines(storage, app_name, verstr, exp_conf, path, expired))
+        lines = _lines(storage, app_name, verstr, exp_conf, path, deadline)
+    except SimilarDeadlineExceeded:
+        VMN_LOGGER.debug("No similar-runs hint: past its time budget")
+        return
     except Exception:
         VMN_LOGGER.debug("No similar-runs hint", exc_info=True)
         return
@@ -65,7 +71,12 @@ def print_hint(storage, app_name, verstr, args, exp_conf):
 
 def _searchable_in_budget(path, app_name):
     """Whether *app_name*'s index is persisted at *path* (warm) with at most
-    :data:`MAX_INDEXED_RUNS` runs; counts them without loading any."""
+    :data:`MAX_INDEXED_RUNS` runs; counts them without loading any.
+
+    The cap exists because loading the persisted index is one read the
+    deadline cannot interrupt, unlike the search after it: an index too big
+    to load within the budget would cost the command its time and memory
+    only to be dropped, so it is never loaded."""
     if not path or not os.path.isfile(path):
         return False
     store = IndexStore(path)
@@ -87,36 +98,23 @@ def _wanted(args, exp_conf):
         os.environ.get(name) for name in INNER_RUN_ENVS)
 
 
-def _within_budget(work):
-    """``work(expired)``'s result when it is done within :data:`BUDGET_SEC`,
-    else None; the Event *expired* is set once nothing waits for it."""
-    started, done, expired = _clock(), [], threading.Event()
-
-    def run():
-        try:
-            done.append(work(expired))
-        except Exception:
-            VMN_LOGGER.debug("Similar-runs hint failed", exc_info=True)
-
-    thread = threading.Thread(target=run, name="vmn-similar-hint", daemon=True)
-    thread.start()
-    thread.join(BUDGET_SEC)
-    expired.set()
-    if thread.is_alive() or not done or _clock() - started > BUDGET_SEC:
-        return None
-    return done[0]
+def _check(deadline):
+    """Raise :class:`SimilarDeadlineExceeded` once *deadline* has passed."""
+    if _clock() >= deadline:
+        raise SimilarDeadlineExceeded
 
 
-def _lines(storage, app_name, verstr, exp_conf, path, expired):
+def _lines(storage, app_name, verstr, exp_conf, path, deadline):
     target = _new_run_target(storage, app_name, verstr)
     if target["row"].get("parent"):
         return None
+    _check(deadline)
     schema = conf_schema(exp_conf)
     snapshot = _cached_snapshot(path, app_name, schema)
-    if expired.is_set():
-        return None
+    _check(deadline)
     items = search(storage, app_name, snapshot, target, schema=schema, top=HINT_TOP,
-                   weights=conf_weights(exp_conf))
+                   weights=conf_weights(exp_conf), deadline=deadline)
+    _check(deadline)
     return hint_lines(items)
 
 

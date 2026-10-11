@@ -26,9 +26,11 @@ function Item({ item, ownApp }: { item: SimilarItem; ownApp: string }) {
   return (
     <li>
       <div className="similar-head">
-        <Link className="mono" to={runHref(`/ws/${item.workspace}/app/${appTag(item.app)}`, item.verstr)}>
+        <Link className="mono" to={runHref(`/ws/${item.workspace}/app/${appTag(item.app)}`, item.verstr)}
+          title={item.verstr}>
           {item.app === ownApp ? label : `${item.app}:${label}`}
         </Link>
+        {item.name && <span className="mono exp-verstr">{item.verstr}</span>}
         <span className="similar-score" title="similarity">{item.score.toFixed(2)}</span>
         <StatusPill status={item.status as RunState} />
         {goal && goal.value !== null && <span className="mono">{`${goal.metric}=${fmtVal(goal.value)}`}</span>}

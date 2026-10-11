@@ -81,18 +81,20 @@ def text_target(context):
 
 
 def search(storage, app_name, snapshot, target, *, schema=None, top=DEFAULT_TOP, query=None,
-           all_apps=False, schema_of=None, weights=None, include_archived=False):
+           all_apps=False, schema_of=None, weights=None, include_archived=False, deadline=None):
     """The *top* runs most like *target*: :func:`item_payload` items, best first.
 
     *snapshot* is *app_name*'s (:func:`app_snapshot` under *schema*); with
     *all_apps* every other app of *storage* joins under ``schema_of(app)``.
-    Raises ``QueryError`` on a bad *query*.
+    Raises ``QueryError`` on a bad *query*, ``SimilarDeadlineExceeded`` when
+    the scoring runs past a *deadline* (:func:`~vmn_exp.core.similar.similar_runs_multi`).
     """
     scopes = [(app_name, snapshot, schema or {})]
     if all_apps:
         scopes += _other_scopes(storage, app_name, schema_of)
     keep = _candidate_filter(scopes, query, include_archived)
-    items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights)
+    items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
+                               deadline=deadline)
     snapshots = {app: snap for app, snap, _ in scopes}
     return [item_payload(item, snapshots[item["app"]]) for item in items]
 
@@ -162,16 +164,26 @@ def item_payload(item, snapshot):
 def intent_excerpt(intent):
     """*intent*'s text cut to :data:`INTENT_EXCERPT_BYTES` of UTF-8 (on a
     character boundary; ``truncated`` when cut, or cut when written), with
-    its ``keywords`` and ``generator``; None without one."""
+    its string ``keywords`` and its ``generator``; None without one. A lone
+    surrogate (only a hand-written log holds one) is no UTF-8: it reads ``?``."""
     if not intent:
         return None
-    excerpt = {key: copy.deepcopy(intent[key]) for key in ("keywords", "generator")
-               if intent.get(key)}
-    raw = str(intent.get("text") or "").encode("utf-8")
+    found = {"keywords": _string_keywords(intent.get("keywords")),
+             "generator": copy.deepcopy(intent.get("generator"))}
+    excerpt = {key: value for key, value in found.items() if value}
+    raw = str(intent.get("text") or "").encode("utf-8", "replace")
     excerpt["text"] = raw[:INTENT_EXCERPT_BYTES].decode("utf-8", "ignore")
     if len(raw) > INTENT_EXCERPT_BYTES or intent.get("truncated"):
         excerpt["truncated"] = True
     return excerpt
+
+
+def _string_keywords(keywords):
+    """The strings of a folded intent's *keywords*: the fold checks only its
+    text, and readers (the web UI) take each keyword for a string."""
+    if not isinstance(keywords, (list, tuple)):
+        return []
+    return [k for k in keywords if isinstance(k, str)]
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,

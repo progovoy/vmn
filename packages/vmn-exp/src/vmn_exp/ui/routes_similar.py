@@ -10,19 +10,22 @@
 - ``GET /api/v1/similar?text=&top=`` — that text over every app of every
   workspace the caller may view, next to ``/api/v1/search``.
 
-Scoring is :mod:`vmn_exp.core.similar`'s. Its inverted index is built once per
-snapshot object, and an app's snapshot is the same object until its index
-moves to a new generation, so requests against an unchanged app reuse it.
-Never the Postgres search rows: they carry no features or intent. Archived
-runs only with ``archived=1``.
+Scoring is :mod:`vmn_exp.core.similar`'s; a run's similar runs are scored
+under its app's conf ``experiment.similar.weights``, as ``vmn-exp similar``
+scores them (a text query scores its text alone). Its inverted
+index is built once per snapshot object, and an app's snapshot is the same
+object until its index moves to a new generation, so requests against an
+unchanged app reuse it. Never the Postgres search rows: they carry no
+features or intent. Archived runs only with ``archived=1``.
 
 Answer: ``{"items": [...], "truncated"}``, each item ``{workspace, app,
 verstr, name, score, reasons, signals, group_size, goal, author, timestamp,
 status, note, intent}`` — ``intent`` the first 2 KB of its text and its
-keywords, or None.
+keywords (:func:`vmn_exp.core.similar_search.intent_excerpt`, the CLI's), or None.
 """
 from fastapi import HTTPException, Request
 from vmn_exp.core.similar import similar_runs_multi, target_from_snapshot
+from vmn_exp.core.similar_search import intent_excerpt as _excerpt
 from vmn_exp.core.status import derive_status
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
@@ -32,28 +35,16 @@ from vmn_exp.ui.routes_search import viewable
 DEFAULT_TOP = 10
 MAX_TOP = 100
 MAX_TEXT_BYTES = 4096
-INTENT_EXCERPT_BYTES = 2048
 
 
-def intent_excerpt(intent, limit=INTENT_EXCERPT_BYTES):
-    """``{"text", "keywords", "truncated"}`` of an intent — its text cut to
-    *limit* UTF-8 bytes on a character boundary, its string keywords — or None."""
-    if not intent:
+def intent_excerpt(intent):
+    """``{"text", "keywords", "truncated"}`` of an intent — the CLI's excerpt
+    (its first 2 KB, its string keywords), every key always there — or None."""
+    excerpt = _excerpt(intent)
+    if excerpt is None:
         return None
-    raw = intent["text"].encode("utf-8")
-    return {
-        "text": raw[:limit].decode("utf-8", "ignore"),
-        "keywords": _string_keywords(intent.get("keywords")),
-        "truncated": len(raw) > limit or bool(intent.get("truncated")),
-    }
-
-
-def _string_keywords(keywords):
-    """The strings of a folded intent's *keywords*: the fold checks only its
-    text, and the web UI renders each keyword as a string."""
-    if not isinstance(keywords, (list, tuple)):
-        return []
-    return [k for k in keywords if isinstance(k, str)]
+    return {"text": excerpt["text"], "keywords": excerpt.get("keywords", []),
+            "truncated": excerpt.get("truncated", False)}
 
 
 def _item(found, snapshot):
@@ -73,14 +64,14 @@ def _unarchived(row):
     return not row.get("archived")
 
 
-def _answer(request, scopes, target, top, archived):
+def _answer(request, scopes, target, top, archived, weights=None):
     """The *top* items most like *target* over *scopes* — ``(workspace, app,
     snapshot, conf schema)`` — keyed by ``(workspace, app)``, so apps of one
-    name in two workspaces stay apart."""
+    name in two workspaces stay apart; *weights* are the conf's overrides."""
     snapshots = {(ws, app): snap for ws, app, snap, _ in scopes}
     found = similar_runs_multi(
         [((ws, app), snap, schema) for ws, app, snap, schema in scopes], target,
-        top=top + 1, rows_filter=None if archived else _unarchived,
+        top=top + 1, rows_filter=None if archived else _unarchived, weights=weights,
     )
     items = [_item(f, snapshots[f["app"]]) for f in found[:top]]
     return json_response({"items": items, "truncated": len(found) > top}, request=request)
@@ -103,11 +94,12 @@ def _text_target(text):
             "text": text, "text_only": True}
 
 
-def register(app, prefix, app_inputs, scopes_of, segment):
+def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
     """Add the routes; *app_inputs(ws_name, app_tag)* → ``(app_name,
     snapshot, conf schema)``, *scopes_of(ws_names)* yields ``(ws_name,
     app_name, snapshot, conf schema)`` of every app of those workspaces,
-    *segment(verstr)* returns a URL verstr or raises a 400."""
+    *segment(verstr)* returns a URL verstr or raises a 400,
+    *weights_of(ws_name, app_name)* the app's conf weight overrides or None."""
 
     def scopes(ws_name, app_name, snapshot, schema, all_apps):
         return list(scopes_of([ws_name])) if all_apps else [(ws_name, app_name, snapshot, schema)]
@@ -123,7 +115,7 @@ def register(app, prefix, app_inputs, scopes_of, segment):
             raise HTTPException(404, f"{verstr} is not a run of {app_name}")
         target = target_from_snapshot(snapshot, verstr, app=(ws_name, app_name))
         return _answer(request, scopes(ws_name, app_name, snapshot, schema, all_apps),
-                       target, top, archived)
+                       target, top, archived, weights_of(ws_name, app_name))
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/similar",
              dependencies=[require(VIEWER)])

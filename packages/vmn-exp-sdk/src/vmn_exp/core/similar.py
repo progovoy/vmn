@@ -23,12 +23,20 @@ the group's goal metric (:func:`goal_metric`), else the most similar — a
 container (a run with inner runs) only when the group holds nothing else;
 ``group_size`` counts them.
 Items sort by score, then newest, then verstr. Scores are never stored:
-they change with every new run. Pure: no storage.
+they change with every new run. A *deadline* (a :func:`time.monotonic`
+value) bounds the work: past it, building the index or scoring raises
+:class:`SimilarDeadlineExceeded`. Pure: no storage.
 """
 from collections import Counter
 
 from vmn_exp.core.metric_schema import effective_schema, metric_goal
-from vmn_exp.core.similar_index import index_for, run_command, side_tables
+from vmn_exp.core.similar_index import (  # noqa: F401  (SimilarDeadlineExceeded: re-exported)
+    SimilarDeadlineExceeded,
+    check_deadline,
+    index_for,
+    run_command,
+    side_tables,
+)
 from vmn_exp.core.similar_profile import build_profile, objective_names, profile_tokens
 from vmn_exp.core.similar_score import score
 from vmn_exp.core.similar_text import query_weights, shared_reason
@@ -98,8 +106,8 @@ class _Query:
 class _Scope:
     """One app's candidates for a query, with their raw BM25 text scores."""
 
-    def __init__(self, app, snapshot, schema, query, rows_filter):
-        self.app, self.index = app, index_for(snapshot)
+    def __init__(self, app, snapshot, schema, query, rows_filter, deadline=None):
+        self.app, self.index, self._deadline = app, index_for(snapshot, deadline), deadline
         declared = getattr(snapshot, "declared_schema", None)
         self.schema = effective_schema(schema, declared() if declared else {})
         excluded = query.exclusion(self.index) if query.app in (None, app) else None
@@ -112,7 +120,8 @@ class _Scope:
         self.candidates = self.index.candidates(query.tokens, keep=keep)
         self.text_raw = {}
         if query.weights:
-            for verstr in self.candidates:
+            for done, verstr in enumerate(self.candidates):
+                check_deadline(deadline, done)
                 p = self.index.profile(verstr)
                 if p.length:
                     self.text_raw[verstr] = self.index.bm25.score(query.weights, p.terms, p.length)
@@ -130,7 +139,8 @@ class _Scope:
         """Item drafts (``app``, ``verstr``, ``score``, ``reasons``,
         ``signals``, the shared ``row``) of the candidates scoring above 0."""
         out = []
-        for verstr in self.candidates:
+        for done, verstr in enumerate(self.candidates):
+            check_deadline(self._deadline, done)
             text, reason = self._text(query, verstr, best)
             if query.text_only:
                 total, reasons, signals = text or 0.0, [reason] if reason else [], {"text": text}
@@ -186,12 +196,14 @@ def _timestamp(row):
     return stamp if isinstance(stamp, str) else ""
 
 
-def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None):
+def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None,
+                       deadline=None):
     """The *top* runs most similar to *target* over *scopes* — ``[(app,
     snapshot, schema)]``, *schema* being that app's conf metrics schema (the
     runs' declared goals are merged in). Text scores are normalised by the
     best candidate over all scopes. *rows_filter(row)* keeps a candidate's
     snapshot row; *weights* override :data:`~vmn_exp.core.similar_score.DEFAULT_WEIGHTS`.
+    Raises :class:`SimilarDeadlineExceeded` once past a *deadline*.
 
     Items: ``{"app", "verstr", "score", "reasons", "signals", "group_size",
     "goal": {"metric", "goal", "value"} | None, "row"}`` (``row`` a copy).
@@ -199,14 +211,15 @@ def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None
     query = _Query(target)
     if not query.tokens:
         return []
-    prepared = [_Scope(app, snapshot, schema, query, rows_filter)
+    prepared = [_Scope(app, snapshot, schema, query, rows_filter, deadline)
                 for app, snapshot, schema in scopes]
     best = max((raw for scope in prepared for raw in scope.text_raw.values()), default=0.0)
     items = [item for scope in prepared for item in scope.items(query, best, weights)]
     return _ordered(items)[:top]
 
 
-def similar_runs(snapshot, target, *, top=10, rows_filter=None, schema=None, weights=None, app=None):
+def similar_runs(snapshot, target, *, top=10, rows_filter=None, schema=None, weights=None, app=None,
+                 deadline=None):
     """:func:`similar_runs_multi` over one app's *snapshot*."""
     return similar_runs_multi([(app, snapshot, schema)], target, top=top,
-                              rows_filter=rows_filter, weights=weights)
+                              rows_filter=rows_filter, weights=weights, deadline=deadline)

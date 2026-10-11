@@ -16,17 +16,39 @@ lives (snapshots are immutable; the experiment index swaps in a new one per
 generation). The snapshot is duck-typed: ``.rows``, and when it has them
 ``.features_of``/``.intent_of``/``.hypothesis_of(verstr)``, ``.run_states``
 and ``.create_notes``. Pure: no storage.
+
+A search may carry a *deadline* (a :func:`time.monotonic` value): the build
+and the scoring look at the clock every :data:`DEADLINE_CHECK_EVERY` rows or
+candidates and raise :class:`SimilarDeadlineExceeded` past it — an
+interrupted build caches nothing.
 """
 import threading
+import time
 import weakref
 
 from vmn_exp.core.similar_profile import build_profile, profile_tokens
 from vmn_exp.core.similar_text import Bm25
 
 CANDIDATE_CAP = 5000
+# Rows indexed or candidates scored between two looks at a deadline: a look
+# is a clock read, and a search overruns its deadline by at most this much work.
+DEADLINE_CHECK_EVERY = 32
+_clock = time.monotonic
 
 _CACHE = weakref.WeakKeyDictionary()
 _CACHE_LOCK = threading.Lock()
+
+
+class SimilarDeadlineExceeded(Exception):
+    """A similar-runs search ran past its deadline."""
+
+
+def check_deadline(deadline, done):
+    """Raise :class:`SimilarDeadlineExceeded` when *deadline* has passed —
+    looked at once every :data:`DEADLINE_CHECK_EVERY` units of work, *done*
+    counting them; never without a *deadline*."""
+    if deadline is not None and done % DEADLINE_CHECK_EVERY == 0 and _clock() >= deadline:
+        raise SimilarDeadlineExceeded
 
 
 def _none(_verstr):
@@ -73,13 +95,14 @@ def _tree_roots(rows):
 
 
 class SimilarIndex:
-    def __init__(self, snapshot):
+    def __init__(self, snapshot, deadline=None):
         features_of, intent_of, hypothesis_of = side_tables(snapshot)
         notes = getattr(snapshot, "create_notes", None) or {}
         self._rows, self._profiles, self._postings = {}, {}, {}
         self.parents = set()
         docs = length = 0
-        for row in snapshot.rows:
+        for done, row in enumerate(snapshot.rows):
+            check_deadline(deadline, done)
             verstr = row["verstr"]
             profile = build_profile(
                 row, features_of(verstr), intent_of(verstr), hypothesis_of(verstr),
@@ -142,15 +165,16 @@ class SimilarIndex:
         return list(chosen)
 
 
-def index_for(snapshot):
-    """The :class:`SimilarIndex` of *snapshot*, built on first use."""
+def index_for(snapshot, deadline=None):
+    """The :class:`SimilarIndex` of *snapshot*, built on first use (by
+    *deadline*, when given)."""
     try:
         with _CACHE_LOCK:
             found = _CACHE.get(snapshot)
     except TypeError:  # neither hashable nor weak-referenceable: no caching
-        return SimilarIndex(snapshot)
+        return SimilarIndex(snapshot, deadline)
     if found is None:
-        found = SimilarIndex(snapshot)
+        found = SimilarIndex(snapshot, deadline)
         with _CACHE_LOCK:
             _CACHE[snapshot] = found
     return found
