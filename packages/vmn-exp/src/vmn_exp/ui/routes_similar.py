@@ -37,15 +37,23 @@ INTENT_EXCERPT_BYTES = 2048
 
 def intent_excerpt(intent, limit=INTENT_EXCERPT_BYTES):
     """``{"text", "keywords", "truncated"}`` of an intent — its text cut to
-    *limit* UTF-8 bytes on a character boundary — or None."""
+    *limit* UTF-8 bytes on a character boundary, its string keywords — or None."""
     if not intent:
         return None
     raw = intent["text"].encode("utf-8")
     return {
         "text": raw[:limit].decode("utf-8", "ignore"),
-        "keywords": intent.get("keywords") or [],
+        "keywords": _string_keywords(intent.get("keywords")),
         "truncated": len(raw) > limit or bool(intent.get("truncated")),
     }
+
+
+def _string_keywords(keywords):
+    """The strings of a folded intent's *keywords*: the fold checks only its
+    text, and the web UI renders each keyword as a string."""
+    if not isinstance(keywords, (list, tuple)):
+        return []
+    return [k for k in keywords if isinstance(k, str)]
 
 
 def _item(found, snapshot):
