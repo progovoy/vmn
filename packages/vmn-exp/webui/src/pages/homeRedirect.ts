@@ -5,7 +5,7 @@ import type { AppRow, Workspace } from "../types";
 
 export type HomeDecision = { to: string } | "wait" | null;
 
-/** A same-origin path, never `//host` or `/\\host` (both read as another origin). */
+/** A same-origin path, never `//host` or `/\host` (both read as another origin). */
 export function validReturnTo(value: string | null): string | null {
   return value && /^\/(?![/\\])/.test(value) ? value : null;
 }
