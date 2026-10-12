@@ -1136,15 +1136,14 @@ truncated: true                            # only when a cap cut a list
   `.gitattributes`) names for it: the nearest line above it in the old file
   that starts with a letter, `_` or `$`. That is a def or class, but also an
   `if __name__` block, a module constant or a text file's prose, and never a
-  method or a nested def (a method's edits all name its class). A hunk starts
-  with its header's name and each such context or removed line moves it for
-  the changes below, so `git diff`'s 3 context lines name what `-U0`
-  (`import-mlflow --repo`) does. With a driver such as
-  `diff=python`, `-U0` names what the driver picks (methods, not
-  `if __name__` blocks), which can differ. Not handled yet: a hunk at the top
-  of a file, or with only blank, indented or comment lines above it, gets no
-  function (`-U0` names, e.g., the file's first function); it records only
-  the definitions it adds or removes.
+  method or a nested def (a method's edits all name its class), read as git
+  prints it: its first 80 bytes, up to its first byte that is not UTF-8. A
+  hunk starts with its header's name (none at the top of a file, or with only
+  blank, indented or comment lines above it) and each such context or removed
+  line moves it for the changes below, so `git diff`'s 3 context lines name
+  what `-U0` (`import-mlflow --repo`) does, e.g. the function a file starts
+  with. With a driver such as `diff=python`, `-U0` names what the driver picks
+  (methods, not `if __name__` blocks), which can differ.
 - The fold keeps the entry with the highest `features_version`, then the
   latest. `show` leaves it out of the log; `show --json` gives it as
   `features`.
