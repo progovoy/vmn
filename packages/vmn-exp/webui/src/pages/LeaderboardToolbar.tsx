@@ -3,13 +3,15 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
 import LiveToggle from "../components/LiveToggle";
 import SavedViews from "../components/SavedViews";
+import { usePageScope } from "../shell/usePageScope";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import type { useBoardSelection } from "../hooks/useBoardSelection";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 
 /** The bar above the leaderboard: live toggle, selection actions, saved
- *  views, the create button and the column picker. */
+ *  views, the create button (only where a run can be created) and the column
+ *  picker. */
 export default function LeaderboardToolbar({
   ws, app, base, view, cols, selection, total, live, onLive, onViewApplied, onResetColumns,
 }: {
@@ -29,6 +31,8 @@ export default function LeaderboardToolbar({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const scope = usePageScope(ws);
+  const canCreate = !scope.readOnly && scope.isGit;
   const onMoveColumn = useCallback(
     (key: string, delta: number) => view.moveColumn(key, delta, cols.defaultKeys),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -50,7 +54,7 @@ export default function LeaderboardToolbar({
         onSelectAll={selection.selectAll}
         onArchive={selection.archive}
       />
-      {!view.creating && <button onClick={() => view.openCreate(true)}>+ New experiment</button>}
+      {canCreate && !view.creating && <button onClick={() => view.openCreate(true)}>New run</button>}
       <SavedViews
         ws={ws} app={app} search={location.search}
         onApply={(search) => { navigate({ search }, { replace: true }); onViewApplied(); }}

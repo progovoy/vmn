@@ -9,7 +9,7 @@ import RunPicker from "../components/RunPicker";
 
 function DiffView({ text }: { text: string }) {
   if (!text.trim())
-    return <div className="empty">The two experiments have identical code.</div>;
+    return <div className="empty">The two runs have identical code.</div>;
   return (
     <div className="diff">
       <pre>
@@ -57,7 +57,7 @@ export default function Compare() {
       </Link>
       <PageHead title="Code diff" mono={false} />
       <p className="page-sub">
-        metric delta and the real source diff between two experiments
+        metric delta and the real source diff between two runs
       </p>
 
       <div className="toolbar" style={{ marginBottom: 18 }}>

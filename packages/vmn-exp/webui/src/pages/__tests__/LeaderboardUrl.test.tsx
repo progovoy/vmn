@@ -108,7 +108,7 @@ describe("leaderboard view state lives in the URL", () => {
 
   it("opening the create form keeps the other params", async () => {
     renderBoard("/ws/test/app/my-app?status=running&sort=loss&order=asc");
-    fireEvent.click(await screen.findByRole("button", { name: "+ New experiment" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New run" }));
     await screen.findByText("new-form");
     expect(urlParams().get("new")).toBe("1");
     expect(urlParams().get("status")).toBe("running");
