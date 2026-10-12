@@ -95,7 +95,7 @@ function headInfo(id: string, layout: RowLayout): { label: ReactNode; sort: stri
 }
 
 const HEAD_CLASS: Record<string, string> = {
-  check: "check-cell", idx: "num", experiment: "exp-head", when: "num when-head",
+  check: "check-cell", idx: "num", status: "status-col-head", experiment: "exp-head", when: "num when-head",
 };
 const headClass = (id: string) =>
   HEAD_CLASS[id] ?? (id.startsWith("c:") && id !== "c:tags" && id !== "c:comments" ? "num fleet-head" : id.startsWith("p:") ? "param-head" : "");

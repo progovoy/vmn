@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
 import { useEscapeKey } from "../hooks/useEscapeKey";
+import { useOffsetHeight } from "../hooks/useOffsetHeight";
 import { MAX_COMPARE_RUNS } from "./compareRunsData";
 
 const plural = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
 const selParams = (verstrs: string[]) => verstrs.map((v) => `sel=${encodeURIComponent(v)}`).join("&");
+/** Room under the last rows beyond the bar itself: its 24px bottom offset and a 12px gap. */
+const BAR_ROOM_PX = 36;
 
 /** The bar floating at the bottom centre while runs are selected (Monday.com
  *  style): the count, what can be done with the runs — diff, compare,
@@ -29,6 +32,8 @@ export default function LeaderboardSelectionBar({
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState<ArchiveVerb | null>(null);
   const n = selected.length;
+  const barRef = useRef<HTMLDivElement>(null);
+  const barHeight = useOffsetHeight(barRef, n > 0);
   useEscapeKey(n > 0, onClear);
   if (n === 0) return null;
 
@@ -38,9 +43,12 @@ export default function LeaderboardSelectionBar({
 
   return (
     <>
-      {/* Room under the last rows, so the bar never covers them. */}
-      <div className="sel-bar-spacer" aria-hidden />
-      <div className="sel-bar" role="region" aria-label="Selection">
+      {/* Room under the last rows, so the bar never covers them, wrapped or not. */}
+      <div
+        className="sel-bar-spacer" aria-hidden
+        style={barHeight === null ? undefined : { height: barHeight + BAR_ROOM_PX }}
+      />
+      <div ref={barRef} className="sel-bar" role="region" aria-label="Selection">
         <span className="sel-badge" aria-hidden>{n}</span>
         <span className="sel-label" aria-hidden>{n === 1 ? "run" : "runs"} selected</span>
         <span className="sr-only" role="status">{n} selected</span>
