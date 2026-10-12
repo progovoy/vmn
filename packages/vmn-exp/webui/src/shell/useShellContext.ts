@@ -39,6 +39,7 @@ export function useShellContext(): ShellContext {
     appTag,
     app,
     appBase: ws && app ? appHref(ws, app) : undefined,
+    wide: Boolean(handle?.wide),
     override,
   };
 }

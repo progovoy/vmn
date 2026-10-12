@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { appTag } from "../http";
 import { runLineage } from "../apiRun";
 import type { Lineage, LineageDataset, LineageLink, LineageModel, LineageNode } from "../apiRun";
 import type { RunState } from "../types";
-import { modelHref, runHref } from "../util";
+import { appHref, modelHref, runHref } from "../util";
 import StatusPill from "./StatusPill";
 
 const DEPTHS = [1, 2, 3];
@@ -21,7 +20,7 @@ function NodeLabel({ ws, node, ownApp }: { ws: string; node: LineageNode; ownApp
     );
   }
   return (
-    <Link className="mono" to={runHref(`/ws/${ws}/app/${appTag(node.app)}`, node.verstr)}>
+    <Link className="mono" to={runHref(appHref(ws, node.app), node.verstr)}>
       {text}
     </Link>
   );

@@ -36,6 +36,7 @@ function renderAt(path: string) {
         { path: "tokens", element: null, handle: { id: "tokens" } },
         { path: "ws/:ws", element: null, handle: { id: "apps" } },
         { path: "ws/:ws/app/:app", element: null, handle: { id: "experiments" } },
+        { path: "ws/:ws/app/:app/overlay", element: null, handle: { id: "overlay", wide: true } },
         { path: "ws/:ws/missing", element: <Overrides />, handle: { id: "apps" } },
         { path: "bare", element: null },
       ],
@@ -64,6 +65,18 @@ describe("useShellContext", () => {
     });
     expect(seen!.params.app).toBe("root-svc");
     expect(seen!.search.get("q")).toBe("lr>1");
+  });
+
+  it("says whether the deepest route asks for the full content width", async () => {
+    renderAt("/ws/ml-repo/app/root-svc/overlay");
+    await waitFor(() => expect(seen?.workspace?.name).toBe("ml-repo"));
+    expect(seen!.wide).toBe(true);
+  });
+
+  it("is not wide on a route without the flag", async () => {
+    renderAt("/ws/ml-repo/app/root-svc");
+    await waitFor(() => expect(seen?.workspace?.name).toBe("ml-repo"));
+    expect(seen!.wide).toBe(false);
   });
 
   it("remembers a known workspace from the URL", async () => {

@@ -55,6 +55,8 @@ export interface ShellContext extends PageScope {
   appTag?: string; app?: string;
   /** `/ws/${ws}/app/${appTag}` */
   appBase?: string;
+  /** Whether the deepest route asks for the full content width. */
+  wide?: boolean;
   override: "not-found" | "sign-in" | null;
 }
 

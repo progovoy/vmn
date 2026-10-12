@@ -104,6 +104,17 @@ describe("AppSwitcher", () => {
     expect(second).toHaveFocus();
   });
 
+  it("jumps to the first and last items with Home and End", async () => {
+    renderSwitcher({ ws: "ml-repo", app: "ml_app" });
+    fireEvent.click(screen.getByRole("button", { name: "ml_app" }));
+    const first = await screen.findByRole("menuitem", { name: "ml_app" });
+    const last = screen.getByRole("menuitem", { name: "root/svc" });
+    fireEvent.keyDown(first, { key: "End" });
+    expect(last).toHaveFocus();
+    fireEvent.keyDown(last, { key: "Home" });
+    expect(first).toHaveFocus();
+  });
+
   it("navigates, closes and calls onNavigate on a pick", async () => {
     const onNavigate = vi.fn();
     const router = renderSwitcher({ ws: "ml-repo", app: "ml_app", onNavigate });

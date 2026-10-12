@@ -2,11 +2,10 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
-import { appTag } from "../http";
 import { runSimilar } from "../apiSimilar";
 import type { SimilarItem, SimilarRuns as SimilarPayload } from "../apiSimilar";
 import type { RunState } from "../types";
-import { fmtVal, relTime, runHref } from "../util";
+import { appHref, fmtVal, relTime, runHref } from "../util";
 import LazyMount from "./LazyMount";
 import StatusPill from "./StatusPill";
 
@@ -26,7 +25,7 @@ function Item({ item, ownApp }: { item: SimilarItem; ownApp: string }) {
   return (
     <li>
       <div className="similar-head">
-        <Link className="mono" to={runHref(`/ws/${item.workspace}/app/${appTag(item.app)}`, item.verstr)}
+        <Link className="mono" to={runHref(appHref(item.workspace, item.app), item.verstr)}
           title={item.verstr}>
           {item.app === ownApp ? label : `${item.app}:${label}`}
         </Link>

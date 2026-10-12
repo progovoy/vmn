@@ -2,11 +2,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { appTag } from "../api";
 import { runLineage } from "../apiRun";
 import type { HttpError } from "../http";
 import type { ExperimentDetail } from "../types";
-import { fmtParam, fmtVal } from "../util";
+import { appHref, fmtParam, fmtVal, runHref } from "../util";
 import MediaImages from "../components/MediaImages";
 import MediaTable from "../components/MediaTable";
 import RunHistograms from "../components/RunHistograms";
@@ -46,7 +45,7 @@ function RunCard({ ws, app, detail }: { ws: string; app: string; detail: Experim
   return (
     <div className="panel-run-card">
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <Link className="mono" to={`/ws/${ws}/app/${appTag(app)}/run/${encodeURIComponent(verstr)}`}>{verstr}</Link>
+        <Link className="mono" to={runHref(appHref(ws, app), verstr)}>{verstr}</Link>
         {detail.status && (
           <StatusPill status={detail.status.status} exitCode={detail.status.exit_code}
             durationSec={detail.status.duration_sec} staleSec={detail.status.stale_sec} />

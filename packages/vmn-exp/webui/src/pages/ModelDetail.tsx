@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { appTag } from "../api";
 import { apiModels } from "../apiModels";
 import type { ModelVersion, AuditEntry } from "../apiModels";
-import { relTime } from "../util";
+import { appHref, relTime, runHref } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import VersionLineagePanel from "../components/VersionLineage";
 import NotFound from "../components/shell/NotFound";
@@ -79,8 +78,7 @@ function VersionRow({
   ws: string;
   onMoveAlias: (alias: string, currentVersion: number) => void;
 }) {
-  const runHref =
-    `/ws/${ws}/app/${appTag(version.run.app)}/run/${encodeURIComponent(version.run.verstr)}`;
+  const runUrl = runHref(appHref(ws, version.run.app), version.run.verstr);
 
   return (
     <tr>
@@ -89,7 +87,7 @@ function VersionRow({
         <span className={`badge status-${version.status}`}>{version.status}</span>
       </td>
       <td>
-        <Link className="mono" to={runHref}>{version.run.verstr}</Link>
+        <Link className="mono" to={runUrl}>{version.run.verstr}</Link>
         <span style={{ color: "var(--text-3)", fontSize: 12, marginLeft: 4 }}>
           {version.run.app}
         </span>
