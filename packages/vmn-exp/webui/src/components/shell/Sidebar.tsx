@@ -104,7 +104,10 @@ export default function Sidebar({ ctx, onNavigate, footExtra }: {
   const [app, ...rest] = navModel(ctx);
   return (
     <>
-      <Link to="/" state={{ home: true }} className="sidebar-brand" onClick={onNavigate}>
+      <Link
+        to="/" className="sidebar-brand" onClick={onNavigate}
+        state={onNavigate ? { home: true, focusMain: true } : { home: true }}
+      >
         <span className="logo" aria-hidden="true">v</span>
         <span className="word">vmn<span>-exp</span></span>
       </Link>

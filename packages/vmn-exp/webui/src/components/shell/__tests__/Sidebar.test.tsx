@@ -187,6 +187,20 @@ describe("Sidebar", () => {
     expect(onNavigate).toHaveBeenCalled();
   });
 
+  it("passes focusMain from the wordmark, the select and the app menu in the drawer", async () => {
+    const onNavigate = vi.fn();
+    const router = renderAt("/ws/ml-repo/app/ml_app", { onNavigate });
+    fireEvent.click(await screen.findByRole("button", { name: "ml_app" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "ml_app" }));
+    expect(router.state.location.state).toEqual({ focusMain: true });
+    await waitFor(() => expect(wsSelect().value).toBe("ml-repo"));
+    fireEvent.change(wsSelect(), { target: { value: "team" } });
+    expect(router.state.location.state).toEqual({ focusMain: true });
+    fireEvent.click(screen.getByRole("link", { name: "vmn-exp" }));
+    expect(router.state.location.state).toEqual({ home: true, focusMain: true });
+    expect(onNavigate).toHaveBeenCalledTimes(3);
+  });
+
   it("passes no state on desktop", async () => {
     const router = renderAt("/ws/ml-repo/app/ml_app");
     fireEvent.click(await screen.findByRole("link", { name: "Models" }));

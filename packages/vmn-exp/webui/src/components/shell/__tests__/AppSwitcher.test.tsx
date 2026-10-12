@@ -114,6 +114,34 @@ describe("AppSwitcher", () => {
     expect(onNavigate).toHaveBeenCalled();
   });
 
+  it("passes no state from a pick on desktop", async () => {
+    const router = renderSwitcher({ ws: "ml-repo", app: "ml_app" });
+    fireEvent.click(screen.getByRole("button", { name: "ml_app" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "root/svc" }));
+    expect(router.state.location.state).toBeNull();
+  });
+
+  it("closes when Tab leaves the menu", async () => {
+    renderSwitcher({ ws: "ml-repo", app: "ml_app" });
+    fireEvent.click(screen.getByRole("button", { name: "ml_app" }));
+    const first = await screen.findByRole("menuitem", { name: "ml_app" });
+    fireEvent.keyDown(first, { key: "Tab" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("closes when the page scrolls or resizes under the fixed menu, not when the menu scrolls", async () => {
+    renderSwitcher({ ws: "ml-repo", app: "ml_app" });
+    const button = screen.getByRole("button", { name: "ml_app" });
+    fireEvent.click(button);
+    fireEvent.scroll(await screen.findByRole("menu"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.scroll(document);
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(button);
+    fireEvent(window, new Event("resize"));
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("says so when the workspace has no apps", async () => {
     apps.mockResolvedValue([]);
     renderSwitcher({ ws: "ml-repo" });

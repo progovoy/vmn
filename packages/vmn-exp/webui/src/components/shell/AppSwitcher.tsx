@@ -8,8 +8,8 @@ import { useDismiss } from "../../hooks/useDismiss";
 import { useApps } from "../../queries";
 import { Icon } from "./icons";
 
-function AppMenu({ ws, app, style, onPick }: {
-  ws: string; app?: string; style: CSSProperties; onPick: () => void;
+function AppMenu({ ws, app, style, onPick, onClose, drawer }: {
+  ws: string; app?: string; style: CSSProperties; onPick: () => void; onClose: () => void; drawer: boolean;
 }) {
   const apps = useApps(ws).data;
   const menuRef = useRef<HTMLDivElement>(null);
@@ -20,7 +20,20 @@ function AppMenu({ ws, app, style, onPick }: {
     (menu?.querySelector<HTMLElement>("[aria-current=page]") ?? menu?.querySelector<HTMLElement>("[role=menuitem]"))
       ?.focus();
   }, [loaded]);
+  // The menu is fixed at the button's old rect: close it once that moves.
+  useEffect(() => {
+    const onMove = (e: Event) => {
+      if (!(e.target instanceof Node && menuRef.current?.contains(e.target))) onClose();
+    };
+    document.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      document.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  }, [onClose]);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Tab") return onClose();
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]"));
@@ -36,6 +49,7 @@ function AppMenu({ ws, app, style, onPick }: {
           key={a.name} role="menuitem" className="app-menu-item mono"
           to={`/ws/${ws}/app/${appTag(a.name)}`}
           aria-current={a.name === app ? "page" : undefined}
+          state={drawer ? { focusMain: true } : undefined}
           onClick={onPick}
         >
           {a.name}
@@ -76,7 +90,9 @@ export default function AppSwitcher({ ws, app, onNavigate }: {
         <span className="app-switch-name">{app ?? "choose app"}</span>
         <Icon name="chevron-down" />
       </button>
-      {open && ws && <AppMenu ws={ws} app={app} style={style} onPick={pick} />}
+      {open && ws && (
+        <AppMenu ws={ws} app={app} style={style} onPick={pick} onClose={close} drawer={Boolean(onNavigate)} />
+      )}
     </div>
   );
 }
