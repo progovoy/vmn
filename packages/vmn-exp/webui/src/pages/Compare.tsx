@@ -100,7 +100,7 @@ export default function Compare() {
                 const numeric =
                   typeof d.from === "number" && typeof d.to === "number";
                 const diff = numeric ? (d.to as number) - (d.from as number) : null;
-                const goal = d.goal ?? null;
+                const goal = d.goal ?? metricGoal(schema, k);
                 const neutral = goal === null || d.param;
                 const improved = !neutral && diff !== null && diff !== 0 &&
                   (goal === "min" ? diff < 0 : diff > 0);

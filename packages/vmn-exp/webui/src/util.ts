@@ -104,16 +104,22 @@ export function paramValue(row: ParamSource, key: string): unknown {
 /** Loss/error-like metric names improve downward (Keras mode="auto"). */
 const MIN_LIKE = /(^|_)(loss|err|error|mae|mse|rmse|perplexity|ppl)($|_|\d)/i;
 
+/** Accuracy/score-like metric names improve upward. */
+const MAX_LIKE = /(^|_)(acc|accuracy|f1|auc|precision|recall|map|bleu|rouge|r2|iou|dice|score|reward)($|_|\d)/i;
+
 /** Display goal for a metric — used for best-value highlights, bar direction,
  *  and delta coloring (never for ordering, which stays server-side). A schema
- *  entry wins; otherwise the goal is inferred from the metric's name, falling
- *  back to higher-is-better. */
+ *  entry with an explicit goal wins; otherwise the goal is inferred from the
+ *  metric's name. Keys matching neither regex return null (unknown goal). */
 export function metricGoal(
   schema: Record<string, { goal?: string }> | null, key: string
-): "min" | "max" {
+): "min" | "max" | null {
   const spec = schema?.[key];
-  if (spec) return spec.goal === "min" ? "min" : "max";
-  return MIN_LIKE.test(key) ? "min" : "max";
+  if (spec?.goal === "min") return "min";
+  if (spec?.goal === "max") return "max";
+  if (MIN_LIKE.test(key)) return "min";
+  if (MAX_LIKE.test(key)) return "max";
+  return null;
 }
 
 /** The Run page's path under an app's base path (`/ws/<ws>/app/<tag>`). */

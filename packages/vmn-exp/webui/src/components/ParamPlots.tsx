@@ -14,7 +14,7 @@ const runLabel = (x: number) => `@${x}`;
 
 interface Plot {
   metric: string;
-  goal: "min" | "max";
+  goal: "min" | "max" | null;
   best: number | null;
   curves: CurveSeries[];
 }
@@ -37,7 +37,7 @@ function buildPlot(sorted: ExperimentRow[], metric: string, cols: string[], sche
   const extreme = goal === "min" ? minOf(vals) : maxOf(vals);
   return {
     metric, goal,
-    best: Number.isNaN(extreme) ? null : extreme,
+    best: goal !== null && !Number.isNaN(extreme) ? extreme : null,
     curves: [{
       key: metric, label: metric, color: seriesColor(cols, metric),
       xs: Float64Array.from(thin, (d) => d.x), ys: Float64Array.from(thin, (d) => d.y),
@@ -74,7 +74,7 @@ function ParamPlots({ rows, metricCols, schema }: {
             }}>
               <span className="mono" style={{ color: "var(--text-2)" }}>
                 {metric}{" "}
-                <span style={{ color: "var(--text-3)" }}>{goal === "min" ? "↓" : "↑"}</span>
+                {goal !== null && <span style={{ color: "var(--text-3)" }}>{goal === "min" ? "↓" : "↑"}</span>}
               </span>
               {best !== null && (
                 <span style={{ color: "var(--good)", fontSize: 11 }}>best {fmtVal(best)}</span>

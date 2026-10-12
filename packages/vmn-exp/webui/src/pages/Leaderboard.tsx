@@ -28,7 +28,8 @@ import { useCanCreateRun } from "../shell/useAppExists";
 
 const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 
-/** A column's best-first direction: newest first for time, else its goal's. */
+/** A column's best-first direction: newest first for time, else its goal's.
+ *  When the goal is unknown (null), default to desc (high first). */
 const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order =>
   !NEWEST_FIRST.has(col) && metricGoal(schema, col) === "min" ? "asc" : "desc";
 

@@ -109,12 +109,13 @@ export function MetricsCard({ metrics, summary, schema, children }: {
         <div>
           {Object.entries(metrics).map(([k, v]) => {
             const line = summaryLine(summary?.[k]);
+            const goal = typeof v === "number" ? metricGoal(schema, k) : null;
             return (
               <div key={k} className="metric-line">
                 <span className="metric-name">
                   {k}{" "}
-                  {typeof v === "number" && (
-                    <span className="metric-goal">{metricGoal(schema, k) === "min" ? "↓" : "↑"}</span>
+                  {goal !== null && (
+                    <span className="metric-goal">{goal === "min" ? "↓" : "↑"}</span>
                   )}
                 </span>
                 <span className="metric-values">
