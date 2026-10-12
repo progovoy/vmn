@@ -41,6 +41,10 @@ describe("crumbsFor", () => {
     expect(labels(input("actions"))).toEqual(["ml_app", "actions"]);
   });
 
+  it("compare counts the runs the page shows: deduped, no blanks", () => {
+    expect(last(labels(input("compare-runs", {}, "sel=a&sel=a&sel=&sel=b")))).toBe("compare 2 runs");
+  });
+
   it("tree: the version is a mono leaf after a linked stamp tree", () => {
     expect(labels(input("tree"))).toEqual(["ml_app", "stamp tree"]);
     const crumbs = crumbsFor(input("tree", {}, "v=0.4.1"));

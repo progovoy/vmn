@@ -1,5 +1,6 @@
 /** The breadcrumb trail after ContextRoot (plan 19 §1.4): lowercase CLI
  *  nouns, identifiers in mono, the leaf last. Pure, so titles and tests share it. */
+import { parseSelection } from "../pages/compareRunsData";
 import { midTruncate } from "../util/midTruncate";
 import type { Crumb, CrumbInput, RouteId, RunLabel } from "./contracts";
 
@@ -22,7 +23,8 @@ export function runText({ verstr, idx, name }: RunLabel): string {
 export const diffRefs = (search: URLSearchParams) =>
   [search.get("v") ?? "@1", search.get("to") ?? "latest"] as const;
 
-export const compareRefs = (search: URLSearchParams) => search.getAll("sel");
+/** The runs the compare page shows (deduped, capped). */
+export const compareRefs = (search: URLSearchParams) => parseSelection(search).verstrs;
 
 const overlayRefs = (search: URLSearchParams) =>
   (search.get("runs") ?? "").split(",").filter(Boolean);

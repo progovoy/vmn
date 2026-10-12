@@ -31,7 +31,9 @@ function CrumbBody({ crumb, leaf }: { crumb: Crumb; leaf: boolean }) {
   return <span className={cls} aria-current="page" title={hint}>{label}</span>;
 }
 
-function focusSibling(e: KeyboardEvent<HTMLDivElement>) {
+/** Arrow keys move between the menu items; Tab leaves (and closes) the menu. */
+function menuKeys(e: KeyboardEvent<HTMLDivElement>, close: () => void) {
+  if (e.key === "Tab") return close();
   const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
   if (!step) return;
   e.preventDefault();
@@ -79,7 +81,10 @@ function CopyCli({ cli }: { cli: CliCommand[] }) {
         </button>
       )}
       {open && (
-        <div className="crumb-copy-menu" role="menu" aria-label="CLI commands" ref={menu} onKeyDown={focusSibling}>
+        <div
+          className="crumb-copy-menu" role="menu" aria-label="CLI commands" ref={menu}
+          onKeyDown={(e) => menuKeys(e, close)}
+        >
           {rest.map((c) => (
             <button
               type="button" role="menuitem" key={c.command} className="mono"
@@ -118,7 +123,7 @@ export default function Crumbs({ root, crumbs, cli }: {
           );
         })}
       </ol>
-      {cli.length > 0 && <CopyCli cli={cli} />}
+      {cli.length > 0 && <CopyCli key={cli.map((c) => c.command).join("\n")} cli={cli} />}
     </nav>
   );
 }

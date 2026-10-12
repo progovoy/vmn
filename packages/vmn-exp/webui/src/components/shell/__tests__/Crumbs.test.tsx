@@ -114,6 +114,22 @@ describe("Crumbs", () => {
     expect(more).toHaveFocus();
   });
 
+  it("Tab out of the menu closes it", () => {
+    renderCrumbs();
+    fireEvent.click(screen.getByRole("button", { name: "More CLI commands" }));
+    fireEvent.keyDown(within(screen.getByRole("menu")).getAllByRole("menuitem")[0], { key: "Tab" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("a route change closes the menu instead of showing other commands", () => {
+    const { rerender } = renderCrumbs();
+    fireEvent.click(screen.getByRole("button", { name: "More CLI commands" }));
+    rerender(<MemoryRouter><Crumbs crumbs={RUN_CRUMBS} cli={CLI.slice(0, 1)} /></MemoryRouter>);
+    expect(screen.queryByRole("menu")).toBeNull();
+    rerender(<MemoryRouter><Crumbs crumbs={RUN_CRUMBS} cli={CLI} /></MemoryRouter>);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("one command has no menu; none has no copy control", () => {
     const { unmount } = renderCrumbs(RUN_CRUMBS, CLI.slice(0, 1));
     expect(screen.getByRole("button", { name: /Copy as CLI/ })).toBeInTheDocument();

@@ -53,6 +53,11 @@ describe("cliFor", () => {
       .toEqual(["vmn-exp compare ml_app -v a -v b -v c"]);
   });
 
+  it("compare names each selected run once and skips blanks", () => {
+    expect(commands(input("compare-runs", {}, "sel=a&sel=a&sel=&sel=b")))
+      .toEqual(["vmn-exp compare ml_app -v a -v b"]);
+  });
+
   it("tree shows the app, or goes to the selected version", () => {
     expect(commands(input("tree"))).toEqual(["vmn show ml_app"]);
     expect(commands(input("tree", {}, "v=0.4.1"))).toEqual(["vmn goto -v 0.4.1 ml_app"]);
