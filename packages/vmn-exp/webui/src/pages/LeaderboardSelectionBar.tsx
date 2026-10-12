@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
@@ -17,6 +17,16 @@ const diffReason = (n: number) => (n === 2 ? null : "Select exactly 2 runs");
 const compareReason = (n: number) =>
   n >= 2 && n <= MAX_COMPARE_RUNS ? null : `Select 2–${MAX_COMPARE_RUNS} runs`;
 const overlayReason = (n: number) => (n >= 2 ? null : "Select 2 or more runs");
+
+/** Hiding a focused select-all (every match now picked) would drop focus to
+ *  the page; hand it to the bar's first enabled action instead. */
+function useKeepFocusInBar(barRef: RefObject<HTMLDivElement | null>,
+  allRef: RefObject<HTMLButtonElement | null>, canSelectAll: boolean) {
+  useLayoutEffect(() => {
+    if (canSelectAll || document.activeElement !== allRef.current) return;
+    barRef.current?.querySelector<HTMLButtonElement>(".sel-actions button:not(:disabled), .sel-close")?.focus();
+  }, [barRef, allRef, canSelectAll]);
+}
 
 /** An action that stays in place at every count: disabled, with its reason
  *  as a tooltip and a description, when the selection doesn't fit it. */
@@ -62,14 +72,16 @@ export default function LeaderboardSelectionBar({
   const [confirming, setConfirming] = useState<ArchiveVerb | null>(null);
   const n = selected.length;
   const barRef = useRef<HTMLDivElement>(null);
+  const allRef = useRef<HTMLButtonElement>(null);
   const barHeight = useOffsetHeight(barRef, n > 0);
+  const matching = Math.min(total, SELECT_ALL_CAP);
+  const canSelectAll = n < matching;
+  useKeepFocusInBar(barRef, allRef, canSelectAll);
   useEscapeKey(n > 0, onClear);
   if (n === 0) return null;
 
   const go = (path: string) => navigate(`${base}/${path}`);
   const verb = (v: ArchiveVerb) => (v === "archive" ? "Archive" : "Unarchive");
-  const matching = Math.min(total, SELECT_ALL_CAP);
-  const canSelectAll = n < matching;
 
   return (
     <>
@@ -91,7 +103,7 @@ export default function LeaderboardSelectionBar({
               style={canSelectAll ? undefined : { visibility: "hidden" }}
             >
               <button
-                className="link" tabIndex={canSelectAll ? undefined : -1} onClick={onSelectAll}
+                ref={allRef} className="link" tabIndex={canSelectAll ? undefined : -1} onClick={onSelectAll}
                 title={`select every matching run (at most ${SELECT_ALL_CAP})`}
               >
                 Select all {matching} matching

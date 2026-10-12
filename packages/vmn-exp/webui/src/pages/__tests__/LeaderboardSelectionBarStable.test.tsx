@@ -103,6 +103,13 @@ describe("a selection bar that keeps its shape as the count changes", () => {
     expect(slot.style.visibility).toBe("hidden");
   });
 
+  it("hands focus to the first available action when select-all hides itself", () => {
+    const { rerenderWith } = renderBar(1, { total: 3 });
+    within(region()).getByRole("button", { name: /select all 3 matching/i }).focus();
+    rerenderWith(3, { total: 3 });
+    expect(document.activeElement).toBe(action(/compare in table/i));
+  });
+
   it("puts select-all in the label area, not among the actions", () => {
     renderBar(1);
     const all = within(region()).getByRole("button", { name: /select all 500 matching/i });
