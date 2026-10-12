@@ -48,6 +48,20 @@ describe("a 401", () => {
     });
   }
 
+  it("answering a request sent before a newer sign-in is thrown but not reported", async () => {
+    let answer!: () => void;
+    fetchMock.mockImplementation(() => new Promise<Response>((resolve) => {
+      answer = () => resolve(new Response(JSON.stringify(BODY), { status: 401 }));
+    }));
+    const pending = get("/runs").catch((e) => e);
+    await Promise.resolve();
+    sessionStorage.setItem("vmn_token", "new");
+    answer();
+    const err = (await pending) as HttpError;
+    expect(err.status).toBe(401);
+    expect(reportUnauthorized).not.toHaveBeenCalled();
+  });
+
   it("from an older server without hints reports null hints", async () => {
     fetchMock.mockImplementation(
       async () => new Response(JSON.stringify({ detail: "Unauthorized" }), { status: 401 }));

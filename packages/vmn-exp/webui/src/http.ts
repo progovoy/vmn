@@ -39,19 +39,24 @@ export function patch<T>(path: string, body: unknown): Promise<T> {
  *  caller's back, so a mutation is never sent twice. */
 async function send<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const json = method === "POST" || method === "PATCH";
+  const sentToken = sessionStorage.getItem("vmn_token");
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: authHeaders(json ? { "Content-Type": "application/json" } : undefined),
     ...(json ? { body: JSON.stringify(body) } : {}),
     signal,
   });
-  return parse<T>(res, method);
+  // A 401 for a token the user has since replaced (a poll sent before the
+  // sign-in) says nothing about the new one: reporting it would swap the
+  // page the session banner just kept for the sign-in page.
+  const stale = sessionStorage.getItem("vmn_token") !== sentToken;
+  return parse<T>(res, stale ? null : method);
 }
 
-async function parse<T>(res: Response, method: string): Promise<T> {
+async function parse<T>(res: Response, reportAs: string | null): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    if (res.status === 401) reportUnauthorized({ hints: body.auth ?? null, method });
+    if (res.status === 401 && reportAs) reportUnauthorized({ hints: body.auth ?? null, method: reportAs });
     // The status rides along: a 400 is the caller's input (a bad experiment
     // query, say) and is shown next to the input, not as a page error.
     throw Object.assign(new Error(body.detail || `HTTP ${res.status}`), {
