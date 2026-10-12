@@ -1,5 +1,6 @@
 /** The one place requests learn the ui token and turn failures into errors.
  *  Kept apart from api.ts so modules whose tests mock `../api` still share it. */
+import { reportUnauthorized } from "./auth/authState";
 import { currentSignal } from "./requestScope";
 
 export const BASE = "/api/v1";
@@ -7,7 +8,7 @@ export const BASE = "/api/v1";
 /** App names appear in URLs in vmn's dashed tag form (`/` -> `-`). */
 export const appTag = (name: string) => name.replaceAll("/", "-");
 
-/** What `get` and `post` throw: the message plus the HTTP status. */
+/** What every request throws: the message plus the HTTP status. */
 export type HttpError = Error & { status?: number; body?: unknown };
 
 export function authHeaders(extra?: Record<string, string>): Record<string, string> {
@@ -17,45 +18,40 @@ export function authHeaders(extra?: Record<string, string>): Record<string, stri
   return headers;
 }
 
-export async function get<T>(path: string, signal = currentSignal()): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { headers: authHeaders(), signal });
-  if (res.status === 401) {
-    const entered = window.prompt("vmn-exp ui token:");
-    if (entered) {
-      sessionStorage.setItem("vmn_token", entered);
-      return get<T>(path, signal);
-    }
-  }
-  return parse<T>(res);
+export function get<T>(path: string, signal = currentSignal()): Promise<T> {
+  return send<T>("GET", path, undefined, signal);
 }
 
-export async function post<T>(path: string, body: unknown, signal = currentSignal()): Promise<T> {
+export function post<T>(path: string, body: unknown, signal = currentSignal()): Promise<T> {
+  return send<T>("POST", path, body, signal);
+}
+
+export function del(path: string): Promise<void> {
+  return send<void>("DELETE", path);
+}
+
+export function patch<T>(path: string, body: unknown): Promise<T> {
+  return send<T>("PATCH", path, body);
+}
+
+/** Every request. A 401 is reported to the auth state (the shell then asks
+ *  for a sign-in) and thrown like any error: nothing is retried behind the
+ *  caller's back, so a mutation is never sent twice. */
+async function send<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const json = method === "POST" || method === "PATCH";
   const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(body),
+    method,
+    headers: authHeaders(json ? { "Content-Type": "application/json" } : undefined),
+    ...(json ? { body: JSON.stringify(body) } : {}),
     signal,
   });
-  return parse<T>(res);
+  return parse<T>(res, method);
 }
 
-export async function del(path: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, { method: "DELETE", headers: authHeaders() });
-  return parse<void>(res);
-}
-
-export async function patch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "PATCH",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(body),
-  });
-  return parse<T>(res);
-}
-
-async function parse<T>(res: Response): Promise<T> {
+async function parse<T>(res: Response, method: string): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
+    if (res.status === 401) reportUnauthorized({ hints: body.auth ?? null, method });
     // The status rides along: a 400 is the caller's input (a bad experiment
     // query, say) and is shown next to the input, not as a page error.
     throw Object.assign(new Error(body.detail || `HTTP ${res.status}`), {
