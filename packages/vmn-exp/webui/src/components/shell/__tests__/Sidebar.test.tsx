@@ -78,7 +78,7 @@ describe("Sidebar", () => {
     apps.mockResolvedValue([{ name: "ml_app", experiments: 3, versions: 2 }]);
     appStatus.mockResolvedValue({
       total: 5, counts: { created: 0, running: 1, stuck: 2, succeeded: 2, failed: 0 },
-      failed_recent: 0, recent_sec: 86400, rollup: "stuck",
+      failed_recent: 0, rollup: "stuck",
     });
   });
 

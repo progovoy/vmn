@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { api } from "../api";
 import type { Job, Workspace } from "../types";
 import { copyText } from "../util";
@@ -32,19 +32,29 @@ export function CopyPath({ text, className }: { text: string; className?: string
   );
 }
 
-/** A "copy" button that briefly reads "copied" (or "no clipboard"). */
-export function CopyButton({ text, className, style, label }: {
-  text: string; className?: string; style?: CSSProperties; label?: string;
-}) {
-  const [copied, setCopied] = useState<"copied" | "no clipboard" | null>(null);
+export type Copied = "copied" | "no clipboard" | null;
+
+/** A copy's outcome, shown for 1.5 s, and the function that copies. */
+export function useCopied(): [Copied, (text: string) => Promise<void>] {
+  const [copied, setCopied] = useState<Copied>(null);
   useEffect(() => {
     if (!copied) return;
     const t = window.setTimeout(() => setCopied(null), 1500);
     return () => window.clearTimeout(t);
   }, [copied]);
+  const copy = useCallback(
+    (text: string) => copyText(text).then((ok) => setCopied(ok ? "copied" : "no clipboard")), [],
+  );
+  return [copied, copy];
+}
+
+/** A "copy" button that briefly reads "copied" (or "no clipboard"). */
+export function CopyButton({ text, className, style, label }: {
+  text: string; className?: string; style?: CSSProperties; label?: string;
+}) {
+  const [copied, copy] = useCopied();
   return (
-    <button className={className} style={style} aria-label={label}
-      onClick={() => copyText(text).then((ok) => setCopied(ok ? "copied" : "no clipboard"))}>
+    <button className={className} style={style} aria-label={label} onClick={() => copy(text)}>
       {copied ?? "copy"}
     </button>
   );

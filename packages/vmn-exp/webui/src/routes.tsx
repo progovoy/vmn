@@ -5,7 +5,8 @@ import { RouteNotFound } from "./components/shell/NotFound";
 import PageFallback from "./components/shell/PageFallback";
 import RouteError from "./components/shell/RouteError";
 import { AppGuard, GitOnly, WorkspaceGuard } from "./components/shell/guards";
-import { AppsPage, WorkspacesHome } from "./pages/Dashboard";
+import { AppsPage } from "./pages/AppsPage";
+import { WorkspacesHome } from "./pages/WorkspacesHome";
 import Leaderboard from "./pages/Leaderboard";
 import type { RouteHandle, RouteId } from "./shell/contracts";
 

@@ -144,13 +144,16 @@ describe("router pages inside the shell", () => {
     await waitFor(() => expect(document.title).toBe("not found — vmn-exp"));
   });
 
-  it("draws no crumb separator before the leaf when no workspace is in context", async () => {
+  it("leaves the root empty when no workspace is in context, so CSS drops it and its separator", async () => {
     sessionStorage.clear();
     renderShell(routes, "/no/such/page");
     await waitFor(() => expect(document.title).toBe("not found — vmn-exp"));
-    const trail = within(screen.getByRole("navigation", { name: "Breadcrumb" }));
-    expect(trail.getByText("not found").closest("li")?.querySelector(".crumb-sep")).toBeNull();
-    expect(trail.queryAllByRole("listitem")).toHaveLength(1);
+    const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const leaf = within(nav).getByText("not found").closest("li")!;
+    // Crumbs.css hides `.crumb-root:empty` and the separator right after it.
+    expect(leaf.previousElementSibling?.matches(".crumb-root:empty")).toBe(true);
+    expect(leaf.matches(".crumb-root:empty + .crumb")).toBe(true);
+    expect(within(nav).queryAllByRole("listitem").filter((li) => li.textContent)).toHaveLength(1);
   });
 
   it("shows RouteError inside the shell when a page throws", async () => {
@@ -241,5 +244,27 @@ describe("sign-in", () => {
     expect(screen.queryByText("apps page")).toBeNull();
     expect(screen.getByRole("complementary")).toBeInTheDocument();
     await waitFor(() => expect(document.title).toBe("sign in — vmn-exp"));
+  });
+});
+
+describe("app status", () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  it("is polled once by the shell on an app page, whoever else reads it", async () => {
+    const appStatus = (await import("../apiShell")).apiShell.appStatus as ReturnType<typeof vi.fn>;
+    appStatus.mockResolvedValue({
+      total: 1, counts: { created: 0, running: 1, stuck: 0, succeeded: 0, failed: 0 },
+      failed_recent: 0, rollup: "running",
+    });
+    const tree: RouteObject[] = [{
+      path: "/", element: <App />,
+      children: [{ path: "ws/:ws/app/:app", element: <div>board</div>, handle: { id: "experiments" } }],
+    }];
+    renderShell(tree, "/ws/w/app/ml_app");
+    await screen.findByText("board");
+    await waitFor(() => expect(appStatus).toHaveBeenCalledTimes(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_500); });
+    expect(appStatus).toHaveBeenCalledTimes(2);
   });
 });

@@ -41,10 +41,12 @@ export function useWorkspaces() {
   );
 }
 
+/** `/meta`, revalidated now and then: the role or auth may change. */
 export function useMeta() {
   const client = useQueryClient();
   return useQuery<Meta>(
-    { queryKey: ["meta"], queryFn: () => api.meta(), staleTime: Infinity }, client,
+    { queryKey: ["meta"], queryFn: () => api.meta(), staleTime: 60_000, refetchOnWindowFocus: true },
+    client,
   );
 }
 
@@ -70,12 +72,14 @@ export function useMetricsSchema(ws: string, app: string): MetricsSchema | null 
  *  facets endpoint; callers fall back to what the loaded rows show. */
 export function useFacets(ws: string, app: string): ExperimentFacets | null {
   const client = useQueryClient();
-  const q = useQuery<ExperimentFacets>(
-    { queryKey: ["facets", ws, app], queryFn: () => api.facets(ws, app), ...shared },
-    client,
-  );
-  return q.data ?? null;
+  return useQuery<ExperimentFacets>(facetsQuery(ws, app), client).data ?? null;
 }
+
+export const facetsQuery = (ws: string, app: string) => ({
+  queryKey: ["facets", ws, app],
+  queryFn: () => api.facets(ws, app),
+  ...shared,
+});
 
 export const runQuery = (ws: string, app: string, verstr: string) => ({
   queryKey: runKey(ws, app, verstr),

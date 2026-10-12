@@ -6,6 +6,11 @@ import { renderWithClient } from "../../test-utils";
 vi.mock("../../apiTokens", () => ({
   apiTokens: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
 }));
+const meta = vi.fn();
+vi.mock("../../api", () => ({
+  api: { meta: () => meta(), workspaces: () => Promise.resolve([]) },
+  appName: (tag: string) => tag.replaceAll("-", "/"),
+}));
 
 import { apiTokens, type TokenRecord } from "../../apiTokens";
 import Tokens from "../Tokens";
@@ -21,7 +26,10 @@ function renderTokens() {
   return renderWithClient(<MemoryRouter><Tokens /></MemoryRouter>);
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  meta.mockResolvedValue({ version: "1", control_plane: true });
+});
 
 describe("Tokens page", () => {
   it("lists tokens with their roles and state", async () => {
@@ -53,9 +61,17 @@ describe("Tokens page", () => {
     await waitFor(() => expect(api.revoke).toHaveBeenCalledWith("abc"));
   });
 
-  it("explains a server without a control plane", async () => {
-    api.list.mockRejectedValue(Object.assign(new Error("no control plane"), { status: 503 }));
+  it("explains a server without a control plane, from meta, without asking for tokens", async () => {
+    meta.mockResolvedValue({ version: "1", control_plane: false });
     renderTokens();
-    expect(await screen.findByText(/no control plane/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "API tokens need a control plane" })).toBeInTheDocument();
+    expect(api.list).not.toHaveBeenCalled();
+  });
+
+  it("shows any failure of the list as an error, a 503 included", async () => {
+    api.list.mockRejectedValue(Object.assign(new Error("store unavailable"), { status: 503 }));
+    renderTokens();
+    expect(await screen.findByText(/store unavailable/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "API tokens need a control plane" })).toBeNull();
   });
 });

@@ -15,6 +15,11 @@ vi.mock("../../api", () => ({
   },
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
+const appStatus = vi.hoisted(() => vi.fn());
+vi.mock("../../apiShell", () => ({ apiShell: { appStatus: () => appStatus() } }));
+const KNOWN_APP = {
+  total: 1, counts: { created: 0, running: 0, stuck: 0, succeeded: 1, failed: 0 }, failed_recent: 0, rollup: null,
+};
 vi.mock("../../components/ParamPlots", () => ({ default: () => null }));
 vi.mock("../../components/NewExperiment", () => ({ default: () => null }));
 vi.mock("@tanstack/react-virtual", () => ({
@@ -46,6 +51,7 @@ beforeEach(() => {
   m.experimentsColumns.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experiments.mockResolvedValue(page([1, 2, 3, 4, 5].map((i) => row(i)), 900));
   m.experimentsPaged.mockResolvedValue({ rows: [], total: 900 });
+  appStatus.mockResolvedValue(KNOWN_APP);
   m.apps.mockResolvedValue([{ name: "my/app", experiments: 900, versions: 1 }]);
 });
 

@@ -9,6 +9,7 @@ const workspaces = vi.fn<() => Promise<Workspace[]>>();
 const apps = vi.fn();
 const facets = vi.fn();
 vi.mock("../../../api", () => ({
+  appName: (tag: string) => tag.replaceAll("-", "/"),
   api: {
     meta: () => meta(), workspaces: () => workspaces(),
     apps: (ws: string) => apps(ws), facets: (ws: string, app: string) => facets(ws, app),
@@ -19,7 +20,7 @@ import NotFound from "../NotFound";
 import { ShellOverrideProvider, useShellOverride } from "../../../shell/shellOverride";
 import type { NotFoundProps } from "../../../shell/contracts";
 
-const AUTH = { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null };
+const AUTH = { enabled: true, token: true, oidc: false, login_url: null };
 
 function Probe() {
   return <span data-testid="override">{useShellOverride() ?? "none"}</span>;

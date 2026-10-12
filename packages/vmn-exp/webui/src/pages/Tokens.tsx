@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiTokens, type Role, type TokenRecord } from "../apiTokens";
 import { PageHead, Skeleton } from "../components/ui";
 import NotFound from "../components/shell/NotFound";
-import { httpStatus } from "../shell/notFoundCopy";
+import { usePageScope } from "../shell/usePageScope";
 
 const ROLES: Role[] = ["viewer", "editor", "admin"];
 const KEY = ["tokens"];
@@ -84,10 +84,16 @@ function TokenTable({ tokens }: { tokens: TokenRecord[] }) {
   );
 }
 
+/** Tokens live in the control plane: meta says whether this server has one. */
 export default function Tokens() {
-  const query = useQuery({ queryKey: KEY, queryFn: apiTokens.list });
+  const { meta } = usePageScope();
+  if (meta && !meta.control_plane) return <NotFound kind="control-plane" />;
+  return <TokensPage ready={Boolean(meta)} />;
+}
+
+function TokensPage({ ready }: { ready: boolean }) {
+  const query = useQuery({ queryKey: KEY, queryFn: apiTokens.list, enabled: ready });
   const [created, setCreated] = useState<string | null>(null);
-  if (httpStatus(query.error) === 503) return <NotFound kind="control-plane" />;
   return (
     <>
       <PageHead title="API tokens" what="for scripts calling this server" mono={false} />

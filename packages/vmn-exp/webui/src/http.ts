@@ -2,6 +2,7 @@
  *  Kept apart from api.ts so modules whose tests mock `../api` still share it. */
 import { reportUnauthorized } from "./auth/authState";
 import { currentSignal } from "./requestScope";
+import { TOKEN_KEY } from "./shell/contracts";
 
 export const BASE = "/api/v1";
 
@@ -12,7 +13,7 @@ export const appTag = (name: string) => name.replaceAll("/", "-");
 export type HttpError = Error & { status?: number; body?: unknown };
 
 export function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const token = sessionStorage.getItem("vmn_token");
+  const token = sessionStorage.getItem(TOKEN_KEY);
   const headers: Record<string, string> = { ...extra };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
@@ -39,7 +40,7 @@ export function patch<T>(path: string, body: unknown): Promise<T> {
  *  caller's back, so a mutation is never sent twice. */
 async function send<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const json = method === "POST" || method === "PATCH";
-  const sentToken = sessionStorage.getItem("vmn_token");
+  const sentToken = sessionStorage.getItem(TOKEN_KEY);
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: authHeaders(json ? { "Content-Type": "application/json" } : undefined),
@@ -49,7 +50,7 @@ async function send<T>(method: string, path: string, body?: unknown, signal?: Ab
   // A 401 for a token the user has since replaced (a poll sent before the
   // sign-in) says nothing about the new one: reporting it would swap the
   // page the session banner just kept for the sign-in page.
-  const stale = sessionStorage.getItem("vmn_token") !== sentToken;
+  const stale = sessionStorage.getItem(TOKEN_KEY) !== sentToken;
   return parse<T>(res, stale ? null : method);
 }
 

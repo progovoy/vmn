@@ -17,14 +17,14 @@ import { useShellCrumbs } from "../useShellCrumbs";
 const last = <T,>(xs: T[]) => xs[xs.length - 1];
 const status = (stuck: number): AppStatus => ({
   total: 3, counts: { created: 0, running: 0, stuck, succeeded: 3 - stuck, failed: 0 },
-  failed_recent: 0, recent_sec: 86400, rollup: stuck ? "stuck" : null,
+  failed_recent: 0, rollup: stuck ? "stuck" : null,
 });
 
 function fakeCtx(routeId: RouteId, extra: Partial<ShellContext> = {}): ShellContext {
   return {
     ws: "ml-repo", workspace: { name: "ml-repo", kind: "git" }, workspaces: [], isGit: true,
-    metaStatus: "ok", metaError: false, authEnabled: false, role: null,
-    readOnly: false, readOnlyReason: null, canAdmin: true,
+    metaStatus: "ok", authEnabled: false, role: null,
+    readOnly: false, readOnlyReason: null, canAdmin: true, canAttach: true,
     routeId, params: { ws: "ml-repo" }, search: new URLSearchParams(), pathname: "/",
     wsFromUrl: true, override: null, ...extra,
   };

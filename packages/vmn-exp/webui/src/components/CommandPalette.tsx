@@ -40,7 +40,7 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  useFocusTrap(dialogRef, true, { initialFocus: inputRef });
+  useFocusTrap(dialogRef, { initialFocus: inputRef });
 
   const apps = useApps(ctx.ws).data;
   const appNames = useMemo(() => (apps ?? []).map((a) => a.name), [apps]);

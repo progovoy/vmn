@@ -16,7 +16,7 @@ export interface GitContext {
 export interface AppStatus {
   total: number;
   counts: Record<"created" | "running" | "stuck" | "succeeded" | "failed", number>;
-  failed_recent: number; recent_sec: number;
+  failed_recent: number;
   rollup: "stuck" | "failed" | "running" | null;
 }
 export interface AuthHints { token: boolean; oidc: boolean; login_url: string | null }
@@ -29,8 +29,6 @@ export interface PageScope {
   isGit: boolean;
   meta?: Meta;
   metaStatus: "loading" | "ok" | "unauthorized" | "forbidden" | "unreachable";
-  /** `metaStatus === "unreachable"` (no HTTP status). */
-  metaError: boolean;
   /** `meta.auth?.enabled ?? false` */
   authEnabled: boolean;
   /** `workspace.role ?? meta.role ?? null` */
@@ -40,6 +38,8 @@ export interface PageScope {
   readOnlyReason: string | null;
   /** `!authEnabled || meta.role === "admin"`: the global gate of /tokens and POST /workspaces. */
   canAdmin: boolean;
+  /** `metaStatus === "ok" && !meta.read_only && canAdmin`: "Attach a checkout" may be offered. */
+  canAttach: boolean;
 }
 
 /** What every shell component reads (useShellContext). */
@@ -78,6 +78,8 @@ export type NotFoundProps =
   | { kind: "control-plane" }
   | { kind: "needs-git"; ws: string; appTag: string; page: "tree" | "actions" };
 
+/** sessionStorage: the ui token (or API token) the user signed in with. */
+export const TOKEN_KEY = "vmn_token";
 export const RETURN_TO_KEY = "vmn-exp:return-to";
 export const LAST_WS_KEY = "vmn-exp:last-ws";
 export const RECENT_KEY = "vmn-exp:recent";
