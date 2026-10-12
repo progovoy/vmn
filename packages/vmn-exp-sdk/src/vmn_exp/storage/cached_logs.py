@@ -5,7 +5,8 @@ A stream's log (:mod:`vmn_exp.core.streams`) exists in up to two copies: the
 local file of the record copy that owns it — the only one that appends to it
 — and the remote objects shipped from that file. Both only ever grow and the
 remote one is a replica of a prefix of the local one, so shipping resumes
-exactly past the bytes the remote holds (:mod:`ship_state`). Every read —
+exactly past the bytes the remote holds (:mod:`ship_state`). A copy ships and
+compacts only the streams it owns (its current and retired owners'). Every read —
 listings, merged logs, the experiment index's per-file reads — takes each
 stream from its bigger copy: a local stream from the local file, another
 copy's from the remote.
@@ -125,7 +126,7 @@ class CachedLogs:
     def _append_locally(self, append, app_name, verstr, writer_id, payload):
         if not self._ensure_local_record(app_name, verstr):
             return False
-        return append(app_name, verstr, writer_id, payload)
+        return append(app_name, verstr, self._owned_stream(app_name, verstr, writer_id), payload)
 
     def _local_logs(self, app_name, verstr):
         if not self._local_is_replica:
@@ -180,12 +181,16 @@ class CachedLogs:
         return ship_state.held(record, kind, repr(self._remote.cache_identity()))
 
     def sync_log_to_remote(self, app_name, verstr, writer_id):
-        """Ship the complete lines appended to each of the copy's streams
+        """Ship the complete lines appended to each of the copy's own streams
         since the remote's copy ends (*writer_id*'s among them); once the run
-        has finished, compact what the remote holds of them."""
+        has finished, compact what the remote holds of them. Another owner's
+        local file (a ``cp -r`` of its root) is neither shipped nor compacted:
+        that owner's ship state assumes it alone ships its stream."""
         if not self.remote_for(app_name, verstr):
             return
-        local_sizes = self._local.log_sizes(app_name, verstr)
+        owns = self._stream_owned(app_name, verstr)
+        local_sizes = {s: n for s, n in self._local.log_sizes(app_name, verstr).items()
+                       if owns(s)}
         if not local_sizes:
             return
         with self._ship_state(app_name, verstr, "log") as state:

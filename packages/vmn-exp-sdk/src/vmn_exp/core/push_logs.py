@@ -7,9 +7,11 @@ the next segment, created only if it does not exist (``create_log_segment``).
 When the remote size is not what the ledger says this host shipped (no
 ledger, a live ship of the same copy), the remote bytes are compared with the
 local prefix first; a mismatch fails loudly and never starts over, because
-the remote bytes are someone else's.
+the remote bytes are someone else's. Only the root's own streams go (see
+:mod:`vmn_exp.core.push_metrics`).
 """
 from vmn_exp.core.logfiles import next_seq
+from vmn_exp.core.streams import owned_by
 from vmn_exp.storage.files import log_object_name
 from vmn_exp.storage.s3_base import parallel_map
 
@@ -25,7 +27,8 @@ def push_logs(local, target, app_name, verstr, shipped=None, finished=False):
     compacted into one. Raises :class:`LogPrefixMismatch`."""
     shipped = shipped or {}
     sizes = {}
-    for writer in sorted(local.log_sizes(app_name, verstr)):
+    owns = owned_by(local.stream_owners(app_name, verstr))
+    for writer in sorted(filter(owns, local.log_sizes(app_name, verstr))):
         pusher = _WriterLog(local, target, app_name, verstr, writer)
         sizes[writer] = pusher.push(shipped.get(writer), finished)
     return sizes

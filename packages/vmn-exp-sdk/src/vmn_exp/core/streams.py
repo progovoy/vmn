@@ -30,6 +30,11 @@ def owner_of(stream):
     return stream.partition(STREAM_SEP)[2]
 
 
+def owned_by(owners):
+    """Whether a stream is one of *owners*' (a plain name has no other owner)."""
+    return lambda stream: not owner_of(stream) or owner_of(stream) in owners
+
+
 def clean_writer_id(writer):
     """*writer* usable in a stream key: its ``~`` replaced."""
     return writer.replace(STREAM_SEP, "-")

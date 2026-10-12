@@ -40,14 +40,19 @@ entries (the parked multi-clone tests and the review probes reproduce them).
     it; `append_to_log`, metric writers, registry/comment/report-header logs,
     `similar-backfill` and compaction all go through it.
   - A copy owns the streams of its current and retired owners only. Another
-    owner's local metric file (a `cp -r` of the original's root holds a stale
-    prefix of its streams) is read and compacted from the remote, never shipped
-    nor put as a `.vmx`: the original's ship state assumes it alone ships its
-    stream. A metric block appended under an owner the copy does not own (a
+    owner's local log or metric file (a `cp -r` of the original's root holds a
+    stale prefix of its streams) is read and compacted from the remote, never
+    shipped, compacted from the copy, pushed (`vmn-exp push`) nor put as a
+    `.vmx`: the original's ship state assumes it alone ships its stream, and a
+    segment it creates behind a range the copy compacted would be hidden. A log
+    line or metric block appended under an owner the copy does not own (a
     one-off owner, named while the record could not be fetched) goes to the
-    copy's own stream. Log lines a copy ships for the original are a prefix of
-    its file, and a segment covered by a compacted range is refused, so they
-    land once.
+    copy's own stream.
+  - Processes and threads of one copy append metric blocks under the copy's
+    append lock (`.ship/append.lock`, never held across remote calls) from
+    choosing the stream to writing the block; a compaction retires its stream
+    under the same lock before it reads the file, so a block lands in the file
+    the build reads or in the next stream, never in one `put_indexed` drops.
 - **The remote is a replica of the owner's local file.** A sync ships every
   local stream of the copy (`cached_logs.py`, `cached_metrics.py`): the bytes
   past what the remote holds go as the next segment through

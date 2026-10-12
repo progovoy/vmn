@@ -101,25 +101,38 @@ def held(record_dir, kind, remote_id):
         yield state
 
 
-@contextmanager
 def ship_lock(record_dir):
     """The copy's ship lock: its processes and threads one at a time (a
-    thread holding it may take it again). Given back in a ``finally`` the
-    hold is taken in: an interrupt landing right after cannot leave it held."""
+    thread holding it may take it again)."""
+    return _record_lock(record_dir, "lock")
+
+
+def append_lock(record_dir):
+    """The copy's metric append lock, held from choosing a block's stream to
+    writing it, and by a compaction while it retires the stream it builds:
+    a block lands before the build reads the file or in the next stream.
+    Never held across remote calls."""
+    return _record_lock(record_dir, "append.lock")
+
+
+@contextmanager
+def _record_lock(record_dir, name):
+    """Lock *name* of the copy, given back in a ``finally`` the hold is taken
+    in: an interrupt landing right after cannot leave it held."""
     os.makedirs(os.path.join(record_dir, SHIP_DIR), exist_ok=True)
-    path = os.path.join(record_dir, SHIP_DIR, "lock")
+    path = os.path.join(record_dir, SHIP_DIR, name)
     local, depth = _thread_lock(path), _DEPTH.__dict__.setdefault(path, [0])
     held, file_lock = [], None
     try:
         held.append(local.acquire(timeout=_wait_sec()))
         if not held[0]:
-            raise RuntimeError("the record's ship lock is held by a stuck thread")
+            raise RuntimeError(f"the record's {name} is held by a stuck thread")
         if not depth[0]:
             file_lock = FileLock(path)
             try:
                 file_lock.acquire(timeout=_wait_sec())
             except Timeout:
-                raise RuntimeError("the record's ship lock is held by a stuck process") from None
+                raise RuntimeError(f"the record's {name} is held by a stuck process") from None
         depth[0] += 1
         try:
             yield

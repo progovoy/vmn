@@ -5,19 +5,24 @@ A stream's blocks are appended to ``metrics/<stream>.vms`` with ``O_APPEND``;
 before its first append in a process the writer truncates a torn tail (a
 block cut short or failing its CRC) so the new block is never hidden behind
 it. A block for a stream its record copy retired (it was compacted) goes to
-the copy's current stream. ``put_indexed`` moves the finished ``.vmx`` in
+the copy's current stream; one appended while the stream is retired for a
+compaction waits for the retirement (:func:`ship_state.append_lock`).
+``put_indexed`` moves the finished ``.vmx`` in
 without overwriting one, then drops the stream files it covers.
 """
 import os
+from contextlib import contextmanager
 
 from vmn_exp.core.metric_block import intact_length
 from vmn_exp.core.metric_files import (
     METRICS_DIR,
     group_metric_objects,
     indexed_name,
+    is_stream_file,
     stream_name,
     superseded,
 )
+from vmn_exp.storage import ship_state
 
 
 def _append(path, data):
@@ -59,15 +64,32 @@ class LocalMetrics:
         if self._refuse_orphan_write(app_name, verstr, "a metric block"):
             return False
         self._metrics_dir(app_name, verstr, create=True)
-        writer_id = self.live_stream(app_name, verstr, writer_id)
-        path = os.path.join(self._snapshot_dir(app_name, verstr), stream_name(writer_id))
-        checked = self.__dict__.setdefault("_checked_streams", set())
-        if path not in checked:
-            _truncate_torn_tail(path)
-            checked.add(path)
-        _append(path, data)
-        os.utime(self._snapshot_dir(app_name, verstr))
+        record = self._snapshot_dir(app_name, verstr)
+        with self.appends_held(app_name, verstr):
+            writer_id = self.live_stream(app_name, verstr, writer_id)
+            path = os.path.join(record, stream_name(writer_id))
+            checked = self.__dict__.setdefault("_checked_streams", set())
+            if path not in checked:
+                _truncate_torn_tail(path)
+                checked.add(path)
+            _append(path, data)
+        os.utime(record)
         return True
+
+    @contextmanager
+    def compacting(self, app_name, verstr, stream):
+        """Around a compaction of *stream*: its local file's stream is retired
+        first, under the append lock, so a block appended meanwhile is in the
+        file the build reads or in the copy's next stream."""
+        objects = self.metric_objects(app_name, verstr).get(stream, ())
+        if any(is_stream_file(name) for name, _ in objects):
+            with self.appends_held(app_name, verstr):
+                self.retire_stream(app_name, verstr, stream)
+        yield
+
+    def appends_held(self, app_name, verstr):
+        """No metric block is appended to the record meanwhile."""
+        return ship_state.append_lock(self._snapshot_dir(app_name, verstr))
 
     def metric_objects(self, app_name, verstr):
         return group_metric_objects(_sizes(self._metrics_dir(app_name, verstr)))

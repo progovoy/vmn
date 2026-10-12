@@ -6,7 +6,8 @@ does not exist, as a live ship does. A local ``.vmx`` goes through
 ``put_indexed`` covering every segment the remote holds of its stream (the
 local file it was built from held them all). A stream the remote compacted
 while blocks of it were still local is compacted locally first and pushed
-as that ``.vmx``.
+as that ``.vmx``. Only the root's own streams go: another owner's local
+file (a ``cp -r`` of its root) is a stale prefix of what that owner pushes.
 """
 import os
 
@@ -19,6 +20,7 @@ from vmn_exp.core.metric_files import (
     last_seq,
     stream_name,
 )
+from vmn_exp.core.streams import owned_by
 
 
 def push_metrics(local, target, app_name, verstr):
@@ -27,7 +29,8 @@ def push_metrics(local, target, app_name, verstr):
     if not objects:
         return
     remote = target.metric_objects(app_name, verstr)
-    for writer in sorted(objects):
+    owns = owned_by(local.stream_owners(app_name, verstr))
+    for writer in sorted(filter(owns, objects)):
         names = objects[writer]
         theirs = remote.get(writer, [])
         if any(is_stream_file(n) for n, _ in names) and _compacted(theirs):

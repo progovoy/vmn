@@ -37,7 +37,7 @@ from vmn_exp.core.metric_files import (
     metric_writer,
     stream_name,
 )
-from vmn_exp.core.streams import display_writer, owner_of, stream_key
+from vmn_exp.core.streams import display_writer, owned_by, stream_key
 from vmn_exp.storage import ship_state
 
 LOCAL, REMOTE = "local", "remote"
@@ -77,9 +77,7 @@ class CachedMetrics:
         fetched) is the copy's own stream of its writer."""
         if not self._ensure_local_record(app_name, verstr):
             return False
-        if not self._stream_owned(app_name, verstr)(writer_id):
-            writer = display_writer(writer_id)
-            writer_id = stream_key(writer, self._local.stream_owner(app_name, verstr, writer))
+        writer_id = self._owned_stream(app_name, verstr, writer_id)
         return self._local.append_metric_block(app_name, verstr, writer_id, data)
 
     def metric_objects(self, app_name, verstr):
@@ -107,14 +105,17 @@ class CachedMetrics:
     @contextmanager
     def compacting(self, app_name, verstr, stream):
         """Around a compaction of *stream*: one the copy owns (its local file
-        is there) is retired and built under the copy's ship lock."""
+        is there) is retired — under the append lock, so a block appended meanwhile
+lands in the file the build reads or in the next stream — and built under
+the copy's ship lock."""
         local = self._local.metric_objects(app_name, verstr).get(stream, [])
         record = self._local.local_record_dir(app_name, verstr)
         if not (_has_stream(local) and record and self._stream_owned(app_name, verstr)(stream)):
             yield
             return
         with ship_state.ship_lock(record):
-            self.retire_stream(app_name, verstr, stream)
+            with self._local.appends_held(app_name, verstr):
+                self.retire_stream(app_name, verstr, stream)
             yield
 
     def put_indexed(self, app_name, verstr, writer_id, path, replace=False, covers=0):
@@ -145,8 +146,16 @@ class CachedMetrics:
         """Whether a local stream is the copy's own: one of its current or
         retired owner's (or a plain name, which has no other owner), not one
         copied along with another root."""
-        owners = self._local.stream_owners(app_name, verstr)
-        return lambda stream: not owner_of(stream) or owner_of(stream) in owners
+        return owned_by(self._local.stream_owners(app_name, verstr))
+
+    def _owned_stream(self, app_name, verstr, stream):
+        """*stream*, or the copy's own stream of its writer when the copy does
+        not own *stream* (a one-off owner, named while the record could not
+        be fetched): only the owner ships a stream."""
+        if self._stream_owned(app_name, verstr)(stream):
+            return stream
+        writer = display_writer(stream)
+        return stream_key(writer, self._local.stream_owner(app_name, verstr, writer))
 
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
         """Ship the intact blocks appended to each of the copy's streams past
