@@ -60,6 +60,12 @@ describe("metricCurves", () => {
     expect(got.curves.map((c) => c.key)).toEqual(["a"]);
   });
 
+  it("leaves out a run whose only point would be an unlisted dot", () => {
+    const dot = run("d", { loss: pts(1) });
+    expect(curvelessRuns([a, dot]).map((r) => r.key)).toEqual(["d"]);
+    expect(metricCurves("loss", [a, dot], null, null).curves.map((c) => c.key)).toEqual(["a"]);
+  });
+
   it("keeps the chart on the x metric for the runs that have it joined", () => {
     const joined = { a: { loss: pts(3, 10) }, b: { loss: [] } };
     const got = metricCurves("loss", [a, b, outer], "epoch", joined);

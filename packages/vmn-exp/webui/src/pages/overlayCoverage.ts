@@ -43,12 +43,14 @@ export function noCurvesNote(runs: OverlayRunData[]): string | null {
   return `No curves: ${labels.join(", ")}`;
 }
 
-/** *metric*'s curves: on *xMetric* for the runs whose join has points, else
- *  (no join yet, or no run has the x metric) every run's plain series. */
+/** *metric*'s curves among the runs with a curve for it: on *xMetric* for
+ *  those whose join has points, else (no join yet, or none has the x metric)
+ *  their plain series. */
 export function metricCurves(
   metric: string, runs: OverlayRunData[], xMetric: string | null, joined: Joined | null,
 ): { xMetric: string | null; curves: MetricCurve[] } {
-  const pick = (series: (r: OverlayRunData) => SeriesPoint[] | undefined) => runs
+  const drawn = runs.filter((r) => isCurve(r.series[metric]));
+  const pick = (series: (r: OverlayRunData) => SeriesPoint[] | undefined) => drawn
     .filter((r) => (series(r)?.length ?? 0) > 0)
     .map((r) => ({ key: r.key, points: series(r)!, origin: r.origin }));
   if (xMetric && joined) {
