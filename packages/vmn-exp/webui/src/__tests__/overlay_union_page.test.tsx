@@ -39,7 +39,7 @@ function renderOverlay(runs: string[], series = SERIES, rows: Record<string, obj
   );
 }
 
-const eyebrows = () => [...document.querySelectorAll(".card .eyebrow")].map((e) => e.textContent);
+const chartTitles = () => [...document.querySelectorAll(".card .section-title")].map((e) => e.textContent);
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -47,7 +47,7 @@ describe("Overlay page with partial metric coverage", () => {
   it("charts the union of metrics instead of an empty state", async () => {
     renderOverlay(["0.0.1-dev.a", "0.0.1-dev.b", "0.0.1-dev.o"]);
     await screen.findByText(/No curves:/);
-    expect(eyebrows()).toEqual(["acc", "loss"]);
+    expect(chartTitles()).toEqual(["acc", "loss"]);
     expect(screen.queryByText(/No shared metrics/)).toBeNull();
   });
 
@@ -79,7 +79,7 @@ describe("Overlay page with partial metric coverage", () => {
   it("keeps the empty state when no selected run has a curve", async () => {
     renderOverlay(["0.0.1-dev.o"]);
     expect(await screen.findByText(/None of the selected runs has series data/)).toBeInTheDocument();
-    expect(eyebrows()).toEqual([]);
+    expect(chartTitles()).toEqual([]);
     expect(screen.queryByText(/No curves:/)).toBeNull();
     expect(screen.getByRole("link", { name: /overlay its 2 trials/ })).toBeInTheDocument();
   });
