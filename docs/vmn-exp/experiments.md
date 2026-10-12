@@ -1653,11 +1653,16 @@ pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
   (a `cp -r` of the repo, a backup restored, a move across filesystems) holds
   that checkout's streams. Only their owner pushes them, so push leaves them
   alone and prints a one-line note on stderr when the remote lacks part of
-  them. `--adopt` makes this checkout their owner for the selected runs
-  (catching their files up with what the remote holds first) and pushes them,
-  then and on every later sync/push. Run it only when the original checkout
-  is gone or will never write again — otherwise two checkouts would ship one
-  stream:
+  them (another view of the folder, e.g. a container mounting it at another
+  path, counts as another checkout). `--adopt` makes this checkout their
+  owner for the selected runs (catching their files up with what the remote
+  holds first) and pushes them, then and on every later sync/push. It never
+  deletes local points the remote does not provably hold: when a remote
+  `.vmx` lacks some (another clone compacted what the original had shipped),
+  that run is refused with a one-line error, left unchanged, and counted
+  failed (exit 1), while the other runs are adopted. Run it only when the
+  original checkout is gone or will never write again — otherwise two
+  checkouts would ship one stream:
 
   ```sh
   vmn-exp push my_app -v 1.6.0-dev.a1b2c3d.e4f5g6h.gpu07 --adopt

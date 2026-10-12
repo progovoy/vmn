@@ -51,8 +51,12 @@ entries (the parked multi-clone tests and the review probes reproduce them).
   (`core/adopt.py:adopt_streams`, `CachedSnapshotStorage.adopt_streams`)
   makes this view the owner of the selected runs' inherited streams: their
   local files first catch up with the remote (the bytes the original shipped
-  after the copy, verified to extend the local file; files of a stream the
-  original compacted remotely are dropped), their ship state is forgotten,
+  after the copy, verified to extend the local file; files of a stream with
+  a remote `.vmx` are dropped only when its footer holds at least as many
+  points as the copy's files — both are prefixes of the one owner's stream —
+  else, e.g. a `.vmx` another clone compacted from a partial ship, adopt
+  refuses the run, changes nothing and push counts it failed; the note uses
+  the same check), their ship state is forgotten,
   then they become this view's retired owners and are shipped, compacted and
   pushed from then on. Run it only when the original checkout is gone or will
   never write again. A copy deleted and fetched again also mints a new owner
