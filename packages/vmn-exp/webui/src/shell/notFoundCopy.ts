@@ -182,11 +182,12 @@ const detailOf = (e: unknown): string => {
   return typeof detail === "string" ? detail : "";
 };
 
-/** The run detail's "no such run" answers: a 404 for the experiment, or a 400
- *  for a ref that is no version at all. Any other failure is a real error. */
+/** The run detail's "no such run" answers: a 404 for the experiment or for an
+ *  `@N` past the app's runs, or a 400 for a ref that is no version at all.
+ *  Any other failure is a real error. */
 export function isMissingRun(e: unknown): boolean {
   const status = httpStatus(e);
-  if (status === 404) return detailOf(e).startsWith("Experiment ");
+  if (status === 404) return /^(Experiment |Index '@)/.test(detailOf(e));
   if (status === 400) return detailOf(e).startsWith("Invalid version");
   return false;
 }

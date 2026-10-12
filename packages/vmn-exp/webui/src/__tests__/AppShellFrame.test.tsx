@@ -144,6 +144,15 @@ describe("router pages inside the shell", () => {
     await waitFor(() => expect(document.title).toBe("not found — vmn-exp"));
   });
 
+  it("draws no crumb separator before the leaf when no workspace is in context", async () => {
+    sessionStorage.clear();
+    renderShell(routes, "/no/such/page");
+    await waitFor(() => expect(document.title).toBe("not found — vmn-exp"));
+    const trail = within(screen.getByRole("navigation", { name: "Breadcrumb" }));
+    expect(trail.getByText("not found").closest("li")?.querySelector(".crumb-sep")).toBeNull();
+    expect(trail.queryAllByRole("listitem")).toHaveLength(1);
+  });
+
   it("shows RouteError inside the shell when a page throws", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     renderShell(frameTree, "/boom");

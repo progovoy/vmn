@@ -195,6 +195,10 @@ describe("isMissingRun", () => {
     expect(isMissingRun(err(400, "Invalid version: x"))).toBe(true);
   });
 
+  it("is a 404 for an @N index past the app's runs", () => {
+    expect(isMissingRun(err(404, "Index '@540' out of range (1..54)"))).toBe(true);
+  });
+
   it("is nothing else", () => {
     expect(isMissingRun(err(404, "Workspace x not found"))).toBe(false);
     expect(isMissingRun(err(400, "bad query"))).toBe(false);
