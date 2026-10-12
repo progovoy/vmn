@@ -13,6 +13,7 @@ function Dialog({ withInitial }: { withInitial?: boolean }) {
       <input ref={initial} aria-label="middle" />
       <button disabled>off</button>
       <button>last</button>
+      <button tabIndex={-1}>row</button>
     </div>
   );
 }
@@ -56,6 +57,15 @@ describe("useFocusTrap", () => {
 
   it("Shift+Tab on the first element cycles to the last enabled one", () => {
     openTrap();
+    fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
+    expect(screen.getByText("last")).toHaveFocus();
+  });
+
+  it("never cycles onto an element taken out of the tab order", () => {
+    openTrap();
+    screen.getByText("last").focus();
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+    expect(screen.getByText("first")).toHaveFocus();
     fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
     expect(screen.getByText("last")).toHaveFocus();
   });

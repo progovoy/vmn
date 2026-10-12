@@ -18,7 +18,9 @@ export function useFocusTrap(
     const container = ref.current;
     if (!active || !container) return;
     const previous = document.activeElement as HTMLElement | null;
-    const focusables = () => [...container.querySelectorAll<HTMLElement>(FOCUSABLE)];
+    // A `tabIndex={-1}` button or input matches FOCUSABLE but is out of the Tab order.
+    const focusables = () =>
+      [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.tabIndex >= 0);
     (initialFocus?.current ?? focusables()[0] ?? container).focus();
 
     const onKey = (e: KeyboardEvent) => {

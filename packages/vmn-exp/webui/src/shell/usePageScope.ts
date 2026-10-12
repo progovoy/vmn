@@ -24,7 +24,7 @@ function readOnlyReasonOf(
   ws: string | undefined, workspace: Workspace | undefined,
 ): string | null {
   if (meta?.read_only) return "Started with --read-only: actions and edits are off";
-  if (authEnabled && role === "viewer") return `Your role in ${ws} is viewer`;
+  if (authEnabled && role === "viewer") return ws ? `Your role in ${ws} is viewer` : "Your role is viewer";
   if (authEnabled && ws && workspace && role === null) return `You have no role in ${ws}`;
   // Capabilities not probed yet are unknown: the server still refuses what it can't do.
   if (workspace?.kind === "store" && workspace.capabilities && !workspace.capabilities.includes("edit")) {

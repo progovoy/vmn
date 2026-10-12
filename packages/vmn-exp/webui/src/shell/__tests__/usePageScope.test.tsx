@@ -65,6 +65,13 @@ describe("usePageScope", () => {
     expect(s.readOnlyReason).toBe("Your role in ml-repo is viewer");
   });
 
+  it("rule 2 without a workspace never names one", async () => {
+    meta.mockResolvedValue({ version: "1", auth: AUTH, role: "viewer" });
+    const s = await scopeFor();
+    expect(s.readOnly).toBe(true);
+    expect(s.readOnlyReason).toBe("Your role is viewer");
+  });
+
   it("rule 3: no role in the workspace", async () => {
     meta.mockResolvedValue({ version: "1", auth: AUTH, role: null });
     workspaces.mockResolvedValue([{ name: "ml-repo", kind: "git", role: null }]);
