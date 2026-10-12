@@ -71,7 +71,6 @@ function MetricScatter({ rows, metricCols, paramCols, schema, onSelect, initialX
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-        <div className="eyebrow" style={{ marginBottom: 0 }}>scatter plot</div>
         <AxisSelect label="X" value={xCol} cols={allCols} onChange={setXCol} />
         <AxisSelect label="Y" value={yCol} cols={allCols} onChange={setYCol} />
       </div>

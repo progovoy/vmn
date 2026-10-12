@@ -59,7 +59,7 @@ export default function RunErrorCard({ status, hasOutputLog = false }: {
   const tail = error?.output_tail;
   return (
     <section className="card run-error-card" aria-label="Run error">
-      <div className="eyebrow">error</div>
+      <h2 className="section-title">Error</h2>
       {headline
         ? <div className="run-error-headline">{headline}</div>
         : <NoException exitCode={status.exit_code} hasOutputLog={hasOutputLog} />}

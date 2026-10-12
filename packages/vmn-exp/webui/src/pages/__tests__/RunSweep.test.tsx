@@ -68,7 +68,7 @@ describe("Run page of a sweep", () => {
   it("has no sweep section for a plain run", async () => {
     mockedApi.experiment.mockResolvedValue(detail({}));
     renderRun();
-    await screen.findByText("metadata");
+    await screen.findByText("Metadata");
     expect(screen.queryByTestId("sweep-spec")).not.toBeInTheDocument();
     expect(mockedSweep).not.toHaveBeenCalled();
   });

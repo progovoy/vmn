@@ -99,7 +99,7 @@ export default function ArtifactsList({ artifacts, downloadUrl }: {
 
   return (
     <div className="card">
-      <div className="eyebrow">artifacts</div>
+      <h2 className="section-title">Artifacts</h2>
       {error && <div className="error">{error}</div>}
       <Tree nodes={tree} downloadUrl={downloadUrl} onDownload={onDownload} />
     </div>

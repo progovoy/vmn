@@ -35,7 +35,7 @@ describe("MetricsCard best-value summaries", () => {
   it("labels the card as metrics, not final values", () => {
     render(<MetricsCard metrics={{ loss: 0.2 }} summary={{ loss: OVERFIT }} schema={null} />);
     expect(screen.queryByText("final metrics")).toBeNull();
-    expect(screen.getByText("metrics")).toBeTruthy();
+    expect(screen.getByText("Metrics")).toBeTruthy();
   });
 });
 

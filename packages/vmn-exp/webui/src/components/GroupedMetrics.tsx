@@ -96,8 +96,7 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
   if (rows.length === 0) {
     return (
       <div className="card">
-        <div className="eyebrow" style={{ marginBottom: 0 }}>grouped metrics</div>
-        <p style={{ color: "var(--text-3)", marginTop: 8 }}>No groups to show.</p>
+        <p style={{ color: "var(--text-3)", margin: 0 }}>No groups to show.</p>
       </div>
     );
   }
@@ -105,7 +104,6 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <div className="eyebrow" style={{ marginBottom: 0 }}>grouped metrics</div>
         <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
           Group by
           <select

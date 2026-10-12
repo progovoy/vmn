@@ -48,7 +48,6 @@ function ParamImportance({ ws, app, filter, rows, metricCols, paramCols, schema,
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-        <div className="eyebrow" style={{ marginBottom: 0 }}>parameter importance</div>
         <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
           metric
           <select

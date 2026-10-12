@@ -84,7 +84,7 @@ export default function Compare() {
       </div>
 
       <div className="card">
-        <div className="eyebrow">what happened</div>
+        <h2 className="section-title">What happened</h2>
         {delta.length === 0 ? (
           <div className="empty">No metric changes.</div>
         ) : (
@@ -130,7 +130,7 @@ export default function Compare() {
       </div>
 
       <div className="card">
-        <div className="eyebrow">what changed</div>
+        <h2 className="section-title">What changed</h2>
         <DiffView text={result.diff} />
       </div>
 

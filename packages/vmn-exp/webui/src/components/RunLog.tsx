@@ -163,7 +163,7 @@ export default function RunLog({ ws, app, verstr, tail, total }: {
 
   return (
     <div className="card">
-      <div className="eyebrow">log</div>
+      <h2 className="section-title">Log</h2>
       {start > 0 && (
         <div className="toolbar" style={{ marginBottom: 8 }}>
           <button className="link" onClick={loadOlder} disabled={loading}>

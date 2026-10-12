@@ -47,7 +47,7 @@ export function EnvCard({ env }: { env: EnvData }) {
 
   return (
     <div className="card">
-      <div className="eyebrow">environment</div>
+      <h2 className="section-title">Environment</h2>
       {env.truncated && (
         <div className="env-truncated" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
           Package list truncated (env.yml exceeded size cap)
@@ -101,7 +101,7 @@ export function InputsCard({ inputs }: { inputs: Record<string, InputEntry> }) {
   if (entries.length === 0) return null;
   return (
     <div className="card">
-      <div className="eyebrow">inputs</div>
+      <h2 className="section-title">Inputs</h2>
       <table className="inputs-table" style={{ fontSize: 12, width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>

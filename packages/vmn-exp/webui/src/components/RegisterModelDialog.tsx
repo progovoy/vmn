@@ -52,7 +52,7 @@ export default function RegisterModelDialog({
         onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onDone(); } }}
         style={{ minWidth: 320 }}
       >
-        <div className="eyebrow">register as model</div>
+        <h2 className="section-title">Register as model</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, margin: "12px 0" }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             Model name

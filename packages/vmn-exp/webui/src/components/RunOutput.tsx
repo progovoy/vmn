@@ -13,7 +13,7 @@ export default function RunOutput({ artifacts, downloadUrl }: {
   if (!output) return null;
   return (
     <div className="card" id={OUTPUT_ANCHOR}>
-      <div className="eyebrow">output</div>
+      <h2 className="section-title">Output</h2>
       <ArtifactPreview artifact={output} url={downloadUrl(OUTPUT_LOG)} />
     </div>
   );
