@@ -23,6 +23,8 @@ import LeaderboardCharts from "./LeaderboardCharts";
 import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits } from "./LeaderboardTable";
 import { DATE_SORT_OF, moveColumn } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
+import { useAppExists } from "../shell/useAppExists";
+import { usePageScope } from "../shell/usePageScope";
 
 const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 
@@ -30,6 +32,24 @@ const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SO
 const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order =>
   !NEWEST_FIRST.has(col) && metricGoal(schema, col) === "min" ? "asc" : "desc";
 
+/** An existing app without runs: the CLI line, plus a New run button where a
+ *  run can be created here (a known app, a writable git workspace). */
+function EmptyBoard({ ws, app, appName, onCreate }: {
+  ws: string; app: string; appName: string; onCreate: () => void;
+}) {
+  const exists = useAppExists(ws, app);
+  const scope = usePageScope(ws);
+  const canCreate = exists === true && !scope.readOnly && scope.isGit;
+  return (
+    <div className="empty">
+      No runs yet in {appName}. Capture your working state:
+      <div className="cli-hint" style={{ margin: "12px auto", maxWidth: 420 }}>
+        vmn-exp create {appName}
+      </div>
+      {canCreate && <button className="primary" onClick={onCreate}>New run</button>}
+    </div>
+  );
+}
 
 /** One app's board: switching app starts from a clean slate (filters, brush,
  *  scroll), while the URL's own view params never remount it. */
@@ -183,17 +203,11 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
         />
       )}
 
-      {/* Filtered down to nothing is not "no experiments yet": keep the table
+      {/* Filtered down to nothing is not "no runs yet": keep the table
           and its filter bar, or there is no way back from the query. */}
       {empty ? (
         !view.creating && (
-          <div className="empty">
-            No experiments yet. Capture your working state:
-            <div className="cli-hint" style={{ margin: "12px auto", maxWidth: 420 }}>
-              vmn-exp create {appName}
-            </div>
-            <button className="primary" onClick={() => view.openCreate(true)}>+ New experiment</button>
-          </div>
+          <EmptyBoard ws={ws} app={app} appName={appName} onCreate={() => view.openCreate(true)} />
         )
       ) : (
         <>

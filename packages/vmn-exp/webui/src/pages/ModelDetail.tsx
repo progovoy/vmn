@@ -7,6 +7,8 @@ import type { ModelVersion, AuditEntry } from "../apiModels";
 import { relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import VersionLineagePanel from "../components/VersionLineage";
+import NotFound from "../components/shell/NotFound";
+import { httpStatus } from "../shell/notFoundCopy";
 
 // ---------------------------------------------------------------------------
 // Alias move dialog
@@ -169,6 +171,7 @@ export default function ModelDetailPage() {
   const [moving, setMoving] = useState<{ alias: string; currentVersion: number } | null>(null);
 
   if (query.error && !query.data) {
+    if (httpStatus(query.error) === 404) return <NotFound kind="model" ws={ws} name={modelName} />;
     return <div className="error">{String(query.error)}</div>;
   }
   if (!query.data) return <Skeleton />;
