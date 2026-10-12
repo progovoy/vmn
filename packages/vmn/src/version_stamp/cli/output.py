@@ -162,6 +162,8 @@ def _handle_output_to_user(data, dirty_states, params, tag_name, vcs, ver_info):
 
         if params.get("raw"):
             out = data["_version"]
+        elif params.get("base"):
+            out = get_base_vmn_version(data["_version"], vcs.hide_zero_hotfix)
 
         if params.get("display_unique_id"):
             out = gen_unique_id(out, data["changesets"]["."]["hash"])

@@ -571,6 +571,8 @@ def handle_show(vmn_ctx):
     else:
         vmn_ctx.params["raw"] = vmn_ctx.args.raw
 
+    vmn_ctx.params["base"] = vmn_ctx.args.base
+
     vmn_ctx.params["ignore_dirty"] = vmn_ctx.args.ignore_dirty
 
     vmn_ctx.params["verbose"] = vmn_ctx.args.verbose

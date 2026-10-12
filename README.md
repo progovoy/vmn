@@ -447,6 +447,7 @@ updated). Takes `--git-push-user`/`--git-push-token`.
 | `-v <version>` | Show a specific version instead of the current one |
 | `--verbose` | Full stamp metadata as YAML |
 | `--raw` | Version without the template applied |
+| `--base` | `major.minor.patch[.hotfix]` only, no prerelease or buildmetadata |
 | `-t, --template <t>` | Format with a different template |
 | `--root` | Root app version |
 | `--type` | Release type (`release` or the prerelease id) |

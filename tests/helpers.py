@@ -179,6 +179,7 @@ def _show(
     display_type=False,
     template=None,
     dev=False,
+    base=False,
 ):
     args_list = ["show"]
     if verbose is not None:
@@ -201,6 +202,8 @@ def _show(
         args_list.extend(["-t", f"{template}"])
     if dev:
         args_list.append("--dev")
+    if base:
+        args_list.append("--base")
 
     args_list.append(app_name)
 
