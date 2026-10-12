@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { ReportDetail } from "../apiReports";
 import type { CliCommand, Crumb, CrumbInput, ShellContext } from "./contracts";
-import { cliFor } from "./cliCommands";
+import { cliFor, storeUriOf } from "./cliCommands";
 import { crumbsFor, isAppRoute } from "./crumbs";
 import { titleFor } from "./titles";
 import { useAppStatus } from "./useShellData";
@@ -17,7 +17,7 @@ export function useShellCrumbs(ctx: ShellContext): { crumbs: Crumb[]; cli: CliCo
   const rid = routeId === "report" || routeId === "report-edit" ? params.rid : undefined;
   const reportTitle = useCacheRead((client) =>
     rid ? client.getQueryData<ReportDetail>(["report", ws, rid])?.title ?? "" : "");
-  const storeUri = workspace?.kind === "store" ? workspace.store : undefined;
+  const storeUri = storeUriOf(workspace);
   const stuck = status?.counts.stuck;
 
   return useMemo(() => {

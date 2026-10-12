@@ -1,12 +1,11 @@
 /** The breadcrumb trail after ContextRoot (plan 19 §1.4): lowercase CLI
  *  nouns, identifiers in mono, the leaf last. Pure, so titles and tests share it. */
 import { parseSelection } from "../pages/compareRunsData";
+import { appHref, plural } from "../util";
 import { midTruncate } from "../util/midTruncate";
 import type { Crumb, CrumbInput, RouteId, RunLabel } from "./contracts";
 
 const RUN_VERSTR_MAX = 24;
-
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 /** The run a route names: its cached label, else the URL ref alone. */
 export function runOf(input: CrumbInput): RunLabel {
@@ -69,10 +68,10 @@ const APP_ROUTES = new Set<RouteId>([
 export const isAppRoute = (routeId: RouteId) => APP_ROUTES.has(routeId);
 
 export function crumbsFor(input: CrumbInput): Crumb[] {
-  const { routeId, ws, appTag, params, reportTitle } = input;
+  const { routeId, ws, app, params, reportTitle } = input;
   const global = GLOBAL[routeId];
   if (global) return [{ label: global }];
-  if (isAppRoute(routeId)) return appCrumbs(input, `/ws/${ws}/app/${appTag}`);
+  if (isAppRoute(routeId)) return appCrumbs(input, appHref(ws!, app!));
 
   if (routeId === "models") return [{ label: "models" }];
   if (routeId === "model") {

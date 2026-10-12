@@ -4,7 +4,7 @@ import { useApps } from "../queries";
 import { useDebounce } from "../hooks/useDebounce";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import type { ShellContext } from "../shell/contracts";
-import { copyText } from "../util";
+import { copyText, plural } from "../util";
 import { Icon } from "./shell/icons";
 import PaletteRow from "./palette/PaletteRow";
 import { buildSections, capItems, type PaletteItem } from "./palette/paletteItems";
@@ -69,7 +69,7 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
   });
   const flat = groups.flatMap((g) => g.entries);
   const current = Math.min(active, flat.length - 1);
-  const announce = useDebounce(`${flat.length} ${flat.length === 1 ? "result" : "results"}`, 300);
+  const announce = useDebounce(plural(flat.length, "result"), 300);
 
   useEffect(() => { setActive(0); setCopied(null); }, [q]);
   useEffect(() => {

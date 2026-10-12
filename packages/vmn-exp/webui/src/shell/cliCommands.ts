@@ -1,10 +1,11 @@
 /** "Copy as CLI" (plan 19 §1.4): the command that prints what the page
  *  shows. Runs are named by verstr (it survives prune); a store workspace
  *  adds `--store` to `vmn-exp` commands. Pages with no CLI twin get none. */
+import type { Workspace } from "../types";
 import type { CliCommand, CrumbInput } from "./contracts";
 import { compareRefs, diffRefs, runOf } from "./crumbs";
 
-const SAFE = /^[A-Za-z0-9@._+:/=-]+$/;
+const SAFE = /^[A-Za-z0-9@%_+=:,./-]+$/;
 
 /** *arg* as one POSIX shell word. */
 export function shellQuote(arg: string): string {
@@ -12,6 +13,15 @@ export function shellQuote(arg: string): string {
 }
 
 const join = (args: string[]) => args.map(shellQuote).join(" ");
+
+/** The URI a workspace's `vmn-exp` commands pass as `--store`: a store workspace's. */
+export const storeUriOf = (w?: Pick<Workspace, "kind" | "store">) =>
+  w?.kind === "store" ? w.store : undefined;
+
+/** `vmn-exp <args>`, plus `--store` for a store workspace. */
+export const vmnExpCommand = (args: string[], storeUri?: string) =>
+  `vmn-exp ${join([...args, ...(storeUri ? ["--store", storeUri] : [])])}`;
+export const vmnCommand = (args: string[]) => `vmn ${join(args)}`;
 
 function vmnExpArgs(input: CrumbInput): string[][] {
   const { routeId, app = "", search, params } = input;
@@ -48,13 +58,12 @@ function vmnArgs({ routeId, app = "", search }: CrumbInput, verstr: string): str
 }
 
 export function cliFor(input: CrumbInput): CliCommand[] {
-  const store = input.storeUri ? ["--store", input.storeUri] : [];
   const exp = vmnExpArgs(input).map((args) => ({
     label: args[0] === "model" ? args[1] : args[0],
-    command: `vmn-exp ${join([...args, ...store])}`,
+    command: vmnExpCommand(args, input.storeUri),
   }));
   const vmn = vmnArgs(input, runOf(input).verstr).map((args) => ({
-    label: args[0], command: `vmn ${join(args)}`,
+    label: args[0], command: vmnCommand(args),
   }));
   return [...exp, ...vmn];
 }

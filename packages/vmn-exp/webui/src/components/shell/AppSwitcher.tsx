@@ -3,7 +3,7 @@
  *  container never clips it. */
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
-import { appTag } from "../../api";
+import { appHref } from "../../util";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useApps } from "../../queries";
 import { Icon } from "./icons";
@@ -47,7 +47,7 @@ function AppMenu({ ws, app, style, onPick, onClose, drawer }: {
       {apps?.map((a) => (
         <Link
           key={a.name} role="menuitem" className="app-menu-item mono"
-          to={`/ws/${ws}/app/${appTag(a.name)}`}
+          to={appHref(ws, a.name)}
           aria-current={a.name === app ? "page" : undefined}
           state={drawer ? { focusMain: true } : undefined}
           onClick={onPick}

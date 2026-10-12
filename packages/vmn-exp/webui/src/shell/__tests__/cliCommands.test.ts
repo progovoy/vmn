@@ -12,6 +12,8 @@ const RUN = { verstr: "0.4.1-dev.abc123", idx: 54, name: "lr" };
 describe("shellQuote", () => {
   it("leaves safe arguments bare", () => {
     expect(shellQuote("root/svc_1.2@3+x:y=z-w")).toBe("root/svc_1.2@3+x:y=z-w");
+    expect(shellQuote("a%b,c")).toBe("a%b,c");
+    expect(shellQuote("0.2.0-dev.1+a")).toBe("0.2.0-dev.1+a");
   });
   it("single-quotes anything else and escapes quotes", () => {
     expect(shellQuote("lr > 1")).toBe("'lr > 1'");

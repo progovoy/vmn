@@ -4,7 +4,7 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { findCachedRow, runKey } from "../queries";
 import type { ExperimentDetail } from "../types";
-import type { RunLabel } from "./contracts";
+import { runLabelOf, type RunLabel } from "./contracts";
 
 /** A value derived from the query cache, re-read on every cache event.
  *  *read* returns a string so unchanged reads keep the snapshot stable. */
@@ -20,10 +20,10 @@ function readLabel(client: QueryClient, ws: string, app: string, ref: string): R
   const detail = client.getQueryData<ExperimentDetail>(runKey(ws, app, ref));
   const verstr = detail?.metadata.verstr ?? ref;
   // An older server's detail has no idx/name: the leaderboard row may.
-  if (detail?.idx !== undefined) return { verstr, idx: detail.idx ?? null, name: detail.name ?? null };
+  if (detail?.idx !== undefined) return runLabelOf({ verstr, idx: detail.idx, name: detail.name });
   const row = findCachedRow(client, ws, app, verstr);
-  if (row) return { verstr, idx: row.idx, name: row.name ?? null };
-  return detail ? { verstr, idx: null, name: null } : undefined;
+  if (row) return runLabelOf({ verstr, idx: row.idx, name: row.name });
+  return detail ? runLabelOf({ verstr }) : undefined;
 }
 
 /** *app* is the URL tag form, *verstr* the URL's run ref. */
