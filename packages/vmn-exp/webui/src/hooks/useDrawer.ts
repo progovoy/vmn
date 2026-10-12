@@ -46,14 +46,8 @@ export function useDrawer(): Drawer {
   const { pathname } = useLocation();
   const isOpen = open && narrow;
 
-  /** Close, handing focus back to whatever opened the drawer. The page is
-   *  un-inerted first: a browser will not focus inside an inert subtree. */
-  const close = useCallback(() => {
-    setOpen(false);
-    setInert(mainRef.current, false);
-    if (opener.current?.isConnected) opener.current.focus();
-    opener.current = null;
-  }, []);
+  const wasOpen = useRef(false);
+  const close = useCallback(() => setOpen(false), []);
   const toggle = useCallback(() => {
     if (open) return close();
     opener.current = document.activeElement as HTMLElement | null;
@@ -67,10 +61,18 @@ export function useDrawer(): Drawer {
     setOpen(false);
   }, [pathname, narrow]);
 
+  // The one writer of inert. Closing hands focus back to whatever opened the
+  // drawer, after the page is un-inerted: a browser will not focus inside an
+  // inert subtree. (A navigation or a resize has cleared the opener already.)
   useEffect(() => {
     setInert(sidebarRef.current, narrow && !isOpen);
     setInert(mainRef.current, isOpen);
     if (isOpen) sidebarRef.current?.querySelector<HTMLElement>("nav a[href]")?.focus();
+    else if (wasOpen.current) {
+      if (opener.current?.isConnected) opener.current.focus();
+      opener.current = null;
+    }
+    wasOpen.current = isOpen;
   }, [narrow, isOpen]);
 
   useEffect(() => {

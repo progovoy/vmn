@@ -6,7 +6,7 @@ import { useFocusTrap } from "../useFocusTrap";
 function Dialog({ withInitial }: { withInitial?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const initial = useRef<HTMLInputElement>(null);
-  useFocusTrap(ref, true, withInitial ? { initialFocus: initial } : undefined);
+  useFocusTrap(ref, withInitial ? { initialFocus: initial } : undefined);
   return (
     <div ref={ref}>
       <button>first</button>
