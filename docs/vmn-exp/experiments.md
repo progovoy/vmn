@@ -1038,7 +1038,7 @@ Each signal is a similarity in [0, 1]; the score is their weighted mean:
 | `entrypoint` | same script 0.7, plus the same subcommand/args 1.0; launchers (`torchrun`, `accelerate launch`, `deepspeed`, `mpirun`, `srun`, `python -m torch.distributed.run`, …) are looked past | 1 |
 | `objective` | Jaccard of the metric names (minus params and `sys_*`) | 1 |
 | `branch` | equality | 0.5 |
-| `text` | BM25 over the intent text, its keywords (×3), name, note, tag keys and values, commit subjects and `create`/`run -f`'s `hypothesis`, scaled by the best candidate's score | 1.5; code + inputs when the target has an intent or a context |
+| `text` | BM25 over the intent text, its keywords (×3), name, note, tag keys and values, commit subjects and `create`/`run -f`'s `hypothesis` (words match whatever their case; a camelCase word also matches its parts), scaled by the best candidate's score | 1.5; code + inputs when the target has an intent or a context |
 
 A signal missing on either side is left out and the rest renormalised (it is
 unknown, not different), so an MLflow import without code still compares on

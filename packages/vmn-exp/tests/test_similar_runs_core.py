@@ -197,3 +197,13 @@ def test_a_create_note_is_part_of_the_target_text_too():
     snapshot = FakeSnapshot(rows, create_notes={"t": "focal loss try"})
     target = target_from_snapshot(snapshot, "t", text_only=True)
     assert verstrs(similar_runs(snapshot, target)) == ["a"]
+
+
+@pytest.mark.parametrize("context", ["nan", "NaN", "resnet", "ResNet"])
+def test_a_context_word_finds_an_intent_whatever_its_capitalisation(context):
+    rows = [run("a", note="baseline"), run("b")]
+    intents = {"b": {"text": "ResNet-18: expect NaN loss", "keywords": []}}
+    items = similar_runs(FakeSnapshot(rows, intents=intents),
+                         _target(None, text=context, text_only=True))
+    assert verstrs(items) == ["b"]
+    assert items[0]["reasons"] == ["shared: " + context.lower()]

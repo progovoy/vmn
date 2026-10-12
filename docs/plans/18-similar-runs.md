@@ -334,8 +334,10 @@ matching. `-f`'s `hypothesis:` (create entry) also feeds the text signal.
 
 ### 4.2 Matching text without a model
 
-- `core/similar_text.py` (pure): a tokenizer (lowercase; splits on punctuation, `_` and
-  camelCase; stopwords and 1-character tokens dropped) and BM25 (saturating query-term
+- `core/similar_text.py` (pure): a tokenizer (splits on punctuation and `_`; each word
+  counts lowercased, and a camelCase word also counts its parts when every part has 2+
+  characters, so `ResNet` gives `resnet res net` and `NaN`/`GPUs` stay `nan`/`gpus`;
+  stopwords and 1-character tokens dropped) and BM25 (saturating query-term
   weights) over each run's text document (§2), with `w:` tokens in the §3.3 inverted
   index. Changed symbols stay structured only, so nothing is counted twice. It is the
   single `text` signal; an intent or context on the target raises its default weight to

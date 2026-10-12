@@ -14,6 +14,7 @@ Pure: no storage.
 import math
 import re
 from collections import Counter
+from itertools import islice
 
 KEYWORD_REPEAT = 3
 # BM25's usual constants; QUERY_K3 saturates a term repeated in the query.
@@ -31,21 +32,31 @@ why will with would you your yours
 """.split())
 
 _PIECES = re.compile(r"[\W_]+")
-_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+# A lower/digit -> Upper boundary, or the start of a Capitalised word (two
+# or more lowercase letters) after an acronym: HTTPServer, not GPUs.
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z]{2})")
+
+
+def _words(piece):
+    """A piece's whole lowercased form, then its camelCase parts when it
+    splits into parts of two or more characters each (NaN and BFloat16 stay
+    whole)."""
+    parts = _CAMEL.split(piece)
+    words = [piece.lower()]
+    if len(parts) > 1 and all(len(part) > 1 for part in parts):
+        words += [part.lower() for part in parts]
+    return words
 
 
 def tokenize(text):
-    """Lowercase words of *text*, split on punctuation, ``_`` and camelCase;
-    stopwords and one-character tokens dropped."""
+    """Lowercase words of *text*, split on punctuation and ``_``; stopwords
+    and one-character tokens dropped. A camelCase word yields its whole
+    lowercased form and its parts (``ResNet`` -> resnet, res, net), so a
+    word matches however it is capitalised."""
     if not isinstance(text, str):
         return []
-    tokens = []
-    for piece in _PIECES.split(text):
-        for word in _CAMEL.split(piece):
-            word = word.lower()
-            if len(word) > 1 and word not in STOPWORDS:
-                tokens.append(word)
-    return tokens
+    return [word for piece in _PIECES.split(text) for word in _words(piece)
+            if len(word) > 1 and word not in STOPWORDS]
 
 
 def _strings(value):
@@ -115,9 +126,15 @@ class Bm25:
         return total
 
 
+def _inside_another(term, terms):
+    """Whether *term* is part of a longer term of *terms* (``net`` of ``resnet``)."""
+    return any(term != other and term in other for other in terms)
+
+
 def shared_reason(query_counts, doc_counts, idf, phrases=(), limit=3):
     """``"shared: a, b, c"`` — keyword *phrases* whose words both sides hold
-    first, then shared words by rarity; None when nothing is shared."""
+    first, then shared words by rarity (none held inside a longer shared
+    word: the parts of a camelCase word); None when nothing is shared."""
     shared = set(query_counts) & set(doc_counts)
     named, covered = [], set()
     for phrase in (p.strip().lower() for p in phrases):
@@ -126,5 +143,6 @@ def shared_reason(query_counts, doc_counts, idf, phrases=(), limit=3):
             named.append(phrase)
             covered.update(words)
     rest = sorted(shared - covered, key=lambda term: (-idf(term), term))
-    named = (named + rest)[:limit]
+    named += islice((t for t in rest if not _inside_another(t, shared)), max(0, limit - len(named)))
+    named = named[:limit]
     return "shared: " + ", ".join(named) if named else None
