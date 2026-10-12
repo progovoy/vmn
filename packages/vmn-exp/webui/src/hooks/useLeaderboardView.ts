@@ -5,14 +5,35 @@ import { moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
 export const CHART_VIEWS = ["trend", "bar", "scatter", "parallel", "grouped", "importance"] as const;
 export type ChartView = (typeof CHART_VIEWS)[number];
 export type Order = "asc" | "desc";
+/** The board's view switcher: the runs table alone, or charts above it. */
+export const BOARD_TABS = ["runs", "charts"] as const;
+export type BoardTab = (typeof BOARD_TABS)[number];
 
-/** The leaderboard's whole view — sort, filters, chart, hidden columns,
+const isChartView = (v: string | null): v is ChartView =>
+  (CHART_VIEWS as readonly string[]).includes(v ?? "");
+
+/** The open tab: `tab=` when set, else Charts for a URL that names a chart
+ *  view (links from before the switcher), else Runs. */
+function boardTab(p: URLSearchParams): BoardTab {
+  const tab = p.get("tab");
+  if (tab === "runs" || tab === "charts") return tab;
+  return isChartView(p.get("view")) ? "charts" : "runs";
+}
+
+/** Write *tab* into *p*, leaving `tab=` out where the URL implies it anyway. */
+function setBoardTab(p: URLSearchParams, tab: BoardTab) {
+  p.delete("tab");
+  if (boardTab(p) !== tab) p.set("tab", tab);
+}
+
+/** The leaderboard's whole view — sort, filters, tab, chart, hidden columns,
  *  column order, pinning and selection — read from and written to the URL,
  *  so it is bookmarkable and Back returns to exactly what was on screen. */
 export function useLeaderboardView() {
   const { params, update, setParam } = useUrlState();
   const read = (k: string) => params.get(k) ?? "";
   const sortOrder = params.get("order");
+  const chartView = params.get("view");
 
   const view = {
     sort: params.get("sort") || null,
@@ -21,8 +42,8 @@ export function useLeaderboardView() {
     query: read("q"),
     search: read("search"),
     branch: read("branch"),
-    chart: (CHART_VIEWS as readonly string[]).includes(read("view"))
-      ? (read("view") as ChartView) : "trend",
+    tab: boardTab(params),
+    chart: isChartView(chartView) ? chartView : "trend",
     creating: params.get("new") === "1",
     archived: params.get("archived") === "1",
   };
@@ -85,7 +106,14 @@ export function useLeaderboardView() {
     setQuery: (q: string) => setParam("q", q),
     setSearch: (s: string) => setParam("search", s),
     setBranch: (b: string) => setParam("branch", b),
-    setChart: (c: ChartView) => setParam("view", c === "trend" ? "" : c),
+    setTab: (tab: BoardTab) => update((p) => setBoardTab(p, tab)),
+    // Only the Charts tab picks a chart, so the pick keeps that tab open.
+    setChart: (c: ChartView) =>
+      update((p) => {
+        if (c === "trend") p.delete("view");
+        else p.set("view", c);
+        setBoardTab(p, "charts");
+      }),
     openCreate: (open: boolean) => setParam("new", open ? "1" : ""),
     toggleHidden: (col: string) => toggleIn("hide", col),
     toggleSelected: (verstr: string) => toggleIn("sel", verstr),

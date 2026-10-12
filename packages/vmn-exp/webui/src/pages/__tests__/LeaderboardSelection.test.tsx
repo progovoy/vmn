@@ -69,6 +69,8 @@ describe("select all filtered", () => {
       verstrs: ["a", "b", "c"], idx: [1, 2, 3], columns: {}, total: 900,
     });
     renderBoard("/ws/test/app/my-app?status=failed");
+    await screen.findByRole("link", { name: v(1) });
+    fireEvent.click(checkbox(1));
     fireEvent.click(await screen.findByRole("button", { name: /select all 500/i }));
     await waitFor(() => expect(urlParams().getAll("sel")).toEqual(["a", "b", "c"]));
     expect(m.experimentsColumns).toHaveBeenCalledWith(
@@ -78,6 +80,8 @@ describe("select all filtered", () => {
 
   it("falls back to the loaded rows without the columns endpoint", async () => {
     renderBoard();
+    await screen.findByRole("link", { name: v(1) });
+    fireEvent.click(checkbox(1));
     fireEvent.click(await screen.findByRole("button", { name: /select all/i }));
     await waitFor(() => expect(urlParams().getAll("sel")).toEqual([1, 2, 3, 4, 5].map(v)));
   });

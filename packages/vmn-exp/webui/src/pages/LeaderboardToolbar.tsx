@@ -5,21 +5,16 @@ import LiveToggle from "../components/LiveToggle";
 import SavedViews from "../components/SavedViews";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
-import type { useBoardSelection } from "../hooks/useBoardSelection";
-import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 
-/** The bar above the leaderboard: live toggle, selection actions, saved
- *  views, the create button and the column picker. */
+/** The bar above the leaderboard: live toggle, the create button, saved
+ *  views and the columns (the selection's actions float at the bottom). */
 export default function LeaderboardToolbar({
-  ws, app, base, view, cols, selection, total, live, onLive, onViewApplied, onResetColumns,
+  ws, app, view, cols, live, onLive, onViewApplied, onResetColumns,
 }: {
   ws: string;
   app: string;
-  base: string;
   view: ReturnType<typeof useLeaderboardView>;
   cols: ReturnType<typeof useLeaderboardColumns>;
-  selection: ReturnType<typeof useBoardSelection>;
-  total: number;
   live: boolean;
   onLive: () => void;
   /** A saved view replaced the URL: controls holding their own state reset. */
@@ -39,17 +34,6 @@ export default function LeaderboardToolbar({
       <span className="legend-chip"><span className="sq" /> best in column</span>
       <LiveToggle live={live} onToggle={onLive} />
       <span className="spacer" />
-      <LeaderboardSelectionBar
-        selected={[...view.selected]}
-        total={total}
-        base={base}
-        showUnarchive={view.archived}
-        archiving={selection.archiving}
-        archiveError={selection.archiveError}
-        onClear={() => view.setSelected([])}
-        onSelectAll={selection.selectAll}
-        onArchive={selection.archive}
-      />
       {!view.creating && <button onClick={() => view.openCreate(true)}>+ New experiment</button>}
       <SavedViews
         ws={ws} app={app} search={location.search}
