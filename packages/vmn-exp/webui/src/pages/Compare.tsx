@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, appName as toAppName } from "../api";
 import type { DiffResult } from "../types";
 import type { HttpError } from "../http";
-import { fmtVal, metricGoal } from "../util";
+import { fmtVal } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import RunPicker from "../components/RunPicker";
 
@@ -128,7 +128,7 @@ export default function Compare() {
                     const numeric =
                       typeof d.from === "number" && typeof d.to === "number";
                     const diff = numeric ? (d.to as number) - (d.from as number) : null;
-                    const goal = d.goal ?? metricGoal(schema, k);
+                    const goal = d.goal ?? null;
                     const neutral = goal === null || d.param;
                     const improved = !neutral && diff !== null && diff !== 0 &&
                       (goal === "min" ? diff < 0 : diff > 0);
