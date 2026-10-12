@@ -20,6 +20,7 @@ import os
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.metric_block import intact_length, read_headers
 from vmn_exp.core.metric_files import (
+    covered_seq,
     is_indexed_file,
     is_stream_file,
     stream_writer_and_seq,
@@ -41,32 +42,55 @@ def _remote_bytes(objects):
     return sum(size for _, size in objects)
 
 
-def _points(storage, app_name, verstr, objects, local=True):
-    """Points held by *objects*: footers of ``.vmx`` files and, if *local*,
-    block headers of streams; a failed read raises. A local ``.vmx`` with
-    rewinds applied counts as infinite: its points need not be a prefix."""
+def _reader(storage, app_name, verstr, name):
+    return lambda offset, length: _read(
+        storage.read_range(app_name, verstr, name, offset, length), name)
+
+
+def _footer(storage, app_name, verstr, name, size):
+    return MetricIndexReader(_reader(storage, app_name, verstr, name), size).footer
+
+
+def _points(storage, app_name, verstr, objects, local=True, past=-1):
+    """Points held by *objects*: footers of ``.vmx`` files plus block headers
+    of streams (remote ones only past segment *past*, which a ``.vmx`` holds);
+    a failed read raises. A local ``.vmx`` with rewinds applied counts as
+    infinite: its points need not be a prefix."""
     total = 0
     for name, size in objects:
-        def read(offset, length, _name=name):
-            return _read(storage.read_range(app_name, verstr, _name, offset, length), _name)
-
         if is_indexed_file(name):
-            footer = MetricIndexReader(read, size).footer
+            footer = _footer(storage, app_name, verstr, name, size)
             if local and footer.get("rewinds_applied"):
                 return float("inf")
             total += footer["rows"]
-        elif local and is_stream_file(name):
-            total += sum(k["n"] for h in read_headers(read(0, size)) for k in h["keys"])
+        elif is_stream_file(name) and (local or stream_writer_and_seq(name)[1] > past):
+            data = _reader(storage, app_name, verstr, name)(0, size)
+            total += sum(k["n"] for h in read_headers(data) for k in h["keys"])
     return total
 
 
+def _same_files(local, remote, app_name, verstr, objects, held):
+    """The local ``.vmx`` files the remote holds as they are: same name, size
+    and footer (the owner shipped its own compaction)."""
+    sizes = dict(held)
+    return {(n, size) for n, size in objects
+            if is_indexed_file(n) and sizes.get(n) == size
+            and _footer(local, app_name, verstr, n, size) == _footer(remote, app_name, verstr, n, size)}
+
+
 def _covered(local, remote, app_name, verstr, objects, held):
-    """Whether the remote ``.vmx`` files *held* provably hold every point of
-    the local *objects* of one stream: both are prefixes of its owner's
-    stream, so holding as many points is holding them all (a remote ``.vmx``
-    with rewinds applied only counts fewer)."""
-    return (_points(remote, app_name, verstr, held, local=False)
-            >= _points(local, app_name, verstr, objects))
+    """Whether the remote objects *held* (one stream's, with a ``.vmx``)
+    provably hold every point of the local *objects*: files the remote holds
+    as they are, and otherwise as many points — both are prefixes of the one
+    owner's stream (a remote ``.vmx`` with rewinds applied only counts fewer)."""
+    same = _same_files(local, remote, app_name, verstr, objects, held)
+    mine = [o for o in objects if o not in same]
+    if not mine:
+        return True
+    past = max((covered_seq(n) for n, _ in held if is_indexed_file(n)), default=-1)
+    theirs = [o for o in held if o not in same]
+    return (_points(remote, app_name, verstr, theirs, local=False, past=past)
+            >= _points(local, app_name, verstr, mine))
 
 
 def _lacks_metrics(local, remote, app_name, verstr, objects, theirs):
