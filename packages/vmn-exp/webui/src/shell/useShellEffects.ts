@@ -22,18 +22,13 @@ export function usePaletteHotkey(setOpen: Dispatch<SetStateAction<boolean>>) {
   }, [setOpen]);
 }
 
-/** The title's subject: `@54 lr-sweep-3` of `(2 stuck) @54 lr-sweep-3 · ml_app — vmn-exp`. */
-export function titleSubject(title: string): string {
-  return title.replace(/ — vmn-exp$/, "").replace(/^\(\d+ stuck\) /, "").split(" · ")[0];
-}
-
 const RECENT_KIND: Partial<Record<RouteId, string>> = { run: "run", experiments: "app", apps: "ws" };
 const UNREMEMBERED = new Set<RouteId>(["not-found", "sign-in"]);
 
 /** On a pathname change: the new title goes to the live region, and focus
  *  moves to main only after a palette or drawer navigation (`state.focusMain`),
  *  so a mouse user never sees it jump. The destination joins ⌘K's Recent. */
-export function useRouteAnnouncer(title: string, routeId: RouteId): string {
+export function useRouteAnnouncer(title: string, subject: string, routeId: RouteId): string {
   const location = useLocation();
   const [announced, setAnnounced] = useState("");
   const first = useRef(true);
@@ -50,8 +45,7 @@ export function useRouteAnnouncer(title: string, routeId: RouteId): string {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // The label follows the title, which may improve once a run's name loads.
-  const subject = titleSubject(title);
+  // The label follows the subject, which may improve once a run's name loads.
   useEffect(() => {
     if (UNREMEMBERED.has(routeId)) return;
     pushRecent({ label: subject, to: location.pathname + location.search, kind: RECENT_KIND[routeId] ?? "page" });

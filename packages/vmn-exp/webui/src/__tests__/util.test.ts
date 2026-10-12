@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fmtDuration, fmtVal, humanizeSeconds, pollIntervalMs, relTime } from "../util";
+import { appHref, fmtDuration, fmtVal, humanizeSeconds, plural, pollIntervalMs, relTime } from "../util";
 
 describe("humanizeSeconds", () => {
   it("walks the s/m/h/d ladder", () => {
@@ -79,5 +79,20 @@ describe("pollIntervalMs", () => {
   it("floors at 5s so a fast heartbeat still feels live", () => {
     expect(pollIntervalMs(5)).toBe(5000);
     expect(pollIntervalMs(1)).toBe(5000);
+  });
+});
+
+describe("plural", () => {
+  it("counts a noun, singular only for one", () => {
+    expect(plural(1, "run")).toBe("1 run");
+    expect(plural(0, "run")).toBe("0 runs");
+    expect(plural(53, "result")).toBe("53 results");
+  });
+});
+
+describe("appHref", () => {
+  it("is the app's experiments page, under its tag", () => {
+    expect(appHref("w", "ml_app")).toBe("/ws/w/app/ml_app");
+    expect(appHref("w", "root/svc")).toBe("/ws/w/app/root-svc");
   });
 });

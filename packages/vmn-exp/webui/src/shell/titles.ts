@@ -25,6 +25,9 @@ function parts(input: CrumbInput): [string, string?] {
   }
 }
 
+/** The title's subject alone: what the announcer and ⌘K's Recent name. */
+export const subjectFor = (input: CrumbInput): string => parts(input)[0];
+
 /** *stuck* prefixes `(N stuck) ` on app routes. */
 export function titleFor(input: CrumbInput, opts: { stuck?: number } = {}): string {
   const [subject, scope] = parts(input);

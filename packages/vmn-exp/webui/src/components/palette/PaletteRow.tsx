@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react";
 import { Icon } from "../shell/icons";
-import type { PaletteItem } from "./paletteItems";
+import { shortCli, type PaletteItem } from "./paletteItems";
 
 /** One option: kind icon | label + secondary | the CLI equivalent. The CLI
  *  is drawn from `data-cli` so it never doubles the row's text content. */
@@ -18,7 +18,7 @@ export default function PaletteRow({ item, index, active, onHover, onPick }: {
       aria-selected={active}
       aria-disabled={item.disabled || undefined}
       className={`cmdk-row${active ? " active" : ""}${item.disabled ? " disabled" : ""}`}
-      data-cli={item.cli}
+      data-cli={shortCli(item.command)}
       onMouseMove={active ? undefined : onHover}
       onClick={onPick}
     >

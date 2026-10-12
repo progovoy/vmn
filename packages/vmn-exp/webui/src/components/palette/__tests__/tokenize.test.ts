@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { completeToken, quoteArg, stripCliPrefix, tokenize } from "../tokenize";
+import { completeToken, stripCliPrefix, tokenize } from "../tokenize";
 
 const values = (text: string) => tokenize(text).map((t) => t.value);
 
@@ -35,17 +35,6 @@ describe("stripCliPrefix", () => {
     ["show vmn", ["show", "vmn"]],
   ])("%s", (text, want) => {
     expect(stripCliPrefix(tokenize(text)).map((t) => t.value)).toEqual(want);
-  });
-});
-
-describe("quoteArg", () => {
-  it("leaves safe words alone and single-quotes the rest", () => {
-    expect(quoteArg("ml_app")).toBe("ml_app");
-    expect(quoteArg("@54")).toBe("@54");
-    expect(quoteArg("0.2.0-dev.1+a")).toBe("0.2.0-dev.1+a");
-    expect(quoteArg("a b")).toBe("'a b'");
-    expect(quoteArg("it's")).toBe(`'it'\\''s'`);
-    expect(quoteArg("")).toBe("''");
   });
 });
 

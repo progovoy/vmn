@@ -1,3 +1,5 @@
+import { appTag } from "./http";
+
 /** The one seconds ladder: 42s / 7m / 2h / 3d. Always floors, so nothing ever
  *  claims a threshold it has not reached. */
 export function humanizeSeconds(secs: number): string {
@@ -116,4 +118,9 @@ export function metricGoal(
 
 /** The Run page's path under an app's base path (`/ws/<ws>/app/<tag>`). */
 export const runHref = (base: string, verstr: string) => `${base}/run/${encodeURIComponent(verstr)}`;
+/** An app's experiments page: `/ws/<ws>/app/<tag>`. */
+export const appHref = (ws: string, name: string) => `/ws/${ws}/app/${appTag(name)}`;
 export const modelHref = (ws: string, model: string) => `/ws/${ws}/models/${encodeURIComponent(model)}`;
+
+/** `1 run`, `0 runs`, `53 runs`. */
+export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;

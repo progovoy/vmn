@@ -9,7 +9,6 @@ vi.mock("../../api", () => ({
   appTag: (n: string) => n.replaceAll("/", "-"),
   appName: (t: string) => t.replaceAll("-", "/"),
 }));
-vi.mock("../../apiShell", () => ({ apiShell: { resolveRef: vi.fn() } }));
 vi.mock("../../apiModels", () => ({ apiModels: { listModels: vi.fn(() => Promise.resolve({ models: [] })) } }));
 vi.mock("../../apiReports", () => ({ apiReports: { listReports: vi.fn(() => Promise.resolve({ reports: [] })) } }));
 

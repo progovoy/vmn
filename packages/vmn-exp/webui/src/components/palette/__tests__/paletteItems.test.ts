@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { DOCS_URL } from "../../../shell/contracts";
 import type { ExperimentRow } from "../../../types";
-import { buildSections, capItems, SECTION_CAP, type PaletteInput, type PaletteSection } from "../paletteItems";
+import { buildSections, capItems, SECTION_CAP, shortCli, type PaletteInput, type PaletteSection } from "../paletteItems";
 import { parseCliQuery } from "../parseCliQuery";
 import { fakeCtx } from "./fakeCtx";
 
@@ -17,7 +17,7 @@ function build(over: Partial<PaletteInput> & { text?: string } = {}): PaletteSec
     intent: over.intent ?? parseCliQuery(text, {
       apps: apps.map((a) => a.name), workspaces: ctx.workspaces.map((w) => w.name), app: ctx.app,
     }),
-    refs: over.refs ?? { pending: false, results: {} },
+    refs: over.refs ?? {},
     runs: over.runs ?? [], searched: over.searched ?? false,
     models: over.models ?? [], reports: over.reports ?? [], recents: over.recents ?? [],
   });
@@ -47,7 +47,7 @@ describe("section order", () => {
     });
     expect(keys(s)).toEqual(["runs", "goto", "apps", "models", "reports", "workspaces"]);
     expect(section(s, "runs").title).toBe("Runs");
-    const cmd = build({ text: "@54", refs: { pending: true, results: { "@54": { state: "pending" } } } });
+    const cmd = build({ text: "@54", refs: { "@54": { state: "pending" } } });
     expect(keys(cmd)[0]).toBe("command");
   });
 
@@ -69,7 +69,7 @@ describe("Go to", () => {
     expect(items.find((i) => i.label === "Compare runs…")!.fill).toBe("compare ");
     expect(items.find((i) => i.label === "Docs: vmn-exp ui")).toMatchObject({ to: DOCS_URL, external: true });
     expect(items.find((i) => i.label === "New run")!.to).toBe("/ws/w/app/ml_app?new=1");
-    expect(items.find((i) => i.label === "Stamp tree")!.cli).toBe("vmn show ml_app");
+    expect(items.find((i) => i.label === "Stamp tree")!.command).toBe("vmn show ml_app");
   });
 
   it("drops app pages and templates without an app", () => {
@@ -123,7 +123,7 @@ describe("caps", () => {
 describe("rows", () => {
   it("say runs, not experiments", () => {
     const s = build({ ctx: twoWs });
-    expect(section(s, "apps").items[0]).toMatchObject({ label: "other", secondary: "1 run", cli: "list other" });
+    expect(section(s, "apps").items[0]).toMatchObject({ label: "other", secondary: "1 run", command: "vmn-exp list other" });
     const many = build({ ctx: fakeCtx({ app: "x" }) });
     expect(section(many, "apps").items[0].secondary).toBe("53 runs");
   });
@@ -133,9 +133,30 @@ describe("rows", () => {
     const item = section(build({ runs: [r] }), "runs").items[0];
     expect(item).toMatchObject({
       prefix: "@54", label: "lr-sweep-3", title: "0.2.0-dev.abc", secondary: "running",
-      to: "/ws/w/app/ml_app/run/0.2.0-dev.abc", cli: "show ml_app -v @54",
-      command: "vmn-exp show ml_app -v @54",
+      to: "/ws/w/app/ml_app/run/0.2.0-dev.abc", command: "vmn-exp show ml_app -v @54",
     });
+  });
+});
+
+describe("CLI commands", () => {
+  const store = fakeCtx({
+    app: "ml_app", isGit: false, workspace: { name: "w", kind: "store", store: "s3://team-exp/ml" },
+  });
+
+  it("are the full runnable command, with --store on a store workspace", () => {
+    const s = build({ ctx: store, runs: [run(54, "0.2.0-dev.abc")] });
+    expect(section(s, "runs").items[0].command).toBe("vmn-exp show ml_app -v @54 --store s3://team-exp/ml");
+    expect(section(s, "goto").items.find((i) => i.label === "Experiments")!.command)
+      .toBe("vmn-exp list ml_app --store s3://team-exp/ml");
+    expect(section(s, "apps").items[0].command).toBe("vmn-exp list other --store s3://team-exp/ml");
+    const typed = section(build({ ctx: store, text: "metrics.loss < 0.3" }), "command").items[0];
+    expect(typed.command).toBe("vmn-exp list ml_app --query 'metrics.loss < 0.3' --store s3://team-exp/ml");
+  });
+
+  it("show a short form without the program name", () => {
+    expect(shortCli("vmn-exp show ml_app -v @54")).toBe("show ml_app -v @54");
+    expect(shortCli("vmn show ml_app")).toBe("vmn show ml_app");
+    expect(shortCli(undefined)).toBeUndefined();
   });
 });
 
@@ -143,27 +164,27 @@ describe("Command row", () => {
   const cmd = (over: Partial<PaletteInput> & { text: string }) => section(build(over), "command").items;
 
   it("reads resolving… until the refs land, then goes to the runs", () => {
-    const pending = cmd({ text: "compare @3 @7", refs: { pending: true, results: {} } });
+    const pending = cmd({ text: "compare @3 @7", refs: {} });
     expect(pending[0]).toMatchObject({ label: "compare @3 @7", secondary: "resolving…" });
     const ok = (verstr: string, idx: number) => ({ state: "ok" as const, run: { verstr, idx, name: null } });
-    const done = cmd({ text: "compare @3 @7", refs: { pending: false, results: { "@3": ok("a1", 3), "@7": ok("b2", 7) } } });
+    const done = cmd({ text: "compare @3 @7", refs: { "@3": ok("a1", 3), "@7": ok("b2", 7) } });
     expect(done[0]).toMatchObject({ to: "/ws/w/app/ml_app/compare-runs?sel=a1&sel=b2" });
     expect(done[0].disabled).toBeFalsy();
     expect(done[0].command).toBe("vmn-exp compare ml_app -v @3 -v @7");
   });
 
   it("names a missing or ambiguous ref", () => {
-    const none = cmd({ text: "@60", refs: { pending: false, results: { "@60": { state: "none" } } } });
+    const none = cmd({ text: "@60", refs: { "@60": { state: "none" } } });
     expect(none[0]).toMatchObject({ label: "ml_app has 53 runs (@1–@53)", disabled: true });
-    const gone = cmd({ text: "show 0.2.0.dev9", refs: { pending: false, results: { "0.2.0.dev9": { state: "none" } } } });
+    const gone = cmd({ text: "show 0.2.0.dev9", refs: { "0.2.0.dev9": { state: "none" } } });
     expect(gone[0]).toMatchObject({ label: "no run matches 0.2.0.dev9", disabled: true });
-    const many = cmd({ text: "show 0.2.", refs: { pending: false, results: { "0.2.": { state: "several" } } } });
+    const many = cmd({ text: "show 0.2.", refs: { "0.2.": { state: "several" } } });
     expect(many[0].label).toBe("0.2. matches several runs; type more of it");
   });
 
   it("names an ambiguous prefix before a ref it may have crowded out of the one request", () => {
     const results = { "@3": { state: "none" as const }, "0.2.0": { state: "several" as const } };
-    const rows = cmd({ text: "compare @3 0.2.0", refs: { pending: false, results } });
+    const rows = cmd({ text: "compare @3 0.2.0", refs: results });
     expect(rows[0].label).toBe("0.2.0 matches several runs; type more of it");
   });
 

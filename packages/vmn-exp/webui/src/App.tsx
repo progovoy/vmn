@@ -37,9 +37,9 @@ function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
 
-  const { crumbs, cli, title } = useShellCrumbs(ctx);
+  const { crumbs, cli, title, subject } = useShellCrumbs(ctx);
   useDocumentTitle(title);
-  const announced = useRouteAnnouncer(title, ctx.override ?? ctx.routeId);
+  const announced = useRouteAnnouncer(title, subject, ctx.override ?? ctx.routeId);
   usePaletteHotkey(setPaletteOpen);
   useHomeRevalidation();
   useAppStatusPoll(ctx.ws, ctx.appTag);

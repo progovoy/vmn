@@ -1,4 +1,4 @@
-/** The shell's shared contracts (plan 19 §2.2): types and storage keys only,
+/** The shell's shared contracts (plan 19 §2.2): types, storage keys and the RunLabel helper,
  *  so every shell unit and page builds against the same shapes. */
 import type { Meta, Role, Workspace } from "../types";
 
@@ -59,6 +59,9 @@ export interface ShellContext extends PageScope {
 }
 
 export interface RunLabel { verstr: string; idx: number | null; name: string | null }
+/** A row's label; what an older server omits is null. */
+export const runLabelOf = (r: { verstr: string; idx?: number | null; name?: string | null }): RunLabel =>
+  ({ verstr: r.verstr, idx: r.idx ?? null, name: r.name ?? null });
 export interface Crumb { label: string; to?: string; mono?: boolean; title?: string; run?: RunLabel }
 export interface CliCommand { label: string; command: string }
 export interface CrumbInput {

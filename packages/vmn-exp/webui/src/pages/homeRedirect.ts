@@ -1,6 +1,6 @@
 /** Where `/` sends a first visit (plan 19 §1.8): back to where sign-in started,
  *  else straight to the only app or the only workspace. Pure. */
-import { appTag } from "../http";
+import { appHref } from "../util";
 import type { AppRow, Workspace } from "../types";
 
 export type HomeDecision = { to: string } | "wait" | null;
@@ -30,6 +30,6 @@ export function homeRedirect({ location, returnTo, workspaces, apps }: {
   if (workspaces.length !== 1) return null;
   if (!apps) return "wait";
   const ws = workspaces[0].name;
-  if (apps.length === 1) return { to: `/ws/${ws}/app/${appTag(apps[0].name)}` };
+  if (apps.length === 1) return { to: appHref(ws, apps[0].name) };
   return apps.length > 1 ? { to: `/ws/${ws}` } : null;
 }

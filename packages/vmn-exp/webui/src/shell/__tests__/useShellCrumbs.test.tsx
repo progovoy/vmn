@@ -67,6 +67,7 @@ describe("useShellCrumbs", () => {
     expect(last(result.current.crumbs)!.label).toBe("@54 lr");
     expect(result.current.cli[0].command).toBe("vmn-exp show ml_app -v 0.4.1-dev.abc");
     expect(result.current.title).toBe("@54 lr · ml_app — vmn-exp");
+    expect(result.current.subject).toBe("@54 lr");
   });
 
   it("prefixes the stuck count on app routes", async () => {

@@ -35,12 +35,6 @@ export function stripCliPrefix(tokens: Token[]): Token[] {
   return tokens.slice(i);
 }
 
-/** *arg* as one POSIX shell word. */
-export function quoteArg(arg: string): string {
-  if (/^[A-Za-z0-9@%_+=:,./-]+$/.test(arg)) return arg;
-  return `'${arg.replaceAll("'", `'\\''`)}'`;
-}
-
 const commonPrefix = (words: string[]) =>
   words.reduce((acc, w) => {
     let i = 0;
