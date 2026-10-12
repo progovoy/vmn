@@ -4,12 +4,21 @@ break something that points at the old name."""
 import os
 
 import pytest
+from multi_clone_helpers import block
 from push_helpers import (
-    APP, CODE, KEY, X, local_code_exists, local_log, local_root, make_run,
-    remote_log, run_meta, set_state,
+    APP,
+    CODE,
+    KEY,
+    X,
+    local_code_exists,
+    local_log,
+    local_root,
+    make_run,
+    remote_log,
+    run_meta,
+    set_state,
 )
 from s3_helpers import mocked_bucket, s3_storage
-
 from vmn_exp._base import now_iso
 from vmn_exp.core import push_rename
 from vmn_exp.core.code_store import drop_unused_code, stored_code
@@ -18,6 +27,7 @@ from vmn_exp.core.push_ledger import PushLedger
 from vmn_exp.core.push_rename import SKIPPED, push_or_rename
 from vmn_exp.core.push_run import FAILED, NEW, UP_TO_DATE, UPDATE, push_run
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.writer import own_stream
 
 FOREIGN = "2025-05-05T00:00:00Z"
 CHILD = X + ".2"
@@ -154,3 +164,19 @@ def test_rename_ledger_entry_moves(local, target, tmp_path):
     assert entry["complete"] and entry["remote_verstr"] == new
     assert "pending_target" not in entry
     assert push_run(local, target, APP, new, ledger).status == UP_TO_DATE
+
+
+def test_a_renamed_run_pushes_its_own_log_and_metric_streams(local, target, tmp_path):
+    make_run(local, tmp_path)
+    own = own_stream(local, APP, X)
+    local.append_log_entry(APP, X, own, {"type": "tags", "set": {"k": "v"},
+                                         "timestamp": "2026-01-01T00:00:09Z"})
+    assert local.append_metric_block(APP, X, own, block(1.0))
+    _foreign(target)
+
+    outcome = _push(local, target)
+
+    log = target.load_merged_log(APP, outcome.verstr)
+    tags = [e for e in log if e["type"] == "tags"]
+    points = [e for e in log if e["type"] == "metrics" and "x" in e.get("values", {})]
+    assert (outcome.status, len(tags), len(points)) == (NEW, 1, 1)

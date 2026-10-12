@@ -27,8 +27,11 @@ entries (the parked multi-clone tests and the review probes reproduce them).
   `<record>/.stream-owner` (`storage/stream_owner.py`, JSON with the id, the
   directory's absolute path and the retired ids), created exclusively by the
   first process that needs it, read by every other process of the copy. A file
-  naming another path (the directory was copied) or a copy deleted and fetched
-  again mints a new owner. The brief suggested a root-level id; a per-record
+  naming another path where the record still is (the directory was copied) or
+  a copy deleted and fetched again mints a new owner; a file naming a path the
+  record left (a moved checkout, a `vmn-exp push` `.rN` rename, a bind mount at
+  another path) keeps its owner and rewrites the path, so an offline run still
+  pushes its streams after the move. The brief suggested a root-level id; a per-record
   owner also covers `prune --local-only` / a cleared cache followed by a
   re-fetch, which would otherwise append to a stream whose local file is
   shorter than its remote copy.

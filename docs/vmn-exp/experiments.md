@@ -1500,7 +1500,8 @@ backends are built.
 - **Streams**: a stream is `<writer>~<owner>`: the writer id (the host name by
   default) and an owner id the local record copy keeps in its
   `.stream-owner` (a copy of the directory elsewhere, or a copy deleted and
-  fetched again, mints a new one; so does a stream once compacted). Every
+  fetched again, mints a new one; so does a stream once compacted; a moved
+  or renamed record keeps its owner). Every
   process of one checkout appends to the same stream; two clones on one host
   never share one. Without a local copy (straight to a bucket) the owner is
   the process's. Displays (log `_writer`, UI writer columns,

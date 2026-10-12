@@ -65,6 +65,22 @@ def test_a_copied_root_gets_a_stream_of_its_own(tmp_path):
     assert own_stream(_local(tmp_path / "a"), APP, V) == original
 
 
+def test_a_moved_root_keeps_its_stream(tmp_path):
+    original = own_stream(_local(tmp_path / "a"), APP, V)
+    shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))
+
+    assert own_stream(_local(tmp_path / "b"), APP, V) == original
+
+
+def test_a_moved_roots_copy_gets_a_stream_of_its_own(tmp_path):
+    original = own_stream(_local(tmp_path / "a"), APP, V)
+    shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))
+    assert own_stream(_local(tmp_path / "b"), APP, V) == original
+    shutil.copytree(tmp_path / "b", tmp_path / "copy")
+
+    assert own_stream(_local(tmp_path / "copy"), APP, V) != original
+
+
 def test_a_record_copy_deleted_and_fetched_again_gets_a_new_stream(tmp_path, monkeypatch):
     with mocked_bucket(monkeypatch):
         monkeypatch.setenv("VMN_WRITER_ID", "gpu07")

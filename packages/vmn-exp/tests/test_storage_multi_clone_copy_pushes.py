@@ -73,3 +73,20 @@ def test_pushing_logs_from_a_copy_keeps_the_lines_the_original_ships_later(tmp_p
     a.sync_log_to_remote(APP, V, own)
 
     assert _remote_tag_counts() == {"k1": 1, "k2": 1, "k3": 1}
+
+
+def test_a_moved_offline_root_pushes_its_log_and_metrics(tmp_path):
+    s3_storage().create_exclusive(APP, V, meta(V), {})
+    a = _local(tmp_path, "a")
+    assert a.create_exclusive(APP, V, meta(V), {})
+    own = own_stream(a, APP, V)
+    a.append_log_entry(APP, V, own, tag(1, "k1"))
+    a.append_metric_block(APP, V, own, block(1.0, start=1))
+    shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))
+    b = _local(tmp_path, "b")
+
+    push_logs(b, s3_storage(), APP, V, finished=True)
+    push_metrics(b, s3_storage(), APP, V)
+
+    assert _remote_tag_counts() == {"k1": 1}
+    assert remote_metric_values() == [1.0]

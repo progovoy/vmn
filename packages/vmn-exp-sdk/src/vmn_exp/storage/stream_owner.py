@@ -5,9 +5,12 @@
 A record directory keeps ``.stream-owner`` (JSON: the id, the directory's
 absolute path, the ids it retired), created by the first process to need it;
 the other processes over the copy read it, so they append to the same
-streams. A file naming another path was copied along with its directory (a
-``cp -r`` of the repo): the copy mints its own. A copy deleted (``prune
---local-only``, a cleared cache) and fetched again starts without one. A
+streams. A file naming another path where the record still is was copied
+along with its directory (a ``cp -r`` of the repo): the copy mints its own.
+One naming a path the record left was moved (a moved checkout, a push
+rename, a bind mount at another path): it keeps its owner, so its streams
+still ship and push. A copy deleted (``prune --local-only``, a cleared
+cache) and fetched again starts without one. A
 stream once compacted is retired with its owner, so nobody appends behind
 its ``.vmx``. Dot files are never listed nor pushed.
 """
@@ -33,9 +36,13 @@ def read_state(record_dir):
         return None
     if not isinstance(found, dict) or not isinstance(found.get("id"), str):
         return None
-    if found.get("path") != os.path.abspath(record_dir):
-        return None  # copied from elsewhere
-    return found
+    if found.get("path") == os.path.abspath(record_dir):
+        return found
+    if os.path.isdir(str(found.get("path"))):
+        return None  # copied from a record still there
+    moved = _state(record_dir, found["id"], found.get("retired", []))
+    atomic_write(_path(record_dir), json.dumps(moved))
+    return moved
 
 
 def _state(record_dir, owner, retired=()):
