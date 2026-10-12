@@ -20,7 +20,8 @@ from vmn_exp.core.features_symbols import hunk_symbol
 
 _FUNCNAME_BYTES = 80  # git's funcname buffer (xdiff/xemit.c)
 _FUNCNAME_LINE = re.compile(r"[A-Za-z_$]")  # a line git's default funcname picks
-_NOT_UTF8 = re.compile("[\ud800-\udfff\ufffd]")  # a decoded byte that is not UTF-8
+# A decoded byte that is not UTF-8, or a noncharacter git rejects (utf8.c).
+_NOT_UTF8 = re.compile("[\ud800-\udfff\ufffd\ufffe\uffff]")
 
 
 class HunkScope:
@@ -60,6 +61,7 @@ def _funcname_line(text):
 def _git_funcname(line: str) -> str:
     """*line* as git prints it as a funcname: its first 80 bytes, up to its
     first byte that is not UTF-8 (diff.c ``sane_truncate_line``) -- here the
-    first lone surrogate (``surrogateescape``) or U+FFFD (``replace``)."""
+    first lone surrogate (``surrogateescape``) or U+FFFD (``replace``), or
+    the U+FFFE/U+FFFF noncharacters git also stops at."""
     valid = _NOT_UTF8.split(line, 1)[0]
     return valid.encode("utf-8")[:_FUNCNAME_BYTES].decode("utf-8", "ignore")

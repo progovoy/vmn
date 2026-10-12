@@ -50,7 +50,7 @@ def test_removed_definitions_are_symbols_too():
     assert _symbols(text) == ["loss.py::Losses", "loss.py::old_loss"]
 
 
-def test_context_lines_and_a_binary_payload_define_nothing():
+def test_a_context_line_names_its_hunk_but_defines_nothing():
     text = ("diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,3 +1,3 @@\n"
             " def kept(x):\n-    a = 1\n+    a = 2\n")
     assert _symbols(text) == ["a.py::kept"]

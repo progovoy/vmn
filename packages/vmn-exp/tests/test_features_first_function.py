@@ -131,3 +131,11 @@ def test_a_column_0_line_with_bytes_that_are_not_utf8_names_what_comes_before_th
     diff, symbols, unified0 = _both(repo, "menu.py", errors)
     assert "@@ def top():" in diff
     assert symbols == ["menu.py::TITLE = ('caf"] == unified0
+
+
+@pytest.mark.parametrize("char", ["\ufffe", "\uffff"], ids=["U+FFFE", "U+FFFF"])
+def test_a_column_0_line_stops_at_a_noncharacter_git_rejects(repo, char):
+    _commit(repo, {"tab.py": f"{TOP}SEP = ('a{char}b',\n    'b',\n    'c',\n)\n"})
+    _edit(repo, "tab.py", "'c',", "'C',")
+    _, symbols, unified0 = _both(repo, "tab.py")
+    assert symbols == ["tab.py::SEP = ('a"] == unified0
