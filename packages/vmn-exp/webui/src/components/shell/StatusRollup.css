@@ -1,14 +1,14 @@
 .status-rollup {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   min-width: 0;
   font-size: 12px;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* A flex item drops its leading space: keep the one before each " · ". */
-.status-rollup > span:not(.rollup-dot) { white-space: pre; }
+.rollup-sep { color: var(--text-3); }
 .status-rollup a {
   color: inherit;
   text-decoration: none;
@@ -21,10 +21,10 @@
   border-radius: 2px;
 }
 
-/* The dot alone is spaced: the parts carry their own " · " separators. */
+/* The gap spaces the dot, the parts and their separators alike. */
 .rollup-dot {
   flex: none;
-  margin-right: 6px;
+  margin-right: 1px;
   width: 7px;
   height: 7px;
   border-radius: 50%;

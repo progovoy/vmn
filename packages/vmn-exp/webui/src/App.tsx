@@ -61,7 +61,7 @@ function Shell() {
           <header className="topbar">
             <Topbar
               ctx={ctx}
-              crumbs={<Crumbs root={ctx.ws ? <ContextRoot ctx={ctx} /> : undefined} crumbs={crumbs} cli={cli} />}
+              crumbs={<Crumbs root={<ContextRoot ctx={ctx} />} crumbs={crumbs} cli={cli} />}
               onSearch={() => setPaletteOpen(true)}
               onMenu={drawer.narrow ? drawer.toggle : undefined}
               menuOpen={drawer.open}

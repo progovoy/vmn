@@ -27,8 +27,21 @@ const dotOf = (c: HTMLElement) => c.querySelector(".rollup-dot");
 
 describe("StatusRollup", () => {
   it("shows the nonzero parts in order: stuck, failed (24h), running", () => {
+    renderRollup(status({ stuck: 2, failed: 5, running: 3 }, 1, "stuck"));
+    expect(screen.getAllByRole("link").map((a) => a.textContent))
+      .toEqual(["2 stuck", "1 failed (24h)", "3 running"]);
+  });
+
+  it("separates the parts with hidden dots of their own, spaced by the layout", () => {
     const c = renderRollup(status({ stuck: 2, failed: 5, running: 3 }, 1, "stuck"));
-    expect(c.textContent).toBe("2 stuck · 1 failed (24h) · 3 running");
+    const root = c.querySelector(".status-rollup")!;
+    const seps = [...root.children].filter((el) => el.classList.contains("rollup-sep"));
+    expect(seps).toHaveLength(2);
+    seps.forEach((sep) => {
+      expect(sep).toHaveAttribute("aria-hidden", "true");
+      expect(sep.textContent).toBe("·");
+    });
+    expect([...root.children].map((el) => el.tagName)).toEqual(["SPAN", "A", "SPAN", "A", "SPAN", "A"]);
   });
 
   it("links every part to the leaderboard query behind its number", () => {

@@ -1,5 +1,6 @@
 /** What needs attention in an app now: stuck runs, recent failures, running
  *  runs. Each number links to the leaderboard query that lists those runs. */
+import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import type { AppStatus } from "../../shell/contracts";
 import "./StatusRollup.css";
@@ -36,12 +37,12 @@ export default function StatusRollup({ status, href, compact }: {
     <span className={`status-rollup${compact ? " compact" : ""}`}>
       {status.rollup && <span className={`rollup-dot rollup-${status.rollup}`} aria-hidden="true" />}
       {shown.map((p, i) => (
-        <span key={p.search}>
-          {i > 0 && " · "}
+        <Fragment key={p.search}>
+          {i > 0 && <span className="rollup-sep" aria-hidden="true">·</span>}
           <Link to={href(p.search)} title={p.title} aria-label={compact ? full : undefined}>
             {p.text}
           </Link>
-        </span>
+        </Fragment>
       ))}
     </span>
   );

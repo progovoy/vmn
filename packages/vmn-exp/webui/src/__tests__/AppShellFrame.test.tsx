@@ -144,13 +144,16 @@ describe("router pages inside the shell", () => {
     await waitFor(() => expect(document.title).toBe("not found — vmn-exp"));
   });
 
-  it("draws no crumb separator before the leaf when no workspace is in context", async () => {
+  it("leaves the root empty when no workspace is in context, so CSS drops it and its separator", async () => {
     sessionStorage.clear();
     renderShell(routes, "/no/such/page");
     await waitFor(() => expect(document.title).toBe("not found — vmn-exp"));
-    const trail = within(screen.getByRole("navigation", { name: "Breadcrumb" }));
-    expect(trail.getByText("not found").closest("li")?.querySelector(".crumb-sep")).toBeNull();
-    expect(trail.queryAllByRole("listitem")).toHaveLength(1);
+    const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+    const leaf = within(nav).getByText("not found").closest("li")!;
+    // Crumbs.css hides `.crumb-root:empty` and the separator right after it.
+    expect(leaf.previousElementSibling?.matches(".crumb-root:empty")).toBe(true);
+    expect(leaf.matches(".crumb-root:empty + .crumb")).toBe(true);
+    expect(within(nav).queryAllByRole("listitem").filter((li) => li.textContent)).toHaveLength(1);
   });
 
   it("shows RouteError inside the shell when a page throws", async () => {
