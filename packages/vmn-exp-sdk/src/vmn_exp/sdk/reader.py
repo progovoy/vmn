@@ -291,8 +291,8 @@ def similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=Non
     group_size, author, timestamp, status, goal, note, intent, features}]``,
     most similar first (see :mod:`vmn_exp.core.similar_search`).
 
-    The run itself, its exact code and its sweep are left out, and so are
-    archived runs. *context* replaces the run's text with a query text;
+    The run itself, its sweep and its reruns (same code, params and inputs;
+    forks are kept) are left out, and so are archived runs. *context* replaces the run's text with a query text;
     *text_only* matches that text alone (with *ref* None: no run at all).
     *query* narrows the candidates like :func:`list_runs`'s; *all_apps*
     searches every app of the storage. The app's conf.yml (when a checkout is

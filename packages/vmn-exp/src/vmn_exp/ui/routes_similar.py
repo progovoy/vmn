@@ -3,7 +3,8 @@
 
 - ``GET .../apps/{app}/experiments/{verstr}/similar?top=10&all_apps=0`` — the
   runs most like that run, in its app or (``all_apps``) every app of its
-  workspace; the run itself, the runs of its exact code and its tree are left out;
+  workspace; the run itself, its tree and its reruns (same code, params and
+  inputs; forks are kept) are left out;
 - ``GET .../apps/{app}/similar?text=&top=&all_apps=`` — the runs whose text
   (intent and keywords, name, note, tags, commit subjects, hypothesis)
   matches a free text, like ``vmn-exp similar --context ... --text-only``;

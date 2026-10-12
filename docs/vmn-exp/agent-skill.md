@@ -103,7 +103,7 @@ entrypoint, metric names and text. You supply the meaning:
 
    Items carry `verstr`, `app`, `score`, `reasons`, `author`, `timestamp`,
    `status`, `goal`, `note`, `intent`, `features` and `group_size` (a sweep,
-   or repeats of one code, shows as its best run). `show --patch --json` adds
+   or the reruns of one config, shows as its best run). `show --patch --json` adds
    `"patch": {"text", "truncated"}`, or `{"text": null, "reason"}`: `no_code`
    (MLflow imports, clean trees, runs recorded git-free from an exported tree),
    `code_missing` (code object pruned), `untracked_only` (untracked files only,

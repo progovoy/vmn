@@ -789,8 +789,8 @@ similar_runs("my_app", ref=None, context="label smoothing", text_only=True, all_
   `[{"app", "verstr", "name", "score", "reasons", "signals", "group_size",
   "author", "timestamp", "status", "goal", "note", "intent", "features"}]`,
   most similar first.
-- The run itself, the runs of its exact code, its run tree and archived runs
-  are left out. `context` replaces the run's text with a query text;
+- The run itself, its run tree, its reruns (same code, params and inputs;
+  forks are kept) and archived runs are left out. `context` replaces the run's text with a query text;
   `text_only=True` matches that text alone, and with `ref=None` needs no run.
   There is no working-tree target here (`vmn-exp similar <app>` without `-v`
   has one). `query` narrows the candidates like `list_runs`'s; `all_apps`

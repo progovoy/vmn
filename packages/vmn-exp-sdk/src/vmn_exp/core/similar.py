@@ -11,14 +11,16 @@
 a run (:func:`target_from_snapshot`) or a working tree (a row-like dict
 without a verstr, or None). ``text`` replaces the target's text document
 (``--context``); ``text_only`` scores that text alone. The target run is
-left out, with the runs of its exact code (same ``code_verstr``) and its
-whole tree (:meth:`~vmn_exp.core.similar_index.SimilarIndex.root`: its outer
-run, every run under it, its own inner runs) — in the target's ``app`` only,
-when given.
+left out, with its whole tree (:meth:`~vmn_exp.core.similar_index.SimilarIndex.root`:
+its outer run, every run under it, its own inner runs) and its reruns — the
+runs of its rerun identity (:func:`~vmn_exp.core.similar_profile.rerun_key`:
+same ``code_verstr``, params and inputs) but a fork of it or the run it
+forked from, a continuation — in the target's ``app`` only, when given. Runs
+of its code with other params or inputs are candidates like any other.
 
 Candidates are grouped — the runs of one tree (a sweep's outer run, its
-trials and the SDK runs they open), else the runs of one ``code_verstr`` —
-so a sweep or repeats of one code fill one slot, shown by the member best on
+trials and the SDK runs they open), else the runs of one rerun identity —
+so a sweep or the reruns of one config fill one slot, shown by the member best on
 the group's goal metric (:func:`goal_metric`), else the most similar — a
 container (a run with inner runs) only when the group holds nothing else;
 ``group_size`` counts them.
@@ -98,19 +100,28 @@ class _Query:
         self.score_target = None if self.text_only else Target(self.profile, weights)
         self.tokens = profile_tokens(self.profile, structured=not self.text_only)
         self.app = target.get("app")
-        self.row, self.verstr, self.code = row, row.get("verstr"), row.get("code_verstr")
+        self.row, self.verstr, self.rerun = row, row.get("verstr"), self.profile.rerun
 
     def exclusion(self, index):
-        """``excluded(row)``: whether *row* is the target, of its code or of
-        its tree in *index*; None for a target without a verstr."""
+        """``excluded(row)``: whether *row* is the target, of its tree in
+        *index* or a rerun of it (:func:`~vmn_exp.core.similar_profile.rerun_key`)
+        that is no fork of it nor its fork source; None for a target without a verstr."""
         if not self.verstr:
             return None
         root = index.root(self.row)
 
         def excluded(row):
-            return (row["verstr"] == self.verstr or row.get("code_verstr") == self.code
-                    or index.root(row) == root)
+            verstr = row["verstr"]
+            if verstr == self.verstr or index.root(row) == root:
+                return True
+            return (self.rerun is not None and index.profile(verstr).rerun == self.rerun
+                    and not self._forked_with(row))
         return excluded
+
+    def _forked_with(self, row):
+        """Whether *row* is a fork of the target or the run it forked from."""
+        return (row.get("forked_from") == self.verstr
+                or self.row.get("forked_from") == row["verstr"])
 
 
 class _Scope:
@@ -187,8 +198,9 @@ class _Scope:
 
     def _group_key(self, row):
         if self.index.in_tree(row):
-            return self.index.root(row)
-        return row.get("code_verstr") or row["verstr"]
+            return "tree", self.index.root(row)
+        rerun = self.index.profile(row["verstr"]).rerun
+        return ("rerun", rerun) if rerun else ("run", row["verstr"])
 
     def _item(self, members):
         # A container (a run with inner runs) stands in only when the group holds nothing else.

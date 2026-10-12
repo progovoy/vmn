@@ -1007,12 +1007,16 @@ vmn-exp similar my_app -v @7 --query 'status = "succeeded" and author ~ "alice"'
   create note), `intent` (`{text, keywords?, generator?, truncated?}`, the text
   cut to 2 KB, or `null`) and `features` (the run's
   [`features`](#what-a-run-records-for-similar) entry or `null`).
-- **Left out**: the target run, every run of its exact code (same
-  `code_verstr`) and its whole run tree (its outer run, the trials and the SDK
-  runs they open, its own inner runs), in the target's app only. A
+- **Left out**: the target run, its whole run tree (its outer run, the
+  trials and the SDK runs they open, its own inner runs) and its reruns — the
+  runs of its *rerun identity*: same `code_verstr`, same params (compared
+  exactly) and same inputs (digest, else uri) — in the target's app only. A
+  fork of the target, or the run it forked from, is a continuation and stays
+  a candidate. Runs of the same code with other params or inputs (e.g. other
+  hyperparameters on one clean commit) are ordinary candidates. A
   working-tree target excludes nothing.
-- **Grouped**: the runs of one tree (a sweep), else the runs of one
-  `code_verstr` (repeats of one code), fill one slot, shown by the member best
+- **Grouped**: the runs of one tree (a sweep), else the runs of one rerun
+  identity (seeds or reruns of one config), fill one slot, shown by the member best
   on the group's goal metric (the [schema](#metrics-schema-sorting--goals)
   `goal` metric most of its runs carry), else the most similar one, with `(+N
   runs)`. Ties sort newest first.
