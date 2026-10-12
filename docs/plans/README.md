@@ -24,6 +24,7 @@ the code-store change, `0096782`).
 | 16 | Native code (Rust): static core binary, vmn-exp hot paths | evaluation, nothing scheduled | [16-native-code.md](16-native-code.md) |
 | 17 | Detached HEAD: no invented branches, one branch resolver, CI-safe stamp/goto, silent config-key migration, accurate goto output | proposal | [17-detached-head-and-goto.md](17-detached-head-and-goto.md) |
 | 18 | Similar runs: features on the record at submission, structured similarity + reasons, backfill and MLflow refresh; v2 intent text written by the user's own AI (via a skill), lexical match + agent re-rank | **done** (`vmn-exp similar`/`similar-backfill`, `--intent*`, `show --patch`, SDK `similar_runs`, UI routes + card, skill) | [18-similar-runs.md](18-similar-runs.md) |
+| 20 | Per-root remote streams: each local record copy appends to its own stream `<writer>~<owner>` replicated to the remote with exclusive segment creates; deletes the seed/merge/catch-up machinery | **done** | [20-per-root-streams.md](20-per-root-streams.md) |
 
 Paths in the plans are repo paths under `packages/` (re-verified against `0096782`).
 

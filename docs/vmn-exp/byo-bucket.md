@@ -52,7 +52,8 @@ your own access.
 | **Read + edits** | the above, plus put on: `runs/*/*/metadata.yml`, `runs/*/*/log/vmn-server*`, `registry/*`, `reports/*`, `comments/*`, `journal/*`, `server/*` | also tag, note, archive, rewind, model register/alias/deprecate, reports and comments |
 
 - `runs/*/*/log/<writer>*` is the server's own per-writer log, which rewind
-  markers go to. `vmn-exp ui` writes them as `vmn-server`, which matches the
+  markers go to (its streams, `log/<writer>~<owner>[@<n>].jsonl`).
+  `vmn-exp ui` writes them as `vmn-server`, which matches the
   policy below. Setting `VMN_WRITER_ID` overrides it, in which case put that
   id in the policy instead.
 - `journal/*` lets the server's edits show up the way any writer's do.

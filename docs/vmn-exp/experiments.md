@@ -410,7 +410,7 @@ Flags shared by most actions:
 | `--store <uri>` | experiment store URI; see [Storage](#storage-local-s3-gcs-azure-plugins) |
 | `--bucket` / `--prefix` / `--endpoint-url` | shorthand for an `s3://` store |
 | `--experiment-dir <dir>` | local root instead of the checkout's `.vmn/` (or `$VMN_EXPERIMENT_DIR`) |
-| `--writer-id <id>` | this process's writer id; `$VMN_WRITER_ID` > `--writer-id` > conf `experiment.storage.writer_id` > `$HOSTNAME` > the host name |
+| `--writer-id <id>` | this process's writer id; `$VMN_WRITER_ID` > `--writer-id` > conf `experiment.storage.writer_id` > `$HOSTNAME` > the host name (a `~` in it becomes `-`; see [streams](#how-records-are-stored)) |
 | `--from-snapshot <path>` | git-free mode against a tree from `vmn-exp export`; see [Git-free mode](#git-free-mode) |
 | `--json` | machine-readable output (`list`, `show`, `importance`, `lineage`, `similar`, `push`, `rerun --print`) |
 
@@ -925,7 +925,7 @@ it, no alert sink is needed.
 
 ### `compact`
 
-Build the compacted metric file (`metrics/<writer>.vmx`, see
+Build the compacted metric file (`metrics/<stream>@000000-<last>.vmx`, see
 [Metric storage](#metric-storage)) of runs whose writer ended before doing so:
 
 ```sh
@@ -1440,8 +1440,9 @@ and an area (`runs`, `snapshots`, `code`, `sweeps`, `registry`, `reports`,
 factory)` does the same at runtime. The contract:
 
 - **Records**: `<root>/<area>/<scope>/<name>/` (scope = app key, model name,
-  ...) holding `metadata.yml`, patch files, per-writer
-  `log/<writer>[@<seq>].jsonl`, `metrics/` (see [Metric storage](#metric-storage)),
+  ...) holding `metadata.yml`, patch files, per-stream
+  `log/<stream>[@<seq>].jsonl` (a stream is `<writer>~<owner>`, see
+  [How records are stored](#how-records-are-stored)), `metrics/` (see [Metric storage](#metric-storage)),
   `run_state.yml`, `outputs/` and `artifacts/`.
   `metadata.yml` makes a record exist: write it last, delete it first.
   Implement the abstract methods (`save`, `load_record`, `list_snapshots`,
@@ -1458,6 +1459,16 @@ factory)` does the same at runtime. The contract:
   save) is *not* safe on a shared store — use a conditional create (`O_EXCL`
   mkdir, S3 `If-None-Match: *`, GCS `if_generation_match=0`, Azure
   `overwrite=False`). `update_metadata` should be a compare-and-swap.
+- **Segments are created, never overwritten**: a local root ships its streams
+  through `create_log_segment(app, verstr, stream, seq, data)` and
+  `create_metric_segment(...)`, which store segment *seq* only if it does not
+  exist yet and return whether they did (the same conditional create). A
+  store without `create_log_segment` gets plain `save_file` writes, safe
+  only while one process ships a record copy at a time;
+  `create_metric_segment` is required for metric streams.
+  `put_indexed(app, verstr, stream, path, replace=, covers=)` stores a
+  stream's compacted `.vmx` covering its segments up to `covers` and deletes
+  just those (and narrower `.vmx`), never a later segment.
 - **Listing**: `list_verstrs` returns names only (claimed-but-unfinished
   included); `list_snapshots` returns only records whose `metadata.yml`
   exists; `list_files` maps `{verstr: {file: (size, mtime[, etag])}}` and
@@ -1476,8 +1487,8 @@ backends are built.
 ### How records are stored
 
 - **One directory (or key prefix) per run**: `metadata.yml`, `run_state.yml`,
-  `env.yml`, `alerts_sent.yml`, one append-only `log/<writer>.jsonl` per
-  writer, its metric files under `metrics/` ([below](#metric-storage)), `outputs/` (vmn's own files: `output.log`, `media/<name>/<step>.png`,
+  `env.yml`, `alerts_sent.yml`, one append-only `log/<stream>.jsonl` per
+  stream, its metric files under `metrics/` ([below](#metric-storage)), `outputs/` (vmn's own files: `output.log`, `media/<name>/<step>.png`,
   `tables/<name>/<step>.json`) and `artifacts/` (the user's only, so any name
   is free). `metadata.yml` is written last, so a half-created run is never
   listed. Local writes are atomic (temp + rename).
@@ -1486,10 +1497,22 @@ backends are built.
   `….r2`, never one merged run.
 - **Object keys**: `<root>/runs/<app-key>/<verstr>/<file>`, `<app-key>` in tag
   form (`root_app/service` → `root_app-service`).
-- **Incremental log sync**: a host ships only what it appended since the last
-  sync, as segments `log/<writer>@<n>.jsonl`; readers merge per writer. Log
-  batches are written as whole lines in one write (one PUT), so readers never
-  see a partial line.
+- **Streams**: a stream is `<writer>~<owner>`: the writer id (the host name by
+  default) and an owner id the local record copy keeps in its
+  `.stream-owner` (a copy of the directory elsewhere, or a copy deleted and
+  fetched again, mints a new one; so does a stream once compacted). Every
+  process of one checkout appends to the same stream; two clones on one host
+  never share one. Without a local copy (straight to a bucket) the owner is
+  the process's. Displays (log `_writer`, UI writer columns,
+  `export-metrics`, authors) show the writer id only.
+- **Incremental log sync**: a local copy is the only source of its streams,
+  so a sync ships what the remote lacks of each of them as the next segment
+  `log/<stream>@<n>.jsonl`, created only if it does not exist; a taken
+  segment is listed again and the ship resumes from the remote size. What
+  the remote holds is kept in `<record>/.ship/`, shared by the copy's
+  processes under one lock. Readers merge all streams. Log batches are
+  written as whole lines in one write (one PUT), so readers never see a
+  partial line.
 - **Caching**: immutable files fetched from a remote (metadata, patches) are
   cached locally; `run_state.yml` and logs never are, so another host's run
   shows its live status.
@@ -1514,18 +1537,20 @@ backends are built.
 
 ### Metric storage
 
-Metric values are not JSONL log lines. Each writer records them columnar
+Metric values are not JSONL log lines. Each stream records them columnar
 (int64 steps and microsecond timestamps, float64 values, per key):
 
-- **While the run is live**: an append-only stream `metrics/<writer>.vms`, one
+- **While the run is live**: an append-only stream `metrics/<stream>.vms`, one
   block per flush (the SDK batches like the log). A remote store gets the
-  appended blocks as segments `metrics/<writer>@<seq>.vms` on each sync. A
-  long writer also seals a part `metrics/<writer>@p<k>.vmx` every 10M points it
-  appends, so live readers don't decode the whole stream.
+  appended blocks as segments `metrics/<stream>@<seq>.vms` on each sync. A
+  long writer compacts its stream every 10M points and goes on in a new one
+  (a new owner), so live readers don't decode the whole stream.
 - **Compacted at the end**: when a writer finishes (`finish()`/exit of an SDK
   run within its final upload wait, `vmn-exp run` at the child's exit, the
-  importers), its points become one indexed file `metrics/<writer>.vmx`, which
-  replaces its stream objects and parts. Per key it holds the points sorted on
+  importers), its stream's points become one indexed file
+  `metrics/<stream>@000000-<last>.vmx`, which replaces the stream's segments
+  up to `<last>` (a later segment stays and reads beside it); the record copy
+  then appends to a new stream. Per key it holds the points sorted on
   the key's axis in separately compressed chunks plus a level-of-detail pyramid
   of min/max buckets, and a footer indexing all of it, so a chart of any length
   reads the footer and one small slice (byte-range reads on object stores).
@@ -1595,9 +1620,9 @@ pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
   `file://` (rsync instead) and no remote are refused.
 - **Same name, parents first**: the code object (if the remote lacks it), the
   claim, other top-level files, each writer's log from where the remote copy
-  ends, each writer's missing or resized metric objects (`metrics/<w>.vmx`
-  via `put_indexed`, which drops remote stream objects it supersedes, else
-  its `.vms` stream), and missing or resized artifacts. `archived`/`note` merge three-way
+  ends, each stream's missing or resized metric objects (a `.vmx` via
+  `put_indexed`, which drops the remote segments it covers, else the local
+  stream's blocks past the remote ones as its next segment), and missing or resized artifacts. `archived`/`note` merge three-way
   against what was last pushed; on conflict the remote wins, with a warning.
 - **Resumable**: a per-host ledger per remote (user state dir,
   `$XDG_STATE_HOME/vmn-exp/push/...`, or under `$VMN_EXP_CACHE_DIR`) records

@@ -222,8 +222,8 @@ child writing through an inherited `Run`, or a write after `finish()`, goes
 straight to the store.
 
 **Metrics are not JSONL lines.** `log_metric`/`log_metrics` values go to the
-writer's columnar metric stream (`metrics/<writer>.vms`, one block per batch),
-and `finish()` compacts it into an indexed `metrics/<writer>.vmx` within the
+record copy's columnar metric stream (`metrics/<writer>~<owner>.vms`, one
+block per batch), and `finish()` compacts it into an indexed `.vmx` within the
 final upload wait (`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`); a run killed first
 keeps its stream until `vmn-exp compact`. See
 [Metric storage](experiments.md#metric-storage). The JSONL log keeps
