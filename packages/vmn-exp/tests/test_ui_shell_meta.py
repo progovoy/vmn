@@ -55,8 +55,7 @@ def test_meta_without_auth(tmp_path):
     assert body["mode"] == "standalone"
     assert body["control_plane"] is False
     assert body["auth"] == {
-        "enabled": False, "token": False, "oidc": False,
-        "api_tokens": False, "login_url": None,
+        "enabled": False, "token": False, "oidc": False, "login_url": None,
     }
     assert body["principal"] is None
     assert body["role"] is None
@@ -82,7 +81,7 @@ def test_meta_with_control_plane_is_configured(tmp_path):
     body = _get(_app(tmp_path, token="t", control_plane=cp), "/api/v1/meta", "Bearer t")
     assert body["mode"] == "configured"
     assert body["control_plane"] is True
-    assert body["auth"]["api_tokens"] is True
+    assert "api_tokens" not in body["auth"]
 
 
 def test_meta_config_set_after_create_app_is_configured(tmp_path):
@@ -96,7 +95,17 @@ def test_meta_vmn_exp_version_is_a_string(tmp_path):
     assert isinstance(_get(_app(tmp_path), "/api/v1/meta")["vmn_exp_version"], str)
 
 
-def test_meta_vmn_exp_version_null_when_not_installed(tmp_path, monkeypatch):
+@pytest.fixture
+def uncached_version():
+    """Forget the process-wide vmn-exp version before and after the test."""
+    from vmn_exp.ui import shell_meta
+
+    shell_meta._vmn_exp_version.cache_clear()
+    yield
+    shell_meta._vmn_exp_version.cache_clear()
+
+
+def test_meta_vmn_exp_version_null_when_not_installed(tmp_path, monkeypatch, uncached_version):
     from importlib import metadata
 
     def _missing(name):
@@ -104,6 +113,18 @@ def test_meta_vmn_exp_version_null_when_not_installed(tmp_path, monkeypatch):
 
     monkeypatch.setattr(metadata, "version", _missing)
     assert _get(_app(tmp_path), "/api/v1/meta")["vmn_exp_version"] is None
+
+
+def test_meta_vmn_exp_version_is_read_once_per_process(tmp_path, monkeypatch, uncached_version):
+    from importlib import metadata
+
+    calls = []
+    real = metadata.version
+    monkeypatch.setattr(metadata, "version", lambda name: calls.append(name) or real(name))
+    app = _app(tmp_path)
+    _get(app, "/api/v1/meta")
+    _get(app, "/api/v1/meta")
+    assert calls.count("vmn-exp") == 1
 
 
 def test_meta_role_null_for_a_per_workspace_principal(tmp_path):

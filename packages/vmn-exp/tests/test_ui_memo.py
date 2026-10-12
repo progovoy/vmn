@@ -2,7 +2,7 @@
 import threading
 import time
 
-from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.memo import LRU, TTLCache
 
 
 def _counting(value):
@@ -125,3 +125,35 @@ def test_lru_put_stores_and_evicts_like_get():
     lru.put("a", 3)  # replaces, and becomes the most recent
     lru.put("c", 4)  # evicts b, the least recently used
     assert (lru.peek("a"), lru.peek("b"), lru.peek("c")) == (3, None, 4)
+
+
+def test_ttl_cache_concurrent_misses_compute_once():
+    """Racing misses (e.g. the shell's git context) share one compute."""
+    cache = TTLCache(60)
+    calls = []
+
+    def compute():
+        calls.append(1)
+        time.sleep(0.05)
+        return object()
+
+    results = [None] * 8
+
+    def worker(i):
+        results[i] = cache.get("ws", compute)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(calls) == 1
+    assert all(value is results[0] for value in results)
+
+
+def test_ttl_cache_recomputes_once_stale():
+    cache = TTLCache(0)
+    values = iter(range(3))
+    assert cache.get("k", lambda: next(values)) == 0
+    assert cache.get("k", lambda: next(values)) == 1

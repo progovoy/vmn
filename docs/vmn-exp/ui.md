@@ -265,6 +265,7 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `ws/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-status` | [Status counts and rollup](#status-counts-and-rollup) |
+| `GET` | `ws/{ws}/apps-status` | [Every app's status counts](#status-counts-and-rollup), one request |
 | `GET` | `ws/{ws}/apps/{app}/experiments-diff?v=&to=` | [Code diff of two runs](#diffs-and-artifacts) |
 | `POST` | `ws/{ws}/apps/{app}/series` | [Series of many runs](#series-for-many-runs) |
 | `GET` | `.../experiments/{verstr}/metric-keys?prefix=&offset=&limit=` | [A run's metric names, paged](#zoom-and-many-keys) |
@@ -280,6 +281,13 @@ stands for `workspaces/{ws}/apps/{app}`.
 | | `/workspaces/{ws}/models/...` | [Model registry](#model-registry-api) |
 
 Unknown `/api/...` paths are a JSON 404.
+
+Routes that resolve a run ref (run detail, its log page, `experiments-diff`)
+answer a ref they cannot resolve with `{"detail": "<message>", "code": "<code>"}`:
+`run_not_found` (no such verstr or prefix, `@N` out of range, no runs) is a
+404, `ambiguous_ref` (a prefix matching several runs) a 409, `invalid_ref`
+(a malformed ref such as `@x`) a 400. Clients branch on `code`, never on the
+message.
 
 ### Experiment status fields
 
@@ -322,7 +330,7 @@ curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
 | `read_only` | `--read-only` |
 | `mode` | `configured` with `--config` or a control plane, else `standalone` |
 | `control_plane` | whether a control plane (API tokens) is configured |
-| `auth` | `{enabled, token, oidc, login_url, api_tokens}`: the sign-in methods offered (`login_url` is `/auth/login` with OIDC, else `null`); never a secret |
+| `auth` | `{enabled, token, oidc, login_url}`: the sign-in methods offered (`login_url` is `/auth/login` with OIDC, else `null`); never a secret |
 | `principal` | `{id, name}` of the caller, or `null` |
 | `role` | the caller's role in `*`, or `null`. With auth on, `null` means no global role (per-workspace roles may still apply); with auth off, everything is allowed |
 
@@ -350,14 +358,20 @@ and an `error` (the first stderr line, or `timeout`). Cached 5 s per workspace.
 ```json
 {"total": 53,
  "counts": {"created": 0, "running": 2, "stuck": 1, "succeeded": 41, "failed": 9},
- "failed_recent": 1, "recent_sec": 86400, "rollup": "stuck"}
+ "failed_recent": 1, "rollup": "stuck"}
 ```
 
 Counts the non-archived runs by derived status (all five keys always present).
-`failed_recent` counts failures that finished within `recent_sec`. `rollup` is
+`failed_recent` counts failures that finished within the last 24 hours. `rollup` is
 `stuck` if any run is stuck, else `failed` if `failed_recent > 0`, else
-`running` if any runs, else `null`. An unknown app answers zeros; ETag/304,
-accurate to the hour for `failed_recent`.
+`running` if any runs, else `null`. A known app with no runs answers zeros; an
+unknown app is a 404 `{"detail", "code": "app_not_found"}`, checked against the
+checkout (`.vmn/<app>/conf.yml`) and the store (any run or snapshot record),
+not the cached app list. ETag/304, accurate to the hour for `failed_recent`.
+
+`GET ws/{ws}/apps-status` answers `{"<app tag>": <the same summary>, ...}` for
+every app of the workspace in one request (tags use `-` for `/`), memoized
+like the per-app route; ETag/304.
 
 ### Filtering with a query
 
