@@ -78,12 +78,14 @@ def resolve_code(storage, app_name, metadata, patches):
     return metadata, code_patches
 
 
-def find_code_key(storage, app_name, code_verstr):
+def find_code_key(storage, app_name, code_verstr, names=None):
     """The key of the one complete code object of *code_verstr*, or None when
     there is none or more than one (a ``from_snapshot`` run names only its
-    code verstr)."""
+    code verstr). *names*: the code area's record names, already listed."""
+    if names is None:
+        names = code_storage(storage).list_record_names(app_name)
     keys = [
-        key for key in code_storage(storage).list_record_names(app_name)
+        key for key in names
         if key.rsplit(".", 1)[0] == code_verstr
         and stored_code(storage, app_name, key) is not None
     ]

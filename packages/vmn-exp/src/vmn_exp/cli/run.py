@@ -16,7 +16,6 @@ import time
 from vmn_exp.cli import fork
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.output_tee import OutputTee, output_artifact, popen_kwargs
-from vmn_exp.cli.similar_hint import print_hint
 from vmn_exp.cli.supervisor import (
     BackgroundSync,
     MetricsTailer,
@@ -241,6 +240,8 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
     # child's included.
     if repo_lock is not None:
         repo_lock.release()
+
+    from vmn_exp.cli.similar_hint import print_hint
 
     exp_conf = experiment_conf(vcs)
     print_hint(storage, app_name, verstr, args, exp_conf, command=run_cmd)

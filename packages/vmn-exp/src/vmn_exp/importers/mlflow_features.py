@@ -65,11 +65,12 @@ def features_entry(tags, commit=None, branch=False) -> dict[str, Any]:
     )
 
 
-def needs_features(entries, commit=None) -> bool:
+def needs_features(entries, commit=lambda: None) -> bool:
     """Whether a record with log *entries* lacks the features a refresh adds:
-    none at the current version, or none with the *commit* changes now known."""
+    none at the current version, or none with the source commit's changes
+    now known — ``commit()``, asked only when they decide it."""
     found = (features_value(e) for e in entries if e.get("type") == "features")
     current = [parsed[1] for parsed in found if parsed and is_current(parsed[1])]
     if not current:
         return True
-    return bool(commit) and not any(value.get("changed") for value in current)
+    return not any(value.get("changed") for value in current) and bool(commit())

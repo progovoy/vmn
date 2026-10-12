@@ -48,27 +48,29 @@ def create_in_checkout(
         storage = build_storage(vcs)
     parent = pick_parent(storage, app_name, parent, nested)
 
-    # Capture env OUTSIDE the repo lock (it is read-only and may block on
-    # subprocess probing), and store the code there too: it is keyed by
-    # content, so it needs no lock.
+    # Capture env and the run's features OUTSIDE the repo lock (both are
+    # read-only and may block on subprocess probing), and store the code there
+    # too: it is keyed by content, so it needs no lock.
     env = _maybe_capture_env(vcs, capture_env, python_exe=python_exe)
     code = capture.ensure_code(storage, vcs, captured)
+    features = capture_features(vcs, captured)
 
     # The claim itself is atomic (create_exclusive); the lock keeps a run from
     # being created while another vmn command holds the repo.
     with get_repo_lock(root_path):
         verstr = record_run(vcs, storage, captured, code, note, create_data, parent,
-                            name, env=env)
+                            name, env=env, features=features)
     return app_name, storage, verstr, None, experiment_conf(vcs)
 
 
 def record_run(vcs, storage, captured, code, note, create_data, parent, name=None,
-               env=None):
+               env=None, features=None):
     """Claim a verstr for *captured* and write the record and its create entry.
 
     *code* is :func:`capture.ensure_code`'s ``(key, summary)``: the record
     references the stored code object instead of carrying the patches. The
-    run's ``features`` entry follows the create entry (best-effort).
+    run's *features* entry (:func:`capture_features`'s, None without one)
+    follows the create entry.
     """
     code_verstr = captured.code_verstr
     template = _build_snapshot_metadata(
@@ -94,5 +96,5 @@ def record_run(vcs, storage, captured, code, note, create_data, parent, name=Non
         parent=parent,
         name=name,
         env=env,
-        features=capture_features(vcs, captured),
+        features=features,
     )

@@ -1053,8 +1053,8 @@ query scores its text alone.
 
 #### The submission hint
 
-After the claim, `create` and `run` print up to 3 similar runs on stderr (`run`
-once the repo lock is released, before the command starts):
+After the claim, `create` and `run` print up to 3 similar runs on stderr, once
+the repo lock is released (`run` before the command starts):
 
 ```
 2 similar runs: best val_loss=0.31 — 0.0.3-dev.abc1234.def5678 by alice@x.io, 3w ago (same dataset imagenet@3, 1 shared function: loss.py::focal_loss)

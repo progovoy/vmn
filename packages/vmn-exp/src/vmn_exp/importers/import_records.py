@@ -296,7 +296,7 @@ def import_run(
             logs = _logs_by_writer(storage, app_name, verstr)
             if _has_import_log(storage, app_name, verstr, logs):
                 if refresh_features and refresh_record(
-                        storage, app_name, verstr, run, existing, logs, commit()):
+                        storage, app_name, verstr, run, existing, logs, commit):
                     return "refreshed"
                 return "skipped"
             # Partial: claimed but log never written — resume

@@ -183,7 +183,7 @@ truncated: true                 # only when caps cut a list
   `{app, verstr, name, score, reasons, signals, group_size, author, timestamp, status,
   goal, note, intent (first 2 KB), features}`.
 - Submission hint (`cli/similar_hint.py`): `create` (before printing the verstr) and
-  `run` (after the lock is released, before the child) print up to 3 on stderr: `2
+  `run` (before the child), both after the lock is released, print up to 3 on stderr: `2
   similar runs: best val_loss=0.31 — <verstr> by alice@x.io, 3w ago (<reasons>)` (or
   `closest — …`). Its candidates come only from this host's persisted index
   (`ExperimentIndex.follower`, never a refresh from the store, whose reads the process

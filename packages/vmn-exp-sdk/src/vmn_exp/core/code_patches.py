@@ -41,12 +41,14 @@ def code_patch_texts(storage, app_name, key, dep_paths=()):
     return record_patch_texts(code_storage(storage), app_name, key, dep_paths)
 
 
-def unreadable_code_keys(storage, app_name, code_verstr):
+def unreadable_code_keys(storage, app_name, code_verstr, names=None):
     """The code objects of *code_verstr* whose marker the store lists but
-    cannot read (``find_code_key`` counts them as missing)."""
+    cannot read (``find_code_key`` counts them as missing). *names*: the
+    code area's record names, already listed."""
     area = code_storage(storage)
-    keys = [key for key in area.list_record_names(app_name)
-            if key.rsplit(".", 1)[0] == code_verstr]
+    if names is None:
+        names = area.list_record_names(app_name)
+    keys = [key for key in names if key.rsplit(".", 1)[0] == code_verstr]
     listed = area.list_files(app_name, keys=keys) if keys else {}
     return [key for key in keys if METADATA_FILE in (listed.get(key) or ())
             and stored_code(storage, app_name, key) is None]
@@ -66,6 +68,13 @@ def record_patch_texts(storage, app_name, verstr, dep_paths=()):
     if deps:
         patches["deps"] = deps
     return patches
+
+
+def run_dep_paths(metadata):
+    """The dep paths of a run's *metadata*: its ``dep_base_commits`` keys and,
+    for records from before them too, its ``changesets`` keys but ``.``."""
+    deps = set(metadata.get("dep_base_commits") or ()) | set(metadata.get("changesets") or ())
+    return sorted(deps - {"."})
 
 
 def patch_items(patches):

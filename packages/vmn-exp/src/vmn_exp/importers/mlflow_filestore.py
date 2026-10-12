@@ -208,12 +208,16 @@ def _dataset_record(fields: dict[str, Any]) -> dict[str, Any]:
     return {key: fields.get(key, "") for key in ("name", "digest", "source_type", "source")}
 
 
-def _read_linked_datasets(inputs_dir: Path, datasets_dir: Path) -> list[dict[str, Any]]:
+def _read_linked_datasets(
+    inputs_dir: Path, datasets_dir: Path, parsed: dict[str, Any],
+) -> list[dict[str, Any]]:
     """
     MLflow's layout: each ``<run>/inputs/<input_id>/meta.yaml`` whose
     ``source_type`` is ``DATASET`` names the dataset by ``source_id``, a folder
     of ``<exp>/datasets/`` whose ``meta.yaml`` holds the Dataset fields.  Model
-    inputs (``source_type: MODEL``) are not datasets.
+    inputs (``source_type: MODEL``) are not datasets. *parsed* keeps each
+    dataset's record (None for an unreadable one) by ``source_id``: the
+    experiment's runs share its datasets.
     """
     datasets: list[dict[str, Any]] = []
     for entry in sorted(inputs_dir.iterdir()):
@@ -222,9 +226,12 @@ def _read_linked_datasets(inputs_dir: Path, datasets_dir: Path) -> list[dict[str
         link = _read_yaml(entry / "meta.yaml")
         if link is None or link.get("source_type") != "DATASET" or not link.get("source_id"):
             continue
-        dataset = _read_yaml(datasets_dir / str(link["source_id"]) / "meta.yaml")
-        if dataset is not None:
-            datasets.append(_dataset_record(dataset))
+        source_id = str(link["source_id"])
+        if source_id not in parsed:
+            dataset = _read_yaml(datasets_dir / source_id / "meta.yaml")
+            parsed[source_id] = None if dataset is None else _dataset_record(dataset)
+        if parsed[source_id] is not None:
+            datasets.append(dict(parsed[source_id]))
     return datasets
 
 
@@ -242,12 +249,13 @@ def _read_legacy_datasets(legacy_dir: Path) -> list[dict[str, Any]]:
     return datasets
 
 
-def _read_datasets(run_dir: Path) -> list[dict[str, Any]]:
-    """The run's dataset inputs; empty when ``inputs/`` is absent or unreadable."""
+def _read_datasets(run_dir: Path, parsed: dict[str, Any]) -> list[dict[str, Any]]:
+    """The run's dataset inputs; empty when ``inputs/`` is absent or unreadable.
+    *parsed*: see :func:`_read_linked_datasets`."""
     inputs_dir = run_dir / "inputs"
     if not inputs_dir.is_dir():
         return []
-    return (_read_linked_datasets(inputs_dir, run_dir.parent / "datasets")
+    return (_read_linked_datasets(inputs_dir, run_dir.parent / "datasets", parsed)
             + _read_legacy_datasets(inputs_dir / _LEGACY_INPUTS_FOLDER))
 
 
@@ -259,8 +267,10 @@ def _read_run(
     run_dir: Path,
     exp_id: str,
     exp_name: str,
+    datasets_parsed: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Build a neutral run dict from a run directory.  Returns None on error."""
+    """Build a neutral run dict from a run directory.  Returns None on error.
+    *datasets_parsed*: the experiment's datasets read so far (:func:`_read_datasets`)."""
     meta_path = run_dir / "meta.yaml"
     meta = _read_yaml(meta_path)
     if meta is None:
@@ -290,7 +300,7 @@ def _read_run(
     tags = _read_flat_dir(run_dir / "tags")
     params = _read_flat_dir(run_dir / "params")
     metrics_callable = _make_metrics_callable(run_dir / "metrics")
-    datasets = _read_datasets(run_dir)
+    datasets = _read_datasets(run_dir, datasets_parsed)
 
     # Derive name: prefer run_name field, then mlflow.runName tag
     name = str(meta.get("run_name") or tags.get("mlflow.runName") or "")
@@ -326,6 +336,7 @@ def _read_experiment_runs(
     include_deleted: bool,
 ) -> Iterator[dict[str, Any]]:
     """Yield run dicts from a single experiment directory."""
+    datasets_parsed: dict[str, Any] = {}
     for item in exp_dir.iterdir():
         # Skip files (meta.yaml) and MLflow's non-run folders
         if not item.is_dir() or item.name in _RESERVED_EXPERIMENT_FOLDERS:
@@ -333,7 +344,7 @@ def _read_experiment_runs(
         if item.name.startswith("."):
             continue  # skip .trash and hidden dirs
 
-        run = _read_run(item, exp_id, exp_name)
+        run = _read_run(item, exp_id, exp_name, datasets_parsed)
         if run is None:
             continue
 

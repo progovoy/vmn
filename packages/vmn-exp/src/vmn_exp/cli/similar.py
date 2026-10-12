@@ -21,17 +21,9 @@ lock-free. Output: :mod:`vmn_exp.cli.similar_output`; ``--json`` items:
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.cli.similar_args import read_context
 from vmn_exp.cli.similar_output import print_items
-from vmn_exp.core.app_conf import experiment_conf, read_experiment_conf
+from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.query import QueryError
-from vmn_exp.core.similar_search import (
-    DEFAULT_TOP,
-    app_snapshot,
-    conf_schema,
-    conf_weights,
-    run_target,
-    search,
-    text_target,
-)
+from vmn_exp.core.similar_search import DEFAULT_TOP, conf_schema_of, find
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.features import features_for_working_tree
 
@@ -49,18 +41,18 @@ def experiment_similar(vcs, storage, app_name, args):
     if err is not None:
         VMN_LOGGER.error(err)
         return 1
-    exp_conf = experiment_conf(vcs)
-    schema = conf_schema(exp_conf)
-    try:
-        snapshot = app_snapshot(storage, app_name, schema)
-        target = _target(vcs, storage, app_name, snapshot, args, context)
+    target = None
+    if not (_has_ref(args) or args.text_only):
+        target = working_tree_target(vcs, context)
         if target is None:
             return 1
-        items = search(
-            storage, app_name, snapshot, target, schema=schema,
-            top=args.top or DEFAULT_TOP, query=args.query, all_apps=args.all_apps,
-            schema_of=_conf_schema_of(vcs), weights=conf_weights(exp_conf),
-            include_archived=args.archived,
+    try:
+        items = find(
+            storage, app_name, _ref(args), experiment_conf(vcs),
+            top=args.top or DEFAULT_TOP, query=args.query, context=context,
+            text_only=args.text_only, all_apps=args.all_apps,
+            schema_of=conf_schema_of(getattr(vcs, "vmn_root_path", None)),
+            target=target, include_archived=args.archived,
         )
     except QueryError as exc:
         VMN_LOGGER.error(f"Invalid --query: {exc}")
@@ -76,6 +68,13 @@ def _has_ref(args):
     return bool(args.version) or args.latest
 
 
+def _ref(args):
+    """The run ``-v``/``--latest`` names (``--latest`` wins), None for neither."""
+    if args.latest:
+        return "latest"
+    return args.version[0] if args.version else None
+
+
 def _check_flags(vcs, args, context):
     if args.top is not None and args.top < 1:
         return "--top must be at least 1"
@@ -84,16 +83,6 @@ def _check_flags(vcs, args, context):
     if vcs is None and not _has_ref(args) and not args.text_only:
         return NEEDS_A_TREE
     return None
-
-
-def _target(vcs, storage, app_name, snapshot, args, context):
-    if _has_ref(args):
-        ref = args.version[0] if args.version else None
-        return run_target(snapshot, storage, app_name, ref, latest=args.latest,
-                          context=context, text_only=args.text_only)
-    if args.text_only:
-        return text_target(context)
-    return working_tree_target(vcs, context)
 
 
 def working_tree_target(vcs, context):
@@ -111,9 +100,3 @@ def working_tree_target(vcs, context):
         VMN_LOGGER.debug("Working tree capture failed", exc_info=True)
         return None
     return {"row": row, "features": features or None, "text": context, "text_only": False}
-
-
-def _conf_schema_of(vcs):
-    """``schema_of(app)``: another app's conf metrics schema, read from the checkout."""
-    root = getattr(vcs, "vmn_root_path", None)
-    return lambda app: conf_schema(read_experiment_conf(app, root))

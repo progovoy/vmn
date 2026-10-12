@@ -26,8 +26,8 @@ from vmn_exp.cli.run import (  # noqa: F401
 from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
-from vmn_exp.cli.similar_hint import print_hint
 from vmn_exp.cli.views import (
+    PATCH_MAX_BYTES,
     dumps,
     event_log,
     format_metric_lines,
@@ -45,6 +45,7 @@ from vmn_exp.storage.store_marker import require_store
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.checkout import record_run
 from vmn_exp.gitmode.coldstart import DIRTY_OK
+from vmn_exp.gitmode.features import capture_features
 from vmn_exp.snapshot import (
     _diff_real_tree,
     _diff_with_external_tool,
@@ -336,7 +337,9 @@ def handle_experiment(vmn_ctx):
     if refuse_stray_refs(args):
         return 1
     if action == "create":
-        return experiment_create(vcs, params, storage, args)
+        return experiment_create(
+            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
+        )
     elif action == "run":
         return experiment_run(
             vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
@@ -402,7 +405,9 @@ def handle_experiment(vmn_ctx):
 
 
 @measure_runtime_decorator
-def experiment_create(vcs, params, storage, args):
+def experiment_create(vcs, params, storage, args, repo_lock=None):
+    """Create a run; ``repo_lock`` is the per-repo lock the CLI entry point
+    acquired, handed back once the run is written (see :func:`experiment_run`)."""
     extra = {}
     if getattr(args, "file", None):
         extra.update(_parse_notes_file(args.file))
@@ -449,6 +454,12 @@ def experiment_create(vcs, params, storage, args):
 
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)
+
+    # The run is written: the hint below only reads, so other vmn commands
+    # need not wait for it.
+    if repo_lock is not None:
+        repo_lock.release()
+    from vmn_exp.cli.similar_hint import print_hint
 
     print_hint(storage, app_name, verstr, args, experiment_conf(vcs))
     print(verstr)
@@ -506,7 +517,8 @@ def _experiment_create_core(
     )
     code = capture.ensure_code(storage, vcs, captured)
     verstr = record_run(
-        vcs, storage, captured, code, note, extra_create_data, parent, name, env=env
+        vcs, storage, captured, code, note, extra_create_data, parent, name, env=env,
+        features=capture_features(vcs, captured),
     )
     return verstr, None
 
@@ -816,7 +828,7 @@ def experiment_show(vcs, params, storage, args):
     if events:
         _print_log(events, getattr(args, "full_log", False))
     if getattr(args, "patch", False):
-        print_patch(verstr, metadata, patches, getattr(args, "max_bytes", None))
+        print_patch(verstr, metadata, patches, getattr(args, "max_bytes", PATCH_MAX_BYTES))
     return 0
 
 
@@ -834,7 +846,8 @@ def _print_show_json(
         observed_at=observed_at, schema=schema,
     )
     if getattr(args, "patch", False):
-        payload["patch"] = patch_payload(metadata, patches, getattr(args, "max_bytes", None))
+        payload["patch"] = patch_payload(
+            metadata, patches, getattr(args, "max_bytes", PATCH_MAX_BYTES))
     print(dumps(payload))
     return 0
 

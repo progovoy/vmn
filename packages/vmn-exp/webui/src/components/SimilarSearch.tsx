@@ -1,14 +1,11 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { textSimilar } from "../apiSimilar";
+import type { SimilarOptions } from "../apiSimilar";
 import { SimilarAnswer, SimilarCard } from "./SimilarRuns";
 
-/** What narrows the candidates: the leaderboard's filters, as the text route takes them. */
-export interface SimilarFilter {
-  /** The query-language query (typed query, branch, statuses), or undefined. */
-  query?: string;
-  /** Let archived runs be candidates; undefined for no. */
-  archived?: boolean;
-}
+/** What narrows the candidates: the leaderboard's filters (the typed query,
+ *  branch and statuses as one query; archived runs or not). */
+export type SimilarFilter = Pick<SimilarOptions, "query" | "archived">;
 
 function TextResults({ ws, app, text, allApps, filter }: {
   ws: string; app: string; text: string; allApps: boolean; filter: SimilarFilter;

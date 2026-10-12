@@ -21,6 +21,7 @@ ignored) and ``hint`` (``false`` turns the submission hint off).
 """
 import copy
 
+from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.index import direct_snapshot, indexed_snapshot
 from vmn_exp.core.intent import cap_utf8
 from vmn_exp.core.query import filter_rows
@@ -53,6 +54,12 @@ def hint_enabled(exp_conf):
 def conf_schema(exp_conf):
     """The conf's ``metrics`` schema, ``{}`` unless a mapping."""
     return _dict(_dict(exp_conf).get("metrics"))
+
+
+def conf_schema_of(root):
+    """``schema_of(app)`` for :func:`search`: an app's conf metrics schema,
+    read from its conf.yml in the checkout at *root*."""
+    return lambda app: conf_schema(read_experiment_conf(app, root))
 
 
 def app_snapshot(storage, app_name, schema=None):
@@ -98,12 +105,15 @@ def search(storage, app_name, snapshot, target, *, schema=None, top=DEFAULT_TOP,
 
 
 def _other_scopes(storage, app_name, schema_of):
-    scopes = []
-    for app in storage.list_apps():
-        if app_key(app) != app_key(app_name):
-            schema = (schema_of(app) if schema_of else None) or {}
-            scopes.append((app, app_snapshot(storage, app, schema), schema))
-    return scopes
+    """The other apps' ``(app, snapshot, schema)``, in app order; their
+    indexes are brought up to date side by side."""
+    # Lazily: the thread pool's module stays off the SDK reader's import path.
+    from vmn_exp.storage.s3_base import parallel_map
+
+    apps = [app for app in storage.list_apps() if app_key(app) != app_key(app_name)]
+    schemas = [(schema_of(app) if schema_of else None) or {} for app in apps]
+    snapshots = parallel_map(lambda pair: app_snapshot(storage, *pair), zip(apps, schemas))
+    return list(zip(apps, snapshots, schemas))
 
 
 def candidate_filter(scopes, query, include_archived):
@@ -201,19 +211,22 @@ def _string_keywords(keywords):
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,
-         context=None, text_only=False, all_apps=False, schema_of=None):
+         context=None, text_only=False, all_apps=False, schema_of=None, target=None,
+         include_archived=False):
     """:func:`search` for run *ref* of *app_name* (the latest when None),
-    or — *ref* None with *text_only* — for the *context* text alone, under
-    the app's ``experiment`` conf *exp_conf* (schema, weights). ValueError
-    for an unknown ref or *text_only* without a *context*."""
+    or — *ref* None with *text_only* — for the *context* text alone, or for
+    a ready *target* (the CLI's working tree), under the app's
+    ``experiment`` conf *exp_conf* (schema, weights). ValueError for an
+    unknown ref or *text_only* without a *context*."""
     if text_only and not (context or "").strip():
         raise ValueError("A text-only search needs a context text")
     schema = conf_schema(exp_conf)
     snapshot = app_snapshot(storage, app_name, schema)
-    if ref is None and text_only:
+    if target is None and ref is None and text_only:
         target = text_target(context)
-    else:
+    elif target is None:
         target = run_target(snapshot, storage, app_name, ref or "latest", context=context,
                             text_only=text_only)
     return search(storage, app_name, snapshot, target, schema=schema, top=top, query=query,
-                  all_apps=all_apps, schema_of=schema_of, weights=conf_weights(exp_conf))
+                  all_apps=all_apps, schema_of=schema_of, weights=conf_weights(exp_conf),
+                  include_archived=include_archived)

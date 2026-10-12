@@ -11,9 +11,8 @@ included — so a bad one creates nothing; it is read once per invocation.
 import sys
 
 from version_stamp.api import VMN_LOGGER
-from vmn_exp._base import now_iso
 from vmn_exp.core.intent import build_intent_entry, parse_intent_file
-from vmn_exp.core.writer import append_to_log
+from vmn_exp.core.writer import append_to_log, stamped_entry
 
 # Where read_intent keeps the entry it read on the parsed args.
 _READ = "_intent_entry_read"
@@ -47,7 +46,7 @@ def read_intent(args):
 
 def append_intent(storage, app_name, verstr, entry):
     """Append *entry* (from :func:`read_intent`) to the run, stamped now."""
-    append_to_log(storage, app_name, verstr, dict(entry, timestamp=now_iso()))
+    append_to_log(storage, app_name, verstr, stamped_entry(entry))
 
 
 def _intent_entry(args):

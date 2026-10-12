@@ -33,6 +33,11 @@ UNTRACKED_ONLY = "untracked_only"
 FACT_ENTRY_TYPES = frozenset({"features"})
 
 
+def plural(n, word):
+    """``1 run``, ``2 runs``."""
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
 def metrics_schema(vcs):
     """``experiment.metrics`` from the app's conf.yml, if any: sort direction
     and summary policies (see :mod:`vmn_exp.core.metric_summary`)."""
@@ -89,10 +94,6 @@ def _section(label, text):
     return f"=== {label} ===\n{text}" + ("" if text.endswith("\n") else "\n")
 
 
-def _patch_cap(max_bytes):
-    return PATCH_MAX_BYTES if max_bytes is None else max_bytes
-
-
 def _no_text_payload(metadata, patches):
     if metadata.get(CODE_MISSING):
         return {"text": None, "reason": CODE_MISSING}
@@ -104,16 +105,16 @@ def _no_text_payload(metadata, patches):
     return {"text": None, "reason": "no_code"}
 
 
-def patch_payload(metadata, patches, max_bytes=None):
-    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*
-    (default :data:`PATCH_MAX_BYTES`). A run without a text patch gets
+def patch_payload(metadata, patches, max_bytes=PATCH_MAX_BYTES):
+    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*.
+    A run without a text patch gets
     ``{"text": None, "reason"}``: ``code_missing``, ``untracked_only`` (plus
     the ``untracked_files`` paths, unless a tarball cannot be read) or ``no_code``."""
     sections = _text_patches(patches or {})
     if not sections:
         return _no_text_payload(metadata or {}, patches or {})
     text = "".join(_section(*s) for s in sections)
-    text, truncated = cap_utf8(text, _patch_cap(max_bytes))
+    text, truncated = cap_utf8(text, max_bytes)
     return {"text": text, "truncated": truncated}
 
 
@@ -142,10 +143,9 @@ def no_patch_note(verstr, metadata, untracked=None):
     return f"{verstr} has no patch to show: {reason}"
 
 
-def print_patch(verstr, metadata, patches, max_bytes=None):
+def print_patch(verstr, metadata, patches, max_bytes=PATCH_MAX_BYTES):
     """``show --patch``'s text: the patches, or a one-line note on stderr."""
-    cap = _patch_cap(max_bytes)
-    payload = patch_payload(metadata, patches, cap)
+    payload = patch_payload(metadata, patches, max_bytes)
     if payload["text"] is None:
         untracked = (payload.get("untracked_files", [])
                      if payload["reason"] == UNTRACKED_ONLY else None)
@@ -153,7 +153,7 @@ def print_patch(verstr, metadata, patches, max_bytes=None):
         return
     print("\n" + payload["text"], end="")
     if payload["truncated"]:
-        print(f"\n[patch truncated at {cap} bytes; raise --max-bytes to see more]")
+        print(f"\n[patch truncated at {max_bytes} bytes; raise --max-bytes to see more]")
 
 
 def event_log(log):

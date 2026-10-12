@@ -67,20 +67,15 @@ def _text(data):
     return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _is_commit(repo, ref) -> bool:
-    return _git_output(repo, ["rev-parse", "--verify", "--quiet",
-                              f"{ref}^{{commit}}"]) is not None
-
-
 def default_branch(repo) -> str | None:
     """The branch a checkout's work merges into: origin/HEAD's target, else
     ``main``, ``master``, ``origin/main``, ``origin/master``; None without any."""
     head = (_git_output(repo, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"])
             or "").strip()
-    if head and _is_commit(repo, head):
+    if head and _commit_exists(repo, head):
         return head
     for name, ref in _DEFAULT_BRANCHES:
-        if _is_commit(repo, ref):
+        if _commit_exists(repo, ref):
             return name
     return None
 

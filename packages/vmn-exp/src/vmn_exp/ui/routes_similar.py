@@ -18,8 +18,8 @@ search rows: they carry no features or intent. Archived runs only with
 language over status-annotated rows, like ``vmn-exp similar --query``).
 
 An app's inverted index is built once per snapshot object (the same object
-until the app's index moves to a new generation), off the request thread
-and from its previous generation's
+until the app's index moves to a new generation), off the request thread —
+every app's of a request at once — and from its previous generation's
 (:class:`~vmn_exp.core.similar_cache.IndexLineages`): a heartbeat reuses
 it, other changes cost what changed, concurrent requests share one build,
 and a text query files words only. A request answers within
@@ -41,7 +41,7 @@ from vmn_exp.core.similar import (
     target_from_snapshot,
 )
 from vmn_exp.core.similar_cache import IndexLineages
-from vmn_exp.core.similar_search import candidate_filter
+from vmn_exp.core.similar_search import candidate_filter, text_target
 from vmn_exp.core.similar_search import intent_excerpt as _excerpt
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
@@ -88,9 +88,12 @@ def _answer(request, lineages, scopes, target, top, archived, query=None, weight
         keep = candidate_filter(keyed, query, archived)
     except QueryError as e:
         raise HTTPException(400, str(e)) from None
+    structured = not target.get("text_only")
+    for key, snap, _ in keyed:
+        lineages.start(key, snap, structured)
     try:
         for key, snap, _ in keyed:
-            lineages.index_for(key, snap, deadline, structured=not target.get("text_only"))
+            lineages.index_for(key, snap, deadline, structured)
         found = similar_runs_multi(keyed, target, top=top + 1, rows_filter=keep,
                                    weights=weights, deadline=deadline)
     except SimilarDeadlineExceeded:
@@ -113,11 +116,6 @@ def _checked_text(text):
         raise HTTPException(400, "text is required")
     if len(text.encode("utf-8")) > MAX_TEXT_BYTES:
         raise HTTPException(400, f"text is over {MAX_TEXT_BYTES} bytes")
-
-
-def _text_target(text):
-    return {"row": None, "features": None, "intent": None, "hypothesis": None,
-            "text": text, "text_only": True}
 
 
 def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
@@ -155,7 +153,7 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
         _checked_text(text)
         app_name, snapshot, schema = app_inputs(ws_name, app_tag)
         return _answer(request, lineages, scopes(ws_name, app_name, snapshot, schema, all_apps),
-                       _text_target(text), top, archived, q)
+                       text_target(text), top, archived, q)
 
     @app.get(f"{prefix}/similar", dependencies=[require(VIEWER)])
     def similar_text(request: Request, text: str = "", top: int = DEFAULT_TOP,
@@ -163,5 +161,5 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
         _checked_top(top)
         _checked_text(text)
         names = sorted(viewable(request, [ws.name for ws in app.state.manager.list()]))
-        return _answer(request, lineages, list(scopes_of(names)), _text_target(text), top,
+        return _answer(request, lineages, list(scopes_of(names)), text_target(text), top,
                        archived, q)

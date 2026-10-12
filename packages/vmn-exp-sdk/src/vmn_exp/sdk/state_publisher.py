@@ -14,7 +14,7 @@ import yaml
 
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.status import RUN_STATE_FILE
-from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage, local_side
 
 
 def split_storage(storage, app_name, verstr):
@@ -28,19 +28,12 @@ def split_storage(storage, app_name, verstr):
     entirely in the background; anything else (a local store, or a caller's
     own wrapper) is written inline, as given.
     """
+    local = local_side(storage)
+    if not getattr(storage, "is_remote", lambda: False)():
+        return local, None
     if isinstance(storage, CachedSnapshotStorage):
-        # Private, but the cache's documented shape (local-first + optional
-        # remote), and it exposes no public accessor for its local side.
-        if storage._remote is None:
-            return storage._local, None
-        return storage._local, functools.partial(
-            _upload_if_held, storage, app_name, verstr
-        )
-    if getattr(storage, "is_remote", lambda: False)():
-        return None, functools.partial(
-            storage.save_file, app_name, verstr, RUN_STATE_FILE
-        )
-    return storage, None
+        return local, functools.partial(_upload_if_held, storage, app_name, verstr)
+    return None, functools.partial(storage.save_file, app_name, verstr, RUN_STATE_FILE)
 
 
 def _upload_if_held(storage, app_name, verstr, data):

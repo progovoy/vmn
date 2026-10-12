@@ -48,7 +48,7 @@ from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_storage
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import placement_snapshot, resolve_experiment
-from vmn_exp.core.similar_search import find as _find_similar
+from vmn_exp.core.similar_search import conf_schema_of, find as _find_similar
 from vmn_exp.core.status import (
     load_run_state,
     observed_at_by_verstr,
@@ -305,7 +305,7 @@ def similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=Non
     return _find_similar(
         storage, app_name, ref, exp_conf, top=top, query=query, context=context,
         text_only=text_only, all_apps=all_apps,
-        schema_of=lambda app: _metrics_schema(root_path, app),
+        schema_of=conf_schema_of(root_path) if root_path else None,
     )
 
 
