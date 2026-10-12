@@ -6,6 +6,7 @@ import { emaXY, toXY } from "../util/seriesArrays";
 import { fetchSeriesBatch } from "../apiSeries";
 import { useJoinedSeries } from "../hooks/useJoinedSeries";
 import type { SeriesPoint } from "../types";
+import { metricCurves } from "../pages/overlayCoverage";
 import { AUTO_X, xMetricLabel, xMetricMap, type XMap } from "../util/xMetric";
 import { OVERLAY_POINTS, useOverlaySeries, type OverlayData, type OverlayRunData } from "../pages/overlaySeries";
 import CurveChart from "./CurveChart";
@@ -79,11 +80,13 @@ export default function OverlayChart({
   );
 }
 
-/** One metric across runs. Each run keeps its own typed x/y arrays, and
- *  "relative" x is measured from each run's own start. With many runs the
- *  smoothed curve replaces the raw one rather than doubling the lines. */
+/** One metric across the runs that logged it. Each run keeps its own typed
+ *  x/y arrays, and "relative" x is measured from each run's own start. With
+ *  many runs the smoothed curve replaces the raw one rather than doubling the
+ *  lines. A run missing the x metric drops out of that chart only, and with
+ *  no run joined the chart stays on the plain axis. */
 const MetricOverlay = memo(function MetricOverlay({
-  metric, runs, colorOf, xMode: plainMode, xMetric, joined, alpha, logY, hidden, focused,
+  metric, runs, colorOf, xMode: plainMode, xMetric: wantedX, joined, alpha, logY, hidden, focused,
 }: {
   metric: string;
   runs: OverlayRunData[];
@@ -97,13 +100,13 @@ const MetricOverlay = memo(function MetricOverlay({
   hidden: ReadonlySet<string>;
   focused: string | null;
 }) {
+  const { xMetric, curves } = useMemo(
+    () => metricCurves(metric, runs, wantedX, joined), [metric, runs, wantedX, joined],
+  );
   const xMode = xMetric ? "metric" : plainMode;
   const raw = useMemo(
-    () => runs.map((r) => {
-      const points = (xMetric ? joined?.[r.key] : r.series)?.[metric] ?? [];
-      return { key: r.key, ...toXY(points, xMode, r.origin, { positiveOnly: logY }) };
-    }),
-    [metric, runs, xMode, xMetric, joined, logY],
+    () => curves.map((c) => ({ key: c.key, ...toXY(c.points, xMode, c.origin, { positiveOnly: logY }) })),
+    [curves, xMode, logY],
   );
   const formatX = useMemo(() => (xMetric ? xMetricLabel(xMetric) : undefined), [xMetric]);
   const series = useMemo<CurveSeries[]>(
