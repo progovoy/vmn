@@ -48,9 +48,9 @@ def test_a_plain_diff_yields_the_file_and_one_symbol_per_hunk_context():
     assert "truncated" not in result
 
 
-def test_hunks_without_context_add_no_symbol():
+def test_a_hunk_whose_header_names_nothing_names_its_column_0_context_line():
     text = "diff --git a/n.txt b/n.txt\n--- a/n.txt\n+++ b/n.txt\n@@ -1,3 +1,4 @@\n a\n+b\n"
-    assert _symbols(text) == []
+    assert _symbols(text) == ["n.txt::a"]
     assert _files(text) == ["n.txt"]
 
 

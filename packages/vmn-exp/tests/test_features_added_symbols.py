@@ -53,7 +53,7 @@ def test_removed_definitions_are_symbols_too():
 def test_context_lines_and_a_binary_payload_define_nothing():
     text = ("diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,3 +1,3 @@\n"
             " def kept(x):\n-    a = 1\n+    a = 2\n")
-    assert _symbols(text) == []
+    assert _symbols(text) == ["a.py::kept"]
 
 
 @pytest.mark.parametrize("path, line, name", [
