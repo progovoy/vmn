@@ -9,6 +9,7 @@ vi.mock("../../api", () => ({
   api: {
     meta: vi.fn(),
     workspaces: vi.fn(),
+    apps: vi.fn(),
     experiments: vi.fn(),
     experimentsPaged: vi.fn(),
     metricsSchema: vi.fn(),
@@ -46,6 +47,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.meta.mockResolvedValue({ version: "0.10.2" });
   m.workspaces.mockResolvedValue([GIT_WS]);
+  m.apps.mockResolvedValue([{ name: "my/app", experiments: 1, versions: 1 }]);
   m.metricsSchema.mockResolvedValue({});
   m.facets.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experiments.mockResolvedValue(page([row(1)]));
@@ -66,6 +68,13 @@ describe("leaderboard toolbar create button", () => {
     await boardSettled();
     expect(await screen.findByRole("button", { name: "New run" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /experiment/i })).toBeNull();
+  });
+
+  it("is hidden while the app is not known to exist (spec §1.6)", async () => {
+    m.apps.mockResolvedValue([]);
+    await boardSettled();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByRole("button", { name: "New run" })).toBeNull();
   });
 
   it("is hidden on a read-only server", async () => {

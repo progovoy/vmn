@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
 import LiveToggle from "../components/LiveToggle";
 import SavedViews from "../components/SavedViews";
-import { usePageScope } from "../shell/usePageScope";
+import { useCanCreateRun } from "../shell/useAppExists";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import type { useBoardSelection } from "../hooks/useBoardSelection";
@@ -31,8 +31,7 @@ export default function LeaderboardToolbar({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const scope = usePageScope(ws);
-  const canCreate = !scope.readOnly && scope.isGit;
+  const canCreate = useCanCreateRun(ws, app);
   const onMoveColumn = useCallback(
     (key: string, delta: number) => view.moveColumn(key, delta, cols.defaultKeys),
     // eslint-disable-next-line react-hooks/exhaustive-deps
