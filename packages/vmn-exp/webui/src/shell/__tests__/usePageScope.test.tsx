@@ -12,7 +12,7 @@ vi.mock("../../api", () => ({ api: { meta: () => meta(), workspaces: () => works
 
 import { usePageScope } from "../usePageScope";
 
-const AUTH = { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null };
+const AUTH = { enabled: true, token: true, oidc: false, login_url: null };
 const fail = (status?: number) =>
   Promise.reject(Object.assign(new Error("x"), status ? { status } : {}));
 
@@ -43,8 +43,8 @@ describe("usePageScope", () => {
     meta.mockResolvedValue({ version: "0.10.2" });
     const s = await scopeFor("ml-repo");
     expect(s).toMatchObject({
-      ws: "ml-repo", isGit: true, metaStatus: "ok", metaError: false, authEnabled: false,
-      role: null, readOnly: false, readOnlyReason: null, canAdmin: true,
+      ws: "ml-repo", isGit: true, metaStatus: "ok", authEnabled: false,
+      role: null, readOnly: false, readOnlyReason: null, canAdmin: true, canAttach: true,
     });
     expect(s.workspace?.name).toBe("ml-repo");
   });
@@ -118,7 +118,18 @@ describe("usePageScope", () => {
     meta.mockImplementation(() => fail(status));
     const s = await scopeFor();
     expect(s.metaStatus).toBe(expected);
-    expect(s.metaError).toBe(expected === "unreachable");
+    expect(s).not.toHaveProperty("metaError");
+    expect(s.canAttach).toBe(false);
+  });
+
+  it("offers attaching a checkout only to an admin of a writable server", async () => {
+    meta.mockResolvedValue({ version: "1", read_only: true });
+    expect((await scopeFor()).canAttach).toBe(false);
+  });
+
+  it("never offers attaching to a non-admin", async () => {
+    meta.mockResolvedValue({ version: "1", auth: AUTH, role: "editor" });
+    expect((await scopeFor()).canAttach).toBe(false);
   });
 
   it("is loading and writable before meta answers", () => {
@@ -126,7 +137,7 @@ describe("usePageScope", () => {
     workspaces.mockImplementation(() => new Promise(() => {}));
     const { result } = renderHook(() => usePageScope("ml-repo"), { wrapper });
     expect(result.current).toMatchObject({
-      metaStatus: "loading", readOnly: false, role: null, isGit: true, workspaces: [],
+      metaStatus: "loading", readOnly: false, role: null, isGit: true, workspaces: [], canAttach: false,
     });
   });
 });

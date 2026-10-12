@@ -5,18 +5,17 @@ const FOCUSABLE = [
   "textarea:not([disabled])", '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
-/** Keep Tab and Shift+Tab inside *ref* while *active*: focus moves in on
- *  activation (to *initialFocus*, else the first focusable element) and goes
- *  back to whatever had it before when the trap deactivates. */
+/** Keep Tab and Shift+Tab inside *ref* while mounted: focus moves in on
+ *  mount (to *initialFocus*, else the first focusable element) and goes back
+ *  to whatever had it before on unmount. */
 export function useFocusTrap(
   ref: RefObject<HTMLElement>,
-  active: boolean,
   opts?: { initialFocus?: RefObject<HTMLElement> },
 ): void {
   const initialFocus = opts?.initialFocus;
   useEffect(() => {
     const container = ref.current;
-    if (!active || !container) return;
+    if (!container) return;
     const previous = document.activeElement as HTMLElement | null;
     // A `tabIndex={-1}` button or input matches FOCUSABLE but is out of the Tab order.
     const focusables = () =>
@@ -44,5 +43,5 @@ export function useFocusTrap(
       document.removeEventListener("keydown", onKey);
       if (previous?.isConnected) previous.focus();
     };
-  }, [ref, active, initialFocus]);
+  }, [ref, initialFocus]);
 }

@@ -1,10 +1,11 @@
 /** The App group's switcher: a menu button listing the workspace's apps.
  *  The menu is `position: fixed` at the button, so the sidebar's scroll
  *  container never clips it. */
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { appTag } from "../../api";
+import { appHref } from "../../util";
 import { useDismiss } from "../../hooks/useDismiss";
+import { useMenuKeys } from "../../hooks/useMenuKeys";
 import { useApps } from "../../queries";
 import { Icon } from "./icons";
 
@@ -13,6 +14,7 @@ function AppMenu({ ws, app, style, onPick, onClose, drawer }: {
 }) {
   const apps = useApps(ws).data;
   const menuRef = useRef<HTMLDivElement>(null);
+  const onKeyDown = useMenuKeys(true, menuRef, onClose);
   // Focus moves into the menu once it has items: the current app, else the first.
   const loaded = apps !== undefined;
   useEffect(() => {
@@ -32,22 +34,13 @@ function AppMenu({ ws, app, style, onPick, onClose, drawer }: {
       window.removeEventListener("resize", onMove);
     };
   }, [onClose]);
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Tab") return onClose();
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    e.preventDefault();
-    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]"));
-    const at = items.indexOf(document.activeElement as HTMLElement);
-    const step = e.key === "ArrowDown" ? 1 : -1;
-    items[(at + step + items.length) % items.length]?.focus();
-  };
   return (
     <div ref={menuRef} className="app-menu" role="menu" aria-label={`Apps in ${ws}`} style={style} onKeyDown={onKeyDown}>
       {apps?.length === 0 && <div className="app-menu-empty">No apps in {ws} yet</div>}
       {apps?.map((a) => (
         <Link
           key={a.name} role="menuitem" className="app-menu-item mono"
-          to={`/ws/${ws}/app/${appTag(a.name)}`}
+          to={appHref(ws, a.name)}
           aria-current={a.name === app ? "page" : undefined}
           state={drawer ? { focusMain: true } : undefined}
           onClick={onPick}

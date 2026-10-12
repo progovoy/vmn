@@ -64,7 +64,7 @@ describe("Topbar", () => {
       authEnabled: true,
       meta: {
         version: "1", principal: { id: "static-token", name: "static token" }, role: "admin",
-        auth: { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null },
+        auth: { enabled: true, token: true, oidc: false, login_url: null },
       },
     });
     fireEvent.click(screen.getByRole("button", { name: /token · admin/ }));

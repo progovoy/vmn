@@ -1,5 +1,18 @@
 """Resolve a user's snapshot/experiment reference to a stored verstr."""
 
+RUN_NOT_FOUND = "run_not_found"  # no such verstr/prefix, @N out of range, no runs
+AMBIGUOUS_REF = "ambiguous_ref"  # a prefix matching several runs
+INVALID_REF = "invalid_ref"  # a malformed ref
+
+
+class RefError(str):
+    """A resolution error: its message, with the reason as ``code``."""
+
+    def __new__(cls, message, code=RUN_NOT_FOUND):
+        error = super().__new__(cls, message)
+        error.code = code
+        return error
+
 
 def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
     """Resolve a version reference to a full verstr.
@@ -12,7 +25,7 @@ def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
     if latest or verstr in ("latest", "@latest"):
         snaps = storage.list_snapshots(app_name)
         if not snaps:
-            return None, f"No {kind}s found for {app_name}"
+            return None, RefError(f"No {kind}s found for {app_name}")
         most_recent = max(snaps, key=lambda m: m.get("timestamp", ""))
         return most_recent["verstr"], None
 
@@ -22,11 +35,13 @@ def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
     if verstr.startswith("@"):
         idx_str = verstr[1:]
         if not idx_str.isdigit():
-            return None, f"Invalid index reference '{verstr}' (use @N, e.g. @1)"
+            return None, RefError(
+                f"Invalid index reference '{verstr}' (use @N, e.g. @1)", INVALID_REF
+            )
         n = int(idx_str)
         snaps = storage.list_snapshots(app_name)
         if n < 1 or n > len(snaps):
-            return None, f"Index '{verstr}' out of range (1..{len(snaps)})"
+            return None, RefError(f"Index '{verstr}' out of range (1..{len(snaps)})")
         return snaps[n - 1]["verstr"], None
 
     if storage.exists(app_name, verstr):
@@ -44,7 +59,8 @@ def _resolve_verstr(storage, app_name, verstr, latest=False, kind="snapshot"):
         return matches[0], None
     if len(matches) > 1:
         cands = ", ".join(matches)
-        return None, (
-            f"Ambiguous prefix '{verstr}': matches {len(matches)} {kind}s: {cands}"
+        return None, RefError(
+            f"Ambiguous prefix '{verstr}': matches {len(matches)} {kind}s: {cands}",
+            AMBIGUOUS_REF,
         )
-    return None, f"{kind.capitalize()} '{verstr}' not found"
+    return None, RefError(f"{kind.capitalize()} '{verstr}' not found")

@@ -117,7 +117,7 @@ describe("RunMediaSection", () => {
         ...base, media: { s: [{ step: 0, path: "outputs/media/s/0.png" }] },
       }} />,
     );
-    expect(screen.getByText("media")).toBeInTheDocument();
+    expect(screen.getByText("Media")).toBeInTheDocument();
     expect(screen.getByRole("img")).toHaveAttribute(
       "src", "/api/v1/workspaces/ws/apps/app/experiments/v1/outputs/media/s/0.png",
     );

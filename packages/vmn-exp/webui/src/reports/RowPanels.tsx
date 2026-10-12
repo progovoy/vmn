@@ -1,11 +1,10 @@
 /** Report panels that plot many runs' rows (pinned or a live query). */
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { appTag } from "../api";
 import { useChartRows } from "../hooks/useChartRows";
 import type { ChartView } from "../hooks/useLeaderboardView";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtParam, fmtVal } from "../util";
+import { appHref, fmtParam, fmtVal, runHref } from "../util";
 import MetricBarChart from "../components/MetricBarChart";
 import MetricScatter from "../components/MetricScatter";
 import ParallelCoordinates from "../components/ParallelCoordinates";
@@ -52,7 +51,7 @@ function LeaderboardTable({ ws, app, rows, metricCols, paramCols }: Cols & {
       <tbody>
         {rows.map((r) => (
           <tr key={r.verstr}>
-            <td><Link to={`/ws/${ws}/app/${appTag(app)}/run/${encodeURIComponent(r.verstr)}`}>@{r.idx}</Link></td>
+            <td><Link to={runHref(appHref(ws, app), r.verstr)}>@{r.idx}</Link></td>
             {metricCols.map((c) => <td key={`m.${c}`} className="mono">{fmtVal(r.metrics[c])}</td>)}
             {paramCols.map((c) => <td key={`p.${c}`} className="mono">{fmtParam(r.params?.[c] ?? "–")}</td>)}
           </tr>

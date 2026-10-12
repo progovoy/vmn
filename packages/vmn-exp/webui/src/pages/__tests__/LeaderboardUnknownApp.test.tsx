@@ -24,7 +24,7 @@ import Leaderboard from "../Leaderboard";
 const never = () => new Promise<never>(() => {});
 const status = (total: number) => ({
   total, counts: { created: 0, running: 0, stuck: 0, succeeded: total, failed: 0 },
-  failed_recent: 0, recent_sec: 86400, rollup: null,
+  failed_recent: 0, rollup: null,
 });
 
 function renderBoard(ws = "ml-repo") {
@@ -58,7 +58,6 @@ describe("Leaderboard empty state", () => {
   });
 
   it("offers no New run while the app's existence is unknown", async () => {
-    apps.mockReturnValue(never());
     appStatus.mockReturnValue(never());
     renderBoard();
     await screen.findByText(/No runs yet in ml_app/);
@@ -66,8 +65,18 @@ describe("Leaderboard empty state", () => {
     expect(newRun()).toBeNull();
   });
 
-  it("offers no New run for an app nobody knows", async () => {
+  it("offers New run from the status answer alone, whatever the app list says", async () => {
     apps.mockResolvedValue([]);
+    renderBoard();
+    await screen.findByText(/No runs yet in ml_app/);
+    await settle();
+    expect(newRun()).not.toBeNull();
+  });
+
+  it("offers no New run for an app the server does not know", async () => {
+    appStatus.mockRejectedValue(
+      Object.assign(new Error("x"), { status: 404, body: { detail: "x", code: "app_not_found" } }),
+    );
     renderBoard();
     await screen.findByText(/No runs yet in ml_app/);
     await waitFor(() => expect(appStatus).toHaveBeenCalled());
@@ -80,7 +89,7 @@ describe("Leaderboard empty state", () => {
     renderBoard();
     await screen.findByText(/No runs yet in ml_app/);
     await waitFor(() => expect(meta).toHaveBeenCalled());
-    await waitFor(() => expect(apps).toHaveBeenCalled());
+    await waitFor(() => expect(appStatus).toHaveBeenCalled());
     await settle();
     expect(newRun()).toBeNull();
   });
@@ -89,7 +98,7 @@ describe("Leaderboard empty state", () => {
     renderBoard("team");
     await screen.findByText(/No runs yet in ml_app/);
     await waitFor(() => expect(workspaces).toHaveBeenCalled());
-    await waitFor(() => expect(apps).toHaveBeenCalled());
+    await waitFor(() => expect(appStatus).toHaveBeenCalled());
     await settle();
     expect(newRun()).toBeNull();
   });

@@ -8,6 +8,7 @@ vi.mock("../../../api", () => ({
 }));
 
 import RouteError from "../RouteError";
+import { watchStaleChunks } from "../../../shell/staleChunk";
 import { ShellOverrideProvider, useShellOverride } from "../../../shell/shellOverride";
 
 function Probe() {
@@ -48,8 +49,20 @@ describe("RouteError", () => {
     expect(screen.getByTestId("override").textContent).toBe("none");
   });
 
+  /** What Vite's preload helper does when a lazy chunk fails to load. */
+  function failChunk(error: Error) {
+    const event = Object.assign(new Event("vite:preloadError", { cancelable: true }), { payload: error });
+    window.dispatchEvent(event);
+    return error;
+  }
+
   it("asks to reload a tab running an older build", () => {
-    renderWith(new TypeError("Failed to fetch dynamically imported module: /assets/Run-abc.js"));
+    const stop = watchStaleChunks();
+    try {
+      renderWith(failChunk(new TypeError("Failed to fetch dynamically imported module: /assets/Run-abc.js")));
+    } finally {
+      stop();
+    }
     expect(screen.getByRole("heading", { name: "The dashboard was updated" })).toHaveFocus();
     expect(screen.getByText("This tab runs an older build. Reload to load the new one."))
       .toBeInTheDocument();
@@ -57,9 +70,9 @@ describe("RouteError", () => {
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
-  it("recognises Safari's stale-chunk message too", () => {
+  it("never guesses a stale chunk from the browser's wording", () => {
     renderWith(new TypeError("Importing a module script failed."));
-    expect(screen.getByRole("heading", { name: "The dashboard was updated" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "This page failed to render" })).toBeInTheDocument();
   });
 
   it("shows a router 404 as a missing page", async () => {

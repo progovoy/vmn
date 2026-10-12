@@ -16,13 +16,18 @@ const appStatus = vi.fn<(ws: string, tag: string) => Promise<AppStatus>>();
 vi.mock("../../apiShell", () => ({
   apiShell: { appStatus: (ws: string, tag: string) => appStatus(ws, tag) },
 }));
+const httpGet = vi.fn<(path: string) => Promise<unknown>>();
+vi.mock("../../http", async (orig) => ({
+  ...(await orig<typeof import("../../http")>()),
+  get: (path: string) => httpGet(path),
+}));
 const cacheStatus = vi.fn();
 vi.mock("../../apiCache", async (orig) => ({
   ...(await orig<typeof import("../../apiCache")>()),
   apiCache: { status: (ws: string) => cacheStatus(ws), resync: vi.fn() },
 }));
 
-import { AppsPage } from "../Dashboard";
+import { AppsPage } from "../AppsPage";
 
 const WS: Workspace[] = [
   { name: "ml-repo", kind: "git", path: "/srv/checkouts/ml-repo" },
@@ -30,7 +35,7 @@ const WS: Workspace[] = [
 ];
 const zero = { created: 0, running: 0, stuck: 0, succeeded: 0, failed: 0 };
 const status = (over: Partial<AppStatus["counts"]> = {}): AppStatus => ({
-  total: 1, counts: { ...zero, ...over }, failed_recent: 0, recent_sec: 86400,
+  total: 1, counts: { ...zero, ...over }, failed_recent: 0,
   rollup: over.stuck ? "stuck" : over.running ? "running" : null,
 });
 const idleCache = { workspace: "ml-repo", state: "idle", progress: { done: 0, total: 0 },
@@ -54,6 +59,10 @@ beforeEach(() => {
   meta.mockResolvedValue({ version: "0.10.2" });
   workspaces.mockResolvedValue(WS);
   appStatus.mockResolvedValue(status());
+  httpGet.mockImplementation(async (path) =>
+    path === "/workspaces/ml-repo/apps-status" || path === "/workspaces/shared/apps-status"
+      ? { clf: status(), "root-svc": status() }
+      : Promise.reject(new Error(`unexpected ${path}`)));
   cacheStatus.mockResolvedValue(idleCache);
   apps.mockResolvedValue([
     { name: "clf", experiments: 53, versions: 12 },
@@ -88,33 +97,30 @@ describe("AppsPage", () => {
   });
 
   it("shows each app's status rollup, linked to its leaderboard", async () => {
-    appStatus.mockImplementation(async (_ws, tag) =>
-      tag === "clf" ? status({ stuck: 2, running: 3 }) : status());
+    httpGet.mockResolvedValue({ clf: status({ stuck: 2, running: 3 }), "root-svc": status() });
     renderAt("ml-repo");
     const stuck = await screen.findByRole("link", { name: "2 stuck" });
     expect(stuck.getAttribute("href")).toBe("/ws/ml-repo/app/clf?status=stuck");
     expect(stuck.closest("article")!.querySelector(".ws-tile-link, .app-tile-link")!.textContent)
       .toBe("clf");
-    expect(appStatus).toHaveBeenCalledWith("ml-repo", "clf");
-    expect(appStatus).toHaveBeenCalledWith("ml-repo", "root-svc");
     expect(document.querySelector(".status-dot")).toBeNull();
   });
 
-  it("requests a tile's status only once it scrolls into view", async () => {
-    const observed: Element[] = [];
-    vi.stubGlobal("IntersectionObserver", class {
-      observe(el: Element) { observed.push(el); }
-      disconnect() {}
-    });
-    try {
-      renderAt("ml-repo");
-      await screen.findByRole("link", { name: "clf" });
-      await new Promise((r) => setTimeout(r, 0));
-      expect(observed.length).toBe(2);
-      expect(appStatus).not.toHaveBeenCalled();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+  it("asks for every tile's status in one request, never one per tile", async () => {
+    httpGet.mockResolvedValue({ clf: status({ running: 1 }), "root-svc": status({ stuck: 1 }) });
+    renderAt("ml-repo");
+    await screen.findByRole("link", { name: "1 running" });
+    await screen.findByRole("link", { name: "1 stuck" });
+    expect(httpGet.mock.calls).toEqual([["/workspaces/ml-repo/apps-status"]]);
+    expect(appStatus).not.toHaveBeenCalled();
+  });
+
+  it("shows no rollup for an app the summary lacks", async () => {
+    httpGet.mockResolvedValue({ clf: status({ stuck: 2 }) });
+    renderAt("ml-repo");
+    await screen.findByRole("link", { name: "2 stuck" });
+    const other = screen.getByRole("link", { name: "root/svc" }).closest("article")!;
+    expect(other.querySelector(".status-rollup")).toBeNull();
   });
 
   it("shows the server cache only on a configured server, with no eyebrow", async () => {

@@ -157,7 +157,6 @@ function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush }: P
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <div className="eyebrow">parallel coordinates</div>
         {target && (
           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
             color by

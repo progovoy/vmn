@@ -664,7 +664,7 @@ export default function StampTree() {
             <VersionDetails ws={ws} app={app} node={current} canonical={canonical} edges={edges} olderVerstrs={olderVerstrs} onSelect={select} />
             <ConfigSection ws={ws} app={app} verstr={current.verstr} />
             <div style={{ height: 1, background: "var(--line)", margin: "16px 0" }} />
-            <div className="eyebrow" style={{ marginBottom: 10 }}>legend</div>
+            <h2 className="section-title">Legend</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {presentModes.map((mode) => (
                 <div key={mode} style={{ display: "flex", alignItems: "center", gap: 8 }}>

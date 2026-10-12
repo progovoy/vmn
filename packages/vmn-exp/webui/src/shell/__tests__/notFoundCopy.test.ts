@@ -107,7 +107,7 @@ describe("notFoundCopy: app", () => {
 });
 
 describe("notFoundCopy: run", () => {
-  const at = (ref: string): NotFoundProps => ({ kind: "run", ws: "ml-repo", appTag: "ml_app", ref });
+  const at = (ref: string): NotFoundProps => ({ kind: "run", ws: "ml-repo", appTag: "ml_app", runRef: ref });
 
   it("gives an @N ref the app's range", () => {
     const c = copy(at("@540"), { runTotal: 53 });
@@ -187,15 +187,21 @@ describe("notFoundCopy: model, report, control plane, needs-git", () => {
 });
 
 describe("isMissingRun", () => {
-  const err = (status: number, detail: string) =>
-    Object.assign(new Error(detail), { status, body: { detail } });
+  const err = (status: number, detail: string, code?: string) =>
+    Object.assign(new Error(detail), { status, body: { detail, code } });
 
-  it("is a 404 for an experiment or a 400 for an invalid version", () => {
-    expect(isMissingRun(err(404, "Experiment @540 not found"))).toBe(true);
-    expect(isMissingRun(err(400, "Invalid version: x"))).toBe(true);
+  it("is the server's run_not_found or invalid_ref answer, whatever its prose", () => {
+    expect(isMissingRun(err(404, "anything", "run_not_found"))).toBe(true);
+    expect(isMissingRun(err(400, "anything", "invalid_ref"))).toBe(true);
+  });
+
+  it("never reads the message", () => {
+    expect(isMissingRun(err(404, "Experiment @540 not found"))).toBe(false);
+    expect(isMissingRun(err(400, "Invalid version: x"))).toBe(false);
   });
 
   it("is nothing else", () => {
+    expect(isMissingRun(err(409, "Ambiguous", "ambiguous_ref"))).toBe(false);
     expect(isMissingRun(err(404, "Workspace x not found"))).toBe(false);
     expect(isMissingRun(err(400, "bad query"))).toBe(false);
     expect(isMissingRun(err(500, "Experiment boom"))).toBe(false);

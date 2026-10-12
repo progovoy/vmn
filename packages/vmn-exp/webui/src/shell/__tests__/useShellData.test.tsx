@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createQueryClient } from "../../queryClient";
@@ -16,14 +16,14 @@ vi.mock("../../apiShell", () => ({
   },
 }));
 
-import { statusPollMs, useAppStatus, useGitContext, useMetaLive } from "../useShellData";
+import { statusPollMs, useAppStatus, useAppStatusPoll, useGitContext } from "../useShellData";
 
 const GIT: GitContext = {
   branch: "main", detached: false, head: null, head_short: null, dirty: false, store: ".vmn/store",
 };
 const status = (running: number, stuck: number): AppStatus => ({
   total: 1, counts: { created: 0, running, stuck, succeeded: 0, failed: 0 },
-  failed_recent: 0, recent_sec: 86400, rollup: null,
+  failed_recent: 0, rollup: null,
 });
 
 let client: QueryClient;
@@ -34,13 +34,6 @@ describe("useShellData", () => {
   beforeEach(() => {
     client = createQueryClient();
     [meta, gitContext, appStatus].forEach((f) => f.mockReset());
-  });
-
-  it("useMetaLive shares the meta key", async () => {
-    meta.mockResolvedValue({ version: "1" });
-    const { result } = renderHook(() => useMetaLive(), { wrapper });
-    await waitFor(() => expect(result.current.data).toEqual({ version: "1" }));
-    expect(client.getQueryData(["meta"])).toEqual({ version: "1" });
   });
 
   it("useGitContext asks only when enabled and a workspace is known", async () => {
@@ -75,5 +68,44 @@ describe("useShellData", () => {
     [status(0, 1), 15_000],
   ])("polls status every %#", (s, ms) => {
     expect(statusPollMs(s)).toBe(ms);
+  });
+});
+
+describe("app status polling", () => {
+  beforeEach(() => {
+    client = createQueryClient();
+    appStatus.mockReset();
+    appStatus.mockResolvedValue(status(1, 0));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
+  it("a plain reader never polls, however many there are", async () => {
+    renderHook(() => useAppStatus("w", "a"), { wrapper });
+    renderHook(() => useAppStatus("w", "a"), { wrapper });
+    await waitFor(() => expect(appStatus).toHaveBeenCalledTimes(1));
+    await advance(61_000);
+    expect(appStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("the one poller refetches on the status cadence for every reader", async () => {
+    const reader = renderHook(() => useAppStatus("w", "a"), { wrapper });
+    renderHook(() => useAppStatusPoll("w", "a"), { wrapper });
+    await waitFor(() => expect(appStatus).toHaveBeenCalledTimes(1));
+    appStatus.mockResolvedValue(status(0, 0));
+    await advance(15_500);
+    expect(appStatus).toHaveBeenCalledTimes(2);
+    expect(reader.result.current.data).toEqual(status(0, 0));
+  });
+
+  it("a reader mounting within 10 s reads the cache without a refetch", async () => {
+    renderHook(() => useAppStatus("w", "a"), { wrapper });
+    await waitFor(() => expect(appStatus).toHaveBeenCalledTimes(1));
+    await advance(5_000);
+    renderHook(() => useAppStatus("w", "a"), { wrapper });
+    await advance(10);
+    expect(appStatus).toHaveBeenCalledTimes(1);
   });
 });

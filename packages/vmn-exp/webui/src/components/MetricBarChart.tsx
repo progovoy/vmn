@@ -70,7 +70,6 @@ function MetricBarChart({ rows, metricCols, schema, onSelect }: {
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div className="eyebrow" style={{ marginBottom: 0 }}>metric bar chart</div>
         <select
           role="combobox"
           value={metric}

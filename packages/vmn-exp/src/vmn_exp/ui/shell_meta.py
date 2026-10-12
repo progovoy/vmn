@@ -2,6 +2,7 @@
 """What the dashboard shell knows about the server: versions, deployment,
 the sign-in methods and the caller's role (``/meta``, ``/workspaces``, the
 401 body). Methods only, never a secret."""
+import functools
 from importlib import metadata
 
 from vmn_exp.ui.auth.authz import effective_role
@@ -21,6 +22,7 @@ def auth_hints(chain):
     }
 
 
+@functools.cache
 def _vmn_exp_version():
     try:
         return metadata.version("vmn-exp")
@@ -50,7 +52,6 @@ def meta_payload(app_state, principal, read_only):
         "control_plane": control_plane,
         "auth": {
             "enabled": app_state.auth_enabled,
-            "api_tokens": control_plane,
             **auth_hints(app_state.auth_chain),
         },
         "principal": principal and {"id": principal.id, "name": principal.name},

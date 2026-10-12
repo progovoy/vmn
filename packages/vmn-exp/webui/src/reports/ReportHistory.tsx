@@ -44,7 +44,7 @@ export default function ReportHistory({ ws, rid, revisions, defaultBase }: {
   const base = `/ws/${ws}/reports/${encodeURIComponent(rid)}`;
   return (
     <div className="card report-history">
-      <div className="eyebrow">Revisions</div>
+      <h2 className="section-title">Revisions</h2>
       <ul>
         {revisions.map((r) => (
           <li key={r.rev}>

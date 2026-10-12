@@ -68,7 +68,7 @@ describe("Leaderboard as an outer-run management view", () => {
   });
 
   it("lets the Columns picker hide an outer-run column", async () => {
-    m.experiments.mockResolvedValue(page([row(1, { metrics: { loss: 0.3 } })]));
+    m.experiments.mockResolvedValue(page([row(1, { metrics: { loss: 0.3 }, kind: "outer", children: ["a"] })]));
     renderBoard();
     await screen.findByText("0.0.1-dev.x");
     expect(headers()).toContain("waiting");

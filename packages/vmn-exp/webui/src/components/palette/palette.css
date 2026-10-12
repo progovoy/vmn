@@ -49,10 +49,11 @@
 .cmdk-row.disabled .cmdk-icon { color: var(--text-3); }
 
 .cmdk-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
+/* The name keeps its room: the secondary text gives way first. */
 .cmdk-label { overflow: hidden; text-overflow: ellipsis; }
 .cmdk-ref { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
 .cmdk-sub {
-  color: var(--text-2); font-size: 12px; flex: 0 1 auto; min-width: 0;
+  color: var(--text-2); font-size: 12px; flex: 0 1000 auto; min-width: 0;
   overflow: hidden; text-overflow: ellipsis;
 }
 

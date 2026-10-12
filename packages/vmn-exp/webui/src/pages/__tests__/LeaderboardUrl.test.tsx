@@ -8,9 +8,15 @@ vi.mock("../../api", () => ({
     metricsSchema: vi.fn(),
     facets: vi.fn(),
     experiment: vi.fn(),
+    apps: vi.fn(),
   },
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
+const appStatus = vi.hoisted(() => vi.fn());
+vi.mock("../../apiShell", () => ({ apiShell: { appStatus: () => appStatus() } }));
+const KNOWN_APP = {
+  total: 1, counts: { created: 0, running: 0, stuck: 0, succeeded: 1, failed: 0 }, failed_recent: 0, rollup: null,
+};
 vi.mock("../../components/ParamPlots", () => ({ default: () => null }));
 vi.mock("../../components/MetricBarChart", () => ({ default: () => <div>bar-chart</div> }));
 vi.mock("../../components/NewExperiment", () => ({ default: () => <div>new-form</div> }));
@@ -32,6 +38,8 @@ const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 beforeEach(() => {
   vi.clearAllMocks();
   m.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
+  appStatus.mockResolvedValue(KNOWN_APP);
+  m.apps.mockResolvedValue([{ name: "my/app", experiments: 1, versions: 1 }]);
   m.facets.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experiments.mockResolvedValue(page([row(1, { metrics: { loss: 0.2 }, params: { model: "m1" } })]));
   m.experimentsPaged.mockResolvedValue({ rows: [row(1, { metrics: { loss: 0.2 } })], total: 1 });
@@ -95,7 +103,7 @@ describe("leaderboard view state lives in the URL", () => {
     const second = (await screen.findByText("0.0.2-dev.x")).closest("tr")!;
     fireEvent.click(within(second).getByRole("checkbox"));
     await waitFor(() => expect(urlParams().getAll("sel")).toEqual(["0.0.1-dev.x", "0.0.2-dev.x"]));
-    expect(screen.getByRole("button", { name: /code diff of 2 selected/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^code diff$/i })).toBeEnabled();
   });
 
   it("hides the columns the URL hides", async () => {

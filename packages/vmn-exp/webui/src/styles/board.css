@@ -33,35 +33,4 @@ tr.row.checked > td:first-child {
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-.sel-bar-spacer { height: 96px; }
-.sel-bar {
-  position: fixed; left: 50%; bottom: 24px; z-index: 50; transform: translateX(-50%);
-  /* max-content: a fixed box at left: 50% would otherwise shrink to half the viewport. */
-  display: flex; align-items: stretch; width: max-content; max-width: calc(100vw - 48px); min-height: 60px;
-  background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.16);
-  animation: sel-bar-in 0.16s ease-out;
-}
-@keyframes sel-bar-in {
-  from { opacity: 0; transform: translate(-50%, 12px); }
-}
-.sel-badge {
-  display: grid; place-items: center; min-width: 60px; padding: 0 10px;
-  background: var(--accent); color: #fff;
-  font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums;
-}
-.sel-label {
-  display: flex; align-items: center; padding: 0 18px 0 16px;
-  color: var(--text); font-size: 14px; white-space: nowrap;
-}
-.sel-actions {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  padding: 10px 16px; border-left: 1px solid var(--line);
-}
-.sel-actions .error { font-size: 12px; }
-button.sel-close {
-  padding: 0 20px; border: none; border-left: 1px solid var(--line); border-radius: 0;
-  background: none; color: var(--text-3); font-size: 16px;
-}
-button.sel-close:hover { color: var(--text); background: var(--panel-2); border-color: var(--line); }
-button.sel-close:focus-visible { outline-offset: -3px; }
+/* The selection bar itself lives in pages/selectionBar.css. */

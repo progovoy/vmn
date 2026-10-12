@@ -19,6 +19,7 @@ from vmn_exp.core.index_views import (
     runs_declared_schema,
     schema_key,
 )
+from vmn_exp.core.resolve_ref import AMBIGUOUS_REF, INVALID_REF, RefError
 from vmn_exp.core.status import derive_status, observed_at_from_mtime
 
 _VIEWS_PER_SNAPSHOT = 4
@@ -165,17 +166,19 @@ class IndexSnapshot:
 
     def _latest(self, kind):
         if not self.rows:
-            return None, f"No {kind}s found for {self.app_name}"
+            return None, RefError(f"No {kind}s found for {self.app_name}")
         newest = max(self.rows, key=lambda r: r.get("timestamp") or "")
         return newest["verstr"], None
 
     def _at_index(self, ref):
         idx = ref[1:]
         if not idx.isdigit():
-            return None, f"Invalid index reference '{ref}' (use @N, e.g. @1)"
+            return None, RefError(
+                f"Invalid index reference '{ref}' (use @N, e.g. @1)", INVALID_REF
+            )
         n = int(idx)
         if n < 1 or n > len(self.rows):
-            return None, f"Index '{ref}' out of range (1..{len(self.rows)})"
+            return None, RefError(f"Index '{ref}' out of range (1..{len(self.rows)})")
         return self.rows[n - 1]["verstr"], None
 
     def _by_prefix(self, ref, kind):
@@ -183,11 +186,12 @@ class IndexSnapshot:
         if len(matches) == 1:
             return matches[0], None
         if matches:
-            return None, (
+            return None, RefError(
                 f"Ambiguous prefix '{ref}': matches {len(matches)} {kind}s: "
-                + ", ".join(matches)
+                + ", ".join(matches),
+                AMBIGUOUS_REF,
             )
-        return None, f"{kind.capitalize()} '{ref}' not found"
+        return None, RefError(f"{kind.capitalize()} '{ref}' not found")
 
 
 class RowCache:

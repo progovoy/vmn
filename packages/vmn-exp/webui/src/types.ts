@@ -55,7 +55,7 @@ export interface Meta {
   mode?: "standalone" | "configured";
   control_plane?: boolean;
   auth?: {
-    enabled: boolean; token: boolean; oidc: boolean; api_tokens: boolean;
+    enabled: boolean; token: boolean; oidc: boolean;
     login_url: string | null;
   };
   principal?: { id: string; name: string } | null;

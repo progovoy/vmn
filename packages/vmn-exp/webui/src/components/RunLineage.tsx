@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { appTag } from "../http";
 import { runLineage } from "../apiRun";
 import type { Lineage, LineageDataset, LineageLink, LineageModel, LineageNode } from "../apiRun";
 import type { RunState } from "../types";
-import { modelHref, runHref } from "../util";
+import { appHref, modelHref, runHref } from "../util";
 import StatusPill from "./StatusPill";
 
 const DEPTHS = [1, 2, 3];
@@ -21,7 +20,7 @@ function NodeLabel({ ws, node, ownApp }: { ws: string; node: LineageNode; ownApp
     );
   }
   return (
-    <Link className="mono" to={runHref(`/ws/${ws}/app/${appTag(node.app)}`, node.verstr)}>
+    <Link className="mono" to={runHref(appHref(ws, node.app), node.verstr)}>
       {text}
     </Link>
   );
@@ -131,8 +130,8 @@ export default function RunLineage({ ws, app, verstr }: { ws: string; app: strin
   });
   return (
     <div className="card lineage">
-      <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        lineage
+      <div className="section-head">
+        <h2 className="section-title">Lineage</h2>
         <select aria-label="Lineage depth" value={depth}
           onChange={(e) => setDepth(Number(e.target.value))} style={{ marginLeft: "auto" }}>
           {DEPTHS.map((d) => <option key={d} value={d}>{`${d} hop${d > 1 ? "s" : ""}`}</option>)}

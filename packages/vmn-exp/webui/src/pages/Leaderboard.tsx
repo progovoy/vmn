@@ -24,8 +24,7 @@ import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits } from "./LeaderboardTable";
 import { DATE_SORT_OF, moveColumn } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
-import { useAppExists } from "../shell/useAppExists";
-import { usePageScope } from "../shell/usePageScope";
+import { useCanCreateRun } from "../shell/useAppExists";
 
 const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 
@@ -38,9 +37,7 @@ const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order
 function EmptyBoard({ ws, app, appName, onCreate }: {
   ws: string; app: string; appName: string; onCreate: () => void;
 }) {
-  const exists = useAppExists(ws, app);
-  const scope = usePageScope(ws);
-  const canCreate = exists === true && !scope.readOnly && scope.isGit;
+  const canCreate = useCanCreateRun(ws, app);
   return (
     <div className="empty">
       No runs yet in {appName}. Capture your working state:
@@ -112,7 +109,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const base = `/ws/${ws}/app/${app}`;
   const colPrefs = useColumnPrefs(`${ws}/${app}`);
   const [tableWidth, setTableWidth] = useState(0);
-  const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth);
+  const cols = useLeaderboardColumns(
+    rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown,
+  );
   const { setWidth, setOrder } = colPrefs;
   const ids = cols.layout.ids;
   const columnEdits = useMemo<ColumnEdits>(() => ({

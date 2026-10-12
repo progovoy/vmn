@@ -4,41 +4,20 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../api";
-import { useApps } from "../../queries";
-import { SHARED_STALE_MS } from "../../queryClient";
+import { facetsQuery, useApps } from "../../queries";
 import { CopyButton } from "../ui";
 import { usePageScope } from "../../shell/usePageScope";
 import { useOverrideRoute } from "../../shell/shellOverride";
 import { notFoundCopy, type Line } from "../../shell/notFoundCopy";
 import type { NotFoundProps } from "../../shell/contracts";
-import type { ExperimentFacets } from "../../types";
 import "./NotFound.css";
-
-type RunProps = Extract<NotFoundProps, { kind: "run" }>;
-/** NotFoundProps as a JSX element takes them: React keeps `ref` for itself, so
- *  the run kind's ref travels as `runRef`. */
-export type NotFoundElementProps =
-  | Exclude<NotFoundProps, RunProps>
-  | (Omit<RunProps, "ref"> & { runRef: string });
-
-function contractProps(p: NotFoundElementProps): NotFoundProps {
-  if (p.kind !== "run") return p;
-  const { runRef, ...rest } = p;
-  return { ...rest, ref: runRef };
-}
 
 const wsOf = (p: NotFoundProps) => ("ws" in p ? p.ws : undefined);
 
-/** The app's run count, asked for only by a run's not-found (same key as useFacets). */
+/** The app's run count, asked for only by a run's not-found. */
 function useRunTotal(p: NotFoundProps): number | null {
   const run = p.kind === "run" ? p : null;
-  const q = useQuery<ExperimentFacets>({
-    queryKey: ["facets", run?.ws, run?.appTag],
-    queryFn: () => api.facets(run!.ws, run!.appTag),
-    enabled: run !== null,
-    staleTime: SHARED_STALE_MS,
-  });
+  const q = useQuery({ ...facetsQuery(run?.ws ?? "", run?.appTag ?? ""), enabled: run !== null });
   return q.data?.total ?? null;
 }
 
@@ -61,8 +40,7 @@ export function FocusedHeading({ children }: { children: ReactNode }) {
   return <h1 ref={ref} tabIndex={-1}>{children}</h1>;
 }
 
-export default function NotFound(elementProps: NotFoundElementProps) {
-  const props = contractProps(elementProps);
+export default function NotFound(props: NotFoundProps) {
   useOverrideRoute("not-found");
   const scope = usePageScope(wsOf(props));
   const apps = useApps(props.kind === "app" ? props.ws : undefined).data;
@@ -73,7 +51,7 @@ export default function NotFound(elementProps: NotFoundElementProps) {
     runTotal,
     isStore: !scope.isGit,
     storeUri: scope.workspace?.store,
-    canAttach: scope.metaStatus === "ok" && !scope.meta?.read_only && scope.canAdmin,
+    canAttach: scope.canAttach,
   });
   return (
     <section className="not-found">

@@ -13,7 +13,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("RunOutput", () => {
   it("shows the run's output.log inline", async () => {
     render(<RunOutput artifacts={[{ name: "artifacts/output.log", size: 9 }, { name: "outputs/output.log", size: 30 }]} downloadUrl={url} />);
-    expect(screen.getByText("output")).toBeInTheDocument();
+    expect(screen.getByText("Output")).toBeInTheDocument();
     expect(await screen.findByText(/Traceback: boom/)).toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe(url("outputs/output.log"));
   });

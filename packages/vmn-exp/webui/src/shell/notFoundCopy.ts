@@ -1,5 +1,7 @@
 /** What each not-found page says and offers (plan 19 §1.6), kept pure so
  *  every string is pinned by a unit test. NotFound.tsx only renders it. */
+import { appName } from "../api";
+import { appTag } from "../http";
 import { closest } from "../util/closest";
 import type { NotFoundProps } from "./contracts";
 
@@ -36,8 +38,6 @@ const ALL_WORKSPACES: NotFoundAction = { label: ["All workspaces"], to: "/" };
 export const plain = (line: Line) =>
   line.map((s) => (typeof s === "string" ? s : s.mono)).join("");
 
-const nameOf = (tag: string) => tag.replaceAll("-", "/");
-const tagOf = (name: string) => name.replaceAll("/", "-");
 const appBase = (ws: string, tag: string) => `/ws/${ws}/app/${tag}`;
 
 /** `a, b, c` as links, the first five only. */
@@ -75,10 +75,10 @@ function workspaceCopy(ws: string, facts: NotFoundFacts): NotFoundCopy {
   };
 }
 
-function appCopy(ws: string, appTag: string, facts: NotFoundFacts): NotFoundCopy {
+function appCopy(ws: string, tag: string, facts: NotFoundFacts): NotFoundCopy {
   const apps = facts.apps ?? [];
-  const guess = closest(nameOf(appTag), apps);
-  const href = (name: string) => appBase(ws, tagOf(name));
+  const guess = closest(appName(tag), apps);
+  const href = (name: string) => appBase(ws, appTag(name));
   const body: Line[] = [];
   if (guess) body.push(["Did you mean ", { mono: guess, to: href(guess) }, "?"]);
   if (apps.length) body.push(["Apps here: ", ...linkList(apps, href), "."]);
@@ -90,7 +90,7 @@ function appCopy(ws: string, appTag: string, facts: NotFoundFacts): NotFoundCopy
     ]);
   }
   return {
-    h1: ["No app ", { mono: nameOf(appTag) }, ` in ${ws}`],
+    h1: ["No app ", { mono: appName(tag) }, ` in ${ws}`],
     body,
     actions: [guess
       ? { label: [`Open ${guess}`], to: href(guess) }
@@ -98,9 +98,9 @@ function appCopy(ws: string, appTag: string, facts: NotFoundFacts): NotFoundCopy
   };
 }
 
-function runCopy(ws: string, appTag: string, ref: string, facts: NotFoundFacts): NotFoundCopy {
-  const app = nameOf(appTag);
-  const base = appBase(ws, appTag);
+function runCopy(ws: string, tag: string, ref: string, facts: NotFoundFacts): NotFoundCopy {
+  const app = appName(tag);
+  const base = appBase(ws, tag);
   const total = facts.runTotal;
   const byIndex = /^@\d+$/.test(ref);
   let line: Line;
@@ -128,16 +128,16 @@ function runCopy(ws: string, appTag: string, ref: string, facts: NotFoundFacts):
   return copy;
 }
 
-function needsGitCopy(ws: string, appTag: string, page: "tree" | "actions", facts: NotFoundFacts): NotFoundCopy {
+function needsGitCopy(ws: string, tag: string, page: "tree" | "actions", facts: NotFoundFacts): NotFoundCopy {
   const where: Line = facts.storeUri ? [" (", { mono: facts.storeUri }, ")"] : [];
   return {
     h1: [page === "tree" ? "Stamp tree needs a git workspace" : "Actions need a git workspace"],
     body: [[
       `${ws} is a store workspace`, ...where,
       ". Versions live in git tags: open a git workspace of this app, or run ",
-      { mono: `vmn show ${nameOf(appTag)}` }, " in a checkout.",
+      { mono: `vmn show ${appName(tag)}` }, " in a checkout.",
     ]],
-    actions: [{ label: ["Open experiments"], to: appBase(ws, appTag) }],
+    actions: [{ label: ["Open experiments"], to: appBase(ws, tag) }],
   };
 }
 
@@ -146,7 +146,7 @@ export function notFoundCopy(props: NotFoundProps, facts: NotFoundFacts): NotFou
     case "route": return routeCopy(props.pathname, facts);
     case "workspace": return workspaceCopy(props.ws, facts);
     case "app": return appCopy(props.ws, props.appTag, facts);
-    case "run": return runCopy(props.ws, props.appTag, props.ref, facts);
+    case "run": return runCopy(props.ws, props.appTag, props.runRef, facts);
     case "model":
       return {
         h1: ["No model ", { mono: props.name }, ` in ${props.ws}`],
@@ -177,16 +177,12 @@ export function notFoundCopy(props: NotFoundProps, facts: NotFoundFacts): NotFou
 export const httpStatus = (e: unknown): number | undefined =>
   (e as { status?: number } | null)?.status;
 
-const detailOf = (e: unknown): string => {
-  const detail = (e as { body?: { detail?: unknown } } | null)?.body?.detail;
-  return typeof detail === "string" ? detail : "";
-};
+const codeOf = (e: unknown): unknown => (e as { body?: { code?: unknown } } | null)?.body?.code;
 
-/** The run detail's "no such run" answers: a 404 for the experiment, or a 400
- *  for a ref that is no version at all. Any other failure is a real error. */
+/** The run detail's "no such run" answers, by the server's error code: no run
+ *  under that ref, or a ref that is no version at all. Any other failure
+ *  (an ambiguous prefix included) is a real error. */
 export function isMissingRun(e: unknown): boolean {
-  const status = httpStatus(e);
-  if (status === 404) return detailOf(e).startsWith("Experiment ");
-  if (status === 400) return detailOf(e).startsWith("Invalid version");
-  return false;
+  const code = codeOf(e);
+  return code === "run_not_found" || code === "invalid_ref";
 }

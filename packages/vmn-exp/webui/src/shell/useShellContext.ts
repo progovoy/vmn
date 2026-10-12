@@ -4,6 +4,7 @@
 import { useEffect, useMemo } from "react";
 import { useLocation, useMatches } from "react-router-dom";
 import { appName } from "../api";
+import { appHref } from "../util";
 import type { RouteHandle, ShellContext } from "./contracts";
 import { lastWorkspace, rememberWorkspace } from "./lastWorkspace";
 import { useShellOverride } from "./shellOverride";
@@ -28,6 +29,7 @@ export function useShellContext(): ShellContext {
 
   const search = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const appTag = params.app;
+  const app = appTag ? appName(appTag) : undefined;
   return {
     ...scope,
     routeId: handle?.id ?? "not-found",
@@ -35,8 +37,9 @@ export function useShellContext(): ShellContext {
     pathname: location.pathname,
     wsFromUrl,
     appTag,
-    app: appTag ? appName(appTag) : undefined,
-    appBase: ws && appTag ? `/ws/${ws}/app/${appTag}` : undefined,
+    app,
+    appBase: ws && app ? appHref(ws, app) : undefined,
+    wide: Boolean(handle?.wide),
     override,
   };
 }

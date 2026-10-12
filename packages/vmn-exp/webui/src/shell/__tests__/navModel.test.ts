@@ -12,8 +12,8 @@ function ctx(over: Partial<ShellContext> = {}): ShellContext {
   const appTag = "appTag" in over ? over.appTag : "ml_app";
   return {
     workspaces: [GIT, STORE],
-    metaStatus: "ok", metaError: false, authEnabled: false, role: null,
-    readOnly: false, readOnlyReason: null, canAdmin: true,
+    metaStatus: "ok", authEnabled: false, role: null,
+    readOnly: false, readOnlyReason: null, canAdmin: true, canAttach: true,
     routeId: "experiments", params: {}, search: new URLSearchParams(), pathname: "/",
     wsFromUrl: true, override: null,
     meta: { version: "0.10.2" },
@@ -102,23 +102,27 @@ describe("navModel", () => {
     expect(item(g, "tree").disabled).toBe("store workspace: no checkout");
   });
 
-  it("disables Actions on a read-only server", () => {
-    const g = navModel(ctx({ meta: { version: "1", read_only: true }, readOnly: true }));
-    expect(item(g, "actions").disabled).toBe("read-only server");
+  it("disables Actions with the page scope's own read-only reason", () => {
+    const reason = "Started with --read-only: actions and edits are off";
+    const g = navModel(ctx({ meta: { version: "1", read_only: true }, readOnly: true, readOnlyReason: reason }));
+    expect(item(g, "actions").disabled).toBe(reason);
     expect(item(g, "tree").disabled).toBeUndefined();
   });
 
-  it("disables Actions for a viewer", () => {
-    const g = navModel(ctx({ authEnabled: true, role: "viewer", readOnly: true }));
-    expect(item(g, "actions").disabled).toBe("your role in ml-repo is viewer");
+  it("disables Actions for a viewer or a principal with no role, in the scope's wording", () => {
+    const viewer = "Your role in ml-repo is viewer";
+    const g = navModel(ctx({ authEnabled: true, role: "viewer", readOnly: true, readOnlyReason: viewer }));
+    expect(item(g, "actions").disabled).toBe(viewer);
+    const none = "You have no role in ml-repo";
+    expect(item(navModel(ctx({ readOnly: true, readOnlyReason: none })), "actions").disabled).toBe(none);
   });
 
-  it("disables Actions when the principal has no role in the workspace", () => {
-    const g = navModel(ctx({ authEnabled: true, role: null, readOnly: true }));
-    expect(item(g, "actions").disabled).toBe("you have no role in ml-repo");
+  it("says store over any read-only reason in a store workspace", () => {
+    const g = navModel(ctx({ workspace: STORE, readOnly: true, readOnlyReason: "This store gives no edit access" }));
+    expect(item(g, "actions").disabled).toBe("store workspace: no checkout");
   });
 
-  it("does not read a null role as no role when auth is off", () => {
+  it("enables Actions when the scope has no read-only reason", () => {
     expect(item(navModel(ctx({ role: null })), "actions").disabled).toBeUndefined();
   });
 

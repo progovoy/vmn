@@ -96,7 +96,7 @@ function ReportBody({ ws, report }: { ws: string; report: ReportDetail }) {
       <ReportHistory ws={ws} rid={report.rid} revisions={report.revisions ?? []}
         defaultBase={report.published_rev ?? Math.max(1, report.rev - 1)} />
       <div className="card">
-        <div className="eyebrow">Comments</div>
+        <h2 className="section-title">Comments</h2>
         <Comments ws={ws} target={target} />
       </div>
     </PanelCaptureProvider>

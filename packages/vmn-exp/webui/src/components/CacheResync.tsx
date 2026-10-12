@@ -11,11 +11,10 @@ export const progressLine = ({ done, total }: CacheStatus["progress"]) =>
 const cacheKey = (ws: string) => ["cache-status", ws];
 
 /** The workspace's cache status: no data when it is refused (not an admin). */
-export function useCacheStatus(ws: string, enabled = true) {
+export function useCacheStatus(ws: string) {
   return useQuery({
     queryKey: cacheKey(ws),
     queryFn: () => apiCache.status(ws),
-    enabled,
     retry: false,
     refetchInterval: (q) => (q.state.data?.state === "rebuilding" ? 1000 : false),
   });

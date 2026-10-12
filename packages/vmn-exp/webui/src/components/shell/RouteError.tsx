@@ -1,11 +1,9 @@
 /** Every child route's errorElement: it renders in the shell's outlet, so the
  *  sidebar and topbar survive a page that failed to load or render. */
 import { Link, isRouteErrorResponse, useLocation, useNavigate, useRouteError } from "react-router-dom";
+import { isStaleChunk } from "../../shell/staleChunk";
 import NotFound, { FocusedHeading } from "./NotFound";
 import "./NotFound.css";
-
-/** What a browser says when a lazy chunk of an older build is gone. */
-const STALE_CHUNK = /dynamically imported module|Importing a module script failed/;
 
 function messageOf(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -20,8 +18,7 @@ export default function RouteError() {
   if (isRouteErrorResponse(error) && error.status === 404) {
     return <NotFound kind="route" pathname={pathname} />;
   }
-  const message = messageOf(error);
-  if (STALE_CHUNK.test(message)) {
+  if (isStaleChunk(error)) {
     return (
       <section className="not-found">
         <FocusedHeading>The dashboard was updated</FocusedHeading>
@@ -35,7 +32,7 @@ export default function RouteError() {
   return (
     <section className="not-found">
       <FocusedHeading>This page failed to render</FocusedHeading>
-      <pre>{message}</pre>
+      <pre>{messageOf(error)}</pre>
       <div className="nf-actions">
         <button className="primary" onClick={() => navigate(0)}>Try again</button>
         <Link className="nf-action" to="/">All workspaces</Link>

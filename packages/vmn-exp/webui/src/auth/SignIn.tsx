@@ -5,7 +5,7 @@ import { useId, useState, type FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "../api";
 import type { HttpError } from "../http";
-import { RETURN_TO_KEY } from "../shell/contracts";
+import { RETURN_TO_KEY, TOKEN_KEY } from "../shell/contracts";
 import { useOverrideRoute } from "../shell/shellOverride";
 import { clearUnauthorized, useAuthState } from "./authState";
 import "./auth.css";
@@ -27,7 +27,7 @@ function TokenForm() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    sessionStorage.setItem("vmn_token", token.trim());
+    sessionStorage.setItem(TOKEN_KEY, token.trim());
     setBusy(true);
     setError(null);
     try {
@@ -35,7 +35,7 @@ function TokenForm() {
       clearUnauthorized();
       client.invalidateQueries();
     } catch (err) {
-      if ((err as HttpError).status === 401) sessionStorage.removeItem("vmn_token");
+      if ((err as HttpError).status === 401) sessionStorage.removeItem(TOKEN_KEY);
       setError(errorText(err));
       setBusy(false);
     }

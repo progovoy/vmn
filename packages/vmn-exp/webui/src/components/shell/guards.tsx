@@ -16,7 +16,7 @@ export function WorkspaceGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Renders *children* at once; swaps to the not-found only when both signals say `:app` is missing. */
+/** Renders *children* at once; swaps to the not-found once the server says `:app` is missing. */
 export function AppGuard({ children }: { children: ReactNode }) {
   const { ws, app } = useParams();
   const exists = useAppExists(ws, app);

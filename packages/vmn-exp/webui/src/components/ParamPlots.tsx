@@ -61,7 +61,6 @@ function ParamPlots({ rows, metricCols, schema }: {
 
   return (
     <div className="card">
-      <div className="eyebrow">metrics across runs</div>
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",

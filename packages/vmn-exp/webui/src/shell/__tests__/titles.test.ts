@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { titleFor } from "../titles";
+import { subjectFor, titleFor } from "../titles";
 import type { CrumbInput, RouteId } from "../contracts";
 
 const input = (routeId: RouteId, extra: Partial<CrumbInput> = {}, search = ""): CrumbInput => ({
@@ -47,5 +47,16 @@ describe("titleFor", () => {
   it("drops the scope it does not know", () => {
     expect(titleFor(input("apps", { ws: undefined }))).toBe("apps — vmn-exp");
     expect(titleFor(input("models", { ws: undefined }))).toBe("models — vmn-exp");
+  });
+});
+
+describe("subjectFor", () => {
+  it("is the title's leaf without scope, stuck prefix or suffix", () => {
+    expect(subjectFor(input("experiments"))).toBe("ml_app experiments");
+    expect(subjectFor(input("model", { params: { modelName: "resnet" } }))).toBe("resnet");
+  });
+
+  it("keeps a run name that contains the scope separator", () => {
+    expect(subjectFor(input("run", { run: { verstr: "v", idx: 54, name: "lr · warm" } }))).toBe("@54 lr · warm");
   });
 });

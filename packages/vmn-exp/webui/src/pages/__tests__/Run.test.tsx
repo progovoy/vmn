@@ -98,7 +98,7 @@ describe("Run writer provenance badge", () => {
     renderRun();
 
     await waitFor(() => {
-      expect(screen.getByText("log")).toBeInTheDocument();
+      expect(screen.getByText("Log")).toBeInTheDocument();
     });
     const timeline = document.querySelector(".timeline");
     expect(timeline?.querySelector(".badge")).toBeNull();
@@ -143,7 +143,7 @@ describe("Run provenance metadata", () => {
     renderRun();
 
     await waitFor(() => {
-      expect(screen.getByText("metadata")).toBeInTheDocument();
+      expect(screen.getByText("Metadata")).toBeInTheDocument();
     });
     expect(screen.queryByText("code version")).not.toBeInTheDocument();
   });
@@ -158,7 +158,7 @@ describe("Run x-axis mode", () => {
     renderRun();
 
     await waitFor(() => {
-      expect(screen.getByText("training curves")).toBeInTheDocument();
+      expect(screen.getByText("Training curves")).toBeInTheDocument();
     });
 
     // Step button should be active (have primary class)
@@ -175,7 +175,7 @@ describe("Run x-axis mode", () => {
     renderRun();
 
     await waitFor(() => {
-      expect(screen.getByText("training curves")).toBeInTheDocument();
+      expect(screen.getByText("Training curves")).toBeInTheDocument();
     });
 
     const relBtn = screen.getByRole("button", { name: "Relative" });
@@ -197,7 +197,7 @@ describe("Run x-axis mode", () => {
     renderRun();
 
     await waitFor(() => {
-      expect(screen.getByText("training curves")).toBeInTheDocument();
+      expect(screen.getByText("Training curves")).toBeInTheDocument();
     });
 
     const wallBtn = screen.getByRole("button", { name: "Wall" });
@@ -219,7 +219,7 @@ describe("Run x-axis mode", () => {
     renderRun();
 
     await waitFor(() => {
-      expect(screen.getByText("training curves")).toBeInTheDocument();
+      expect(screen.getByText("Training curves")).toBeInTheDocument();
     });
 
     expect(screen.getByRole("button", { name: "Wall" })).toBeDisabled();

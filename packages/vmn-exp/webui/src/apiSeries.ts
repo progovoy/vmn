@@ -1,7 +1,7 @@
 /** Batched reads for the overlay: every run's series in one request, and the
  *  runs' status rows in another. Kept apart from api.ts so the pages whose
  *  tests mock `./api` still reach these through their own module. */
-import type { ExperimentRow, RunStatus, SeriesPoint } from "./types";
+import type { ExperimentRow, SeriesPoint } from "./types";
 import { appTag, get, post } from "./http";
 import { verstrInQuery } from "./util/searchQuery";
 
@@ -36,10 +36,10 @@ export function fetchSeriesRange(
   }).then((b) => b.series[verstr]?.[metric] ?? []);
 }
 
-/** Status fields (running? started when?) of just *verstrs*, by verstr. */
+/** The rows (status, `@N`, name, kind) of just *verstrs*, by verstr. */
 export async function fetchRunStatuses(
   ws: string, app: string, verstrs: string[],
-): Promise<Record<string, Partial<RunStatus>>> {
+): Promise<Record<string, Partial<ExperimentRow>>> {
   const p = new URLSearchParams({
     offset: "0", limit: String(verstrs.length), q: verstrInQuery(verstrs),
   });

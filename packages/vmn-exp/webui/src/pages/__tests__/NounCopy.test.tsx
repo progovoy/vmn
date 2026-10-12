@@ -9,6 +9,7 @@ vi.mock("../../api", () => ({
   api: {
     meta: vi.fn(),
     workspaces: vi.fn(),
+    apps: vi.fn(),
     experiments: vi.fn(),
     experimentsPaged: vi.fn(),
     metricsSchema: vi.fn(),
@@ -21,6 +22,11 @@ vi.mock("../../api", () => ({
   },
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
+const appStatus = vi.hoisted(() => vi.fn());
+vi.mock("../../apiShell", () => ({ apiShell: { appStatus: () => appStatus() } }));
+const KNOWN_APP = {
+  total: 1, counts: { created: 0, running: 0, stuck: 0, succeeded: 1, failed: 0 }, failed_recent: 0, rollup: null,
+};
 vi.mock("../../components/ParamPlots", () => ({ default: () => null }));
 vi.mock("../../components/MetricBarChart", () => ({ default: () => null }));
 vi.mock("@tanstack/react-virtual", () => ({
@@ -46,6 +52,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.meta.mockResolvedValue({ version: "0.10.2" });
   m.workspaces.mockResolvedValue([GIT_WS]);
+  appStatus.mockResolvedValue(KNOWN_APP);
+  m.apps.mockResolvedValue([{ name: "my/app", experiments: 1, versions: 1 }]);
   m.metricsSchema.mockResolvedValue({});
   m.facets.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experiments.mockResolvedValue(page([row(1)]));
@@ -66,6 +74,15 @@ describe("leaderboard toolbar create button", () => {
     await boardSettled();
     expect(await screen.findByRole("button", { name: "New run" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /experiment/i })).toBeNull();
+  });
+
+  it("is hidden for an app the server does not know (spec §1.6)", async () => {
+    appStatus.mockRejectedValue(
+      Object.assign(new Error("x"), { status: 404, body: { detail: "x", code: "app_not_found" } }),
+    );
+    await boardSettled();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByRole("button", { name: "New run" })).toBeNull();
   });
 
   it("is hidden on a read-only server", async () => {

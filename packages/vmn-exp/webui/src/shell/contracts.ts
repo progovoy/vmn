@@ -1,4 +1,4 @@
-/** The shell's shared contracts (plan 19 §2.2): types and storage keys only,
+/** The shell's shared contracts (plan 19 §2.2): types, storage keys and the RunLabel helper,
  *  so every shell unit and page builds against the same shapes. */
 import type { Meta, Role, Workspace } from "../types";
 
@@ -16,7 +16,7 @@ export interface GitContext {
 export interface AppStatus {
   total: number;
   counts: Record<"created" | "running" | "stuck" | "succeeded" | "failed", number>;
-  failed_recent: number; recent_sec: number;
+  failed_recent: number;
   rollup: "stuck" | "failed" | "running" | null;
 }
 export interface AuthHints { token: boolean; oidc: boolean; login_url: string | null }
@@ -29,8 +29,6 @@ export interface PageScope {
   isGit: boolean;
   meta?: Meta;
   metaStatus: "loading" | "ok" | "unauthorized" | "forbidden" | "unreachable";
-  /** `metaStatus === "unreachable"` (no HTTP status). */
-  metaError: boolean;
   /** `meta.auth?.enabled ?? false` */
   authEnabled: boolean;
   /** `workspace.role ?? meta.role ?? null` */
@@ -40,6 +38,8 @@ export interface PageScope {
   readOnlyReason: string | null;
   /** `!authEnabled || meta.role === "admin"`: the global gate of /tokens and POST /workspaces. */
   canAdmin: boolean;
+  /** `metaStatus === "ok" && !meta.read_only && canAdmin`: "Attach a checkout" may be offered. */
+  canAttach: boolean;
 }
 
 /** What every shell component reads (useShellContext). */
@@ -55,10 +55,15 @@ export interface ShellContext extends PageScope {
   appTag?: string; app?: string;
   /** `/ws/${ws}/app/${appTag}` */
   appBase?: string;
+  /** Whether the deepest route asks for the full content width. */
+  wide?: boolean;
   override: "not-found" | "sign-in" | null;
 }
 
 export interface RunLabel { verstr: string; idx: number | null; name: string | null }
+/** A row's label; what an older server omits is null. */
+export const runLabelOf = (r: { verstr: string; idx?: number | null; name?: string | null }): RunLabel =>
+  ({ verstr: r.verstr, idx: r.idx ?? null, name: r.name ?? null });
 export interface Crumb { label: string; to?: string; mono?: boolean; title?: string; run?: RunLabel }
 export interface CliCommand { label: string; command: string }
 export interface CrumbInput {
@@ -72,12 +77,14 @@ export type NotFoundProps =
   | { kind: "route"; pathname: string }
   | { kind: "workspace"; ws: string }
   | { kind: "app"; ws: string; appTag: string }
-  | { kind: "run"; ws: string; appTag: string; ref: string }
+  | { kind: "run"; ws: string; appTag: string; runRef: string }
   | { kind: "model"; ws: string; name: string }
   | { kind: "report"; ws: string; rid: string }
   | { kind: "control-plane" }
   | { kind: "needs-git"; ws: string; appTag: string; page: "tree" | "actions" };
 
+/** sessionStorage: the ui token (or API token) the user signed in with. */
+export const TOKEN_KEY = "vmn_token";
 export const RETURN_TO_KEY = "vmn-exp:return-to";
 export const LAST_WS_KEY = "vmn-exp:last-ws";
 export const RECENT_KEY = "vmn-exp:recent";

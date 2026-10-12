@@ -40,7 +40,7 @@ describe("RunErrorCard", () => {
   it("shows the headline, meta line and traceback of a recorded exception", () => {
     render(<RunErrorCard status={status("failed", { exit_code: 137, signal: "SIGKILL", error: ERR })} />);
     expect(card()).not.toBeNull();
-    expect(screen.getByText("error")).toBeInTheDocument();
+    expect(screen.getByText("Error")).toBeInTheDocument();
     const headline = card()!.querySelector(".run-error-headline") as HTMLElement;
     expect(headline.textContent).toBe("RuntimeError: dataloader worker died\nsecond line");
     const meta = card()!.querySelector(".run-error-meta") as HTMLElement;

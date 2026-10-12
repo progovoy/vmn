@@ -52,15 +52,17 @@ export default function LeaderboardCharts({
   });
   return (
     <>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-        {CHART_VIEWS.map((v) => (
-          <button
-            key={v} className={view === v ? "primary" : ""}
-            aria-pressed={view === v} onClick={() => onView(v)}
-          >
-            {LABELS[v]}
-          </button>
-        ))}
+      <div className="chart-views">
+        <div className="segmented" role="group" aria-label="Chart type">
+          {CHART_VIEWS.map((v) => (
+            <button
+              key={v} className={view === v ? "primary" : ""}
+              aria-pressed={view === v} onClick={() => onView(v)}
+            >
+              {LABELS[v]}
+            </button>
+          ))}
+        </div>
         {label && <span className="chart-coverage">{label}</span>}
         <span style={{ marginLeft: "auto" }}><AddToReport ws={importance.ws} spec={spec} /></span>
       </div>

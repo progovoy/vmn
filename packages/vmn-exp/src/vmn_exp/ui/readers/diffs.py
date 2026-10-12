@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.core.log import latest_metrics, load_log
+from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import experiment_storage
 
@@ -71,7 +72,7 @@ def _load_sides(storage, app_name, verstrs, read_log):
     for verstr in verstrs:
         meta, patches = storage.load(app_name, verstr)
         if meta is None:
-            return None, f"Experiment {verstr} not found"
+            return None, RefError(f"Experiment {verstr} not found")
         sides.append((meta, patches, latest_metrics(read_log(storage, app_name, verstr))))
     return sides, None
 

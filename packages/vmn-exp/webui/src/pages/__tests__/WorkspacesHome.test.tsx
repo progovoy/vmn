@@ -17,14 +17,14 @@ vi.mock("../../api", async (orig) => ({
   },
 }));
 
-import { WorkspacesHome } from "../Dashboard";
+import { WorkspacesHome } from "../WorkspacesHome";
 import { RETURN_TO_KEY } from "../../shell/contracts";
 
 const TWO: Workspace[] = [
   { name: "ml-repo", kind: "git", path: "/srv/checkouts/ml-repo" },
   { name: "shared", kind: "store", store: "s3://bucket/vmn" },
 ];
-const AUTH = { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null };
+const AUTH = { enabled: true, token: true, oidc: false, login_url: null };
 
 function renderAt(url: string | { pathname: string; state: unknown }) {
   return renderWithClient(

@@ -5,7 +5,7 @@ A stream is ``<writer id>~<owner>``: the writer id the user sees (the host,
 ``VMN_WRITER_ID``), and the owner that appends to it — a local copy of the
 record (:mod:`vmn_exp.storage.stream_owner`), or a process writing straight
 to a remote. Each stream thus has exactly one appending owner, and its remote
-copy is a replica of that owner's local file (docs/plans/20-per-root-streams.md).
+copy is a replica of that owner's local file (docs/plans/21-per-root-streams.md).
 A hostname never contains ``~``; an explicit writer id has it replaced.
 Pure: no I/O.
 """

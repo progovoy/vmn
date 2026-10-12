@@ -335,6 +335,12 @@ class LeaderboardCache:
         """Every row passing *status* in :meth:`page`'s order, unpaged."""
         return self._ordered(snapshot, schema, sort, None, status, None, order, archived)
 
+    def rows(self, snapshot, archived=False):
+        """Every row, with its status as of now, in storage order: no sort, for
+        counting (archived rows only when *archived*)."""
+        base, bucket = self._base(snapshot)
+        return base.tail(bucket, 0, None, None, archived)
+
     def columns(
         self, snapshot, schema, keys, limit=None, sort=None, status=None,
         query=None, order=None, archived=False,

@@ -234,6 +234,17 @@ is the standalone behaviour.
 | OIDC (`auth.oidc`) | browsers | authorization-code flow against the issuer's discovery document. Routes: `/auth/login`, `/auth/callback` (the redirect URI is `<public_url>/auth/callback`), `POST /auth/logout`. The session cookie `vmn_session` is `HttpOnly`, `Secure`, `SameSite=Lax` and lasts 12 h |
 | API tokens | scripts and CLI calls to the server API | `vmnx_<id>_<secret>` bearer tokens. Needs a control plane (`--config` or `--db`) |
 
+An unauthenticated `/api` request gets a 401 with `WWW-Authenticate: Bearer`
+and a body naming the sign-in methods (never a secret), which the dashboard's
+sign-in page reads:
+
+```json
+{"detail": "Unauthorized", "auth": {"token": true, "oidc": true, "login_url": "/auth/login"}}
+```
+
+`login_url` is `null` without OIDC. `GET /api/v1/meta` carries the same hints
+under `auth`.
+
 Only a salted hash of each API token's secret is stored (scrypt, or PBKDF2
 where scrypt is unavailable). Admins manage tokens through the API:
 

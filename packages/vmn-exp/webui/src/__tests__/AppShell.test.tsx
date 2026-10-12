@@ -53,7 +53,7 @@ function renderShell(tree: RouteObject[], path: string) {
 
 const shellTree: RouteObject[] = [{
   path: "/", element: <App />,
-  children: [{ path: "ws/:ws/app/:app/run/:verstr", element: <Probe />, handle: { page: "run" } }],
+  children: [{ path: "ws/:ws/app/:app/run/:verstr", element: <Probe />, handle: { id: "run" } }],
 }];
 
 beforeEach(() => {
@@ -94,13 +94,13 @@ describe("page width", () => {
   }];
 
   it("lets a wide page span the whole content area", async () => {
-    renderShell(tree({ page: "run", wide: true }), "/ws/w/app/a/run/v1");
+    renderShell(tree({ id: "run", wide: true }), "/ws/w/app/a/run/v1");
     await screen.findByText("probe v1");
     expect(document.querySelector(".content-inner")).toHaveClass("wide");
   });
 
   it("keeps other pages in a readable column", async () => {
-    renderShell(tree({ page: "run" }), "/ws/w/app/a/run/v1");
+    renderShell(tree({ id: "run" }), "/ws/w/app/a/run/v1");
     await screen.findByText("probe v1");
     expect(document.querySelector(".content-inner")).not.toHaveClass("wide");
   });

@@ -29,6 +29,10 @@
 }
 .crumb-leaf { flex: 1 1 auto; }
 .crumb-root { max-width: none; flex: 0 1 auto; }
+/* A root that rendered nothing (no workspace in context) takes no space and
+   no separator: the trail then starts at its first crumb. */
+.crumb-root:empty,
+.crumb-root:empty + .crumb > .crumb-sep { display: none; }
 
 .crumb-sep {
   display: inline-flex;

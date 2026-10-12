@@ -12,7 +12,7 @@ export default function ReportsUsing({ ws, app, verstr }: { ws: string; app: str
   if (!reports.length) return null;
   return (
     <aside className="card reports-using" aria-label="Reports using this">
-      <div className="eyebrow">{verstr ? "Reports using this run" : "Reports using this app"}</div>
+      <h2 className="section-title">{verstr ? "Reports using this run" : "Reports using this app"}</h2>
       <ul>
         {reports.map((r) => (
           <li key={r.rid}>
