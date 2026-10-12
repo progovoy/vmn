@@ -103,10 +103,10 @@ export default function Compare() {
                   typeof d.from === "number" && typeof d.to === "number";
                 const diff = numeric ? (d.to as number) - (d.from as number) : null;
                 const goal = metricGoal(schema, k);
-                const improved = diff !== null && diff !== 0 &&
+                const improved = goal !== null && diff !== null && diff !== 0 &&
                   (goal === "min" ? diff < 0 : diff > 0);
                 const color =
-                  diff === null || diff === 0
+                  diff === null || diff === 0 || goal === null
                     ? "var(--text-3)"
                     : improved
                       ? "var(--good)"

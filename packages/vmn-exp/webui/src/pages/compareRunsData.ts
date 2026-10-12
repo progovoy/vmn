@@ -36,7 +36,8 @@ const sourceOf = (d: ExperimentDetail, kind: "params" | "metrics") =>
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-function bestOf(values: unknown[], goal: "min" | "max"): number | null {
+function bestOf(values: unknown[], goal: "min" | "max" | null): number | null {
+  if (goal === null) return null;
   const nums = finiteNumbers(values);
   if (nums.length < 2) return null;
   const lo = minOf(nums);

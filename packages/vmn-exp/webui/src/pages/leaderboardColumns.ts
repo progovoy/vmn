@@ -200,7 +200,7 @@ export function metricColumns(
 }
 
 export interface ColMeta {
-  goal: "min" | "max";
+  goal: "min" | "max" | null;
   best: number | null;
   isBar: boolean;
   min: number;
@@ -222,7 +222,7 @@ export function computeColMeta(
     const max = maxOf(vals);
     meta[m] = {
       goal,
-      best: vals.length ? (goal === "min" ? min : max) : null,
+      best: goal !== null && vals.length ? (goal === "min" ? min : max) : null,
       isBar: m === primary && vals.length > 0,
       min, max,
     };

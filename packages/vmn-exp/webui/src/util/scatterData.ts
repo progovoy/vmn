@@ -31,22 +31,23 @@ function toGroup(points: ScatterPoint[]): PointGroup {
   };
 }
 
-/** Rows with finite x and y, split by whether y is the best value (per goal). */
+/** Rows with finite x and y, split by whether y is the best value (per goal).
+ *  When goal is null no point is marked as best. */
 export function scatterGroups(
-  rows: ExperimentRow[], xCol: string, yCol: string, paramCols: string[], goal: "min" | "max",
+  rows: ExperimentRow[], xCol: string, yCol: string, paramCols: string[], goal: "min" | "max" | null,
 ): { rest: PointGroup; best: PointGroup } {
   const points: ScatterPoint[] = [];
-  let bestY = goal === "min" ? Infinity : -Infinity;
+  let bestY = goal === "min" ? Infinity : goal === "max" ? -Infinity : null;
   for (const r of rows) {
     const x = numericValue(r, xCol, paramCols);
     const y = numericValue(r, yCol, paramCols);
     if (x === null || y === null) continue;
     points.push({ x, y, verstr: r.verstr, idx: r.idx });
-    if (goal === "min" ? y < bestY : y > bestY) bestY = y;
+    if (bestY !== null && (goal === "min" ? y < bestY : y > bestY)) bestY = y;
   }
   return {
-    rest: toGroup(points.filter((p) => p.y !== bestY)),
-    best: toGroup(points.filter((p) => p.y === bestY)),
+    rest: toGroup(points.filter((p) => bestY === null || p.y !== bestY)),
+    best: toGroup(points.filter((p) => bestY !== null && p.y === bestY)),
   };
 }
 
