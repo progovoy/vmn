@@ -10,7 +10,9 @@ import threading
 from types import SimpleNamespace
 
 from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
-from vmn_exp.core.log import latest_metrics, load_log
+from vmn_exp.core.fold import fold_definitions, fold_log, fold_metrics, fold_values
+from vmn_exp.core.log import load_log
+from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import experiment_storage
@@ -67,22 +69,60 @@ def _record_key(storage, app_name, verstr):
     return verstr, meta.get("diff_hash"), meta.get("base_commit"), meta.get("timestamp")
 
 
-def _load_sides(storage, app_name, verstrs, read_log):
+def _fold_side(log, schema):
+    """Fold a log and return ``(metrics, params, metric_summary, run_defs)``."""
+    fold = fold_log(log)
+    metrics, metric_summary = fold_metrics(fold, schema)
+    params = fold_values(fold, "params")
+    run_defs = fold_definitions(fold) if fold.get("metric_defs") else {}
+    return metrics, params, metric_summary, run_defs
+
+
+def _load_sides(storage, app_name, verstrs, read_log, schema=None):
     sides = []
     for verstr in verstrs:
         meta, patches = storage.load(app_name, verstr)
         if meta is None:
             return None, RefError(f"Experiment {verstr} not found")
-        sides.append((meta, patches, latest_metrics(read_log(storage, app_name, verstr))))
+        log = read_log(storage, app_name, verstr)
+        metrics, params, metric_summary, run_defs = _fold_side(log, schema)
+        sides.append((meta, patches, metrics, params, metric_summary, run_defs))
     return sides, None
 
 
-def _metrics_delta(m1, m2):
-    return {
-        key: {"from": m1.get(key), "to": m2.get(key)}
-        for key in sorted(set(m1) | set(m2))
-        if m1.get(key) != m2.get(key)
-    }
+def _is_param_only(key, params, metric_summary):
+    """True when *key* came from a numeric param, not a ``metrics`` entry."""
+    return key in params and key not in metric_summary
+
+
+def _resolve_goal(key, run_defs1, run_defs2, schema):
+    """The goal of *key*: the runs' own definitions first, then the schema."""
+    return (
+        metric_goal(run_defs1, key)
+        or metric_goal(run_defs2, key)
+        or metric_goal(schema, key)
+    )
+
+
+def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None):
+    params1, ms1, defs1 = side1_extra
+    params2, ms2, defs2 = side2_extra
+    delta = {}
+    for key in sorted(set(m1) | set(m2)):
+        if m1.get(key) == m2.get(key):
+            continue
+        is_param = (
+            _is_param_only(key, params1, ms1)
+            and _is_param_only(key, params2, ms2)
+        )
+        goal = None if is_param else _resolve_goal(key, defs1, defs2, schema)
+        delta[key] = {
+            "from": m1.get(key),
+            "to": m2.get(key),
+            "goal": goal,
+            "param": is_param,
+        }
+    return delta
 
 
 def _truncated(text):
@@ -96,8 +136,8 @@ def _truncated(text):
 
 def _tree_diff(root_path, app_name, v1, side1, v2, side2):
     """``(fields, err)`` — the ``diff`` text (capped), or why there is none."""
-    for verstr, (meta, _, _) in ((v1, side1), (v2, side2)):
-        if not meta.get("base_commit"):
+    for verstr, side in ((v1, side1), (v2, side2)):
+        if not side[0].get("base_commit"):
             return {"diff": None, "truncated": False,
                     "diff_unavailable": NO_BASE_COMMIT.format(verstr)}, None
     # Materialization only needs a root path (both sides have base_commit).
@@ -109,32 +149,49 @@ def _tree_diff(root_path, app_name, v1, side1, v2, side2):
     return {"diff": text, "truncated": truncated}, None
 
 
-def experiment_diff(root_path, app_name, ref1, ref2):
+def _delta_from_sides(side1, side2, schema=None):
+    """Build the ``metrics_delta`` dict from two loaded sides."""
+    # side = (meta, patches, metrics, params, metric_summary, run_defs)
+    return _metrics_delta(
+        side1[2], side2[2],
+        (side1[3], side1[4], side1[5]),
+        (side2[3], side2[4], side2[5]),
+        schema,
+    )
+
+
+def experiment_diff(root_path, app_name, ref1, ref2, schema=None):
     """Compare two experiments. Returns (result, error_message_or_None)."""
     storage = experiment_storage(root_path)
     verstrs, err = _resolve_pair(storage, app_name, ref1, ref2)
     if err:
         return None, err
-    sides, err = _load_sides(storage, app_name, verstrs, load_log)
+    sides, err = _load_sides(storage, app_name, verstrs, load_log, schema)
     if err:
         return None, err
     (v1, v2), (side1, side2) = verstrs, sides
     tree, err = _tree_diff(root_path, app_name, v1, side1, v2, side2)
     if err:
         return None, err
-    result = {"from_verstr": v1, "to_verstr": v2, "metrics_delta": _metrics_delta(side1[2], side2[2])}
+    result = {
+        "from_verstr": v1,
+        "to_verstr": v2,
+        "metrics_delta": _delta_from_sides(side1, side2, schema),
+    }
     result.update(tree)
     return result, None
 
 
-def cached_experiment_diff(root_path, app_name, ref1, ref2):
+def cached_experiment_diff(root_path, app_name, ref1, ref2, schema=None):
     """:func:`experiment_diff` through :data:`DIFF_CACHE` (may raise DiffBusy)."""
     storage = experiment_storage(root_path)
     verstrs, err = _resolve_pair(storage, app_name, ref1, ref2)
     if err:
         return None, err
     key = (root_path, app_name) + tuple(_record_key(storage, app_name, v) for v in verstrs)
-    return DIFF_CACHE.run(key, lambda: experiment_diff(root_path, app_name, *verstrs))
+    return DIFF_CACHE.run(
+        key, lambda: experiment_diff(root_path, app_name, *verstrs, schema=schema)
+    )
 
 
 def _merged_log(storage, app_name, verstr):
@@ -143,19 +200,19 @@ def _merged_log(storage, app_name, verstr):
     return load_log(storage, app_name, verstr)
 
 
-def experiment_diff_from_storage(storage, app_name, ref1, ref2):
+def experiment_diff_from_storage(storage, app_name, ref1, ref2, schema=None):
     """Compare two experiments from a storage backend (S3). Metrics-only
     comparison: tree diffs are unavailable without a local checkout."""
     verstrs, err = _resolve_pair(storage, app_name, ref1, ref2)
     if err:
         return None, err
-    sides, err = _load_sides(storage, app_name, verstrs, _merged_log)
+    sides, err = _load_sides(storage, app_name, verstrs, _merged_log, schema)
     if err:
         return None, err
     return {
         "from_verstr": verstrs[0],
         "to_verstr": verstrs[1],
-        "metrics_delta": _metrics_delta(sides[0][2], sides[1][2]),
+        "metrics_delta": _delta_from_sides(sides[0], sides[1], schema),
         "diff": None,  # Tree diffs unavailable for S3 workspaces
         "truncated": False,
     }, None

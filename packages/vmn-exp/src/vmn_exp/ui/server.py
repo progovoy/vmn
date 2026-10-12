@@ -509,13 +509,16 @@ def create_app(
         _segment(v)
         _segment(to)
         store_storage = _exp_storage_for(ws)
+        schema = _app_schema(ws, app_name)
         try:
             if store_storage:
                 result, err = diff_reader.experiment_diff_from_storage(
-                    store_storage, app_name, v, to
+                    store_storage, app_name, v, to, schema=schema
                 )
             else:
-                result, err = diff_reader.cached_experiment_diff(ws.path, app_name, v, to)
+                result, err = diff_reader.cached_experiment_diff(
+                    ws.path, app_name, v, to, schema=schema
+                )
         except diff_reader.DiffBusy:
             raise HTTPException(429, "Too many diffs in progress; retry shortly")
         if err:

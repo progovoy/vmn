@@ -1,9 +1,8 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, appName as toAppName } from "../api";
-import { useMetricsSchema } from "../queries";
 import type { DiffResult } from "../types";
-import { fmtVal, metricGoal } from "../util";
+import { fmtVal } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
 import RunPicker from "../components/RunPicker";
 
@@ -42,7 +41,6 @@ export default function Compare() {
     queryKey: ["experiments-diff", ws, app, v, to],
     queryFn: () => api.experimentsDiff(ws, app, v, to),
   }, client);
-  const schema = useMetricsSchema(ws, app);
   const result = diff.data ?? null;
 
   if (diff.error) return <div className="error">{String(diff.error)}</div>;
@@ -102,11 +100,12 @@ export default function Compare() {
                 const numeric =
                   typeof d.from === "number" && typeof d.to === "number";
                 const diff = numeric ? (d.to as number) - (d.from as number) : null;
-                const goal = metricGoal(schema, k);
-                const improved = diff !== null && diff !== 0 &&
+                const goal = d.goal ?? null;
+                const neutral = goal === null || d.param;
+                const improved = !neutral && diff !== null && diff !== 0 &&
                   (goal === "min" ? diff < 0 : diff > 0);
                 const color =
-                  diff === null || diff === 0
+                  diff === null || diff === 0 || neutral
                     ? "var(--text-3)"
                     : improved
                       ? "var(--good)"
