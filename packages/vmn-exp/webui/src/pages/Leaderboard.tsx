@@ -16,10 +16,11 @@ import { useLeaderboardRows } from "../hooks/useLeaderboardRows";
 import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
-import { useChartRows } from "../hooks/useChartRows";
 import { useBoardSelection } from "../hooks/useBoardSelection";
 import { collapsedByDefault, foldState, visibleRows } from "../util/sweepTree";
-import LeaderboardCharts from "./LeaderboardCharts";
+import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
+import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
+import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits } from "./LeaderboardTable";
 import { DATE_SORT_OF, moveColumn } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
@@ -120,30 +121,16 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   }), [setWidth, setOrder, ids]);
 
   const all = useMemo(() => rows ?? [], [rows]);
-  // Importance ranks every param, hidden ones too, so its drill-down needs them all.
-  const allParams = cols.suggestFacets.param_keys;
-  const chartParams = useMemo(
-    () => (view.chart === "importance" && allParams ? [...allParams] : cols.paramCols),
-    [view.chart, allParams, cols.paramCols],
-  );
-  const chart = useChartRows(
-    ws, app, filter, view.chart, cols.metricCols, chartParams, all, data.total,
-  );
-  // A brush in the parallel view narrows the table; the chart keeps every row
-  // so its brush indices stay meaningful.
-  const onBrush = useCallback(
-    (indices: number[] | null) => setBrushed(indices
-      ? new Set(indices.map((i) => chart.rows[i]?.verstr).filter((v): v is string => !!v))
-      : null),
-    [chart.rows],
-  );
+  const charting = view.tab === "charts";
+  // A brush in the parallel view (Charts tab) narrows the table.
+  const brush = charting && view.chart === "parallel" ? brushed : null;
   const { expanded, collapsed } = view;
   const tableRows = useMemo(() => {
     if (!rows) return rows;
     const topLevel = rows.filter((r) => !r.depth);
-    const brushedRows = brushed && view.chart === "parallel" ? topLevel.filter((r) => brushed.has(r.verstr)) : topLevel;
+    const brushedRows = brush ? topLevel.filter((r) => brush.has(r.verstr)) : topLevel;
     return visibleRows(brushedRows, expanded, collapsed);
-  }, [rows, brushed, view.chart, expanded, collapsed]);
+  }, [rows, brush, expanded, collapsed]);
   const collapsedOf = useCallback(
     (r: ExperimentRow) => foldState(r, expanded, collapsed),
     [expanded, collapsed],
@@ -209,8 +196,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
       ) : (
         <>
           <LeaderboardToolbar
-            ws={ws} app={app} base={base} view={view} cols={cols} selection={selection}
-            total={data.total} live={live} onLive={() => setLive((v) => !v)}
+            ws={ws} app={app} view={view} cols={cols}
+            live={live} onLive={() => setLive((v) => !v)}
             onViewApplied={() => setFilterGen((g) => g + 1)}
             onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
           />
@@ -235,40 +222,58 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
             <SimilarSearch ws={ws} app={app} text={similarText} filter={similarFilter} />
           ) : (
             <>
-              <LeaderboardCharts
-                view={view.chart} onView={view.setChart} rows={chart.rows} label={chart.label}
-                metricCols={cols.metricCols} paramCols={chartParams} schema={schema} onBrush={onBrush}
-                importance={{ ws, app, filter, defaultMetric: sortLabel }}
-              />
+              <BoardTabs tab={view.tab} onTab={view.setTab} />
+              <div role="tabpanel" id={BOARD_PANEL_ID} aria-labelledby={boardTabId(view.tab)}>
+                {charting && (
+                  <LeaderboardChartsPanel
+                    ws={ws} app={app} filter={filter} view={view.chart} onView={view.setChart}
+                    loaded={all} total={data.total} metricCols={cols.metricCols} paramCols={cols.paramCols}
+                    allParams={cols.suggestFacets.param_keys} schema={schema} defaultMetric={sortLabel}
+                    onBrushed={setBrushed}
+                  />
+                )}
 
-              <LeaderboardTable
-                rows={tableRows}
-                layout={cols.layout}
-                sort={sortState}
-                selected={view.selected}
-                flash={flash}
-                onToggle={selection.toggle}
-                onPrefetch={onPrefetch}
-                collapsedOf={collapsedOf}
-                onFold={onFold}
-                hasMore={all.length < data.total}
-                onNearEnd={data.loadMore}
-                visibleRef={data.visibleRef}
-                edits={columnEdits}
-                onFit={setTableWidth}
-              />
-              {rows !== undefined && all.length < data.total && (
-                <div className="load-more">
-                  <button onClick={data.loadMore}>Load more ({data.total - all.length} remaining)</button>
-                  {data.moreError && <span className="error">{data.moreError}</span>}
-                </div>
-              )}
+                <LeaderboardTable
+                  rows={tableRows}
+                  layout={cols.layout}
+                  sort={sortState}
+                  selected={view.selected}
+                  flash={flash}
+                  onToggle={selection.toggle}
+                  headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll }}
+                  onPrefetch={onPrefetch}
+                  collapsedOf={collapsedOf}
+                  onFold={onFold}
+                  hasMore={all.length < data.total}
+                  onNearEnd={data.loadMore}
+                  visibleRef={data.visibleRef}
+                  edits={columnEdits}
+                  onFit={setTableWidth}
+                />
+                {rows !== undefined && all.length < data.total && (
+                  <div className="load-more">
+                    <button onClick={data.loadMore}>Load more ({data.total - all.length} remaining)</button>
+                    {data.moreError && <span className="error">{data.moreError}</span>}
+                  </div>
+                )}
+              </div>
             </>
           )}
           <ReportsUsing ws={ws} app={appName} />
           <div className="cli-card">
             vmn-exp list {appName}{sortLabel ? ` --sort ${sortLabel}` : ""}
           </div>
+          <LeaderboardSelectionBar
+            selected={[...view.selected]}
+            total={data.total}
+            base={base}
+            showUnarchive={view.archived}
+            archiving={selection.archiving}
+            archiveError={selection.archiveError}
+            onClear={() => view.setSelected([])}
+            onSelectAll={selection.selectAll}
+            onArchive={selection.archive}
+          />
         </>
       )}
     </>

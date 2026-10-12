@@ -60,6 +60,7 @@ describe("the leaderboard's importance panel", () => {
 
   it("is reachable from the chart switcher and opens the scatter on a param", async () => {
     renderBoard("/ws/test/app/my-app");
+    fireEvent.click(await screen.findByRole("tab", { name: "Charts" }));
     fireEvent.click(await screen.findByRole("button", { name: "Importance" }));
     await waitFor(() => expect(urlParams().get("view")).toBe("importance"));
     fireEvent.click(await screen.findByTestId("importance-param"));

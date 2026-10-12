@@ -8,6 +8,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
     globals: true,
+    // Stylesheets stay empty in tests, except `?raw` imports (the CSS guards read them).
+    css: { include: [/\.css\?raw$/] },
   },
   build: {
     outDir: "../src/vmn_exp/ui/static",

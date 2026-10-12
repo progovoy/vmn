@@ -48,13 +48,14 @@ def capture_features(vcs, captured):
 
 
 def features_for_working_tree(vcs, captured=None) -> dict:
-    """The working tree's features, shaped like ``IndexSnapshot.features_of``'s;
-    ``{}`` when the tree can't be captured. Pass *captured* to reuse a capture."""
+    """The working tree's features, shaped like ``IndexSnapshot.features_of``'s
+    but without an author (no run, so nobody to credit); ``{}`` when the tree
+    can't be captured. Pass *captured* to reuse a capture."""
     if captured is None:
         captured, err = capture.capture_snapshot(vcs)
         if err is not None:
             return {}
-    entry = capture_features(vcs, captured) or {}
+    entry = _best_effort(_tree_entry, vcs, captured, False) or {}
     entry.pop("type", None)
     return entry
 
@@ -76,11 +77,11 @@ def _best_effort(build, *args):
         return None
 
 
-def _tree_entry(vcs, captured):
+def _tree_entry(vcs, captured, with_author=True):
     parsed = features_from_patches(patch_items(captured.identity))
     changed = dict(parsed["changed"], untracked=_untracked_paths(vcs, captured))
-    return build_features_entry("capture", author=_author(vcs, parsed),
-                                **dict(parsed, changed=changed))
+    author = _author(vcs, parsed) if with_author else None
+    return build_features_entry("capture", author=author, **dict(parsed, changed=changed))
 
 
 def _rerun_entry(vcs, log, metadata, patches):
