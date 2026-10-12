@@ -27,6 +27,7 @@ from vmn_exp.ui import (
     routes_reports,
     routes_search,
     routes_series,
+    routes_shell,
     routes_similar,
     routes_sweep,
     routes_tree,
@@ -55,6 +56,7 @@ from vmn_exp.ui.responses import (
     json_response,
 )
 from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
+from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
 from vmn_exp.ui.static_files import mount_static
 from vmn_exp.ui.tenancy import install_org_middleware
 from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
@@ -146,7 +148,8 @@ def create_app(
         principal = await run_in_threadpool(chain.authenticate, request) if chain else None
         request.state.principal = principal
         if chain and principal is None and request.url.path.startswith("/api"):
-            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+            return JSONResponse({"detail": "Unauthorized", "auth": auth_hints(chain)},
+                                status_code=401, headers={"WWW-Authenticate": "Bearer"})
         return await call_next(request)
 
     # Registered after the token check, so it runs first: a rebound or
@@ -219,14 +222,14 @@ def create_app(
         return _exp_storage_for(ws) or source.workspace_index(ws).storage
 
     @app.get(f"{API_PREFIX}/meta", dependencies=[require(VIEWER)])
-    def meta():
-        from version_stamp.api import version as version_mod
-
-        return {"version": version_mod.version, "read_only": read_only}
+    def meta(request: Request):
+        return meta_payload(app.state, request.state.principal, read_only)
 
     @app.get(f"{API_PREFIX}/workspaces", dependencies=[require(VIEWER)])
-    def list_workspaces():
-        return [ws.to_public_dict() for ws in manager.list()]
+    def list_workspaces(request: Request):
+        principal = request.state.principal
+        return [dict(ws.to_public_dict(), role=workspace_role(app.state, principal, ws.name))
+                for ws in manager.list()]
 
     @app.post(f"{API_PREFIX}/workspaces", status_code=201, dependencies=[require(ADMIN)])
     def add_workspace(body: dict):
@@ -257,6 +260,7 @@ def create_app(
         source.forget(ws_name)
         report_indexes.forget(ws_name)
         app_lists.pop(ws_name)
+        forget_git(ws_name)
         store_storages.pop(ws_name, None)
         edit_storages.pop(ws_name, None)
 
@@ -564,6 +568,8 @@ def create_app(
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
                                 _comment_counts)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
+    forget_git = routes_shell.register(app, API_PREFIX, _git_workspace, _leaderboard_inputs,
+                                       leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
