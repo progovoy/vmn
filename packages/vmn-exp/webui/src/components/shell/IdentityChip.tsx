@@ -1,6 +1,6 @@
 /** Who the browser is to this server, and whether it can reach it at all.
  *  Replaces the old pulsing `local` chip; it never animates. */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ShellContext } from "../../shell/contracts";
 import { useMetaLive } from "../../shell/useShellData";
 import { useDismiss } from "../../hooks/useDismiss";
@@ -41,6 +41,17 @@ function ChipText({ chip }: { chip: Chip }) {
   );
 }
 
+/** The menu pattern's keys: arrows wrap, Home/End jump, Tab leaves (and closes). */
+function onMenuKey(e: KeyboardEvent<HTMLDivElement>, close: () => void) {
+  if (e.key === "Tab") return close();
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  const at = items.indexOf(document.activeElement as HTMLElement);
+  const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  items[(to + items.length) % items.length]?.focus();
+}
+
 function ChipMenu({ chip, ctx, onSignOut }: { chip: Chip; ctx: ShellContext; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -72,7 +83,7 @@ function ChipMenu({ chip, ctx, onSignOut }: { chip: Chip; ctx: ShellContext; onS
               ))}
             </ul>
           )}
-          <div role="menu" aria-label="Account">
+          <div role="menu" aria-label="Account" onKeyDown={(e) => onMenuKey(e, close)}>
             {chip.menu === "user" && (
               <button type="button" role="menuitem" onClick={() => { void copyText(login); close(); }}>
                 Copy CLI login

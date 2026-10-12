@@ -85,4 +85,5 @@ button.id-chip:hover, button.id-chip[aria-expanded="true"] { border-color: var(-
     font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: var(--text);
     background: var(--panel-3); border-radius: 50%;
   }
+  .id-chip.bad .id-initial { color: var(--bad); }
 }

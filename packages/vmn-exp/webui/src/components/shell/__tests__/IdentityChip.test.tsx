@@ -91,6 +91,37 @@ describe("IdentityChip", () => {
     expect(btn).toHaveFocus();
   });
 
+  it("moves between menu items with the arrow keys, wrapping, and Home/End", () => {
+    renderChip({
+      ws: "ml-repo", workspace: ML_REPO, authEnabled: true, role: "editor",
+      meta: { version: "1", auth: AUTH, principal: { id: "u1", name: "Ada" }, role: "editor" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Ada/ }));
+    const [copy, signOut] = screen.getAllByRole("menuitem");
+    expect(copy).toHaveFocus();
+    const menu = screen.getByRole("menu");
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(signOut).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(copy).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(signOut).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(copy).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(signOut).toHaveFocus();
+  });
+
+  it("closes its menu when Tab moves focus out of it", () => {
+    renderChip({
+      authEnabled: true,
+      meta: { version: "1", auth: AUTH, principal: { id: "static-token", name: "static token" }, role: "admin" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /token/ }));
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Tab" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("says not signed in on a 401, with no menu", () => {
     const { c } = renderChip({ metaStatus: "unauthorized", meta: undefined, authEnabled: false });
     expect(chip(c)!.textContent).toContain("not signed in");
