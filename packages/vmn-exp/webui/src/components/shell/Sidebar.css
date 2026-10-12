@@ -1,0 +1,101 @@
+/* The sidebar's contents (plan 19 §1.2). The <aside> frame itself (.sidebar,
+ * drawer behaviour) lives in styles.css. */
+
+/* Until styles.css carries a shared one (U9). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.sidebar-brand {
+  display: flex; align-items: center; gap: 9px;
+  padding: 16px 18px 14px; color: var(--text);
+}
+.sidebar-brand:hover { text-decoration: none; }
+.sidebar-brand .logo {
+  width: 26px; height: 26px; border-radius: 7px; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-weight: 600; font-size: 14px; color: #fff;
+}
+.sidebar-brand .word { font-weight: 600; font-size: 16px; letter-spacing: 0.2px; color: var(--text); }
+.sidebar-brand .word span { color: var(--text-3); font-weight: 500; }
+
+/* ---- workspace scope ---- */
+.nav-scope { padding: 2px 14px 14px; border-bottom: 1px solid var(--line); }
+.ws-select-wrap { position: relative; }
+#ws-select {
+  width: 100%; height: 32px; appearance: none;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line-2); border-radius: 8px;
+  padding: 0 30px 0 10px; font: inherit; font-size: 13px; cursor: pointer;
+  caret-color: var(--accent);
+}
+#ws-select:hover { border-color: var(--text-3); }
+#ws-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ws-select-chevron {
+  position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+  display: flex; color: var(--text-2); pointer-events: none;
+}
+.nav-scope .copy-path { margin-top: 6px; padding: 0 4px; }
+.nav-scope .copy-path .mono { font-size: 12px; }
+
+/* ---- nav groups ---- */
+.nav-group { padding: 14px 12px 4px; }
+.nav-group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.nav-label {
+  margin: 0 10px 6px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-2);
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-radius: 8px; color: var(--text-2); font-size: 13.5px;
+}
+.nav-item svg { flex: none; }
+a.nav-item:hover { text-decoration: none; color: var(--text); background: var(--panel-2); }
+a.nav-item[aria-current="page"] {
+  color: var(--text); font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.nav-item[aria-disabled="true"] { color: var(--text-3); cursor: not-allowed; }
+.nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- app switcher ---- */
+.nav-app { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; padding: 0 2px; }
+.app-switch {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; height: 32px; padding: 0 9px 0 10px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line-2); border-radius: 8px; font-size: 13px; cursor: pointer;
+}
+.app-switch:not(.mono) { color: var(--text-2); }
+.app-switch:hover:not(:disabled) { border-color: var(--text-3); }
+.app-switch:disabled { cursor: not-allowed; color: var(--text-3); }
+.app-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-switch svg { flex: none; color: var(--text-2); }
+.app-switch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-app .status-rollup { padding: 0 8px; }
+
+.app-menu {
+  position: fixed; z-index: 40; max-height: 320px; overflow: auto;
+  display: flex; flex-direction: column; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 8px;
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 35%, transparent);
+}
+.app-menu-item {
+  padding: 6px 10px; border-radius: 6px; font-size: 13px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.app-menu-item:hover, .app-menu-item:focus { text-decoration: none; color: var(--text); background: var(--panel-2); }
+.app-menu-item[aria-current="page"] { color: var(--text); font-weight: 600; }
+.app-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.app-menu-empty { padding: 6px 10px; font-size: 13px; color: var(--text-2); }
+
+/* ---- foot ---- */
+.sidebar-foot {
+  margin-top: auto; padding: 14px 18px; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px;
+}
+.sidebar-versions { display: flex; gap: 10px; font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.sidebar-docs { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); }
+.sidebar-docs:hover { color: var(--text); }
+.sidebar-docs:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
