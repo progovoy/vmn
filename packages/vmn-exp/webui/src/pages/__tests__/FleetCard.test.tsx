@@ -24,9 +24,9 @@ function renderFleet(f: Fleet = fleet) {
 }
 
 describe("FleetCard", () => {
-  it("renders the fleet eyebrow header", () => {
+  it("renders the Fleet section heading", () => {
     renderFleet();
-    expect(screen.getByText("fleet")).toBeInTheDocument();
+    expect(screen.getByText("Fleet")).toBeInTheDocument();
   });
 
   it("renders non-zero status counts", () => {

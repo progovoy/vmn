@@ -65,7 +65,7 @@ export default function OverlayChart({
       {error && <div className="error">{error.message}</div>}
       {keys.map((metric) => (
         <div key={metric} className="card" style={{ marginBottom: 16 }}>
-          <div className="eyebrow" style={{ marginBottom: 10 }}>{metric}</div>
+          <h2 className="section-title">{metric}</h2>
           <LazyMount height={CHART_H}>
             <MetricOverlay
               metric={metric} runs={loaded} colorOf={colorOf} xMode={xMode}

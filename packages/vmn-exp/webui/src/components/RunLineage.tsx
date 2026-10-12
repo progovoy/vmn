@@ -131,8 +131,8 @@ export default function RunLineage({ ws, app, verstr }: { ws: string; app: strin
   });
   return (
     <div className="card lineage">
-      <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        lineage
+      <div className="section-head">
+        <h2 className="section-title">Lineage</h2>
         <select aria-label="Lineage depth" value={depth}
           onChange={(e) => setDepth(Number(e.target.value))} style={{ marginLeft: "auto" }}>
           {DEPTHS.map((d) => <option key={d} value={d}>{`${d} hop${d > 1 ? "s" : ""}`}</option>)}

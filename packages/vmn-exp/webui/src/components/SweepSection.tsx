@@ -57,7 +57,7 @@ export function SweepCard({ view, boardUrl, runUrl }: {
   const params = Object.keys(spec.parameters);
   return (
     <div className="card" style={{ marginBottom: 16 }}>
-      <div className="eyebrow">sweep</div>
+      <h2 className="section-title">Sweep</h2>
       <SpecSummary spec={spec} />
       {best && (
         <div data-testid="sweep-best" style={{ marginTop: 12 }}>

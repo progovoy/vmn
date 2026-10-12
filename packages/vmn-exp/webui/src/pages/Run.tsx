@@ -87,7 +87,7 @@ function RunBody({ ws, app, appName, detail }: {
       <div className="card-grid-wide">
         <RunLog ws={ws} app={app} verstr={verstr} tail={logTail} total={logTotal} />
         <div className="card">
-          <div className="eyebrow">reproduce</div>
+          <h2 className="section-title">Reproduce</h2>
           <div className="cli-hint">vmn-exp restore {appName} -v {verstr}</div>
           <div className="cli-hint">vmn-exp export {appName} -v {verstr}</div>
           <RerunHints boardBase={`/ws/${ws}/app/${app}`} appName={appName} verstr={verstr}
@@ -193,7 +193,7 @@ export default function Run() {
       {detail ? <RunBody ws={ws} app={app} appName={appName} detail={detail} /> : <Skeleton />}
       <ReportsUsing ws={ws} app={appName} verstr={summary.verstr} />
       <aside className="card run-comments" aria-label="Comments">
-        <div className="eyebrow">Comments</div>
+        <h2 className="section-title">Comments</h2>
         <Comments ws={ws} target={commentTarget.run(appName, summary.verstr)} />
       </aside>
     </>

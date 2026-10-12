@@ -83,7 +83,7 @@ describe("Run page error card", () => {
     mockedApi.experiment.mockResolvedValue(makeDetail(status("stuck", { stale_sec: 600 })));
     renderRun();
     await screen.findByTestId("training-curves");
-    await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Status")).toBeInTheDocument());
     expect(card()).toBeNull();
   });
 });

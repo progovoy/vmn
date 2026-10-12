@@ -20,7 +20,7 @@ export function Duration({ secs }: { secs: number | null | undefined }) {
 export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => string }) {
   return (
     <div className="card" style={{ marginBottom: 16 }}>
-      <div className="eyebrow">status</div>
+      <h2 className="section-title">Status</h2>
       <div className="status-head">
         <StatusPill status={st.status} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
         {st.status === "stuck" && st.stale_sec != null && (
@@ -68,7 +68,7 @@ export function ParamsCard({ params }: { params: Record<string, unknown> | null 
   if (!params || Object.keys(params).length === 0) return null;
   return (
     <div className="card">
-      <div className="eyebrow">parameters</div>
+      <h2 className="section-title">Parameters</h2>
       <div className="kv">
         {Object.entries(params).map(([k, v]) => (
           <Fragment key={k}>
@@ -102,7 +102,7 @@ export function MetricsCard({ metrics, summary, schema, children }: {
 }) {
   return (
     <div className="card">
-      <div className="eyebrow">metrics</div>
+      <h2 className="section-title">Metrics</h2>
       {Object.keys(metrics).length === 0 ? (
         <div className="empty" style={{ padding: 12 }}>No metrics logged.</div>
       ) : (
@@ -159,7 +159,7 @@ export function FleetCard({ fleet, runUrl }: { fleet: Fleet; runUrl: (v: string)
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
-      <div className="eyebrow">fleet</div>
+      <h2 className="section-title">Fleet</h2>
       <div className="fleet-summary">
         {nonZeroCounts.map(([status, count]) => (
           <span key={status} className="fleet-count">
@@ -243,7 +243,7 @@ export function MetadataCard({ detail }: { detail: ExperimentDetail }) {
     .reduce((s, e) => s + (Number(e.duration_sec) || 0), 0);
   return (
     <div className="card">
-      <div className="eyebrow">metadata</div>
+      <h2 className="section-title">Metadata</h2>
       <div className="kv">
         <div className="k">branch</div>
         <div className="mono">{meta.branch as string}</div>

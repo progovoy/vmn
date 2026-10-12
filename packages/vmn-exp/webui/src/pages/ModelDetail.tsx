@@ -122,7 +122,7 @@ function VersionRow({
 function AuditLog({ entries }: { entries: AuditEntry[] }) {
   return (
     <div className="card">
-      <div className="eyebrow">audit</div>
+      <h2 className="section-title">Audit</h2>
       {entries.length === 0 ? (
         <div className="empty">No audit entries.</div>
       ) : (
@@ -187,7 +187,7 @@ export default function ModelDetailPage() {
       )}
 
       <div className="card" style={{ padding: 0, overflow: "auto", marginBottom: 16 }}>
-        <div className="eyebrow" style={{ padding: "10px 16px" }}>versions</div>
+        <h2 className="section-title" style={{ padding: "10px 16px", margin: 0 }}>Versions</h2>
         <table style={{ width: "100%" }}>
           <thead>
             <tr>

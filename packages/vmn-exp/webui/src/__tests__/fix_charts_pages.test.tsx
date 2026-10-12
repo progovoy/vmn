@@ -94,10 +94,10 @@ describe("Run page", () => {
   it("keeps system metrics off the training chart until toggled", async () => {
     mockedApi.experiment.mockResolvedValue(detail());
     renderRun();
-    await screen.findByText("training curves");
-    expect(screen.queryByText("system metrics")).toBeNull();
+    await screen.findByText("Training curves");
+    expect(screen.queryByText("System metrics")).toBeNull();
     fireEvent.click(screen.getByText(/show system metrics/));
-    expect(screen.getByText("system metrics")).toBeInTheDocument();
+    expect(screen.getByText("System metrics")).toBeInTheDocument();
   });
 });
 

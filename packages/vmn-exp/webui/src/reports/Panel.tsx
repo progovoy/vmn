@@ -95,7 +95,7 @@ export default function Panel({ ws, spec, published, payload }: {
   const s = result.spec;
   return (
     <div className="md-panel" data-panel-id={s.id}>
-      {s.title && <div className="eyebrow">{s.title}</div>}
+      {s.title && <h3 className="section-title">{s.title}</h3>}
       <LazyMount height={s.height ?? DEFAULT_HEIGHT}>
         <PanelBody ws={ws} spec={s} published={published} payload={payload} />
       </LazyMount>

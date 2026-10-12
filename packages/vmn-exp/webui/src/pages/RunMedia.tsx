@@ -14,7 +14,7 @@ export default function RunMediaSection({ ws, app, detail }: {
   const url = (path: string) => artifactUrl(ws, app, verstr, path);
   return (
     <div className="card media-card" style={{ marginBottom: 16 }}>
-      <div className="eyebrow">media</div>
+      <h2 className="section-title">Media</h2>
       {detail.media && <MediaImages media={detail.media} url={url} />}
       {detail.tables && Object.keys(detail.tables).length > 0 && (
         <MediaTable ws={ws} app={app} verstr={verstr} tables={detail.tables} />

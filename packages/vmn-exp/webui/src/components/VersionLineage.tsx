@@ -28,8 +28,8 @@ export default function VersionLineagePanel({ ws, model, versions }: {
   });
   return (
     <div className="card lineage" style={{ marginBottom: 16 }}>
-      <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        lineage
+      <div className="section-head">
+        <h2 className="section-title">Lineage</h2>
         <select aria-label="Lineage version" value={version}
           onChange={(e) => setPicked(Number(e.target.value))} style={{ marginLeft: "auto" }}>
           {versions.map((n) => <option key={n} value={n}>{`version ${n}`}</option>)}

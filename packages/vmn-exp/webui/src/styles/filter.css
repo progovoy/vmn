@@ -1,0 +1,13 @@
+/* The leaderboard filter (components/LeaderboardFilter.tsx): 8px between
+   controls, 10px between its rows, every control one height, and room before
+   the board tabs below. */
+.filter-bar { gap: 10px 8px; margin-bottom: 16px; }
+.filter-bar .filter-control, .filter-bar .query-input input, .filter-bar button { height: 30px; }
+.filter-bar button { display: inline-flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+.filter-bar button.filter-clear { padding: 0 10px; }
+
+/* The chart view picker above the charts (pages/LeaderboardCharts.tsx): one
+   segmented control. */
+.chart-views { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.segmented { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.segmented button { height: 30px; padding: 0 12px; }

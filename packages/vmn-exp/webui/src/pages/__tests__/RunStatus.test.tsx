@@ -80,7 +80,7 @@ describe("Run status block", () => {
 
     renderRun();
 
-    await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Status")).toBeInTheDocument());
     const pill = document.querySelector(".status-pill") as HTMLElement;
     expect(pill.className).toContain("failed");
     expect(pill.getAttribute("aria-label")).toContain("exit 3");
@@ -98,7 +98,7 @@ describe("Run status block", () => {
 
     renderRun();
 
-    await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Status")).toBeInTheDocument());
     expect(screen.getByText(/no heartbeat for 10m/)).toBeInTheDocument();
   });
 
@@ -125,7 +125,7 @@ describe("Run status block", () => {
 
     renderRun();
 
-    await waitFor(() => expect(screen.getByText("metadata")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Metadata")).toBeInTheDocument());
     expect(document.querySelector(".status-pill")).toBeNull();
   });
 

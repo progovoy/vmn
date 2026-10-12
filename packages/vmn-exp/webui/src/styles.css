@@ -1,6 +1,7 @@
 /* vmn ui — warm near-black theme (design handoff: vmn UI redesign). */
 @import "./styles/checkbox.css";
 @import "./styles/board.css";
+@import "./styles/filter.css";
 :root {
   /* surfaces */
   --bg: #0c0c0b;
@@ -261,10 +262,13 @@ tr.flash { animation: flashbg 1.8s ease-out; }
 
 h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
 h2 { font-size: 15px; margin: 24px 0 8px; color: var(--text-2); }
-.eyebrow {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
-  color: var(--text-3); margin-bottom: 12px; font-weight: 600;
+/* An in-page section heading (h2, or h3 inside a nested section). */
+.section-title {
+  font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--text);
+  margin: 0 0 12px;
 }
+.section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.section-head .section-title { margin: 0; }
 
 /* ---------- cards & grids ---------- */
 .card {
@@ -807,7 +811,7 @@ td.fleet-failed:not(:empty) { color: var(--text-2); }
   border-color: color-mix(in srgb, var(--bad) 50%, var(--line));
   border-left: 3px solid var(--bad);
 }
-.run-error-card .eyebrow { color: var(--bad); }
+.run-error-card .section-title { color: var(--bad); }
 .run-error-headline {
   font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--bad);
   white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 6px;

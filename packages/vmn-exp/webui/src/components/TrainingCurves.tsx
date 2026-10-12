@@ -94,7 +94,7 @@ function TrainingCurves({
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div className="eyebrow" style={{ marginBottom: 0 }}>training curves</div>
+          <h2 className="section-title" style={{ marginBottom: 0 }}>Training curves</h2>
           <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />
           <XMetricSelect value={xChoice} onChange={setXChoice} metrics={xOptions} enabled={xMode === "step"} />
           <LogToggle value={logY} onChange={setLogY} />
@@ -118,13 +118,13 @@ function TrainingCurves({
         metrics={shownTraining} series={series} colorOf={trainColor} view={view}
         joined={joined} xMap={xMap} fetchRange={fetchRange}
       />
-      <Collapsible label="hidden metrics" count={shownHidden.length}>
+      <Collapsible title="Hidden metrics" label="hidden metrics" count={shownHidden.length}>
         <MetricGrid
           metrics={shownHidden} series={series} colorOf={trainColor} view={view}
           joined={joined} xMap={xMap} fetchRange={fetchRange}
         />
       </Collapsible>
-      <Collapsible label="system metrics" count={system.length}>
+      <Collapsible title="System metrics" label="system metrics" count={system.length}>
         <MetricGrid
           metrics={shownSystem} series={series} colorOf={sysColor} view={sysView}
           height={140} minWidth={260}
@@ -134,8 +134,10 @@ function TrainingCurves({
   );
 }
 
-/** A "show <label> (count)" link revealing *children*; nothing when count is 0. */
-function Collapsible({ label, count, children }: { label: string; count: number; children: ReactNode }) {
+/** A "show <label> (count)" link revealing *children* under a *title* heading; nothing when count is 0. */
+function Collapsible({ title, label, count, children }: {
+  title: string; label: string; count: number; children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   if (count === 0) return null;
   return (
@@ -145,7 +147,7 @@ function Collapsible({ label, count, children }: { label: string; count: number;
       </button>
       {open && (
         <div style={{ marginTop: 10 }}>
-          <div className="eyebrow">{label}</div>
+          <h3 className="section-title">{title}</h3>
           {children}
         </div>
       )}

@@ -79,8 +79,8 @@ export function SimilarCard({ children }: { children: (allApps: boolean) => Reac
   const [allApps, setAllApps] = useState(false);
   return (
     <div className="card similar">
-      <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        similar runs
+      <div className="section-head">
+        <h2 className="section-title">Similar runs</h2>
         <select aria-label="Similar runs scope" value={allApps ? "all" : "app"}
           onChange={(e) => setAllApps(e.target.value === "all")} style={{ marginLeft: "auto" }}>
           <option value="app">this app</option>
