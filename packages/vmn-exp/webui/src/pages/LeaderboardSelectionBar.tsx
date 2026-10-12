@@ -2,13 +2,16 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
+import { useEscapeKey } from "../hooks/useEscapeKey";
 import { MAX_COMPARE_RUNS } from "./compareRunsData";
 
 const plural = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
 const selParams = (verstrs: string[]) => verstrs.map((v) => `sel=${encodeURIComponent(v)}`).join("&");
 
-/** What can be done with the selected runs: count/clear, select everything
- *  filtered, compare, overlay, and archive/unarchive (after a confirm). */
+/** The bar floating at the bottom centre while runs are selected (Monday.com
+ *  style): the count, what can be done with the runs — diff, compare,
+ *  overlay, archive/unarchive (after a confirm), select every match — and a
+ *  ✕ that clears the selection, as Escape does. */
 export default function LeaderboardSelectionBar({
   selected, total, base, showUnarchive, archiving, archiveError,
   onClear, onSelectAll, onArchive,
@@ -26,48 +29,54 @@ export default function LeaderboardSelectionBar({
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState<ArchiveVerb | null>(null);
   const n = selected.length;
+  useEscapeKey(n > 0, onClear);
+  if (n === 0) return null;
+
   const go = (path: string) => navigate(`${base}/${path}`);
   const verb = (v: ArchiveVerb) => (v === "archive" ? "Archive" : "Unarchive");
+  const matching = Math.min(total, SELECT_ALL_CAP);
 
   return (
     <>
-      {total > 0 && (
-        <button onClick={onSelectAll} title={`select every matching run (at most ${SELECT_ALL_CAP})`}>
-          Select all {Math.min(total, SELECT_ALL_CAP)}
-        </button>
-      )}
-      {n > 0 && (
-        <span className="sel-count">
-          {n} selected
-          <button className="link" aria-label="Clear selection" onClick={onClear}>✕</button>
-        </span>
-      )}
-      {n === 2 && (
-        <button className="primary" onClick={() => go(
-          `compare?v=${encodeURIComponent(selected[0])}&to=${encodeURIComponent(selected[1])}`,
-        )}>
-          Code diff of 2 selected →
-        </button>
-      )}
-      {n >= 2 && n <= MAX_COMPARE_RUNS && (
-        <button onClick={() => go(`compare-runs?${selParams(selected)}`)}>
-          Compare {n} in a table →
-        </button>
-      )}
-      {n >= 2 && (
-        <button className="primary" onClick={() => go(`overlay?runs=${selected.map(encodeURIComponent).join(",")}`)}>
-          Overlay curves →
-        </button>
-      )}
-      {n > 0 && (
-        <>
+      {/* Room under the last rows, so the bar never covers them. */}
+      <div className="sel-bar-spacer" aria-hidden />
+      <div className="sel-bar" role="region" aria-label="Selection">
+        <span className="sel-badge" aria-hidden>{n}</span>
+        <span className="sel-label" aria-hidden>{n === 1 ? "run" : "runs"} selected</span>
+        <span className="sr-only" role="status">{n} selected</span>
+        <span className="sel-actions">
+          {n === 2 && (
+            <button className="primary" onClick={() => go(
+              `compare?v=${encodeURIComponent(selected[0])}&to=${encodeURIComponent(selected[1])}`,
+            )}>
+              Code diff of 2 selected →
+            </button>
+          )}
+          {n >= 2 && n <= MAX_COMPARE_RUNS && (
+            <button onClick={() => go(`compare-runs?${selParams(selected)}`)}>
+              Compare {n} in a table →
+            </button>
+          )}
+          {n >= 2 && (
+            <button className="primary" onClick={() => go(`overlay?runs=${selected.map(encodeURIComponent).join(",")}`)}>
+              Overlay curves →
+            </button>
+          )}
           <button disabled={archiving} onClick={() => setConfirming("archive")}>Archive</button>
           {showUnarchive && (
             <button disabled={archiving} onClick={() => setConfirming("unarchive")}>Unarchive</button>
           )}
-        </>
-      )}
-      {archiveError && <span className="error">{archiveError}</span>}
+          {n < matching && (
+            <button onClick={onSelectAll} title={`select every matching run (at most ${SELECT_ALL_CAP})`}>
+              Select all {matching} matching
+            </button>
+          )}
+          {archiveError && <span className="error">{archiveError}</span>}
+        </span>
+        <button className="sel-close" aria-label="Clear selection" title="Clear selection (Esc)" onClick={onClear}>
+          ✕
+        </button>
+      </div>
       {confirming && (
         <ConfirmDialog
           message={`${verb(confirming)} ${plural(Math.min(n, SELECT_ALL_CAP))}?`}

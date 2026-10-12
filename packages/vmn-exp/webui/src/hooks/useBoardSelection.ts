@@ -8,6 +8,8 @@ import { useJob } from "../components/ui";
 export const SELECT_ALL_CAP = 500;
 
 export type ArchiveVerb = "archive" | "unarchive";
+/** How many of the rows on screen are selected, for the header checkbox. */
+export type HeaderCheck = "none" | "some" | "all";
 
 interface Selection {
   selected: ReadonlySet<string>;
@@ -16,7 +18,8 @@ interface Selection {
 }
 
 /** The leaderboard's selection actions: toggle (shift extends a range over
- *  the rows on screen), select every filtered run, and bulk archive. */
+ *  the rows on screen), the header checkbox over those rows, select every
+ *  filtered run, and bulk archive. */
 export function useBoardSelection(
   ws: string, app: string, filter: RowsFilter, rows: readonly ExperimentRow[],
   sel: Selection, onArchived: () => void,
@@ -41,6 +44,20 @@ export function useBoardSelection(
     const span = rows.slice(lo, hi + 1).map((r) => r.verstr);
     sel.setSelected([...new Set([...sel.selected, ...span])]);
   }, []);
+
+  const onScreen = rows.filter((r) => sel.selected.has(r.verstr)).length;
+  const headerCheck: HeaderCheck = onScreen === 0 ? "none" : onScreen === rows.length ? "all" : "some";
+  /** Select every row on screen or, once they all are, clear them (runs
+   *  selected elsewhere, e.g. by "select all matching", stay selected). */
+  const toggleAll = () => {
+    const shown = rows.map((r) => r.verstr);
+    if (headerCheck !== "all") {
+      sel.setSelected([...new Set([...sel.selected, ...shown])]);
+      return;
+    }
+    const drop = new Set(shown);
+    sel.setSelected([...sel.selected].filter((v) => !drop.has(v)));
+  };
 
   /** Every run the filter matches (up to the cap); the loaded rows on a
    *  server without the columns endpoint. */
@@ -67,7 +84,7 @@ export function useBoardSelection(
   };
 
   return {
-    toggle, selectAll, archive,
+    toggle, headerCheck, toggleAll, selectAll, archive,
     archiving: job.job?.status === "running",
     archiveError: archiveError ?? job.error,
   };

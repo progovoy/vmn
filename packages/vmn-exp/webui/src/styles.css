@@ -1,4 +1,6 @@
 /* vmn ui — warm near-black theme (design handoff: vmn UI redesign). */
+@import "./styles/checkbox.css";
+@import "./styles/board.css";
 :root {
   /* surfaces */
   --bg: #0c0c0b;
@@ -333,7 +335,6 @@ th.num, td.num { text-align: right; }
 tr:last-child td { border-bottom: none; }
 tr.row { cursor: pointer; }
 tr.row:hover { background: var(--panel-2); }
-tr.row.checked { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 td .note { color: var(--text-2); }
 td.note-cell {
   color: var(--text-2); font-size: 12.5px; max-width: 200px;
@@ -343,7 +344,6 @@ td.when-cell { text-align: right; color: var(--text-3); font-size: 12px; white-s
 td.idx-cell { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
 .metric { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; }
 .best { color: var(--good); font-weight: 600; }
-input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 
 .bar-cell { position: relative; }
 .bar-cell .bar {
@@ -409,7 +409,7 @@ button.status-toggle[aria-pressed="true"] {
 
 /* ---------- forms & buttons ---------- */
 .field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-3); }
-.field input, .field textarea {
+.field input:not([type="checkbox"]), .field textarea {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2);
   border-radius: 8px; padding: 8px 10px; font-size: 13px;
 }
@@ -438,7 +438,7 @@ button.link:hover { border: none; text-decoration: underline; }
   flex-wrap: wrap; min-height: 34px;
 }
 .toolbar .spacer { margin-left: auto; }
-.toolbar input, .toolbar select {
+.toolbar input:not([type="checkbox"]), .toolbar select {
   background: var(--panel-2); color: var(--text);
   border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 10px; font-size: 13px;
 }
@@ -644,7 +644,8 @@ button.link:hover { border: none; text-decoration: underline; }
 .col-picker-item:hover .col-picker-only, .col-picker-only:focus-visible { opacity: 1; }
 
 /* ---- leaderboard table (widths come from one shared style per column) ---- */
-th.check-cell, td.check-cell { padding-left: 16px; }
+/* The checkbox column: the box centred, no padding to clip it. */
+th.check-cell, td.check-cell { padding-left: 0; padding-right: 0; text-align: center; }
 th.when-head, td.when-cell { padding-right: 16px; }
 th.param-head { color: var(--text-3); }
 td.param-cell {

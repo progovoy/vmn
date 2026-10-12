@@ -138,6 +138,7 @@ describe("brushing the parallel view", () => {
   it("filters the table to the brushed runs and keeps the chart's rows whole", async () => {
     mockedApi.experiments.mockResolvedValue(page([row(1), row(2), row(3)]));
     renderLeaderboard();
+    fireEvent.click(await screen.findByRole("tab", { name: "Charts" }));
     fireEvent.click(await screen.findByRole("button", { name: "Parallel" }));
     fireEvent.click(await screen.findByRole("button", { name: "fake-brush" }));
 

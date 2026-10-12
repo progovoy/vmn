@@ -1,0 +1,45 @@
+/* The app's one checkbox: a native input (keyboard, forms and screen readers
+   keep working) drawn as a 16px rounded box whose border reads in both
+   themes; accent fill with a white mark when checked or indeterminate. */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  align-self: center;
+  vertical-align: middle;
+  border: 1.5px solid var(--text-3);
+  border-radius: 4px;
+  background-color: var(--panel);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+input[type="checkbox"]:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+input[type="checkbox"]:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+input[type="checkbox"]:indeterminate {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%23fff' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+input[type="checkbox"]:disabled:hover { border-color: var(--text-3); }
