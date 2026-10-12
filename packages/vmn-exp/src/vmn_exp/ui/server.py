@@ -53,6 +53,7 @@ from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.ui.routes_tree import _not_a_repo_response
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -449,10 +450,7 @@ def create_app(
         try:
             return source.workspace_index(ws).list_versions(_app_name(app_tag))
         except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            return SafeJSONResponse(
-                {"detail": "Not a git repository", "reason": "not_a_repo", "path": ws.path},
-                status_code=409,
-            )
+            return _not_a_repo_response(ws.path)
 
     @app.post(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/actions/{{action}}",

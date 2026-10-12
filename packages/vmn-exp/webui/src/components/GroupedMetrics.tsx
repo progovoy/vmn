@@ -93,6 +93,8 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
     [groups, chartMetric],
   );
 
+  const chartGoal = metricGoal(schema, chartMetric);
+
   if (rows.length === 0) {
     return (
       <div className="card">
@@ -133,7 +135,7 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
       <div style={{ marginBottom: 16 }}>
         <GroupBars
           bars={bars}
-          color={metricGoal(schema, chartMetric) === "min" ? "var(--hotfix)" : metricGoal(schema, chartMetric) === "max" ? "var(--minor)" : "var(--text-2)"}
+          color={chartGoal === "min" ? "var(--hotfix)" : chartGoal === "max" ? "var(--minor)" : "var(--text-2)"}
         />
       </div>
 
