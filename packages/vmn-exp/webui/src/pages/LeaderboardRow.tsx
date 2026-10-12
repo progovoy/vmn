@@ -196,18 +196,21 @@ function Row({
         );
       case "idx":
         return <td key={id} data-col-id={id} className="idx-cell" style={style}>@{r.idx}</td>;
-      case "status":
+      case "status": {
+        // For outers, tree_status is the headline status.
+        const displayStatus = (r.kind === "outer" && r.tree_status) ? r.tree_status as ExperimentRow["status"] : r.status;
         return (
           <td key={id} data-col-id={id} className="status-cell" style={style}>
-            {r.status && (
+            {displayStatus && (
               <StatusPill
-                status={r.status} exitCode={r.exit_code}
+                status={displayStatus} exitCode={r.exit_code}
                 durationSec={r.duration_sec} staleSec={r.stale_sec}
                 errorSummary={r.error_summary}
               />
             )}
           </td>
         );
+      }
       case "experiment":
         return (
           <ExperimentCell

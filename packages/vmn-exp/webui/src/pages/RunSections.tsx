@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus } from "../types";
+import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunState, RunStatus } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import StatusPill from "../components/StatusPill";
 
@@ -18,15 +18,25 @@ export function Duration({ secs }: { secs: number | null | undefined }) {
 }
 
 export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => string }) {
+  // For outers, tree_status is the headline; the run's own status is secondary.
+  const isOuter = st.kind === "outer" && st.tree_status;
+  const primaryStatus = isOuter ? st.tree_status as RunState : st.status;
+  const showOwnStatus = isOuter && (
+    st.status === "failed" || st.status === "stuck"
+    || (st.status === "running" && st.status !== st.tree_status)
+  );
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <h2 className="section-title">Status</h2>
       <div className="status-head">
-        <StatusPill status={st.status} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
+        <StatusPill status={primaryStatus} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
+        {showOwnStatus && (
+          <span className="tree-roll">own {st.status}</span>
+        )}
         {st.status === "stuck" && st.stale_sec != null && (
           <span className="stale">⚠ no heartbeat for {fmtDuration(st.stale_sec)}</span>
         )}
-        {st.tree_status && st.tree_status !== st.status && (
+        {!isOuter && st.tree_status && st.tree_status !== st.status && (
           <span className="tree-roll">tree {st.tree_status}</span>
         )}
       </div>
