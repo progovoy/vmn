@@ -100,6 +100,23 @@ describe("AppsPage", () => {
     expect(document.querySelector(".status-dot")).toBeNull();
   });
 
+  it("requests a tile's status only once it scrolls into view", async () => {
+    const observed: Element[] = [];
+    vi.stubGlobal("IntersectionObserver", class {
+      observe(el: Element) { observed.push(el); }
+      disconnect() {}
+    });
+    try {
+      renderAt("ml-repo");
+      await screen.findByRole("link", { name: "clf" });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(observed.length).toBe(2);
+      expect(appStatus).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("shows the server cache only on a configured server, with no eyebrow", async () => {
     meta.mockResolvedValue({ version: "1", mode: "configured" });
     renderAt("ml-repo");

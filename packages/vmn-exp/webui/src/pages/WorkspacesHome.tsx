@@ -28,7 +28,8 @@ function useHomeRedirect(workspaces?: Workspace[]): HomeDecision {
   if (settled.current === "wait") {
     settled.current = homeRedirect({ location, returnTo, workspaces, apps });
   }
-  return settled.current;
+  // Once followed (a return-to of `/` lands back here), the page shows.
+  return first ? settled.current : null;
 }
 
 function WorkspaceTile({ workspace }: { workspace: Workspace }) {

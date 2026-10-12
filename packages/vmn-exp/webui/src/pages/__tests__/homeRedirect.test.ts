@@ -17,6 +17,10 @@ describe("validReturnTo", () => {
     expect(validReturnTo("")).toBeNull();
     expect(validReturnTo(null)).toBeNull();
   });
+
+  it("refuses a backslash path the URL parser reads as another origin", () => {
+    expect(validReturnTo("/\\evil.example/x")).toBeNull();
+  });
 });
 
 describe("homeRedirect", () => {

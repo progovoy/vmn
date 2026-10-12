@@ -5,9 +5,9 @@ import type { AppRow, Workspace } from "../types";
 
 export type HomeDecision = { to: string } | "wait" | null;
 
-/** A same-origin path, never `//host` (which the browser reads as another origin). */
+/** A same-origin path, never `//host` or `/\\host` (both read as another origin). */
 export function validReturnTo(value: string | null): string | null {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : null;
+  return value && /^\/(?![/\\])/.test(value) ? value : null;
 }
 
 /** Only the entry the browser landed on redirects: a home link (`state.home`)

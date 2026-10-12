@@ -26,7 +26,7 @@ const TWO: Workspace[] = [
 ];
 const AUTH = { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null };
 
-function renderAt(url: string) {
+function renderAt(url: string | { pathname: string; state: unknown }) {
   return renderWithClient(
     <MemoryRouter initialEntries={[url]}>
       <Routes>
@@ -137,6 +137,21 @@ describe("WorkspacesHome", () => {
     sessionStorage.setItem(RETURN_TO_KEY, "/ws/ml-repo");
     renderAt("/");
     expect(await screen.findByText("apps page")).toBeTruthy();
+    expect(sessionStorage.getItem(RETURN_TO_KEY)).toBeNull();
+  });
+
+  it("stays home on a home link, even with one workspace and one app", async () => {
+    workspaces.mockResolvedValue([TWO[0]]);
+    apps.mockResolvedValue([{ name: "clf", experiments: 3, versions: 1 }]);
+    renderAt({ pathname: "/", state: { home: true } });
+    expect(await screen.findByRole("link", { name: "ml-repo" })).toBeTruthy();
+    expect(screen.queryByText("leaderboard page")).toBeNull();
+  });
+
+  it("shows the page after a return-to that is home itself", async () => {
+    sessionStorage.setItem(RETURN_TO_KEY, "/?add=1");
+    renderAt("/");
+    expect(await screen.findByRole("link", { name: "ml-repo" })).toBeTruthy();
     expect(sessionStorage.getItem(RETURN_TO_KEY)).toBeNull();
   });
 });
