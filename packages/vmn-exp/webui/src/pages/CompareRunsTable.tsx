@@ -40,7 +40,7 @@ function Section({ title, kind, rows, width }: {
   if (rows.length === 0) return null;
   return (
     <>
-      <tr className="compare-section"><th colSpan={width}>{title}</th></tr>
+      <tr className="compare-section"><th colSpan={width} className="label-caps">{title}</th></tr>
       {rows.map((r) => (
         <tr key={`${kind}:${r.key}`} className={r.differs ? "differs" : ""}>
           <td className="mono compare-key">{r.key}</td>
