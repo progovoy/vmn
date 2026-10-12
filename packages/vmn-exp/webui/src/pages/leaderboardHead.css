@@ -1,0 +1,10 @@
+/* The group row over the leaderboard's inner-run count columns. */
+.lb-group-row th, .lb-group-row td {
+  box-sizing: border-box; padding: 0 10px; border-bottom: none; vertical-align: bottom;
+}
+/* A rule under the label marks which columns it spans; an inset shadow, as
+   a collapsed border would not travel with the sticky cell. */
+th.lb-group {
+  text-align: center; padding-bottom: 3px; color: var(--text-3); cursor: help;
+  box-shadow: inset 0 -1px 0 var(--line-2), inset 1px 0 0 var(--line), inset -1px 0 0 var(--line);
+}

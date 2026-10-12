@@ -1,9 +1,11 @@
 /** The leaderboard's header row: sorting, column drag/resize and the
  *  select-all checkbox. */
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { HeaderCheck } from "../hooks/useBoardSelection";
 import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, MIN_COL_WIDTH, STICKY_BG, isPinned } from "./leaderboardColumns";
 import { layoutIds, type RowLayout } from "./LeaderboardRow";
+import HeadGroups, { GROUP_ROW_HEIGHT } from "./LeaderboardHeadGroups";
+import { headGroups, isInnerRunId } from "./innerRunColumns";
 
 export const TIMESTAMP_SORT = "timestamp";
 export const IDX_SORT = "idx";
@@ -25,11 +27,11 @@ export interface SortState {
  *  body style already has `position: "sticky"` (experiment + pinned metric/
  *  param columns) sit at zIndex 3 so they aren't overlapped by other headers
  *  when both axes scroll simultaneously. */
-function headStyle(style: CSSProperties, index: number): CSSProperties {
+function headStyle(style: CSSProperties, index: number, top = 0): CSSProperties {
   const base: CSSProperties = {
     ...style,
     position: "sticky",
-    top: 0,
+    top,
     zIndex: 2,
     background: STICKY_BG,
   };
@@ -128,16 +130,22 @@ export default function Head({ layout, sort: s, edits, check }: {
   edits?: ColumnEdits;
   check?: HeaderCheckProps;
 }) {
-  const headStyles = layout.styles.map(headStyle);
+  const ids = layoutIds(layout);
+  const groups = headGroups(ids);
+  const helpId = useId();
+  const top = groups ? GROUP_ROW_HEIGHT : 0;
+  const headStyles = layout.styles.map((st, i) => headStyle(st, i, top));
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   return (
     <thead>
+      {groups && <HeadGroups groups={groups} styles={layout.styles} helpId={helpId} />}
       <tr>
-        {layoutIds(layout).map((id, i) => {
+        {ids.map((id, i) => {
           const { label, sort, title } = headInfo(id, layout);
           const movable = Boolean(edits) && !isPinned(id);
+          const inner = isInnerRunId(id);
           const cls = [
             headClass(id), sort && "sortable", sort && s.sort === sort && "sorted",
             dragging === id && "col-dragging", over === id && dragging !== id && "col-drop",
@@ -145,6 +153,7 @@ export default function Head({ layout, sort: s, edits, check }: {
           return (
             <th
               key={id} data-col-id={id} style={headStyles[i]} className={cls || undefined} title={title}
+              aria-describedby={inner ? helpId : undefined}
               onClick={sort ? () => s.onSort(sort) : undefined}
               draggable={movable}
               onDragStart={movable ? (e) => {

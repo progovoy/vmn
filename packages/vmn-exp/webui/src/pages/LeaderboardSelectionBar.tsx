@@ -24,12 +24,15 @@ function useKeepFocusInBar(barRef: RefObject<HTMLDivElement | null>,
   allRef: RefObject<HTMLButtonElement | null>, canSelectAll: boolean) {
   useLayoutEffect(() => {
     if (canSelectAll || document.activeElement !== allRef.current) return;
-    barRef.current?.querySelector<HTMLButtonElement>(".sel-actions button:not(:disabled), .sel-close")?.focus();
+    barRef.current?.querySelector<HTMLButtonElement>(
+      '.sel-actions button:not(:disabled):not([aria-disabled="true"]), .sel-close',
+    )?.focus();
   }, [barRef, allRef, canSelectAll]);
 }
 
-/** An action that stays in place at every count: disabled, with its reason
- *  as a tooltip and a description, when the selection doesn't fit it. */
+/** An action that stays in place at every count. When the selection doesn't
+ *  fit it, it is aria-disabled rather than disabled: still a Tab stop that
+ *  announces its reason (tooltip and description), but inert. */
 function BarAction({ label, reason, primary, onClick }: {
   label: string; reason: string | null; primary?: boolean; onClick: () => void;
 }) {
@@ -39,8 +42,8 @@ function BarAction({ label, reason, primary, onClick }: {
     <>
       <button
         className={primary && !off ? "primary" : undefined}
-        disabled={off} title={reason ?? undefined}
-        aria-describedby={off ? id : undefined} onClick={onClick}
+        aria-disabled={off || undefined} title={reason ?? undefined}
+        aria-describedby={off ? id : undefined} onClick={off ? undefined : onClick}
       >
         {label}
       </button>

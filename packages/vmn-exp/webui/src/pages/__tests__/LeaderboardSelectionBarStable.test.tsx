@@ -52,15 +52,15 @@ describe("a selection bar that keeps its shape as the count changes", () => {
     for (const name of actionNames()) expect(name).not.toMatch(/\d/);
   });
 
-  it("disables what one run can't do, saying why", () => {
+  it("marks what one run can't do aria-disabled, saying why", () => {
     renderBar(1);
     const diff = action(/^code diff$/i);
-    expect(diff).toBeDisabled();
+    expect(diff).toHaveAttribute("aria-disabled", "true");
     expect(diff).toHaveAttribute("title", "Select exactly 2 runs");
     expect(reason(diff)).toBe("Select exactly 2 runs");
-    expect(action(/compare in table/i)).toBeDisabled();
+    expect(action(/compare in table/i)).toHaveAttribute("aria-disabled", "true");
     expect(reason(action(/compare in table/i))).toBe(`Select 2–${MAX_COMPARE_RUNS} runs`);
-    expect(action(/overlay curves/i)).toBeDisabled();
+    expect(action(/overlay curves/i)).toHaveAttribute("aria-disabled", "true");
     expect(reason(action(/overlay curves/i))).toBe("Select 2 or more runs");
     expect(action(/^archive$/i)).toBeEnabled();
   });
@@ -72,14 +72,14 @@ describe("a selection bar that keeps its shape as the count changes", () => {
       expect(action(name)).not.toHaveAttribute("aria-describedby");
     }
     rerenderWith(3);
-    expect(action(/^code diff$/i)).toBeDisabled();
+    expect(action(/^code diff$/i)).toHaveAttribute("aria-disabled", "true");
     expect(action(/compare in table/i)).toBeEnabled();
     expect(action(/overlay curves/i)).toBeEnabled();
   });
 
   it("disables the compare table past its cap", () => {
     renderBar(MAX_COMPARE_RUNS + 1);
-    expect(action(/compare in table/i)).toBeDisabled();
+    expect(action(/compare in table/i)).toHaveAttribute("aria-disabled", "true");
     expect(action(/overlay curves/i)).toBeEnabled();
   });
 

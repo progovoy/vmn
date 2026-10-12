@@ -109,7 +109,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const base = `/ws/${ws}/app/${app}`;
   const colPrefs = useColumnPrefs(`${ws}/${app}`);
   const [tableWidth, setTableWidth] = useState(0);
-  const cols = useLeaderboardColumns(rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth);
+  const cols = useLeaderboardColumns(
+    rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown,
+  );
   const { setWidth, setOrder } = colPrefs;
   const ids = cols.layout.ids;
   const columnEdits = useMemo<ColumnEdits>(() => ({

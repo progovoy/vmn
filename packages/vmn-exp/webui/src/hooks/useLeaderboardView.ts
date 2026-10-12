@@ -49,6 +49,7 @@ export function useLeaderboardView() {
   };
 
   const hidden = useParamSet(params, "hide");
+  const shown = useParamSet(params, "show");
   const selected = useParamSet(params, "sel");
   const expanded = useParamSet(params, "expand");
   const collapsed = useParamSet(params, "collapse");
@@ -116,6 +117,15 @@ export function useLeaderboardView() {
       }),
     openCreate: (open: boolean) => setParam("new", open ? "1" : ""),
     toggleHidden: (col: string) => toggleIn("hide", col),
+    /** Record the user's explicit choice for a column whose default depends
+     *  on the rows: `show=` when on, `hide=` when off. */
+    setColumnShown: (col: string, on: boolean) =>
+      update((p) => {
+        const drop = (name: string) => setAllParams(p, name, p.getAll(name).filter((v) => v !== col));
+        drop("show");
+        drop("hide");
+        p.append(on ? "show" : "hide", col);
+      }),
     toggleSelected: (verstr: string) => toggleIn("sel", verstr),
     setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),
     setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),
@@ -135,7 +145,7 @@ export function useLeaderboardView() {
 
   return {
     ...view,
-    hidden, selected, expanded, collapsed,
+    hidden, shown, selected, expanded, collapsed,
     colOrder, pinned,
     clickSort, toggleCollapsed, ...setters,
   };
