@@ -16,7 +16,8 @@ from vmn_exp.core.similar_text import (
 
 def test_tokens_are_lowercased_and_split_on_camel_case_snake_case_and_punctuation():
     assert tokenize("FocalLoss for class_imbalance, HTTPServer/resnet50") == [
-        "focal", "loss", "class", "imbalance", "http", "server", "resnet50",
+        "focalloss", "focal", "loss", "class", "imbalance", "httpserver", "http", "server",
+        "resnet50",
     ]
 
 
