@@ -152,6 +152,16 @@ def test_an_unknown_ref_is_an_error(app_layout, capfd):
     assert rc == 1 and verstr(9) in out.err
 
 
+def test_an_empty_ref_is_an_unknown_run_not_the_latest(app_layout, capfd):
+    _bootstrap(app_layout)
+    app = app_layout.app_name
+    _train_step_run(_storage(app_layout), app, 1)
+    _train_step_run(_storage(app_layout), app, 2)
+    rc, out = _similar(app_layout, capfd, "-v", "", "--json")
+    assert rc == 1 and out.out == ""
+    assert f"Experiment '' not found for {app}" in out.err
+
+
 def test_similar_is_read_only_and_never_waits_for_the_repo_lock(app_layout):
     from vmn_exp.cli.experiment import READ_ONLY_ACTIONS
     from vmn_exp.cli.plugin import EXPERIMENT_ACTIONS

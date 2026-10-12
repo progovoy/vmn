@@ -41,6 +41,10 @@ def experiment_similar(vcs, storage, app_name, args):
     if err is not None:
         VMN_LOGGER.error(err)
         return 1
+    ref = _ref(args)
+    if ref == "":  # find() takes an empty ref for the latest run, as the SDK does
+        VMN_LOGGER.error(f"Experiment '' not found for {app_name}")
+        return 1
     target = None
     if not (_has_ref(args) or args.text_only):
         target = working_tree_target(vcs, context)
@@ -48,7 +52,7 @@ def experiment_similar(vcs, storage, app_name, args):
             return 1
     try:
         items = find(
-            storage, app_name, _ref(args), experiment_conf(vcs),
+            storage, app_name, ref, experiment_conf(vcs),
             top=args.top or DEFAULT_TOP, query=args.query, context=context,
             text_only=args.text_only, all_apps=args.all_apps,
             schema_of=conf_schema_of(getattr(vcs, "vmn_root_path", None)),
