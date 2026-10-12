@@ -21,6 +21,7 @@ import inspect
 from dataclasses import dataclass, field
 
 from vmn_exp._base import now_iso
+from vmn_exp.core.adopt import inherited_note, missing_inherited
 from vmn_exp.core.push_code import MISSING, CodePusher
 from vmn_exp.core.push_files import merge_fields, push_artifacts, push_files
 from vmn_exp.core.push_identity import record_fingerprint, run_identity
@@ -82,7 +83,7 @@ def push_run(local, target, app_name, verstr, ledger=None, code=None):
     identity = run_identity(app_name, meta)
     entry = ledger_entry(ledger, verstr, identity)
     if up_to_date(entry, local, app_name, verstr):
-        return Outcome(verstr, UP_TO_DATE)
+        return _noting_inherited(Outcome(verstr, UP_TO_DATE), local, target, app_name)
     job = _RunPush(local, target, app_name, verstr, code, meta, identity, entry)
     try:
         outcome = job.run()
@@ -90,6 +91,18 @@ def push_run(local, target, app_name, verstr, ledger=None, code=None):
         outcome = Outcome(verstr, FAILED, str(e) or type(e).__name__, job.warnings)
     if job.claimed:
         ledger.put(verstr, job.entry)
+    return _noting_inherited(outcome, local, target, app_name)
+
+
+def _noting_inherited(outcome, local, target, app_name):
+    """*outcome*, warning when the remote lacks part of the streams the
+    record inherited (never pushed but by their owner, or once adopted)."""
+    try:
+        streams = missing_inherited(local, target, app_name, outcome.verstr)
+    except Exception:
+        streams = []
+    if streams:
+        outcome.warnings.append(inherited_note(app_name, outcome.verstr, streams))
     return outcome
 
 

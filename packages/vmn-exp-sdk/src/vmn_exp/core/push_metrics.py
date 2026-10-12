@@ -7,11 +7,8 @@ does not exist, as a live ship does. A local ``.vmx`` goes through
 local file it was built from held them all). A stream the remote compacted
 while blocks of it were still local is compacted locally first and pushed
 as that ``.vmx``. Only the root's own streams go: another owner's local
-file (a ``cp -r`` of its root) is a stale prefix of what that owner pushes.
-A stream the copy inherited (:mod:`vmn_exp.storage.stream_owner`: its file
-came with the directory and never grows) goes only while the remote has not
-compacted it: its blocks past the remote's, or the ``.vmx`` its owner built
-from the whole file.
+file (a ``cp -r`` of its root, a stream the copy inherited) is pushed only
+by that owner, or once adopted (:mod:`vmn_exp.core.adopt`).
 """
 import os
 
@@ -34,13 +31,8 @@ def push_metrics(local, target, app_name, verstr):
         return
     remote = target.metric_objects(app_name, verstr)
     owns = owned_by(local.stream_owners(app_name, verstr))
-    inherits = owned_by(local.inherited_owners(app_name, verstr))
-    for writer in sorted(objects):
+    for writer in sorted(filter(owns, objects)):
         names, theirs = objects[writer], remote.get(writer, [])
-        if not owns(writer):
-            if inherits(writer) and not _compacted(theirs):
-                _push_stream(local, target, app_name, verstr, writer, names, theirs)
-            continue
         if any(is_stream_file(n) for n, _ in names) and _compacted(theirs):
             compact_writer(local, app_name, verstr, writer,
                            record_rewinds(local, app_name, verstr))

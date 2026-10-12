@@ -900,7 +900,9 @@ rerun).
 ### `push`
 
 Upload local runs (typically recorded offline) to the remote store under the
-same names. See [Offline recording and push](#offline-recording-and-push).
+same names. `--adopt` first makes this checkout the owner of the streams its
+runs inherited from a copied or moved checkout. See
+[Offline recording and push](#offline-recording-and-push).
 
 ### `watch`
 
@@ -1503,8 +1505,13 @@ backends are built.
   bind mount or a rename on one filesystem keep it; another directory (a
   copy elsewhere, a backup restored at the same path, a cross-filesystem
   move, a copy deleted and fetched again) mints a new one, and so does a
-  stream once compacted. A new owner ships what the remote lacks of the old
-  owner's streams unless their record is another directory still there. Every
+  stream once compacted. A process seeing the directory under another
+  `st_dev` (a container) keeps the owner when the inode and path agree, else
+  gets one owner of its own. Only a stream's owner ships, compacts and pushes
+  it: the streams a copy *inherited* from its original stay as they are, and
+  a sync or push notes on stderr when the remote lacks part of them; adopt
+  them with `vmn-exp push --adopt` ([push](#offline-recording-and-push)) once the
+  original checkout is gone. Every
   process of one checkout appends to the same stream; two clones on one host
   never share one. Without a local copy (straight to a bucket) the owner is
   the process's. Displays (log `_writer`, UI writer columns,
@@ -1642,6 +1649,19 @@ pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
   (`new`, `update`, `up-to-date`, `skipped`, `failed`; `collision` in a
   dry-run), then the summary. `--json` prints a list of `{verstr, status,
   detail, warnings, renamed_from}`. Exit 1 when any run failed.
+- **Copied or moved records**: a run whose record came from another checkout
+  (a `cp -r` of the repo, a backup restored, a move across filesystems) holds
+  that checkout's streams. Only their owner pushes them, so push leaves them
+  alone and prints a one-line note on stderr when the remote lacks part of
+  them. `--adopt` makes this checkout their owner for the selected runs
+  (catching their files up with what the remote holds first) and pushes them,
+  then and on every later sync/push. Run it only when the original checkout
+  is gone or will never write again — otherwise two checkouts would ship one
+  stream:
+
+  ```sh
+  vmn-exp push my_app -v 1.6.0-dev.a1b2c3d.e4f5g6h.gpu07 --adopt
+  ```
 - Takes the repo lock (it may rename local runs); works git-free. The UI runs
   it as the `exp_push` job action ([ui.md](ui.md#actions)).
 

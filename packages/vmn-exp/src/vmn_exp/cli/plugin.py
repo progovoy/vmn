@@ -110,6 +110,10 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                            "rerun: print the plan, create nothing; "
                            "push: print what would be pushed, write nothing remote; "
                            "similar-backfill: print what would be backfilled, write nothing")
+    pexp.add_argument("--adopt", action="store_true", default=False,
+                      help="push: make this checkout the owner of the streams its runs "
+                           "inherited from a copied/moved checkout, then push them; only "
+                           "when that checkout is gone or will never write again")
     pexp.add_argument("--print", dest="print_only", action="store_true", default=False,
                       help="rerun: print the resolved command, cwd, code identity and a "
                            "recipe (with --json as JSON); runs and creates nothing")

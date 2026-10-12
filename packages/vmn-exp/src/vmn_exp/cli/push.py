@@ -5,20 +5,28 @@ The target is the store the flags, ``VMN_EXPERIMENT_STORE`` or conf name;
 ``VMN_EXP_OFFLINE`` never hides it here. Each run goes through
 :func:`vmn_exp.core.push_rename.push_or_rename`, parents before children.
 ``--dry-run`` reads the ledger and one remote metadata object per run that
-is not up to date, and writes nothing.
+is not up to date, and writes nothing. ``--adopt`` first makes this checkout
+the owner of the streams each run inherited (:mod:`vmn_exp.core.adopt`).
 """
 import json
 from collections import Counter
 from dataclasses import asdict
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.adopt import adopt_streams
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.push_code import CodePusher
 from vmn_exp.core.push_ledger import PushLedger
 from vmn_exp.core.push_plan import parents_first, plan_push
 from vmn_exp.core.push_rename import SKIPPED, push_or_rename
 from vmn_exp.core.push_run import (
-    COLLISION, FAILED, NEW, UP_TO_DATE, UPDATE, Outcome, require_push_target,
+    COLLISION,
+    FAILED,
+    NEW,
+    UP_TO_DATE,
+    UPDATE,
+    Outcome,
+    require_push_target,
 )
 from vmn_exp.core.storage_resolve import experiment_dir, store_uri
 from vmn_exp.registry.view import registered_runs
@@ -40,16 +48,36 @@ def experiment_push(vcs, params, app_name, args):
         VMN_LOGGER.error(str(exc))
         return 1
     ledger = PushLedger.for_target(local, app_name, target)
+    adopt_failed = 0
     if args.dry_run:
         outcomes = [Outcome(v, plan_push(local, target, app_name, v, ledger))
                     for v in verstrs]
     else:
+        if getattr(args, "adopt", False):
+            adopt_failed = _adopt(local, target, app_name, verstrs, ledger)
         code = CodePusher(local, target, app_name)
         registered = registered_runs(local)
         outcomes = [push_or_rename(local, target, app_name, v, ledger, code, registered)
                     for v in verstrs]
     failed = _report(outcomes, args.json, args.dry_run)
-    return 1 if failed else 0
+    return 1 if failed or adopt_failed else 0
+
+
+def _adopt(local, target, app_name, verstrs, ledger):
+    """Adopt each run's inherited streams (a run that adopted some is pushed
+    again whatever the ledger says); the number of runs that failed to."""
+    failed = 0
+    for verstr in verstrs:
+        try:
+            adopted = adopt_streams(local, target, app_name, verstr)
+        except Exception as exc:
+            VMN_LOGGER.error(f"{verstr}: could not adopt its inherited streams: {exc}")
+            failed += 1
+            continue
+        entry = ledger.get(verstr)
+        if adopted and entry:
+            ledger.put(verstr, dict(entry, complete=False))
+    return failed
 
 
 def _stores(vcs, params):

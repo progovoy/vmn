@@ -76,18 +76,17 @@ class ShipState:
         atomic_write(self._path, json.dumps(self._all))
 
 
-class Unknown:
-    """A ship state that knows nothing, for a stream the copy inherited
-    (:mod:`stream_owner`): every ship lists the remote."""
-
-    def get(self, stream):
-        return None
-
-    def put(self, stream, state):
-        pass
-
-    def forget(self, stream):
-        pass
+def forget_streams(record_dir, which):
+    """Under the ship lock: drop what every ship state of the copy remembers
+    of the streams *which* accepts (a stream adopted from another owner)."""
+    with ship_lock(record_dir):
+        for kind in ("log", "metrics"):
+            state = ShipState(record_dir, kind, None)
+            state._load()
+            kept = {remote: {s: v for s, v in streams.items() if not which(s)}
+                    for remote, streams in state._all.items() if isinstance(streams, dict)}
+            if kept != state._all:
+                atomic_write(state._path, json.dumps(kept))
 
 
 @contextmanager

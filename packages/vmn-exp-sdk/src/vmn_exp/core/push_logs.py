@@ -7,9 +7,8 @@ the next segment, created only if it does not exist (``create_log_segment``).
 When the remote size is not what the ledger says this host shipped (no
 ledger, a live ship of the same copy), the remote bytes are compared with the
 local prefix first; a mismatch fails loudly and never starts over, because
-the remote bytes are someone else's. Only the root's own streams go, plus
-what the remote lacks of those it inherited (see
-:mod:`vmn_exp.core.push_metrics`).
+the remote bytes are someone else's. Only the root's own streams go, never
+those it inherited (:mod:`vmn_exp.core.adopt`).
 """
 from vmn_exp.core.logfiles import next_seq
 from vmn_exp.core.streams import owned_by
@@ -29,13 +28,9 @@ def push_logs(local, target, app_name, verstr, shipped=None, finished=False):
     shipped = shipped or {}
     sizes = {}
     owns = owned_by(local.stream_owners(app_name, verstr))
-    inherits = owned_by(local.inherited_owners(app_name, verstr))
-    for writer, size in sorted(local.log_sizes(app_name, verstr).items()):
+    for writer in sorted(filter(owns, local.log_sizes(app_name, verstr))):
         pusher = _WriterLog(local, target, app_name, verstr, writer)
-        if owns(writer):
-            sizes[writer] = pusher.push(shipped.get(writer), finished)
-        elif inherits(writer):
-            sizes[writer] = pusher.push_missing(size)
+        sizes[writer] = pusher.push(shipped.get(writer), finished)
     return sizes
 
 
@@ -61,15 +56,6 @@ class _WriterLog:
         if finished and len(objects) + bool(chunk) > 1:
             self._target.compact_log_segments(*self._at, self._writer)
         return remote_size + len(chunk)
-
-    def push_missing(self, local_size):
-        """An inherited stream (its file never grows): the lines the remote
-        lacks, if it holds less than the file; never compacted here."""
-        objects = list(self._target.log_objects(*self._at, self._writer))
-        remote_size = sum(size for _, size in objects)
-        if remote_size >= local_size:
-            return remote_size
-        return self.push(None, False)
 
     def _local_bytes(self, offset):
         name = log_object_name(self._writer)

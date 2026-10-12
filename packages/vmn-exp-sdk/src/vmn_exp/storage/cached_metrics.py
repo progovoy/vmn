@@ -13,8 +13,9 @@ what it shipped, also when another copy compacted the stream on the remote),
 else the remote's — or a local ``.vmx`` when the remote has none. A copy owns
 the streams of its current and retired owners (:mod:`stream_owner`); the
 others' local files (a ``cp -r`` of the original's root) are stale prefixes:
-read and compacted from the remote, never shipped (the owner's ship state
-assumes it alone ships its stream) nor put as a ``.vmx``.
+read from the remote, never shipped (the owner's ship state assumes it alone
+ships its stream) nor put as a ``.vmx``; those the copy inherited are not
+compacted here at all until adopted (:mod:`vmn_exp.core.adopt`).
 :meth:`read_range` reads the copy the last listing picked, since the local
 stream and the remote base segment share a name.
 
@@ -28,6 +29,7 @@ blocks to ship is compacted again from the local file at its next ship.
 import os
 from contextlib import contextmanager
 
+from vmn_exp.core.adopt import note_missing_inherited
 from vmn_exp.core.metric_block import intact_length
 from vmn_exp.core.metric_files import (
     covered_seq,
@@ -37,7 +39,7 @@ from vmn_exp.core.metric_files import (
     metric_writer,
     stream_name,
 )
-from vmn_exp.core.streams import display_writer, owned_by, stream_key
+from vmn_exp.core.streams import display_writer, owned_by, owner_of, stream_key
 from vmn_exp.storage import ship_state
 
 LOCAL, REMOTE = "local", "remote"
@@ -123,8 +125,11 @@ the copy's ship lock."""
         copy shipped of the stream) covers every segment the remote holds now
         (the build ran under the ship lock) and replaces whatever ``.vmx``
         the remote has; it goes to the remote, then here. One built from the
-        remote's objects goes to the remote only."""
+        remote's objects goes to the remote only. A stream the copy inherited
+        is compacted only by its owner."""
         if not self._ensure_local_record(app_name, verstr):
+            return False
+        if owner_of(writer_id) in self._local.inherited_owners(app_name, verstr):
             return False
         remote = self.remote_for(app_name, verstr)
         source = self._metric_state()["sources"].get((app_name, verstr, writer_id), LOCAL)
@@ -158,43 +163,28 @@ the copy's ship lock."""
         return stream_key(writer, self._local.stream_owner(app_name, verstr, writer))
 
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
-        """Ship the intact blocks appended to each of the copy's streams past
-        what the remote holds (*writer_id*'s among them)."""
+        """Ship the intact blocks appended to each of the copy's own streams
+        past what the remote holds (*writer_id*'s among them); never a stream
+        it inherited (only its owner ships it)."""
         remote = self.remote_for(app_name, verstr)
         if not remote:
             return
         local = self._local.metric_objects(app_name, verstr)
         if not local:
             return
+        note_missing_inherited(self._local, remote, app_name, verstr)
+        owns = self._stream_owned(app_name, verstr)
         with self._ship_state(app_name, verstr, "metrics") as state:
             listing = _Listing(remote, app_name, verstr)
-            owns = self._stream_owned(app_name, verstr)
-            inherits = owned_by(self._local.inherited_owners(app_name, verstr))
             for stream, objects in sorted(local.items()):
                 if owns(stream):
                     self._ship_own(state, listing, remote, app_name, verstr, stream, objects)
-                elif inherits(stream):
-                    self._ship_inherited(listing, remote, app_name, verstr, stream, objects)
 
     def _ship_own(self, state, listing, remote, app_name, verstr, stream, objects):
         if _has_stream(objects):
             self._ship_blocks(state, listing, remote, app_name, verstr, stream)
         else:
             self._ship_indexed(state, listing, remote, app_name, verstr, stream, objects)
-
-    def _ship_inherited(self, listing, remote, app_name, verstr, stream, objects):
-        """What the remote lacks of a stream whose file came with the copy's
-        directory and never grows: the blocks past its segments, or the
-        ``.vmx`` its owner built from that whole file. Nothing once the
-        remote compacted it, nor from a fresh listing's view of it."""
-        theirs = listing.objects(stream)
-        if any(is_indexed_file(n) for n, _ in theirs):
-            return
-        if _has_stream(objects):
-            self._ship_blocks(ship_state.Unknown(), listing, remote, app_name, verstr, stream,
-                              recompact=False)
-        else:
-            self._ship_indexed(ship_state.Unknown(), listing, remote, app_name, verstr, stream, objects)
 
     def _ship_indexed(self, state, listing, remote, app_name, verstr, stream, objects):
         """A ``.vmx`` the copy built while the remote was out of reach goes up
@@ -208,14 +198,13 @@ the copy's ship lock."""
         remote.put_indexed(app_name, verstr, stream, path, replace=True, covers=covers)
         state.put(stream, _INDEXED)
 
-    def _ship_blocks(self, state, listing, remote, app_name, verstr, stream, recompact=True):
+    def _ship_blocks(self, state, listing, remote, app_name, verstr, stream):
         for _ in range(_SHIP_ATTEMPTS):
             held = state.get(stream)
             if held in (None, _INDEXED):
                 held = _remote_state(listing.objects(stream))
             if held is None:  # another copy compacted it: compact it again
-                if recompact:
-                    self._recompact(app_name, verstr, stream)
+                self._recompact(app_name, verstr, stream)
                 state.forget(stream)
                 return
             offset, seq = held

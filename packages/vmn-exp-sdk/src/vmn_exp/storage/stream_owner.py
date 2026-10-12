@@ -2,28 +2,27 @@
 """The owner id of a local record copy: the ``<owner>`` of its stream keys
 (:mod:`vmn_exp.core.streams`).
 
-A record directory keeps ``.stream-owner`` (JSON: the id, the directory's
-realpath and ``[st_dev, st_ino]``, the ids it retired, the ids it inherited
-with the record each came from), created by the first process to need it;
-the other processes over the copy read it, so they append to the same
-streams. A copy is the physical directory, whatever path reached it (a
-symlink, a bind mount, a move on one filesystem): the same ``(st_dev,
-st_ino)`` is the same copy. Another directory — a ``cp -r`` of the repo, a
-backup restored at the original's path, a cross-filesystem move — never
-appends to the recorded owner (the original may have gone on appending and
-shipping): it mints its own and inherits the old one's streams with the
-record they came from (:func:`inherited`). Their local files never grow
-again; the copy ships what the remote lacks of them unless their record is
-another directory that is still there, which alone ships them and trusts its
-ship state. A process seeing this very directory with another identity (a
-container's st_dev) mints too, and ships the streams whose record is the
-directory as it sees it: no stream is left without a shipper. A file from
-before identities counts as another directory. Minting happens under the
-copy's owner lock, re-reading the file first, so every process of the copy
-gets the same new owner. A copy deleted (``prune --local-only``, a cleared
-cache) and fetched again starts without one. A stream once compacted is
-retired with its owner, so nobody appends behind its ``.vmx``. Dot files are
-never listed nor pushed.
+Only a stream's owner ever appends to, ships, seals, compacts or pushes it.
+A record directory keeps ``.stream-owner`` (JSON): one *view* entry — an
+owner id, the directory's realpath and ``[st_dev, st_ino]`` as a process saw
+it, the ids it retired — at the top level, the others under ``views``. A
+process owns the entry of its view of the directory: the same ``(st_dev,
+st_ino)`` (whatever path reached it: a symlink, a bind mount, a rename on one
+filesystem — the recorded path is refreshed then), else the same inode at
+the recorded path (a container seeing the directory with another st_dev). A
+process matching no entry mints its own under the owner lock, re-reading the
+file first, so every process of a view gets the same owner; its entry then
+leads and the others stay under ``views``.
+
+Every other id in the file is *inherited* (:func:`inherited`): another view's
+(a container at another path), or a directory this one was copied, restored
+or moved across filesystems from. Whether that original is gone cannot be
+told from here, so inherited streams are never shipped, pushed nor compacted
+automatically; :func:`adopt` (``vmn-exp push --adopt``) makes them this
+view's, for when the user knows the original will never write again. A copy
+deleted (``prune --local-only``, a cleared cache) and fetched again starts
+without an owner. A stream once compacted is retired with its owner, so
+nobody appends behind its ``.vmx``. Dot files are never listed nor pushed.
 """
 import json
 import os
@@ -39,97 +38,96 @@ def _path(record_dir):
     return os.path.join(record_dir, OWNER_FILE)
 
 
-def _read(record_dir):
-    """The owner file as written (maybe another path's), None if absent."""
+def _where(record_dir):
+    """``([st_dev, st_ino] or None, realpath)`` of directory *record_dir*."""
+    try:
+        st = os.stat(record_dir)
+    except OSError:
+        return None, os.path.realpath(record_dir)
+    return [st.st_dev, st.st_ino], os.path.realpath(record_dir)
+
+
+def _entries(record_dir):
+    """The file's view entries, the leading one first ([] if absent)."""
     try:
         with open(_path(record_dir)) as f:
             found = json.load(f)
     except (OSError, ValueError):
+        return []
+    if not isinstance(found, dict):
+        return []
+    views = found.pop("views", None) or []
+    return [e for e in [found, *views] if isinstance(e, dict) and isinstance(e.get("id"), str)]
+
+
+def _write(record_dir, entries):
+    lead, *others = entries
+    atomic_write(_path(record_dir), json.dumps(dict(lead, views=others)))
+
+
+def _ids(entry):
+    return [entry["id"], *entry.get("retired", ())]
+
+
+def _same_inode_here(entry, ident, real):
+    seen = entry.get("ident")
+    return isinstance(seen, list) and len(seen) == 2 and seen[1] == ident[1] \
+        and entry.get("path") == real
+
+
+def _mine(entries, where):
+    """The index of the entry of the view *where*, None if there is none."""
+    ident, real = where
+    if ident is None:
         return None
-    if not isinstance(found, dict) or not isinstance(found.get("id"), str):
-        return None
-    return found
-
-
-def _identity(path):
-    """``[st_dev, st_ino]`` of directory *path*, None if it is not there."""
-    try:
-        st = os.stat(path)
-    except OSError:
-        return None
-    return [st.st_dev, st.st_ino]
-
-
-def _is_here(found, record_dir):
-    ident = found.get("ident") if found else None
-    return ident is not None and ident == _identity(record_dir)
-
-
-def _origin(found):
-    return {"path": found.get("path"), "ident": found.get("ident")}
-
-
-def _all_owners(found):
-    """``{owner: its record}`` of *found* and all it retired or inherited."""
-    owners = {o: _origin(found) for o in (found["id"], *found.get("retired", ()))}
-    owners.update(found.get("inherited") or {})
-    return owners
-
-
-def _shipped_elsewhere(origin, mine):
-    """Whether *origin* is another directory, still there (it ships its own)."""
-    if not isinstance(origin, dict) or origin.get("ident") in (None, mine):
-        return False
-    return _identity(str(origin.get("path"))) == origin["ident"]
+    for i, e in enumerate(entries):
+        if e.get("ident") == ident:
+            return i
+    for i, e in enumerate(entries):
+        if _same_inode_here(e, ident, real):
+            return i
+    return None
 
 
 def read_state(record_dir):
-    """The copy's owner state, None before it has one of its own."""
-    found = _read(record_dir)
-    return found if _is_here(found, record_dir) else None
+    """This view's entry ``{"id", "retired", ...}``, None before it has one."""
+    entries = _entries(record_dir)
+    i = _mine(entries, _where(record_dir))
+    return None if i is None else entries[i]
 
 
 def inherited(record_dir):
-    """The owners whose streams came with the copy's directory from a record
-    that is not another live directory (gone, or this one as another
-    process saw it): shipped and pushed past what the remote holds, never
-    appended to nor compacted here."""
-    found = _read(record_dir)
-    if found is None:
-        return set()
-    if _is_here(found, record_dir):
-        owners = found.get("inherited") or {}
-    else:
-        owners = _all_owners(found)
-    mine = _identity(record_dir)
-    return {o for o, origin in owners.items() if not _shipped_elsewhere(origin, mine)}
+    """The owners of the other entries: their streams are never shipped,
+    pushed nor compacted here until :func:`adopt`."""
+    entries = _entries(record_dir)
+    i = _mine(entries, _where(record_dir))
+    return {o for j, e in enumerate(entries) if j != i for o in _ids(e)}
 
 
-def _state(record_dir, owner, retired=(), inherits=None):
-    return {"id": owner, "path": os.path.realpath(record_dir),
-            "ident": _identity(record_dir), "retired": list(retired),
-            "inherited": dict(inherits or {})}
-
-
-def _mint(record_dir):
-    """Under the owner lock: the copy's state, minted unless another process
-    did first."""
-    found = _read(record_dir)
-    if _is_here(found, record_dir):
-        return found
-    state = _state(record_dir, new_owner(), inherits=_all_owners(found) if found else None)
-    atomic_write(_path(record_dir), json.dumps(state))
-    return state
+def _held_entries(record_dir):
+    """Under the owner lock: the entries and the index of this view's,
+    minted (or its path refreshed) and written if needed."""
+    entries, where = _entries(record_dir), _where(record_dir)
+    i = _mine(entries, where)
+    if i is None:
+        entries = [{"id": new_owner(), "path": where[1], "ident": where[0],
+                    "retired": []}, *entries]
+        _write(record_dir, entries)
+        return entries, 0
+    if entries[i].get("path") != where[1] and entries[i].get("ident") == where[0]:
+        entries[i] = dict(entries[i], path=where[1])
+        _write(record_dir, entries)
+    return entries, i
 
 
 def owner_state(record_dir):
-    """``{"id", "retired", "inherited"}`` of the copy at *record_dir*
-    (created if needed)."""
+    """This view's entry (created, or its path refreshed, if needed)."""
     found = read_state(record_dir)
-    if found is not None:
+    if found is not None and found.get("path") == _where(record_dir)[1]:
         return found
     with ship_state.owner_lock(record_dir):
-        return _mint(record_dir)
+        entries, i = _held_entries(record_dir)
+        return entries[i]
 
 
 def record_owner(record_dir):
@@ -137,12 +135,24 @@ def record_owner(record_dir):
 
 
 def retire_owner(record_dir, owner):
-    """Retire *owner* if it is still the copy's: the copy's owner after."""
+    """Retire *owner* if it is still this view's: the view's owner after."""
     with ship_state.owner_lock(record_dir):
-        found = _mint(record_dir)
-        if found["id"] != owner:
-            return found["id"]
-        state = _state(record_dir, new_owner(), found.get("retired", []) + [owner],
-                       found.get("inherited"))
-        atomic_write(_path(record_dir), json.dumps(state))
-        return state["id"]
+        entries, i = _held_entries(record_dir)
+        entry = entries[i]
+        if entry["id"] != owner:
+            return entry["id"]
+        entries[i] = dict(entry, id=new_owner(), retired=[*entry.get("retired", ()), owner])
+        _write(record_dir, entries)
+        return entries[i]["id"]
+
+
+def adopt(record_dir):
+    """Make every inherited owner this view's (retired: shipped, never
+    appended to); the other entries go. The owners adopted, sorted."""
+    with ship_state.owner_lock(record_dir):
+        entries, i = _held_entries(record_dir)
+        theirs = sorted({o for j, e in enumerate(entries) if j != i for o in _ids(e)})
+        if theirs:
+            entry = entries[i]
+            _write(record_dir, [dict(entry, retired=[*entry.get("retired", ()), *theirs])])
+        return theirs

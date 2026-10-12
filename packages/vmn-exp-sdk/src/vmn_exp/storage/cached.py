@@ -286,6 +286,15 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
     def retire_stream(self, app_name, verstr, stream):
         self._local.retire_stream(app_name, verstr, stream)
 
+    def adopt_streams(self, app_name, verstr):
+        """Make the local copy the owner of the streams it inherited
+        (:func:`vmn_exp.core.adopt.adopt_streams`); the owners adopted."""
+        from vmn_exp.core.adopt import adopt_streams
+
+        if not self._remote or not self._ensure_local_record(app_name, verstr):
+            return []
+        return adopt_streams(self._local, self._remote, app_name, verstr)
+
     def remote_for(self, app_name, verstr):
         """The remote to write *verstr*'s files to: None unless the remote
         holds this very record (see :mod:`vmn_exp.storage.remote_presence`)."""

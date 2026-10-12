@@ -23,35 +23,40 @@ entries (the parked multi-clone tests and the review probes reproduce them).
 - **Stream key** `<writer>~<owner>` (`core/streams.py`): `stream_key`,
   `display_writer` (the part before `~`), `owner_of`. The writer id users see
   and set is unchanged; a `~` in an explicit writer id becomes `-`.
-- **One appending owner per stream.** The owner is per local *record copy*:
-  `<record>/.stream-owner` (`storage/stream_owner.py`, JSON with the id, the
-  directory's realpath and `[st_dev, st_ino]`, the retired ids and the
-  inherited ones), minted under the copy's owner lock (`.ship/owner.lock`,
-  re-reading the file first, so all processes opening a fresh copy at once get
-  the same owner) and read by every other process of the copy. A copy is the
-  physical directory: the same `(st_dev, st_ino)` keeps the owner whatever
-  path reached it (a symlink, a bind mount, macOS `/tmp` vs `/private/tmp`, a
-  rename on one filesystem, a `vmn-exp push` `.rN` rename). Another directory
-  — a `cp -r`, a backup restored at the original's path, a cross-filesystem
-  move — never keeps the owner (the original may have gone on appending and
-  shipping, so the copy's file can be a stale prefix of the remote): the copy
-  mints a new owner and *inherits* the old one's streams (and those it
-  retired or inherited), each with the record (realpath + identity) it came
-  from. An inherited stream's local file never grows again. Unless its record
-  is another directory still there, the copy ships and pushes what the remote
-  lacks of it — nothing when the remote is ahead, the missing suffix when behind, from a fresh
-  listing, never once the remote compacted it — and never compacts it nor puts
-  it as a `.vmx` from its local file (an inherited local `.vmx` was built by
-  its owner from the whole file, so it goes up while the remote has none).
-  While the original still lives it alone ships its streams: its ship state
-  trusts that. A process that sees the same directory with another identity
-  (a container's `st_dev` for a bind-mounted dir, overlayfs) mints too and
-  ships every inherited stream whose record is this directory as it sees it,
-  so a disagreement costs an extra stream, never an unshipped one. A
-  `.stream-owner` without an identity (older) counts as another directory. A copy deleted and fetched again also mints a new owner. The brief suggested a root-level id; a per-record
-  owner also covers `prune --local-only` / a cleared cache followed by a
-  re-fetch, which would otherwise append to a stream whose local file is
-  shorter than its remote copy.
+- **One owner per stream, and only the owner touches it.** Only a stream's
+  owner ever appends to, ships, seals, compacts or pushes it. The owner is per
+  local *record copy* and per *view* of it: `<record>/.stream-owner`
+  (`storage/stream_owner.py`) holds one entry per view — an owner id, the
+  directory's realpath and `[st_dev, st_ino]` as that view saw it, the ids it
+  retired — the matching one minted under the copy's owner lock
+  (`.ship/owner.lock`, re-reading the file first, so all processes opening a
+  fresh copy at once get the same owner). A process's view is the entry with
+  its `(st_dev, st_ino)` (a symlink, a bind mount, macOS `/tmp` vs
+  `/private/tmp`, a same-fs rename or a push `.rN` rename keep it; the recorded
+  path is refreshed under the owner lock), else the entry with its `st_ino` at
+  its realpath (a container seeing the dir with another `st_dev`): views never
+  re-mint on alternating appends, and a container at another path keeps one
+  entry of its own beside the host's.
+- **Inherited streams are never shipped automatically.** Every id in the file
+  that is not this view's is *inherited*: a `cp -r`, a backup restored at the
+  original's path, a cross-filesystem move, or another view. Whether the
+  original is gone cannot be told from inside a copy (renamed, symlinked,
+  another disk, a restored backup, inode reuse), and every round-3..5 review
+  failure came from a copy shipping streams it inherited while the original
+  still owned them. So inherited streams are never shipped, pushed, compacted
+  nor put as a `.vmx`; a sync or a push notes once on stderr when the remote
+  lacks part of them (`core/adopt.py:note_missing_inherited`, push outcome
+  warnings).
+- **Explicit adopt**: `vmn-exp push <app> [-v <ref>...] --adopt`
+  (`core/adopt.py:adopt_streams`, `CachedSnapshotStorage.adopt_streams`)
+  makes this view the owner of the selected runs' inherited streams: their
+  local files first catch up with the remote (the bytes the original shipped
+  after the copy, verified to extend the local file; files of a stream the
+  original compacted remotely are dropped), their ship state is forgotten,
+  then they become this view's retired owners and are shipped, compacted and
+  pushed from then on. Run it only when the original checkout is gone or will
+  never write again. A copy deleted and fetched again also mints a new owner
+  (`prune --local-only`, a cleared cache).
   - No local copy (straight to a bucket): the process's owner
     (`process_owner`, re-minted after `fork`).
   - A log buffer (`storage/buffered.py`): its own owner, rotated when the
@@ -61,12 +66,8 @@ entries (the parked multi-clone tests and the review probes reproduce them).
     `similar-backfill` and compaction all go through it.
   - A copy owns the streams of its current and retired owners only. Another
     owner's local log or metric file (a `cp -r` of the original's root holds a
-    stale prefix of its streams) is read and compacted from the remote, never
-    shipped, compacted from the copy, pushed (`vmn-exp push`) nor put as a
-    `.vmx`: the original's ship state assumes it alone ships its stream, and a
-    segment it creates behind a range the copy compacted would be hidden
-    (inherited streams whose record is gone only get their missing part, as
-    above). A log
+    stale prefix of its streams) is read from the remote, never shipped,
+    compacted, pushed nor put as a `.vmx` by the copy. A log
     line or metric block appended under an owner the copy does not own (a
     one-off owner, named while the record could not be fetched) goes to the
     copy's own stream.
@@ -115,7 +116,21 @@ entries (the parked multi-clone tests and the review probes reproduce them).
   `test_storage_cached_log_lock_interrupt.py`, the part tests); the outcomes
   they guarded are covered by `test_storage_multi_clone_*.py`.
 
+## Deleted by decision 2 (owner-only shipping)
+
+- The "is the original still alive" logic (`_shipped_elsewhere`, stat-ing the
+  recorded path of an inherited stream's record) and every automatic ship or
+  push of an inherited stream (`_ship_inherited`, `push_missing`,
+  `ship_state.Unknown`).
+
 ## Known limits (not covered by tests)
+
+- A directory at the same path with the same `(st_dev, st_ino)` is taken for
+  the original: ext4 inode reuse after `rm -rf; cp -r`, VM/disk snapshots,
+  btrfs/ZFS clones. With a shared writer id such a copy owns the original's
+  stream from a stale prefix.
+- A process that sees the directory under another `st_dev` *and* another path
+  gets an entry of its own (one per such view, not per append).
 
 - Two processes of one record copy: an append landing between the owner's
   compaction reading the local stream and the owner's retirement.

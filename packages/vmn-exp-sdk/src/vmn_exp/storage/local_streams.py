@@ -34,8 +34,8 @@ class LocalStreams:
 
     def inherited_owners(self, app_name, verstr):
         """The owners whose streams came with the copy's directory (a ``cp
-        -r``, a move): their files never grow again, so the copy ships and
-        pushes just what the remote lacks of them, and compacts none."""
+        -r``, a move) or are another view's: never appended to, shipped,
+        pushed nor compacted here until adopted (:mod:`vmn_exp.core.adopt`)."""
         record = self._owner_dir(app_name, verstr)
         return stream_owner.inherited(record) if record else set()
 

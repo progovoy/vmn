@@ -2,7 +2,8 @@
 copy, a checkout moved across filesystems, a copy whose original was deleted
 later — never appends to
 the recorded owner's streams: it mints its own owner and inherits the old
-one's streams, whose local files never grow again. It ships just what the
+one's streams, whose local files never grow again. Only their owner ships
+them; once the copy adopts them (``vmn-exp push --adopt``) it ships what the
 remote lacks of them, so a delayed move loses nothing. Processes opening one
 copy at once all end up with the same new owner."""
 import random
@@ -89,6 +90,7 @@ def test_a_moved_copy_ships_what_its_original_never_did(tmp_path):
     a.append_metric_block(APP, V, own, block(2.0, start=2))
     _move_across_filesystems(tmp_path / "a", tmp_path / "b")
     b = cached_host(tmp_path, "b")
+    b.adopt_streams(APP, V)
 
     _ship(b, stream(b))
 
