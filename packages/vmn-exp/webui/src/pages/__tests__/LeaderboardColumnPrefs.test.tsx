@@ -28,14 +28,14 @@ import { api } from "../../api";
 import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
-const heads = () => [...document.querySelectorAll("thead th")] as HTMLElement[];
+const heads = () => [...document.querySelectorAll("thead th[data-col-id]")] as HTMLElement[];
 const headers = () => heads().map((th) => th.dataset.colId);
 const head = (id: string) => document.querySelector(`thead th[data-col-id="${id}"]`) as HTMLElement;
 const px = (el: HTMLElement) => Number.parseFloat(el.style.width);
 
 async function board() {
   m.experiments.mockResolvedValue(page([
-    row(1, { metrics: { loss: 0.3, acc: 0.9 }, started_at: "2026-01-01T00:00:00Z", finished_at: null }),
+    row(1, { metrics: { loss: 0.3, acc: 0.9 }, kind: "outer", children: ["a"], started_at: "2026-01-01T00:00:00Z", finished_at: null }),
   ]));
   const utils = renderBoard();
   await screen.findByText("0.0.1-dev.x");

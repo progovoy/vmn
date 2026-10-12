@@ -5,8 +5,9 @@ import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
 import { tagLabel } from "../util/tags";
 import {
-  DATE_SORT_OF, cellId, columnIds, defaultColumnIds, fleetCounts, type ColMeta, type ColumnCell, type FleetCol,
+  DATE_SORT_OF, cellId, columnIds, defaultColumnIds, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
+import { innerRunCount } from "./innerRunColumns";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
@@ -63,12 +64,10 @@ function MetricCell({ id, v, col, style, showBest }: {
 const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const shortDate = (iso: string | null | undefined) => (iso ? SHORT_DATE.format(new Date(iso)) : "—");
 
-function FleetCell({ r, c, counts, style }: {
-  r: ExperimentRow; c: string; counts: ReturnType<typeof fleetCounts>; style: CSSProperties;
-}) {
+function FleetCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProperties }) {
   const field = DATE_SORT_OF[`c:${c}`];
   const date = field ? r[field] : undefined;
-  const text = date !== undefined ? shortDate(date) : counts ? String(counts[c as keyof typeof counts]) : "—";
+  const text = date !== undefined ? shortDate(date) : innerRunCount(r, c);
   return (
     <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={date ?? undefined}>
       {text}
@@ -176,7 +175,6 @@ function Row({
   const { styles, colMeta } = layout;
   const href = runHref(layout.runBase, r.verstr);
   const params = layout.paramCols.length ? rowParams(r) : {};
-  const counts = fleetCounts(r);
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
   // link opens a tab); anywhere else on the row opens the run.
   const onClick = (e: MouseEvent) => {
@@ -229,7 +227,7 @@ function Row({
           </td>
         );
     }
-    if (id.startsWith("c:")) return <FleetCell key={id} r={r} c={name} counts={counts} style={style} />;
+    if (id.startsWith("c:")) return <FleetCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (
         <MetricCell key={id} id={id} v={r.metrics[name]} col={colMeta[name]} style={style} showBest={layout.showBest} />

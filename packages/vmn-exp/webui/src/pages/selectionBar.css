@@ -43,6 +43,10 @@
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   padding: 10px 16px; border-left: 1px solid var(--line);
 }
+/* An inapplicable action stays focusable (aria-disabled), looking as a
+   disabled button does. */
+.sel-actions button[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+.sel-actions button[aria-disabled="true"]:hover { border-color: var(--line-2); }
 .sel-toast {
   position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
   max-width: 100%; padding: 6px 12px; box-sizing: border-box;

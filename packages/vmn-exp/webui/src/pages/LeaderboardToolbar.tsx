@@ -6,6 +6,7 @@ import SavedViews from "../components/SavedViews";
 import { useCanCreateRun } from "../shell/useAppExists";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
+import { isInnerRunId } from "./innerRunColumns";
 
 /** The bar above the leaderboard: live toggle, the create button (only where
  *  a run can be created), saved views and the columns (the selection's
@@ -53,7 +54,11 @@ export default function LeaderboardToolbar({
         metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
         onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
         otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
-        onToggleOther={(c) => view.toggleHidden(`c:${c}`)}
+        onToggleOther={(c) => {
+          const id = `c:${c}`;
+          if (isInnerRunId(id)) view.setColumnShown(id, !cols.visibleOther.includes(c));
+          else view.toggleHidden(id);
+        }}
         orderedCells={cols.cells}
         pinnedCols={view.pinned}
         onMoveColumn={onMoveColumn}

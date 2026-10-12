@@ -11,6 +11,7 @@ import { EMPTY_PREFS, type ColumnPrefs } from "./useColumnPrefs";
 import type { SuggestFacets } from "../util/querySuggest";
 import { orderedKeys } from "../util/columnOrder";
 import { schemaHides } from "../util/hiddenMetrics";
+import { anyOuter, isInnerRunId } from "../pages/innerRunColumns";
 
 /** *value*, or the previous one when structurally equal — so a poll that
  *  moves no column best leaves every memoized row alone. */
@@ -32,6 +33,7 @@ const splitKey = (key: string) => (key ? key.split("\u0000") : []);
 // Stable empty array used as default param so callers that omit order/pinned
 // don't trigger useMemo re-runs on every render.
 const EMPTY: readonly string[] = [];
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
 /** The table's columns: metric and param columns from the rows (minus the
  *  hidden `m:`/`p:` ones), their widths, and the row layout every row shares.
@@ -51,6 +53,9 @@ export function useLeaderboardColumns(
   prefs: ColumnPrefs = EMPTY_PREFS,
   /** Width (px) the table has to fill. */
   fill = 0,
+  /** Columns the user turned on (`show=`): the inner-run counts, which are
+   *  otherwise shown only while an outer run is on the board. */
+  shown: ReadonlySet<string> = EMPTY_SET,
 ) {
   const list = rows ?? [];
   const primary = useMemo(
@@ -114,7 +119,11 @@ export function useLeaderboardColumns(
   const showTags = hasTags && !hidden.has(TAGS_COLUMN);
   const hasComments = useMemo(() => anyComments(rows), [rows]);
   const showComments = hasComments && hidden.has(COMMENTS_COLUMN);
-  const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => !hidden.has(`c:${c}`)), [hidden]);
+  const hasOuter = useMemo(() => anyOuter(rows), [rows]);
+  const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => {
+    const id = `c:${c}`;
+    return !hidden.has(id) && (hasOuter || shown.has(id) || !isInnerRunId(id));
+  }), [hidden, shown, hasOuter]);
 
   const { widths, order: savedOrder } = prefs;
   const layout = useMemo((): RowLayout => {
