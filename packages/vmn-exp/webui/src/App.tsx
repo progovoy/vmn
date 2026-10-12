@@ -4,10 +4,11 @@ import {
   Link, NavLink, Outlet, useLocation, useMatches, useNavigate,
 } from "react-router-dom";
 import { appName as toAppName } from "./api";
-import { useApps, useMeta, useWorkspaces, WORKSPACES_KEY } from "./queries";
+import { useMeta, useWorkspaces, WORKSPACES_KEY } from "./queries";
 import CommandPalette from "./components/CommandPalette";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ThemeToggle from "./components/ThemeToggle";
+import { useShellContext } from "./shell/useShellContext";
 import { CopyPath, wsLocation } from "./components/ui";
 
 function NavIcon({ name }: { name: string }) {
@@ -49,6 +50,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const shellCtx = useShellContext();
 
   // Route context comes from the router itself (see handle.page in routes.tsx).
   const matches = useMatches();
@@ -60,7 +62,6 @@ export default function App() {
   const appName = appTag ? toAppName(appTag) : undefined;
   const appBase = ws && appTag ? `/ws/${ws}/app/${appTag}` : null;
   const workspaces = useWorkspaces().data ?? [];
-  const apps = useApps(ws).data ?? [];
   const vmnVersion = useMeta().data?.version ?? "";
   const currentWs = workspaces.find((w) => w.name === ws);
 
@@ -207,13 +208,7 @@ export default function App() {
       </div>
 
       {paletteOpen && (
-        <CommandPalette
-          ws={ws}
-          app={appName}
-          workspaces={workspaces}
-          apps={apps}
-          onClose={() => setPaletteOpen(false)}
-        />
+        <CommandPalette ctx={shellCtx} onClose={() => setPaletteOpen(false)} />
       )}
     </div>
   );
