@@ -53,7 +53,6 @@ from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
-from vmn_exp.ui.routes_tree import _not_a_repo_response
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -447,10 +446,7 @@ def create_app(
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions", dependencies=[require(VIEWER)])
     def list_versions(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        try:
-            return source.workspace_index(ws).list_versions(_app_name(app_tag))
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            return _not_a_repo_response(ws.path)
+        return source.workspace_index(ws).list_versions(_app_name(app_tag))
 
     @app.post(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/actions/{{action}}",

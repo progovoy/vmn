@@ -130,13 +130,11 @@ def _tree_statuses(verstrs, children_of, by_verstr, parent_of):
                 stack.append((node, True))
                 stack.extend((c, False) for c in children if c not in best)
                 continue
-            # A container outer (has children, own status "created") is a pure
-            # wrapper — exclude its own status so it doesn't drag the rollup
-            # down to "created" when all children succeeded.
-            if _is_container(node, children_of, by_verstr):
-                own = len(rank)  # sentinel: won't affect min
+            status = (by_verstr.get(node) or {}).get("status")
+            if children and status == CREATED:
+                own = len(rank)
             else:
-                own = rank.get((by_verstr.get(node) or {}).get("status"), len(rank))
+                own = rank.get(status, len(rank))
             best[node] = min([own] + [best[c] for c in children])
     return {v: (_PRECEDENCE + (None,))[best[v]] for v in verstrs}
 

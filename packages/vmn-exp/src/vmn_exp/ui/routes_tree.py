@@ -23,39 +23,36 @@ def register(app, prefix, checkout_for, optional_segment):
     """Add the routes; *checkout_for(ws_name, app_tag)* → ``(root_path, app_name)``."""
     base = f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
 
+    @app.exception_handler(git.InvalidGitRepositoryError)
+    @app.exception_handler(git.NoSuchPathError)
+    async def _handle_not_a_repo(request, exc):
+        path = getattr(exc, "args", ("",))[0] if exc.args else ""
+        return _not_a_repo_response(path)
+
     @app.get(f"{base}/tree", dependencies=[require(VIEWER)])
     def version_tree(ws_name: str, app_tag: str):
         root, app_name = checkout_for(ws_name, app_tag)
-        try:
-            return TREES.get(root, app_name, "dag", lambda: tree_reader.version_dag(root, app_name))
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            return _not_a_repo_response(root)
+        return TREES.get(root, app_name, "dag", lambda: tree_reader.version_dag(root, app_name))
 
     @app.get(f"{base}/tree/root", dependencies=[require(VIEWER)])
     def root_tree(ws_name: str, app_tag: str):
         root, app_name = checkout_for(ws_name, app_tag)
-        try:
-            return TREES.get(
-                root, app_name, "root", lambda: tree_reader.root_topology(root, app_name)
-            )
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            return _not_a_repo_response(root)
+        return TREES.get(
+            root, app_name, "root", lambda: tree_reader.root_topology(root, app_name)
+        )
 
     @app.get(f"{base}/deps", dependencies=[require(VIEWER)])
     def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):
         root, app_name = checkout_for(ws_name, app_tag)
         verstr, to_verstr = optional_segment(v), optional_segment(to)
-        try:
-            graph, err = TREES.get(
-                root,
-                app_name,
-                "deps",
-                lambda: tree_reader.dep_graph(root, app_name, verstr=verstr, to_verstr=to_verstr),
-                verstr,
-                to_verstr,
-            )
-        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-            return _not_a_repo_response(root)
+        graph, err = TREES.get(
+            root,
+            app_name,
+            "deps",
+            lambda: tree_reader.dep_graph(root, app_name, verstr=verstr, to_verstr=to_verstr),
+            verstr,
+            to_verstr,
+        )
         if err:
             raise HTTPException(404, err)
         return graph
