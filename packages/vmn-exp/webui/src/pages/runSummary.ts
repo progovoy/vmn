@@ -54,6 +54,8 @@ function statusFromRow(r: ExperimentRow): RunStatus | null {
     depth: r.depth ?? 0,
     tree_status: r.tree_status ?? null,
     last_metric_at: r.last_metric_at ?? null,
+    error_summary: r.error_summary ?? null,
+    signal: r.signal ?? null,
   };
 }
 

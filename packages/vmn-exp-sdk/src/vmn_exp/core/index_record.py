@@ -10,6 +10,7 @@ from vmn_exp.core.fold import new_fold
 from vmn_exp.core.index_logs import log_signatures, record_signatures, update_logs
 from vmn_exp.core.index_sweep import METADATA_FILE
 from vmn_exp.core.record_format import readable
+from vmn_exp.core.run_error import slim_run_state
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 
 
@@ -70,7 +71,7 @@ def _update_run_state(storage, app_name, key, names, record):
     rs_sig = _sig(names.get(RUN_STATE_FILE))
     if record["rs_sig"] == rs_sig:
         return False
-    record["run_state"] = load_run_state(storage, app_name, key) if rs_sig else None
+    record["run_state"] = slim_run_state(load_run_state(storage, app_name, key)) if rs_sig else None
     record["rs_sig"] = rs_sig
     return True
 

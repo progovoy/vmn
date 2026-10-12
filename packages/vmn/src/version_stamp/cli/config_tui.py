@@ -26,6 +26,7 @@ from version_stamp.core.models import VMN_DEFAULT_CONF
 from version_stamp.core.utils import (
     _conf_basename,
     branch_conf_canonical_path,
+    conf_mapping,
     resolve_branch_conf_path,
 )
 from version_stamp.core.version_math import get_root_app_name_from_name
@@ -37,10 +38,7 @@ def _read_raw_conf(conf_path):
     if not os.path.isfile(conf_path):
         return {}
     with open(conf_path) as f:
-        data = yaml.safe_load(f)
-    if data and "conf" in data:
-        return data["conf"]
-    return {}
+        return conf_mapping(yaml.safe_load(f))
 
 
 def _write_full_config(conf_path, raw_conf):
@@ -90,7 +88,7 @@ def _resolve_conf_target(vmn_ctx):
     app_dir = _root_app_dir(vcs) if root else vcs.app_dir_path
 
     if vmn_ctx.args.branch:
-        branch = vcs.backend.logical_branch()
+        branch = vcs.backend.active_branch
         conf_path = branch_conf_canonical_path(app_dir, branch, root=root)
         if os.path.isfile(conf_path):
             seed_source = conf_path

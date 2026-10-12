@@ -7,7 +7,12 @@ import tempfile
 
 import yaml
 
-from version_stamp.core.constants import BRANCH_CONF_DIR, ISLAND_BRANCH_PREFIX, JINJA_TAG_RE
+from version_stamp.core.constants import (
+    BRANCH_CONF_DIR,
+    ISLAND_BRANCH_PREFIX,
+    JINJA_TAG_RE,
+    LEGACY_TRACKING_PREFIX,
+)
 from version_stamp.core.logging import VMN_LOGGER
 
 # libyaml's loader is ~10x faster than the pure-Python one, and experiment
@@ -18,6 +23,13 @@ _FAST_SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 def yaml_safe_load(stream_or_text):
     """``yaml.safe_load`` semantics, on the C loader when libyaml is present."""
     return yaml.load(stream_or_text, Loader=_FAST_SAFE_LOADER)
+
+
+def conf_mapping(data):
+    """The ``conf`` mapping of a loaded conf file; ``{}`` for an empty file, a
+    bare ``conf:`` or a file without the key."""
+    conf = data.get("conf") if isinstance(data, dict) else None
+    return conf if isinstance(conf, dict) else {}
 
 
 def parse_record_metadata(raw):
@@ -188,6 +200,20 @@ def _conf_basename(root):
 def is_island_branch(branch):
     """True for a private `vmn wt` branch (island/<name>/<source>)."""
     return bool(branch) and branch.startswith(ISLAND_BRANCH_PREFIX)
+
+
+def is_legacy_tracking_branch(branch):
+    """True for a vmn_tracking_remote__* branch older vmn created."""
+    return bool(branch) and branch.startswith(LEGACY_TRACKING_PREFIX)
+
+
+def legacy_tracking_branch_name(remote_ref, hexsha):
+    return f"{LEGACY_TRACKING_PREFIX}{remote_ref.replace('/', '_')}__from_{hexsha[:5]}"
+
+
+def one_line_reason(exc):
+    """An exception's message on one line, for log messages."""
+    return str(exc).replace("\n", " ").strip()
 
 
 def branch_conf_canonical_path(app_dir_path, branch, root=False):

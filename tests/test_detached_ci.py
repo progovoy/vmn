@@ -1,6 +1,5 @@
 """goto / stamp / release / add from detached (CI-style) checkouts (plan 17 §4)."""
 
-import pytest
 from helpers import (
     _add_buildmetadata_to_version,
     _configure_2_deps,
@@ -8,23 +7,18 @@ from helpers import (
     _release_app,
     _stamp_app,
 )
-from island_helpers import _commit, _out
-from test_ensure_on_branch import (
-    LEGACY,
+from island_helpers import (  # noqa: F401 (_no_ci_env is an autouse fixture)
     _branches,
     _ci_checkout,
+    _commit,
     _current,
     _head,
+    _no_ci_env,
+    _out,
     _push_head_as,
     _stamped_repo,
 )
-from version_stamp.backends.branch_resolver import CI_BRANCH_ENV_VARS
-
-
-@pytest.fixture(autouse=True)
-def _no_ci_env(monkeypatch):
-    for name in (*CI_BRANCH_ENV_VARS, "GITHUB_REF_TYPE"):
-        monkeypatch.delenv(name, raising=False)
+from version_stamp.core.constants import LEGACY_TRACKING_PREFIX as LEGACY
 
 
 def _remote_tags(repo):

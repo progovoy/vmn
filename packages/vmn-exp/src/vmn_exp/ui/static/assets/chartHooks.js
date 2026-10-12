@@ -1,1 +1,1 @@
-import{E as u,r,aV as p}from"./index.js";function c(a){var o;const{ws:s,app:t}=u(),n=(o=r.useContext(p))==null?void 0:o.navigator;return r.useCallback(e=>{a?a(e):n&&s&&t&&n.push(`/ws/${s}/app/${t}/run/${encodeURIComponent(e)}`)},[a,n,s,t])}export{c as u};
+import{F as u,r,aW as p}from"./index.js";function c(a){var o;const{ws:s,app:t}=u(),n=(o=r.useContext(p))==null?void 0:o.navigator;return r.useCallback(e=>{a?a(e):n&&s&&t&&n.push(`/ws/${s}/app/${t}/run/${encodeURIComponent(e)}`)},[a,n,s,t])}export{c as u};

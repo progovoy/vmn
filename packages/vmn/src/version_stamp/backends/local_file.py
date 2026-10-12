@@ -48,6 +48,7 @@ class LocalFileBackend(VMNBackend):
 
         self.repo_path = repo_path
         self.active_branch = "none"
+        self.local_branch = "none"
         self.remote_active_branch = "remote/none"
 
     def perform_cached_fetch(self, force=False):

@@ -20,6 +20,8 @@ INIT_COMMIT_MESSAGE = "Initialized vmn tracking"
 BRANCH_CONF_DIR = "branch_conf"
 VMN_READONLY_REMOTE = "vmn-readonly"
 ISLAND_BRANCH_PREFIX = "island/"
+# Branches older vmn created for a detached HEAD (plan 17); kept as a fallback.
+LEGACY_TRACKING_PREFIX = "vmn_tracking_remote__"
 
 # ── Regex patterns ───────────────────────────────────────────────────
 

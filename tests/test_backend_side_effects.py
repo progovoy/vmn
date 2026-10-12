@@ -4,7 +4,7 @@ import os
 import git
 
 from helpers import _configure_2_deps, _init_app, _run_vmn_init, _show, _stamp_app
-from island_helpers import _commit, _out
+from island_helpers import _ci_checkout, _commit, _out
 from version_stamp.backends import factory
 from version_stamp.backends.git import GitBackend
 from version_stamp.cli.entry import vmn_run
@@ -71,7 +71,7 @@ def test_read_only_backend_reports_remote_branch_without_creating_one(app_layout
     branch = _detach_past_local_branches(repo)
     before = _repo_state(repo)
 
-    backend = GitBackend(repo, read_only=True)
+    backend = GitBackend(repo)
 
     assert _repo_state(repo) == before
     assert backend.active_branch == branch
@@ -83,8 +83,7 @@ def test_backend_in_a_ci_checkout_changes_nothing(app_layout):
     _stamped_repo(app_layout)
     repo = app_layout.repo_path
     branch = _out(repo, "branch", "--show-current")
-    _out(repo, "checkout", "-q", "-f", _out(repo, "rev-parse", "HEAD"))
-    _out(repo, "branch", "-q", "-D", branch)
+    _ci_checkout(repo, branch)
     before = _repo_state(repo)
 
     backend = GitBackend(repo)
@@ -99,8 +98,7 @@ def test_goto_deps_only_in_a_ci_checkout_changes_nothing(app_layout):
     _stamped_repo(app_layout)
     repo = app_layout.repo_path
     branch = _out(repo, "branch", "--show-current")
-    _out(repo, "checkout", "-q", "-f", _out(repo, "rev-parse", "HEAD"))
-    _out(repo, "branch", "-q", "-D", branch)
+    _ci_checkout(repo, branch)
     before = _repo_state(repo)
 
     reset_logger()

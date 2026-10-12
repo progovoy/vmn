@@ -2,51 +2,20 @@
 
 import os
 
-import pytest
-from helpers import _goto, _init_app, _run_vmn_init, _stamp_app
-from island_helpers import _commit, _out
-from version_stamp.backends.branch_resolver import CI_BRANCH_ENV_VARS
+from helpers import _goto, _stamp_app
+from island_helpers import (  # noqa: F401 (_no_ci_env is an autouse fixture)
+    _branches,
+    _ci_checkout,
+    _commit,
+    _current,
+    _head,
+    _no_ci_env,
+    _out,
+    _push_head_as,
+    _stamped_repo,
+)
+from version_stamp.core.constants import LEGACY_TRACKING_PREFIX as LEGACY
 from version_stamp.backends.git import GitBackend
-
-LEGACY = "vmn_tracking_remote__"
-
-
-@pytest.fixture(autouse=True)
-def _no_ci_env(monkeypatch):
-    for name in (*CI_BRANCH_ENV_VARS, "GITHUB_REF_TYPE"):
-        monkeypatch.delenv(name, raising=False)
-
-
-def _stamped_repo(app_layout):
-    _run_vmn_init()
-    _, _, params = _init_app(app_layout.app_name)
-    assert _stamp_app(app_layout.app_name, "patch")[0] == 0
-    repo = app_layout.repo_path
-    return repo, _out(repo, "branch", "--show-current"), params
-
-
-def _branches(repo):
-    return _out(
-        repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/"
-    ).split()
-
-
-def _head(repo):
-    return _out(repo, "rev-parse", "HEAD")
-
-
-def _current(repo):
-    return _out(repo, "branch", "--show-current")
-
-
-def _ci_checkout(repo, default, rev="HEAD"):
-    _out(repo, "checkout", "-q", "-f", _out(repo, "rev-parse", rev))
-    _out(repo, "branch", "-q", "-D", default)
-
-
-def _push_head_as(repo, name):
-    _out(repo, "push", "-q", "origin", f"HEAD:refs/heads/{name}")
-    _out(repo, "fetch", "-q", "origin")
 
 
 def _stamp_ensure(repo):

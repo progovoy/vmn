@@ -34,22 +34,52 @@ def popen_kwargs(env):
     return {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "env": env}
 
 
+# The end of the child's stderr kept apart from output.log, where stdout lines
+# can interleave with a traceback: the run's error is parsed from it.
+_STDERR_TAIL_BYTES = 64 * 1024
+
+
+class TailBuffer:
+    """The last *cap* bytes written; one writer thread, read after it ends."""
+
+    def __init__(self, cap):
+        self._cap = cap
+        self._buf = bytearray()
+
+    def write(self, data):
+        self._buf += data
+        if len(self._buf) > 2 * self._cap:  # trim in batches: amortized O(1)
+            del self._buf[:-self._cap]
+
+    def text(self):
+        return bytes(self._buf[-self._cap:]).decode("utf-8", errors="replace")
+
+
 class OutputTee:
     """Pump a child's two pipes until they close."""
 
     def __init__(self, proc, sink):
+        self._stderr = TailBuffer(_STDERR_TAIL_BYTES)
+
+        def stderr_sink(data):
+            self._stderr.write(data)
+            sink(data)
+
         self._threads = [
             threading.Thread(
                 target=pump,
-                args=(stream.fileno(), fd, sink),
+                args=(stream.fileno(), fd, stream_sink),
                 name=f"vmn-exp-output-{fd}",
                 daemon=True,
             )
-            for stream, fd in ((proc.stdout, 1), (proc.stderr, 2))
+            for stream, fd, stream_sink in ((proc.stdout, 1, sink), (proc.stderr, 2, stderr_sink))
         ]
         for thread in self._threads:
             thread.start()
 
     def drain(self, timeout=_DRAIN_TIMEOUT_SEC):
         join_all(self._threads, timeout)
+
+    def stderr_text(self):
+        return self._stderr.text()
 

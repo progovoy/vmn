@@ -16,7 +16,6 @@ from version_stamp import version as version_mod
 from version_stamp.backends.factory import get_client
 from version_stamp.compat.config_keys import (
     migrate_config_keys,
-    warn_vmn_version_file_backend,
 )
 from version_stamp.compat.template_format import migrate_old_template
 from version_stamp.compat.version_file_084 import read_version_from_old_file
@@ -33,6 +32,7 @@ from version_stamp.core.models import VMN_DEFAULT_CONF, AppConf
 from version_stamp.core.utils import (
     WrongTagFormatException,
     comment_out_jinja,
+    conf_mapping,
     resolve_branch_conf_path,
     yaml_safe_load,
 )
@@ -77,6 +77,30 @@ class IVersionsStamper:
         self.name: str = arg_params["name"]
         self.be_type = arg_params["be_type"]
 
+        # root_context means that the user uses vmn in a context of a root app
+        self.root_context = arg_params["root"]
+
+        self.backend, err = get_client(
+            self.vmn_root_path, self.be_type, inherit_env=True, use_ci_hint=True
+        )
+        if err:
+            err_str = f"Failed to create backend {err}. Exiting"
+            VMN_LOGGER.error(err_str)
+            raise RuntimeError(err_str)
+
+        self._load_app()
+
+    def ensure_on_branch(self):
+        """Put a detached HEAD on its branch (commands that commit); reload the
+        app when that changes the branch it belongs to. True when on one."""
+        before = self.backend.logical_branch() if self.name is not None else None
+        on_branch = self.backend.ensure_on_branch(require_tip=True)
+        if self.name is not None and self.backend.logical_branch() != before:
+            self._load_app()
+        return on_branch
+
+    def _load_app(self):
+        """The app's conf and repo state, for the branch HEAD belongs to."""
         # Configuration defaults — AppConf is the single source of truth.
         # Individual attributes remain on self for backward compatibility
         # (tests and external code access self.__dict__).
@@ -98,26 +122,6 @@ class IVersionsStamper:
             },
             "stamping": {"msg": "", "app": {"info": {}}, "root_app": {}},
         }
-
-        # root_context means that the user uses vmn in a context of a root app
-        self.root_context = arg_params["root"]
-
-        self.read_only = arg_params.get("read_only", False)
-        self.backend, err = get_client(
-            self.vmn_root_path,
-            self.be_type,
-            inherit_env=True,
-            read_only=self.read_only,
-            use_ci_hint=True,
-        )
-        if err:
-            err_str = f"Failed to create backend {err}. Exiting"
-            VMN_LOGGER.error(err_str)
-            raise RuntimeError(err_str)
-
-        # Commands that commit need a branch (CI checkouts are detached).
-        if arg_params.get("ensure_branch"):
-            self.backend.ensure_on_branch(require_tip=True, use_ci_hint=True)
 
         if self.name is None:
             self.tracked = False
@@ -150,25 +154,28 @@ class IVersionsStamper:
     _CONF_KEY_TO_ATTR = AppConf.conf_key_to_attr()
 
     def update_attrs_from_app_conf_file(self):
+        # Whether the loaded conf has keys `vmn stamp` rewrites on disk.
+        self.conf_has_deprecated_keys = False
         # TODO:: handle deleted app with missing conf file
         if os.path.isfile(self.app_conf_path):
             self.conf_file_exists = True
 
             with open(self.app_conf_path) as f:
-                data = yaml_safe_load(f)
-                if "conf" in data:
-                    if "template" in data["conf"]:
-                        self.raw_template = migrate_old_template(
-                            data["conf"]["template"], VMN_DEFAULT_CONF["template"]
-                        )
+                conf = conf_mapping(yaml_safe_load(f))
+            if "template" in conf:
+                self.raw_template = migrate_old_template(
+                    conf["template"], VMN_DEFAULT_CONF["template"]
+                )
 
-                    migrate_config_keys(data["conf"], self.app_conf_path)
+            self.conf_has_deprecated_keys = migrate_config_keys(
+                conf, self.app_conf_path
+            )
 
-                    for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
-                        if conf_key == "template":
-                            continue  # handled above with old-template detection
-                        if conf_key in data["conf"]:
-                            setattr(self, attr_name, data["conf"][conf_key])
+            for conf_key, attr_name in self._CONF_KEY_TO_ATTR.items():
+                if conf_key == "template":
+                    continue  # handled above with old-template detection
+                if conf_key in conf:
+                    setattr(self, attr_name, conf[conf_key])
 
         self.set_template(self.raw_template)
 
@@ -177,9 +184,9 @@ class IVersionsStamper:
         ):
             self.root_conf_file_exists = True
             with open(self.root_app_conf_path) as f:
-                data = yaml_safe_load(f)
-                if "external_services" in data["conf"]:
-                    self.external_services = data["conf"]["external_services"]
+                conf = conf_mapping(yaml_safe_load(f))
+            if "external_services" in conf:
+                self.external_services = conf["external_services"]
 
     def initialize_paths(self):
         self.app_dir_path = os.path.join(
@@ -189,7 +196,7 @@ class IVersionsStamper:
         self.version_file_path = os.path.join(self.app_dir_path, VER_FILE_NAME)
 
         self.app_conf_path, _ = resolve_branch_conf_path(
-            self.app_dir_path, self.backend.logical_branch()
+            self.app_dir_path, self.backend.active_branch
         )
 
         if self.root_context:
@@ -207,7 +214,7 @@ class IVersionsStamper:
 
             self.root_app_conf_path, _ = resolve_branch_conf_path(
                 self.root_app_dir_path,
-                self.backend.logical_branch(),
+                self.backend.active_branch,
                 root=True,
             )
 
@@ -690,15 +697,12 @@ class IVersionsStamper:
                 "Would have written to version file:\n" f"version: {version_number}\n"
             )
         else:
-            self._write_version_to_vmn_version_file(version_number)
+            self._write_last_known_version_file(version_number)
 
         if not self.version_backends:
             return
 
         for backend, backend_conf in self.version_backends.items():
-            if warn_vmn_version_file_backend(backend):
-                continue
-
             if backend in self._STRUCTURED_BACKEND_SPEC:
                 self._write_version_to_structured(version_number, backend_conf, backend)
                 continue
@@ -884,7 +888,7 @@ class IVersionsStamper:
 
             shutil.copy2(tmp_path, final_path)
 
-    def _write_version_to_vmn_version_file(self, verstr):
+    def _write_last_known_version_file(self, verstr):
         file_path = self.version_file_path
         try:
             with open(file_path, "w") as fid:

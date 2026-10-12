@@ -1,4 +1,5 @@
 import ArtifactPreview from "./ArtifactPreview";
+import { OUTPUT_ANCHOR } from "./RunErrorCard";
 import type { Artifact } from "../util/artifactTree";
 
 /** The console output `vmn-exp run` (or `start_run(capture_output=True)`)
@@ -11,7 +12,7 @@ export default function RunOutput({ artifacts, downloadUrl }: {
   const output = artifacts.find((a) => a.name === OUTPUT_LOG);
   if (!output) return null;
   return (
-    <div className="card">
+    <div className="card" id={OUTPUT_ANCHOR}>
       <div className="eyebrow">output</div>
       <ArtifactPreview artifact={output} url={downloadUrl(OUTPUT_LOG)} />
     </div>

@@ -230,3 +230,17 @@ def test_sigterm_with_no_open_run_just_kills(app_layout):
     rc, out = _terminate(proc)
 
     assert rc == -signal.SIGTERM, out
+
+
+def test_sigterm_records_the_signal_that_ended_the_run(app_layout):
+    # ``signal`` is what readers show ("killed by SIGTERM"); ``received_signal``
+    # alone only says one arrived.
+    _bootstrap(app_layout)
+    marker = os.path.join(app_layout.base_dir, "opened")
+    proc = _spawn(app_layout, _OPEN_AND_WAIT.format(prelude=""), MARKER=marker)
+    verstr = _wait_for_file(marker, proc)
+
+    _terminate(proc)
+
+    state = load_run_state(_storage(app_layout), app_layout.app_name, verstr)
+    assert state["signal"] == "SIGTERM", state

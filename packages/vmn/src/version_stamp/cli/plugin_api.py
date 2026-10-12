@@ -19,7 +19,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, FrozenSet, Optional, Tuple
+from typing import Callable, FrozenSet, Optional, Tuple, Union
 
 
 @dataclass
@@ -48,6 +48,10 @@ class CommandSpec:
         returns a non-None value, the call is handled without resolving a git
         repo and acquiring the lock.  Return ``None`` to fall through to normal
         repo-aware dispatch.
+    commits:
+        True, or a callable ``commits(args) -> bool``, when the command creates
+        a commit: vmn then puts a detached HEAD (a CI checkout) on its branch
+        before the command runs.
     """
 
     names: Tuple[str, ...]
@@ -57,6 +61,7 @@ class CommandSpec:
     read_only_actions: FrozenSet[str] = field(default_factory=frozenset)
     split_after_double_dash: bool = False
     run_without_repo: Optional[Callable] = None
+    commits: Union[bool, Callable] = False
 
 
 # ---------------------------------------------------------------------------

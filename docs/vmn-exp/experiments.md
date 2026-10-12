@@ -264,8 +264,19 @@ of `vmn-exp run` itself leaves a run claiming `running` (it then derives
 `stuck`). Failing heartbeat writes, bad metric lines or hung syncs never end
 supervision: vmn warns and keeps watching.
 
+When the command fails (non-zero exit, not a sweep's `stopped`) and its
+output is captured, the final state also records `error`, parsed from
+`output.log`: `source: output`, the `output_tail` (last 50 lines) and, when the
+output holds a Python traceback, its `type`, `message` and `traceback`. Not with
+`--no-capture-output`. The SDK records `error` from the exception itself
+(`source: exception`) and `signal` when SIGTERM finalized the run. Rows and
+queries carry the one-line `error_summary` (`Type: message`); a failure alert's
+text ends with it too.
+
 `exp list` shows a status per row; `exp show` prints `Status:`, exit code,
-duration, `Runner: pid … on <host>`, and the heartbeat age when `stuck`.
+duration, `Runner: pid … on <host>`, the heartbeat age when `stuck`, and an
+`Error:` block (`Type: message`, then the traceback or output tail) for a run
+with an `error`; `show --json` carries the full `error`.
 
 ### Alerts
 

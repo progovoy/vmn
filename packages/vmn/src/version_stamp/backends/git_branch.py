@@ -2,7 +2,7 @@
 """Git backend mixin: branch, checkout, and state-check operations."""
 from version_stamp.core.constants import VMN_READONLY_REMOTE
 from version_stamp.core.logging import VMN_LOGGER, measure_runtime_decorator
-from version_stamp.core.utils import is_island_branch
+from version_stamp.core.utils import is_island_branch, one_line_reason
 
 
 def _is_island_readonly_upstream(local_branch_name, upstream):
@@ -24,45 +24,14 @@ class GitBranchMixin:
     @measure_runtime_decorator
     def get_active_branch(self):
         """The checked-out branch; for a detached HEAD the branch resolved for
-        it (None when no branch contains it). Never changes the repo."""
-        if not self.in_detached_head():
-            return self._be.active_branch.name
-
-        choice = self.resolve_branch(
-            self._be.head.commit.hexsha, use_ci_hint=self.use_ci_hint
-        )
-        if choice is None:
-            return None
-        if choice.rule == "legacy":
-            VMN_LOGGER.debug(
-                f"Detached HEAD is on several branches {choice.candidates}; "
-                f"reporting {choice.name}"
-            )
-        if not choice.is_local:
-            self.remote_active_branch = f"{self.selected_remote.name}/{choice.name}"
-        return choice.name
-
-    def _branches_under(self, hexsha, *ref_prefixes):
-        """Names (prefix stripped) of the refs under ref_prefixes containing
-        hexsha, in ref_prefixes order, without duplicates."""
-        out = self._be.git.for_each_ref(
-            "--contains", hexsha, "--format=%(refname)", *ref_prefixes
-        ).splitlines()
-        names = []
-        for prefix in ref_prefixes:
-            for ref in out:
-                name = ref[len(prefix) :] if ref.startswith(prefix) else None
-                if name and name != "HEAD" and name not in names:
-                    names.append(name)
-        return names
+        it now (None when no branch contains it). Never changes the repo."""
+        return self._resolve_active_branch()[0]
 
     @measure_runtime_decorator
     def branches_containing(self, hexsha):
         """Local and selected-remote branches (remote prefix stripped) with hexsha."""
-        prefixes = ["refs/heads/"]
-        if self.selected_remote is not None:
-            prefixes.append(f"refs/remotes/{self.selected_remote.name}/")
-        return self._branches_under(hexsha, *prefixes)
+        local, remote = self._refs_containing(hexsha)
+        return list(dict.fromkeys([*local, *remote]))
 
     @measure_runtime_decorator
     def checkout(self, rev=None, tag=None, branch=None):
@@ -74,6 +43,7 @@ class GitBranchMixin:
 
         assert rev is not None
 
+        self._before_head_move()
         self._be.git.checkout(rev)
 
         self.detached_head = self.in_detached_head()
@@ -82,17 +52,18 @@ class GitBranchMixin:
     def checkout_branch(self, branch_name=None):
         try:
             if branch_name is None:
-                branch_name = self.active_branch
+                branch_name = self.local_branch
 
             self.checkout(branch=branch_name)
         except Exception as e:
-            reason = str(e).replace("\n", " ").strip()
-            VMN_LOGGER.error(f"checkout_branch({branch_name}) failed: {reason}")
+            VMN_LOGGER.error(
+                f"checkout_branch({branch_name}) failed: {one_line_reason(e)}"
+            )
             VMN_LOGGER.debug("Exception info: ", exc_info=True)
 
-            return None
+            return False
 
-        return self._be.active_branch.commit.hexsha
+        return True
 
     @measure_runtime_decorator
     def get_remote_tracking_branch(self, local_branch_name):
@@ -141,7 +112,7 @@ class GitBranchMixin:
         if self.remote_active_branch is not None:
             return 0
 
-        local_branch_name = self.active_branch
+        local_branch_name = self.local_branch
 
         VMN_LOGGER.warning(
             f"No remote branch for local branch: {local_branch_name} "
@@ -161,6 +132,7 @@ class GitBranchMixin:
             return 1
 
         try:
+            self._before_ref_change()
             self._be.git.execute(
                 [
                     "git",
@@ -207,13 +179,13 @@ class GitBranchMixin:
         if self.remote_active_branch is None:
             err = (
                 f"No upstream branch found in {self.root()}. "
-                f"for local branch {self.active_branch}. "
+                f"for local branch {self.local_branch}. "
                 f"Probably no upstream branch is set"
             )
 
             return err
 
-        branch_name = self.active_branch
+        branch_name = self.local_branch
         try:
             self._be.git.rev_parse("--verify", f"{self.remote_active_branch}")
         except Exception:

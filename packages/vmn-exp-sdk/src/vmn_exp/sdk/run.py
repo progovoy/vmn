@@ -27,6 +27,7 @@ from vmn_exp.core.inputs import create_input_entry
 from vmn_exp.core.intent import build_intent_entry
 from vmn_exp.core.metric_compact import compact_by, reopen_writer
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
+from vmn_exp.core.run_error import error_from_exception, error_from_message
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
 from vmn_exp.core.storage_resolve import _try_repo_root
 from vmn_exp.core.values import sanitize_entry
@@ -89,19 +90,20 @@ ALERT_DRAIN_SEC = 5
 # ``_note_uncaught_exception`` below) makes it read as failed instead.
 ABANDONED_EXIT_CODE = 1
 
-# Whether an uncaught exception has reached the top of this process. Only
-# this flips the atexit-abandoned default from succeeded to failed:
-# ``SystemExit`` never reaches ``sys.excepthook`` (CPython special-cases it
-# before running atexit handlers), so a bare ``sys.exit(N)`` outside a
-# context-managed run stays indistinguishable from a clean exit here — the
-# same as it would be for any other process without our instrumentation.
-_uncaught_exception_seen = False
+# The uncaught exception that reached the top of this process, if any,
+# recorded as the abandoned runs' ``error``. Only it flips the atexit-abandoned
+# default from succeeded to failed: ``SystemExit`` never reaches
+# ``sys.excepthook`` (CPython special-cases it before running atexit
+# handlers), so a bare ``sys.exit(N)`` outside a context-managed run stays
+# indistinguishable from a clean exit here — the same as it would be for any
+# other process without our instrumentation.
+_uncaught_exception = None
 _prev_excepthook = sys.excepthook
 
 
 def _note_uncaught_exception(exc_type, exc_value, tb):
-    global _uncaught_exception_seen
-    _uncaught_exception_seen = True
+    global _uncaught_exception
+    _uncaught_exception = exc_value
     _prev_excepthook(exc_type, exc_value, tb)
 
 
@@ -378,21 +380,40 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             self._chore_guard("output capture", self._output.start)
         self._heartbeat.start()
 
-    def finish(self, exit_code=0):
+    def finish(self, exit_code=0, error=None):
         """Finalize the run. Idempotent: a second call changes nothing.
+
+        *error* — an exception or a message — is recorded as the final run
+        state's ``error`` (and an ``error`` log entry), whatever *exit_code* is.
 
         Never raises for a storage failure (a flaky remote at the end of a long
         run is logged, not thrown at the workload), and always closes the run —
         it leaves the open-run registry and hands the env back either way.
         """
-        self._finish(exit_code)
+        self._finish(exit_code, error=error)
 
-    def _finish(self, exit_code, **final_state):
+    def _finish(self, exit_code, error=None, **final_state):
         deadline = _final_upload_deadline()
-        if self._record_final(exit_code, deadline, **final_state):
+        if self._record_final(exit_code, deadline, error=error, **final_state):
             self._close_remote_writers(deadline)
 
-    def _record_final(self, exit_code, deadline, **final_state):
+    def _record_error(self, error):
+        """Append the ``error`` log entry of *error*; return its run-state mapping."""
+        if isinstance(error, BaseException):
+            recorded = error_from_exception(error)
+            entry = create_log_entry(
+                "error",
+                exception=type(error).__name__,
+                message=recorded["message"],
+                traceback=recorded["traceback"],
+            )
+        else:
+            recorded = error_from_message(error)
+            entry = create_log_entry("error", message=recorded["message"])
+        self._record_guard("error entry", self._append, entry)
+        return recorded
+
+    def _record_final(self, exit_code, deadline, error=None, **final_state):
         """Write the run's last log entries and final state locally, queue their
         upload and close the run. False if it was finished already.
 
@@ -412,6 +433,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             )
             self._heartbeat.stop()
             duration = self._duration()
+            if error is not None:
+                recorded = self._record_guard("error", self._record_error, error)
+                if recorded is not None:
+                    final_state["error"] = recorded
             self._record_guard(
                 "run entry",
                 self._append,
@@ -473,12 +498,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             # an error — and the real code (when non-zero) beats a generic 1.
             self.finish(exit_code=_system_exit_code(exc))
             return False
-        self._record_guard(
-            "error entry",
-            self._append,
-            create_log_entry("error", exception=type(exc).__name__, message=str(exc)),
-        )
-        self.finish(exit_code=1)
+        self.finish(exit_code=1, error=exc)
         return False  # never swallow — nor replace — the workload's exception
 
     # -- recording ---------------------------------------------------------
@@ -628,14 +648,16 @@ def _finalize_open_runs(exit_code=None, **final_state):
 
     With no explicit *exit_code* (the atexit case) a clean process exit reads
     as succeeded, and only a genuinely uncaught exception reads as failed —
-    see ``_uncaught_exception_seen``. ``_finalize_signaled`` always passes an
+    see ``_uncaught_exception``. ``_finalize_signaled`` always passes an
     explicit code, so a killed process is unaffected.
 
     Only this process's runs: a forked child exiting normally must not finalize
     — and so mark failed — the parent's still-running run.
     """
+    error = None
     if exit_code is None:
-        exit_code = ABANDONED_EXIT_CODE if _uncaught_exception_seen else 0
+        exit_code = ABANDONED_EXIT_CODE if _uncaught_exception is not None else 0
+        error = _uncaught_exception
     # One shared deadline for every run's uploads: a hung remote must not
     # spend the whole budget on each run in turn. Media files are waited for
     # while recording (their entries must precede the final flush); the rest
@@ -644,7 +666,7 @@ def _finalize_open_runs(exit_code=None, **final_state):
     recorded = [
         run
         for run in reversed(context.open_runs())
-        if _quietly(run._record_final, exit_code, deadline, **final_state)
+        if _quietly(run._record_final, exit_code, deadline, error=error, **final_state)
     ]
     for run in recorded:
         _quietly(run._close_remote_writers, deadline)
@@ -680,8 +702,9 @@ def _system_exit_code(exc):
 
 def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it."""
+    name = signal.Signals(signum).name
     with finalizing():
-        _finalize_open_runs(128 + signum, received_signal=signal.Signals(signum).name)
+        _finalize_open_runs(128 + signum, received_signal=name, signal=name)
 
 
 def install_signal_handlers():

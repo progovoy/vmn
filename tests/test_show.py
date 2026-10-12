@@ -725,3 +725,21 @@ def test_show_and_goto_do_not_migrate(app_layout, capfd):
         cwd=app_layout.repo_path,
     ).decode()
     assert status.strip() == ""
+
+
+
+def test_show_base(app_layout, capfd):
+    _run_vmn_init()
+    _init_app(app_layout.app_name)
+    _stamp_app(app_layout.app_name, "hotfix", prerelease="rc")
+    err = _add_buildmetadata_to_version(app_layout, "build.1", version="0.0.0.1-rc.1")
+    assert err == 0
+
+    capfd.readouterr()
+    err = _show(app_layout.app_name, base=True, version="0.0.0.1-rc.1+build.1")
+    assert err == 0
+    assert capfd.readouterr().out == "0.0.0.1\n"
+
+    err = _show(app_layout.app_name, base=True, template="[{major}]")
+    assert err == 0
+    assert capfd.readouterr().out == "0.0.0.1\n"

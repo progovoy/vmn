@@ -333,6 +333,13 @@ def add_arg_show(subprasers):
     pshow.set_defaults(conf=False)
     pshow.add_argument("--raw", dest="raw", action="store_true")
     pshow.set_defaults(raw=False)
+    pshow.add_argument(
+        "--base",
+        dest="base",
+        action="store_true",
+        help="Show only major.minor.patch[.hotfix], without prerelease or buildmetadata",
+    )
+    pshow.set_defaults(base=False)
     pshow.add_argument("--from-file", dest="from_file", action="store_true")
     pshow.set_defaults(from_file=False)
     pshow.add_argument("--ignore-dirty", dest="ignore_dirty", action="store_true")

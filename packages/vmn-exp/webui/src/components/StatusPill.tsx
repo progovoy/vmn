@@ -31,13 +31,16 @@ function describe(
 
 /** Colored pill for a run's job status. `running` pulses; `stuck` carries a
  *  warning glyph so a dead runner never reads as a live one. */
-export default function StatusPill({ status, exitCode, durationSec, staleSec }: {
+export default function StatusPill({ status, exitCode, durationSec, staleSec, errorSummary }: {
   status: RunState;
   exitCode?: number | null;
   durationSec?: number | null;
   staleSec?: number | null;
+  /** What ended a failed run — appended to its tooltip. */
+  errorSummary?: string | null;
 }) {
-  const label = describe(status, exitCode, durationSec, staleSec);
+  const base = describe(status, exitCode, durationSec, staleSec);
+  const label = status === "failed" && errorSummary ? `${base} — ${errorSummary}` : base;
   return (
     <span className={`status-pill ${status}`} title={label} aria-label={label}>
       <span className="dot" />

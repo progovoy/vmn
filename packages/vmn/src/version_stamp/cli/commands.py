@@ -129,10 +129,10 @@ def _log_no_release_mode(vcs):
 
 def _log_checkout_hint(backend):
     """How to get a detached HEAD onto a branch vmn can commit on."""
-    branch = backend.logical_branch()
+    branch = backend.active_branch
     if branch is None:
         command = "git checkout <branch>"
-    elif backend.branch_ref() == f"refs/heads/{branch}":
+    elif backend.active_branch_is_local and branch == backend.local_branch:
         command = f"git checkout {branch}"
     else:
         command = f"git checkout -B {branch} {backend.remote_active_branch}"
@@ -570,6 +570,8 @@ def handle_show(vmn_ctx):
         vmn_ctx.params["raw"] = False
     else:
         vmn_ctx.params["raw"] = vmn_ctx.args.raw
+
+    vmn_ctx.params["base"] = vmn_ctx.args.base
 
     vmn_ctx.params["ignore_dirty"] = vmn_ctx.args.ignore_dirty
 

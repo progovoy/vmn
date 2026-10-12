@@ -2,7 +2,9 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 from helpers import _init_app, _run_vmn_init, _stamp_app
+from version_stamp.backends.branch_resolver import CI_BRANCH_ENV_VARS
 from version_stamp.cli.entry import vmn_run
 
 
@@ -21,6 +23,47 @@ def _commit(path, name, content=None):
     (Path(path) / name).write_text(content or name)
     _git(path, "add", name)
     _git(path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", name)
+
+
+@pytest.fixture(autouse=True)
+def _no_ci_env(monkeypatch):
+    """No CI branch hint leaks in from the host; import into a test module to apply."""
+    for name in (*CI_BRANCH_ENV_VARS, "GITHUB_REF_TYPE"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def _stamped_repo(app_layout):
+    """Stamp the app once. Returns (repo, default branch, init-app params)."""
+    _run_vmn_init()
+    _, _, params = _init_app(app_layout.app_name)
+    assert _stamp_app(app_layout.app_name, "patch")[0] == 0
+    repo = app_layout.repo_path
+    return repo, _out(repo, "branch", "--show-current"), params
+
+
+def _branches(repo):
+    return _out(
+        repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/"
+    ).split()
+
+
+def _head(repo):
+    return _out(repo, "rev-parse", "HEAD")
+
+
+def _current(repo):
+    return _out(repo, "branch", "--show-current")
+
+
+def _ci_checkout(repo, default, rev="HEAD"):
+    """Jenkins-style: detached at rev, no local default branch."""
+    _out(repo, "checkout", "-q", "-f", _out(repo, "rev-parse", rev))
+    _out(repo, "branch", "-q", "-D", default)
+
+
+def _push_head_as(repo, name):
+    _out(repo, "push", "-q", "origin", f"HEAD:refs/heads/{name}")
+    _out(repo, "fetch", "-q", "origin")
 
 
 def _remote_refs(remote):

@@ -29,6 +29,7 @@ from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     PATCH_MAX_BYTES,
     dumps,
+    error_lines,
     event_log,
     format_metric_lines,
     format_number,
@@ -286,6 +287,10 @@ def auto_init(vmn_ctx):
             VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
             return 1
 
+    # The init commits and pushes: a CI checkout detached at a remote tip
+    # commits on that branch, as `vmn stamp` does.
+    if repo_missing or app_missing:
+        vcs.ensure_on_branch()
     err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
     return err or None
 
@@ -742,6 +747,11 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
         print(f"  Runner:    pid {fields['pid']} on {fields['host']}")
     if fields["status"] == STUCK:
         print(f"  Heartbeat: last seen {relative_timestamp(fields['heartbeat'])}")
+    error = error_lines((run_state or {}).get("error"))
+    if error:
+        print(f"  Error:     {error[0]}")
+        for line in error[1:]:
+            print(f"  {line}")
 
     if metadata.get("parent"):
         print(f"  Parent:    {metadata['parent']}")

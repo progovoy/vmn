@@ -242,7 +242,9 @@ conf:
 
 Root apps: `root_conf.yml` accepts `external_services`, recorded in each root
 version. Deprecated keys (`create_verinfo_files`, `default_release_mode:
-optional|strict`) are migrated automatically.
+optional|strict`, `conventional_commits.default_release_mode`, the
+`vmn_version_file` backend) are honoured silently and rewritten in the conf
+file (comments kept) by the next `vmn stamp`, which commits the change.
 
 </details>
 
@@ -302,6 +304,15 @@ the branch name become directories; root apps use `root_conf.yml`). Legacy
 
 - `--dry-run` previews a stamp without committing or tagging.
 - Dirty, detached, outgoing, and dependency states are checked before release.
+- Detached CI checkouts work as they are: vmn never creates or switches branches
+  as a side effect. `stamp` and `release --stamp` check out the real branch
+  whose remote tip is HEAD (`git checkout -b <branch> --track origin/<branch>`);
+  `release` and `add` push only their tag and stay detached. When several
+  branches qualify, the CI's branch variable decides (`BRANCH_NAME`,
+  `GIT_BRANCH`, `GITHUB_HEAD_REF`/`GITHUB_REF_NAME`, `CI_COMMIT_REF_NAME`,
+  `BUILDKITE_BRANCH`, `CIRCLE_BRANCH`, `BITBUCKET_BRANCH`); otherwise vmn warns
+  and picks the first alphabetically. Leftover `vmn_tracking_remote__*` branches
+  from older versions are treated as their upstream and deleted once unused.
 - A per-repository lock prevents concurrent local vmn operations.
 - Release-branch allowlists restrict stable stamps to configured branches.
 - `--pull` fetches remote state and retries version conflicts.
@@ -436,6 +447,7 @@ updated). Takes `--git-push-user`/`--git-push-token`.
 | `-v <version>` | Show a specific version instead of the current one |
 | `--verbose` | Full stamp metadata as YAML |
 | `--raw` | Version without the template applied |
+| `--base` | `major.minor.patch[.hotfix]` only, no prerelease or buildmetadata |
 | `-t, --template <t>` | Format with a different template |
 | `--root` | Root app version |
 | `--type` | Release type (`release` or the prerelease id) |
@@ -445,7 +457,9 @@ updated). Takes `--git-push-user`/`--git-push-token`.
 | `--from-file` | Read from `.vmn/` files instead of git (with `create_snapshots`) |
 | `--ignore-dirty` | Do not report dirty states |
 
-**`vmn goto <app>`**: `-v <version>` (default: tip of the current branch),
+**`vmn goto <app>`**: `-v <version>` (default: back to a branch tip — the
+current branch, else the branch you left, the CI's branch, or the one whose tip
+or stamped version is HEAD),
 `--root` (`-v` is a root version), `--deps-only`, `--pull`, `--force` (dev
 versions: restore even if oversized untracked files would be lost).
 

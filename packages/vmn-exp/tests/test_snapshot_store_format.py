@@ -197,7 +197,9 @@ def test_patch_summary_matches_vmn_exp():
 def test_build_record_metadata_carries_the_code_verstr():
     from types import SimpleNamespace
 
-    backend = SimpleNamespace(active_branch="main", remote=lambda: "git@x:r")
+    backend = SimpleNamespace(
+        active_branch="main", logical_branch=lambda: "main", remote=lambda: "git@x:r"
+    )
     vcs = SimpleNamespace(backend=backend, name="app")
     ver_info = {"stamping": {"app": {"changesets": {".": {"hash": "c" * 40}}}}}
     meta = vmn_record.build_record_metadata(

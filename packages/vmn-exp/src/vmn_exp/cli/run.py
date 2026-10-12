@@ -28,6 +28,7 @@ from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.metric_compact import compact_by
 from vmn_exp.core.rerun import RUNNER_CLI, repo_relative_cwd
+from vmn_exp.core.run_error import error_from_output
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
@@ -46,6 +47,9 @@ KILL_GRACE_ENV = "VMN_EXP_KILL_GRACE_SEC"
 DEFAULT_KILL_GRACE_SEC = 30
 _FINAL_SYNC_TIMEOUT_SEC = 60
 _FINAL_STATE_ATTEMPTS = 3
+
+# The end of output.log an error's output_tail is cut from (it keeps far less).
+_ERROR_OUTPUT_BYTES = 64 * 1024
 
 
 def _parse_metrics(metrics_list):
@@ -429,6 +433,10 @@ class _Supervision:
             final["received_signal"] = self.forwarder.received
         if self.stopped_early:
             final["end_reason"] = STOPPED
+        elif exit_code != 0:
+            error = self.guard("output error", self._output_error)
+            if error:
+                final["error"] = error
         self._publish_final(final)
 
         self.guard(
@@ -459,6 +467,15 @@ class _Supervision:
             lambda: append_to_log(
                 self.storage, self.app_name, self.verstr, self.output.seal()
             ),
+        )
+
+    def _output_error(self):
+        """The ``error`` parsed from the captured output; None without capture."""
+        if not self.output:
+            return None
+        stderr = self.tee.stderr_text() if self.tee else None
+        return error_from_output(
+            self.output.tail_text(_ERROR_OUTPUT_BYTES), traceback_text=stderr
         )
 
     def _publish(self, what, **updates):
