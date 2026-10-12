@@ -1,215 +1,94 @@
+/** The dashboard shell (plan 19 §1.1): skip link, the sidebar (a drawer below
+ *  900px), the topbar with crumbs, the page outlet behind the sign-in gate,
+ *  ⌘K, and a live region that reads each new page's title. */
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import {
-  Link, NavLink, Outlet, useLocation, useMatches, useNavigate,
-} from "react-router-dom";
-import { appName as toAppName } from "./api";
-import { useMeta, useWorkspaces, WORKSPACES_KEY } from "./queries";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Outlet, useLocation, useMatches } from "react-router-dom";
+import AuthGate from "./auth/AuthGate";
+import { signOut } from "./auth/authState";
 import CommandPalette from "./components/CommandPalette";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ThemeToggle from "./components/ThemeToggle";
+import ContextRoot from "./components/shell/ContextRoot";
+import Crumbs from "./components/shell/Crumbs";
+import Sidebar from "./components/shell/Sidebar";
+import Topbar from "./components/shell/Topbar";
+import { setInert, useDrawer } from "./hooks/useDrawer";
+import { useDocumentTitle } from "./hooks/useDocumentTitle";
+import type { RouteHandle } from "./shell/contracts";
+import { ShellOverrideProvider } from "./shell/shellOverride";
 import { useShellContext } from "./shell/useShellContext";
-import { CopyPath, wsLocation } from "./components/ui";
+import { useShellCrumbs } from "./shell/useShellCrumbs";
+import { useHomeRevalidation, usePaletteHotkey, useRouteAnnouncer } from "./shell/useShellEffects";
 
-function NavIcon({ name }: { name: string }) {
-  switch (name) {
-    case "exp":
-      return (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <rect x="1" y="9" width="3" height="5" rx="1" fill="currentColor" />
-          <rect x="6" y="5" width="3" height="9" rx="1" fill="currentColor" />
-          <rect x="11" y="2" width="3" height="12" rx="1" fill="currentColor" />
-        </svg>
-      );
-    case "tree":
-      return (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <path d="M3.5 2.5v6a2 2 0 0 0 2 2h6" stroke="currentColor" strokeWidth="1.6" />
-          <circle cx="3.5" cy="2.5" r="1.9" fill="currentColor" />
-          <circle cx="11.5" cy="10.5" r="1.9" fill="currentColor" />
-        </svg>
-      );
-    case "models":
-      return (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <rect x="2" y="2" width="11" height="3" rx="1" fill="currentColor" />
-          <rect x="2" y="6.5" width="11" height="3" rx="1" fill="currentColor" opacity="0.7" />
-          <rect x="2" y="11" width="11" height="2" rx="1" fill="currentColor" opacity="0.4" />
-        </svg>
-      );
-    default:
-      return (
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <path d="M4 2.5l8 5-8 5v-10z" fill="currentColor" />
-        </svg>
-      );
-  }
+/** Whether the deepest route asks for the full content width. */
+function useWide(): boolean {
+  const matches = useMatches();
+  return Boolean((matches[matches.length - 1]?.handle as RouteHandle | undefined)?.wide);
+}
+
+function Shell() {
+  const ctx = useShellContext();
+  const location = useLocation();
+  const client = useQueryClient();
+  const drawer = useDrawer();
+  const wide = useWide();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+
+  const { crumbs, cli, title } = useShellCrumbs(ctx);
+  useDocumentTitle(title);
+  const announced = useRouteAnnouncer(title, ctx.override ?? ctx.routeId);
+  usePaletteHotkey(setPaletteOpen);
+  useHomeRevalidation();
+  // A layout effect: the shell must be focusable again before the closing
+  // palette hands focus back to its opener.
+  useLayoutEffect(() => setInert(shellRef.current, paletteOpen), [paletteOpen]);
+
+  const onNavigate = drawer.narrow ? drawer.close : undefined;
+  return (
+    <>
+      <a className="skip-link" href="#main">Skip to content</a>
+      <div className="shell" ref={shellRef}>
+        <aside className="sidebar" id="sidebar" ref={drawer.sidebarRef} data-open={drawer.open || undefined}>
+          <div className="drawer-context"><ContextRoot ctx={ctx} /></div>
+          <Sidebar ctx={ctx} onNavigate={onNavigate} footExtra={<div className="drawer-theme"><ThemeToggle /></div>} />
+        </aside>
+        {drawer.open && <div className="drawer-veil" aria-hidden="true" onClick={drawer.close} />}
+        <div className="main-col" ref={drawer.mainRef}>
+          <header className="topbar">
+            <Topbar
+              ctx={ctx}
+              crumbs={<Crumbs root={<ContextRoot ctx={ctx} />} crumbs={crumbs} cli={cli} />}
+              onSearch={() => setPaletteOpen(true)}
+              onMenu={drawer.narrow ? drawer.toggle : undefined}
+              menuOpen={drawer.open}
+              onSignOut={() => void signOut(client, ctx.meta)}
+            />
+          </header>
+          <main id="main" className="content" tabIndex={-1}>
+            <div className={`content-inner${wide ? " wide" : ""}`}>
+              <AuthGate>
+                {/* Pages stay mounted across param changes (their caches paint
+                    at once); only a render error is reset by navigating. */}
+                <ErrorBoundary resetKey={location.pathname}>
+                  <Outlet />
+                </ErrorBoundary>
+              </AuthGate>
+            </div>
+          </main>
+        </div>
+      </div>
+      {paletteOpen && <CommandPalette ctx={ctx} onClose={() => setPaletteOpen(false)} />}
+      <div className="sr-only shell-announce" aria-live="polite">{announced}</div>
+    </>
+  );
 }
 
 export default function App() {
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
-  const shellCtx = useShellContext();
-
-  // Route context comes from the router itself (see handle.page in routes.tsx).
-  const matches = useMatches();
-  const deepest = matches[matches.length - 1];
-  const { ws, app: appTag } = (deepest?.params ?? {}) as {
-    ws?: string; app?: string;
-  };
-  const { page: pageLabel, wide } = (deepest?.handle ?? {}) as { page?: string; wide?: boolean };
-  const appName = appTag ? toAppName(appTag) : undefined;
-  const appBase = ws && appTag ? `/ws/${ws}/app/${appTag}` : null;
-  const workspaces = useWorkspaces().data ?? [];
-  const vmnVersion = useMeta().data?.version ?? "";
-  const currentWs = workspaces.find((w) => w.name === ws);
-
-  // Revalidate on entering/leaving home — the add-workspace form lives there.
-  const client = useQueryClient();
-  const atHome = location.pathname === "/";
-  const firstVisit = useRef(true);
-  useEffect(() => {
-    if (firstVisit.current) { firstVisit.current = false; return; }
-    client.invalidateQueries({ queryKey: WORKSPACES_KEY });
-  }, [atHome, client]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <Link to="/" className="sb-brand">
-          <span className="logo">v</span>
-          <span className="word">vmn<span> ui</span></span>
-        </Link>
-
-        <div className="sb-group">
-          <div className="sb-label">Workspace</div>
-          <div className="select-wrap">
-            <select
-              value={ws ?? ""}
-              onChange={(e) => e.target.value && navigate(`/ws/${e.target.value}`)}
-            >
-              <option value="" disabled>
-                workspace…
-              </option>
-              {workspaces.map((w) => (
-                <option key={w.name} value={w.name}>
-                  {w.name} {w.kind === "store" ? "(store)" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          {currentWs && <CopyPath text={wsLocation(currentWs)} />}
-        </div>
-
-        {appName && (
-          <>
-            <div className="sb-divider" />
-            <div className="sb-group">
-              <div className="sb-label">App</div>
-              <div className="sb-app">
-                <span className="status-dot" />
-                <span className="name">{appName}</span>
-              </div>
-            </div>
-          </>
-        )}
-
-        {ws && (
-          <nav className="sb-nav">
-            <NavLink to={`/ws/${ws}/models`}>
-              <NavIcon name="models" /> Models
-            </NavLink>
-            <NavLink to={`/ws/${ws}/reports`}>
-              <NavIcon name="reports" /> Reports
-            </NavLink>
-          </nav>
-        )}
-        <nav className="sb-nav">
-          <NavLink to="/tokens">
-            <NavIcon name="tokens" /> API tokens
-          </NavLink>
-        </nav>
-
-        {appBase && (
-          <nav className="sb-nav">
-            <NavLink to={appBase} end>
-              <NavIcon name="exp" /> Experiments
-            </NavLink>
-            <NavLink to={`${appBase}/tree`}>
-              <NavIcon name="tree" /> Stamp tree
-            </NavLink>
-            <NavLink to={`${appBase}/actions`}>
-              <NavIcon name="actions" /> Actions
-            </NavLink>
-          </nav>
-        )}
-
-        <div className="sb-foot">
-          <span className="ver">vmn {vmnVersion || "ui"}</span>
-          <a href="https://github.com/progovoy/vmn" target="_blank" rel="noreferrer">
-            docs ↗
-          </a>
-        </div>
-      </aside>
-
-      <div className="main-col">
-        <header className="topbar">
-          <div className="crumbs">
-            {ws ? (
-              <>
-                <Link to={`/ws/${ws}`}>{ws}</Link>
-                {appName && (
-                  <>
-                    <span>/</span>
-                    <Link to={appBase!} className="mono">{appName}</Link>
-                  </>
-                )}
-                <span>/</span>
-                <span className="cur">{pageLabel}</span>
-              </>
-            ) : (
-              <span className="cur">workspaces</span>
-            )}
-          </div>
-          <div className="topbar-right">
-            <button className="search-pill" onClick={() => setPaletteOpen(true)}>
-              <span>Search</span>
-              <span className="key">⌘K</span>
-            </button>
-            <ThemeToggle />
-            <div className="host-chip">
-              <span className="status-dot pulse" />
-              <span>local</span>
-            </div>
-          </div>
-        </header>
-
-        <div className="content">
-          <div className={`content-inner${wide ? " wide" : ""}`}>
-            {/* Pages stay mounted across param changes (their caches paint
-                at once); only a render error is reset by navigating. */}
-            <ErrorBoundary resetKey={location.pathname}>
-              <Outlet />
-            </ErrorBoundary>
-          </div>
-        </div>
-      </div>
-
-      {paletteOpen && (
-        <CommandPalette ctx={shellCtx} onClose={() => setPaletteOpen(false)} />
-      )}
-    </div>
+    <ShellOverrideProvider>
+      <Shell />
+    </ShellOverrideProvider>
   );
 }
