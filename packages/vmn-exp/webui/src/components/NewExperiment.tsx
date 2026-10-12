@@ -44,7 +44,7 @@ export default function NewExperiment({ ws, app, appName, onCreated, onClose }: 
 
   return (
     <div className="card">
-      <h2 className="card-title" style={{ marginTop: 0 }}>New run</h2>
+      <h2 className="card-title" style={{ marginTop: 0, color: "var(--text)" }}>New run</h2>
       <p className="page-sub" style={{ marginBottom: 12 }}>
         Captures the workspace's current working state — dirty files, local
         commits, untracked files — as a reproducible run.
