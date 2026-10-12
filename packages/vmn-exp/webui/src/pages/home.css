@@ -1,0 +1,95 @@
+/* Home (workspaces) and a workspace's apps (plan 19 §1.8). Each tile's name
+   link stretches over the tile; the controls inside sit above it. */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.ws-tile, .app-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: border-color 0.15s ease-out;
+}
+.ws-tile:hover, .app-tile:hover { border-color: var(--line-2); }
+.ws-tile:has(.ws-tile-link:focus-visible),
+.app-tile:has(.app-tile-link:focus-visible) {
+  border-color: var(--accent);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ws-tile h2, .app-tile h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.app-tile h2 { font-family: var(--mono); font-weight: 500; }
+.ws-tile-link, .app-tile-link { color: var(--text); text-decoration: none; }
+.ws-tile-link:focus-visible, .app-tile-link:focus-visible { outline: none; }
+.ws-tile-link::after, .app-tile-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.ws-tile .copy-path, .app-tile .status-rollup { position: relative; z-index: 1; }
+
+.kind-badge {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 20px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.app-tile-meta {
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty code { font-family: var(--mono); font-size: 12.5px; color: var(--text-2); }
+
+/* Disclosures below the grid: attach a workspace, the server cache. */
+.add-ws, .cache-details {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.add-ws summary, .cache-details summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+.add-ws summary:hover, .cache-details summary:hover { color: var(--text); }
+.add-ws[open] summary, .cache-details[open] summary { margin-bottom: 14px; }
+
+.add-ws-fields {
+  display: grid;
+  grid-template-columns: 130px 1.4fr 1.2fr auto;
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 899px) {
+  .add-ws-fields { grid-template-columns: 1fr; }
+}
+.add-ws-help {
+  max-width: 70ch;
+  margin: 12px 0 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}

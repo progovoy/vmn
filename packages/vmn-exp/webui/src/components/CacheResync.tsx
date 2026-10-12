@@ -8,22 +8,29 @@ const n = (value: number) => value.toLocaleString("en-US");
 export const progressLine = ({ done, total }: CacheStatus["progress"]) =>
   `rebuilding: ${n(done)} / ${n(total)} records`;
 
-export default function CacheResync({ ws }: { ws: string }) {
-  const client = useQueryClient();
-  const key = ["cache-status", ws];
-  const { data } = useQuery({
-    queryKey: key,
+const cacheKey = (ws: string) => ["cache-status", ws];
+
+/** The workspace's cache status: no data when it is refused (not an admin). */
+export function useCacheStatus(ws: string, enabled = true) {
+  return useQuery({
+    queryKey: cacheKey(ws),
     queryFn: () => apiCache.status(ws),
+    enabled,
     retry: false,
     refetchInterval: (q) => (q.state.data?.state === "rebuilding" ? 1000 : false),
   });
+}
+
+export default function CacheResync({ ws }: { ws: string }) {
+  const client = useQueryClient();
+  const key = cacheKey(ws);
+  const { data } = useCacheStatus(ws);
   if (!data) return null;
   const resync = (full: boolean) =>
     apiCache.resync(ws, full).then((status) => client.setQueryData(key, status));
   const rebuilding = data.state === "rebuilding";
   return (
     <aside className="card cache-resync" aria-label="Cache">
-      <div className="eyebrow">cache</div>
       <span className="meta">
         {rebuilding ? progressLine(data.progress) : `drift ${n(data.drift)}`}
       </span>{" "}
