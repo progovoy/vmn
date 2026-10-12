@@ -523,17 +523,53 @@ const VersionDetails = memo(function VersionDetails({
   );
 });
 
+interface NotARepoError {
+  reason: "not_a_repo";
+  path: string;
+  detail: string;
+}
+
+function isNotARepoError(e: unknown): e is Error & { status: number; body: NotARepoError } {
+  if (!(e instanceof Error)) return false;
+  const ex = e as Error & { status?: number; body?: Record<string, unknown> };
+  return ex.status === 409 && ex.body?.reason === "not_a_repo";
+}
+
+function NotARepoMessage({ path }: { path: string }) {
+  return (
+    <div className="card" style={{ maxWidth: 540 }}>
+      <p>
+        <strong>Not a git repository</strong> at <code>{path}</code>.
+      </p>
+      <p style={{ color: "var(--text-muted)", marginTop: 8 }}>
+        The workspace path does not contain a valid git repository. Check that the
+        directory exists and is a git checkout:
+      </p>
+      <pre className="cli-card" style={{ marginTop: 8 }}>
+        git -C {path} status
+      </pre>
+    </div>
+  );
+}
+
 export default function StampTree() {
   const { ws, app } = useParams() as { ws: string; app: string };
   const [rows, setRows] = useState<VersionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [repoError, setRepoError] = useState<NotARepoError | null>(null);
   const [params, setParams] = useSearchParams();
   const selected = params.get("v");
   const graphRef = useRef<HTMLDivElement | null>(null);
   const [graphW, setGraphW] = useState(0);
 
   useEffect(() => {
-    api.versions(ws, app).then(setRows).catch((e) => setError(String(e)));
+    api.versions(ws, app).then(setRows).catch((e) => {
+      if (isNotARepoError(e)) {
+        setRepoError(e.body as NotARepoError);
+      } else {
+        setError(String(e));
+      }
+    });
   }, [ws, app]);
 
   useEffect(() => {
@@ -575,6 +611,14 @@ export default function StampTree() {
     return i < 0 ? [] : nodes.slice(i + 1).map((n) => n.verstr);
   }, [nodes, current]);
 
+  if (repoError) {
+    return (
+      <>
+        <PageHead title={toAppName(app)} what="stamp tree" />
+        <NotARepoMessage path={repoError.path} />
+      </>
+    );
+  }
   if (error) return <div className="error">{error}</div>;
   if (rows === null) return <Skeleton />;
 

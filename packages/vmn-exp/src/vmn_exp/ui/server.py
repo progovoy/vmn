@@ -8,6 +8,7 @@ illegal in app names. Request hardening lives in :mod:`vmn_exp.ui.security`.
 """
 import os
 
+import git
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -445,7 +446,13 @@ def create_app(
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions", dependencies=[require(VIEWER)])
     def list_versions(ws_name: str, app_tag: str):
         ws = _git_workspace(ws_name)
-        return source.workspace_index(ws).list_versions(_app_name(app_tag))
+        try:
+            return source.workspace_index(ws).list_versions(_app_name(app_tag))
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+            return SafeJSONResponse(
+                {"detail": "Not a git repository", "reason": "not_a_repo", "path": ws.path},
+                status_code=409,
+            )
 
     @app.post(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/actions/{{action}}",
@@ -521,6 +528,11 @@ def create_app(
                 )
         except diff_reader.DiffBusy:
             raise HTTPException(429, "Too many diffs in progress; retry shortly")
+        except diff_reader.DiffMaterializeError as exc:
+            return SafeJSONResponse(
+                {"detail": exc.detail, "reason": exc.reason},
+                status_code=422,
+            )
         if err:
             raise_read_error(err)
         return result

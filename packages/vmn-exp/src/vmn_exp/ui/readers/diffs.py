@@ -25,6 +25,15 @@ class DiffBusy(Exception):
     """Every diff slot stayed taken for the whole wait."""
 
 
+class DiffMaterializeError(Exception):
+    """The diff could not be produced because code could not be materialised."""
+
+    def __init__(self, detail, reason="restore_failed"):
+        super().__init__(detail)
+        self.detail = detail
+        self.reason = reason
+
+
 class DiffCache:
     """Small LRU of diff results plus a gate on concurrent computations."""
 
@@ -134,6 +143,22 @@ def _truncated(text):
     return data[:cut].decode("utf-8", "ignore"), True
 
 
+_MATERIALIZE_REASONS = {
+    "Failed to materialize snapshots for diff": "code_missing",
+    "git diff could not be run": "restore_failed",
+}
+
+
+def _materialize_reason(err_msg):
+    """Return a structured reason if *err_msg* is a materialisation failure."""
+    for prefix, reason in _MATERIALIZE_REASONS.items():
+        if err_msg and err_msg.startswith(prefix):
+            return reason
+    if err_msg and err_msg.startswith("git diff failed:"):
+        return "restore_failed"
+    return None
+
+
 def _tree_diff(root_path, app_name, v1, side1, v2, side2):
     """``(fields, err)`` — the ``diff`` text (capped), or why there is none."""
     for verstr, side in ((v1, side1), (v2, side2)):
@@ -144,6 +169,9 @@ def _tree_diff(root_path, app_name, v1, side1, v2, side2):
     vcs_stub = SimpleNamespace(vmn_root_path=root_path, name=app_name)
     text, err = render_tree_diff(vcs_stub, v1, side1[0], side1[1], v2, side2[0], side2[1])
     if err:
+        reason = _materialize_reason(err)
+        if reason:
+            raise DiffMaterializeError(err, reason)
         return None, err
     text, truncated = _truncated(text)
     return {"diff": text, "truncated": truncated}, None
