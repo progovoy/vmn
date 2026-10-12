@@ -21,7 +21,7 @@ Sources:
   first, scale is normal, same words as the CLI).
 
 Sections: §0 ground truth, §1 the flows and their targets, §2 decisions, §3 contracts,
-§4 work units (A correctness, B run page, C leaderboard, M compare, E consistency; decisions are D1–D11, contracts K1–K6), §5 sequencing and worktrees, §6 verification.
+§4 work units (A correctness, B run page, C leaderboard, M compare, E consistency; decisions are D1–D12, contracts K1–K6), §5 sequencing and worktrees, §6 verification.
 
 ## 0. Ground truth (verified against `2307139c`)
 
@@ -50,6 +50,9 @@ Sections: §0 ground truth, §1 the flows and their targets, §2 decisions, §3 
 | `Y_AXIS_SIZE = 56` still clips long sparkline y-labels | `util/curveOptions.ts:69` |
 | The Models page uses a native unstyled `<select>` ("all kinds"); the Reports page uses an unlabelled `title` input and a raw checkbox | `pages/Models.tsx`, `pages/Reports.tsx` |
 | On workspace pages (Models, Reports) the app switcher shows "choose app" and greys out the app nav, even when the user just came from an app | `components/shell/Sidebar.tsx` |
+| `tree_status` is `rollup_status` over the run's **whole subtree including itself**, with precedence `failed > stuck > running > created > succeeded`. An outer run that never ran (a grouping record from `vmn-exp create`, or a sweep outer; no `run_state.yml`) is `created`, so its tree is `created` even when every child succeeded. Seen on `ml_app` `lr_layers_grid`: `status: created, tree_status: created, kind: outer`, Fleet card "16 succeeded" | `packages/vmn-exp-sdk/src/vmn_exp/core/tree.py:31-37`, `_subtree_statuses` (`:77`) |
+| The run page headline pill is the run's **own** status; "tree X" appears only when `tree_status != status`, so the case above shows a bare `created` above a "16 succeeded" Fleet card | `pages/RunSections.tsx` (`StatusCard`), `pages/LeaderboardRow.tsx:127` |
+| Unclaimed sweep trials are not records, so the subtree cannot know a sweep is incomplete. `core/sweep/summary.py:summarize` has `run_cap`, `trials`, `claimed`, `unstarted`; a grid's size follows from its spec | `packages/vmn-exp-sdk/src/vmn_exp/core/sweep/summary.py:125-146`, `core/sweep/spec.py` |
 | File sizes to respect (~200-300 lines per file): `Run.tsx` 201, `RunSections.tsx` 271, `Leaderboard.tsx` 283, `LeaderboardRow.tsx` 262, `styles.css` 825 (no new rules there, use per-component CSS) | `wc -l` |
 
 ## 1. The flows
@@ -66,7 +69,7 @@ target is the bar each work unit in §4 must reach.
 | F4 | "Get me back to this exact state" | CLI commands at ~3300px | `wandb restore` CLI | Check out a commit, dirty work lost | **Reproduce ▾** in the run header: `restore` / `rerun` / `export` with copy and one line each. 2 clicks from any number |
 | F5 | "Compare these runs" | Three separate pages; uppercased IDs; params as metrics; legend shows verstrs | One workspace, panels follow the selection | Compare page (params/metrics/charts) | One **Compare** page, tabs Curves · Table · Code, one selection, `@N name` everywhere, only-differing on |
 | F6 | "Why did it fail?" | "No exception was recorded — exit code 1." | Logs tab (stdout) | Little | Failure card: output tail inline, last step reached, **diff since the last good run** of the same command |
-| F7 | "Watch a live run / sweep" | "Live off" button; children listed twice; Progress all `—` | Sweep page, parallel coords, live charts | Nested runs, no rollup | `● live · updated 3s ago` indicator; fleet/sweep table with `@N name`, status, varied params, goal metric, step progress; parallel coords on the sweep run |
+| F7 | "Watch a live run / sweep" | "Live off" button; children listed twice; Progress all `—`; an outer whose 16 children succeeded reads `created` | Sweep page, parallel coords, live charts | Nested runs, no rollup | `● live · updated 3s ago` indicator; fleet/sweep table with `@N name`, status, varied params, goal metric, step progress; parallel coords on the sweep run |
 | F8 | "Find it again / show a teammate" | URLs, saved views, ⌘K, Similar runs | Reports, URLs | URLs | Copy link in the run header; Similar runs next to Changes |
 
 Success: on every flow vmn is at least level with both, and ahead on F1, F3, F4 and F6
@@ -166,6 +169,18 @@ The rest comes from the column picker; user prefs (`useColumnPrefs`) still win. 
 runs collapse into one `inner` cell (`5 · 4 running · 1 failed`), shown only when an
 outer row is loaded.
 
+**D12. An outer run's headline is its tree.** An outer run that never ran (no run
+state: own status `created`) is a container, and its own `created` is left out of its
+`tree_status` rollup. An outer that did run (a `vmn-exp run` orchestrator, an SDK parent)
+still counts, so a failed orchestrator still fails its tree. A sweep outer whose trials
+are all finished but number fewer than the sweep's planned size (grid size, else
+`run_cap`; unknown for an uncapped random/bayes sweep) rolls up to `created`, and the
+UI says `16/20 · incomplete`. On the run page and in the leaderboard row, outer runs
+show the tree status as the main pill, with the inner count (`succeeded · 16/16 inner`).
+Their own status shows as a secondary line only when it is `failed` or `stuck`, or
+differs from the tree while running. The `tree_status` description in `CLAUDE.md`
+changes with it.
+
 ## 3. Contracts
 
 **K1. `experiments-diff` metrics.** `metrics_delta` is computed from the two rows'
@@ -253,6 +268,28 @@ th` and any header holding IDs. Section labels move to a `.label-caps` class.
   keeps its pickers on 422.
 - Compare with an unknown ref: a "not found: nope (remove)" chip, no `—` column, and
   the count excludes it.
+
+**A7. Outer runs report their tree** (D12).
+- Core tests (`packages/vmn-exp/tests/`, pure `core/tree.py`):
+  - an outer with no run state and 16 succeeded children → `tree_status == "succeeded"`;
+  - the same with one failed child → `failed`, and with one running child → `running`;
+  - an outer that ran and failed with succeeded children → `failed`;
+  - an outer that ran and is still running → `running`;
+  - nested: an inner outer without run state under an outer without run state;
+  - the cyclic-graph path (`_has_cycle`) gives the same answers as the linear one.
+- Sweep tests: a grid sweep of 20 points with 16 finished trials → `created`
+  (incomplete). With 20 → `succeeded`. An uncapped random sweep follows its trials. The
+  planned size comes from `core/sweep/spec.py`, so `core/tree.py` stays pure: the
+  sweep's planned size is passed in, or attached to the row by the index, never read
+  from storage in `tree.py`.
+- Index: bump the index `SCHEMA_VERSION` if `tree_status` is cached in the index rows.
+  Queries on `tree_status` and `vmn-exp list` follow automatically; add one CLI test
+  (`vmn-exp list` shows the outer as succeeded).
+- Web tests: `StatusCard` and `LeaderboardRow` lead with the tree pill for `kind ==
+  "outer"` plus `16/16 inner`, show the own status only per D12, and show
+  `16/20 · incomplete` for the sweep case. Single and inner runs are unchanged.
+- Docs: the `CLAUDE.md` nesting bullet (`tree_status` rule) and
+  `docs/vmn-exp/experiments.md` (nesting/status section).
 
 ### Phase B — the run page (F3, F4, F6, F7, F8)
 
@@ -446,7 +483,7 @@ rewriting tests. Then:
 
 | Wave | Worktrees (parallel, each owns its red-green-refactor) | Depends on |
 |---|---|---|
-| 1 | `a1-diff-summary` · `a2-a3-goals-params` · `a4-a5-truths` · `a6-error-states` | — |
+| 1 | `a1-diff-summary` · `a2-a3-goals-params` · `a4-a5-truths` · `a6-error-states` · `a7-outer-tree-status` | — |
 | 2 | `b1-run-code-api` · `c1-c2-columns` · `c3-sort-a11y` · `e1-e2-ws-pages` · `e3-e5-run-cards` | wave 1 |
 | 3 | `b2-changes-card` · `b3-header-actions` · `b4-failure-card` · `c4-c5-filter-grammar` · `d1-compare-page` | B1 (B2, B4), wave 1 |
 | 4 | `b5-run-layout` · `b6-fleet-sweep` · `b7-live-status` · `c6-c7-attention-toolbar` · `d2-d3-compare-content` | B2–B4, M1, C4 |
@@ -480,6 +517,8 @@ Rules (from `CLAUDE.md`):
    - F5: switching curves ↔ table ↔ code keeps the selection, 1 click each.
    - F6: a failed run shows the output tail without scrolling at 1440×900.
    - F1: the stuck count on the strip equals the rows behind its link.
+   - F7: an outer run whose children all succeeded never reads `created`; an
+     incomplete sweep reads `N/M · incomplete`.
    - Every page has no uppercased identifiers and no goal arrow on a goal-less metric.
    - Keyboard only: sort, filter, select, compare and copy a command.
 4. **Re-critique** the whole dashboard (not only `App.tsx`) and store it under
