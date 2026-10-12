@@ -19,6 +19,7 @@ from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.metric_compact import record_compacted
 from vmn_exp.core.refs import placement_snapshot
+from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.core.run_error import ERROR_SUMMARY
 from vmn_exp.core.status import (
     load_run_state,
@@ -172,7 +173,7 @@ def _resolve(storage, app_name, verstr_ref, resolve=None):
         return None, None, err
     metadata = storage.load_metadata(app_name, verstr)
     if metadata is None:
-        return None, None, f"Experiment {verstr} not found"
+        return None, None, RefError(f"Experiment {verstr} not found")
     return verstr, metadata, None
 
 

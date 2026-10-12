@@ -88,7 +88,7 @@ def test_counts_over_non_archived_rows(tmp_path, clock):
     assert body == {
         "total": 6,
         "counts": {"created": 1, "running": 1, "stuck": 0, "succeeded": 2, "failed": 2},
-        "failed_recent": 1, "recent_sec": 86400, "rollup": "failed",
+        "failed_recent": 1, "rollup": "failed",
     }
 
 
@@ -127,11 +127,22 @@ def test_etag_and_304(tmp_path, clock):
     assert again.status_code == 304
 
 
-def test_unknown_app_is_all_zeros(tmp_path, clock):
-    body = _status(_setup(tmp_path, _fleet(clock)), app="nope")
-    assert body["total"] == 0
-    assert body["counts"] == dict.fromkeys(STATUSES, 0)
-    assert body["failed_recent"] == 0 and body["rollup"] is None
+def test_unknown_app_is_404_app_not_found(tmp_path, clock):
+    client = _setup(tmp_path, _fleet(clock))
+    r = client.get("/api/v1/workspaces/ws/apps/nope/experiments-status")
+    assert r.status_code == 404, r.text
+    assert r.json()["code"] == "app_not_found"
+    assert "nope" in r.json()["detail"]
+
+
+def test_counting_never_sorts(tmp_path, clock, monkeypatch):
+    from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
+    def no_sorting(*a, **kw):
+        raise AssertionError("status counts must not sort the rows")
+
+    monkeypatch.setattr(LeaderboardCache, "ordered", no_sorting)
+    assert _status(_setup(tmp_path, _fleet(clock)))["total"] == 6
 
 
 def test_invalid_tag_is_400(tmp_path, clock):
@@ -158,4 +169,4 @@ def test_summary_always_has_every_status():
     now = datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)
     body = status_summary([], now)
     assert body == {"total": 0, "counts": dict.fromkeys(STATUSES, 0),
-                    "failed_recent": 0, "recent_sec": 86400, "rollup": None}
+                    "failed_recent": 0, "rollup": None}

@@ -14,9 +14,11 @@ from starlette.concurrency import run_in_threadpool
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.similar_search import conf_weights
+from vmn_exp.storage.areas import app_key
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.ui import (
+    api_errors,
     routes_admin,
     routes_cache,
     routes_comments,
@@ -32,6 +34,8 @@ from vmn_exp.ui import (
     routes_sweep,
     routes_tree,
 )
+from vmn_exp.ui.api_errors import APP_NOT_FOUND, CodedError, raise_read_error
+from vmn_exp.ui.app_presence import app_exists
 from vmn_exp.ui.audit import AuditLog, install_audit_middleware
 from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.auth.authz import require, require_action
@@ -173,6 +177,8 @@ def create_app(
         # Storage refuses names that are not a single path component.
         return JSONResponse({"detail": str(exc)}, status_code=400)
 
+    api_errors.install(app)
+
     def _app_name(app_tag):
         """The app name a URL names, refusing anything that walks out of .vmn/."""
         name = safe_app_name(app_tag)
@@ -281,6 +287,17 @@ def create_app(
         schema = _app_schema(ws, app_name)
         return app_name, source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
 
+    def _status_snapshot(ws_name, app_tag):
+        """The app's snapshot; 404 ``app_not_found`` when there is no such app."""
+        app_name, snapshot, _ = _app_inputs(ws_name, app_tag)
+        ws = _experiment_workspace(ws_name)
+        if not snapshot.rows and not app_exists(ws, app_name, _any_exp_storage(ws)):
+            raise CodedError(404, f"App '{app_name}' not found", APP_NOT_FOUND)
+        return snapshot
+
+    def _app_tags(ws_name):
+        return [app_key(row["name"]) for row in list_apps(ws_name)]
+
     def _leaderboard_inputs(ws_name, app_tag):
         """``(snapshot, effective metrics schema)`` of an app: sorted by the
         conf schema plus what the runs declare (see :mod:`vmn_exp.core.metric_schema`)."""
@@ -336,7 +353,7 @@ def create_app(
             **_detail_options(ws, app_name),
         )
         if err:
-            raise HTTPException(404, err)
+            raise_read_error(err)
         return json_response(detail, request=request)
 
     @app.get(
@@ -369,7 +386,7 @@ def create_app(
             ),
         )
         if err:
-            raise HTTPException(404, err)
+            raise_read_error(err)
         return json_response(page, request=request)
 
     def download_artifact(ws_name: str, app_tag: str, verstr: str, filename: str):
@@ -502,7 +519,7 @@ def create_app(
         except diff_reader.DiffBusy:
             raise HTTPException(429, "Too many diffs in progress; retry shortly")
         if err:
-            raise HTTPException(404, err)
+            raise_read_error(err)
         return result
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/changelog", dependencies=[require(VIEWER)])
@@ -568,8 +585,8 @@ def create_app(
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
                                 _comment_counts)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
-    forget_git = routes_shell.register(app, API_PREFIX, _git_workspace, _leaderboard_inputs,
-                                       leaderboards)
+    forget_git = routes_shell.register(app, API_PREFIX, _git_workspace, _status_snapshot,
+                                       _app_tags, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
