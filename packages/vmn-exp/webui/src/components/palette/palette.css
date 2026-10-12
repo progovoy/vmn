@@ -1,0 +1,80 @@
+/* ⌘K (plan 19 §1.5). The veil mixes from --bg, so it follows the theme. */
+.cmdk-veil {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh;
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+}
+.cmdk {
+  width: min(600px, 92vw); max-height: 72vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden;
+  box-shadow: 0 18px 48px -12px color-mix(in srgb, #000 55%, transparent);
+  animation: cmdk-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes cmdk-in {
+  from { opacity: 0.6; transform: translateY(-4px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+.cmdk-field {
+  display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  border-bottom: 1px solid var(--line); color: var(--text-2);
+}
+.cmdk-field input {
+  flex: 1; min-width: 0; background: transparent; border: none; outline: none;
+  color: var(--text); caret-color: var(--accent); font-size: 14px; padding: 14px 0;
+}
+.cmdk-field input::placeholder { color: var(--text-3); }
+
+.cmdk-list { overflow-y: auto; padding: 4px 6px 6px; overscroll-behavior: contain; }
+.cmdk-sec {
+  font-size: 11px; font-weight: 500; color: var(--text-2);
+  padding: 12px 10px 4px;
+}
+.cmdk-list > [role="group"]:first-child .cmdk-sec { padding-top: 6px; }
+
+.cmdk-row {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text);
+}
+.cmdk-row::after {
+  content: attr(data-cli); font-family: var(--mono); font-size: 11.5px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30ch;
+}
+.cmdk-row.active { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cmdk-row.active::after { color: var(--text-2); }
+.cmdk-row.disabled { color: var(--text-3); cursor: default; }
+.cmdk-row.disabled.active { background: var(--panel-2); }
+.cmdk-icon { display: flex; color: var(--text-2); }
+.cmdk-row.active .cmdk-icon { color: var(--accent); }
+.cmdk-row.disabled .cmdk-icon { color: var(--text-3); }
+
+.cmdk-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
+.cmdk-label { overflow: hidden; text-overflow: ellipsis; }
+.cmdk-ref { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
+.cmdk-sub {
+  color: var(--text-2); font-size: 12px; flex: 0 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+.cmdk-empty {
+  margin: 0; padding: 18px 16px 22px; color: var(--text-2); font-size: 13px; line-height: 1.5;
+  text-wrap: pretty;
+}
+.cmdk-foot {
+  border-top: 1px solid var(--line); padding: 8px 16px; font-size: 11px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cmdk-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+@media (max-width: 599px) {
+  .cmdk-veil { padding-top: 8vh; }
+  .cmdk { width: min(560px, calc(100vw - 16px)); }
+  .cmdk-row::after { max-width: 14ch; }
+  .cmdk-foot { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmdk { animation: none; }
+}

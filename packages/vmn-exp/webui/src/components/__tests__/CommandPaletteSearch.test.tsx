@@ -12,6 +12,7 @@ vi.mock("../../api", () => ({
 import { api } from "../../api";
 import { createQueryClient } from "../../queryClient";
 import CommandPalette from "../CommandPalette";
+import { fakeCtx } from "../palette/__tests__/fakeCtx";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
@@ -19,7 +20,7 @@ function open(client: QueryClient) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <CommandPalette ws="w" app="app" workspaces={[]} apps={[]} onClose={() => {}} />
+        <CommandPalette ctx={fakeCtx({ ws: "w", app: "app", workspaces: [] })} onClose={() => {}} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
