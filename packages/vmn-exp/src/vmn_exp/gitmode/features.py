@@ -6,9 +6,9 @@ create entry (CLI create/run/sweep, SDK): the files, ``path::name`` functions
 and commit subjects of the captured patches (working tree diff, local commits,
 deps under their configured path), the main repo's untracked paths (as the
 capture listed them), and the author — git config's email in the repo (given
-up on after ``GIT_CONFIG_TIMEOUT_SEC``: this runs under the repo lock), else
-``VMN_EXP_AUTHOR``, else the first local commit's ``From:``. vmn's own
-bookkeeping commits (init, stamp: authored as ``VMN_USER_NAME``; an SDK cold
+up on after ``GIT_CONFIG_TIMEOUT_SEC``: the CLI runs this under the repo
+lock), else ``VMN_EXP_AUTHOR``, else the first local commit's ``From:``. vmn's
+own bookkeeping commits (init, stamp: authored as ``VMN_USER_NAME``; an SDK cold
 start leaves them unpushed) are not the run's: this module's
 ``features_from_patches`` (core's, for a run's patches) skips them.
 ``features_for_working_tree`` gives the same facts without creating a run;
@@ -24,18 +24,17 @@ from version_stamp.api import (
     _untracked_candidates,
 )
 from vmn_exp.core import features as core_features
+from vmn_exp.core.code_patches import patch_items, run_dep_paths
 from vmn_exp.core.features import (
-    FEATURES_VERSION,
     author_from_commits,
     build_features_entry,
     code_facts,
+    is_current,
 )
-from vmn_exp.core.fold import fold_features, fold_log
 from vmn_exp.core.identity import env_author, run_author
+from vmn_exp.core.snapshot_features import log_features
 from vmn_exp.gitmode import capture
 from vmn_exp.storage.files import safe_dep_name
-
-_TEXT_PATCHES = ("working_tree", "local_commits")
 
 
 def features_from_patches(patch_texts) -> dict:
@@ -78,19 +77,19 @@ def _best_effort(build, *args):
 
 
 def _tree_entry(vcs, captured):
-    identity = captured.identity
-    parsed = features_from_patches(_patch_texts(identity, identity.get("deps") or {}))
+    parsed = features_from_patches(patch_items(captured.identity))
     changed = dict(parsed["changed"], untracked=_untracked_paths(vcs, captured))
     return build_features_entry("capture", author=_author(vcs, parsed),
                                 **dict(parsed, changed=changed))
 
 
 def _rerun_entry(vcs, log, metadata, patches):
-    original = fold_features(fold_log(log))
-    if original and original.get("features_version") == FEATURES_VERSION:
+    original = log_features(log)
+    if is_current(original):
         facts = code_facts(original)
     else:
-        parsed = features_from_patches(_patch_texts(patches, _stored_deps(metadata, patches)))
+        parsed = features_from_patches(
+            patch_items(dict(patches, deps=_stored_deps(metadata, patches))))
         untracked = _tarball_paths(patches.get("untracked_files"))
         facts = dict(parsed, changed=dict(parsed["changed"], untracked=untracked))
     # The rerunner's identity only: the original's committer did not rerun it.
@@ -98,17 +97,9 @@ def _rerun_entry(vcs, log, metadata, patches):
     return build_features_entry("rerun", author=author, **facts)
 
 
-def _patch_texts(patches, deps):
-    """The text patches of *patches* and of *deps* (``{path: patches}``)."""
-    texts = [patches.get(key) for key in _TEXT_PATCHES]
-    for path, dep in sorted(deps.items()):
-        texts.extend((path, dep.get(key)) for key in _TEXT_PATCHES)
-    return texts
-
-
 def _stored_deps(metadata, patches):
     """A stored code object's deps (keyed by safe name) under their dep path."""
-    paths = {safe_dep_name(path): path for path in metadata.get("dep_base_commits") or {}}
+    paths = {safe_dep_name(path): path for path in run_dep_paths(metadata)}
     return {paths.get(name, name): dep for name, dep in (patches.get("deps") or {}).items()}
 
 

@@ -95,7 +95,11 @@ def _same(a, b):
 def value_closeness(a, b):
     """1 for equal values; positive numbers ``1 - min(1, |log10(a/b)| / 2)``;
     0 when either is NaN or infinite (not comparable)."""
-    x, y = metric_number(a), metric_number(b)
+    return _closeness(a, b, metric_number(a), metric_number(b))
+
+
+def _closeness(a, b, x, y):
+    """:func:`value_closeness` of *a* and *b*, read as the numbers *x* and *y*."""
     if any(n is not None and not math.isfinite(n) for n in (x, y)):
         return 0.0
     if x is not None and y is not None:
@@ -152,9 +156,9 @@ def _code(a, b):
 
 def _overlap(a, b, describe):
     """Jaccard of two sets, not both empty, with *describe(sorted shared
-    items)* as the reason."""
-    shared = sorted(a & b)
-    return len(shared) / len(a | b), (describe(shared) if shared else None)
+    items)* as the reason (none without a *describe*)."""
+    shared = a & b
+    return len(shared) / len(a | b), (describe(sorted(shared)) if shared and describe else None)
 
 
 def _jaccard(a, b, describe):
@@ -220,14 +224,18 @@ def _inputs(a, b):
     return total / max(len(a.inputs), len(b.inputs)), reason
 
 
-def _params(a, b):
+def _params(a, b, numbers, why):
+    """*numbers*: *a*'s params as metric numbers; *why* False: no reason."""
     if not a.params or not b.params:
         return None
     shared = sorted(set(a.params) & set(b.params))
     if not shared:
         return 0.0, None
-    close = {k: value_closeness(b.params[k], a.params[k]) for k in shared}
+    close = {k: _closeness(b.params[k], a.params[k], metric_number(b.params[k]), numbers[k])
+             for k in shared}
     similarity = len(shared) / len(set(a.params) | set(b.params)) * sum(close.values()) / len(shared)
+    if not why:
+        return similarity, None
     differ = sorted((k for k in shared if not _same(a.params[k], b.params[k])),
                     key=lambda k: (close[k], k))
     if differ:
@@ -258,43 +266,62 @@ def _branch(a, b):
     return (1.0, f"same branch {b.branch}") if a.branch == b.branch else (0.0, None)
 
 
-def signal_values(a, b):
+def signal_values(a, b, numbers, why=True):
     """``{signal: (similarity, reason or None)}`` of the structured signals
-    both profiles carry."""
+    both profiles carry; *numbers* are *a*'s params as metric numbers. *why*
+    False spares the reasons that cost (sorting, formatting): a ranking
+    reads the similarities alone."""
     found = {
         "code": _code(a, b),
-        "files": _changed(a, b, "files", _shared_files, CLEAN_TREES),
-        "symbols": _changed(a, b, "symbols", _shared_functions),
+        "files": _changed(a, b, "files", _shared_files if why else None, CLEAN_TREES),
+        "symbols": _changed(a, b, "symbols", _shared_functions if why else None),
         "inputs": _inputs(a, b),
-        "params": _params(a, b),
+        "params": _params(a, b, numbers, why),
         "entrypoint": _entrypoint(a, b),
-        "objective": _jaccard(a.objective, b.objective, _same_metrics),
+        "objective": _jaccard(a.objective, b.objective, _same_metrics if why else None),
         "branch": _branch(a, b),
     }
     return {name: value for name, value in found.items() if value is not None}
 
 
-def score(target, candidate, weights=None, text_score=None, text_reason=None):
+def score(target, candidate, weights=None, text_score=None, text_reason=None, why=True):
     """``(score, reasons, signals)`` of *candidate* against *target*.
 
-    Both are profiles or run views (:func:`~vmn_exp.core.similar_profile.as_profile`);
-    *weights* are overrides (:func:`resolve_weights`); *text_score* is the
-    normalised text similarity, or None when either side has no text.
-    ``signals`` is ``{signal: similarity}``; ``reasons`` the top
-    :data:`REASONS` contributions' reasons.
+    Both are profiles or run views (:func:`~vmn_exp.core.similar_profile.as_profile`),
+    *target* also a :class:`Target` (what a query reads once); *weights*
+    are overrides (:func:`resolve_weights`), a :class:`Target`'s its own;
+    *text_score* is the normalised text similarity, or None when either
+    side has no text. ``signals`` is ``{signal: similarity}``; ``reasons``
+    the top :data:`REASONS` contributions' reasons — ``[]`` with *why*
+    False (see :func:`signal_values`).
     """
-    a, b = as_profile(target), as_profile(candidate)
-    w = resolve_weights(weights, intent=a.has_intent)
+    target = target if isinstance(target, Target) else Target(target, weights)
+    a, b, w = target.profile, as_profile(candidate), target.weights
     if a.commit_changes or b.commit_changes:
-        w["files"], w["symbols"] = w["files"] / 2, w["symbols"] / 2
-    found = signal_values(a, b)
+        w = dict(w, files=w["files"] / 2, symbols=w["symbols"] / 2)
+    found = signal_values(a, b, target.numbers, why)
     if text_score is not None:
         found["text"] = (text_score, text_reason or ("similar text" if text_score else None))
     total = sum(w[name] for name in found)
     value = sum(w[name] * sim for name, (sim, _) in found.items()) / total if total else 0.0
+    signals = {name: sim for name, (sim, _) in found.items()}
+    return value, (_reasons(found, w) if why else []), signals
+
+
+class Target:
+    """A :func:`score` target read once for every candidate of a query: its
+    profile, its *weights* resolved and its params parsed."""
+
+    def __init__(self, target, weights=None):
+        self.profile = as_profile(target)
+        self.weights = resolve_weights(weights, intent=self.profile.has_intent)
+        self.numbers = {k: metric_number(v) for k, v in self.profile.params.items()}
+
+
+def _reasons(found, w):
+    """The reasons of the top :data:`REASONS` weighted contributions."""
     ranked = sorted(
         (name for name, (sim, reason) in found.items() if sim > 0 and w[name] and reason),
         key=lambda name: (-w[name] * found[name][0], SIGNALS.index(name)),
     )
-    reasons = [found[name][1] for name in ranked[:REASONS]]
-    return value, reasons, {name: sim for name, (sim, _) in found.items()}
+    return [found[name][1] for name in ranked[:REASONS]]

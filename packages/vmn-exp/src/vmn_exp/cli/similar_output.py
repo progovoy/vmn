@@ -14,7 +14,7 @@ leads with the best of the closest runs on their goal metric::
 import datetime
 import sys
 
-from vmn_exp.cli.views import dumps, format_number
+from vmn_exp.cli.views import dumps, format_number, plural
 from vmn_exp.core.status import parse_iso
 
 NO_VALUE = "—"
@@ -40,10 +40,6 @@ def goal_text(goal):
     return f"{goal['metric']}={format_number(goal['value'])}" if goal else NO_VALUE
 
 
-def _runs(count, noun="run"):
-    return f"{count} {noun}{'' if count == 1 else 's'}"
-
-
 def item_line(item, with_app=False, now=None):
     """One result line (see the module docstring)."""
     label = f"{item['app']}/{item['verstr']}" if with_app else item["verstr"]
@@ -55,7 +51,7 @@ def item_line(item, with_app=False, now=None):
         line += "  — " + ", ".join(item["reasons"])
     others = item.get("group_size", 1) - 1
     if others > 0:
-        line += f"  (+{_runs(others)})"
+        line += f"  (+{plural(others, 'run')})"
     return line
 
 
@@ -94,5 +90,5 @@ def hint_lines(items, now=None):
         return []
     best = _best(items)
     lead = f"best {goal_text(best['goal'])}" if best.get("goal") else "closest"
-    lines = [f"{_runs(len(items), 'similar run')}: {lead} — {_who(best, now)}"]
+    lines = [f"{plural(len(items), 'similar run')}: {lead} — {_who(best, now)}"]
     return lines + [f"  {_who(item, now)}" for item in items if item is not best]

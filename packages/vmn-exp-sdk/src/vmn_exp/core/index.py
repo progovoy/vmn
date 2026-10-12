@@ -505,19 +505,30 @@ def _run_states(storage, app_name, rows, read_run_state=load_run_state):
     return {r["verstr"]: read_run_state(storage, app_name, r["verstr"]) for r in rows}
 
 
-def direct_snapshot(storage, app_name, schema=None):
-    """An :class:`IndexSnapshot` (generation 0) built by reading every record,
-    summarized by *schema* like :func:`indexed_snapshot`'s."""
+def snapshot_of_folds(app_name, folds, run_states=None):
+    """An :class:`IndexSnapshot` (generation 0) of *folds*, ``(idx, metadata,
+    fold)`` per run; ``run_states(rows)`` gives the runs' ``(run states,
+    observed_at)`` once their rows are built (none without it)."""
     rows, notes, sides = [], {}, new_side_tables()
-    for idx, meta, fold in _direct_folds(storage, app_name, load_log):
+    for idx, meta, fold in folds:
         verstr = meta["verstr"]
         row, notes[verstr], *values = lean_row(idx, meta, fold)
         rows.append(row)
         put_side_tables(sides, verstr, values)
-    states = _run_states(storage, app_name, rows)
-    observed = observed_at_by_verstr(storage, app_name, states)
-    snap = IndexSnapshot.build(app_name, 0, rows, states, notes, observed, **sides)
-    return snap.summarized(schema)
+    states, observed = run_states(rows) if run_states else ({}, {})
+    return IndexSnapshot.build(app_name, 0, rows, states, notes, observed, **sides)
+
+
+def direct_snapshot(storage, app_name, schema=None):
+    """An :class:`IndexSnapshot` (generation 0) built by reading every record,
+    summarized by *schema* like :func:`indexed_snapshot`'s."""
+
+    def run_states(rows):
+        states = _run_states(storage, app_name, rows)
+        return states, observed_at_by_verstr(storage, app_name, states)
+
+    folds = _direct_folds(storage, app_name, load_log)
+    return snapshot_of_folds(app_name, folds, run_states).summarized(schema)
 
 
 def indexed_snapshot(

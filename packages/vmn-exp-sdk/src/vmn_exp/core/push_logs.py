@@ -9,7 +9,8 @@ older vmn, another host), the remote bytes are compared with the local
 prefix first; a mismatch fails loudly and never starts over, because the
 remote bytes are someone else's.
 """
-from vmn_exp.storage.files import log_object_name, log_writer_and_seq
+from vmn_exp.core.logfiles import next_seq
+from vmn_exp.storage.files import log_object_name
 from vmn_exp.storage.s3_base import parallel_map
 
 
@@ -46,9 +47,7 @@ class _WriterLog:
         else:
             chunk = _complete_lines(self._local_bytes(remote_size))
         if chunk:
-            seqs = [log_writer_and_seq(name)[1] for name, _ in objects]
-            seq = max(seqs) + 1 if seqs else 0
-            self._target.put_log_segment(*self._at, self._writer, seq, chunk)
+            self._target.put_log_segment(*self._at, self._writer, next_seq(objects), chunk)
         if finished and len(objects) + bool(chunk) > 1:
             self._target.compact_log_segments(*self._at, self._writer)
         return remote_size + len(chunk)

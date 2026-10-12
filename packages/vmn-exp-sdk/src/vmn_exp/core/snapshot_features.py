@@ -19,7 +19,7 @@ import os
 
 import yaml
 from vmn_exp._base import VMN_LOGGER, yaml_safe_load
-from vmn_exp.core.features import build_features_entry, code_facts
+from vmn_exp.core.features import AUTHOR_ONLY_VERSION, build_features_entry, code_facts
 from vmn_exp.core.fold import fold_features, fold_log
 from vmn_exp.core.identity import env_author, run_author
 
@@ -27,14 +27,12 @@ EXPERIMENT_FILE = "vmn_experiment.yml"
 FEATURES_FILE = "vmn_features.yml"
 # An older export's vmn_experiment.yml is parsed for its features up to this size.
 LEGACY_READ_MAX_BYTES = 1 << 20
-# The version of an entry naming only the author.
-AUTHOR_ONLY_VERSION = 0
 
 
 def write_features_file(dest, log, exported_by):
     """Write the exported run's features (from its *log*) and *exported_by*."""
     with open(os.path.join(dest, FEATURES_FILE), "w") as f:
-        yaml.safe_dump({"features": _run_features(log), "exported_by": exported_by},
+        yaml.safe_dump({"features": log_features(log), "exported_by": exported_by},
                        f, sort_keys=False)
 
 
@@ -73,11 +71,11 @@ def _older_export(tree_dir):
         VMN_LOGGER.debug(f"Not reading the features of {path}: it is too large")
         return {}
     exported = _load(path) or {}
-    return {"features": _run_features(exported.get("log") or []),
+    return {"features": log_features(exported.get("log") or []),
             "exported_by": exported.get("exported_by")}
 
 
-def _run_features(log):
+def log_features(log):
     """The folded features of a run's *log*, folding its ``features`` entries alone."""
     return fold_features(fold_log(
         [e for e in log if isinstance(e, dict) and e.get("type") == "features"]))

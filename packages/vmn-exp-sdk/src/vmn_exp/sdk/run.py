@@ -37,6 +37,7 @@ from vmn_exp.core.writer import (
     create_tags_entry,
     get_writer_id,
     save_artifact,
+    stamped_entry,
     sync_to_remote,
 )
 from vmn_exp.sdk import (
@@ -571,7 +572,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         (model id) that wrote it, if any. Matched by similar-run search; the
         latest intent wins, also on a finished run — nothing ships its log
         any more, so the entry is synced to the remote at once."""
-        self._append(dict(build_intent_entry(text, keywords, generator), timestamp=now_iso()))
+        self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
         if self._finished:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
                                self.id, get_writer_id())

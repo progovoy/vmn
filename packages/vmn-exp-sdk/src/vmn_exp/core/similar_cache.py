@@ -48,15 +48,12 @@ class _Slot:
 
 
 def _slot(snapshot):
-    """*snapshot*'s slot; None when it is neither hashable nor weak-referenceable."""
-    try:
-        with _LOCK:
-            slot = _CACHE.get(snapshot)
-            if slot is None:
-                slot = _CACHE[snapshot] = _Slot()
-            return slot
-    except TypeError:
-        return None
+    """*snapshot*'s slot."""
+    with _LOCK:
+        slot = _CACHE.get(snapshot)
+        if slot is None:
+            slot = _CACHE[snapshot] = _Slot()
+        return slot
 
 
 def _wait(build, deadline):
@@ -89,6 +86,24 @@ def _run_in_background(slot, build, make, own):
         _LOGGER.warning("Building a similar-runs index failed", exc_info=True)
 
 
+def _claim(slot, structured):
+    """``(index, build, mine)`` of *slot*, under ``_LOCK``: no *build* when its
+    index will do, else the build in flight — *mine* when this caller just
+    claimed it — and the slot's index so far."""
+    index = slot.index
+    if index is not None and (index.structured or not structured):
+        return index, None, False
+    if slot.build is not None:
+        return index, slot.build, False
+    slot.build = _Build()
+    return index, slot.build, True
+
+
+def _start_in_background(slot, build, make, own):
+    threading.Thread(target=_run_in_background, args=(slot, build, make, own),
+                     name="vmn-similar-index", daemon=True).start()
+
+
 def _obtain(slot, structured, deadline, make, background=False):
     """*slot*'s index (with structured tokens when *structured*), built by
     *make(deadline, own)* — *own* the slot's words-only index or None — by
@@ -96,18 +111,14 @@ def _obtain(slot, structured, deadline, make, background=False):
     thread of its own."""
     while True:
         with _LOCK:
-            index = slot.index
-            if index is not None and (index.structured or not structured):
-                return index
-            build, mine = slot.build, slot.build is None
-            if mine:
-                build = slot.build = _Build()
+            index, build, mine = _claim(slot, structured)
+        if build is None:
+            return index
         if mine and not background:
             _run(slot, build, make, deadline, index)
             continue
         if mine:
-            threading.Thread(target=_run_in_background, args=(slot, build, make, index),
-                             name="vmn-similar-index", daemon=True).start()
+            _start_in_background(slot, build, make, index)
         if not _wait(build, deadline):
             raise SimilarDeadlineExceeded
         if build.error is not None:
@@ -117,10 +128,7 @@ def _obtain(slot, structured, deadline, make, background=False):
 def index_for(snapshot, deadline=None, structured=True):
     """The :class:`~vmn_exp.core.similar_index.SimilarIndex` of *snapshot*
     (see the module docstring); *structured* False settles for words only."""
-    slot = _slot(snapshot)
-    if slot is None:
-        return build_index(snapshot, deadline, structured=structured)
-    return _obtain(slot, structured, deadline,
+    return _obtain(_slot(snapshot), structured, deadline,
                    lambda by, own: build_index(snapshot, by, own, structured))
 
 
@@ -130,21 +138,30 @@ class _Lineage:
 
 
 class IndexLineages:
-    """The last index of each lineage of snapshots (at most *kept*, the
-    least recently used dropped), and their builds; see the module docstring."""
+    """The last index of each lineage of snapshots (at most
+    :data:`LINEAGES_KEPT`, the least recently used dropped), and their
+    builds; see the module docstring."""
 
-    def __init__(self, kept=LINEAGES_KEPT):
-        self._kept, self._lock, self._lineages = kept, threading.Lock(), OrderedDict()
+    def __init__(self):
+        self._lock, self._lineages = threading.Lock(), OrderedDict()
 
     def index_for(self, key, snapshot, deadline=None, structured=True):
         """*snapshot*'s index, built in lineage *key*; raises
         :class:`SimilarDeadlineExceeded` when it is not ready by *deadline*."""
+        return _obtain(_slot(snapshot), structured, deadline,
+                       self._maker(key, snapshot, structured), background=True)
+
+    def start(self, key, snapshot, structured=True):
+        """Start building *snapshot*'s index in lineage *key*, unless it is
+        built or being built; :meth:`index_for` then waits for it."""
         slot = _slot(snapshot)
-        if slot is None:
-            return build_index(snapshot, deadline, structured=structured)
-        return _obtain(slot, structured, deadline,
-                       lambda _by, own: self._build(key, snapshot, own, structured),
-                       background=True)
+        with _LOCK:
+            own, build, mine = _claim(slot, structured)
+        if mine:
+            _start_in_background(slot, build, self._maker(key, snapshot, structured), own)
+
+    def _maker(self, key, snapshot, structured):
+        return lambda _by, own: self._build(key, snapshot, own, structured)
 
     def _build(self, key, snapshot, own, structured):
         lineage = self._lineage(key)
@@ -158,6 +175,6 @@ class IndexLineages:
         with self._lock:
             lineage = self._lineages.pop(key, None) or _Lineage()
             self._lineages[key] = lineage
-            while len(self._lineages) > self._kept:
+            while len(self._lineages) > LINEAGES_KEPT:
                 self._lineages.popitem(last=False)
             return lineage

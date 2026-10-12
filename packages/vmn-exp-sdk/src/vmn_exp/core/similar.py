@@ -34,11 +34,10 @@ from vmn_exp.core.similar_index import (  # noqa: F401  (SimilarDeadlineExceeded
     SimilarDeadlineExceeded,
     check_deadline,
     index_for,
-    run_command,
-    side_tables,
+    run_facts,
 )
 from vmn_exp.core.similar_profile import build_profile, objective_names, profile_tokens
-from vmn_exp.core.similar_score import score
+from vmn_exp.core.similar_score import Target, score
 from vmn_exp.core.similar_text import query_weights, shared_reason
 from vmn_exp.core.values import is_finite_number
 
@@ -50,11 +49,10 @@ def target_from_snapshot(snapshot, verstr, text=None, text_only=False, *, app=No
     row = _row_of(snapshot, verstr)
     if row is None:
         raise KeyError(verstr)
-    features_of, intent_of, hypothesis_of = side_tables(snapshot)
-    notes = getattr(snapshot, "create_notes", None) or {}
-    target = {"row": row, "features": features_of(verstr), "intent": intent_of(verstr),
-              "hypothesis": hypothesis_of(verstr), "text": text, "text_only": bool(text_only),
-              "command": run_command(snapshot, row), "create_note": notes.get(verstr)}
+    features, intent, hypothesis, command, note = run_facts(snapshot)(row)
+    target = {"row": row, "features": features, "intent": intent, "hypothesis": hypothesis,
+              "text": text, "text_only": bool(text_only), "command": command,
+              "create_note": note}
     if app is not None:
         target["app"] = app
     return target
@@ -85,7 +83,10 @@ def goal_metric(schema, rows):
 
 
 class _Query:
-    def __init__(self, target):
+    """A target, read once: its profile, BM25 query weights, tokens and —
+    unless the text alone is scored — its score :class:`Target` under *weights*."""
+
+    def __init__(self, target, weights=None):
         row = target.get("row") or {}
         self.text_only = bool(target.get("text_only"))
         self.profile = build_profile(
@@ -94,6 +95,7 @@ class _Query:
             create_note=target.get("create_note") or row.get("create_note"),
         )
         self.weights = query_weights(self.profile.terms)
+        self.score_target = None if self.text_only else Target(self.profile, weights)
         self.tokens = profile_tokens(self.profile, structured=not self.text_only)
         self.app = target.get("app")
         self.row, self.verstr, self.code = row, row.get("verstr"), row.get("code_verstr")
@@ -112,7 +114,9 @@ class _Query:
 
 
 class _Scope:
-    """One app's candidates for a query, with their raw BM25 text scores."""
+    """One app's candidates for a query, with their raw BM25 text scores.
+    Candidates are ranked on their scores alone; :meth:`reasons` explains
+    the few returned."""
 
     def __init__(self, app, snapshot, schema, query, rows_filter, deadline=None):
         self.index = index_for(snapshot, deadline, structured=not query.text_only)
@@ -129,42 +133,55 @@ class _Scope:
         self.candidates = self.index.candidates(query.tokens, keep=keep)
         self.text_raw = {}
         if query.weights:
+            bm25 = self.index.bm25
+            idfs = bm25.idfs(query.weights)
             for done, verstr in enumerate(self.candidates):
                 check_deadline(deadline, done)
                 p = self.index.profile(verstr)
                 if p.length:
-                    self.text_raw[verstr] = self.index.bm25.score(query.weights, p.terms, p.length)
+                    self.text_raw[verstr] = bm25.score(query.weights, p.terms, p.length, idfs)
 
-    def _text(self, query, verstr, best):
+    def _text(self, verstr, best):
         raw = self.text_raw.get(verstr)
-        if raw is None:
-            return None, None
-        p = self.index.profile(verstr)
-        reason = shared_reason(query.profile.terms, p.terms, self.index.bm25.idf,
-                               phrases=query.profile.keywords + p.keywords) if raw else None
-        return (raw / best if best else 0.0), reason
+        return None if raw is None else (raw / best if best else 0.0)
 
-    def scored(self, query, best, weights):
-        """Item drafts (``app``, ``verstr``, ``score``, ``reasons``,
-        ``signals``, the shared ``row``) of the candidates scoring above 0."""
+    def _text_reason(self, query, verstr):
+        if not self.text_raw.get(verstr):
+            return None
+        p = self.index.profile(verstr)
+        return shared_reason(query.profile.terms, p.terms, self.index.bm25.idf,
+                             phrases=query.profile.keywords + p.keywords)
+
+    def scored(self, query, best):
+        """Item drafts (``app``, ``verstr``, ``score``, ``reasons`` — empty
+        until :meth:`reasons` —, ``signals``, the shared ``row``) of the
+        candidates scoring above 0."""
         out = []
         for done, verstr in enumerate(self.candidates):
             check_deadline(self._deadline, done)
-            text, reason = self._text(query, verstr, best)
+            text = self._text(verstr, best)
             if query.text_only:
-                total, reasons, signals = text or 0.0, [reason] if reason else [], {"text": text}
+                total, signals = text or 0.0, {"text": text}
             else:
-                total, reasons, signals = score(
-                    query.profile, self.index.profile(verstr), weights, text, reason)
+                total, _, signals = score(query.score_target, self.index.profile(verstr),
+                                          text_score=text, why=False)
             if total > 0:
                 out.append({"app": self.app, "verstr": verstr, "score": round(total, 4),
-                            "reasons": reasons, "row": self.index.row(verstr),
+                            "reasons": [], "row": self.index.row(verstr),
                             "signals": {k: round(v, 4) for k, v in signals.items()}})
         return out
 
-    def items(self, query, best, weights):
+    def reasons(self, query, verstr, best):
+        """The reasons of candidate *verstr*'s score."""
+        reason = self._text_reason(query, verstr)
+        if query.text_only:
+            return [reason] if reason else []
+        return score(query.score_target, self.index.profile(verstr),
+                     text_score=self._text(verstr, best), text_reason=reason)[1]
+
+    def items(self, query, best):
         groups = {}
-        for draft in self.scored(query, best, weights):
+        for draft in self.scored(query, best):
             groups.setdefault(self._group_key(draft["row"]), []).append(draft)
         return [self._item(members) for members in groups.values()]
 
@@ -217,14 +234,18 @@ def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None
     Items: ``{"app", "verstr", "score", "reasons", "signals", "group_size",
     "goal": {"metric", "goal", "value"} | None, "row"}`` (``row`` a copy).
     """
-    query = _Query(target)
+    query = _Query(target, weights)
     if not query.tokens:
         return []
     prepared = [_Scope(app, snapshot, schema, query, rows_filter, deadline)
                 for app, snapshot, schema in scopes]
     best = max((raw for scope in prepared for raw in scope.text_raw.values()), default=0.0)
-    items = [item for scope in prepared for item in scope.items(query, best, weights)]
-    return _ordered(items)[:top]
+    found = [(scope, item) for scope in prepared for item in scope.items(query, best)]
+    scope_of = {id(item): scope for scope, item in found}
+    items = _ordered([item for _, item in found])[:top]
+    for item in items:
+        item["reasons"] = scope_of[id(item)].reasons(query, item["verstr"], best)
+    return items
 
 
 def similar_runs(snapshot, target, *, top=10, rows_filter=None, schema=None, weights=None, app=None,

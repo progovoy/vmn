@@ -35,14 +35,12 @@ import time
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.cli.similar_output import hint_lines
 from vmn_exp.core.fold import fold_log
-from vmn_exp.core.index import ExperimentIndex
-from vmn_exp.core.index_snapshot import IndexSnapshot, new_side_tables, put_side_tables
+from vmn_exp.core.index import ExperimentIndex, snapshot_of_folds
 from vmn_exp.core.index_store import IndexStore
-from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.log import load_log
 from vmn_exp.core.similar import SimilarDeadlineExceeded, target_from_snapshot
 from vmn_exp.core.similar_search import conf_schema, conf_weights, hint_enabled, search
-from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.cached import local_side
 
 BUDGET_SEC = 0.3
 # The most runs an index may hold for the hint to load it within the budget
@@ -62,7 +60,7 @@ def print_hint(storage, app_name, verstr, args, exp_conf, command=None):
     try:
         if not _wanted(args, exp_conf):
             return
-        local = _local_side(storage)
+        local = local_side(storage)
         path = _cache_path(storage, app_name)
         if local is None or not _searchable_in_budget(path, app_name):
             return
@@ -92,15 +90,6 @@ def _searchable_in_budget(path, app_name):
         return 0 < store.count(app_name) <= MAX_INDEXED_RUNS
     finally:
         store.close()
-
-
-def _local_side(storage):
-    """The storage the command wrote the new run to locally: a local-first
-    storage's local side, else *storage* unless it is remote (None)."""
-    if isinstance(storage, CachedSnapshotStorage):
-        # Private, but the cache's documented shape; it has no public accessor.
-        return storage._local
-    return None if getattr(storage, "is_remote", lambda: False)() else storage
 
 
 def _cache_path(storage, app_name):
@@ -135,7 +124,7 @@ def _lines(local, app_name, verstr, exp_conf, path, deadline, command):
     return hint_lines(items)
 
 
-def _cached_snapshot(path, app_name, schema=None):
+def _cached_snapshot(path, app_name, schema):
     """*app_name*'s index snapshot as persisted at *path*, under the metrics
     *schema*; reads nothing but that file."""
     store = IndexStore(path)
@@ -145,15 +134,13 @@ def _cached_snapshot(path, app_name, schema=None):
         store.close()
 
 
-def _new_run_target(local, app_name, verstr, command=None):
+def _new_run_target(local, app_name, verstr, command):
     """The similar-runs target of the run *verstr*, running *command*, from
     its own record in the *local* storage."""
     meta = local.load_metadata(app_name, verstr)
-    row, note, *values = lean_row(1, meta, fold_log(load_log(local, app_name, verstr)))
-    sides = new_side_tables()
-    put_side_tables(sides, verstr, values)
-    own = IndexSnapshot.build(app_name, 0, [row], {}, {verstr: note}, **sides)
-    target = target_from_snapshot(own, verstr, app=app_name)
+    fold = fold_log(load_log(local, app_name, verstr))
+    target = target_from_snapshot(snapshot_of_folds(app_name, [(1, meta, fold)]), verstr,
+                                  app=app_name)
     if command:
         target["command"] = list(command)
     return target

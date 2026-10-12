@@ -19,7 +19,7 @@ from vmn_exp.core.index_views import (
     runs_declared_schema,
     schema_key,
 )
-from vmn_exp.core.status import observed_at_from_mtime
+from vmn_exp.core.status import derive_status, observed_at_from_mtime
 
 _VIEWS_PER_SNAPSHOT = 4
 
@@ -107,6 +107,12 @@ class IndexSnapshot:
     def hypothesis_of(self, verstr):
         """*verstr*'s hypothesis (its first ``create`` entry's), or None."""
         return self.hypotheses.get(verstr)
+
+    def status_of(self, verstr):
+        """*verstr*'s derived status, its run state's store write time
+        (:attr:`run_state_observed_at`) as *observed_at*."""
+        return derive_status(self.run_states.get(verstr),
+                             observed_at=self.run_state_observed_at.get(verstr))
 
     def declared_schema(self):
         """``{metric: {"goal"?, "hidden"?}}`` the runs declare, the latest

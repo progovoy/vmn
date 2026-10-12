@@ -47,6 +47,12 @@ def log_writer_and_seq(name):
     return writer, last
 
 
+def next_seq(objects):
+    """The segment after a writer's log *objects* ``[(name, size)]``."""
+    seqs = [log_writer_and_seq(name)[1] for name, _ in objects]
+    return max(seqs) + 1 if seqs else 0
+
+
 # A local log file lists as ``(size, mtime_ns, inode, log/ mtime_ns)``: an
 # append moves only the first two, while a rewrite (an atomic replace, like a
 # local-first cache merging the remote's lines in) gives the file a new inode
@@ -64,6 +70,12 @@ def append_identity(sig):
     """The part of log file signature *sig* an append keeps and a rewrite
     changes; None for a signature without one (an object store's)."""
     return tuple(sig[2:]) if len(sig) == _LOCAL_LOG_SIG_LEN else None
+
+
+def appended(old_sig, new_sig):
+    """Whether the file listed *new_sig* may be the file listed *old_sig* with
+    bytes appended: bigger, and its :func:`append_identity` unmoved."""
+    return new_sig[0] > old_sig[0] and append_identity(new_sig) == append_identity(old_sig)
 
 
 def log_object_name(writer, seq=0):

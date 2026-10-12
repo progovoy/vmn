@@ -28,7 +28,7 @@ from vmn_exp.core.fold import (
 )
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.log import load_log, metric_series
-from vmn_exp.core.logfiles import append_identity, group_log_names, is_log_file
+from vmn_exp.core.logfiles import appended, group_log_names, is_log_file
 from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.metric_files import (
     INDEXED_SUFFIX,
@@ -273,13 +273,13 @@ def _appends_in_order(entries, new_entries):
 
 
 def _replaced(sig, files):
-    """Whether a file of listing *sig* (the last parse's) was replaced since —
-    its :func:`~vmn_exp.core.logfiles.append_identity` moved, like a log a
+    """Whether a file of listing *sig* (the last parse's) changed since other
+    than by an append (:func:`~vmn_exp.core.logfiles.appended`) — like a log a
     local-first cache merged — so its bytes past the offset parsed need not
     follow the ones parsed."""
     before = dict(sig or ())
     return any(
-        name in before and append_identity(before[name]) != append_identity(listed)
+        name in before and before[name] != listed and not appended(before[name], listed)
         for name, listed in files.items()
     )
 

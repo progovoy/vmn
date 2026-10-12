@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """How ``vmn-exp show`` prints a run's logged images, tables and histograms."""
+from vmn_exp.cli.views import plural
 from vmn_exp.core.media import media_counts
-
-
-def _plural(n, word):
-    return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
 def media_lines(log):
     """``["images: 3 (2 keys)", ...]`` for the kinds the run logged."""
     return [
-        f"{kind}: {c['entries']} ({_plural(c['keys'], 'key')})"
+        f"{kind}: {c['entries']} ({plural(c['keys'], 'key')})"
         for kind, c in media_counts(log).items()
         if c["entries"]
     ]

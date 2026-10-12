@@ -122,6 +122,12 @@ def create_log_entry(entry_type, **kwargs):
     return entry
 
 
+def stamped_entry(entry):
+    """A built *entry* (its ``type`` and fields) as :func:`create_log_entry` makes it."""
+    fields = dict(entry)
+    return create_log_entry(fields.pop("type"), **fields)
+
+
 def create_tags_entry(tags=None, remove=None):
     """A ``tags`` log entry: set *tags* (values stored as strings), drop *remove*.
 

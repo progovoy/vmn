@@ -19,13 +19,18 @@ skipped one by one. Pure: no storage.
 import re
 from collections import Counter, namedtuple
 
-from vmn_exp.core.similar_text import document_terms, keyword_phrases, tokenize
+from vmn_exp.core.features import AUTHOR_ONLY_VERSION
+from vmn_exp.core.similar_text import (
+    _dict,
+    _strings,
+    document_terms,
+    keyword_phrases,
+    tokenize,
+)
 
 SYS_PREFIX = "sys_"
 # The diff part of a clean tree's dev verstr (version_stamp's snapshot identity).
 CLEAN_DIFF = "0000000"
-# The version of an export's entry that names only its author (core.snapshot_features).
-_AUTHOR_ONLY_VERSION = 0
 
 Input = namedtuple("Input", "name dataset digest kind")
 
@@ -51,14 +56,6 @@ class Profile:
         "symbols",
         "terms",
     )
-
-
-def _dict(value):
-    return value if isinstance(value, dict) else {}
-
-
-def _strings(value):
-    return [v for v in value if isinstance(v, str) and v] if isinstance(value, list) else []
 
 
 def _named(value):
@@ -96,7 +93,7 @@ def _clean_code(row):
 def _changes_known(row, features):
     """Whether *features* — the run's entry, None without one — knows the
     run's changes (see the module docstring)."""
-    if not isinstance(features, dict) or features.get("features_version") == _AUTHOR_ONLY_VERSION:
+    if not isinstance(features, dict) or features.get("features_version") == AUTHOR_ONLY_VERSION:
         return False
     source = features.get("source")
     if source == "mlflow":  # an import: MLflow never saw the code

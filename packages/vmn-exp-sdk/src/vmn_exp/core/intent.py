@@ -33,7 +33,7 @@ def build_intent_entry(text, keywords=None, generator=None) -> dict:
     text = text.strip() if isinstance(text, str) else ""
     if not text:
         raise ValueError("An intent needs a non-empty text")
-    text, truncated = _capped_text(_utf8(text, "The intent text"))
+    text, truncated = cap_utf8(_utf8(text, "The intent text"), MAX_TEXT_BYTES)
     entry = {"type": "intent", "text": text}
     kept = clean_keywords(keywords)
     if kept:
@@ -78,12 +78,14 @@ def _front_matter(block):
     return meta
 
 
-def _capped_text(text):
+def cap_utf8(text, max_bytes):
+    """``(text, cut)``: *text* cut to *max_bytes* bytes of UTF-8, never
+    mid-character; *cut* whether it was."""
     encoded = text.encode("utf-8")
-    if len(encoded) <= MAX_TEXT_BYTES:
+    if len(encoded) <= max_bytes:
         return text, False
     # A cut UTF-8 prefix is invalid only in its last, partial character.
-    return encoded[:MAX_TEXT_BYTES].decode("utf-8", "ignore"), True
+    return encoded[:max_bytes].decode("utf-8", "ignore"), True
 
 
 def clean_keywords(keywords):

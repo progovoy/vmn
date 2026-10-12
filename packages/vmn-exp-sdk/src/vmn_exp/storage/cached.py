@@ -68,7 +68,9 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
         except Exception:
             self._local.delete(app_name, verstr)
             raise
-        if not claimed:
+        if claimed:
+            self._claimed.add((app_name, verstr))
+        else:
             # Another host holds this name on the shared remote.
             self._local.delete(app_name, verstr)
         self._presence.mark(app_name, verstr, claimed)
@@ -330,3 +332,10 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
             return self._remote.artifact_uri(app_name, verstr, path)
         return self._local.artifact_uri(app_name, verstr, path)
 
+
+def local_side(storage):
+    """Where a command's writes to *storage* land on this host: a local-first
+    cache's local store, else *storage* itself — None when it is remote only."""
+    if isinstance(storage, CachedSnapshotStorage):
+        return storage._local
+    return None if getattr(storage, "is_remote", lambda: False)() else storage

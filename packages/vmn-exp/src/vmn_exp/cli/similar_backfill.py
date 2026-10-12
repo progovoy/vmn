@@ -20,28 +20,26 @@ with its older entry's. Code the store lists but could not read fails the run
 (nothing written: the next backfill retries it), as does any other error of
 one run, a malformed run state included.
 """
-from collections import Counter
+from collections import Counter, defaultdict
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.cli.migrate_convert import LEGACY_WRITER
+from vmn_exp.cli.views import plural
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.code_patches import (
     CodeReadError,
     code_patch_texts,
     patch_items,
     record_patch_texts,
+    run_dep_paths,
     unreadable_code_keys,
 )
-from vmn_exp.core.code_store import find_code_key
-from vmn_exp.core.features import (
-    FEATURES_VERSION,
-    author_from_commits,
-    build_features_entry,
-)
+from vmn_exp.core.code_store import code_storage, find_code_key
+from vmn_exp.core.features import author_from_commits, build_features_entry, is_current
 from vmn_exp.core.provenance import _has_in_record_patches
 from vmn_exp.core.rerun import _dirty_snapshot, code_verstr_of
-from vmn_exp.core.status import RUNNING, STUCK, derive_status
-from vmn_exp.core.writer import create_log_entry, flush_log, get_writer_id
+from vmn_exp.core.status import RUNNING, STUCK
+from vmn_exp.core.writer import flush_log, get_writer_id, stamped_entry
 from vmn_exp.gitmode.features import features_from_patches  # without vmn's own commits
 
 BACKFILLED, PARTIAL, SKIPPED, FAILED = "backfilled", "partial", "skipped", "failed"
@@ -94,13 +92,11 @@ def backfill_app(storage, app_name, dry_run=False):
 
 def _skip_reason(snap, row):
     verstr = row["verstr"]
-    features = snap.features_of(verstr)
-    if features and features["features_version"] >= FEATURES_VERSION:
+    if is_current(snap.features_of(verstr)):
         return "up to date"
     if row.get("imported_from"):
         return "imported"
-    status = derive_status(snap.run_states.get(verstr),
-                           observed_at=snap.run_state_observed_at.get(verstr))
+    status = snap.status_of(verstr)
     return status if status in (RUNNING, STUCK) else None
 
 
@@ -159,12 +155,11 @@ def _counts(entry):
     parts = [(len(changed.get("files") or ()), "file"),
              (len(changed.get("symbols") or ()), "symbol"),
              (len(entry.get("commits") or ()), "commit")]
-    return ", ".join(f"{n} {noun}{'' if n == 1 else 's'}" for n, noun in parts)
+    return ", ".join(plural(n, noun) for n, noun in parts)
 
 
 def _append(storage, app_name, verstr, entry):
-    log_entry = create_log_entry(entry["type"], **{k: v for k, v in entry.items()
-                                                   if k != "type"})
+    log_entry = stamped_entry(entry)
     if storage.append_log_entry(app_name, verstr, get_writer_id(), log_entry) is False:
         raise RuntimeError("the record is gone")
     # One-shot command: no heartbeat will ship the entry to a remote later.
@@ -180,6 +175,7 @@ class _CodeFeatures:
         self._app = app_name
         self._parsed = {}  # code key -> features_from_patches result, None = missing
         self._keys = {}  # code verstr -> its one code object's key, or None
+        self._names = None  # code verstr -> its code objects' keys, listed once
 
     def of(self, metadata):
         """``(parsed patches, None)``, ``(None, None)`` for a clean tree, or
@@ -196,29 +192,32 @@ class _CodeFeatures:
             return self._object(key, metadata, missing) if key else (None, missing)
         if _has_in_record_patches(metadata):
             patches = record_patch_texts(self._storage, self._app, metadata["verstr"],
-                                         _dep_paths(metadata))
+                                         run_dep_paths(metadata))
             return features_from_patches(patch_items(patches)), None
         return None, None
 
     def _find_key(self, code_verstr):
         """The one complete code object of *code_verstr*; CodeReadError when
         there is none to be found because the store could not read one."""
-        key = find_code_key(self._storage, self._app, code_verstr)
+        names = self._code_names().get(code_verstr, [])
+        key = find_code_key(self._storage, self._app, code_verstr, names)
         if key is None:
-            unread = unreadable_code_keys(self._storage, self._app, code_verstr)
+            unread = unreadable_code_keys(self._storage, self._app, code_verstr, names)
             if unread:
                 raise CodeReadError(f"could not read code object {', '.join(unread)}")
         return key
 
+    def _code_names(self):
+        if self._names is None:
+            self._names = defaultdict(list)
+            for key in code_storage(self._storage).list_record_names(self._app):
+                self._names[key.rsplit(".", 1)[0]].append(key)
+        return self._names
+
     def _object(self, key, metadata, missing):
         if key not in self._parsed:
-            patches = code_patch_texts(self._storage, self._app, key, _dep_paths(metadata))
+            patches = code_patch_texts(self._storage, self._app, key, run_dep_paths(metadata))
             self._parsed[key] = (
                 None if patches is None else features_from_patches(patch_items(patches)))
         parsed = self._parsed[key]
         return (parsed, None) if parsed is not None else (None, missing)
-
-
-def _dep_paths(metadata):
-    deps = set(metadata.get("dep_base_commits") or ()) | set(metadata.get("changesets") or ())
-    return sorted(deps - {"."})

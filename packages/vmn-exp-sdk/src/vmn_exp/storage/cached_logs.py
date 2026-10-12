@@ -20,8 +20,9 @@ of the listed files always equals a full re-read.
 import threading
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.logfiles import next_seq
 from vmn_exp.core.status import run_finished
-from vmn_exp.storage.cached_log_merge import LogMerge, next_seq
+from vmn_exp.storage.cached_log_merge import LogMerge
 from vmn_exp.storage.files import (
     is_log_file,
     log_object_name,

@@ -134,7 +134,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--patch", action="store_true", default=False,
                       help="show: also print the run's own patches (working tree, local "
                            "commits, deps; never untracked files)")
-    pexp.add_argument("--max-bytes", type=views.positive_max_bytes, default=None, metavar="N",
+    pexp.add_argument("--max-bytes", type=views.positive_max_bytes,
+                      default=views.PATCH_MAX_BYTES, metavar="N",
                       help="show --patch: print at most N bytes of patch text "
                            f"(default: {views.PATCH_MAX_BYTES})")
     pexp.add_argument("--query", default=None,
