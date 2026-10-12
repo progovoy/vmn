@@ -8,6 +8,8 @@ import ReportHistory from "../reports/ReportHistory";
 import { PanelCaptureProvider, usePanelCapture } from "../reports/publishedData";
 import Comments from "../components/Comments";
 import { Skeleton } from "../components/ui";
+import NotFound from "../components/shell/NotFound";
+import { httpStatus } from "../shell/notFoundCopy";
 
 /** Which revision to show: ?rev=N, else the draft (live, editors, nothing
  *  published), else the published one (plan 13 decision 1). */
@@ -104,6 +106,7 @@ function ReportBody({ ws, report }: { ws: string; report: ReportDetail }) {
 export default function Report() {
   const { ws = "", rid = "" } = useParams();
   const query = useQuery({ queryKey: ["report", ws, rid], queryFn: () => apiReports.getReport(ws, rid) });
+  if (httpStatus(query.error) === 404) return <NotFound kind="report" ws={ws} rid={rid} />;
   if (query.error) return <div className="error">{(query.error as Error).message}</div>;
   if (!query.data) return <Skeleton />;
   return (

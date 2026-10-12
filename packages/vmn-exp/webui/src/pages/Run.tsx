@@ -8,6 +8,8 @@ import { findCachedRow, rowsPrefix, runQuery, useMetricsSchema, useMeta } from "
 import type { ExperimentDetail } from "../types";
 import { pollIntervalMs, runHref } from "../util";
 import { Skeleton } from "../components/ui";
+import NotFound from "../components/shell/NotFound";
+import { isMissingRun } from "../shell/notFoundCopy";
 import { usePolling } from "../hooks/usePolling";
 import ArtifactsList from "../components/ArtifactsList";
 import RegisterModelDialog from "../components/RegisterModelDialog";
@@ -132,7 +134,10 @@ export default function Run() {
   const pollMs = pollIntervalMs(detail?.status?.heartbeat_interval_sec);
   usePolling(() => query.refetch(), pollMs, live || running);
 
-  if (query.error && !detail) return <div className="error">{String(query.error)}</div>;
+  if (query.error && !detail) {
+    if (isMissingRun(query.error)) return <NotFound kind="run" ws={ws} appTag={app} runRef={verstr} />;
+    return <div className="error">{String(query.error)}</div>;
+  }
   // Until the detail lands, the leaderboard's row for this run paints the top.
   const row = detail ? undefined : findCachedRow(client, ws, app, verstr);
   const summary = detail ? summaryFromDetail(detail) : row ? summaryFromRow(row) : null;
