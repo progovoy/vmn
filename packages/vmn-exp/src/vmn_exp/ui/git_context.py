@@ -46,7 +46,8 @@ def _failure(error):
 def _status(path):
     try:
         result = subprocess.run(
-            GIT_STATUS, cwd=path, capture_output=True, text=True, timeout=TIMEOUT_SEC
+            GIT_STATUS, cwd=path, capture_output=True, text=True, errors="replace",
+            timeout=TIMEOUT_SEC,
         )
     except subprocess.TimeoutExpired:
         return _failure("timeout")

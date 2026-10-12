@@ -99,6 +99,14 @@ def test_repo_without_commits(tmp_path):
     assert body["dirty"] is False
 
 
+def test_a_non_utf8_branch_name_still_answers(tmp_path):
+    repo = _repo(tmp_path, commit=False)
+    (repo / ".git" / "HEAD").write_bytes(b"ref: refs/heads/caf\xe9\n")
+    body = _context(_client(tmp_path, {"ws": repo}))
+    assert body["branch"] == "caf\ufffd"
+    assert body["dirty"] is False
+
+
 def test_not_a_repo_answers_200_with_an_error(tmp_path):
     path = tmp_path / "plain"
     os.makedirs(path / ".vmn")
