@@ -1,0 +1,74 @@
+/* The selection bar floating at the bottom of the board (Monday.com). Every
+   slot keeps its size at every count: the badge reserves four tabular
+   digits, the label the plural's width, select-all its place when hidden,
+   and archive errors float above the bar instead of widening it. */
+
+.sel-bar-spacer { height: 96px; }
+.sel-dock {
+  position: fixed; left: 50%; bottom: 24px; z-index: 50; transform: translateX(-50%);
+  /* max-content: a fixed box at left: 50% would otherwise shrink to half the viewport. */
+  width: max-content; max-width: calc(100vw - 48px);
+  animation: sel-bar-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes sel-bar-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+}
+.sel-bar {
+  display: flex; align-items: stretch; min-height: 60px;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+.sel-badge {
+  display: grid; place-items: center; box-sizing: border-box; min-width: 5.5ch; padding: 0 0.5ch;
+  background: var(--accent); color: #fff;
+  font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums;
+  animation: sel-count-in 0.18s ease-out;
+}
+/* A new count fades in where the old one was; nothing moves. */
+@keyframes sel-count-in {
+  from { color: color-mix(in srgb, #fff 35%, transparent); }
+}
+.sel-label {
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  padding: 8px 18px 8px 16px; white-space: nowrap;
+}
+/* The shown label and the widest one share a cell, so the box fits both. */
+.sel-label-text { display: inline-grid; color: var(--text); font-size: 14px; }
+.sel-label-text::after {
+  content: attr(data-widest); visibility: hidden; height: 0; overflow: hidden;
+}
+.sel-all { display: flex; }
+.sel-all button.link { font-size: 12px; color: var(--accent); }
+.sel-actions {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 10px 16px; border-left: 1px solid var(--line);
+}
+.sel-toast {
+  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+  max-width: 100%; padding: 6px 12px; box-sizing: border-box;
+  background: var(--panel); border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--line-2));
+  border-radius: 8px; color: var(--bad); font-size: 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+}
+.sel-toast:empty { display: none; }
+button.sel-close {
+  padding: 0 20px; border: none; border-left: 1px solid var(--line); border-radius: 0;
+  background: none; color: var(--text-3); font-size: 16px;
+}
+button.sel-close:hover { color: var(--text); background: var(--panel-2); border-color: var(--line); }
+button.sel-close:focus-visible { outline-offset: -3px; }
+
+/* Phones: one fixed-width bar; the actions take their own row under the count. */
+@media (max-width: 599px) {
+  .sel-dock { left: 12px; right: 12px; bottom: 12px; width: auto; max-width: none; transform: none; }
+  @keyframes sel-bar-in {
+    from { opacity: 0; transform: translateY(12px); }
+  }
+  .sel-bar { flex-wrap: wrap; }
+  .sel-label { flex: 1; }
+  .sel-actions {
+    order: 3; flex-basis: 100%; display: grid; grid-template-columns: 1fr 1fr;
+    border-left: none; border-top: 1px solid var(--line);
+  }
+  button.sel-close { order: 2; }
+}

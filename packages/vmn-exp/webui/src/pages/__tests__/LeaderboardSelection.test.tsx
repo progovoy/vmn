@@ -90,7 +90,7 @@ describe("select all filtered", () => {
 describe("N-run compare", () => {
   it("opens the compare table for the selected runs", async () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(1)}&sel=${v(2)}&sel=${v(3)}`);
-    fireEvent.click(await screen.findByRole("button", { name: /compare 3 in a table/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /compare in table/i }));
     await waitFor(() => expect(location.pathname).toBe("/ws/test/app/my-app/compare-runs"));
     expect(urlParams().getAll("sel")).toEqual([v(1), v(2), v(3)]);
   });
