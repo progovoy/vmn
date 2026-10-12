@@ -169,13 +169,32 @@ the copy's ship lock."""
         with self._ship_state(app_name, verstr, "metrics") as state:
             listing = _Listing(remote, app_name, verstr)
             owns = self._stream_owned(app_name, verstr)
+            inherits = owned_by(self._local.inherited_owners(app_name, verstr))
             for stream, objects in sorted(local.items()):
-                if not owns(stream):
-                    continue
-                if _has_stream(objects):
-                    self._ship_blocks(state, listing, remote, app_name, verstr, stream)
-                else:
-                    self._ship_indexed(state, listing, remote, app_name, verstr, stream, objects)
+                if owns(stream):
+                    self._ship_own(state, listing, remote, app_name, verstr, stream, objects)
+                elif inherits(stream):
+                    self._ship_inherited(listing, remote, app_name, verstr, stream, objects)
+
+    def _ship_own(self, state, listing, remote, app_name, verstr, stream, objects):
+        if _has_stream(objects):
+            self._ship_blocks(state, listing, remote, app_name, verstr, stream)
+        else:
+            self._ship_indexed(state, listing, remote, app_name, verstr, stream, objects)
+
+    def _ship_inherited(self, listing, remote, app_name, verstr, stream, objects):
+        """What the remote lacks of a stream whose file came with the copy's
+        directory and never grows: the blocks past its segments, or the
+        ``.vmx`` its owner built from that whole file. Nothing once the
+        remote compacted it, nor from a fresh listing's view of it."""
+        theirs = listing.objects(stream)
+        if any(is_indexed_file(n) for n, _ in theirs):
+            return
+        if _has_stream(objects):
+            self._ship_blocks(ship_state.Unknown(), listing, remote, app_name, verstr, stream,
+                              recompact=False)
+        else:
+            self._ship_indexed(ship_state.Unknown(), listing, remote, app_name, verstr, stream, objects)
 
     def _ship_indexed(self, state, listing, remote, app_name, verstr, stream, objects):
         """A ``.vmx`` the copy built while the remote was out of reach goes up
@@ -189,13 +208,14 @@ the copy's ship lock."""
         remote.put_indexed(app_name, verstr, stream, path, replace=True, covers=covers)
         state.put(stream, _INDEXED)
 
-    def _ship_blocks(self, state, listing, remote, app_name, verstr, stream):
+    def _ship_blocks(self, state, listing, remote, app_name, verstr, stream, recompact=True):
         for _ in range(_SHIP_ATTEMPTS):
             held = state.get(stream)
             if held in (None, _INDEXED):
                 held = _remote_state(listing.objects(stream))
             if held is None:  # another copy compacted it: compact it again
-                self._recompact(app_name, verstr, stream)
+                if recompact:
+                    self._recompact(app_name, verstr, stream)
                 state.forget(stream)
                 return
             offset, seq = held

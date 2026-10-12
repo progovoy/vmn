@@ -25,13 +25,23 @@ entries (the parked multi-clone tests and the review probes reproduce them).
   and set is unchanged; a `~` in an explicit writer id becomes `-`.
 - **One appending owner per stream.** The owner is per local *record copy*:
   `<record>/.stream-owner` (`storage/stream_owner.py`, JSON with the id, the
-  directory's absolute path and the retired ids), created exclusively by the
-  first process that needs it, read by every other process of the copy. A file
-  naming another path where the record still is (the directory was copied) or
-  a copy deleted and fetched again mints a new owner; a file naming a path the
-  record left (a moved checkout, a `vmn-exp push` `.rN` rename, a bind mount at
-  another path) keeps its owner and rewrites the path, so an offline run still
-  pushes its streams after the move. The brief suggested a root-level id; a per-record
+  directory's absolute path, the retired ids and the inherited ones), minted
+  under the copy's owner lock (`.ship/owner.lock`, re-reading the file first,
+  so all processes opening a fresh copy at once get the same owner) and read
+  by every other process of the copy. A file naming another path — a `cp -r`,
+  a moved checkout, a `vmn-exp push` `.rN` rename, a bind mount — never keeps
+  its owner (the original may have gone on appending and shipping, so the
+  copy's file can be a stale prefix of the remote): the copy mints a new owner
+  and *inherits* the old one's streams (and those it retired or inherited),
+  each with the path of the record it came from. An inherited stream's local
+  file never grows again. Once that path no longer holds the record (moved,
+  deleted) the copy ships and pushes what the remote lacks of it — nothing
+  when the remote is ahead, the missing suffix when behind, from a fresh
+  listing, never once the remote compacted it — and never compacts it nor puts
+  it as a `.vmx` from its local file (an inherited local `.vmx` was built by
+  its owner from the whole file, so it goes up while the remote has none).
+  While the original still lives it alone ships its streams: its ship state
+  trusts that. A copy deleted and fetched again also mints a new owner. The brief suggested a root-level id; a per-record
   owner also covers `prune --local-only` / a cleared cache followed by a
   re-fetch, which would otherwise append to a stream whose local file is
   shorter than its remote copy.
@@ -47,7 +57,9 @@ entries (the parked multi-clone tests and the review probes reproduce them).
     stale prefix of its streams) is read and compacted from the remote, never
     shipped, compacted from the copy, pushed (`vmn-exp push`) nor put as a
     `.vmx`: the original's ship state assumes it alone ships its stream, and a
-    segment it creates behind a range the copy compacted would be hidden. A log
+    segment it creates behind a range the copy compacted would be hidden
+    (inherited streams whose record is gone only get their missing part, as
+    above). A log
     line or metric block appended under an owner the copy does not own (a
     one-off owner, named while the record could not be fetched) goes to the
     copy's own stream.

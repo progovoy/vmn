@@ -76,6 +76,20 @@ class ShipState:
         atomic_write(self._path, json.dumps(self._all))
 
 
+class Unknown:
+    """A ship state that knows nothing, for a stream the copy inherited
+    (:mod:`stream_owner`): every ship lists the remote."""
+
+    def get(self, stream):
+        return None
+
+    def put(self, stream, state):
+        pass
+
+    def forget(self, stream):
+        pass
+
+
 @contextmanager
 def finalizing():
     """While the SDK's SIGTERM finalizer runs: ship locks are waited for at
@@ -113,6 +127,12 @@ def append_lock(record_dir):
     a block lands before the build reads the file or in the next stream.
     Never held across remote calls."""
     return _record_lock(record_dir, "append.lock")
+
+
+def owner_lock(record_dir):
+    """The copy's owner lock, held while its ``.stream-owner`` is minted or
+    changed: the innermost lock (nothing else is taken under it)."""
+    return _record_lock(record_dir, "owner.lock")
 
 
 @contextmanager

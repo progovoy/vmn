@@ -32,6 +32,13 @@ class LocalStreams:
         state = stream_owner.read_state(record) if record else None
         return {state["id"], *state.get("retired", ())} if state else set()
 
+    def inherited_owners(self, app_name, verstr):
+        """The owners whose streams came with the copy's directory (a ``cp
+        -r``, a move): their files never grow again, so the copy ships and
+        pushes just what the remote lacks of them, and compacts none."""
+        record = self._owner_dir(app_name, verstr)
+        return stream_owner.inherited(record) if record else set()
+
     def retire_stream(self, app_name, verstr, stream):
         """Before *stream* is compacted: the copy moves on to a new owner if
         *stream* is its current one."""

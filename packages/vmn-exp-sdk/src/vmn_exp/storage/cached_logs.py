@@ -6,7 +6,8 @@ local file of the record copy that owns it — the only one that appends to it
 — and the remote objects shipped from that file. Both only ever grow and the
 remote one is a replica of a prefix of the local one, so shipping resumes
 exactly past the bytes the remote holds (:mod:`ship_state`). A copy ships and
-compacts only the streams it owns (its current and retired owners'). Every read —
+compacts only the streams it owns (its current and retired owners'), plus
+the missing part of those it inherited (:mod:`stream_owner`). Every read —
 listings, merged logs, the experiment index's per-file reads — takes each
 stream from its bigger copy: a local stream from the local file, another
 copy's from the remote.
@@ -21,6 +22,7 @@ file.
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.logfiles import next_seq
 from vmn_exp.core.status import run_finished
+from vmn_exp.core.streams import owned_by
 from vmn_exp.storage import ship_state
 from vmn_exp.storage.files import (
     is_log_file,
@@ -183,22 +185,25 @@ class CachedLogs:
     def sync_log_to_remote(self, app_name, verstr, writer_id):
         """Ship the complete lines appended to each of the copy's own streams
         since the remote's copy ends (*writer_id*'s among them); once the run
-        has finished, compact what the remote holds of them. Another owner's
-        local file (a ``cp -r`` of its root) is neither shipped nor compacted:
-        that owner's ship state assumes it alone ships its stream."""
+        has finished, compact what the remote holds of them. An inherited
+        stream (its file came with the copy's directory and never grows) ships
+        just what the remote lacks, read from a fresh listing, and is never
+        compacted: its owner may have gone on shipping it elsewhere."""
         if not self.remote_for(app_name, verstr):
             return
         owns = self._stream_owned(app_name, verstr)
+        inherits = owned_by(self._local.inherited_owners(app_name, verstr))
         local_sizes = {s: n for s, n in self._local.log_sizes(app_name, verstr).items()
-                       if owns(s)}
+                       if owns(s) or inherits(s)}
         if not local_sizes:
             return
         with self._ship_state(app_name, verstr, "log") as state:
             listing = _Listing(self._remote, app_name, verstr)
             for stream, size in sorted(local_sizes.items()):
-                self._ship_stream(state, listing, app_name, verstr, stream, size)
+                held = state if owns(stream) else ship_state.Unknown()
+                self._ship_stream(held, listing, app_name, verstr, stream, size)
             if self._run_finished(app_name, verstr):
-                for stream in sorted(local_sizes):
+                for stream in sorted(filter(owns, local_sizes)):
                     self._compact_once(app_name, verstr, stream)
 
     def _ship_stream(self, state, listing, app_name, verstr, stream, size):

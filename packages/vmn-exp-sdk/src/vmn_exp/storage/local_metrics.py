@@ -7,8 +7,8 @@ block cut short or failing its CRC) so the new block is never hidden behind
 it. A block for a stream its record copy retired (it was compacted) goes to
 the copy's current stream; one appended while the stream is retired for a
 compaction waits for the retirement (:func:`ship_state.append_lock`).
-``put_indexed`` moves the finished ``.vmx`` in
-without overwriting one, then drops the stream files it covers.
+``put_indexed`` moves the finished ``.vmx`` of one of the copy's own streams
+in without overwriting one, then drops the stream files it covers.
 """
 import os
 from contextlib import contextmanager
@@ -22,6 +22,7 @@ from vmn_exp.core.metric_files import (
     stream_name,
     superseded,
 )
+from vmn_exp.core.streams import owned_by
 from vmn_exp.storage import ship_state
 
 
@@ -105,8 +106,12 @@ class LocalMetrics:
 
     def put_indexed(self, app_name, verstr, writer_id, path, replace=False, covers=0):
         """Move *path* in as the stream's ``.vmx`` covering its segments up
-        to *covers*; False if that one is there and not *replace*."""
+        to *covers*; False if that one is there and not *replace*, or if the
+        stream is not the copy's own (one it inherited is a stale prefix of
+        what its owner may have gone on appending elsewhere)."""
         if self._refuse_orphan_write(app_name, verstr, "a metric index"):
+            return False
+        if not owned_by(self.stream_owners(app_name, verstr))(writer_id):
             return False
         record = self._snapshot_dir(app_name, verstr)
         self._metrics_dir(app_name, verstr, create=True)
