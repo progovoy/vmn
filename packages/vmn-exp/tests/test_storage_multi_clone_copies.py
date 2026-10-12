@@ -151,3 +151,24 @@ def test_report_header_edits_from_two_clones_are_all_kept(tmp_path):
     entries = report_log.read_header_entries(cached_host(tmp_path, "c"), rid)
 
     assert sorted(e["type"] for e in entries) == ["archived", "pinned", "title", "title"]
+
+
+def test_lines_the_original_appends_after_a_copy_compacted_its_log_reach_the_remote(tmp_path):
+    a = cached_host(tmp_path, "a")
+    assert a.create_exclusive(APP, V, meta(V), {})
+    own = stream(a)
+    a.append_log_entry(APP, V, own, tag(1, "k1"))
+    a.sync_log_to_remote(APP, V, own)
+    a.save_file(APP, V, RUN_STATE_FILE, FINISHED)
+    a.append_log_entry(APP, V, own, tag(2, "k2"))  # its ship failed
+    shutil.copytree(tmp_path / "a", tmp_path / "a2")
+    a.append_log_entry(APP, V, own, tag(3, "k3"))  # after the copy
+    copy = cached_host(tmp_path, "a2")
+    copy.sync_log_to_remote(APP, V, stream(copy))  # run end: ships, compacts
+
+    cached_host(tmp_path, "a").sync_log_to_remote(APP, V, own)
+
+    assert _remote_tag_counts() == {"k1": 1, "k2": 1, "k3": 1}
+    fresh = cached_host(tmp_path, "fresh").load_merged_log(APP, V)
+    assert sorted(k for e in fresh if e.get("type") == "tags" for k in e["set"]) == [
+        "k1", "k2", "k3"]
