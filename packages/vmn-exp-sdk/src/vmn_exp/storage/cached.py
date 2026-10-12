@@ -12,6 +12,7 @@ index would forget them, prune would miscount what it keeps.
 """
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.streams import new_owner
 from vmn_exp.storage.base import SnapshotStorage
 from vmn_exp.storage.cached_metrics import CachedMetrics
 from vmn_exp.storage.cached_logs import CachedLogs
@@ -68,9 +69,7 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
         except Exception:
             self._local.delete(app_name, verstr)
             raise
-        if claimed:
-            self._claimed.add((app_name, verstr))
-        else:
+        if not claimed:
             # Another host holds this name on the shared remote.
             self._local.delete(app_name, verstr)
         self._presence.mark(app_name, verstr, claimed)
@@ -173,11 +172,9 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
 
     def _listing_identity(self):
         """How the local copy's files are listed: a local root's log files
-        carry their identity, with a remote or not, as a merge may rewrite one
-        (:mod:`cached_log_merge`) — this cache's, or one by another cache over
-        the root, whose readers persist to the same index file — and a reader
-        may switch between a writer's two copies. A plugin root lists with
-        its base signatures."""
+        carry their identity, with a remote or not, so an index notices a log
+        file replaced under its name (its folder copied over, a record fetched
+        again). A plugin root lists with its base signatures."""
         return {"identity": True} if isinstance(self._local, LocalSnapshotStorage) else {}
 
     def _local_files(self, app_name, keys):
@@ -274,6 +271,20 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
         except Exception:
             VMN_LOGGER.debug("Could not fetch the remote record", exc_info=True)
         return True
+
+    def stream_owner(self, app_name, verstr, writer):
+        """The local copy's owner (:mod:`vmn_exp.storage.local_streams`),
+        fetching the record first; a one-off owner while there is none (an
+        append may still fetch it: its lines then go to a stream of their own,
+        never one another copy appends to)."""
+        if self._ensure_local_record(app_name, verstr):
+            owner = self._local.stream_owner(app_name, verstr, writer)
+            if owner:
+                return owner
+        return new_owner()
+
+    def retire_stream(self, app_name, verstr, stream):
+        self._local.retire_stream(app_name, verstr, stream)
 
     def remote_for(self, app_name, verstr):
         """The remote to write *verstr*'s files to: None unless the remote

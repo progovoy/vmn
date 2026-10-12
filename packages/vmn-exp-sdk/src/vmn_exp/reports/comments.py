@@ -11,7 +11,7 @@ import base64
 import os
 
 from vmn_exp.core.record_format import stamped
-from vmn_exp.core.writer import claim_record, flush_log, get_writer_id
+from vmn_exp.core.writer import claim_record, flush_log, get_writer_id, own_stream
 from vmn_exp.registry.fold import next_ts, now_iso
 from vmn_exp.registry.log import actor_identity
 from vmn_exp.storage.areas import COMMENTS, REPORTS
@@ -81,7 +81,7 @@ def _append(area, scope, name, entry_type, **fields):
         "actor": actor_identity(),
         **fields,
     }
-    area.append_log_entry(scope, name, writer, entry)
+    area.append_log_entry(scope, name, own_stream(area, scope, name), entry)
     flush_log(area, scope, name)
 
 

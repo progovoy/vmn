@@ -35,7 +35,7 @@ from vmn_exp.core.writer import (
     append_entries_to_log,
     append_to_log,
     create_log_entry,
-    get_writer_id,
+    own_stream,
     save_run_state,
     sync_to_remote,
 )
@@ -281,7 +281,6 @@ class _Supervision:
         self.guard = supervision_guard()
         self.sync = BackgroundSync(self._sync_once)
         self.forwarder = SignalForwarder(_kill_grace_sec(args))
-        self.writer_id = get_writer_id()
         self.output = output_artifact(storage, app_name, verstr, args)
         self.tee = None
 
@@ -451,7 +450,8 @@ class _Supervision:
         )
         self.sync.final(_FINAL_SYNC_TIMEOUT_SEC)
         self.guard("metric compaction", compact_by, self.storage, self.app_name,
-                   self.verstr, self.writer_id, time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC)
+                   self.verstr, own_stream(self.storage, self.app_name, self.verstr),
+                   time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC)
         self.guard("failure alert", self._alert_if_failed)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
@@ -529,7 +529,6 @@ class _Supervision:
             self.storage,
             self.app_name,
             self.verstr,
-            self.writer_id,
         )
         if self.output is not None:
             self.guard("output log upload", self.output.upload)

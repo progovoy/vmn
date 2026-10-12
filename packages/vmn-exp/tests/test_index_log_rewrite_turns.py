@@ -1,14 +1,15 @@
 """Two clones on one host (one writer id) take turns appending to a run over one
 S3 store, some of their remote calls failing, while `vmn-exp list` runs on
-either clone now and then. However their local logs get seeded, merged and
-switched between copies, each clone's persisted index ends equal to a full
-read of its storage.
+either clone now and then. However their streams ship and readers switch
+between local and remote copies, each clone's persisted index ends equal to
+a full read of its storage.
 """
 import random
 
 import pytest
 from s3_helpers import cached_host, meta, mocked_bucket
 from vmn_exp.core.index import ExperimentIndex, direct_rows
+from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import buffered
 
 APP = "app"
@@ -25,7 +26,8 @@ def _bucket(monkeypatch):
 
 def _flaky(host, rng, p):
     """Each of *host*'s remote log listings, saves and loads fails with *p*."""
-    for name in ("log_objects", "save_file", "load_file"):
+    for name in ("log_objects", "log_object_groups", "save_file", "create_log_segment",
+                 "load_file"):
         real = getattr(host._remote, name)
 
         def call(*args, _real=real, **kw):
@@ -47,8 +49,8 @@ def _one_shot_append(tmp_path, root, step, rng):
     if rng.random() < 0.4:
         _flaky(host, rng, 0.5)
     try:
-        host.append_log_entry(APP, V, W, _tag(step, root, rng))
-        host.sync_log_to_remote(APP, V, W)
+        host.append_log_entry(APP, V, own_stream(host, APP, V), _tag(step, root, rng))
+        host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
     except Exception:
         pass  # the network is down: the next command ships it
 
@@ -65,7 +67,8 @@ def test_each_clones_persisted_index_equals_a_full_read(tmp_path, seed):
             ExperimentIndex(cached_host(tmp_path, root), APP,
                             cache_path=caches[root]).refresh()
     for root in "ab":
-        cached_host(tmp_path, root).sync_log_to_remote(APP, V, W)
+        host = cached_host(tmp_path, root)
+        host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
 
     for root in "ab":
         host = cached_host(tmp_path, root)

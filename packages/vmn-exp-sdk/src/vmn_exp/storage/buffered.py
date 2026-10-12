@@ -8,9 +8,12 @@ log's length. Here appends land in a private temp dir and ship as segments
 most every ``flush_interval_sec`` (a sooner sync — the run's heartbeat, its
 finish, process exit — ships them earlier).
 
-The buffer is not a replica: it holds only what this process appended, plus
-the metadata that makes appends legal. Every read goes to the remote, and the
-remote stays the only copy of a record's body.
+The buffer is not a replica of the record: it holds only what this storage
+appended, plus the metadata that makes appends legal. Every read goes to the
+remote, and the remote stays the only copy of a record's body. Its streams are
+its own (:mod:`vmn_exp.core.streams`): the owner is a fresh id per buffer, so
+each buffered stream's remote copy is a replica of one buffer file, shipped
+from the remote's size like any local copy's.
 """
 
 import atexit
@@ -21,6 +24,7 @@ import time
 import uuid
 
 from vmn_exp._base import VMN_LOGGER, parse_record_metadata
+from vmn_exp.core.streams import new_owner, owner_of
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
@@ -57,6 +61,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         )
         super().__init__(LocalSnapshotStorage(self._buffer_root, area), remote)
         self._flush_interval_sec = flush_interval_sec
+        self._owner = new_owner()  # a new buffer, a new owner
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
         self._metrics_flushed_at = {}
@@ -81,6 +86,14 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._local.save(app_name, verstr, metadata, {})
         self._presence.mark(app_name, verstr)
         return True
+
+    def stream_owner(self, app_name, verstr, writer):
+        return self._owner
+
+    def retire_stream(self, app_name, verstr, stream):
+        """A compacted stream is not appended to again: a new owner."""
+        if owner_of(stream) == self._owner:
+            self._owner = new_owner()
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         # Straight up: a multi-GB checkpoint must not be copied to /tmp first.
@@ -159,21 +172,12 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         super().sync_metrics_to_remote(app_name, verstr, writer_id)
 
     def _cleanup_buffer(self):
-        """Drop the buffer dir, and the log offsets into it: a later append
-        starts a fresh buffer, shipped from its first byte. Idempotent:
-        ``rmtree`` on an already-gone directory is a safe no-op, so a later
-        call (``close()``, or another writer's sync) costs nothing."""
-        self._synced.clear()
+        """Drop the buffer dir: a later append starts a fresh buffer, under a
+        new owner. Idempotent: ``rmtree`` on an already-gone directory is a
+        safe no-op, so a later call (``close()``, or another writer's sync)
+        costs nothing."""
         shutil.rmtree(self._buffer_root, ignore_errors=True)
-
-    def _initial_sync_state(self, app_name, verstr, writer_id):
-        # The buffer starts empty: ship all of it, after what the remote holds
-        # (another process of this host may have logged under the same writer).
-        _, seq = self._remote_log_state(app_name, verstr, writer_id)
-        return 0, seq
-
-    def _ship(self, app_name, verstr, writer_id, seq, chunk):
-        return self._remote.put_log_segment(app_name, verstr, writer_id, seq, chunk)
+        self._owner = new_owner()
 
     def close(self):
         """Ship whatever is still buffered and drop the buffer."""
@@ -194,8 +198,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
                 )
                 VMN_LOGGER.debug("Final metric flush failed", exc_info=True)
         self._metrics_flushed_at.clear()
-        self._metric_state()["synced"].clear()
-        # A later append starts a fresh buffer, shipped from its first byte.
+        # A later append starts a fresh buffer, under a new owner.
         self._flushed_at.clear()
         self._unshipped.clear()
         _PENDING.discard(self)

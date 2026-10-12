@@ -14,7 +14,7 @@ Storage is duck-typed; like the rest of ``core`` this imports nothing from
 from vmn_exp.core.writer import (
     create_tags_entry,
     flush_log,
-    get_writer_id,
+    own_stream,
 )
 
 ARCHIVED_FIELD = "archived"
@@ -36,7 +36,7 @@ def tag_run(storage, app_name, verstr, tags=None, remove=None):
     entry = create_tags_entry(tags, remove)
     if not storage.exists(app_name, verstr):
         return False
-    if storage.append_log_entry(app_name, verstr, get_writer_id(), entry) is False:
+    if storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), entry) is False:
         return False
     flush_log(storage, app_name, verstr)
     return True

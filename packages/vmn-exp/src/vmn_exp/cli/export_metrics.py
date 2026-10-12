@@ -12,6 +12,7 @@ import os
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.series_reader import SeriesReader, rewind_markers
+from vmn_exp.core.streams import display_writer
 from vmn_exp.storage.files import flatten_logs
 
 COLUMNS = ("run", "writer", "key", "step", "ts", "value")
@@ -26,8 +27,8 @@ def run_rows(storage, app_name, verstr, keys=None):
     reader = SeriesReader.from_storage(storage, app_name, verstr,
                                        rewinds=rewind_markers(entries),
                                        legacy=flatten_logs(logs))
-    for row in reader.rows(keys=keys):
-        yield (verstr, *row)
+    for stream, *row in reader.rows(keys=keys):
+        yield (verstr, display_writer(stream), *row)
 
 
 def _format(args, output):

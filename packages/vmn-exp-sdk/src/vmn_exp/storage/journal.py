@@ -116,9 +116,10 @@ class JournaledStorage:
     append_log_entries = _journaled_write("append_log_entries")
     put_log_segment = _journaled_write("put_log_segment")
     append_metric_block = _journaled_write("append_metric_block", lambda r, a: bool(r))
+    create_log_segment = _journaled_write("create_log_segment", lambda r, a: bool(r))
     put_metric_segment = _journaled_write("put_metric_segment")
+    create_metric_segment = _journaled_write("create_metric_segment", lambda r, a: bool(r))
     put_indexed = _journaled_write("put_indexed", lambda r, a: bool(r))
-    drop_indexed = _journaled_write("drop_indexed")
     delete = _journaled_write("delete")
 
     @property

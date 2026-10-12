@@ -16,6 +16,7 @@ from moto import mock_aws
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from backfill_helpers import host_logs
 from mlflow_fixtures import MlflowFixtureBuilder
 from version_stamp.cli.args import parse_user_commands
 from vmn_exp.importers.import_records import IMPORT_WRITER, run_verstr
@@ -175,7 +176,7 @@ def test_a_refresh_writes_through_the_remote_store(tmp_path, s3, capsys, fresh_r
     assert rc == 0
     assert "refreshed 2" in _summary(capsys)
     remote = resolve_experiment_storage(store=s3, repo_root=False)
-    by_writer = remote.load_logs_by_writer(APP, run_verstr(RUN_A))
+    by_writer = host_logs(remote, APP, run_verstr(RUN_A))
     assert [e["type"] for e in by_writer[IMPORT_WRITER]] == ["create"]
     [entry] = [e for e in by_writer["refresher"] if e["type"] == "features"]
     assert entry["author"] == {"os_user": "alice", "source": "mlflow"}

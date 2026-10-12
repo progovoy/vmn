@@ -8,6 +8,7 @@ from version_stamp.snapshot.record import patch_summary
 from vmn_exp.core import writer
 from vmn_exp.core.code_store import store_code
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.streams import display_writer
 
 CODE = "0.0.2-dev.abc1234.1234567"
 KEY = CODE + ".1234567ffff"
@@ -95,5 +96,13 @@ def features_entries(storage, app, verstr):
 
 def feature_writers(storage, app, verstr):
     """The writers whose logs hold a ``features`` entry."""
-    return sorted(w for w, entries in storage.load_logs_by_writer(app, verstr).items()
-                  if any(e.get("type") == "features" for e in entries))
+    return sorted({display_writer(w) for w, entries in host_logs(storage, app, verstr).items()
+                   if any(e.get("type") == "features" for e in entries)})
+
+
+def host_logs(storage, app, verstr):
+    """The record's log entries per writer id, its streams joined in order."""
+    joined = {}
+    for stream, entries in sorted(storage.load_logs_by_writer(app, verstr).items()):
+        joined.setdefault(display_writer(stream), []).extend(entries)
+    return joined

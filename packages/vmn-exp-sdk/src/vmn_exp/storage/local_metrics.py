@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Metric streams of the local-disk backend (plan 12 §4.2).
 
-A writer appends blocks to ``metrics/<writer>.vms`` with ``O_APPEND``; before
-its first append in a process it truncates a torn tail (a block cut short or
-failing its CRC) so the new block is never hidden behind it. ``put_indexed``
-moves the finished ``.vmx`` in without overwriting one, then drops the
-writer's stream files.
+A stream's blocks are appended to ``metrics/<stream>.vms`` with ``O_APPEND``;
+before its first append in a process the writer truncates a torn tail (a
+block cut short or failing its CRC) so the new block is never hidden behind
+it. A block for a stream its record copy retired (it was compacted) goes to
+the copy's current stream. ``put_indexed`` moves the finished ``.vmx`` in
+without overwriting one, then drops the stream files it covers.
 """
 import os
 
@@ -14,11 +15,8 @@ from vmn_exp.core.metric_files import (
     METRICS_DIR,
     group_metric_objects,
     indexed_name,
-    is_part_file,
-    is_stream_file,
-    metric_writer,
-    part_name,
     stream_name,
+    superseded,
 )
 
 
@@ -61,6 +59,7 @@ class LocalMetrics:
         if self._refuse_orphan_write(app_name, verstr, "a metric block"):
             return False
         self._metrics_dir(app_name, verstr, create=True)
+        writer_id = self.live_stream(app_name, verstr, writer_id)
         path = os.path.join(self._snapshot_dir(app_name, verstr), stream_name(writer_id))
         checked = self.__dict__.setdefault("_checked_streams", set())
         if path not in checked:
@@ -82,34 +81,20 @@ class LocalMetrics:
         except FileNotFoundError:
             return None
 
-    def put_indexed(self, app_name, verstr, writer_id, path, part=None, replace=False):
-        """Move *path* in as the writer's ``.vmx`` (or sealed *part*); False
-        if one is there and not *replace*."""
+    def put_indexed(self, app_name, verstr, writer_id, path, replace=False, covers=0):
+        """Move *path* in as the stream's ``.vmx`` covering its segments up
+        to *covers*; False if that one is there and not *replace*."""
         if self._refuse_orphan_write(app_name, verstr, "a metric index"):
             return False
         record = self._snapshot_dir(app_name, verstr)
         self._metrics_dir(app_name, verstr, create=True)
-        name = indexed_name(writer_id) if part is None else part_name(writer_id, part)
-        if not _move_in(path, os.path.join(record, name), replace):
+        if not _move_in(path, os.path.join(record, indexed_name(writer_id, covers)), replace):
             return False
-        self._drop_streams(record, writer_id, parts=part is None)
+        names = _sizes(os.path.join(record, METRICS_DIR))
+        for name in superseded(names, writer_id, covers):
+            os.unlink(os.path.join(record, name))
         os.utime(record)
         return True
-
-    def drop_indexed(self, app_name, verstr, writer_id):
-        record = self._snapshot_dir(app_name, verstr)
-        try:
-            os.unlink(os.path.join(record, indexed_name(writer_id)))
-        except FileNotFoundError:
-            return
-        os.utime(record)
-
-    def _drop_streams(self, record, writer_id, parts):
-        sizes = _sizes(os.path.join(record, METRICS_DIR))
-        for name in sizes:
-            dropped = is_stream_file(name) or (parts and is_part_file(name))
-            if dropped and metric_writer(name) == writer_id:
-                os.unlink(os.path.join(record, name))
 
 
 def _move_in(path, dest, replace):

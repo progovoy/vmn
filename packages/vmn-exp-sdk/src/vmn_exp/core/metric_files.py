@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """Names of a record's metric objects (plan 12 §4.2) — the one definition.
 
-Per writer: the stream ``metrics/<writer>.vms`` and its synced segments
-``metrics/<writer>@<seq>.vms`` (the log seq scheme of :mod:`logfiles`), and
-once the writer finished, the indexed ``metrics/<writer>.vmx``, which
-supersedes every stream object of its writer. A long-running writer also
-seals parts ``metrics/<writer>@p<k>.vmx``, each covering the stream objects
-it replaced; the final ``.vmx`` supersedes them too. Pure: no I/O.
+Per stream (:mod:`vmn_exp.core.streams`): the live stream
+``metrics/<stream>.vms`` and its synced segments ``metrics/<stream>@<seq>.vms``
+(the log seq scheme of :mod:`logfiles`), and once compacted, the indexed
+``metrics/<stream>@000000-<last>.vmx``, which supersedes the stream's
+segments up to seq *last* — and nothing after it: a segment shipped after the
+compaction read the stream stays visible next to it, as an object a failed
+delete left behind stays hidden. Of several ``.vmx`` of a stream the one
+covering most wins. Pure: no I/O.
 """
-from vmn_exp.core.logfiles import visible_spans, writer_and_span
+from vmn_exp.core.logfiles import writer_and_span
 
 METRICS_DIR = "metrics"
 STREAM_SUFFIX = ".vms"
 INDEXED_SUFFIX = ".vmx"
 _PREFIX = METRICS_DIR + "/"
-_PART_MARK = "@p"
 
 
 def _in_dir(name):
@@ -25,21 +26,12 @@ def is_stream_file(name):
     return _in_dir(name) and name.endswith(STREAM_SUFFIX)
 
 
-def _vmx(name):
+def is_indexed_file(name):
     return _in_dir(name) and name.endswith(INDEXED_SUFFIX)
 
 
-def is_part_file(name):
-    return _vmx(name) and _PART_MARK in name[len(_PREFIX):]
-
-
-def is_indexed_file(name):
-    """The writer's final ``.vmx`` (not a sealed part)."""
-    return _vmx(name) and not is_part_file(name)
-
-
 def is_metric_file(name):
-    return is_stream_file(name) or _vmx(name)
+    return is_stream_file(name) or is_indexed_file(name)
 
 
 def stream_name(writer, seq=0):
@@ -47,52 +39,70 @@ def stream_name(writer, seq=0):
     return f"{_PREFIX}{writer}{seq_part}{STREAM_SUFFIX}"
 
 
-def indexed_name(writer):
-    return f"{_PREFIX}{writer}{INDEXED_SUFFIX}"
+def indexed_name(writer, last=0):
+    """The ``.vmx`` of *writer*'s stream covering its segments up to *last*."""
+    return f"{_PREFIX}{writer}@{0:06d}-{last:06d}{INDEXED_SUFFIX}"
 
 
-def part_name(writer, k):
-    return f"{_PREFIX}{writer}{_PART_MARK}{k:06d}{INDEXED_SUFFIX}"
-
-
-def part_writer_and_k(name):
-    """``metrics/w@p000002.vmx`` → ``("w", 2)``."""
-    writer, _, k = name[len(_PREFIX):-len(INDEXED_SUFFIX)].rpartition(_PART_MARK)
-    return writer, int(k)
+def _split(name):
+    suffix = INDEXED_SUFFIX if is_indexed_file(name) else STREAM_SUFFIX
+    return writer_and_span(name, _PREFIX, suffix)
 
 
 def stream_writer_and_seq(name):
     """``metrics/w@000003.vms`` → ``("w", 3)``; the base stream is seq 0."""
-    writer, (_, last) = writer_and_span(name, _PREFIX, STREAM_SUFFIX)
+    writer, (_, last) = _split(name)
     return writer, last
 
 
+def covered_seq(name):
+    """The last segment seq the ``.vmx`` *name* supersedes."""
+    return _split(name)[1][1]
+
+
 def metric_writer(name):
-    if is_part_file(name):
-        return part_writer_and_k(name)[0]
-    if is_indexed_file(name):
-        return name[len(_PREFIX):-len(INDEXED_SUFFIX)]
-    return stream_writer_and_seq(name)[0]
+    return _split(name)[0]
+
+
+def last_seq(names):
+    """The highest segment seq *names* (one stream's) hold or cover; -1 if none."""
+    return max((stream_writer_and_seq(n)[1] for n in names), default=-1)
 
 
 def group_metric_names(names):
-    """``{writer: [names]}``: a writer's ``.vmx`` alone when there is one,
-    else its sealed parts in order, then its stream objects in seq order."""
-    streams, indexed, parts = {}, {}, {}
+    """``{stream: [names]}``: the stream's widest ``.vmx`` (if any), then its
+    segments past what it covers, in seq order."""
+    streams, indexed = {}, {}
     for name in names:
-        if is_part_file(name):
-            writer, k = part_writer_and_k(name)
-            parts.setdefault(writer, []).append((k, name))
-        elif is_indexed_file(name):
-            indexed[metric_writer(name)] = name
+        if is_indexed_file(name):
+            writer = metric_writer(name)
+            if covered_seq(name) >= covered_seq(indexed.get(writer, name)):
+                indexed[writer] = name
         elif is_stream_file(name):
-            writer, span = writer_and_span(name, _PREFIX, STREAM_SUFFIX)
-            streams.setdefault(writer, []).append((span, name))
-    groups = {w: [n for _, n in sorted(p)] for w, p in parts.items()}
-    for writer, spans in streams.items():
-        groups.setdefault(writer, []).extend(n for _, n in visible_spans(spans))
-    groups.update((w, [name]) for w, name in indexed.items())
+            writer, (_, seq) = writer_and_span(name, _PREFIX, STREAM_SUFFIX)
+            streams.setdefault(writer, []).append((seq, name))
+    groups = {}
+    for writer in set(streams) | set(indexed):
+        vmx = indexed.get(writer)
+        after = covered_seq(vmx) if vmx else -1
+        groups[writer] = ([vmx] if vmx else []) + [
+            n for seq, n in sorted(streams.get(writer, ())) if seq > after]
     return groups
+
+
+def superseded(names, writer, last):
+    """The objects of *writer* among *names* a ``.vmx`` covering up to *last*
+    hides: its segments up to *last* and the narrower ``.vmx``."""
+    hidden = []
+    for name in names:
+        if not is_metric_file(name) or metric_writer(name) != writer:
+            continue
+        if is_indexed_file(name):
+            if covered_seq(name) < last:
+                hidden.append(name)
+        elif stream_writer_and_seq(name)[1] <= last:
+            hidden.append(name)
+    return hidden
 
 
 def group_metric_objects(sizes):

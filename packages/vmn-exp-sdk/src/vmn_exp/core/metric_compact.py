@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
-"""Compaction (plan 12 §6): build a writer's ``metrics/<w>.vmx`` from what it
-wrote, then let storage drop the stream objects (and sealed parts) it
-supersedes (``put_indexed``).
+"""Compaction (plan 12 §6): build a stream's ``.vmx`` from what it holds,
+then let storage drop the objects it covers (``put_indexed``: the segments up
+to the last seq the build read — one shipped after the build stays visible).
 
-Writers compact at their end (SDK finish, ``vmn-exp run`` at child exit,
-importers); ``vmn-exp compact`` and ``vmn-exp watch --compact`` catch the
-writers that died first. Rewinds known at build time are applied (their
-points dropped); a later rewind rebuilds the file (*rebuild*). A long writer
-seals a part every :data:`SEAL_POINTS` points it appends in a process, so a
-live reader never decodes weeks of stream; the final ``.vmx`` merges them.
+Writers compact their stream at their end (SDK finish, ``vmn-exp run`` at
+child exit, importers); ``vmn-exp compact`` and ``vmn-exp watch --compact``
+catch the streams of writers that died first. Rewinds known at build time are
+applied (their points dropped); a later rewind rebuilds the file (*rebuild*).
+A compacted stream is never appended to again (its record copy moves on to
+a new stream, ``storage.compacting``), so a long writer seals its stream —
+compacts it and goes on in a new one — every :data:`SEAL_POINTS` points it
+appends in a process: a live reader never decodes weeks of stream.
 """
 import os
 import tempfile
 import threading
 import time
+from contextlib import nullcontext
 
 from vmn_exp._base import VMN_LOGGER
-
 from vmn_exp.core.metric_columns import Columns
-from vmn_exp.core.metric_files import is_indexed_file, is_part_file, part_writer_and_k
+from vmn_exp.core.metric_files import is_indexed_file, last_seq
 from vmn_exp.core.metric_index_file import build_index
 from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited, stepless_twin
 from vmn_exp.core.series_reader import hidden, rewind_markers, writer_source
@@ -75,20 +77,28 @@ def _put(storage, app_name, verstr, writer, data, **kwargs):
 
 
 def is_compacted(objects):
-    return any(is_indexed_file(n) for n, _ in objects)
+    """Whether a stream's visible *objects* are all indexed (nothing to compact)."""
+    return bool(objects) and all(is_indexed_file(n) for n, _ in objects)
+
+
+def _compacting(storage, app_name, verstr, writer):
+    hold = getattr(storage, "compacting", None)
+    return hold(app_name, verstr, writer) if hold else nullcontext()
 
 
 def compact_writer(storage, app_name, verstr, writer, rewinds=(), rebuild=False):
-    """Build *writer*'s ``.vmx``; True when stored. A compacted writer is
-    left alone unless *rebuild*, which rewrites its file."""
-    objects = _objects(storage, app_name, verstr, writer)
-    if not objects or (is_compacted(objects) and not rebuild):
-        return False
-    keys = writer_columns(storage, app_name, verstr, objects, rewinds)
-    if not keys:
-        return False
-    data = build_index(writer, keys, rewinds_applied=bool(rewinds))
-    return _put(storage, app_name, verstr, writer, data, replace=rebuild)
+    """Build stream *writer*'s ``.vmx``; True when stored. A compacted stream
+    is left alone unless *rebuild*, which rewrites its file."""
+    with _compacting(storage, app_name, verstr, writer):
+        objects = _objects(storage, app_name, verstr, writer)
+        if not objects or (is_compacted(objects) and not rebuild):
+            return False
+        keys = writer_columns(storage, app_name, verstr, objects, rewinds)
+        if not keys:
+            return False
+        data = build_index(writer, keys, rewinds_applied=bool(rewinds))
+        covers = max(last_seq(n for n, _ in objects), 0)
+        return _put(storage, app_name, verstr, writer, data, replace=rebuild, covers=covers)
 
 
 def record_rewinds(storage, app_name, verstr):
@@ -98,8 +108,8 @@ def record_rewinds(storage, app_name, verstr):
 
 
 def compact_record(storage, app_name, verstr, rebuild=False):
-    """Compact every writer of the record still on streams (every writer
-    with *rebuild*); the writers whose ``.vmx`` was stored, sorted."""
+    """Compact every stream of the record with segments past its ``.vmx``
+    (every stream with *rebuild*); the streams whose ``.vmx`` was stored, sorted."""
     listing = getattr(storage, "metric_objects", None)
     writers = sorted(listing(app_name, verstr) if listing else {})
     rewinds = record_rewinds(storage, app_name, verstr)
@@ -108,18 +118,18 @@ def compact_record(storage, app_name, verstr, rebuild=False):
 
 
 def rebuild_compacted(storage, app_name, verstr):
-    """Rebuild the ``.vmx`` of every compacted writer of the record, so a
+    """Rebuild the ``.vmx`` of every compacted stream of the record, so a
     rewind appended after compaction is applied in the file."""
     listing = getattr(storage, "metric_objects", None)
     objects = listing(app_name, verstr) if listing else {}
     rewinds = record_rewinds(storage, app_name, verstr)
-    return [w for w in sorted(objects) if is_compacted(objects[w])
+    return [w for w in sorted(objects) if any(is_indexed_file(n) for n, _ in objects[w])
             and compact_writer(storage, app_name, verstr, w, rewinds, rebuild=True)]
 
 
 def record_compacted(storage, app_name, verstr):
-    """True when every writer of the record is on a ``.vmx``, False when one
-    is still on streams, None when the record has no metric objects."""
+    """True when every stream of the record is on a ``.vmx`` alone, False
+    when one has segments, None when the record has no metric objects."""
     listing = getattr(storage, "metric_objects", None)
     objects = listing(app_name, verstr) if listing else {}
     if not objects:
@@ -152,37 +162,13 @@ def compact_by(storage, app_name, verstr, writer, deadline):
 
 
 def seal_writer(storage, app_name, verstr, writer):
-    """Seal *writer*'s stream objects as its next part; its number, or None."""
-    objects = _objects(storage, app_name, verstr, writer)
-    if is_compacted(objects):
-        return None
-    parts = [part_writer_and_k(n)[1] for n, _ in objects if is_part_file(n)]
-    streams = [(n, s) for n, s in objects if not is_part_file(n)]
-    keys = writer_columns(storage, app_name, verstr, streams) if streams else {}
-    if not keys:
-        return None
-    k = max(parts, default=0) + 1
-    return k if _put(storage, app_name, verstr, writer, build_index(writer, keys), part=k) else None
-
-
-def reopen_writer(storage, app_name, verstr, writer):
-    """Turn *writer*'s final ``.vmx`` into its next part, so a resumed writer's
-    new blocks are read after it; the part's number, or None."""
-    objects = _objects(storage, app_name, verstr, writer)
-    final = [(n, s) for n, s in objects if is_indexed_file(n)]
-    if not final:
-        return None
-    (name, size), = final
-    k = max((part_writer_and_k(n)[1] for n, _ in objects if is_part_file(n)), default=0) + 1
-    data = storage.read_range(app_name, verstr, name, 0, size)
-    if not data or not _put(storage, app_name, verstr, writer, data, part=k):
-        return None
-    storage.drop_indexed(app_name, verstr, writer)
-    return k
+    """Seal stream *writer*: compact it; its writer goes on in a new stream."""
+    return compact_writer(storage, app_name, verstr, writer,
+                          record_rewinds(storage, app_name, verstr))
 
 
 def note_points(storage, app_name, verstr, writer, n):
-    """Count *n* points appended by *writer*; seal a part past :data:`SEAL_POINTS`."""
+    """Count *n* points appended to stream *writer*; seal it past :data:`SEAL_POINTS`."""
     with _SEAL_LOCK:
         counts = storage.__dict__.setdefault("_sealed_counts", {})
         key = (app_name, verstr, writer)

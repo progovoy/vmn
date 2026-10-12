@@ -1,9 +1,8 @@
 """The experiment index folds a log incrementally only while its bytes grow at
-the end. A local log rewritten into a bigger file — a local-first cache merging
-the remote's lines back in after its seed failed — or a reader switching from
-the remote copy of a writer's log to a local copy that is not a superset of it
-is folded again, so the index (and its persisted cache) always equals a full
-read of the same storage.
+the end. A local log rewritten into a bigger file, or a reader switching from
+the remote copy of a stream's log to a local copy that is not a superset of
+it, is folded again, so the index (and its persisted cache) always equals a
+full read of the same storage — however the clones' streams interleave.
 """
 import json
 import os
@@ -18,7 +17,7 @@ from vmn_exp.core import writer
 from vmn_exp.core.index import ExperimentIndex, direct_rows, direct_snapshot
 from vmn_exp.core.intent import build_intent_entry
 from vmn_exp.core.manage import tag_run
-from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
+from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, own_stream
 from vmn_exp.storage import buffered
 
 APP = "app"
@@ -42,7 +41,7 @@ def _line(e):
 def _remote_offline_for(host, n):
     """*host*'s next *n* remote log listings and saves raise."""
     left = {"n": n}
-    for name in ("log_objects", "save_file"):
+    for name in ("log_objects", "log_object_groups", "save_file", "create_log_segment"):
         real = getattr(host._remote, name)
 
         def flaky(*args, _real=real, **kw):
@@ -58,8 +57,8 @@ def _host_a_shipped(tmp_path, *entries):
     a = cached_host(tmp_path, "a")
     a.save(APP, V, meta(V), {})
     for e in entries:
-        assert a.append_log_entry(APP, V, W, e)
-    a.sync_log_to_remote(APP, V, W)
+        assert a.append_log_entry(APP, V, own_stream(a, APP, V), e)
+    a.sync_log_to_remote(APP, V, own_stream(a, APP, V))
     return a
 
 
@@ -118,18 +117,22 @@ def test_a_local_log_replaced_by_a_bigger_one_is_folded_again(tmp_path, bucket):
 # -- a local-first cache merging the remote's lines in --------------------------
 
 
-def test_an_index_over_a_cache_whose_seed_failed_matches_a_full_read_after_the_merge(
+def test_an_index_over_a_cache_whose_ship_failed_matches_a_full_read_after_the_next(
     tmp_path, bucket
 ):
     _host_a_shipped(tmp_path, entry(1))
     b = cached_host(tmp_path, "b")
     _remote_listing_fails_once(b)
-    assert b.append_log_entry(APP, V, W, _note(LONG, 10))  # local copy: LONG only
+    assert b.append_log_entry(APP, V, own_stream(b, APP, V), _note(LONG, 10))  # local copy: LONG only
     index = ExperimentIndex(b, APP).refresh()
+    with pytest.raises(RuntimeError):
+        b.sync_log_to_remote(APP, V, own_stream(b, APP, V))  # its listing fails
 
-    b.sync_log_to_remote(APP, V, W)  # merges: the remote's lines, then LONG
+    b.sync_log_to_remote(APP, V, own_stream(b, APP, V))
 
-    assert [e["type"] for e in s3_storage().load_logs_by_writer(APP, V)[W]] == [
+    remote = sorted((e for es in s3_storage().load_logs_by_writer(APP, V).values() for e in es),
+                    key=lambda e: e["timestamp"])
+    assert [e["type"] for e in remote] == [
         "metrics",
         "note",
     ]
@@ -143,13 +146,13 @@ def test_a_persisted_index_refolds_a_log_another_process_merged(tmp_path, bucket
     _host_a_shipped(tmp_path, _params(1, lr=0.1))
     died = cached_host(tmp_path, "b")  # its seed failed; it appended, never shipped
     _remote_listing_fails_once(died)
-    assert died.append_log_entry(APP, V, W, _note(LONG, 10))
+    assert died.append_log_entry(APP, V, own_stream(died, APP, V), _note(LONG, 10))
     cache = str(tmp_path / "idx.sqlite")
     ExperimentIndex(cached_host(tmp_path, "b"), APP, cache_path=cache).refresh()
 
     later = cached_host(tmp_path, "b")  # a one-shot append + flush merges
-    assert later.append_log_entry(APP, V, W, _note("b1", 11))
-    later.sync_log_to_remote(APP, V, W)
+    assert later.append_log_entry(APP, V, own_stream(later, APP, V), _note("b1", 11))
+    later.sync_log_to_remote(APP, V, own_stream(later, APP, V))
 
     reader = cached_host(tmp_path, "b")
     rows = ExperimentIndex(reader, APP, cache_path=cache).refresh().rows()
@@ -188,10 +191,12 @@ def test_an_index_that_read_the_remote_copy_refolds_when_the_local_copy_outgrows
     _remote_listing_fails_once(b)
     intent = {"timestamp": "2026-01-01T00:00:10Z", "type": "intent",
               "text": "try focal loss " + "x" * 400}
-    assert b.append_log_entry(APP, V, W, intent)  # the local copy: just the intent
+    assert b.append_log_entry(APP, V, own_stream(b, APP, V), intent)  # the local copy: just the intent
     assert _view(index.refresh().snapshot()) == _view(direct_snapshot(b, APP))
+    with pytest.raises(RuntimeError):
+        b.sync_log_to_remote(APP, V, own_stream(b, APP, V))  # its listing fails
 
-    b.sync_log_to_remote(APP, V, W)
+    b.sync_log_to_remote(APP, V, own_stream(b, APP, V))
     want = _view(direct_snapshot(b, APP))
     assert want["intent"] is not None and want["features"] is not None
     assert _view(index.refresh().snapshot()) == want

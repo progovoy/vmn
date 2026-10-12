@@ -11,6 +11,7 @@ from backfill_helpers import (
     as_backfiller,
     dirty_run,
     features_entries,
+    host_logs,
     seed_code,
 )
 from exp_helpers import _bootstrap, _exp, _storage
@@ -48,11 +49,11 @@ def test_a_cached_backfill_keeps_the_remote_entries_of_its_writer(
                 extra_args=["--store", s3_uri(BUCKET, PREFIX)])
 
     assert code == 0, capfd.readouterr()
-    remote_log = s3_storage().load_logs_by_writer(app, V1)[CREATOR]
+    remote_log = host_logs(s3_storage(), app, V1)[CREATOR]
     assert [e["type"] for e in remote_log] == ["create", "note", "note", "features"]
     assert sorted(remote_log[-1]["changed"]["files"]) == FILES
-    local_log = _storage(app_layout).load_logs_by_writer(app, V1)[CREATOR]
-    assert [e["type"] for e in local_log] == ["create", "note", "note", "features"]
+    local_log = host_logs(_storage(app_layout), app, V1)[CREATOR]
+    assert [e["type"] for e in local_log] == ["features"]  # this clone's own stream
 
 
 # -- git-free, on an S3 store ---------------------------------------------------

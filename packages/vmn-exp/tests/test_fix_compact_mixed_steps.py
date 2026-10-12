@@ -48,7 +48,7 @@ def test_mixed_blocks_seal_and_merge(tmp_path, order):
     storage = _storage(tmp_path)
     for step, value, ts in ORDERS[order]:
         _block(storage, step, value, ts)
-    assert seal_writer(storage, APP, V, "w") == 1
+    assert seal_writer(storage, APP, V, "w")
     assert _points(storage) == _expected(order)
-    assert compact_writer(storage, APP, V, "w")
+    assert compact_writer(storage, APP, V, "w", rebuild=True)
     assert _points(storage) == _expected(order)

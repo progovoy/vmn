@@ -310,9 +310,10 @@ def test_cached_sync_log_to_remote(tmp_path):
     cached.append_log_entry("app", "1.0.0-dev.aaa.bbb", "pod-1", entry)
     cached.sync_log_to_remote("app", "1.0.0-dev.aaa.bbb", "pod-1")
 
-    remote.save_file.assert_called_once()
-    call_args = remote.save_file.call_args
-    assert call_args[0][2] == "log/pod-1.jsonl"
+    remote.create_log_segment.assert_called_once()
+    app, verstr, stream, seq, data = remote.create_log_segment.call_args[0]
+    assert (stream, seq) == ("pod-1", 0)
+    assert data == (json.dumps(entry) + "\n").encode()
 
 
 def test_cached_sync_log_to_remote_noop_without_remote(tmp_path):

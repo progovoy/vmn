@@ -25,7 +25,7 @@ from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
 from vmn_exp.core.intent import build_intent_entry
-from vmn_exp.core.metric_compact import compact_by, reopen_writer
+from vmn_exp.core.metric_compact import compact_by
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
 from vmn_exp.core.run_error import error_from_exception, error_from_message
 from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
@@ -36,7 +36,7 @@ from vmn_exp.core.writer import (
     compute_artifact_info,
     create_log_entry,
     create_tags_entry,
-    get_writer_id,
+    own_stream,
     save_artifact,
     stamped_entry,
     sync_to_remote,
@@ -63,7 +63,7 @@ from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
-from vmn_exp.storage.cached_log_merge import finalizing
+from vmn_exp.storage.ship_state import finalizing
 from vmn_exp.storage.files import user_artifact_path
 from vmn_exp.sdk.media_uploads import MediaUploads
 from vmn_exp.sdk.run_media import RunMedia
@@ -200,8 +200,6 @@ def start_run(
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
             app_name, ref, storage
         )
-        # Its new metric blocks must not hide behind the finished run's .vmx.
-        _reopen_metrics(storage, app_name, verstr)
         if rewind_to_step is not None:
             start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
     else:
@@ -247,14 +245,6 @@ def _check_intent(intent, keywords):
         build_intent_entry(intent, keywords)
     elif keywords is not None:
         raise ValueError("intent_keywords needs an intent")
-
-
-def _reopen_metrics(storage, app_name, verstr):
-    try:
-        reopen_writer(storage, app_name, verstr, get_writer_id())
-    except Exception:
-        _LOGGER.warning(f"vmn: could not reopen run {verstr}'s compacted metrics",
-                        exc_info=True)
 
 
 def _record_resume_inputs(run, note, params):
@@ -461,7 +451,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
                 duration_sec=duration,
                 **final_state,
             )
-            self._log_sync.submit(get_writer_id())
+            self._log_sync.submit(None)
             self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
         finally:
             context.unregister(self)
@@ -479,7 +469,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         for what, writer in writers:
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
-        compact_by(self._storage, self.app_name, self.id, get_writer_id(), deadline)
+        compact_by(self._storage, self.app_name, self.id,
+                   own_stream(self._storage, self.app_name, self.id), deadline)
 
     def _duration(self):
         return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)
@@ -595,7 +586,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
         if self._finished:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
-                               self.id, get_writer_id())
+                               self.id)
 
     def similar(self, top=10):
         """The past runs most like this one — its code, changes, params,
@@ -638,7 +629,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         if time.monotonic() - self._last_sync < self._sync_interval_sec:
             return
         self._last_sync = time.monotonic()
-        self._log_sync.submit(get_writer_id())
+        self._log_sync.submit(None)
         if self._output is not None:
             self._output.request_upload()
 

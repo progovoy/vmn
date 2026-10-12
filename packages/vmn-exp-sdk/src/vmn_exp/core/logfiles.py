@@ -14,6 +14,8 @@ Pure: no I/O.
 """
 import json
 
+from vmn_exp.core.streams import display_writer
+
 # The record's folder of log files; the names below are record-relative paths.
 LOG_DIR = "log"
 _PREFIX = LOG_DIR + "/"
@@ -126,11 +128,12 @@ def parse_json_line(line):
 
 
 def parse_jsonl(text, writer):
-    """The entries of a JSONL log, each tagged with its ``_writer``."""
+    """The entries of a JSONL log, each tagged with its ``_writer`` (the
+    writer id of stream *writer*)."""
     entries = []
     for line in text.splitlines():
         entry = parse_json_line(line)
         if entry is not None:
-            entry["_writer"] = writer
+            entry["_writer"] = display_writer(writer)
             entries.append(entry)
     return entries

@@ -37,10 +37,22 @@ class S3Logs:
             o["Key"][len(prefix) :]: o["Size"] for o in self._objects(prefix + "log/")
         }
 
-    def log_objects(self, app_name, verstr, writer_id):
-        """``[(name, size)]`` of the writer's visible log objects, in order."""
+    def log_object_groups(self, app_name, verstr):
+        """``{stream: [(name, size)]}`` of every stream's visible log objects,
+        in order — one listing."""
         sizes = self._log_names(f"{self._record_prefix(app_name, verstr)}/")
-        return [(n, sizes[n]) for n in group_log_names(sizes).get(writer_id, [])]
+        return {w: [(n, sizes[n]) for n in names]
+                for w, names in group_log_names(sizes).items()}
+
+    def log_objects(self, app_name, verstr, writer_id):
+        """``[(name, size)]`` of the stream's visible log objects, in order."""
+        return self.log_object_groups(app_name, verstr).get(writer_id, [])
+
+    def create_log_segment(self, app_name, verstr, stream, seq, data):
+        """Store *data* as the stream's segment *seq* unless that exists:
+        whether it was created (a stream's segments are never overwritten)."""
+        prefix = self._record_prefix(app_name, verstr)
+        return self._create(f"{prefix}/{log_object_name(stream, seq)}", data)
 
     def put_log_segment(self, app_name, verstr, writer_id, seq, data):
         """Store *data* as the writer's segment *seq* — or the next free one,

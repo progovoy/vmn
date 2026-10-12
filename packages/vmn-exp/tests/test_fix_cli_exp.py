@@ -8,9 +8,9 @@ import time
 
 import pytest
 import yaml
+from exp_helpers import _PY, _SRC_PATH, _bootstrap, _exp, _storage, cli_module
 from filelock import FileLock
-from exp_helpers import cli_module, _SRC_PATH, _PY, _bootstrap, _exp, _storage
-
+from vmn_exp.core.streams import display_writer
 from vmn_exp.snapshot import _resolve_verstr
 
 BLOCKED_WINDOW = 3.0
@@ -267,4 +267,5 @@ def test_conf_writer_id_names_the_log_file(app_layout):
             "log/*.jsonl",
         )
     )
-    assert [os.path.basename(p) for p in logs] == ["confwriter.jsonl"], logs
+    assert [display_writer(os.path.basename(p)[:-len(".jsonl")]) for p in logs] == [
+        "confwriter"], logs

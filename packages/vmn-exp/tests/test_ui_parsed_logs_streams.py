@@ -57,14 +57,15 @@ def test_a_grown_stream_is_read_from_its_offset(storage, monkeypatch):
     _assert_full(snap, storage)
 
 
-def test_a_sealed_part_reparses_even_when_the_new_stream_outgrew_the_old(storage):
+def test_a_seal_reparses_even_when_the_next_stream_outgrew_the_sealed_one(storage):
     from vmn_exp.core.metric_compact import seal_writer
+    from vmn_exp.core.writer import own_stream
 
     cache = ParsedLogs()
-    _log(storage, "w", 0, 3)
+    _log(storage, own_stream(storage, APP, V), 0, 3)
     cache.get(storage, APP, V, load_log)
-    seal_writer(storage, APP, V, "w")
-    _log(storage, "w", 3, 20)
+    seal_writer(storage, APP, V, own_stream(storage, APP, V))
+    _log(storage, own_stream(storage, APP, V), 3, 20)
     snap = cache.get(storage, APP, V, load_log)
     assert [p["step"] for p in snap.series()["loss"]] == list(range(20))
     _assert_full(snap, storage)

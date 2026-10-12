@@ -1,5 +1,5 @@
-"""Compaction (plan 12 §6): a writer's ``.vms`` stream becomes its ``.vmx``;
-a long writer seals parts every SEAL_POINTS points, merged at the end."""
+"""Compaction (plan 12 §6): a stream's ``.vms`` becomes its ``.vmx``; a long
+writer seals its stream every SEAL_POINTS points and goes on in a new one."""
 import random
 
 from test_series_reader import APP, V, _entries, _same, _storage, _write
@@ -7,10 +7,11 @@ from test_series_reader import APP, V, _entries, _same, _storage, _write
 from vmn_exp.core import metric_compact
 from vmn_exp.core.log import metric_series
 from vmn_exp.core.metric_compact import compact_record, compact_writer, seal_writer
-from vmn_exp.core.metric_files import indexed_name, is_part_file, is_stream_file
+from vmn_exp.core.metric_files import indexed_name, is_indexed_file, is_stream_file
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.series_reader import SeriesReader
+from vmn_exp.core.writer import own_stream
 
 
 def _series(storage, rewinds=()):
@@ -73,26 +74,29 @@ def test_compact_record_compacts_every_streaming_writer(tmp_path):
     assert compact_record(storage, APP, V) == []
 
 
-def test_parts_and_later_blocks_read_as_one_series_and_merge_at_finish(tmp_path):
+def _all_names(storage):
+    return sorted(n for names in storage.metric_objects(APP, V).values() for n, _ in names)
+
+
+def test_sealed_streams_and_later_blocks_read_as_one_series_and_compact_at_finish(tmp_path):
     storage = _storage(tmp_path)
     entries = _entries(random.Random(8), 400, 1_700_000_000_000_000)
-    _write(storage, "w", entries[:200])
-    assert seal_writer(storage, APP, V, "w") == 1
-    _write(storage, "w", entries[200:300])
-    assert seal_writer(storage, APP, V, "w") == 2
-    _write(storage, "w", entries[300:])
-    names = _names(storage)
-    assert [is_part_file(n) for n in names] == [True, True, False]
-    assert is_stream_file(names[2])
+    _write(storage, own_stream(storage, APP, V), entries[:200])
+    assert seal_writer(storage, APP, V, own_stream(storage, APP, V))
+    _write(storage, own_stream(storage, APP, V), entries[200:300])
+    assert seal_writer(storage, APP, V, own_stream(storage, APP, V))
+    _write(storage, own_stream(storage, APP, V), entries[300:])
+    names = _all_names(storage)
+    assert sum(map(is_indexed_file, names)) == 2 and sum(map(is_stream_file, names)) == 1
     reference = _storage(tmp_path / "ref")
     _write(reference, "w", entries)
     _same(_series(storage), _series(reference))
-    assert compact_writer(storage, APP, V, "w")
-    assert _names(storage) == [indexed_name("w")]
+    assert compact_writer(storage, APP, V, own_stream(storage, APP, V))
+    assert all(map(is_indexed_file, _all_names(storage)))
     _same(_series(storage), _series(reference))
 
 
-def test_writers_seal_a_part_once_they_pass_the_seal_threshold(tmp_path, monkeypatch):
+def test_writers_seal_their_stream_once_they_pass_the_seal_threshold(tmp_path, monkeypatch):
     from vmn_exp.core.writer import append_metric_entries
 
     monkeypatch.setattr(metric_compact, "SEAL_POINTS", 10)
@@ -103,24 +107,20 @@ def test_writers_seal_a_part_once_they_pass_the_seal_threshold(tmp_path, monkeyp
         entry = {"type": "metrics", "step": i, "timestamp": "2026-01-01T00:00:0%dZ" % i,
                  "values": {"a": 1.0, "b": 2.0, "c": 3.0}}
         assert append_metric_entries(storage, APP, V, [entry])
-    names = _names(storage)
-    assert is_part_file(names[0]) and is_stream_file(names[-1])
+    names = _all_names(storage)
+    assert any(map(is_indexed_file, names)) and any(map(is_stream_file, names))
     assert len(_series(storage)["a"]) == 5
 
 
-def test_a_reopened_writer_keeps_its_index_as_a_part_and_streams_on(tmp_path):
-    from vmn_exp.core.metric_compact import reopen_writer
-
+def test_a_resumed_writer_keeps_its_compacted_points_and_streams_on(tmp_path):
     storage = _storage(tmp_path)
     entries = _entries(random.Random(10), 200, 1_700_000_000_000_000)
-    _write(storage, "w", entries[:100])
-    compact_writer(storage, APP, V, "w")
-    assert reopen_writer(storage, APP, V, "w") == 1
-    _write(storage, "w", entries[100:])
+    _write(storage, own_stream(storage, APP, V), entries[:100])
+    assert compact_writer(storage, APP, V, own_stream(storage, APP, V))
+    _write(storage, own_stream(storage, APP, V), entries[100:])
     reference = _storage(tmp_path / "ref")
     _write(reference, "w", entries)
     _same(_series(storage), _series(reference))
-    assert compact_writer(storage, APP, V, "w")
-    assert _names(storage) == [indexed_name("w")]
+    assert compact_writer(storage, APP, V, own_stream(storage, APP, V))
+    assert all(map(is_indexed_file, _all_names(storage)))
     _same(_series(storage), _series(reference))
-    assert reopen_writer(storage, APP, V, "nobody") is None

@@ -106,33 +106,34 @@ def test_a_grown_stream_reads_only_its_new_headers(tmp_path, monkeypatch):
     assert 0 < sum(read) < 2000  # a header, not the ~30 KB of points
 
 
-def test_sealed_parts_and_the_final_index_fold_like_the_stream(tmp_path):
+def test_a_sealed_stream_and_the_next_one_fold_like_the_stream(tmp_path):
     from vmn_exp.core.metric_compact import compact_writer, seal_writer
+    from vmn_exp.core.writer import own_stream
 
     st = _storage(tmp_path)
     rng = random.Random(9)
-    _log_points(st, "w", 40, rng)
+    _log_points(st, own_stream(st, APP, V), 40, rng)
     index = ExperimentIndex(st, APP)
     index.refresh()
-    assert seal_writer(st, APP, V, "w") == 1
-    _log_points(st, "w", 40, rng, step0=40)
+    assert seal_writer(st, APP, V, own_stream(st, APP, V))
+    _log_points(st, own_stream(st, APP, V), 40, rng, step0=40)
     assert _fields(index.refresh().rows()[0]) == _fields(_expected(st))
     assert _fields(_row(st)) == _fields(_expected(st))
     expected = _fields(_expected(st))
-    assert compact_writer(st, APP, V, "w")
+    assert compact_writer(st, APP, V, own_stream(st, APP, V))
     assert _fields(index.refresh().rows()[0]) == expected
 
 
-def test_a_vmx_rewritten_larger_refolds_like_a_cold_build(tmp_path):
-    from vmn_exp.core.metric_compact import compact_writer, reopen_writer
+def test_a_resumed_writer_compacted_again_refolds_like_a_cold_build(tmp_path):
+    from vmn_exp.core.metric_compact import compact_writer
+    from vmn_exp.core.writer import own_stream
 
     st = _storage(tmp_path)
     rng = random.Random(11)
-    _log_points(st, "w", 40, rng)
-    assert compact_writer(st, APP, V, "w")
+    _log_points(st, own_stream(st, APP, V), 40, rng)
+    assert compact_writer(st, APP, V, own_stream(st, APP, V))
     index = ExperimentIndex(st, APP)
     index.refresh()
-    assert reopen_writer(st, APP, V, "w") == 1
-    _log_points(st, "w", 40, rng, step0=40)
-    assert compact_writer(st, APP, V, "w")
+    _log_points(st, own_stream(st, APP, V), 40, rng, step0=40)
+    assert compact_writer(st, APP, V, own_stream(st, APP, V))
     assert _fields(index.refresh().rows()[0]) == _fields(_row(st))

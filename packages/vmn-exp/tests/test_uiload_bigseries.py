@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pytest  # noqa: E402
 from uiload import probe_series, scenario, seed_series, slo  # noqa: E402
 from uiload.inproc_server import serve_root  # noqa: E402
+from vmn_exp.core.metric_files import indexed_name
 from vmn_exp.sdk.reader import list_runs  # noqa: E402
 from vmn_exp.snapshot import open_storage  # noqa: E402
 from vmn_exp.storage.areas import local_store_root  # noqa: E402
@@ -80,7 +81,7 @@ def test_tiny_seed_writes_one_vmx_per_run_and_no_metric_log_lines(seeded):
     for row in list_runs(APP, storage=storage):
         objects = storage.metric_objects(APP, row["verstr"])
         names = [n for objs in objects.values() for n, _ in objs]
-        assert names == [f"metrics/{seed_series.WRITER}.vmx"]
+        assert names == [indexed_name(seed_series.WRITER)]
         log = [e for entries in storage.load_logs_by_writer(APP, row["verstr"]).values()
                for e in entries]
         assert not any(e["type"] == "metrics" for e in log)

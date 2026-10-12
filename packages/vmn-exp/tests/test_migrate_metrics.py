@@ -13,6 +13,7 @@ from vmn_exp.cli import migrate as migrate_mod
 from vmn_exp.cli.migrate import run_migrate
 from vmn_exp.core.fold import fold_log, fold_metrics
 from vmn_exp.core.log import load_log, metric_series
+from vmn_exp.core.metric_files import indexed_name
 from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.storage.open import open_storage
@@ -122,7 +123,7 @@ def test_metrics_entries_leave_the_jsonl_for_a_vmx_per_writer(tmp_path):
     assert run_migrate(["--dir", str(tmp_path)]) == 0
     rec = "runs/my-app/r1"
     names = {k for k in raw.keys() if k.startswith(rec + "/")}
-    assert {f"{rec}/metrics/w1.vmx", f"{rec}/metrics/v1.vmx"} <= names
+    assert {f"{rec}/{indexed_name('w1')}", f"{rec}/{indexed_name('v1')}"} <= names
     assert not any(k.endswith(".vms") for k in names)
     for key in METRIC_KEYS:
         if f"{rec}/{key}" in names:
@@ -203,7 +204,7 @@ def test_s3_store_converts_metrics(s3):
     for name, data in _run_files().items():
         s3.put(f"{object_key(('run',), 'r1', 'team')}/{name}", data)
     assert run_migrate(["--store", "s3://bkt/team"]) == 0
-    assert "team/runs/my-app/r1/metrics/w1.vmx" in s3.keys()
+    assert f"team/runs/my-app/r1/{indexed_name('w1')}" in s3.keys()
     before = {k: s3.get(k) for k in s3.keys()}
     assert run_migrate(["--store", "s3://bkt/team"]) == 0
     assert {k: s3.get(k) for k in s3.keys()} == before

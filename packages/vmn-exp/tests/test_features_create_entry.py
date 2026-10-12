@@ -4,6 +4,7 @@ entry is written."""
 import pytest
 from vmn_exp.core import writer as experiment_writer
 from vmn_exp.core.features import FEATURES_VERSION, build_features_entry
+from vmn_exp.core.streams import display_writer
 from vmn_exp.core.writer import create_run
 
 
@@ -58,7 +59,7 @@ def test_the_features_entry_follows_the_create_entry_in_one_write():
                         create_data={"params": {"lr": _Scalar()}}, features=_features())
 
     [(written_verstr, writer, entries)] = storage.writes
-    assert (written_verstr, writer) == (verstr, "gpu-07")
+    assert (written_verstr, display_writer(writer)) == (verstr, "gpu-07")
     create, features = entries
     assert create["type"] == "create" and create["note"] == "n"
     assert create["params"] == {"lr": 0.5}

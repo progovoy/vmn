@@ -15,6 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from backfill_helpers import host_logs
 from mlflow_fixtures import MlflowFixtureBuilder
 from vmn_exp.importers import commit_changes
 from vmn_exp.importers.commit_changes import CommitChanges, default_branch
@@ -186,7 +187,7 @@ def test_refresh_with_a_checkout_adds_changes_to_features_without_them(
     assert import_run(storage, APP, run, refresh_features=True,
                       commit_changes=changes) == "skipped"
 
-    by_writer = storage.load_logs_by_writer(APP, run_verstr(RUN_ID))
+    by_writer = host_logs(storage, APP, run_verstr(RUN_ID))
     [first] = [e for e in by_writer["mlflow-import"] if e["type"] == "features"]
     [refreshed] = [e for e in by_writer["refresher"] if e["type"] == "features"]
     assert "changed" not in first

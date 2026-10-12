@@ -185,31 +185,41 @@ class SnapshotStorage(ABC):
         return path if path and os.path.isfile(path) else None
 
     def log_sizes(self, app_name, verstr):
-        """``{writer: bytes}`` of the record's logs .
+        """``{stream: bytes}`` of the record's logs.
 
-        A writer's log only ever grows, so comparing sizes tells which copy of
+        A stream's log only ever grows, so comparing sizes tells which copy of
         it is newer without reading either. Empty when the backend can't tell.
         """
         return {}
 
     def log_objects(self, app_name, verstr, writer_id):
-        """``[(object name, size)]`` of a writer's remote log objects, in order."""
+        """``[(object name, size)]`` of a stream's remote log objects, in order."""
         return []
+
+    def log_object_groups(self, app_name, verstr):
+        """``{stream: [(object name, size)]}`` of every stream, one listing."""
+        return {}
+
+    def stream_owner(self, app_name, verstr, writer):
+        """The owner of the streams this storage appends to in *verstr*
+        (:mod:`vmn_exp.core.streams`); None: this process's."""
+        return None
+
+    # A remote a local-first cache ships streams to also implements
+    # ``create_log_segment``/``create_metric_segment(app, verstr, stream, seq,
+    # data) -> bool``: create segment *seq* unless it exists (S3 If-None-Match,
+    # O_EXCL), False when it does — never overwrite one (docs/vmn-exp/experiments.md).
 
     # -- metric streams (plan 12 §4.2) ----------------------------------------
 
     def append_metric_block(self, app_name, verstr, writer_id, data):
-        """Append one encoded block to the writer's ``metrics/`` stream."""
+        """Append one encoded block to the stream's ``metrics/`` file."""
         raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
 
-    def put_indexed(self, app_name, verstr, writer_id, path, part=None, replace=False):
-        """Store *path* as the writer's ``.vmx`` (never over one unless
-        *replace*; False then) and drop the stream objects and parts it
-        supersedes. With *part* k: the sealed part k, dropping the streams."""
-        raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
-
-    def drop_indexed(self, app_name, verstr, writer_id):
-        """Delete the writer's final ``.vmx`` (a reopened writer streams on)."""
+    def put_indexed(self, app_name, verstr, writer_id, path, replace=False, covers=0):
+        """Store *path* as the stream's ``.vmx`` covering its segments up to
+        seq *covers* (never over that one unless *replace*; False then) and
+        drop the objects it covers."""
         raise NotImplementedError(f"{type(self).__name__} stores no metric streams")
 
     def metric_objects(self, app_name, verstr):
@@ -222,7 +232,7 @@ class SnapshotStorage(ABC):
         return None if data is None else data[offset:offset + length]
 
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
-        """Ship the writer's new metric blocks. No-op by default."""
+        """Ship the record copy's new metric blocks. No-op by default."""
 
     def sync_log_to_remote(self, app_name, verstr, writer_id):
-        """Sync the writer's log file to remote storage. No-op by default."""
+        """Ship the record copy's new log lines. No-op by default."""

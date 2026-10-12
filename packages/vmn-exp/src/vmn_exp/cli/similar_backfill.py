@@ -39,7 +39,8 @@ from vmn_exp.core.features import author_from_commits, build_features_entry, is_
 from vmn_exp.core.provenance import _has_in_record_patches
 from vmn_exp.core.rerun import _dirty_snapshot, code_verstr_of
 from vmn_exp.core.status import RUNNING, STUCK
-from vmn_exp.core.writer import flush_log, get_writer_id, stamped_entry
+from vmn_exp.core.streams import display_writer
+from vmn_exp.core.writer import flush_log, own_stream, stamped_entry
 from vmn_exp.gitmode.features import features_from_patches  # without vmn's own commits
 
 BACKFILLED, PARTIAL, SKIPPED, FAILED = "backfilled", "partial", "skipped", "failed"
@@ -143,7 +144,7 @@ def _creator(storage, app_name, verstr, run_state):
         for entry in entries
         if entry.get("type") == "create"
     )
-    writer = creates[0][1].strip() if creates else None
+    writer = display_writer(creates[0][1]).strip() if creates else None
     if writer != LEGACY_WRITER:
         return writer
     host = (run_state or {}).get("host")
@@ -160,7 +161,7 @@ def _counts(entry):
 
 def _append(storage, app_name, verstr, entry):
     log_entry = stamped_entry(entry)
-    if storage.append_log_entry(app_name, verstr, get_writer_id(), log_entry) is False:
+    if storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), log_entry) is False:
         raise RuntimeError("the record is gone")
     # One-shot command: no heartbeat will ship the entry to a remote later.
     flush_log(storage, app_name, verstr)

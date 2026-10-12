@@ -8,6 +8,7 @@ import time
 from exp_helpers import _PY, _SRC_PATH
 
 from vmn_exp.core.metric_files import indexed_name, is_stream_file
+from vmn_exp.core.streams import display_writer
 from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -21,6 +22,12 @@ def _storage(root, cls=CachedSnapshotStorage):
     st = cls(LocalSnapshotStorage(str(root), area="runs"))
     st.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return st
+
+
+def _only_stream(st):
+    """The one metric stream of the run (its writer id and its record copy)."""
+    [stream] = st.metric_objects(APP, VERSTR)
+    return stream
 
 
 def _names(st):
@@ -43,7 +50,8 @@ def test_finish_leaves_only_the_indexed_file(tmp_path):
     run._open()
     _log(run)
     run.finish()
-    assert _names(st) == [indexed_name(get_writer_id())]
+    assert _names(st) == [indexed_name(_only_stream(st))]
+    assert display_writer(_only_stream(st)) == get_writer_id()
     assert _steps(st) == list(range(30))
 
 
@@ -89,5 +97,6 @@ def test_interpreter_exit_compacts_too(tmp_path):
     st = _storage(tmp_path)
     env = dict(os.environ, PYTHONPATH=_SRC_PATH, VMN_WRITER_ID="child")
     subprocess.run([_PY, "-c", _SCRIPT, str(tmp_path)], env=env, check=True, timeout=60)
-    assert _names(st) == [indexed_name("child")]
+    assert _names(st) == [indexed_name(_only_stream(st))]
+    assert display_writer(_only_stream(st)) == "child"
     assert _steps(st) == list(range(25))

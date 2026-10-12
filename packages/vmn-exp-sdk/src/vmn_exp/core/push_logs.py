@@ -1,13 +1,13 @@
-"""Per-writer log shipping for ``vmn exp push``.
+"""Per-stream log shipping for ``vmn exp push``.
 
-A writer's local log is one ``log.<writer>.jsonl``; its remote copy is the
-base object plus segments. The remote copy must be a prefix of the local one.
-Push ships the complete local lines past the remote's size as one conditional
-segment (``put_log_segment``, ``If-None-Match``). When the remote size is not
-what the ledger says this host shipped (no ledger, an orphan leaked by an
-older vmn, another host), the remote bytes are compared with the local
-prefix first; a mismatch fails loudly and never starts over, because the
-remote bytes are someone else's.
+A stream's local log is one ``log/<stream>.jsonl`` (:mod:`vmn_exp.core.streams`);
+its remote copy is the base object plus segments, a replica of a prefix of
+the local one. Push ships the complete local lines past the remote's size as
+the next segment, created only if it does not exist (``create_log_segment``).
+When the remote size is not what the ledger says this host shipped (no
+ledger, a live ship of the same copy), the remote bytes are compared with the
+local prefix first; a mismatch fails loudly and never starts over, because
+the remote bytes are someone else's.
 """
 from vmn_exp.core.logfiles import next_seq
 from vmn_exp.storage.files import log_object_name
@@ -46,8 +46,10 @@ class _WriterLog:
             chunk = _complete_lines(local[remote_size:])
         else:
             chunk = _complete_lines(self._local_bytes(remote_size))
-        if chunk:
-            self._target.put_log_segment(*self._at, self._writer, next_seq(objects), chunk)
+        if chunk and not self._target.create_log_segment(
+                *self._at, self._writer, next_seq(objects), chunk):
+            raise RuntimeError(f"{self._at[1]}: the remote log of {self._writer!r} "
+                               "changed while pushing; push again")
         if finished and len(objects) + bool(chunk) > 1:
             self._target.compact_log_segments(*self._at, self._writer)
         return remote_size + len(chunk)

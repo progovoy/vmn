@@ -32,8 +32,9 @@ from vmn_exp.core.status import run_finished
 NEW, UPDATE, UP_TO_DATE, COLLISION, FAILED = (
     "new", "update", "up-to-date", "collision", "failed",
 )
-_REQUIRED = ("put_log_segment", "log_objects", "list_artifacts", "record_files",
-             "compact_log_segments", "metric_objects", "put_indexed")
+_REQUIRED = ("create_log_segment", "create_metric_segment", "log_objects",
+             "list_artifacts", "record_files", "compact_log_segments",
+             "metric_objects", "put_indexed")
 
 
 class _Collision(Exception):

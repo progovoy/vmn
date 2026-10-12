@@ -9,9 +9,9 @@ import os
 
 import pytest
 import yaml
-
 from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.streams import display_writer
 from vmn_exp.core.writer import (
     allocate_run_verstr,
     append_to_log,
@@ -88,7 +88,9 @@ def test_append_to_log_writes_through_the_per_writer_jsonl(monkeypatch):
 
     append_to_log(storage, "app", "0.0.1", {"type": "note", "text": "hi"})
 
-    assert storage.log_entries == [("app", "0.0.1", "pod-7", {"type": "note", "text": "hi"})]
+    [(app, verstr, stream, entry)] = storage.log_entries
+    assert (app, verstr, entry) == ("app", "0.0.1", {"type": "note", "text": "hi"})
+    assert display_writer(stream) == "pod-7"
 
 
 # ---------------------------------------------------------------------------

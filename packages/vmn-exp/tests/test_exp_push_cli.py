@@ -178,7 +178,7 @@ def test_failed_push_exits_1(offline, monkeypatch, capfd):
     def boom(*args, **kwargs):
         raise OSError("network down")
 
-    monkeypatch.setattr(S3SnapshotStorage, "put_log_segment", boom)
+    monkeypatch.setattr(S3SnapshotStorage, "create_log_segment", boom)
     capfd.readouterr()
     assert _push(offline) == 1
     lines = _lines(capfd)

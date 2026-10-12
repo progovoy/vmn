@@ -1,6 +1,6 @@
 """Names of a record's metric objects (plan 12 §4.2): streams
 ``metrics/<w>.vms`` + segments ``metrics/<w>@<seq>.vms``, indexed
-``metrics/<w>.vmx`` superseding them."""
+``metrics/<w>@000000-<last>.vmx`` superseding the segments up to *last*."""
 from vmn_exp.core.metric_files import (
     group_metric_names,
     indexed_name,
@@ -13,7 +13,8 @@ from vmn_exp.core.metric_files import (
 def test_stream_and_segment_names_follow_the_log_seq_scheme():
     assert stream_name("w") == "metrics/w.vms"
     assert stream_name("w", 3) == "metrics/w@000003.vms"
-    assert indexed_name("w") == "metrics/w.vmx"
+    assert indexed_name("w") == "metrics/w@000000-000000.vmx"
+    assert indexed_name("w", 5) == "metrics/w@000000-000005.vmx"
     assert stream_writer_and_seq("metrics/w@000003.vms") == ("w", 3)
     assert stream_writer_and_seq("metrics/w.vms") == ("w", 0)
 
@@ -36,26 +37,21 @@ def test_grouping_orders_a_writers_segments():
 
 
 def test_an_indexed_file_supersedes_its_writers_streams():
-    names = ["metrics/a.vms", "metrics/a@000001.vms", "metrics/a.vmx", "metrics/b.vms"]
-    assert group_metric_names(names) == {"a": ["metrics/a.vmx"], "b": ["metrics/b.vms"]}
+    names = ["metrics/a.vms", "metrics/a@000001.vms", "metrics/a@000000-000001.vmx",
+             "metrics/b.vms"]
+    assert group_metric_names(names) == {"a": ["metrics/a@000000-000001.vmx"],
+                                         "b": ["metrics/b.vms"]}
 
 
-def test_sealed_parts_are_named_per_writer_and_are_not_the_final_index():
-    from vmn_exp.core.metric_files import is_indexed_file, is_part_file, part_name
-
-    assert part_name("w", 2) == "metrics/w@p000002.vmx"
-    assert is_part_file("metrics/w@p000002.vmx")
-    assert is_metric_file("metrics/w@p000002.vmx")
-    assert not is_indexed_file("metrics/w@p000002.vmx")
-    assert not is_part_file("metrics/w.vmx")
-
-
-def test_parts_come_first_then_the_streams_written_after_them():
-    names = ["metrics/a.vms", "metrics/a@p000002.vmx", "metrics/a@p000001.vmx"]
+def test_segments_past_what_a_vmx_covers_follow_it():
+    names = ["metrics/a.vms", "metrics/a@000002.vms", "metrics/a@000000-000001.vmx",
+             "metrics/a@000003.vms"]
     assert group_metric_names(names) == {
-        "a": ["metrics/a@p000001.vmx", "metrics/a@p000002.vmx", "metrics/a.vms"]}
+        "a": ["metrics/a@000000-000001.vmx", "metrics/a@000002.vms", "metrics/a@000003.vms"]}
 
 
-def test_the_final_index_supersedes_parts_too():
-    names = ["metrics/a.vms", "metrics/a@p000001.vmx", "metrics/a.vmx"]
-    assert group_metric_names(names) == {"a": ["metrics/a.vmx"]}
+def test_the_widest_vmx_of_a_stream_hides_the_narrower_one():
+    names = ["metrics/a@000000-000001.vmx", "metrics/a@000000-000003.vmx",
+             "metrics/a@000002.vms", "metrics/a@000004.vms"]
+    assert group_metric_names(names) == {
+        "a": ["metrics/a@000000-000003.vmx", "metrics/a@000004.vms"]}

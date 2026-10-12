@@ -13,6 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from backfill_helpers import host_logs
 from mlflow_fixtures import MlflowFixtureBuilder
 from vmn_exp.core.writer import claim_record
 from vmn_exp.importers.import_records import IMPORT_WRITER, import_run, run_verstr
@@ -65,7 +66,7 @@ def _legacy_record(storage, run, note=None, run_id=None):
 
 def _features(storage, verstr, writer=None):
     if writer:
-        entries = storage.load_logs_by_writer(APP, verstr).get(writer) or []
+        entries = host_logs(storage, APP, verstr).get(writer) or []
     else:
         entries = storage.load_merged_log(APP, verstr)
     return [e for e in entries if e.get("type") == "features"]
@@ -82,7 +83,7 @@ def test_refresh_appends_the_features_a_legacy_import_lacks(tmp_path):
     assert entry["author"] == {"os_user": "alice", "source": "mlflow"}
     assert entry["entrypoint"] == "train.py"
     assert entry["branch"] == "feat/focal"
-    assert [e["type"] for e in storage.load_logs_by_writer(APP, verstr)[IMPORT_WRITER]] \
+    assert [e["type"] for e in host_logs(storage, APP, verstr)[IMPORT_WRITER]] \
         == ["create"]
 
 

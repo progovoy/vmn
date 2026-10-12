@@ -29,6 +29,7 @@ from vmn_exp.core.metric_entries import (
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.streams import clean_writer_id, process_owner, stream_key
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.storage.files import user_artifact_path
 
@@ -67,11 +68,12 @@ def get_writer_id(conf_writer_id=None):
     """Return a unique writer identifier for concurrent-safe log writes.
 
     Priority: VMN_WRITER_ID env > conf_writer_id > HOSTNAME env > socket.gethostname().
-    Cached for the process lifetime so all log entries land in the same JSONL file.
+    Cached for the process lifetime. A ``~`` (the stream key separator,
+    :mod:`vmn_exp.core.streams`) is replaced.
     """
     global _WRITER_ID
     if _WRITER_ID is None:
-        _WRITER_ID = (
+        _WRITER_ID = clean_writer_id(
             os.environ.get(WRITER_ID_ENV)
             or conf_writer_id
             or os.environ.get("HOSTNAME")
@@ -80,11 +82,21 @@ def get_writer_id(conf_writer_id=None):
     return _WRITER_ID
 
 
+def own_stream(storage, app_name, verstr):
+    """The stream this process appends to in *verstr*: ``<writer id>~<owner>``,
+    the owner the one *storage* names for the record (its local copy's), else
+    this process's. Resolved per call — a compacted stream is never appended
+    to again, so its owner moves on."""
+    owner_for = getattr(storage, "stream_owner", None)
+    owner = owner_for(app_name, verstr, get_writer_id()) if owner_for else None
+    return stream_key(get_writer_id(), owner or process_owner())
+
+
 def set_default_writer_id(writer_id):
     """Make *writer_id* the process's writer id unless ``VMN_WRITER_ID`` names one
     (a server's own edits, whatever an earlier call cached)."""
     global _WRITER_ID
-    _WRITER_ID = os.environ.get(WRITER_ID_ENV) or writer_id
+    _WRITER_ID = clean_writer_id(os.environ.get(WRITER_ID_ENV) or writer_id)
     return _WRITER_ID
 
 
@@ -160,18 +172,18 @@ def append_to_log(storage, app_name, verstr, entry):
     if is_metric_entry(entry):
         append_metric_entries(storage, app_name, verstr, [entry])
     else:
-        storage.append_log_entry(app_name, verstr, get_writer_id(), entry)
+        storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), entry)
 
 
 def append_metric_entries(storage, app_name, verstr, entries, inherited=False):
     """Record sanitized ``metrics`` *entries* as one block of this writer's
     metric stream (plan 12 §4.1); True when stored."""
-    writer_id = get_writer_id()
-    writer = MetricWriter(storage, app_name, verstr, writer_id)
+    stream = own_stream(storage, app_name, verstr)
+    writer = MetricWriter(storage, app_name, verstr, stream)
     if not record_metric_entries(writer, entries, inherited=inherited):
         return False
     points = sum(len(e.get("values") or {}) for e in entries)
-    note_points(storage, app_name, verstr, writer_id, points)
+    note_points(storage, app_name, verstr, stream, points)
     return True
 
 
@@ -186,12 +198,12 @@ def append_entries_to_log(storage, app_name, verstr, entries):
         return False
     if not entries:
         return True
-    writer = get_writer_id()
+    stream = own_stream(storage, app_name, verstr)
     batch = getattr(storage, "append_log_entries", None)
     if batch is not None:
-        return batch(app_name, verstr, writer, entries)
+        return batch(app_name, verstr, stream, entries)
     for entry in entries:
-        storage.append_log_entry(app_name, verstr, writer, entry)
+        storage.append_log_entry(app_name, verstr, stream, entry)
     return True
 
 
@@ -206,16 +218,17 @@ def flush_log(storage, app_name, verstr):
     this right after appending. Backends without the method (a plain S3
     remote, which has nothing to sync) are left alone.
     """
-    sync_to_remote(storage, app_name, verstr, get_writer_id())
+    sync_to_remote(storage, app_name, verstr)
 
 
-def sync_to_remote(storage, app_name, verstr, writer_id):
-    """Ship *writer_id*'s new log lines, then its new metric blocks, where
-    the backend syncs them."""
+def sync_to_remote(storage, app_name, verstr, stream=None):
+    """Ship the record copy's new log lines, then its new metric blocks,
+    where the backend syncs them (*stream*: this process's, by default)."""
+    stream = stream or own_stream(storage, app_name, verstr)
     for method in ("sync_log_to_remote", "sync_metrics_to_remote"):
         sync = getattr(storage, method, None)
         if sync is not None:
-            sync(app_name, verstr, writer_id)
+            sync(app_name, verstr, stream)
 
 
 # ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ from vmn_exp.core.identity import (  # noqa: F401
     actor_identity,
 )
 from vmn_exp.core.record_format import stamped
-from vmn_exp.core.writer import flush_log, get_writer_id
+from vmn_exp.core.writer import flush_log, get_writer_id, own_stream
 from vmn_exp.registry.fold import fold_registry, fold_uses, next_ts
 from vmn_exp.registry.fold import now_iso as _reg_ts
 from vmn_exp.registry.names import HEADER_RECORD, USES_RECORD
@@ -71,7 +71,7 @@ def _build_entry(
 def _append_entry(storage, model: str, entry: dict, record: str = HEADER_RECORD) -> None:
     """Append *entry* to *model*'s *record* log and flush to remote so readers see it."""
     reg = registry_storage(storage)
-    reg.append_log_entry(model, record, entry["writer"], entry)
+    reg.append_log_entry(model, record, own_stream(reg, model, record), entry)
     flush_log(reg, model, record)
 
 

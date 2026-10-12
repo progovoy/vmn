@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 """The log half of local-first storage with a remote (:mod:`snapshot_storage_cached`).
 
-A writer's log exists in up to two copies: the local file its host appends to
-and the remote objects that host ships as segments. Both only ever grow, and
-the remote one is a prefix of the local one, so the bigger copy is the newer
-one. Every read — listings, merged logs, the experiment index's per-file reads
-— takes each writer from that same copy.
+A stream's log (:mod:`vmn_exp.core.streams`) exists in up to two copies: the
+local file of the record copy that owns it — the only one that appends to it
+— and the remote objects shipped from that file. Both only ever grow and the
+remote one is a replica of a prefix of the local one, so shipping resumes
+exactly past the bytes the remote holds (:mod:`ship_state`). Every read —
+listings, merged logs, the experiment index's per-file reads — takes each
+stream from its bigger copy: a local stream from the local file, another
+copy's from the remote.
 
-A local copy that lags the remote one under the same writer id is brought up
-to it before it ships (:mod:`cached_log_merge`); until then (a seed that
-failed) the two copies need not line up, and the merge then rewrites the local
-one. So the local copy's log files list with their identity
-(:func:`~vmn_exp.core.logfiles.append_identity`): the experiment index folds
-a writer again when its local copy was rewritten or it switched copies, rather
-than read on from an offset that no longer lines up, and an incremental fold
-of the listed files always equals a full re-read.
+Two processes of one copy may ship the same file: a segment is created only
+if it does not exist (``create_log_segment``), and one that does — or a
+failed ship, whose upload may have landed — means listing the remote again
+and going on from what it holds, exact since both shipped bytes of the same
+file.
 """
-
-import threading
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.logfiles import next_seq
 from vmn_exp.core.status import run_finished
-from vmn_exp.storage.cached_log_merge import LogMerge
+from vmn_exp.storage import ship_state
 from vmn_exp.storage.files import (
     is_log_file,
     log_object_name,
@@ -32,6 +30,7 @@ from vmn_exp.storage.files import (
 )
 
 LOCAL, REMOTE = "local", "remote"
+_SHIP_ATTEMPTS = 5
 
 
 def is_any_log(name):
@@ -43,7 +42,7 @@ def log_writer(name):
 
 
 def pick_log_sources(remote_sizes, local_sizes):
-    """``{writer: LOCAL | REMOTE}``: the copy of each writer's log to read.
+    """``{stream: LOCAL | REMOTE}``: the copy of each stream's log to read.
 
     The bigger copy is the newer one; a tie goes to the local copy (no
     download).
@@ -60,19 +59,20 @@ def _sizes(files):
     return log_sizes_of((name, sig[0]) for name, sig in files.items())
 
 
-class CachedLogs(LogMerge):
-    # Whether local log files are complete copies of their writers' logs
+def _state_of(objects):
+    """``(bytes, next seq)`` of a stream's remote log *objects*."""
+    return sum(size for _, size in objects), next_seq(objects)
+
+
+class CachedLogs:
+    # Whether local log files are complete copies of their streams' logs
     # (False for a buffer that only holds what this process appended).
     _local_is_replica = True
 
     def _init_logs(self):
-        # (app, verstr, writer) -> (bytes already on the remote, next segment)
-        self._synced = {}
-        # (app, verstr, writer) -> LOCAL | REMOTE, as the last listing chose
+        # (app, verstr, stream) -> LOCAL | REMOTE, as the last listing chose
         self._log_sources = {}
-        self._sync_lock = threading.Lock()
-        self._compacted = set()  # writers already compacted after their run finished
-        self._init_log_merge()
+        self._compacted = set()  # streams already compacted after their run finished
 
     # -- listings ---------------------------------------------------------------
 
@@ -125,9 +125,7 @@ class CachedLogs(LogMerge):
     def _append_locally(self, append, app_name, verstr, writer_id, payload):
         if not self._ensure_local_record(app_name, verstr):
             return False
-        self._seed_local_log(app_name, verstr, writer_id)
-        with self._local_log_held():
-            return append(app_name, verstr, writer_id, payload)
+        return append(app_name, verstr, writer_id, payload)
 
     def _local_logs(self, app_name, verstr):
         if not self._local_is_replica:
@@ -175,47 +173,51 @@ class CachedLogs(LogMerge):
 
     # -- shipping to the remote -------------------------------------------------
 
-    def _remote_log_state(self, app_name, verstr, writer_id):
-        objects = list(self._remote.log_objects(app_name, verstr, writer_id))
-        return sum(size for _, size in objects), next_seq(objects)
-
-    def _initial_sync_state(self, app_name, verstr, writer_id):
-        """Where shipping resumes: past everything the remote already holds."""
-        return self._remote_log_state(app_name, verstr, writer_id)
-
-    def _ship(self, app_name, verstr, writer_id, seq, chunk):
-        """Upload *chunk* as segment *seq*; returns the seq it went to."""
-        self._remote.save_file(app_name, verstr, log_object_name(writer_id, seq), chunk)
-        return seq
+    def _ship_state(self, app_name, verstr, kind):
+        """The copy's :class:`~vmn_exp.storage.ship_state.ShipState` of
+        *kind*, under its ship lock."""
+        record = self._local.local_record_dir(app_name, verstr)
+        return ship_state.held(record, kind, repr(self._remote.cache_identity()))
 
     def sync_log_to_remote(self, app_name, verstr, writer_id):
-        """Ship the writer's complete lines appended since the last sync; once
-        the run has finished, compact what the remote holds for the writer."""
+        """Ship the complete lines appended to each of the copy's streams
+        since the remote's copy ends (*writer_id*'s among them); once the run
+        has finished, compact what the remote holds of them."""
         if not self.remote_for(app_name, verstr):
             return
-        with self._sync_lock:
-            self._ship_new_lines(app_name, verstr, writer_id)
-        key = (app_name, verstr, writer_id)
-        if key not in self._compacted and self._run_finished(app_name, verstr):
-            self._compact(app_name, verstr, writer_id)
-            self._compacted.add(key)
-
-    def _ship_new_lines(self, app_name, verstr, writer_id):
-        base = log_object_name(writer_id)
-        local_size = self._local.log_sizes(app_name, verstr).get(writer_id, 0)
-        if not local_size:
+        local_sizes = self._local.log_sizes(app_name, verstr)
+        if not local_sizes:
             return
-        key = (app_name, verstr, writer_id)
-        if key not in self._synced:
-            self._synced[key] = self._initial_sync_state(app_name, verstr, writer_id)
-        offset, seq = self._synced[key]
-        if self._needs_merge(key, offset, local_size):
-            self._synced[key] = self._merge_remote_lines(app_name, verstr, writer_id)
-            offset, seq = self._synced[key]
-        chunk = self._complete_lines(app_name, verstr, base, offset)
-        if chunk:
-            used = self._ship(app_name, verstr, writer_id, seq, chunk)
-            self._synced[key] = (offset + len(chunk), used + 1)
+        with self._ship_state(app_name, verstr, "log") as state:
+            listing = _Listing(self._remote, app_name, verstr)
+            for stream, size in sorted(local_sizes.items()):
+                self._ship_stream(state, listing, app_name, verstr, stream, size)
+            if self._run_finished(app_name, verstr):
+                for stream in sorted(local_sizes):
+                    self._compact_once(app_name, verstr, stream)
+
+    def _ship_stream(self, state, listing, app_name, verstr, stream, size):
+        for _ in range(_SHIP_ATTEMPTS):
+            held = state.get(stream) or _state_of(listing.objects(stream))
+            offset, seq = held
+            chunk = self._complete_lines(app_name, verstr, log_object_name(stream), offset)
+            if size <= offset or not chunk:
+                state.put(stream, held)
+                return
+            state.forget(stream)  # until the upload is known to have landed
+            if self._ship(app_name, verstr, stream, seq, chunk):
+                state.put(stream, (offset + len(chunk), seq + 1))
+                return
+            listing.refresh()  # another process of the copy shipped it
+        raise RuntimeError(f"{verstr}: could not ship the log of {stream!r}")
+
+    def _ship(self, app_name, verstr, stream, seq, chunk):
+        """Create segment *seq* of *stream* unless it exists: whether it did."""
+        create = getattr(self._remote, "create_log_segment", None)
+        if create is None:  # a plugin remote without conditional creates
+            self._remote.save_file(app_name, verstr, log_object_name(stream, seq), chunk)
+            return True
+        return create(app_name, verstr, stream, seq, chunk)
 
     def _complete_lines(self, app_name, verstr, name, offset):
         """The complete lines of local *name* from *offset* on (b"" if none)."""
@@ -225,12 +227,39 @@ class CachedLogs(LogMerge):
     def _run_finished(self, app_name, verstr):
         return run_finished(self._local, app_name, verstr)
 
-    def _compact(self, app_name, verstr, writer_id):
-        compact = getattr(self._remote, "compact_log_segments", None)
-        if compact is None:
+    def _compact_once(self, app_name, verstr, stream):
+        key = (app_name, verstr, stream)
+        if key in self._compacted:
             return
-        try:
-            compact(app_name, verstr, writer_id)
-        except Exception:
-            # Nothing is lost: the segments stay readable as they are.
-            VMN_LOGGER.debug("Log compaction failed", exc_info=True)
+        compact = getattr(self._remote, "compact_log_segments", None)
+        if compact is not None:
+            try:
+                compact(app_name, verstr, stream)
+            except Exception:
+                # Nothing is lost: the segments stay readable as they are.
+                VMN_LOGGER.debug("Log compaction failed", exc_info=True)
+                return
+        self._compacted.add(key)
+
+
+class _Listing:
+    """One remote listing of a record's log streams, taken when first needed."""
+
+    def __init__(self, remote, app_name, verstr):
+        self._remote, self._where, self._groups = remote, (app_name, verstr), None
+
+    def objects(self, stream):
+        if self._groups is None:
+            self._groups = _groups(self._remote, *self._where)
+        return self._groups.get(stream, [])
+
+    def refresh(self):
+        self._groups = None
+
+
+def _groups(remote, app_name, verstr):
+    groups = getattr(remote, "log_object_groups", None)
+    if groups is not None:
+        return groups(app_name, verstr)
+    return {w: list(remote.log_objects(app_name, verstr, w))
+            for w in remote.log_sizes(app_name, verstr)}

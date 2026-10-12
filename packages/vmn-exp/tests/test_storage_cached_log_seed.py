@@ -1,11 +1,8 @@
-"""A local-first cache whose local copy of a writer's log is behind the
-remote's (a fresh clone, a cleared cache, another clone on the same host —
-all under one writer id) appends without losing the remote's entries.
-
-Shipping resumes past the bytes the remote holds, which only works while the
-local copy is a superset of the remote one; so before its first append under
-a writer the cache brings its local copy up to the remote's, and shipping
-merges rather than overwrites when the local copy shrank under it.
+"""A local-first cache whose local copy of a run has less of a writer's log
+than the remote (a fresh clone, a cleared cache, another clone on the same
+host — all under one writer id) appends without losing the remote's entries:
+each copy appends to a stream of its own (``<writer>~<owner>``), which only
+its own file ever ships to.
 """
 import pytest
 from s3_helpers import cached_host, meta, mocked_bucket, raw_keys, s3_storage
@@ -13,7 +10,8 @@ from vmn_exp.core import writer
 from vmn_exp.core.logfiles import compacted_log_name
 from vmn_exp.core.manage import tag_run
 from vmn_exp.core.status import RUN_STATE_FILE
-from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
+from vmn_exp.core.streams import display_writer
+from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, own_stream
 from vmn_exp.storage import buffered
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.uri import s3_uri
@@ -36,11 +34,23 @@ def _note(text, second):
 
 
 def _append(host, text, second):
-    assert host.append_log_entry(APP, V, W, _note(text, second))
+    assert host.append_log_entry(APP, V, own_stream(host, APP, V), _note(text, second))
+
+
+def _sync(host):
+    host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
+
+
+def _remote_log(writer_id=None):
+    """The entries of every remote stream of *writer_id* (any), by time."""
+    logs = s3_storage().load_logs_by_writer(APP, V)
+    entries = [e for stream, es in logs.items() for e in es
+               if writer_id is None or display_writer(stream) == writer_id]
+    return sorted(entries, key=lambda e: e["timestamp"])
 
 
 def _remote_texts():
-    return [e["text"] for e in s3_storage().load_logs_by_writer(APP, V).get(W, [])]
+    return [e["text"] for e in _remote_log()]
 
 
 def _log_keys():
@@ -59,8 +69,8 @@ def _host_a_wrote_three(tmp_path, sync_each=False):
     for i in range(3):
         _append(host, f"a{i}", i)
         if sync_each:
-            host.sync_log_to_remote(APP, V, W)
-    host.sync_log_to_remote(APP, V, W)
+            _sync(host)
+    _sync(host)
     return host
 
 
@@ -68,7 +78,7 @@ def _fresh_host_appends(tmp_path, text="b0", name="b"):
     """A cache over the fresh root *name* appends *text* under W and syncs."""
     host = cached_host(tmp_path, name)
     _append(host, text, 10)
-    host.sync_log_to_remote(APP, V, W)
+    _sync(host)
     return host
 
 
@@ -82,19 +92,9 @@ def test_a_fresh_root_appending_under_the_same_writer_keeps_the_remote_entries(t
     assert _texts(b) == ["a0", "a1", "a2", "b0"]
 
 
-def test_the_fresh_roots_local_copy_holds_the_remote_entries_once_it_appends(tmp_path):
-    _host_a_wrote_three(tmp_path)
-
-    b = cached_host(tmp_path, "b")
-    _append(b, "b0", 10)
-
-    local = b._local.load_logs_by_writer(APP, V)[W]
-    assert [e["text"] for e in local] == ["a0", "a1", "a2", "b0"]
-
-
 def test_remote_segments_survive_a_fresh_roots_append(tmp_path):
-    _host_a_wrote_three(tmp_path, sync_each=True)
-    assert len(s3_storage().log_objects(APP, V, W)) == 3
+    a = _host_a_wrote_three(tmp_path, sync_each=True)
+    assert len(s3_storage().log_objects(APP, V, own_stream(a, APP, V))) == 3
 
     _fresh_host_appends(tmp_path)
 
@@ -104,9 +104,10 @@ def test_remote_segments_survive_a_fresh_roots_append(tmp_path):
 def test_a_compacted_remote_log_survives_a_fresh_roots_append(tmp_path):
     a = _host_a_wrote_three(tmp_path, sync_each=True)
     a.save_file(APP, V, RUN_STATE_FILE, FINISHED)
-    a.sync_log_to_remote(APP, V, W)  # the run finished: one merged object
-    assert [n for n, _ in s3_storage().log_objects(APP, V, W)] == [
-        compacted_log_name(W, 2)
+    _sync(a)  # the run finished: one merged object
+    stream = own_stream(a, APP, V)
+    assert [n for n, _ in s3_storage().log_objects(APP, V, stream)] == [
+        compacted_log_name(stream, 2)
     ]
 
     _fresh_host_appends(tmp_path)
@@ -119,13 +120,13 @@ def test_clones_taking_turns_under_one_writer_keep_every_entry(tmp_path):
     a.save(APP, V, meta(V), {})
     _append(a, "a0", 0)
     _append(a, "a1", 1)
-    a.sync_log_to_remote(APP, V, W)
+    _sync(a)
 
     _fresh_host_appends(tmp_path)
 
     again = cached_host(tmp_path, "a")  # a later process in the first clone
     _append(again, "a2", 20)
-    again.sync_log_to_remote(APP, V, W)
+    _sync(again)
 
     assert _remote_texts() == ["a0", "a1", "b0", "a2"]
     assert _texts(cached_host(tmp_path, "a")) == ["a0", "a1", "b0", "a2"]
@@ -137,7 +138,7 @@ def test_a_local_copy_dropped_under_a_live_cache_keeps_the_remote_entries(tmp_pa
 
     b._local.delete(APP, V)  # the cache cleared while this process lives
     _append(b, "b1", 11)
-    b.sync_log_to_remote(APP, V, W)
+    _sync(b)
 
     assert _remote_texts() == ["a0", "a1", "a2", "b0", "b1"]
 
@@ -150,7 +151,7 @@ def _finished_buffered_pod(lines):
     for i, text in enumerate(lines):
         _append(pod, text, i)
     pod.save_file(APP, V, RUN_STATE_FILE, FINISHED)
-    pod.sync_log_to_remote(APP, V, W)
+    _sync(pod)
     return pod
 
 
@@ -158,7 +159,7 @@ def test_a_buffered_pod_appending_after_its_run_finished_keeps_the_log():
     pod = _finished_buffered_pod(["a0", "a1", "a2"])
 
     _append(pod, "late", 10)
-    pod.sync_log_to_remote(APP, V, W)
+    _sync(pod)
 
     assert _remote_texts() == ["a0", "a1", "a2", "late"]
 
@@ -167,7 +168,7 @@ def test_a_buffered_pod_ships_a_long_line_appended_after_its_run_finished():
     pod = _finished_buffered_pod(["a0"])
 
     _append(pod, "x" * 200, 10)  # longer than everything the pod had shipped
-    pod.sync_log_to_remote(APP, V, W)
+    _sync(pod)
 
     assert _remote_texts() == ["a0", "x" * 200]
 
@@ -192,7 +193,7 @@ def test_tag_from_a_fresh_root_keeps_the_runs_log(tmp_path, same_writer):
 
     assert tag_run(cached_host(tmp_path, "b"), APP, V, tags={"verdict": "keep"})
 
-    log = s3_storage().load_logs_by_writer(APP, V)[W]
+    log = _remote_log(W)
     assert [e["type"] for e in log] == ["create", "note", "tags"]
 
 
@@ -203,7 +204,7 @@ def test_add_note_from_a_fresh_root_keeps_the_runs_log(tmp_path, same_writer):
     append_to_log(b, APP, V, create_log_entry("note", text="from b"))
     flush_log(b, APP, V)
 
-    log = s3_storage().load_logs_by_writer(APP, V)[W]
+    log = _remote_log(W)
     assert [e["type"] for e in log] == ["create", "note", "note"]
     assert [e["text"] for e in log if e["type"] == "note"] == ["from a", "from b"]
 
@@ -216,7 +217,7 @@ def test_an_up_to_date_local_copy_downloads_no_log(tmp_path):
     a._remote.load_file = lambda *args: gets.append(args[2]) or real(*args)
 
     _append(a, "a3", 3)
-    a.sync_log_to_remote(APP, V, W)
+    _sync(a)
 
     assert [g for g in gets if g.startswith("log/")] == []
     assert len(_log_keys()) == len(logs_before) + 1  # one new segment

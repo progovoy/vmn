@@ -7,8 +7,6 @@ import tempfile
 from vmn_exp._base import valid_app_path, valid_path_component
 
 # Log file naming and parsing live in core, shared with the experiment index.
-from vmn_exp.core.rewind import drop_rewound
-from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     LOG_DIR,
     group_log_names,
@@ -17,6 +15,9 @@ from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     log_writer_and_seq,
     parse_jsonl,
 )
+from vmn_exp.core.rewind import drop_rewound
+from vmn_exp.core.series_reader import SeriesReader
+from vmn_exp.core.streams import display_writer
 
 METADATA_FILE = "metadata.yml"
 # The derived experiment-index cache, beside the records it summarizes.
@@ -163,7 +164,7 @@ def merged_log(storage, app_name, verstr, logs_by_writer):
     logs = {w: list(entries or []) for w, entries in logs_by_writer.items()}
     metrics = SeriesReader.from_storage(storage, app_name, verstr, rewinds=())
     for writer, entries in metrics.entries_by_writer().items():
-        logs.setdefault(writer, []).extend(dict(e, _writer=writer) for e in entries)
+        logs.setdefault(writer, []).extend(dict(e, _writer=display_writer(writer)) for e in entries)
     return flatten_logs(logs)
 
 

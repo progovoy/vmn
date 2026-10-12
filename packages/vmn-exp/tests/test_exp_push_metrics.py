@@ -125,13 +125,15 @@ def test_stream_pushed_then_compacted_leaves_no_stale_stream(offline, monkeypatc
     from s3_helpers import raw_keys
 
     from vmn_exp.core.metric_compact import compact_by
-    from vmn_exp.core.writer import get_writer_id
+    from vmn_exp.core.writer import own_stream
     from vmn_exp.sdk import run as run_module
 
     monkeypatch.setattr(run_module, "compact_by", lambda *a, **k: None)
     verstr = _run(offline)
     assert _push(offline) == 0
-    compact_by(_local(offline), offline.app_name, verstr, get_writer_id(), time.monotonic() + 30)
+    local = _local(offline)
+    compact_by(local, offline.app_name, verstr, own_stream(local, offline.app_name, verstr),
+               time.monotonic() + 30)
     assert _push(offline) == 0
     metric_keys = [k.rsplit("/", 2)[-2:] for k in raw_keys() if "/metrics/" in k]
     assert metric_keys and all(name.endswith(".vmx") for _, name in metric_keys)

@@ -133,6 +133,16 @@ class S3Base:
         body = data.encode("utf-8") if isinstance(data, str) else data
         self._s3.put_object(Bucket=self.bucket, Key=key, Body=body, **kwargs)
 
+    def _create(self, key, data):
+        """Create *key* unless it exists (``If-None-Match``); whether it did."""
+        try:
+            self._put(key, data, IfNoneMatch="*")
+        except Exception as e:
+            if is_taken(e):
+                return False
+            raise
+        return True
+
     def _pages(self, **params):
         """Every ``list_objects_v2`` page for *params*, following continuations."""
         params = dict(params, Bucket=self.bucket)

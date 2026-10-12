@@ -13,7 +13,7 @@ from vmn_exp.core.writer import (
     append_to_log,
     create_log_entry,
     flush_log,
-    get_writer_id,
+    own_stream,
 )
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -86,8 +86,9 @@ def test_flush_log_ships_metric_blocks_too(tmp_path):
         def sync_metrics_to_remote(self, *a):
             calls.append(("metrics",) + a)
 
-    flush_log(Spy(), APP, V)
-    assert calls == ["log", ("metrics", APP, V, get_writer_id())]
+    spy = Spy()
+    flush_log(spy, APP, V)
+    assert calls == ["log", ("metrics", APP, V, own_stream(spy, APP, V))]
 
 
 def test_sdk_log_metrics_reach_the_stream_not_the_jsonl(tmp_path):

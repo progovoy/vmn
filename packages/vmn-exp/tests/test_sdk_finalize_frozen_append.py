@@ -1,7 +1,7 @@
 """The SIGTERM finalizer records a run even though the main thread was caught
 in the middle of a log append: it runs on a worker thread while the main
 thread sits in the signal handler, so it must not wait on a lock that thread
-holds (see vmn_exp.storage.cached_log_merge.LOCAL_LOCK_WAIT_SEC)."""
+holds (see vmn_exp.storage.ship_state.FINALIZING_WAIT_SEC)."""
 import yaml
 from frozen_holders import finishes_within, frozen_in, in_thread
 from vmn_exp.core.status import RUN_STATE_FILE
@@ -10,12 +10,12 @@ from vmn_exp.sdk import run as sdk_run
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
-from vmn_exp.storage.cached_log_merge import LOCAL_LOCK_WAIT_SEC
+from vmn_exp.storage.ship_state import FINALIZING_WAIT_SEC
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
 # The periodic flush and the final one may each wait out the lock once.
-PROMPT_SEC = 2 * LOCAL_LOCK_WAIT_SEC + 5
+PROMPT_SEC = 2 * FINALIZING_WAIT_SEC + 5
 
 
 def _storage(tmp_path):

@@ -364,19 +364,22 @@ def test_sdk_and_cli_records_share_one_schema(app_layout, capfd):
 def test_sdk_writes_the_same_per_writer_log_file_as_the_cli(app_layout):
     _bootstrap(app_layout)
 
+    from vmn_exp.core.streams import display_writer
     from vmn_exp.core.writer import get_writer_id
 
     with start_run(app_layout.app_name) as run:
         run.log_metric("loss", 1.0)
 
-    log_path = os.path.join(
+    log_dir = os.path.join(
         app_layout.repo_path,
         ".vmn", "store", "runs",
         app_layout.app_name,
         run.id.replace("+", "_plus_"),
-        f"log/{get_writer_id()}.jsonl",
+        "log",
     )
-    assert os.path.isfile(log_path), os.listdir(os.path.dirname(log_path))
+    [log_file] = os.listdir(log_dir)
+    assert log_file.endswith(".jsonl")
+    assert display_writer(log_file[:-len(".jsonl")]) == get_writer_id()
 
 
 # ---------------------------------------------------------------------------

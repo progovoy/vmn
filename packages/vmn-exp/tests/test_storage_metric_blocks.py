@@ -125,39 +125,37 @@ def _file(tmp_path, name, data):
     return str(path)
 
 
-def test_a_sealed_part_replaces_the_streams_and_later_blocks_follow_it(store, tmp_path):
-    from vmn_exp.core.metric_files import part_name
-
-    store.append_metric_block(APP, V, W, _block(1.0))
-    assert store.put_indexed(APP, V, W, _file(tmp_path, "p", b"part1"), part=1)
-    store.append_metric_block(APP, V, W, _block(2.0))
+def test_a_vmx_drops_the_segments_it_covers_and_later_ones_follow_it(tmp_path, bucket):
+    store = _saved(s3_storage())
+    for seq in range(3):
+        assert store.create_metric_segment(APP, V, W, seq, _block(float(seq)))
+    assert store.put_indexed(APP, V, W, _file(tmp_path, "p", b"vmx01"), covers=1)
     names = [n for n, _ in store.metric_objects(APP, V)[W]]
-    assert names[0] == part_name(W, 1)
-    assert len(names) == 2 and names[1].endswith(".vms")
-    assert store.put_indexed(APP, V, W, _file(tmp_path, "q", b"again"), part=1) is False
+    assert names == [indexed_name(W, 1), stream_name(W, 2)]
+    assert store.read_range(APP, V, stream_name(W, 1), 0, 5) is None
 
 
-def test_the_final_index_drops_the_writers_parts(store, tmp_path):
+def test_a_wider_vmx_drops_the_narrower_one(store, tmp_path):
     store.append_metric_block(APP, V, W, _block(1.0))
-    store.put_indexed(APP, V, W, _file(tmp_path, "p", b"part1"), part=1)
-    store.append_metric_block(APP, V, W, _block(2.0))
-    assert store.put_indexed(APP, V, W, _file(tmp_path, "f", b"final"))
-    assert store.metric_objects(APP, V)[W] == [(indexed_name(W), 5)]
-    from vmn_exp.core.metric_files import part_name
-    assert store.read_range(APP, V, part_name(W, 1), 0, 5) is None
+    assert store.put_indexed(APP, V, W, _file(tmp_path, "p", b"vmx00"))
+    assert store.put_indexed(APP, V, W, _file(tmp_path, "f", b"vmx03"), covers=3)
+    assert store.metric_objects(APP, V)[W] == [(indexed_name(W, 3), 5)]
+    assert store.read_range(APP, V, indexed_name(W), 0, 5) is None
+
+
+@pytest.mark.parametrize("make", [s3_storage, _gcs, _azure], ids=["s3", "gcs", "azure"])
+def test_a_segment_is_created_once(make, monkeypatch):
+    with mocked_bucket(monkeypatch):
+        store = _saved(make())
+        assert store.create_metric_segment(APP, V, W, 1, _block(1.0))
+        assert store.create_metric_segment(APP, V, W, 1, _block(2.0)) is False
+        assert store.create_log_segment(APP, V, W, 1, b'{"a": 1}\n')
+        assert store.create_log_segment(APP, V, W, 1, b'{"a": 2}\n') is False
+        assert _read_all(store) == [[1.0]]
+        assert store.load_file(APP, V, "log/w@000001.jsonl") == b'{"a": 1}\n'
 
 
 def test_replace_rebuilds_an_indexed_file(store, tmp_path):
     store.put_indexed(APP, V, W, _file(tmp_path, "a", b"first"))
     assert store.put_indexed(APP, V, W, _file(tmp_path, "b", b"second"), replace=True)
     assert store.read_range(APP, V, indexed_name(W), 0, 6) == b"second"
-
-
-def test_drop_indexed_removes_only_the_final_index(store, tmp_path):
-    from vmn_exp.core.metric_files import part_name
-
-    store.put_indexed(APP, V, W, _file(tmp_path, "p", b"part1"), part=1)
-    store.put_indexed(APP, V, W, _file(tmp_path, "f", b"final"))
-    store.put_indexed(APP, V, W, _file(tmp_path, "p2", b"part2"), part=2)
-    store.drop_indexed(APP, V, W)
-    assert store.metric_objects(APP, V)[W] == [(part_name(W, 2), 5)]
