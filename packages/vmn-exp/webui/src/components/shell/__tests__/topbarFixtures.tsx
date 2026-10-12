@@ -17,8 +17,8 @@ export function ctxOf(over: Partial<ShellContext> = {}): ShellContext {
     routeId: "experiments", params: {}, search: new URLSearchParams(), pathname: "/",
     wsFromUrl: true, override: null,
     workspaces: [ML_REPO, TEAM], isGit: true,
-    metaStatus: "ok", metaError: false, authEnabled: false, role: null,
-    readOnly: false, readOnlyReason: null, canAdmin: true,
+    metaStatus: "ok", authEnabled: false, role: null,
+    readOnly: false, readOnlyReason: null, canAdmin: true, canAttach: true,
     meta: { version: "0.10.2" },
     ...over,
   };

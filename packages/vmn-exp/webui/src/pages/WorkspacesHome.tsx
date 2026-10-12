@@ -44,13 +44,12 @@ function WorkspaceTile({ workspace }: { workspace: Workspace }) {
 
 export function WorkspacesHome() {
   const { data: workspaces, error } = useWorkspaces();
-  const { meta, canAdmin } = usePageScope();
+  const { canAttach } = usePageScope();
   const [search] = useSearchParams();
   const client = useQueryClient();
   const decision = useHomeRedirect(error ? [] : workspaces);
 
   if (decision && decision !== "wait") return <Navigate replace to={decision.to} />;
-  const canAttach = Boolean(meta) && canAdmin && !meta?.read_only;
   const onAdded = () => client.invalidateQueries({ queryKey: WORKSPACES_KEY });
 
   return (

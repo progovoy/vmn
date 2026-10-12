@@ -41,14 +41,15 @@ export function usePageScope(ws?: string): PageScope {
   const role = workspace?.role ?? meta?.role ?? null;
   const metaStatus = metaStatusOf(metaQuery.isError, metaQuery.error, meta);
   const readOnlyReason = readOnlyReasonOf(meta, authEnabled, role, ws, workspace);
+  const canAdmin = !authEnabled || meta?.role === "admin";
   return {
     ws, workspace, workspaces,
     isGit: workspace?.kind !== "store",
     meta, metaStatus,
-    metaError: metaStatus === "unreachable",
     authEnabled, role,
     readOnly: readOnlyReason !== null,
     readOnlyReason,
-    canAdmin: !authEnabled || meta?.role === "admin",
+    canAdmin,
+    canAttach: metaStatus === "ok" && !meta?.read_only && canAdmin,
   };
 }

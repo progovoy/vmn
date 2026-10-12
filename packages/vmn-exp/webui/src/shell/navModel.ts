@@ -28,15 +28,11 @@ const NO_APP = "choose an app first";
 const NO_WS = "choose a workspace first";
 const STORE = "store workspace: no checkout";
 
-/** Why Actions cannot run here; permanent reasons first, so picking an app is
- *  never suggested as the fix for a store or a read-only server. */
-function actionsBlocked(ctx: ShellContext): string | undefined {
-  if (!ctx.isGit) return STORE;
-  if (ctx.meta?.read_only) return "read-only server";
-  if (ctx.authEnabled && ctx.role === "viewer") return `your role in ${ctx.ws} is viewer`;
-  if (ctx.authEnabled && ctx.ws && ctx.workspace && ctx.role === null) return `you have no role in ${ctx.ws}`;
-  return undefined;
-}
+/** Why Actions cannot run here (the page scope's own read-only wording);
+ *  permanent reasons first, so picking an app is never suggested as the fix
+ *  for a store or a read-only server. */
+const actionsBlocked = (ctx: ShellContext): string | undefined =>
+  ctx.isGit ? ctx.readOnlyReason ?? undefined : STORE;
 
 export function navModel(ctx: ShellContext): NavGroup[] {
   const active = ACTIVE[ctx.routeId];

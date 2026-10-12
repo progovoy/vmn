@@ -23,8 +23,8 @@ const status = (stuck: number): AppStatus => ({
 function fakeCtx(routeId: RouteId, extra: Partial<ShellContext> = {}): ShellContext {
   return {
     ws: "ml-repo", workspace: { name: "ml-repo", kind: "git" }, workspaces: [], isGit: true,
-    metaStatus: "ok", metaError: false, authEnabled: false, role: null,
-    readOnly: false, readOnlyReason: null, canAdmin: true,
+    metaStatus: "ok", authEnabled: false, role: null,
+    readOnly: false, readOnlyReason: null, canAdmin: true, canAttach: true,
     routeId, params: { ws: "ml-repo" }, search: new URLSearchParams(), pathname: "/",
     wsFromUrl: true, override: null, ...extra,
   };
