@@ -7,10 +7,10 @@ import type { AppStatus, GitContext } from "./contracts";
 
 const GIT_POLL_MS = 30_000;
 
-const busy = (status: AppStatus) => status.counts.running + status.counts.stuck > 0;
-
 /** Status polls fast while something runs (or is stuck), slowly otherwise. */
-export const statusPollMs = (status?: AppStatus) => (status && busy(status) ? 15_000 : 60_000);
+const pollMs = (statuses: AppStatus[]) =>
+  statuses.some((s) => s.counts.running + s.counts.stuck > 0) ? 15_000 : 60_000;
+export const statusPollMs = (status?: AppStatus) => pollMs(status ? [status] : []);
 
 /** Pass `enabled = isGit`: a store workspace has no checkout to ask about.
  *  Interval refetches pause while the tab is hidden (react-query's default). */
@@ -57,7 +57,6 @@ export function useAppsStatus(ws: string) {
     queryKey: ["apps-status", ws],
     queryFn: () => get<Record<string, AppStatus>>(`/workspaces/${ws}/apps-status`),
     staleTime: STATUS_STALE_MS,
-    refetchInterval: (query) =>
-      Object.values(query.state.data ?? {}).some(busy) ? 15_000 : 60_000,
+    refetchInterval: (query) => pollMs(Object.values(query.state.data ?? {})),
   });
 }
