@@ -25,23 +25,30 @@ entries (the parked multi-clone tests and the review probes reproduce them).
   and set is unchanged; a `~` in an explicit writer id becomes `-`.
 - **One appending owner per stream.** The owner is per local *record copy*:
   `<record>/.stream-owner` (`storage/stream_owner.py`, JSON with the id, the
-  directory's absolute path, the retired ids and the inherited ones), minted
-  under the copy's owner lock (`.ship/owner.lock`, re-reading the file first,
-  so all processes opening a fresh copy at once get the same owner) and read
-  by every other process of the copy. A file naming another path — a `cp -r`,
-  a moved checkout, a `vmn-exp push` `.rN` rename, a bind mount — never keeps
-  its owner (the original may have gone on appending and shipping, so the
-  copy's file can be a stale prefix of the remote): the copy mints a new owner
-  and *inherits* the old one's streams (and those it retired or inherited),
-  each with the path of the record it came from. An inherited stream's local
-  file never grows again. Once that path no longer holds the record (moved,
-  deleted) the copy ships and pushes what the remote lacks of it — nothing
-  when the remote is ahead, the missing suffix when behind, from a fresh
+  directory's realpath and `[st_dev, st_ino]`, the retired ids and the
+  inherited ones), minted under the copy's owner lock (`.ship/owner.lock`,
+  re-reading the file first, so all processes opening a fresh copy at once get
+  the same owner) and read by every other process of the copy. A copy is the
+  physical directory: the same `(st_dev, st_ino)` keeps the owner whatever
+  path reached it (a symlink, a bind mount, macOS `/tmp` vs `/private/tmp`, a
+  rename on one filesystem, a `vmn-exp push` `.rN` rename). Another directory
+  — a `cp -r`, a backup restored at the original's path, a cross-filesystem
+  move — never keeps the owner (the original may have gone on appending and
+  shipping, so the copy's file can be a stale prefix of the remote): the copy
+  mints a new owner and *inherits* the old one's streams (and those it
+  retired or inherited), each with the record (realpath + identity) it came
+  from. An inherited stream's local file never grows again. Unless its record
+  is another directory still there, the copy ships and pushes what the remote
+  lacks of it — nothing when the remote is ahead, the missing suffix when behind, from a fresh
   listing, never once the remote compacted it — and never compacts it nor puts
   it as a `.vmx` from its local file (an inherited local `.vmx` was built by
   its owner from the whole file, so it goes up while the remote has none).
   While the original still lives it alone ships its streams: its ship state
-  trusts that. A copy deleted and fetched again also mints a new owner. The brief suggested a root-level id; a per-record
+  trusts that. A process that sees the same directory with another identity
+  (a container's `st_dev` for a bind-mounted dir, overlayfs) mints too and
+  ships every inherited stream whose record is this directory as it sees it,
+  so a disagreement costs an extra stream, never an unshipped one. A
+  `.stream-owner` without an identity (older) counts as another directory. A copy deleted and fetched again also mints a new owner. The brief suggested a root-level id; a per-record
   owner also covers `prune --local-only` / a cleared cache followed by a
   re-fetch, which would otherwise append to a stream whose local file is
   shorter than its remote copy.

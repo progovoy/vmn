@@ -1,5 +1,6 @@
-"""A record whose ``.stream-owner`` names another path — a ``cp -r`` copy,
-a moved checkout, a copy whose original was deleted later — never appends to
+"""A record whose ``.stream-owner`` names another directory — a ``cp -r``
+copy, a checkout moved across filesystems, a copy whose original was deleted
+later — never appends to
 the recorded owner's streams: it mints its own owner and inherits the old
 one's streams, whose local files never grow again. It ships just what the
 remote lacks of them, so a delayed move loses nothing. Processes opening one
@@ -72,6 +73,11 @@ def test_a_copy_whose_original_shipped_more_and_was_deleted_loses_nothing(tmp_pa
     assert metric_values(b) == [1.0, 2.0, 3.0]
 
 
+def _move_across_filesystems(src, dst):
+    shutil.copytree(src, dst)  # what shutil.move does across devices
+    shutil.rmtree(src)
+
+
 def test_a_moved_copy_ships_what_its_original_never_did(tmp_path):
     a = cached_host(tmp_path, "a")
     assert a.create_exclusive(APP, V, meta(V), {})
@@ -81,7 +87,7 @@ def test_a_moved_copy_ships_what_its_original_never_did(tmp_path):
     _ship(a, own)
     a.append_log_entry(APP, V, own, tag(2, "k2"))
     a.append_metric_block(APP, V, own, block(2.0, start=2))
-    shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))
+    _move_across_filesystems(tmp_path / "a", tmp_path / "b")
     b = cached_host(tmp_path, "b")
 
     _ship(b, stream(b))
@@ -89,6 +95,22 @@ def test_a_moved_copy_ships_what_its_original_never_did(tmp_path):
     assert stream(b) != own
     assert remote_tag_keys() == ["k1", "k2"]
     assert remote_metric_values() == [1.0, 2.0]
+
+
+def test_a_root_renamed_on_its_filesystem_keeps_its_stream_and_ships_it(tmp_path):
+    a = cached_host(tmp_path, "a")
+    assert a.create_exclusive(APP, V, meta(V), {})
+    own = stream(a)
+    a.append_log_entry(APP, V, own, tag(1, "k1"))
+    a.append_metric_block(APP, V, own, block(1.0, start=1))
+    shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))
+    b = cached_host(tmp_path, "b")
+
+    _ship(b, stream(b))
+
+    assert stream(b) == own
+    assert remote_tag_keys() == ["k1"]
+    assert remote_metric_values() == [1.0]
 
 
 def test_an_offline_copy_compacts_no_stream_it_inherited(tmp_path):

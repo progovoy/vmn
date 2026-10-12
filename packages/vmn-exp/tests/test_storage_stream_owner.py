@@ -65,14 +65,48 @@ def test_a_copied_root_gets_a_stream_of_its_own(tmp_path):
     assert own_stream(_local(tmp_path / "a"), APP, V) == original
 
 
-def test_a_moved_root_gets_a_stream_of_its_own_and_keeps_shipping_the_old(tmp_path):
+def test_a_root_moved_across_filesystems_gets_a_stream_of_its_own_and_keeps_shipping_the_old(
+        tmp_path):
     original = own_stream(_local(tmp_path / "a"), APP, V)
-    shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))
+    shutil.copytree(tmp_path / "a", tmp_path / "b")  # shutil.move across devices
+    shutil.rmtree(tmp_path / "a")
     moved = _local(tmp_path / "b")
 
     assert own_stream(moved, APP, V) != original
     assert own_stream(_local(tmp_path / "b"), APP, V) == own_stream(moved, APP, V)
     assert original.partition("~")[2] in moved._local.inherited_owners(APP, V)
+
+
+def test_a_root_renamed_on_its_filesystem_keeps_its_stream(tmp_path):
+    original = own_stream(_local(tmp_path / "a"), APP, V)
+    shutil.move(str(tmp_path / "a"), str(tmp_path / "b"))
+
+    assert own_stream(_local(tmp_path / "b"), APP, V) == original
+
+
+def test_a_root_seen_through_a_symlink_keeps_its_stream(tmp_path):
+    original = own_stream(_local(tmp_path / "a"), APP, V)
+    os.symlink(str(tmp_path / "a"), str(tmp_path / "alink"))
+
+    assert own_stream(_local(tmp_path / "alink"), APP, V) == original
+    assert own_stream(_local(tmp_path / "a"), APP, V) == original
+
+
+def test_an_owner_file_from_before_identities_counts_as_another_directory(tmp_path):
+    import json
+
+    storage = _local(tmp_path / "a")
+    original = own_stream(storage, APP, V)
+    path = os.path.join(storage.local_record_dir(APP, V), ".stream-owner")
+    with open(path) as f:
+        state = json.load(f)
+    del state["ident"]
+    with open(path, "w") as f:
+        json.dump(state, f)
+    again = _local(tmp_path / "a")
+
+    assert own_stream(again, APP, V) != original
+    assert original.partition("~")[2] in again._local.inherited_owners(APP, V)
 
 
 def test_a_moved_roots_copy_gets_a_stream_of_its_own(tmp_path):

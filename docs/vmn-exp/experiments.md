@@ -1499,10 +1499,12 @@ backends are built.
   form (`root_app/service` → `root_app-service`).
 - **Streams**: a stream is `<writer>~<owner>`: the writer id (the host name by
   default) and an owner id the local record copy keeps in its
-  `.stream-owner` (a copy of the directory elsewhere, or a copy deleted and
-  fetched again, mints a new one; so does a stream once compacted, and a
-  moved or renamed record, which ships what the remote lacks of the old
-  owner's streams once the old path no longer holds the record). Every
+  `.stream-owner`, tied to the directory's `(st_dev, st_ino)`: a symlink, a
+  bind mount or a rename on one filesystem keep it; another directory (a
+  copy elsewhere, a backup restored at the same path, a cross-filesystem
+  move, a copy deleted and fetched again) mints a new one, and so does a
+  stream once compacted. A new owner ships what the remote lacks of the old
+  owner's streams unless their record is another directory still there. Every
   process of one checkout appends to the same stream; two clones on one host
   never share one. Without a local copy (straight to a bucket) the owner is
   the process's. Displays (log `_writer`, UI writer columns,
