@@ -150,3 +150,18 @@ def test_the_text_reason_names_a_camel_case_word_once():
     terms = Counter(tokenize("ResNet NaN"))
     reason = shared_reason(terms, terms, lambda t: 1.0)
     assert reason == "shared: nan, resnet"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("ResNet-18", ["resnet", "res", "net", "resnet18"]),
+    ("resnet18", ["resnet18"]),
+    ("gpt-4 and COVID-19", ["gpt", "gpt4", "covid", "covid19"]),
+    ("lr0.001 batch 4096", ["lr0", "batch", "4096"]),
+    ("2026-10-12 run_42", ["2026", "run", "run42"]),
+])
+def test_short_numbers_join_the_word_they_are_hyphenated_to_and_never_stand_alone(text, expected):
+    assert tokenize(text) == expected
+
+
+def test_resnet18_matches_resnet_dash_18():
+    assert "resnet18" in tokenize("ResNet-18 baseline")

@@ -31,7 +31,9 @@ to too under until up very was we were what when where which while who whom
 why will with would you your yours
 """.split())
 
-_PIECES = re.compile(r"[\W_]+")
+_PIECE = re.compile(r"[^\W_]+")
+_JOINERS = ("-", "_")
+MIN_NUMBER_DIGITS = 4
 # A lower/digit -> Upper boundary, or the start of a Capitalised word (two
 # or more lowercase letters) after an acronym: HTTPServer, not GPUs.
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z]{2})")
@@ -48,15 +50,31 @@ def _words(piece):
     return words
 
 
+def _pieces(text):
+    """The words of *text* split on punctuation and ``_``. A number
+    hyphenated or underscored to a word also joins it (``ResNet-18`` ->
+    ResNet, resnet18). A bare short number is no word — version, decimal and
+    layer-count fragments (``lr0.001`` -> lr0); one of
+    :data:`MIN_NUMBER_DIGITS`+ digits (a year, a batch size) is."""
+    prev = None
+    for match in _PIECE.finditer(text):
+        piece = match.group()
+        if not piece.isdigit() or len(piece) >= MIN_NUMBER_DIGITS:
+            yield from _words(piece)
+        if piece.isdigit() and prev and prev.group()[-1].isalpha() \
+                and text[prev.end():match.start()] in _JOINERS:
+            yield prev.group().lower() + piece
+        prev = match
+
+
 def tokenize(text):
-    """Lowercase words of *text*, split on punctuation and ``_``; stopwords
-    and one-character tokens dropped. A camelCase word yields its whole
+    """Lowercase words of *text* (see :func:`_pieces`); stopwords and
+    one-character tokens dropped. A camelCase word yields its whole
     lowercased form and its parts (``ResNet`` -> resnet, res, net), so a
     word matches however it is capitalised."""
     if not isinstance(text, str):
         return []
-    return [word for piece in _PIECES.split(text) for word in _words(piece)
-            if len(word) > 1 and word not in STOPWORDS]
+    return [word for word in _pieces(text) if len(word) > 1 and word not in STOPWORDS]
 
 
 def _strings(value):
