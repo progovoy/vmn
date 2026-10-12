@@ -4,29 +4,26 @@ import { Link, useParams } from "react-router-dom";
 import { appTag } from "../api";
 import { useApps } from "../queries";
 import { usePageScope } from "../shell/usePageScope";
-import { useAppStatus } from "../shell/useShellData";
+import { useAppsStatus } from "../shell/useShellData";
 import { PageHead, Skeleton, wsLocation } from "../components/ui";
 import CacheResync, { useCacheStatus } from "../components/CacheResync";
-import LazyMount from "../components/LazyMount";
 import StatusRollup from "../components/shell/StatusRollup";
+import type { AppStatus } from "../shell/contracts";
 import type { AppRow, Workspace } from "../types";
 import "./home.css";
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-function TileStatus({ ws, tag }: { ws: string; tag: string }) {
-  const { data } = useAppStatus(ws, tag);
-  return <StatusRollup status={data} href={(search) => `/ws/${ws}/app/${tag}${search}`} />;
-}
-
-function AppTile({ ws, app, isGit }: { ws: string; app: AppRow; isGit: boolean }) {
+function AppTile({ ws, app, isGit, status }: {
+  ws: string; app: AppRow; isGit: boolean; status?: AppStatus;
+}) {
   const tag = appTag(app.name);
   const runs = count(app.experiments, "run");
   return (
     <article className="app-tile">
       <h2><Link className="app-tile-link" to={`/ws/${ws}/app/${tag}`}>{app.name}</Link></h2>
       <span className="app-tile-meta">{isGit ? `${runs} · ${count(app.versions, "version")}` : runs}</span>
-      <LazyMount height={18}><TileStatus ws={ws} tag={tag} /></LazyMount>
+      <StatusRollup status={status} href={(search) => `/ws/${ws}/app/${tag}${search}`} />
     </article>
   );
 }
@@ -63,6 +60,7 @@ export function AppsPage() {
   const { ws } = useParams() as { ws: string };
   const { data: apps, error } = useApps(ws);
   const { workspace, isGit, meta } = usePageScope(ws);
+  const statuses = useAppsStatus(ws).data;
 
   return (
     <>
@@ -78,7 +76,9 @@ export function AppsPage() {
             <EmptyApps ws={ws} isGit={isGit} />
           ) : (
             <div className="home-grid">
-              {apps.map((a) => <AppTile key={a.name} ws={ws} app={a} isGit={isGit} />)}
+              {apps.map((a) => (
+                <AppTile key={a.name} ws={ws} app={a} isGit={isGit} status={statuses?.[appTag(a.name)]} />
+              ))}
             </div>
           )}
         </>

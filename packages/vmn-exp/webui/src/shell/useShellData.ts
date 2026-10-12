@@ -2,13 +2,15 @@
  *  never throws them to an error boundary by default). */
 import { useQuery } from "@tanstack/react-query";
 import { apiShell } from "../apiShell";
+import { get } from "../http";
 import type { AppStatus, GitContext } from "./contracts";
 
 const GIT_POLL_MS = 30_000;
 
+const busy = (status: AppStatus) => status.counts.running + status.counts.stuck > 0;
+
 /** Status polls fast while something runs (or is stuck), slowly otherwise. */
-export const statusPollMs = (status?: AppStatus) =>
-  status && status.counts.running + status.counts.stuck > 0 ? 15_000 : 60_000;
+export const statusPollMs = (status?: AppStatus) => (status && busy(status) ? 15_000 : 60_000);
 
 /** Pass `enabled = isGit`: a store workspace has no checkout to ask about.
  *  Interval refetches pause while the tab is hidden (react-query's default). */
@@ -45,5 +47,17 @@ export function useAppStatusPoll(ws: string | undefined, tag: string | undefined
   useQuery<AppStatus>({
     ...appStatusQuery(ws, tag),
     refetchInterval: (query) => statusPollMs(query.state.data),
+  });
+}
+
+/** Every app's status in a workspace, keyed by tag: one request for the
+ *  apps page, polled fast while any app has something running or stuck. */
+export function useAppsStatus(ws: string) {
+  return useQuery<Record<string, AppStatus>>({
+    queryKey: ["apps-status", ws],
+    queryFn: () => get<Record<string, AppStatus>>(`/workspaces/${ws}/apps-status`),
+    staleTime: STATUS_STALE_MS,
+    refetchInterval: (query) =>
+      Object.values(query.state.data ?? {}).some(busy) ? 15_000 : 60_000,
   });
 }

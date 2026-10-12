@@ -17,7 +17,7 @@ vi.mock("../../api", async (orig) => ({
   },
 }));
 
-import { WorkspacesHome } from "../Dashboard";
+import { WorkspacesHome } from "../WorkspacesHome";
 import { RETURN_TO_KEY } from "../../shell/contracts";
 
 const TWO: Workspace[] = [
