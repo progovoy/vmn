@@ -105,6 +105,7 @@ function runCopy(ws: string, appTag: string, ref: string, facts: NotFoundFacts):
   const byIndex = /^@\d+$/.test(ref);
   let line: Line;
   if (byIndex && total === 0) line = [`${app} has no runs yet.`];
+  else if (byIndex && total === 1) line = [`${app} has 1 run (@1).`];
   else if (byIndex && total != null) line = [`${app} has ${total} runs (@1–@${total}).`];
   else {
     line = [
@@ -120,7 +121,8 @@ function runCopy(ws: string, appTag: string, ref: string, facts: NotFoundFacts):
   };
   if (byIndex) return copy;
   // A verstr or prefix may still match a run under another name: search for it.
-  const query = `verstr ~ "${ref.replaceAll('"', "")}"`;
+  // Quotes are dropped so the query and the single-quoted CLI stay well formed.
+  const query = `verstr ~ "${ref.replace(/["']/g, "")}"`;
   copy.actions.push({ label: ["Search runs for ", { mono: ref }], to: `${base}?q=${encodeURIComponent(query)}` });
   copy.cli += ` --query '${query}'`;
   return copy;

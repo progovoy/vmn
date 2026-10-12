@@ -8,6 +8,11 @@ vi.mock("../../../api", () => ({
 }));
 
 import RouteError from "../RouteError";
+import { ShellOverrideProvider, useShellOverride } from "../../../shell/shellOverride";
+
+function Probe() {
+  return <span data-testid="override">{useShellOverride() ?? "none"}</span>;
+}
 
 function Thrower({ error }: { error: unknown }): never {
   throw error;
@@ -23,7 +28,9 @@ function renderWith(error: unknown) {
       ],
     },
   ], { initialEntries: ["/page"] });
-  return renderWithClient(<RouterProvider router={router} />);
+  return renderWithClient(
+    <ShellOverrideProvider><RouterProvider router={router} /><Probe /></ShellOverrideProvider>,
+  );
 }
 
 beforeEach(() => {
@@ -38,6 +45,7 @@ describe("RouteError", () => {
     expect(screen.getByText("kaboom").tagName).toBe("PRE");
     expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "All workspaces" }).getAttribute("href")).toBe("/");
+    expect(screen.getByTestId("override").textContent).toBe("none");
   });
 
   it("asks to reload a tab running an older build", () => {
@@ -59,5 +67,6 @@ describe("RouteError", () => {
     renderWith({ status: 404, statusText: "Not Found", internal: false, data: null });
     expect(await screen.findByRole("heading", { name: "No page at this address" })).toBeInTheDocument();
     expect(screen.getByText("/page")).toBeInTheDocument();
+    expect(screen.getByTestId("override").textContent).toBe("not-found");
   });
 });

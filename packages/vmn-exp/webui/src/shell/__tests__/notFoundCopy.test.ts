@@ -117,6 +117,15 @@ describe("notFoundCopy: run", () => {
     expect(c.cli).toBe("vmn-exp list ml_app");
   });
 
+  it("says a single run in the singular", () => {
+    expect(copy(at("@2"), { runTotal: 1 }).body).toEqual(["ml_app has 1 run (@1)."]);
+  });
+
+  it("keeps the shell command intact for a ref with a single quote", () => {
+    const c = copy(at("x'; rm -rf ~; '"));
+    expect(c.cli).toBe(`vmn-exp list ml_app --query 'verstr ~ "x; rm -rf ~; "'`);
+  });
+
   it("says an app without runs has none", () => {
     expect(copy(at("@2"), { runTotal: 0 }).body).toEqual(["ml_app has no runs yet."]);
   });

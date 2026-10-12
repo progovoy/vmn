@@ -51,6 +51,8 @@ function renderAt(path: string, element: JSX.Element, route = "/ws/:ws/app/:app"
 }
 
 const page = () => screen.queryByTestId("page");
+/** Let every mocked read settle and render before asserting the page stayed. */
+const settle = () => act(() => new Promise((r) => setTimeout(r, 30)));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -73,6 +75,7 @@ describe("WorkspaceGuard", () => {
     workspaces.mockReturnValue(fail(500));
     renderAt("/ws/nope/app/x", guarded);
     await waitFor(() => expect(workspaces).toHaveBeenCalled());
+    await settle();
     expect(page()).not.toBeNull();
   });
 
@@ -98,6 +101,7 @@ describe("AppGuard", () => {
     renderAt("/ws/ml-repo/app/ml_app", guarded);
     await waitFor(() => expect(apps).toHaveBeenCalled());
     await waitFor(() => expect(appStatus).toHaveBeenCalled());
+    await settle();
     expect(page()).not.toBeNull();
   });
 
@@ -123,6 +127,7 @@ describe("AppGuard", () => {
     appStatus.mockReturnValue(never());
     renderAt("/ws/ml-repo/app/ml_ap", guarded);
     await waitFor(() => expect(apps).toHaveBeenCalled());
+    await settle();
     expect(page()).not.toBeNull();
   });
 
@@ -138,6 +143,7 @@ describe("AppGuard", () => {
     appStatus.mockReturnValue(fail());
     renderAt("/ws/ml-repo/app/ml_ap", guarded);
     await waitFor(() => expect(appStatus).toHaveBeenCalled());
+    await settle();
     expect(page()).not.toBeNull();
   });
 
