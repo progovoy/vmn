@@ -137,9 +137,6 @@ function renderLeaderboard() {
   );
 }
 
-const cellOf = (verstr: string) =>
-  screen.getByText(verstr).closest("td") as HTMLElement;
-
 beforeEach(() => {
   vi.clearAllMocks();
   mockedApi.metricsSchema.mockResolvedValue({});

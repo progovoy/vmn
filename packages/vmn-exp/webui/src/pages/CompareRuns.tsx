@@ -36,7 +36,6 @@ export default function CompareRuns() {
   const onlyDiffering = params.get("diff") === "1";
   const schema = useMetricsSchema(ws, app);
   const results = useQueries({ queries: verstrs.map((v) => runQuery(ws, app, v)) }, client);
-  const details = results.map((r) => r.data);
   const failed = results.flatMap((r, i) => (r.error ? [verstrs[i]] : []));
   const failedSet = new Set(failed);
 
