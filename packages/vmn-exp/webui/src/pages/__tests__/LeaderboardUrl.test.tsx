@@ -12,6 +12,11 @@ vi.mock("../../api", () => ({
   },
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
+const appStatus = vi.hoisted(() => vi.fn());
+vi.mock("../../apiShell", () => ({ apiShell: { appStatus: () => appStatus() } }));
+const KNOWN_APP = {
+  total: 1, counts: { created: 0, running: 0, stuck: 0, succeeded: 1, failed: 0 }, failed_recent: 0, rollup: null,
+};
 vi.mock("../../components/ParamPlots", () => ({ default: () => null }));
 vi.mock("../../components/MetricBarChart", () => ({ default: () => <div>bar-chart</div> }));
 vi.mock("../../components/NewExperiment", () => ({ default: () => <div>new-form</div> }));
@@ -33,6 +38,7 @@ const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 beforeEach(() => {
   vi.clearAllMocks();
   m.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
+  appStatus.mockResolvedValue(KNOWN_APP);
   m.apps.mockResolvedValue([{ name: "my/app", experiments: 1, versions: 1 }]);
   m.facets.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experiments.mockResolvedValue(page([row(1, { metrics: { loss: 0.2 }, params: { model: "m1" } })]));
