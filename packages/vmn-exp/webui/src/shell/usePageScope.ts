@@ -1,10 +1,9 @@
 /** What a page may know about where it is and what it may do: meta and the
  *  workspaces only (no router matches), so it works under a plain MemoryRouter. */
-import { useWorkspaces } from "../queries";
+import { useMeta, useWorkspaces } from "../queries";
 import type { HttpError } from "../http";
 import type { Meta, Role, Workspace } from "../types";
 import type { PageScope } from "./contracts";
-import { useMetaLive } from "./useShellData";
 
 type MetaStatus = PageScope["metaStatus"];
 
@@ -34,7 +33,7 @@ function readOnlyReasonOf(
 }
 
 export function usePageScope(ws?: string): PageScope {
-  const metaQuery = useMetaLive();
+  const metaQuery = useMeta();
   const workspaces = useWorkspaces().data ?? [];
   const meta = metaQuery.data;
   const workspace = ws ? workspaces.find((w) => w.name === ws) : undefined;

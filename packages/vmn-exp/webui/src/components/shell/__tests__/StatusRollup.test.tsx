@@ -14,7 +14,7 @@ function status(
   return {
     total: 10,
     counts: { created: 0, running: 0, stuck: 0, succeeded: 0, failed: 0, ...counts },
-    failed_recent, recent_sec: 86400, rollup,
+    failed_recent, rollup,
   };
 }
 

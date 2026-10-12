@@ -8,7 +8,7 @@ vi.mock("../../../api", () => ({ api: { meta: () => meta() } }));
 
 import IdentityChip, { isLoopback } from "../IdentityChip";
 
-const AUTH = { enabled: true, token: true, oidc: true, api_tokens: false, login_url: "/auth/login" };
+const AUTH = { enabled: true, token: true, oidc: true, login_url: "/auth/login" };
 const chip = (c: HTMLElement) => c.querySelector(".id-chip");
 
 function renderChip(over: Parameters<typeof ctxOf>[0], onSignOut = vi.fn()) {

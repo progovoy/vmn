@@ -2,7 +2,7 @@
  *  React context, so http.ts can report a 401 from outside any component. */
 import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import type { AuthHints } from "../shell/contracts";
+import { TOKEN_KEY, type AuthHints } from "../shell/contracts";
 import type { Meta } from "../types";
 
 export interface AuthState {
@@ -43,17 +43,12 @@ export function clearUnauthorized() {
   if (state.required) setState(SIGNED_IN);
 }
 
-function hintsOf(meta?: Meta): AuthHints | null {
-  const auth = meta?.auth;
-  return auth ? { token: auth.token, oidc: auth.oidc, login_url: auth.login_url } : null;
-}
-
 export async function signOut(client: QueryClient, meta?: Meta): Promise<void> {
-  sessionStorage.removeItem("vmn_token");
+  sessionStorage.removeItem(TOKEN_KEY);
   if (meta?.auth?.oidc) {
     // /auth lives outside the API base, so this is a raw fetch, not post().
     await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   }
   client.clear();
-  setState({ required: true, hints: hintsOf(meta), method: "GET" });
+  setState({ required: true, hints: meta?.auth ?? null, method: "GET" });
 }

@@ -243,3 +243,25 @@ describe("sign-in", () => {
     await waitFor(() => expect(document.title).toBe("sign in — vmn-exp"));
   });
 });
+
+describe("app status", () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  it("is polled once by the shell on an app page, whoever else reads it", async () => {
+    const appStatus = (await import("../apiShell")).apiShell.appStatus as ReturnType<typeof vi.fn>;
+    appStatus.mockResolvedValue({
+      total: 1, counts: { created: 0, running: 1, stuck: 0, succeeded: 0, failed: 0 },
+      failed_recent: 0, rollup: "running",
+    });
+    const tree: RouteObject[] = [{
+      path: "/", element: <App />,
+      children: [{ path: "ws/:ws/app/:app", element: <div>board</div>, handle: { id: "experiments" } }],
+    }];
+    renderShell(tree, "/ws/w/app/ml_app");
+    await screen.findByText("board");
+    await waitFor(() => expect(appStatus).toHaveBeenCalledTimes(1));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_500); });
+    expect(appStatus).toHaveBeenCalledTimes(2);
+  });
+});

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import { clearUnauthorized, reportUnauthorized, signOut, useAuthState } from "../authState";
+import { TOKEN_KEY } from "../../shell/contracts";
 import type { Meta } from "../../types";
 
 const TOKEN_HINTS = { token: true, oidc: false, login_url: null };
@@ -9,7 +10,7 @@ const SSO_HINTS = { token: true, oidc: true, login_url: "/auth/login" };
 
 const meta = (oidc: boolean): Meta => ({
   version: "0.10.2",
-  auth: { enabled: true, token: true, oidc, api_tokens: false, login_url: oidc ? "/auth/login" : null },
+  auth: { enabled: true, token: true, oidc, login_url: oidc ? "/auth/login" : null },
 });
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -57,14 +58,17 @@ describe("authState", () => {
 
 describe("signOut", () => {
   it("clears the token and the cache, then requires a GET sign-in", async () => {
-    sessionStorage.setItem("vmn_token", "secret");
+    sessionStorage.setItem(TOKEN_KEY, "secret");
     const client = new QueryClient();
     client.setQueryData(["meta"], { version: "1" });
     const { result } = renderHook(() => useAuthState());
-    await act(() => signOut(client, meta(false)));
-    expect(sessionStorage.getItem("vmn_token")).toBeNull();
+    const m = meta(false);
+    await act(() => signOut(client, m));
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBeNull();
     expect(client.getQueryData(["meta"])).toBeUndefined();
-    expect(result.current).toEqual({ required: true, hints: TOKEN_HINTS, method: "GET" });
+    // The hints are meta's own auth block: it carries every hint field.
+    expect(result.current).toEqual({ required: true, hints: m.auth, method: "GET" });
+    expect(result.current.hints).toMatchObject(TOKEN_HINTS);
   });
 
   it("posts a raw /auth/logout only with OIDC", async () => {
@@ -81,7 +85,8 @@ describe("signOut", () => {
     fetchMock.mockRejectedValue(new TypeError("offline"));
     const { result } = renderHook(() => useAuthState());
     await act(() => signOut(new QueryClient(), meta(true)));
-    expect(result.current).toEqual({ required: true, hints: SSO_HINTS, method: "GET" });
+    expect(result.current.hints).toMatchObject(SSO_HINTS);
+    expect(result.current.method).toBe("GET");
   });
 
   it("without meta signs out with unknown hints", async () => {

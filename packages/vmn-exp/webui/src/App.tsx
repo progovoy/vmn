@@ -19,6 +19,7 @@ import type { RouteHandle } from "./shell/contracts";
 import { ShellOverrideProvider } from "./shell/shellOverride";
 import { useShellContext } from "./shell/useShellContext";
 import { useShellCrumbs } from "./shell/useShellCrumbs";
+import { useAppStatusPoll } from "./shell/useShellData";
 import { useHomeRevalidation, usePaletteHotkey, useRouteAnnouncer } from "./shell/useShellEffects";
 
 /** Whether the deepest route asks for the full content width. */
@@ -41,6 +42,7 @@ function Shell() {
   const announced = useRouteAnnouncer(title, ctx.override ?? ctx.routeId);
   usePaletteHotkey(setPaletteOpen);
   useHomeRevalidation();
+  useAppStatusPoll(ctx.ws, ctx.appTag);
   // A layout effect: the shell must be focusable again before the closing
   // palette hands focus back to its opener.
   useLayoutEffect(() => setInert(shellRef.current, paletteOpen), [paletteOpen]);

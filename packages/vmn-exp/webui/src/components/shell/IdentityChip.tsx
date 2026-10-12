@@ -2,7 +2,7 @@
  *  Replaces the old pulsing `local` chip; it never animates. */
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ShellContext } from "../../shell/contracts";
-import { useMetaLive } from "../../shell/useShellData";
+import { useMeta } from "../../queries";
 import { useDismiss } from "../../hooks/useDismiss";
 import { copyText } from "../../util";
 import { Icon } from "./icons";
@@ -100,7 +100,7 @@ function ChipMenu({ chip, ctx, onSignOut }: { chip: Chip; ctx: ShellContext; onS
 }
 
 export default function IdentityChip({ ctx, onSignOut }: { ctx: ShellContext; onSignOut: () => void }) {
-  const metaError = useMetaLive().error as Error | null;
+  const metaError = useMeta().error as Error | null;
   const chip = chipOf(ctx, metaError?.message);
   if (!chip) return null;
   if (chip.menu) return <ChipMenu chip={chip} ctx={ctx} onSignOut={onSignOut} />;

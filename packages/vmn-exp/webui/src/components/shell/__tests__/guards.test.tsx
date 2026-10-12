@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
@@ -9,6 +9,7 @@ const workspaces = vi.fn<() => Promise<Workspace[]>>();
 const apps = vi.fn();
 const appStatus = vi.fn();
 vi.mock("../../../api", () => ({
+  appName: (tag: string) => tag.replaceAll("-", "/"),
   api: {
     meta: () => Promise.resolve({ version: "1" }),
     workspaces: () => workspaces(),
@@ -27,7 +28,7 @@ const fail = (status?: number) =>
   Promise.reject(Object.assign(new Error("x"), status ? { status } : {}));
 const status = (total: number) => ({
   total, counts: { created: 0, running: 0, stuck: 0, succeeded: total, failed: 0 },
-  failed_recent: 0, recent_sec: 86400, rollup: null,
+  failed_recent: 0, rollup: null,
 });
 
 let mounts = 0;
@@ -95,51 +96,49 @@ describe("WorkspaceGuard", () => {
 describe("AppGuard", () => {
   const guarded = <AppGuard><Page /></AppGuard>;
   const missing = () => screen.queryByRole("heading", { name: /^No app/ });
+  const appNotFound = () =>
+    Promise.reject(Object.assign(new Error("x"), { status: 404, body: { detail: "x", code: "app_not_found" } }));
 
-  it("renders the page when the list has the app", async () => {
+  it("renders the page for a known app with no runs yet", async () => {
     appStatus.mockResolvedValue(status(0));
     renderAt("/ws/ml-repo/app/ml_app", guarded);
-    await waitFor(() => expect(apps).toHaveBeenCalled());
     await waitFor(() => expect(appStatus).toHaveBeenCalled());
     await settle();
     expect(page()).not.toBeNull();
   });
 
-  it("renders the page when the status has runs, even if the cached list lags", async () => {
+  it("never reads the app list: the status answer alone decides", async () => {
     apps.mockResolvedValue([]);
     renderAt("/ws/ml-repo/app/fresh", guarded);
     await waitFor(() => expect(appStatus).toHaveBeenCalled());
-    await waitFor(() => expect(apps).toHaveBeenCalled());
+    await settle();
     expect(page()).not.toBeNull();
     expect(missing()).toBeNull();
+    expect(apps).not.toHaveBeenCalled();
   });
 
-  it("shows the app not-found when neither signal knows it", async () => {
-    apps.mockResolvedValue([]);
-    appStatus.mockResolvedValue(status(0));
+  it("shows the app not-found when the status answers app_not_found", async () => {
+    appStatus.mockImplementation(appNotFound);
     renderAt("/ws/ml-repo/app/ml_ap", guarded);
     expect(await screen.findByRole("heading", { name: "No app ml_ap in ml-repo" })).toBeInTheDocument();
     expect(page()).toBeNull();
   });
 
   it("waits for the status before deciding", async () => {
-    apps.mockResolvedValue([]);
     appStatus.mockReturnValue(never());
     renderAt("/ws/ml-repo/app/ml_ap", guarded);
-    await waitFor(() => expect(apps).toHaveBeenCalled());
+    await waitFor(() => expect(appStatus).toHaveBeenCalled());
     await settle();
     expect(page()).not.toBeNull();
   });
 
   it("shows the not-found for an invalid tag (status 400)", async () => {
-    apps.mockReturnValue(never());
     appStatus.mockReturnValue(fail(400));
     renderAt("/ws/ml-repo/app/bad", guarded);
     expect(await screen.findByRole("heading", { name: /^No app/ })).toBeInTheDocument();
   });
 
   it("keeps the page on a network error", async () => {
-    apps.mockResolvedValue([]);
     appStatus.mockReturnValue(fail());
     renderAt("/ws/ml-repo/app/ml_ap", guarded);
     await waitFor(() => expect(appStatus).toHaveBeenCalled());
@@ -147,31 +146,21 @@ describe("AppGuard", () => {
     expect(page()).not.toBeNull();
   });
 
+  it("keeps the page on a 404 without the app_not_found code", async () => {
+    appStatus.mockReturnValue(fail(404));
+    renderAt("/ws/ml-repo/app/ml_ap", guarded);
+    await waitFor(() => expect(appStatus).toHaveBeenCalled());
+    await settle();
+    expect(page()).not.toBeNull();
+  });
+
   it("keeps the page mounted across a param change", async () => {
-    apps.mockResolvedValue([
-      { name: "ml_app", experiments: 1, versions: 0 }, { name: "eval", experiments: 1, versions: 0 },
-    ]);
     renderAt("/ws/ml-repo/app/ml_app", guarded);
-    await waitFor(() => expect(apps).toHaveBeenCalled());
+    await waitFor(() => expect(appStatus).toHaveBeenCalled());
     act(() => screen.getByRole("button", { name: "go" }).click());
     await waitFor(() => expect(appStatus).toHaveBeenCalledWith("ml-repo", "eval"));
     expect(page()).not.toBeNull();
     expect(mounts).toBe(1);
-  });
-});
-
-describe("AppGuard refetch", () => {
-  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
-  afterEach(() => vi.useRealTimers());
-
-  it("asks for the app list again every 6 s while the app is missing", async () => {
-    apps.mockResolvedValue([]);
-    appStatus.mockResolvedValue(status(0));
-    renderAt("/ws/ml-repo/app/ml_ap", <AppGuard><Page /></AppGuard>);
-    await screen.findByRole("heading", { name: /^No app/ });
-    apps.mockResolvedValue([{ name: "ml_ap", experiments: 1, versions: 1 }]);
-    await act(async () => { await vi.advanceTimersByTimeAsync(6_100); });
-    await waitFor(() => expect(page()).not.toBeNull());
   });
 });
 

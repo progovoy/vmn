@@ -16,8 +16,8 @@ import { api } from "../../api";
 import Run from "../Run";
 
 const mocked = api as unknown as Record<"experiment" | "metricsSchema" | "facets", ReturnType<typeof vi.fn>>;
-const httpError = (status: number, detail: string) =>
-  Object.assign(new Error(detail), { status, body: { detail } });
+const httpError = (status: number, detail: string, code?: string) =>
+  Object.assign(new Error(detail), { status, body: { detail, code } });
 
 function renderRun(ref: string) {
   return renderWithClient(
@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("Run page for a missing run", () => {
   it("gives an @N past the end the app's range", async () => {
-    mocked.experiment.mockRejectedValue(httpError(404, "Experiment @540 not found"));
+    mocked.experiment.mockRejectedValue(httpError(404, "Experiment @540 not found", "run_not_found"));
     renderRun("@540");
     expect(await screen.findByRole("heading", { name: "No run @540 in ml_app" })).toBeInTheDocument();
     expect(await screen.findByText("ml_app has 53 runs (@1–@53).")).toBeInTheDocument();
@@ -44,14 +44,14 @@ describe("Run page for a missing run", () => {
   });
 
   it("suggests a pruned or unpushed run for a verstr, and searches for it", async () => {
-    mocked.experiment.mockRejectedValue(httpError(404, "Experiment 0.2.0.dev3 not found"));
+    mocked.experiment.mockRejectedValue(httpError(404, "Experiment 0.2.0.dev3 not found", "run_not_found"));
     renderRun("0.2.0.dev3");
     expect(await screen.findByText(/It may have been pruned/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Search runs for 0.2.0.dev3" })).toBeInTheDocument();
   });
 
   it("treats an invalid version as a missing run", async () => {
-    mocked.experiment.mockRejectedValue(httpError(400, "Invalid version: ???"));
+    mocked.experiment.mockRejectedValue(httpError(400, "Invalid version: ???", "invalid_ref"));
     renderRun("???");
     expect(await screen.findByRole("heading", { name: /^No run/ })).toBeInTheDocument();
   });

@@ -30,7 +30,7 @@ const WS: Workspace[] = [
 ];
 const zero = { created: 0, running: 0, stuck: 0, succeeded: 0, failed: 0 };
 const status = (over: Partial<AppStatus["counts"]> = {}): AppStatus => ({
-  total: 1, counts: { ...zero, ...over }, failed_recent: 0, recent_sec: 86400,
+  total: 1, counts: { ...zero, ...over }, failed_recent: 0,
   rollup: over.stuck ? "stuck" : over.running ? "running" : null,
 });
 const idleCache = { workspace: "ml-repo", state: "idle", progress: { done: 0, total: 0 },

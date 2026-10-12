@@ -24,7 +24,7 @@ const TWO: Workspace[] = [
   { name: "ml-repo", kind: "git", path: "/srv/checkouts/ml-repo" },
   { name: "shared", kind: "store", store: "s3://bucket/vmn" },
 ];
-const AUTH = { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null };
+const AUTH = { enabled: true, token: true, oidc: false, login_url: null };
 
 function renderAt(url: string | { pathname: string; state: unknown }) {
   return renderWithClient(

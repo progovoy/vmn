@@ -12,7 +12,7 @@ vi.mock("../../api", () => ({ api: { meta: () => meta(), workspaces: () => works
 
 import { usePageScope } from "../usePageScope";
 
-const AUTH = { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null };
+const AUTH = { enabled: true, token: true, oidc: false, login_url: null };
 const fail = (status?: number) =>
   Promise.reject(Object.assign(new Error("x"), status ? { status } : {}));
 

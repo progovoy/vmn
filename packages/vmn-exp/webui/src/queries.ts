@@ -41,10 +41,12 @@ export function useWorkspaces() {
   );
 }
 
+/** `/meta`, revalidated now and then: the role or auth may change. */
 export function useMeta() {
   const client = useQueryClient();
   return useQuery<Meta>(
-    { queryKey: ["meta"], queryFn: () => api.meta(), staleTime: Infinity }, client,
+    { queryKey: ["meta"], queryFn: () => api.meta(), staleTime: 60_000, refetchOnWindowFocus: true },
+    client,
   );
 }
 

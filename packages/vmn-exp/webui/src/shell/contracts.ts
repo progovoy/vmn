@@ -16,7 +16,7 @@ export interface GitContext {
 export interface AppStatus {
   total: number;
   counts: Record<"created" | "running" | "stuck" | "succeeded" | "failed", number>;
-  failed_recent: number; recent_sec: number;
+  failed_recent: number;
   rollup: "stuck" | "failed" | "running" | null;
 }
 export interface AuthHints { token: boolean; oidc: boolean; login_url: string | null }
@@ -78,6 +78,8 @@ export type NotFoundProps =
   | { kind: "control-plane" }
   | { kind: "needs-git"; ws: string; appTag: string; page: "tree" | "actions" };
 
+/** sessionStorage: the ui token (or API token) the user signed in with. */
+export const TOKEN_KEY = "vmn_token";
 export const RETURN_TO_KEY = "vmn-exp:return-to";
 export const LAST_WS_KEY = "vmn-exp:last-ws";
 export const RECENT_KEY = "vmn-exp:recent";
