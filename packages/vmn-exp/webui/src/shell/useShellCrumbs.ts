@@ -5,11 +5,13 @@ import type { ReportDetail } from "../apiReports";
 import type { CliCommand, Crumb, CrumbInput, ShellContext } from "./contracts";
 import { cliFor, storeUriOf } from "./cliCommands";
 import { crumbsFor, isAppRoute } from "./crumbs";
-import { titleFor } from "./titles";
+import { subjectFor, titleFor } from "./titles";
 import { useAppStatus } from "./useShellData";
 import { useCacheRead, useRunLabel } from "./useRunLabel";
 
-export function useShellCrumbs(ctx: ShellContext): { crumbs: Crumb[]; cli: CliCommand[]; title: string } {
+export function useShellCrumbs(ctx: ShellContext): {
+  crumbs: Crumb[]; cli: CliCommand[]; title: string; subject: string;
+} {
   const routeId = ctx.override ?? ctx.routeId;
   const { ws, appTag, app, params, search, workspace } = ctx;
   const run = useRunLabel(ws, appTag, routeId === "run" ? params.verstr : undefined);
@@ -24,6 +26,6 @@ export function useShellCrumbs(ctx: ShellContext): { crumbs: Crumb[]; cli: CliCo
     const input: CrumbInput = {
       routeId, ws, app, appTag, params, search, run, reportTitle: reportTitle || undefined, storeUri,
     };
-    return { crumbs: crumbsFor(input), cli: cliFor(input), title: titleFor(input, { stuck }) };
+    return { crumbs: crumbsFor(input), cli: cliFor(input), title: titleFor(input, { stuck }), subject: subjectFor(input) };
   }, [routeId, ws, app, appTag, params, search, run, reportTitle, storeUri, stuck]);
 }
