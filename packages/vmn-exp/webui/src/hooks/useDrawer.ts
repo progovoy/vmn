@@ -46,9 +46,11 @@ export function useDrawer(): Drawer {
   const { pathname } = useLocation();
   const isOpen = open && narrow;
 
-  /** Close, handing focus back to whatever opened the drawer. */
+  /** Close, handing focus back to whatever opened the drawer. The page is
+   *  un-inerted first: a browser will not focus inside an inert subtree. */
   const close = useCallback(() => {
     setOpen(false);
+    setInert(mainRef.current, false);
     if (opener.current?.isConnected) opener.current.focus();
     opener.current = null;
   }, []);

@@ -88,6 +88,18 @@ describe("useDrawer", () => {
     expect(inert(mainCol)).toBe(false);
   });
 
+  // Browsers refuse focus inside an inert subtree (jsdom does not), so the
+  // page must stop being inert before focus goes back to the menu button.
+  it("lifts the page's inert before handing focus back to the menu button", () => {
+    const { mainCol, menu } = renderDrawer();
+    menu.focus();
+    fireEvent.click(menu);
+    const inertAtFocus: boolean[] = [];
+    menu.addEventListener("focus", () => inertAtFocus.push(inert(mainCol)));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(inertAtFocus).toEqual([false]);
+  });
+
   it("closes on a veil click", () => {
     const { menu } = renderDrawer();
     menu.focus();
