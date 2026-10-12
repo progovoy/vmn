@@ -513,8 +513,9 @@ page shows it with a version picker.
 
 `GET .../experiments/{verstr}/similar?top=10&all_apps=0&archived=0` answers the
 runs most like that run, as [`vmn-exp similar -v`](experiments.md#similar)
-ranks them: the run itself, the runs of its exact code and its run tree are
-left out, and a sweep or repeats of one code show as their best run.
+ranks them: the run itself, its run tree and its reruns (same code, params
+and inputs; forks are kept) are left out, and a sweep or the reruns of one
+config show as their best run.
 `GET ws/{ws}/apps/{app}/similar?text=...` is the text-only query in one app,
 like `vmn-exp similar --context ... --text-only`. With `all_apps=1` either
 covers every app of the workspace; `GET /api/v1/similar?text=` covers every

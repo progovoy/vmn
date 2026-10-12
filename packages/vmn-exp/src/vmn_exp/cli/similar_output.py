@@ -5,7 +5,7 @@
     <verstr>  <score>  <author or ->  <age>  <status>  <goal metric>=<value>  — <reasons>  (+N runs)
 
 ``—`` standing in for a group without a goal metric value, ``(+N runs)`` for
-the other runs of its group (a sweep, or repeats of one code). The hint
+the other runs of its group (a sweep, or the reruns of one config). The hint
 leads with the best of the closest runs on their goal metric::
 
     3 similar runs: best val_loss=0.31 — <verstr> by alice@x.io, 3w ago (<reasons>)

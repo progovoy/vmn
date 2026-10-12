@@ -6,8 +6,9 @@ The past runs most like run *ref* — or, with no ``-v``/``--latest``, like the
 current **working tree**, so you can ask before creating a run. ``similar`` is
 the one action whose missing ref means the working tree (``show``/``restore``/
 ``export`` take the latest run), because it is mostly asked before submitting.
-The run itself, its exact code and its sweep are left out; a group (a sweep,
-repeats of one code) shows as its best run on the goal metric.
+The run itself, its sweep and its reruns (same code, params and inputs; forks
+are kept) are left out; a group (a sweep, the reruns of one config) shows as
+its best run on the goal metric.
 
 ``--context`` is a text query combined with the target's code facts, its
 text replacing the target's own; ``--text-only`` matches that text alone

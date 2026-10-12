@@ -1,5 +1,5 @@
-"""Grouping and ordering of similar runs (vmn_exp.core.similar): repeats of one
-code and the trials of one sweep fill one slot, shown by their best run."""
+"""Grouping and ordering of similar runs (vmn_exp.core.similar): reruns of one
+config and the trials of one sweep fill one slot, shown by their best run."""
 from similar_fixtures import FakeSnapshot, run, verstrs
 from vmn_exp.core.similar import goal_metric, similar_runs
 
@@ -18,7 +18,7 @@ def _sweep(*losses, metric="val_loss"):
     return [outer] + trials
 
 
-def test_repeats_of_one_code_fill_one_slot_with_their_group_size():
+def test_reruns_of_one_config_fill_one_slot_with_their_group_size():
     code = run("r1")["code_verstr"]
     rows = [run("r1", code=code, params=PARAMS), run("r2", code=code, params=PARAMS),
             run("x", params=PARAMS)]

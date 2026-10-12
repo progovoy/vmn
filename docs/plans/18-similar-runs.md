@@ -157,12 +157,18 @@ truncated: true                 # only when caps cut a list
   over `[(app, snapshot, schema)]`; `target_from_snapshot(snapshot, verstr, text=None,
   text_only=False, *, app=None)`. The target is `{"row", "features", "intent",
   "hypothesis", "text", "text_only", "command"?, "create_note"?, "app"?}`.
-  - Excluded: the target, its `code_verstr`, and its whole run tree (outer run, every
-    trial and the SDK runs they open, its own inner runs) — in the target's app only. A
-    working-tree target excludes nothing.
+  - A run's **rerun identity** (`similar_profile.rerun_key`, computed once per profile)
+    is a hash of its `code_verstr`, its params (verbatim, compared exactly) and the set
+    of its inputs (each one's digest, else its uri); none without a `code_verstr`.
+  - Excluded: the target, its whole run tree (outer run, every trial and the SDK runs
+    they open, its own inner runs) and its reruns (same rerun identity) — but never a
+    fork of the target or the run it forked from (`forked_from`: a continuation) — in
+    the target's app only. Runs of the target's code with other params or inputs are
+    candidates like any other. A working-tree target excludes nothing.
   - Grouped by **run tree root** (`SimilarIndex.root`: a run with a parent or children;
-    a missing ancestor still roots its subtree; cycles end the walk), else by
-    `code_verstr`. Each group shows its member best on the group's goal metric
+    a missing ancestor still roots its subtree; cycles end the walk), else by rerun
+    identity (else alone): the seeds of one config fill one slot, other hyperparameters
+    on the same commit are separate items. Each group shows its member best on the group's goal metric
     (`goal_metric`: the schema-goal objective most of its rows carry), else the most
     similar; a container run only when alone; `group_size` counts them. Items sort by
     score, then newest, then verstr. Result items carry `goal: {metric, goal, value}`.
@@ -437,6 +443,10 @@ fields), `ui.md` (routes, card, search mode), `server.md` (`/api/v1/similar`),
 - Text: also includes the create entry's `hypothesis` (from `-f`).
 - Grouping: by run tree root (whole sweep incl. nested SDK runs) rather than direct
   parent; exclusion drops the target's whole tree.
+- Exclusion and grouping by rerun identity (code + params + inputs), not `code_verstr`:
+  on a clean committed tree every run of a commit shares one `code_verstr`, so the
+  common workflow (commit, then vary hyperparameters from the CLI) hid all sibling runs
+  from each other and would have collapsed them into one item. Forks are kept.
 - Symbols: from hunk headers **and** definitions on added/removed lines (new files and
   functions appended below a hunk context count). A change's function is what git's
   default funcname names (`core/features_scope.py`): any column-0 old-file line in a

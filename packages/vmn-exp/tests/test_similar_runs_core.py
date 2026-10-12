@@ -29,7 +29,7 @@ def test_the_closest_run_ranks_first_with_its_reasons_and_row():
     assert 0 < items[1]["score"] < best["score"]
 
 
-def test_the_target_its_code_and_its_sweep_are_left_out():
+def test_the_target_its_reruns_and_its_sweep_are_left_out():
     params = {"lr": 0.1}
     rows = [
         run("outer", params=params),
