@@ -114,6 +114,17 @@ describe("Crumbs", () => {
     expect(more).toHaveFocus();
   });
 
+  it("Home and End jump to the menu's first and last commands", async () => {
+    renderCrumbs();
+    fireEvent.click(screen.getByRole("button", { name: "More CLI commands" }));
+    const items = within(screen.getByRole("menu")).getAllByRole("menuitem");
+    await waitFor(() => expect(items[0]).toHaveFocus());
+    fireEvent.keyDown(items[0], { key: "End" });
+    expect(items[items.length - 1]).toHaveFocus();
+    fireEvent.keyDown(items[items.length - 1], { key: "Home" });
+    expect(items[0]).toHaveFocus();
+  });
+
   it("Tab out of the menu closes it", () => {
     renderCrumbs();
     fireEvent.click(screen.getByRole("button", { name: "More CLI commands" }));

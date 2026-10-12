@@ -1,9 +1,10 @@
 /** Who the browser is to this server, and whether it can reach it at all.
  *  Replaces the old pulsing `local` chip; it never animates. */
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { ShellContext } from "../../shell/contracts";
 import { useMeta } from "../../queries";
 import { useDismiss } from "../../hooks/useDismiss";
+import { useMenuKeys } from "../../hooks/useMenuKeys";
 import { copyText } from "../../util";
 import { Icon } from "./icons";
 import "./Topbar.css";
@@ -41,26 +42,14 @@ function ChipText({ chip }: { chip: Chip }) {
   );
 }
 
-/** The menu pattern's keys: arrows wrap, Home/End jump, Tab leaves (and closes). */
-function onMenuKey(e: KeyboardEvent<HTMLDivElement>, close: () => void) {
-  if (e.key === "Tab") return close();
-  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-  const at = items.indexOf(document.activeElement as HTMLElement);
-  const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[e.key];
-  if (to === undefined) return;
-  e.preventDefault();
-  items[(to + items.length) % items.length]?.focus();
-}
-
 function ChipMenu({ chip, ctx, onSignOut }: { chip: Chip; ctx: ShellContext; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const close = () => setOpen(false);
+  const menu = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, wrap, trigger);
-  useEffect(() => {
-    if (open) wrap.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
-  }, [open]);
+  const onMenuKey = useMenuKeys(open, menu, close);
   const login = `vmn-exp login --server ${window.location.origin}`;
   return (
     <div className="id-wrap" ref={wrap}>
@@ -83,7 +72,7 @@ function ChipMenu({ chip, ctx, onSignOut }: { chip: Chip; ctx: ShellContext; onS
               ))}
             </ul>
           )}
-          <div role="menu" aria-label="Account" onKeyDown={(e) => onMenuKey(e, close)}>
+          <div role="menu" aria-label="Account" ref={menu} onKeyDown={onMenuKey}>
             {chip.menu === "user" && (
               <button type="button" role="menuitem" onClick={() => { void copyText(login); close(); }}>
                 Copy CLI login
