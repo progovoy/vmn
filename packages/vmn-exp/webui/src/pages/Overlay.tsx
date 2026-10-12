@@ -10,19 +10,12 @@ import SmoothingSlider from "../components/SmoothingSlider";
 import { Skeleton } from "../components/ui";
 import AddToReport from "../reports/AddToReport";
 import { overlaySpec } from "../reports/viewSpecs";
-import { useOverlaySeries, type OverlayRunData } from "./overlaySeries";
+import OverlayNoCurves, { TrialLinks } from "../components/OverlayNoCurves";
+import { useOverlaySeries } from "./overlaySeries";
+import { curvelessRuns, unionMetrics } from "./overlayCoverage";
 
 /** More runs than this make an unreadable chart and a lot of payload. */
 export const MAX_OVERLAY_RUNS = 100;
-
-/** Metrics that have series data in every fetched run. */
-function sharedMetrics(runs: OverlayRunData[]): string[] {
-  if (runs.length === 0) return [];
-  const sets = runs.map((r) => new Set(
-    Object.keys(r.series).filter((m) => r.series[m].length > 1),
-  ));
-  return [...sets[0]].filter((m) => sets.every((s) => s.has(m))).sort();
-}
 
 export default function Overlay() {
   const { ws, app } = useParams() as { ws: string; app: string };
@@ -41,8 +34,11 @@ export default function Overlay() {
   const [focused, setFocused] = useState<string | null>(null);
 
   const loaded = useMemo(() => data?.runs ?? [], [data]);
-  const loadedKeys = useMemo(() => loaded.map((r) => r.key), [loaded]);
-  const metrics = useMemo(() => sharedMetrics(loaded), [loaded]);
+  const metrics = useMemo(() => unionMetrics(loaded), [loaded]);
+  const legendKeys = useMemo(() => {
+    const none = new Set(curvelessRuns(loaded).map((r) => r.key));
+    return loaded.map((r) => r.key).filter((k) => !none.has(k));
+  }, [loaded]);
   const hasTimestamps = useMemo(
     () => loaded.length > 0 && loaded.every((r) => allTimestamped(r.series)), [loaded],
   );
@@ -96,19 +92,24 @@ export default function Overlay() {
         <p style={{ color: "var(--text-3)", margin: "0 0 12px" }}>not found: {data.missing.join(", ")}</p>
       )}
 
+      {metrics.length > 0 && <OverlayNoCurves ws={ws} app={app} runs={loaded} />}
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />
         <XMetricSelect value={xChoice} onChange={setXChoice} metrics={metrics} enabled={xMode === "step"} />
         <LogToggle value={logY} onChange={setLogY} />
         <SmoothingSlider value={alpha} onChange={setAlpha} />
         <OverlayLegend
-          runs={loadedKeys} colorOf={colorOf} hidden={hidden}
+          runs={legendKeys} colorOf={colorOf} hidden={hidden}
           onToggle={toggle} onHover={setFocused}
         />
       </div>
 
       {metrics.length === 0 ? (
-        <div className="empty">No shared metrics with series data across the selected runs.</div>
+        <div className="empty">
+          None of the selected runs has series data.
+          <TrialLinks ws={ws} app={app} runs={loaded} />
+        </div>
       ) : (
         <OverlayChart
           ws={ws} app={app} verstrs={runs} keys={metrics} x={xChoice} smoothing={alpha}

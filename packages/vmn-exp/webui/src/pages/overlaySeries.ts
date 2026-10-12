@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchRunStatuses, fetchSeriesBatch } from "../apiSeries";
 import { usePolling } from "../hooks/usePolling";
 import { withSignal } from "../requestScope";
-import type { RunStatus, SeriesPoint } from "../types";
+import type { ExperimentRow, SeriesPoint } from "../types";
 import { pollIntervalMs } from "../util";
 import { runOrigin } from "../util/chartData";
 
@@ -20,6 +20,11 @@ export interface OverlayRunData {
   origin: number;
   status: string | null;
   heartbeatSec: number | null;
+  /** The run's `@N`, name, kind and inner runs, for naming it off the chart. */
+  idx?: number | null;
+  name?: string | null;
+  kind?: ExperimentRow["kind"];
+  children?: string[];
 }
 
 export interface OverlayData {
@@ -37,21 +42,25 @@ function mergeStepMetrics(perRun: Record<string, Record<string, string>> = {}, r
   return merged;
 }
 
-function toRun(key: string, series: Series, status?: Partial<RunStatus> | null): OverlayRunData {
+function toRun(key: string, series: Series, row?: Partial<ExperimentRow> | null): OverlayRunData {
   return {
     key,
     series,
-    origin: runOrigin(series, status?.started_at),
-    status: status?.status ?? null,
-    heartbeatSec: status?.heartbeat_interval_sec ?? null,
+    origin: runOrigin(series, row?.started_at),
+    status: row?.status ?? null,
+    heartbeatSec: row?.heartbeat_interval_sec ?? null,
+    idx: row?.idx ?? null,
+    name: row?.name ?? null,
+    kind: row?.kind,
+    children: row?.children ?? [],
   };
 }
 
 async function loadBatch(ws: string, app: string, runs: string[], maxPoints: number): Promise<OverlayData> {
   const [batch, statuses] = await Promise.all([
     fetchSeriesBatch(ws, app, runs, null, maxPoints),
-    // Status only drives polling and the relative-time origin: best effort.
-    fetchRunStatuses(ws, app, runs).catch(() => ({} as Record<string, Partial<RunStatus>>)),
+    // Rows drive polling, the relative-time origin and run labels: best effort.
+    fetchRunStatuses(ws, app, runs).catch(() => ({} as Record<string, Partial<ExperimentRow>>)),
   ]);
   return {
     runs: runs.filter((v) => batch.series[v]).map((v) => toRun(v, batch.series[v], statuses[v])),
