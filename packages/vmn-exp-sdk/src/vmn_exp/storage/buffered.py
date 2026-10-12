@@ -90,6 +90,9 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
     def stream_owner(self, app_name, verstr, writer):
         return self._owner
 
+    def _stream_owned(self, app_name, verstr):
+        return lambda stream: True  # the buffer holds only this process's appends
+
     def retire_stream(self, app_name, verstr, stream):
         """A compacted stream is not appended to again: a new owner."""
         if owner_of(stream) == self._owner:

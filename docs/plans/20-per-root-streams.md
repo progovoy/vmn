@@ -37,8 +37,17 @@ entries (the parked multi-clone tests and the review probes reproduce them).
   - A log buffer (`storage/buffered.py`): its own owner, rotated when the
     buffer is cleaned up.
   - `core/writer.py:own_stream(storage, app, verstr)` is the one way callers get
-    it; `append_to_log`, metric writers, registry/comment logs, `similar-backfill`
-    and compaction all go through it.
+    it; `append_to_log`, metric writers, registry/comment/report-header logs,
+    `similar-backfill` and compaction all go through it.
+  - A copy owns the streams of its current and retired owners only. Another
+    owner's local metric file (a `cp -r` of the original's root holds a stale
+    prefix of its streams) is read and compacted from the remote, never shipped
+    nor put as a `.vmx`: the original's ship state assumes it alone ships its
+    stream. A metric block appended under an owner the copy does not own (a
+    one-off owner, named while the record could not be fetched) goes to the
+    copy's own stream. Log lines a copy ships for the original are a prefix of
+    its file, and a segment covered by a compacted range is refused, so they
+    land once.
 - **The remote is a replica of the owner's local file.** A sync ships every
   local stream of the copy (`cached_logs.py`, `cached_metrics.py`): the bytes
   past what the remote holds go as the next segment through

@@ -6,7 +6,7 @@ last-writer-wins on ``(ts, writer, pos)``.
 """
 from __future__ import annotations
 
-from vmn_exp.core.writer import flush_log
+from vmn_exp.core.writer import flush_log, own_stream
 from vmn_exp.registry.fold import _sort_key
 from vmn_exp.registry.log import _build_entry
 from vmn_exp.storage.areas import REPORTS
@@ -47,7 +47,7 @@ def fold_header(entries):
 def _append(storage, rid, entry_type, actor=None, **fields):
     area = reports_area(storage)
     entry = _build_entry(read_header_entries(storage, rid), entry_type, actor, **fields)
-    area.append_log_entry(rid, HEADER, entry["writer"], entry)
+    area.append_log_entry(rid, HEADER, own_stream(area, rid, HEADER), entry)
     flush_log(area, rid, HEADER)
 
 

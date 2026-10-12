@@ -25,6 +25,13 @@ class LocalStreams:
         objects = self.metric_objects(app_name, verstr).get(stream, ())
         return any(is_indexed_file(name) for name, _ in objects)
 
+    def stream_owners(self, app_name, verstr):
+        """The owners of the copy's own streams (its owner, the retired ones);
+        a ``cp -r`` copy holds only a stale prefix of the others'."""
+        record = self._owner_dir(app_name, verstr)
+        state = stream_owner.read_state(record) if record else None
+        return {state["id"], *state.get("retired", ())} if state else set()
+
     def retire_stream(self, app_name, verstr, stream):
         """Before *stream* is compacted: the copy moves on to a new owner if
         *stream* is its current one."""

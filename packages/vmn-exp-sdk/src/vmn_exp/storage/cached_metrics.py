@@ -10,7 +10,11 @@ what the remote holds, for every process of the copy).
 
 Each stream is read from one copy: the local file of its owner (a superset of
 what it shipped, also when another copy compacted the stream on the remote),
-else the remote's — or a local ``.vmx`` when the remote has none.
+else the remote's — or a local ``.vmx`` when the remote has none. A copy owns
+the streams of its current and retired owners (:mod:`stream_owner`); the
+others' local files (a ``cp -r`` of the original's root) are stale prefixes:
+read and compacted from the remote, never shipped (the owner's ship state
+assumes it alone ships its stream) nor put as a ``.vmx``.
 :meth:`read_range` reads the copy the last listing picked, since the local
 stream and the remote base segment share a name.
 
@@ -33,6 +37,7 @@ from vmn_exp.core.metric_files import (
     metric_writer,
     stream_name,
 )
+from vmn_exp.core.streams import display_writer, owner_of, stream_key
 from vmn_exp.storage import ship_state
 
 LOCAL, REMOTE = "local", "remote"
@@ -44,12 +49,12 @@ def _has_stream(objects):
     return any(is_stream_file(n) for n, _ in objects)
 
 
-def _pick(local, remote):
+def _pick(local, remote, owned):
     """LOCAL or REMOTE for one stream's ``[(name, size)]`` copies."""
-    if _has_stream(local) or not remote:
+    if not remote or (owned and _has_stream(local)):
         return LOCAL  # the owner's file holds all the stream ever shipped
-    if not local or any(is_indexed_file(n) for n, _ in remote):
-        return REMOTE
+    if not owned or not local or any(is_indexed_file(n) for n, _ in remote):
+        return REMOTE  # another copy's file here is a stale prefix of it
     return LOCAL
 
 
@@ -67,16 +72,23 @@ class CachedMetrics:
         return self.__dict__.setdefault("_metrics", {"sources": {}})
 
     def append_metric_block(self, app_name, verstr, writer_id, data):
+        """Append to the local copy's stream: one named for an owner the copy
+        does not own (a one-off one, named while the record could not be
+        fetched) is the copy's own stream of its writer."""
         if not self._ensure_local_record(app_name, verstr):
             return False
+        if not self._stream_owned(app_name, verstr)(writer_id):
+            writer = display_writer(writer_id)
+            writer_id = stream_key(writer, self._local.stream_owner(app_name, verstr, writer))
         return self._local.append_metric_block(app_name, verstr, writer_id, data)
 
     def metric_objects(self, app_name, verstr):
         local = self._local.metric_objects(app_name, verstr) if self._local_is_replica else {}
         remote = self._remote.metric_objects(app_name, verstr) if self._remote else {}
         sources, picked = self._metric_state()["sources"], {}
+        owns = self._stream_owned(app_name, verstr)
         for writer in set(local) | set(remote):
-            source = _pick(local.get(writer, []), remote.get(writer, []))
+            source = _pick(local.get(writer, []), remote.get(writer, []), owns(writer))
             sources[(app_name, verstr, writer)] = source
             picked[writer] = (local if source == LOCAL else remote)[writer]
         return picked
@@ -98,7 +110,7 @@ class CachedMetrics:
         is there) is retired and built under the copy's ship lock."""
         local = self._local.metric_objects(app_name, verstr).get(stream, [])
         record = self._local.local_record_dir(app_name, verstr)
-        if not (_has_stream(local) and record):
+        if not (_has_stream(local) and record and self._stream_owned(app_name, verstr)(stream)):
             yield
             return
         with ship_state.ship_lock(record):
@@ -118,6 +130,8 @@ class CachedMetrics:
         if source == REMOTE:
             return bool(remote) and remote.put_indexed(
                 app_name, verstr, writer_id, path, replace, covers)
+        if remote and not self._stream_owned(app_name, verstr)(writer_id):
+            return False  # built from another copy's stale file
         if remote:
             with self._ship_state(app_name, verstr, "metrics") as state:
                 names = [n for n, _ in remote.metric_objects(app_name, verstr).get(writer_id, [])]
@@ -126,6 +140,13 @@ class CachedMetrics:
                 remote.put_indexed(app_name, verstr, writer_id, path, True, covers)
                 state.put(writer_id, _INDEXED)
         return self._local.put_indexed(app_name, verstr, writer_id, path, True, covers)
+
+    def _stream_owned(self, app_name, verstr):
+        """Whether a local stream is the copy's own: one of its current or
+        retired owner's (or a plain name, which has no other owner), not one
+        copied along with another root."""
+        owners = self._local.stream_owners(app_name, verstr)
+        return lambda stream: not owner_of(stream) or owner_of(stream) in owners
 
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
         """Ship the intact blocks appended to each of the copy's streams past
@@ -138,7 +159,10 @@ class CachedMetrics:
             return
         with self._ship_state(app_name, verstr, "metrics") as state:
             listing = _Listing(remote, app_name, verstr)
+            owns = self._stream_owned(app_name, verstr)
             for stream, objects in sorted(local.items()):
+                if not owns(stream):
+                    continue
                 if _has_stream(objects):
                     self._ship_blocks(state, listing, remote, app_name, verstr, stream)
                 else:
