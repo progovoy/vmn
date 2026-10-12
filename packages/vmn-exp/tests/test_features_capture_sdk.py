@@ -76,7 +76,7 @@ def test_features_for_working_tree_reads_the_tree_without_creating_a_run(app_lay
     assert "type" not in features
     assert features["source"] == "capture"
     assert features["changed"]["files"] == ["data.py"]
-    assert features["author"]["git_user_email"] == "test@test.com"
+    assert "author" not in features
     assert _storage(app_layout).list_record_names(app_layout.app_name) == runs
 
 
