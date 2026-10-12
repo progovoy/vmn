@@ -6,5 +6,5 @@
    a collapsed border would not travel with the sticky cell. */
 th.lb-group {
   text-align: center; padding-bottom: 3px; color: var(--text-3); cursor: help;
-  box-shadow: inset 0 -1px 0 var(--line-2), inset 1px 0 0 var(--line), inset -1px 0 0 var(--line);
+  box-shadow: inset 0 -1px 0 var(--line-2);
 }

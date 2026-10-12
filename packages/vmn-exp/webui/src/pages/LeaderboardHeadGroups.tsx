@@ -30,7 +30,7 @@ export default function HeadGroups({ groups, styles, helpId }: {
       {groups.map((g) => g.inner ? (
         <th
           key={g.start} scope="colgroup" colSpan={g.span} className="lb-group"
-          style={groupStyle({})} title={INNER_RUNS_HELP} aria-describedby={helpId}
+          style={groupStyle(styles[g.start] ?? {})} title={INNER_RUNS_HELP} aria-describedby={helpId}
         >
           {INNER_RUNS_LABEL}
           {g === first && <span id={helpId} hidden>{INNER_RUNS_HELP}</span>}
