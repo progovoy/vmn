@@ -19,6 +19,7 @@ vi.mock("../../api", () => ({
 
 import { api } from "../../api";
 import CommandPalette from "../CommandPalette";
+import { fakeCtx } from "../palette/__tests__/fakeCtx";
 import ArtifactsList from "../ArtifactsList";
 import ErrorBoundary from "../ErrorBoundary";
 import { useJob } from "../ui";
@@ -39,7 +40,7 @@ describe("CommandPalette", () => {
     ]);
     renderWithClient(
       <MemoryRouter>
-        <CommandPalette ws="w" app="app" workspaces={[]} apps={[]} onClose={() => {}} />
+        <CommandPalette ctx={fakeCtx({ ws: "w", app: "app", workspaces: [] })} onClose={() => {}} />
       </MemoryRouter>,
     );
     await waitFor(() => expect(screen.getByText("newest-run")).toBeInTheDocument());

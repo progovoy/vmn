@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api, appName as toAppName, appTag } from "../api";
 import type { AppRow, VersionRow } from "../types";
 import { JobCard, PageHead, useJob } from "../components/ui";
@@ -12,7 +12,9 @@ export default function Actions() {
   const [dryRun, setDryRun] = useState(true);
   const [apps, setApps] = useState<AppRow[]>([]);
   const [gotoApp, setGotoApp] = useState(appName);
-  const [gotoVerstr, setGotoVerstr] = useState("");
+  // ⌘K's `goto <version>` lands here as ?goto=: a prefill, never a run.
+  const [searchParams] = useSearchParams();
+  const [gotoVerstr, setGotoVerstr] = useState(() => searchParams.get("goto") ?? "");
   const [gotoVersions, setGotoVersions] = useState<VersionRow[]>([]);
   const { job, error, run } = useJob();
 
