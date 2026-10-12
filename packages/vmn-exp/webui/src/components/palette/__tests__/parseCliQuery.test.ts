@@ -59,6 +59,14 @@ describe("parseCliQuery: list", () => {
   ])("%s", (text, query, archived) => {
     expect(parse(text)).toEqual({ kind: "list", app: "ml_app", query, archived });
   });
+
+  it("takes the app only before the expression, never from inside it", () => {
+    expect(parse("q params.app = ml_app", noApp)).toEqual({ kind: "error", message: "name an app: list <app> <query>" });
+    expect(parse("list ml_app params.app = root/svc"))
+      .toEqual({ kind: "list", app: "ml_app", query: "params.app = root/svc", archived: false });
+    expect(parse("list root/svc params.app = ml_app"))
+      .toEqual({ kind: "list", app: "root/svc", query: "params.app = ml_app", archived: false });
+  });
 });
 
 describe("parseCliQuery: compare, diff, overlay", () => {
@@ -168,6 +176,11 @@ describe("completeCli", () => {
     expect(completeCli("sh", ["ml_app"])).toBe("show ");
     expect(completeCli("show ml_", ["ml_app"])).toBe("show ml_app ");
     expect(completeCli("vmn-exp comp", ["ml_app"])).toBe("vmn-exp compare ");
+  });
+
+  it("completes a bare app as the first word too", () => {
+    expect(completeCli("ml_", ["ml_app"])).toBe("ml_app ");
+    expect(completeCli("root-", ["root/svc"])).toBe("root-svc ");
   });
 
   it("returns null with nothing to complete", () => {

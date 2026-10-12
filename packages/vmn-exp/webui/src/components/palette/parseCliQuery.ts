@@ -60,8 +60,9 @@ const appOf = (scope: ParseScope, word: string) =>
   scope.apps.find((a) => a === word || appTag(a) === word);
 
 /** Flags and positionals the way the CLI reads them: `-v` repeats, the first
- *  token naming an app sets it, `--query` takes the rest. */
-function readArgs(tokens: Token[], scope: ParseScope): Args {
+ *  token naming an app sets it (for a query, only before the expression
+ *  starts), `--query` takes the rest. */
+function readArgs(tokens: Token[], scope: ParseScope, query: boolean): Args {
   const args: Args = { refs: [], rest: [], archived: false };
   for (let i = 0; i < tokens.length; i++) {
     const word = tokens[i].value;
@@ -75,7 +76,7 @@ function readArgs(tokens: Token[], scope: ParseScope): Args {
     } else if (word === "--archived") args.archived = true;
     else if (VALUE_FLAGS.has(word)) i++;
     else if (/^--?[A-Za-z]/.test(word) && !tokens[i].quoted) continue;
-    else if (!args.app && appOf(scope, word)) args.app = appOf(scope, word);
+    else if (!args.app && !(query && args.rest.length) && appOf(scope, word)) args.app = appOf(scope, word);
     else args.rest.push(tokens[i]);
   }
   return args;
@@ -109,7 +110,7 @@ function parseVerb(verb: string, tokens: Token[], scope: ParseScope): CliIntent 
     return scope.workspaces.includes(ws) ? { kind: "ws", ws } : error(`no workspace named ${ws}`);
   }
   const name = { q: "list", new: "create", runs: "experiments" }[verb] ?? verb;
-  const args = readArgs(tokens, scope);
+  const args = readArgs(tokens, scope, name === "list");
   const app = args.app ?? scope.app ?? (scope.apps.length === 1 ? scope.apps[0] : undefined);
   if (!app) return error(`name an app: ${USAGE[name]}`);
   return appVerb(name, app, args);
@@ -167,9 +168,10 @@ export function parseCliQuery(text: string, scope: ParseScope): CliIntent {
   return NONE;
 }
 
-/** Tab: the verb while it is the only word, else the app. */
+/** Tab: the verb or a bare app while it is the only word, else the app. */
 export function completeCli(text: string, apps: string[]): string | null {
   const words = stripCliPrefix(tokenize(text));
   const typingFirst = words.length === 1 && !/\s$/.test(text);
-  return completeToken(text, typingFirst ? VERBS : [...new Set(apps.flatMap((a) => [a, appTag(a)]))]);
+  const names = [...new Set(apps.flatMap((a) => [a, appTag(a)]))];
+  return completeToken(text, typingFirst ? [...VERBS, ...names] : names);
 }

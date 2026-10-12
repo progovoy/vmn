@@ -13,8 +13,9 @@ export default function Actions() {
   const [apps, setApps] = useState<AppRow[]>([]);
   const [gotoApp, setGotoApp] = useState(appName);
   // ⌘K's `goto <version>` lands here as ?goto=: a prefill, never a run.
-  const [searchParams] = useSearchParams();
-  const [gotoVerstr, setGotoVerstr] = useState(() => searchParams.get("goto") ?? "");
+  // ⌘K on this page keeps it mounted, so a new ?goto= refills it too.
+  const prefill = useSearchParams()[0].get("goto");
+  const [gotoVerstr, setGotoVerstr] = useState(prefill ?? "");
   const [gotoVersions, setGotoVersions] = useState<VersionRow[]>([]);
   const { job, error, run } = useJob();
 
@@ -23,6 +24,9 @@ export default function Actions() {
     api.apps(ws).then(setApps).catch(() => setApps([]));
   }, [ws]);
   useEffect(() => setGotoApp(appName), [appName]);
+  useEffect(() => {
+    if (prefill !== null) setGotoVerstr(prefill);
+  }, [prefill]);
 
   useEffect(() => {
     api.versions(ws, appTag(gotoApp))

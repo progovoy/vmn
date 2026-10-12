@@ -161,6 +161,12 @@ describe("Command row", () => {
     expect(many[0].label).toBe("0.2. matches several runs; type more of it");
   });
 
+  it("names an ambiguous prefix before a ref it may have crowded out of the one request", () => {
+    const results = { "@3": { state: "none" as const }, "0.2.0": { state: "several" as const } };
+    const rows = cmd({ text: "compare @3 0.2.0", refs: { pending: false, results } });
+    expect(rows[0].label).toBe("0.2.0 matches several runs; type more of it");
+  });
+
   it("refuses goto in a store workspace and goto or create while read-only", () => {
     expect(cmd({ text: "goto 1.2.0", ctx: fakeCtx({ app: "ml_app", isGit: false }) })[0])
       .toMatchObject({ label: "goto needs a git workspace", disabled: true });
@@ -182,6 +188,11 @@ describe("Command row", () => {
     expect(row.command).toBe("vmn-exp list ml_app --query 'metrics.loss < 0.3'");
     expect(cmd({ text: "list --archived" })[0].to).toBe("/ws/w/app/ml_app?archived=1");
     expect(cmd({ text: "status stuck" })[0].to).toBe("/ws/w/app/ml_app?status=stuck");
+  });
+
+  it("sets labels in sans and commands in mono", () => {
+    expect(cmd({ text: "create" })[0]).toMatchObject({ label: "New run", mono: false });
+    expect(cmd({ text: "status stuck" })[0]).toMatchObject({ label: "status stuck", mono: true });
   });
 
   it("copies restore instead of navigating", () => {

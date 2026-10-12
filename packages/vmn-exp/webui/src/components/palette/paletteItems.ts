@@ -160,11 +160,12 @@ function refCommand(intent: RefIntent, base: string, input: PaletteInput): Palet
   if (input.refs.pending || states.some((s) => s.state === "pending")) {
     return [row("cmd:refs", "command", label, { mono: true, secondary: "resolving…", command })];
   }
-  const runs = [];
-  for (const [i, s] of states.entries()) {
-    if (s.state !== "ok") return [errorRow(refError(refs[i], s, intent.app, input.apps))];
-    runs.push(s.run);
-  }
+  // An ambiguous prefix can fill the one request's limit and crowd out an
+  // `@N`, so it is named first: typing more of it is the fix for both.
+  const bad = states.findIndex((s) => s.state === "several");
+  const failed = bad >= 0 ? bad : states.findIndex((s) => s.state !== "ok");
+  if (failed >= 0) return [errorRow(refError(refs[failed], states[failed], intent.app, input.apps))];
+  const runs = states.map((s) => (s as Extract<RefState, { state: "ok" }>).run);
   const verstrs = runs.map((r) => r.verstr);
   const to = intent.kind === "show" ? runHref(base, verstrs[0])
     : intent.kind === "compare" ? `${base}/compare-runs?${verstrs.map((v) => `sel=${enc(v)}`).join("&")}`
@@ -200,7 +201,7 @@ function commandItems(input: PaletteInput): PaletteItem[] {
       secondary: "filter runs", to: `${base}?status=${intent.status}`,
       command: vx("list", app, "--query", `status = "${intent.status}"`),
     });
-    case "create": return c("New run", { to: `${base}?new=1`, command: vx("create", app) }, "run");
+    case "create": return c("New run", { mono: false, to: `${base}?new=1`, command: vx("create", app) }, "run");
     case "copy": return c(`${intent.verb} ${intent.ref}`, {
       secondary: "copy the command", copyOnEnter: true, command: vx(intent.verb, app, "-v", intent.ref),
     });
