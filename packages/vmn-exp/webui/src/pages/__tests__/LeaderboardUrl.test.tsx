@@ -8,6 +8,7 @@ vi.mock("../../api", () => ({
     metricsSchema: vi.fn(),
     facets: vi.fn(),
     experiment: vi.fn(),
+    apps: vi.fn(),
   },
   appName: (tag: string) => tag.replaceAll("-", "/"),
 }));
@@ -32,6 +33,7 @@ const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 beforeEach(() => {
   vi.clearAllMocks();
   m.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
+  m.apps.mockResolvedValue([{ name: "my/app", experiments: 1, versions: 1 }]);
   m.facets.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experiments.mockResolvedValue(page([row(1, { metrics: { loss: 0.2 }, params: { model: "m1" } })]));
   m.experimentsPaged.mockResolvedValue({ rows: [row(1, { metrics: { loss: 0.2 } })], total: 1 });

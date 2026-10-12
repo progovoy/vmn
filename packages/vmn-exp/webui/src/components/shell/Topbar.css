@@ -75,6 +75,8 @@ button.id-chip:hover, button.id-chip[aria-expanded="true"] { border-color: var(-
   .topbar .ctx-root { display: none; }
 }
 @media (max-width: 599px) {
+  /* The theme toggle moves to the drawer's foot (App's footExtra). */
+  .topbar-right .theme-toggle { display: none; }
   .search-label, .search-key { display: none; }
   .search-btn { width: 30px; padding: 0; justify-content: center; }
   .id-text {

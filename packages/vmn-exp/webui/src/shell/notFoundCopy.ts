@@ -146,7 +146,7 @@ export function notFoundCopy(props: NotFoundProps, facts: NotFoundFacts): NotFou
     case "route": return routeCopy(props.pathname, facts);
     case "workspace": return workspaceCopy(props.ws, facts);
     case "app": return appCopy(props.ws, props.appTag, facts);
-    case "run": return runCopy(props.ws, props.appTag, props.ref, facts);
+    case "run": return runCopy(props.ws, props.appTag, props.runRef, facts);
     case "model":
       return {
         h1: ["No model ", { mono: props.name }, ` in ${props.ws}`],

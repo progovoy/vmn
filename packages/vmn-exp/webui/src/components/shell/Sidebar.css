@@ -1,12 +1,6 @@
 /* The sidebar's contents (plan 19 §1.2). The <aside> frame itself (.sidebar,
  * drawer behaviour) lives in styles.css. */
 
-/* Until styles.css carries a shared one (U9). */
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-
 .sidebar-brand {
   display: flex; align-items: center; gap: 9px;
   padding: 16px 18px 14px; color: var(--text);

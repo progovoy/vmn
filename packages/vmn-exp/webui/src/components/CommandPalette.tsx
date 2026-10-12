@@ -96,7 +96,7 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
       if (!mods.newTab) onClose();
       return;
     }
-    navigate(item.to);
+    navigate(item.to, { state: { focusMain: true } });
     onClose();
   };
 

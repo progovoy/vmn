@@ -23,8 +23,7 @@ import LeaderboardCharts from "./LeaderboardCharts";
 import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits } from "./LeaderboardTable";
 import { DATE_SORT_OF, moveColumn } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
-import { useAppExists } from "../shell/useAppExists";
-import { usePageScope } from "../shell/usePageScope";
+import { useCanCreateRun } from "../shell/useAppExists";
 
 const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 
@@ -37,9 +36,7 @@ const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order
 function EmptyBoard({ ws, app, appName, onCreate }: {
   ws: string; app: string; appName: string; onCreate: () => void;
 }) {
-  const exists = useAppExists(ws, app);
-  const scope = usePageScope(ws);
-  const canCreate = exists === true && !scope.readOnly && scope.isGit;
+  const canCreate = useCanCreateRun(ws, app);
   return (
     <div className="empty">
       No runs yet in {appName}. Capture your working state:

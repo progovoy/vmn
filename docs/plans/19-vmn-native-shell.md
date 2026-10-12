@@ -665,7 +665,7 @@ export type NotFoundProps =
   | { kind: "route"; pathname: string }
   | { kind: "workspace"; ws: string }
   | { kind: "app"; ws: string; appTag: string }
-  | { kind: "run"; ws: string; appTag: string; ref: string }
+  | { kind: "run"; ws: string; appTag: string; runRef: string }   // not `ref`: React keeps that prop
   | { kind: "model"; ws: string; name: string }
   | { kind: "report"; ws: string; rid: string }
   | { kind: "control-plane" }
