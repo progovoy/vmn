@@ -172,8 +172,15 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
       <PageHead title={appName} what="experiment leaderboard" />
       <p className="page-sub">
         {rows === undefined ? "loading runs…"
-          : tableRows!.length !== data.total ? `${tableRows!.length} of ${data.total} runs`
-          : `${data.total} runs`}
+          : filtered || all.length < data.total
+            ? (tableRows!.length !== data.total ? `${tableRows!.length} of ${data.total} runs` : `${data.total} runs`)
+            : (() => {
+                const topLevel = rows!.filter((r) => !r.depth).length;
+                const innerCount = data.total - topLevel;
+                return innerCount > 0
+                  ? `${topLevel} runs · ${data.total} incl. inner`
+                  : `${topLevel} runs`;
+              })()}
         {sortLabel && (
           <>
             {" · sorted by "}<b>{sortLabel}</b>

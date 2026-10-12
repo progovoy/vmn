@@ -669,7 +669,8 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
 .compare-runs .compare-key { position: sticky; left: 0; background: var(--surface-1); min-width: 160px; }
 .compare-run-head { min-width: 140px; vertical-align: top; }
 .compare-run-title { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
-.compare-section th { text-transform: uppercase; font-size: 11px; color: var(--text-3); text-align: left; }
+.compare-section th { font-size: 11px; color: var(--text-3); text-align: left; }
+.label-caps { text-transform: uppercase; }
 .compare-runs tr.differs td.compare-key { font-weight: 600; }
 .compare-pairs { flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 /* ---- end N-run compare table ---- */

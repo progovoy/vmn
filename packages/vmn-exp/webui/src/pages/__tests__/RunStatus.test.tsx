@@ -85,7 +85,8 @@ describe("Run status block", () => {
     expect(pill.className).toContain("failed");
     expect(pill.getAttribute("aria-label")).toContain("exit 3");
     expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("90s")).toBeInTheDocument();
+    expect(screen.getByText("1m")).toBeInTheDocument();
+    expect(screen.getByTitle("90s")).toBeInTheDocument();
     expect(screen.getByText(/4242/)).toBeInTheDocument();
     expect(screen.getByText(/gpu0/)).toBeInTheDocument();
     expect(screen.getByText("python train.py")).toBeInTheDocument();

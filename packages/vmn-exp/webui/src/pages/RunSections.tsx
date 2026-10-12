@@ -4,15 +4,15 @@ import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus }
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import StatusPill from "../components/StatusPill";
 
-/** A duration on the relTime ladder (2h), with the exact seconds beside it. */
+/** A single duration text (rounded seconds for short, ladder for longer),
+ *  with the exact seconds in the title attribute. 0s shows as "<1s". */
 export function Duration({ secs }: { secs: number | null | undefined }) {
   if (secs == null) return <div>—</div>;
-  const text = fmtDuration(secs);
-  const exact = `${Math.round(secs)}s`;
+  const rounded = Math.round(secs);
+  const display = rounded === 0 ? "<1s" : secs < 60 ? `${rounded}s` : fmtDuration(secs);
   return (
-    <div>
-      <span>{text}</span>
-      {exact !== text && <>{" "}<span className="exact-secs">{exact}</span></>}
+    <div title={`${rounded}s`}>
+      <span>{display}</span>
     </div>
   );
 }
@@ -38,7 +38,7 @@ export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) 
         <Duration secs={st.duration_sec} />
         {st.pid !== null && <><div className="k">pid</div><div className="mono">{st.pid}</div></>}
         {Boolean(st.host) && <><div className="k">host</div><div className="mono">{st.host}</div></>}
-        {Boolean(st.heartbeat) && (
+        {Boolean(st.heartbeat) && st.status !== "succeeded" && st.status !== "failed" && (
           <><div className="k">heartbeat</div><div title={st.heartbeat ?? ""}>{relTime(st.heartbeat)}</div></>
         )}
         {st.command && st.command.length > 0 && (
