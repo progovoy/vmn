@@ -22,7 +22,8 @@ vmn-exp ui --port 9000 --no-browser
 ```
 
 With no `--repo`/`--store`, the repo enclosing the current directory becomes
-the workspace.
+the workspace. With `--repo`, `--store` or `--config`, `vmn-exp ui` runs from
+any directory, inside a git checkout or not.
 
 ## Flags
 

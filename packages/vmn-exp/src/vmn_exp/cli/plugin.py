@@ -304,6 +304,15 @@ def _handle_ui(vmn_ctx):
     return handle_ui(vmn_ctx.args)
 
 
+def _ui_run_without_repo(args):
+    """An explicit source (--repo, --store, --config) needs no enclosing
+    checkout; a bare `vmn-exp ui` falls through to serve that checkout."""
+    if not (args.repo or args.store or args.config):
+        return None
+    from vmn_exp.ui.cli import handle_ui
+    return handle_ui(args)
+
+
 # ---------------------------------------------------------------------------
 # run_without_repo: experiment in from-snapshot mode (moved from entry.py)
 # ---------------------------------------------------------------------------
@@ -442,6 +451,7 @@ def register_all() -> None:
         add_parser=_add_ui_parser,
         handle=_handle_ui,
         access="local",
+        run_without_repo=_ui_run_without_repo,
     ))
     _register(CommandSpec(
         names=("sweep",),
