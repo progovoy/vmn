@@ -16,7 +16,8 @@ from vmn_exp.core.similar_text import (
 
 def test_tokens_are_lowercased_and_split_on_camel_case_snake_case_and_punctuation():
     assert tokenize("FocalLoss for class_imbalance, HTTPServer/resnet50") == [
-        "focal", "loss", "class", "imbalance", "http", "server", "resnet50",
+        "focalloss", "focal", "loss", "class", "imbalance", "httpserver", "http", "server",
+        "resnet50",
     ]
 
 
@@ -106,3 +107,61 @@ def test_the_text_reason_names_shared_keyword_phrases_before_rare_terms():
 
 def test_no_text_reason_without_a_shared_term():
     assert shared_reason(Counter(["a1"]), Counter(["b1"]), lambda t: 1.0) is None
+
+
+@pytest.mark.parametrize("text, tokens", [
+    ("NaN", ["nan"]),
+    ("nan", ["nan"]),
+    ("ResNet", ["resnet", "res", "net"]),
+    ("resnet", ["resnet"]),
+    ("PyTorch", ["pytorch", "py", "torch"]),
+    ("pytorch", ["pytorch"]),
+    ("GPUs", ["gpus"]),
+    ("gpus", ["gpus"]),
+    ("LayerNorm", ["layernorm", "layer", "norm"]),
+    ("layernorm", ["layernorm"]),
+    ("BFloat16", ["bfloat16"]),
+    ("HTTPServer", ["httpserver", "http", "server"]),
+    ("getUserName", ["getusername", "get", "user", "name"]),
+    ("focal loss", ["focal", "loss"]),
+])
+def test_a_word_keeps_its_whole_lowercased_form_and_adds_its_camel_case_parts(text, tokens):
+    assert tokenize(text) == tokens
+
+
+def test_camel_case_parts_drop_stopwords_and_one_character_tokens_but_the_whole_stays():
+    assert tokenize("isTrain") == ["istrain", "train"]
+    assert tokenize("x") == []
+
+
+@pytest.mark.parametrize("query, document", [
+    ("nan", "Expect NaN loss"),
+    ("NaN", "expect nan loss"),
+    ("resnet", "ResNet-18 baseline"),
+    ("ResNet", "resnet baseline"),
+    ("pytorch", "PyTorch port"),
+    ("gpus", "8 GPUs"),
+])
+def test_a_word_matches_whatever_its_capitalisation(query, document):
+    assert query.lower() in tokenize(document)
+
+
+def test_the_text_reason_names_a_camel_case_word_once():
+    terms = Counter(tokenize("ResNet NaN"))
+    reason = shared_reason(terms, terms, lambda t: 1.0)
+    assert reason == "shared: nan, resnet"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("ResNet-18", ["resnet", "res", "net", "resnet18"]),
+    ("resnet18", ["resnet18"]),
+    ("gpt-4 and COVID-19", ["gpt", "gpt4", "covid", "covid19"]),
+    ("lr0.001 batch 4096", ["lr0", "batch", "4096"]),
+    ("2026-10-12 run_42", ["2026", "run", "run42"]),
+])
+def test_short_numbers_join_the_word_they_are_hyphenated_to_and_never_stand_alone(text, expected):
+    assert tokenize(text) == expected
+
+
+def test_resnet18_matches_resnet_dash_18():
+    assert "resnet18" in tokenize("ResNet-18 baseline")

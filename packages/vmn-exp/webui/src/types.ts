@@ -1,8 +1,14 @@
+export type Role = "viewer" | "editor" | "admin";
+
 export interface Workspace {
   name: string;
   kind: string;
   path?: string;
   store?: string;
+  /** Store workspaces only, once probed: what the store lets this server do. */
+  capabilities?: string[];
+  /** The principal's role here (`*` included); null with auth off or no role. */
+  role?: Role | null;
 }
 
 export interface AppRow {
@@ -44,6 +50,17 @@ export interface Meta {
   version: string;
   /** True when the server was started with --read-only; mutations return 403. */
   read_only?: boolean;
+  vmn_exp_version?: string | null;
+  /** `configured` with `--config` or a control plane, else `standalone`. */
+  mode?: "standalone" | "configured";
+  control_plane?: boolean;
+  auth?: {
+    enabled: boolean; token: boolean; oidc: boolean; api_tokens: boolean;
+    login_url: string | null;
+  };
+  principal?: { id: string; name: string } | null;
+  /** The role in `*`. With auth on, null means no global role, not "all allowed". */
+  role?: Role | null;
 }
 
 export interface Job {
@@ -230,6 +247,9 @@ export interface OutputEntry {
 
 export interface ExperimentDetail {
   metadata: Record<string, unknown> & { verstr: string };
+  /** The run's storage index (`@N`); null when the server did not resolve it. */
+  idx?: number | null;
+  name?: string | null;
   /** The newest log entries — the whole log only when requested with
    *  `include_log=1`, or from an older server that always sent all of it.
    *  Page older entries through `/log?offset&limit` instead. */

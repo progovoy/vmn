@@ -53,13 +53,13 @@ def test_no_ref_compares_the_working_tree_and_finds_the_run_that_changed_the_sam
     assert verstr(2) not in _verstrs(items)
 
 
-def test_a_run_target_leaves_out_itself_its_code_and_its_sweep(app_layout, capfd):
+def test_a_run_target_leaves_out_itself_its_reruns_and_its_sweep(app_layout, capfd):
     _bootstrap(app_layout)
     app, storage = app_layout.app_name, _storage(app_layout)
     outer = seed(storage, app, verstr(1))
     trial = _train_step_run(storage, app, 2, parent=outer)
     _train_step_run(storage, app, 3, parent=outer)
-    _train_step_run(storage, app, 4, code=trial)  # a repeat of the trial's code
+    _train_step_run(storage, app, 4, code=trial)  # a rerun of the trial: its code and params
     other = _train_step_run(storage, app, 5)
 
     assert _verstrs(_items(app_layout, capfd, "-v", trial)) == [other]

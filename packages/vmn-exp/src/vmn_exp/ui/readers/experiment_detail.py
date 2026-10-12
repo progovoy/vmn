@@ -208,7 +208,9 @@ def experiment_detail(
     the run's and the *schema*'s summary policies. *step_range* (``(lo, hi)``)
     keeps that range of each series, read from the metric objects (see
     :mod:`~vmn_exp.ui.readers.range_series`); ``compacted`` tells whether
-    every metrics writer of the run has its ``.vmx``.
+    every metrics writer of the run has its ``.vmx``. ``idx`` / ``name`` come
+    from the resolved run's index row (*read_child_row*); ``idx`` is None
+    without it.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -224,8 +226,11 @@ def experiment_detail(
     elif include_series:
         series, series_total = thinned_series(snapshot, keys, max_points, x=x)
     metrics, metric_summary = snapshot.summarized_metrics(schema)
+    row = (read_child_row(verstr) if read_child_row else None) or {}
     return {
         "metadata": metadata,
+        "idx": row.get("idx"),
+        "name": row.get("name") or metadata.get("name"),
         "log": snapshot.log() if include_log else tail,
         "log_tail": tail,
         "log_total": snapshot.total,

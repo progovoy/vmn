@@ -107,7 +107,7 @@ describe("Leaderboard virtualization", () => {
     renderLeaderboard();
 
     await waitFor(() => {
-      expect(screen.getByText(/No experiments yet/)).toBeInTheDocument();
+      expect(screen.getByText(/No runs yet in/)).toBeInTheDocument();
     });
   });
 

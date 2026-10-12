@@ -1,7 +1,7 @@
 """Workspaces of raw run records for the similar-runs UI routes' tests.
 
 ``ws1`` holds two apps: ``app1`` (a target run, its twin, an unrelated run, a
-rerun of the target's exact code and an archived twin) and ``app2`` (one run
+rerun of the target (its code and params) and an archived twin) and ``app2`` (one run
 touching the target's function); ``ws2`` holds ``app3`` (a label-smoothing
 run). Records are written as ``vmn-exp`` leaves them on disk.
 """

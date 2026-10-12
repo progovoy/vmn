@@ -16,6 +16,8 @@ gone (told from a clean tree's backfill by the clean code verstr). Values of
 an unexpected type (a hand-edited record, ``log_input(digest=<int>)``) are
 skipped one by one. Pure: no storage.
 """
+import hashlib
+import json
 import re
 from collections import Counter, namedtuple
 
@@ -52,6 +54,7 @@ class Profile:
         "length",
         "objective",
         "params",
+        "rerun",
         "script",
         "symbols",
         "terms",
@@ -120,6 +123,28 @@ def _inputs(inputs):
         for name, value in sorted(_named(inputs).items())
         if isinstance(value, dict)
     )
+
+
+def rerun_key(row):
+    """A run's rerun identity: a stable hash of its ``code_verstr``, its
+    params (verbatim) and the set of its inputs (each one's digest, else its
+    uri); runs of equal keys are reruns of one experiment. None without a
+    ``code_verstr``: nothing is known to rerun it."""
+    code = row.get("code_verstr")
+    if not code:
+        return None
+    inputs = sorted({str(_input_identity(v)) for v in _dict(row.get("inputs")).values()})
+    identity = [str(code), _named(row.get("params")), inputs]
+    try:
+        canonical = json.dumps(identity, sort_keys=True, default=repr)
+    except (TypeError, ValueError):  # mixed-type or recursive keys of a hand-edited record
+        canonical = repr(identity)
+    return hashlib.blake2b(canonical.encode(), digest_size=16).hexdigest()
+
+
+def _input_identity(value):
+    value = _dict(value)
+    return _digest(value.get("digest")) or value.get("uri")
 
 
 _LAUNCHERS = frozenset(
@@ -222,6 +247,7 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
     p.commit_changes = features.get("changed_source") == "commit"
     p.inputs = _inputs(row.get("inputs"))
     p.params = _named(row.get("params"))
+    p.rerun = rerun_key(row)
     p.script, p.args = entrypoint(row.get("command") or command or features.get("entrypoint"))
     p.objective = objective_names(row)
     branch = row.get("branch") or features.get("branch")

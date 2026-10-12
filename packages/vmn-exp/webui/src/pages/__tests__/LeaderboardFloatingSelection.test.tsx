@@ -69,7 +69,7 @@ describe("the floating selection bar", () => {
     expect(within(sel).getByRole("button", { name: /select all 500 matching/i })).toBeInTheDocument();
     const toolbar = document.querySelector(".toolbar") as HTMLElement;
     expect(within(toolbar).queryByRole("button", { name: "Archive" })).toBeNull();
-    expect(within(toolbar).getByRole("button", { name: "+ New experiment" })).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: "New run" })).toBeInTheDocument();
   });
 
   it("offers the diff, the compare table and the overlay for two runs", async () => {

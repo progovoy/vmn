@@ -44,10 +44,10 @@ export default function NewExperiment({ ws, app, appName, onCreated, onClose }: 
 
   return (
     <div className="card">
-      <div className="eyebrow">new experiment</div>
+      <h2 className="card-title" style={{ marginTop: 0, color: "var(--text)" }}>New run</h2>
       <p className="page-sub" style={{ marginBottom: 12 }}>
         Captures the workspace's current working state — dirty files, local
-        commits, untracked files — as a reproducible experiment.
+        commits, untracked files — as a reproducible run.
       </p>
       <div className="card-grid-2" style={{ marginBottom: 12 }}>
         <label className="field">
@@ -71,7 +71,7 @@ export default function NewExperiment({ ws, app, appName, onCreated, onClose }: 
       </div>
       <div className="toolbar" style={{ marginBottom: 0 }}>
         <button className="primary" onClick={submit} disabled={running}>
-          {running ? "Capturing…" : "Create experiment"}
+          {running ? "Capturing…" : "Create run"}
         </button>
         <button onClick={onClose}>Cancel</button>
         {(parseError || error) && <span className="error">{parseError || error}</span>}

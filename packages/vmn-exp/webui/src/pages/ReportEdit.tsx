@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { apiReports } from "../apiReports";
 import { PageHead, Skeleton } from "../components/ui";
+import NotFound from "../components/shell/NotFound";
+import { httpStatus } from "../shell/notFoundCopy";
 import { Markdown, type PanelSpec } from "../reports/Markdown";
 import Panel from "../reports/Panel";
 import PanelDialog from "../reports/PanelDialog";
@@ -110,6 +112,7 @@ export default function ReportEdit() {
     setDialog(null);
   };
 
+  if (httpStatus(query.error) === 404) return <NotFound kind="report" ws={ws} rid={rid} />;
   if (query.error) return <div className="error">{(query.error as Error).message}</div>;
   if (!editing) return <Skeleton />;
   return (
