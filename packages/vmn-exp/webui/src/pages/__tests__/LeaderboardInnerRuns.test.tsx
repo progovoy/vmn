@@ -70,6 +70,29 @@ describe("the leaderboard's inner-run columns", () => {
     COUNTS.forEach((c) => expect(colIds()).toContain(c));
   });
 
+  it("keeps every group-row cell in the accessibility tree, so Inner runs heads its own columns", async () => {
+    serve([outer(1)]);
+    renderBoard();
+    await screen.findByText("0.0.1-dev.x");
+    const cells = [...document.querySelectorAll(".lb-group-row > *")] as HTMLTableCellElement[];
+    cells.forEach((c) => expect(c).not.toHaveAttribute("aria-hidden"));
+    const before = cells.slice(0, cells.indexOf(group() as HTMLTableCellElement));
+    const offset = before.reduce((n, c) => n + c.colSpan, 0);
+    expect(colIds()[offset]).toBe("c:total");
+  });
+
+  it("keeps the Inner runs label readable when its block scrolls under the pinned columns", async () => {
+    serve([outer(1)]);
+    renderBoard();
+    await screen.findByText("0.0.1-dev.x");
+    const exp = document.querySelector('thead th[data-col-id="experiment"]') as HTMLElement;
+    const edge = Number.parseFloat(exp.style.left) + Number.parseFloat(exp.style.width);
+    const label = (group() as HTMLElement).querySelector(".lb-group-label") as HTMLElement;
+    expect(label.textContent).toBe("Inner runs");
+    expect(label.style.position).toBe("sticky");
+    expect(Number.parseFloat(label.style.left)).toBe(edge);
+  });
+
   it("keeps the column row stuck below the group row", async () => {
     serve([outer(1)]);
     renderBoard();

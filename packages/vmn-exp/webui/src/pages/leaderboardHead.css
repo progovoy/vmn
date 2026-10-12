@@ -4,7 +4,10 @@
 }
 /* A rule under the label marks which columns it spans; an inset shadow, as
    a collapsed border would not travel with the sticky cell. */
-th.lb-group {
+.lb-table th.lb-group {
   text-align: center; padding-bottom: 3px; color: var(--text-3); cursor: help;
   box-shadow: inset 0 -1px 0 var(--line-2);
+  /* Not a scroll container, so the label can stick past the pinned columns. */
+  overflow: visible;
 }
+.lb-group-label { display: inline-block; }
