@@ -110,6 +110,18 @@ location / {
 }
 ```
 
+## Signing in
+
+When the server needs auth, a page load that gets a 401 shows a sign-in page
+in place of the page (the sidebar stays). It offers what the 401 body's
+[`auth` hints](server.md#authentication) name: **Continue with SSO** (OIDC;
+you come back to the page you were on) and/or a **Token** field for the
+`--token` / `VMN_UI_TOKEN` value or a `vmnx_…` API token. The token is kept in
+`sessionStorage` for the tab. A 401 on a mutation instead shows a
+**Session ended** banner above the page, which stays mounted so typed input
+survives; the action is not replayed, retry it after signing in. A 403 is not
+a sign-in case: the page shows the server's message (`Requires role 'editor'`).
+
 ## Actions
 
 Mutations on a git workspace are asynchronous jobs:
@@ -206,6 +218,25 @@ one row whose status rolls up its subtree. Pages auto-refresh while anything
 is unfinished. See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
+## Keyboard
+
+- **Skip to content**: the first Tab stop jumps past the sidebar to the page.
+- **⌘K / Ctrl+K** toggles the command palette anywhere. It reads CLI grammar
+  (a leading `vmn-exp`/`vmn`/`exp` is dropped, so a pasted command works):
+  `@54` or `show [app] -v <ref>` opens a run, `list [app] <query>` (or any
+  input with `metrics.`/`params.` or a comparison) filters the leaderboard,
+  `compare @3 @7`, `diff a b`, `overlay a b`, `tree [version]`,
+  `status stuck`, `create`, a page (`models`, `reports`, `tokens`, `actions`,
+  `apps`, `docs`, ...) or an app/workspace name. `goto <version>` only fills
+  the Actions goto form, and `restore`/`rerun <ref>` copy the command: the
+  palette never runs a mutation. Without an app in the input, the current one
+  (or the workspace's only one) is used. Keys: ↑↓ move, Home/End, PageUp/PageDown
+  between sections, ↵ open, ⌘↵ new tab, ⇧↵ copy the row's CLI equivalent, Tab
+  completes the verb or app, Esc clears the input, then closes.
+- **Narrow windows** (below 900 px): the sidebar becomes a drawer opened from
+  the topbar's menu button; it focuses the first nav link, and Esc, a click
+  outside or a navigation closes it and returns focus to the button.
+
 ## API
 
 OpenAPI docs are served at `/api/docs` (`/api/openapi.json`). All paths are
@@ -215,9 +246,10 @@ stands for `workspaces/{ws}/apps/{app}`.
 
 | Method | Path | Answers |
 |---|---|---|
-| `GET` | `/meta` | `{"version", "read_only"}` |
-| `GET` / `POST` | `/workspaces` | List / add a workspace ([Workspaces](#workspaces)) |
+| `GET` | `/meta` | [Server meta](#server-meta-and-roles): versions, `read_only`, `mode`, `auth`, `principal`, `role` |
+| `GET` / `POST` | `/workspaces` | List (each item with the caller's `role`, [roles](#server-meta-and-roles)) / add a workspace ([Workspaces](#workspaces)) |
 | `DELETE` | `/workspaces/{ws}` | Remove a workspace (204) |
+| `GET` | `/workspaces/{ws}/git` | [Branch, HEAD, dirty, store](#git-context) of a git workspace |
 | `GET` | `/workspaces/{ws}/apps` | Apps with experiments or versions |
 | `GET` | `ws/{ws}/apps/{app}/experiments` | Run rows ([paging](#paging-sorting-and-order), [query](#filtering-with-a-query)) |
 | `GET` | `ws/{ws}/apps/{app}/experiments/{verstr}` | [Run detail](#run-detail-is-bounded) (`latest`, `@N`, prefixes resolve) |
@@ -232,6 +264,7 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `ws/{ws}/apps/{app}/experiments-columns` | [Whole-set chart columns](#columns-for-whole-set-charts) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
+| `GET` | `ws/{ws}/apps/{app}/experiments-status` | [Status counts and rollup](#status-counts-and-rollup) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-diff?v=&to=` | [Code diff of two runs](#diffs-and-artifacts) |
 | `POST` | `ws/{ws}/apps/{app}/series` | [Series of many runs](#series-for-many-runs) |
 | `GET` | `.../experiments/{verstr}/metric-keys?prefix=&offset=&limit=` | [A run's metric names, paged](#zoom-and-many-keys) |
@@ -278,6 +311,53 @@ takes `status=running,stuck` (comma-separated) to filter:
 curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
   "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?status=running,stuck"
 ```
+
+### Server meta and roles
+
+`GET /meta`:
+
+| Field | Meaning |
+|---|---|
+| `version` / `vmn_exp_version` | vmn's version, the installed `vmn-exp` package's (`null` when not installed as a package) |
+| `read_only` | `--read-only` |
+| `mode` | `configured` with `--config` or a control plane, else `standalone` |
+| `control_plane` | whether a control plane (API tokens) is configured |
+| `auth` | `{enabled, token, oidc, login_url, api_tokens}`: the sign-in methods offered (`login_url` is `/auth/login` with OIDC, else `null`); never a secret |
+| `principal` | `{id, name}` of the caller, or `null` |
+| `role` | the caller's role in `*`, or `null`. With auth on, `null` means no global role (per-workspace roles may still apply); with auth off, everything is allowed |
+
+Each `/workspaces` item carries `role` (`viewer`/`editor`/`admin`, the `*`
+role included), `null` with auth off or no role there.
+
+### Git context
+
+`GET /workspaces/{ws}/git` (git workspaces only: a store workspace is 400):
+
+```json
+{"branch": "main", "detached": false, "head": "<40-hex>", "head_short": "e71c74d", "dirty": true, "store": ".vmn/store"}
+```
+
+One `git --no-optional-locks status --porcelain=v2 --branch
+--untracked-files=no` (2 s timeout), so it never takes `index.lock` and
+untracked files are not dirty. Detached: `branch: null, detached: true`. On a
+failure it still answers 200 with `branch`/`head`/`head_short`/`dirty` `null`
+and an `error` (the first stderr line, or `timeout`). Cached 5 s per workspace.
+
+### Status counts and rollup
+
+`GET ws/{ws}/apps/{app}/experiments-status`:
+
+```json
+{"total": 53,
+ "counts": {"created": 0, "running": 2, "stuck": 1, "succeeded": 41, "failed": 9},
+ "failed_recent": 1, "recent_sec": 86400, "rollup": "stuck"}
+```
+
+Counts the non-archived runs by derived status (all five keys always present).
+`failed_recent` counts failures that finished within `recent_sec`. `rollup` is
+`stuck` if any run is stuck, else `failed` if `failed_recent > 0`, else
+`running` if any runs, else `null`. An unknown app answers zeros; ETag/304,
+accurate to the hour for `failed_recent`.
 
 ### Filtering with a query
 
@@ -408,6 +488,7 @@ Query params: `max_points` (default 2000, at most 20000), `keys=loss,acc`
 | `media` / `tables` / `histograms` | logged images, tables, histograms per name, one item per step ([Media](#media)); `histograms` is `{}` once they would serve more than 100 steps in all |
 | `histograms_total` | `{name: steps logged}` for every histogram name |
 | `compacted` | whether every metrics writer of the run has its compacted `.vmx` (the UI shows a "not compacted" badge otherwise) |
+| `idx` / `name` | the run's `@N` index and its name (from its index row, else `name` from its metadata); `null` when unknown |
 
 Page older entries with `.../log`. A live run's poll parses only the log bytes
 appended since the last one. Detail and log carry an `ETag` and
