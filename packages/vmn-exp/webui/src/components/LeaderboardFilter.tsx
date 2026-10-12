@@ -114,9 +114,10 @@ export default function LeaderboardFilter({
   const hasFilter = search || branch || query || statuses.length > 0 || (similarOn && similarText);
 
   return (
-    <div className="toolbar" style={{ gap: 8, marginBottom: 0 }}>
+    <div className="toolbar filter-bar">
       <input
         type="text"
+        className="filter-control"
         aria-label="Search runs"
         placeholder={similarOn ? SIMILAR_HINT : SEARCH_HINT}
         value={similarOn ? similarText : search}
@@ -135,6 +136,7 @@ export default function LeaderboardFilter({
       )}
       <select
         role="combobox"
+        className="filter-control"
         value={branch}
         onChange={(e) => setBranch(e.target.value)}
         style={{ minWidth: 120 }}
@@ -166,7 +168,7 @@ export default function LeaderboardFilter({
         </button>
       )}
       {hasFilter && (
-        <button title="Clear filters" onClick={clear} style={{ padding: "4px 10px" }}>
+        <button className="filter-clear" title="Clear filters" onClick={clear}>
           ✕
         </button>
       )}

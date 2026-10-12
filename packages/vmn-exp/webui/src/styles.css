@@ -1,6 +1,7 @@
 /* vmn ui — warm near-black theme (design handoff: vmn UI redesign). */
 @import "./styles/checkbox.css";
 @import "./styles/board.css";
+@import "./styles/filter.css";
 :root {
   /* surfaces */
   --bg: #0c0c0b;
