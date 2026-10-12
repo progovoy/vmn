@@ -17,7 +17,7 @@ vi.mock("../../../api", () => ({
 
 import NotFound from "../NotFound";
 import { ShellOverrideProvider, useShellOverride } from "../../../shell/shellOverride";
-import type { NotFoundElementProps } from "../NotFound";
+import type { NotFoundProps } from "../../../shell/contracts";
 
 const AUTH = { enabled: true, token: true, oidc: false, api_tokens: false, login_url: null };
 
@@ -25,7 +25,7 @@ function Probe() {
   return <span data-testid="override">{useShellOverride() ?? "none"}</span>;
 }
 
-function renderNotFound(props: NotFoundElementProps) {
+function renderNotFound(props: NotFoundProps) {
   return renderWithClient(
     <MemoryRouter>
       <ShellOverrideProvider>

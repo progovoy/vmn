@@ -107,7 +107,7 @@ describe("notFoundCopy: app", () => {
 });
 
 describe("notFoundCopy: run", () => {
-  const at = (ref: string): NotFoundProps => ({ kind: "run", ws: "ml-repo", appTag: "ml_app", ref });
+  const at = (ref: string): NotFoundProps => ({ kind: "run", ws: "ml-repo", appTag: "ml_app", runRef: ref });
 
   it("gives an @N ref the app's range", () => {
     const c = copy(at("@540"), { runTotal: 53 });

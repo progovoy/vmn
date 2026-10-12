@@ -15,19 +15,6 @@ import type { NotFoundProps } from "../../shell/contracts";
 import type { ExperimentFacets } from "../../types";
 import "./NotFound.css";
 
-type RunProps = Extract<NotFoundProps, { kind: "run" }>;
-/** NotFoundProps as a JSX element takes them: React keeps `ref` for itself, so
- *  the run kind's ref travels as `runRef`. */
-export type NotFoundElementProps =
-  | Exclude<NotFoundProps, RunProps>
-  | (Omit<RunProps, "ref"> & { runRef: string });
-
-function contractProps(p: NotFoundElementProps): NotFoundProps {
-  if (p.kind !== "run") return p;
-  const { runRef, ...rest } = p;
-  return { ...rest, ref: runRef };
-}
-
 const wsOf = (p: NotFoundProps) => ("ws" in p ? p.ws : undefined);
 
 /** The app's run count, asked for only by a run's not-found (same key as useFacets). */
@@ -61,8 +48,7 @@ export function FocusedHeading({ children }: { children: ReactNode }) {
   return <h1 ref={ref} tabIndex={-1}>{children}</h1>;
 }
 
-export default function NotFound(elementProps: NotFoundElementProps) {
-  const props = contractProps(elementProps);
+export default function NotFound(props: NotFoundProps) {
   useOverrideRoute("not-found");
   const scope = usePageScope(wsOf(props));
   const apps = useApps(props.kind === "app" ? props.ws : undefined).data;
