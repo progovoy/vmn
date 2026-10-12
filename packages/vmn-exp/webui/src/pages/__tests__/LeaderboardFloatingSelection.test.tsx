@@ -79,9 +79,9 @@ describe("the floating selection bar", () => {
     const sel = await bar();
     expect(within(sel).getByText("2", { selector: ".sel-badge" })).toBeInTheDocument();
     expect(within(sel).getByText("runs selected")).toBeInTheDocument();
-    expect(within(sel).getByRole("button", { name: /code diff of 2 selected/i })).toBeInTheDocument();
-    expect(within(sel).getByRole("button", { name: /compare 2 in a table/i })).toBeInTheDocument();
-    expect(within(sel).getByRole("button", { name: /overlay curves/i })).toBeInTheDocument();
+    expect(within(sel).getByRole("button", { name: /^code diff$/i })).toBeEnabled();
+    expect(within(sel).getByRole("button", { name: /compare in table/i })).toBeEnabled();
+    expect(within(sel).getByRole("button", { name: /overlay curves/i })).toBeEnabled();
   });
 
   it("closes with its ✕, clearing the selection", async () => {
