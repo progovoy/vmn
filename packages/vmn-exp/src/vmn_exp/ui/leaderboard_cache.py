@@ -335,7 +335,7 @@ class LeaderboardCache:
     def _candidates(self, snapshot, query):
         """The slots of *snapshot* the search index says may pass *query*'s
         ``~`` clauses, or None (no clause it answers: every slot)."""
-        if not query or ("~" not in query and "contains" not in query):
+        if not query or ("~" not in query and "contains" not in query.lower()):
             return None
         return search_prefilter.candidates(parse_query(query), self._search.get(snapshot))
 
@@ -343,6 +343,13 @@ class LeaderboardCache:
         """``{"results"}``: ⌘K "go to run" over every run (plan 23 S8)."""
         index = self._search.get(snapshot)
         return {"results": results(snapshot, index.ranked(text, limit, archived))}
+
+    def search_etag(self, snapshot, **params):
+        """:meth:`search`'s ETag: the snapshot's token and the time bucket
+        (statuses age), without building the leaderboard's base."""
+        token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens))
+        raw = json.dumps([_NONCE, token, self._bucket(), sorted(params.items())], default=str)
+        return hashlib.blake2b(raw.encode(), digest_size=16).hexdigest()
 
     def page(
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,

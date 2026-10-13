@@ -30,7 +30,7 @@ def register(app, api_prefix, snapshot_of, cache):
     def search_runs(request: Request, ws_name: str, app_tag: str, text: str = "",
                     limit: int = DEFAULT_LIMIT, archived: bool = False):
         snapshot = snapshot_of(ws_name, app_tag)
-        params = dict(text=text, limit=max(1, min(int(limit), MAX_LIMIT)), archived=archived)
-        etag = cache.etag(snapshot, None, route="search", **params)
+        params = dict(text=text, limit=max(1, min(limit, MAX_LIMIT)), archived=archived)
+        etag = cache.search_etag(snapshot, **params)
         return memoized_json_response(
             request, etag, lambda: cache.search(snapshot, **params), bodies)

@@ -8,9 +8,11 @@ cannot answer) and unions them across ``or`` (only when every branch can be
 answered). The result is a superset: the query is still evaluated on each
 candidate, so what matches never changes — only how many rows are looked at.
 """
-# Row fields the index holds as they are, and dicts whose every value it holds.
-_ROW_FIELDS = frozenset(
-    ("name", "verstr", "note", "tags", "command", "branch", "author", "error_summary"))
+from vmn_exp.ui.search_index import FIELDS, needle_of
+
+# Row fields the index holds as they are (params and intent are no row
+# field), and dicts whose every value it holds.
+_ROW_FIELDS = frozenset(FIELDS) - {"params", "intent"}
 _DICT_FIELDS = frozenset(("tags", "params"))
 
 
@@ -35,7 +37,7 @@ def candidates(node, index):
         return None if any(c is None for c in found) else set().union(*found)
     if kind != "cmp" or node[2] != "~" or node[1][0] != "path":
         return None
-    field, needle = _field(node[1][1]), index.needle_of(node[3])
+    field, needle = _field(node[1][1]), needle_of(node[3])
     if field is None or needle is None:
         return None
     return index.slots(needle, [field])

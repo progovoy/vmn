@@ -4,21 +4,21 @@
 
 Tiers, each newest first: the run whose ``@N`` (or bare ``N``) is the text,
 then verstr prefixes, name prefixes, then a hit in any field (reported as
-the first such field in the index's field order).
+the first such field in :data:`~vmn_exp.ui.search_index.FIELDS` order).
 Archived runs are left out unless asked for.
 """
 import re
 from itertools import islice
 
 from vmn_exp.core.status import derive_status
+from vmn_exp.ui.search_index import FIELDS, SEP, needle_of
 
 _AT_N = re.compile(r"@?(\d+)")
-_MAX_DEPTH = 1000
 
 
 def ranked(index, text, limit, archived=False):
     """``[(slot, matched field)]``, at most *limit*."""
-    needle = index.needle_of((text or "").strip())
+    needle = needle_of((text or "").strip())
     if needle is None or limit < 1:
         return []
     rows, found, seen = index.snapshot.rows, [], set()
@@ -33,11 +33,11 @@ def ranked(index, text, limit, archived=False):
         return len(found) >= limit
 
     if (take(_at_n(rows, needle), "idx")
-            or take(index.newest(index.sep + needle, "verstr"), "verstr")
-            or take(index.newest(index.sep + needle, "name"), "name")):
+            or take(index.newest(SEP + needle, "verstr"), "verstr")
+            or take(index.newest(SEP + needle, "name"), "name")):
         return found
     need, hits = limit - len(found), {}
-    for field in index.fields:  # each field's newest *need* hold the overall newest *need*
+    for field in FIELDS:  # each field's newest *need* hold the overall newest *need*
         for slot in islice(filter(shown, index.newest(needle, field)), need):
             hits.setdefault(slot, field)
     found.extend(sorted(hits.items(), reverse=True)[:need])
@@ -49,7 +49,9 @@ def _at_n(rows, needle):
     if not match:
         return []
     n = int(match.group(1))
-    if 0 < n <= len(rows) and rows[n - 1].get("idx") == n:
+    if not 0 < n <= len(rows):  # idx is the 1-based storage index
+        return []
+    if rows[n - 1].get("idx") == n:
         return [n - 1]
     return [i for i, row in enumerate(rows) if row.get("idx") == n]
 
@@ -58,7 +60,7 @@ def _root(snapshot, verstr):
     """The top-level ancestor of *verstr* present in *snapshot*, or None."""
     edges, root, seen = snapshot.edges, None, {verstr}
     parent = edges.get(verstr)
-    while parent in edges and parent not in seen and len(seen) < _MAX_DEPTH:
+    while parent in edges and parent not in seen:
         root = parent
         seen.add(parent)
         parent = edges.get(parent)
