@@ -466,3 +466,57 @@ Open:
 - Nested jobs deeper than one level get rollups (S1 is per subtree), but no special UI.
 - Log search across thousands of runs' `output.log`. Failure clusters use row fields and
   one example tail.
+
+## 10. API contract (phase 2, fixed 2026-10-14)
+
+Server and web units build against this contract in parallel. Prefix:
+`/api/v1/workspaces/{ws}/apps/{app}`. Rollup fields come from S1
+(`ui/job_rollup*.py`, `LeaderboardCache.job_rollup/job_rollups`).
+
+**Rows (S2).** Every board row gains:
+- `root`: its top-level ancestor's verstr, or null for a top-level run.
+- `failure_sig`: S1's `failure_signature.signature(row)`, null unless failed/stuck.
+
+Both are query fields.
+
+**Jobs view (S2):** `GET .../experiments?top=1&sort=&order=&q=&status=&offset=&limit=`.
+- Rows are top-level runs only (`depth = 0`).
+- A job row carries `job`, the compact summary: `{total, counts: {running, waiting,
+  succeeded, failed, stuck}, done, expected, progress, failed_pct, throughput_per_min,
+  eta_sec, metric, best, best_verstr, best_idx, spread: [12 counts]}`. A single run has
+  `job: null`.
+- Extra sort keys: `job:progress`, `job:failed_pct`, `job:throughput`, `job:best`
+  (best-first by the metric's goal), `job:total`, `job:started`.
+- `q`/`status` filter the top-level rows by their own fields; `q` may use `under` (S2)
+  but not `has` (W11).
+
+**Scope (S2):** `scope=<verstr>` on `experiments` (flat and grouped),
+`experiments-columns`, `experiments-facets`, `experiments-importance`.
+- It means the verstr's subtree, without the verstr itself. An unknown verstr gives 404.
+- `experiments-facets` also takes `q` and `status`, so its counts follow the other
+  filters.
+- Query: `under("<v>")` is true for rows in v's subtree.
+
+**Job summary (S3):** `GET .../experiments/{v}/summary`. It returns 404 if v has no
+children, and an early ETag. The body is S1's `job_rollup` payload plus:
+- `name`, `idx`, `status`, `tree_status`, `kind`, and `sweep: bool`.
+- `top`: up to 10 rows on the main metric, as `{verstr, idx, name, status, value}`.
+- `timeline`: `{bucket_sec, start, buckets: [{t, started, succeeded, failed}]}`. The
+  buckets are per minute for the last 24 h (coarser beyond), and `running(t)` is derived
+  client-side.
+
+**Failures (S3):** `GET .../experiments/{v}/failures?limit=20`.
+- Body: `{total_failed, clusters: [{sig, label, count, share, first_at, last_at, hosts:
+  [{host, count}] (top 5), params: [{key, value, share, base_share}] (overrepresented,
+  top 5), example_verstr}]}`.
+- Early ETag, memoized per generation.
+
+**Run detail of a job (S3).** `fleet.children` is dropped. `fleet.counts` and
+`fleet.expected` stay, read from the rollup, and the detail no longer reads the subtree.
+`.../sweep` keeps the spec and gets its trial counts from the rollup. Its `trials` array
+is capped at the first 50, with a `trials_total`.
+
+**Web routes (W1, W2).**
+- `/ws/{ws}/app/{app}` is the Jobs view (`view=jobs` default; `view=all` is plan 22's
+  board). The last view is remembered per app in localStorage, and the URL wins.
+- A run with children opens the job page: `/ws/{ws}/app/{app}/run/{v}?tab=overview|runs|charts|failures|code|log`.
