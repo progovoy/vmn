@@ -9,6 +9,9 @@ import FilterShortcuts from "./FilterShortcuts";
 import QueryBar from "./QueryBar";
 import QueryFieldHint from "./QueryFieldHint";
 import SimilarToggle from "./SimilarToggle";
+import SearchTools from "./SearchTools";
+import { QueryHelpButton, QueryHelpPanel, useQueryHelp } from "./QueryHelp";
+import type { QueryHelpData } from "../util/queryHelp";
 
 export type { FilterValues };
 
@@ -24,7 +27,7 @@ const NO_FACETS: SuggestFacets = {};
  *  the branch list when no branches are given. */
 export default function LeaderboardFilter({
   rows = [], queryError, branches: knownBranches, facets = NO_FACETS, initial, archived = false,
-  onArchivedChange, onSimilarChange, ...reports
+  onArchivedChange, onSimilarChange, help, ...reports
 }: FilterReports & {
   rows?: ExperimentRow[];
   /** What the server said about the query it refused; shown beside the bar. */
@@ -42,10 +45,13 @@ export default function LeaderboardFilter({
    *  mode; the mode's toggle appears with this callback. The typed filter
    *  text is kept apart, so leaving the mode restores it. */
   onSimilarChange?: (text: string | null) => void;
+  /** The query help's content; its `?` appears with it (plan 20 C5). */
+  help?: QueryHelpData;
 }) {
   const [similarOn, setSimilarOn] = useState(false);
   const [similarText, setSimilarText] = useState("");
   const grammar = useFilterGrammar(initial, similarOn, reports);
+  const helpState = useQueryHelp();
   const { state, setState } = grammar;
   // Each change scores the app's runs: wait for a pause, like the query box.
   const debouncedSimilar = useDebounce(similarText, 300);
@@ -65,23 +71,38 @@ export default function LeaderboardFilter({
     if (archived) onArchivedChange?.(false);
   };
   const typedHint = similarOn ? null : fieldHint(grammar.draft, facets);
+  // An example goes in the box to edit or commit, and the filter moves to it.
+  const pick = (example: string) => {
+    setSimilarOn(false);
+    grammar.setDraft(example);
+    helpState.close();
+    helpState.anchor.current?.querySelector<HTMLInputElement>('input[aria-label="Filter query"]')?.focus();
+  };
   const hasFilter = tokens.length > 0 || grammar.draft || (similarOn && similarText);
 
   return (
     <div className="toolbar filter-bar">
-      <QueryBar
-        tokens={tokens}
-        onRemove={remove}
-        text={similarOn ? similarText : grammar.draft}
-        onText={similarOn ? setSimilarText : grammar.setDraft}
-        onSubmit={similarOn ? undefined : grammar.commit}
-        facets={facets}
-        placeholder={similarOn ? SIMILAR_HINT : QUERY_HINT}
-        suggestions={!similarOn}
-        error={queryError}
-        hint={typedHint && <QueryFieldHint hint={typedHint} onApply={grammar.apply} />}
-        inside={onSimilarChange && <SimilarToggle on={similarOn} onToggle={() => setSimilarOn((on) => !on)} />}
-      />
+      <div className="query-help-anchor" ref={helpState.anchor}>
+        <QueryBar
+          tokens={tokens}
+          onRemove={remove}
+          text={similarOn ? similarText : grammar.draft}
+          onText={similarOn ? setSimilarText : grammar.setDraft}
+          onSubmit={similarOn ? undefined : grammar.commit}
+          facets={facets}
+          placeholder={similarOn ? SIMILAR_HINT : QUERY_HINT}
+          suggestions={!similarOn}
+          error={queryError}
+          hint={typedHint && <QueryFieldHint hint={typedHint} onApply={grammar.apply} />}
+          inside={(onSimilarChange || help) && (
+            <SearchTools>
+              {onSimilarChange && <SimilarToggle on={similarOn} onToggle={() => setSimilarOn((on) => !on)} />}
+              {help && <QueryHelpButton state={helpState} />}
+            </SearchTools>
+          )}
+        />
+        {help && helpState.open && <QueryHelpPanel data={help} onPick={pick} />}
+      </div>
       <FilterShortcuts
         statuses={state.statuses}
         onStatuses={(statuses) => setState((s) => ({ ...s, statuses }))}

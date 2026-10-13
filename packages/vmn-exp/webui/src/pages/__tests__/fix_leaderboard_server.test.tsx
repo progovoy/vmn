@@ -104,7 +104,7 @@ describe("sort direction is the server's job", () => {
 });
 
 describe("free-text search runs on the server", () => {
-  it("sends the search box as a query over verstr, note and branch", async () => {
+  it("sends the search box as a query over name, verstr, note and branch", async () => {
     mockedApi.experiments.mockResolvedValue(page([row(1)]));
     renderLeaderboard();
     fireEvent.change(await screen.findByPlaceholderText(/search/i), { target: { value: "bat" } });
