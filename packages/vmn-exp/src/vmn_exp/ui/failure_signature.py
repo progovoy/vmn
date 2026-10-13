@@ -47,6 +47,12 @@ def signature(row):
     return sig + _MSG + message if message else sig
 
 
+def signed(row):
+    """*row* with its ``failure_sig`` (plan 23 S2), set in place."""
+    row["failure_sig"] = signature(row)
+    return row
+
+
 def label(sig):
     """Human text for a :func:`signature`, or None."""
     if sig is None:

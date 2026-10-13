@@ -61,9 +61,15 @@ class JobRollupCache:
         def row(job):
             return base.rows[base.position[job]]
 
+        def summary(job):
+            out = job_summary(row(job), parts(job), static.spec, now)
+            best = out["best_verstr"]
+            out["best_idx"] = row(best)["idx"] if best in base.position else None
+            return out
+
         if verstr is not None:
             return job_payload(row(verstr), parts(verstr), static.spec, now)
-        return {job: job_summary(row(job), parts(job), static.spec, now) for job in tree.jobs}
+        return {job: summary(job) for job in tree.jobs}
 
     def _static_of(self, snapshot, base, schema, schema_key):
         key = (snapshot.app_name, schema_key)

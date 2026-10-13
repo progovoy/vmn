@@ -9,7 +9,7 @@ export const ROW_FIELDS = [
   "last_metric_at", "host", "pid", "command", "stale_sec",
   "heartbeat_interval_sec", "forked_from", "rerun_of", "author", "has_intent",
   "error_summary", "signal", "end_reason", "name", "archived", "tags",
-  "imported_from", "forked_from_step",
+  "imported_from", "forked_from_step", "root", "failure_sig",
 ];
 
 export const OPERATORS = ["=", "!=", "<", "<=", ">", ">=", "~", "!~", "in", "not in", "contains"];
