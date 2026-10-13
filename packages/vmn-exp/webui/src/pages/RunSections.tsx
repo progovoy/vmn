@@ -91,15 +91,29 @@ export function ParamsCard({ params }: { params: Record<string, unknown> | null 
   );
 }
 
-/** "last 0.9 · min 0.2 · max 1" — or null when all three read the same. */
-function summaryLine(parts: MetricSummary | undefined): string | null {
+/** ["last 0.9", "min 0.2", "max 1", ...] — or null when all three read the same. */
+function summaryPairs(parts: MetricSummary | undefined): string[] | null {
   if (!parts) return null;
   const shown = [parts.last, parts.min, parts.max].map(fmtVal);
   if (new Set(shown).size === 1) return null;
-  const line = [`last ${shown[0]}`, `min ${shown[1]}`, `max ${shown[2]}`];
-  if (parts.first != null) line.push(`first ${fmtVal(parts.first)}`);
-  if (parts.mean != null) line.push(`mean ${fmtVal(parts.mean)}`);
-  return line.join(" · ");
+  const pairs = [`last ${shown[0]}`, `min ${shown[1]}`, `max ${shown[2]}`];
+  if (parts.first != null) pairs.push(`first ${fmtVal(parts.first)}`);
+  if (parts.mean != null) pairs.push(`mean ${fmtVal(parts.mean)}`);
+  return pairs;
+}
+
+/** "last 0.9 · min 0.2 · max 1", wrapping only between whole pairs. */
+function SummaryLine({ metric, pairs }: { metric: string; pairs: string[] }) {
+  return (
+    <span data-testid={`metric-summary-${metric}`} className="metric-summary">
+      {pairs.map((p, i) => (
+        <span key={p} className="metric-chunk">
+          {i > 0 && <span className="metric-sep"> · </span>}
+          <span className="metric-pair">{p}</span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 /** Each metric's summary value (its best, per the metric's policy), with
@@ -118,7 +132,7 @@ export function MetricsCard({ metrics, summary, schema, children }: {
       ) : (
         <div>
           {Object.entries(metrics).map(([k, v]) => {
-            const line = summaryLine(summary?.[k]);
+            const pairs = summaryPairs(summary?.[k]);
             const goal = typeof v === "number" ? metricGoal(schema, k) : null;
             return (
               <div key={k} className="metric-line">
@@ -133,9 +147,7 @@ export function MetricsCard({ metrics, summary, schema, children }: {
                     data-testid={`metric-value-${k}`}
                     className={`metric${schema?.[k]?.primary ? " best" : ""}`}
                   >{fmtVal(v)}</span>
-                  {line && (
-                    <span data-testid={`metric-summary-${k}`} className="metric-summary">{line}</span>
-                  )}
+                  {pairs && <SummaryLine metric={k} pairs={pairs} />}
                 </span>
               </div>
             );

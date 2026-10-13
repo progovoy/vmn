@@ -8,6 +8,8 @@ export interface CursorInfo {
   /** The same position in data units. */
   x: number;
   y: number;
+  /** The plot area's left edge in CSS pixels (the y axis width), when known. */
+  plotLeft?: number;
 }
 
 interface Props {
@@ -30,11 +32,16 @@ function canvasSupported(): boolean {
     && !!document.createElement("canvas").getContext("2d");
 }
 
+function plotLeftOf(u: uPlot): number | undefined {
+  const left = parseFloat(u.over?.style.left ?? "");
+  return Number.isFinite(left) ? left : undefined;
+}
+
 function emitCursor(u: uPlot, cb?: (c: CursorInfo | null) => void) {
   if (!cb) return;
   const { left, top } = u.cursor;
   if (left == null || top == null || left < 0) cb(null);
-  else cb({ left, top, x: u.posToVal(left, "x"), y: u.posToVal(top, "y") });
+  else cb({ left, top, x: u.posToVal(left, "x"), y: u.posToVal(top, "y"), plotLeft: plotLeftOf(u) });
 }
 
 /** Thin lifecycle wrapper: create on mount (lazily loading uPlot), resize

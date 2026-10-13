@@ -65,8 +65,19 @@ export function curveData(series: CurveSeries[]): uPlot.AlignedData {
   return [null, ...series.map((s) => [s.xs, s.ys])] as unknown as uPlot.AlignedData;
 }
 
-/** Width of the y axis, left of the plot area (the tooltip offsets by it). */
+/** Narrowest y axis, left of the plot area (a tooltip with no measured plot
+ *  edge offsets by it). */
 export const Y_AXIS_SIZE = 56;
+/** Advance of one 10.5px monospace glyph, and the tick + gap beside a label. */
+const LABEL_CHAR_PX = 6.5;
+const LABEL_PAD_PX = 16;
+
+/** uPlot `size` of a y axis: as wide as its widest tick label (labels like
+ *  1.792e+9 are not clipped), never narrower than Y_AXIS_SIZE. */
+export function yAxisSize(_u: unknown, values: string[] | null): number {
+  const widest = Math.max(0, ...(values ?? []).map((v) => String(v).length));
+  return Math.max(Y_AXIS_SIZE, Math.ceil(widest * LABEL_CHAR_PX + LABEL_PAD_PX));
+}
 
 export const X_TICK: Partial<Record<XMode, (v: number) => string>> = {
   wall: fmtWallTick,
@@ -115,7 +126,7 @@ export function curveOptions(
         show: !hideX,
         ...(xTick ? { values: (_u: unknown, splits: number[]) => splits.map(xTick) } : {}),
       } as Partial<uPlot.Axis>, false),
-      axis({ size: Y_AXIS_SIZE }),
+      axis({ size: yAxisSize }),
     ],
     series: [
       {},
