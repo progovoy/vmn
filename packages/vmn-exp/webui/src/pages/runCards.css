@@ -5,6 +5,9 @@
 }
 .run-cards .card { margin-bottom: 0; }
 .run-cards-wide { grid-column: 1 / -1; }
+/* Keys as wide as the longest (a long param name never runs into its value). */
+.run-cards .kv { grid-template-columns: minmax(88px, max-content) minmax(0, 1fr); column-gap: 16px; }
+.run-cards .kv > * { overflow-wrap: anywhere; }
 .run-cards-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 @media (max-width: 860px) {
   .run-cards { grid-template-columns: 1fr; }
