@@ -51,12 +51,16 @@ export function visibleColumns(layout: RowLayout, scrollLeft: number, viewWidth:
   return { start: Math.max(sticky, first), end: last };
 }
 
-/** *layout* with the columns outside *range* folded into gap columns. */
+/** *layout* with the columns outside *range* folded into gap columns. The
+ *  range may be one computed for an earlier layout (the table renders a new
+ *  layout once before re-reading its window), so it is clamped to this one. */
 export function windowLayout(layout: RowLayout, range: ColRange | null): RowLayout {
-  if (range === null) return layout;
-  const allIds = layoutIds(layout);
   const widths = widthsOf(layout);
+  if (range === null || widths.length <= WINDOW_MIN_COLS) return layout;
+  const allIds = layoutIds(layout);
   const sticky = stickyCount(layout.styles);
+  const end = Math.min(range.end, widths.length);
+  const start = Math.min(Math.max(range.start, sticky), end);
   const ids: string[] = [];
   const styles: CSSProperties[] = [];
   const kept: number[] = [];
@@ -73,8 +77,8 @@ export function windowLayout(layout: RowLayout, range: ColRange | null): RowLayo
     kept.push(width);
   };
   for (let i = 0; i < sticky; i++) take(i);
-  gap("left", sticky, range.start);
-  for (let i = range.start; i < range.end; i++) take(i);
-  gap("right", range.end, widths.length);
+  gap("left", sticky, start);
+  for (let i = start; i < end; i++) take(i);
+  gap("right", end, widths.length);
   return { ...layout, ids, styles, widths: kept };
 }

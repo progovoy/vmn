@@ -55,4 +55,15 @@ describe("column window", () => {
     const layout = layoutOf(600);
     expect(visibleColumns(layout, 30_000, 1000)).toEqual(visibleColumns(layout, 30_040, 1000));
   });
+  it("takes a range computed for an earlier, wider layout without inventing columns", () => {
+    // The table renders a changed layout once before its effect re-reads the window.
+    const stale = visibleColumns(layoutOf(600), 0, 3000)!;
+    const narrow = layoutOf(20);
+    expect(windowLayout(narrow, stale)).toBe(narrow);
+    const wide = layoutOf(100);
+    const windowed = windowLayout(wide, visibleColumns(layoutOf(600), 30_000, 1000));
+    expect(windowed.styles.every(Boolean)).toBe(true);
+    expect(windowed.ids!.every(Boolean)).toBe(true);
+    expect(sum(windowed.widths!)).toBe(wide.total);
+  });
 });
