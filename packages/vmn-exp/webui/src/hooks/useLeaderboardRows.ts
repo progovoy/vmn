@@ -6,6 +6,7 @@ import { PAGE_SIZE } from "../paging";
 import { isAbortError, withSignal } from "../requestScope";
 import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
+import { useShownList } from "./useShownList";
 import { combineQueries } from "../util/searchQuery";
 
 /** The first page for *f*. Unsorted-or-default-direction lists go through
@@ -22,7 +23,7 @@ function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
  *  filter (Back) paints its cached rows at once and revalidates behind them.
  *  A refresh re-asks only the first page plus the running / on-screen rows
  *  past it (see refreshRows), and unchanged rows keep their identity. */
-export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) {
+export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, enabled = true) {
   const client = useQueryClient();
   const key = rowsKey(ws, app, filter);
   /** Verstrs on screen right now — the table keeps it current. */
@@ -30,6 +31,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) 
 
   const query = useQuery<RowsData, HttpError>({
     queryKey: key,
+    enabled,
     // react-query aborts *signal* once this fetch is superseded or unwatched.
     queryFn: ({ signal }) => {
       const scoped = <T,>(fn: () => Promise<T>) => withSignal(signal, fn);
@@ -50,14 +52,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) 
     structuralSharing: false,
   }, client);
 
-  // What was last shown survives a refused query (400) and a pending one.
-  const lastGood = useRef<RowsData>();
-  if (query.data) lastGood.current = query.data;
-  const data = query.data ?? lastGood.current;
-
-  const err = query.error && !isAbortError(query.error) ? query.error : null;
-  const queryError = err?.status === 400 ? err.message : null;
-  const pageError = err && err.status !== 400 && !data ? String(err) : null;
+  const { data, queryError, pageError } = useShownList(query, enabled);
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const loadingMore = useRef(false);

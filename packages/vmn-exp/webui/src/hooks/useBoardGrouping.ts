@@ -28,9 +28,11 @@ export function useBoardGrouping(ws: string, app: string, view: View) {
   const client = useQueryClient();
   const facets = useQuery(facetsQuery(ws, app), client);
   const defaultAggregate = useConfAggregate(ws, app);
-  // Unknown (null) until the facets answer; a failed answer means ungrouped.
+  // Unknown (null) until the facets answer; a failed answer means ungrouped,
+  // also while it is asked again (Back to the board paints at once).
+  const failed = facets.isError || facets.errorUpdatedAt > 0;
   const defaultGroup: GroupBy | null = facets.data
-    ? defaultGroupOf(facets.data) : facets.isError ? defaultGroupOf(null) : null;
+    ? defaultGroupOf(facets.data) : failed ? defaultGroupOf(null) : null;
   const group = view.groupParam ?? defaultGroup;
   const fields = useMemo(() => groupFields(facets.data), [facets.data]);
 

@@ -1,20 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { ExperimentRow } from "../types";
-import { runHref } from "../util";
-import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
+import type { GroupAggregate } from "../apiGroups";
+import { boardRows, isGroupItem, type BoardItem } from "../util/groupItems";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
 import { useMoreRight } from "../hooks/useMoreRight";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import LeaderboardCards from "./LeaderboardCards";
-import { PENDING_TEXT } from "./pendingText";
-import Row, { ROW_HEIGHT, depthStyle, layoutIds, type RowLayout } from "./LeaderboardRow";
+import Row, { ROW_HEIGHT, type RowLayout } from "./LeaderboardRow";
+import { GroupHeaderRow, GroupMoreRow } from "./LeaderboardGroupRow";
 import Head, { type ColumnEdits, type HeaderCheckProps, type SortState } from "./LeaderboardHead";
 import { visibleColumns, windowLayout, type ColRange } from "./columnWindow";
 import "./leaderboardTable.css";
-import "./innerRows.css";
 
 export { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits, type SortState } from "./LeaderboardHead";
 
@@ -36,28 +34,9 @@ function SkeletonRows({ layout }: { layout: RowLayout }) {
   );
 }
 
-/** A row standing in for an open outer's inner runs that are not shown,
- *  its text in the (sticky) experiment column, indented like an inner run. */
-function PendingInnerRow({ item, index, layout }: { item: PendingRow; index: number; layout: RowLayout }) {
-  return (
-    <tr className={`row inner inner-pending ${item.state}`} style={{ height: ROW_HEIGHT }} data-row-index={index} tabIndex={-1}>
-      {layoutIds(layout).map((id, i) => (
-        <td key={id} data-col-id={id} style={layout.styles[i]}>
-          {id === "experiment" && (
-            <div className="nest exp-tree" style={depthStyle(item.depth)} role={item.state === "error" ? "alert" : "status"}>
-              {PENDING_TEXT[item.state](item)}
-              {item.state === "more" && <Link to={runHref(layout.runBase, item.parent)}>open the outer run</Link>}
-            </div>
-          )}
-        </td>
-      ))}
-    </tr>
-  );
-}
-
 type TableProps = {
   /** Undefined while the first page loads: skeleton rows under a live header. */
-  rows: TableItem[] | undefined;
+  rows: BoardItem[] | undefined;
   layout: RowLayout;
   sort: SortState;
   selected: ReadonlySet<string>;
@@ -66,9 +45,9 @@ type TableProps = {
   /** The header checkbox over the rows on screen; none when omitted. */
   headerCheck?: HeaderCheckProps;
   onPrefetch: (verstr: string) => void;
-  /** Whether an outer run is shut (null: not an outer run). */
-  collapsedOf: (r: ExperimentRow) => boolean | null;
-  onFold: (r: ExperimentRow) => void;
+  /** Set while the board is grouped (plan 22 G4): the aggregate its header
+   *  rows show, folding a group, and loading a group's other rows. */
+  groups?: GroupActions;
   hasMore: boolean;
   onNearEnd: () => void;
   visibleRef: MutableRefObject<() => string[]>;
@@ -80,6 +59,14 @@ type TableProps = {
   describedBy?: string;
 };
 
+export interface GroupActions {
+  /** The grouping (`group=`). */
+  field: string;
+  aggregate: GroupAggregate;
+  onFold: (key: string) => void;
+  onMore: (key: string) => void;
+}
+
 /** Cards that refresh with the board: about a phone screen's worth and the
  *  scroll ahead of it, like the grid's virtual window. */
 const CARDS_REFRESHED = 40;
@@ -89,9 +76,9 @@ export default function LeaderboardTable(props: TableProps) {
   const narrow = useMediaQuery(NARROW_QUERY);
   if (!narrow) return <GridTable {...props} />;
   const { rows, visibleRef } = props;
-  visibleRef.current = () =>
-    (rows ?? []).flatMap((r) => (isPending(r) ? [] : [r.verstr])).slice(0, CARDS_REFRESHED);
-  return <LeaderboardCards {...props} />;
+  const runs = rows && boardRows(rows);
+  visibleRef.current = () => (runs ?? []).map((r) => r.verstr).slice(0, CARDS_REFRESHED);
+  return <LeaderboardCards {...props} rows={runs} />;
 }
 
 const sameRange = (a: ColRange | null, b: ColRange | null) =>
@@ -104,7 +91,7 @@ function columnsAt(full: RowLayout, el: HTMLElement | null): ColRange | null {
 
 function GridTable({
   rows, layout: full, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
-  collapsedOf, onFold, edits, onFit, describedBy,
+  groups, edits, onFit, describedBy,
 }: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState<ColRange | null>(() => columnsAt(full, null));
@@ -128,7 +115,7 @@ function GridTable({
   const navigate = useNavigate();
   const keys = useRowKeys(parentRef, list.length, (i) => virtualizer.scrollToIndex?.(i), navigate);
   visibleRef.current = () =>
-    items.map((it) => list[it.index]).flatMap((r) => (r && !isPending(r) ? [r.verstr] : []));
+    items.map((it) => list[it.index]).flatMap((r) => (r && !isGroupItem(r) ? [r.verstr] : []));
 
   // Back to this entry: put the table where it was once its rows are there.
   const restored = useRef(false);
@@ -174,7 +161,7 @@ function GridTable({
           style={{ tableLayout: "fixed", width: layout.total }}
         >
           <colgroup>{layout.styles.map((st, i) => <col key={i} style={{ width: st.width }} />)}</colgroup>
-          <Head layout={layout} sort={sort} edits={edits} check={headerCheck} />
+          <Head layout={layout} sort={sort} edits={edits} check={headerCheck} aggregate={groups?.aggregate} />
           {rows === undefined ? (
             <tbody><SkeletonRows layout={layout} /></tbody>
           ) : (
@@ -184,15 +171,25 @@ function GridTable({
               )}
               {items.map((it) => {
                 const r = list[it.index];
-                if (isPending(r)) return <PendingInnerRow key={r.key} item={r} index={it.index} layout={layout} />;
+                if (isGroupItem(r)) {
+                  if (r.item === "more") {
+                    return <GroupMoreRow key={`more:${r.key}`} item={r} index={it.index} layout={layout} onMore={groups!.onMore} />;
+                  }
+                  const next = list[it.index + 1];
+                  return (
+                    <GroupHeaderRow
+                      key={`group:${r.group.key}`} item={r} index={it.index} isActive={it.index === keys.active}
+                      layout={layout} agg={groups!.aggregate} onFold={groups!.onFold}
+                      first={groups!.field === "code_verstr" && next && !isGroupItem(next) ? next : undefined}
+                    />
+                  );
+                }
                 return (
                   <Row
                     key={r.verstr}
                     row={r}
                     index={it.index}
                     isActive={it.index === keys.active}
-                    collapsed={collapsedOf(r)}
-                    onFold={onFold}
                     isSelected={selected.has(r.verstr)}
                     isFlash={flash === r.verstr}
                     layout={layout}

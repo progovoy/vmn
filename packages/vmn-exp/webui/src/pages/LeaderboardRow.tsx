@@ -3,14 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
-import { Icon } from "../components/shell/icons";
 import { tagLabel } from "../util/tags";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
 import {
   DATE_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
-import { innerRunCount, innerTotal, isInnerRunId } from "./innerRunColumns";
-import "./innerRunColumns.css";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
@@ -67,23 +64,11 @@ function MetricCell({ id, v, col, style, showBest }: {
 const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const shortDate = (iso: string | null | undefined) => (iso ? SHORT_DATE.format(new Date(iso)) : "—");
 
-/** The total cell of an incomplete sweep: `16/20 · incomplete`, read out
- *  as a sentence. */
-function IncompleteTotalCell({ text, label, style }: { text: string; label: string; style: CSSProperties }) {
-  return (
-    <td data-col="total" data-col-id="c:total" className="num fleet-cell fleet-total incomplete" style={style} title={label}>
-      <span aria-hidden="true">{text}</span>
-      <span className="sr-only">{label}</span>
-    </td>
-  );
-}
-
-function FleetCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProperties }) {
+/** A run's own start or end (`c:started`/`c:ended`). */
+function DateCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProperties }) {
   const field = DATE_SORT_OF[`c:${c}`];
   const date = field ? r[field] : undefined;
-  const incomplete = c === "total" ? innerTotal(r) : null;
-  if (incomplete) return <IncompleteTotalCell {...incomplete} style={style} />;
-  const text = date !== undefined ? shortDate(date) : innerRunCount(r, c);
+  const text = date != null ? shortDate(date) : "";
   return (
     <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={date ?? undefined}>
       {text}
@@ -110,57 +95,35 @@ export function layoutIds(layout: RowLayout): readonly string[] {
 export const headStatus = (r: ExperimentRow) =>
   (r.kind === "outer" && r.tree_status ? r.tree_status : r.status) as ExperimentRow["status"];
 
-/** The tree level as the `--depth` custom property `innerRows.css` indents by. */
-export const depthStyle = (depth: number | undefined) => ({ "--depth": depth ?? 0 }) as CSSProperties;
-
-export function FoldToggle({ r, collapsed, onFold }: {
-  r: ExperimentRow; collapsed: boolean; onFold: (r: ExperimentRow) => void;
-}) {
-  return (
-    <button
-      className="fold-toggle" aria-expanded={!collapsed}
-      aria-label={`${collapsed ? "Expand" : "Collapse"} ${r.verstr}`}
-      onClick={() => onFold(r)}
-    >
-      <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />
-    </button>
-  );
+/** An outer run's rollup beside its name: its tree status where it differs
+ *  from its own, and an incomplete sweep's `16/20 · incomplete`. */
+function treeRoll(r: ExperimentRow): string {
+  if (!r.children?.length) return "";
+  const tree = r.tree_status && r.tree_status !== r.status ? `tree ${r.tree_status}` : "";
+  return [tree, sweepIncompleteLabel(r)].filter(Boolean).join(" · ");
 }
 
-function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold, innerShown }: {
+function ExperimentCell({ r, href, style, onPrefetch }: {
   r: ExperimentRow; href: string; style: CSSProperties; onPrefetch: (verstr: string) => void;
-  /** A count column counts the inner runs, so this cell doesn't. */
-  innerShown: boolean;
-  /** Null for a run without inner runs. */
-  collapsed: boolean | null;
-  onFold: (r: ExperimentRow) => void;
 }) {
+  const roll = treeRoll(r);
   return (
     <td style={style} className="exp-cell" data-col-id="experiment">
-      <div className="exp-tree" style={depthStyle(r.depth)}>
-        <div className="nest">
-          {collapsed !== null && <FoldToggle r={r} collapsed={collapsed} onFold={onFold} />}
-          {(r.depth ?? 0) > 0 && <span className="nest-mark" title="inner run">⤷</span>}
-          <Link
-            className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
-            onFocus={() => onPrefetch(r.verstr)}
-          >
-            {r.name || r.verstr}
-          </Link>
-          {r.children && r.children.length > 0 && (() => {
-            const tree = r.tree_status && r.tree_status !== r.status ? `tree ${r.tree_status}` : "";
-            if (innerShown) return tree && <span className="tree-roll">{tree}</span>;
-            const text = [`${r.children.length} inner`, tree, sweepIncompleteLabel(r)].filter(Boolean).join(" · ");
-            return text && <span className="tree-roll">{text}</span>;
-          })()}
-        </div>
-        <div className="exp-branch">
-          {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
-          {r.branch}
-          {r.status === "failed" && r.error_summary && (
-            <span className="exp-error" title={r.error_summary}>{r.error_summary}</span>
-          )}
-        </div>
+      <div className="nest">
+        <Link
+          className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
+          onFocus={() => onPrefetch(r.verstr)}
+        >
+          {r.name || r.verstr}
+        </Link>
+        {roll && <span className="tree-roll">{roll}</span>}
+      </div>
+      <div className="exp-branch">
+        {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
+        {r.branch}
+        {r.status === "failed" && r.error_summary && (
+          <span className="exp-error" title={r.error_summary}>{r.error_summary}</span>
+        )}
       </div>
     </td>
   );
@@ -178,8 +141,7 @@ export function TagChips({ tags }: { tags: Record<string, string> | undefined })
 }
 
 function Row({
-  row: r, index, isSelected, isFlash, isActive, collapsed, layout,
-  onToggle, onPrefetch, onFold,
+  row: r, index, isSelected, isFlash, isActive, layout, onToggle, onPrefetch,
 }: {
   row: ExperimentRow;
   index: number;
@@ -187,12 +149,10 @@ function Row({
   isFlash: boolean;
   /** The table's one tab stop (roving tabindex). */
   isActive: boolean;
-  collapsed: boolean | null;
   layout: RowLayout;
   /** *range*: extend the selection from the last toggled row (shift-click). */
   onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
-  onFold: (r: ExperimentRow) => void;
 }) {
   const navigate = useNavigate();
   // Prefetch on a resting pointer, not on every row a scroll slides under it.
@@ -202,8 +162,6 @@ function Row({
   const { styles, colMeta } = layout;
   const href = runHref(layout.runBase, r.verstr);
   const ids = layoutIds(layout);
-  // From the fleet columns, not *ids*: a windowed row leaves out the ones scrolled away.
-  const innerShown = Boolean(layout.fleetCols?.some((c) => isInnerRunId(`c:${c}`)));
   const params = layout.paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
   // link opens a tab); anywhere else on the row opens the run.
@@ -242,10 +200,7 @@ function Row({
       }
       case "experiment":
         return (
-          <ExperimentCell
-            key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} collapsed={collapsed} onFold={onFold}
-            innerShown={innerShown}
-          />
+<ExperimentCell key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} />
         );
       case "c:tags":
         return <td key={id} data-col-id={id} className="tags-cell" style={style}><TagChips tags={r.tags} /></td>;
@@ -261,7 +216,7 @@ function Row({
         );
     }
     if (isGapId(id)) return <td key={id} aria-hidden style={style} />;
-    if (id.startsWith("c:")) return <FleetCell key={id} r={r} c={name} style={style} />;
+    if (id.startsWith("c:")) return <DateCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (
         <MetricCell key={id} id={id} v={r.metrics[name]} col={colMeta[name]} style={style} showBest={layout.showBest} />
@@ -280,7 +235,7 @@ function Row({
   return (
     <tr
       style={{ height: ROW_HEIGHT }}
-      className={`row${(r.depth ?? 0) > 0 ? " inner" : ""}${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
+      className={`row${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
       data-row-index={index}
       data-href={href}
       tabIndex={isActive ? 0 : -1}

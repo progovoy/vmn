@@ -1,4 +1,0 @@
-/* The leaderboard's inner-run count columns (innerRunColumns.ts). */
-td.fleet-failed:not(:empty) { color: var(--text-2); }
-/* An incomplete sweep's `16/20 · incomplete` (plan 20 A7) wraps in its narrow cell. */
-td.fleet-total.incomplete { white-space: normal; line-height: 1.25; color: var(--text-2); font-style: italic; }

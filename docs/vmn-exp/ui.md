@@ -222,8 +222,8 @@ standard library (included above). With the GIL on and a watched app of
 ## Run status in the dashboard
 
 Every run row has a status pill (`created`, `running` (pulsing), `stuck`,
-`succeeded`, `failed`). Inner runs nest under their outer run, so a sweep is
-one row whose status rolls up its subtree. While any run on the page is
+`succeeded`, `failed`). Every run is a row, outer and inner alike; an outer
+run's pill shows its subtree's rolled-up status. While any run on the page is
 running, the leaderboard and the run page poll on their own and show
 `● live · updated Ns ago` with a Pause button (Resume restarts it); with
 nothing running they show a Refresh button instead. On the leaderboard this
@@ -273,19 +273,32 @@ parallel-coordinates chart of the metric and the varying params.
 By default the leaderboard shows `#`, status, experiment, the metrics whose
 `goal` the schema declares (pinned after the experiment column; every metric
 when none declares one), up to six params whose values vary across the loaded
-runs (as many as fit the window), the inner-run count columns `total`,
-`waiting`, `running`, `done` and `failed` under an "Inner runs" header while
-an outer run is loaded (each turned on/off on its own with `show=`/`hide=`
-`c:total` etc.; a `c:inner` key from views saved while the counts were one
-column shows or hides all five; an incomplete sweep's total reads
-`16/20 · incomplete`; with all five hidden the experiment cell says
-`N inner`), and `when`. Note, tags, the run's
+runs (as many as fit the window), and `when`. An outer run's experiment cell
+adds `tree <status>` when its subtree differs and an incomplete sweep's
+`16/20 · incomplete`. Note, tags, the run's
 `started`/`ended` dates and the rest come from the Columns picker. The choices
 live in the URL (`show=`/`hide=`, e.g. `show=m:train_loss`, `hide=p:seed`;
 `hide=` always hides, except that it still shows a schema-hidden metric, as
 before; `pin=`; `pin=-` pins nothing), and dragged
 widths/order in the browser. A fade on the table's right edge shows there are
 more columns to scroll to.
+
+## Grouped board
+
+With a grouping (`?group=`, the Group by menu) the board lists groups: each
+starts with a header row (the fold, the group's label — for a link the
+target run's `@N` name and status pill, for `same code` the code verstr with
+its base version and branch, for a field `branch = main` — and its status
+count, `16 · 2 running · 1 failed`), then up to 10 of its rows and a
+`+N more` row that loads the rest (a refresh keeps each group as deep as it
+was loaded). Each metric column of a header shows the
+group's aggregate (`?agg=`, default conf `experiment.ui.group_aggregate`,
+else mean; the cell title says `mean of 16`, and `(no goal)` where `best`
+falls back to the mean), plus `own 0.91` when the target run logged the
+metric itself; the metric headers carry a small aggregate tag. `?collapse=`
+lists the closed groups (the parent grouping's `(no parent run)` group never
+folds). Sorting orders the groups (by the aggregate) and the rows within
+them; 50 groups load per page.
 
 ## Compare
 

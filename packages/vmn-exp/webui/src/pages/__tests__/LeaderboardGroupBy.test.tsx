@@ -6,6 +6,7 @@ vi.mock("../../api", () => ({
     experiments: vi.fn(),
     experimentsPaged: vi.fn(),
     experimentsColumns: vi.fn(),
+    experimentGroups: vi.fn(),
     metricsSchema: vi.fn(),
     facets: vi.fn(),
     config: vi.fn(),
@@ -35,6 +36,13 @@ beforeEach(() => {
   m.experimentsColumns.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.config.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.facets.mockResolvedValue(facets());
+  m.experimentGroups.mockResolvedValue({
+    groups: [{
+      key: "(none)", label: "(none)", target: null, aggregates: {}, rows: [row(1), row(2)], rows_total: 2,
+      counts: { total: 2, running: 0, waiting: 0, done: 2, failed: 0, stuck: 0 },
+    }],
+    total_groups: 1, total_rows: 2,
+  });
 });
 
 describe("the board's Group by control (plan 22 W1)", () => {

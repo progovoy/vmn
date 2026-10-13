@@ -14,9 +14,8 @@ const MIN_EXPERIMENT_WIDTH = 200;
 /** Narrowest a column can be dragged to. */
 export const MIN_COL_WIDTH = 40;
 
-/** The outer-run management columns, right after the experiment column:
- *  the inner-run tally and the run's own start/end. */
-export const FLEET_COLS = ["total", "waiting", "running", "done", "failed", "started", "ended"] as const;
+/** The run's own start/end, right after the experiment column (on with `show=`). */
+export const FLEET_COLS = ["started", "ended"] as const;
 export type FleetCol = (typeof FLEET_COLS)[number];
 
 /** The server sort key behind each sortable date column. */
@@ -24,16 +23,6 @@ export const DATE_SORT_OF: Readonly<Record<string, "started_at" | "finished_at">
   "c:started": "started_at", "c:ended": "finished_at",
 };
 
-/** Inner runs of *r* per management column (null: not an outer run). */
-export function fleetCounts(r: ExperimentRow): Record<Exclude<FleetCol, "started" | "ended">, number> | null {
-  if (!r.children?.length) return null;
-  const c = r.child_counts ?? {};
-  const n = (k: string) => c[k] ?? 0;
-  return {
-    total: r.fleet?.expected ?? r.children.length,
-    waiting: n("created"), running: n("running"), done: n("succeeded"), failed: n("failed") + n("stuck"),
-  };
-}
 const MIN_TABLE_WIDTH = 760;
 
 /** The columns that always lead the table, in this order, and never move. */

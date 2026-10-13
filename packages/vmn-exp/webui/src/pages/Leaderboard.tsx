@@ -11,19 +11,18 @@ import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
 import SimilarSearch from "../components/SimilarSearch";
 import { usePolling } from "../hooks/usePolling";
-import { useLeaderboardRows } from "../hooks/useLeaderboardRows";
+import { useBoardRows } from "../hooks/useBoardRows";
 import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useColumnEdits } from "../hooks/useColumnEdits";
 import { useBoardSelection } from "../hooks/useBoardSelection";
 import { useBoardGrouping } from "../hooks/useBoardGrouping";
-import { useInnerRuns } from "../hooks/useInnerRuns";
-import { foldState, isPending, topRows, treeRows } from "../util/sweepTree";
+import { boardRows } from "../util/groupItems";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
 import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
-import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT } from "./LeaderboardTable";
+import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type GroupActions } from "./LeaderboardTable";
 import { DATE_SORT_OF } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import BoardHead, { runCountText } from "./BoardHead";
@@ -35,7 +34,8 @@ import { LiveText } from "../components/LiveStatus";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { queryHelpData } from "../util/queryHelp";
 
-const topLevel = (rows: readonly ExperimentRow[]) => topRows(rows, false).length;
+/** The runs no other run launched (the subtitle's `N runs`). */
+const topLevel = (rows: readonly ExperimentRow[]) => rows.filter((r) => !r.depth).length;
 
 const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 
@@ -98,7 +98,14 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     query: serverQuery || undefined,
     archived: view.archived || undefined,
   }), [view.sort, view.order, view.status, serverQuery, view.archived]);
-  const data = useLeaderboardRows(ws, app, filter);
+  const charting = view.tab === "charts";
+  // A brush in the parallel view (Charts tab) narrows the table.
+  const brush = charting && view.chart === "parallel" ? brushed : null;
+  const keep = useMemo(() => (brush ? (r: ExperimentRow) => brush.has(r.verstr) : undefined), [brush]);
+  // Every run is a row (plan 22 G1); grouped, under its group's header row.
+  const data = useBoardRows(ws, app, filter, {
+    group: grouping.group, aggregateInUrl: grouping.aggregateInUrl, collapsed: view.collapsed, keep,
+  });
   // The similar mode keeps the bar's tokens: the box holds its text.
   const similarQuery = combineQueries(serverQuery, statusClause(view.status));
   const similarFilter = useMemo(() => ({
@@ -120,11 +127,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     return { anyRunning: running, heartbeatSec: fastest };
   }, [rows]);
   const all = useMemo(() => rows ?? [], [rows]);
-  const { expanded } = view;
-  const inner = useInnerRuns(ws, app, all, expanded, filter);
-  const { refresh: refreshRows } = data;
-  const { refresh: refreshInner } = inner;
-  const refresh = useCallback(() => { refreshInner(); return refreshRows(); }, [refreshRows, refreshInner]);
+  const { refresh } = data;
   usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused);
 
   const base = `/ws/${ws}/app/${app}`;
@@ -139,25 +142,14 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     primary: view.sort ?? cols.primary ?? cols.visibleMetrics[0],
   }), [cols.suggestFacets, facets, all, schema, view.sort, cols.primary, cols.visibleMetrics]);
 
-  const charting = view.tab === "charts";
-  // A brush in the parallel view (Charts tab) narrows the table.
-  const brush = charting && view.chart === "parallel" ? brushed : null;
   const filtered = Boolean(view.query || view.status || view.search || view.branch || view.archived);
-  // Inner runs sit under their outer, shown only once it is unfolded.
-  const keep = useMemo(() => (brush ? (r: ExperimentRow) => brush.has(r.verstr) : undefined), [brush]);
-  const top = useMemo(
-    () => rows && topRows(rows, filtered).filter((r) => keep?.(r) ?? true), [rows, filtered, keep],
-  );
-  const tableItems = useMemo(
-    () => top && treeRows(top, expanded, inner.innerOf, keep), [top, expanded, inner.innerOf, keep],
-  );
-  const tableRows = useMemo(
-    () => tableItems?.filter((r): r is ExperimentRow => !isPending(r)),
-    [tableItems],
-  );
-  const collapsedOf = useCallback((r: ExperimentRow) => foldState(r, expanded), [expanded]);
-  const { toggleExpanded } = view;
-  const onFold = useCallback((r: ExperimentRow) => toggleExpanded(r.verstr), [toggleExpanded]);
+  const tableItems = data.items;
+  const tableRows = useMemo(() => tableItems && boardRows(tableItems), [tableItems]);
+  const { toggleCollapsed } = view;
+  const { loadGroup } = data;
+  const groupActions = useMemo<GroupActions | undefined>(() => (data.grouped && grouping.group ? {
+    field: grouping.group, aggregate: grouping.aggregate, onFold: toggleCollapsed, onMore: loadGroup,
+  } : undefined), [data.grouped, grouping.group, grouping.aggregate, toggleCollapsed, loadGroup]);
   const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, () => { refresh(); });
 
   const onPrefetch = useCallback(
@@ -184,14 +176,18 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
 
   const empty = rows !== undefined && rows.length === 0 && !filtered;
   const sortLabel = view.sort ?? cols.primary;
-  // Inner runs shown under an open outer do not count as runs on the board.
-  const shownTop = top?.length ?? 0;
+  const shownTop = topLevel(tableRows ?? []);
+  // Groups hold only their first rows: the facets count the board's runs.
+  const wholeBoard = data.grouped && rows !== undefined && !filtered && facets !== null;
 
   return (
     <>
       <BoardHead
         title={appName}
-        count={runCountText({
+        count={runCountText(wholeBoard ? {
+          loading: false, filtered, loaded: data.total, total: data.total,
+          shownTop, loadedTop: Math.max(0, data.total - facets.parented),
+        } : {
           loading: rows === undefined, filtered, loaded: all.length, total: data.total,
           shownTop, loadedTop: topLevel(all),
         })}
@@ -264,9 +260,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
                   onToggle={selection.toggle}
                   headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll }}
                   onPrefetch={onPrefetch}
-                  collapsedOf={collapsedOf}
-                  onFold={onFold}
-                  hasMore={all.length < data.total}
+                  groups={groupActions}
+                  hasMore={data.hasMore}
                   onNearEnd={data.loadMore}
                   visibleRef={data.visibleRef}
                   edits={columnEdits}
@@ -277,9 +272,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
                   sortLabel={sortLabel} reversed={sortState.reversed}
                   live={{ running: anyRunning, paused, updatedAt: data.updatedAt, onPaused: setPaused, onRefresh: refresh }}
                 />
-                {rows !== undefined && all.length < data.total && (
+                {rows !== undefined && data.hasMore && (
                   <div className="load-more">
-                    <button onClick={data.loadMore}>Load more ({data.total - all.length} remaining)</button>
+                    <button onClick={data.loadMore}>{data.moreLabel}</button>
                     {data.moreError && <span className="error">{data.moreError}</span>}
                   </div>
                 )}

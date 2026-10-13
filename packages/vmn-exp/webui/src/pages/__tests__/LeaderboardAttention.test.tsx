@@ -89,11 +89,4 @@ describe("the attention strip on the board", () => {
     const runLinks = within(grid).getAllByRole("link").filter((a) => /\/run\//.test(a.getAttribute("href") ?? ""));
     expect(runLinks).toHaveLength(STATUS.counts.stuck);
   });
-
-  it("keeps an inner run under its outer when the outer matches too", async () => {
-    renderBoard();
-    await screen.findByRole("link", { name: v(1) });
-    // The outer is shut: its inner runs are not rows of their own.
-    expect(screen.queryByRole("link", { name: v(3) })).toBeNull();
-  });
 });

@@ -30,45 +30,12 @@ import { location, page, renderBoard, row, urlParams } from "./leaderboardHarnes
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
 
-/** An outer run @1 with inner runs @2..@(n+1), and a lone run after them. */
-function sweep(n: number) {
-  const inner = Array.from({ length: n }, (_, k) => k + 2);
-  return [
-    row(1, { kind: "outer", children: inner.map(v), depth: 0, tree_status: "succeeded" }),
-    ...inner.map((i) => row(i, { kind: "inner", parent: v(1), depth: 1 })),
-    row(n + 2),
-  ];
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   m.metricsSchema.mockResolvedValue({});
   m.facets.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experimentsColumns.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.experiment.mockResolvedValue({ metadata: { verstr: "x" }, metrics: {}, series: {}, patches: {} });
-});
-
-describe("inner runs hidden from list", () => {
-  it("hides inner runs from the list and shows the outer and lone runs", async () => {
-    m.experiments.mockResolvedValue(page(sweep(25)));
-    renderBoard();
-    // The outer run (depth=0) is visible
-    await screen.findByRole("link", { name: v(1) });
-    // Inner runs (depth=1) are filtered out
-    expect(screen.queryByRole("link", { name: v(2) })).toBeNull();
-    // The lone run after the sweep (depth=0) is visible
-    expect(screen.getByRole("link", { name: v(27) })).toBeInTheDocument();
-  });
-
-  it("hides inner runs of a small sweep too", async () => {
-    m.experiments.mockResolvedValue(page(sweep(3)));
-    renderBoard();
-    await screen.findByRole("link", { name: v(1) });
-    // Inner runs are not shown even for small sweeps
-    expect(screen.queryByRole("link", { name: v(2) })).toBeNull();
-    // The lone run after the sweep is still visible
-    expect(screen.getByRole("link", { name: v(5) })).toBeInTheDocument();
-  });
 });
 
 describe("keyboard row navigation", () => {
