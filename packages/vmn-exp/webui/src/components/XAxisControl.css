@@ -1,0 +1,8 @@
+.x-axis-control { align-items: center; gap: 2px; font-size: 11px; }
+.x-axis-control .x-axis-label { color: var(--text-3); margin-right: 6px; font-size: 12px; }
+.x-axis-control button { height: 24px; padding: 0 8px; font-size: 11px; border-radius: 4px; }
+.x-axis-control .select-wrap select { height: 24px; font-size: 11px; padding: 0 22px 0 6px; }
+.x-axis-control .select-wrap.on select {
+  color: var(--text); border-color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+}
