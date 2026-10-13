@@ -1,5 +1,6 @@
 /** What a group header row says (plan 22 G4, G10): its status count and,
  *  per metric, the aggregate the board shows. */
+import { plural } from "../util";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed";
@@ -21,7 +22,7 @@ export const countsText = (c: GroupCounts) => countParts(c).map((p) => p.text).j
 /** `16 runs, 2 running, 1 failed`, for a screen reader. */
 export function spokenCounts(c: GroupCounts): string {
   const [, ...rest] = countParts(c);
-  return [`${c.total} run${c.total === 1 ? "" : "s"}`, ...rest.map((p) => p.text)].join(", ");
+  return [plural(c.total, "run"), ...rest.map((p) => p.text)].join(", ");
 }
 
 /** A header's cell for one metric: *agg* of the group's values, the mean for

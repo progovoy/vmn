@@ -4,12 +4,11 @@ import { useMemo } from "react";
 import type { GroupAggregate } from "../apiGroups";
 import type { RowsFilter } from "../queries";
 import type { ExperimentRow } from "../types";
+import { plural } from "../util";
 import { NO_GROUP, type GroupBy } from "../util/groupBy";
 import { groupItems, type BoardItem } from "../util/groupItems";
 import { useGroupedRows } from "./useGroupedRows";
 import { useLeaderboardRows } from "./useLeaderboardRows";
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** *group* null (not known yet: the facets have not answered) fetches
  *  nothing; `none` is the flat list. *keep* narrows the rows on screen. */

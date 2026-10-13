@@ -6,6 +6,7 @@ import { PAGE_SIZE } from "../paging";
 import { isAbortError, withSignal } from "../requestScope";
 import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
+import { useShownList } from "./useShownList";
 import { combineQueries } from "../util/searchQuery";
 
 /** The first page for *f*. Unsorted-or-default-direction lists go through
@@ -51,14 +52,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
     structuralSharing: false,
   }, client);
 
-  // What was last shown survives a refused query (400) and a pending one.
-  const lastGood = useRef<RowsData>();
-  if (query.data) lastGood.current = query.data;
-  const data = enabled ? query.data ?? lastGood.current : undefined;
-
-  const err = query.error && !isAbortError(query.error) ? query.error : null;
-  const queryError = err?.status === 400 ? err.message : null;
-  const pageError = err && err.status !== 400 && !data ? String(err) : null;
+  const { data, queryError, pageError } = useShownList(query, enabled);
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const loadingMore = useRef(false);

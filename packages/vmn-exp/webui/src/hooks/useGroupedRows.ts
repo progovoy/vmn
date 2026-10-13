@@ -8,6 +8,7 @@ import type { GroupAggregate, GroupField } from "../apiGroups";
 import type { HttpError } from "../http";
 import { isAbortError, withSignal } from "../requestScope";
 import { rowsPrefix, type RowsFilter } from "../queries";
+import { useShownList } from "./useShownList";
 import { cacheOf, deepestGroup, withGroupRows, withGroups } from "../util/groupedCache";
 import type { GroupedRows, MoreState } from "../util/groupItems";
 
@@ -49,10 +50,7 @@ export function useGroupedRows(
     structuralSharing: false,
   }, client);
 
-  const lastGood = useRef<GroupedRows>();
-  if (query.data) lastGood.current = query.data;
-  const data = group === null ? undefined : query.data ?? lastGood.current;
-  const err = query.error && !isAbortError(query.error) ? query.error : null;
+  const { data, queryError, pageError } = useShownList(query, group !== null);
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const [more, setMore] = useState<ReadonlyMap<string, MoreState>>(new Map());
@@ -103,8 +101,7 @@ export function useGroupedRows(
 
   return {
     data,
-    queryError: err?.status === 400 ? err.message : null,
-    pageError: err && err.status !== 400 && !data ? String(err) : null,
+    queryError, pageError,
     moreError, more, loadMore, loadGroup, refresh,
     updatedAt: query.dataUpdatedAt,
   };
