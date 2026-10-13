@@ -87,16 +87,6 @@ describe("folding an outer run's inner runs", () => {
     expect(await screen.findByRole("link", { name: v(2) })).toBeInTheDocument();
   });
 
-  it("drops a legacy collapse= once the user opens the outer", async () => {
-    m.experiments.mockResolvedValue(page(sweep(3)));
-    renderBoard(`/ws/test/app/my-app?collapse=${v(1)}`);
-    await screen.findByRole("link", { name: v(1) });
-    expect(link(2)).toBeNull();
-    fireEvent.click(toggle(1));
-    await waitFor(() => expect(link(2)).toBeInTheDocument());
-    expect(urlParams().getAll("collapse")).toEqual([]);
-  });
-
   it("fetches inner runs that are not loaded once, showing a loading row meanwhile", async () => {
     const [outer, ...rest] = sweep(2);
     const inner = rest.slice(0, 2);

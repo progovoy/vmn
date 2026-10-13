@@ -17,6 +17,7 @@ import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useColumnEdits } from "../hooks/useColumnEdits";
 import { useBoardSelection } from "../hooks/useBoardSelection";
+import { useBoardGrouping } from "../hooks/useBoardGrouping";
 import { useInnerRuns } from "../hooks/useInnerRuns";
 import { foldState, isPending, topRows, treeRows } from "../util/sweepTree";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
@@ -74,6 +75,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const narrow = useMediaQuery(NARROW_QUERY);
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);
+  const grouping = useBoardGrouping(ws, app, view);
   const status = useAppStatus(ws, app).data;
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -196,7 +198,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
         live={narrow && anyRunning && <LiveText paused={paused} updatedAt={data.updatedAt} />}
         actions={!empty && (
           <LeaderboardToolbar
-            ws={ws} app={app} view={view} cols={cols}
+            ws={ws} app={app} view={view} cols={cols} grouping={grouping}
             onViewApplied={resetFilter}
             onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
           />

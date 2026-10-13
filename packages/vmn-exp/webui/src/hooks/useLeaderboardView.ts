@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { setAllParams, useUrlState } from "./useUrlState";
 import { NO_PINS, moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
+import { parseAggregate, parseGroup, type Aggregate, type GroupBy } from "../util/groupBy";
 
 export const CHART_VIEWS = ["trend", "bar", "scatter", "parallel", "grouped", "importance"] as const;
 export type ChartView = (typeof CHART_VIEWS)[number];
@@ -46,12 +47,16 @@ export function useLeaderboardView() {
     chart: isChartView(chartView) ? chartView : "trend",
     creating: params.get("new") === "1",
     archived: params.get("archived") === "1",
+    /** `group=`/`agg=` when the board knows them; null = the default. */
+    groupParam: parseGroup(params.get("group")),
+    aggParam: parseAggregate(params.get("agg")),
   };
 
   const hidden = useParamSet(params, "hide");
   const shown = useParamSet(params, "show");
   const selected = useParamSet(params, "sel");
   const expanded = useParamSet(params, "expand");
+  const collapsed = useParamSet(params, "collapse");
 
   // Column order (col=) and pinned set (pin=) — stable arrays for useMemo deps.
   const colOrder = useParamList(params, "col");
@@ -85,17 +90,8 @@ export function useLeaderboardView() {
     [update],
   );
 
-  /** Open/shut an outer run (all start shut, so `expand=` lists the open
-   *  ones); a `collapse=` left by older links is dropped on the way. */
-  const toggleExpanded = useCallback(
-    (verstr: string) =>
-      update((p) => {
-        const open = p.getAll("expand");
-        setAllParams(p, "expand", open.includes(verstr) ? open.filter((v) => v !== verstr) : [...open, verstr]);
-        setAllParams(p, "collapse", p.getAll("collapse").filter((v) => v !== verstr));
-      }),
-    [update],
-  );
+  /** Open/shut an outer run (all start shut, so `expand=` lists the open ones). */
+  const toggleExpanded = useCallback((verstr: string) => toggleIn("expand", verstr), [toggleIn]);
 
   const setters = useMemo(() => ({
     setStatus: (csv: string) => setParam("status", csv),
@@ -127,6 +123,18 @@ export function useLeaderboardView() {
         for (const name of ["show", "hide"]) setAllParams(p, name, p.getAll(name).filter((v) => v !== col));
       }),
     toggleSelected: (verstr: string) => toggleIn("sel", verstr),
+    /** Group the board by *group*; `group=` is left out at the default
+     *  *dflt*, and the closed groups of the old grouping are forgotten. */
+    setGroup: (group: GroupBy, dflt: GroupBy) =>
+      update((p) => {
+        if (group === dflt) p.delete("group");
+        else p.set("group", group);
+        p.delete("collapse");
+      }),
+    /** The aggregate a group header shows; `agg=` is left out at the default. */
+    setAggregate: (agg: Aggregate, dflt: Aggregate) => setParam("agg", agg === dflt ? "" : agg),
+    /** Close or reopen a group (all start open, so `collapse=` lists the shut ones). */
+    toggleCollapsed: (key: string) => toggleIn("collapse", key),
     setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),
     setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),
     setOrder: (keys: readonly string[]) => setAll("col", keys),
@@ -148,7 +156,7 @@ export function useLeaderboardView() {
 
   return {
     ...view,
-    hidden, shown, selected, expanded,
+    hidden, shown, selected, expanded, collapsed,
     colOrder, pinned,
     clickSort, toggleExpanded, ...setters,
   };

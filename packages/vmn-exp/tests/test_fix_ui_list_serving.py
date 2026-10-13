@@ -125,6 +125,9 @@ def test_facets_list_the_filter_vocabulary(tmp_path, use_index):
         "branches": ["feat/x", "main"],
         "metric_keys": ["loss", "lr"],
         "param_keys": ["lr", "opt"],
+        "tag_keys": [],
+        "param_values": {"lr": 1, "opt": 1},
+        "parented": 0,
         "total": 3,
     }
 

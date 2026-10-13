@@ -66,4 +66,23 @@ describe("useMenuKeys", () => {
     key("x");
     expect(item("a")).toHaveFocus();
   });
+
+  it("treats radio items as items and opens on the checked one", () => {
+    function Radios() {
+      const menu = useRef<HTMLDivElement>(null);
+      const onKeyDown = useMenuKeys(true, menu, () => {});
+      return (
+        <div role="menu" ref={menu} onKeyDown={onKeyDown}>
+          {["x", "y", "z"].map((n) => (
+            <button key={n} role="menuitemradio" aria-checked={n === "y"}>{n}</button>
+          ))}
+        </div>
+      );
+    }
+    render(<Radios />);
+    const radio = (name: string) => screen.getByRole("menuitemradio", { name });
+    expect(radio("y")).toHaveFocus();
+    key("ArrowDown");
+    expect(radio("z")).toHaveFocus();
+  });
 });

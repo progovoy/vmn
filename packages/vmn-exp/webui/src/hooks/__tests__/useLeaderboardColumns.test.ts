@@ -29,6 +29,7 @@ describe("useLeaderboardColumns facets", () => {
       branches: [],
       metric_keys: ["loss", "accuracy"],
       param_keys: ["lr", "batch_size"],
+      tag_keys: [], param_values: {}, parented: 0,
       total: 500,
     };
     const { result } = renderHook(() => useLeaderboardColumns(rows, null, hidden, "", facets));
@@ -47,6 +48,7 @@ describe("useLeaderboardColumns facets", () => {
     const rows = [row(1, { metrics: { loss: 0.5 } })];
     const facets: ExperimentFacets = {
       branches: [], metric_keys: ["loss", "accuracy"], param_keys: [], total: 10,
+      tag_keys: [], param_values: {}, parented: 0,
     };
     const schema = { loss: { primary: true } };
     const { result } = renderHook(() => useLeaderboardColumns(rows, schema, hidden, "", facets));

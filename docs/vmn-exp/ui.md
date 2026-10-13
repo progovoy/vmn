@@ -633,12 +633,16 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 
 ### Facets
 
-`GET .../experiments-facets[?archived=1]` answers the filter vocabulary, each
-list sorted (`metric_keys` includes numeric params; `total` counts all runs),
-with an ETag:
+`GET .../experiments-facets[?archived=1]` answers the filter and Group by
+vocabulary, each list sorted (`metric_keys` includes numeric params; `total`
+counts all runs), with an ETag. `param_values` is each param's number of
+distinct values, capped at 21 (the board's Group by menu offers a param only
+with at most 20); `parented` counts the runs with a parent (the board groups
+by parent run by default when it is non-zero):
 
 ```json
-{"branches": ["feat/x", "main"], "metric_keys": ["acc", "loss"], "param_keys": ["lr", "opt"], "total": 5000}
+{"branches": ["feat/x", "main"], "metric_keys": ["acc", "loss"], "param_keys": ["lr", "opt"],
+ "tag_keys": ["team"], "param_values": {"lr": 21, "opt": 3}, "parented": 40, "total": 5000}
 ```
 
 ### Run detail is bounded

@@ -197,6 +197,9 @@ def test_facets_are_computed_once_per_generation():
         "branches": ["b0", "b1", "b2"],
         "metric_keys": ["loss", "lr"],
         "param_keys": ["lr", "opt"],
+        "tag_keys": [],
+        "param_values": {"lr": 9, "opt": 1},
+        "parented": 0,
         "total": 9,
     }
     assert cache.facets(snap) is facets
