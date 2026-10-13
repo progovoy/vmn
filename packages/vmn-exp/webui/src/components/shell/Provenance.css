@@ -11,7 +11,7 @@
 .prov-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .prov-pop {
   position: absolute; left: 0; top: calc(100% + 6px); z-index: 40;
-  min-width: 260px; max-width: min(480px, 90vw); padding: 8px 10px;
+  min-width: 340px; max-width: min(520px, 90vw); padding: 8px 10px;
   background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); white-space: normal;
 }

@@ -427,6 +427,11 @@ untracked files are not dirty. Detached: `branch: null, detached: true`. On a
 failure it still answers 200 with `branch`/`head`/`head_short`/`dirty` `null`
 and an `error` (the first stderr line, or `timeout`). Cached 5 s per workspace.
 
+The topbar's breadcrumb root shows the workspace and `branch @ head_short`
+(plus `dirty`); `store` and the checkout path sit behind its Data source
+button, not in the trail. When the workspace is named after its app, the
+trail leaves the app crumb out.
+
 ### Status counts and rollup
 
 `GET ws/{ws}/apps/{app}/experiments-status`:
