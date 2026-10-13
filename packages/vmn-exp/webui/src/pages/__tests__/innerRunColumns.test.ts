@@ -1,49 +1,38 @@
 import { describe, it, expect } from "vitest";
-import { headGroups, INNER_RUN_COLS, innerRunCount } from "../innerRunColumns";
+import { INNER_COLUMN, innerRunSummary } from "../innerRunColumns";
 import type { ExperimentRow } from "../../types";
 
-describe("the Inner runs header group", () => {
-  it("names the five inner-run count columns", () => {
-    expect(INNER_RUN_COLS).toEqual(["total", "waiting", "running", "done", "failed"]);
+const outer = (counts: Record<string, number>, children = 5, expected?: number) => ({
+  kind: "outer", children: Array.from({ length: children }, (_, i) => `c${i}`), child_counts: counts,
+  ...(expected ? { fleet: { expected } } : {}),
+}) as unknown as ExperimentRow;
+
+describe("the inner column (C2)", () => {
+  it("is one column", () => {
+    expect(INNER_COLUMN).toBe("c:inner");
   });
 
-  it("spans the contiguous count block and leaves every other column its own cell", () => {
-    const ids = ["check", "idx", "status", "experiment", "c:total", "c:waiting", "c:running", "c:done",
-      "c:failed", "c:started", "m:loss", "note", "when"];
-    expect(headGroups(ids)).toEqual([
-      { start: 0, span: 1, inner: false }, { start: 1, span: 1, inner: false },
-      { start: 2, span: 1, inner: false }, { start: 3, span: 1, inner: false },
-      { start: 4, span: 5, inner: true },
-      { start: 9, span: 1, inner: false }, { start: 10, span: 1, inner: false },
-      { start: 11, span: 1, inner: false }, { start: 12, span: 1, inner: false },
-    ]);
+  it("reads total · running · failed, leaving out the states with no runs", () => {
+    const s = innerRunSummary(outer({ running: 4, failed: 1 }))!;
+    expect(s.text).toBe("5 · 4 running · 1 failed");
+    expect(s.parts.map((p) => p.state)).toEqual(["running", "failed"]);
   });
 
-  it("labels each block again when a count column is dragged away from the rest", () => {
-    const ids = ["experiment", "c:total", "c:waiting", "m:loss", "c:failed"];
-    expect(headGroups(ids)!.filter((g) => g.inner)).toEqual([
-      { start: 1, span: 2, inner: true }, { start: 4, span: 1, inner: true },
-    ]);
+  it("tells screen readers what the numbers count", () => {
+    expect(innerRunSummary(outer({ running: 4, failed: 1 }))!.label).toBe("5 inner runs, 4 running, 1 failed");
+    expect(innerRunSummary(outer({ succeeded: 1 }, 1))!.label).toBe("1 inner run, 1 done");
   });
 
-  it("has no group without count columns", () => {
-    expect(headGroups(["experiment", "c:started", "m:loss"])).toBeNull();
-  });
-});
-
-describe("an inner-run count cell", () => {
-  const outer = {
-    kind: "outer", children: ["a", "b", "c"], child_counts: { created: 1, running: 1, failed: 1 },
-  } as unknown as ExperimentRow;
-  const single = { kind: "single", children: [] } as unknown as ExperimentRow;
-
-  it("counts an outer run's inner runs, zeros included", () => {
-    expect(innerRunCount(outer, "total")).toBe("3");
-    expect(innerRunCount(outer, "done")).toBe("0");
-    expect(innerRunCount(outer, "failed")).toBe("1");
+  it("counts stuck runs as failed and created ones as waiting", () => {
+    const s = innerRunSummary(outer({ stuck: 1, failed: 1, created: 2, succeeded: 1 }))!;
+    expect(s.text).toBe("5 · 2 failed · 2 waiting · 1 done");
   });
 
-  it("is empty for a run without inner runs, never a dash or a zero", () => {
-    for (const c of INNER_RUN_COLS) expect(innerRunCount(single, c)).toBe("");
+  it("totals a fleet's planned size, not only the runs it has so far", () => {
+    expect(innerRunSummary(outer({ running: 2 }, 2, 8))!.text).toBe("8 · 2 running");
+  });
+
+  it("is empty for a run without inner runs", () => {
+    expect(innerRunSummary({ kind: "single", children: [] } as unknown as ExperimentRow)).toBeNull();
   });
 });

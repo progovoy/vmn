@@ -67,9 +67,9 @@ function row(
   };
 }
 
-function renderLeaderboard() {
+function renderLeaderboard(path = "/ws/test/app/my-app") {
   return renderWithClient(
-    <MemoryRouter initialEntries={["/ws/test/app/my-app"]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/ws/:ws/app/:app" element={<Leaderboard />} />
       </Routes>
@@ -130,7 +130,8 @@ describe("Leaderboard status column", () => {
       row(3, "failed", { kind: "inner", depth: 1, parent: "0.0.1-rc.1", exit_code: 1 }),
     ]);
 
-    renderLeaderboard();
+    // The count sits in the experiment cell while the inner column is hidden (plan 20 C2).
+    renderLeaderboard("/ws/test/app/my-app?hide=c:inner");
 
     await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
 
@@ -165,7 +166,8 @@ describe("Leaderboard status column", () => {
       }),
     ]);
 
-    renderLeaderboard();
+    // The count sits in the experiment cell while the inner column is hidden (plan 20 C2).
+    renderLeaderboard("/ws/test/app/my-app?hide=c:inner");
 
     await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
     const roll = cellOf("0.0.1-rc.1").querySelector(".tree-roll");

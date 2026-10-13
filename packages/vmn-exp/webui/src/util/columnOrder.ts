@@ -59,6 +59,10 @@ export function moveKey(
     : [...rendered.filter((k) => pinnedSet.has(k)), ...newGroup];
 }
 
+/** The `pin=` value that pins nothing — without any `pin=` the board pins
+ *  its default columns (the goal metrics). */
+export const NO_PINS = "-";
+
 /** New `pinned` array with `key` added if absent, removed if present. */
 export function togglePin(pinned: readonly string[], key: string): string[] {
   return pinned.includes(key)

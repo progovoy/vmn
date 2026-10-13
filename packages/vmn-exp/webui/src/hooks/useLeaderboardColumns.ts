@@ -1,15 +1,16 @@
 import { useMemo, useRef } from "react";
 import type { ExperimentFacets, ExperimentRow, MetricsSchema } from "../types";
 import {
-  FLEET_COLS, PINNED_COLS, anyComments, anyTags, columnIds, columnStyles, computeColMeta, idLayout, metricColumns,
-  orderColumns, paramKey,
+  FLEET_COLS, PINNED_COLS, anyComments, anyTags, columnIds, columnStyles, computeColMeta, defaultWidth, idLayout,
+  metricColumns, orderColumns, paramKey,
 } from "../pages/leaderboardColumns";
+import { goalMetrics, paramBudget, variedParams } from "../pages/defaultColumns";
 import type { ColumnCell } from "../pages/leaderboardColumns";
 import type { RowLayout } from "../pages/LeaderboardRow";
 import { sameValue } from "../util/stableRows";
 import { EMPTY_PREFS, type ColumnPrefs } from "./useColumnPrefs";
 import type { SuggestFacets } from "../util/querySuggest";
-import { orderedKeys } from "../util/columnOrder";
+import { NO_PINS, orderedKeys } from "../util/columnOrder";
 import { schemaHides } from "../util/hiddenMetrics";
 import { anyOuter, isInnerRunId } from "../pages/innerRunColumns";
 
@@ -21,12 +22,15 @@ function useStable<T>(value: T): T {
   return ref.current;
 }
 
-/** The `hide=` entry of the tags column. */
+/** The `show=`/`hide=` entry of the tags column; hidden by default (plan 20 D11). */
 export const TAGS_COLUMN = "c:tags";
 
 /** The `hide=` entry of the comments column; hidden by default, so listing
  *  it there shows the column. */
 export const COMMENTS_COLUMN = "c:comments";
+
+/** The note column's `show=` entry; hidden by default (plan 20 D11). */
+export const NOTE_COLUMN = "c:note";
 
 const splitKey = (key: string) => (key ? key.split("\u0000") : []);
 
@@ -38,9 +42,16 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
 /** The table's columns: metric and param columns from the rows (minus the
  *  hidden `m:`/`p:` ones), their widths, and the row layout every row shares.
  *
+ *  Defaults (plan 20 D11): the declared-goal metrics (every metric when no
+ *  goal is declared; `hide=` flips one, like a schema-hidden one), up to six
+ *  params whose values vary across the rows (as many as fit *fill*; `show=`/
+ *  `hide=` override), the inner column while an outer run is loaded, then
+ *  `when`. Note, tags and the start/end dates need `show=`.
+ *
  *  `order` and `pinned` come from URL params `col=` and `pin=` (as stable
  *  arrays from `useLeaderboardView`). Columns in `order` appear first;
- *  columns in `pinned` are sticky after the experiment column. */
+ *  columns in `pinned` are sticky after the experiment column. Without
+ *  `pin=` the visible goal metrics are pinned; `pin=-` pins nothing. */
 export function useLeaderboardColumns(
   rows: readonly ExperimentRow[] | undefined,
   schema: MetricsSchema | null,
@@ -53,8 +64,8 @@ export function useLeaderboardColumns(
   prefs: ColumnPrefs = EMPTY_PREFS,
   /** Width (px) the table has to fill. */
   fill = 0,
-  /** Columns the user turned on (`show=`): the inner-run counts, which are
-   *  otherwise shown only while an outer run is on the board. */
+  /** Columns the user turned on (`show=`): params, note, dates and the inner
+   *  column (otherwise shown only while an outer run is on the board). */
   shown: ReadonlySet<string> = EMPTY_SET,
 ) {
   const list = rows ?? [];
@@ -71,12 +82,54 @@ export function useLeaderboardColumns(
   );
   const metricCols = useMemo(() => splitKey(metricNames), [metricNames]);
   const paramCols = useMemo(() => splitKey(paramNames), [paramNames]);
-  // A schema-hidden metric starts hidden, so toggling its `m:` key shows it.
-  const visibleMetrics = useMemo(
-    () => metricCols.filter((c) => hidden.has(`m:${c}`) === schemaHides(schema, c)),
-    [metricCols, hidden, schema],
+  const goals = useMemo(() => goalMetrics(metricCols, schema), [metricCols, schema]);
+  // A metric off by default (schema-hidden, or no goal while others have
+  // one) starts hidden, so toggling its `m:` key shows it.
+  const visibleMetrics = useMemo(() => {
+    const goal = new Set(goals);
+    const byDefault = (c: string) => !schemaHides(schema, c) && (goal.size === 0 || goal.has(c));
+    return metricCols.filter((c) => hidden.has(`m:${c}`) !== byDefault(c));
+  }, [metricCols, hidden, schema, goals]);
+  const varied = useStable(useMemo(
+    () => variedParams(list, paramCols),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, paramCols],
+  ));
+
+  const hasOuter = useMemo(() => anyOuter(rows), [rows]);
+  const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => {
+    const id = `c:${c}`;
+    if (shown.has(id)) return true;
+    return !hidden.has(id) && isInnerRunId(id) && hasOuter;
+  }), [hidden, shown, hasOuter]);
+  const hasTags = useMemo(() => anyTags(rows), [rows]);
+  const showTags = hasTags && shown.has(TAGS_COLUMN);
+  const hasComments = useMemo(() => anyComments(rows), [rows]);
+  const showComments = hasComments && hidden.has(COMMENTS_COLUMN);
+  const showNote = shown.has(NOTE_COLUMN);
+
+  const { widths, order: savedOrder } = prefs;
+  // Params the user turned on, then as many varying ones as fit beside
+  // every other column at its width.
+  const visibleParams = useMemo(() => {
+    const picked = new Set(paramCols.filter((c) => shown.has(`p:${c}`)));
+    const others = columnIds(
+      visibleFleet, [...visibleMetrics.map((m) => `m:${m}`), ...[...picked].map((p) => `p:${p}`)],
+      showTags, showComments, showNote,
+    );
+    const taken = others.reduce((sum, id) => sum + (widths[id] ?? defaultWidth(id)), 0);
+    varied.filter((c) => !hidden.has(`p:${c}`) && !picked.has(c))
+      .slice(0, paramBudget(fill, taken)).forEach((c) => picked.add(c));
+    return paramCols.filter((c) => picked.has(c));
+  }, [paramCols, shown, hidden, varied, visibleFleet, visibleMetrics, showTags, showComments, showNote, widths, fill]);
+
+  // The visible goal metrics stick by default, until `pin=` says otherwise.
+  const pins = useMemo(
+    () => (pinned.length
+      ? pinned.filter((k) => k !== NO_PINS)
+      : goals.filter((g) => visibleMetrics.includes(g)).map((g) => `m:${g}`)),
+    [pinned, goals, visibleMetrics],
   );
-  const visibleParams = useMemo(() => paramCols.filter((c) => !hidden.has(`p:${c}`)), [paramCols, hidden]);
 
   // Combined key list for ordering: m:name for metrics, p:name for params.
   const defaultKeys = useMemo(
@@ -89,10 +142,10 @@ export function useLeaderboardColumns(
 
   // Apply URL order and pin to produce an ordered, combined cell list.
   const orderedCellKeys = useMemo(
-    () => orderedKeys(defaultKeys, order, pinned),
+    () => orderedKeys(defaultKeys, order, pins),
     // order/pinned are stable arrays from useParamList in the view hook
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [defaultKeys, order, pinned],
+    [defaultKeys, order, pins],
   );
 
   const cells = useMemo(
@@ -105,9 +158,9 @@ export function useLeaderboardColumns(
   );
 
   const pinnedCount = useMemo(() => {
-    const pinnedSet = new Set(pinned);
+    const pinnedSet = new Set(pins);
     return orderedCellKeys.filter((k) => pinnedSet.has(k)).length;
-  }, [orderedCellKeys, pinned]);
+  }, [orderedCellKeys, pins]);
 
   const colMeta = useStable(useMemo(
     () => computeColMeta(list, visibleMetrics, schema, primary),
@@ -115,22 +168,11 @@ export function useLeaderboardColumns(
     [rows, visibleMetrics, schema, primary],
   ));
   const showBest = list.length > 1;
-  const hasTags = useMemo(() => anyTags(rows), [rows]);
-  const showTags = hasTags && !hidden.has(TAGS_COLUMN);
-  const hasComments = useMemo(() => anyComments(rows), [rows]);
-  const showComments = hasComments && hidden.has(COMMENTS_COLUMN);
-  const hasOuter = useMemo(() => anyOuter(rows), [rows]);
-  const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => {
-    const id = `c:${c}`;
-    return !hidden.has(id) && (hasOuter || shown.has(id) || !isInnerRunId(id));
-  }), [hidden, shown, hasOuter]);
-
-  const { widths, order: savedOrder } = prefs;
   const layout = useMemo((): RowLayout => {
     // URL-pinned cells stick right after the experiment column, so they lead
     // the movable columns whatever the saved drag order says.
     const pinnedIds = orderedCellKeys.slice(0, pinnedCount);
-    const movable = columnIds(visibleFleet, orderedCellKeys.slice(pinnedCount), showTags, showComments);
+    const movable = columnIds(visibleFleet, orderedCellKeys.slice(pinnedCount), showTags, showComments, showNote);
     const moved = orderColumns(movable, savedOrder);
     const ids = [...PINNED_COLS, ...pinnedIds, ...moved.slice(PINNED_COLS.length)];
     const cl = idLayout(ids, widths, fill);
@@ -141,7 +183,7 @@ export function useLeaderboardColumns(
       colMeta, showBest, runBase,
     };
   }, [
-    orderedCellKeys, pinnedCount, cells, visibleFleet, visibleMetrics, visibleParams, showTags, showComments,
+    orderedCellKeys, pinnedCount, cells, visibleFleet, visibleMetrics, visibleParams, showTags, showComments, showNote,
     colMeta, showBest, runBase, widths, savedOrder, fill,
   ]);
 
@@ -150,10 +192,12 @@ export function useLeaderboardColumns(
     param_keys: facets?.param_keys ?? paramCols,
   }), [facets, metricCols, paramCols]);
 
-  const otherCols = [...FLEET_COLS, ...(hasTags ? ["tags"] : []), ...(hasComments ? ["comments"] : [])];
-  const visibleOther = [...visibleFleet, ...(showTags ? ["tags"] : []), ...(showComments ? ["comments"] : [])];
+  const otherCols = [...FLEET_COLS, "note", ...(hasTags ? ["tags"] : []), ...(hasComments ? ["comments"] : [])];
+  const visibleOther = [
+    ...visibleFleet, ...(showNote ? ["note"] : []), ...(showTags ? ["tags"] : []), ...(showComments ? ["comments"] : []),
+  ];
   return {
-    primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, defaultKeys, layout,
+    primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, defaultKeys, layout, pinned: pins,
     suggestFacets, otherCols, visibleOther,
   };
 }

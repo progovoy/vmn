@@ -779,7 +779,6 @@ tr.inner-pending.error td { color: var(--bad); }
 .lb-table .run-link { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lb-table .tree-roll { flex-shrink: 0; }
 td.fleet-cell { font-family: var(--mono); font-size: 12px; }
-td.fleet-failed:not(:empty) { color: var(--text-2); }
 
 /* Run page media: image tiles, histograms, logged tables */
 .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 12px; }

@@ -1,0 +1,7 @@
+/* The leaderboard's inner cell (plan 20 C2): states keep their status colour. */
+td.inner-cell { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
+.inner-cell .inner-total { color: var(--text); font-weight: 600; }
+.inner-cell .inner-running { color: var(--st-running); }
+.inner-cell .inner-failed { color: var(--st-bad); }
+.inner-cell .inner-done { color: var(--st-good); }
+.inner-cell .inner-waiting { color: var(--text-2); }

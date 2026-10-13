@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { setAllParams, useUrlState } from "./useUrlState";
-import { moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
+import { NO_PINS, moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
 
 export const CHART_VIEWS = ["trend", "bar", "scatter", "parallel", "grouped", "importance"] as const;
 export type ChartView = (typeof CHART_VIEWS)[number];
@@ -125,16 +125,17 @@ export function useLeaderboardView() {
     setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),
     setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),
     setOrder: (keys: readonly string[]) => setAll("col", keys),
-    moveColumn: (key: string, delta: number, defaultKeys: readonly string[]) =>
+    /** *pinned*: the pins in effect (the board's defaults without `pin=`). */
+    moveColumn: (key: string, delta: number, defaultKeys: readonly string[], pinned?: readonly string[]) =>
       update((p) => {
-        const cur = p.getAll("col");
-        const cur2 = p.getAll("pin");
-        setAllParams(p, "col", moveKey(cur, key, delta, defaultKeys, cur2));
+        setAllParams(p, "col", moveKey(p.getAll("col"), key, delta, defaultKeys, pinned ?? p.getAll("pin")));
       }),
-    togglePin: (key: string) =>
+    /** Flip *key* in the pins in effect (*pinned*, else `pin=`); unpinning
+     *  the last one writes `pin=-`, so the defaults don't come back. */
+    togglePin: (key: string, pinned?: readonly string[]) =>
       update((p) => {
-        const cur = p.getAll("pin");
-        setAllParams(p, "pin", togglePinUtil(cur, key));
+        const next = togglePinUtil(pinned ?? p.getAll("pin"), key);
+        setAllParams(p, "pin", next.length ? next : [NO_PINS]);
       }),
   }), [setParam, toggleIn, setAll, update]);
 

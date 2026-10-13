@@ -8,7 +8,8 @@ import { tagLabel } from "../util/tags";
 import {
   DATE_SORT_OF, cellId, columnIds, defaultColumnIds, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
-import { innerRunCount } from "./innerRunColumns";
+import InnerCell from "./InnerCell";
+import { INNER_COLUMN, isInnerRunId } from "./innerRunColumns";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
@@ -68,7 +69,7 @@ const shortDate = (iso: string | null | undefined) => (iso ? SHORT_DATE.format(n
 function FleetCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProperties }) {
   const field = DATE_SORT_OF[`c:${c}`];
   const date = field ? r[field] : undefined;
-  const text = date !== undefined ? shortDate(date) : innerRunCount(r, c);
+  const text = date !== undefined ? shortDate(date) : "";
   return (
     <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={date ?? undefined}>
       {text}
@@ -105,8 +106,10 @@ function FoldToggle({ r, collapsed, onFold }: {
   );
 }
 
-function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold }: {
+function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold, innerShown }: {
   r: ExperimentRow; href: string; style: CSSProperties; onPrefetch: (verstr: string) => void;
+  /** The inner column counts the inner runs, so this cell doesn't. */
+  innerShown: boolean;
   /** Null for a run without inner runs. */
   collapsed: boolean | null;
   onFold: (r: ExperimentRow) => void;
@@ -122,12 +125,11 @@ function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold }: {
         >
           {r.name || r.verstr}
         </Link>
-        {r.children && r.children.length > 0 && (
-          <span className="tree-roll">
-            {r.children.length} inner
-            {r.tree_status && r.tree_status !== r.status ? ` · tree ${r.tree_status}` : ""}
-          </span>
-        )}
+        {r.children && r.children.length > 0 && (() => {
+          const tree = r.tree_status && r.tree_status !== r.status ? `tree ${r.tree_status}` : "";
+          const text = innerShown ? tree : `${r.children.length} inner${tree ? ` · ${tree}` : ""}`;
+          return text && <span className="tree-roll">{text}</span>;
+        })()}
       </div>
       <div className="exp-branch">
         {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
@@ -175,6 +177,7 @@ function Row({
   const onLeave = () => clearTimeout(hover.current);
   const { styles, colMeta } = layout;
   const href = runHref(layout.runBase, r.verstr);
+  const ids = layoutIds(layout);
   const params = layout.paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
   // link opens a tab); anywhere else on the row opens the run.
@@ -216,6 +219,7 @@ function Row({
         return (
           <ExperimentCell
             key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} collapsed={collapsed} onFold={onFold}
+            innerShown={ids.includes(INNER_COLUMN)}
           />
         );
       case "c:tags":
@@ -231,6 +235,7 @@ function Row({
           </td>
         );
     }
+    if (isInnerRunId(id)) return <InnerCell key={id} r={r} style={style} />;
     if (id.startsWith("c:")) return <FleetCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (
@@ -258,7 +263,7 @@ function Row({
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      {layoutIds(layout).map((id, i) => cell(id, styles[i]))}
+      {ids.map((id, i) => cell(id, styles[i]))}
     </tr>
   );
 }

@@ -6,8 +6,10 @@ import { runHref } from "../util";
 import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
+import { useMoreRight } from "../hooks/useMoreRight";
 import Row, { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import Head, { type ColumnEdits, type HeaderCheckProps, type SortState } from "./LeaderboardHead";
+import "./leaderboardTable.css";
 
 export { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits, type SortState } from "./LeaderboardHead";
 
@@ -111,16 +113,20 @@ export default function LeaderboardTable({
     return () => ro.disconnect();
   }, [onFit]);
 
+  const edge = useMoreRight(parentRef, layout.total);
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
+    edge.check();
     scroll.save(el.scrollTop);
     const nearEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END_ROWS * ROW_HEIGHT;
     if (nearEnd && hasMore) onNearEnd();
   };
 
   return (
-    <div className="card flush">
+    <div className={`card flush lb-card${edge.more ? " more-right" : ""}`}>
+      {/* A fade over the right edge while columns run past it. */}
+      <div className="lb-edge-fade" aria-hidden="true" />
       <div
         className="tbl-scroll"
         ref={parentRef}

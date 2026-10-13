@@ -126,7 +126,8 @@ describe("Leaderboard virtualization", () => {
 
     // Verify thead columns are still rendered correctly
     expect(screen.getByText("experiment")).toBeInTheDocument();
-    expect(screen.getByText("note")).toBeInTheDocument();
+    // Note is a picker column, not a default one (plan 20 D11).
+    expect(screen.queryByText("note")).toBeNull();
     expect(screen.getByText("when")).toBeInTheDocument();
     expect(screen.getByText("#")).toBeInTheDocument();
   });

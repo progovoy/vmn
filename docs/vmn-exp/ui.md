@@ -218,6 +218,18 @@ one row whose status rolls up its subtree. Pages auto-refresh while anything
 is unfinished. See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
+## Leaderboard columns
+
+By default the leaderboard shows `#`, status, experiment, the metrics whose
+`goal` the schema declares (pinned after the experiment column; every metric
+when none declares one), up to six params whose values vary across the loaded
+runs (as many as fit the window), one `inner` column while an outer run is
+loaded (`5 · 4 running · 1 failed`), and `when`. Note, tags, the run's
+`started`/`ended` dates and the rest come from the Columns picker. The choices
+live in the URL (`show=`/`hide=`, `pin=`; `pin=-` pins nothing), and dragged
+widths/order in the browser. A fade on the table's right edge shows there are
+more columns to scroll to.
+
 ## Keyboard
 
 - **Skip to content**: the first Tab stop jumps past the sidebar to the page.

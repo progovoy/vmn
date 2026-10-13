@@ -1,0 +1,10 @@
+/* The leaderboard card: a fade over the right edge while more columns sit
+   past it (the table scrolls sideways), gone once scrolled to the end. */
+.lb-card { position: relative; }
+.lb-edge-fade {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 56px; z-index: 5;
+  pointer-events: none; opacity: 0; transition: opacity 0.15s ease;
+  background: linear-gradient(to right, transparent, var(--panel) 85%);
+  box-shadow: inset -12px 0 12px -10px color-mix(in srgb, var(--text) 50%, transparent);
+}
+.lb-card.more-right .lb-edge-fade { opacity: 1; }
