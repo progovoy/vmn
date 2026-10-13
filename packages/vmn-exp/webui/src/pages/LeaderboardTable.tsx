@@ -76,9 +76,8 @@ export default function LeaderboardTable(props: TableProps) {
   const narrow = useMediaQuery(NARROW_QUERY);
   if (!narrow) return <GridTable {...props} />;
   const { rows, visibleRef } = props;
-  const runs = rows && boardRows(rows);
-  visibleRef.current = () => (runs ?? []).map((r) => r.verstr).slice(0, CARDS_REFRESHED);
-  return <LeaderboardCards {...props} rows={runs} />;
+  visibleRef.current = () => boardRows(rows ?? []).map((r) => r.verstr).slice(0, CARDS_REFRESHED);
+  return <LeaderboardCards {...props} />;
 }
 
 const sameRange = (a: ColRange | null, b: ColRange | null) =>

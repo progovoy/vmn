@@ -4,19 +4,33 @@
  *  (with a link target's own value), plus the `+N more` row under it. */
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import type { GroupAggregate, GroupTarget } from "../apiGroups";
+import type { GroupAggregate, GroupCounts, GroupTarget } from "../apiGroups";
 import StatusPill from "../components/StatusPill";
 import { Icon } from "../components/shell/icons";
 import type { ExperimentRow, RunState } from "../types";
 import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
-import { aggregateCell, countParts, countsText, spokenCounts } from "./groupHeaderText";
+import { MORE_TEXT, aggregateCell, countParts, countsText, spokenCounts } from "./groupHeaderText";
 import { isGapId } from "./leaderboardColumns";
 import { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import "./leaderboardGroupRow.css";
 
 /** What names the group: its target run, else its label. */
-const groupName = (label: string, t: GroupTarget | null) => (t ? t.name || t.verstr : label);
+export const groupName = (label: string, t: GroupTarget | null) => (t ? t.name || t.verstr : label);
+
+/** `16 · 2 running · 1 failed`, each state in its colour (hidden from a
+ *  screen reader, which gets the counts in words). */
+export function GroupCountParts({ counts, className = "", title }: {
+  counts: GroupCounts; className?: string; title?: string;
+}) {
+  return (
+    <span className={`group-counts ${className}`.trim()} aria-hidden="true" title={title}>
+      {countParts(counts).map((p, i) => (
+        <span key={p.tone}>{i > 0 && " · "}<span className={`tone-${p.tone}`}>{p.text}</span></span>
+      ))}
+    </span>
+  );
+}
 
 function Label({ item, layout, first, onFold }: {
   item: GroupHeaderItem; layout: RowLayout; first?: ExperimentRow; onFold: (key: string) => void;
@@ -46,11 +60,7 @@ function Label({ item, layout, first, onFold }: {
         )}
       </div>
       <div className={`group-sub${item.foldable ? " under-fold" : ""}`} title={countsText(group.counts)}>
-        <span className="group-counts" aria-hidden="true">
-          {countParts(group.counts).map((p, i) => (
-            <span key={p.tone}>{i > 0 && " · "}<span className={`tone-${p.tone}`}>{p.text}</span></span>
-          ))}
-        </span>
+        <GroupCountParts counts={group.counts} />
         {code && <span className="group-code"> · {first.base_version} · {first.branch}</span>}
         <span className="sr-only">{`Group ${name}: ${spokenCounts(group.counts)}`}</span>
       </div>
@@ -100,8 +110,6 @@ export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFo
     </tr>
   );
 }
-
-const MORE_TEXT = { idle: (n: number) => `+${n} more`, loading: () => "Loading…", error: () => "Could not load them, retry" };
 
 export function GroupMoreRow({ item, index, layout, onMore }: {
   item: GroupMoreItem; index: number; layout: RowLayout; onMore: (key: string) => void;

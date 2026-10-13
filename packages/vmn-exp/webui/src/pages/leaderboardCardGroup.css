@@ -1,0 +1,29 @@
+/* A grouped board's group below 640px (LeaderboardCardGroup, plan 22 G9):
+   a section label that sticks to the top of the scrolling board (opaque, so
+   the cards pass under it) above the group's cards; nothing in it is wider
+   than the screen — the name and the count truncate. */
+.lb-mgroup { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.lb-mgroup + .lb-mgroup { margin-top: 8px; }
+.lb-mgroup > .lb-mcards { margin: 0; }
+.lb-mgroup-head {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 8px 4px 6px; background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.lb-mgroup-head .fold-toggle { flex: none; }
+.lb-mgroup-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.lb-mgroup-label {
+  font-size: 13.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-mgroup-counts {
+  display: block; font-size: 11.5px; font-family: var(--mono); color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-mgroup-agg { flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.lb-mgroup-value { font-size: 15px; font-weight: 600; color: var(--text); }
+.lb-mgroup-metric { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.lb-mgroup-more { list-style: none; }
+.lb-mgroup-more .group-more-btn { margin-left: 0; padding: 6px 4px; font-size: 13px; }
+.lb-mgroup-more.error .group-more-btn { color: var(--bad); }
