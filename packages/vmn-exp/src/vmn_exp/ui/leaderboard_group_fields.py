@@ -4,15 +4,10 @@
 A group field is a link between runs (``parent``, ``forked_from``,
 ``rerun_of``: the run pointed at heads the group; ``code_verstr``: the code
 state) or a row field (``branch``, ``status``, ``tags.<k>``, ``params.<k>``).
-:func:`key_of` gives a row's group key, a pure function of the row. A group's
-counts tally its rows' statuses; its aggregates summarize each metric's finite
-values (mean, best by the goal, median, min, max, n).
+:func:`key_of` gives a row's group key, a pure function of the row; a
+group's counts and aggregates live in :mod:`~vmn_exp.ui.leaderboard_group_summary`.
 """
 import json
-import math
-
-from vmn_exp.core.metric_schema import metric_goal
-from vmn_exp.core.values import is_finite_number
 
 PARENT = "parent"
 RERUN_OF = "rerun_of"
@@ -91,66 +86,6 @@ def label(group, key, found):
     if group in LINKS:
         return key
     return f"{group} = {key}"
-
-
-def counts(rows):
-    out = dict.fromkeys(COUNT_KEYS, 0)
-    for row in rows:
-        name = COUNT_OF.get(row.get("status"))
-        if name:
-            out[name] += 1
-    out["total"] = len(rows)
-    return out
-
-
-def finite_values(rows, metric):
-    return [v for v in (row["metrics"].get(metric) for row in rows) if is_finite_number(v)]
-
-
-def _median(ordered):
-    mid = len(ordered) // 2
-    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
-
-
-def _best(lo, hi, goal):
-    return lo if goal == "min" else hi if goal == "max" else None
-
-
-def stats(values, goal):
-    """Every aggregate of finite *values*; ``best`` follows *goal* (None without)."""
-    if not values:
-        return {"mean": None, "best": None, "median": None, "min": None, "max": None, "n": 0}
-    ordered = sorted(values)
-    lo, hi = ordered[0], ordered[-1]
-    return {"mean": math.fsum(ordered) / len(ordered), "best": _best(lo, hi, goal),
-            "median": _median(ordered), "min": lo, "max": hi, "n": len(ordered)}
-
-
-def aggregate(values, agg, goal):
-    """The one aggregate *agg* of finite *values* (``best`` without a goal is
-    the mean), or None when there are none."""
-    if not values:
-        return None
-    if agg == "best":
-        agg = goal if goal in ("min", "max") else "mean"
-    if agg == "min":
-        return min(values)
-    if agg == "max":
-        return max(values)
-    if agg == "median":
-        return _median(sorted(values))
-    return math.fsum(values) / len(values)
-
-
-def aggregates(rows, schema):
-    """``{metric: stats}`` for every metric any of *rows* carries."""
-    values = {}
-    for row in rows:
-        for metric, value in row["metrics"].items():
-            kept = values.setdefault(metric, [])
-            if is_finite_number(value):
-                kept.append(value)
-    return {metric: stats(kept, metric_goal(schema, metric)) for metric, kept in values.items()}
 
 
 def target_payload(row):

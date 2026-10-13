@@ -7,7 +7,7 @@ one served for the same arguments across the deltas since (else built from
 the cache's static order), plus one view per time bucket while runs are live.
 """
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
-from vmn_exp.ui.leaderboard_groups import GroupSpec, Grouping, groups_payload
+from vmn_exp.ui.leaderboard_groups import Grouping, GroupSpec, groups_payload
 from vmn_exp.ui.memo import LRU
 
 # Groupings moved on across generations, like the cache's latest orders.

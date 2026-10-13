@@ -5,7 +5,6 @@ import datetime
 import random
 
 import pytest
-
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
