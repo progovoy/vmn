@@ -328,6 +328,12 @@ board's groups in order, the no-value group grey, a legend above the chart;
 parallel's `color by` offers `group` first), reading each run's group from
 `experiments-columns`' `group:<field>`.
 
+With rows selected, grouped or not, the Charts tab plots only the selected
+runs, under a `Showing N selected · Show all` note. Show all plots every
+filtered run again and keeps the selection (a `Show N selected` link goes
+back); changing the selection plots it again. Without a selection the charts
+plot every filtered run.
+
 Below 640px, where the board is one card per run, each group's header is a
 section label above its cards that sticks to the top while you scroll them:
 the group's checkbox (as on the desktop header), the fold, the group's name

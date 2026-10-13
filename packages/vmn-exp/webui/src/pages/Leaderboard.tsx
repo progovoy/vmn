@@ -248,7 +248,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
                     ws={ws} app={app} filter={filter} view={view.chart} onView={view.setChart}
                     loaded={all} total={data.total} metricCols={cols.metricCols} paramCols={cols.paramCols}
                     allParams={cols.suggestFacets.param_keys} schema={schema} defaultMetric={sortLabel}
-                    onBrushed={setBrushed} grouping={chartGrouping}
+                    onBrushed={setBrushed} grouping={chartGrouping} selected={view.selected}
                   />
                 )}
 
