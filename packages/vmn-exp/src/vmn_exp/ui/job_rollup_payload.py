@@ -126,6 +126,7 @@ def job_payload(job, parts, spec, now):
     p50, p90 = duration.quantiles([0.5, 0.9])
     return {
         **progress_fields(job, parts, now),
+        "metric": spec.main,
         "metrics": {m: metric_fields(parts, m, spec.descending[m]) for m in spec.metrics},
         "duration": {"n": duration.count, "p50": p50, "p90": p90},
         "failures": _failures(parts),

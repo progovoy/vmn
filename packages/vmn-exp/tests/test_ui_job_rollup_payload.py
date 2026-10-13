@@ -83,6 +83,12 @@ def test_failures_are_the_top_ten_signatures_with_labels():
     assert all(f["label"].startswith("err") for f in failures)
 
 
+def test_the_full_rollup_names_its_main_metric_so_the_page_needs_no_guess():
+    assert _payload([_row(1, metrics={"loss": 0.5})])["metric"] == "loss"
+    assert job_payload({"verstr": "job", "params": {}}, [Tally.of([], RollupSpec({}))],
+                       RollupSpec({}), T0)["metric"] is None
+
+
 def test_parts_add_up_like_one_tally():
     rows = [_row(i, ago=10 * i, metrics={"loss": i / 10}) for i in range(20)]
     whole = _payload(rows)
