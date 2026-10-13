@@ -75,8 +75,7 @@ inputs, so groups would overlap. It stays on the run page.
 - fold chevron, the label (link groups: `@N name` linking to the target run, plus its
   status or tree pill; `same code`: the verstr; fields: `branch = main`);
 - the status count `16 · 2 running · 1 failed` in colour, with text, as one cell;
-- per visible metric column, the group's aggregate (best or mean, see §5; a per-board
-  `aggregate: best|mean|min|max` choice in the Group by menu). For a link group whose
+- per visible metric column, the group's aggregate (G10). For a link group whose
   target run logged that metric itself, its own value shows on a second line `own 0.91`.
 
 Groups open by default up to 10 rows each. A `+N more` row loads the rest.
@@ -105,6 +104,18 @@ group open or closed. The removed count-column keys (`c:total`, `c:waiting`, `c:
 showing the status count and the group's aggregate on the primary metric. Cards are
 unchanged.
 
+**G10. The aggregate is mean by default and configurable.** User decision (2026-10-13):
+"let it be mean but configurable to best or whatever else". The choices are `mean`
+(default), `best`, `median`, `min` and `max`. `best` follows D1: the goal's direction
+(min for `goal: min`, max for `goal: max`). A goal-less metric has no best, so it shows
+the mean, marked `mean` in the cell title. The choice is set:
+- per board, in the Group by menu, kept in the URL as `?agg=` and in saved views;
+- per app default, in conf `experiment.ui.group_aggregate` (the board's default when the
+  URL has no `agg=`).
+
+The header cell names the aggregate in its title (`mean of 16`), and the column header
+shows a small `mean`/`best`/… tag while grouped.
+
 ## 2. Contracts
 
 **K1. `GET .../experiments?group=<field>`.** With `group`, the list answers with groups
@@ -113,7 +124,7 @@ instead of a flat page:
 { "groups": [ { "key": "...", "label": "...",
                 "target": {verstr, idx, name, status, tree_status, metrics} | null,
                 "counts": {total, running, waiting, done, failed, stuck},
-                "aggregates": {"<metric>": {best, mean, min, max}},
+                "aggregates": {"<metric>": {mean, best, median, min, max, n}},
                 "rows": [ ...first N rows by the sort... ], "rows_total": 16 } ],
   "total_groups": 3, "total_rows": 48 }
 ```
@@ -123,7 +134,11 @@ instead of a flat page:
 - `rows_per_group` (default 10, <= 100) caps each group's `rows`;
 - `group_key=<key>&offset=&limit=` pages one group's rows (the `+N more` row).
 
-`sort`/`order`/`status`/`q`/`archived` behave as in G5/G6. Unknown fields give 400.
+`agg=mean|best|median|min|max` (default: conf `experiment.ui.group_aggregate`, else
+`mean`) picks the aggregate that sorts groups (G5); every aggregate is in the payload so
+switching needs no refetch. `best` is null for a goal-less metric. Finite values only;
+`n` counts them. `sort`/`order`/`status`/`q`/`archived` behave as in G5/G6. Unknown
+fields or aggregates give 400.
 Rows with no value go to one `(none)` group, last (for `parent`: `(no parent run)`). A
 link whose target is not in the index (pruned, another app) groups under the target's
 verstr, with `target: null` and the label `<verstr> (not found)`.
@@ -150,7 +165,8 @@ makes it green.
 - Tests: groups by each link and by branch and a param; a target is a header and not a
   member of its own group; a member that is also a target appears in both places;
   `(no parent run)` last; a missing target (`not found`); counts equal the rows';
-  aggregates follow the summary policy and goal; a target's own value; filters cut rows
+  aggregates (mean, best by goal, median, min, max, n) follow the summary policy;
+  `agg=` picks the sorting aggregate; the conf default; a target's own value; filters cut rows
   and keep link headers (G6); sort orders groups by aggregate and rows within;
   `group_key` paging; unknown field 400; a bench.
 
@@ -158,8 +174,8 @@ makes it green.
 
 **W1. Group by control + URL** (G2, G8). `components/GroupByMenu.tsx`,
 `hooks/useLeaderboardView` (`group`, `aggregate`, `collapse`).
-- Tests: the two sections; default `parent` with parented runs and `none` without; URL
-  round-trip; saved views keep it; `expand=`/`collapse=` mapping; the param option is
+- Tests: the two sections; default `parent` with parented runs and `none` without; the
+  aggregate switch (default mean, `?agg=`, the app's conf default); URL round-trip; saved views keep it; `expand=`/`collapse=` mapping; the param option is
   hidden for > 20 values.
 
 **W2. Flat rows + group header rows** (G1, G4, G5). `pages/LeaderboardGroupRow.tsx`
@@ -179,7 +195,8 @@ makes it green.
 **W4. Phone** (G9).
 - Tests at 390px: the sticky section label, its count, no horizontal scroll.
 
-**D1. Docs.** `CLAUDE.md` (`vmn-exp ui` line: `group=`), `docs/vmn-exp/ui.md`,
+**D1. Docs.** `CLAUDE.md` (`vmn-exp ui` line: `group=`, `agg=`; the conf key
+`experiment.ui.group_aggregate`), `docs/vmn-exp/ui.md`,
 `docs/vmn-exp/ai-fleet-tracking.md` (where fleets show on the board), the plan-20 C2
 note, and this plan's row in `docs/plans/README.md`.
 
@@ -202,6 +219,3 @@ After each wave: `/simplify`, rebuild the bundle, light/dark screenshots at 1440
   `leaderboard_groups.py`.
 - **Lineage groups.** Grouping by an input would put a run in several groups. If it is
   wanted, it is a filter ("runs that used X"), not a grouping.
-- **Open question: default aggregate.** Best (goal metrics) is proposed. W&B defaults
-  to mean. Best answers "which sweep found the best run". Mean answers "which config is
-  robust". The switch in the Group by menu exists either way.
