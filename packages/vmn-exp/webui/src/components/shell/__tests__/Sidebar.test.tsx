@@ -97,14 +97,16 @@ describe("Sidebar", () => {
     expect(router.state.location.pathname).toBe("/ws/team");
   });
 
-  it("renders three nav landmarks and one visible Workspace heading", async () => {
+  it("renders three labelled nav landmarks and no headings before the page's h1", async () => {
     renderAt("/ws/ml-repo/app/ml_app");
     await screen.findByRole("navigation", { name: "Server" });
     expect(screen.getAllByRole("navigation")).toHaveLength(3);
     for (const name of ["App", "Workspace", "Server"]) {
-      expect(screen.getByRole("navigation", { name })).toBeInTheDocument();
+      const nav = screen.getByRole("navigation", { name });
+      expect(nav).toHaveAttribute("aria-label", name);
+      expect(within(nav).getByText(name, { selector: ".nav-label" })).toHaveAttribute("aria-hidden", "true");
     }
-    expect(screen.getAllByRole("heading", { name: "Workspace" })).toHaveLength(1);
+    expect(screen.queryAllByRole("heading")).toHaveLength(0);
   });
 
   it("links the vmn-exp wordmark home with state.home", async () => {
@@ -243,6 +245,16 @@ describe("Sidebar", () => {
     await router.navigate("/ws/ml-repo/models");
     await waitFor(() => expect(screen.getByRole("link", { name: "Models" })).toHaveAttribute("aria-current", "page"));
     expect(screen.getByRole("button", { name: /choose app/ })).toBeInTheDocument();
+  });
+
+  it("gives an unknown app no context: choose app, and the app nav disabled", async () => {
+    appStatus.mockRejectedValue(Object.assign(new Error("no app"), { status: 404, body: { code: "app_not_found" } }));
+    renderAt("/ws/ml-repo/app/bogus");
+    expect(await screen.findByRole("button", { name: /choose app/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "bogus" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Experiments" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Stamp tree" })).toBeNull();
+    expect(screen.getByText("Experiments").closest(".nav-item")).toHaveAttribute("aria-disabled", "true");
   });
 
   it("renders footExtra in the foot", () => {

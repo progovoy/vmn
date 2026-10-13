@@ -32,11 +32,11 @@ function NavEntry({ item, onNavigate }: { item: NavItem } & Nav) {
   );
 }
 
+/** The group's label is the nav's name, not a heading: the page's h1 comes first. */
 function NavSection({ group, head, onNavigate }: { group: NavGroup; head?: ReactNode } & Nav) {
-  const id = `nav-${group.id}`;
   return (
-    <nav className="nav-group" aria-labelledby={id}>
-      <h2 className="nav-label" id={id}>{group.label}</h2>
+    <nav className="nav-group" aria-label={group.label}>
+      <div className="nav-label" aria-hidden="true">{group.label}</div>
       {head}
       <ul>
         {group.items.map((item) => (
@@ -100,15 +100,19 @@ function Foot({ ctx, footExtra }: { ctx: ShellContext; footExtra?: ReactNode }) 
   );
 }
 
-/** Remembers the URL's app once the server knows it; returns *ctx* with the
- *  workspace's last app when the URL names none. */
+const withoutApp = (ctx: ShellContext): ShellContext =>
+  ({ ...ctx, appTag: undefined, app: undefined, appBase: undefined });
+
+/** Remembers the URL's app once the server knows it; an app it does not know
+ *  gives no app context. Returns *ctx* with the workspace's last app when the
+ *  URL names none (or an unknown one). */
 function useLastApp(ctx: ShellContext): ShellContext {
   const known = Boolean(ctx.workspace);
   const exists = useAppExists(known ? ctx.ws : undefined, ctx.appTag);
   useEffect(() => {
     if (exists && ctx.ws && ctx.appTag) rememberApp(ctx.ws, ctx.appTag);
   }, [exists, ctx.ws, ctx.appTag]);
-  return withLastApp(ctx);
+  return withLastApp(exists === false ? withoutApp(ctx) : ctx);
 }
 
 export default function Sidebar({ ctx: urlCtx, onNavigate, footExtra }: {
