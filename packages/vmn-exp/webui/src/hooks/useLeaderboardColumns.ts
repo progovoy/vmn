@@ -43,7 +43,7 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
  *  hidden `m:`/`p:` ones), their widths, and the row layout every row shares.
  *
  *  Defaults (plan 20 D11): the declared-goal metrics (every metric when no
- *  goal is declared; `hide=` flips one, like a schema-hidden one), up to six
+ *  goal is declared; `show=`/`hide=` override), up to six
  *  params whose values vary across the rows (as many as fit *fill*; `show=`/
  *  `hide=` override), the inner column while an outer run is loaded, then
  *  `when`. Note, tags and the start/end dates need `show=`.
@@ -64,7 +64,7 @@ export function useLeaderboardColumns(
   prefs: ColumnPrefs = EMPTY_PREFS,
   /** Width (px) the table has to fill. */
   fill = 0,
-  /** Columns the user turned on (`show=`): params, note, dates and the inner
+  /** Columns the user turned on (`show=`): metrics, params, note, dates and the inner
    *  column (otherwise shown only while an outer run is on the board). */
   shown: ReadonlySet<string> = EMPTY_SET,
 ) {
@@ -83,13 +83,20 @@ export function useLeaderboardColumns(
   const metricCols = useMemo(() => splitKey(metricNames), [metricNames]);
   const paramCols = useMemo(() => splitKey(paramNames), [paramNames]);
   const goals = useMemo(() => goalMetrics(metricCols, schema), [metricCols, schema]);
-  // A metric off by default (schema-hidden, or no goal while others have
-  // one) starts hidden, so toggling its `m:` key shows it.
+  // Like params: `show=` turns a metric on, `hide=` off; a non-goal metric
+  // is off by default while others have a goal. A schema-hidden metric
+  // keeps its older inverted key: `hide=` shows it.
+  const schemaHidden = useMemo(() => metricCols.filter((c) => schemaHides(schema, c)), [metricCols, schema]);
   const visibleMetrics = useMemo(() => {
     const goal = new Set(goals);
-    const byDefault = (c: string) => !schemaHides(schema, c) && (goal.size === 0 || goal.has(c));
-    return metricCols.filter((c) => hidden.has(`m:${c}`) !== byDefault(c));
-  }, [metricCols, hidden, schema, goals]);
+    const legacy = new Set(schemaHidden);
+    return metricCols.filter((c) => {
+      const id = `m:${c}`;
+      if (shown.has(id)) return true;
+      if (legacy.has(c)) return hidden.has(id);
+      return !hidden.has(id) && (goal.size === 0 || goal.has(c));
+    });
+  }, [metricCols, hidden, shown, schemaHidden, goals]);
   const varied = useStable(useMemo(
     () => variedParams(list, paramCols),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,7 +204,7 @@ export function useLeaderboardColumns(
     ...visibleFleet, ...(showNote ? ["note"] : []), ...(showTags ? ["tags"] : []), ...(showComments ? ["comments"] : []),
   ];
   return {
-    primary, metricCols, paramCols, visibleMetrics, visibleParams, cells, defaultKeys, layout, pinned: pins,
+    primary, metricCols, paramCols, schemaHidden, visibleMetrics, visibleParams, cells, defaultKeys, layout, pinned: pins,
     suggestFacets, otherCols, visibleOther,
   };
 }

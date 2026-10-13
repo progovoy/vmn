@@ -226,7 +226,9 @@ when none declares one), up to six params whose values vary across the loaded
 runs (as many as fit the window), one `inner` column while an outer run is
 loaded (`5 · 4 running · 1 failed`), and `when`. Note, tags, the run's
 `started`/`ended` dates and the rest come from the Columns picker. The choices
-live in the URL (`show=`/`hide=`, `pin=`; `pin=-` pins nothing), and dragged
+live in the URL (`show=`/`hide=`, e.g. `show=m:train_loss`, `hide=p:seed`;
+`hide=` always hides, except that it still shows a schema-hidden metric, as
+before; `pin=`; `pin=-` pins nothing), and dragged
 widths/order in the browser. A fade on the table's right edge shows there are
 more columns to scroll to.
 

@@ -51,7 +51,12 @@ export default function LeaderboardToolbar({
         columns={cols.paramCols} visible={cols.visibleParams}
         onToggle={(c) => view.setColumnShown(`p:${c}`, !cols.visibleParams.includes(c))}
         metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
-        onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
+        onToggleMetric={(c) => {
+          const on = !cols.visibleMetrics.includes(c);
+          // hide= would show a schema-hidden metric (its older inverted key).
+          if (!on && cols.schemaHidden.includes(c)) view.resetColumn(`m:${c}`);
+          else view.setColumnShown(`m:${c}`, on);
+        }}
         otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
         onToggleOther={(c) => {
           const id = `c:${c}`;

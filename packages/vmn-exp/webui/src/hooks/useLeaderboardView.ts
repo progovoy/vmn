@@ -121,6 +121,11 @@ export function useLeaderboardView() {
         drop("hide");
         p.append(on ? "show" : "hide", col);
       }),
+    /** Drop a column's `show=`/`hide=` entries, back to its default. */
+    resetColumn: (col: string) =>
+      update((p) => {
+        for (const name of ["show", "hide"]) setAllParams(p, name, p.getAll(name).filter((v) => v !== col));
+      }),
     toggleSelected: (verstr: string) => toggleIn("sel", verstr),
     setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),
     setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),

@@ -26,6 +26,13 @@ describe("schema-hidden metric columns", () => {
     const { result } = renderHook(() => useLeaderboardColumns(ROWS, schema, toggled, "", null));
     expect([...result.current.visibleMetrics].sort()).toEqual(["grad_max", "grad_norm", "lr"]);
   });
+
+  it("show once show= turns them on", () => {
+    const schema: MetricsSchema = { lr: { hidden: true } };
+    const { result } = renderHook(() =>
+      useLeaderboardColumns(ROWS, schema, new Set<string>(), "", null, [], [], undefined, 0, new Set(["m:lr"])));
+    expect(result.current.visibleMetrics).toContain("lr");
+  });
 });
 
 describe("schemaHides", () => {

@@ -47,8 +47,14 @@ describe("default leaderboard columns (D11)", () => {
     expect(ids(c)).not.toContain("m:train_loss");
   });
 
-  it("show a non-goal metric once it is toggled on", () => {
-    expect(columns({ hidden: new Set(["m:train_loss"]) }).visibleMetrics).toContain("train_loss");
+  it("show a non-goal metric once show= turns it on", () => {
+    expect(columns({ shown: new Set(["m:train_loss"]) }).visibleMetrics).toContain("train_loss");
+  });
+
+  it("keep a metric in hide= hidden, as saved views and links before D11 meant", () => {
+    const c = columns({ hidden: new Set(["m:train_loss"]) });
+    expect(c.visibleMetrics).not.toContain("train_loss");
+    expect(c.visibleMetrics).toEqual(["val_loss", "val_acc"]);
   });
 
   it("keep every metric when the schema declares no goal", () => {
