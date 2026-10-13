@@ -16,7 +16,7 @@ from vmn_exp.core.tree import (
     INNER,
     OUTER,
     SINGLE,
-    _depth,
+    ancestors,
     children_by_parent,
     count_statuses,
     own_rollup_status,
@@ -87,17 +87,19 @@ def _upward(seeds, edges, position):
     return closed
 
 
-def _depths(roots, edges, children_of):
-    """``{verstr: depth}`` for *roots* and everything below them."""
+def _depths(seeds, edges, children_of):
+    """``{verstr: (depth, root)}`` for *seeds* and everything below them."""
     depth = {}
-    for root in roots:
-        if root in depth:
+    for seed in seeds:
+        if seed in depth:
             continue
-        stack = [(root, _depth(root, edges))]
+        chain = ancestors(seed, edges)
+        stack = [(seed, len(chain), chain[-1] if chain else None)]
         while stack:
-            verstr, d = stack.pop()
-            depth[verstr] = d
-            stack.extend((kid, d + 1) for kid in children_of.get(verstr, ()) if kid not in depth)
+            verstr, d, root = stack.pop()
+            depth[verstr] = d, root
+            stack.extend((kid, d + 1, root or verstr)
+                         for kid in children_of.get(verstr, ()) if kid not in depth)
     return depth
 
 
@@ -170,7 +172,10 @@ class _Was:
         return self._fresh.get(verstr) or self.old(verstr)
 
     def depth(self, verstr):
-        return self._depth[verstr] if verstr in self._depth else self.old(verstr)["depth"]
+        return self._depth[verstr][0] if verstr in self._depth else self.old(verstr)["depth"]
+
+    def root(self, verstr):
+        return self._depth[verstr][1] if verstr in self._depth else self.old(verstr)["root"]
 
 
 def _sweep_trials(dirty, was, children_of):
@@ -205,7 +210,9 @@ def _roll_up(prev, edges, withdrawn, dirty, was, tree):
 
 def _assemble(prev, snapshot, position, tree, fresh, touched, was):
     """``(rows, rebuilt)``: *prev*'s rows with every row whose fields changed
-    replaced by a new object (the *fresh* ones completed in place)."""
+    replaced by a new object (the *fresh* ones completed in place). Every row
+    below a re-linked run is new too: its ancestry changed, so a scoped order
+    (plan 23 S2) must place it again."""
     children_of, depth, tree_status, trials = tree
     rows = list(prev.rows[: len(snapshot.rows)])
     rows.extend([None] * (len(snapshot.rows) - len(rows)))
@@ -217,6 +224,7 @@ def _assemble(prev, snapshot, position, tree, fresh, touched, was):
             "children": children,
             "kind": kind_of(row, children),
             "depth": was.depth(verstr),
+            "root": was.root(verstr),
             "tree_status": tree_status[verstr] if verstr in tree_status else row["tree_status"],
             "child_counts": count_statuses(was.row(c)["status"] for c in children),
         }
@@ -224,7 +232,7 @@ def _assemble(prev, snapshot, position, tree, fresh, touched, was):
             fields["sweep_trials"] = trials[verstr]
         if verstr in fresh:
             row.update(fields)
-        elif verstr in touched or _tree_fields_changed(row, fields):
+        elif verstr in touched or verstr in depth or _tree_fields_changed(row, fields):
             row = {**row, **fields}
         else:
             continue
@@ -235,4 +243,4 @@ def _assemble(prev, snapshot, position, tree, fresh, touched, was):
 
 def _tree_fields_changed(row, fields):
     return any(row.get(key) != fields.get(key)
-               for key in ("depth", "tree_status", "child_counts", "sweep_trials"))
+               for key in ("depth", "root", "tree_status", "child_counts", "sweep_trials"))

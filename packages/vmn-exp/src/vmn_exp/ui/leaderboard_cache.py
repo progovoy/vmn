@@ -26,8 +26,10 @@ only the live rows are re-derived, their ancestors' ``tree_status`` rolled
 up again, and those few rows re-filtered and bisected into the cached order
 (:mod:`~vmn_exp.ui.leaderboard_live`) — O(live · log N), never a full sort.
 ``last`` (a storage-order window taken after filtering) scans back from the
-newest row only as far as it needs. Rows handed out are shared: callers must
-treat them as read-only.
+newest row only as far as it needs. Scope and top (plan 23 S2) are filters
+like the others (:mod:`~vmn_exp.ui.leaderboard_scope`), a scoped order built
+from the subtree alone; ``job:*`` orders are :mod:`~vmn_exp.ui.leaderboard_jobs`.
+Rows handed out are shared: callers must treat them as read-only.
 """
 import hashlib
 import itertools
@@ -36,30 +38,37 @@ import os
 import threading
 
 import vmn_exp.core.status as experiment_status
-from vmn_exp.core.importance import param_importance
 from vmn_exp.core.log import primary_metric
-from vmn_exp.core.query import parse_query, query_roots
+from vmn_exp.core.query import parse_query
 from vmn_exp.core.status import status_fields
 from vmn_exp.core.tree import annotate_rows
-from vmn_exp.ui import search_prefilter
+from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.http_params import MAX_PAGE
 from vmn_exp.ui.job_rollup_cache import JobRollupCache
+from vmn_exp.ui.leaderboard_answers import IMPORTANCE_RESULTS, SetAnswers
 from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, static_moves
 from vmn_exp.ui.leaderboard_facets import Facets
-from vmn_exp.ui.leaderboard_facets import visible as _visible
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
+from vmn_exp.ui.leaderboard_jobs import JobsView
 from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, order_key
+from vmn_exp.ui.leaderboard_scope import (
+    Filters,
+    check_scope,
+    filtered,
+    left_filtered,
+    scope_positions,
+)
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
-from vmn_exp.ui.readers.experiments import apply_filters, sort_rows
+from vmn_exp.ui.readers.experiments import sort_rows
 from vmn_exp.ui.search_index import SearchIndexes
 from vmn_exp.ui.search_rank import results
 
+from vmn_exp.ui import search_prefilter
+
 BUCKET_SEC = 2
-# Importance results kept (each pins its scored runs' params dicts).
-IMPORTANCE_RESULTS = 8
 # Orders moved on across generations: the dashboard's mix of sorts and
 # queries at 100k rows, each a list of row references.
 LATEST_ORDERS = 64
@@ -79,21 +88,9 @@ def _status(snapshot, verstr):
     )
 
 
-def _filtered(snapshot, rows, status, query, archived):
-    """*rows* of *snapshot* passing the filters (a query may read the
-    snapshot's ``outputs``, kept off the rows)."""
-    return apply_filters(_visible(rows, archived), status, query, snapshot)
-
-
-def _left_filtered(order, left, status, query, archived):
-    """Those of the *left* rows (of an older snapshot) *order* holds. A
-    query over ``outputs`` cannot be judged again on them — the current
-    snapshot has their successors' — but they are in *order* exactly when
-    they passed it."""
-    if not (query and query.strip() and "outputs" in query_roots(query)):
-        return _filtered(None, left, status, query, archived)
-    ids = {id(row) for row in left}
-    return [row for row in order if id(row) in ids]
+def _restated(snapshot, row):
+    """A copy of *row* with its status fields as of now."""
+    return signed({**row, **_status(snapshot, row["verstr"])})
 
 
 class _Base:
@@ -106,6 +103,7 @@ class _Base:
         self.position = position
         self.patch = patch
         self.children_of, self.child_statuses = tree
+        self.scopes = {}  # {scope: storage indexes of its subtree}
         # (previous base's token, static rows that left, static rows that joined)
         self.delta = None
         self._at = (bucket, [rows[i] for i in patch.changed])
@@ -116,7 +114,8 @@ class _Base:
         """From scratch: O(N)."""
         states = snapshot.run_states
         live = [i for i, row in enumerate(snapshot.rows) if _is_live(states.get(row["verstr"]))]
-        rows = annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)
+        rows = [signed(row) for row in
+                annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)]
         position = {row["verstr"]: i for i, row in enumerate(rows)}
         patch = LivePatch.of_rows(rows, live, position)
         return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows))
@@ -136,7 +135,7 @@ class _Base:
         for i in fresh_at:
             verstr = snapshot.rows[i]["verstr"]
             position[verstr] = i
-            fresh[verstr] = dict(snapshot.rows[i], **_status(snapshot, verstr))
+            fresh[verstr] = _restated(snapshot, snapshot.rows[i])
         tree = derive_tree(prev, snapshot, fresh, gone, position)
         if tree is None:
             return None
@@ -154,23 +153,22 @@ class _Base:
                 self._at = (bucket, self._rederive_live())
             return self._at[1]
 
-    def tail(self, bucket, count, status, query, archived):
-        """The last *count* rows passing the filters (every one when *count*
-        < 1) in storage order, as of *bucket*: scans back only as needed."""
+    def tail(self, bucket, count, f):
+        """The last *count* rows passing the :class:`Filters` *f* (every one
+        when *count* < 1) in storage order, as of *bucket*: scans back only
+        as needed, within the scope's subtree when *f* has one."""
         patched = dict(zip(self.patch.changed, self.changed_at(bucket)))
-        out, stop, chunk = [], len(self.rows), max(count, 64)
+        at = scope_positions(self, f.scope) if f.scope else range(len(self.rows))
+        out, stop, chunk = [], len(at), max(count, 64)
         while stop and (count < 1 or len(out) < count):
             start = max(0, stop - chunk)
-            window = [patched.get(i, self.rows[i]) for i in range(start, stop)]
-            out = _filtered(self.snapshot, window, status, query, archived) + out
+            window = [patched.get(i, self.rows[i]) for i in at[start:stop]]
+            out = filtered(self.snapshot, window, f) + out
             stop, chunk = start, chunk * 2
         return out
 
     def _rederive_live(self):
-        fresh = {
-            i: {**self.rows[i], **_status(self.snapshot, self.rows[i]["verstr"])}
-            for i in self.patch.live
-        }
+        fresh = {i: _restated(self.snapshot, self.rows[i]) for i in self.patch.live}
         return self.patch.rolled_up(self.rows, fresh)
 
 
@@ -194,24 +192,28 @@ class _Static:
         self.filtered = None if with_metric else filtered
 
     @classmethod
-    def build(cls, base, schema, sort, status, query, order, archived, slots=None):
-        """Filtered and sorted from scratch: O(N log N). *slots*: the storage
-        slots that may pass *query* (None: every one)."""
+    def build(cls, base, schema, f, slots=None):
+        """Filtered (:class:`Filters` *f*) and sorted from scratch: O(N log N),
+        N the scope's subtree when *f* has one. *slots*: the storage slots
+        that may pass *f*'s query (None: every one)."""
         changed = set(base.patch.changed)
-        at = range(len(base.rows)) if slots is None else sorted(slots)
+        at = scope_positions(base, f.scope) if f.scope else range(len(base.rows))
+        if slots is not None:
+            at = sorted(set(at) & slots) if f.scope else sorted(slots)
         rows = [base.rows[i] for i in at if i not in changed]
-        filtered = _filtered(base.snapshot, rows, status, query, archived)
-        ordered = sort_rows(filtered, schema, sort=sort, order=order)
-        with_metric = _carrying(sort or primary_metric(schema), filtered)
-        return cls(base.token, ordered, filtered, with_metric)
+        kept = filtered(base.snapshot, rows, f)
+        ordered = sort_rows(kept, schema, sort=f.sort, order=f.order)
+        with_metric = _carrying(f.sort or primary_metric(schema), kept)
+        return cls(base.token, ordered, kept, with_metric)
 
-    def advanced(self, base, left, joined, schema, sort, status, query, order, archived):
+    def advanced(self, base, left, joined, schema, f):
         """This order moved to *base*: the *left* rows out (by identity, so
         from any number of generations back), the *joined* rows in by
         bisection. None when whether any row carries the sort metric flips —
         the order changes shape then — or a left row is missing."""
-        left = _left_filtered(self.sorted, left, status, query, archived)
-        joined = _filtered(base.snapshot, joined, status, query, archived)
+        left = left_filtered(self.sorted, left, f)
+        joined = filtered(base.snapshot, joined, f)
+        sort, order = f.sort, f.order
         metric = sort or primary_metric(schema)
         with_metric = self.with_metric - _carrying(metric, left) + _carrying(metric, joined)
         if bool(with_metric) != self.has_metric:
@@ -219,12 +221,12 @@ class _Static:
         key = order_key(schema, sort, DESCENDING.get(order), lambda m: self.has_metric,
                         base.position)[0]
         ordered = moved(self.sorted, left, joined, key)
-        filtered = None
+        in_storage = None
         if not with_metric:
-            filtered = moved(self.filtered, left, joined, _by_position(base.position))
-        if ordered is None or (filtered is None and not with_metric):
+            in_storage = moved(self.filtered, left, joined, _by_position(base.position))
+        if ordered is None or (in_storage is None and not with_metric):
             return None
-        return _Static(base.token, ordered, filtered, with_metric)
+        return _Static(base.token, ordered, in_storage, with_metric)
 
     def merged(self, base, live, schema, sort, order):
         """This order with the filtered changed rows *live* placed into it."""
@@ -239,7 +241,7 @@ def _schema_key(schema):
     return json.dumps(schema or {}, sort_keys=True, default=str)
 
 
-class LeaderboardCache:
+class LeaderboardCache(SetAnswers):
     def __init__(self, max_page=MAX_PAGE, bucket_sec=BUCKET_SEC, size=32):
         self.max_page = max_page
         self.bucket_sec = bucket_sec
@@ -266,6 +268,8 @@ class LeaderboardCache:
         self._groups = GroupCache(self, size)
         self._jobs = JobRollupCache(self, size)
         self._search = SearchIndexes()
+        self._job_view = JobsView(self, size)
+        self._filtered_facets = LRU(size)
 
     schema_key = staticmethod(_schema_key)
 
@@ -289,32 +293,29 @@ class LeaderboardCache:
             self._deltas.add(derived)
         return derived or _Base.build(snapshot, token, bucket)
 
-    def _ordered(self, snapshot, schema, sort, last, status, query, order, archived=False):
+    def _ordered(self, snapshot, schema, last, f):
+        """The rows passing the :class:`Filters` *f* in order (no ``job:*`` sort)."""
         base, bucket = self._base(snapshot)
+        check_scope(base, f.scope)
         schema_key = _schema_key(schema)
-        filters = (sort, status, query, order, archived)
         if last:
             return self._sorted.get(
-                (base.token, bucket, schema_key, last) + filters,
-                lambda: sort_rows(
-                    base.tail(bucket, int(last), status, query, archived),
-                    schema, sort=sort, last=last, order=order,
-                ),
+                (base.token, bucket, schema_key, last) + f,
+                lambda: sort_rows(base.tail(bucket, int(last), f), schema,
+                                  sort=f.sort, last=last, order=f.order),
             )
-        static = self.static_order(base, schema, filters)
+        static = self.static_order(base, schema, f)
         if not base.patch.changed:
             return static.sorted
         return self._sorted.get(
-            (base.token, bucket, schema_key, None) + filters,
+            (base.token, bucket, schema_key, None) + f,
             lambda: static.merged(
-                base, _filtered(base.snapshot, base.changed_at(bucket), status, query, archived),
-                schema, sort, order,
+                base, filtered(base.snapshot, base.changed_at(bucket), f), schema, f.sort, f.order,
             ),
         )
 
     def static_order(self, base, schema, filters):
-        """*base*'s :class:`_Static` order for *filters* ``(sort, status,
-        query, order, archived)``."""
+        """*base*'s :class:`_Static` order for the :class:`Filters` *filters*."""
         schema_key = _schema_key(schema)
         return self._static.get(
             (base.token, schema_key) + filters,
@@ -328,9 +329,9 @@ class LeaderboardCache:
         key = (schema_key,) + filters
         last = self._latest.peek(key)
         moves = last and self._deltas.since(last.token, base)
-        static = moves and last.advanced(base, *moves, schema, *filters)
-        static = static or _Static.build(base, schema, *filters,
-                                         slots=self._candidates(base.snapshot, filters[2]))
+        static = moves and last.advanced(base, *moves, schema, filters)
+        static = static or _Static.build(base, schema, filters,
+                                         slots=self._candidates(base.snapshot, filters.query))
         self._latest.put(key, static)
         return static
 
@@ -355,23 +356,38 @@ class LeaderboardCache:
 
     def page(
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,
-        status=None, query=None, order=None, archived=False,
+        status=None, query=None, order=None, archived=False, scope=None, top=False,
     ):
         """What ``leaderboard`` answers for the same arguments, from the memo.
 
         Without *limit* a plain list of at most ``max_page`` rows; with it
-        ``{"rows", "total"}``. Archived rows are left out unless *archived*.
-        Raises ``QueryError`` on a bad *query*.
+        ``{"rows", "total"}``. Archived rows are left out unless *archived*;
+        *scope* keeps a run's subtree (without it), *top* the top-level runs,
+        each then carrying ``job`` (plan 23 S2). Raises ``QueryError`` on a
+        bad *query*, :class:`~vmn_exp.ui.leaderboard_scope.UnknownScope` on an
+        unknown *scope*.
         """
-        rows = self._ordered(snapshot, schema, sort, last, status, query, order, archived)
-        offset = offset or 0
-        if limit is None:
-            return rows[offset : offset + self.max_page]
-        return {"rows": rows[offset : offset + limit], "total": len(rows)}
+        f = Filters(sort, status, query, order, archived, scope, top)
+        rows = self._job_view.ordered(snapshot, schema, last, f)
+        return self.paged(snapshot, schema, rows, offset, limit, top)
 
-    def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False):
+    def paged(self, snapshot, schema, rows, offset, limit, top):
+        """*rows* cut as :meth:`page` answers (carrying ``job`` when *top*)."""
+        offset = offset or 0
+        cut = rows[offset : offset + (self.max_page if limit is None else limit)]
+        if top:
+            cut = self._job_view.with_jobs(snapshot, schema, cut)
+        return cut if limit is None else {"rows": cut, "total": len(rows)}
+
+    def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False,
+                scope=None, top=False):
         """Every row passing *status* in :meth:`page`'s order, unpaged."""
-        return self._ordered(snapshot, schema, sort, None, status, None, order, archived)
+        f = Filters(sort, status, None, order, archived, scope, top)
+        return self._job_view.ordered(snapshot, schema, None, f)
+
+    def clock(self):
+        """The time bucket a Jobs view's summaries (throughput, ETA) follow."""
+        return self._bucket()
 
     def groups(self, snapshot, schema, group, **params):
         """The grouped board (plan 22 K1), see
@@ -392,11 +408,11 @@ class LeaderboardCache:
         """Every row, with its status as of now, in storage order: no sort, for
         counting (archived rows only when *archived*)."""
         base, bucket = self._base(snapshot)
-        return base.tail(bucket, 0, None, None, archived)
+        return base.tail(bucket, 0, Filters(archived=archived))
 
     def columns(
         self, snapshot, schema, keys, limit=None, sort=None, status=None,
-        query=None, order=None, archived=False,
+        query=None, order=None, archived=False, scope=None, top=False,
     ):
         """``{verstrs, idx, columns, total}`` over the first *limit* ordered rows.
 
@@ -405,38 +421,15 @@ class LeaderboardCache:
         limit = clamp_columns_limit(limit)
         keys = tuple(keys)
         base, bucket = self._base(snapshot)
-        params = (sort, status, query, order, archived, keys, limit)
+        f = Filters(sort, status, query, order, archived, scope, top)
         return self._columns.get(
-            (base.token, bucket, _schema_key(schema)) + params,
-            lambda: self._columns_payload(snapshot, schema, *params),
+            (base.token, bucket, _schema_key(schema), keys, limit) + f,
+            lambda: self._columns_payload(snapshot, schema, f, keys, limit),
         )
 
-    def _columns_payload(self, snapshot, schema, sort, status, query, order, archived, keys, limit):
-        rows = self._ordered(snapshot, schema, sort, None, status, query, order, archived)
+    def _columns_payload(self, snapshot, schema, f, keys, limit):
+        rows = self._job_view.ordered(snapshot, schema, None, f)
         return columns_payload(rows[:limit], keys, len(rows))
-
-    def importance(self, snapshot, schema, metric, status=None, query=None, archived=False):
-        """Parameter importance for *metric* over the filtered rows.
-
-        Memoized on what is scored — each scored run's verstr, metric value
-        and params — so a new generation or status bucket that changed none
-        of them (a live run still without the metric) costs a filter, not a
-        forest. Raises ``ValueError`` when no visible run carries *metric*,
-        ``QueryError`` on a bad *query*. Keyed by *schema* too: the rows'
-        metric values follow it.
-        """
-        base, bucket = self._base(snapshot)
-        rows = base.tail(bucket, 0, status, query, archived)
-        scored = tuple(
-            (row["verstr"], row["metrics"].get(metric), row.get("params"))
-            for row in rows if metric in row["metrics"]
-        )
-        key = (_schema_key(schema), metric, tuple((v, m, id(p)) for v, m, p in scored))
-        universe = lambda: base.tail(bucket, 0, None, None, archived)  # noqa: E731
-        # The value keeps the params dicts alive, so their ids stay unique.
-        return self._importance.get(
-            key, lambda: (scored, param_importance(rows, metric, universe=universe()))
-        )[1]
 
     def etag(self, snapshot, schema, **params):
         """Changes whenever :meth:`page` could answer differently."""
@@ -446,8 +439,3 @@ class LeaderboardCache:
             default=str,
         )
         return hashlib.blake2b(raw.encode(), digest_size=16).hexdigest()
-
-    def facets(self, snapshot, archived=False):
-        """The app's filter vocabulary, once per snapshot (archived rows only
-        when *archived*), moved on from the app's last counts."""
-        return self._facets.get(snapshot, archived)

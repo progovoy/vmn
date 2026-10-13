@@ -13,7 +13,7 @@ Grammar::
     or_expr    = and_expr { "or" and_expr }
     and_expr   = not_expr { "and" not_expr }
     not_expr   = "not" not_expr | primary
-    primary    = "(" or_expr ")" | comparison
+    primary    = "(" or_expr ")" | "under" "(" string ")" | comparison
     comparison = field cmp_op literal
                | field [ "not" ] "in" "(" literal { "," literal } ")"
     cmp_op     = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
@@ -53,10 +53,13 @@ current tags, which are always strings (``tags.stage = "prod"``); a removed
 or never-set tag is missing. ``name ~ "sweep"`` matches the run name and
 ``archived = true`` the archived runs. ``author ~ "alice"`` matches who ran it
 (git email, else OS user, else writer) and ``has_intent = false`` the runs
-nobody described yet.
+nobody described yet. ``under("<verstr>")`` matches the runs in that run's
+subtree (not the run itself).
 """
 
 import functools
+
+from vmn_exp.core.tree import ancestry_of
 
 # Every non-metric field a row can carry, from ``experiment_row`` +
 # ``experiment_status.status_fields`` + ``experiment_tree.annotate_tree``.
@@ -68,7 +71,7 @@ ROW_FIELDS = frozenset(
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status imported_from forked_from forked_from_step rerun_of
     author has_intent
-    end_reason error_summary signal
+    end_reason error_summary signal root failure_sig
     """.split()
 )
 
@@ -85,6 +88,9 @@ NESTED_SUBFIELDS = {
     "inputs": ("uri", "digest", "kind"),
     "outputs": ("path", "digest", "size"),
 }
+
+# ``under("v")`` reads each row's ancestor verstrs, supplied as this field.
+UNDER, ANCESTORS = "under", "ancestors"
 
 _KEYWORDS = frozenset({"and", "or", "not", "in", "contains", "true", "false", "null"})
 _OPERATORS = ("==", "!=", "<=", ">=", "!~", "=", "<", ">", "~")
@@ -333,6 +339,9 @@ def _predicate(node):
     if kind == "not":
         inner = _predicate(node[1])
         return lambda row: not inner(row)
+    if kind == "under":
+        verstr = node[1]
+        return lambda row: verstr in (row.get(ANCESTORS) or ())
     get = _getter(node[1])
     if kind == "in":
         values = node[2]
@@ -423,6 +432,8 @@ class _Parser:
         if token[0] != "name":
             _fail(f"expected a field name, found {_describe(token)}", token[2])
         self.next()
+        if token[1] == UNDER and self.peek()[0] == "(":
+            return self.parse_under()
         field = _field(token[1], token[2])
 
         negate = bool(self.accept("kw", "not"))
@@ -440,6 +451,15 @@ class _Parser:
         if operator[1] in ("~", "!~", "contains") and not isinstance(literal, str):
             _fail(f"'{operator[1]}' needs a string on the right", operator[2])
         return ("cmp", field, _CANONICAL_OPS.get(operator[1], operator[1]), literal)
+
+    def parse_under(self):
+        """``under("<verstr>")``: the rows in that run's subtree."""
+        self.next()
+        token = self.next()
+        if token[0] != "lit" or not isinstance(token[1], str):
+            _fail("under() takes one quoted verstr", token[2])
+        self.expect(")", ")", "')'")
+        return ("under", token[1])
 
     def parse_literal(self):
         token = self.next()
@@ -469,7 +489,7 @@ def parse_query(text):
     ``("in", field, [literals])`` or ``("cmp", field, op, literal)``, with
     ``op`` one of ``= != < <= > >= ~ !~`` and ``field`` either
     ``("path", keys)`` (nested dict keys from the row) or
-    ``("env_packages", package)``. Raises :class:`QueryError` like
+    ``("env_packages", package)``; ``under("v")`` is ``("under", v)``. Raises :class:`QueryError` like
     :func:`compile_query`; the SQL backend compiles the same tree."""
     if not text or not text.strip():
         raise QueryError("empty query")
@@ -494,11 +514,12 @@ def compile_query(text):
 def query_roots(text):
     """The top-level row keys *text* reads (``outputs`` for
     ``outputs."a.png".size``, ``status`` for ``status = "failed"``)."""
-    return frozenset(
+    roots = (
         (value[0] if isinstance(value, tuple) else value.split(".")[0])
         for kind, value, _ in tokenize(text)
         if kind == "name"
     )
+    return frozenset(ANCESTORS if root == UNDER else root for root in roots)
 
 
 def _completing(text, extra):
@@ -520,10 +541,13 @@ def filter_rows(rows, text, extra=None):
 
     *extra* ``{key: of(verstr)}`` supplies fields kept off lean rows (the
     index snapshot's ``outputs``): a query reading one sees it, the rows
-    returned are the ones given.
+    returned are the ones given. ``under()`` reads ``ancestors``, by default
+    from the *rows*' own ``parent`` links.
     """
     if not text or not text.strip():
         return rows
     predicate = compile_query(text)
+    if ANCESTORS in query_roots(text) and ANCESTORS not in (extra or {}):
+        extra = dict(extra or {}, ancestors=ancestry_of(rows))
     complete = _completing(text, extra)
     return [row for row in rows if predicate(complete(row))]

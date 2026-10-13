@@ -12,7 +12,7 @@ corpus through both backends.
 """
 import json
 
-from vmn_exp.core.query import parse_query
+from vmn_exp.core.query import QueryError, parse_query
 
 # What Python's ``x or y`` treats as false, as jsonb.
 _FALSY = "('null', '{}', '[]', '\"\"', '0', 'false')"
@@ -39,6 +39,8 @@ class _Compiler:
             return "(" + joiner.join(self.node(term) for term in node[1]) + ")"
         if kind == "not":
             return f"(NOT {self.node(node[1])})"
+        if kind == "under":
+            raise QueryError("under() is not supported by the SQL backend")
         value = self.field(node[1])
         if kind == "in":
             return "(" + " OR ".join(self.equal(value, v) for v in node[2]) + ")"

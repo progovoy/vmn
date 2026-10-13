@@ -9,12 +9,13 @@ import os
 
 from vmn_exp.core.log import filter_by_status, sort_by_metric
 from vmn_exp.core.log import load_log as _load_log
-from vmn_exp.core.query import filter_rows
+from vmn_exp.core.query import ANCESTORS, filter_rows
 from vmn_exp.core.status import load_run_state
-from vmn_exp.core.tree import annotate_rows
+from vmn_exp.core.tree import ancestors, annotate_rows
 from vmn_exp.storage.areas import RUNS, SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.facet_values import distinct_count, value_key
+from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.leaderboard_group_fields import conf_aggregate
 from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
@@ -96,10 +97,22 @@ def apply_filters(rows, status=None, query=None, snapshot=None):
     ordering and paging — so ``total`` counts the rows that matched. Raises
     :class:`~version_stamp.core.experiment_query.QueryError` on a bad *query*;
     the API turns that into a 400. *snapshot*: the index snapshot the lean
-    *rows* came from, whose ``outputs`` a query may read.
+    *rows* came from, whose ``outputs`` and run tree a query may read.
     """
-    extra = {"outputs": snapshot.outputs_of} if snapshot is not None else None
-    return filter_rows(filter_by_status(rows, status), query, extra=extra)
+    return filter_rows(filter_by_status(rows, status), query, extra=snapshot_fields(snapshot))
+
+
+# What a query may read of the snapshot rather than the rows.
+SNAPSHOT_FIELDS = frozenset({"outputs", ANCESTORS})
+
+
+def snapshot_fields(snapshot):
+    """What a query reads of *snapshot* beyond its rows: ``outputs`` and the
+    ``ancestors`` ``under()`` tests (None without a snapshot)."""
+    if snapshot is None:
+        return None
+    edges = snapshot.edges
+    return {"outputs": snapshot.outputs_of, ANCESTORS: lambda verstr: ancestors(verstr, edges)}
 
 
 ORDERS = ("asc", "desc")
@@ -147,7 +160,7 @@ def leaderboard(
     neither is ever cached — callers pass freshly fetched rows. *observed_at*
     is ``{verstr: run_state.yml store write time}``.
     """
-    annotated = annotate_rows(rows, run_states, observed_at=observed_at)
+    annotated = [signed(row) for row in annotate_rows(rows, run_states, observed_at=observed_at)]
     return sort_rows(
         apply_filters(annotated, status, query),
         schema,

@@ -7,7 +7,6 @@ ties) then take the default order, as with no sort (plan 22 F10).
 """
 from vmn_exp.core.log import primary_metric, sort_descending
 from vmn_exp.core.metric_schema import metric_goal
-from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.leaderboard_group_fields import (
     COUNT_SORTS,
     check_aggregate,
@@ -15,15 +14,15 @@ from vmn_exp.ui.leaderboard_group_fields import (
     key_of,
 )
 from vmn_exp.ui.leaderboard_live import order_key
+from vmn_exp.ui.leaderboard_scope import Filters, filtered
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
-from vmn_exp.ui.readers.experiments import apply_filters
 
 
 class GroupSpec:
     """One grouping's field, aggregate, sort and filters."""
 
     def __init__(self, group, agg, schema, sort=None, order=None, status=None,
-                 query=None, archived=False):
+                 query=None, archived=False, scope=None, top=False):
         self.group = check_group(group)
         self.counted = COUNT_SORTS.get(sort)
         # The groups' order beyond the flat board's (a count sort), else None.
@@ -34,9 +33,8 @@ class GroupSpec:
         self.agg = check_aggregate(agg)
         self.key_of = key_of(group)
         self.schema, self.sort, self.descending = schema, sort, DESCENDING.get(order)
-        self.filters = (status, query, archived)
-        # The flat board's (sort, status, query, order, archived).
-        self.flat = (sort, status, query, order, archived)
+        # The flat board's filters.
+        self.flat = Filters(sort, status, query, order, archived, scope, top)
         self.metric = sort or primary_metric(schema)
         self._goal = metric_goal(schema, self.metric) if self.metric else None
         descending = self.descending
@@ -45,8 +43,7 @@ class GroupSpec:
         self._sign = -1 if descending else 1
 
     def filtered(self, snapshot, rows):
-        status, query, archived = self.filters
-        return apply_filters(visible(rows, archived), status, query, snapshot)
+        return filtered(snapshot, rows, self.flat)
 
     def carrying(self, rows):
         return sum(1 for row in rows if self.metric in row["metrics"])
