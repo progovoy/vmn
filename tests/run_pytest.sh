@@ -118,6 +118,14 @@ fi
 
 echo "Will run the ${suite} suite:"
 export PYTHONPATH=${SRC_PATH}
+# macOS: torch bundles libomp and xgboost loads Homebrew's; two OpenMP runtimes
+# in one worker crash it. Make xgboost load torch's too.
+if [ "$(uname)" = "Darwin" ]; then
+	TORCH_LIB=$(${PYTHON} -c 'import importlib.util, os; s = importlib.util.find_spec("torch"); print(os.path.join(os.path.dirname(s.origin), "lib") if s else "")')
+	if [ -n "${TORCH_LIB}" ]; then
+		export DYLD_LIBRARY_PATH=${TORCH_LIB}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}
+	fi
+fi
 # Timing benchmarks (marker "serial") run in a second, one-process pass:
 # under 29 busy workers they measure the contention, not the code.
 cmd='${PYTHON} -m coverage run -m pytest  -n 29 -m "not serial" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'

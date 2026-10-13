@@ -20,7 +20,13 @@ COPY stamp_with_${VMN_VERSION}_vmn.sh /
 RUN git config --global user.email "you@example.com"
 RUN git config --global user.name "Your Name"
 
-RUN pip3 install --no-cache-dir "git+https://github.com/progovoy/vmn.git@${VMN_GIT_TAG}"
+# setuptools >= 66 rejects old tags' setup.py version "dev" (PEP 440). A tag
+# without a pyproject.toml builds with the image's setuptools, one with it in
+# pip's isolated build environment, which the constraint reaches.
+RUN echo "setuptools<66" > /tmp/build-constraints.txt && \
+    pip3 install --no-cache-dir -c /tmp/build-constraints.txt setuptools && \
+    PIP_CONSTRAINT=/tmp/build-constraints.txt \
+    pip3 install --no-cache-dir "git+https://github.com/progovoy/vmn.git@${VMN_GIT_TAG}"
 
 # Inject the real version — git installs leave version.py at 0.0.0
 # because gen_ver.py only runs during PyPI wheel builds

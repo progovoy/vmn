@@ -46,6 +46,10 @@ root inside the worker's checkout. From a laptop:
     muster run ci/pipeline.py --runs-on docker
 """
 
+import importlib.util
+import os
+import sys
+
 from debug_router.pipeline import Param, Pipeline, stage
 
 # muster builds/reuses one venv from this spec (cwd is the repo, so ``-e .`` and
@@ -77,6 +81,16 @@ def lint(ctx):
     ctx.run(["ruff", "check", "packages", "--output-format", "concise"])
 
 
+def _openmp_env():
+    """macOS: torch bundles libomp and xgboost loads Homebrew's; two OpenMP
+    runtimes in one worker crash it. Make xgboost load torch's too."""
+    spec = importlib.util.find_spec("torch")
+    if sys.platform != "darwin" or spec is None:
+        return None
+    torch_lib = os.path.join(os.path.dirname(spec.origin), "lib")
+    return {"DYLD_LIBRARY_PATH": os.pathsep.join(filter(None, [torch_lib, os.environ.get("DYLD_LIBRARY_PATH")]))}
+
+
 def _pytest(ctx, suite_dir, report, workers=("-n", "29"), marker=None):
     # ctx.run defaults to check=True: it writes the output card, then fails the
     # stage on any nonzero exit — test failures (exit 1) and pytest crashes
@@ -92,7 +106,8 @@ def _pytest(ctx, suite_dir, report, workers=("-n", "29"), marker=None):
             f"--html=reports/{report}.html",
             "--self-contained-html",
             "-vv",
-        ]
+        ],
+        env=_openmp_env(),
     )
 
 

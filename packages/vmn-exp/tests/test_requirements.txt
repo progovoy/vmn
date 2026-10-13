@@ -17,3 +17,11 @@ optuna
 pip
 numpy
 playwright
+psycopg[binary]
+pandas
+pillow
+pyarrow
+mlflow-skinny
+transformers
+ray
+accelerate
