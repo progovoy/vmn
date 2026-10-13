@@ -41,6 +41,7 @@ _EXPECTED_ALL = [
     "_collect_untracked_tarball",
     "_commit_exists",
     "_complete_apps",
+    "checkout_branch_of",
     "_compute_diff_hash",
     "_compute_verstr",
     "_diff_real_tree",

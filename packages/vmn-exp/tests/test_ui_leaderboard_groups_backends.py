@@ -50,6 +50,9 @@ QUERIES = [
     {"group": "status"},
     {"group": "params.lr", "sort": "metrics.loss", "order": "desc"},
     {"group": "tags.team", "limit": 1, "offset": 1},
+    {"group": "parent", "sort": "c:total", "order": "desc"},
+    {"group": "params.lr", "sort": "c:failed"},
+    {"group": "code_verstr", "sort": "c:done", "order": "asc", "status": "succeeded"},
 ]
 
 

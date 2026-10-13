@@ -67,6 +67,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "handle_init":                 "version_stamp.cli.commands:handle_init",
     "init_needed":                 "version_stamp.stamping.init:init_needed",
     "get_client":                  "version_stamp.backends.factory:get_client",
+    "checkout_branch_of":          "version_stamp.backends.factory:checkout_branch_of",
     "_complete_apps":              "version_stamp.cli.completion:_complete_apps",
     # --- plugin hooks and the CLI runner, for vmn-exp's commands ------------
     "CommandSpec":                 "version_stamp.cli.plugin_api:CommandSpec",

@@ -24,6 +24,10 @@ def _state(kind):
     if kind == "running":
         return {"state": "running", "exit_code": None, "started_at": _iso(NOW),
                 "heartbeat": _iso(NOW), "heartbeat_interval_sec": 30}
+    if kind == "stuck":  # running, its heartbeat an hour stale
+        old = _iso(NOW - datetime.timedelta(hours=1))
+        return {"state": "running", "exit_code": None, "started_at": old,
+                "heartbeat": old, "heartbeat_interval_sec": 30}
     return {"state": "finished", "exit_code": 0 if kind == "ok" else 1,
             "started_at": _iso(NOW), "finished_at": _iso(NOW), "heartbeat": _iso(NOW)}
 

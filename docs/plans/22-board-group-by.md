@@ -162,8 +162,10 @@ resolved to (F3). Every aggregate is in the payload so switching needs no refetc
 `best` is null for a goal-less metric. Finite values only; `n` counts them.
 `sort`/`order`/`status`/`q`/`archived` behave as in G5/G6: `rows_total` counts a group's
 passing rows, `rows_unfiltered` its rows with the same `archived` but without
-`q`/`status` (F1), and the top-level `running` the running rows after the filters
-across all groups (F4). Unknown fields or aggregates give 400.
+`q`/`status` (F1; only those two are dropped, and the web client sends its branch
+and search filters inside `q`), and the top-level `running` the running rows after
+the filters across all groups (F4). `sort=c:total|c:waiting|c:running|c:done|c:failed`
+orders groups by that count (F10). Unknown fields or aggregates give 400.
 Rows with no value go to one group, last, labelled `(none)` (for `parent`: `(no parent
 run)`); its `key` is the sentinel `∅` (U+2205), and a value whose text starts with `∅`
 is keyed with it doubled, so no value shares that group (F6). A
@@ -255,7 +257,8 @@ Everything the first build left open, plus the reviewers' non-blocking findings.
 approved the toolbar test's 7 -> 8 controls limit (G2 adds Group by).
 
 **F1. `5 of 16` (G6).** K1 gains, per group, `rows_unfiltered`: the group's size with the
-same `archived` setting but without `q`/`status`/`branch`/`search`. It equals `rows_total`
+same `archived` setting but without `q`/`status` (the server drops those two; the web
+client turns its `branch`/`search` filters into `q`, so they go too). It equals `rows_total`
 when no filter is set. The header (desktop and phone) says `5 of 16` when they differ.
 Kept incrementally like the other group stats.
 
@@ -265,7 +268,9 @@ line wraps instead of being cut (`1 st…`).
 
 **F3. The effective aggregate comes from the server.** K1's top level gains `aggregate`
 (what `agg=` resolved to, the conf default included, read the same way the server reads
-other app conf, branch conf respected). The board's tag and menu show that value when the
+other app conf, branch conf respected; a detached HEAD counts as the branch vmn
+resolves it to, plan 17, through `version_stamp.api.checkout_branch_of`, cached per
+(checkout, HEAD sha); attached, HEAD is read as a file, no git process). The board's tag and menu show that value when the
 URL has no `agg=`; the client's own conf read (`useConfAggregate`) goes.
 
 **F4. Live while any group runs.** K1's top level gains `running` (running rows across
@@ -278,7 +283,8 @@ rows (`rows_per_group` is lowered to fit); out-of-range values are clamped, not 
 **F6. Distinct keys.** A field value that is literally `(none)` must not share the
 no-value group: the no-value group's `key` is a sentinel that no value can produce
 (its label stays `(none)` / `(no parent run)`). NaN params count as one distinct value
-in the facets' distinct-value tally, and leaving cancels joining.
+in the facets' distinct-value tally, and leaving cancels joining. Bookmarked
+`collapse=` keys of the old `(none)` group are not migrated: they no longer fold (G8).
 
 **F7. Charts follow the selection (G7).** With rows selected, the Charts tab plots only
 them (a `Showing N selected · Show all` note clears it); without a selection it plots
@@ -310,3 +316,14 @@ only the size (`16 runs` / `5 of 16 runs`); the phone section label keeps the fu
 wording. Also: a group a filter cut never says `all succeeded` (`5 of 16 runs · 5
 succeeded`, the spoken text too), the selected aggregate in the Group by menu shows a 2px
 focus ring, and the stylesheet tests share one contrast helper module.
+
+**F10 (server). Sort groups by count** (user decision; the board adds count columns
+on group header rows). K1 takes `sort=c:total|c:waiting|c:running|c:done|c:failed`
+and orders groups by that count of `counts`, with the old inner-run count columns'
+status semantics: `waiting` = created, `running`, `done` = succeeded, `failed` =
+failed + stuck. `order=asc|desc` as usual (no `order`: most first, the board's
+default for a count column); ties keep the default group order, rows within a group
+their default order (no sort), and the no-value group stays last. Cached and moved
+by deltas like the other group orders (the count sort is part of the grouping's
+key; only groups whose rows changed are placed again). Without `group=`, a `c:*`
+sort is what any unknown sort is today: a metric no row carries (storage order).

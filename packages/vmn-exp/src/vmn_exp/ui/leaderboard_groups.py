@@ -6,7 +6,8 @@ themselves ordered by the sort.
 Rows keep the flat board's order (:func:`~vmn_exp.ui.leaderboard_live.order_key`).
 When the sort ranks by a metric, groups order by their aggregate (*agg*) of
 it — missing ones after, ties by their first row — else by their first row;
-the ``(none)`` group always comes last.
+the ``(none)`` group always comes last. A count sort orders groups by that
+count (:class:`~vmn_exp.ui.leaderboard_group_spec.GroupSpec`).
 
 Like :class:`~vmn_exp.ui.leaderboard_cache._Static`, a :class:`Grouping`
 covers the rows no time bucket changes: :meth:`Grouping.build` partitions a
@@ -16,63 +17,19 @@ the rows that left and joined (only their groups are placed again, their
 and :meth:`Grouping.merged` places a bucket's changed rows into it. Rows
 handed out are shared: callers must treat them as read-only.
 """
-from vmn_exp.core.log import primary_metric, sort_descending
-from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.ui.leaderboard_delta import splice
-from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.leaderboard_group_fields import (
     NONE,
     RERUN_OF,
     TARGET_LINKS,
     UnknownGroup,
-    check_aggregate,
-    check_group,
-    key_of,
+    escaped_key,
     key_text,
     label,
     target_payload,
-    value_key,
 )
 from vmn_exp.ui.leaderboard_group_summary import Summary
-from vmn_exp.ui.leaderboard_live import MergedRows, _bisect, order_key
-from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
-from vmn_exp.ui.readers.experiments import apply_filters
-
-
-class GroupSpec:
-    """One grouping's field, aggregate, sort and filters."""
-
-    def __init__(self, group, agg, schema, sort=None, order=None, status=None,
-                 query=None, archived=False):
-        self.group = check_group(group)
-        self.agg = check_aggregate(agg)
-        self.key_of = key_of(group)
-        self.schema, self.sort, self.descending = schema, sort, DESCENDING.get(order)
-        self.filters = (status, query, archived)
-        # The flat board's (sort, status, query, order, archived).
-        self.flat = (sort, status, query, order, archived)
-        self.metric = sort or primary_metric(schema)
-        self._goal = metric_goal(schema, self.metric) if self.metric else None
-        descending = self.descending
-        if descending is None and self.metric:
-            descending = sort_descending(schema, self.metric)
-        self._sign = -1 if descending else 1
-
-    def filtered(self, snapshot, rows):
-        status, query, archived = self.filters
-        return apply_filters(visible(rows, archived), status, query, snapshot)
-
-    def carrying(self, rows):
-        return sum(1 for row in rows if self.metric in row["metrics"])
-
-    def row_key(self, position, present):
-        """``(key, ranked)`` as :func:`order_key` orders the flat board."""
-        return order_key(self.schema, self.sort, self.descending, lambda m: present, position)
-
-    def value(self, summary):
-        """A group's sort value: its aggregate, signed by the direction."""
-        value = summary.value(self.metric, self.agg, self._goal)
-        return None if value is None else self._sign * value
+from vmn_exp.ui.leaderboard_live import MergedRows, _bisect
 
 
 def _partition(rows, key_of):
@@ -140,7 +97,7 @@ class Grouping:
             summaries[group] = self._owned(summaries, group, dirty).add(rows)
             dirty.add(group)
         if spec.group == RERUN_OF:
-            dirty.update(value_key(row["verstr"]) for row in list(left) + list(joined))
+            dirty.update(escaped_key(row["verstr"]) for row in list(left) + list(joined))
         moved = Grouping(base, spec, members, summaries, key, ranked, with_metric)
         return moved._from(self, dirty)
 
@@ -187,7 +144,7 @@ class Grouping:
             summaries[group] = self._owned(summaries, group, ()).add(add)
             dirty.add(group)
         if spec.group == RERUN_OF:
-            dirty.update(value_key(row["verstr"]) for row in changed)
+            dirty.update(escaped_key(row["verstr"]) for row in changed)
         view = Grouping(base, spec, members, summaries, key, ranked, with_metric, live)
         return view._from(self, dirty)
 
@@ -220,9 +177,12 @@ class Grouping:
     def _group_key(self, group):
         first = self.key(self.members[group][:1][0])
         if not self.ranked:
-            return (first,)
-        value = self.spec.value(self._summary(group))
-        return (1, first) if value is None else (0, value, first)
+            key = (first,)
+        else:
+            value = self.spec.value(self._summary(group))
+            key = (1, first) if value is None else (0, value, first)
+        count = self.spec.count(self.summaries[group])
+        return key if count is None else (count,) + key
 
     # -- what a group says -------------------------------------------------
     def row_of(self, verstr):
