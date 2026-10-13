@@ -1,5 +1,6 @@
 /** The failure card's context lines (plan 20 K4/B4): where the run
  *  stopped, the last run of its command that worked, and its last output. */
+import { useLayoutEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import type { ExperimentDetail } from "../types";
 import { runText } from "../shell/crumbs";
@@ -15,6 +16,14 @@ export function tailText(context: FailureContext | undefined, errorTail: string 
   const lines = context?.output_tail?.lines;
   if (lines?.length) return lines.slice(-TAIL_LINES).join("\n");
   return errorTail || null;
+}
+
+/** A `<pre>` ref kept scrolled to its end, where the last line is. */
+export function useScrolledToEnd(text: string) {
+  const ref = useRef<HTMLPreElement>(null);
+  const scroll = () => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; };
+  useLayoutEffect(scroll, [text]);
+  return [ref, scroll] as const;
 }
 
 export function StopStep({ lastStep }: { lastStep: FailureContext["last_step"] }) {
@@ -40,10 +49,12 @@ export function SinceLastGood({ lastGood, runPath }: {
 export function OutputTail({ text, open, fullOutputHref }: {
   text: string; open: boolean; fullOutputHref: string | null;
 }) {
+  // A closed <details> has no height to scroll, so opening it scrolls too.
+  const [ref, scroll] = useScrolledToEnd(text);
   return (
-    <details className="run-error-output" open={open}>
+    <details className="run-error-output" open={open} onToggle={scroll}>
       <summary>last output</summary>
-      <pre className="yaml-block mono run-error-tail">{text}</pre>
+      <pre ref={ref} className="yaml-block mono run-error-tail">{text}</pre>
       {fullOutputHref && <a className="run-error-full" href={fullOutputHref}>open full output</a>}
     </details>
   );

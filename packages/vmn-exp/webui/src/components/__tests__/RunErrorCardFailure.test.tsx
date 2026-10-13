@@ -40,6 +40,18 @@ describe("RunErrorCard failure context", () => {
     expect(open).toHaveAttribute("href", "#run-output");
   });
 
+  it("scrolls the output tail to its end, where the run died", () => {
+    const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 700 });
+    try {
+      renderCard({ output_tail: { lines: lines(40), truncated: false } });
+      expect((card().querySelector("pre.run-error-tail") as HTMLElement).scrollTop).toBe(700);
+    } finally {
+      if (desc) Object.defineProperty(HTMLElement.prototype, "scrollHeight", desc);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight;
+    }
+  });
+
   it("prefers the output log's tail over the error's captured tail", () => {
     renderCard({ output_tail: { lines: ["from log"], truncated: false } }, {
       st: status("failed", { error: { message: "Killed", output_tail: "from error" } }),

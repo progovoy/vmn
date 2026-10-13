@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef } from "react";
 import type { RunError, RunStatus } from "../types";
 import { CopyButton } from "./ui";
-import { OutputTail, SinceLastGood, StopStep, tailText, type FailureContext } from "./RunFailureContext";
+import {
+  OutputTail, SinceLastGood, StopStep, tailText, useScrolledToEnd, type FailureContext,
+} from "./RunFailureContext";
 
 export type { FailureContext };
 
@@ -24,10 +25,7 @@ function MetaLine({ status, withExit }: { status: RunStatus; withExit: boolean }
 /** The traceback, scrolled to its end so the raising frame shows first,
  *  with the final `Type: message` line highlighted. */
 function Traceback({ text }: { text: string }) {
-  const ref = useRef<HTMLPreElement>(null);
-  useLayoutEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [text]);
+  const [ref] = useScrolledToEnd(text);
   const lines = text.replace(/\s+$/, "").split("\n");
   const last = lines.pop() ?? "";
   return (
