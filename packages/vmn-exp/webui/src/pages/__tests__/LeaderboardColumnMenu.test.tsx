@@ -89,6 +89,23 @@ describe("Leaderboard column menu (C3)", () => {
     expect(urlParams().getAll("hide")).toEqual(["m:acc"]);
   });
 
+  it("Hide column hides a column turned on with show=", async () => {
+    mockedApi.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
+    await board("/ws/test/app/my-app?show=m%3Aacc");
+    await waitFor(() => expect(head("m:acc")).toBeTruthy());
+    choose("acc", "Hide column");
+    await waitFor(() => expect(head("m:acc")).toBeNull());
+    expect(urlParams().getAll("show")).toEqual([]);
+  });
+
+  it("Hide column hides a schema-hidden metric shown with its older hide= key", async () => {
+    mockedApi.metricsSchema.mockResolvedValue({ acc: { hidden: true } });
+    await board("/ws/test/app/my-app?hide=m%3Aacc");
+    await waitFor(() => expect(head("m:acc")).toBeTruthy());
+    choose("acc", "Hide column");
+    await waitFor(() => expect(head("m:acc")).toBeNull());
+  });
+
   it("Pin column pins it after the experiment column", async () => {
     await board();
     choose("loss", "Pin column");

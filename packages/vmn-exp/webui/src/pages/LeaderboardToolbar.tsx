@@ -4,6 +4,7 @@ import ColumnPicker from "../components/ColumnPicker";
 import LiveStatus from "../components/LiveStatus";
 import SavedViews from "../components/SavedViews";
 import { useCanCreateRun } from "../shell/useAppExists";
+import { hideColumn } from "../hooks/useColumnEdits";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 
@@ -61,10 +62,8 @@ export default function LeaderboardToolbar({
         onToggle={(c) => view.setColumnShown(`p:${c}`, !cols.visibleParams.includes(c))}
         metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
         onToggleMetric={(c) => {
-          const on = !cols.visibleMetrics.includes(c);
-          // hide= would show a schema-hidden metric (its older inverted key).
-          if (!on && cols.schemaHidden.includes(c)) view.resetColumn(`m:${c}`);
-          else view.setColumnShown(`m:${c}`, on);
+          if (cols.visibleMetrics.includes(c)) hideColumn(view, cols.schemaHidden, `m:${c}`);
+          else view.setColumnShown(`m:${c}`, true);
         }}
         otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
         onToggleOther={(c) => {

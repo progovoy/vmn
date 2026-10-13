@@ -426,9 +426,6 @@ button.link:hover { border: none; text-decoration: underline; }
 .toolbar input[aria-invalid="true"] {
   border-color: color-mix(in srgb, var(--bad) 60%, transparent);
 }
-.query-row {
-  display: flex; gap: 8px; align-items: center; flex: 1 1 100%;
-}
 .query-error { color: var(--bad); font-size: 12px; }
 
 /* ---------- kv, cli, diff, timeline ---------- */
