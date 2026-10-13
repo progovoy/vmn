@@ -600,6 +600,20 @@ only when it exists, each `{verstr, idx, name, status}`:
 A run not indexed yet answers `{}`; an unknown run is 404. Both are viewer
 reads with a body-digest ETag.
 
+The run page's **Changes** card (`#changes`, below the training curves, in
+read-only workspaces too) offers these baselines as a picker. It defaults to
+`base` when present, else `previous`, else the first that exists. `base` shows
+the `/patch` files and text. Any other baseline is diffed through
+`experiments-diff` (baseline → this run): it shows the top 5 metrics by |Δ|
+(goal metrics first, then "+N more"), the params that changed, the changed
+files and the diff behind *Show diff*, with *Open in Compare →*
+(`compare-runs?tab=code&sel=<baseline>&sel=<run>`). Without code or
+baselines, it shows one line with the reason. The picked baseline is kept in
+the page's `?baseline=` param. Its value is a baseline key or any run ref,
+and a ref that is not a baseline gets its own `vs <ref>` choice. So
+`/ws/<ws>/app/<app>/run/<verstr>?baseline=<ref>#changes` links straight to
+a diff against that run.
+
 ### Series for many runs
 
 A comparison chart fetches the same metrics from many runs at once:
