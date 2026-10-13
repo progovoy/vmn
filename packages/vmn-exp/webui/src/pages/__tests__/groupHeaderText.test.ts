@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateCell, countParts, countsText, spokenCounts } from "../groupHeaderText";
+import { aggregateCell, countParts, countsText, sizeText, spokenCounts } from "../groupHeaderText";
 
 const counts = (extra = {}) => ({ total: 16, running: 2, waiting: 0, done: 13, failed: 1, stuck: 0, ...extra });
 const agg = (extra = {}) => ({ mean: 0.5, best: 0.2, median: 0.4, min: 0.2, max: 0.9, n: 16, ...extra });
@@ -18,10 +18,26 @@ describe("a group header's status count (plan 22 G4)", () => {
 
   it("reads `5 of 16` when the filters leave part of the group (F1)", () => {
     expect(countsText(counts({ total: 5 }), 16)).toBe("5 of 16 runs · 2 running · 1 failed");
-    expect(countsText(counts({ total: 1, running: 0, failed: 0, done: 1 }), 3)).toBe("1 of 3 runs · all succeeded");
+    expect(countsText(counts({ total: 1, running: 0, failed: 0, done: 1 }), 3)).toBe("1 of 3 runs · 1 succeeded");
     // No filter (or a server without the field): the plain count.
     expect(countsText(counts(), 16)).toBe("16 runs · 2 running · 1 failed");
     expect(countsText(counts(), undefined)).toBe("16 runs · 2 running · 1 failed");
+  });
+
+  it("never says `all succeeded` of a group the filters cut, it names the count", () => {
+    const ok = counts({ total: 5, running: 0, failed: 0, done: 5 });
+    expect(countsText(ok, 16)).toBe("5 of 16 runs · 5 succeeded");
+    expect(countParts(ok, 16).map((p) => p.tone)).toEqual(["total", "done"]);
+    expect(spokenCounts(ok, 16)).toBe("5 of 16 runs, 5 succeeded");
+    // Unfiltered keeps the short wording.
+    expect(countsText(counts({ running: 0, failed: 0, done: 16 }), 16)).toBe("16 runs · all succeeded");
+  });
+
+  it("reads only the size for a header whose counts sit in columns (F10)", () => {
+    expect(sizeText(counts())).toBe("16 runs");
+    expect(sizeText(counts({ total: 1 }))).toBe("1 run");
+    expect(sizeText(counts({ total: 5 }), 16)).toBe("5 of 16 runs");
+    expect(sizeText(counts(), 16)).toBe("16 runs");
   });
 
   it("tags each part with its state, so it can be coloured", () => {

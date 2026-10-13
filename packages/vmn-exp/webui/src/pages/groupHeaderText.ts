@@ -8,20 +8,23 @@ export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "
 /** The states a header names besides the total; done is the rest. */
 const NAMED: readonly Exclude<CountTone, "total" | "done">[] = ["running", "waiting", "stuck", "failed"];
 
-/** `16 runs`, `1 run`, or `5 of 16 runs` when the filters leave *of* of the
- *  group's *unfiltered* runs (plan 22 F1). */
-function totalText(total: number, unfiltered: number | undefined): string {
-  return unfiltered === undefined || unfiltered === total
-    ? plural(total, "run")
-    : `${total} of ${plural(unfiltered, "run")}`;
-}
+const isCut = (total: number, unfiltered: number | undefined) =>
+  unfiltered !== undefined && unfiltered !== total;
+
+/** `16 runs`, `1 run`, or `5 of 16 runs` when the filters leave *total* of
+ *  the group's *unfiltered* runs (plan 22 F1); all a header says of its
+ *  counts while the count columns show them (F10). */
+export const sizeText = (c: GroupCounts, unfiltered?: number): string =>
+  isCut(c.total, unfiltered) ? `${c.total} of ${plural(unfiltered!, "run")}` : plural(c.total, "run");
 
 /** The total in words, then each state that is not done and has runs; a
- *  group with none of those reads `all succeeded` (plan 22 F2). */
+ *  group with none of those reads `all succeeded` (plan 22 F2), or names
+ *  the count when the filters cut the group (`5 of 16 runs · 5 succeeded`). */
 export function countParts(c: GroupCounts, unfiltered?: number): { text: string; tone: CountTone }[] {
   const named = NAMED.filter((t) => c[t] > 0).map((t) => ({ text: `${c[t]} ${t}`, tone: t }));
-  const rest = named.length || c.total === 0 ? named : [{ text: "all succeeded", tone: "done" as const }];
-  return [{ text: totalText(c.total, unfiltered), tone: "total" }, ...rest];
+  const done = isCut(c.total, unfiltered) ? `${c.done} succeeded` : "all succeeded";
+  const rest = named.length || c.total === 0 ? named : [{ text: done, tone: "done" as const }];
+  return [{ text: sizeText(c, unfiltered), tone: "total" }, ...rest];
 }
 
 /** `16 runs · 2 running · 1 failed`. */
