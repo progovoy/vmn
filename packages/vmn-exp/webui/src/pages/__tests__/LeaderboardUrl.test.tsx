@@ -68,7 +68,7 @@ describe("leaderboard view state lives in the URL", () => {
     await waitFor(() =>
       expect(m.experiments).toHaveBeenCalledWith(
         "test", "my-app", "idx", "running",
-        '(metrics.loss < 1) and (verstr ~ "bat" or note ~ "bat" or branch ~ "bat")',
+        '(metrics.loss < 1) and (name ~ "bat" or verstr ~ "bat" or note ~ "bat" or branch ~ "bat")',
       ),
     );
     const tokens = within(screen.getByRole("list", { name: "Active filters" })).getAllByRole("listitem");

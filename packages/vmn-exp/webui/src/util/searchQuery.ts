@@ -5,16 +5,17 @@ export function quoteLiteral(text: string): string | null {
   return quote && `${quote}${text}${quote}`;
 }
 
-/** The search box as a server query over verstr, note and branch — so it
- *  searches every run, not just the page on screen. The query language has no
- *  escapes, so the text is quoted with whichever quote it doesn't contain; text
- *  holding both can't be expressed and searches the loaded rows only. */
+/** The search box as a server query over name, verstr, note and branch (plan
+ *  20 D10) — so it searches every run, not just the page on screen. The query
+ *  language has no escapes, so the text is quoted with whichever quote it
+ *  doesn't contain; text holding both can't be expressed and searches the
+ *  loaded rows only. */
 export function searchClause(text: string): string | null {
   const t = text.trim();
   if (!t) return null;
   const lit = quoteLiteral(t);
   if (!lit) return null;
-  return `verstr ~ ${lit} or note ~ ${lit} or branch ~ ${lit}`;
+  return `name ~ ${lit} or verstr ~ ${lit} or note ~ ${lit} or branch ~ ${lit}`;
 }
 
 /** The branch filter as a server clause (null for "all branches"). */

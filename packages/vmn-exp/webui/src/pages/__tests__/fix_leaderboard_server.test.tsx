@@ -112,7 +112,7 @@ describe("free-text search runs on the server", () => {
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
         "test", "my-app", "idx", undefined,
-        'verstr ~ "bat" or note ~ "bat" or branch ~ "bat"',
+        'name ~ "bat" or verstr ~ "bat" or note ~ "bat" or branch ~ "bat"',
       ),
     );
   });
@@ -128,7 +128,7 @@ describe("free-text search runs on the server", () => {
     await waitFor(() =>
       expect(mockedApi.experiments).toHaveBeenLastCalledWith(
         "test", "my-app", "idx", undefined,
-        "(metrics.loss < 0.5) and (verstr ~ 'say \"hi\"' or note ~ 'say \"hi\"' or branch ~ 'say \"hi\"')",
+        "(metrics.loss < 0.5) and (name ~ 'say \"hi\"' or verstr ~ 'say \"hi\"' or note ~ 'say \"hi\"' or branch ~ 'say \"hi\"')",
       ),
     );
   });

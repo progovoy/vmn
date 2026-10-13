@@ -111,3 +111,32 @@ describe("LeaderboardFilter: one filter grammar", () => {
     expect(onStatusChange).toHaveBeenLastCalledWith("failed");
   });
 });
+
+describe("LeaderboardFilter: a compared word that is no field", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("searches `lr=0.1` as text instead of sending the server a query it refuses", () => {
+    const onQueryChange = vi.fn();
+    const onSearchChange = vi.fn();
+    render(<LeaderboardFilter onQueryChange={onQueryChange} onSearchChange={onSearchChange} />);
+    fireEvent.change(box(), { target: { value: "lr=0.1" } });
+    settle();
+    expect(onSearchChange).toHaveBeenLastCalledWith("lr=0.1");
+    expect(onQueryChange).not.toHaveBeenCalledWith("lr=0.1");
+    fireEvent.keyDown(box(), { key: "Enter" });
+    expect(tokens()).toEqual(['text ~ "lr=0.1"']);
+  });
+
+  it("hints at the param the bare name stands for, and applies it on click", () => {
+    const onQueryChange = vi.fn();
+    render(<LeaderboardFilter onQueryChange={onQueryChange} facets={{ param_keys: ["lr"] }} />);
+    fireEvent.change(box(), { target: { value: "lr=0.1" } });
+    const hint = screen.getByText(/isn.t a field/);
+    expect(hint).toHaveTextContent("lr isn't a field, so this searches text");
+    fireEvent.click(screen.getByRole("button", { name: "params.lr=0.1" }));
+    expect(tokens()).toEqual(["params.lr=0.1"]);
+    settle();
+    expect(onQueryChange).toHaveBeenLastCalledWith("params.lr=0.1");
+  });
+});

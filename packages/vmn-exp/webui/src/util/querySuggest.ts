@@ -8,7 +8,8 @@ export const ROW_FIELDS = [
   "exit_code", "duration_sec", "started_at", "finished_at", "heartbeat",
   "last_metric_at", "host", "pid", "command", "stale_sec",
   "heartbeat_interval_sec", "forked_from", "rerun_of", "author", "has_intent",
-  "error_summary", "signal", "end_reason",
+  "error_summary", "signal", "end_reason", "name", "archived", "tags",
+  "imported_from", "forked_from_step",
 ];
 
 export const OPERATORS = ["=", "!=", "<", "<=", ">", ">=", "~", "!~", "in", "not in", "contains"];

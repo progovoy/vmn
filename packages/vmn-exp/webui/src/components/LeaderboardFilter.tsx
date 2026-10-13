@@ -4,8 +4,10 @@ import { useDebounce } from "../hooks/useDebounce";
 import { useFilterGrammar, type FilterReports } from "../hooks/useFilterGrammar";
 import { filterTokens, removeToken, type FilterToken, type FilterValues } from "../util/filterTokens";
 import type { SuggestFacets } from "../util/querySuggest";
+import { fieldHint } from "../util/queryFields";
 import FilterShortcuts from "./FilterShortcuts";
 import QueryBar from "./QueryBar";
+import QueryFieldHint from "./QueryFieldHint";
 import SimilarToggle from "./SimilarToggle";
 
 export type { FilterValues };
@@ -62,6 +64,7 @@ export default function LeaderboardFilter({
     setSimilarText("");
     if (archived) onArchivedChange?.(false);
   };
+  const typedHint = similarOn ? null : fieldHint(grammar.draft, facets);
   const hasFilter = tokens.length > 0 || grammar.draft || (similarOn && similarText);
 
   return (
@@ -76,6 +79,7 @@ export default function LeaderboardFilter({
         placeholder={similarOn ? SIMILAR_HINT : QUERY_HINT}
         suggestions={!similarOn}
         error={queryError}
+        hint={typedHint && <QueryFieldHint hint={typedHint} onApply={grammar.apply} />}
         inside={onSimilarChange && <SimilarToggle on={similarOn} onToggle={() => setSimilarOn((on) => !on)} />}
       />
       <FilterShortcuts

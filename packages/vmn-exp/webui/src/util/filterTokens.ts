@@ -5,6 +5,7 @@
  *  where the status shortcut would have put it. */
 import type { RunState } from "../types";
 import { quoteLiteral } from "./searchQuery";
+import { unknownFields } from "./queryFields";
 
 /** Every status, in display order. */
 export const STATUS_ORDER: RunState[] = ["running", "stuck", "failed", "succeeded", "created"];
@@ -109,6 +110,14 @@ export function commitText(state: FilterState, text: string): FilterState {
   if (!t) return state;
   if (isPlainText(t)) return { ...state, search: t };
   return splitConjuncts(t).map(readClause).reduce(addClause, state);
+}
+
+/** *state* with what was typed in the box added: like commitText, except
+ *  that text comparing a word no field matches (`lr=0.1`) is searched for
+ *  as text rather than sent as a query the server refuses. */
+export function commitTyped(state: FilterState, text: string): FilterState {
+  const t = text.trim();
+  return t && unknownFields(t).length ? { ...state, search: t } : commitText(state, t);
 }
 
 /** The URL's filters as one state. */
