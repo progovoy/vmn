@@ -173,6 +173,20 @@ describe("GitOnly", () => {
     expect(page()).not.toBeNull();
   });
 
+  it("mounts nothing while the workspace kind is unknown, so a store never asks for /tree", async () => {
+    workspaces.mockImplementation(never);
+    renderAt("/ws/team/app/ml_app", guarded);
+    await settle();
+    expect(page()).toBeNull();
+    expect(mounts).toBe(0);
+  });
+
+  it("renders the page when the workspace list fails (the page reports its own error)", async () => {
+    workspaces.mockImplementation(() => fail(500));
+    renderAt("/ws/ml-repo/app/ml_app", guarded);
+    await waitFor(() => expect(page()).not.toBeNull());
+  });
+
   it("explains a store workspace has no stamp tree", async () => {
     workspaces.mockResolvedValue([{ name: "team", kind: "store", store: "s3://team-exp/ml" }]);
     renderAt("/ws/team/app/ml_app", guarded);

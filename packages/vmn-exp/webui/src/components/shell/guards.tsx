@@ -6,6 +6,7 @@ import { useParams } from "react-router-dom";
 import { useWorkspaces } from "../../queries";
 import { useAppExists } from "../../shell/useAppExists";
 import { usePageScope } from "../../shell/usePageScope";
+import { Skeleton } from "../ui";
 import NotFound from "./NotFound";
 
 /** Renders *children* until the loaded workspace list lacks `:ws`. */
@@ -24,10 +25,12 @@ export function AppGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** The stamp tree and actions read git: a store workspace has neither. */
+/** The stamp tree and actions read git: a store workspace has neither. The
+ *  page waits for the workspace's kind, so a store never sends their requests. */
 export function GitOnly({ page, children }: { page: "tree" | "actions"; children: ReactNode }) {
   const { ws, app } = useParams();
   const { workspace } = usePageScope(ws);
+  if (useWorkspaces().isPending) return <Skeleton />;
   if (ws && app && workspace?.kind === "store") {
     return <NotFound kind="needs-git" ws={ws} appTag={app} page={page} />;
   }
