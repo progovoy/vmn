@@ -1,6 +1,7 @@
 /** styles.css floors (plan 19 §1.11): AA light-mode status pills, reduced
  *  motion, readable copy-path text. */
 import { describe, it, expect, beforeAll } from "vitest";
+import { contrast, mix, rgb } from "./contrastHelpers";
 
 // Vitest stubs imported CSS, so read it from disk (vitest runs from webui/).
 type Fs = { readFileSync(path: string, encoding: "utf8"): string };
@@ -15,24 +16,6 @@ function token(name: string): string {
   expect(m, name).not.toBeNull();
   return m![1];
 }
-
-const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-
-function luminance([r, g, b]: number[]): number {
-  const lin = (c: number) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-}
-
-function contrast(a: number[], b: number[]): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
-
-/** *fg* at *pct* over *bg*, as color-mix(in srgb) draws it. */
-const mix = (fg: number[], bg: number[], pct: number) => fg.map((c, i) => c * pct + bg[i] * (1 - pct));
 
 const WHITE = [255, 255, 255];
 

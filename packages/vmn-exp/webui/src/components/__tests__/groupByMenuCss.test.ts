@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import menuCss from "../GroupByMenu.css?raw";
 import styles from "../../styles.css?raw";
+import { contrast, mix, rgb } from "../../__tests__/contrastHelpers";
 
 const strip = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
 
@@ -34,16 +35,6 @@ function decls(css: string, selector: string): Record<string, string> {
   return out;
 }
 
-const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const lum = (c: number[]) => {
-  const lin = (v: number) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
-  return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
-};
-const contrast = (a: number[], b: number[]) => {
-  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-};
-
 /** A theme's colour token: dark is `:root`'s `--x`, light its `--light-x`. */
 function token(name: string, theme: "dark" | "light"): number[] {
   const key = theme === "light" ? `--light-${name.slice(2)}` : name;
@@ -58,12 +49,11 @@ function resolve(value: string, theme: "dark" | "light", under: number[]): numbe
   if (/^#fff(fff)?$/i.test(value)) return [255, 255, 255];
   const plain = value.match(/^var\((--[\w-]+)\)$/);
   if (plain) return token(plain[1], theme);
-  const mix = value.match(/^color-mix\(in srgb,\s*var\((--[\w-]+)\)\s+([\d.]+)%,\s*(transparent|var\((--[\w-]+)\))\)$/);
-  expect(mix, `a colour the test can resolve: ${value}`).not.toBeNull();
-  const fg = token(mix![1], theme);
-  const bg = mix![4] ? token(mix![4], theme) : under;
-  const p = Number(mix![2]) / 100;
-  return fg.map((c, i) => c * p + bg[i] * (1 - p));
+  const m = value.match(/^color-mix\(in srgb,\s*var\((--[\w-]+)\)\s+([\d.]+)%,\s*(transparent|var\((--[\w-]+)\))\)$/);
+  expect(m, `a colour the test can resolve: ${value}`).not.toBeNull();
+  const fg = token(m![1], theme);
+  const bg = m![4] ? token(m![4], theme) : under;
+  return mix(fg, bg, Number(m![2]) / 100);
 }
 
 const SELECTED = '.group-by-section[aria-label="Aggregate"] .group-by-item[aria-checked="true"]';
