@@ -143,7 +143,8 @@ export interface FleetChild {
 export interface Fleet {
   expected: number;
   counts: Record<string, number>;
-  children: FleetChild[];
+  /** Older servers only: a job's runs are its Runs tab now (plan 23 S3). */
+  children?: FleetChild[];
 }
 
 /** Status fields are optional: older servers omit them entirely. */

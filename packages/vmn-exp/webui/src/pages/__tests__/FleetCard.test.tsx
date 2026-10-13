@@ -120,4 +120,11 @@ describe("FleetCard", () => {
       .map((el) => el.textContent?.replace(/\d+/g, "").trim());
     expect(labels).toEqual(["waiting", "running", "succeeded", "failed"]);
   });
+
+  it("renders counts without a table when the server sends no children (plan 23 S3)", () => {
+    const { children: _dropped, ...rollupOnly } = fleet;
+    const { container } = renderFleet(rollupOnly);
+    expect(container.querySelector(".fleet-summary")!.textContent).toContain("running");
+    expect(container.querySelector(".fleet-children")).toBeNull();
+  });
 });

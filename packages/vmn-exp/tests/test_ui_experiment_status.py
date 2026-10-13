@@ -420,7 +420,8 @@ def test_detail_status_only_reads_its_own_subtree(app_layout, monkeypatch):
 
     assert detail["status"]["tree_status"] == "failed"
     assert sorted(detail["status"]["children"]) == ["0.0.2", "0.0.3"]
-    assert sorted(set(run_state_reads)) == ["0.0.1", "0.0.2", "0.0.3"]
+    # A job's tree status and counts come from its rollup (plan 23 S3).
+    assert sorted(set(run_state_reads)) == ["0.0.1"]
     assert log_reads == ["0.0.1"]  # only the experiment being shown
 
 

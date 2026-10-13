@@ -95,6 +95,9 @@ def rollup(rows, verstr, schema):
                  if row["status"] in ("succeeded", "failed") and row.get("finished_at")
                  and _finite(row.get("duration_sec"))]
     started = [row["started_at"] for row in members if row.get("started_at")]
+    events = [("started", _minute(row["started_at"])) for row in members if row.get("started_at")]
+    events += [(row["status"], _minute(row["finished_at"])) for row in members
+               if row["status"] in ("succeeded", "failed") and row.get("finished_at")]
     finished = [row["finished_at"] for row in members if row.get("finished_at")]
     return {
         "total": len(members), "counts": counts, "done": done,
@@ -104,4 +107,20 @@ def rollup(rows, verstr, schema):
         "metrics": {m: _metric(members, m, schema) for m in tracked_metrics(schema)},
         "durations": durations,
         "failures": sorted(failures.items(), key=lambda kv: (-kv[1], kv[0]))[:10],
+        "events": events,
     }
+
+
+def _minute(stamp):
+    return int(parse_iso(stamp).timestamp() // 60)
+
+
+def timeline(events, minutes):
+    """``{bucket start sec: (started, succeeded, failed)}`` of *events* per *minutes*."""
+    out = {}
+    for kind, minute in events:
+        t = minute // minutes * minutes * 60
+        counts = list(out.get(t, (0, 0, 0)))
+        counts[("started", "succeeded", "failed").index(kind)] += 1
+        out[t] = tuple(counts)
+    return out

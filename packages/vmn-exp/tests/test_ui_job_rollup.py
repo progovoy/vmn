@@ -6,7 +6,7 @@ import datetime
 import math
 
 import pytest
-from job_rollup_reference import annotated, exact_quantile, jobs, rollup
+from job_rollup_reference import annotated, exact_quantile, jobs, rollup, timeline
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_rollup
@@ -45,10 +45,19 @@ def _check(got, want):
     assert set(got["metrics"]) == set(want["metrics"])
     for name, metric in want["metrics"].items():
         _check_metric(got["metrics"][name], metric)
+    _check_timeline(got["timeline"], want["events"])
     if want["durations"]:
         assert _close(got["duration"]["p50"], exact_quantile(want["durations"], 0.5))
     else:
         assert got["duration"]["p50"] is None
+
+
+def _check_timeline(got, events):
+    assert got["bucket_sec"] == 60  # every fleet here spans less than a day
+    buckets = {b["t"]: (b["started"], b["succeeded"], b["failed"]) for b in got["buckets"]}
+    assert buckets == timeline(events, 1)
+    assert [b["t"] for b in got["buckets"]] == sorted(buckets)
+    assert got["start"] == (got["buckets"][0]["t"] if got["buckets"] else None)
 
 
 def _check_all(cache, snap, schema):

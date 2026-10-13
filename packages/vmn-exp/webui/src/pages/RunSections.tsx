@@ -159,8 +159,9 @@ export function FleetCard({ fleet, schema = null, runUrl, table = true, incomple
   const nonZeroCounts = FLEET_DISPLAY_ORDER
     .filter((s) => (fleet.counts[s] ?? 0) > 0)
     .map((s) => [s, fleet.counts[s]] as const);
-  const metric = fleetMetric(fleet.children, schema);
-  const rows = fleetRowsOf(fleet.children, metric);
+  const children = fleet.children ?? [];
+  const metric = fleetMetric(children, schema);
+  const rows = fleetRowsOf(children, metric);
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>

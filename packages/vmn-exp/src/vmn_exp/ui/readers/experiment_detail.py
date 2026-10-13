@@ -29,7 +29,6 @@ from vmn_exp.core.status import (
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.failure_context import failure_fields
-from vmn_exp.ui.readers.fleet_steps import add_child_steps
 from vmn_exp.ui.readers.histograms import detail_media
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.patches import patch_presence
@@ -112,6 +111,7 @@ def status_detail(
     read_run_state=load_run_state,
     read_observed_at=run_state_observed_at,
     read_child_row=None,
+    job_status=None,
 ):
     """Status payload with the run's place in the tree.
 
@@ -121,7 +121,14 @@ def status_detail(
     should hand back the same mapping while nothing changed, which makes the
     tree lookup a dict lookup. *read_observed_at* gives each member's
     run_state.yml store write time, which stuck detection weighs too.
+    *job_status(verstr)* gives a job's tree fields and ``fleet`` from its
+    rollup (None for a run without children): a job then reads its own run
+    state only.
     """
+    job = job_status(verstr) if job_status else None
+    if job is not None:
+        return _job_detail(storage, app_name, verstr, metadata, log, job,
+                           read_run_state, read_observed_at)
     edges_of = edges(storage, app_name)
     parent_of = edges_of
     if verstr not in edges_of:  # not indexed yet: overlay, never copy the rest
@@ -142,11 +149,8 @@ def status_detail(
     )
     detail["parent"] = metadata.get("parent")
     detail["error"] = _full_error(storage, app_name, verstr, own_state)
-    detail["last_metric_at"] = (
-        log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
-    )
+    detail["last_metric_at"] = _last_metric_at(log)
 
-    fleet = None
     if detail.get("kind") == "outer":
         expected = None
         if isinstance(log, LogSnapshot):
@@ -155,15 +159,29 @@ def status_detail(
                 expected = int(ep)
         if expected is None:
             expected = detail.get("sweep_planned")
-        detail["fleet"] = fleet_summary(
+        fleet = fleet_summary(
             verstr, children_of, read_state_fn,
             observed_at=observed_at_fn, expected=expected,
-            read_child_row=read_child_row,
         )
+        detail["fleet"] = fleet and {k: v for k, v in fleet.items() if k != "children"}
     else:
         detail["fleet"] = None
 
     return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
+
+
+def _job_detail(storage, app_name, verstr, metadata, log, job, read_run_state,
+                read_observed_at):
+    own_state = read_run_state(storage, app_name, verstr)
+    detail = status_fields(own_state, observed_at=read_observed_at(storage, app_name, verstr))
+    detail.update(job, parent=metadata.get("parent"),
+                  error=_full_error(storage, app_name, verstr, own_state),
+                  last_metric_at=_last_metric_at(log))
+    return {k: detail.get(k) for k in _DETAIL_STATUS_KEYS}
+
+
+def _last_metric_at(log):
+    return log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
 
 
 def _resolve(storage, app_name, verstr_ref, resolve=None):
@@ -202,6 +220,7 @@ def experiment_detail(
     schema=None,
     step_range=None,
     last_good=None,
+    job_status=None,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
@@ -221,7 +240,8 @@ def experiment_detail(
     from the resolved run's index row (*read_child_row*); ``idx`` is None
     without it. A failed or stuck run adds ``output_tail``/``last_step``/
     ``last_good`` (:mod:`~vmn_exp.ui.readers.failure_context`; *last_good*
-    is ``verstr -> {verstr, idx, name} | None``).
+    is ``verstr -> {verstr, idx, name} | None``). *job_status*: see
+    :func:`status_detail`.
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -264,6 +284,7 @@ def experiment_detail(
             read_run_state=read_run_state,
             read_observed_at=read_observed_at,
             read_child_row=read_child_row,
+            job_status=job_status,
         ),
         "patches": patch_presence(storage, app_name, verstr, metadata),
         "env": _load_env(storage, app_name, verstr, metadata),
@@ -275,7 +296,6 @@ def experiment_detail(
         "rewinds": snapshot.rewinds(),
         "compacted": record_compacted(storage, app_name, verstr),
     }
-    add_child_steps(detail["status"].get("fleet"), storage, app_name, _PARSED, read_log)
     detail.update(failure_fields(storage, app_name, verstr, detail, snapshot, last_good))
     return detail, None
 
