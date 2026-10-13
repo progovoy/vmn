@@ -22,6 +22,7 @@ from vmn_exp.ui.cache_resync import WorkspaceCache
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.readers.baselines import last_good
+from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.refresher import InlineRefresher
 from vmn_exp.ui.schema_cache import MetricsSchemaCache
 
@@ -85,7 +86,8 @@ class ExperimentSource:
         self._caches = {}  # workspace name -> WorkspaceCache
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
-        self._group_aggregates = MetricsSchemaCache(read=exp_reader.group_aggregate)
+        self._group_aggregates = MetricsSchemaCache(read=exp_reader.group_aggregate,
+                                                    path=app_conf_path)
         self._lock = threading.Lock()
         self._pg = None
         if cache_dsn:

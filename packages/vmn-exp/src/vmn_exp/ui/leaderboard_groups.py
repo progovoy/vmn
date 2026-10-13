@@ -28,8 +28,10 @@ from vmn_exp.ui.leaderboard_group_fields import (
     check_aggregate,
     check_group,
     key_of,
+    key_text,
     label,
     target_payload,
+    value_key,
 )
 from vmn_exp.ui.leaderboard_group_summary import Summary
 from vmn_exp.ui.leaderboard_live import MergedRows, _bisect, order_key
@@ -94,7 +96,7 @@ class Grouping:
         self.live = live  # {storage index: row} of a bucket's view, else None
         self._changed = set(base.patch.changed)
         self._okeys, self.order = {}, []
-        self._total = None
+        self._total = self._running = None
         self._aggregates = {}  # memo: {group: aggregates payload}
 
     @classmethod
@@ -138,7 +140,7 @@ class Grouping:
             summaries[group] = self._owned(summaries, group, dirty).add(rows)
             dirty.add(group)
         if spec.group == RERUN_OF:
-            dirty.update(row["verstr"] for row in list(left) + list(joined))
+            dirty.update(value_key(row["verstr"]) for row in list(left) + list(joined))
         moved = Grouping(base, spec, members, summaries, key, ranked, with_metric)
         return moved._from(self, dirty)
 
@@ -185,7 +187,7 @@ class Grouping:
             summaries[group] = self._owned(summaries, group, ()).add(add)
             dirty.add(group)
         if spec.group == RERUN_OF:
-            dirty.update(row["verstr"] for row in changed)
+            dirty.update(value_key(row["verstr"]) for row in changed)
         view = Grouping(base, spec, members, summaries, key, ranked, with_metric, live)
         return view._from(self, dirty)
 
@@ -236,10 +238,11 @@ class Grouping:
         summary = self.summaries[group]
         if self.spec.group != RERUN_OF or group == NONE:
             return summary
-        i = self.base.position.get(group)
+        i = self.base.position.get(key_text(group))
         if i is None or (self.live is None and i in self._changed):
             return summary
-        return summary.with_rows(self.spec.filtered(self.base.snapshot, [self.row_of(group)]))
+        original = self.row_of(key_text(group))
+        return summary.with_rows(self.spec.filtered(self.base.snapshot, [original]))
 
     def _aggregates_of(self, group):
         found = self._aggregates.get(group)
@@ -256,25 +259,42 @@ class Grouping:
             self._total = sum(s.size for s in self.summaries.values())
         return self._total
 
-    def group(self, key, offset, limit):
-        """One group's payload, its rows paged."""
+    @property
+    def running(self):
+        """Running rows across every group."""
+        if self._running is None:
+            self._running = sum(s.statuses.get("running", 0) for s in self.summaries.values())
+        return self._running
+
+    def size(self, key):
+        return len(self.members.get(key, ()))
+
+    def group(self, key, offset, limit, unfiltered=None):
+        """One group's payload, its rows paged; ``rows_unfiltered`` is the
+        group's size in *unfiltered* (the same grouping without the filters)."""
         rows = self.members[key]
-        target = self.row_of(key) if self.spec.group in TARGET_LINKS and key != NONE else None
+        linked = self.spec.group in TARGET_LINKS and key != NONE
+        target = self.row_of(key_text(key)) if linked else None
         return {"key": key, "label": label(self.spec.group, key, target is not None),
                 "target": target_payload(target) if target else None,
                 "counts": self.summaries[key].counts(),
                 "aggregates": self._aggregates_of(key),
-                "rows": list(rows[offset:offset + limit]), "rows_total": len(rows)}
+                "rows": list(rows[offset:offset + limit]), "rows_total": len(rows),
+                "rows_unfiltered": (unfiltered or self).size(key)}
 
 
-def groups_payload(grouping, offset=0, limit=None, rows_per_group=10, group_key=None):
+def groups_payload(grouping, offset=0, limit=None, rows_per_group=10, group_key=None,
+                   unfiltered=None):
     """K1's answer: a page of groups, or with *group_key* one group's rows
-    paged by *offset*/*limit* (:class:`UnknownGroup` when there is none)."""
+    paged by *offset*/*limit* (:class:`UnknownGroup` when there is none).
+    *unfiltered* (default: *grouping*) sizes each group before the filters."""
     limit = 50 if limit is None else limit
     if group_key is not None:
         if group_key not in grouping.members:
             raise UnknownGroup(f"no group {group_key!r}")
-        return grouping.group(group_key, offset, limit)
+        return grouping.group(group_key, offset, limit, unfiltered)
     keys = grouping.keys()
-    return {"groups": [grouping.group(k, 0, rows_per_group) for k in keys[offset:offset + limit]],
-            "total_groups": len(keys), "total_rows": grouping.total}
+    return {"groups": [grouping.group(k, 0, rows_per_group, unfiltered)
+                       for k in keys[offset:offset + limit]],
+            "total_groups": len(keys), "total_rows": grouping.total,
+            "running": grouping.running, "aggregate": grouping.spec.agg}

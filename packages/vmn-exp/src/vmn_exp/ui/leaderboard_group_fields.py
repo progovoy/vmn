@@ -17,7 +17,10 @@ FIELDS = ("branch", "status")
 DICT_FIELDS = ("tags", "params")
 AGGREGATES = ("mean", "best", "median", "min", "max")
 DEFAULT_AGGREGATE = "mean"
-NONE = "(none)"
+# The no-value group's key: no value's key equals it, since a value whose
+# text starts with it is keyed with it doubled (:func:`value_key`).
+NONE = "\u2205"
+NONE_LABEL = "(none)"
 NO_PARENT = "(no parent run)"
 # A run's status as a group's counts name it.
 COUNT_OF = {"running": "running", "created": "waiting", "succeeded": "done",
@@ -59,20 +62,30 @@ def _absent(value):
     return value is None or value == ""
 
 
+def value_key(text):
+    """The group key of a value spelled *text*."""
+    return NONE + text if text.startswith(NONE) else text
+
+
+def key_text(key):
+    """The value a group *key* (not :data:`NONE`) stands for: a link's verstr."""
+    return key[len(NONE):] if key.startswith(NONE) else key
+
+
 def key_of(group):
     """``row -> group key`` for *group* (a checked field)."""
     if group in TARGET_LINKS:
         def link(row):
             target = row.get(group)
-            return NONE if _absent(target) or target == row["verstr"] else target
+            return NONE if _absent(target) or target == row["verstr"] else value_key(target)
         return link
     if group in LINKS or group in FIELDS:
-        return lambda row: NONE if _absent(row.get(group)) else _text(row[group])
+        return lambda row: NONE if _absent(row.get(group)) else value_key(_text(row[group]))
     prefix, _, name = group.partition(".")
 
     def entry(row):
         value = (row.get(prefix) or {}).get(name)
-        return NONE if value is None else _text(value)
+        return NONE if value is None else value_key(_text(value))
 
     return entry
 
@@ -80,12 +93,13 @@ def key_of(group):
 def label(group, key, found):
     """What a group's header says; *found*: whether a link's target is indexed."""
     if key == NONE:
-        return NO_PARENT if group == PARENT else NONE
+        return NO_PARENT if group == PARENT else NONE_LABEL
+    text = key_text(key)
     if group in TARGET_LINKS:
-        return key if found else f"{key} (not found)"
+        return text if found else f"{text} (not found)"
     if group in LINKS:
-        return key
-    return f"{group} = {key}"
+        return text
+    return f"{group} = {text}"
 
 
 def target_payload(row):

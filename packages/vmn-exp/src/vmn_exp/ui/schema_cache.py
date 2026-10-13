@@ -21,17 +21,23 @@ def _signature(path):
     return st.st_mtime_ns, st.st_size
 
 
-class MetricsSchemaCache:
-    """*read(root_path, app_name)* (default: the metrics schema) per conf change."""
+def _app_conf(root_path, app_name):
+    return os.path.join(root_path, *_conf_relpath(app_name).split("/"))
 
-    def __init__(self, size=256, read=None):
+
+class MetricsSchemaCache:
+    """*read(root_path, app_name)* (default: the metrics schema) per change
+    of the conf file *path(root_path, app_name)* (default: the app conf)."""
+
+    def __init__(self, size=256, read=None, path=_app_conf):
         self._entries = LRU(size)  # (root, app) -> (conf signature, schema)
         self._read = read
+        self._path = path
 
     def get(self, root_path, app_name):
-        path = os.path.join(root_path, *_conf_relpath(app_name).split("/"))
+        path = self._path(root_path, app_name)
         # Stat before reading: a write in between is caught by the next stat.
-        signature = _signature(path)
+        signature = (path, _signature(path))
         return self._entries.get(
             (root_path, app_name),
             lambda: (signature, (self._read or exp_reader.metrics_schema)(root_path, app_name)),

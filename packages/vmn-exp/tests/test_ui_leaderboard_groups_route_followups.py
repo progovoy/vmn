@@ -41,8 +41,10 @@ def test_the_page_names_the_mean_by_default(tmp_path, repo):  # noqa: F811
 def test_the_page_names_the_apps_conf_default(tmp_path, repo):  # noqa: F811
     root, _ = repo
     _conf(root, {"ui": {"group_aggregate": "median"}})
-    assert _aggregate(tmp_path, root) == "median"
-    assert _aggregate(tmp_path, root, agg="best") == "best"
+    client = _client(tmp_path, root)
+    assert client.get(BASE, params={"group": "parent"}).json()["aggregate"] == "median"
+    explicit = client.get(BASE, params={"group": "parent", "agg": "best"}).json()
+    assert explicit["aggregate"] == "best"
 
 
 def test_an_invalid_conf_default_is_named_the_mean(tmp_path, repo):  # noqa: F811

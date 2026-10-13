@@ -89,7 +89,9 @@ def test_runs_are_counted_once_when_a_target_is_also_a_member():
 def test_a_value_spelled_like_no_value_has_its_own_group(field, value):
     prefix, _, name = field.partition(".")
     with_value = {"branch": value} if prefix == "branch" else {prefix: {name: value}}
-    out = _groups([run(1, **with_value), run(2)], field)
+    # The fixture puts runs on main unless told otherwise.
+    without = {"branch": None} if prefix == "branch" else {}
+    out = _groups([run(1, **with_value), run(2, **without)], field)
     assert len(out["groups"]) == 2
     assert keys(out)[-1] == NONE
     assert members(group_of(out, NONE)) == [v(2)]

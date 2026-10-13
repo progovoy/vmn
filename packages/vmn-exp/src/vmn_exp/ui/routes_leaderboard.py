@@ -17,22 +17,28 @@ Archived rows are left out of all of them unless the request passes
 from functools import partial
 
 from fastapi import HTTPException, Request
-
+from vmn_exp.core.query import QueryError
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
-from vmn_exp.core.query import QueryError
+from vmn_exp.ui.http_params import clamp_page, key_list
 from vmn_exp.ui.leaderboard_comments import (
-    groups_by_comments, joined, joined_groups, page_by_comments, reads_comments,
+    groups_by_comments,
+    joined,
+    joined_groups,
+    page_by_comments,
+    reads_comments,
 )
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE, UnknownGroup
-from vmn_exp.ui.http_params import clamp_page, key_list
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import ORDERS
 from vmn_exp.ui.responses import json_response, memoized_json_response
 
 # Encoded bodies kept per ETag (pages, chart columns): a few generations' worth.
 ENCODED_BODIES = 64
+# A grouped page's size (plan 22 F5): groups, rows per group, rows in all.
+MAX_GROUPS = 50
 MAX_ROWS_PER_GROUP = 100
+MAX_GROUPED_ROWS = 5000
 
 
 def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None):
@@ -75,7 +81,10 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         except QueryError as e:
             raise HTTPException(400, str(e))
         if group is not None:
-            _check_grouped(last, rows_per_group)
+            if last:
+                raise HTTPException(400, "last cannot be combined with group")
+            if group_key is None:
+                params["limit"], rows_per_group = grouped_page(limit, rows_per_group)
             params.update(agg=agg or aggregate_of(ws_name, app_tag),
                           rows_per_group=rows_per_group, group_key=group_key)
             compute = (partial(groups_by_comments, cache, counts=counts) if by_comments
@@ -145,11 +154,14 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
             raise HTTPException(400, str(e))
 
 
-def _check_grouped(last, rows_per_group):
-    if last:
-        raise HTTPException(400, "last cannot be combined with group")
-    if not 1 <= rows_per_group <= MAX_ROWS_PER_GROUP:
-        raise HTTPException(400, f"rows_per_group must be 1..{MAX_ROWS_PER_GROUP}")
+def grouped_page(limit, rows_per_group):
+    """``(groups, rows per group)`` of a grouped page, clamped (not refused)
+    to 1..:data:`MAX_GROUPS` groups and 1..:data:`MAX_ROWS_PER_GROUP` rows
+    each, the rows per group lowered until the page holds at most
+    :data:`MAX_GROUPED_ROWS` rows; no *limit* is the most groups."""
+    groups = MAX_GROUPS if limit is None else max(1, min(int(limit), MAX_GROUPS))
+    rows = max(1, min(int(rows_per_group), MAX_ROWS_PER_GROUP, MAX_GROUPED_ROWS // groups))
+    return groups, rows
 
 
 def _check_order(order):

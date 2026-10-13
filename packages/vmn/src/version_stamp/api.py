@@ -8,7 +8,7 @@ Boundary rules (see PLAN.md §2.2):
   R1  vmn_exp.* → version_stamp.* only via this module.
   R3  ``import version_stamp.api`` loads no experiment module and no ``git``.
 
-All 95 names are resolved lazily via PEP 562 ``__getattr__`` from the
+All 96 names are resolved lazily via PEP 562 ``__getattr__`` from the
 ``_LAZY_REGISTRY`` table below.  Each lookup caches the result in the module
 namespace so repeated accesses pay only one ``importlib.import_module`` call.
 
@@ -32,6 +32,7 @@ _LAZY_REGISTRY: dict[str, str] = {
     "now_iso":                     "version_stamp.core.utils:now_iso",
     "parse_record_metadata":       "version_stamp.core.utils:parse_record_metadata",
     "resolve_root_path":           "version_stamp.core.utils:resolve_root_path",
+    "resolve_branch_conf_path":    "version_stamp.core.utils:resolve_branch_conf_path",
     "sha256_file":                 "version_stamp.core.utils:sha256_file",
     "valid_app_path":              "version_stamp.core.utils:valid_app_path",
     "valid_path_component":        "version_stamp.core.utils:valid_path_component",

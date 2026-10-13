@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """How many distinct values each param has, as the board's Group by menu
 needs it: exact up to :data:`DISTINCT_CAP`, then only "more than that"."""
+import math
 
 # The menu offers a param only with at most this many values (plan 22 G2).
 DISTINCT_CAP = 20
@@ -10,7 +11,10 @@ _TRACKED = 64
 
 
 def value_key(value):
-    """A hashable stand-in for a verbatim param value (lists, dicts too)."""
+    """A hashable stand-in for a verbatim param value (lists, dicts too);
+    every NaN is one value (NaN != NaN, and each row parses its own)."""
+    if isinstance(value, float) and math.isnan(value):
+        return ("float", "nan")
     try:
         hash(value)
     except TypeError:

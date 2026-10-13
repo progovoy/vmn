@@ -13,7 +13,6 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from vmn_exp.core.app_conf import read_experiment_conf
-from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.similar_search import conf_weights
 from vmn_exp.storage.areas import app_key
@@ -47,6 +46,7 @@ from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.readers import changelog as changelog_reader
