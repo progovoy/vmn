@@ -131,6 +131,7 @@ def _seq(storage, app_name, verstr):
     return state.get("heartbeat_seq")
 
 
+@pytest.mark.serial
 def test_sdk_heartbeat_seq_increases_every_beat(app_layout):
     _bootstrap(app_layout)
     storage = _storage(app_layout)

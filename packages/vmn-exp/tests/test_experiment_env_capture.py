@@ -71,6 +71,7 @@ def test_packages_match_importlib_metadata():
 # Performance
 # ---------------------------------------------------------------------------
 
+@pytest.mark.serial
 def test_capture_under_50ms():
     """capture_env() must complete in under 50 ms (take best of 5 runs)."""
     from vmn_exp.core.env import capture_env

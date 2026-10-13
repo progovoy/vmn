@@ -149,7 +149,9 @@ def test_crash_fails_with_exit_1(launched):
 
 def test_outer_hosts_inner_runs(launched):
     root = launched["root"]
-    _wait_for(_status_is(root, "live-000010", "succeeded"))
+    # The worker's jobs start on threads of their own: live-000001 may come last.
+    for name in ("live-000010", "live-000001"):
+        _wait_for(_status_is(root, name, "succeeded"))
     rows = _rows(root)
     outer = rows["live-000010"]
     assert outer["kind"] == "outer"
@@ -184,6 +186,8 @@ def test_recovers_after_sigcont(launched):
     _wait_for(lambda: worker.is_stopped(stopping["pid"]))
     os.kill(stopping["pid"], signal.SIGCONT)
     _wait_for(_status_is(root, "live-000006", "succeeded"))
+    # The run's final state lands before the worker emits "finished".
+    _wait_for(lambda: "finished" in _events_of(run_dir, "live-000006"))
     assert _events_of(run_dir, "live-000006") == ["started", "stopping", "finished"]
 
 
@@ -200,6 +204,8 @@ def test_killed_via_vmn_exp_run_fails_143(launched):
 def test_endless_runs_until_sigterm(launched):
     root, proc = launched["root"], launched["procs"]["endless"]
     _wait_for(_status_is(root, "live-000008", "running"))
+    # A run shows running before its worker records the job: signal it after.
+    _wait_for(lambda: "started" in _events_of(launched["run_dir"], "live-000008"))
     proc.send_signal(signal.SIGTERM)
     assert proc.wait(timeout=20) == 143
     row = _rows(root)["live-000008"]

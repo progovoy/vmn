@@ -415,9 +415,11 @@ def test_metrics_callable_lazy(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_real_mlflow_roundtrip(tmp_path):
+def test_real_mlflow_roundtrip(tmp_path, monkeypatch):
     """Log a real run with mlflow then read it back without mlflow."""
     mlflow = pytest.importorskip("mlflow")
+    # mlflow >= 3.x writes the FileStore (what the importer reads) only on request.
+    monkeypatch.setenv("MLFLOW_ALLOW_FILE_STORE", "true")
 
     tracking_uri = f"file://{tmp_path / 'mlruns'}"
     mlflow.set_tracking_uri(tracking_uri)

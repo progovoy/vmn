@@ -275,7 +275,7 @@ def test_real_ray_tune_run_with_vmn_callback(tmp_path, monkeypatch):
     callback = make_callback(recorder)
 
     def trainable(config):
-        tune.report(loss=config["x"] ** 2, training_iteration=1)
+        tune.report({"loss": config["x"] ** 2})
 
     ray.init(num_cpus=1, ignore_reinit_error=True)
     try:

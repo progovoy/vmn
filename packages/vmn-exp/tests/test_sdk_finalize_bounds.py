@@ -46,6 +46,7 @@ def hung_runs(app_layout, tmp_path, monkeypatch):
     for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(run_module, "FINAL_REMOTE_TIMEOUT_SEC", TIMEOUT)
+    before = set(threading.enumerate())
     _bootstrap(app_layout)
     local = LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs")
     remote = _HungRemote(LocalSnapshotStorage(str(tmp_path), area="remote"))
@@ -63,6 +64,10 @@ def hung_runs(app_layout, tmp_path, monkeypatch):
         remote.up.set()
         for run in runs:
             run.finish()
+        # The uploads the hung remote held write on into the repo: let them
+        # land before app_layout removes it.
+        for thread in set(threading.enumerate()) - before:
+            thread.join(10)
 
 
 def _exit_codes(local, runs):

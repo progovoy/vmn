@@ -99,6 +99,7 @@ def test_tiny_seed_reads_back_through_the_index(seeded):
     assert len(big["metrics"]) == profile.big_keys
 
 
+@pytest.mark.serial
 def test_tiny_profile_meets_its_series_slos(seeded, tmp_path):
     root, profile, _ = seeded
     with serve_root(root, tmp_path / "data", "ws") as (base_url, ws):

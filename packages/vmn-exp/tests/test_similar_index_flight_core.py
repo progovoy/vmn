@@ -90,6 +90,7 @@ def test_a_builder_past_its_deadline_leaves_the_build_to_a_waiter(slow_build):
     assert index.row("r39") is not None and index is index_for(snapshot)
 
 
+@pytest.mark.serial
 def test_a_lineage_build_outlives_a_caller_past_its_deadline(slow_build):
     lineages, snapshot = IndexLineages(), _snapshot()
     with pytest.raises(SimilarDeadlineExceeded):

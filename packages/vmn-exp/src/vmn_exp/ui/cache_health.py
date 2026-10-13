@@ -23,6 +23,19 @@ def _identity(path):
     return st.st_dev, st.st_ino
 
 
+_SQLITE_HEADER = b"SQLite format 3\x00"
+
+
+def _has_sqlite_header(path):
+    """Whether the file still starts as SQLite's: with page 1 in an
+    uncheckpointed WAL a read would not notice the file itself is gone bad."""
+    try:
+        with open(path, "rb") as f:
+            return f.read(len(_SQLITE_HEADER)) == _SQLITE_HEADER
+    except OSError:
+        return False
+
+
 def _schema_of(path):
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
@@ -51,6 +64,8 @@ class SqliteHealth:
             return "missing"
         if identity != self._identity:
             return "replaced"
+        if not _has_sqlite_header(self.path):
+            return "corrupt"
         try:
             schema = _schema_of(self.path)
         except sqlite3.OperationalError as exc:
