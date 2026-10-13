@@ -9,6 +9,7 @@ from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 from vmn_exp.ui import leaderboard_groups as groups_mod
+from vmn_exp.ui.leaderboard_group_fields import NONE
 
 VOLATILE = ("stale_sec", "duration_sec")
 SCHEMA = {"loss": {"goal": "min"}}
@@ -126,3 +127,53 @@ def test_a_large_delta_still_matches(monkeypatch):
     _assert_same(cache, fleet.snapshot())
     fleet.remove(3)  # every later row moves
     _assert_same(cache, fleet.snapshot())
+
+
+def _loose(cache, snap, link, **params):
+    """The loose rows of a link grouping (plan 22 F12), checked against a fresh cache."""
+    out = cache.groups(snap, SCHEMA, link, rows_per_group=100, limit=1000, **params)
+    fresh = lb.LeaderboardCache(bucket_sec=cache.bucket_sec).groups(
+        snap, SCHEMA, link, rows_per_group=100, limit=1000, **params)
+    assert _strip(out) == _strip(fresh)
+    loose = [g for g in out["groups"] if g["key"] == NONE]
+    return [row["verstr"] for row in loose[0]["rows"]] if loose else []
+
+
+@pytest.mark.parametrize("link", ["parent", "forked_from", "rerun_of"])
+@pytest.mark.parametrize("archived", [False, True])
+def test_a_run_leaves_the_loose_rows_with_its_first_link_and_returns_with_its_last(
+        monkeypatch, link, archived):
+    _at(monkeypatch, T0)
+    fleet = Fleet(4)
+    head, other = fleet.append(state=finished()), fleet.append(state=finished())
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    assert _loose(cache, fleet.snapshot(), link, archived=archived) == [head, other]
+
+    def linked(state):
+        fleet.append(state=state)
+        fleet.edit(len(fleet.specs) - 1, **{link: head})
+
+    linked(finished())
+    assert _loose(cache, fleet.snapshot(), link, archived=archived) == [other]
+    linked(running(T0))  # a second link, live: still a header
+    assert _loose(cache, fleet.snapshot(), link, archived=archived) == [other]
+    fleet.remove(3)
+    assert _loose(cache, fleet.snapshot(), link, archived=archived) == [other]
+    fleet.edit(2, archived=True)  # its last link hidden unless archived runs show
+    want = [other] if archived else [head, other]
+    assert _loose(cache, fleet.snapshot(), link, archived=archived) == want
+    fleet.remove(2)
+    assert _loose(cache, fleet.snapshot(), link, archived=archived) == [head, other]
+
+
+def test_a_filter_that_cuts_a_heads_group_makes_it_loose_incrementally(monkeypatch):
+    _at(monkeypatch, T0)
+    fleet = Fleet(5)
+    head = fleet.append(state=finished())
+    fleet.append(parent=head, state=finished(1))
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    assert _loose(cache, fleet.snapshot(), "parent", status="succeeded") == [head]
+    fleet.set_state(1, finished(0))  # its child passes the filter now
+    assert _loose(cache, fleet.snapshot(), "parent", status="succeeded") == []
+    fleet.set_state(1, finished(2))
+    assert _loose(cache, fleet.snapshot(), "parent", status="succeeded") == [head]

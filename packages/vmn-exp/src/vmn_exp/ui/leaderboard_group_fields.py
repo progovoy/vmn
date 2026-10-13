@@ -21,7 +21,6 @@ DEFAULT_AGGREGATE = "mean"
 # text starts with it is keyed with it doubled (:func:`escaped_key`).
 NONE = "\u2205"
 NONE_LABEL = "(none)"
-NO_PARENT = "(no parent run)"
 # A run's status as a group's counts name it.
 COUNT_OF = {"running": "running", "created": "waiting", "succeeded": "done",
             "failed": "failed", "stuck": "stuck"}
@@ -97,7 +96,7 @@ def key_of(group):
 def label(group, key, found):
     """What a group's header says; *found*: whether a link's target is indexed."""
     if key == NONE:
-        return NO_PARENT if group == PARENT else NONE_LABEL
+        return NONE_LABEL
     text = key_text(key)
     if group in TARGET_LINKS:
         return text if found else f"{text} (not found)"

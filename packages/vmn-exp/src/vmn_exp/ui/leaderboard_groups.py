@@ -6,7 +6,9 @@ themselves ordered by the sort.
 Rows keep the flat board's order (:func:`~vmn_exp.ui.leaderboard_live.order_key`).
 When the sort ranks by a metric, groups order by their aggregate (*agg*) of
 it — missing ones after, ties by their first row — else by their first row;
-the ``(none)`` group always comes last. A count sort orders groups by that
+the ``(none)`` group always comes last. Grouped by a link, that group is
+``loose``: the runs heading a group are left out of it
+(:mod:`~vmn_exp.ui.leaderboard_group_loose`). A count sort orders groups by that
 count (:class:`~vmn_exp.ui.leaderboard_group_spec.GroupSpec`).
 
 Like :class:`~vmn_exp.ui.leaderboard_cache._Static`, a :class:`Grouping`
@@ -28,6 +30,7 @@ from vmn_exp.ui.leaderboard_group_fields import (
     label,
     target_payload,
 )
+from vmn_exp.ui.leaderboard_group_loose import Loose
 from vmn_exp.ui.leaderboard_group_summary import Summary
 from vmn_exp.ui.leaderboard_live import MergedRows, _bisect
 
@@ -55,6 +58,7 @@ class Grouping:
         self._okeys, self.order = {}, []
         self._total = self._running = None
         self._aggregates = {}  # memo: {group: aggregates payload}
+        self._loose_rows = None  # memo: a link grouping's Loose
 
     @classmethod
     def build(cls, base, spec, static):
@@ -195,7 +199,7 @@ class Grouping:
     def _summary(self, group):
         """*group*'s summary, a rerun group's original counted when it passes
         the filters (G3: the original's value is part of the result)."""
-        summary = self.summaries[group]
+        summary = self._own(group)
         if self.spec.group != RERUN_OF or group == NONE:
             return summary
         i = self.base.position.get(key_text(group))
@@ -210,8 +214,23 @@ class Grouping:
             found = self._aggregates[group] = self._summary(group).aggregates(self.spec.schema)
         return found
 
+    def _is_loose(self, key):
+        return key == NONE and self.spec.group in TARGET_LINKS
+
+    def _own(self, key):
+        """*key*'s summary of its own rows."""
+        return self._loose().summary if self._is_loose(key) else self.summaries[key]
+
+    def _loose(self):
+        if self._loose_rows is None:
+            self._loose_rows = Loose(self)
+        return self._loose_rows
+
+    def has(self, key):
+        return self.size(key) > 0
+
     def keys(self):
-        return self.order + ([NONE] if NONE in self.members else [])
+        return self.order + ([NONE] if self.has(NONE) else [])
 
     @property
     def total(self):
@@ -227,19 +246,26 @@ class Grouping:
         return self._running
 
     def size(self, key):
+        if self._is_loose(key) and NONE in self.members:
+            return self._loose().size
         return len(self.members.get(key, ()))
+
+    def _rows(self, key, offset, limit):
+        if self._is_loose(key):
+            return self._loose().page(offset, limit)
+        return list(self.members[key][offset:offset + limit])
 
     def group(self, key, offset, limit, unfiltered=None):
         """One group's payload, its rows paged; ``rows_unfiltered`` is the
         group's size in *unfiltered* (the same grouping without the filters)."""
-        rows = self.members[key]
         linked = self.spec.group in TARGET_LINKS and key != NONE
         target = self.row_of(key_text(key)) if linked else None
         return {"key": key, "label": label(self.spec.group, key, target is not None),
                 "target": target_payload(target) if target else None,
-                "counts": self.summaries[key].counts(),
+                "loose": self._is_loose(key),
+                "counts": self._own(key).counts(),
                 "aggregates": self._aggregates_of(key),
-                "rows": list(rows[offset:offset + limit]), "rows_total": len(rows),
+                "rows": self._rows(key, offset, limit), "rows_total": self.size(key),
                 "rows_unfiltered": (unfiltered or self).size(key)}
 
 
@@ -250,7 +276,7 @@ def groups_payload(grouping, offset=0, limit=None, rows_per_group=10, group_key=
     *unfiltered* (default: *grouping*) sizes each group before the filters."""
     limit = 50 if limit is None else limit
     if group_key is not None:
-        if group_key not in grouping.members:
+        if not grouping.has(group_key):
             raise UnknownGroup(f"no group {group_key!r}")
         return grouping.group(group_key, offset, limit, unfiltered)
     keys = grouping.keys()

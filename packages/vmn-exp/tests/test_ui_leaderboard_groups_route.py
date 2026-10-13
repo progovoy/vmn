@@ -43,9 +43,11 @@ def repo(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
     root = str(root)
-    # sweep 1: losses 1 and 9 (mean 5, min 1); sweep 4: 3 and 4 (mean 3.5, min 3)
+    # sweep 1: losses 1 and 9 (mean 5, min 1); sweep 4: 3 and 4 (mean 3.5, min 3);
+    # run 7 heads nothing: the loose row
     runs = {n: _record(root, n, loss, parent) for n, loss, parent in [
-        (1, 0.5, None), (2, 9.0, 1), (3, 1.0, 1), (4, 0.5, None), (5, 3.0, 4), (6, 4.0, 4)]}
+        (1, 0.5, None), (2, 9.0, 1), (3, 1.0, 1), (4, 0.5, None), (5, 3.0, 4), (6, 4.0, 4),
+        (7, 2.0, None)]}
     _conf(root, {"metrics": {"loss": {"goal": "min"}}})
     return root, runs
 
@@ -68,7 +70,7 @@ def test_group_answers_groups_sorted_by_the_mean(tmp_path, repo):
     body = _client(tmp_path, root).get(BASE, params={"group": "parent", "sort": "loss"}).json()
     assert _keys(body) == [runs[4], runs[1], NONE]
     assert body["total_groups"] == 3
-    assert body["total_rows"] == 6
+    assert body["total_rows"] == 7
     first = body["groups"][0]
     assert first["aggregates"]["loss"] == {"mean": 3.5, "best": 3.0, "median": 3.5,
                                            "min": 3.0, "max": 4.0, "n": 2}
@@ -153,4 +155,4 @@ def test_without_group_the_list_is_unchanged(tmp_path, repo):
     root, _ = repo
     body = _client(tmp_path, root).get(BASE, params={"limit": 50}).json()
     assert set(body) == {"rows", "total"}
-    assert body["total"] == 6
+    assert body["total"] == 7

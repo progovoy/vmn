@@ -25,7 +25,7 @@ def _unfiltered(payload):
 
 def test_without_a_filter_a_groups_unfiltered_size_is_its_size():
     out = _groups(FLEET, "parent")
-    assert _unfiltered(out) == {v(1): (3, 3), v(5): (1, 1), NONE: (2, 2)}
+    assert _unfiltered(out) == {v(1): (3, 3), v(5): (1, 1)}  # runs 1 and 5 are headers
 
 
 @pytest.mark.parametrize("params", [
@@ -102,9 +102,9 @@ def test_a_value_spelled_like_no_value_has_its_own_group(field, value):
 
 
 def test_the_no_value_key_is_none_of_the_labels():
-    out = _groups([run(1), run(2, parent=1)], "parent")
-    assert NONE not in ("(none)", "(no parent run)", "")
-    assert group_of(out, NONE)["label"] == "(no parent run)"
+    out = _groups([run(1), run(2, parent=1), run(3)], "parent")
+    assert NONE not in ("(none)", "")
+    assert group_of(out, NONE)["label"] == "(none)"
 
 
 def test_a_value_group_and_the_no_value_group_page_apart():
@@ -117,6 +117,6 @@ def test_a_value_group_and_the_no_value_group_page_apart():
 def test_a_link_spelled_like_no_value_is_a_missing_target():
     out = _groups([run(1, parent=NONE), run(2)], "parent")
     assert len(out["groups"]) == 2
-    assert group_of(out, NONE)["label"] == "(no parent run)"
+    assert group_of(out, NONE)["label"] == "(none)"
     assert members(group_of(out, NONE)) == [v(2)]
     assert out["groups"][0]["label"] == f"{NONE} (not found)"

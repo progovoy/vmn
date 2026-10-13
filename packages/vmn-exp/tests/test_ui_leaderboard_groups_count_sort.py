@@ -21,8 +21,9 @@ def _sweep(parent, first, states, losses=None):
             for i, (state, loss) in enumerate(zip(states, losses))]
 
 
-# Sweep 1: 1 run; sweep 2: 3 runs; sweep 3: 2 runs; runs 1-3 have no parent.
-FLEET = ([run(1), run(2), run(3)] + _sweep(1, 10, ["ok"])
+# Sweep 1: 1 run; sweep 2: 3 runs; sweep 3: 2 runs; runs 1-3 and 4 have no
+# parent, 4 is a loose row (1-3 head the sweeps).
+FLEET = ([run(1), run(2), run(3), run(4)] + _sweep(1, 10, ["ok"])
          + _sweep(2, 20, ["ok", "fail", "stuck"]) + _sweep(3, 30, ["running", None]))
 
 
@@ -47,16 +48,16 @@ def test_each_count_sorts_by_its_statuses(sort, want):
 
 def test_failed_counts_stuck_runs_too():
     specs = [run(1), run(2)] + _sweep(1, 10, ["stuck", "stuck"]) + _sweep(2, 20, ["fail", "ok"])
-    assert keys(_groups(specs, sort="c:failed", order="desc")) == [v(1), v(2), NONE]
+    assert keys(_groups(specs, sort="c:failed", order="desc")) == [v(1), v(2)]
 
 
 def test_ties_keep_the_default_group_order():
     specs = ([run(1), run(2), run(3)] + _sweep(1, 10, ["ok", "ok"], [5.0, 5.0])
              + _sweep(2, 20, ["ok", "ok"], [1.0, 1.0]) + _sweep(3, 30, ["ok"], [3.0]))
     default = keys(_groups(specs))
-    assert default == [v(2), v(3), v(1), NONE]  # by mean loss
-    assert keys(_groups(specs, sort="c:total", order="desc")) == [v(2), v(1), v(3), NONE]
-    assert keys(_groups(specs, sort="c:total", order="asc")) == [v(3), v(2), v(1), NONE]
+    assert default == [v(2), v(3), v(1)]  # by mean loss
+    assert keys(_groups(specs, sort="c:total", order="desc")) == [v(2), v(1), v(3)]
+    assert keys(_groups(specs, sort="c:total", order="asc")) == [v(3), v(2), v(1)]
 
 
 def test_rows_within_a_group_keep_the_default_order():

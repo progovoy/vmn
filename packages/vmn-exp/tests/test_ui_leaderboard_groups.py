@@ -29,18 +29,18 @@ def test_parent_groups_put_the_outer_run_in_the_header_not_among_its_rows():
     assert out["total_rows"] == 6
 
 
-def test_runs_without_a_parent_are_rows_of_the_no_parent_group_shown_last():
+def test_runs_without_a_parent_that_head_no_group_are_loose_rows_shown_last():
     group = group_of(_groups(FLEET, "parent"), NONE)
-    assert members(group) == [v(1), v(4), v(6)]
+    assert members(group) == [v(6)]
     assert group["target"] is None
-    assert group["label"] == "(no parent run)"
+    assert group["loose"] is True
 
 
 def test_an_inner_outer_run_is_a_header_and_a_row_of_its_parents_group():
     out = _groups([run(1), run(2, parent=1), run(3, parent=2)], "parent")
     assert members(group_of(out, v(1))) == [v(2)]
     assert members(group_of(out, v(2))) == [v(3)]
-    assert members(group_of(out, NONE)) == [v(1)]
+    assert NONE not in keys(out)  # run 1 heads a group
 
 
 def test_a_target_missing_from_the_index_groups_under_its_verstr():
@@ -159,12 +159,12 @@ def _two_sweeps():
 ])
 def test_agg_picks_the_aggregate_groups_sort_by(agg, order):
     out = _groups(_two_sweeps(), "parent", schema={"loss": {"goal": "min"}}, sort="loss", agg=agg)
-    assert keys(out) == [v(n) for n in order] + [NONE]
+    assert keys(out) == [v(n) for n in order]
 
 
 def test_the_default_aggregate_is_the_mean():
     out = _groups(_two_sweeps(), "parent", schema={"loss": {"goal": "min"}}, sort="loss")
-    assert keys(out) == [v(4), v(1), NONE]
+    assert keys(out) == [v(4), v(1)]
 
 
 def test_rows_within_a_group_follow_the_sort_and_order_flips_groups_too():
@@ -172,25 +172,25 @@ def test_rows_within_a_group_follow_the_sort_and_order_flips_groups_too():
     out = _groups(_two_sweeps(), "parent", schema=schema, sort="loss")
     assert members(group_of(out, v(1))) == [v(3), v(2)]
     flipped = _groups(_two_sweeps(), "parent", schema=schema, sort="loss", order="desc")
-    assert keys(flipped) == [v(1), v(4), NONE]
+    assert keys(flipped) == [v(1), v(4)]
     assert members(group_of(flipped, v(1))) == [v(2), v(3)]
 
 
 def test_best_on_a_goal_less_metric_sorts_by_the_mean():
     out = _groups(_two_sweeps(), "parent", sort="loss", agg="best")
-    assert keys(out) == [v(4), v(1), NONE]
+    assert keys(out) == [v(4), v(1)]
 
 
 def test_groups_without_a_value_sort_after_the_valued_ones():
     specs = _two_sweeps() + [run(7), run(8, parent=7)]
     out = _groups(specs, "parent", schema={"loss": {"goal": "min"}}, sort="loss", order="desc")
-    assert keys(out) == [v(1), v(4), v(7), NONE]
+    assert keys(out) == [v(1), v(4), v(7)]
 
 
 def test_a_date_sort_orders_groups_by_their_first_row():
     specs = [run(1), run(2, parent=1), run(3), run(4, parent=3), run(5, parent=1)]
     out = _groups(specs, "parent", sort="timestamp")  # newest first
-    assert keys(out) == [v(1), v(3), NONE]
+    assert keys(out) == [v(1), v(3)]
     assert members(group_of(out, v(1))) == [v(5), v(2)]
 
 
@@ -220,10 +220,10 @@ def test_groups_page_and_each_groups_rows_are_capped():
     assert keys(first) == [v(1), v(40)]
     assert len(group_of(first, v(1))["rows"]) == 5
     assert group_of(first, v(1))["rows_total"] == 28
-    assert first["total_groups"] == 4
+    assert first["total_groups"] == 3  # runs 1, 40, 50 head groups: no loose rows
     assert first["total_rows"] == len(specs)
     second = cache.groups(snap, {}, "parent", offset=2, limit=2)
-    assert keys(second) == [v(50), NONE]
+    assert keys(second) == [v(50)]
 
 
 def test_group_key_pages_one_groups_rows():
