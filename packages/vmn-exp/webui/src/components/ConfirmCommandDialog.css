@@ -1,2 +1,3 @@
 .confirm-command code.cli-hint { display: block; margin: 0 0 12px; }
 .confirm-command .confirm-note { color: var(--text-2); font-size: 12.5px; }
+.confirm-command { margin: 0 12px; }
