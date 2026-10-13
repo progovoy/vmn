@@ -9,7 +9,7 @@ import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
 import { PENDING_TEXT } from "./pendingText";
 import StatusPill from "../components/StatusPill";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
-import { FoldToggle, type RowLayout } from "./LeaderboardRow";
+import { FoldToggle, headStatus, type RowLayout } from "./LeaderboardRow";
 import type { SortState } from "./LeaderboardHead";
 import "./leaderboardCards.css";
 
@@ -20,9 +20,6 @@ export function cardMetric(layout: RowLayout, sort: string | null): string | nul
   if (sort && shown.includes(sort)) return sort;
   return shown.find((m) => layout.colMeta[m]?.isBar) ?? shown[0] ?? null;
 }
-
-const headStatus = (r: ExperimentRow) =>
-  (r.kind === "outer" && r.tree_status ? r.tree_status : r.status) as ExperimentRow["status"];
 
 function MetricLine({ r, metric, layout }: { r: ExperimentRow; metric: string; layout: RowLayout }) {
   const col = layout.colMeta[metric];

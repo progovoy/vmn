@@ -3,25 +3,9 @@
  *  click or a navigation closes it. */
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useLocation } from "react-router-dom";
+import { useMediaQuery } from "./useMediaQuery";
 
 const NARROW = "(max-width: 899px)";
-
-function narrowQuery(): MediaQueryList | null {
-  return typeof window.matchMedia === "function" ? window.matchMedia(NARROW) : null;
-}
-
-/** Whether the drawer layout applies, following the media query. */
-function useNarrow(): boolean {
-  const [narrow, setNarrow] = useState(() => narrowQuery()?.matches ?? false);
-  useEffect(() => {
-    const mq = narrowQuery();
-    if (!mq) return;
-    const onChange = (e: { matches: boolean }) => setNarrow(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return narrow;
-}
 
 export function setInert(el: HTMLElement | null, on: boolean) {
   if (on) el?.setAttribute("inert", "");
@@ -38,7 +22,7 @@ export interface Drawer {
 }
 
 export function useDrawer(): Drawer {
-  const narrow = useNarrow();
+  const narrow = useMediaQuery(NARROW);
   const [open, setOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);

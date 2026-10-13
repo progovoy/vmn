@@ -92,6 +92,10 @@ export function layoutIds(layout: RowLayout): readonly string[] {
     : defaultColumnIds(fleet, layout.metricCols, layout.paramCols, tags);
 }
 
+/** A row's headline status: an outer's rolled-up tree_status, else its own. */
+export const headStatus = (r: ExperimentRow) =>
+  (r.kind === "outer" && r.tree_status ? r.tree_status : r.status) as ExperimentRow["status"];
+
 export function FoldToggle({ r, collapsed, onFold }: {
   r: ExperimentRow; collapsed: boolean; onFold: (r: ExperimentRow) => void;
 }) {
@@ -201,8 +205,7 @@ function Row({
       case "idx":
         return <td key={id} data-col-id={id} className="idx-cell" style={style}>@{r.idx}</td>;
       case "status": {
-        // For outers, tree_status is the headline status.
-        const displayStatus = (r.kind === "outer" && r.tree_status) ? r.tree_status as ExperimentRow["status"] : r.status;
+        const displayStatus = headStatus(r);
         return (
           <td key={id} data-col-id={id} className="status-cell" style={style}>
             {displayStatus && (
