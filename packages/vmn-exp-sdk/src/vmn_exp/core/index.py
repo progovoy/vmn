@@ -10,7 +10,11 @@ is loaded, a changed ``metadata.yml`` re-read, a grown log read from where it
 was last read up to (:mod:`experiment_index_logs`), a rewritten
 ``run_state.yml`` — a heartbeat — re-read on its own. The folded state
 persists in SQLite (:mod:`experiment_index_store`), so a new process starts
-warm; a heartbeat there rewrites only its small run-state row.
+warm; a heartbeat there rewrites only its small run-state row. A restarted
+server's first :meth:`ExperimentIndex.snapshot` serves those persisted rows
+as soon as they are read and revalidates them against the storage listing in
+the background (seconds at 100k records); :meth:`refresh_if_stale` and
+:meth:`refresh` still answer only once storage was listed.
 
 Readers get an immutable :class:`IndexSnapshot` per ``generation`` (bumped by
 anything visible, run states included) that never takes the index lock or
@@ -43,6 +47,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.fold import fold_log, fold_row
+from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_listing import ListingWatch
@@ -96,6 +101,9 @@ class ExperimentIndex:
         self._rows = RowCache()
         self._snapshot = None
         self._lock = threading.Lock()
+        self._published = threading.Event()  # a first snapshot, or a refresh that failed
+        self._revalidator = None  # the thread a warm snapshot() started
+        self._revalidator_lock = threading.Lock()
         self.generation = 0
         self.last_refresh_at = None  # monotonic start of the last refresh
         self._cache_gen = None  # a follower's CacheStore generation; None for a leader
@@ -172,7 +180,8 @@ class ExperimentIndex:
         snap = self._snapshot
         if snap is None:
             return self._first_load()
-        if _monotonic() - self.last_refresh_at < max_age_sec:
+        fresh_at = self.last_refresh_at  # None: persisted rows not revalidated yet
+        if fresh_at is not None and _monotonic() - fresh_at < max_age_sec:
             return snap
         if not self._lock.acquire(blocking=False):
             return snap
@@ -232,16 +241,21 @@ class ExperimentIndex:
             self.last_refresh_at = started
             return
         try:
-            self._refresh_from_storage(started)
+            with gc_paused():
+                self._refresh_from_storage(started)
         except Exception:
             # A listing's changes may have been taken but not applied.
             self._sweep.reset()
             raise
+        finally:
+            self._published.set()
         self.last_refresh_at = started
 
     def _refresh_from_storage(self, started):
         if self._records is None:
             self._records = self._load_records()
+            if self._records and self._snapshot is None:
+                self._publish_persisted()
         listing, removed = self._sweep.listing(self._records, started)
 
         # Unfinished claims and deleted records' leftovers have no metadata.
@@ -278,6 +292,14 @@ class ExperimentIndex:
         if touched or removed or self._snapshot is None:
             self.generation += 1
             self._snapshot = self._build_snapshot(None if removed else touched)
+
+    def _publish_persisted(self):
+        """Serve the records as persisted until the listing under way
+        revalidates them."""
+        self._order = self._sorted_keys()
+        self.generation += 1
+        self._snapshot = self._build_snapshot()
+        self._published.set()
 
     def _refresh_from_cache(self):
         if self._records is None:
@@ -374,8 +396,39 @@ class ExperimentIndex:
         )
 
     def snapshot(self):
-        """The current :class:`IndexSnapshot`; the first call loads the index."""
+        """The current :class:`IndexSnapshot`. The first call of an index
+        with persisted records answers them as soon as they are read and
+        refreshes them from storage in the background; a cold index answers
+        once its first load is done."""
+        snap = self._snapshot
+        if snap is not None:
+            return snap
+        if self._cache_gen is not None:
+            return self._first_load()
+        self._revalidate_in_background()
+        self._published.wait()
+        # The background load failed: load here, meeting its error.
         return self._snapshot or self._first_load()
+
+    def _revalidate_in_background(self):
+        with self._revalidator_lock:
+            if self._revalidator is not None:
+                return
+            self._revalidator = threading.Thread(
+                target=self._revalidate, daemon=True, name="vmn-index-revalidate"
+            )
+            self._revalidator.start()
+
+    def _revalidate(self):
+        try:
+            self.refresh()
+        except Exception:
+            _LOGGER.debug("Background index refresh failed", exc_info=True)
+
+    def wait_revalidated(self, timeout=None):
+        """Wait for the refresh a first :meth:`snapshot` started, if any."""
+        if self._revalidator is not None:
+            self._revalidator.join(timeout)
 
     # -- copies of the current snapshot (call refresh() first) ---------------
 

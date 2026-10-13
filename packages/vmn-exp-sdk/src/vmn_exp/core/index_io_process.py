@@ -28,7 +28,9 @@ import subprocess
 import sys
 import traceback
 
+from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index_record import listed_unchanged
+from vmn_exp.core.index_store import decode_records
 from vmn_exp.core.index_workers import _can_spawn
 
 _LOGGER = logging.getLogger(__name__)
@@ -157,7 +159,7 @@ class ProcessIO:
             raise IOProcessError(f"index I/O helper died during {op}") from exc
 
     def load(self):
-        return dict(self.call("load"))
+        return decode_records(*self.call("load"))
 
     def refresh(self, work, removed):
         """Like the in-process refresh, but a record the listing shows
@@ -213,7 +215,8 @@ class _Helper:
         self.watch = self.index._sweep.watch = ListingWatch(storage, app_name, identity=True)
 
     def load(self):
-        return list(self.index._store.load(self.index.app_name).items())
+        # Undecoded: strings cross the pipe as one copy each.
+        return self.index._store.load_raw(self.index.app_name)
 
     def refresh(self, work, removed):
         sent = {key: pickle.dumps(record) for key, _, record in work if record is not None}
@@ -244,10 +247,16 @@ def main():
         try:
             if op == "setup":
                 helper, result = _Helper(*args), None
-            elif op in ("load", "refresh"):
-                result = getattr(helper, op)(*args)
             else:
-                result = getattr(helper.watch, op)(*args)
+                result = _handle(helper, op, args)
             _answer(out, result)
         except Exception:
             _write(out, ("err", traceback.format_exc(limit=5)))
+
+
+def _handle(helper, op, args):
+    """*helper*'s answer to *op*: bulk work, done with collection paused."""
+    with gc_paused():
+        if op in ("load", "refresh"):
+            return getattr(helper, op)(*args)
+        return getattr(helper.watch, op)(*args)

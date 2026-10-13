@@ -23,6 +23,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp._base import ensure_logger
+from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.record_files import RecordFiles
 
@@ -42,10 +43,16 @@ def load_new_records(storage, direct, app_name, work):
     items = _with_record_dirs(storage, direct, app_name, new) if count > 1 else None
     if not items:
         return {}
+    answers = in_workers(items, count, lambda chunk: _run_worker(app_name, chunk))
+    return {key: result for answer in answers for key, result in answer if result}
+
+
+def in_workers(items, count, run):
+    """``run(chunk)`` for *count* strided chunks of *items* (``items[i::count]``),
+    each on its own thread — *run* starts a worker process."""
     chunks = [items[i::count] for i in range(count)]
     with ThreadPoolExecutor(max_workers=count) as pool:
-        answers = list(pool.map(lambda chunk: _run_worker(app_name, chunk), chunks))
-    return {key: result for answer in answers for key, result in answer if result}
+        return list(pool.map(run, chunks))
 
 
 def _can_spawn():
@@ -75,13 +82,18 @@ def _cpus():
     return len(affinity(0)) if affinity else os.cpu_count() or 1
 
 
-def _worker_command():
+def worker_command(module):
+    """The command line of a worker running *module*'s ``main()``."""
     return [
         sys.executable,
         "-c",
         f"import sys; sys.path.insert(0, {_PACKAGE_ROOT!r}); "
-        "from vmn_exp.core.index_workers import main; main()",
+        f"from {module} import main; main()",
     ]
+
+
+def _worker_command():
+    return worker_command(__name__)
 
 
 def _spawn(cmd, env):
@@ -92,12 +104,18 @@ def _spawn(cmd, env):
 
 def _run_worker(app_name, chunk):
     """``[(key, result or None)]`` from one worker; ``[]`` if it failed."""
+    return run_in_worker(_worker_command(), (app_name, chunk)) or []
+
+
+def run_in_worker(cmd, payload):
+    """The unpickled answer of the worker *cmd* to the pickled *payload* on
+    its stdin; None if it failed."""
     try:
-        proc = _spawn(_worker_command(), dict(os.environ))
-        out, _ = proc.communicate(pickle.dumps((app_name, chunk), pickle.HIGHEST_PROTOCOL))
-        return pickle.loads(out) if proc.returncode == 0 else []
+        proc = _spawn(cmd, dict(os.environ))
+        out, _ = proc.communicate(pickle.dumps(payload, pickle.HIGHEST_PROTOCOL))
+        return pickle.loads(out) if proc.returncode == 0 else None
     except Exception:
-        return []
+        return None
 
 
 def _load_chunk(app_name, chunk):
@@ -116,6 +134,8 @@ def _load_chunk(app_name, chunk):
 def main():
     """Worker entry point: a pickled ``(app, chunk)`` on stdin, answers on stdout."""
     ensure_logger()
-    app_name, chunk = pickle.load(sys.stdin.buffer)
-    pickle.dump(_load_chunk(app_name, chunk), sys.stdout.buffer, pickle.HIGHEST_PROTOCOL)
+    with gc_paused():  # every record it loads lives until it exits
+        app_name, chunk = pickle.load(sys.stdin.buffer)
+        answers = _load_chunk(app_name, chunk)
+    pickle.dump(answers, sys.stdout.buffer, pickle.HIGHEST_PROTOCOL)
     sys.stdout.buffer.flush()

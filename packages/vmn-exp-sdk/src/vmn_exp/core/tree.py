@@ -12,6 +12,7 @@ states only through the reader its caller passes in.
 """
 from collections import Counter
 
+import vmn_exp.core.status as experiment_status
 from vmn_exp.core.status import (
     CREATED,
     FAILED,
@@ -169,6 +170,7 @@ def annotate_rows(rows, run_states, observed_at=None, now=None):
     """
     run_states = run_states or {}
     observed_at = observed_at or {}
+    now = experiment_status._now(now)  # one clock reading for every row
     return _annotate_tree_in_place([
         dict(row, **status_fields(
             run_states.get(row["verstr"]), now=now,
