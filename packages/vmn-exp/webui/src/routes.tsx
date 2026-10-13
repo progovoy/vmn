@@ -7,7 +7,7 @@ import RouteError from "./components/shell/RouteError";
 import { AppGuard, GitOnly, WorkspaceGuard } from "./components/shell/guards";
 import { AppsPage } from "./pages/AppsPage";
 import { WorkspacesHome } from "./pages/WorkspacesHome";
-import Leaderboard from "./pages/Leaderboard";
+import ExperimentsPage from "./pages/Experiments/ExperimentsPage";
 import type { RouteHandle, RouteId } from "./shell/contracts";
 
 // The landing pages ship in the main bundle; every other page loads on first
@@ -49,7 +49,7 @@ export const routes: RouteObject[] = [
       child(undefined, "home", <WorkspacesHome />),
       child("tokens", "tokens", page(Tokens, "API tokens")),
       child("ws/:ws", "apps", inWs(<AppsPage />)),
-      child("ws/:ws/app/:app", "experiments", inApp(<Leaderboard />), true),
+      child("ws/:ws/app/:app", "experiments", inApp(<ExperimentsPage />), true),
       child("ws/:ws/app/:app/run/:verstr", "run", inApp(page(Run, "run"))),
       child("ws/:ws/app/:app/compare-runs", "compare-runs", inApp(page(ComparePage, "comparison"))),
       child("ws/:ws/app/:app/tree", "tree", inGitApp("tree", page(StampTree, "stamp tree"))),

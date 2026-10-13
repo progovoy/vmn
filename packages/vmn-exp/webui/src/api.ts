@@ -21,6 +21,8 @@ export interface PageOpts {
   order?: "asc" | "desc";
   /** Include archived runs (hidden by default). */
   archived?: boolean;
+  /** Top-level runs only: the Jobs view (plan 23 S2). */
+  top?: boolean;
 }
 
 /** The leaderboard filter, as the list-shaped endpoints take it. */
@@ -30,6 +32,7 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.query) p.set("q", opts.query);
   if (opts.order) p.set("order", opts.order);
   if (opts.archived) p.set("archived", "1");
+  if (opts.top) p.set("top", "1");
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 

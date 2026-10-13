@@ -33,7 +33,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 import { api } from "../../api";
 import type { ExperimentRow } from "../../types";
-import Leaderboard from "../Leaderboard";
+import Leaderboard from "../Experiments/AllRunsView";
 
 const mockedApi = api as unknown as {
   experiments: ReturnType<typeof vi.fn>;
@@ -104,7 +104,7 @@ describe("Leaderboard sticky header + pinned identifier column", () => {
     expect(expHead).toBeTruthy();
     expect(expHead.style.position).toBe("sticky");
     // Left offset = the summed widths of the check/#/status columns before it.
-    expect(expHead.style.left).toBe("200px");
+    expect(expHead.style.left).toBe("216px");
     expect(Number(expHead.style.zIndex)).toBeGreaterThan(Number(idxHead.style.zIndex));
   });
 
@@ -116,7 +116,7 @@ describe("Leaderboard sticky header + pinned identifier column", () => {
     const cell = document.querySelector("tbody td.exp-cell") as HTMLElement;
     expect(cell).toBeTruthy();
     expect(cell.style.position).toBe("sticky");
-    expect(cell.style.left).toBe("200px");
+    expect(cell.style.left).toBe("216px");
     expect(cell.style.background).toBe("var(--surface-1)");
     expect(Number(cell.style.zIndex)).toBeGreaterThan(0);
   });

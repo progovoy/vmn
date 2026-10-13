@@ -19,7 +19,7 @@ vi.mock("../../api", () => ({
 vi.mock("../../apiShell", () => ({ apiShell: { appStatus: () => appStatus() } }));
 vi.mock("../../components/NewExperiment", () => ({ default: () => null }));
 
-import Leaderboard from "../Leaderboard";
+import Leaderboard from "../Experiments/AllRunsView";
 
 const never = () => new Promise<never>(() => {});
 const status = (total: number) => ({

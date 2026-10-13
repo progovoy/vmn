@@ -1,50 +1,48 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import { appName as toAppName } from "../api";
-import ReportsUsing from "../components/ReportsUsing";
-import { facetsQuery, prefetchRun, useFacets, useMetricsSchema } from "../queries";
-import { branchClause, combineQueries, searchClause, statusClause } from "../util/searchQuery";
-import { pollIntervalMs } from "../util";
-import type { ExperimentRow } from "../types";
-import NewExperiment from "../components/NewExperiment";
-import LeaderboardFilter from "../components/LeaderboardFilter";
-import SimilarSearch from "../components/SimilarSearch";
-import { usePolling } from "../hooks/usePolling";
-import { useLiveScope } from "../hooks/useLiveScope";
-import { useBoardRows } from "../hooks/useBoardRows";
-import { useLeaderboardView } from "../hooks/useLeaderboardView";
-import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
-import { useColumnPrefs } from "../hooks/useColumnPrefs";
-import { useColumnEdits } from "../hooks/useColumnEdits";
-import { useBoardSelection } from "../hooks/useBoardSelection";
-import { useBoardGrouping } from "../hooks/useBoardGrouping";
-import { useBoardAggregate } from "../hooks/useBoardAggregate";
-import { useBoardGroupActions } from "../hooks/useBoardGroupActions";
-import { boardRows } from "../util/groupItems";
-import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
-import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
-import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
-import LeaderboardTable, { IDX_SORT } from "./LeaderboardTable";
-import { boardSortState } from "./boardSortState";
-import { boardSort, isGroupCountId } from "../util/groupCountSort";
-import LeaderboardToolbar from "./LeaderboardToolbar";
-import BoardHead, { runCountText } from "./BoardHead";
-import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
-import BoardGridTools from "./BoardGridTools";
-import { useCanCreateRun } from "../shell/useAppExists";
-import { useAppStatus } from "../shell/useShellData";
-import AttentionStrip from "../components/AttentionStrip";
-import { LiveText } from "../components/LiveStatus";
-import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
-import { queryHelpData } from "../util/queryHelp";
+import { appName as toAppName } from "../../api";
+import ReportsUsing from "../../components/ReportsUsing";
+import { prefetchRun, useFacets, useMetricsSchema } from "../../queries";
+import { branchClause, combineQueries, searchClause, statusClause } from "../../util/searchQuery";
+import type { ExperimentRow } from "../../types";
+import NewExperiment from "../../components/NewExperiment";
+import LeaderboardFilter from "../../components/LeaderboardFilter";
+import SimilarSearch from "../../components/SimilarSearch";
+import { useBoardLive } from "../../hooks/useBoardLive";
+import { useBoardRows } from "../../hooks/useBoardRows";
+import { useLeaderboardView } from "../../hooks/useLeaderboardView";
+import { useLeaderboardColumns } from "../../hooks/useLeaderboardColumns";
+import { useColumnPrefs } from "../../hooks/useColumnPrefs";
+import { useColumnEdits } from "../../hooks/useColumnEdits";
+import { useBoardSelection } from "../../hooks/useBoardSelection";
+import { useBoardGrouping } from "../../hooks/useBoardGrouping";
+import { useBoardAggregate } from "../../hooks/useBoardAggregate";
+import { useBoardGroupActions } from "../../hooks/useBoardGroupActions";
+import { boardRows } from "../../util/groupItems";
+import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "../BoardTabs";
+import LeaderboardChartsPanel from "../LeaderboardChartsPanel";
+import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
+import LeaderboardTable, { IDX_SORT } from "../LeaderboardTable";
+import { boardSortState } from "../boardSortState";
+import { boardSort, isGroupCountId } from "../../util/groupCountSort";
+import LeaderboardToolbar from "../LeaderboardToolbar";
+import BoardHead, { runCountText } from "../BoardHead";
+import BoardCaption, { BOARD_CAPTION_ID } from "../BoardCaption";
+import BoardGridTools from "../BoardGridTools";
+import { useCanCreateRun } from "../../shell/useAppExists";
+import { useAppStatus } from "../../shell/useShellData";
+import AttentionStrip from "../../components/AttentionStrip";
+import { LiveText } from "../../components/LiveStatus";
+import { NARROW_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
+import { queryHelpData } from "../../util/queryHelp";
 
 /** The runs no other run launched (the subtitle's `N runs`). */
 const topLevel = (rows: readonly ExperimentRow[]) => rows.filter((r) => !r.depth).length;
 
 /** An existing app without runs: the CLI line, plus a New run button where a
  *  run can be created here (a known app, a writable git workspace). */
-function EmptyBoard({ ws, app, appName, onCreate }: {
+export function EmptyBoard({ ws, app, appName, onCreate }: {
   ws: string; app: string; appName: string; onCreate: () => void;
 }) {
   const canCreate = useCanCreateRun(ws, app);
@@ -63,17 +61,22 @@ function EmptyBoard({ ws, app, appName, onCreate }: {
  *  scroll), while the URL's own view params never remount it. */
 export default function Leaderboard() {
   const { ws, app } = useParams() as { ws: string; app: string };
-  return <AppLeaderboard key={`${ws}/${app}`} ws={ws} app={app} />;
+  return <AllRunsView key={`${ws}/${app}`} ws={ws} app={app} />;
 }
 
-function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
+/** The All runs view (plan 23 W1): plan 22's board of every run. Inside the
+ *  experiments page, *views* is the Jobs | All runs switch and *onJobs*
+ *  opens the Jobs view: the board's "parent run" grouping (§3.4). */
+export function AllRunsView({ ws, app, views, onJobs }: {
+  ws: string; app: string; views?: ReactNode; onJobs?: () => void;
+}) {
   const appName = toAppName(app);
   const client = useQueryClient();
   const view = useLeaderboardView();
   const narrow = useMediaQuery(NARROW_QUERY);
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);
-  const groupBy = useBoardGrouping(ws, app, view);
+  const groupBy = useBoardGrouping(ws, app, view, onJobs);
   const status = useAppStatus(ws, app).data;
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -115,31 +118,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   }), [similarQuery, view.archived]);
   const rows = data.rows;
 
-  // Keep refreshing on our own while a run is still in flight (until paused),
-  // at the cadence its heartbeat can actually move the status at. Grouped,
-  // the payload counts running rows the board has not loaded (F4).
-  const serverRunning = data.running > 0;
-  const { anyRunning, heartbeatSec } = useMemo(() => {
-    let running = serverRunning;
-    let fastest: number | null = null;
-    for (const r of rows ?? []) {
-      if (r.status === "running") running = true;
-      const hb = r.heartbeat_interval_sec;
-      if (typeof hb === "number" && (fastest === null || hb < fastest)) fastest = hb;
-    }
-    return { anyRunning: running, heartbeatSec: fastest };
-  }, [rows, serverRunning]);
   const all = useMemo(() => rows ?? [], [rows]);
   const { refresh } = data;
-  // Pushed by the app's live events (new runs too), else polled.
-  const live = useLiveScope({
-    ws, app, enabled: !paused,
-    onChange: () => Promise.all([
-      refresh(),
-      client.invalidateQueries({ queryKey: facetsQuery(ws, app).queryKey }),
-    ]),
-  });
-  usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused && !live.connected);
+  const anyRunning = useBoardLive({ ws, app, paused, rows, serverRunning: data.running > 0, refresh });
 
   const base = `/ws/${ws}/app/${app}`;
   const colPrefs = useColumnPrefs(`${ws}/${app}`);
@@ -196,6 +177,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           shownTop, loadedTop: topLevel(all),
         })}
         live={narrow && anyRunning && <LiveText paused={paused} updatedAt={data.updatedAt} />}
+        views={views}
         actions={!empty && (
           <LeaderboardToolbar
             ws={ws} app={app} view={view} cols={cols} grouping={grouping}

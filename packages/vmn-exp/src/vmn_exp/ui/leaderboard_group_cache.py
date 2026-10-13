@@ -9,6 +9,8 @@ the cache's static order), plus one view per time bucket while runs are live.
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
 from vmn_exp.ui.leaderboard_group_spec import GroupSpec
 from vmn_exp.ui.leaderboard_groups import Grouping, groups_payload
+from vmn_exp.ui.leaderboard_jobs import check_job_sort
+from vmn_exp.ui.leaderboard_scope import check_scope
 from vmn_exp.ui.memo import LRU
 
 # Groupings moved on across generations, like the cache's latest orders.
@@ -24,20 +26,24 @@ class GroupCache:
 
     def groups(self, snapshot, schema, group, sort=None, status=None, query=None,
                order=None, archived=False, agg=DEFAULT_AGGREGATE, offset=0, limit=None,
-               rows_per_group=10, group_key=None, rows_filter=None):
+               rows_per_group=10, group_key=None, rows_filter=None, scope=None, top=False):
         """K1's payload (see :func:`~vmn_exp.ui.leaderboard_groups.groups_payload`).
         Raises ValueError on an unknown field or aggregate, ``QueryError`` on
-        a bad *query*, LookupError on an unknown *group_key*. *rows_filter*
-        (rows -> rows) replaces *query*, uncached: a query reading comments."""
+        a bad *query*, LookupError on an unknown *group_key* or *scope*.
+        *rows_filter* (rows -> rows) replaces *query*, uncached: a query
+        reading comments. *scope*/*top* narrow the rows as for a page."""
+        check_job_sort(sort, False)
+        check_scope(self._cache._base(snapshot)[0], scope)
+        where = dict(scope=scope, top=top)
         if rows_filter is None:
-            spec = GroupSpec(group, agg, schema, sort, order, status, query, archived)
+            spec = GroupSpec(group, agg, schema, sort, order, status, query, archived, **where)
             grouping = self.grouping(snapshot, schema, spec)
         else:
-            spec = GroupSpec(group, agg, schema, sort, order, status, None, archived)
+            spec = GroupSpec(group, agg, schema, sort, order, status, None, archived, **where)
             grouping = self._uncached(snapshot, schema, spec, rows_filter)
         unfiltered = None
         if status or query or rows_filter is not None:
-            plain = GroupSpec(group, DEFAULT_AGGREGATE, schema, archived=archived)
+            plain = GroupSpec(group, DEFAULT_AGGREGATE, schema, archived=archived, **where)
             unfiltered = self.grouping(snapshot, schema, plain)
         return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
                               unfiltered)
@@ -45,8 +51,9 @@ class GroupCache:
     def _uncached(self, snapshot, schema, spec, rows_filter):
         base, bucket = self._cache._base(snapshot)
         live = dict(zip(base.patch.changed, base.changed_at(bucket)))
-        sort, status, _, order, archived = spec.flat
-        rows = rows_filter(self._cache.ordered(snapshot, schema, sort, status, order, archived))
+        f = spec.flat
+        rows = rows_filter(self._cache.ordered(snapshot, schema, f.sort, f.status, f.order,
+                                               f.archived, f.scope, f.top))
         return Grouping.of_rows(base, spec, rows, live)
 
     def grouping(self, snapshot, schema, spec):

@@ -60,18 +60,21 @@ def subtree_verstrs(verstr, children_of):
     return out
 
 
-def _depth(verstr, parent_of):
-    """Distance to the top of the parent chain. A cycle stops at its entry point."""
-    depth = 0
-    seen = {verstr}
-    cursor = verstr
-    while True:
-        parent = parent_of.get(cursor)
-        if not parent or parent in seen:
-            return depth
-        depth += 1
-        seen.add(parent)
-        cursor = parent
+def ancestors(verstr, parent_of):
+    """*verstr*'s parent chain, nearest first (its length is the run's
+    depth): a missing parent ends it, a cycle stops at its entry point."""
+    chain, seen, cursor = [], {verstr}, parent_of.get(verstr)
+    while cursor and cursor not in seen:
+        chain.append(cursor)
+        seen.add(cursor)
+        cursor = parent_of.get(cursor)
+    return chain
+
+
+def ancestry_of(rows):
+    """``verstr -> ancestors`` over *rows*' own ``parent`` links."""
+    parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
+    return lambda verstr: ancestors(verstr, parent_of)
 
 
 def own_rollup_status(status, has_children, incomplete=False):
@@ -149,7 +152,8 @@ def _tree_statuses(verstrs, children_of, by_verstr, parent_of):
 
 
 def annotate_tree(rows):
-    """Add ``children``, ``kind``, ``depth`` and ``tree_status`` to each row.
+    """Add ``children``, ``kind``, ``depth``, ``root`` (the top-level
+    ancestor, None for a top-level run) and ``tree_status`` to each row.
 
     ``status`` is left as the row's own status; ``tree_status`` is the rollup
     over the row and everything beneath it.
@@ -195,7 +199,9 @@ def _annotate_tree_in_place(rows):
             row["kind"] = INNER
         else:
             row["kind"] = SINGLE
-        row["depth"] = _depth(verstr, parent_of)
+        chain = ancestors(verstr, parent_of)
+        row["depth"] = len(chain)
+        row["root"] = chain[-1] if chain else None
         row["tree_status"] = tree_statuses[verstr]
         row["child_counts"] = count_statuses(
             (by_verstr.get(c) or {}).get("status") for c in children
@@ -245,7 +251,7 @@ def subtree_status(
     tree = {
         "children": children,
         "kind": OUTER if children else (INNER if parent else SINGLE),
-        "depth": _depth(verstr, parent_of),
+        "depth": len(ancestors(verstr, parent_of)),
         "tree_status": rollup_status([own, *below]),
         "child_counts": count_statuses(status_of(c) for c in children),
         **sweep,

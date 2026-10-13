@@ -40,7 +40,7 @@ const BAR: readonly Exclude<CountTone, "total" | "waiting">[] = ["done", "failed
 
 /** A group header's run bar (plan 22 F13), each state's share of the runs
  *  in percent; null for a group of one run or none, which needs no bar. */
-export function barSegments(c: GroupCounts): { tone: CountTone; pct: number }[] | null {
+export function barSegments(c: Omit<GroupCounts, "waiting">): { tone: CountTone; pct: number }[] | null {
   if (c.total <= 1) return null;
   return BAR.filter((t) => c[t] > 0).map((t) => ({ tone: t, pct: Math.round((c[t] / c.total) * 10000) / 100 }));
 }

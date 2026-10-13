@@ -13,7 +13,7 @@ import {
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
-const HOVER_INTENT_MS = 120;
+export const HOVER_INTENT_MS = 120;
 export const ROW_HEIGHT = 48;
 /** A compact board's one-line rows (plan 23 W8). */
 export const COMPACT_ROW_HEIGHT = 32;
@@ -49,8 +49,11 @@ export interface RowLayout {
 }
 
 /** The height of every row of a board laid out by *layout*. */
-export const rowHeight = (layout: RowLayout) =>
-  layout.density === "compact" ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+export const rowHeight = (layout: RowLayout) => densityRowHeight(layout.density);
+
+/** A board row's height at *density* (comfortable when omitted). */
+export const densityRowHeight = (density: Density | undefined) =>
+  density === "compact" ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
 
 function MetricCell({ id, v, col, style, showBest }: {
   id: string; v: number | string | null | undefined; col: ColMeta; style: CSSProperties; showBest: boolean;
