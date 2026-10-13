@@ -37,7 +37,8 @@ async function board() {
   m.experiments.mockResolvedValue(page([
     row(1, { metrics: { loss: 0.3, acc: 0.9 }, kind: "outer", children: ["a"], started_at: "2026-01-01T00:00:00Z", finished_at: null }),
   ]));
-  const utils = renderBoard();
+  // The run's start/end dates are picker columns (plan 20 D11), turned on here.
+  const utils = renderBoard("/ws/test/app/my-app?show=c:started&show=c:ended");
   await screen.findByText("0.0.1-dev.x");
   return utils;
 }
@@ -128,19 +129,19 @@ describe("leaderboard column reordering", () => {
 
   it("moves a column in front of the header it is dropped on, header and cells alike", async () => {
     await board();
-    drag("m:loss", "c:total");
-    await waitFor(() => expect(headers().indexOf("m:loss")).toBe(headers().indexOf("c:total") - 1));
+    drag("c:started", "c:inner");
+    await waitFor(() => expect(headers().indexOf("c:started")).toBe(headers().indexOf("c:inner") - 1));
     const cells = [...document.querySelectorAll("tbody tr.row td")].map((td) => (td as HTMLElement).dataset.colId);
     expect(cells).toEqual(headers());
   });
 
   it("keeps the new order across reloads", async () => {
     const { unmount } = await board();
-    drag("c:ended", "c:total");
-    await waitFor(() => expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:total") - 1));
+    drag("c:ended", "c:inner");
+    await waitFor(() => expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:inner") - 1));
     unmount();
     await board();
-    expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:total") - 1);
+    expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:inner") - 1);
   });
 
   it("leaves the pinned columns (check, #, status, experiment) where they are", async () => {
@@ -154,7 +155,7 @@ describe("leaderboard column reordering", () => {
   it("resets widths and order from the toolbar", async () => {
     await board();
     const defaults = headers();
-    drag("m:loss", "c:total");
+    drag("c:ended", "c:inner");
     await waitFor(() => expect(headers()).not.toEqual(defaults));
     fireEvent.click(screen.getByRole("button", { name: /reset columns/i }));
     await waitFor(() => expect(headers()).toEqual(defaults));

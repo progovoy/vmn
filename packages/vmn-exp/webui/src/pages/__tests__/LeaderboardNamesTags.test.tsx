@@ -48,8 +48,18 @@ describe("run names and tags in the table", () => {
     expect(screen.getByRole("link", { name: "0.0.2-dev.x" })).toBeInTheDocument();
   });
 
-  it("shows tags as chips in a tags column", async () => {
+  it("offers the tags column in the picker without showing it by default (plan 20 D11)", async () => {
     renderBoard();
+    await screen.findByRole("link", { name: "baseline" });
+    expect(within(document.querySelector("thead")!).queryByText("tags")).toBeNull();
+    fireEvent.click(screen.getByTitle("Columns"));
+    fireEvent.click(screen.getByLabelText("tags"));
+    await waitFor(() => expect(urlParams().getAll("show")).toEqual(["c:tags"]));
+    expect(within(document.querySelector("thead")!).getByText("tags")).toBeInTheDocument();
+  });
+
+  it("shows tags as chips in a tags column", async () => {
+    renderBoard("/ws/test/app/my-app?show=c:tags");
     const tr = (await screen.findByRole("link", { name: "baseline" })).closest("tr")!;
     expect(within(tr).getByText("team: vision")).toHaveClass("tag-chip");
     expect(within(tr).getByText("stage: prod")).toBeInTheDocument();
@@ -57,7 +67,7 @@ describe("run names and tags in the table", () => {
   });
 
   it("hides the tags column from the column picker, in the URL", async () => {
-    renderBoard();
+    renderBoard("/ws/test/app/my-app?show=c:tags");
     await screen.findByRole("link", { name: "baseline" });
     fireEvent.click(screen.getByTitle("Columns"));
     fireEvent.click(screen.getByLabelText("tags"));
@@ -68,7 +78,7 @@ describe("run names and tags in the table", () => {
 
   it("has no tags column when no run carries tags", async () => {
     m.experiments.mockResolvedValue(page([row(1), row(2)]));
-    renderBoard();
+    renderBoard("/ws/test/app/my-app?show=c:tags");
     await screen.findByRole("link", { name: "0.0.1-dev.x" });
     expect(within(document.querySelector("thead")!).queryByText("tags")).toBeNull();
   });

@@ -6,7 +6,6 @@ import SavedViews from "../components/SavedViews";
 import { useCanCreateRun } from "../shell/useAppExists";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
-import { isInnerRunId } from "./innerRunColumns";
 
 /** The bar above the leaderboard: live toggle, the create button (only where
  *  a run can be created), saved views and the columns (the selection's
@@ -29,9 +28,9 @@ export default function LeaderboardToolbar({
   const navigate = useNavigate();
   const canCreate = useCanCreateRun(ws, app);
   const onMoveColumn = useCallback(
-    (key: string, delta: number) => view.moveColumn(key, delta, cols.defaultKeys),
+    (key: string, delta: number) => view.moveColumn(key, delta, cols.defaultKeys, cols.pinned),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [view.moveColumn, cols.defaultKeys],
+    [view.moveColumn, cols.defaultKeys, cols.pinned],
   );
   return (
     <div className="toolbar">
@@ -50,19 +49,25 @@ export default function LeaderboardToolbar({
       )}
       <ColumnPicker
         columns={cols.paramCols} visible={cols.visibleParams}
-        onToggle={(c) => view.toggleHidden(`p:${c}`)}
+        onToggle={(c) => view.setColumnShown(`p:${c}`, !cols.visibleParams.includes(c))}
         metricColumns={cols.metricCols} visibleMetrics={cols.visibleMetrics}
-        onToggleMetric={(c) => view.toggleHidden(`m:${c}`)}
+        onToggleMetric={(c) => {
+          const on = !cols.visibleMetrics.includes(c);
+          // hide= would show a schema-hidden metric (its older inverted key).
+          if (!on && cols.schemaHidden.includes(c)) view.resetColumn(`m:${c}`);
+          else view.setColumnShown(`m:${c}`, on);
+        }}
         otherColumns={cols.otherCols} visibleOther={cols.visibleOther}
         onToggleOther={(c) => {
           const id = `c:${c}`;
-          if (isInnerRunId(id)) view.setColumnShown(id, !cols.visibleOther.includes(c));
-          else view.toggleHidden(id);
+          // Comments flip their `hide=` key; the rest record the choice in show=/hide=.
+          if (c === "comments") view.toggleHidden(id);
+          else view.setColumnShown(id, !cols.visibleOther.includes(c));
         }}
         orderedCells={cols.cells}
-        pinnedCols={view.pinned}
+        pinnedCols={cols.pinned}
         onMoveColumn={onMoveColumn}
-        onTogglePin={view.togglePin}
+        onTogglePin={(key) => view.togglePin(key, cols.pinned)}
       />
     </div>
   );

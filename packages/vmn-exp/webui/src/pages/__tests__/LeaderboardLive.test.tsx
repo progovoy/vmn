@@ -110,7 +110,8 @@ describe("paging", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     m.experiments.mockResolvedValue(page([row(1)], 2));
     m.experimentsPaged.mockResolvedValueOnce({ rows: [row(2, { status: "running", note: "old" })], total: 2 });
-    renderBoard();
+    // The note column is a picker column (plan 20 D11), turned on to watch the poll.
+    renderBoard("/ws/test/app/my-app?show=c:note");
     await screen.findByText("0.0.1-dev.x");
     fireEvent.click(screen.getByRole("button", { name: /load more/i }));
     await screen.findByText("old");

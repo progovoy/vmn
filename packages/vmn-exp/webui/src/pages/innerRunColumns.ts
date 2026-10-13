@@ -1,46 +1,42 @@
-/** The leaderboard's inner-run count columns: which they are, the header
- *  group over them, and what their cells say. */
+/** The leaderboard's inner column: one cell per outer run summing its inner
+ *  runs (`5 · 4 running · 1 failed`), shown while an outer run is loaded. */
 import type { ExperimentRow } from "../types";
 import { fleetCounts } from "./leaderboardColumns";
 
-/** The fleet columns that count an outer run's inner runs (the dates aren't). */
-export const INNER_RUN_COLS = ["total", "waiting", "running", "done", "failed"] as const;
-export type InnerRunCol = (typeof INNER_RUN_COLS)[number];
+/** The column's id (the `show=`/`hide=` key). */
+export const INNER_COLUMN = "c:inner";
+export const isInnerRunId = (id: string) => id === INNER_COLUMN;
 
-const INNER_IDS = new Set<string>(INNER_RUN_COLS.map((c) => `c:${c}`));
-export const isInnerRunId = (id: string) => INNER_IDS.has(id);
-
-export const INNER_RUNS_LABEL = "Inner runs";
 export const INNER_RUNS_HELP = "Counts of this run's inner runs (sweep trials, fleet pods)";
 
-/** Whether any loaded row is an outer run — the count columns' default. */
+/** Whether any loaded row is an outer run — the column's default. */
 export const anyOuter = (rows: readonly ExperimentRow[] | undefined) =>
   Boolean(rows?.some((r) => r.kind === "outer"));
 
-/** One cell of the group row: *span* columns from *start*. */
-export interface HeadGroup {
-  start: number;
-  span: number;
-  /** True for a block of adjacent count columns. */
-  inner: boolean;
+/** The states the cell names, in the order it names them. */
+const STATES = ["running", "failed", "waiting", "done"] as const;
+export type InnerState = (typeof STATES)[number];
+
+export interface InnerRunSummary {
+  total: number;
+  /** The states with at least one run. */
+  parts: { state: InnerState; count: number; text: string }[];
+  /** What the cell shows: `5 · 4 running · 1 failed`. */
+  text: string;
+  /** What a screen reader says: `5 inner runs, 4 running, 1 failed`. */
+  label: string;
 }
 
-/** The group row over *ids*: one cell per contiguous block of count columns
- *  (a block dragged apart gets a label of its own), one per other column;
- *  null when no count column is shown. */
-export function headGroups(ids: readonly string[]): HeadGroup[] | null {
-  const out: HeadGroup[] = [];
-  ids.forEach((id, i) => {
-    const inner = isInnerRunId(id);
-    const last = out[out.length - 1];
-    if (inner && last?.inner) last.span += 1;
-    else out.push({ start: i, span: 1, inner });
-  });
-  return out.some((g) => g.inner) ? out : null;
-}
-
-/** What a count cell shows: the count for an outer run, nothing otherwise. */
-export function innerRunCount(r: ExperimentRow, col: string): string {
+/** The inner cell of *r*; null for a run without inner runs. */
+export function innerRunSummary(r: ExperimentRow): InnerRunSummary | null {
   const counts = fleetCounts(r);
-  return counts && col in counts ? String(counts[col as InnerRunCol]) : "";
+  if (!counts) return null;
+  const parts = STATES.filter((s) => counts[s] > 0)
+    .map((state) => ({ state, count: counts[state], text: `${counts[state]} ${state}` }));
+  const runs = `${counts.total} inner run${counts.total === 1 ? "" : "s"}`;
+  return {
+    total: counts.total, parts,
+    text: [String(counts.total), ...parts.map((p) => p.text)].join(" · "),
+    label: [runs, ...parts.map((p) => p.text)].join(", "),
+  };
 }
