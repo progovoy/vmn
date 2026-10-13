@@ -80,14 +80,15 @@ function headInfo(id: string, layout: RowLayout): { label: ReactNode; sort: stri
   if (id in DATE_SORT_OF) return { label: name, sort: DATE_SORT_OF[id], title: `sort by ${name} time (newest first)` };
   if (id.startsWith("m:")) {
     const meta = layout.colMeta[name];
+    const hasGoal = meta && meta.goal !== null;
     return {
       label: (
         <>
           {name}{" "}
-          {meta && meta.best !== null && <span className="goal">{meta.goal === "min" ? "↓" : "↑"}</span>}
+          {hasGoal && meta.best !== null && <span className="goal">{meta.goal === "min" ? "↓" : "↑"}</span>}
         </>
       ),
-      sort: name, title: `sort by ${name} (best first)`,
+      sort: name, title: hasGoal ? `sort by ${name} (best first)` : `sort by ${name} (high first)`,
     };
   }
   if (id === "check") return { label: "", sort: null };

@@ -1,32 +1,42 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus } from "../types";
+import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunState, RunStatus } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import StatusPill from "../components/StatusPill";
 
-/** A duration on the relTime ladder (2h), with the exact seconds beside it. */
+/** A single duration text (rounded seconds for short, ladder for longer),
+ *  with the exact seconds in the title attribute. 0s shows as "<1s". */
 export function Duration({ secs }: { secs: number | null | undefined }) {
   if (secs == null) return <div>—</div>;
-  const text = fmtDuration(secs);
-  const exact = `${Math.round(secs)}s`;
+  const rounded = Math.round(secs);
+  const display = rounded === 0 ? "<1s" : secs < 60 ? `${rounded}s` : fmtDuration(secs);
   return (
-    <div>
-      <span>{text}</span>
-      {exact !== text && <>{" "}<span className="exact-secs">{exact}</span></>}
+    <div title={`${rounded}s`}>
+      <span>{display}</span>
     </div>
   );
 }
 
 export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => string }) {
+  // For outers, tree_status is the headline; the run's own status is secondary.
+  const isOuter = st.kind === "outer" && st.tree_status;
+  const primaryStatus = isOuter ? st.tree_status as RunState : st.status;
+  const showOwnStatus = isOuter && (
+    st.status === "failed" || st.status === "stuck"
+    || (st.status === "running" && st.status !== st.tree_status)
+  );
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <h2 className="section-title">Status</h2>
       <div className="status-head">
-        <StatusPill status={st.status} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
+        <StatusPill status={primaryStatus} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
+        {showOwnStatus && (
+          <span className="tree-roll">own {st.status}</span>
+        )}
         {st.status === "stuck" && st.stale_sec != null && (
           <span className="stale">⚠ no heartbeat for {fmtDuration(st.stale_sec)}</span>
         )}
-        {st.tree_status && st.tree_status !== st.status && (
+        {!isOuter && st.tree_status && st.tree_status !== st.status && (
           <span className="tree-roll">tree {st.tree_status}</span>
         )}
       </div>
@@ -38,7 +48,7 @@ export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) 
         <Duration secs={st.duration_sec} />
         {st.pid !== null && <><div className="k">pid</div><div className="mono">{st.pid}</div></>}
         {Boolean(st.host) && <><div className="k">host</div><div className="mono">{st.host}</div></>}
-        {Boolean(st.heartbeat) && (
+        {Boolean(st.heartbeat) && st.status !== "succeeded" && st.status !== "failed" && (
           <><div className="k">heartbeat</div><div title={st.heartbeat ?? ""}>{relTime(st.heartbeat)}</div></>
         )}
         {st.command && st.command.length > 0 && (
@@ -109,12 +119,13 @@ export function MetricsCard({ metrics, summary, schema, children }: {
         <div>
           {Object.entries(metrics).map(([k, v]) => {
             const line = summaryLine(summary?.[k]);
+            const goal = typeof v === "number" ? metricGoal(schema, k) : null;
             return (
               <div key={k} className="metric-line">
                 <span className="metric-name">
                   {k}{" "}
-                  {typeof v === "number" && (
-                    <span className="metric-goal">{metricGoal(schema, k) === "min" ? "↓" : "↑"}</span>
+                  {goal !== null && (
+                    <span className="metric-goal">{goal === "min" ? "↓" : "↑"}</span>
                   )}
                 </span>
                 <span className="metric-values">

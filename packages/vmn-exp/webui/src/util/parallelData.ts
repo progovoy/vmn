@@ -114,11 +114,14 @@ export function colorScale(t: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-/** Each row's target value as t, with the best value at 1 for either goal. */
-export function targetTs(rows: ExperimentRow[], metric: string, goal: "min" | "max"): (number | null)[] {
+/** Each row's target value as t, with the best value at 1 for either goal.
+ *  When goal is null, t is passed through unchanged (higher maps to brighter). */
+export function targetTs(rows: ExperimentRow[], metric: string, goal: "min" | "max" | null): (number | null)[] {
   const axis = buildAxis(rows, metric, [metric]);
   return rows.map((r) => {
     const t = axis.kind === "num" ? axisT(axis, r.metrics[metric]) : null;
-    return t === null ? null : goal === "min" ? 1 - t : t;
+    if (t === null) return null;
+    if (goal === "min") return 1 - t;
+    return t;
   });
 }

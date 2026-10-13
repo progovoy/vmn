@@ -406,9 +406,16 @@ export interface Changelog {
   deps: ChangelogDep[];
 }
 
+export interface DiffDelta {
+  from: number | null;
+  to: number | null;
+  goal: "min" | "max" | null;
+  param: boolean;
+}
+
 export interface DiffResult {
   from_verstr: string;
   to_verstr: string;
-  metrics_delta: Record<string, { from: number | null; to: number | null }>;
+  metrics_delta: Record<string, DiffDelta>;
   diff: string;
 }

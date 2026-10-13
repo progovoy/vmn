@@ -74,11 +74,28 @@ def _depth(verstr, parent_of):
         cursor = parent
 
 
+def own_rollup_status(status, has_children):
+    """What a run's own *status* adds to its tree's rollup: nothing (None)
+    for a container — an outer run that never ran itself."""
+    return None if has_children and status == CREATED else status
+
+
+def _is_container(node, children_of, by_verstr):
+    """True when *node* is an outer run that never ran (pure container)."""
+    status = (by_verstr.get(node) or {}).get("status")
+    return status is not None and own_rollup_status(status, bool(children_of.get(node))) is None
+
+
 def _subtree_statuses(verstr, children_of, by_verstr):
-    """Own statuses of *verstr* and everything reachable below it (cycle-safe)."""
+    """Own statuses of *verstr* and everything reachable below it (cycle-safe).
+
+    A container outer's own ``created`` is excluded so it does not pollute the
+    rollup — if all children succeeded, the tree should be ``succeeded``.
+    """
     return [
         (by_verstr.get(v) or {}).get("status")
         for v in subtree_verstrs(verstr, children_of)
+        if not _is_container(v, children_of, by_verstr)
     ]
 
 
@@ -117,7 +134,11 @@ def _tree_statuses(verstrs, children_of, by_verstr, parent_of):
                 stack.append((node, True))
                 stack.extend((c, False) for c in children if c not in best)
                 continue
-            own = rank.get((by_verstr.get(node) or {}).get("status"), len(rank))
+            status = (by_verstr.get(node) or {}).get("status")
+            if children and status == CREATED:
+                own = len(rank)
+            else:
+                own = rank.get(status, len(rank))
             best[node] = min([own] + [best[c] for c in children])
     return {v: (_PRECEDENCE + (None,))[best[v]] for v in verstrs}
 
@@ -203,11 +224,16 @@ def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=
     def status_of(v):
         return derive_status(states[v], observed_at=observed_at(v) if observed_at else None)
 
+    # A container outer (has children, own status "created") is a pure wrapper:
+    # exclude its own status so the rollup reflects only its subtree.
+    is_container = children and derive_status(states[verstr]) == CREATED
+    rollup_members = (v for v in states if not (is_container and v == verstr))
+
     tree = {
         "children": children,
         "kind": OUTER if children else (INNER if parent else SINGLE),
         "depth": _depth(verstr, parent_of),
-        "tree_status": rollup_status(status_of(v) for v in states),
+        "tree_status": rollup_status(status_of(v) for v in rollup_members),
         "child_counts": count_statuses(status_of(c) for c in children),
     }
     return states[verstr], tree

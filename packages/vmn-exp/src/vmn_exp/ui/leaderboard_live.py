@@ -28,6 +28,7 @@ from vmn_exp.core.log import (
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.tree import (
     children_by_parent,
+    own_rollup_status,
     rollup_status,
     subtree_verstrs,
 )
@@ -95,14 +96,15 @@ class LivePatch:
         for i in sorted(affected, key=lambda i: rows[i]["depth"], reverse=True):
             row = rows[i]
             tally = dict(child_statuses.get(row["verstr"], {}))
-            terminal, under = set(), [i] if i in live_set else []
+            own = own_rollup_status(row["status"], bool(row["children"]))
+            terminal, under = set(), [i] if i in live_set and own else []
             for kid in kids.get(i, ()):
                 tally[rows[kid]["tree_status"]] -= 1
                 terminal |= rollups[kid][0]
                 under.extend(rollups[kid][1])
             terminal.update(s for s, n in tally.items() if n)
-            if i not in live_set:
-                terminal.add(row["status"])
+            if i not in live_set and own:
+                terminal.add(own)
             summary = rollup_status(terminal)
             kids_live = tuple(k for k in kids.get(i, ()) if k in live_set)
             rollups[i] = (
@@ -123,7 +125,8 @@ class LivePatch:
         parts = {}
         for i in affected:
             members = [position[v] for v in subtree_verstrs(rows[i]["verstr"], children_of)
-                       if v in position]
+                       if v in position
+                       and own_rollup_status(rows[position[v]]["status"], bool(children_of.get(v)))]
             kids = [position[v] for v in children_of.get(rows[i]["verstr"], []) if v in position]
             parts[i] = (
                 frozenset(rows[m]["status"] for m in members if m not in live),

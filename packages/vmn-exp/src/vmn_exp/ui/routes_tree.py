@@ -1,17 +1,33 @@
 #!/usr/bin/env python3
 """Stamp-tree routes — ``/tree``, ``/tree/root``, ``/deps`` — answered from
 :data:`~vmn_exp.ui.tree_cache.TREES` while the app's tags are unchanged."""
+import git
 from fastapi import HTTPException
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import tree as tree_reader
+from vmn_exp.ui.responses import SafeJSONResponse
 from vmn_exp.ui.tree_cache import TREES
+
+
+def _not_a_repo_response(path):
+    """409 when the workspace path is not a valid git repository."""
+    return SafeJSONResponse(
+        {"detail": "Not a git repository", "reason": "not_a_repo", "path": str(path)},
+        status_code=409,
+    )
 
 
 def register(app, prefix, checkout_for, optional_segment):
     """Add the routes; *checkout_for(ws_name, app_tag)* → ``(root_path, app_name)``."""
     base = f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+
+    @app.exception_handler(git.InvalidGitRepositoryError)
+    @app.exception_handler(git.NoSuchPathError)
+    async def _handle_not_a_repo(request, exc):
+        path = getattr(exc, "args", ("",))[0] if exc.args else ""
+        return _not_a_repo_response(path)
 
     @app.get(f"{base}/tree", dependencies=[require(VIEWER)])
     def version_tree(ws_name: str, app_tag: str):

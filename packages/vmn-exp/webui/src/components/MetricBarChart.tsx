@@ -59,13 +59,14 @@ function MetricBarChart({ rows, metricCols, schema, onSelect }: {
     const all = rows
       .map((r) => ({ label: `@${r.idx}`, value: r.metrics[metric], verstr: r.verstr }))
       .filter((d): d is BarDatum => isFiniteNumber(d.value));
-    const best = [...all].sort((a, b) => (goal === "min" ? a.value - b.value : b.value - a.value));
-    const shown = best.slice(0, MAX_BARS);
+    const sorted = [...all].sort((a, b) => (goal === "min" ? a.value - b.value : b.value - a.value));
+    const shown = sorted.slice(0, MAX_BARS);
     return { data: shown, total: all.length, maxAbs: Math.max(0, ...shown.map((d) => Math.abs(d.value))) };
   }, [rows, metric, goal]);
 
   // `data` is sorted best-first, so the best value is its head.
-  const best = data.length ? data[0].value : null;
+  // When goal is null (unknown direction), no bar is highlighted.
+  const best = goal !== null && data.length ? data[0].value : null;
 
   return (
     <div className="card">

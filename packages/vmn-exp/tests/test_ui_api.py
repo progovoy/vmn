@@ -323,7 +323,7 @@ def test_ui_experiment_diff_endpoint(app_layout, capfd):
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["metrics_delta"]["loss"] == {"from": 0.5, "to": 0.3}
+    assert body["metrics_delta"]["loss"] == {"from": 0.5, "to": 0.3, "goal": None, "param": False}
     assert "ALPHA_LINE" in body["diff"]
     assert "BETA_LINE" in body["diff"]
 

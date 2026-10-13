@@ -36,8 +36,12 @@ export default function CompareRuns() {
   const onlyDiffering = params.get("diff") === "1";
   const schema = useMetricsSchema(ws, app);
   const results = useQueries({ queries: verstrs.map((v) => runQuery(ws, app, v)) }, client);
-  const details = results.map((r) => r.data);
   const failed = results.flatMap((r, i) => (r.error ? [verstrs[i]] : []));
+  const failedSet = new Set(failed);
+
+  // Filter out unknown/failed refs from the table columns
+  const validVerstrs = verstrs.filter((v) => !failedSet.has(v));
+  const validDetails = results.filter((_, i) => !failedSet.has(verstrs[i])).map((r) => r.data);
 
   const onRemove = (verstr: string) =>
     update((p) => setAllParams(p, "sel", p.getAll("sel").filter((v) => v !== verstr)));
@@ -53,9 +57,25 @@ export default function CompareRuns() {
       ) : (
         <>
           <p className="page-sub">
-            {verstrs.length} runs side by side
+            {validVerstrs.length} runs side by side
             {dropped > 0 && ` · showing the first ${MAX_COMPARE_RUNS} (${dropped} more selected)`}
           </p>
+          {failed.length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              {failed.map((ref) => (
+                <span key={ref} className="badge" style={{ background: "var(--bad-bg, var(--line))" }}>
+                  not found: <span className="mono">{ref}</span>{" "}
+                  <button
+                    className="link" aria-label={`remove ${ref}`} title="remove unknown ref"
+                    onClick={() => onRemove(ref)}
+                    style={{ marginLeft: 4 }}
+                  >
+                    remove
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="toolbar">
             <button
               aria-pressed={onlyDiffering}
@@ -65,14 +85,15 @@ export default function CompareRuns() {
               Only differing
             </button>
           </div>
-          {failed.length > 0 && (
-            <div className="error">could not load {failed.join(", ")}</div>
+          {validVerstrs.length >= 2 && (
+            <>
+              <CompareRunsTable
+                verstrs={validVerstrs} details={validDetails} schema={schema} base={base}
+                onlyDiffering={onlyDiffering} onRemove={onRemove}
+              />
+              <PairLinks verstrs={validVerstrs} details={validDetails} base={base} />
+            </>
           )}
-          <CompareRunsTable
-            verstrs={verstrs} details={details} schema={schema} base={base}
-            onlyDiffering={onlyDiffering} onRemove={onRemove}
-          />
-          <PairLinks verstrs={verstrs} details={details} base={base} />
         </>
       )}
     </>
