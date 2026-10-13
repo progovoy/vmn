@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from vmn_exp.core.app_conf import read_experiment_conf
+from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.similar_search import conf_weights
 from vmn_exp.storage.areas import app_key
@@ -310,6 +311,13 @@ def create_app(
         """The app's conf.yml metrics schema; none in a store."""
         return {} if _exp_storage_for(ws) else source.metrics_schema(ws, app_name)
 
+    def _group_aggregate(ws_name, app_tag):
+        """The app's conf.yml ``experiment.ui.group_aggregate``; the mean in a store."""
+        ws = _experiment_workspace(ws_name)
+        if _exp_storage_for(ws):
+            return DEFAULT_AGGREGATE
+        return source.group_aggregate(ws, _app_name(app_tag))
+
     def _similar_weights(ws_name, app_name):
         """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp
         similar`` and the SDK reader read them; none in a store."""
@@ -593,7 +601,7 @@ def create_app(
         return index.comment_counts(_app_name(app_tag)), index.generation
 
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
-                                _comment_counts)
+                                _comment_counts, _group_aggregate)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     forget_git = routes_shell.register(app, API_PREFIX, _git_workspace, _status_snapshot,
                                        _app_tags, leaderboards)

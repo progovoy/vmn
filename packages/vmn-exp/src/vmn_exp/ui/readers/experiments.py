@@ -14,6 +14,7 @@ from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.tree import annotate_rows
+from vmn_exp.ui.leaderboard_group_fields import conf_aggregate
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
 from vmn_exp.ui.readers.versions import version_counts
@@ -23,9 +24,18 @@ def experiment_storage(root_path):
     return open_storage(None, local_store_root(root_path), area=RUNS, writer=False)
 
 
+def experiment_conf(root_path, app_name):
+    """The app conf.yml's ``experiment`` section, or ``{}``."""
+    return _read_app_conf(root_path, app_name).get("experiment") or {}
+
+
 def metrics_schema(root_path, app_name):
-    exp_conf = _read_app_conf(root_path, app_name).get("experiment") or {}
-    return exp_conf.get("metrics", {}) or {}
+    return experiment_conf(root_path, app_name).get("metrics", {}) or {}
+
+
+def group_aggregate(root_path, app_name):
+    """The board's default group aggregate: conf ``experiment.ui.group_aggregate``."""
+    return conf_aggregate(experiment_conf(root_path, app_name))
 
 
 def list_apps(root_path):

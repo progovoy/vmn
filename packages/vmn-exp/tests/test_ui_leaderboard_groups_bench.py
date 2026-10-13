@@ -33,7 +33,9 @@ def fleet():
 
 
 @pytest.mark.serial
-@pytest.mark.parametrize("group,slack", [("parent", 0.05), ("code_verstr", 0.3)])
+# parent: 50 sweeps among single runs; code_verstr: a group per run;
+# status: a few groups of tens of thousands of rows each.
+@pytest.mark.parametrize("group,slack", [("parent", 0.05), ("code_verstr", 0.3), ("status", 0.05)])
 def test_a_grouped_page_costs_about_what_a_flat_page_costs(monkeypatch, fleet, group, slack):
     monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
     cache = LeaderboardCache()
