@@ -49,7 +49,7 @@ from vmn_exp.storage.files import flatten_logs
 from vmn_exp.ui.readers.series import SeriesThinner, downsample
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
-DEFAULT_MAX_ENTRIES = 128
+DEFAULT_MAX_ENTRIES = 1024  # a busy leaderboard reads hundreds of runs; the byte bound decides
 MAX_THINNERS = 256
 
 

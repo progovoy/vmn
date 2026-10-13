@@ -2,7 +2,7 @@
  *  `aria-sort` on its cell), column drag/resize, the column menu (their
  *  keyboard equivalents) and the select-all checkbox. */
 import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isPinned } from "./leaderboardColumns";
+import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isGapId, isPinned } from "./leaderboardColumns";
 import ColumnMenu, { type MenuAction } from "./ColumnMenu";
 import { HeaderCheckbox, ResizeGrip, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, type RowLayout } from "./LeaderboardRow";
@@ -135,6 +135,7 @@ export default function Head({ layout, sort: s, edits, check }: {
     <thead>
       <tr>
         {ids.map((id, i) => {
+          if (isGapId(id)) return <th key={id} aria-hidden style={headStyles[i]} />;
           const { label, sort, title } = headInfo(id, layout);
           const movable = Boolean(edits) && !isPinned(id);
           const actions = edits && id !== "check" ? menuActions(id, ids, sort, s, edits) : [];

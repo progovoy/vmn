@@ -222,3 +222,24 @@ def test_a_grown_runs_series_are_thinned_incrementally(storage, monkeypatch):
     assert totals == {"loss": 5_004}
     monkeypatch.undo()
     assert series == {"loss": series_mod.downsample(snap.series()["loss"], 200)}
+
+
+def test_the_default_cache_keeps_the_runs_a_leaderboard_session_reads(storage, monkeypatch):
+    """Run pages over a few hundred runs: the byte bound, not a small entry
+    count, decides what goes — else every revisit parses the run afresh."""
+    verstrs = [f"1.0.0-dev.s{i:04d}" for i in range(600)]
+    for v in verstrs:
+        storage.save(APP, v, {"verstr": v, "timestamp": _ts(0)}, {})
+        _append(storage, 1, 4, verstr=v)
+    fresh_parses = []
+    real = parsed_logs._parse_local
+    monkeypatch.setattr(parsed_logs, "_parse_local", lambda *a: fresh_parses.append(1) or real(*a))
+    cache = ParsedLogs()
+
+    for v in verstrs:
+        cache.get(storage, APP, v, load_log)
+    fresh_parses.clear()
+    for v in verstrs:
+        cache.get(storage, APP, v, load_log)
+
+    assert fresh_parses == []

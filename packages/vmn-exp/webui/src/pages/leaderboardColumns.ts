@@ -264,3 +264,7 @@ export function computeColMeta(
   });
   return meta;
 }
+
+/** A gap column stands for the columns a wide table leaves unrendered (see columnWindow). */
+export const GAP_PREFIX = "gap:";
+export const isGapId = (id: string) => id.startsWith(GAP_PREFIX);

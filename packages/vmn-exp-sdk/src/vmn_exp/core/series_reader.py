@@ -94,6 +94,7 @@ class _EntrySource:
 
     def __init__(self, entries):
         self._entries = [e for e in entries if is_metric_entry(e)]
+        self._by_name = None
 
     def counts(self):
         counts = {}
@@ -102,12 +103,21 @@ class _EntrySource:
                 counts[key] = counts.get(key, 0) + 1
         return counts
 
-    def points(self, name):
-        for entry in self._entries:
-            values = entry.get("values") or {}
-            if name in values:
+    def _points_by_name(self):
+        """``{name: [(ts_us, step, value, ts)]}`` in log order, built in one
+        pass: each entry's timestamp parsed once for all its keys."""
+        if self._by_name is None:
+            by_name = {}
+            for entry in self._entries:
                 ts = entry.get("timestamp")
-                yield iso_to_us(ts) or 0, entry.get("step"), values[name], ts
+                point = (iso_to_us(ts) or 0, entry.get("step"))
+                for name, value in (entry.get("values") or {}).items():
+                    by_name.setdefault(name, []).append((*point, value, ts))
+            self._by_name = by_name
+        return self._by_name
+
+    def points(self, name):
+        return iter(self._points_by_name().get(name, ()))
 
     def entries(self):
         return list(self._entries)
@@ -228,12 +238,16 @@ class SeriesReader:
 
     def _merged(self, key):
         """``[(ts, rank, step, value, logged ts or None)]`` of *key* in series order."""
-        per_rank = {}
+        rewinds, per_rank = self._rewinds, {}
         for rank, source, name, _ in self._raw_names().get(key, ()):
+            points = source.points(name)
+            if rewinds:
+                points = (p for p in points if not hidden(rewinds, p[0], p[1]))
             per_rank.setdefault(rank, []).extend(
-                (ts, rank, step, value, iso) for ts, step, value, iso in source.points(name)
-                if not hidden(self._rewinds, ts, step))
+                (ts, rank, step, value, iso) for ts, step, value, iso in points)
         lists = [sorted(points, key=lambda p: p[0]) for points in per_rank.values()]
+        if len(lists) == 1:
+            return lists[0]
         return list(heapq.merge(*lists, key=lambda p: (p[0], p[1])))
 
     def points(self, key, step_range=None, ts_range=None):

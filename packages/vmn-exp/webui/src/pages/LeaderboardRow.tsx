@@ -6,7 +6,7 @@ import StatusPill from "../components/StatusPill";
 import { Icon } from "../components/shell/icons";
 import { tagLabel } from "../util/tags";
 import {
-  DATE_SORT_OF, cellId, columnIds, defaultColumnIds, type ColMeta, type ColumnCell, type FleetCol,
+  DATE_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
 import InnerCell from "./InnerCell";
 import { INNER_COLUMN, isInnerRunId } from "./innerRunColumns";
@@ -238,6 +238,7 @@ function Row({
           </td>
         );
     }
+    if (isGapId(id)) return <td key={id} aria-hidden style={style} />;
     if (isInnerRunId(id)) return <InnerCell key={id} r={r} style={style} />;
     if (id.startsWith("c:")) return <FleetCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {

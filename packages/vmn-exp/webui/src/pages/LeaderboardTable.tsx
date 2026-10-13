@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ExperimentRow } from "../types";
@@ -12,6 +12,7 @@ import LeaderboardCards from "./LeaderboardCards";
 import { PENDING_TEXT } from "./pendingText";
 import Row, { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import Head, { type ColumnEdits, type HeaderCheckProps, type SortState } from "./LeaderboardHead";
+import { visibleColumns, windowLayout, type ColRange } from "./columnWindow";
 import "./leaderboardTable.css";
 
 export { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits, type SortState } from "./LeaderboardHead";
@@ -92,11 +93,27 @@ export default function LeaderboardTable(props: TableProps) {
   return <LeaderboardCards {...props} />;
 }
 
+const sameRange = (a: ColRange | null, b: ColRange | null) =>
+  a === b || (a !== null && b !== null && a.start === b.start && a.end === b.end);
+
+/** The columns to render at the scroll element's horizontal position. */
+function columnsAt(full: RowLayout, el: HTMLElement | null): ColRange | null {
+  return visibleColumns(full, el?.scrollLeft ?? 0, el?.clientWidth || window.innerWidth);
+}
+
 function GridTable({
-  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
+  rows, layout: full, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
   collapsedOf, onFold, edits, onFit, describedBy,
 }: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState<ColRange | null>(() => columnsAt(full, null));
+  useLayoutEffect(() => {
+    setCols((was) => {
+      const now = columnsAt(full, parentRef.current);
+      return sameRange(was, now) ? was : now;
+    });
+  }, [full]);
+  const layout = useMemo(() => windowLayout(full, cols), [full, cols]);
   const scroll = useScrollMemory();
   const list = rows ?? [];
   const virtualizer = useVirtualizer({
@@ -134,6 +151,8 @@ function GridTable({
     if (!el) return;
     edge.check();
     scroll.save(el.scrollTop);
+    const now = columnsAt(full, el);
+    if (!sameRange(cols, now)) setCols(now);
     const nearEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END_ROWS * ROW_HEIGHT;
     if (nearEnd && hasMore) onNearEnd();
   };
