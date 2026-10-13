@@ -55,14 +55,19 @@ describe("TrainingCurves x axis control", () => {
   });
 
   it("Step returns a picked metric to each chart's declared step metric", async () => {
-    const fetchJoined = vi.fn().mockResolvedValue({});
+    const joinedOn = (xMap: Record<string, string>) => Object.fromEntries(Object.keys(xMap).map(
+      (m) => [m, [0, 1].map((i) => ({ step: i, ts: null, value: 1, x: i }))],
+    ));
+    const fetchJoined = vi.fn().mockImplementation(async (xMap: Record<string, string>) => joinedOn(xMap));
     renderWithClient(<TrainingCurves series={SERIES} stepMetrics={{ val_loss: "epoch" }} fetchJoined={fetchJoined} />);
-    await waitFor(() => expect(fetchJoined).toHaveBeenCalledWith({ val_loss: "epoch" }));
+    expect(await screen.findByText(/vs epoch/)).toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox", { name: /x axis metric/i }), { target: { value: "loss" } });
-    await waitFor(() => expect(fetchJoined).toHaveBeenCalledWith({ val_loss: "loss", epoch: "loss" }));
+    await waitFor(() => expect(screen.getAllByText(/vs loss/)).toHaveLength(2));
+    expect(within(axisGroup()).getByRole("button", { name: "Step" })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(within(axisGroup()).getByRole("button", { name: "Step" }));
     expect(screen.getByRole("combobox", { name: /x axis metric/i })).toHaveValue("");
-    await waitFor(() => expect(fetchJoined).toHaveBeenLastCalledWith({ val_loss: "epoch" }));
+    await waitFor(() => expect(screen.queryByText(/vs loss/)).toBeNull());
+    expect(screen.getByText(/vs epoch/)).toBeInTheDocument();
   });
 
   it("Log y is a pressed/unpressed chip", () => {
