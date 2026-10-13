@@ -62,7 +62,7 @@ describe("the board's Group by control (plan 22 W1)", () => {
     fireEvent.click(screen.getByRole("menuitemradio", { name: "tags.team" }));
     await waitFor(() => expect(urlParams().get("group")).toBe("tags.team"));
     fireEvent.click(await groupBy());
-    fireEvent.click(within(screen.getByRole("group", { name: "Aggregate" })).getByRole("button", { name: "median" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Aggregate" })).getByRole("menuitemradio", { name: "median" }));
     await waitFor(() => expect(urlParams().get("agg")).toBe("median"));
 
     fireEvent.click(screen.getByRole("button", { name: /^views/i }));
@@ -77,7 +77,7 @@ describe("the board's Group by control (plan 22 W1)", () => {
     renderBoard("/ws/test/app/my-app?group=branch&agg=best");
     expect(await groupBy()).toHaveTextContent("Group by: branch");
     fireEvent.click(await groupBy());
-    expect(within(screen.getByRole("group", { name: "Aggregate" })).getByRole("button", { name: "best" }))
-      .toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("group", { name: "Aggregate" })).getByRole("menuitemradio", { name: "best" }))
+      .toHaveAttribute("aria-checked", "true");
   });
 });

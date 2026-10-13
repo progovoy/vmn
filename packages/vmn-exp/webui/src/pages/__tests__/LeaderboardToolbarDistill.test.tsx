@@ -1,7 +1,8 @@
 /** Plan 20 C7: the board's chrome, distilled. The page head names the app
- *  once with its run count and carries New run / Views / Columns; the live
- *  status, the sort and the "best in column" legend are the table's caption;
- *  at most 7 controls stand between the h1 and the table. */
+ *  once with its run count and carries New run / Views / Columns (plan 22 G2
+ *  adds Group by next to Columns); the live status, the sort and the "best in
+ *  column" legend are the table's caption; at most 8 controls (7 before plan
+ *  22's Group by) stand between the h1 and the table. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, within } from "@testing-library/react";
 
@@ -73,11 +74,11 @@ beforeEach(() => {
 });
 
 describe("the distilled board toolbar (C7)", () => {
-  it("has at most 7 controls between the h1 and the table in the default view", async () => {
+  it("has at most 8 controls between the h1 and the table in the default view", async () => {
     const { h1, grid } = await board();
     const stops = tabStopsBetween(h1, grid);
     expect(stops.length, stops.map((s) => s.textContent || s.getAttribute("aria-label")).join(" | "))
-      .toBeLessThanOrEqual(7);
+      .toBeLessThanOrEqual(8);
   });
 
   it("names the app once in the page head, with its run count", async () => {

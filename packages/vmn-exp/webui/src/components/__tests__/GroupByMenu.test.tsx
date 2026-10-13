@@ -39,8 +39,10 @@ describe("GroupByMenu (plan 22 G2, G10)", () => {
     setup();
     open();
     const menu = screen.getByRole("menu", { name: "Group by" });
+    const groups = within(menu).getAllByRole("group").map((g) => g.getAttribute("aria-label"));
+    expect(groups).toEqual(["Links", "Fields", "Aggregate"]);
     const items = within(menu).getAllByRole("menuitemradio").map((i) => i.textContent);
-    expect(items).toEqual([
+    expect(items.slice(0, 9)).toEqual([
       "none", "parent run", "forked from", "rerun of", "same code",
       "branch", "status", "tags.team", "params.lr",
     ]);
@@ -66,14 +68,14 @@ describe("GroupByMenu (plan 22 G2, G10)", () => {
     expect(screen.getByRole("menuitemradio", { name: "params.seed" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("switches the aggregate (mean pressed by default), staying open", () => {
+  it("switches the aggregate (mean checked by default), staying open", () => {
     const { onAggregate } = setup();
     open();
     const agg = screen.getByRole("group", { name: "Aggregate" });
-    const buttons = within(agg).getAllByRole("button");
-    expect(buttons.map((b) => b.textContent)).toEqual(["mean", "best", "median", "min", "max"]);
-    expect(within(agg).getByRole("button", { name: "mean" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(within(agg).getByRole("button", { name: "best" }));
+    const choices = within(agg).getAllByRole("menuitemradio");
+    expect(choices.map((b) => b.textContent)).toEqual(["mean", "best", "median", "min", "max"]);
+    expect(within(agg).getByRole("menuitemradio", { name: "mean" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(agg).getByRole("menuitemradio", { name: "best" }));
     expect(onAggregate).toHaveBeenCalledWith("best");
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
@@ -94,9 +96,9 @@ describe("GroupByMenu (plan 22 G2, G10)", () => {
   it("moves between choices with the arrow keys", () => {
     setup();
     open();
-    const menu = screen.getByRole("menu");
-    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "parent run" }));
-    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    const parent = screen.getByRole("menuitemradio", { name: "parent run" });
+    expect(document.activeElement).toBe(parent);
+    fireEvent.keyDown(parent, { key: "ArrowDown" });
     expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "forked from" }));
   });
 });

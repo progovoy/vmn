@@ -1,23 +1,27 @@
 import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
+import GroupByMenu from "../components/GroupByMenu";
 import SavedViews from "../components/SavedViews";
 import { useCanCreateRun } from "../shell/useAppExists";
 import { hideColumn } from "../hooks/useColumnEdits";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
+import type { useBoardGrouping } from "../hooks/useBoardGrouping";
+import { NO_GROUP } from "../util/groupBy";
 import "./leaderboardToolbar.css";
 
 /** The board's actions, in its page head: the create button (primary, only
- *  where a run can be created), saved views and the columns (the live status
+ *  where a run can be created), saved views, Group by and the columns (the live status
  *  is the table's caption; the selection's actions float at the bottom). */
 export default function LeaderboardToolbar({
-  ws, app, view, cols, onViewApplied, onResetColumns,
+  ws, app, view, cols, grouping, onViewApplied, onResetColumns,
 }: {
   ws: string;
   app: string;
   view: ReturnType<typeof useLeaderboardView>;
   cols: ReturnType<typeof useLeaderboardColumns>;
+  grouping: ReturnType<typeof useBoardGrouping>;
   /** A saved view replaced the URL: controls holding their own state reset. */
   onViewApplied: () => void;
   /** Drop the dragged widths and column order; omitted while there are none. */
@@ -45,6 +49,11 @@ export default function LeaderboardToolbar({
           Reset columns
         </button>
       )}
+      <GroupByMenu
+        value={grouping.group ?? NO_GROUP} links={grouping.links} fields={grouping.fields}
+        onChange={grouping.setGroup}
+        aggregate={grouping.aggregate} onAggregate={grouping.setAggregate}
+      />
       <ColumnPicker
         columns={cols.paramCols} visible={cols.visibleParams}
         onToggle={(c) => view.setColumnShown(`p:${c}`, !cols.visibleParams.includes(c))}
