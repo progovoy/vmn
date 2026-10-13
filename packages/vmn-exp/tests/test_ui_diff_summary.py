@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Tests for the diff endpoint returning summary-policy values, goal and param flags."""
-import pytest
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.readers import diffs as diff_reader
@@ -130,3 +129,73 @@ def test_diff_delta_marks_params(tmp_path):
     assert delta["epochs"]["param"] is True
     # loss is a metric, not a param
     assert delta["loss"]["param"] is False
+
+
+def _pair(storage, first, second):
+    """Two runs fed by ``first(storage, verstr)`` / ``second(storage, verstr)``."""
+    v1, v2 = "1.0.0-dev.aaa.bbb", "1.0.0-dev.ccc.ddd"
+    _save_exp(storage, "myapp", v1)
+    first(storage, v1)
+    _save_exp(storage, "myapp", v2, ts="2025-01-02T00:00:00Z")
+    second(storage, v2)
+    result, err = diff_reader.experiment_diff_from_storage(storage, "myapp", v1, v2)
+    assert err is None
+    return result["metrics_delta"]
+
+
+def test_diff_marks_a_param_only_one_run_set(tmp_path):
+    """A param the other run never set is still a param (D2), not a metric."""
+    def with_params(storage, v):
+        _log_params(storage, "myapp", v, {"lr": 0.01, "batch_size": 32, "augment": True})
+        _log_metrics(storage, "myapp", v, {"loss": 0.5})
+
+    def without(storage, v):
+        _log_metrics(storage, "myapp", v, {"loss": 0.3})
+
+    delta = _pair(LocalSnapshotStorage(str(tmp_path), area="runs"), with_params, without)
+
+    for key in ("lr", "batch_size", "augment"):
+        assert delta[key]["param"] is True, key
+        assert delta[key]["goal"] is None
+        assert delta[key]["to"] is None
+    assert delta["loss"]["param"] is False
+
+
+def test_diff_marks_a_param_only_the_later_run_set(tmp_path):
+    def without(storage, v):
+        _log_metrics(storage, "myapp", v, {"loss": 0.5})
+
+    def with_params(storage, v):
+        _log_params(storage, "myapp", v, {"lr": 0.001})
+        _log_metrics(storage, "myapp", v, {"loss": 0.3})
+
+    delta = _pair(LocalSnapshotStorage(str(tmp_path), area="runs"), without, with_params)
+
+    assert delta["lr"] == {"from": None, "to": 0.001, "goal": None, "param": True}
+
+
+def test_diff_keeps_a_key_one_run_logs_as_a_metric_a_metric(tmp_path):
+    """A param on one side but a logged series on the other stays a metric."""
+    def as_param(storage, v):
+        _log_params(storage, "myapp", v, {"lr": 0.01})
+
+    def as_series(storage, v):
+        _log_metrics(storage, "myapp", v, {"lr": 0.01})
+        _log_metrics(storage, "myapp", v, {"lr": 0.005})
+
+    delta = _pair(LocalSnapshotStorage(str(tmp_path), area="runs"), as_param, as_series)
+
+    assert delta["lr"]["param"] is False
+
+
+def test_diff_keeps_a_metric_only_one_run_logged_a_metric(tmp_path):
+    def logged(storage, v):
+        _log_metrics(storage, "myapp", v, {"val_acc": 0.9})
+
+    def silent(storage, v):
+        _log_params(storage, "myapp", v, {"lr": 0.01})
+
+    delta = _pair(LocalSnapshotStorage(str(tmp_path), area="runs"), logged, silent)
+
+    assert delta["val_acc"]["param"] is False
+    assert delta["lr"]["param"] is True

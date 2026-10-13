@@ -1,5 +1,5 @@
 /** The Changes card's pieces: the metric delta (top goal metrics by |Δ|),
- *  the params that changed, the files list and the expandable diff. */
+ *  the files list and the expandable diff (params: ParamDeltaBlock). */
 import { useState } from "react";
 import type { PatchFile } from "../apiRunCode";
 import type { DiffDelta } from "../types";
@@ -52,16 +52,6 @@ export function MetricDelta({ deltas }: { deltas: Record<string, DiffDelta> }) {
       </table>
       {more > 0 && <button type="button" className="link" onClick={() => setAll(true)}>+{more} more</button>}
     </div>
-  );
-}
-
-export function ParamsChanged({ deltas }: { deltas: Record<string, DiffDelta> }) {
-  const params = Object.entries(deltas).filter(([, d]) => d.param && d.from !== d.to);
-  if (params.length === 0) return null;
-  return (
-    <p className="changes-params">
-      {`params changed: ${params.map(([k, d]) => `${k} ${fmtVal(d.from)} → ${fmtVal(d.to)}`).join(", ")}`}
-    </p>
   );
 }
 

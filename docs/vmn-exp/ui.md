@@ -661,8 +661,8 @@ read-only workspaces too) offers these baselines as a picker. It defaults to
 `base` when present, else `previous`, else the first that exists. `base` shows
 the `/patch` files and text. Any other baseline is diffed through
 `experiments-diff` (baseline → this run): it shows the top 5 metrics by |Δ|
-(goal metrics first, then "+N more"), the params that changed, the changed
-files and the diff behind *Show diff*, with *Open in Compare →*
+(goal metrics first, then "+N more"), a *Params changed* block (count + one
+row per param), the changed files and the diff behind *Show diff*, with *Open in Compare →*
 (`compare-runs?tab=code&sel=<baseline>&sel=<run>`). Without code or
 baselines, it shows one line with the reason. The picked baseline is kept in
 the page's `?baseline=` param. Its value is a baseline key or any run ref,
@@ -732,6 +732,13 @@ Results are cached per pair, at most two diffs run at once (a third waits, then
 gets 429), and the text is capped at 2 MB (`truncated: true`). A record with no
 base commit (a git-free run) answers `diff: null` with the reason in
 `diff_unavailable`.
+
+`metrics_delta` maps each key of the two runs' folded `metrics` whose value
+differs to `{from, to, goal, param}` (`from`/`to` are `null` on a run without
+the key). `param: true` marks a numeric param folded into `metrics`: every run
+holding the key holds it as a param with no `metric_summary` entry, so a param
+only one run set is still a param. The Compare *Code* tab and the run page's
+*Changes* card list those under *Params changed*, the rest as metrics.
 
 `GET .../experiments/{verstr}/artifacts/{path}` downloads an artifact, and
 `.../outputs/{path}` one of vmn's own outputs (`output.log`, media, tables;

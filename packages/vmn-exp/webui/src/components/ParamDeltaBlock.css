@@ -1,0 +1,15 @@
+.param-deltas { margin: 14px 0 10px; overflow-x: auto; }
+.param-deltas .param-deltas-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 4px;
+}
+.param-deltas .param-deltas-count {
+  font-family: var(--mono); font-size: 12px; color: var(--text-3);
+  border: 1px solid var(--border); border-radius: 999px; padding: 0 6px;
+}
+.param-deltas table { width: auto; }
+.param-deltas th[scope="row"] {
+  font-weight: 500; text-align: left; font-size: 13px;
+  text-transform: none; letter-spacing: normal; color: var(--text);
+}
+.param-deltas tbody tr:last-child th { border-bottom: none; }

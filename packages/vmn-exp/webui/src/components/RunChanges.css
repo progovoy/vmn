@@ -11,7 +11,6 @@
 .run-changes .delta.flat { color: var(--text-3); }
 .run-changes .delta.better { color: var(--good); }
 .run-changes .delta.worse { color: var(--bad); }
-.run-changes .changes-params { font-size: 13px; color: var(--text-2); margin: 0 0 10px; overflow-wrap: anywhere; }
 .run-changes .changes-files { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; }
 .run-changes .changes-files li { display: flex; gap: 10px; align-items: baseline; padding: 2px 0; }
 .run-changes .changes-files .path { overflow-wrap: anywhere; min-width: 0; }
