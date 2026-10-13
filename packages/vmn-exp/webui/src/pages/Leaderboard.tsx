@@ -7,7 +7,6 @@ import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
 import { branchClause, combineQueries, searchClause, statusClause } from "../util/searchQuery";
 import { metricGoal, pollIntervalMs } from "../util";
 import type { ExperimentRow } from "../types";
-import { PageHead } from "../components/ui";
 import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
 import SimilarSearch from "../components/SimilarSearch";
@@ -26,6 +25,8 @@ import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT } from "./LeaderboardTable";
 import { DATE_SORT_OF } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
+import BoardHead, { runCountText } from "./BoardHead";
+import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
 import { useCanCreateRun } from "../shell/useAppExists";
 import { useAppStatus } from "../shell/useShellData";
 import AttentionStrip from "../components/AttentionStrip";
@@ -176,19 +177,20 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
 
   return (
     <>
-      <PageHead title={appName} what="experiment leaderboard" />
-      <p className="page-sub">
-        {rows === undefined ? "loading runs…"
-          : filtered || all.length < data.total
-            ? (shownTop !== data.total ? `${shownTop} of ${data.total} runs` : `${data.total} runs`)
-            : `${topLevel(all)} runs${data.total > topLevel(all) ? ` · ${data.total} incl. inner` : ""}`}
-        {sortLabel && (
-          <>
-            {" · sorted by "}<b>{sortLabel}</b>
-            {" · "}{sortState.reversed ? "worst first" : "best first"}
-          </>
+      <BoardHead
+        title={appName}
+        count={runCountText({
+          loading: rows === undefined, filtered, loaded: all.length, total: data.total,
+          shownTop, loadedTop: topLevel(all),
+        })}
+        actions={!empty && (
+          <LeaderboardToolbar
+            ws={ws} app={app} view={view} cols={cols}
+            onViewApplied={() => setFilterGen((g) => g + 1)}
+            onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
+          />
         )}
-      </p>
+      />
 
       {view.creating && (
         <NewExperiment
@@ -206,13 +208,6 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
         )
       ) : (
         <>
-          <LeaderboardToolbar
-            ws={ws} app={app} view={view} cols={cols}
-            live={{ running: anyRunning, paused, updatedAt: data.updatedAt, onPaused: setPaused, onRefresh: refresh }}
-            onViewApplied={() => setFilterGen((g) => g + 1)}
-            onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
-          />
-
           <AttentionStrip status={status} onFollow={() => setFilterGen((g) => g + 1)} />
 
           <LeaderboardFilter
@@ -262,6 +257,11 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
                   visibleRef={data.visibleRef}
                   edits={columnEdits}
                   onFit={setTableWidth}
+                  describedBy={BOARD_CAPTION_ID}
+                />
+                <BoardCaption
+                  sortLabel={sortLabel} reversed={sortState.reversed}
+                  live={{ running: anyRunning, paused, updatedAt: data.updatedAt, onPaused: setPaused, onRefresh: refresh }}
                 />
                 {rows !== undefined && all.length < data.total && (
                   <div className="load-more">

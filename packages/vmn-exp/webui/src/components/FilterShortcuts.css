@@ -1,0 +1,2 @@
+/* The filter shortcuts' toolbar (FilterShortcuts.tsx): one row in the filter bar. */
+.filter-shortcuts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

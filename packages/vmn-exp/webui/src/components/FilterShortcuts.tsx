@@ -1,8 +1,11 @@
 import type { RunState } from "../types";
 import { STATUS_ORDER } from "../util/filterTokens";
+import { useRovingToolbar } from "../hooks/useRovingToolbar";
+import "./FilterShortcuts.css";
 
 /** Status chips, the branch picker and the archived switch: shortcuts that
- *  write their clause into the query bar as a token. */
+ *  write their clause into the query bar as a token. One toolbar, one Tab
+ *  stop: the arrow keys move between them. */
 export default function FilterShortcuts({
   statuses, onStatuses, branch, branches, onBranch, archived, onArchived,
 }: {
@@ -17,8 +20,9 @@ export default function FilterShortcuts({
 }) {
   const toggle = (s: RunState) =>
     onStatuses(STATUS_ORDER.filter((x) => (x === s ? !statuses.includes(s) : statuses.includes(x))));
+  const roving = useRovingToolbar<HTMLDivElement>();
   return (
-    <>
+    <div className="filter-shortcuts" role="toolbar" aria-label="Filter shortcuts" {...roving}>
       <select
         role="combobox"
         aria-label="Branch"
@@ -53,6 +57,6 @@ export default function FilterShortcuts({
           archived
         </button>
       )}
-    </>
+    </div>
   );
 }
