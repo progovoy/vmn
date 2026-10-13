@@ -87,5 +87,7 @@ export type NotFoundProps =
 export const TOKEN_KEY = "vmn_token";
 export const RETURN_TO_KEY = "vmn-exp:return-to";
 export const LAST_WS_KEY = "vmn-exp:last-ws";
+/** sessionStorage: `{ws: appTag}`, the app last opened in each workspace. */
+export const LAST_APP_KEY = "vmn-exp:last-app";
 export const RECENT_KEY = "vmn-exp:recent";
 export const DOCS_URL = "https://github.com/progovoy/vmn/blob/master/docs/vmn-exp/ui.md";

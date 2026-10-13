@@ -257,7 +257,8 @@ every consumer in `registry/<name>/uses`, pruned ones marked `found: false`.
 ## UI
 
 The `vmn-exp ui` **Models** page lists every model and dataset with a kind
-badge (and a kind filter) and its aliases. A model's page shows its versions
+badge (a segmented all kinds / models / datasets filter), its description
+(else its latest version) and its aliases. A model's page shows its versions
 linked to their runs, and a **lineage** card with the picked version's
 producer and consumers. A **Register** button on a run page's Artifacts panel
 registers a version from the browser. With `--read-only` the page is

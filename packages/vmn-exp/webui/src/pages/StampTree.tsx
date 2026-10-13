@@ -309,16 +309,19 @@ function ChangelogSection({ ws, app, verstr, olderVerstrs }: {
           {olderVerstrs.length > 0 ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
               <span style={{ color: "var(--text-muted)", fontSize: 12 }}>from</span>
-              <select
-                className="mono"
-                value={effectiveFrom ?? ""}
-                onChange={(e) => setFrom(e.target.value)}
-                style={{ fontSize: 12, padding: "1px 4px" }}
-              >
-                {olderVerstrs.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
+              <span className="select-wrap" style={{ display: "inline-block" }}>
+                <select
+                  className="mono"
+                  aria-label="Changelog from"
+                  value={effectiveFrom ?? ""}
+                  onChange={(e) => setFrom(e.target.value)}
+                  style={{ fontSize: 12, padding: "3px 26px 3px 8px" }}
+                >
+                  {olderVerstrs.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </span>
               <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
               <span className="mono" style={{ fontSize: 12 }}>{verstr}</span>
             </div>

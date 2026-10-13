@@ -1,6 +1,7 @@
 import type { RunState } from "../types";
 import { STATUS_ORDER } from "../util/filterTokens";
 import { useRovingToolbar } from "../hooks/useRovingToolbar";
+import ToggleChip from "./ToggleChip";
 import "./FilterShortcuts.css";
 
 /** Status chips, the branch picker and the archived switch: shortcuts that
@@ -47,15 +48,9 @@ export default function FilterShortcuts({
         </button>
       ))}
       {onArchived && (
-        <button
-          type="button"
-          className="status-toggle archived-toggle"
-          aria-pressed={archived}
-          title="include archived runs"
-          onClick={() => onArchived(!archived)}
-        >
+        <ToggleChip className="archived-toggle" pressed={archived} title="include archived runs" onChange={onArchived}>
           archived
-        </button>
+        </ToggleChip>
       )}
     </div>
   );

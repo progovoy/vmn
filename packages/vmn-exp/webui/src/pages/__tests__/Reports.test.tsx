@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { renderWithClient } from "../../test-utils";
 
@@ -51,16 +51,46 @@ describe("Reports page", () => {
   it("refetches with the archived filter", async () => {
     renderReports();
     await screen.findByText("LR sweep");
-    fireEvent.click(screen.getByLabelText("Show archived"));
+    const toggle = screen.getByRole("button", { name: "archived" });
+    expect(toggle).toHaveClass("status-toggle");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(toggle);
     await waitFor(() => expect(listReports).toHaveBeenCalledWith("w", true));
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("drops the redundant workspace subtitle", async () => {
+    renderReports();
+    await screen.findByText("LR sweep");
+    expect(screen.getByRole("heading", { level: 1, name: "Reports" })).toBeInTheDocument();
+    expect(document.querySelector(".page-head .what")).toBeNull();
+  });
+
+  it("asks for the title in a labelled New report dialog", async () => {
+    renderReports();
+    await screen.findByText("LR sweep");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "New report" }));
+    const dialog = screen.getByRole("dialog", { name: "New report" });
+    const title = within(dialog).getByLabelText("Title");
+    expect(title.tagName).toBe("INPUT");
+    const label = dialog.querySelector(`label[for="${title.id}"]`) ?? title.closest("label");
+    expect(label?.textContent).toMatch(/^Title/);
+    expect(label).not.toHaveClass("sr-only");
+    expect(title).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(apiReports.createReport).not.toHaveBeenCalled();
   });
 
   it("creates a new report and opens its editor", async () => {
     (apiReports.createReport as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ rid: "r9", rev: 1 });
     renderReports();
     await screen.findByText("LR sweep");
-    fireEvent.change(screen.getByLabelText("New report title"), { target: { value: "Fresh" } });
     fireEvent.click(screen.getByRole("button", { name: "New report" }));
+    const dialog = screen.getByRole("dialog", { name: "New report" });
+    fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Fresh" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
     await screen.findByText("editor-page");
     expect(apiReports.createReport).toHaveBeenCalledWith("w", { title: "Fresh", body: "" });
   });

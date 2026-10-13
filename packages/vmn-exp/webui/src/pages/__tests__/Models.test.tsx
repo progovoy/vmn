@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { renderWithClient } from "../../test-utils";
 
@@ -105,10 +105,49 @@ describe("Models page", () => {
 
     await screen.findByText("my-model");
     expect(mockedApiModels.listModels).toHaveBeenLastCalledWith("myws", undefined);
-    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "dataset" } });
+    fireEvent.click(screen.getByRole("button", { name: "datasets" }));
     await waitFor(() =>
       expect(mockedApiModels.listModels).toHaveBeenLastCalledWith("myws", "dataset"),
     );
+  });
+
+  it("picks the kind with the shared segmented control, not a native select", async () => {
+    mockedApiModels.listModels.mockResolvedValue({ models: MODELS });
+
+    renderModels();
+
+    await screen.findByText("my-model");
+    const group = screen.getByRole("group", { name: "Kind" });
+    expect(group).toHaveClass("segmented");
+    expect(document.querySelector("select")).toBeNull();
+    const pressed = () => within(group).getAllByRole("button")
+      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.textContent);
+    expect(pressed()).toEqual(["all kinds"]);
+    fireEvent.click(within(group).getByRole("button", { name: "datasets" }));
+    await waitFor(() => expect(pressed()).toEqual(["datasets"]));
+  });
+
+  it("describes a model without a description instead of a dash", async () => {
+    mockedApiModels.listModels.mockResolvedValue({ models: MODELS });
+
+    renderModels();
+
+    await screen.findByText("other-model");
+    const row = screen.getByRole("link", { name: "other-model" }).closest("tr")!;
+    expect(within(row).queryByText("—")).toBeNull();
+    expect(within(row).getByText("latest v1")).toBeInTheDocument();
+    const own = screen.getByRole("link", { name: "my-model" }).closest("tr")!;
+    expect(within(own).getByText("A test model")).toBeInTheDocument();
+  });
+
+  it("drops the redundant subtitle", async () => {
+    mockedApiModels.listModels.mockResolvedValue({ models: MODELS });
+
+    renderModels();
+
+    await screen.findByText("my-model");
+    expect(screen.getByRole("heading", { level: 1, name: "Models" })).toBeInTheDocument();
+    expect(document.querySelector(".page-head .what")).toBeNull();
   });
 
   it("shows empty state when there are no models", async () => {

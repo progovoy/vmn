@@ -1,10 +1,12 @@
 /** The contents of the shell's `<aside>` (plan 19 §1.2): wordmark, the
  *  workspace select, the App / Workspace / Server navs and the foot. */
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DOCS_URL, type ShellContext } from "../../shell/contracts";
 import { navModel, type NavGroup, type NavItem } from "../../shell/navModel";
 import { useAppStatus } from "../../shell/useShellData";
+import { useAppExists } from "../../shell/useAppExists";
+import { rememberApp, withLastApp } from "../../shell/lastApp";
 import { CopyPath, wsLocation } from "../ui";
 import AppSwitcher from "./AppSwitcher";
 import { Icon } from "./icons";
@@ -98,9 +100,21 @@ function Foot({ ctx, footExtra }: { ctx: ShellContext; footExtra?: ReactNode }) 
   );
 }
 
-export default function Sidebar({ ctx, onNavigate, footExtra }: {
+/** Remembers the URL's app once the server knows it; returns *ctx* with the
+ *  workspace's last app when the URL names none. */
+function useLastApp(ctx: ShellContext): ShellContext {
+  const known = Boolean(ctx.workspace);
+  const exists = useAppExists(known ? ctx.ws : undefined, ctx.appTag);
+  useEffect(() => {
+    if (exists && ctx.ws && ctx.appTag) rememberApp(ctx.ws, ctx.appTag);
+  }, [exists, ctx.ws, ctx.appTag]);
+  return withLastApp(ctx);
+}
+
+export default function Sidebar({ ctx: urlCtx, onNavigate, footExtra }: {
   ctx: ShellContext; onNavigate?: () => void; footExtra?: ReactNode;
 }) {
+  const ctx = useLastApp(urlCtx);
   const [app, ...rest] = navModel(ctx);
   return (
     <>

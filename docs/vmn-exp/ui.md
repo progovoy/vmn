@@ -71,6 +71,11 @@ At runtime, `POST /api/v1/workspaces` attaches a checkout
 into `<data-dir>/workspaces/<name>`). `DELETE /api/v1/workspaces/{ws}`
 unregisters it and deletes the checkout only if the server cloned it.
 
+The sidebar remembers, per workspace and browser tab, the last app you opened
+there: on workspace pages (Models, Reports, Apps) its app switcher keeps that
+app and the App nav (Experiments, Stamp tree, Actions) still points to it. A
+workspace where no app was opened yet shows "choose app".
+
 ## Remote deployment
 
 ```sh
