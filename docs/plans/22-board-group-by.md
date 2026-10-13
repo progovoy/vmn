@@ -96,9 +96,21 @@ group.
 header checkbox shows indeterminate when partial). Compare, Archive and the Charts tab
 work on the selected rows. The Charts tab colours by group when grouped.
 
-**G8. Old URLs.** `expand=` and `collapse=` from plan 20 map to `group=parent` with that
-group open or closed. The removed count-column keys (`c:total`, `c:waiting`, `c:running`,
-`c:done`, `c:failed`, `c:inner`) are ignored.
+**G8. No compatibility layer.** User decision (2026-10-13): "if you need to deprecate
+something - do it! we have no real users". Nothing old is mapped, redirected or kept
+readable:
+- `expand=`/`collapse=`-as-outer-ids from plan 20 and the count-column keys (`c:total`,
+  `c:waiting`, `c:running`, `c:done`, `c:failed`, `c:inner`) are deleted, not ignored
+  through a shim. An unknown URL key simply has no effect.
+- Saved views from before this plan are not migrated; a saved view only knows the new
+  keys.
+- Code that existed only for the fold (useInnerRuns, util/sweepTree.ts fold state,
+  innerRunColumns.ts, innerRows.css, the inner indent, the pending inner row) is
+  deleted with its tests.
+- Plan 20's old-page redirects (`overlay?runs=`, `compare?v=&to=`,
+  `pages/Compare/legacyRedirects.tsx` and its routes) go too; anything vmn itself prints
+  or links (CLI output, reports, docs) points at `compare-runs?tab=…` instead.
+- Server-side, a list option or helper only the fold used goes with it.
 
 **G9. Phone (< 640px).** Group headers become a sticky section label above their cards,
 showing the status count and the group's aggregate on the primary metric. Cards are
@@ -175,8 +187,8 @@ makes it green.
 **W1. Group by control + URL** (G2, G8). `components/GroupByMenu.tsx`,
 `hooks/useLeaderboardView` (`group`, `aggregate`, `collapse`).
 - Tests: the two sections; default `parent` with parented runs and `none` without; the
-  aggregate switch (default mean, `?agg=`, the app's conf default); URL round-trip; saved views keep it; `expand=`/`collapse=` mapping; the param option is
-  hidden for > 20 values.
+  aggregate switch (default mean, `?agg=`, the app's conf default); URL round-trip; saved
+  views keep it; the param option is hidden for > 20 values. No `expand=` mapping (G8).
 
 **W2. Flat rows + group header rows** (G1, G4, G5). `pages/LeaderboardGroupRow.tsx`
 (+ CSS); the virtualised table renders headers and rows from the grouped payload.
@@ -191,6 +203,8 @@ makes it green.
 **W3. Selection, Compare, Charts** (G7).
 - Tests: a header checkbox selects its loaded rows, is indeterminate when partial;
   Compare (N) counts rows; the Charts tab colours by group.
+- Delete the plan-20 Compare redirects (G8) and repoint every vmn-made link at
+  `compare-runs?tab=…`.
 
 **W4. Phone** (G9).
 - Tests at 390px: the sticky section label, its count, no horizontal scroll.
