@@ -21,3 +21,12 @@
 .prov-row dd { margin: 0; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .prov-row .mono { font-size: 12px; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
 .prov-copy { flex: none; padding: 0 8px; font-size: 11px; }
+
+/* In the mobile drawer (280px, overflow clips) the popover spans the drawer's
+   context block instead of hanging off the icon button. */
+@media (max-width: 899px) {
+  .drawer-context { position: relative; }
+  .drawer-context .ctx-root { flex-wrap: wrap; }
+  .drawer-context .prov { position: static; }
+  .drawer-context .prov-pop { left: 18px; right: 18px; min-width: 0; max-width: none; }
+}
