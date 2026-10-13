@@ -46,7 +46,7 @@ function renderBoard(url: string) {
 }
 
 const toggle = () => screen.getByRole("button", { name: /^similar$/i });
-const box = () => screen.getByRole("textbox", { name: /search runs/i });
+const box = () => screen.getByLabelText("Filter query");
 
 /** The options of the last similar-runs request for *text*. */
 function lastOptions(text: string) {
@@ -73,15 +73,15 @@ beforeEach(() => {
 });
 
 describe("Leaderboard similar mode filters", () => {
-  it("narrows the similar runs by the bar's query, branch, statuses and archived toggle", async () => {
+  it("narrows the similar runs by every token: query, branch, statuses, search and archived", async () => {
     await similarMode(FILTERED);
     const opts = lastOptions("focal loss");
     expect(opts.archived).toBe(true);
     expect(opts.query).toContain("metrics.loss < 0.5");
     expect(opts.query).toContain('branch = "main"');
     expect(opts.query).toContain('status in ("failed", "succeeded")');
-    // The table's search text is not the similar text: it is left out.
-    expect(opts.query).not.toContain("batch");
+    // The search is a token like the rest: similar mode keeps it.
+    expect(opts.query).toContain('note ~ "batch"');
   });
 
   it("asks again when a status is toggled in the mode", async () => {

@@ -120,9 +120,9 @@ describe("free-text search runs on the server", () => {
   it("ANDs the search with a typed query and picks a quote the text lacks", async () => {
     mockedApi.experiments.mockResolvedValue(page([row(1)]));
     renderLeaderboard();
-    fireEvent.change(await screen.findByLabelText("Filter query"), {
-      target: { value: "metrics.loss < 0.5" },
-    });
+    const box = await screen.findByLabelText("Filter query");
+    fireEvent.change(box, { target: { value: "metrics.loss < 0.5" } });
+    fireEvent.keyDown(box, { key: "Enter" });
     fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'say "hi"' } });
 
     await waitFor(() =>

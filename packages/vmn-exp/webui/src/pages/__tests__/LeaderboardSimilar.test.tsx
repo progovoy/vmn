@@ -49,7 +49,7 @@ function renderBoard() {
 }
 
 const toggle = () => screen.getByRole("button", { name: /^similar$/i });
-const box = () => screen.getByRole("textbox", { name: /search runs/i });
+const box = () => screen.getByLabelText("Filter query");
 
 beforeEach(() => {
   vi.clearAllMocks();

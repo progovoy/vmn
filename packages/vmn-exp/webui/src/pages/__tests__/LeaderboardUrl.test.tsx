@@ -71,8 +71,9 @@ describe("leaderboard view state lives in the URL", () => {
         '(metrics.loss < 1) and (verstr ~ "bat" or note ~ "bat" or branch ~ "bat")',
       ),
     );
-    expect(screen.getByLabelText("Filter query")).toHaveValue("metrics.loss < 1");
-    expect(screen.getByPlaceholderText(/search/i)).toHaveValue("bat");
+    const tokens = within(screen.getByRole("list", { name: "Active filters" })).getAllByRole("listitem");
+    expect(tokens.map((t) => t.getAttribute("data-token")))
+      .toEqual(['status = "running"', 'text ~ "bat"', "metrics.loss < 1"]);
     expect(screen.getByRole("button", { name: "running" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -89,6 +90,15 @@ describe("leaderboard view state lives in the URL", () => {
     renderBoard();
     fireEvent.click(await screen.findByRole("button", { name: "failed" }));
     await waitFor(() => expect(urlParams().get("status")).toBe("failed"));
+  });
+
+  it("puts a hand-typed status clause into ?status=, not ?q=", async () => {
+    renderBoard();
+    const box = await screen.findByLabelText("Filter query");
+    fireEvent.change(box, { target: { value: 'status = "failed"' } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(urlParams().get("status")).toBe("failed"));
+    expect(urlParams().get("q")).toBeNull();
   });
 
   it("restores the chart view from the URL", async () => {
