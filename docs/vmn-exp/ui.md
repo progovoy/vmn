@@ -240,8 +240,25 @@ rows behind a link are as many as it counts. App tiles count runs the same way
 (archived runs left out). See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
-An outer run's page lists its children once, in the Fleet card (the Status
-card has no `children` row): status counts, a bar, and a table of `@N name`,
+## The run page
+
+A run's page reads top to bottom in the order of the questions it answers:
+the header (name, verstr, branch, the Reproduce / Copy link / Add to report
+actions and the live indicator, then a line with `@N`, the status pill, the
+base version, and for an outer run its tree status with `N/M inner`); the note
+and tags; the failure card (failed runs); training curves; Changes; Fleet and
+Sweep (outer runs); Parameters (those that vary across the app's loaded runs
+first) | Metrics (params folded into `metrics` stay under Parameters); Similar
+runs | Lineage; the output log and artifacts. Last come sections collapsed by
+default: **Status details** (exit code, duration, pid, host, heartbeat,
+command, parent, and the run's code metadata), **Log** (closed, it shows its
+last 10 entries), **Environment** (Python, platform, packages, inputs),
+**Media** (open when the run logged any) and **Comments** (open when there
+are any). Each section's heading is a button (`aria-expanded`); the open or
+closed choice is remembered per browser (localStorage `vmn-exp:disclosures`).
+
+An outer run's page lists its children once, in the Fleet card (Status
+details has no `children` row): status counts, a bar, and a table of `@N name`,
 status, the params that vary among the children (at most six), the goal metric
 (the conf's primary metric, else the first child metric with a declared or
 name-inferred goal; best marked) and progress (`step / of`), a column shown
@@ -800,7 +817,7 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   workspace: 404. Viewer role; ETag/304. A request that cannot answer within
   10 s (an app's index still building) gets a 503 with `Retry-After`; the build
   goes on, so the retry is quick.
-- The run page shows a **similar runs** card below lineage (loaded when
+- The run page shows a **similar runs** card beside lineage (loaded when
   scrolled near, with a *this app* / *all apps* choice): each run's link
   (labelled with its app when it is another), score, status, goal metric,
   author, age, `(+N runs)`, its reasons as chips and its intent, collapsed.
