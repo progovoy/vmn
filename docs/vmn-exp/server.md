@@ -100,6 +100,10 @@ tags, notes, status), the per-app listing state and the journal cursor. Logs,
 series, artifacts, media and code are not cached. Run pages read them from
 storage on demand. `--no-index` keeps the cache in memory only.
 
+Whatever holds the cache (memory, SQLite or Postgres), the board's list
+endpoint, grouped (`group=`, `agg=`) or not, is answered in memory from the
+rows the cache loads, so every backend gives the same answer.
+
 ## Postgres and replicas
 
 With `db: postgresql://...` store workspaces are cached in Postgres instead of
