@@ -14,7 +14,7 @@ import { usePolling } from "../hooks/usePolling";
 import ArtifactsList from "../components/ArtifactsList";
 import RegisterModelDialog from "../components/RegisterModelDialog";
 import AppendMetrics from "../components/AppendMetrics";
-import LiveToggle from "../components/LiveToggle";
+import LiveStatus from "../components/LiveStatus";
 import NoteEditor from "../components/NoteEditor";
 import Comments from "../components/Comments";
 import ReportsUsing from "../components/ReportsUsing";
@@ -125,14 +125,14 @@ export default function Run() {
   // series above all) the same object, so the charts don't redraw.
   const query = useQuery(runQuery(ws, app, verstr), client);
   const schema = useMetricsSchema(ws, app);
-  const [live, setLive] = useState(false);
+  const [paused, setPaused] = useState(false);
   const detail = query.data;
 
-  // Follow a live run on its own, even with the Live toggle off. One cadence
-  // either way — the payload only changes when the runner beats.
+  // Follow a running run on its own until paused, at the cadence its
+  // heartbeat can move the payload at; anything else refreshes on demand.
   const running = detail?.status?.status === "running";
   const pollMs = pollIntervalMs(detail?.status?.heartbeat_interval_sec);
-  usePolling(() => query.refetch(), pollMs, live || running);
+  usePolling(() => query.refetch(), pollMs, running && !paused);
 
   if (query.error && !detail) {
     if (isMissingRun(query.error)) return <NotFound kind="run" ws={ws} appTag={app} runRef={verstr} />;
@@ -162,7 +162,11 @@ export default function Run() {
         {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
         {summary.branch && <span className="badge">{summary.branch}</span>}
         <span style={{ marginLeft: "auto" }}><AddToReport ws={ws} spec={() => runSpec(app, summary.verstr)} /></span>
-        <LiveToggle live={live} onToggle={() => setLive((v) => !v)} />
+        <LiveStatus
+          running={running} paused={paused} updatedAt={query.dataUpdatedAt}
+          onPause={() => setPaused(true)} onResume={() => setPaused(false)}
+          onRefresh={() => query.refetch()}
+        />
       </div>
       {detail && (
         <ForkOrigin forkedFrom={detail.forked_from} rerunOf={detail.rerun_of} rewinds={detail.rewinds} runUrl={runUrl} />

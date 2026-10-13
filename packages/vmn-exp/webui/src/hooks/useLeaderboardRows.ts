@@ -92,5 +92,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter) 
     total: data ? Math.max(data.total, data.rows.length) : 0,
     queryError, pageError, moreError,
     loadMore, refresh, visibleRef,
+    /** When the first page last arrived (ms since the epoch). */
+    updatedAt: query.dataUpdatedAt,
   };
 }

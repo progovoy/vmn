@@ -37,6 +37,12 @@ function detail(extra: Partial<ExperimentDetail> = {}): ExperimentDetail {
   };
 }
 
+const runningStatus: ExperimentDetail["status"] = {
+  status: "running", exit_code: null, started_at: null, finished_at: null, heartbeat: null,
+  duration_sec: null, pid: null, host: null, command: null, stale_sec: null, parent: null,
+  children: [], kind: "single", depth: 0, tree_status: null, last_metric_at: null,
+};
+
 const cachedRow: ExperimentRow = {
   idx: 2, verstr: VERSTR, code_verstr: VERSTR, timestamp: "2026-01-01T12:00:00Z",
   note: "row note", branch: "feat/row", base_version: "0.0.1",
@@ -95,20 +101,37 @@ describe("Run formatting", () => {
     expect(screen.getByText("1h")).toBeInTheDocument();
   });
 
-  it("labels the live toggle's off state", async () => {
+  it("offers only Refresh for a run that is not running", async () => {
     m.experiment.mockResolvedValue(detail());
     renderRun();
-    expect(await screen.findByRole("button", { name: /live off/i })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh" }));
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    await waitFor(() => expect(m.experiment).toHaveBeenCalledTimes(2));
   });
 });
 
 describe("Run polling", () => {
-  it("keeps unchanged parts of the detail identical across polls, so charts don't redraw", async () => {
+  it("shows live with Pause for a running run; Pause stops polling, Resume restarts it", async () => {
     vi.useFakeTimers();
-    m.experiment.mockImplementation(async () => detail());
+    m.experiment.mockImplementation(async () => detail({ status: runningStatus }));
     renderRun();
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    fireEvent.click(screen.getByRole("button", { name: /live off/i }));
+    expect(screen.getByText(/live · updated \d+s ago/)).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(m.experiment).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+    expect(m.experiment).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(m.experiment).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps unchanged parts of the detail identical across polls, so charts don't redraw", async () => {
+    vi.useFakeTimers();
+    m.experiment.mockImplementation(async () => detail({ status: runningStatus }));
+    renderRun();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
     expect(m.experiment).toHaveBeenCalledTimes(2);
     const seen = seriesSeen.filter(Boolean);
