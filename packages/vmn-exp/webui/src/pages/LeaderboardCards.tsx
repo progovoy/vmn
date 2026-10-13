@@ -1,6 +1,6 @@
 /** The leaderboard below 640px (plan 20 C8): one card per run — name and
  *  status, the primary metric large, branch · when — instead of a grid
- *  the phone would scroll sideways. */
+ *  the phone would scroll sideways; grouped, a section per group (plan 22 G9). */
 import { memo, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
@@ -10,6 +10,9 @@ import StatusPill from "../components/StatusPill";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { headStatus, type RowLayout } from "./LeaderboardRow";
 import type { SortState } from "./LeaderboardHead";
+import type { GroupActions } from "./LeaderboardTable";
+import CardGroup from "./LeaderboardCardGroup";
+import { isGroupItem, type BoardItem, type GroupHeaderItem, type GroupMoreItem } from "../util/groupItems";
 import "./leaderboardCards.css";
 
 /** The metric a card shows large: the one sorted by, else the primary
@@ -87,10 +90,28 @@ const MCard = memo(function MCard({
   );
 });
 
+/** *items* as sections: each group's header with its runs and `+N more`;
+ *  one headless section when the board is not grouped. */
+interface Section { head?: GroupHeaderItem; rows: ExperimentRow[]; more?: GroupMoreItem }
+
+function sectionsOf(items: readonly BoardItem[]): Section[] {
+  const out: Section[] = [];
+  for (const it of items) {
+    if (isGroupItem(it) && it.item === "group") out.push({ head: it, rows: [] });
+    else {
+      if (!out.length) out.push({ rows: [] });
+      const last = out[out.length - 1];
+      if (isGroupItem(it)) last.more = it;
+      else last.rows.push(it);
+    }
+  }
+  return out;
+}
+
 export default function LeaderboardCards({
-  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, describedBy,
+  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, groups, describedBy,
 }: {
-  rows: ExperimentRow[] | undefined;
+  rows: BoardItem[] | undefined;
   layout: RowLayout;
   sort: SortState;
   selected: ReadonlySet<string>;
@@ -98,26 +119,37 @@ export default function LeaderboardCards({
   onToggle: (verstr: string, range: boolean) => void;
   headerCheck?: HeaderCheckProps;
   onPrefetch: (verstr: string) => void;
+  /** Set while the board is grouped: each group becomes a section (plan 22 G9). */
+  groups?: GroupActions;
   describedBy?: string;
 }) {
   const metric = cardMetric(layout, sort.sort);
+  const cardsOf = (list: ExperimentRow[]) => list.map((r) => (
+    <MCard
+      key={r.verstr} r={r} layout={layout} metric={metric}
+      selected={selected.has(r.verstr)} flash={flash === r.verstr}
+      onToggle={onToggle} onPrefetch={onPrefetch}
+    />
+  ));
+  const sections = rows && sectionsOf(rows);
   return (
     <div className="lb-mcards-wrap">
       <div className="lb-mcards-head">
         {headerCheck && <HeaderCheckbox {...headerCheck} />}
         {metric && <span className="lb-mcards-metric">{metric}</span>}
       </div>
-      {rows === undefined ? (
+      {sections === undefined ? (
         <p className="lb-mcards-loading" role="status">loading runs…</p>
       ) : (
         <ul className="lb-mcards" role="list" aria-label="experiments" aria-describedby={describedBy}>
-          {rows.map((r) => (
-            <MCard
-              key={r.verstr} r={r} layout={layout} metric={metric}
-              selected={selected.has(r.verstr)} flash={flash === r.verstr}
-              onToggle={onToggle} onPrefetch={onPrefetch}
-            />
-          ))}
+          {sections.map((sec) => sec.head && groups ? (
+            <CardGroup
+              key={`group:${sec.head.group.key}`} item={sec.head} more={sec.more}
+              layout={layout} metric={metric} groups={groups}
+            >
+              {cardsOf(sec.rows)}
+            </CardGroup>
+          ) : cardsOf(sec.rows))}
         </ul>
       )}
     </div>

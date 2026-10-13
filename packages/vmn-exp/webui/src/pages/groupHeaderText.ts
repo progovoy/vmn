@@ -25,13 +25,21 @@ export function spokenCounts(c: GroupCounts): string {
   return [plural(c.total, "run"), ...rest.map((p) => p.text)].join(", ");
 }
 
+/** The aggregate shown for *agg*: the mean for `best` of a metric without a goal. */
+export const shownAggregate = (a: MetricAggregate, agg: GroupAggregate): GroupAggregate =>
+  agg === "best" && a.best === null ? "mean" : agg;
+
 /** A header's cell for one metric: *agg* of the group's values, the mean for
  *  `best` of a metric without a goal; its title names what it shows. */
 export function aggregateCell(
   a: MetricAggregate | undefined, agg: GroupAggregate,
 ): { value: number | null; title: string | undefined } {
   if (!a || a.n === 0) return { value: null, title: undefined };
-  const noGoal = agg === "best" && a.best === null;
-  const used = noGoal ? "mean" : agg;
-  return { value: a[used], title: `${used} of ${a.n}${noGoal ? " (no goal)" : ""}` };
+  const used = shownAggregate(a, agg);
+  return { value: a[used], title: `${used} of ${a.n}${used !== agg ? " (no goal)" : ""}` };
 }
+
+/** A `+N more` row's text in each state of its load. */
+export const MORE_TEXT = {
+  idle: (n: number) => `+${n} more`, loading: () => "Loading…", error: () => "Could not load them, retry",
+};

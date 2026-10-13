@@ -308,6 +308,12 @@ board's groups in order, the no-value group grey, a legend above the chart;
 parallel's `color by` offers `group` first), reading each run's group from
 `experiments-columns`' `group:<field>`.
 
+Below 640px, where the board is one card per run, each group's header is a
+section label above its cards that sticks to the top while you scroll them:
+the fold, the group's name (a link group's target run, linked), its status
+count, and the group's aggregate on the card metric (`0.2327 val_loss mean`).
+Its `+N more` is a button under the last card.
+
 ## Compare
 
 `.../app/<app>/compare-runs` is the one Compare page. Its tabs live in
