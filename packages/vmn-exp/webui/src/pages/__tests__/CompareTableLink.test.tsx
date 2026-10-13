@@ -14,18 +14,18 @@ vi.mock("../../api", () => ({
 }));
 
 import { createQueryClient } from "../../queryClient";
-import Compare from "../Compare";
+import Compare from "../Compare/ComparePage";
 
 describe("Compare page", () => {
   it("links the pair to the N-run compare table", async () => {
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter initialEntries={["/ws/w/app/app/compare?v=a&to=b"]}>
-          <Routes><Route path="/ws/:ws/app/:app/compare" element={<Compare />} /></Routes>
+        <MemoryRouter initialEntries={["/ws/w/app/app/compare-runs?tab=code&sel=a&sel=b"]}>
+          <Routes><Route path="/ws/:ws/app/:app/compare-runs" element={<Compare />} /></Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    const link = await screen.findByRole("link", { name: /compare as table/i });
-    expect(link).toHaveAttribute("href", "/ws/w/app/app/compare-runs?sel=a&sel=b");
+    const link = await screen.findByRole("tab", { name: "Table" });
+    expect(link).toHaveAttribute("href", "/ws/w/app/app/compare-runs?tab=table&sel=a&sel=b");
   });
 });

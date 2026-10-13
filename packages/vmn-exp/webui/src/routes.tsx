@@ -8,14 +8,13 @@ import { AppGuard, GitOnly, WorkspaceGuard } from "./components/shell/guards";
 import { AppsPage } from "./pages/AppsPage";
 import { WorkspacesHome } from "./pages/WorkspacesHome";
 import Leaderboard from "./pages/Leaderboard";
+import { LegacyCompareRedirect } from "./pages/Compare/legacyRedirects";
 import type { RouteHandle, RouteId } from "./shell/contracts";
 
 // The landing pages ship in the main bundle; every other page loads on first
 // visit, so the leaderboard never waits for chart or tree code.
 const Run = lazy(() => import("./pages/Run"));
-const Compare = lazy(() => import("./pages/Compare"));
-const CompareRuns = lazy(() => import("./pages/CompareRuns"));
-const Overlay = lazy(() => import("./pages/Overlay"));
+const ComparePage = lazy(() => import("./pages/Compare/ComparePage"));
 const StampTree = lazy(() => import("./pages/StampTree"));
 const Actions = lazy(() => import("./pages/Actions"));
 const Models = lazy(() => import("./pages/Models"));
@@ -53,9 +52,10 @@ export const routes: RouteObject[] = [
       child("ws/:ws", "apps", inWs(<AppsPage />)),
       child("ws/:ws/app/:app", "experiments", inApp(<Leaderboard />), true),
       child("ws/:ws/app/:app/run/:verstr", "run", inApp(page(Run, "run"))),
-      child("ws/:ws/app/:app/compare", "code-diff", inApp(page(Compare, "code diff"))),
-      child("ws/:ws/app/:app/compare-runs", "compare-runs", inApp(page(CompareRuns, "comparison"))),
-      child("ws/:ws/app/:app/overlay", "overlay", inApp(page(Overlay, "overlay"))),
+      child("ws/:ws/app/:app/compare-runs", "compare-runs", inApp(page(ComparePage, "comparison"))),
+      // The pages Compare replaced (D6): old links land on its code / curves tab.
+      child("ws/:ws/app/:app/compare", "code-diff", <LegacyCompareRedirect from="code" />),
+      child("ws/:ws/app/:app/overlay", "overlay", <LegacyCompareRedirect from="overlay" />),
       child("ws/:ws/app/:app/tree", "tree", inGitApp("tree", page(StampTree, "stamp tree"))),
       child("ws/:ws/app/:app/actions", "actions", inGitApp("actions", page(Actions, "actions"))),
       child("ws/:ws/models", "models", inWs(page(Models, "models"))),

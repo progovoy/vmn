@@ -9,11 +9,12 @@ const SUGGESTIONS = 20;
 
 /** A typeahead over the server: suggestions come from a bounded search (the
  *  newest runs until something is typed), never from loading every run. */
-export default function RunPicker({ ws, app, value, onChange }: {
+export default function RunPicker({ ws, app, value, onChange, label = "experiment" }: {
   ws: string;
   app: string;
   value: string;
   onChange: (verstr: string) => void;
+  label?: string;
 }) {
   const [text, setText] = useState(value);
   const [options, setOptions] = useState<ExperimentRow[]>([]);
@@ -44,7 +45,7 @@ export default function RunPicker({ ws, app, value, onChange }: {
     <div className="select-wrap" style={{ display: "inline-block" }}>
       <input
         role="combobox"
-        aria-label="experiment"
+        aria-label={label}
         className="mono"
         list={listId}
         value={text}

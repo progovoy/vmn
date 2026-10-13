@@ -12,20 +12,14 @@ function cellText(v: unknown, kind: "params" | "metrics"): string {
   return typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
 }
 
-function RunHead({ verstr, detail, base, onRemove }: {
-  verstr: string; detail: ExperimentDetail | undefined; base: string; onRemove: (v: string) => void;
+function RunHead({ verstr, detail, base }: {
+  verstr: string; detail: ExperimentDetail | undefined; base: string;
 }) {
   const st = detail?.status;
   return (
     <th className="compare-run-head">
       <div className="compare-run-title">
         <Link className="mono run-link" to={runHref(base, verstr)}>{runLabel(verstr, detail)}</Link>
-        <button
-          className="link" aria-label={`remove ${verstr}`} title="remove from comparison"
-          onClick={() => onRemove(verstr)}
-        >
-          ×
-        </button>
       </div>
       {st?.status && (
         <StatusPill status={st.status} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
@@ -59,13 +53,12 @@ function Section({ title, kind, rows, width }: {
 }
 
 /** Params and metrics of every selected run, one column per run. */
-export default function CompareRunsTable({ verstrs, details, schema, base, onlyDiffering, onRemove }: {
+export default function CompareRunsTable({ verstrs, details, schema, base, onlyDiffering }: {
   verstrs: string[];
   details: (ExperimentDetail | undefined)[];
   schema: MetricsSchema | null;
   base: string;
   onlyDiffering: boolean;
-  onRemove: (verstr: string) => void;
 }) {
   const keep = (rows: CompareRow[]) => (onlyDiffering ? rows.filter((r) => r.differs) : rows);
   const params = keep(compareRows(details, "params", schema));
@@ -79,7 +72,7 @@ export default function CompareRunsTable({ verstrs, details, schema, base, onlyD
             <tr>
               <th className="compare-key" />
               {verstrs.map((v, i) => (
-                <RunHead key={v} verstr={v} detail={details[i]} base={base} onRemove={onRemove} />
+                <RunHead key={v} verstr={v} detail={details[i]} base={base} />
               ))}
             </tr>
           </thead>

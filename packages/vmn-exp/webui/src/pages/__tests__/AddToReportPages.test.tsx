@@ -20,7 +20,7 @@ vi.mock("../../components/OverlayChart", () => ({ default: () => null }));
 import { api } from "../../api";
 import { fetchSeriesBatch } from "../../apiSeries";
 import LeaderboardCharts from "../LeaderboardCharts";
-import Overlay from "../Overlay";
+import Overlay from "../Compare/ComparePage";
 import Run from "../Run";
 
 const spec = () => {
@@ -56,7 +56,7 @@ describe("Add to report sources", () => {
     (fetchSeriesBatch as ReturnType<typeof vi.fn>).mockResolvedValue({
       series: { a: { loss: [{ step: 0, value: 1, ts: null }, { step: 1, value: 0.5, ts: null }] } }, missing: [],
     });
-    at("/ws/w/app/my-app/overlay?runs=a", "/ws/:ws/app/:app/overlay", <Overlay />);
+    at("/ws/w/app/my-app/compare-runs?sel=a", "/ws/:ws/app/:app/compare-runs", <Overlay />);
     await waitFor(() => expect(spec()).toMatchObject({
       type: "curves", app: "my/app", runs: { verstrs: ["a"] }, keys: ["loss"], x: { mode: "step" }, smoothing: 0, log_y: false,
     }));

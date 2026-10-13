@@ -6,7 +6,7 @@ import { renderWithClient } from "../test-utils";
 vi.mock("../apiSeries", () => ({ fetchSeriesBatch: vi.fn(), fetchRunStatuses: vi.fn() }));
 
 import { fetchRunStatuses, fetchSeriesBatch } from "../apiSeries";
-import Overlay from "../pages/Overlay";
+import Overlay from "../pages/Compare/ComparePage";
 
 const batch = fetchSeriesBatch as unknown as ReturnType<typeof vi.fn>;
 const statuses = fetchRunStatuses as unknown as ReturnType<typeof vi.fn>;
@@ -33,8 +33,8 @@ function renderOverlay(runs: string[], series = SERIES, rows: Record<string, obj
   }));
   statuses.mockResolvedValue(rows);
   return renderWithClient(
-    <MemoryRouter initialEntries={[`/ws/w/app/app/overlay?runs=${runs.join(",")}`]}>
-      <Routes><Route path="/ws/:ws/app/:app/overlay" element={<Overlay />} /></Routes>
+    <MemoryRouter initialEntries={[`/ws/w/app/app/compare-runs?${runs.map((r) => `sel=${r}`).join("&")}`]}>
+      <Routes><Route path="/ws/:ws/app/:app/compare-runs" element={<Overlay />} /></Routes>
     </MemoryRouter>,
   );
 }

@@ -13,7 +13,7 @@ vi.mock("../../apiSeries", () => ({
 }));
 
 import { fetchSeriesBatch } from "../../apiSeries";
-import Overlay from "../Overlay";
+import Overlay from "../Compare/ComparePage";
 
 const mockedBatch = fetchSeriesBatch as unknown as ReturnType<typeof vi.fn>;
 
@@ -32,11 +32,11 @@ function serve(runs: Record<string, Points>) {
 }
 
 function renderOverlay(runs: string[]) {
-  const search = runs.length ? `?runs=${runs.join(",")}` : "";
+  const search = runs.length ? `?${runs.map((r) => `sel=${r}`).join("&")}` : "";
   return renderWithClient(
-    <MemoryRouter initialEntries={[`/ws/test/app/my-app/overlay${search}`]}>
+    <MemoryRouter initialEntries={[`/ws/test/app/my-app/compare-runs${search}`]}>
       <Routes>
-        <Route path="/ws/:ws/app/:app/overlay" element={<Overlay />} />
+        <Route path="/ws/:ws/app/:app/compare-runs" element={<Overlay />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -85,8 +85,8 @@ describe("Overlay page", () => {
     });
 
     // Each run's verstr should appear in the legend
-    expect(screen.getByText("0.0.1-rc.1")).toBeInTheDocument();
-    expect(screen.getByText("0.0.2-rc.1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "0.0.1-rc.1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "0.0.2-rc.1" })).toBeInTheDocument();
   });
 
   it("shows run legend with verstr labels", async () => {
@@ -102,8 +102,8 @@ describe("Overlay page", () => {
     renderOverlay(["0.0.1-rc.1", "0.0.3-rc.2"]);
 
     await waitFor(() => {
-      expect(screen.getByText("0.0.1-rc.1")).toBeInTheDocument();
-      expect(screen.getByText("0.0.3-rc.2")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "0.0.1-rc.1" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "0.0.3-rc.2" })).toBeInTheDocument();
     });
   });
 

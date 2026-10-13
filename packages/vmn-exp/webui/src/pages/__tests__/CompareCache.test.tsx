@@ -13,15 +13,15 @@ vi.mock("../../api", () => ({
 
 import { api } from "../../api";
 import { createQueryClient } from "../../queryClient";
-import Compare from "../Compare";
+import Compare from "../Compare/ComparePage";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
 function renderCompare(client: QueryClient) {
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/ws/w/app/app/compare?v=a&to=b"]}>
-        <Routes><Route path="/ws/:ws/app/:app/compare" element={<Compare />} /></Routes>
+      <MemoryRouter initialEntries={["/ws/w/app/app/compare-runs?tab=code&sel=a&sel=b"]}>
+        <Routes><Route path="/ws/:ws/app/:app/compare-runs" element={<Compare />} /></Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );

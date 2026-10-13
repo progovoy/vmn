@@ -1,30 +1,24 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { runColor } from "../util";
-import { allTimestamped } from "../util/chartData";
-import { LogToggle, XMetricSelect, XModeToggle } from "../components/ChartControls";
-import { useCurveControls } from "../hooks/useCurveControls";
-import OverlayChart from "../components/OverlayChart";
-import OverlayLegend from "../components/OverlayLegend";
-import SmoothingSlider from "../components/SmoothingSlider";
-import { Skeleton } from "../components/ui";
-import AddToReport from "../reports/AddToReport";
-import { overlaySpec } from "../reports/viewSpecs";
-import OverlayNoCurves, { TrialLinks } from "../components/OverlayNoCurves";
-import { useOverlaySeries } from "./overlaySeries";
-import { curvelessRuns, unionMetrics } from "./overlayCoverage";
+import { runColor } from "../../util";
+import { allTimestamped } from "../../util/chartData";
+import { LogToggle, XMetricSelect, XModeToggle } from "../../components/ChartControls";
+import { useCurveControls } from "../../hooks/useCurveControls";
+import OverlayChart from "../../components/OverlayChart";
+import OverlayLegend from "../../components/OverlayLegend";
+import SmoothingSlider from "../../components/SmoothingSlider";
+import { Skeleton } from "../../components/ui";
+import AddToReport from "../../reports/AddToReport";
+import { overlaySpec } from "../../reports/viewSpecs";
+import OverlayNoCurves, { TrialLinks } from "../../components/OverlayNoCurves";
+import { useOverlaySeries } from "../overlaySeries";
+import { curvelessRuns, unionMetrics } from "../overlayCoverage";
 
 /** More runs than this make an unreadable chart and a lot of payload. */
 export const MAX_OVERLAY_RUNS = 100;
 
-export default function Overlay() {
-  const { ws, app } = useParams() as { ws: string; app: string };
-  const [searchParams] = useSearchParams();
-  const requested = useMemo(() => {
-    const raw = searchParams.get("runs") ?? "";
-    return raw ? raw.split(",").filter(Boolean) : [];
-  }, [searchParams]);
-  const runs = useMemo(() => requested.slice(0, MAX_OVERLAY_RUNS), [requested]);
+/** The selected runs' training curves overlaid, one chart per metric. */
+export default function CurvesTab({ ws, app, refs }: { ws: string; app: string; refs: string[] }) {
+  const runs = useMemo(() => refs.slice(0, MAX_OVERLAY_RUNS), [refs]);
 
   const { data, error } = useOverlaySeries(ws, app, runs);
   const {
@@ -52,19 +46,8 @@ export default function Overlay() {
     return next;
   }), []);
 
-  const back = (
-    <Link className="back-link" to={`/ws/${ws}/app/${app}`}>
-      ← experiments
-    </Link>
-  );
-
   if (runs.length === 0) {
-    return (
-      <>
-        {back}
-        <div className="empty">No runs selected. Select runs from the leaderboard to overlay their training curves.</div>
-      </>
-    );
+    return <div className="empty">No runs selected. Select runs from the leaderboard to overlay their training curves.</div>;
   }
 
   if (error && !data) return <div className="error">{error}</div>;
@@ -72,20 +55,17 @@ export default function Overlay() {
 
   return (
     <>
-      {back}
-      <div className="page-head" style={{ alignItems: "center", marginBottom: 6 }}>
-        <h1 style={{ fontSize: 20 }}>Overlay — {runs.length} runs</h1>
-        {metrics.length > 0 && (
-          <span style={{ marginLeft: "auto" }}>
-            <AddToReport ws={ws} spec={() => overlaySpec({
-              app, verstrs: runs, keys: metrics, smoothing: alpha, xMode, x: xChoice, logY,
-            })} />
-          </span>
-        )}
-      </div>
-      {requested.length > runs.length && (
+      {metrics.length > 0 && (
+        <div className="toolbar" style={{ marginBottom: 6 }}>
+          <span className="spacer" />
+          <AddToReport ws={ws} spec={() => overlaySpec({
+            app, verstrs: runs, keys: metrics, smoothing: alpha, xMode, x: xChoice, logY,
+          })} />
+        </div>
+      )}
+      {refs.length > runs.length && (
         <p style={{ color: "var(--text-2)", margin: "0 0 12px" }}>
-          showing the first {runs.length} of {requested.length} selected runs
+          showing the first {runs.length} of {refs.length} selected runs
         </p>
       )}
       {data.missing.length > 0 && (

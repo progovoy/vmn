@@ -120,9 +120,9 @@ describe("Compare page selection chips", () => {
 
   it("adds a run through a picker", async () => {
     renderPage("?sel=a&sel=b");
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "run to add" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: /add run/i }));
-    const picker = await screen.findByRole("combobox");
+    const picker = await screen.findByRole("combobox", { name: "run to add" });
     fireEvent.change(picker, { target: { value: "c" } });
     fireEvent.keyDown(picker, { key: "Enter" });
     await waitFor(() => expect(sel()).toEqual(["a", "b", "c"]));

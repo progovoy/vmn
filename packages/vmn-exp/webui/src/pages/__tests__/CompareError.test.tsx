@@ -18,18 +18,18 @@ vi.mock("../../api", () => ({
 }));
 
 import { api } from "../../api";
-import Compare from "../Compare";
-import CompareRuns from "../CompareRuns";
+import Compare from "../Compare/ComparePage";
+import CompareRuns from "../Compare/ComparePage";
 import type { ExperimentDetail } from "../../types";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
-function renderCompare(search = "?v=a&to=b") {
+function renderCompare(search = "?tab=code&sel=a&sel=b") {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare${search}`]}>
+      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs${search}`]}>
         <Routes>
-          <Route path="/ws/:ws/app/:app/compare" element={<Compare />} />
+          <Route path="/ws/:ws/app/:app/compare-runs" element={<Compare />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -45,7 +45,7 @@ function Probe() {
 function renderCompareRuns(search: string) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs${search}`]}>
+      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs?tab=table&${search.slice(1)}`]}>
         <Probe />
         <Routes>
           <Route path="/ws/:ws/app/:app/compare-runs" element={<CompareRuns />} />
