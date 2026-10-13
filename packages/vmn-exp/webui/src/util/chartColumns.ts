@@ -1,6 +1,6 @@
 /** Chart rows from `/experiments-columns`: only the keys a chart plots,
  *  over the whole filtered set rather than the pages the table loaded. */
-import type { ExperimentColumns, ExperimentRow } from "../types";
+import type { ExperimentColumns, ExperimentRow, RunState } from "../types";
 import type { ChartView } from "../hooks/useLeaderboardView";
 import { groupColumn } from "./chartGroups";
 
@@ -25,6 +25,7 @@ export function columnsToRows(data: ExperimentColumns): ExperimentRow[] {
     const metrics: ExperimentRow["metrics"] = {};
     const params: Record<string, unknown> = {};
     let branch: string | null = null;
+    const row: Pick<ExperimentRow, "status" | "name"> = {};
     for (const [key, values] of entries) {
       const v = values[i];
       if (v === null || v === undefined) continue;
@@ -34,11 +35,15 @@ export function columnsToRows(data: ExperimentColumns): ExperimentRow[] {
         params[key.slice(7)] = v;
       } else if (key === "branch") {
         branch = String(v);
+      } else if (key === "status") {
+        row.status = v as RunState;
+      } else if (key === "name") {
+        row.name = String(v);
       }
     }
     return {
       idx: data.idx[i], verstr, code_verstr: verstr, timestamp: null, note: null,
-      branch, base_version: null, params, metrics,
+      branch, base_version: null, params, metrics, ...row,
     };
   });
 }

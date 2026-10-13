@@ -8,7 +8,7 @@ import type { ExperimentColumns } from "../../types";
 import { isFiniteNumber } from "../../util/stats";
 import { ChartEmpty, ChartFigure, ColorPicker, ColumnsState, colKey, colorChoice, runsCaption, type JobChartProps } from "./JobChartParts";
 import { useJobColumns } from "./jobChartQueries";
-import { colorBy, columnValue, jobChartKeys, jobRows } from "./jobChartData";
+import { colorBy, colorKey, columnValue, jobChartKeys, jobRows } from "./jobChartData";
 
 /** The x axis: the URL's, else the first varying param, else another metric. */
 function xChoice({ state, params, metrics, varying, y }: JobChartProps): string {
@@ -18,7 +18,7 @@ function xChoice({ state, params, metrics, varying, y }: JobChartProps): string 
 
 function Plot({ data, x, y, color, p }: { data: ExperimentColumns; x: string; y: string; color: string; p: JobChartProps }) {
   const rows = useMemo(() => jobRows(data), [data]);
-  const groups = useMemo(() => colorBy(rows, color === "status" ? "status" : `params.${color}`), [rows, color]);
+  const groups = useMemo(() => colorBy(rows, colorKey(color)), [rows, color]);
   const xKey = colKey(x, p.params);
   const points = useMemo(
     () => rows.filter((r) => isFiniteNumber(columnValue(r, xKey)) && isFiniteNumber(r.metrics[y])).length,
@@ -44,7 +44,7 @@ export default function JobScatter(p: JobChartProps) {
   const color = colorChoice(p.state, p.groupable);
   const keys = useMemo(() => jobChartKeys({
     chart: "scatter", x: colKey(x, p.params), y: p.y,
-    color: color === "status" ? "status" : `params.${color}`, params: p.params,
+    color: colorKey(color), params: [],
   }), [x, p.params, p.y, color]);
   const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary.done);
   return (

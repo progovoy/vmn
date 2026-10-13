@@ -83,7 +83,8 @@ function span(groups: PointGroup[], key: "xs" | "ys"): number {
 }
 
 /** The point closest to (x, y), distances measured as fractions of each
- *  axis' data span; null when none lies within *radius* of it. */
+ *  axis' data span; null when none lies within *radius* of it. The linear
+ *  reference scan: the chart hovers through `pointGrid`, checked against this. */
 export function nearestPoint(
   groups: PointGroup[], x: number, y: number, radius: number,
 ): ScatterPoint | null {

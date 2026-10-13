@@ -23,6 +23,8 @@ export interface PageOpts {
   archived?: boolean;
   /** Top-level runs only: the Jobs view (plan 23 S2). */
   top?: boolean;
+  /** Only run *scope*'s subtree, without it (plan 23 S2). */
+  scope?: string;
 }
 
 /** The leaderboard filter, as the list-shaped endpoints take it. */
@@ -33,6 +35,7 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.order) p.set("order", opts.order);
   if (opts.archived) p.set("archived", "1");
   if (opts.top) p.set("top", "1");
+  if (opts.scope) p.set("scope", opts.scope);
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 

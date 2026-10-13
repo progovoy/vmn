@@ -4,7 +4,7 @@
  *  the per-value boxes of a metric. */
 import type { ExperimentColumns, ExperimentRow, RunState } from "../../types";
 import { paramValue, runColor } from "../../util";
-import type { ChartGroup, ChartGroups } from "../../util/chartGroups";
+import { NO_GROUP_COLOR, type ChartGroup, type ChartGroups } from "../../util/chartGroups";
 import { columnsToRows } from "../../util/chartColumns";
 import { STATUS_ORDER } from "../../util/filterTokens";
 import { isFiniteNumber } from "../../util/stats";
@@ -24,11 +24,11 @@ export interface JobChartAxes {
   params: string[];
 }
 
-export type JobRow = ExperimentRow & { status?: RunState; name?: string | null };
+export type JobRow = ExperimentRow;
 
 /** The categorical slots a param's values get; the rest fold into Other. */
 export const PARAM_COLORS = 6;
-export const OTHER_COLOR = "var(--text-3)";
+export const OTHER_COLOR = NO_GROUP_COLOR;
 /** Most groups the box chart draws. */
 export const MAX_BOXES = 20;
 
@@ -39,6 +39,9 @@ export const STATUS_COLORS: Record<RunState, string> = {
 const STATUS_LABEL = (s: RunState) => (s === "created" ? "waiting" : s);
 
 const uniq = (keys: string[]) => keys.filter((k, i) => k && keys.indexOf(k) === i);
+
+/** The colour-by choice's column key: `status`, else the param's. */
+export const colorKey = (color: string) => (color === "status" ? "status" : `params.${color}`);
 
 /** The column keys *a.chart* plots. */
 export function jobChartKeys(a: JobChartAxes): string[] {
@@ -52,14 +55,7 @@ export function jobChartKeys(a: JobChartAxes): string[] {
 }
 
 /** One row per run, with its status and name when the columns carry them. */
-export function jobRows(data: ExperimentColumns): JobRow[] {
-  const status = data.columns.status, name = data.columns.name;
-  return columnsToRows(data).map((r, i) => ({
-    ...r,
-    ...(status ? { status: status[i] as RunState } : {}),
-    ...(name ? { name: (name[i] as string | null) ?? null } : {}),
-  }));
-}
+export const jobRows: (data: ExperimentColumns) => JobRow[] = columnsToRows;
 
 /** A row's value of column *key* (`params.<k>`, `metrics.<k>` or `status`). */
 export function columnValue(row: JobRow, key: string): unknown {
@@ -76,7 +72,7 @@ function compareValues(a: unknown, b: unknown): number {
   if (typeof a === "number" && typeof b === "number") return a - b;
   if (typeof a === "number") return -1;
   if (typeof b === "number") return 1;
-  return String(a).localeCompare(String(b));
+  return String(a).localeCompare(String(b), undefined, { numeric: true });
 }
 
 function countValues(rows: JobRow[], key: string): Map<string, { value: unknown; count: number }> {

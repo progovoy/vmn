@@ -1,7 +1,7 @@
 /** Parallel coordinates of the job's varying params and a metric (plan 23
  *  W4). A brush becomes a query clause, and "Show N brushed runs in Runs"
  *  opens the Runs tab filtered by it. */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ChartGroupLegend from "../../components/ChartGroupLegend";
 import ParallelCoordinates from "../../components/ParallelCoordinates";
@@ -11,7 +11,7 @@ import {
   ChartEmpty, ChartFigure, ColorPicker, ColumnsState, colorChoice, MetricPicker, runsCaption, type JobChartProps,
 } from "./JobChartParts";
 import { useJobColumns } from "./jobChartQueries";
-import { colorBy, jobChartKeys, jobRows } from "./jobChartData";
+import { colorBy, colorKey, jobChartKeys, jobRows } from "./jobChartData";
 
 /** Axes past this many are left off (each needs ~100px). */
 const MAX_PARAM_AXES = 12;
@@ -27,9 +27,12 @@ function BrushLink({ query, count }: { query: string | null; count: number }) {
 
 function Plot({ data, dims, color, y }: { data: ExperimentColumns; dims: string[]; color: string; y: string }) {
   const rows = useMemo(() => jobRows(data), [data]);
-  const groups = useMemo(() => colorBy(rows, color === "status" ? "status" : `params.${color}`), [rows, color]);
+  const groups = useMemo(() => colorBy(rows, colorKey(color)), [rows, color]);
   const [brushed, setBrushed] = useState<number | null>(null);
   const [query, setQuery] = useState<string | null>(null);
+  // Stable props: a brush commit re-renders this, and must not rebuild 50k rows' axes.
+  const metricCols = useMemo(() => [y], [y]);
+  const onBrush = useCallback((idx: number[] | null) => setBrushed(idx ? idx.length : null), []);
   if (!rows.length) return <ChartEmpty text="No run of this job is in yet." />;
   return (
     <ChartFigure
@@ -38,8 +41,8 @@ function Plot({ data, dims, color, y }: { data: ExperimentColumns; dims: string[
     >
       <ChartGroupLegend legend={groups.legend} />
       <ParallelCoordinates
-        rows={rows} metricCols={[y]} paramCols={dims} schema={null} groups={groups}
-        onBrush={(idx) => setBrushed(idx ? idx.length : null)} onBrushQuery={setQuery}
+        rows={rows} metricCols={metricCols} paramCols={dims} schema={null} groups={groups}
+        onBrush={onBrush} onBrushQuery={setQuery}
       />
     </ChartFigure>
   );
@@ -49,7 +52,7 @@ export default function JobParallel(p: JobChartProps) {
   const color = colorChoice(p.state, p.groupable);
   const dims = useMemo(() => (p.varying.length ? p.varying : p.params).slice(0, MAX_PARAM_AXES), [p.varying, p.params]);
   const keys = useMemo(() => jobChartKeys({
-    chart: "parallel", x: "", y: p.y, color: color === "status" ? "status" : `params.${color}`, params: dims,
+    chart: "parallel", x: "", y: p.y, color: colorKey(color), params: dims,
   }), [p.y, color, dims]);
   const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary.done);
   return (

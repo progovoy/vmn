@@ -42,7 +42,12 @@ function vocabulary(summary: JobSummary, facets: ExperimentFacets | undefined) {
 export default function JobCharts({ ws, app, summary }: { ws: string; app: string; summary: JobSummary }) {
   const state = useJobChartState();
   const facets = useJobFacets(ws, app, summary.verstr, summary.done);
-  const vocab = useMemo(() => vocabulary(summary, facets.data), [summary, facets.data]);
+  // Every poll brings a new summary; the charts keep the same name lists
+  // (and so their 50k-row memos) until a name really changes.
+  const fresh = vocabulary(summary, facets.data);
+  const names = JSON.stringify(fresh);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const vocab = useMemo(() => fresh, [names]);
 
   if (facets.isPending) return <Skeleton />;
   if (!vocab.metrics.length) return <ChartEmpty text="No run of this job has logged a metric yet." />;

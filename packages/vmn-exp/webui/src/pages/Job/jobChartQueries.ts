@@ -16,6 +16,8 @@ export function useJobFacets(ws: string, app: string, v: string, done: number) {
   }, useQueryClient());
 }
 
+const COLUMNS_GC_MS = 30_000;
+
 /** Columns *keys* over the job, refetched once more of its runs are *done*. */
 export function useJobColumns(ws: string, app: string, v: string, keys: string[], done: number) {
   return useQuery({
@@ -23,6 +25,8 @@ export function useJobColumns(ws: string, app: string, v: string, keys: string[]
     queryFn: ({ signal }) => withSignal(signal, () => jobColumns(ws, app, v, keys)),
     enabled: keys.length > 0,
     placeholderData: keepPreviousData,
+    // Each `done` is a new entry of up to 50k runs: don't keep the old ones around.
+    gcTime: COLUMNS_GC_MS,
   }, useQueryClient());
 }
 

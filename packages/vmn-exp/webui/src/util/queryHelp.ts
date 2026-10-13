@@ -30,7 +30,7 @@ function median(values: number[]): number | null {
 }
 
 /** *value* as a query literal: numbers and bools bare, strings quoted. */
-function literal(value: unknown): string | null {
+export function literal(value: unknown): string | null {
   if (isFiniteNumber(value) || typeof value === "boolean") return String(value);
   return typeof value === "string" ? quoteLiteral(value) : null;
 }

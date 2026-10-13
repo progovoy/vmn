@@ -1,20 +1,19 @@
 /** Parallel-coordinates brushes as a query clause (plan 23 W4), so "show the
  *  brushed runs" opens the Runs tab filtered to exactly them. Each brushed
  *  axis is bounded by the values of the runs inside its brush, so the clause
- *  never drifts from the picture by a rounding of the axis scale. */
+ *  never drifts from the picture by a rounding of the axis scale. The query
+ *  language has no escapes: text holding both quotes gives no clause. */
 import type { ExperimentRow } from "../types";
 import { axisT, rawValue, type Axis, type Brushes } from "./parallelData";
+import { literal } from "./queryHelp";
 import { quoteLiteral } from "./searchQuery";
-
-const asString = (text: string) => quoteLiteral(text) ?? JSON.stringify(text);
+import { maxOf, minOf } from "./stats";
 
 /** `metrics.<name>` / `params.<name>`, quoted when the name is no plain identifier. */
-export function fieldPath(group: "metrics" | "params", name: string): string {
-  return /^\w+$/.test(name) ? `${group}.${name}` : `${group}.${asString(name)}`;
-}
-
-function literal(v: unknown): string {
-  return typeof v === "number" || typeof v === "boolean" ? String(v) : asString(String(v));
+export function fieldPath(group: "metrics" | "params", name: string): string | null {
+  if (/^\w+$/.test(name)) return `${group}.${name}`;
+  const quoted = quoteLiteral(name);
+  return quoted && `${group}.${quoted}`;
 }
 
 /** The raw values of the rows whose t on *axis* lies within [lo, hi]. */
@@ -28,14 +27,14 @@ function brushedValues(rows: ExperimentRow[], axis: Axis, metricCols: string[], 
   return out;
 }
 
-function axisClause(axis: Axis, values: unknown[], field: string): string {
-  if (axis.kind === "cat") return `${field} in (${[...new Set(values)].map(literal).join(", ")})`;
-  let lo = Infinity, hi = -Infinity;
-  for (const v of values as number[]) { if (v < lo) lo = v; if (v > hi) hi = v; }
-  return `${field} >= ${lo} and ${field} <= ${hi}`;
+function axisClause(axis: Axis, values: unknown[], field: string): string | null {
+  if (axis.kind === "num") return `${field} >= ${minOf(values)} and ${field} <= ${maxOf(values)}`;
+  const literals = [...new Set(values)].map(literal);
+  return literals.every((l) => l !== null) ? `${field} in (${literals.join(", ")})` : null;
 }
 
-/** The brushes as one ANDed clause; null with no brush or when one holds no run. */
+/** The brushes as one ANDed clause; null with no brush, when one holds no
+ *  run, or when a name or value can't be written as a literal. */
 export function brushQuery(
   rows: ExperimentRow[], axes: Axis[], metricCols: string[], brushes: Brushes,
 ): string | null {
@@ -45,8 +44,10 @@ export function brushQuery(
     const axis = axes[d];
     if (!axis) continue;
     const values = brushedValues(rows, axis, metricCols, Math.min(a, b), Math.max(a, b));
-    if (!values.length) return null;
-    clauses.push(axisClause(axis, values, fieldPath(metrics.has(axis.name) ? "metrics" : "params", axis.name)));
+    const field = fieldPath(metrics.has(axis.name) ? "metrics" : "params", axis.name);
+    const clause = values.length && field ? axisClause(axis, values, field) : null;
+    if (!clause) return null;
+    clauses.push(clause);
   }
   return clauses.length ? clauses.join(" and ") : null;
 }
