@@ -1,9 +1,6 @@
 /* Plan 20 C6: the attention strip above the board. */
 .attention-strip {
   display: flex;
-  width: fit-content;
-  max-width: 100%;
-  box-sizing: border-box;
   flex-wrap: wrap;
   align-items: center;
   gap: 2px 4px;

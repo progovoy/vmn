@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { plural } from "../util";
 import "./boardHead.css";
 
 /** The board's run count: matches of a filter or a partly loaded board read
@@ -11,8 +10,8 @@ export function runCountText({ loading, filtered, loaded, total, shownTop, loade
   loaded: number; total: number; shownTop: number; loadedTop: number;
 }): string {
   if (loading) return "loading runs…";
-  if (filtered || loaded < total) return shownTop !== total ? `${shownTop} of ${plural(total, "run")}` : plural(total, "run");
-  return `${plural(loadedTop, "run")}${total > loadedTop ? ` · ${total} incl. inner` : ""}`;
+  if (filtered || loaded < total) return shownTop !== total ? `${shownTop} of ${total} runs` : `${total} runs`;
+  return `${loadedTop} runs${total > loadedTop ? ` · ${total} incl. inner` : ""}`;
 }
 
 /** The leaderboard's head: the app named once, its run count beside it and
