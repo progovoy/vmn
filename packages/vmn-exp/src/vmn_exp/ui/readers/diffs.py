@@ -9,11 +9,11 @@ again), lets at most two diffs run at once, and the text is capped.
 import threading
 from types import SimpleNamespace
 
-from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.core.fold import fold_definitions, fold_log, fold_metrics, fold_values
 from vmn_exp.core.log import load_log
 from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.resolve_ref import RefError
+from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import experiment_storage
 
@@ -104,6 +104,18 @@ def _is_param_only(key, params, metric_summary):
     return key in params and key not in metric_summary
 
 
+def _is_param_key(key, sides):
+    """True when every side holding *key* holds it as a param (D2).
+
+    *sides* are ``(metrics, params, metric_summary)``; a run that never set
+    *key* has no say, so a param only one run set is still a param.
+    """
+    present = [side for side in sides if key in side[0]]
+    return bool(present) and all(
+        _is_param_only(key, params, summary) for _, params, summary in present
+    )
+
+
 def _resolve_goal(key, run_defs1, run_defs2, schema):
     """The goal of *key*: the runs' own definitions first, then the schema."""
     return (
@@ -120,10 +132,7 @@ def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None):
     for key in sorted(set(m1) | set(m2)):
         if m1.get(key) == m2.get(key):
             continue
-        is_param = (
-            _is_param_only(key, params1, ms1)
-            and _is_param_only(key, params2, ms2)
-        )
+        is_param = _is_param_key(key, ((m1, params1, ms1), (m2, params2, ms2)))
         goal = None if is_param else _resolve_goal(key, defs1, defs2, schema)
         delta[key] = {
             "from": m1.get(key),
