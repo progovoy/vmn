@@ -190,3 +190,15 @@ def test_vmn_exp_skill_says_untracked_files_is_listed_only_when_readable(capfd):
     section = _flat_section(capfd)
     assert ("`untracked_only` (untracked files only, listed in `untracked_files` "
             "when readable)") in section
+
+
+def test_vmn_exp_skill_puts_the_fleet_counts_on_the_parent_group_header(capfd):
+    # Plan 22 G1/G4: the board is flat and the counts sit on the outer run's
+    # group header (Group by parent run), not in per-row count columns.
+    assert _skill() == 0
+    out = " ".join(capfd.readouterr().out.split())
+    assert "group header" in out and "parent run" in out
+    assert "?group=parent" in out
+    assert "shows these on an outer run (a run with inner runs)" not in out
+    # The header names stuck on its own; failed no longer includes it.
+    assert "plus `stuck` ones" not in out
