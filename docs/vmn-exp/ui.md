@@ -300,6 +300,12 @@ lists the closed groups (the parent grouping's `(no parent run)` group never
 folds). Sorting orders the groups (by the aggregate) and the rows within
 them; 50 groups load per page.
 
+Below 640px, where the board is one card per run, each group's header is a
+section label above its cards that sticks to the top while you scroll them:
+the fold, the group's name (a link group's target run, linked), its status
+count, and the group's aggregate on the card metric (`0.2327 val_loss mean`).
+Its `+N more` is a button under the last card.
+
 ## Compare
 
 `.../app/<app>/compare-runs` is the one Compare page. Its tabs live in
