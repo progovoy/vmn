@@ -290,7 +290,8 @@ starts with a header row (the fold, the group's label — for a link the
 target run's `@N` name and status pill, for `same code` the code verstr with
 its base version and branch, for a field `branch = main` — and its status
 count, `16 · 2 running · 1 failed`), then up to 10 of its rows and a
-`+N more` row that loads the rest. Each metric column of a header shows the
+`+N more` row that loads the rest (a refresh keeps each group as deep as it
+was loaded). Each metric column of a header shows the
 group's aggregate (`?agg=`, default conf `experiment.ui.group_aggregate`,
 else mean; the cell title says `mean of 16`, and `(no goal)` where `best`
 falls back to the mean), plus `own 0.91` when the target run logged the

@@ -39,6 +39,13 @@ export function withGroupRows(cur: GroupedRows, page: RunGroup): GroupedRows {
   };
 }
 
-/** The most rows any loaded group holds. */
-export const deepestGroup = (data: GroupedRows | undefined) =>
-  Math.max(0, ...(data?.groups ?? []).map((g) => g.verstrs.length));
+/** `[key, offset, limit]` of each group of *next* that *prev* held more
+ *  rows of: the rows a refresh re-asks so a group keeps its depth. */
+export function deeperGroups(prev: GroupedRows | undefined, next: GroupedRows): [string, number, number][] {
+  const held = new Map((prev?.groups ?? []).map((g) => [g.key, g.verstrs.length]));
+  return next.groups.flatMap((g): [string, number, number][] => {
+    const offset = g.verstrs.length;
+    const limit = Math.min(held.get(g.key) ?? 0, g.rows_total) - offset;
+    return limit > 0 ? [[g.key, offset, limit]] : [];
+  });
+}

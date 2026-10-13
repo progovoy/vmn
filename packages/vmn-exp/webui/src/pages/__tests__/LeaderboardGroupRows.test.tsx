@@ -174,6 +174,31 @@ describe("the grouped board", () => {
     expect(screen.queryByRole("button", { name: /more$/ })).toBeNull();
   });
 
+  it("keeps each group's own depth across a refresh: the opened one whole, a sibling at its first 10", async () => {
+    const runs = (p: number, n: number) => Array.from({ length: n }, (_, i) =>
+      row(p + i + 1, { kind: "inner", parent: v(p), depth: 1 }));
+    const all: Record<string, ReturnType<typeof row>[]> = { [v(100)]: runs(100, 12), [v(200)]: runs(200, 15) };
+    const group = (key: string, rows: ReturnType<typeof row>[]): RunGroup =>
+      sweepGroup({ key, label: key, target: null, rows, rows_total: all[key].length });
+    m.experimentGroups.mockImplementation(async (_ws: string, _app: string, o: { rowsPerGroup?: number }) => ({
+      groups: Object.keys(all).map((k) => group(k, all[k].slice(0, o.rowsPerGroup ?? 10))),
+      total_groups: 2, total_rows: 27,
+    }));
+    m.experimentGroupRows.mockImplementation(async (_ws: string, _app: string, key: string, o: { offset: number; limit: number }) =>
+      group(key, all[key].slice(o.offset, o.offset + o.limit)));
+    renderBoard();
+    fireEvent.click(await screen.findByRole("button", { name: "+2 more" }));
+    expect(await screen.findByRole("link", { name: v(112) })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(m.experimentGroups).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(runLinks()).toHaveLength(22));
+    expect(screen.getByRole("link", { name: v(112) })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "+2 more" })).toBeNull();
+    expect(screen.getByRole("button", { name: "+5 more" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: v(211) })).toBeNull();
+  });
+
   it("pages groups: Load more asks for the groups after the loaded ones", async () => {
     const third = { ...noParent(), key: "x", label: "x", rows: [row(9)], rows_total: 1 };
     m.experimentGroups

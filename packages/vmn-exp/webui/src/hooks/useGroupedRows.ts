@@ -9,14 +9,12 @@ import type { HttpError } from "../http";
 import { isAbortError, withSignal } from "../requestScope";
 import { rowsPrefix, type RowsFilter } from "../queries";
 import { useShownList } from "./useShownList";
-import { cacheOf, deepestGroup, withGroupRows, withGroups } from "../util/groupedCache";
+import { cacheOf, deeperGroups, withGroupRows, withGroups } from "../util/groupedCache";
 import type { GroupedRows, MoreState } from "../util/groupItems";
 
-/** Groups per page, and the server's caps on a page and on a group's first rows. */
+/** Groups per page, and the server's cap on a page. */
 const GROUPS_PAGE = 50;
 const PAGE_MAX = 1000;
-const FIRST_ROWS = 10;
-const FIRST_ROWS_MAX = 100;
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -37,14 +35,19 @@ export function useGroupedRows(
   const query = useQuery<GroupedRows, HttpError>({
     queryKey: key,
     enabled: group !== null,
-    // A refresh asks again for as many groups and rows as are loaded.
-    queryFn: ({ signal }) => {
+    // A refresh asks again for as many groups as are loaded, each group
+    // then for as many rows as it held (its own `+N more` depth).
+    queryFn: async ({ signal }) => {
       const cur = read();
-      const deepest = deepestGroup(cur);
-      return withSignal(signal, () => api.experimentGroups(ws, app, {
+      const page = await withSignal(signal, () => api.experimentGroups(ws, app, {
         ...opts, offset: 0, limit: clamp(cur?.groups.length ?? 0, GROUPS_PAGE, PAGE_MAX),
-        rowsPerGroup: deepest > FIRST_ROWS ? Math.min(deepest, FIRST_ROWS_MAX) : undefined,
-      })).then(cacheOf);
+      }));
+      const next = cacheOf(page);
+      const deeper = await Promise.all(deeperGroups(cur, next).map(([key, offset, limit]) =>
+        withSignal(signal, () => api.experimentGroupRows(ws, app, key, {
+          ...opts, offset, limit: Math.min(limit, PAGE_MAX),
+        }))));
+      return deeper.reduce(withGroupRows, next);
     },
     placeholderData: keepPreviousData,
     structuralSharing: false,
