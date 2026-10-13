@@ -74,6 +74,29 @@ describe("the Group by menu's selected aggregate (plan 22 F9)", () => {
   });
 });
 
+describe("the keyboard focus on the selected aggregate (plan 22 F10)", () => {
+  /** The 2px ring the focused choice draws: an inset box-shadow (drawn on
+   *  the choice's tint) or an outline (drawn on the menu). */
+  function ring(d: Record<string, string>): { colour: string; inset: boolean } | null {
+    const shadow = d["box-shadow"]?.match(/^inset 0 0 0 2px (.+)$/);
+    if (shadow) return { colour: shadow[1], inset: true };
+    const outline = d.outline?.match(/^2px solid (.+)$/);
+    return outline ? { colour: outline[1], inset: false } : null;
+  }
+
+  for (const theme of ["dark", "light"] as const) {
+    it(`draws a 2px ring at 3:1 against what it sits on in the ${theme} theme`, () => {
+      const focused = decls(menuCss, `${SELECTED}:focus-visible`);
+      const r = ring(focused);
+      expect(r, "a 2px focus ring on the selected aggregate").not.toBeNull();
+      const menuBg = token("--panel-2", theme);
+      const bg = { ...decls(menuCss, SELECTED), ...focused }.background;
+      const under = r!.inset && bg ? resolve(bg, theme, menuBg) : menuBg;
+      expect(contrast(resolve(r!.colour, theme, under), under)).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
+
 describe("the phone Group by menu (plan 22 F9)", () => {
   it("opens under its trigger at any scroll: fixed at the trigger's bottom, inside the viewport", () => {
     const d = decls(media(menuCss, "(max-width: 639px)"), ".group-by-menu");
