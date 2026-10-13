@@ -18,6 +18,7 @@ import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useColumnEdits } from "../hooks/useColumnEdits";
 import { useBoardSelection } from "../hooks/useBoardSelection";
 import { useBoardGrouping } from "../hooks/useBoardGrouping";
+import { useBoardAggregate } from "../hooks/useBoardAggregate";
 import { useBoardGroupActions } from "../hooks/useBoardGroupActions";
 import { boardRows } from "../util/groupItems";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
@@ -76,7 +77,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const narrow = useMediaQuery(NARROW_QUERY);
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);
-  const grouping = useBoardGrouping(ws, app, view);
+  const groupBy = useBoardGrouping(ws, app, view);
   const status = useAppStatus(ws, app).data;
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -105,8 +106,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const keep = useMemo(() => (brush ? (r: ExperimentRow) => brush.has(r.verstr) : undefined), [brush]);
   // Every run is a row (plan 22 G1); grouped, under its group's header row.
   const data = useBoardRows(ws, app, filter, {
-    group: grouping.group, aggregateInUrl: grouping.aggregateInUrl, collapsed: view.collapsed, keep,
+    group: groupBy.group, aggregateInUrl: groupBy.aggregateInUrl, collapsed: view.collapsed, keep,
   });
+  const grouping = useBoardAggregate(groupBy, view, data);
   // The similar mode keeps the bar's tokens: the box holds its text.
   const similarQuery = combineQueries(serverQuery, statusClause(view.status));
   const similarFilter = useMemo(() => ({
@@ -116,9 +118,11 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const rows = data.rows;
 
   // Keep refreshing on our own while a run is still in flight (until paused),
-  // at the cadence its heartbeat can actually move the status at.
+  // at the cadence its heartbeat can actually move the status at. Grouped,
+  // the payload counts running rows the board has not loaded (F4).
+  const serverRunning = data.running > 0;
   const { anyRunning, heartbeatSec } = useMemo(() => {
-    let running = false;
+    let running = serverRunning;
     let fastest: number | null = null;
     for (const r of rows ?? []) {
       if (r.status === "running") running = true;
@@ -126,7 +130,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
       if (typeof hb === "number" && (fastest === null || hb < fastest)) fastest = hb;
     }
     return { anyRunning: running, heartbeatSec: fastest };
-  }, [rows]);
+  }, [rows, serverRunning]);
   const all = useMemo(() => rows ?? [], [rows]);
   const { refresh } = data;
   usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused);

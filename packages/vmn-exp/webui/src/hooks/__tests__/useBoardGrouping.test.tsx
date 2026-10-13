@@ -87,30 +87,10 @@ describe("the board's grouping (plan 22 G2, G10)", () => {
     expect(url().has("group")).toBe(false);
   });
 
-  it("aggregates by the mean unless the URL or the app's conf says otherwise", async () => {
-    const { result } = setup();
-    await waitFor(() => expect(m.config).toHaveBeenCalled());
-    expect(result.current.grouping.aggregate).toBe("mean");
-    expect(result.current.grouping.aggregateInUrl).toBeNull();
-
-    m.config.mockResolvedValue({ conf: { experiment: { ui: { group_aggregate: "median" } } }, text: "" });
-    const conf = setup();
-    await waitFor(() => expect(conf.result.current.grouping.aggregate).toBe("median"));
-    expect(conf.result.current.grouping.defaultAggregate).toBe("median");
-
-    const fromUrl = setup("/b?agg=best");
-    expect(fromUrl.result.current.grouping.aggregate).toBe("best");
-    expect(fromUrl.result.current.grouping.aggregateInUrl).toBe("best");
-  });
-
-  it("writes agg= only away from the default; a bad agg= is ignored", async () => {
-    m.config.mockResolvedValue({ conf: { experiment: { ui: { group_aggregate: "max" } } }, text: "" });
-    const { result } = setup("/b?agg=sum");
-    await waitFor(() => expect(result.current.grouping.aggregate).toBe("max"));
-    act(() => result.current.grouping.setAggregate("min"));
-    expect(url().get("agg")).toBe("min");
-    act(() => result.current.grouping.setAggregate("max"));
-    expect(url().has("agg")).toBe(false);
+  it("reads agg= from the URL and ignores a bad one (the shown aggregate is the server's, F3)", () => {
+    expect(setup("/b?agg=best").result.current.grouping.aggregateInUrl).toBe("best");
+    expect(setup("/b?agg=sum").result.current.grouping.aggregateInUrl).toBeNull();
+    expect(m.config).not.toHaveBeenCalled();
   });
 
   it("remembers closed groups in collapse=, and a new grouping opens them all", async () => {
@@ -128,7 +108,7 @@ describe("the board's grouping (plan 22 G2, G10)", () => {
   it("round-trips a grouped view through its URL", async () => {
     const { result } = setup("/b?group=tags.team&agg=median&collapse=a");
     expect(result.current.grouping.group).toBe("tags.team");
-    expect(result.current.grouping.aggregate).toBe("median");
+    expect(result.current.grouping.aggregateInUrl).toBe("median");
     expect([...result.current.view.collapsed]).toEqual(["a"]);
   });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  AGGREGATES, LINK_GROUPS, confAggregate, defaultGroup, groupFields, parseAggregate, parseGroup,
+  AGGREGATES, LINK_GROUPS, defaultGroup, groupFields, parseAggregate, parseGroup,
 } from "../groupBy";
 
 const facets = (extra = {}) => ({
@@ -54,12 +54,5 @@ describe("the Group by vocabulary (plan 22 G2)", () => {
     expect(parseAggregate("best")).toBe("best");
     expect(parseAggregate("sum")).toBeNull();
     expect(parseAggregate(null)).toBeNull();
-  });
-
-  it("takes the app's conf experiment.ui.group_aggregate, else mean", () => {
-    expect(confAggregate({ experiment: { ui: { group_aggregate: "median" } } })).toBe("median");
-    expect(confAggregate({ experiment: { ui: { group_aggregate: "sum" } } })).toBe("mean");
-    expect(confAggregate({ experiment: {} })).toBe("mean");
-    expect(confAggregate(undefined)).toBe("mean");
   });
 });
