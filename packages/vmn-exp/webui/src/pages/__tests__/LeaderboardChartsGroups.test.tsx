@@ -96,6 +96,14 @@ describe("the Charts tab on a grouped board", () => {
     expect(barColor(v(4))).toBe(NO_GROUP_COLOR);
   });
 
+  it("colours only the selected runs by group while rows are selected (F7)", async () => {
+    renderBoard(`/ws/test/app/my-app?view=bar&sel=${v(3)}&sel=${v(4)}`);
+    await waitFor(() => expect(legend()).toEqual(["sweep1", "(no parent run)1"]));
+    expect(await bars()).toHaveLength(2);
+    expect(barColor(v(3))).toBe(runColor(0));
+    expect(barColor(v(4))).toBe(NO_GROUP_COLOR);
+  });
+
   it("colours the loaded rows by their loaded groups on a server without the columns endpoint", async () => {
     m.experimentsColumns.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
     renderBoard("/ws/test/app/my-app?view=bar");
