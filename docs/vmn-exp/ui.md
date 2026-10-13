@@ -273,10 +273,13 @@ parallel-coordinates chart of the metric and the varying params.
 By default the leaderboard shows `#`, status, experiment, the metrics whose
 `goal` the schema declares (pinned after the experiment column; every metric
 when none declares one), up to six params whose values vary across the loaded
-runs (as many as fit the window), one `inner` column while an outer run is
-loaded (`5 · 4 running · 1 failed`; older views' `c:total`/`c:waiting`/
-`c:running`/`c:done`/`c:failed` keys mean it: `show=` of any shows it, `hide=`
-of all five hides it), and `when`. Note, tags, the run's
+runs (as many as fit the window), the inner-run count columns `total`,
+`waiting`, `running`, `done` and `failed` under an "Inner runs" header while
+an outer run is loaded (each turned on/off on its own with `show=`/`hide=`
+`c:total` etc.; a `c:inner` key from views saved while the counts were one
+column shows or hides all five; an incomplete sweep's total reads
+`16/20 · incomplete`; with all five hidden the experiment cell says
+`N inner`), and `when`. Note, tags, the run's
 `started`/`ended` dates and the rest come from the Columns picker. The choices
 live in the URL (`show=`/`hide=`, e.g. `show=m:train_loss`, `hide=p:seed`;
 `hide=` always hides, except that it still shows a schema-hidden metric, as

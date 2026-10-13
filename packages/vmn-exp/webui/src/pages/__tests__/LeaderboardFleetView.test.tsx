@@ -47,7 +47,7 @@ describe("Leaderboard as an outer-run management view", () => {
     expect(JSON.stringify(calls[calls.length - 1])).toContain('"idx"');
   });
 
-  it("sums an outer run's inner runs in one inner column", async () => {
+  it("shows inner-run counts per status for an outer run", async () => {
     m.experiments.mockResolvedValue(page([
       row(1, {
         kind: "outer", depth: 0, children: ["a", "b", "c", "d", "e", "f"],
@@ -57,22 +57,26 @@ describe("Leaderboard as an outer-run management view", () => {
     ]));
     renderBoard();
     await screen.findByText("0.0.1-dev.x");
-    // Plan 20 C2: one inner column instead of five counts; the dates are picker columns (D11).
+    // The dates are picker columns (plan 20 D11).
     const h = headers();
-    expect(h).toContain("inner");
-    ["total", "waiting", "running", "done", "failed", "started", "ended"].forEach((c) => expect(h).not.toContain(c));
-    const cell = document.querySelector('tbody td[data-col-id="c:inner"] [aria-hidden]')?.textContent;
-    expect(cell).toBe("6 · 2 running · 1 failed · 1 waiting · 2 done");
+    ["total", "waiting", "running", "done", "failed"].forEach((c) => expect(h).toContain(c));
+    ["started", "ended"].forEach((c) => expect(h).not.toContain(c));
+    const cell = (name: string) => document.querySelector(`tbody td[data-col="${name}"]`)?.textContent;
+    expect(cell("total")).toBe("6");
+    expect(cell("waiting")).toBe("1");
+    expect(cell("running")).toBe("2");
+    expect(cell("done")).toBe("2");
+    expect(cell("failed")).toBe("1");
   });
 
   it("lets the Columns picker hide an outer-run column", async () => {
     m.experiments.mockResolvedValue(page([row(1, { metrics: { loss: 0.3 }, kind: "outer", children: ["a"] })]));
     renderBoard();
     await screen.findByText("0.0.1-dev.x");
-    expect(headers()).toContain("inner");
+    expect(headers()).toContain("waiting");
     fireEvent.click(screen.getByRole("button", { name: /columns/i }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "inner" }));
-    await waitFor(() => expect(headers()).not.toContain("inner"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "waiting" }));
+    await waitFor(() => expect(headers()).not.toContain("waiting"));
   });
 
   it("lays rows out in normal table flow, not absolutely positioned", async () => {

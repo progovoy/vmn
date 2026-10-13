@@ -129,19 +129,19 @@ describe("leaderboard column reordering", () => {
 
   it("moves a column in front of the header it is dropped on, header and cells alike", async () => {
     await board();
-    drag("c:started", "c:inner");
-    await waitFor(() => expect(headers().indexOf("c:started")).toBe(headers().indexOf("c:inner") - 1));
+    drag("c:started", "c:total");
+    await waitFor(() => expect(headers().indexOf("c:started")).toBe(headers().indexOf("c:total") - 1));
     const cells = [...document.querySelectorAll("tbody tr.row td")].map((td) => (td as HTMLElement).dataset.colId);
     expect(cells).toEqual(headers());
   });
 
   it("keeps the new order across reloads", async () => {
     const { unmount } = await board();
-    drag("c:ended", "c:inner");
-    await waitFor(() => expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:inner") - 1));
+    drag("c:ended", "c:total");
+    await waitFor(() => expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:total") - 1));
     unmount();
     await board();
-    expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:inner") - 1);
+    expect(headers().indexOf("c:ended")).toBe(headers().indexOf("c:total") - 1);
   });
 
   it("leaves the pinned columns (check, #, status, experiment) where they are", async () => {
@@ -155,7 +155,7 @@ describe("leaderboard column reordering", () => {
   it("resets widths and order from the toolbar", async () => {
     await board();
     const defaults = headers();
-    drag("c:ended", "c:inner");
+    drag("c:ended", "c:total");
     await waitFor(() => expect(headers()).not.toEqual(defaults));
     fireEvent.click(screen.getByRole("button", { name: /reset columns/i }));
     await waitFor(() => expect(headers()).toEqual(defaults));

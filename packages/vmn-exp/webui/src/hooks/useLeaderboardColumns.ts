@@ -12,7 +12,7 @@ import { EMPTY_PREFS, type ColumnPrefs } from "./useColumnPrefs";
 import type { SuggestFacets } from "../util/querySuggest";
 import { NO_PINS, orderedKeys } from "../util/columnOrder";
 import { schemaHides } from "../util/hiddenMetrics";
-import { anyOuter, innerVisible, isInnerRunId } from "../pages/innerRunColumns";
+import { anyOuter, countVisible, isInnerRunId } from "../pages/innerRunColumns";
 
 /** *value*, or the previous one when structurally equal — so a poll that
  *  moves no column best leaves every memoized row alone. */
@@ -45,7 +45,7 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
  *  Defaults (plan 20 D11): the declared-goal metrics (every metric when no
  *  goal is declared; `show=`/`hide=` override), up to six
  *  params whose values vary across the rows (as many as fit *fill*; `show=`/
- *  `hide=` override), the inner column while an outer run is loaded, then
+ *  `hide=` override), the inner-run counts while an outer run is loaded, then
  *  `when`. Note, tags and the start/end dates need `show=`.
  *
  *  `order` and `pinned` come from URL params `col=` and `pin=` (as stable
@@ -64,8 +64,8 @@ export function useLeaderboardColumns(
   prefs: ColumnPrefs = EMPTY_PREFS,
   /** Width (px) the table has to fill. */
   fill = 0,
-  /** Columns the user turned on (`show=`): metrics, params, note, dates and the inner
-   *  column (otherwise shown only while an outer run is on the board). */
+  /** Columns the user turned on (`show=`): metrics, params, note, dates and the
+   *  inner-run counts (otherwise shown only while an outer run is on the board). */
   shown: ReadonlySet<string> = EMPTY_SET,
 ) {
   const list = rows ?? [];
@@ -107,7 +107,7 @@ export function useLeaderboardColumns(
   const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => {
     const id = `c:${c}`;
     if (!isInnerRunId(id)) return shown.has(id);
-    return innerVisible(shown, hidden, hasOuter);
+    return countVisible(id, shown, hidden, hasOuter);
   }), [hidden, shown, hasOuter]);
   const hasTags = useMemo(() => anyTags(rows), [rows]);
   const showTags = hasTags && shown.has(TAGS_COLUMN);

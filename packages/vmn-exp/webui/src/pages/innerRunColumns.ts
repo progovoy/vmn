@@ -1,63 +1,70 @@
-/** The leaderboard's inner column: one cell per outer run summing its inner
- *  runs (`5 · 4 running · 1 failed`), shown while an outer run is loaded. */
+/** The leaderboard's inner-run count columns: which they are, when they
+ *  show, the header group over them, and what their cells say. */
 import type { ExperimentRow } from "../types";
 import { sweepIncompleteLabel, sweepIncompleteSpoken } from "../util/sweepProgress";
 import { fleetCounts } from "./leaderboardColumns";
 
-/** The column's id (the `show=`/`hide=` key). */
-export const INNER_COLUMN = "c:inner";
-export const isInnerRunId = (id: string) => id === INNER_COLUMN;
+/** The fleet columns that count an outer run's inner runs (the dates aren't). */
+export const INNER_RUN_COLS = ["total", "waiting", "running", "done", "failed"] as const;
+export type InnerRunCol = (typeof INNER_RUN_COLS)[number];
 
-/** The five count columns the inner column replaced (plan 20 C2), still in
- *  older saved views and links. */
-const LEGACY_COUNTS = ["c:total", "c:waiting", "c:running", "c:done", "c:failed"];
+const INNER_IDS = new Set<string>(INNER_RUN_COLS.map((c) => `c:${c}`));
+export const isInnerRunId = (id: string) => INNER_IDS.has(id);
 
-/** Whether the inner column shows: its own `show=`/`hide=` entry wins, then
- *  an old count's (`show=` of any, `hide=` of every one), then outer rows. */
-export function innerVisible(shown: ReadonlySet<string>, hidden: ReadonlySet<string>, hasOuter: boolean) {
-  if (shown.has(INNER_COLUMN)) return true;
-  if (hidden.has(INNER_COLUMN)) return false;
-  if (LEGACY_COUNTS.some((k) => shown.has(k))) return true;
-  return hasOuter && !LEGACY_COUNTS.every((k) => hidden.has(k));
+/** The one inner column the counts were merged into for a while (plan 20
+ *  C2, reverted): links and views saved then use it for all five. */
+const MERGED_INNER = "c:inner";
+
+/** Whether count column *id* shows: its own `show=`/`hide=` wins, then
+ *  `c:inner`'s, then whether an outer run is loaded. */
+export function countVisible(id: string, shown: ReadonlySet<string>, hidden: ReadonlySet<string>, hasOuter: boolean) {
+  if (shown.has(id)) return true;
+  if (hidden.has(id)) return false;
+  if (shown.has(MERGED_INNER)) return true;
+  if (hidden.has(MERGED_INNER)) return false;
+  return hasOuter;
 }
 
+export const INNER_RUNS_LABEL = "Inner runs";
 export const INNER_RUNS_HELP = "Counts of this run's inner runs (sweep trials, fleet pods)";
 
-/** Whether any loaded row is an outer run — the column's default. */
+/** Whether any loaded row is an outer run — the count columns' default. */
 export const anyOuter = (rows: readonly ExperimentRow[] | undefined) =>
   Boolean(rows?.some((r) => r.kind === "outer"));
 
-/** The states the cell names, in the order it names them. */
-const STATES = ["running", "failed", "waiting", "done"] as const;
-export type InnerState = (typeof STATES)[number];
-
-export interface InnerRunSummary {
-  total: number;
-  /** The states with at least one run. */
-  parts: { state: InnerState; count: number; text: string }[];
-  /** What the cell shows: `5 · 4 running · 1 failed`. */
-  text: string;
-  /** An incomplete sweep's `16/20 · incomplete` (then the whole text), else null. */
-  incomplete: string | null;
-  /** What a screen reader says: `5 inner runs, 4 running, 1 failed`. */
-  label: string;
+/** One cell of the group row: *span* columns from *start*. */
+export interface HeadGroup {
+  start: number;
+  span: number;
+  /** True for a block of adjacent count columns. */
+  inner: boolean;
 }
 
-/** The inner cell of *r*; null for a run without inner runs. */
-export function innerRunSummary(r: ExperimentRow): InnerRunSummary | null {
+/** The group row over *ids*: one cell per contiguous block of count columns
+ *  (a block dragged apart gets a label of its own), one per other column
+ *  (a windowed table's gap columns too); null when no count column is shown. */
+export function headGroups(ids: readonly string[]): HeadGroup[] | null {
+  const out: HeadGroup[] = [];
+  ids.forEach((id, i) => {
+    const inner = isInnerRunId(id);
+    const last = out[out.length - 1];
+    if (inner && last?.inner) last.span += 1;
+    else out.push({ start: i, span: 1, inner });
+  });
+  return out.some((g) => g.inner) ? out : null;
+}
+
+/** What a count cell shows: the count for an outer run, nothing otherwise. */
+export function innerRunCount(r: ExperimentRow, col: string): string {
   const counts = fleetCounts(r);
-  if (!counts) return null;
-  const parts = STATES.filter((s) => counts[s] > 0)
-    .map((state) => ({ state, count: counts[state], text: `${counts[state]} ${state}` }));
-  const runs = `${counts.total} inner run${counts.total === 1 ? "" : "s"}`;
-  const incomplete = sweepIncompleteLabel(r);
-  if (incomplete) {
-    // Every trial finished: the planned size is all the cell has to add.
-    return { total: counts.total, parts: [], incomplete, text: incomplete, label: `${runs}, ${sweepIncompleteSpoken(r)}` };
-  }
-  return {
-    total: counts.total, parts, incomplete,
-    text: [String(counts.total), ...parts.map((p) => p.text)].join(" · "),
-    label: [runs, ...parts.map((p) => p.text)].join(", "),
-  };
+  return counts && col in counts ? String(counts[col as InnerRunCol]) : "";
+}
+
+/** The total cell of an incomplete sweep (plan 20 A7): `16/20 · incomplete`
+ *  and what a screen reader says for it; null for any other run. */
+export function innerTotal(r: ExperimentRow): { text: string; label: string } | null {
+  const text = sweepIncompleteLabel(r);
+  if (!text) return null;
+  const total = fleetCounts(r)?.total ?? 0;
+  return { text, label: `${total} inner run${total === 1 ? "" : "s"}, ${sweepIncompleteSpoken(r)}` };
 }

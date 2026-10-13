@@ -9,8 +9,8 @@ import { sweepIncompleteLabel } from "../util/sweepProgress";
 import {
   DATE_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
-import InnerCell from "./InnerCell";
-import { INNER_COLUMN, isInnerRunId } from "./innerRunColumns";
+import { innerRunCount, innerTotal, isInnerRunId } from "./innerRunColumns";
+import "./innerRunColumns.css";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
@@ -67,10 +67,23 @@ function MetricCell({ id, v, col, style, showBest }: {
 const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const shortDate = (iso: string | null | undefined) => (iso ? SHORT_DATE.format(new Date(iso)) : "—");
 
+/** The total cell of an incomplete sweep: `16/20 · incomplete`, read out
+ *  as a sentence. */
+function IncompleteTotalCell({ text, label, style }: { text: string; label: string; style: CSSProperties }) {
+  return (
+    <td data-col="total" data-col-id="c:total" className="num fleet-cell fleet-total incomplete" style={style} title={label}>
+      <span aria-hidden="true">{text}</span>
+      <span className="sr-only">{label}</span>
+    </td>
+  );
+}
+
 function FleetCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProperties }) {
   const field = DATE_SORT_OF[`c:${c}`];
   const date = field ? r[field] : undefined;
-  const text = date !== undefined ? shortDate(date) : "";
+  const incomplete = c === "total" ? innerTotal(r) : null;
+  if (incomplete) return <IncompleteTotalCell {...incomplete} style={style} />;
+  const text = date !== undefined ? shortDate(date) : innerRunCount(r, c);
   return (
     <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={date ?? undefined}>
       {text}
@@ -116,7 +129,7 @@ export function FoldToggle({ r, collapsed, onFold }: {
 
 function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold, innerShown }: {
   r: ExperimentRow; href: string; style: CSSProperties; onPrefetch: (verstr: string) => void;
-  /** The inner column counts the inner runs, so this cell doesn't. */
+  /** A count column counts the inner runs, so this cell doesn't. */
   innerShown: boolean;
   /** Null for a run without inner runs. */
   collapsed: boolean | null;
@@ -189,6 +202,8 @@ function Row({
   const { styles, colMeta } = layout;
   const href = runHref(layout.runBase, r.verstr);
   const ids = layoutIds(layout);
+  // From the fleet columns, not *ids*: a windowed row leaves out the ones scrolled away.
+  const innerShown = Boolean(layout.fleetCols?.some((c) => isInnerRunId(`c:${c}`)));
   const params = layout.paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the
   // link opens a tab); anywhere else on the row opens the run.
@@ -229,7 +244,7 @@ function Row({
         return (
           <ExperimentCell
             key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} collapsed={collapsed} onFold={onFold}
-            innerShown={ids.includes(INNER_COLUMN)}
+            innerShown={innerShown}
           />
         );
       case "c:tags":
@@ -246,7 +261,6 @@ function Row({
         );
     }
     if (isGapId(id)) return <td key={id} aria-hidden style={style} />;
-    if (isInnerRunId(id)) return <InnerCell key={id} r={r} style={style} />;
     if (id.startsWith("c:")) return <FleetCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (

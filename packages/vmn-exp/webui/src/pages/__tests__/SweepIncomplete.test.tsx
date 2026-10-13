@@ -1,6 +1,6 @@
 /** Plan 20 A7/D12: a sweep whose trials all finished but number fewer than
  *  planned reads `16/20 · incomplete` — on the run page (status line and
- *  Fleet card), in the leaderboard row (inner cell, else the experiment cell)
+ *  Fleet card), in the leaderboard row (total cell, else the experiment cell)
  *  and on a mobile card. A complete sweep and other runs are unchanged. */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
@@ -136,17 +136,17 @@ describe("the run page of a sweep", () => {
 });
 
 describe("the leaderboard row of a sweep", () => {
-  it("reads 16/20 · incomplete in the inner cell, every trial being finished", async () => {
+  it("reads 16/20 · incomplete in the total cell, every trial being finished", async () => {
     serve([sweepRow(16), row(1)]);
     renderBoard();
     await screen.findByText("0.0.2-dev.x");
-    const inner = rowOf("0.0.2-dev.x").querySelector('td[data-col-id="c:inner"]') as HTMLElement;
+    const inner = rowOf("0.0.2-dev.x").querySelector('td[data-col-id="c:total"]') as HTMLElement;
     expect(inner.querySelector("[aria-hidden]")?.textContent).toBe(LABEL);
     expect(inner.querySelector(".sr-only")?.textContent).toBe("16 inner runs, 16 of 20 planned trials, incomplete");
     expect(rowOf("0.0.2-dev.x").querySelector(".exp-cell")?.textContent).not.toContain("incomplete");
   });
 
-  it("shows it in the experiment cell when the inner column is hidden", async () => {
+  it("shows it in the experiment cell when the count columns are hidden", async () => {
     serve([sweepRow(16), row(1)]);
     renderBoard("/ws/test/app/my-app?hide=c:inner");
     await screen.findByText("0.0.2-dev.x");

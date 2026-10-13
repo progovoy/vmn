@@ -6,7 +6,7 @@ import { finiteNumbers, maxOf, minOf } from "../util/stats";
 /** Default column widths (px) under `table-layout: fixed`, so a long value
  *  is clipped with an ellipsis instead of stretching its column. */
 const W = {
-  check: 34, idx: 56, status: 110, experiment: 240, fleet: 76, inner: 150, date: 150,
+  check: 34, idx: 56, status: 110, experiment: 240, fleet: 76, date: 150,
   metric: 110, param: 120, tags: 180, note: 200, when: 90,
 };
 /** Narrowest the experiment column gets when it shrinks to fit the table. */
@@ -15,8 +15,8 @@ const MIN_EXPERIMENT_WIDTH = 200;
 export const MIN_COL_WIDTH = 40;
 
 /** The outer-run management columns, right after the experiment column:
- *  the inner-run summary and the run's own start/end. */
-export const FLEET_COLS = ["inner", "started", "ended"] as const;
+ *  the inner-run tally and the run's own start/end. */
+export const FLEET_COLS = ["total", "waiting", "running", "done", "failed", "started", "ended"] as const;
 export type FleetCol = (typeof FLEET_COLS)[number];
 
 /** The server sort key behind each sortable date column. */
@@ -25,9 +25,7 @@ export const DATE_SORT_OF: Readonly<Record<string, "started_at" | "finished_at">
 };
 
 /** Inner runs of *r* per management column (null: not an outer run). */
-export function fleetCounts(
-  r: ExperimentRow,
-): Record<"total" | "waiting" | "running" | "done" | "failed", number> | null {
+export function fleetCounts(r: ExperimentRow): Record<Exclude<FleetCol, "started" | "ended">, number> | null {
   if (!r.children?.length) return null;
   const c = r.child_counts ?? {};
   const n = (k: string) => c[k] ?? 0;
@@ -95,7 +93,6 @@ export function columnLayout(cells: readonly ColumnCell[], tags = false): Column
 export function defaultWidth(id: string): number {
   if (id in DATE_SORT_OF) return W.date;
   if (id === "c:tags") return W.tags;
-  if (id === "c:inner") return W.inner;
   const prefix = id.slice(0, 2);
   if (prefix === "c:") return W.fleet;
   if (prefix === "m:") return W.metric;

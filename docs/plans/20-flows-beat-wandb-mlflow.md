@@ -167,7 +167,8 @@ button shows instead. `LiveToggle` goes away.
 
 The rest comes from the column picker; user prefs (`useColumnPrefs`) still win. Inner
 runs collapse into one `inner` cell (`5 · 4 running · 1 failed`), shown only when an
-outer row is loaded.
+outer row is loaded. *(2026-10-13: the user reverted this to the five per-state count
+columns — total/waiting/running/done/failed under an "Inner runs" header group — see C2.)*
 
 **D12. An outer run's headline is its tree.** An outer run that never ran (no run
 state: own status `created`) is a container, and its own `created` is left out of its
@@ -357,6 +358,12 @@ screen readers.
 (`5 · 4 running · 1 failed`, colour-coded with text). The header group goes away.
 - Tests: absent without outer rows; the counts' text; screen readers read "5 inner
   runs, 4 running, 1 failed".
+- *Reverted by the user on 2026-10-13:* the single inner cell went back to the five
+  per-state count columns (`c:total`/`c:waiting`/`c:running`/`c:done`/`c:failed`, the
+  "Inner runs" header group, shown while an outer row is loaded, `show=`/`hide=` per
+  column). A `c:inner` key in links saved meanwhile maps to all five; the A7
+  `16/20 · incomplete` label sits in the total cell; the experiment cell says `N inner`
+  only when all five are hidden; mobile cards keep their `N inner` summary.
 
 **C3. Keyboard and screen-reader sorting.** `LeaderboardHead`: a `<button>` inside each
 sortable `th`, `aria-sort` on the `th`, visible focus ring. Drag/resize stay

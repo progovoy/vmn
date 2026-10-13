@@ -1,12 +1,13 @@
 /** The leaderboard's header row: sorting (a button per sortable column,
  *  `aria-sort` on its cell), column drag/resize, the column menu (their
  *  keyboard equivalents) and the select-all checkbox. */
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useId, useState, type CSSProperties, type ReactNode } from "react";
 import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isGapId, isPinned } from "./leaderboardColumns";
 import ColumnMenu, { type MenuAction } from "./ColumnMenu";
 import { ARIA_SORT, HeaderCheckbox, ResizeGrip, SortButton, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, type RowLayout } from "./LeaderboardRow";
-import { INNER_RUNS_HELP, isInnerRunId } from "./innerRunColumns";
+import HeadGroups, { GROUP_ROW_HEIGHT } from "./LeaderboardHeadGroups";
+import { headGroups, isInnerRunId } from "./innerRunColumns";
 
 export const TIMESTAMP_SORT = "timestamp";
 export const IDX_SORT = "idx";
@@ -40,11 +41,11 @@ export interface SortState {
  *  body style already has `position: "sticky"` (experiment + pinned metric/
  *  param columns) sit at zIndex 3 so they aren't overlapped by other headers
  *  when both axes scroll simultaneously. */
-function headStyle(style: CSSProperties, index: number): CSSProperties {
+function headStyle(style: CSSProperties, index: number, top = 0): CSSProperties {
   const base: CSSProperties = {
     ...style,
     position: "sticky",
-    top: 0,
+    top,
     zIndex: 2,
     background: STICKY_BG,
   };
@@ -74,13 +75,12 @@ function headInfo(id: string, layout: RowLayout): { label: ReactNode; sort: stri
   if (id === "check") return { label: "", sort: null };
   if (id === "c:tags") return { label: "tags", sort: null };
   if (id === "c:comments") return { label: "comments", sort: null };
-  if (isInnerRunId(id)) return { label: "inner", sort: null, title: INNER_RUNS_HELP };
   return { label: id.includes(":") ? name : id, sort: null };
 }
 
 const HEAD_CLASS: Record<string, string> = {
   check: "check-cell", idx: "num", status: "status-col-head", experiment: "exp-head", when: "num when-head",
-  "c:tags": "", "c:comments": "", "c:inner": "inner-head",
+  "c:tags": "", "c:comments": "",
 };
 const plainName = (id: string) => (id === "idx" ? "#" : id.includes(":") ? id.slice(2) : id);
 const hideable = (id: string) => /^[mpc]:/.test(id);
@@ -117,13 +117,17 @@ export default function Head({ layout, sort: s, edits, check }: {
   check?: HeaderCheckProps;
 }) {
   const ids = layoutIds(layout);
-  const headStyles = layout.styles.map((st, i) => headStyle(st, i));
+  const groups = headGroups(ids);
+  const helpId = useId();
+  const top = groups ? GROUP_ROW_HEIGHT : 0;
+  const headStyles = layout.styles.map((st, i) => headStyle(st, i, top));
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   const ariaSort = (col: string) => (s.sort === col && s.order ? ARIA_SORT[s.order] : "none");
   return (
     <thead>
+      {groups && <HeadGroups groups={groups} styles={layout.styles} helpId={helpId} />}
       <tr>
         {ids.map((id, i) => {
           if (isGapId(id)) return <th key={id} aria-hidden style={headStyles[i]} />;
@@ -139,6 +143,7 @@ export default function Head({ layout, sort: s, edits, check }: {
               key={id} data-col-id={id} style={headStyles[i]} className={cls || undefined}
               title={sort ? undefined : title}
               aria-sort={sort ? ariaSort(sort) : undefined}
+              aria-describedby={isInnerRunId(id) ? helpId : undefined}
               onClick={sort ? () => s.onSort(sort) : undefined}
               draggable={movable}
               onDragStart={movable ? (e) => {

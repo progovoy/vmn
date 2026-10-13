@@ -134,10 +134,18 @@ describe("fitting the table (F2)", () => {
     expect(wide).toBeGreaterThanOrEqual(narrow);
   });
 
-  it("still fits at 1280px when an outer run adds the inner column", () => {
+  // The five count columns (the user's revert of plan 20 C2, 2026-10-13) no
+  // longer fit at 1280px beside the goal metrics: the table scrolls, the
+  // goal metrics stay pinned in view and the default params make room.
+  it("keeps the goal metrics in view at 1280px when an outer run adds the inner-run count columns", () => {
     const rows = [...ROWS, { ...row(3, { val_loss: 0.3 }), kind: "outer" as const, children: ["x"] }];
     const c = columns({ rows, fill: AT_1280 });
-    expect(ids(c)).toContain("c:inner");
-    expect(c.layout.total).toBeLessThanOrEqual(AT_1280);
+    ["c:total", "c:waiting", "c:running", "c:done", "c:failed"].forEach((id) => expect(ids(c)).toContain(id));
+    for (const m of ["m:val_loss", "m:val_acc"]) {
+      const i = ids(c).indexOf(m);
+      expect(c.layout.styles[i].position).toBe("sticky");
+      expect(Number(c.layout.styles[i].left) + c.layout.widths![i]).toBeLessThanOrEqual(AT_1280);
+    }
+    expect(c.visibleParams).toEqual([]);
   });
 });
