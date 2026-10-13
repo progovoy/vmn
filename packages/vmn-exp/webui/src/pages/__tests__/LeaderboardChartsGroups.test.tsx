@@ -44,11 +44,12 @@ const LONE = row(4, { metrics: { loss: 0.5 } });
 const sweep = (): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: null, metrics: {} },
-  counts, aggregates: {}, rows: INNER, rows_total: 2, rows_unfiltered: 2,
+  loose: false, counts, aggregates: {}, rows: INNER, rows_total: 2, rows_unfiltered: 2,
 });
-const noParent = (): RunGroup => ({
-  key: NONE_GROUP, label: "(no parent run)", target: null, counts, aggregates: {}, rows: [OUTER, LONE], rows_total: 2,
-  rows_unfiltered: 2,
+// The runs with no parent that head no group (plan 22 F12).
+const loose = (): RunGroup => ({
+  key: NONE_GROUP, label: "(none)", target: null, loose: true, counts, aggregates: {}, rows: [LONE], rows_total: 1,
+  rows_unfiltered: 1,
 });
 const facets = (parented: number) => ({
   branches: ["main"], metric_keys: ["loss"], param_keys: [], tag_keys: [], param_values: {}, parented, total: 6,
@@ -78,16 +79,16 @@ beforeEach(() => {
   m.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
   m.config.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
   m.facets.mockResolvedValue(facets(2));
-  m.experimentGroups.mockResolvedValue({ groups: [sweep(), noParent()], total_groups: 3, total_rows: 6 });
+  m.experimentGroups.mockResolvedValue({ groups: [sweep(), loose()], total_groups: 3, total_rows: 6 });
   m.experiments.mockResolvedValue(page([OUTER, ...INNER, LONE], 6));
   m.experimentsPaged.mockResolvedValue({ rows: [OUTER, ...INNER, LONE], total: 6 });
   m.experimentsColumns.mockResolvedValue(columns);
 });
 
 describe("the Charts tab on a grouped board", () => {
-  it("asks for each run's group and colours every charted run by it, the board's groups first", async () => {
+  it("asks for each run's group and colours every charted run by it, the board's groups first, runs of none grey", async () => {
     renderBoard("/ws/test/app/my-app?view=bar");
-    await waitFor(() => expect(legend()).toEqual(["sweep2", `${v(7)}1`, "(no parent run)2"]));
+    await waitFor(() => expect(legend()).toEqual(["sweep2", `${v(7)}1`]));
     expect(m.experimentsColumns).toHaveBeenCalledWith(
       "test", "my-app", ["metrics.loss", "group:parent"], expect.objectContaining({ sort: "idx" }),
     );
@@ -99,7 +100,7 @@ describe("the Charts tab on a grouped board", () => {
 
   it("colours only the selected runs by group while rows are selected (F7)", async () => {
     renderBoard(`/ws/test/app/my-app?view=bar&sel=${v(3)}&sel=${v(4)}`);
-    await waitFor(() => expect(legend()).toEqual(["sweep1", "(no parent run)1"]));
+    await waitFor(() => expect(legend()).toEqual(["sweep1"]));
     expect(await bars()).toHaveLength(2);
     expect(barColor(v(3))).toBe(runColor(0));
     expect(barColor(v(4))).toBe(NO_GROUP_COLOR);
@@ -108,10 +109,10 @@ describe("the Charts tab on a grouped board", () => {
   it("colours the loaded rows by their loaded groups on a server without the columns endpoint", async () => {
     m.experimentsColumns.mockRejectedValue(Object.assign(new Error("nf"), { status: 404 }));
     renderBoard("/ws/test/app/my-app?view=bar");
-    await waitFor(() => expect(legend()).toEqual(["sweep2", "(no parent run)2"]));
+    await waitFor(() => expect(legend()).toEqual(["sweep2"]));
     await bars();
     expect(barColor(v(3))).toBe(runColor(0));
-    expect(barColor(v(1))).toBe(NO_GROUP_COLOR);
+    expect(barColor(v(4))).toBe(NO_GROUP_COLOR);
   });
 
   it("keeps the usual colours, and asks for no group, on an ungrouped board", async () => {

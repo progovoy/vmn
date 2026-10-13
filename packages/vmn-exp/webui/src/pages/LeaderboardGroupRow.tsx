@@ -60,15 +60,13 @@ function Label({ item, layout, first, onFold }: {
   return (
     <div className="group-head">
       <div className="nest">
-        {item.foldable && (
-          <button
-            className="fold-toggle" aria-expanded={item.open}
-            aria-label={`${item.open ? "Collapse" : "Expand"} group ${name}`}
-            onClick={() => onFold(group.key)}
-          >
-            <Icon name={item.open ? "chevron-down" : "chevron-right"} size={14} />
-          </button>
-        )}
+        <button
+          className="fold-toggle" aria-expanded={item.open}
+          aria-label={`${item.open ? "Collapse" : "Expand"} group ${name}`}
+          onClick={() => onFold(group.key)}
+        >
+          <Icon name={item.open ? "chevron-down" : "chevron-right"} size={14} />
+        </button>
         {t ? (
           <Link className={`group-label run-link${t.name ? " run-name" : " mono"}`} to={runHref(layout.runBase, t.verstr)} title={t.verstr}>
             {name}
@@ -77,7 +75,7 @@ function Label({ item, layout, first, onFold }: {
           <span className={`group-label${code ? " mono" : ""}`} title={group.label}>{group.label}</span>
         )}
       </div>
-      <div className={`group-sub${item.foldable ? " under-fold" : ""}`} title={groupCountsText(group)}>
+      <div className="group-sub" title={groupCountsText(group)}>
         <GroupCountParts group={group} sizeOnly={sizeOnly} />
         {code && <span className="group-code"> · {first.base_version} · {first.branch}</span>}
         <span className="sr-only">{groupSpoken(group)}</span>

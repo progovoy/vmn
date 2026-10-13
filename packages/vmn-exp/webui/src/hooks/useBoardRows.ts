@@ -23,7 +23,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
   const data = groups.data;
 
   const items = useMemo<BoardItem[] | undefined>(() => {
-    if (grouped) return data && groupItems(data, group, collapsed, groups.more, keep);
+    if (grouped) return data && groupItems(data, collapsed, groups.more, keep);
     return flat.rows && (keep ? flat.rows.filter(keep) : flat.rows);
   }, [grouped, data, group, collapsed, groups.more, keep, flat.rows]);
 

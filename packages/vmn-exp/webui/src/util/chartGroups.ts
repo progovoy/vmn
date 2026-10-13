@@ -8,10 +8,12 @@ import type { BoardGroup } from "./groupItems";
 
 /** The columns key carrying a run's group key on the board grouped by *field*. */
 export const groupColumn = (field: string) => `group:${field}`;
-/** The runs with no value (`(none)`, `(no parent run)`). */
+/** The runs of no group: a field's `(none)`, a link grouping's runs with no link. */
 export const NO_GROUP_COLOR = "var(--text-3)";
 
 const TARGET_LINKS = new Set(["parent", "forked_from", "rerun_of", "code_verstr"]);
+/** Groupings whose runs with no link are no group (plan 22 F12): no legend entry. */
+const LOOSE_LINKS = new Set(["parent", "forked_from", "rerun_of"]);
 
 export interface ChartGroup {
   key: string;
@@ -24,7 +26,8 @@ export interface ChartGroup {
 export interface ChartGroups {
   /** verstr -> colour; a run of no known group has none. */
   colorOf: ReadonlyMap<string, string>;
-  /** The groups with a charted run, in colour order, the no-value group last. */
+  /** The groups with a charted run, in colour order, the no-value group last
+   *  (none for a link grouping, F12). */
   legend: ChartGroup[];
 }
 
@@ -32,7 +35,7 @@ export interface ChartGroups {
  *  loaded, its label as the server would give it. */
 function labelOf(key: string, field: string, loaded: BoardGroup | undefined): string {
   if (loaded) return loaded.target?.name || loaded.label;
-  if (key === NONE_GROUP) return field === "parent" ? "(no parent run)" : "(none)";
+  if (key === NONE_GROUP) return "(none)";
   const text = groupKeyText(key);
   return TARGET_LINKS.has(field) ? text : `${field} = ${text}`;
 }
@@ -51,12 +54,12 @@ export function chartGroups(
   const loaded = new Map(groups.map((g) => [g.key, g]));
   const order = [...groups.map((g) => g.key), ...count.keys()]
     .filter((k, i, all) => count.has(k) && k !== NONE_GROUP && all.indexOf(k) === i);
-  if (count.has(NONE_GROUP)) order.push(NONE_GROUP);
+  if (count.has(NONE_GROUP) && !LOOSE_LINKS.has(field)) order.push(NONE_GROUP);
   const legend = order.map((key, i) => ({
     key, label: labelOf(key, field, loaded.get(key)), count: count.get(key)!,
     color: key === NONE_GROUP ? NO_GROUP_COLOR : runColor(i),
   }));
-  const colorByKey = new Map(legend.map((e) => [e.key, e.color]));
+  const colorByKey = new Map<string, string>([[NONE_GROUP, NO_GROUP_COLOR], ...legend.map((e) => [e.key, e.color] as const)]);
   const colorOf = new Map<string, string>();
   for (const r of rows) {
     const key = keyOf.get(r.verstr);

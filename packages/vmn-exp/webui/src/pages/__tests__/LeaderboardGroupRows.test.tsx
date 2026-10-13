@@ -52,13 +52,16 @@ function sweepGroup(extra: Partial<RunGroup> = {}): RunGroup {
     key: v(1), label: v(1),
     target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "failed", metrics: { loss: 0.91 } },
     counts: counts(), aggregates: { loss: agg(0.3), acc: agg(0.8, { best: null }) }, rows: INNER, rows_total: 2,
-    rows_unfiltered: (extra.counts ?? counts()).total, ...extra,
+    rows_unfiltered: (extra.counts ?? counts()).total, loose: false, ...extra,
   };
 }
-const noParent = (): RunGroup => ({
-  key: NONE_GROUP, label: "(no parent run)", target: null, counts: counts({ total: 2, running: 0, failed: 0 }),
-  aggregates: {}, rows: [OUTER, LONE], rows_total: 2, rows_unfiltered: 2,
+// The runs with no parent that head no group (plan 22 F12): the sweep's run is its header.
+const loose = (): RunGroup => ({
+  key: NONE_GROUP, label: "(none)", target: null, loose: true, counts: counts({ total: 1, running: 0, failed: 0 }),
+  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1,
 });
+// A group that is not loose, built on *base*'s fields.
+const plain = (base: RunGroup, extra: Partial<RunGroup>): RunGroup => ({ ...base, loose: false, ...extra });
 const grouped = (groups: RunGroup[]) => ({ groups, total_groups: groups.length, total_rows: 4 });
 const headerRows = () => [...document.querySelectorAll("tbody tr.group-row")] as HTMLElement[];
 const header = (text: string) => headerRows().find((r) => r.textContent?.includes(text)) as HTMLElement;
@@ -73,7 +76,7 @@ beforeEach(() => {
   m.experiment.mockResolvedValue({ metadata: { verstr: "x" }, metrics: {}, series: {}, patches: {} });
   m.experiments.mockResolvedValue(page([OUTER, ...INNER, LONE]));
   m.facets.mockResolvedValue(facets(2));
-  m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), noParent()]));
+  m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), loose()]));
 });
 
 describe("the flat board (group=none)", () => {
@@ -93,7 +96,7 @@ describe("the flat board (group=none)", () => {
 describe("the grouped board", () => {
   it("asks for the groups once the facets say runs have a parent, leaving agg to the server", async () => {
     renderBoard();
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     expect(m.experiments).not.toHaveBeenCalled();
     expect(m.experimentGroups).toHaveBeenCalledTimes(1);
     const opts = m.experimentGroups.mock.calls[0][2];
@@ -103,7 +106,7 @@ describe("the grouped board", () => {
 
   it("heads a link group with its target run: a link, its tree status and the counts in words", async () => {
     renderBoard();
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     const h = header("sweep");
     expect(within(h).getByRole("link", { name: "sweep" })).toHaveAttribute("href", `/ws/test/app/my-app/run/${v(1)}`);
     expect(h.querySelector('td[data-col-id="idx"]')?.textContent).toBe("@1");
@@ -115,18 +118,17 @@ describe("the grouped board", () => {
   });
 
   it("says `2 of 5` when the filters leave part of the group (plan 22 F1)", async () => {
-    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ counts: counts({ total: 2 }), rows_unfiltered: 5 }), noParent()]));
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ counts: counts({ total: 2 }), rows_unfiltered: 5 }), loose()]));
     renderBoard("/ws/test/app/my-app?status=failed");
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     const h = header("sweep");
     expect(h.querySelector(".group-counts")?.textContent).toBe("2 of 5 runs");
     expect(within(h).getByText("Group sweep: 2 of 5 runs, 1 running, 1 failed")).toHaveClass("sr-only");
-    expect(header("(no parent run)").querySelector(".group-counts")?.textContent).toBe("2 runs");
   });
 
   it("shows the group's aggregate per metric, the target's own value, and names the aggregate", async () => {
     renderBoard("/ws/test/app/my-app?show=m:acc");
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     const loss = header("sweep").querySelector('td[data-col-id="m:loss"]') as HTMLElement;
     expect(loss.querySelector(".group-agg")?.textContent).toBe("0.3");
     expect(loss).toHaveAttribute("title", "mean of 3");
@@ -136,7 +138,7 @@ describe("the grouped board", () => {
 
   it("sends a chosen agg= and shows that aggregate, the mean for a metric without a goal", async () => {
     renderBoard("/ws/test/app/my-app?agg=best&show=m:acc");
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     expect(m.experimentGroups.mock.calls[0][2]).toMatchObject({ agg: "best" });
     const cell = (id: string) => header("sweep").querySelector(`td[data-col-id="${id}"]`) as HTMLElement;
     expect(cell("m:loss").querySelector(".group-agg")?.textContent).toBe("0.15");
@@ -145,18 +147,19 @@ describe("the grouped board", () => {
     expect(cell("m:acc")).toHaveAttribute("title", "mean of 3 (no goal)");
   });
 
-  it("puts each group's rows under its header, and the (no parent run) group last, open, without a fold", async () => {
+  it("puts each group's rows under its header, and the loose rows after the groups, with no header (plan 22 F12)", async () => {
     renderBoard();
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     const order = [...document.querySelectorAll("tbody tr")].map((tr) =>
       tr.classList.contains("group-row") ? `[${tr.querySelector(".group-label")?.textContent}]` : tr.querySelector(".run-link")?.textContent);
-    expect(order).toEqual(["[sweep]", v(2), v(3), "[(no parent run)]", "sweep", v(4)]);
-    expect(within(header("(no parent run)")).queryByRole("button", { name: /group/i })).toBeNull();
+    expect(order).toEqual(["[sweep]", v(2), v(3), v(4)]);
+    expect(screen.queryByText("(none)")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^(Collapse|Expand) group/ })).toHaveLength(1);
   });
 
   it("folds a group shut and open again, remembering it in collapse=", async () => {
     renderBoard();
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     const fold = within(header("sweep")).getByRole("button", { name: "Collapse group sweep" });
     expect(fold).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(fold);
@@ -169,7 +172,7 @@ describe("the grouped board", () => {
 
   it("opens with the groups collapse= names shut", async () => {
     renderBoard(`/ws/test/app/my-app?collapse=${v(1)}`);
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     expect(screen.queryByRole("link", { name: v(2) })).toBeNull();
     expect(screen.getByRole("link", { name: v(4) })).toBeInTheDocument();
   });
@@ -211,13 +214,14 @@ describe("the grouped board", () => {
   });
 
   it("pages groups: Load more asks for the groups after the loaded ones", async () => {
-    const third = { ...noParent(), key: "x", label: "x", rows: [row(9)], rows_total: 1 };
+    const third = plain(loose(), { key: "x", label: "x", rows: [row(9)], rows_total: 1 });
     m.experimentGroups
-      .mockResolvedValueOnce({ ...grouped([sweepGroup(), noParent()]), total_groups: 3 })
-      .mockResolvedValueOnce({ ...grouped([third]), total_groups: 3 });
+      .mockResolvedValueOnce({ ...grouped([sweepGroup(), third]), total_groups: 3 })
+      .mockResolvedValueOnce({ ...grouped([loose()]), total_groups: 3 });
     renderBoard();
     fireEvent.click(await screen.findByRole("button", { name: "Load more (1 group remaining)" }));
-    await waitFor(() => expect(headerRows()).toHaveLength(3));
+    await waitFor(() => expect(screen.getByRole("link", { name: v(4) })).toBeInTheDocument());
+    expect(headerRows()).toHaveLength(2);
     expect(m.experimentGroups.mock.calls[1][2]).toMatchObject({ group: "parent", offset: 2 });
     expect(screen.getByRole("link", { name: v(9) })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^load more/i })).toBeNull();
@@ -225,15 +229,15 @@ describe("the grouped board", () => {
 
   it("orders groups by the sorted column: the server's group order, the sort sent with it", async () => {
     renderBoard();
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
-    m.experimentGroups.mockResolvedValue(grouped([noParent(), sweepGroup()]));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ key: v(7), label: v(7), target: null }), sweepGroup()]));
     fireEvent.click(screen.getByRole("button", { name: /sort by loss/i }));
-    await waitFor(() => expect(headerRows()[0].textContent).toContain("(no parent run)"));
+    await waitFor(() => expect(headerRows()[0].textContent).toContain(v(7)));
     expect(m.experimentGroups.mock.calls.slice(-1)[0][2]).toMatchObject({ sort: "loss", order: "asc" });
   });
 
   it("labels a code-state group by its verstr and a field group as field = value", async () => {
-    const code = { ...noParent(), key: "0.1.0-dev.e71c74d.ba02c10", label: "0.1.0-dev.e71c74d.ba02c10" };
+    const code = plain(loose(), { key: "0.1.0-dev.e71c74d.ba02c10", label: "0.1.0-dev.e71c74d.ba02c10" });
     m.experimentGroups.mockResolvedValue(grouped([code]));
     const { unmount } = renderBoard("/ws/test/app/my-app?group=code_verstr");
     await waitFor(() => expect(headerRows()).toHaveLength(1));
@@ -242,7 +246,7 @@ describe("the grouped board", () => {
     expect(headerRows()[0].textContent).toContain("0.0.1 · main");
     unmount();
 
-    m.experimentGroups.mockResolvedValue(grouped([{ ...noParent(), key: "main", label: "branch = main" }]));
+    m.experimentGroups.mockResolvedValue(grouped([plain(loose(), { key: "main", label: "branch = main" })]));
     renderBoard("/ws/test/app/my-app?group=branch");
     await waitFor(() => expect(headerRows()).toHaveLength(1));
     expect(headerRows()[0].querySelector(".group-label")?.textContent).toBe("branch = main");
@@ -250,15 +254,15 @@ describe("the grouped board", () => {
 
   it("counts the runs of the grouped payload in the subtitle", async () => {
     renderBoard();
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     expect(document.querySelector(".page-sub")?.textContent).toBe("2 runs · 4 incl. inner");
   });
 
   it("counts the whole board's runs while groups hold only their first rows", async () => {
     m.facets.mockResolvedValue({ ...facets(40), total: 50 });
-    m.experimentGroups.mockResolvedValue({ ...grouped([sweepGroup({ rows_total: 40 }), noParent()]), total_rows: 50 });
+    m.experimentGroups.mockResolvedValue({ ...grouped([sweepGroup({ rows_total: 40 }), loose()]), total_rows: 50 });
     renderBoard();
-    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    await waitFor(() => expect(headerRows()).toHaveLength(1));
     expect(document.querySelector(".page-sub")?.textContent).toBe("10 runs · 50 incl. inner");
   });
 });

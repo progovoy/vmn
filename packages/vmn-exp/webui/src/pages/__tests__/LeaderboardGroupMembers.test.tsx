@@ -1,7 +1,7 @@
 /** A group's rows read as its members (plan 22 F11): indented under the
  *  header's label, a guide line from the fold down to the last member. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../../api", () => ({
   api: {
@@ -52,12 +52,13 @@ function sweepGroup(extra: Partial<RunGroup> = {}): RunGroup {
     key: v(1), label: v(1),
     target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "failed", metrics: { loss: 0.91 } },
     counts: counts(), aggregates: { loss: agg(0.3), acc: agg(0.8, { best: null }) }, rows: INNER, rows_total: 2,
-    rows_unfiltered: (extra.counts ?? counts()).total, ...extra,
+    rows_unfiltered: (extra.counts ?? counts()).total, loose: false, ...extra,
   };
 }
-const noParent = (): RunGroup => ({
-  key: NONE_GROUP, label: "(no parent run)", target: null, counts: counts({ total: 2, running: 0, failed: 0 }),
-  aggregates: {}, rows: [OUTER, LONE], rows_total: 2, rows_unfiltered: 2,
+// The runs with no parent that head no group (plan 22 F12).
+const loose = (extra: Partial<RunGroup> = {}): RunGroup => ({
+  key: NONE_GROUP, label: "(none)", target: null, loose: true, counts: counts({ total: 1, running: 0, failed: 0 }),
+  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1, ...extra,
 });
 const grouped = (groups: RunGroup[]) => ({ groups, total_groups: groups.length, total_rows: 4 });
 const headerRows = () => [...document.querySelectorAll("tbody tr.group-row")] as HTMLElement[];
@@ -73,14 +74,14 @@ beforeEach(() => {
   m.experiment.mockResolvedValue({ metadata: { verstr: "x" }, metrics: {}, series: {}, patches: {} });
   m.experiments.mockResolvedValue(page([OUTER, ...INNER, LONE]));
   m.facets.mockResolvedValue(facets(2));
-  m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), noParent()]));
+  m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), loose()]));
 });
 
 const member = (name: string) =>
   [...document.querySelectorAll("tbody tr.row")].find((r) => r.querySelector(".run-link")?.textContent === name) as HTMLElement;
 
 describe("a group's members", () => {
-  it("marks a foldable group's rows as members, the last one as last", async () => {
+  it("marks a group's rows as members, the last one as last", async () => {
     renderBoard();
     await waitFor(() => expect(header("sweep")).toBeTruthy());
     const [first, last] = INNER.map((r) => member(r.name ?? r.verstr));
@@ -91,11 +92,28 @@ describe("a group's members", () => {
     expect(first.querySelector("td.exp-cell .group-member-body .run-link")).toBeTruthy();
   });
 
-  it("leaves the inline (no parent run) rows and the flat board's rows unmarked", async () => {
+  it("leaves the loose rows unmarked, after the groups, without a header of their own (plan 22 F12)", async () => {
     renderBoard();
     await waitFor(() => expect(header("sweep")).toBeTruthy());
-    expect(member("sweep").classList.contains("group-member")).toBe(false);
-    expect(member(LONE.name ?? LONE.verstr).querySelector(".group-member-body")).toBeNull();
+    expect(headerRows()).toHaveLength(1);
+    const lone = member(LONE.name ?? LONE.verstr);
+    expect(lone.classList.contains("group-member")).toBe(false);
+    expect(lone.querySelector(".group-member-body")).toBeNull();
+    // The sweep's last member stays its last, though a loose row follows it.
+    expect(member(v(3)).classList.contains("group-last")).toBe(true);
+  });
+
+  it("pages the loose rows from a plain +N more row, no one's member", async () => {
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), loose({ rows_total: 3, rows_unfiltered: 3 })]));
+    m.experimentGroupRows.mockResolvedValue(loose({ rows: [row(5), row(6)], rows_total: 3 }));
+    renderBoard();
+    const more = await screen.findByRole("button", { name: "+2 more" });
+    expect(more.closest("tr")?.classList.contains("group-member")).toBe(false);
+    fireEvent.click(more);
+    expect(await screen.findByRole("link", { name: v(6) })).toBeInTheDocument();
+    expect(m.experimentGroupRows.mock.calls[0][2]).toBe(NONE_GROUP);
+    expect(m.experimentGroupRows.mock.calls[0][3]).toMatchObject({ group: "parent", offset: 1, limit: 2 });
+    expect(member(v(6)).classList.contains("group-member")).toBe(false);
   });
 
   it("marks nothing with group=none", async () => {

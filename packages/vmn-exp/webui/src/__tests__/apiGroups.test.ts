@@ -12,7 +12,7 @@ const GROUP: RunGroup = {
             tree_status: "running", metrics: { loss: 0.91 } },
   counts: { total: 16, running: 2, waiting: 0, done: 13, failed: 1, stuck: 0 },
   aggregates: { loss: { mean: 0.5, best: 0.2, median: 0.45, min: 0.2, max: 0.9, n: 16 } },
-  rows: [], rows_total: 16, rows_unfiltered: 20,
+  rows: [], rows_total: 16, rows_unfiltered: 20, loose: false,
 };
 
 describe("apiGroups", () => {
@@ -75,7 +75,7 @@ describe("apiGroups", () => {
 
   it("keys the no-value group with a sentinel no value or label spells (plan 22 F6)", () => {
     expect(NONE_GROUP).toBe("\u2205");
-    expect(["(none)", "(no parent run)", ""]).not.toContain(NONE_GROUP);
+    expect(["(none)", ""]).not.toContain(NONE_GROUP);
     expect(groupKeyText("main")).toBe("main");
     expect(groupKeyText("(none)")).toBe("(none)");
     expect(groupKeyText("\u2205\u2205x")).toBe("\u2205x");

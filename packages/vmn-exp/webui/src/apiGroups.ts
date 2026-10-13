@@ -16,9 +16,10 @@ export type GroupField = GroupLink | "branch" | "status" | `tags.${string}` | `p
 export const GROUP_AGGREGATES = ["mean", "best", "median", "min", "max"] as const;
 export type GroupAggregate = (typeof GROUP_AGGREGATES)[number];
 
-/** The key of the group of runs without a value, last; labelled `(none)`
- *  (`(no parent run)` for `parent`). No value's key equals it: a value whose
- *  text starts with it is keyed with it doubled (plan 22 F6). */
+/** The key of the group of runs without a value, last, labelled `(none)`
+ *  (for a link grouping, the loose rows: {@link RunGroup.loose}). No value's
+ *  key equals it: a value whose text starts with it is keyed with it doubled
+ *  (plan 22 F6). */
 export const NONE_GROUP = "\u2205";
 
 /** The value a group key other than {@link NONE_GROUP} stands for. */
@@ -57,11 +58,15 @@ export interface GroupTarget {
 
 export interface RunGroup {
   key: string;
-  /** The target's verstr, `<verstr> (not found)`, the code verstr, `branch = main`,
-   *  `(none)` or `(no parent run)`. */
+  /** The target's verstr, `<verstr> (not found)`, the code verstr, `branch = main`
+   *  or `(none)`. */
   label: string;
   /** Null for `code_verstr`, field groups, `(none)` and a target not in the index. */
   target: GroupTarget | null;
+  /** True for a link grouping's (`parent`/`forked_from`/`rerun_of`) runs with
+   *  no link that head no group (plan 22 F12): not a group, so the board
+   *  shows them as plain rows after the groups, with no header. */
+  loose: boolean;
   counts: GroupCounts;
   aggregates: Record<string, MetricAggregate>;
   rows: ExperimentRow[];

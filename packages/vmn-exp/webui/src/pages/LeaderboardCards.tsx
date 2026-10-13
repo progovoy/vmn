@@ -1,7 +1,7 @@
 /** The leaderboard below 640px (plan 20 C8): one card per run — name and
  *  status, the primary metric large, branch · when — instead of a grid
  *  the phone would scroll sideways; grouped, a section per group (plan 22 G9). */
-import { memo, type MouseEvent } from "react";
+import { Fragment, memo, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtVal, relTime, runHref } from "../util";
@@ -11,8 +11,8 @@ import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { headStatus, type RowLayout } from "./LeaderboardRow";
 import type { SortState } from "./LeaderboardHead";
 import type { GroupActions } from "./LeaderboardTable";
-import CardGroup from "./LeaderboardCardGroup";
-import { isGroupItem, type BoardItem, type GroupHeaderItem, type GroupMoreItem } from "../util/groupItems";
+import CardGroup, { CardGroupMore } from "./LeaderboardCardGroup";
+import { isGroupItem, memberOf, type BoardItem, type GroupHeaderItem, type GroupMoreItem } from "../util/groupItems";
 import "./leaderboardCards.css";
 
 /** The metric a card shows large: the one sorted by, else the primary
@@ -91,20 +91,20 @@ const MCard = memo(function MCard({
 });
 
 /** *items* as sections: each group's header with its runs and `+N more`;
- *  one headless section when the board is not grouped. */
+ *  a headless section for the rows of no group (an ungrouped board, the
+ *  loose rows, plan 22 F12). */
 interface Section { head?: GroupHeaderItem; rows: ExperimentRow[]; more?: GroupMoreItem }
 
 function sectionsOf(items: readonly BoardItem[]): Section[] {
+  const owner = memberOf(items);
   const out: Section[] = [];
-  for (const it of items) {
-    if (isGroupItem(it) && it.item === "group") out.push({ head: it, rows: [] });
-    else {
-      if (!out.length) out.push({ rows: [] });
-      const last = out[out.length - 1];
-      if (isGroupItem(it)) last.more = it;
-      else last.rows.push(it);
-    }
-  }
+  items.forEach((it, i) => {
+    if (isGroupItem(it) && it.item === "group") return void out.push({ head: it, rows: [] });
+    let last = out[out.length - 1];
+    if (!last || (last.head && owner[i] !== last.head)) out.push(last = { rows: [] });
+    if (isGroupItem(it)) last.more = it;
+    else last.rows.push(it);
+  });
   return out;
 }
 
@@ -142,14 +142,19 @@ export default function LeaderboardCards({
         <p className="lb-mcards-loading" role="status">loading runs…</p>
       ) : (
         <ul className="lb-mcards" role="list" aria-label="experiments" aria-describedby={describedBy}>
-          {sections.map((sec) => sec.head && groups ? (
+          {sections.map((sec, i) => sec.head && groups ? (
             <CardGroup
               key={`group:${sec.head.group.key}`} item={sec.head} more={sec.more}
               layout={layout} metric={metric} groups={groups}
             >
               {cardsOf(sec.rows)}
             </CardGroup>
-          ) : cardsOf(sec.rows))}
+          ) : (
+            <Fragment key={`rows:${i}`}>
+              {cardsOf(sec.rows)}
+              {sec.more && groups && <CardGroupMore item={sec.more} onMore={groups.onMore} />}
+            </Fragment>
+          ))}
         </ul>
       )}
     </div>

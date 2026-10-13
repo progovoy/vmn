@@ -9,12 +9,11 @@ tr.group-row > td {
 tr.group-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .group-head { min-width: 0; }
 .group-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Under the label, past the fold chevron. */
 .group-sub {
   font-size: 11.5px; color: var(--text-3); font-family: var(--mono);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 27px;
 }
-/* Under the label, past the fold chevron. */
-.group-sub.under-fold { margin-left: 27px; }
 /* The count line's states and the count columns' cells (F10) share a tone;
    a zero count is muted. */
 .group-counts .tone-total, td.group-count.tone-total { color: var(--text-2); font-weight: 600; }

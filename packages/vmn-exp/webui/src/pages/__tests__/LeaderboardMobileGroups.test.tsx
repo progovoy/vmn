@@ -43,11 +43,12 @@ const sweepGroup = (extra: Partial<RunGroup> = {}): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "failed", metrics: { loss: 0.91 } },
   counts: counts(), aggregates: { loss: agg(0.3), acc: agg(0.8, { best: null }) }, rows: INNER, rows_total: 2,
-  rows_unfiltered: (extra.counts ?? counts()).total, ...extra,
+  rows_unfiltered: (extra.counts ?? counts()).total, loose: false, ...extra,
 });
-const noParent = (): RunGroup => ({
-  key: NONE_GROUP, label: "(no parent run)", target: null, counts: counts({ total: 2, running: 0, failed: 0 }),
-  aggregates: {}, rows: [OUTER, LONE], rows_total: 2, rows_unfiltered: 2,
+// The runs with no parent that head no group (plan 22 F12): the sweep's run is its header.
+const loose = (extra: Partial<RunGroup> = {}): RunGroup => ({
+  key: NONE_GROUP, label: "(none)", target: null, loose: true, counts: counts({ total: 1, running: 0, failed: 0 }),
+  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1, ...extra,
 });
 const grouped = (groups: RunGroup[]) => ({ groups, total_groups: groups.length, total_rows: 4 });
 
@@ -59,8 +60,11 @@ const cardNames = (s: HTMLElement) => [...s.querySelectorAll(".lb-mcard .lb-mcar
 const shown = async () => {
   renderBoard();
   await screen.findByRole("list", { name: "experiments" });
-  await waitFor(() => expect(sections()).toHaveLength(2));
+  await waitFor(() => expect(sections()).toHaveLength(1));
 };
+/** The cards outside every section: the loose runs. */
+const looseCards = () => [...document.querySelectorAll(".lb-mcard")]
+  .filter((c) => !c.closest(".lb-mgroup")).map((c) => c.querySelector(".lb-mcard-name")?.textContent);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,7 +78,7 @@ beforeEach(() => {
   m.facets.mockResolvedValue({
     branches: ["main"], metric_keys: ["loss", "acc"], param_keys: [], tag_keys: [], param_values: {}, parented: 2, total: 4,
   });
-  m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), noParent()]));
+  m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), loose()]));
 });
 afterEach(dropFakeMedia);
 
@@ -82,9 +86,8 @@ describe("a grouped board below 640px", () => {
   it("heads each group's cards with its section label, in the server's order", async () => {
     await shown();
     expect(screen.queryByRole("grid", { name: "experiments" })).toBeNull();
-    expect(sections().map((s) => s.querySelector(".lb-mgroup-label")?.textContent)).toEqual(["sweep", "(no parent run)"]);
+    expect(sections().map((s) => s.querySelector(".lb-mgroup-label")?.textContent)).toEqual(["sweep"]);
     expect(cardNames(section("sweep"))).toEqual([v(2), v(3)]);
-    expect(cardNames(section("(no parent run)"))).toEqual(["sweep", v(4)]);
     // The label comes before its cards.
     const s = section("sweep");
     expect(s.firstElementChild).toBe(head("sweep"));
@@ -94,7 +97,6 @@ describe("a grouped board below 640px", () => {
     await shown();
     expect(within(head("sweep")).getByRole("link", { name: "sweep" }))
       .toHaveAttribute("href", `/ws/test/app/my-app/run/${v(1)}`);
-    expect(within(head("(no parent run)")).queryByRole("link")).toBeNull();
   });
 
   it("shows the status count in colour, and in words for a screen reader", async () => {
@@ -106,7 +108,7 @@ describe("a grouped board below 640px", () => {
   });
 
   it("says `2 of 5` when the filters leave part of the group (plan 22 F1)", async () => {
-    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ counts: counts({ total: 2 }), rows_unfiltered: 5 }), noParent()]));
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ counts: counts({ total: 2 }), rows_unfiltered: 5 }), loose()]));
     await shown();
     const h = head("sweep");
     expect(h.querySelector(".group-counts")?.textContent).toBe("2 of 5 runs · 1 running · 1 failed");
@@ -128,17 +130,17 @@ describe("a grouped board below 640px", () => {
 
   it("shows the section checkbox indeterminate when only some of its cards are selected", async () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(2)}`);
-    await waitFor(() => expect(sections()).toHaveLength(2));
+    await waitFor(() => expect(sections()).toHaveLength(1));
     const box = within(head("sweep")).getByRole("checkbox", { name: "Select group sweep" }) as HTMLInputElement;
     await waitFor(() => expect(box.indeterminate).toBe(true));
     expect(box.checked).toBe(false);
   });
 
   it("has no section checkbox for a group with no loaded cards", async () => {
-    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ rows: [], rows_total: 2 }), noParent()]));
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ rows: [], rows_total: 2 }), loose()]));
     await shown();
     expect(within(head("sweep")).queryByRole("checkbox")).toBeNull();
-    expect(within(head("(no parent run)")).getByRole("checkbox", { name: "Select group (no parent run)" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("checkbox", { name: /^Select group/ })).toEqual([]);
   });
 
   it("shows the group's aggregate on the primary metric and names it", async () => {
@@ -148,20 +150,23 @@ describe("a grouped board below 640px", () => {
     expect(a).toHaveTextContent("loss");
     expect(a).toHaveTextContent("mean");
     expect(a).toHaveAttribute("title", "mean of 3");
-    // A group with no value on the metric shows none.
-    expect(head("(no parent run)").querySelector(".lb-mgroup-agg")).toBeNull();
+  });
+
+  it("shows no aggregate for a group with no value on the metric", async () => {
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ aggregates: {} })]));
+    await shown();
+    expect(head("sweep").querySelector(".lb-mgroup-agg")).toBeNull();
   });
 
   it("shows the chosen aggregate, and the one of the metric the board is sorted by", async () => {
     renderBoard("/ws/test/app/my-app?agg=best");
-    await waitFor(() => expect(sections()).toHaveLength(2));
+    await waitFor(() => expect(sections()).toHaveLength(1));
     expect(head("sweep").querySelector(".lb-mgroup-value")?.textContent).toBe("0.15");
     expect(head("sweep").querySelector(".lb-mgroup-agg")).toHaveAttribute("title", "best of 3");
   });
 
   it("folds a group shut and open again from its label, remembering it in collapse=", async () => {
     await shown();
-    expect(within(head("(no parent run)")).queryByRole("button", { name: /group/i })).toBeNull();
     const fold = within(head("sweep")).getByRole("button", { name: "Collapse group sweep" });
     expect(fold).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(fold);
@@ -182,10 +187,29 @@ describe("a grouped board below 640px", () => {
     expect(cardNames(section("sweep"))).toEqual([v(2), v(3)]);
   });
 
+  it("lists the loose runs as plain cards after the sections, with no section label (plan 22 F12)", async () => {
+    await shown();
+    expect(looseCards()).toEqual([v(4)]);
+    expect(screen.queryByText("(none)")).toBeNull();
+    const list = screen.getByRole("list", { name: "experiments" });
+    expect(list.lastElementChild?.classList.contains("lb-mcard")).toBe(true);
+  });
+
+  it("pages the loose runs from a plain +N more button", async () => {
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup(), loose({ rows_total: 2, rows_unfiltered: 2 })]));
+    m.experimentGroupRows.mockResolvedValue(loose({ rows: [row(5)], rows_total: 2 }));
+    await shown();
+    const more = screen.getByRole("button", { name: "+1 more" });
+    expect(more.closest(".lb-mgroup")).toBeNull();
+    fireEvent.click(more);
+    await waitFor(() => expect(looseCards()).toEqual([v(4), v(5)]));
+    expect(m.experimentGroupRows.mock.calls[0][2]).toBe(NONE_GROUP);
+  });
+
   it("still selects every card on screen", async () => {
     await shown();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible runs" }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toHaveLength(4));
+    await waitFor(() => expect(urlParams().getAll("sel")).toHaveLength(3));
   });
 });
 

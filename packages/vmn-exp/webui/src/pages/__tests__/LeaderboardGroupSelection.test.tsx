@@ -39,18 +39,18 @@ import { location, renderBoard, row, urlParams } from "./leaderboardHarness";
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
 const counts = { total: 3, running: 0, waiting: 0, done: 3, failed: 0, stuck: 0 };
-const OUTER = row(1, { kind: "outer", name: "sweep", children: [v(2), v(3), v(5)] });
 const INNER = [2, 3].map((i) => row(i, { kind: "inner", parent: v(1), depth: 1 }));
 const LONE = row(4);
 
 const sweep = (): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "succeeded", metrics: {} },
-  counts, aggregates: {}, rows: INNER, rows_total: 3, rows_unfiltered: 3,
+  loose: false, counts, aggregates: {}, rows: INNER, rows_total: 3, rows_unfiltered: 3,
 });
-const noParent = (): RunGroup => ({
-  key: NONE_GROUP, label: "(no parent run)", target: null, counts: { ...counts, total: 2 },
-  aggregates: {}, rows: [OUTER, LONE], rows_total: 2, rows_unfiltered: 2,
+// The runs with no parent that head no group (plan 22 F12): the sweep's run is its header.
+const loose = (): RunGroup => ({
+  key: NONE_GROUP, label: "(none)", target: null, loose: true, counts: { ...counts, total: 1 },
+  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1,
 });
 const job = (status: string) => ({ id: "j1", status, command: [], exit_code: status === "running" ? null : 0, log: "" });
 
@@ -68,7 +68,7 @@ beforeEach(() => {
   m.facets.mockResolvedValue({
     branches: ["main"], metric_keys: [], param_keys: [], tag_keys: [], param_values: {}, parented: 2, total: 4,
   });
-  m.experimentGroups.mockResolvedValue({ groups: [sweep(), noParent()], total_groups: 2, total_rows: 4 });
+  m.experimentGroups.mockResolvedValue({ groups: [sweep(), loose()], total_groups: 2, total_rows: 4 });
   m.action.mockResolvedValue(job("running"));
   m.job.mockResolvedValue(job("succeeded"));
 });
@@ -104,11 +104,13 @@ describe("a group header's checkbox", () => {
     await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(2), v(3)]));
   });
 
-  it("is there on the (no parent run) group too", async () => {
+  it("is not there for the loose runs, which have no header: each is selected on its own row", async () => {
     renderBoard();
-    await waitFor(() => expect(header("(no parent run)")).toBeTruthy());
-    fireEvent.click(groupBox("(no parent run)"));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(1), v(4)]));
+    await waitFor(() => expect(header("sweep")).toBeTruthy());
+    expect(screen.getAllByRole("checkbox", { name: /^Select group/ })).toEqual([groupBox("sweep")]);
+    fireEvent.click(screen.getByRole("checkbox", { name: `Select ${v(4)}` }));
+    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(4)]));
+    expect(groupBox("sweep").checked).toBe(false);
   });
 });
 

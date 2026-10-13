@@ -11,7 +11,7 @@ const row = (v: string): ExperimentRow => ({
 });
 const counts = { total: 0, running: 0, waiting: 0, done: 0, failed: 0, stuck: 0 };
 const group = (key: string, verstrs: string[], extra: Partial<BoardGroup> = {}): BoardGroup => ({
-  key, label: key, target: null, counts, aggregates: {}, verstrs, rows_total: verstrs.length,
+  key, label: key, target: null, loose: false, counts, aggregates: {}, verstrs, rows_total: verstrs.length,
   rows_unfiltered: verstrs.length, ...extra,
 });
 const sweep = group("s", ["a", "b"], {
@@ -21,13 +21,22 @@ const sweep = group("s", ["a", "b"], {
 describe("the Charts tab's colours by group (plan 22 G7)", () => {
   it("gives each group the board's order a series colour, and the no-value group grey, last", () => {
     const keys = new Map([["a", "s"], ["b", "s"], ["c", NONE_GROUP], ["d", "t"]]);
-    const g = chartGroups(["a", "b", "c", "d"].map(row), keys, [group(NONE_GROUP, ["c"], { label: "(no parent run)" }), sweep, group("t", ["d"])], "parent");
+    const g = chartGroups(["a", "b", "c", "d"].map(row), keys, [group(NONE_GROUP, ["c"], { label: "(none)" }), sweep, group("t", ["d"])], "branch");
     expect(g.legend.map((e) => [e.label, e.color, e.count])).toEqual([
-      ["sweep", runColor(0), 2], ["t", runColor(1), 1], ["(no parent run)", NO_GROUP_COLOR, 1],
+      ["sweep", runColor(0), 2], ["t", runColor(1), 1], ["(none)", NO_GROUP_COLOR, 1],
     ]);
     expect(g.colorOf.get("a")).toBe(runColor(0));
     expect(g.colorOf.get("c")).toBe(NO_GROUP_COLOR);
   });
+
+  it.each(["parent", "forked_from", "rerun_of"])(
+    "draws a %s grouping's runs with no link grey and names no group for them (plan 22 F12)", (field) => {
+      const keys = new Map([["a", "s"], ["c", NONE_GROUP]]);
+      const g = chartGroups(["a", "c"].map(row), keys, [sweep, group(NONE_GROUP, ["c"], { label: "(none)", loose: true })], field);
+      expect(g.legend.map((e) => e.key)).toEqual(["s"]);
+      expect(g.colorOf.get("c")).toBe(NO_GROUP_COLOR);
+      expect(g.colorOf.get("a")).toBe(runColor(0));
+    });
 
   it("colours groups the board has not loaded after the loaded ones, labelled as the server would", () => {
     const keys = new Map([["a", "s"], ["x", "main"], ["y", "dev"]]);
@@ -44,8 +53,8 @@ describe("the Charts tab's colours by group (plan 22 G7)", () => {
     expect(g.legend.map((e) => [e.key, e.label])).toEqual([
       [`${NONE_GROUP}${NONE_GROUP}x`, `branch = ${NONE_GROUP}x`], [NONE_GROUP, "(none)"],
     ]);
-    const parents = chartGroups([row("a")], new Map([["a", NONE_GROUP]]), [], "parent");
-    expect(parents.legend.map((e) => e.label)).toEqual(["(no parent run)"]);
+    const code = chartGroups([row("a")], new Map([["a", NONE_GROUP]]), [], "code_verstr");
+    expect(code.legend.map((e) => e.label)).toEqual(["(none)"]);
   });
 
   it("leaves a run with no known group uncoloured and out of the legend", () => {

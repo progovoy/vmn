@@ -40,15 +40,13 @@ function CardGroupHead({ item, layout, metric, agg, mono, onFold, check }: {
   return (
     <div className={`lb-mgroup-head${item.open ? "" : " shut"}`}>
       {item.rows.length > 0 && <HeaderCheckbox {...check} label={`Select group ${name}`} />}
-      {item.foldable && (
-        <button
-          className="fold-toggle" aria-expanded={item.open}
-          aria-label={`${item.open ? "Collapse" : "Expand"} group ${name}`}
-          onClick={() => onFold(group.key)}
-        >
-          <Icon name={item.open ? "chevron-down" : "chevron-right"} size={14} />
-        </button>
-      )}
+      <button
+        className="fold-toggle" aria-expanded={item.open}
+        aria-label={`${item.open ? "Collapse" : "Expand"} group ${name}`}
+        onClick={() => onFold(group.key)}
+      >
+        <Icon name={item.open ? "chevron-down" : "chevron-right"} size={14} />
+      </button>
       <div className="lb-mgroup-name">
         {t ? (
           <Link
@@ -70,7 +68,7 @@ function CardGroupHead({ item, layout, metric, agg, mono, onFold, check }: {
   );
 }
 
-function CardGroupMore({ item, onMore }: { item: GroupMoreItem; onMore: (key: string) => void }) {
+export function CardGroupMore({ item, onMore }: { item: GroupMoreItem; onMore: (key: string) => void }) {
   return (
     <li className={`lb-mgroup-more ${item.state}`}>
       <button
