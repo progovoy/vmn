@@ -86,10 +86,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     archived: view.archived || undefined,
   }), [view.sort, view.order, view.status, serverQuery, view.archived]);
   const data = useLeaderboardRows(ws, app, filter);
-  // The similar mode keeps the bar's other filters: the box holds its text.
-  const similarQuery = combineQueries(
-    combineQueries(view.query, branchClause(view.branch)), statusClause(view.status),
-  );
+  // The similar mode keeps the bar's tokens: the box holds its text.
+  const similarQuery = combineQueries(serverQuery, statusClause(view.status));
   const similarFilter = useMemo(() => ({
     query: similarQuery || undefined,
     archived: view.archived || undefined,

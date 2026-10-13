@@ -4,26 +4,37 @@ import { applySuggestion, suggest, type SuggestFacets } from "../util/querySugge
 const MAX_SUGGESTIONS = 12;
 
 /** The query box with autocomplete: fields (`metrics.<key>`, `params.<key>`,
- *  row fields), operators and connectives, offered for the word at the caret. */
-export default function QueryInput({ value, onChange, facets, invalid, placeholder }: {
+ *  row fields), operators and connectives, offered for the word at the caret.
+ *  With *onSubmit*, Enter submits the text and picks a suggestion only once
+ *  the arrows moved through the list (Tab always picks one). */
+export default function QueryInput({
+  value, onChange, facets, invalid, placeholder, onSubmit, onEmptyBackspace, className = "", suggestions = true,
+}: {
   value: string;
   onChange: (text: string) => void;
   facets: SuggestFacets;
   invalid?: boolean;
   placeholder?: string;
+  onSubmit?: () => void;
+  /** Backspace in the empty box (a token bar drops its last token). */
+  onEmptyBackspace?: () => void;
+  className?: string;
+  /** Off: a plain text box (the similar-runs mode's description). */
+  suggestions?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   const [caret, setCaret] = useState(value.length);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [navigated, setNavigated] = useState(false);
   const pendingCaret = useRef<number | null>(null);
 
   const options = useMemo(
-    () => (open ? suggest(value, caret, facets).slice(0, MAX_SUGGESTIONS) : []),
-    [open, value, caret, facets],
+    () => (open && suggestions ? suggest(value, caret, facets).slice(0, MAX_SUGGESTIONS) : []),
+    [open, suggestions, value, caret, facets],
   );
-  useEffect(() => setActive(0), [options]);
+  useEffect(() => { setActive(0); setNavigated(false); }, [options]);
 
   // Put the caret after an applied suggestion once React wrote the value.
   useEffect(() => {
@@ -40,10 +51,21 @@ export default function QueryInput({ value, onChange, facets, invalid, placehold
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !value && onEmptyBackspace) {
+      onEmptyBackspace();
+      return;
+    }
+    if (e.key === "Enter" && onSubmit && !(options.length && navigated)) {
+      e.preventDefault();
+      setOpen(false);
+      onSubmit();
+      return;
+    }
     if (!options.length) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const step = e.key === "ArrowDown" ? 1 : -1;
+      setNavigated(true);
       setActive((a) => (a + step + options.length) % options.length);
     } else if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
@@ -60,7 +82,7 @@ export default function QueryInput({ value, onChange, facets, invalid, placehold
       <input
         ref={inputRef}
         type="text"
-        className="mono"
+        className={`mono ${className}`.trim()}
         aria-label="Filter query"
         aria-autocomplete="list"
         aria-controls={listId}

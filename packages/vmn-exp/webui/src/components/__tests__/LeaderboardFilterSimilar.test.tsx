@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import LeaderboardFilter from "../LeaderboardFilter";
 
 const toggle = () => screen.getByRole("button", { name: /^similar$/i });
-const box = () => screen.getByRole("textbox", { name: /search runs/i });
+const box = () => screen.getByLabelText("Filter query");
 const settle = () => act(() => { vi.advanceTimersByTime(400); });
 
 describe("LeaderboardFilter similar mode", () => {
@@ -49,9 +49,9 @@ describe("LeaderboardFilter similar mode", () => {
     expect(onSearchChange).toHaveBeenLastCalledWith("batch");
   });
 
-  it("keeps the query box in either mode", () => {
-    render(<LeaderboardFilter onSimilarChange={vi.fn()} />);
+  it("keeps the query's tokens in either mode", () => {
+    render(<LeaderboardFilter onSimilarChange={vi.fn()} initial={{ query: "metrics.loss < 1" }} />);
     fireEvent.click(toggle());
-    expect(screen.getByPlaceholderText(/metrics\./i)).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveAttribute("data-token", "metrics.loss < 1");
   });
 });

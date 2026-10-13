@@ -16,7 +16,7 @@ describe("leaderboard control spacing", () => {
     expect(bar).toHaveClass("filter-bar");
     // Spacing comes from the stylesheet, not per-instance inline overrides.
     expect(bar.getAttribute("style")).toBeNull();
-    expect(screen.getByRole("textbox", { name: "Search runs" })).toHaveClass("filter-control");
+    expect(screen.getByRole("textbox", { name: "Filter query" })).toHaveClass("filter-control");
     expect(screen.getByRole("combobox")).toHaveClass("filter-control");
   });
 

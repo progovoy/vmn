@@ -650,10 +650,18 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   scrolled near, with a *this app* / *all apps* choice): each run's link
   (labelled with its app when it is another), score, status, goal metric,
   author, age, `(+N runs)`, its reasons as chips and its intent, collapsed.
-- The leaderboard's search box has a **similar** toggle: the box text then
-  goes to the per-app text route, with the leaderboard's branch, status and
-  query filters as `q` (and its archived toggle), and a results card replaces
-  the charts and table; leaving the mode restores the previous search and the table.
+- The leaderboard's query bar has a **similar** toggle inside it: the box text
+  then goes to the per-app text route, with every filter token (query, branch,
+  status, search) as `q` (and the archived token), and a results card replaces
+  the charts and table; leaving the mode restores the typed text and the table.
+- The leaderboard has one filter grammar: the query bar shows every filter as a
+  removable token worded as its clause (`status = "failed"`, `branch = "main"`,
+  `text ~ "batch"` for free text over verstr/note/branch, `archived`, and each
+  top-level `and` conjunct of the query). The status chips, branch picker and
+  archived switch write tokens; a hand-typed `status = ...`/`status in (...)`/
+  `branch = ...` clause becomes the same token (Enter commits the text,
+  Backspace in an empty box drops the last token). The URL keeps `q`, `status`,
+  `branch`, `search` and `archived`.
 - The run log describes `features` entries as `features: N files, M functions,
   K commits (author)` and intents as `intent: <first line> [keywords]`.
 

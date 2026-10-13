@@ -1,0 +1,25 @@
+/* The leaderboard's query bar (components/QueryBar.tsx): one bordered box
+   holding the filter tokens, the text box and the similar toggle. */
+.query-bar { display: flex; gap: 8px; align-items: center; flex: 1 1 100%; }
+.query-bar-box {
+  flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  min-height: 32px; padding: 2px 4px; box-sizing: border-box;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px;
+}
+.query-bar-box:focus-within { border-color: var(--accent); }
+.query-tokens { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.query-token {
+  display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 2px 0 8px;
+  font-size: 11.5px; color: var(--text); border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.filter-bar .query-token button {
+  height: 20px; padding: 0 5px; border: none; background: none;
+  color: var(--text-3); font-size: 10px;
+}
+.filter-bar .query-token button:hover { color: var(--text); }
+.filter-bar .query-bar-box .query-input input {
+  height: 24px; padding: 0 6px; border: none; background: transparent; outline: none;
+}
+.filter-bar .query-bar-box .similar-toggle { height: 24px; margin-left: auto; }
