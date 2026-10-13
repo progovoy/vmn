@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { GroupAggregate } from "../apiGroups";
 import type { HeaderCheck } from "../hooks/useBoardSelection";
-import { boardRows, isGroupItem, type BoardItem } from "../util/groupItems";
+import { boardRows, isGroupItem, memberPlaces, type BoardItem } from "../util/groupItems";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
 import { useMoreRight } from "../hooks/useMoreRight";
@@ -107,6 +107,7 @@ function GridTable({
   const layout = useMemo(() => windowLayout(full, cols), [full, cols]);
   const scroll = useScrollMemory();
   const list = rows ?? [];
+  const places = useMemo(() => memberPlaces(list), [list]);
   const virtualizer = useVirtualizer({
     count: list.length,
     getScrollElement: () => parentRef.current,
@@ -176,7 +177,7 @@ function GridTable({
                 const r = list[it.index];
                 if (isGroupItem(r)) {
                   if (r.item === "more") {
-                    return <GroupMoreRow key={`more:${r.key}`} item={r} index={it.index} layout={layout} onMore={groups!.onMore} />;
+                    return <GroupMoreRow key={`more:${r.key}`} item={r} index={it.index} layout={layout} onMore={groups!.onMore} member={places.get(it.index)} />;
                   }
                   const next = list[it.index + 1];
                   return (
@@ -196,6 +197,7 @@ function GridTable({
                     isActive={it.index === keys.active}
                     isSelected={selected.has(r.verstr)}
                     isFlash={flash === r.verstr}
+                    member={places.get(it.index)}
                     layout={layout}
                     onToggle={onToggle}
                     onPrefetch={onPrefetch}

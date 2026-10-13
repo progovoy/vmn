@@ -1,6 +1,7 @@
 import { memo, useRef, type CSSProperties, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
+import type { MemberPlace } from "../util/groupItems";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
 import { tagLabel } from "../util/tags";
@@ -103,12 +104,12 @@ function treeRoll(r: ExperimentRow): string {
   return [tree, sweepIncompleteLabel(r)].filter(Boolean).join(" · ");
 }
 
-function ExperimentCell({ r, href, style, onPrefetch }: {
-  r: ExperimentRow; href: string; style: CSSProperties; onPrefetch: (verstr: string) => void;
+function ExperimentCell({ r, href, style, onPrefetch, member }: {
+  r: ExperimentRow; href: string; style: CSSProperties; onPrefetch: (verstr: string) => void; member: boolean;
 }) {
   const roll = treeRoll(r);
-  return (
-    <td style={style} className="exp-cell" data-col-id="experiment">
+  const body = (
+    <>
       <div className="nest">
         <Link
           className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
@@ -125,6 +126,11 @@ function ExperimentCell({ r, href, style, onPrefetch }: {
           <span className="exp-error" title={r.error_summary}>{r.error_summary}</span>
         )}
       </div>
+    </>
+  );
+  return (
+    <td style={style} className="exp-cell" data-col-id="experiment">
+      {member ? <div className="group-member-body">{body}</div> : body}
     </td>
   );
 }
@@ -141,7 +147,7 @@ export function TagChips({ tags }: { tags: Record<string, string> | undefined })
 }
 
 function Row({
-  row: r, index, isSelected, isFlash, isActive, layout, onToggle, onPrefetch,
+  row: r, index, isSelected, isFlash, isActive, layout, onToggle, onPrefetch, member,
 }: {
   row: ExperimentRow;
   index: number;
@@ -153,6 +159,8 @@ function Row({
   /** *range*: extend the selection from the last toggled row (shift-click). */
   onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
+  /** Its place under a group header, when it is a group's member. */
+  member?: MemberPlace;
 }) {
   const navigate = useNavigate();
   // Prefetch on a resting pointer, not on every row a scroll slides under it.
@@ -200,7 +208,7 @@ function Row({
       }
       case "experiment":
         return (
-<ExperimentCell key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} />
+<ExperimentCell key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} member={!!member} />
         );
       case "c:tags":
         return <td key={id} data-col-id={id} className="tags-cell" style={style}><TagChips tags={r.tags} /></td>;
@@ -235,7 +243,7 @@ function Row({
   return (
     <tr
       style={{ height: ROW_HEIGHT }}
-      className={`row${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
+      className={`row${member ? ` group-member${member === "last" ? " group-last" : ""}` : ""}${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
       data-row-index={index}
       data-href={href}
       tabIndex={isActive ? 0 : -1}

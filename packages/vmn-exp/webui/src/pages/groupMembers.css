@@ -1,0 +1,19 @@
+/* A group's rows under its header (plan 22 F11): the experiment cell is
+   indented past the header's fold so names line up under the group's label,
+   and a guide line runs down from the fold, with a tick to each member, and
+   stops at the last one. */
+.group-member-body { position: relative; min-width: 0; padding-left: var(--member-indent); }
+tr.group-member .group-member-body::before {
+  content: ""; position: absolute; left: var(--member-guide); top: -40px; bottom: -40px;
+  border-left: 2px solid var(--line-2);
+}
+tr.group-member.group-last .group-member-body::before { bottom: calc(100% - var(--member-tick)); }
+tr.group-member .group-member-body::after {
+  content: ""; position: absolute; left: var(--member-guide); top: var(--member-tick);
+  width: calc(var(--member-indent) - var(--member-guide) - 6px); border-top: 2px solid var(--line-2);
+}
+.lb-table { --member-indent: 28px; --member-guide: 8px; --member-tick: 10px; }
+/* The +N more row's button sits on the members' line. */
+tr.group-more.group-member .group-more-btn { margin-left: 0; }
+/* Each group starts with a clear rule above its header. */
+tr.group-row:not(:first-child) > td { border-top: 2px solid var(--line-2); }

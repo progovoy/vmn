@@ -72,3 +72,24 @@ export function groupItems(
 /** The runs among *items*. */
 export const boardRows = (items: readonly BoardItem[]): ExperimentRow[] =>
   items.filter((it): it is ExperimentRow => !isGroupItem(it));
+
+export type MemberPlace = "mid" | "last";
+
+/** Where each item of a foldable group sits under its header (plan 22 F11):
+ *  its rows and `+N more` row by index, the one before the next header (or
+ *  the end) `last`. The inline `(no parent run)` group's rows are no one's
+ *  members. */
+export function memberPlaces(items: readonly BoardItem[]): Map<number, MemberPlace> {
+  const out = new Map<number, MemberPlace>();
+  let inGroup = false;
+  items.forEach((it, i) => {
+    if (isGroupItem(it) && it.item === "group") {
+      inGroup = it.foldable;
+      return;
+    }
+    if (!inGroup) return;
+    const next = items[i + 1];
+    out.set(i, !next || (isGroupItem(next) && next.item === "group") ? "last" : "mid");
+  });
+  return out;
+}

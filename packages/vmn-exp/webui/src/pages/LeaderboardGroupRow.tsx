@@ -11,13 +11,14 @@ import StatusPill from "../components/StatusPill";
 import { Icon } from "../components/shell/icons";
 import type { ExperimentRow, RunState } from "../types";
 import { fmtVal, runHref } from "../util";
-import type { BoardGroup, GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
+import type { BoardGroup, GroupHeaderItem, GroupMoreItem, MemberPlace } from "../util/groupItems";
 import { MORE_TEXT, aggregateCell, countParts, countsText, sizeText, spokenCounts } from "./groupHeaderText";
 import { GROUP_COUNT_COLS, groupCount, groupCountTone, isGroupCountId, type GroupCountCol } from "./groupCountColumns";
 import { isGapId } from "./leaderboardColumns";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import "./leaderboardGroupRow.css";
+import "./groupMembers.css";
 
 /** What names the group: its target run, else its label. */
 export const groupName = (label: string, t: GroupTarget | null) => (t ? t.name || t.verstr : label);
@@ -142,22 +143,23 @@ export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFo
   );
 }
 
-export function GroupMoreRow({ item, index, layout, onMore }: {
-  item: GroupMoreItem; index: number; layout: RowLayout; onMore: (key: string) => void;
+export function GroupMoreRow({ item, index, layout, onMore, member }: {
+  item: GroupMoreItem; index: number; layout: RowLayout; onMore: (key: string) => void; member?: MemberPlace;
 }) {
+  const more = (
+    <button
+      type="button" className="group-more-btn" disabled={item.state === "loading"}
+      role={item.state === "error" ? "alert" : undefined}
+      onClick={() => onMore(item.key)}
+    >
+      {MORE_TEXT[item.state](item.remaining)}
+    </button>
+  );
   return (
-    <tr className={`group-more ${item.state}`} style={{ height: ROW_HEIGHT }} data-row-index={index} tabIndex={-1}>
+    <tr className={`group-more ${item.state}${member ? " group-member group-last" : ""}`} style={{ height: ROW_HEIGHT }} data-row-index={index} tabIndex={-1}>
       {layoutIds(layout).map((id, i) => (
         <td key={id} data-col-id={id} style={layout.styles[i]}>
-          {id === "experiment" && (
-            <button
-              type="button" className="group-more-btn" disabled={item.state === "loading"}
-              role={item.state === "error" ? "alert" : undefined}
-              onClick={() => onMore(item.key)}
-            >
-              {MORE_TEXT[item.state](item.remaining)}
-            </button>
-          )}
+          {id === "experiment" && (member ? <div className="group-member-body">{more}</div> : more)}
         </td>
       ))}
     </tr>

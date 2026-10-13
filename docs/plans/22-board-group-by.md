@@ -327,3 +327,11 @@ their default order (no sort), and the no-value group stays last. Cached and mov
 by deltas like the other group orders (the count sort is part of the grouping's
 key; only groups whose rows changed are placed again). Without `group=`, a `c:*`
 sort is what any unknown sort is today: a metric no row carries (storage order).
+
+**F11. Members read as members.** User feedback (2026-10-13): a group's rows did not
+look like they belong under its header — their names started left of the header's
+label. In a foldable group each row's experiment cell is now indented so names line up
+under the group's label, with a guide line from the fold down and a tick to each member
+(`└` at the last one, or at its `+N more` row); each group's header gets a heavier rule
+above it (`util/groupItems.ts:memberPlaces`, `pages/groupMembers.css`). The inline
+`(no parent run)` group and `group=none` are unchanged.
