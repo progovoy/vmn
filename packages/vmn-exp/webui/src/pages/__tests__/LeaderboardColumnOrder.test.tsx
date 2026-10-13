@@ -44,6 +44,11 @@ beforeEach(() => {
   mockedApi.experimentsPaged?.mockResolvedValue(undefined);
 });
 
+/** A header's first text: its label's, which sits in the sort button of a
+ *  sortable header (plan 20 C3), before the goal arrow span. */
+const firstText = (th: Element) =>
+  document.createTreeWalker(th, NodeFilter.SHOW_TEXT).nextNode()?.textContent?.trim();
+
 /** Metric/param header names in their DOM order.
  *  Each header contains the key name as its first text child (before the goal
  *  arrow span), so we take the first word to avoid matching "loss ↑". */
@@ -51,7 +56,7 @@ function metricParamHeaders(): string[] {
   const heads = [...document.querySelectorAll("thead th")] as HTMLElement[];
   const fixed = new Set(["", "#", "status", "experiment", "note", "when", "tags"]);
   return heads
-    .map((th) => (th.firstChild as Text | null)?.textContent?.trim() ?? th.textContent?.trim() ?? "")
+    .map((th) => firstText(th) ?? th.textContent?.trim() ?? "")
     .filter((t) => !fixed.has(t));
 }
 
@@ -88,7 +93,7 @@ describe("Leaderboard column order and pinning from URL", () => {
     const heads = [...document.querySelectorAll("thead th")] as HTMLElement[];
     // Use first text node to find the header (avoids "loss ↑" / "loss ▾" suffixes)
     const lossHead = heads.find(
-      (th) => (th.firstChild as Text | null)?.textContent?.trim() === "loss"
+      (th) => firstText(th) === "loss"
     );
     expect(lossHead).toBeTruthy();
     expect(Number(lossHead!.style.zIndex)).toBe(3);
@@ -102,7 +107,7 @@ describe("Leaderboard column order and pinning from URL", () => {
     await waitFor(() => expect(document.querySelector("thead")).toBeInTheDocument());
     const heads = [...document.querySelectorAll("thead th")] as HTMLElement[];
     const lossIdx = heads.findIndex(
-      (th) => (th.firstChild as Text | null)?.textContent?.trim() === "loss"
+      (th) => firstText(th) === "loss"
     );
     expect(lossIdx).toBeGreaterThan(0);
     const bodyRow = document.querySelector("tbody tr") as HTMLTableRowElement | null;

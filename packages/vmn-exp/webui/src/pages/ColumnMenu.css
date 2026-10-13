@@ -1,0 +1,29 @@
+/* The leaderboard header's column menu button (over the label's end, shown on
+   hover or focus, so it takes no room from the label) and its popup. */
+.lb-table th .th-menu {
+  position: absolute; top: 50%; right: 7px; transform: translateY(-50%);
+  width: 16px; height: 18px; padding: 0; border: 0; border-radius: 3px;
+  background: var(--surface-1); color: var(--text-3); font-size: 13px; line-height: 1;
+  cursor: pointer; opacity: 0;
+}
+/* The glyph is drawn, so it stays out of the header's text. */
+.lb-table th .th-menu::before { content: "\22EE"; }
+.lb-table th:hover .th-menu, .lb-table th .th-menu:focus-visible, .lb-table th .th-menu[aria-expanded="true"] {
+  opacity: 1;
+}
+.lb-table th .th-menu:hover { color: var(--text); background: var(--panel-2); }
+.lb-table th .th-menu:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+
+.th-menu-pop {
+  position: fixed; z-index: 40; display: flex; flex-direction: column; padding: 4px;
+  border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel);
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.45);
+}
+.th-menu-pop [role="menuitem"] {
+  padding: 6px 10px; border: 0; border-radius: 5px; background: none;
+  color: var(--text-2); font-size: 13px; text-align: left; white-space: nowrap; cursor: pointer;
+}
+.th-menu-pop [role="menuitem"]:hover:not(:disabled),
+.th-menu-pop [role="menuitem"]:focus-visible { background: var(--panel-2); color: var(--text); }
+.th-menu-pop [role="menuitem"]:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.th-menu-pop [role="menuitem"]:disabled { color: var(--text-3); opacity: 0.55; cursor: default; }
