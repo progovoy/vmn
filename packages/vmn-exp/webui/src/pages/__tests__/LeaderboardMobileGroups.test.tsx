@@ -43,7 +43,7 @@ const sweepGroup = (extra: Partial<RunGroup> = {}): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "failed", metrics: { loss: 0.91 } },
   counts: counts(), aggregates: { loss: agg(0.3), acc: agg(0.8, { best: null }) }, rows: INNER, rows_total: 2,
-  rows_unfiltered: extra.rows_total ?? 2, ...extra,
+  rows_unfiltered: (extra.counts ?? counts()).total, ...extra,
 });
 const noParent = (): RunGroup => ({
   key: NONE_GROUP, label: "(no parent run)", target: null, counts: counts({ total: 2, running: 0, failed: 0 }),
