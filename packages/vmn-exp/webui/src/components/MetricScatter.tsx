@@ -4,7 +4,8 @@ import { fmtVal, metricGoal } from "../util";
 import { chartTheme } from "../util/cssColor";
 import { useThemeVersion } from "../hooks/useTheme";
 import { Y_AXIS_SIZE } from "../util/curveOptions";
-import { nearestPoint, scatterGroups } from "../util/scatterData";
+import { colorGroups, nearestPoint, scatterGroups } from "../util/scatterData";
+import { NO_GROUP_COLOR, type ChartGroups } from "../util/chartGroups";
 import { DENSE_POINTS, scatterData, scatterOptions } from "../util/scatterOptions";
 import { TOOLTIP_STYLE } from "./chartStyles";
 import { useRunSelect } from "./chartHooks";
@@ -20,6 +21,8 @@ interface Props {
   /** Axes to start from (the importance panel opens param vs metric). */
   initialX?: string;
   initialY?: string;
+  /** Colours each point by its run's group (plan 22 G7). */
+  groups?: ChartGroups;
 }
 
 const HEIGHT = 320;
@@ -43,22 +46,26 @@ function AxisSelect({ label, value, cols, onChange }: {
 /** Canvas scatter (uPlot) of any metric or numeric param against another;
  *  the best point by the y metric's goal is highlighted. Hover shows the
  *  nearest run, click opens it. */
-function MetricScatter({ rows, metricCols, paramCols, schema, onSelect, initialX, initialY }: Props) {
+function MetricScatter({ rows, metricCols, paramCols, schema, onSelect, initialX, initialY, groups: byGroup }: Props) {
   const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
   const [xCol, setXCol] = useState(initialX ?? metricCols[0] ?? paramCols[0] ?? "");
   const [yCol, setYCol] = useState(initialY ?? metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "");
   const yGoal = metricGoal(schema, yCol);
   const select = useRunSelect(onSelect);
 
-  const groups = useMemo(() => {
+  const colorOf = byGroup?.colorOf;
+  const { colors, groups } = useMemo(() => {
+    if (colorOf) return colorGroups(rows, xCol, yCol, paramCols, colorOf, NO_GROUP_COLOR);
     const { rest, best } = scatterGroups(rows, xCol, yCol, paramCols, yGoal);
-    return [rest, best]; // in COLORS order
-  }, [rows, xCol, yCol, paramCols, yGoal]);
+    return { colors: COLORS, groups: [rest, best] };
+  }, [rows, xCol, yCol, paramCols, yGoal, colorOf]);
+  const colorsKey = colors.join("|");
   const dense = groups.reduce((n, g) => n + g.xs.length, 0) > DENSE_POINTS;
   // Fresh rows (a poll) swap data in place; only the point-size tier rebuilds.
   const themeVersion = useThemeVersion();
   const options = useMemo(
-    () => scatterOptions(COLORS, { height: HEIGHT, theme: chartTheme(), dense }), [dense, themeVersion],
+    // Rebuilt when the colours change, not each new array of them.
+    () => scatterOptions(colors, { height: HEIGHT, theme: chartTheme(), dense }), [colorsKey, dense, themeVersion],
   );
   const data = useMemo(() => scatterData(groups), [groups]);
 

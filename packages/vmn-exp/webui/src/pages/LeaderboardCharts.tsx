@@ -5,6 +5,8 @@ import { CHART_VIEWS, type ChartView } from "../hooks/useLeaderboardView";
 import Segmented from "../components/Segmented";
 import AddToReport from "../reports/AddToReport";
 import { leaderboardSpec } from "../reports/viewSpecs";
+import ChartGroupLegend from "../components/ChartGroupLegend";
+import type { ChartGroups } from "../util/chartGroups";
 
 // Chart code is heavy (uPlot among it); loading them lazily keeps them off the table's
 // critical path — the rows paint while the chart code is still arriving.
@@ -34,7 +36,7 @@ export function ChartFallback() {
 }
 
 export default function LeaderboardCharts({
-  view, onView, rows, label, metricCols, paramCols, schema, onBrush, importance,
+  view, onView, rows, label, metricCols, paramCols, schema, onBrush, importance, groups,
 }: {
   view: ChartView;
   onView: (v: ChartView) => void;
@@ -46,6 +48,8 @@ export default function LeaderboardCharts({
   schema: MetricsSchema | null;
   onBrush: (indices: number[] | null) => void;
   importance: ImportanceSource;
+  /** Each run's group colour on a grouped board (plan 22 G7). */
+  groups?: ChartGroups;
 }) {
   const common = { rows, metricCols, schema };
   const spec = () => leaderboardSpec({
@@ -59,11 +63,12 @@ export default function LeaderboardCharts({
         {label && <span className="chart-coverage">{label}</span>}
         <span style={{ marginLeft: "auto" }}><AddToReport ws={importance.ws} spec={spec} /></span>
       </div>
+      {groups && <ChartGroupLegend legend={groups.legend} />}
       <Suspense fallback={<ChartFallback />}>
         {view === "trend" && <ParamPlots {...common} />}
-        {view === "bar" && <MetricBarChart {...common} />}
-        {view === "scatter" && <MetricScatter {...common} paramCols={paramCols} />}
-        {view === "parallel" && <ParallelCoordinates {...common} paramCols={paramCols} onBrush={onBrush} />}
+        {view === "bar" && <MetricBarChart {...common} groups={groups} />}
+        {view === "scatter" && <MetricScatter {...common} paramCols={paramCols} groups={groups} />}
+        {view === "parallel" && <ParallelCoordinates {...common} paramCols={paramCols} onBrush={onBrush} groups={groups} />}
         {view === "grouped" && <GroupedMetrics {...common} paramCols={paramCols} />}
         {view === "importance" && <ParamImportance {...common} {...importance} paramCols={paramCols} />}
       </Suspense>

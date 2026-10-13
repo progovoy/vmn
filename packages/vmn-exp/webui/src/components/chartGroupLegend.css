@@ -1,0 +1,10 @@
+.chart-group-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 14px;
+  margin: 0 0 10px; padding: 0; list-style: none;
+  font-size: 12px; color: var(--text-2);
+}
+.chart-group-legend li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 260px; }
+.chart-group-legend .swatch { flex: none; width: 10px; height: 10px; border-radius: 2px; }
+.chart-group-legend .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-group-legend .count { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.chart-group-legend .more { color: var(--text-3); }

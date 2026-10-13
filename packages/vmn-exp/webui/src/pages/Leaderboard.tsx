@@ -154,6 +154,10 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     checkOf, onCheck: toggleRows,
   } : undefined;
 
+  const boardGroups = data.grouped ? data.groups : undefined;
+  const chartGrouping = useMemo(() => (boardGroups && grouping.group
+    ? { field: grouping.group, groups: boardGroups } : undefined), [boardGroups, grouping.group]);
+
   const onPrefetch = useCallback(
     (verstr: string) => { prefetchRun(client, ws, app, verstr); },
     [client, ws, app],
@@ -249,7 +253,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
                     ws={ws} app={app} filter={filter} view={view.chart} onView={view.setChart}
                     loaded={all} total={data.total} metricCols={cols.metricCols} paramCols={cols.paramCols}
                     allParams={cols.suggestFacets.param_keys} schema={schema} defaultMetric={sortLabel}
-                    onBrushed={setBrushed}
+                    onBrushed={setBrushed} grouping={chartGrouping}
                   />
                 )}
 

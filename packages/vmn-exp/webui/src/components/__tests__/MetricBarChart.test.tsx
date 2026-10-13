@@ -43,4 +43,11 @@ describe("MetricBarChart", () => {
     expect(container.querySelector("[data-testid='bar-chart']")).toBeInTheDocument();
     expect(container.querySelectorAll("[data-testid='bar']")).toHaveLength(0);
   });
+
+  it("charts the first metric once the metrics arrive after it mounted", () => {
+    const { container, rerender } = render(<MetricBarChart rows={ROWS} metricCols={[]} schema={SCHEMA} />);
+    rerender(<MetricBarChart rows={ROWS} metricCols={["loss", "acc"]} schema={SCHEMA} />);
+    expect(container.querySelectorAll("[data-testid='bar']")).toHaveLength(3);
+    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("loss");
+  });
 });
