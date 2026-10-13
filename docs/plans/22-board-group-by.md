@@ -17,7 +17,7 @@
 > Paths are relative to `packages/vmn-exp/webui/src/` unless they start with
 > `packages/`, `ui/` (= `packages/vmn-exp/src/vmn_exp/ui/`) or `docs/`.
 
-Status: **done** (2026-10-13). Done: S1, S2 (no SQL cache serves the list, so
+Status: **done, follow-ups in progress** (2026-10-13; §6). Done: S1, S2 (no SQL cache serves the list, so
 nothing to fall back from), W1, W2, W3 (group selection, Compare, Charts by group, the
 plan-20 Compare redirects removed), W4 (phone section labels), D1. Not built: G6's
 `5 of 16` on a header the filter cut (counts cover the passing rows only).
@@ -236,3 +236,47 @@ After each wave: `/simplify`, rebuild the bundle, light/dark screenshots at 1440
   `leaderboard_groups.py`.
 - **Lineage groups.** Grouping by an input would put a run in several groups. If it is
   wanted, it is a filter ("runs that used X"), not a grouping.
+
+## 6. Follow-ups (2026-10-13, user: "do ALL that is left")
+
+Everything the first build left open, plus the reviewers' non-blocking findings. The user
+approved the toolbar test's 7 -> 8 controls limit (G2 adds Group by).
+
+**F1. `5 of 16` (G6).** K1 gains, per group, `rows_unfiltered`: the group's size with the
+same `archived` setting but without `q`/`status`/`branch`/`search`. It equals `rows_total`
+when no filter is set. The header (desktop and phone) says `5 of 16` when they differ.
+Kept incrementally like the other group stats.
+
+**F2. The header count in words.** `16 runs` (and `1 run`), then the non-zero statuses
+`· 2 running · 1 failed`; all-succeeded reads `16 runs · all succeeded`. On the phone the
+line wraps instead of being cut (`1 st…`).
+
+**F3. The effective aggregate comes from the server.** K1's top level gains `aggregate`
+(what `agg=` resolved to, the conf default included, read the same way the server reads
+other app conf, branch conf respected). The board's tag and menu show that value when the
+URL has no `agg=`; the client's own conf read (`useConfAggregate`) goes.
+
+**F4. Live while any group runs.** K1's top level gains `running` (running rows across
+all groups after filters). The board is live when it is > 0, not only when a loaded row
+is running.
+
+**F5. A size cap.** Grouped, `limit` is <= 50 groups and `limit * rows_per_group` <= 5000
+rows (`rows_per_group` is lowered to fit); out-of-range values are clamped, not refused.
+
+**F6. Distinct keys.** A field value that is literally `(none)` must not share the
+no-value group: the no-value group's `key` is a sentinel that no value can produce
+(its label stays `(none)` / `(no parent run)`). NaN params count as one distinct value
+in the facets' distinct-value tally, and leaving cancels joining.
+
+**F7. Charts follow the selection (G7).** With rows selected, the Charts tab plots only
+them (a `Showing N selected · Show all` note clears it); without a selection it plots
+the filtered runs as today.
+
+**F8. Phone header checkbox.** The phone section label gets the same group checkbox as
+the desktop header (selects its loaded rows, indeterminate when partial).
+
+**F9. Small fixes.** The selected aggregate in the Group by menu meets 4.5:1 contrast in
+both themes (no `#fff` on the dark accent). On the phone the Group by menu opens under
+its trigger at any scroll. `useShellContext.test.tsx`'s fixture route `overlay` becomes
+`compare-runs`. `server.py`'s new import is ruff-clean (I001). The grouping
+incremental tests gain `rerun_of` and `forked_from` cases.
