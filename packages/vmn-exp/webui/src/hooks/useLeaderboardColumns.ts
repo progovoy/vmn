@@ -12,7 +12,6 @@ import { EMPTY_PREFS, type ColumnPrefs } from "./useColumnPrefs";
 import type { SuggestFacets } from "../util/querySuggest";
 import { NO_PINS, orderedKeys } from "../util/columnOrder";
 import { schemaHides } from "../util/hiddenMetrics";
-import { GROUP_COUNT_COLS, countColumnVisible } from "../pages/groupCountColumns";
 
 /** *value*, or the previous one when structurally equal — so a poll that
  *  moves no column best leaves every memoized row alone. */
@@ -45,8 +44,7 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
  *  Defaults (plan 20 D11): the declared-goal metrics (every metric when no
  *  goal is declared; `show=`/`hide=` override), up to six
  *  params whose values vary across the rows (as many as fit *fill*; `show=`/
- *  `hide=` override), a grouped board's count columns (plan 22 F10; `hide=`
- *  overrides), then `when`. Note, tags and the start/end dates need `show=`.
+ *  `hide=` override), then `when`. Note, tags and the start/end dates need `show=`.
  *
  *  `order` and `pinned` come from URL params `col=` and `pin=` (as stable
  *  arrays from `useLeaderboardView`). Columns in `order` appear first;
@@ -66,8 +64,6 @@ export function useLeaderboardColumns(
   fill = 0,
   /** Columns the user turned on (`show=`): metrics, params, note and dates. */
   shown: ReadonlySet<string> = EMPTY_SET,
-  /** A grouped board: its count columns show unless `hide=` names them (plan 22 F10). */
-  grouped = false,
 ) {
   const list = rows ?? [];
   const primary = useMemo(
@@ -104,10 +100,7 @@ export function useLeaderboardColumns(
     [rows, paramCols],
   ));
 
-  const visibleFleet = useMemo(() => [
-    ...GROUP_COUNT_COLS.filter((c) => countColumnVisible(`c:${c}`, hidden, grouped)),
-    ...FLEET_COLS.filter((c) => shown.has(`c:${c}`)),
-  ], [hidden, shown, grouped]);
+  const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => shown.has(`c:${c}`)), [shown]);
   const hasTags = useMemo(() => anyTags(rows), [rows]);
   const showTags = hasTags && shown.has(TAGS_COLUMN);
   const hasComments = useMemo(() => anyComments(rows), [rows]);
@@ -200,7 +193,7 @@ export function useLeaderboardColumns(
     param_keys: facets?.param_keys ?? paramCols,
   }), [facets, metricCols, paramCols]);
 
-  const otherCols = [...(grouped ? GROUP_COUNT_COLS : []), ...FLEET_COLS, "note", ...(hasTags ? ["tags"] : []), ...(hasComments ? ["comments"] : [])];
+  const otherCols = [...FLEET_COLS, "note", ...(hasTags ? ["tags"] : []), ...(hasComments ? ["comments"] : [])];
   const visibleOther = [
     ...visibleFleet, ...(showNote ? ["note"] : []), ...(showTags ? ["tags"] : []), ...(showComments ? ["comments"] : []),
   ];

@@ -1,5 +1,6 @@
 /* The board's Group by menu (plan 22 G2): one column of radio choices in
-   titled sections; the aggregate is a row of choices at the bottom. */
+   titled sections; the group sort and the aggregate are rows of choices at
+   the bottom. */
 .group-by { position: relative; display: inline-block; }
 .group-by > button { padding: 4px 10px; }
 .group-by-menu {
@@ -26,18 +27,19 @@
 .group-by-item:hover, .group-by-item:focus-visible {
   background: var(--panel); outline: none; box-shadow: inset 0 0 0 2px var(--accent);
 }
-/* The aggregate reads as one row of short choices, kept in view at the
-   bottom however long the field list scrolls. */
-.group-by-section[aria-label="Aggregate"] {
+/* The group sort and the aggregate read as rows of short choices, kept in
+   view at the bottom however long the field list scrolls. */
+.group-by-footer {
   position: sticky; bottom: -6px; margin: 4px -6px -6px; padding: 0 6px 6px;
-  flex-direction: row; flex-wrap: wrap; align-items: center;
   background: var(--panel-2); border-top: 1px solid var(--line);
 }
-.group-by-section[aria-label="Aggregate"] .group-by-title { width: 100%; }
-.group-by-section[aria-label="Aggregate"] .group-by-item { padding: 4px 8px; }
-.group-by-section[aria-label="Aggregate"] .group-by-item::before { display: none; }
+.group-by-footer .group-by-section { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.group-by-footer .group-by-title { width: 100%; }
+.group-by-footer .group-by-item { padding: 4px 8px; }
+.group-by-footer .group-by-item::before { display: none; }
 /* A tint of the accent under the theme's own text: #fff on the dark accent
    reads at 3.3:1 (F9). */
+.group-by-section[aria-label="Sort groups"] .group-by-item[aria-checked="true"],
 .group-by-section[aria-label="Aggregate"] .group-by-item[aria-checked="true"] {
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 22%, transparent);
@@ -45,6 +47,7 @@
 }
 /* Its own 1px accent edge would hide the 2px focus ring: the focused
    choice gets a ring in the text colour, distinct from that edge (F10). */
+.group-by-section[aria-label="Sort groups"] .group-by-item[aria-checked="true"]:focus-visible,
 .group-by-section[aria-label="Aggregate"] .group-by-item[aria-checked="true"]:focus-visible {
   box-shadow: inset 0 0 0 2px var(--text);
 }

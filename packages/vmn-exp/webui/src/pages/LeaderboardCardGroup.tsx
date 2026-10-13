@@ -9,7 +9,7 @@ import { Icon } from "../components/shell/icons";
 import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
 import { MORE_TEXT, aggregateCell, shownAggregate } from "./groupHeaderText";
-import { GroupCountParts, groupCountsText, groupName, groupSpoken } from "./LeaderboardGroupRow";
+import { GroupBar, GroupCountParts, groupCountsText, groupName, groupSpoken } from "./LeaderboardGroupRow";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import type { RowLayout } from "./LeaderboardRow";
 import type { GroupActions } from "./LeaderboardTable";
@@ -60,7 +60,10 @@ function CardGroupHead({ item, layout, metric, agg, mono, onFold, check }: {
             {group.label}
           </span>
         )}
-        <GroupCountParts group={group} className="lb-mgroup-counts" title={groupCountsText(group)} />
+        <span className="lb-mgroup-counts">
+          <GroupBar group={group} />
+          <GroupCountParts group={group} title={groupCountsText(group)} />
+        </span>
         <span className="sr-only">{groupSpoken(group)}</span>
       </div>
       {metric && <Aggregate item={item} metric={metric} agg={agg} />}

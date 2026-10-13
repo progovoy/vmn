@@ -1,14 +1,12 @@
 /** The leaderboard's header row: sorting (a button per sortable column,
  *  `aria-sort` on its cell), column drag/resize, the column menu (their
  *  keyboard equivalents) and the select-all checkbox. */
-import { useId, useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { GroupAggregate } from "../apiGroups";
 import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isGapId, isPinned } from "./leaderboardColumns";
 import ColumnMenu, { type MenuAction } from "./ColumnMenu";
 import { ARIA_SORT, HeaderCheckbox, ResizeGrip, SortButton, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, type RowLayout } from "./LeaderboardRow";
-import HeadGroups, { GROUP_ROW_HEIGHT } from "./LeaderboardHeadGroups";
-import { headGroups, isGroupCountId } from "./groupCountColumns";
 
 export const TIMESTAMP_SORT = "timestamp";
 export const IDX_SORT = "idx";
@@ -42,11 +40,11 @@ export interface SortState {
  *  body style already has `position: "sticky"` (experiment + pinned metric/
  *  param columns) sit at zIndex 3 so they aren't overlapped by other headers
  *  when both axes scroll simultaneously. */
-function headStyle(style: CSSProperties, index: number, top = 0): CSSProperties {
+function headStyle(style: CSSProperties, index: number): CSSProperties {
   const base: CSSProperties = {
     ...style,
     position: "sticky",
-    top,
+    top: 0,
     zIndex: 2,
     background: STICKY_BG,
   };
@@ -61,7 +59,6 @@ function headInfo(id: string, layout: RowLayout, aggregate?: GroupAggregate): { 
   if (id === "idx") return { label: "#", sort: IDX_SORT, title: "sort by run number (newest first)" };
   if (id === "when") return { label: "when", sort: TIMESTAMP_SORT, title: "sort by time (newest first)" };
   if (id in DATE_SORT_OF) return { label: name, sort: DATE_SORT_OF[id], title: `sort by ${name} time (newest first)` };
-  if (isGroupCountId(id)) return { label: name, sort: id, title: `sort groups by ${name} (most first)` };
   if (id.startsWith("m:")) {
     const meta = layout.colMeta[name];
     const hasGoal = meta && meta.goal !== null;
@@ -123,17 +120,13 @@ export default function Head({ layout, sort: s, edits, check, aggregate }: {
   aggregate?: GroupAggregate;
 }) {
   const ids = layoutIds(layout);
-  const groups = headGroups(ids);
-  const helpId = useId();
-  const top = groups ? GROUP_ROW_HEIGHT : 0;
-  const headStyles = layout.styles.map((st, i) => headStyle(st, i, top));
+  const headStyles = layout.styles.map(headStyle);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
   const ariaSort = (col: string) => (s.sort === col && s.order ? ARIA_SORT[s.order] : "none");
   return (
     <thead>
-      {groups && <HeadGroups groups={groups} styles={layout.styles} helpId={helpId} />}
       <tr>
         {ids.map((id, i) => {
           if (isGapId(id)) return <th key={id} aria-hidden style={headStyles[i]} />;
@@ -149,7 +142,6 @@ export default function Head({ layout, sort: s, edits, check, aggregate }: {
               key={id} data-col-id={id} style={headStyles[i]} className={cls || undefined}
               title={sort ? undefined : title}
               aria-sort={sort ? ariaSort(sort) : undefined}
-              aria-describedby={isGroupCountId(id) ? helpId : undefined}
               onClick={sort ? () => s.onSort(sort) : undefined}
               draggable={movable}
               onDragStart={movable ? (e) => {

@@ -1,5 +1,5 @@
 import LiveStatus from "../components/LiveStatus";
-import { isGroupCountId } from "./groupCountColumns";
+import { isGroupCountId } from "../util/groupCountSort";
 import "./boardCaption.css";
 
 export const BOARD_CAPTION_ID = "board-caption";

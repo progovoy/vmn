@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateCell, countParts, countsText, sizeText, spokenCounts } from "../groupHeaderText";
+import { aggregateCell, barSegments, countParts, countsText, sizeText, spokenCounts } from "../groupHeaderText";
 
 const counts = (extra = {}) => ({ total: 16, running: 2, waiting: 0, done: 13, failed: 1, stuck: 0, ...extra });
 const agg = (extra = {}) => ({ mean: 0.5, best: 0.2, median: 0.4, min: 0.2, max: 0.9, n: 16, ...extra });
@@ -65,5 +65,22 @@ describe("a group header's aggregate cell (plan 22 G10)", () => {
   it("is empty when the group has no value of the metric", () => {
     expect(aggregateCell(undefined, "mean")).toEqual({ value: null, title: undefined });
     expect(aggregateCell(agg({ mean: null, n: 0 }), "mean")).toEqual({ value: null, title: undefined });
+  });
+});
+
+describe("a group header's run bar (plan 22 F13)", () => {
+  it("fills from the left with the finished runs, then the running; waiting runs are the empty track", () => {
+    expect(barSegments(counts())).toEqual([
+      { tone: "done", pct: 81.25 }, { tone: "failed", pct: 6.25 }, { tone: "running", pct: 12.5 },
+    ]);
+    expect(barSegments(counts({ total: 3, running: 0, done: 1, failed: 0, stuck: 1, waiting: 1 }))).toEqual([
+      { tone: "done", pct: 33.33 }, { tone: "stuck", pct: 33.33 },
+    ]);
+  });
+
+  it("is an empty track while every run waits, and absent for a group of one run", () => {
+    expect(barSegments(counts({ total: 3, running: 0, done: 0, failed: 0, waiting: 3 }))).toEqual([]);
+    expect(barSegments(counts({ total: 1, running: 0, done: 1, failed: 0 }))).toBeNull();
+    expect(barSegments(counts({ total: 0, running: 0, done: 0, failed: 0 }))).toBeNull();
   });
 });

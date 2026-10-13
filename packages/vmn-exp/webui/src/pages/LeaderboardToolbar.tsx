@@ -9,6 +9,7 @@ import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import type { BoardGrouping } from "../hooks/useBoardAggregate";
 import { NO_GROUP } from "../util/groupBy";
+import { groupSortOf } from "../util/groupCountSort";
 import "./leaderboardToolbar.css";
 
 /** The board's actions, in its page head: the create button (primary, only
@@ -53,6 +54,7 @@ export default function LeaderboardToolbar({
         value={grouping.group ?? NO_GROUP} links={grouping.links} fields={grouping.fields}
         onChange={grouping.setGroup}
         aggregate={grouping.aggregate} onAggregate={grouping.setAggregate}
+        groupSort={groupSortOf(view.sort)} onGroupSort={view.setGroupSort}
       />
       <ColumnPicker
         columns={cols.paramCols} visible={cols.visibleParams}

@@ -9,7 +9,8 @@ const rect = (bottom: number) => ({ top: bottom - 30, bottom, left: 0, right: 10
 
 function setup() {
   render(
-    <GroupByMenu value="parent" links={LINK_GROUPS} fields={[]} onChange={vi.fn()} aggregate="mean" onAggregate={vi.fn()} />,
+    <GroupByMenu value="parent" links={LINK_GROUPS} fields={[]} onChange={vi.fn()} aggregate="mean" onAggregate={vi.fn()}
+      groupSort={null} onGroupSort={vi.fn()} />,
   );
   return screen.getByRole("button", { name: /^group by/i });
 }

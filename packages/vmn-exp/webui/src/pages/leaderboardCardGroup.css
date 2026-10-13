@@ -28,7 +28,7 @@
   overflow-wrap: anywhere;
 }
 /* It breaks between the parts, not inside `1 running`. */
-.lb-mgroup-counts > span > span { white-space: nowrap; }
+.lb-mgroup-counts .group-counts > span { white-space: nowrap; }
 .lb-mgroup-agg { flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
 .lb-mgroup-value { font-size: 15px; font-weight: 600; color: var(--text); }
 .lb-mgroup-metric { font-family: var(--mono); font-size: 11px; color: var(--text-3); }

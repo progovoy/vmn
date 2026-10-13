@@ -2,7 +2,6 @@ import type { CSSProperties } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { metricGoal, rowParams } from "../util";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
-import type { GroupCountCol } from "./groupCountColumns";
 
 /** Default column widths (px) under `table-layout: fixed`, so a long value
  *  is clipped with an ellipsis instead of stretching its column. */
@@ -17,9 +16,7 @@ export const MIN_COL_WIDTH = 40;
 
 /** The run's own start/end, right after the experiment column (on with `show=`). */
 export const FLEET_COLS = ["started", "ended"] as const;
-/** The columns right after the experiment column: a grouped board's count
- *  columns (groupCountColumns.ts), then the dates. */
-export type FleetCol = (typeof FLEET_COLS)[number] | GroupCountCol;
+export type FleetCol = (typeof FLEET_COLS)[number];
 
 /** The server sort key behind each sortable date column. */
 export const DATE_SORT_OF: Readonly<Record<string, "started_at" | "finished_at">> = {

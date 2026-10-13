@@ -1,8 +1,8 @@
-/** Plan 22 F10: while grouped, the board shows each group's counts in five
- *  columns (total / waiting / running / done / failed), filled on the group
- *  header rows only; their headers sort the groups by that count. */
+/** Plan 22 F13: a group's run counts belong to its head (the outer run), so
+ *  they sit in its header row's own cell — a bar and the counts in words —
+ *  not in table columns; the Group by menu sorts the groups by a count. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("../../api", () => ({
   api: {
@@ -48,7 +48,6 @@ const sweep = (): RunGroup => ({
 });
 const grouped = (groups: RunGroup[]) => ({ groups, total_groups: groups.length, total_rows: 4, running: 1, aggregate: "mean" });
 const header = () => document.querySelector("tbody tr.group-row") as HTMLElement;
-const cell = (tr: Element, id: string) => tr.querySelector(`td[data-col-id="${id}"]`) as HTMLElement;
 const headIds = () => [...document.querySelectorAll("thead th[data-col-id]")].map((th) => (th as HTMLElement).dataset.colId);
 
 beforeEach(() => {
@@ -64,58 +63,69 @@ beforeEach(() => {
   m.experimentGroups.mockResolvedValue(grouped([sweep()]));
 });
 
-describe("the group count columns (plan 22 F10)", () => {
-  it("show total / waiting / running / done / failed under one header group", async () => {
-    renderBoard();
-    await waitFor(() => expect(header()).toBeTruthy());
-    expect(headIds().filter((id) => COUNTS.includes(id!))).toEqual(COUNTS);
-    const group = document.querySelector("thead th.lb-group") as HTMLTableCellElement;
-    expect(group).toHaveAttribute("colspan", "5");
-    expect(group.querySelector(".lb-group-label")?.textContent).toBe("Runs in group");
-  });
+const segments = (tr: Element) => [...tr.querySelectorAll(".group-bar .group-bar-seg")]
+  .map((el) => [(el as HTMLElement).dataset.tone, (el as HTMLElement).style.width]);
+const sortMenu = () => {
+  fireEvent.click(screen.getByRole("button", { name: /^group by/i }));
+  return screen.getByRole("group", { name: "Sort groups" });
+};
+const lastGroupsCall = () => m.experimentGroups.mock.calls.slice(-1)[0][2];
 
-  it("fill the group header row from its counts, stuck counted as failed; run rows stay blank", async () => {
-    renderBoard();
+describe("a group's run counts (plan 22 F13)", () => {
+  it("are no table columns: no count column and no header group, even with show=", async () => {
+    renderBoard(`/ws/test/app/my-app?${COUNTS.map((id) => `show=${id}`).join("&")}`);
     await waitFor(() => expect(header()).toBeTruthy());
-    expect(COUNTS.map((id) => cell(header(), id).textContent)).toEqual(["4", "0", "1", "1", "2"]);
-    expect(cell(header(), "c:failed")).toHaveClass("tone-failed");
-    expect(cell(header(), "c:waiting")).toHaveClass("count-zero");
-    for (const tr of document.querySelectorAll("tbody tr.row")) {
-      for (const id of COUNTS) expect(cell(tr, id).textContent).toBe("");
+    expect(headIds().filter((id) => COUNTS.includes(id!))).toEqual([]);
+    expect(document.querySelector("thead .lb-group-row")).toBeNull();
+    for (const tr of document.querySelectorAll("tbody tr")) {
+      for (const id of COUNTS) expect(tr.querySelector(`td[data-col-id="${id}"]`)).toBeNull();
     }
   });
 
-  it("leave the header's own count line to the size while they show", async () => {
+  it("read in words on the head run's row", async () => {
     renderBoard();
     await waitFor(() => expect(header()).toBeTruthy());
-    expect(header().querySelector(".group-counts")?.textContent).toBe("4 runs");
-    // A screen reader still hears the counts in words.
+    expect(header().querySelector(".group-counts")?.textContent).toBe("4 runs · 1 running · 1 stuck · 1 failed");
     expect(header().querySelector(".sr-only")?.textContent).toBe("Group sweep: 4 runs, 1 running, 1 stuck, 1 failed");
   });
 
-  it("give the count line its full wording back once every count column is hidden", async () => {
-    renderBoard(`/ws/test/app/my-app?${COUNTS.map((id) => `hide=${id}`).join("&")}`);
-    await waitFor(() => expect(header()).toBeTruthy());
-    expect(headIds().filter((id) => COUNTS.includes(id!))).toEqual([]);
-    expect(document.querySelector("thead th.lb-group")).toBeNull();
-    expect(header().querySelector(".group-counts")?.textContent).toBe("4 runs · 1 running · 1 stuck · 1 failed");
-  });
-
-  it("hide one at a time with hide=", async () => {
-    renderBoard("/ws/test/app/my-app?hide=c:waiting");
-    await waitFor(() => expect(header()).toBeTruthy());
-    expect(headIds().filter((id) => COUNTS.includes(id!))).toEqual(["c:total", "c:running", "c:done", "c:failed"]);
-  });
-
-  it("sort the groups by their count: sort=c:<name> goes to the grouped list, most first, then flips", async () => {
+  it("fill a bar on the head run's row, finished runs first, hidden from a screen reader", async () => {
     renderBoard();
     await waitFor(() => expect(header()).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /sort groups by failed/i }));
-    await waitFor(() => expect(m.experimentGroups.mock.calls.slice(-1)[0][2]).toMatchObject({ sort: "c:failed", order: "desc" }));
+    expect(segments(header())).toEqual([["done", "25%"], ["failed", "25%"], ["stuck", "25%"], ["running", "25%"]]);
+    expect(header().querySelector(".group-bar")).toHaveAttribute("aria-hidden", "true");
+    for (const tr of document.querySelectorAll("tbody tr.row")) expect(tr.querySelector(".group-bar")).toBeNull();
+  });
+
+  it("leave the bar out of a group of one run", async () => {
+    m.experimentGroups.mockResolvedValue(grouped([{
+      ...sweep(), counts: { total: 1, running: 0, waiting: 0, done: 1, failed: 0, stuck: 0 },
+      rows: INNER.slice(0, 1), rows_total: 1, rows_unfiltered: 1,
+    }]));
+    renderBoard();
+    await waitFor(() => expect(header()).toBeTruthy());
+    expect(header().querySelector(".group-counts")?.textContent).toBe("1 run · all succeeded");
+    expect(header().querySelector(".group-bar")).toBeNull();
+  });
+
+  it("sort the groups from the Group by menu: sort=c:<name>, most first", async () => {
+    renderBoard();
+    await waitFor(() => expect(header()).toBeTruthy());
+    fireEvent.click(within(sortMenu()).getByRole("menuitemradio", { name: "failed" }));
+    await waitFor(() => expect(lastGroupsCall()).toMatchObject({ sort: "c:failed", order: "desc" }));
     expect(urlParams().get("sort")).toBe("c:failed");
-    expect(document.querySelector('thead th[data-col-id="c:failed"]')).toHaveAttribute("aria-sort", "descending");
-    fireEvent.click(screen.getByRole("button", { name: /sort groups by failed/i }));
-    await waitFor(() => expect(m.experimentGroups.mock.calls.slice(-1)[0][2]).toMatchObject({ sort: "c:failed", order: "asc" }));
+    expect(document.querySelector(".board-caption-sort")?.textContent).toBe("groups sorted by failed runs, most first");
+    // The menu stays open after the pick, the count checked.
+    const sort = screen.getByRole("group", { name: "Sort groups" });
+    expect(within(sort).getByRole("menuitemradio", { name: "failed" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("go back to the aggregate's order from the menu", async () => {
+    renderBoard("/ws/test/app/my-app?sort=c:total&order=desc");
+    await waitFor(() => expect(header()).toBeTruthy());
+    fireEvent.click(within(sortMenu()).getByRole("menuitemradio", { name: "aggregate" }));
+    await waitFor(() => expect(urlParams().get("sort")).toBeNull());
+    expect(urlParams().get("order")).toBeNull();
   });
 
   it("never print a count sort as a CLI flag", async () => {
@@ -126,10 +136,9 @@ describe("the group count columns (plan 22 F10)", () => {
 });
 
 describe("the flat board (group=none)", () => {
-  it("has no count columns, none to pick, and drops a count sort left in the URL", async () => {
+  it("drops a count sort left in the URL", async () => {
     renderBoard("/ws/test/app/my-app?group=none&sort=c:total&order=desc");
     await screen.findByRole("link", { name: v(3) });
-    expect(headIds().filter((id) => COUNTS.includes(id!))).toEqual([]);
     expect(m.experimentGroups).not.toHaveBeenCalled();
     expect(m.experimentsPaged).not.toHaveBeenCalled();
     expect(m.experiments.mock.calls[0][2]).toBe("idx");

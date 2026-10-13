@@ -11,13 +11,14 @@ const fields = groupFields({
 function setup(value = "parent", extra: Partial<Parameters<typeof GroupByMenu>[0]> = {}) {
   const onChange = vi.fn();
   const onAggregate = vi.fn();
+  const onGroupSort = vi.fn();
   render(
     <GroupByMenu
       value={value} links={LINK_GROUPS} fields={fields} onChange={onChange}
-      aggregate="mean" onAggregate={onAggregate} {...extra}
+      aggregate="mean" onAggregate={onAggregate} groupSort={null} onGroupSort={onGroupSort} {...extra}
     />,
   );
-  return { onChange, onAggregate };
+  return { onChange, onAggregate, onGroupSort };
 }
 const trigger = () => screen.getByRole("button", { name: /^group by/i });
 const open = () => fireEvent.click(trigger());
@@ -40,7 +41,7 @@ describe("GroupByMenu (plan 22 G2, G10)", () => {
     open();
     const menu = screen.getByRole("menu", { name: "Group by" });
     const groups = within(menu).getAllByRole("group").map((g) => g.getAttribute("aria-label"));
-    expect(groups).toEqual(["Links", "Fields", "Aggregate"]);
+    expect(groups).toEqual(["Links", "Fields", "Sort groups", "Aggregate"]);
     const items = within(menu).getAllByRole("menuitemradio").map((i) => i.textContent);
     expect(items.slice(0, 9)).toEqual([
       "none", "parent run", "forked from", "rerun of", "same code",
@@ -84,6 +85,34 @@ describe("GroupByMenu (plan 22 G2, G10)", () => {
     setup("none");
     open();
     expect(screen.queryByRole("group", { name: "Aggregate" })).toBeNull();
+  });
+
+  it("sorts the groups by the aggregate (checked by default) or by a count, staying open (plan 22 F13)", () => {
+    const { onGroupSort } = setup();
+    open();
+    const sort = screen.getByRole("group", { name: "Sort groups" });
+    expect(within(sort).getAllByRole("menuitemradio").map((b) => b.textContent))
+      .toEqual(["aggregate", "runs", "running", "failed", "waiting", "succeeded"]);
+    expect(within(sort).getByRole("menuitemradio", { name: "aggregate" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(sort).getByRole("menuitemradio", { name: "failed" }));
+    expect(onGroupSort).toHaveBeenCalledWith("c:failed");
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("checks the count the groups are sorted by, and goes back to the aggregate", () => {
+    const { onGroupSort } = setup("parent", { groupSort: "c:running" });
+    open();
+    const sort = screen.getByRole("group", { name: "Sort groups" });
+    expect(within(sort).getByRole("menuitemradio", { name: "running" })).toHaveAttribute("aria-checked", "true");
+    expect(within(sort).getByRole("menuitemradio", { name: "aggregate" })).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(within(sort).getByRole("menuitemradio", { name: "aggregate" }));
+    expect(onGroupSort).toHaveBeenCalledWith(null);
+  });
+
+  it("offers no group sort while ungrouped", () => {
+    setup("none");
+    open();
+    expect(screen.queryByRole("group", { name: "Sort groups" })).toBeNull();
   });
 
   it("closes on Escape", () => {

@@ -1,6 +1,6 @@
 /* The grouped board's header rows (LeaderboardGroupRow.tsx): a tinted band
    over the table (an inset shadow, as pinned cells carry their own solid
-   background), the label over the status count, and per metric the group's
+   background), the label over the run bar and status count, and per metric the group's
    aggregate over the target run's own value. */
 tr.group-row > td {
   box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 5%, transparent);
@@ -14,17 +14,23 @@ tr.group-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -
   font-size: 11.5px; color: var(--text-3); font-family: var(--mono);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 27px;
 }
-/* The count line's states and the count columns' cells (F10) share a tone;
-   a zero count is muted. */
-.group-counts .tone-total, td.group-count.tone-total { color: var(--text-2); font-weight: 600; }
-.group-counts .tone-running, td.group-count.tone-running { color: var(--st-running); }
+.group-counts .tone-total { color: var(--text-2); font-weight: 600; }
+.group-counts .tone-running { color: var(--st-running); }
 .group-counts .tone-waiting { color: var(--text-3); }
-/* Above the muted zeros. */
-td.group-count.tone-waiting { color: var(--text); }
 .group-counts .tone-stuck { color: var(--st-stuck); }
-.group-counts .tone-failed, td.group-count.tone-failed { color: var(--st-bad); }
-.group-counts .tone-done, td.group-count.tone-done { color: var(--st-good); }
-td.group-count.count-zero { color: var(--text-3); }
+.group-counts .tone-failed { color: var(--st-bad); }
+.group-counts .tone-done { color: var(--st-good); }
+/* The group's runs as one bar before the count line (plan 22 F13), in the
+   status colours; the track left over is the waiting runs. */
+.group-bar {
+  display: inline-flex; width: 56px; height: 6px; margin-right: 8px; vertical-align: middle;
+  border-radius: 3px; overflow: hidden; background: var(--line-2);
+}
+.group-bar-seg { height: 100%; }
+.group-bar-seg.tone-done { background: var(--st-good); }
+.group-bar-seg.tone-failed { background: var(--st-bad); }
+.group-bar-seg.tone-stuck { background: var(--st-stuck); }
+.group-bar-seg.tone-running { background: var(--st-running); }
 td.group-metric { line-height: 1.2; }
 td.group-metric .group-agg { display: block; font-weight: 600; }
 td.group-metric .group-own { display: block; font-size: 11px; color: var(--text-3); font-family: var(--mono); }

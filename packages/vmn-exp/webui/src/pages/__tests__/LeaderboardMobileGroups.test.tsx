@@ -107,6 +107,12 @@ describe("a grouped board below 640px", () => {
     expect(within(h).getByText("Group sweep: 3 runs, 1 running, 1 failed")).toHaveClass("sr-only");
   });
 
+  it("fills the head run's bar on its section label too (plan 22 F13)", async () => {
+    await shown();
+    const tones = [...head("sweep").querySelectorAll(".group-bar .group-bar-seg")].map((el) => (el as HTMLElement).dataset.tone);
+    expect(tones).toEqual(["done", "failed", "running"]);
+  });
+
   it("says `2 of 5` when the filters leave part of the group (plan 22 F1)", async () => {
     m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ counts: counts({ total: 2 }), rows_unfiltered: 5 }), loose()]));
     await shown();

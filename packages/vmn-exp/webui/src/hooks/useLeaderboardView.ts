@@ -129,6 +129,11 @@ export function useLeaderboardView() {
       }),
     /** The aggregate a group header shows; `agg=` is left out at the default (when known). */
     setAggregate: (agg: Aggregate, dflt: Aggregate | undefined) => setParam("agg", agg === dflt ? "" : agg),
+    /** Sort the groups by a count (`c:<name>`, most first), or by the aggregate (null). */
+    setGroupSort: (sort: string | null) =>
+      update((p) => {
+        if (sort) { p.set("sort", sort); p.set("order", "desc"); } else { p.delete("sort"); p.delete("order"); }
+      }),
     /** Close or reopen a group (all start open, so `collapse=` lists the shut ones). */
     toggleCollapsed: (key: string) => toggleIn("collapse", key),
     setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),

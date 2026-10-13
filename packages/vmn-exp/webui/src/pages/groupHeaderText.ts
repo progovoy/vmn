@@ -12,8 +12,7 @@ const isCut = (total: number, unfiltered: number | undefined) =>
   unfiltered !== undefined && unfiltered !== total;
 
 /** `16 runs`, `1 run`, or `5 of 16 runs` when the filters leave *total* of
- *  the group's *unfiltered* runs (plan 22 F1); all a header says of its
- *  counts while the count columns show them (F10). */
+ *  the group's *unfiltered* runs (plan 22 F1). */
 export const sizeText = (c: GroupCounts, unfiltered?: number): string =>
   isCut(c.total, unfiltered) ? `${c.total} of ${plural(unfiltered!, "run")}` : plural(c.total, "run");
 
@@ -34,6 +33,17 @@ export const countsText = (c: GroupCounts, unfiltered?: number) =>
 /** `16 runs, 2 running, 1 failed`, for a screen reader. */
 export const spokenCounts = (c: GroupCounts, unfiltered?: number) =>
   countParts(c, unfiltered).map((p) => p.text).join(", ");
+
+/** The states a group's run bar fills, left to right: the finished runs,
+ *  then the running; the waiting ones are the empty track. */
+const BAR: readonly Exclude<CountTone, "total" | "waiting">[] = ["done", "failed", "stuck", "running"];
+
+/** A group header's run bar (plan 22 F13), each state's share of the runs
+ *  in percent; null for a group of one run or none, which needs no bar. */
+export function barSegments(c: GroupCounts): { tone: CountTone; pct: number }[] | null {
+  if (c.total <= 1) return null;
+  return BAR.filter((t) => c[t] > 0).map((t) => ({ tone: t, pct: Math.round((c[t] / c.total) * 10000) / 100 }));
+}
 
 /** The aggregate shown for *agg*: the mean for `best` of a metric without a goal. */
 export const shownAggregate = (a: MetricAggregate, agg: GroupAggregate): GroupAggregate =>

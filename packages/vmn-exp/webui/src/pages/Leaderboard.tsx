@@ -26,7 +26,7 @@ import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 import LeaderboardTable, { IDX_SORT } from "./LeaderboardTable";
 import { boardSortState } from "./boardSortState";
-import { boardSort, isGroupCountId } from "./groupCountColumns";
+import { boardSort, isGroupCountId } from "../util/groupCountSort";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import BoardHead, { runCountText } from "./BoardHead";
 import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
@@ -135,7 +135,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const colPrefs = useColumnPrefs(`${ws}/${app}`);
   const [tableWidth, setTableWidth] = useState(0);
   const cols = useLeaderboardColumns(
-    rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown, data.grouped,
+    rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown,
   );
   const columnEdits = useColumnEdits(view, cols, colPrefs);
   const queryHelp = useMemo(() => queryHelpData({
