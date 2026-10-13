@@ -66,4 +66,13 @@ describe("column window", () => {
     expect(windowed.ids!.every(Boolean)).toBe(true);
     expect(sum(windowed.widths!)).toBe(wide.total);
   });
+
+  it("takes a window from a wider layout, for the render before it is recomputed", () => {
+    const wide = layoutOf(600);
+    const narrower = layoutOf(200);
+    const windowed = windowLayout(narrower, visibleColumns(wide, 30_000, 1000));
+    expect(windowed.styles.every(Boolean)).toBe(true);
+    expect(windowed.ids!.every(Boolean)).toBe(true);
+    expect(sum(windowed.widths!)).toBe(narrower.total);
+  });
 });
