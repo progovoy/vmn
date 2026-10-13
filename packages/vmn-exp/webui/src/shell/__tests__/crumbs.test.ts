@@ -58,6 +58,18 @@ describe("crumbsFor", () => {
     expect(crumbs[2].mono).toBe(true);
   });
 
+  it("drops the app crumb when the workspace has the app's name (the root already says it)", () => {
+    const same = (routeId: RouteId, search = "") =>
+      labels(input(routeId, { ws: "ml_app" }, search));
+    expect(same("experiments")).toEqual(["experiments"]);
+    expect(same("actions")).toEqual(["actions"]);
+    expect(same("tree")).toEqual(["stamp tree"]);
+    expect(same("tree", "v=0.4.1")).toEqual(["stamp tree", "0.4.1"]);
+    expect(same("compare-runs", "sel=a&sel=b")).toEqual(["experiments", "compare 2 runs"]);
+    const [exps] = crumbsFor(input("compare-runs", { ws: "ml_app" }, "sel=a&sel=b"));
+    expect(exps.to).toBe("/ws/ml_app/app/ml_app");
+  });
+
   it("run: @N and name, with the full verstr as title", () => {
     const run = { verstr: "0.4.1-dev.abcdef1234567890", idx: 54, name: "lr-sweep-3" };
     const crumbs = crumbsFor(input("run", { run, params: { verstr: "@54" } }));
