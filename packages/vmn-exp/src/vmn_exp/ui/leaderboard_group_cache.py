@@ -33,10 +33,10 @@ class GroupCache:
             grouping = self.grouping(snapshot, schema, spec)
         else:
             spec = GroupSpec(group, agg, schema, sort, order, status, None, archived)
-            grouping = self._filtered(snapshot, schema, spec, rows_filter)
+            grouping = self._uncached(snapshot, schema, spec, rows_filter)
         return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key)
 
-    def _filtered(self, snapshot, schema, spec, rows_filter):
+    def _uncached(self, snapshot, schema, spec, rows_filter):
         base, bucket = self._cache._base(snapshot)
         live = dict(zip(base.patch.changed, base.changed_at(bucket)))
         sort, status, _, order, archived = spec.flat
