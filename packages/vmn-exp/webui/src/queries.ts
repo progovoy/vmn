@@ -18,6 +18,8 @@ export interface RowsFilter {
   query?: string;
   /** Include archived runs. */
   archived?: boolean;
+  /** Top-level runs only (the Jobs view). */
+  top?: boolean;
 }
 export interface RowsData {
   rows: ExperimentRow[];

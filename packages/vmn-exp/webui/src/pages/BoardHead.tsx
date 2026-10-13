@@ -21,14 +21,18 @@ export function runCountText({ loading, filtered, loaded, total, shownTop, loade
  *  the board's actions (New run, Views, Columns) on the right. *live* (the
  *  phone board's freshness, whose caption is far below) shows after the
  *  count as text only: the caption keeps Pause and the live region. */
-export default function BoardHead({ title, count, live, actions }: {
-  title: string; count: string; live?: ReactNode; actions?: ReactNode;
+export default function BoardHead({ title, count, live, views, actions }: {
+  title: string; count: string; live?: ReactNode;
+  /** The experiments page's Jobs | All runs switch (plan 23 W1). */
+  views?: ReactNode;
+  actions?: ReactNode;
 }) {
   return (
     <div className="page-head board-head">
       <h1 className="mono">{title}</h1>
       <p className="page-sub board-count">{count}</p>
       {live && <span className="board-live" aria-hidden="true">{live}</span>}
+      {views}
       {actions}
     </div>
   );
