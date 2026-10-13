@@ -437,5 +437,7 @@ export interface DiffResult {
   from_verstr: string;
   to_verstr: string;
   metrics_delta: Record<string, DiffDelta>;
-  diff: string;
+  /** Null when the server could not build it; `diff_unavailable` says why. */
+  diff: string | null;
+  diff_unavailable?: string;
 }

@@ -139,9 +139,11 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
 
           <div className="card">
             <h2 className="section-title">What changed</h2>
-            {result.diff.trim()
-              ? <DiffText text={result.diff} />
-              : <div className="empty">The two runs have identical code.</div>}
+            {result.diff === null
+              ? <div className="empty">{result.diff_unavailable || "No code diff for these runs."}</div>
+              : result.diff.trim()
+                ? <DiffText text={result.diff} />
+                : <div className="empty">The two runs have identical code.</div>}
           </div>
 
           <div className="cli-card">
