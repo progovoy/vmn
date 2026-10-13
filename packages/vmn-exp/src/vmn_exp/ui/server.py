@@ -28,6 +28,7 @@ from vmn_exp.ui import (
     routes_media,
     routes_models,
     routes_reports,
+    routes_run_code,
     routes_search,
     routes_series,
     routes_shell,
@@ -601,6 +602,8 @@ def create_app(
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment)
+    routes_run_code.register(app, API_PREFIX, _series_storage, _leaderboard_inputs,
+                             leaderboards, _segment)
     def _ws_storage(ws_name):
         return _any_exp_storage(_experiment_workspace(ws_name))
 

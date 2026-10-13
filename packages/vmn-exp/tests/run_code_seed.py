@@ -2,6 +2,7 @@
 code/failure API tests (``/patch``, ``/baselines``, the K4 detail fields)."""
 import json
 import os
+import uuid
 
 import yaml
 
@@ -85,7 +86,7 @@ def client(app_layout):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
+    manager = WorkspaceManager(os.path.join(app_layout.base_dir, f"ui_data_{uuid.uuid4().hex}"))
     manager.attach_path("main", app_layout.repo_path)
     return TestClient(create_app(manager))
 
