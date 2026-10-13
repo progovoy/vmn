@@ -292,3 +292,21 @@ both themes (no `#fff` on the dark accent). On the phone the Group by menu opens
 its trigger at any scroll. `useShellContext.test.tsx`'s fixture route `overlay` becomes
 `compare-runs`. `server.py`'s new import is ruff-clean (I001). The grouping
 incremental tests gain `rerun_of` and `forked_from` cases.
+
+**F10 (web). Count columns for groups.** User decision (2026-10-13, "option 2"): this
+reverses G1's removal of the count columns for grouped boards. While the board is grouped
+(`group` != `none`) it shows `total` / `waiting` / `running` / `done` / `failed` with the
+keys, order and semantics of the inner-run columns at ba6e87e0 (`c:total`, `c:waiting`,
+`c:running`, `c:done`, `c:failed`; waiting = created, done = succeeded, failed = failed +
+stuck), under a "Runs in group" header group (`pages/groupCountColumns.ts`,
+`pages/LeaderboardHeadGroups.tsx`). Only group header rows fill them, from K1's `counts`;
+run rows leave the cells blank. Zeros are muted, other counts take their state's colour.
+They are on by default while grouped, each hideable from Columns or `hide=`, and absent
+with `group=none` (a `sort=c:*` left in the URL is dropped there). Their header buttons
+sort groups by that count: the board sends `sort=c:<name>` (with `order`, most first by
+default) to the grouped list, and K1 orders groups by the count, rows within a group
+keeping the default order. With the columns visible the desktop header's count line reads
+only the size (`16 runs` / `5 of 16 runs`); the phone section label keeps the full
+wording. Also: a group a filter cut never says `all succeeded` (`5 of 16 runs · 5
+succeeded`, the spoken text too), the selected aggregate in the Group by menu shows a 2px
+focus ring, and the stylesheet tests share one contrast helper module.

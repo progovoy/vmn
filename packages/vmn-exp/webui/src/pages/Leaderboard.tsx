@@ -26,6 +26,7 @@ import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
 import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT } from "./LeaderboardTable";
 import { DATE_SORT_OF } from "./leaderboardColumns";
+import { boardSort, isGroupCountId } from "./groupCountColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import BoardHead, { runCountText } from "./BoardHead";
 import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
@@ -93,13 +94,15 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const serverQuery = combineQueries(
     combineQueries(view.query, searchClause(view.search)), branchClause(view.branch),
   );
+  // A count sort orders groups only (plan 22 F10): the flat board drops it.
+  const sort = boardSort(view.sort, groupBy.group);
   const filter = useMemo(() => ({
-    sort: view.sort ?? IDX_SORT,
-    order: view.sort ? view.order : undefined,
+    sort: sort ?? IDX_SORT,
+    order: sort ? view.order : undefined,
     status: view.status || undefined,
     query: serverQuery || undefined,
     archived: view.archived || undefined,
-  }), [view.sort, view.order, view.status, serverQuery, view.archived]);
+  }), [sort, view.order, view.status, serverQuery, view.archived]);
   const charting = view.tab === "charts";
   // A brush in the parallel view (Charts tab) narrows the table.
   const brush = charting && view.chart === "parallel" ? brushed : null;
@@ -139,13 +142,13 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const colPrefs = useColumnPrefs(`${ws}/${app}`);
   const [tableWidth, setTableWidth] = useState(0);
   const cols = useLeaderboardColumns(
-    rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown,
+    rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown, data.grouped,
   );
   const columnEdits = useColumnEdits(view, cols, colPrefs);
   const queryHelp = useMemo(() => queryHelpData({
     facets: cols.suggestFacets, branches: facets?.branches ?? [], rows: all, schema,
-    primary: view.sort ?? cols.primary ?? cols.visibleMetrics[0],
-  }), [cols.suggestFacets, facets, all, schema, view.sort, cols.primary, cols.visibleMetrics]);
+    primary: sort ?? cols.primary ?? cols.visibleMetrics[0],
+  }), [cols.suggestFacets, facets, all, schema, sort, cols.primary, cols.visibleMetrics]);
 
   const filtered = Boolean(view.query || view.status || view.search || view.branch || view.archived);
   const tableItems = data.items;
@@ -158,9 +161,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     [client, ws, app],
   );
   const sortState = {
-    sort: view.sort,
-    order: view.sort ? view.order ?? bestOrder(schema, view.sort) : null,
-    reversed: Boolean(view.sort && view.order && view.order !== bestOrder(schema, view.sort)),
+    sort,
+    order: sort ? view.order ?? bestOrder(schema, sort) : null,
+    reversed: Boolean(sort && view.order && view.order !== bestOrder(schema, sort)),
     onSort: (col: string) => view.clickSort(col, bestOrder(schema, col)),
   };
 
@@ -176,7 +179,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   if (data.pageError) return <div className="error">{data.pageError}</div>;
 
   const empty = rows !== undefined && rows.length === 0 && !filtered;
-  const sortLabel = view.sort ?? cols.primary;
+  const sortLabel = sort ?? cols.primary;
+  // `vmn-exp list` sorts runs, not groups.
+  const cliSort = isGroupCountId(sortLabel) ? null : sortLabel;
   const shownTop = topLevel(tableRows ?? []);
   // Groups hold only their first rows: the facets count the board's runs.
   const wholeBoard = data.grouped && rows !== undefined && !filtered && facets !== null;
@@ -284,7 +289,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           )}
           <ReportsUsing ws={ws} app={appName} />
           <div className="cli-card">
-            vmn-exp list {appName}{sortLabel ? ` --sort ${sortLabel}` : ""}
+            vmn-exp list {appName}{cliSort ? ` --sort ${cliSort}` : ""}
           </div>
           <LeaderboardSelectionBar
             selected={[...view.selected]}
