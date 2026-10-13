@@ -88,6 +88,11 @@ describe("plural", () => {
     expect(plural(0, "run")).toBe("0 runs");
     expect(plural(53, "result")).toBe("53 results");
   });
+
+  it("groups the thousands, so a job's 4,000 runs read at a glance (plan 23)", () => {
+    expect(plural(4000, "run")).toBe("4,000 runs");
+    expect(plural(1234567, "run")).toBe("1,234,567 runs");
+  });
 });
 
 describe("appHref", () => {

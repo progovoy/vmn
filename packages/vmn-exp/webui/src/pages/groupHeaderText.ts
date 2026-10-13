@@ -1,6 +1,6 @@
 /** What a group header row says (plan 22 G4, G10): its status count and,
  *  per metric, the aggregate the board shows. */
-import { plural } from "../util";
+import { fmtCount, plural } from "../util";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "done";
@@ -14,14 +14,14 @@ const isCut = (total: number, unfiltered: number | undefined) =>
 /** `16 runs`, `1 run`, or `5 of 16 runs` when the filters leave *total* of
  *  the group's *unfiltered* runs (plan 22 F1). */
 export const sizeText = (c: GroupCounts, unfiltered?: number): string =>
-  isCut(c.total, unfiltered) ? `${c.total} of ${plural(unfiltered!, "run")}` : plural(c.total, "run");
+  isCut(c.total, unfiltered) ? `${fmtCount(c.total)} of ${plural(unfiltered!, "run")}` : plural(c.total, "run");
 
 /** The total in words, then each state that is not done and has runs; a
  *  group with none of those reads `all succeeded` (plan 22 F2), or names
  *  the count when the filters cut the group (`5 of 16 runs · 5 succeeded`). */
 export function countParts(c: GroupCounts, unfiltered?: number): { text: string; tone: CountTone }[] {
-  const named = NAMED.filter((t) => c[t] > 0).map((t) => ({ text: `${c[t]} ${t}`, tone: t }));
-  const done = isCut(c.total, unfiltered) ? `${c.done} succeeded` : "all succeeded";
+  const named = NAMED.filter((t) => c[t] > 0).map((t) => ({ text: `${fmtCount(c[t])} ${t}`, tone: t }));
+  const done = isCut(c.total, unfiltered) ? `${fmtCount(c.done)} succeeded` : "all succeeded";
   const rest = named.length || c.total === 0 ? named : [{ text: done, tone: "done" as const }];
   return [{ text: sizeText(c, unfiltered), tone: "total" }, ...rest];
 }

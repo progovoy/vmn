@@ -1,9 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { columnLayout, columnStyles, EXPERIMENT_COL_INDEX } from "../leaderboardColumns";
+import { columnLayout, columnStyles, defaultWidth, EXPERIMENT_COL_INDEX } from "../leaderboardColumns";
 import type { ColumnCell } from "../leaderboardColumns";
 
-// Fixed widths: check=34, idx=56, status=110 → stickyLeft = 200
-const STICKY_LEFT = 34 + 56 + 110;
+// The fixed columns before the experiment column: check, #, status.
+const STICKY_LEFT = defaultWidth("check") + defaultWidth("idx") + defaultWidth("status");
+
+describe("the # column", () => {
+  it("fits a six-digit run number (`@100000`, 12px mono) beside its padding (plan 23)", () => {
+    const MONO_12PX = 7.3;
+    const PADDING = 20;
+    expect(defaultWidth("idx")).toBeGreaterThanOrEqual(Math.ceil("@100000".length * MONO_12PX + PADDING));
+  });
+});
 
 describe("columnStyles pinnedCount", () => {
   it("zero pinnedCount: only the experiment column is sticky", () => {

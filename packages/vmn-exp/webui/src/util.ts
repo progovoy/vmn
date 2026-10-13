@@ -129,4 +129,6 @@ export const appHref = (ws: string, name: string) => `/ws/${ws}/app/${appTag(nam
 export const modelHref = (ws: string, model: string) => `/ws/${ws}/models/${encodeURIComponent(model)}`;
 
 /** `1 run`, `0 runs`, `53 runs`. */
-export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+/** *n* with its thousands grouped: `4,000`. */
+export const fmtCount = (n: number) => n.toLocaleString("en-US");
+export const plural = (n: number, noun: string) => `${fmtCount(n)} ${noun}${n === 1 ? "" : "s"}`;

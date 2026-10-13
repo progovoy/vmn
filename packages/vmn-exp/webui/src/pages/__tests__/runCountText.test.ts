@@ -14,4 +14,9 @@ describe("runCountText", () => {
   it("reads N of M under a filter", () => {
     expect(runCountText({ ...base, filtered: true, total: 7, shownTop: 5 })).toBe("5 of 7 runs");
   });
+  it("groups the thousands (plan 23)", () => {
+    expect(runCountText({ ...base, loaded: 99600, total: 99600, shownTop: 50, loadedTop: 19600 }))
+      .toBe("19,600 runs · 99,600 incl. inner");
+    expect(runCountText({ ...base, filtered: true, total: 4000, shownTop: 200 })).toBe("200 of 4,000 runs");
+  });
 });

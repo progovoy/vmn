@@ -68,6 +68,14 @@ describe("a group header's aggregate cell (plan 22 G10)", () => {
   });
 });
 
+describe("a big group's count (plan 23)", () => {
+  it("groups the thousands of every number it names", () => {
+    const big = counts({ total: 4000, running: 1200, done: 1500, failed: 1300 });
+    expect(countsText(big)).toBe("4,000 runs · 1,200 running · 1,300 failed");
+    expect(countsText(counts({ total: 2500, running: 0, failed: 0, done: 2500 }), 4000)).toBe("2,500 of 4,000 runs · 2,500 succeeded");
+  });
+});
+
 describe("a group header's run bar (plan 22 F13)", () => {
   it("fills from the left with the finished runs, then the running; waiting runs are the empty track", () => {
     expect(barSegments(counts())).toEqual([

@@ -6,7 +6,7 @@ import { finiteNumbers, maxOf, minOf } from "../util/stats";
 /** Default column widths (px) under `table-layout: fixed`, so a long value
  *  is clipped with an ellipsis instead of stretching its column. */
 const W = {
-  check: 34, idx: 56, status: 110, experiment: 240, fleet: 76, date: 150,
+  check: 34, idx: 72, status: 110, experiment: 240, fleet: 76, date: 150,
   metric: 110, param: 120, tags: 180, note: 200, when: 90,
 };
 /** Narrowest the experiment column gets when it shrinks to fit the table. */
