@@ -22,8 +22,11 @@ def _signature(path):
 
 
 class MetricsSchemaCache:
-    def __init__(self, size=256):
+    """*read(root_path, app_name)* (default: the metrics schema) per conf change."""
+
+    def __init__(self, size=256, read=None):
         self._entries = LRU(size)  # (root, app) -> (conf signature, schema)
+        self._read = read
 
     def get(self, root_path, app_name):
         path = os.path.join(root_path, *_conf_relpath(app_name).split("/"))
@@ -31,6 +34,6 @@ class MetricsSchemaCache:
         signature = _signature(path)
         return self._entries.get(
             (root_path, app_name),
-            lambda: (signature, exp_reader.metrics_schema(root_path, app_name)),
+            lambda: (signature, (self._read or exp_reader.metrics_schema)(root_path, app_name)),
             valid=lambda hit: hit[0] == signature,
         )[1]

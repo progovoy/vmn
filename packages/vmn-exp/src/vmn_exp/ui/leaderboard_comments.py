@@ -24,6 +24,22 @@ def joined(payload, counts):
             for row in payload]
 
 
+def joined_groups(payload, counts):
+    """A grouped answer (one group, or ``{groups, ...}``) with ``comments`` on its rows."""
+    if not counts:
+        return payload
+    if "groups" in payload:
+        return dict(payload, groups=[joined_groups(g, counts) for g in payload["groups"]])
+    return dict(payload, rows=joined(payload["rows"], counts))
+
+
+def groups_by_comments(cache, snapshot, schema, group, counts, query=None, **params):
+    """:meth:`LeaderboardCache.groups` for a *query* reading ``comments``."""
+    extra = {"comments": counts.get, "outputs": snapshot.outputs_of}
+    return cache.groups(snapshot, schema, group,
+                        rows_filter=lambda rows: filter_rows(rows, query, extra=extra), **params)
+
+
 def page_by_comments(cache, snapshot, schema, counts, sort=None, last=None, offset=0,
                      limit=None, status=None, query=None, order=None, archived=False):
     """:meth:`LeaderboardCache.page` for a *query* reading ``comments``."""

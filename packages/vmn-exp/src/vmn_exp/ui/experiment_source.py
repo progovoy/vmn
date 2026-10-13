@@ -85,6 +85,7 @@ class ExperimentSource:
         self._caches = {}  # workspace name -> WorkspaceCache
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
+        self._group_aggregates = MetricsSchemaCache(read=exp_reader.group_aggregate)
         self._lock = threading.Lock()
         self._pg = None
         if cache_dsn:
@@ -186,6 +187,10 @@ class ExperimentSource:
     def metrics_schema(self, ws, app_name):
         """The git workspace app's metrics schema, parsed once per conf change."""
         return self._schemas.get(ws.path, app_name)
+
+    def group_aggregate(self, ws, app_name):
+        """The git workspace app's default group aggregate (plan 22 G10)."""
+        return self._group_aggregates.get(ws.path, app_name)
 
     def detail_options(self, ws, snap):
         """``edges``/``resolve``/``read_child_row``/``last_good`` (and with a background

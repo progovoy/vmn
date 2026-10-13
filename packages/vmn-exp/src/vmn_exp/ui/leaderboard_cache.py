@@ -46,6 +46,7 @@ from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, static_moves
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_facets import visible as _visible
+from vmn_exp.ui.leaderboard_group_cache import GroupCache
 from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, order_key
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.memo import LRU
@@ -256,6 +257,9 @@ class LeaderboardCache:
         self._sorted = LRU(size)
         self._columns = LRU(size)
         self._importance = LRU(IMPORTANCE_RESULTS)
+        self._groups = GroupCache(self, size)
+
+    schema_key = staticmethod(_schema_key)
 
     def _bucket(self):
         return int(experiment_status._now().timestamp() // self.bucket_sec)
@@ -289,10 +293,7 @@ class LeaderboardCache:
                     schema, sort=sort, last=last, order=order,
                 ),
             )
-        static = self._static.get(
-            (base.token, schema_key) + filters,
-            lambda: self._static_of(base, schema_key, schema, filters),
-        )
+        static = self.static_order(base, schema, filters)
         if not base.patch.changed:
             return static.sorted
         return self._sorted.get(
@@ -301,6 +302,15 @@ class LeaderboardCache:
                 base, _filtered(base.snapshot, base.changed_at(bucket), status, query, archived),
                 schema, sort, order,
             ),
+        )
+
+    def static_order(self, base, schema, filters):
+        """*base*'s :class:`_Static` order for *filters* ``(sort, status,
+        query, order, archived)``."""
+        schema_key = _schema_key(schema)
+        return self._static.get(
+            (base.token, schema_key) + filters,
+            lambda: self._static_of(base, schema_key, schema, filters),
         )
 
     def _static_of(self, base, schema_key, schema, filters):
@@ -334,6 +344,11 @@ class LeaderboardCache:
     def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False):
         """Every row passing *status* in :meth:`page`'s order, unpaged."""
         return self._ordered(snapshot, schema, sort, None, status, None, order, archived)
+
+    def groups(self, snapshot, schema, group, **params):
+        """The grouped board (plan 22 K1), see
+        :meth:`~vmn_exp.ui.leaderboard_group_cache.GroupCache.groups`."""
+        return self._groups.groups(snapshot, schema, group, **params)
 
     def rows(self, snapshot, archived=False):
         """Every row, with its status as of now, in storage order: no sort, for

@@ -356,7 +356,7 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `DELETE` | `/workspaces/{ws}` | Remove a workspace (204) |
 | `GET` | `/workspaces/{ws}/git` | [Branch, HEAD, dirty, store](#git-context) of a git workspace |
 | `GET` | `/workspaces/{ws}/apps` | Apps with experiments or versions |
-| `GET` | `ws/{ws}/apps/{app}/experiments` | Run rows ([paging](#paging-sorting-and-order), [query](#filtering-with-a-query)) |
+| `GET` | `ws/{ws}/apps/{app}/experiments` | Run rows ([paging](#paging-sorting-and-order), [query](#filtering-with-a-query)); with `group=`, [groups of runs](#grouped-runs) |
 | `GET` | `ws/{ws}/apps/{app}/experiments/{verstr}` | [Run detail](#run-detail-is-bounded) (`latest`, `@N`, prefixes resolve) |
 | `GET` | `.../experiments/{verstr}/log?offset=&limit=` | A page of the log, `{"entries", "total"}`, oldest first |
 | `GET` | `.../experiments/{verstr}/artifacts/{path}` | [Artifact download](#diffs-and-artifacts) |
@@ -533,6 +533,51 @@ section on the run page show them).
 ```sh
 curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
   "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?sort=loss&order=asc&limit=50"
+```
+
+### Grouped runs
+
+`GET .../experiments?group=<field>` answers groups instead of a page. The
+field is a link between runs, `parent`, `forked_from`, `rerun_of` (the run
+pointed at heads the group and is not one of its rows) or `code_verstr` (the
+code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
+
+```
+{"groups": [{"key", "label",
+             "target": {verstr, idx, name, status, tree_status, metrics} | null,
+             "counts": {total, running, waiting, done, failed, stuck},
+             "aggregates": {"<metric>": {mean, best, median, min, max, n}},
+             "rows": [...], "rows_total": 16}],
+ "total_groups": 3, "total_rows": 48}
+```
+
+- `target` is the header run of a `parent`/`forked_from`/`rerun_of` group. A
+  target missing from the index (pruned, another app) groups under its verstr
+  with `target: null` and the label `<verstr> (not found)`. Runs without a
+  value form the `(none)` group, always last (labelled `(no parent run)` for
+  `parent`).
+- Filters (`q`, `status`, `archived`) select rows; a group shows when one of
+  its rows passes, and its counts and aggregates cover the passing rows. A
+  link group keeps its `target` even when the target fails the filter. A
+  `rerun_of` group's aggregates include the original's own value.
+- `aggregates` cover each metric's finite values, by each run's summary
+  policy; `best` follows the metric's goal and is null without one.
+- `sort`/`order` order rows within a group as on the flat list. Groups order
+  by `agg=mean|best|median|min|max` of the sort metric (`best` without a goal
+  is the mean; groups without a value after the others), and by their first
+  row for a date or no metric sort. `agg` defaults to conf.yml's
+  `experiment.ui.group_aggregate`, else `mean`; every aggregate is in the
+  payload either way.
+- `offset`/`limit` page groups (default 50); `rows_per_group` (1..100, default
+  10) caps each group's `rows`. `group_key=<key>&offset=&limit=` answers that
+  one group with its rows paged (404 for an unknown key).
+- An unknown field or aggregate, `last` or a `rows_per_group` out of range is
+  a 400. Groupings are kept per index generation and moved along with it, so a
+  grouped page costs about what a flat one does.
+
+```sh
+curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments?group=parent&sort=loss&agg=best&limit=50"
 ```
 
 ### Columns for whole-set charts
