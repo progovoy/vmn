@@ -64,8 +64,7 @@ absent = the default. Saved views keep it. One level only; nesting is out of sco
 it points at with *L*. The target run is the group header, not also a row in that
 group:
 - `parent`: header = the outer run, members = its direct inner runs. A run with no
-  parent is its own row in the `(no parent run)` group. That group's header has no run
-  and is shown last, with its rows inline, not folded.
+  parent that heads no group is a plain row after the groups, in no group (F12).
 - `forked_from`: header = the source run, members = its forks.
 - `rerun_of`: header = the original, members = its reruns. The original's own values
   count in the aggregates, so the group answers "how stable is this result".
@@ -142,6 +141,7 @@ instead of a flat page:
 ```
 { "groups": [ { "key": "...", "label": "...",
                 "target": {verstr, idx, name, status, tree_status, metrics} | null,
+                "loose": false,
                 "counts": {total, running, waiting, done, failed, stuck},
                 "aggregates": {"<metric>": {mean, best, median, min, max, n}},
                 "rows": [ ...first N rows by the sort... ], "rows_total": 5,
@@ -166,9 +166,13 @@ passing rows, `rows_unfiltered` its rows with the same `archived` but without
 and search filters inside `q`), and the top-level `running` the running rows after
 the filters across all groups (F4). `sort=c:total|c:waiting|c:running|c:done|c:failed`
 orders groups by that count (F10). Unknown fields or aggregates give 400.
-Rows with no value go to one group, last, labelled `(none)` (for `parent`: `(no parent
-run)`); its `key` is the sentinel `∅` (U+2205), and a value whose text starts with `∅`
-is keyed with it doubled, so no value shares that group (F6). A
+Rows with no value go to one group, last, labelled `(none)`; its `key` is the sentinel
+`∅` (U+2205), and a value whose text starts with `∅` is keyed with it doubled, so no
+value shares that group (F6). Each group carries `loose` (F12): true only for that group
+of a link grouping (`parent`/`forked_from`/`rerun_of`), which then holds the runs with
+no link that head no group of the grouping after the filters (the others are headers),
+its counts, aggregates, `rows_total` and `rows_unfiltered` over those runs, and is left
+out when it has none; `total_rows` and `running` still count every passing run. A
 link whose target is not in the index (pruned, another app) groups under the target's
 verstr, with `target: null` and the label `<verstr> (not found)`.
 
@@ -193,7 +197,7 @@ makes it green.
 `routes_leaderboard.py`.
 - Tests: groups by each link and by branch and a param; a target is a header and not a
   member of its own group; a member that is also a target appears in both places;
-  `(no parent run)` last; a missing target (`not found`); counts equal the rows';
+  the loose rows last; a missing target (`not found`); counts equal the rows';
   aggregates (mean, best by goal, median, min, max, n) follow the summary policy;
   `agg=` picks the sorting aggregate; the conf default; a target's own value; filters cut rows
   and keep link headers (G6); sort orders groups by aggregate and rows within;
@@ -282,7 +286,7 @@ rows (`rows_per_group` is lowered to fit); out-of-range values are clamped, not 
 
 **F6. Distinct keys.** A field value that is literally `(none)` must not share the
 no-value group: the no-value group's `key` is a sentinel that no value can produce
-(its label stays `(none)` / `(no parent run)`). NaN params count as one distinct value
+(its label stays `(none)`). NaN params count as one distinct value
 in the facets' distinct-value tally, and leaving cancels joining. Bookmarked
 `collapse=` keys of the old `(none)` group are not migrated: they no longer fold (G8).
 
@@ -333,5 +337,23 @@ look like they belong under its header — their names started left of the heade
 label. In a foldable group each row's experiment cell is now indented so names line up
 under the group's label, with a guide line from the fold down and a tick to each member
 (`└` at the last one, or at its `+N more` row); each group's header gets a heavier rule
-above it (`util/groupItems.ts:memberPlaces`, `pages/groupMembers.css`). The inline
-`(no parent run)` group and `group=none` are unchanged.
+above it (`util/groupItems.ts:memberPlaces`, `pages/groupMembers.css`). `group=none` is
+unchanged; the loose rows are no one's members (F12).
+
+**F12. Runs with no link are not a group.** User feedback (2026-10-13), on the board
+grouped by parent run: the `(no parent run) · 32 runs` header with mean aggregates and
+counts was a fake group — not a run, its aggregates meaningless, and it listed the outer
+runs that already head their own groups (an outer run was both a header and a row in
+it). For the link groupings (`parent`, `forked_from`, `rerun_of`) K1's no-link group is
+now `loose: true` and holds only the runs that head no group of the grouping after the
+filters (a run whose group a filter cut is loose again); its counts, aggregates,
+`rows_total` and `rows_unfiltered` cover those runs, it keeps the `∅` key and stays
+last, and is absent when empty (`ui/leaderboard_group_loose.py`, derived from the
+grouping's state, so it moves with the deltas: a run gaining its first child, fork or
+rerun leaves the loose rows, losing its last one brings it back). The board shows no
+header for it (no label, counts, aggregates, checkbox or fold): its rows are ordinary,
+unindented rows after the groups, with a plain `+N more` row; on the phone they are
+plain cards after the sections (`util/groupItems.ts:memberOf`). Charts draw them in the
+no-group grey with no legend entry (`util/chartGroups.ts`). Field groupings and
+`code_verstr` keep their `(none)` group as before. Gone: the `(no parent run)` label
+and the header's `foldable` flag.

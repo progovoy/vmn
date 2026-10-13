@@ -322,13 +322,15 @@ group's aggregate (`?agg=`, default conf `experiment.ui.group_aggregate`,
 else mean; the cell title says `mean of 16`, and `(no goal)` where `best`
 falls back to the mean), plus `own 0.91` when the target run logged the
 metric itself; the metric headers carry a small aggregate tag. `?collapse=`
-lists the closed groups (the parent grouping's `(no parent run)` group never
-folds). Sorting orders the groups (by the aggregate) and the rows within
+lists the closed groups. Sorting orders the groups (by the aggregate) and the rows within
 them; 50 groups load per page. A filter keeps the groups with a matching run
 and counts only those runs; a link group's header stays even when its target
 run does not match. Grouped by parent run, an outer run heads its inner runs'
-group, and its own row sits in the group of its parent (`(no parent run)` for
-a top-level run).
+group, and its own row sits in the group of its parent. Grouped by a link
+(parent run, forked from, rerun of), the runs with no link that head no
+group are not a group: they are plain rows after the groups (plain cards on
+a phone), with no header, no group colour in Charts, and a plain `+N more`
+row.
 
 A group header's checkbox selects the group's loaded rows, shut or open (it
 is indeterminate while only some are selected); the header's target run is
@@ -608,6 +610,7 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
 ```
 {"groups": [{"key", "label",
              "target": {verstr, idx, name, status, tree_status, metrics} | null,
+             "loose": false,
              "counts": {total, running, waiting, done, failed, stuck},
              "aggregates": {"<metric>": {mean, best, median, min, max, n}},
              "rows": [...], "rows_total": 5, "rows_unfiltered": 16}],
@@ -617,10 +620,15 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
 - `target` is the header run of a `parent`/`forked_from`/`rerun_of` group. A
   target missing from the index (pruned, another app) groups under its verstr
   with `target: null` and the label `<verstr> (not found)`. Runs without a
-  value form one group, always last, labelled `(none)` (`(no parent run)` for
-  `parent`). Its `key` is `∅` (U+2205), which no value's key equals: a value
+  value form one group, always last, labelled `(none)`. Its `key` is `∅` (U+2205), which no value's key equals: a value
   whose text starts with `∅` is keyed with it doubled (`∅x` -> `∅∅x`), so a
-  param literally set to `(none)` is a group of its own.
+  param literally set to `(none)` is a group of its own. Every group carries
+  `loose`, true only for that group of a link grouping (`parent`,
+  `forked_from`, `rerun_of`): the runs with no link minus those heading a
+  group of the grouping (after the filters), so each run shows once; its
+  counts, aggregates, `rows_total` and `rows_unfiltered` cover those runs,
+  and it is absent when there are none. `total_rows` and `running` count
+  every passing run. The board shows a loose group's rows without a header.
 - Filters (`q`, `status`, `archived`) select rows; a group shows when one of
   its rows passes, and its counts and aggregates cover the passing rows.
   `rows_total` counts its passing rows, `rows_unfiltered` its rows with the
