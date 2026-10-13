@@ -718,12 +718,11 @@ the same step (for step-less points, the same `log_metrics` call); points
 without a finite x are dropped. The join happens before thinning, and
 `series_total` counts joined points.
 
-In the dashboard, the run page has an `x:` picker next to the Step / Wall /
-Relative toggle (Step mode): `x: declared` (default) uses each metric's declared
-`step_metric`, `x: step` ignores declarations, and a metric name plots every
-other chart against it. The Compare page's curves tab folds these into one
-x axis control: Step (each metric's declared `step_metric`, else the step),
-Wall, Relative, or `x = <metric>` for every chart.
+In the dashboard, the run page's training curves and the Compare page's
+curves tab share one x axis control: Step (each metric's declared
+`step_metric`, else the step), Wall, Relative, or `x = <metric>` for every
+chart. `Log y` is an on/off chip; a log axis labels each tick with its own
+value (`1e-4`, `0.001`, `10`).
 
 ### Diffs and artifacts
 
