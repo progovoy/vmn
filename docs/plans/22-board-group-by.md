@@ -17,10 +17,14 @@
 > Paths are relative to `packages/vmn-exp/webui/src/` unless they start with
 > `packages/`, `ui/` (= `packages/vmn-exp/src/vmn_exp/ui/`) or `docs/`.
 
-Status: **done, follow-ups in progress** (2026-10-13; §6). Done: S1, S2 (no SQL cache serves the list, so
-nothing to fall back from), W1, W2, W3 (group selection, Compare, Charts by group, the
-plan-20 Compare redirects removed), W4 (phone section labels), D1. Not built: G6's
-`5 of 16` on a header the filter cut (counts cover the passing rows only).
+Status: **done** (2026-10-13). Done: S1, S2 (no SQL cache serves the list, so nothing to
+fall back from), W1, W2, W3 (group selection, Compare, Charts by group, the plan-20
+Compare redirects removed), W4 (phone section labels), D1, and the §6 follow-ups F1-F9:
+K1's `rows_unfiltered` (headers read `5 of 16 runs`), counts in words (`16 runs · all
+succeeded`, wrapping on the phone), the top-level `aggregate` (branch conf respected,
+`ui/readers/branch_conf.py`; `useBoardAggregate`) and `running` (the board stays live),
+the 50-group / 5000-row clamp, the `∅` no-value key, Charts plotting only the selection
+(`useChartSelection`), the phone section checkbox, and F9's contrast/anchoring/test fixes.
 
 Sources: the 2026-10-13 discussion. Plan 20 C2 merged the inner counts into one cell, the
 user reverted that to five columns (`ba6e87e0`), then asked whether the inner/outer
