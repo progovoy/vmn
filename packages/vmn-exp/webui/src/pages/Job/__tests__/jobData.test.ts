@@ -1,0 +1,110 @@
+import { describe, it, expect } from "vitest";
+import {
+  etaText, failureQuery, jobKpis, mainMetric, paramShareText, quantileMarks, rerunCommand,
+  throughputText, timelineSeries,
+} from "../jobData";
+import { jobSummaryFixture } from "./jobFixture";
+
+describe("timelineSeries", () => {
+  it("derives running(t) = cumulative started - cumulative ended, and completions per minute", () => {
+    const s = timelineSeries({
+      bucket_sec: 120, start: 1000,
+      buckets: [
+        { t: 1000, started: 4, succeeded: 0, failed: 0 },
+        { t: 1120, started: 2, succeeded: 3, failed: 1 },
+        { t: "1970-01-01T00:20:40Z", started: 0, succeeded: 1, failed: 0 },
+      ],
+    });
+    expect(s.t).toEqual([1000_000, 1120_000, 1240_000]);
+    expect(s.running).toEqual([4, 2, 1]);
+    expect(s.succeeded).toEqual([0, 3, 4]);
+    expect(s.failed).toEqual([0, 1, 1]);
+    expect(s.perMin).toEqual([0, 2, 0.5]);
+  });
+
+  it("fills the empty buckets a sparse timeline leaves out with zeros", () => {
+    const s = timelineSeries({
+      bucket_sec: 60, start: 0,
+      buckets: [{ t: 0, started: 3, succeeded: 0, failed: 0 }, { t: 180, started: 0, succeeded: 2, failed: 1 }],
+    });
+    expect(s.t).toEqual([0, 60_000, 120_000, 180_000]);
+    expect(s.running).toEqual([3, 3, 3, 0]);
+    expect(s.succeeded).toEqual([0, 0, 0, 2]);
+    expect(s.failed).toEqual([0, 0, 0, 1]);
+    expect(s.perMin).toEqual([0, 0, 0, 3]);
+  });
+
+  it("never reports fewer than zero running", () => {
+    const s = timelineSeries({ bucket_sec: 60, start: 0, buckets: [{ t: 0, started: 0, succeeded: 2, failed: 0 }] });
+    expect(s.running).toEqual([0]);
+  });
+});
+
+describe("jobKpis", () => {
+  it("names done/expected, failures, the live states, durations and the best run", () => {
+    const tiles = jobKpis(jobSummaryFixture());
+    const byLabel = Object.fromEntries(tiles.map((t) => [t.label, t]));
+    expect(byLabel["done"].value).toBe("1,412 / 2,000");
+    expect(byLabel["failed"].value).toBe("1.5%");
+    expect(byLabel["failed"].sub).toBe("3 runs");
+    expect(byLabel["running"].value).toBe("40");
+    expect(byLabel["waiting"].value).toBe("548");
+    expect(byLabel["stuck"].value).toBe("0");
+    expect(byLabel["median duration"].value).toBe("2m");
+    expect(byLabel["p90 duration"].value).toBe("7m");
+    expect(byLabel["best val_loss"].value).toBe("0.182");
+    expect(byLabel["best val_loss"].href).toBe("0.0.2-dev.t1903");
+  });
+});
+
+describe("mainMetric", () => {
+  it("takes the server's metric, else the first tracked one with values", () => {
+    expect(mainMetric(jobSummaryFixture())).toBe("val_loss");
+    expect(mainMetric({ ...jobSummaryFixture(), metric: undefined, metrics: { a: null, b: jobSummaryFixture().metrics.val_loss } })).toBe("b");
+    expect(mainMetric({ ...jobSummaryFixture(), metric: null, metrics: {} })).toBeNull();
+  });
+});
+
+describe("progress words", () => {
+  it("reads throughput and ETA", () => {
+    expect(throughputText(41)).toBe("41/min");
+    expect(throughputText(0.25)).toBe("0.25/min");
+    expect(throughputText(0)).toBeNull();
+    expect(etaText(840, 588)).toBe("ETA 14m");
+    expect(etaText(null, 588)).toBe("no ETA (stalled)");
+    expect(etaText(0, 0)).toBeNull();
+  });
+});
+
+describe("failure helpers", () => {
+  it("quotes a signature for the query language", () => {
+    expect(failureQuery("failed | exit=<n>")).toBe('failure_sig = "failed | exit=<n>"');
+    expect(failureQuery('msg="x"')).toBe(`failure_sig = 'msg="x"'`);
+  });
+
+  it("says how overrepresented a param is", () => {
+    expect(paramShareText({ key: "batch_size", value: 512, share: 0.94, base_share: 0.25 }))
+      .toBe("batch_size = 512 · 94% vs 25%");
+    expect(paramShareText({ key: "opt", value: "adam", share: 1, base_share: 0.5 }))
+      .toBe("opt = adam · 100% vs 50%");
+  });
+
+  it("copies a rerun command per example", () => {
+    expect(rerunCommand("my/app", "0.0.2-dev.t1")).toBe("vmn-exp rerun my/app -v 0.0.2-dev.t1");
+    expect(rerunCommand("a", "v", "s3://b/p")).toBe("vmn-exp rerun a -v v --store s3://b/p");
+  });
+});
+
+describe("quantileMarks", () => {
+  it("places p10/p50/p90 along the histogram range", () => {
+    expect(quantileMarks({ ...jobSummaryFixture().metrics.val_loss!, min: 0, max: 1, hist: [
+      { lo: 0, hi: 0.5, count: 1 }, { lo: 0.5, hi: 1, count: 1 },
+    ], p10: 0.1, p50: 0.5, p90: 0.9 })).toEqual([
+      { label: "p10", value: 0.1, at: 0.1 }, { label: "p50", value: 0.5, at: 0.5 }, { label: "p90", value: 0.9, at: 0.9 },
+    ]);
+  });
+
+  it("skips missing quantiles", () => {
+    expect(quantileMarks({ ...jobSummaryFixture().metrics.val_loss!, p10: null, p50: undefined, p90: null })).toEqual([]);
+  });
+});

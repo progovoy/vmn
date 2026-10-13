@@ -30,6 +30,8 @@ import { ForkOrigin } from "./RunFork";
 import { paramsVariedFirst } from "./runParams";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
+import JobPage from "./Job/JobPage";
+import { jobSummaryQuery } from "./Job/jobQueries";
 
 /** The metrics the Metrics card lists: params folded into `metrics` stay
  *  under Params (D2). */
@@ -39,7 +41,24 @@ function shownMetrics(metrics: ExperimentDetail["metrics"], detail: ExperimentDe
   return keys.length === Object.keys(metrics).length ? metrics : Object.fromEntries(keys.map((k) => [k, metrics[k]]));
 }
 
+/** A run with children opens the job page (plan 23 W2) once its summary
+ *  lands; a single or inner run, or a server without the summary endpoint
+ *  (any error before one landed, a 404 above all), the run page. */
 export default function Run() {
+  const { ws, app, verstr } = useParams() as { ws: string; app: string; verstr: string };
+  const client = useQueryClient();
+  const query = useQuery(runQuery(ws, app, verstr), client);
+  const detail = query.data;
+  const st = detail?.status;
+  const isJob = !!st && (st.kind === "outer" || !!st.fleet);
+  const summary = useQuery({ ...jobSummaryQuery(ws, app, detail?.metadata.verstr ?? ""), enabled: isJob }, client);
+  if (detail && isJob && (summary.data || summary.isPending)) {
+    return <JobPage ws={ws} app={app} detail={detail} summary={summary} refetchDetail={() => query.refetch()} />;
+  }
+  return <SingleRun />;
+}
+
+function SingleRun() {
   const { ws, app, verstr } = useParams() as { ws: string; app: string; verstr: string };
   const client = useQueryClient();
   // Structural sharing keeps every unchanged part of a polled detail (its
