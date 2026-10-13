@@ -30,6 +30,9 @@ import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
 import { useCanCreateRun } from "../shell/useAppExists";
 import { useAppStatus } from "../shell/useShellData";
 import AttentionStrip from "../components/AttentionStrip";
+import { LiveText } from "../components/LiveStatus";
+import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
+import { queryHelpData } from "../util/queryHelp";
 
 const topLevel = (rows: readonly ExperimentRow[]) => topRows(rows, false).length;
 
@@ -68,6 +71,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const appName = toAppName(app);
   const client = useQueryClient();
   const view = useLeaderboardView();
+  const narrow = useMediaQuery(NARROW_QUERY);
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);
   const status = useAppStatus(ws, app).data;
@@ -128,6 +132,10 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown,
   );
   const columnEdits = useColumnEdits(view, cols, colPrefs);
+  const queryHelp = useMemo(() => queryHelpData({
+    facets: cols.suggestFacets, branches: facets?.branches ?? [], rows: all, schema,
+    primary: view.sort ?? cols.primary ?? cols.visibleMetrics[0],
+  }), [cols.suggestFacets, facets, all, schema, view.sort, cols.primary, cols.visibleMetrics]);
 
   const charting = view.tab === "charts";
   // A brush in the parallel view (Charts tab) narrows the table.
@@ -185,6 +193,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           loading: rows === undefined, filtered, loaded: all.length, total: data.total,
           shownTop, loadedTop: topLevel(all),
         })}
+        live={narrow && anyRunning && <LiveText paused={paused} updatedAt={data.updatedAt} />}
         actions={!empty && (
           <LeaderboardToolbar
             ws={ws} app={app} view={view} cols={cols}
@@ -226,6 +235,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
             archived={view.archived}
             onArchivedChange={view.setArchived}
             onSimilarChange={setSimilarText}
+            help={queryHelp}
           />
 
           {similarText !== null ? (

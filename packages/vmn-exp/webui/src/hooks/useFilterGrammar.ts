@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDebounce } from "./useDebounce";
 import {
-  EMPTY_FILTER, commitText, isPlainText, joinClauses, stateFromValues,
+  EMPTY_FILTER, commitText, commitTyped, isPlainText, joinClauses, stateFromValues,
   type FilterState, type FilterValues,
 } from "../util/filterTokens";
 
@@ -22,7 +22,7 @@ export function useFilterGrammar(initial: FilterValues | undefined, paused: bool
   // Free text searches after a short pause; a query waits for a whole field name.
   const debounced = useDebounce(draft, isPlainText(draft) ? 200 : 300);
   const live = draft.trim() && !paused ? debounced : "";
-  const effective = useMemo(() => commitText(state, live), [state, live]);
+  const effective = useMemo(() => commitTyped(state, live), [state, live]);
 
   const { onStatusChange, onQueryChange, onSearchChange, onBranchChange } = reports;
   const statusCsv = effective.statuses.join(",");
@@ -37,7 +37,9 @@ export function useFilterGrammar(initial: FilterValues | undefined, paused: bool
     setState,
     draft,
     setDraft,
-    commit: () => { setState((s) => commitText(s, draft)); setDraft(""); },
+    commit: () => { setState((s) => commitTyped(s, draft)); setDraft(""); },
+    /** Commit *text* as a query, in place of the draft. */
+    apply: (text: string) => { setState((s) => commitText(s, text)); setDraft(""); },
     clear: () => { setState(EMPTY_FILTER); setDraft(""); },
   };
 }

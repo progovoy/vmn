@@ -17,19 +17,14 @@ export default function LiveStatus({
   onResume: () => void;
   onRefresh: () => void;
 }) {
-  const now = useNow(running);
   const state = !running ? "Nothing running, live updates off"
     : paused ? "Live updates paused" : "Live updates on";
-  const age = `updated ${humanizeSeconds(Math.max(0, (now - updatedAt) / 1000))} ago`;
   return (
     <span className="live-status">
       <span className="sr-only" aria-live="polite">{state}</span>
       {running ? (
         <>
-          <span className={`live-status-text${paused ? " paused" : ""}`}>
-            {!paused && <span className="live-dot" aria-hidden />}
-            {paused ? "paused" : "live"} · {age}
-          </span>
+          <LiveText paused={paused} updatedAt={updatedAt} />
           {paused
             ? <button onClick={onResume}>Resume</button>
             : <button onClick={onPause}>Pause</button>}
@@ -37,6 +32,19 @@ export default function LiveStatus({
       ) : (
         <button onClick={onRefresh}>Refresh</button>
       )}
+    </span>
+  );
+}
+
+/** "● live · updated 3s ago" (or "paused · …"), ticking each second: what
+ *  LiveStatus shows while a run is running, and the phone board's head. */
+export function LiveText({ paused, updatedAt }: { paused: boolean; updatedAt: number }) {
+  const now = useNow(true);
+  const age = `updated ${humanizeSeconds(Math.max(0, (now - updatedAt) / 1000))} ago`;
+  return (
+    <span className={`live-status-text${paused ? " paused" : ""}`}>
+      {!paused && <span className="live-dot" aria-hidden />}
+      {paused ? "paused" : "live"} · {age}
     </span>
   );
 }

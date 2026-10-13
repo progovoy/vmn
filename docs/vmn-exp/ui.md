@@ -219,7 +219,9 @@ running, the leaderboard and the run page poll on their own and show
 `● live · updated Ns ago` with a Pause button (Resume restarts it); with
 nothing running they show a Refresh button instead. On the leaderboard this
 sits in the table's caption, under the board, with the "best in column" legend
-and the sort. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
+and the sort; below 640px, where the caption follows every card, the page head
+also shows `live · updated Ns ago` (or `paused`) as plain text after the run
+count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
 · 4 running`, from `experiments-status`) appears while a run is stuck or one
 failed in the last 24 hours; each part links to the board filtered to exactly
 those runs (`status=stuck`; the failures also get a `finished_at >= "<24h
@@ -235,7 +237,9 @@ By default the leaderboard shows `#`, status, experiment, the metrics whose
 `goal` the schema declares (pinned after the experiment column; every metric
 when none declares one), up to six params whose values vary across the loaded
 runs (as many as fit the window), one `inner` column while an outer run is
-loaded (`5 · 4 running · 1 failed`), and `when`. Note, tags, the run's
+loaded (`5 · 4 running · 1 failed`; older views' `c:total`/`c:waiting`/
+`c:running`/`c:done`/`c:failed` keys mean it: `show=` of any shows it, `hide=`
+of all five hides it), and `when`. Note, tags, the run's
 `started`/`ended` dates and the rest come from the Columns picker. The choices
 live in the URL (`show=`/`hide=`, e.g. `show=m:train_loss`, `hide=p:seed`;
 `hide=` always hides, except that it still shows a schema-hidden metric, as
@@ -739,13 +743,20 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   the charts and table; leaving the mode restores the typed text and the table.
 - The leaderboard has one filter grammar: the query bar shows every filter as a
   removable token worded as its clause (`status = "failed"`, `branch = "main"`,
-  `text ~ "batch"` for free text over verstr/note/branch, `archived`, and each
+  `text ~ "batch"` for free text over name/verstr/note/branch, `archived`, and each
   top-level `and` conjunct of the query). The status chips, branch picker and
   archived switch (one toolbar, a single Tab stop; the arrow keys move inside
   it) write tokens; a hand-typed `status = ...`/`status in (...)`/
   `branch = ...` clause becomes the same token (Enter commits the text,
   Backspace in an empty box drops the last token). The URL keeps `q`, `status`,
-  `branch`, `search` and `archived`.
+  `branch`, `search` and `archived`. Typed text that compares a word no field
+  matches (`lr=0.1`) searches as text instead of failing on the server, with a
+  hint offering `params.lr=0.1` (or `metrics.<k>`) when the app has that key.
+- A `?` in the query box (sharing one Tab stop with the similar toggle) opens
+  query help: this app's `metrics.<k>`/`params.<k>`/`tags.<k>` fields, the
+  main row fields, the operators and three examples built from the app's keys
+  and the loaded rows' values; picking one puts it in the box. Escape closes
+  it and returns focus to the `?`.
 - The run log describes `features` entries as `features: N files, M functions,
   K commits (author)` and intents as `intent: <first line> [keywords]`.
 

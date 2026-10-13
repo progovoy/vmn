@@ -7,6 +7,19 @@ import { fleetCounts } from "./leaderboardColumns";
 export const INNER_COLUMN = "c:inner";
 export const isInnerRunId = (id: string) => id === INNER_COLUMN;
 
+/** The five count columns the inner column replaced (plan 20 C2), still in
+ *  older saved views and links. */
+const LEGACY_COUNTS = ["c:total", "c:waiting", "c:running", "c:done", "c:failed"];
+
+/** Whether the inner column shows: its own `show=`/`hide=` entry wins, then
+ *  an old count's (`show=` of any, `hide=` of every one), then outer rows. */
+export function innerVisible(shown: ReadonlySet<string>, hidden: ReadonlySet<string>, hasOuter: boolean) {
+  if (shown.has(INNER_COLUMN)) return true;
+  if (hidden.has(INNER_COLUMN)) return false;
+  if (LEGACY_COUNTS.some((k) => shown.has(k))) return true;
+  return hasOuter && !LEGACY_COUNTS.every((k) => hidden.has(k));
+}
+
 export const INNER_RUNS_HELP = "Counts of this run's inner runs (sweep trials, fleet pods)";
 
 /** Whether any loaded row is an outer run — the column's default. */

@@ -12,7 +12,7 @@ import { EMPTY_PREFS, type ColumnPrefs } from "./useColumnPrefs";
 import type { SuggestFacets } from "../util/querySuggest";
 import { NO_PINS, orderedKeys } from "../util/columnOrder";
 import { schemaHides } from "../util/hiddenMetrics";
-import { anyOuter, isInnerRunId } from "../pages/innerRunColumns";
+import { anyOuter, innerVisible, isInnerRunId } from "../pages/innerRunColumns";
 
 /** *value*, or the previous one when structurally equal — so a poll that
  *  moves no column best leaves every memoized row alone. */
@@ -106,8 +106,8 @@ export function useLeaderboardColumns(
   const hasOuter = useMemo(() => anyOuter(rows), [rows]);
   const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => {
     const id = `c:${c}`;
-    if (shown.has(id)) return true;
-    return !hidden.has(id) && isInnerRunId(id) && hasOuter;
+    if (!isInnerRunId(id)) return shown.has(id);
+    return innerVisible(shown, hidden, hasOuter);
   }), [hidden, shown, hasOuter]);
   const hasTags = useMemo(() => anyTags(rows), [rows]);
   const showTags = hasTags && shown.has(TAGS_COLUMN);

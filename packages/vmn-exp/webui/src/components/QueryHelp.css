@@ -1,0 +1,29 @@
+/* The query bar's help (QueryHelp.tsx): the `?` in the box and the panel
+   under the bar. */
+.query-help-anchor { position: relative; display: flex; flex: 1 1 100%; min-width: 0; }
+.search-tools { display: inline-flex; gap: 4px; margin-left: auto; }
+.filter-bar .query-bar-box .search-tools .status-toggle { height: 24px; }
+.query-help-button { min-width: 26px; font-weight: 600; }
+.query-help {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 20;
+  width: min(520px, 100%); box-sizing: border-box; padding: 10px 14px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); font-size: 12.5px; color: var(--text-2);
+}
+.query-help:focus { outline: none; }
+.query-help section + section { margin-top: 10px; }
+.query-help h3 { margin: 0 0 4px; font-size: 11px; color: var(--text-3); font-weight: 600; }
+.query-help code {
+  font-family: var(--mono); font-size: 11.5px; color: var(--text);
+  padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.query-help-keys { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.query-help-more { color: var(--text-3); }
+.query-help-ops { display: grid; gap: 3px; margin: 0; }
+.query-help-ops div { display: flex; gap: 10px; align-items: baseline; }
+.query-help-ops dt { display: flex; gap: 3px; min-width: 190px; }
+.query-help-ops dd { margin: 0; color: var(--text-3); }
+.query-help-examples { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.query-help-examples button { text-align: left; font-size: 12px; }
+.query-help-foot { margin: 10px 0 0; color: var(--text-3); }
+@media (max-width: 639px) { .query-help-ops dt { min-width: 120px; flex-wrap: wrap; } }
