@@ -40,7 +40,10 @@ export interface PaletteInput {
 
 export const SECTION_CAP = 5;
 const TYPED_RUNS = 8;
-const RECENT_ICONS: Record<string, IconName> = { run: "run", app: "app", ws: "workspace" };
+const RECENT_ICONS: Record<string, IconName> = {
+  run: "run", app: "app", ws: "workspace", workspace: "workspace", experiments: "experiments",
+  tree: "tree", actions: "actions", models: "models", reports: "reports", key: "key",
+};
 
 /** A command as the row's right column shows it: without `vmn-exp `. */
 export const shortCli = (command?: string) => command?.replace(/^vmn-exp /, "");

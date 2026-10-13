@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { RECENT_KEY } from "../../../shell/contracts";
-import { pushRecent, readRecents } from "../recents";
+import { forgetRecent, pushRecent, readRecents, recentKindOf } from "../recents";
 
 beforeEach(() => localStorage.clear());
 
@@ -36,5 +36,28 @@ describe("recents", () => {
     expect(readRecents()).toEqual([entry(3)]);
     pushRecent(entry(4));
     expect(readRecents().map((r) => r.label)).toEqual(["run 4", "run 3"]);
+  });
+
+  it("forgets a destination that turned out missing", () => {
+    pushRecent(entry(1));
+    pushRecent(entry(2));
+    forgetRecent(entry(1).to);
+    expect(readRecents().map((r) => r.label)).toEqual(["run 2"]);
+  });
+
+  it("files each route under the icon Go to uses for it", () => {
+    expect(recentKindOf("run")).toBe("run");
+    expect(recentKindOf("experiments")).toBe("app");
+    expect(recentKindOf("apps")).toBe("ws");
+    expect(recentKindOf("tree")).toBe("tree");
+    expect(recentKindOf("actions")).toBe("actions");
+    expect(recentKindOf("models")).toBe("models");
+    expect(recentKindOf("model")).toBe("models");
+    expect(recentKindOf("reports")).toBe("reports");
+    expect(recentKindOf("report")).toBe("reports");
+    expect(recentKindOf("report-edit")).toBe("reports");
+    expect(recentKindOf("tokens")).toBe("key");
+    expect(recentKindOf("compare-runs")).toBe("experiments");
+    expect(recentKindOf("home")).toBe("workspace");
   });
 });

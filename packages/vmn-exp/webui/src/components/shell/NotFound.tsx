@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { facetsQuery, useApps } from "../../queries";
 import { CopyButton } from "../ui";
 import { usePageScope } from "../../shell/usePageScope";
-import { useOverrideRoute } from "../../shell/shellOverride";
+import { useDeadEnd, useOverrideRoute } from "../../shell/shellOverride";
 import { notFoundCopy, type Line } from "../../shell/notFoundCopy";
 import type { NotFoundProps } from "../../shell/contracts";
 import "./NotFound.css";
@@ -41,7 +41,9 @@ export function FocusedHeading({ children }: { children: ReactNode }) {
 }
 
 export default function NotFound(props: NotFoundProps) {
-  useOverrideRoute("not-found");
+  // A page whose feature is off (/tokens without a control plane) exists: its crumbs stay.
+  useOverrideRoute(props.kind === "control-plane" ? null : "not-found");
+  useDeadEnd();
   const scope = usePageScope(wsOf(props));
   const apps = useApps(props.kind === "app" ? props.ws : undefined).data;
   const runTotal = useRunTotal(props);

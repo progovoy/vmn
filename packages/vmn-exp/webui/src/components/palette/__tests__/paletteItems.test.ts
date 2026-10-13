@@ -37,6 +37,20 @@ describe("section order", () => {
     expect(s.map((x) => x.title)).toEqual(["Recent", "Go to", "Runs", "Apps", "Workspaces"]);
   });
 
+  it("draws each Recent row with its destination's own icon", () => {
+    const kinds = ["run", "app", "ws", "models", "reports", "tree", "actions", "key", "experiments", "workspace"];
+    const s = build({
+      ctx: twoWs, recents: kinds.map((kind, i) => ({ label: `r${i}`, to: `/x/${i}`, kind })),
+    });
+    expect(section(s, "recent").items.map((i) => i.icon)).toEqual([
+      "run", "app", "workspace", "models", "reports",
+    ]);
+    const all = build({
+      ctx: twoWs, recents: kinds.slice(5).map((kind, i) => ({ label: `r${i}`, to: `/y/${i}`, kind })),
+    });
+    expect(section(all, "recent").items.map((i) => i.icon)).toEqual(["tree", "actions", "key", "experiments", "workspace"]);
+  });
+
   it("typed: Command first, then Runs, Go to, Apps, Models, Reports, Workspaces", () => {
     const s = build({
       ctx: fakeCtx({ app: "ml_app", workspaces: [{ name: "w", kind: "git" }, { name: "remote", kind: "git" }] }),

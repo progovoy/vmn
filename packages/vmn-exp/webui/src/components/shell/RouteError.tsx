@@ -2,6 +2,7 @@
  *  sidebar and topbar survive a page that failed to load or render. */
 import { Link, isRouteErrorResponse, useLocation, useNavigate, useRouteError } from "react-router-dom";
 import { isStaleChunk } from "../../shell/staleChunk";
+import { useDeadEnd } from "../../shell/shellOverride";
 import NotFound, { FocusedHeading } from "./NotFound";
 import "./NotFound.css";
 
@@ -15,6 +16,7 @@ export default function RouteError() {
   const error = useRouteError();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  useDeadEnd();
   if (isRouteErrorResponse(error) && error.status === 404) {
     return <NotFound kind="route" pathname={pathname} />;
   }
