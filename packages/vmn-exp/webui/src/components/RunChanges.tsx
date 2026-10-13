@@ -2,7 +2,8 @@
  *  a baseline picked from the server's `/baselines` (its own patch, parent,
  *  fork/rerun origin, previous, best) or any run the page's `?baseline=`
  *  names. Read-only: it renders in every workspace. */
-import { Link } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchRunBaselines } from "../apiRunCode";
 import { compareSearch } from "../pages/Compare/selection";
@@ -22,6 +23,12 @@ export default function RunChanges({ ws, app, verstr, baseline, onBaseline }: {
   onBaseline: (keyOrRef: string) => void;
 }) {
   const client = useQueryClient();
+  const card = useRef<HTMLElement>(null);
+  const { hash } = useLocation();
+  // The browser's own jump to #changes ran before the card existed.
+  useEffect(() => {
+    if (hash === `#${CHANGES_ID}`) card.current?.scrollIntoView();
+  }, [hash]);
   const found = useQuery({
     queryKey: ["run-baselines", ws, app, verstr],
     queryFn: () => fetchRunBaselines(ws, app, verstr),
@@ -39,7 +46,7 @@ export default function RunChanges({ ws, app, verstr, baseline, onBaseline }: {
   else body = <RunDiffChanges ws={ws} app={app} from={chosen.verstr} to={verstr} />;
 
   return (
-    <section className="card run-changes" id={CHANGES_ID} aria-labelledby="run-changes-title">
+    <section ref={card} className="card run-changes" id={CHANGES_ID} aria-labelledby="run-changes-title">
       <div className="run-changes-head">
         <h2 className="section-title" id="run-changes-title">Changes</h2>
         {chosen && choices.length > 1 && (

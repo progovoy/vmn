@@ -62,4 +62,14 @@ describe("Run page Changes card", () => {
     fireEvent.click(await screen.findByRole("button", { name: "best @7" }));
     expect(screen.getByTestId("search")).toHaveTextContent("?baseline=best");
   });
+
+  it("scrolls to the card when the link carries #changes", async () => {
+    mockedApi.meta.mockResolvedValue({ read_only: false });
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    renderRun(`/ws/test/app/my-app/run/${RUN}?baseline=v-good#changes`);
+    const card = await screen.findByRole("region", { name: "Changes" });
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts[0]).toBe(card);
+  });
 });
