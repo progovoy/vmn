@@ -37,10 +37,10 @@ def _command(snapshot, verstr):
 
 def _earlier_rows(snapshot, row):
     """The unarchived rows stored before *row*, newest first."""
-    rows = snapshot.rows
+    rows, verstr = snapshot.rows, row["verstr"]
     pos = (row.get("idx") or 0) - 1
-    if not (0 <= pos < len(rows) and rows[pos] is row):
-        pos = next(i for i, r in enumerate(rows) if r is row)
+    if not (0 <= pos < len(rows) and rows[pos]["verstr"] == verstr):
+        pos = next((i for i, r in enumerate(rows) if r["verstr"] == verstr), 0)
     return (r for r in reversed(rows[:pos]) if not r.get("archived"))
 
 
