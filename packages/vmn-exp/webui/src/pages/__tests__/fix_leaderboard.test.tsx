@@ -88,7 +88,7 @@ describe("Leaderboard paging", () => {
   it("shows the server total, not just the loaded page", async () => {
     mockedApi.experiments.mockResolvedValue(page([row(1), row(2)], 5000));
     renderLeaderboard();
-    await waitFor(() => expect(screen.getByText(/2 of 5000 runs/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/2 of 5,000 runs/)).toBeInTheDocument());
   });
 
   it("loads the next page with the same filters", async () => {
