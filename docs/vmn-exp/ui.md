@@ -410,7 +410,8 @@ Every row of `.../experiments` and the run detail carry:
 | `parent` / `children` | verstrs linking outer and inner jobs |
 | `kind` | `outer`, `inner` or `single` |
 | `depth` | nesting depth, for indenting the list |
-| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`) |
+| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created` is left out, an incomplete sweep adds `created` |
+| `sweep_planned` / `sweep_trials` | a sweep outer's planned trials (grid size, else `run_cap`) and the trial slots its inner runs fill; absent for other runs and uncapped random/bayes sweeps. While `sweep_trials < sweep_planned` the UI reads `16/20 · incomplete`, and the detail's `status.fleet.expected` is the planned size |
 | `signal` / `end_reason` | the signal that ended the run (`SIGTERM`), `stopped` for an early-stopped sweep trial |
 | `error_summary` | `Type: message` of a failed run's recorded `error`, else `null` |
 
