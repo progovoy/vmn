@@ -139,6 +139,18 @@ describe("CommandPalette keys", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("says what Esc does: clear while there is text, then close again", () => {
+    const { input } = openPalette();
+    const foot = () => document.querySelector(".cmdk-foot")!.textContent;
+    expect(foot()).toMatch(/esc close$/);
+    fireEvent.change(input, { target: { value: "abc" } });
+    expect(foot()).toMatch(/esc clear$/);
+    expect(input).toHaveAccessibleDescription(/esc clear$/);
+    key(input, "Escape");
+    expect(foot()).toMatch(/esc again to close$/);
+    expect(input).toHaveAccessibleDescription(/esc again to close$/);
+  });
+
   it("Enter goes to the active row and closes", () => {
     const onClose = vi.fn();
     const { input } = openPalette(onClose);
