@@ -12,7 +12,7 @@ const OPERATORS: [string[], string][] = [
   [["and", "or", "not"], "combine, with ( )"],
   [["= null"], "field missing"],
 ];
-const SHOWN_KEYS = 8;
+const SHOWN_KEYS = 6;
 
 /** The help's open state; Escape or a press outside *anchor* (the bar and
  *  the panel) closes it, Escape returning focus to the `?`. */
@@ -59,16 +59,13 @@ function Keys({ keys }: { keys: readonly string[] }) {
 export function QueryHelpPanel({ data, onPick }: { data: QueryHelpData; onPick: (example: string) => void }) {
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => { panel.current?.focus(); }, []);
-  const appKeys = [...data.metrics, ...data.params, ...data.tags];
   return (
     <div ref={panel} className="query-help" role="dialog" aria-label="Query help" tabIndex={-1}>
       <section>
         <h3>Fields</h3>
-        {appKeys.length > 0 && (
-          <div className="query-help-keys">
-            <Keys keys={data.metrics} /><Keys keys={data.params} /><Keys keys={data.tags} />
-          </div>
-        )}
+        {[data.metrics, data.params, data.tags].filter((keys) => keys.length > 0).map((keys) => (
+          <div key={keys[0]} className="query-help-keys"><Keys keys={keys} /></div>
+        ))}
         <div className="query-help-keys">{RUN_FIELDS.map((f) => <code key={f}>{f}</code>)}</div>
       </section>
       <section>

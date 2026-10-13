@@ -133,8 +133,9 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   );
   const columnEdits = useColumnEdits(view, cols, colPrefs);
   const queryHelp = useMemo(() => queryHelpData({
-    facets: cols.suggestFacets, branches: facets?.branches ?? [], rows: all, schema, primary: cols.primary,
-  }), [cols.suggestFacets, facets, all, schema, cols.primary]);
+    facets: cols.suggestFacets, branches: facets?.branches ?? [], rows: all, schema,
+    primary: view.sort ?? cols.primary ?? cols.visibleMetrics[0],
+  }), [cols.suggestFacets, facets, all, schema, view.sort, cols.primary, cols.visibleMetrics]);
 
   const charting = view.tab === "charts";
   // A brush in the parallel view (Charts tab) narrows the table.
