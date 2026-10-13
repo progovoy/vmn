@@ -126,7 +126,35 @@ class Fleet:
             observed_at=dict(self.observed),
         )
 
+    def ended(self, now, code=None):
+        """A finished run state with start/end times, and why when it failed."""
+        rng = self.rng
+        code = rng.choice([0] * 8 + [1, 137]) if code is None else code
+        end = now - datetime.timedelta(seconds=rng.randrange(3600))
+        start = end - datetime.timedelta(seconds=rng.randrange(1, 900))
+        state = {"state": "finished", "exit_code": code, "started_at": iso(start),
+                 "finished_at": iso(end), "heartbeat": iso(end)}
+        if code == 137:
+            state["signal"] = "SIGKILL"
+        elif code:
+            state["error_summary"] = rng.choice([
+                f"CUDA out of memory. Tried to allocate {rng.random() * 4:.2f} GiB",
+                f"ValueError: loss is NaN at step {rng.randrange(1000)}",
+            ])
+        return state
+
     # -- random workload -----------------------------------------------
+    def seed_jobs(self, jobs, inners, now, live=0):
+        """*jobs* running outers of *inners* ended children each, *live* of
+        those children running instead."""
+        roots = [self.append(state=running(now)) for _ in range(jobs)]
+        for root in roots:
+            for _ in range(inners):
+                self.append(parent=root, state=self.ended(now))
+        for i in self.rng.sample(range(jobs, len(self.specs)), live):
+            self.set_state(i, running(now, self.rng.choice([0, 30, 50])))
+        return roots
+
     def seed(self, n, now, sweeps=4, live=10):
         roots = [self.append(state=running(now)) for _ in range(sweeps)]
         for _ in range(n - sweeps):

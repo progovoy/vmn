@@ -14,12 +14,12 @@ from vmn_exp.core.status import FAILED, STUCK
 MAX_MESSAGE = 160
 _MSG = " | msg="
 _MASKS = [
-    (re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", re.I), "<uuid>"),
+    (re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", re.IGNORECASE), "<uuid>"),
     (re.compile(r"\b\d+\.\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?(?:\+[\w.]+)?"), "<ver>"),
     (re.compile(r"(?<![\w.<>])(?:~|\.{1,2})?(?:/[\w.\-+@%=]+)+/?"), "<path>"),
     (re.compile(r"\b[A-Za-z]:\\[\w\\.\-]+"), "<path>"),
-    (re.compile(r"\b0x[0-9a-f]+\b", re.I), "<hex>"),
-    (re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b", re.I), "<hex>"),
+    (re.compile(r"\b0x[0-9a-f]+\b", re.IGNORECASE), "<hex>"),
+    (re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b", re.IGNORECASE), "<hex>"),
     (re.compile(r"\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"), "<n>"),
 ]
 

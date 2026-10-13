@@ -71,7 +71,7 @@ class QuantileSketch:
     non-numbers are ignored."""
 
     MAX_BINS = 512
-    __slots__ = ("_pos", "_neg", "_zero", "count")
+    __slots__ = ("_neg", "_pos", "_zero", "count")
 
     def __init__(self):
         self._pos, self._neg = _Side(), _Side()

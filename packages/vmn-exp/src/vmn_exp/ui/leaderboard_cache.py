@@ -42,6 +42,7 @@ from vmn_exp.core.query import query_roots
 from vmn_exp.core.status import status_fields
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.http_params import MAX_PAGE
+from vmn_exp.ui.job_rollup_cache import JobRollupCache
 from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, static_moves
 from vmn_exp.ui.leaderboard_facets import Facets
@@ -258,6 +259,7 @@ class LeaderboardCache:
         self._columns = LRU(size)
         self._importance = LRU(IMPORTANCE_RESULTS)
         self._groups = GroupCache(self, size)
+        self._jobs = JobRollupCache(self, size)
 
     schema_key = staticmethod(_schema_key)
 
@@ -349,6 +351,16 @@ class LeaderboardCache:
         """The grouped board (plan 22 K1), see
         :meth:`~vmn_exp.ui.leaderboard_group_cache.GroupCache.groups`."""
         return self._groups.groups(snapshot, schema, group, **params)
+
+    def job_rollup(self, snapshot, schema, verstr):
+        """*verstr*'s rollup over its whole subtree (plan 23 S1), or None when
+        it is not a job; see :mod:`~vmn_exp.ui.job_rollup`. Archived runs
+        are left out."""
+        return self._jobs.job_rollup(snapshot, schema, verstr)
+
+    def job_rollups(self, snapshot, schema):
+        """``{verstr: compact rollup}`` for every job (for a Jobs view)."""
+        return self._jobs.job_rollups(snapshot, schema)
 
     def rows(self, snapshot, archived=False):
         """Every row, with its status as of now, in storage order: no sort, for
