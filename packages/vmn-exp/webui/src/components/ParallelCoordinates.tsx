@@ -4,7 +4,8 @@ import { metricGoal } from "../util";
 import {
   buildAxes, buildMatrix, colorScale, selectRows, targetTs, yFromT, type Axis, type Brushes,
 } from "../util/parallelData";
-import ParallelCanvas, { type PlotGeometry } from "./ParallelCanvas";
+import { brushQuery } from "../util/brushQuery";
+import ParallelCanvas,{ type PlotGeometry } from "./ParallelCanvas";
 import { useAxisBrush } from "./useAxisBrush";
 import type { ChartGroups } from "../util/chartGroups";
 
@@ -15,6 +16,8 @@ interface Props {
   schema: MetricsSchema | null;
   /** Row indices inside every brush, or null when no brush is active. */
   onBrush?: (indices: number[] | null) => void;
+  /** The query clause matching the brushed runs (plan 23 W4), null with no brush. */
+  onBrushQuery?: (query: string | null) => void;
   /** Colours each line by its run's group (plan 22 G7), the default "color by". */
   groups?: ChartGroups;
 }
@@ -122,7 +125,7 @@ function CanvasPlot(p: RenderProps) {
 const defaultTarget = (metricCols: string[], schema: MetricsSchema | null) =>
   metricCols.find((m) => schema?.[m]?.primary) ?? metricCols[0] ?? null;
 
-function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush, groups }: Props) {
+function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush, onBrushQuery, groups }: Props) {
   const dims = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
   const axes = useMemo(() => buildAxes(rows, dims, metricCols), [rows, dims, metricCols]);
   const matrix = useMemo(() => buildMatrix(rows, dims, metricCols, axes), [rows, dims, metricCols, axes]);
@@ -143,18 +146,21 @@ function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush, gro
 
   const plotRef = useRef<HTMLDivElement>(null);
   const toY = useCallback((cy: number) => cy - (plotRef.current?.getBoundingClientRect().top ?? 0), []);
-  const latest = useRef({ matrix, nDims: dims.length, onBrush });
-  latest.current = { matrix, nDims: dims.length, onBrush };
+  const latest = useRef({ matrix, nDims: dims.length, onBrush, onBrushQuery, rows, axes, metricCols });
+  latest.current = { matrix, nDims: dims.length, onBrush, onBrushQuery, rows, axes, metricCols };
   const commit = useCallback((b: Brushes) => {
-    const { matrix: m, nDims, onBrush: emit } = latest.current;
+    const { matrix: m, nDims, onBrush: emit, onBrushQuery: emitQuery, ...q } = latest.current;
     emit?.(selectRows(m, nDims, b));
+    emitQuery?.(brushQuery(q.rows, q.axes, q.metricCols, b));
   }, []);
   const { brushes, onStart, clear } = useAxisBrush(toY, PAD, PLOT_H, commit);
 
   const selectedList = useMemo(() => selectRows(matrix, dims.length, brushes), [matrix, dims.length, brushes]);
   const selected = useMemo(() => (selectedList ? new Set(selectedList) : null), [selectedList]);
 
-  const clearAll = useCallback(() => { clear(); onBrush?.(null); }, [clear, onBrush]);
+  const clearAll = useCallback(() => {
+    clear(); onBrush?.(null); onBrushQuery?.(null);
+  }, [clear, onBrush, onBrushQuery]);
 
   if (dims.length === 0) return null;
 

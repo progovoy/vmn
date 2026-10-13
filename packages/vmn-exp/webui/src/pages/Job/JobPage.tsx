@@ -2,13 +2,11 @@
  *  first (the Overview, from the job's rollup), then the runs, charts,
  *  failures, and the job's own code and log, each tab in `?tab=`. */
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import type { JobSummary } from "../../apiJob";
 import LiveStatus from "../../components/LiveStatus";
 import RunHeaderActions from "../../components/RunHeaderActions";
 import RunLog from "../../components/RunLog";
-import { sweepQuery } from "../../components/SweepSection";
 import { Skeleton } from "../../components/ui";
 import { useLiveScope } from "../../hooks/useLiveScope";
 import { usePolling } from "../../hooks/usePolling";
@@ -17,6 +15,7 @@ import { runSpec } from "../../reports/viewSpecs";
 import type { ExperimentDetail } from "../../types";
 import { pollIntervalMs } from "../../util";
 import { RunChangesSection } from "../RunLayout";
+import JobCharts from "./JobCharts";
 import JobFailures from "./JobFailures";
 import JobHeader, { JOB_PANEL_ID, JobTabs, jobTabId } from "./JobHeader";
 import { failedCount } from "./jobData";
@@ -25,26 +24,16 @@ import JobRuns from "./JobRuns";
 import { jobSummaryKey, useJobTab, type JobTab } from "./jobQueries";
 import "./job.css";
 
-function Coming({ text, boardHref }: { text: string; boardHref: string }) {
-  return (
-    <div className="card job-coming">
-      <p>{text}</p>
-      <Link to={boardHref}>See the job&apos;s runs on the experiments board</Link>
-    </div>
-  );
-}
-
 function Panel({ tab, ws, app, detail, summary, live }: {
   tab: JobTab; ws: string; app: string; detail: ExperimentDetail; summary: JobSummary;
   /** The page's Pause, and its rollup refresh (the Runs tab's live changes move it too). */
   live: { paused: boolean; onPaused: (paused: boolean) => void; refresh: () => unknown };
 }) {
   const v = detail.metadata.verstr;
-  const boardHref = `/ws/${ws}/app/${app}?${new URLSearchParams({ q: sweepQuery(v) })}`;
   switch (tab) {
     case "overview": return <JobOverview ws={ws} app={app} summary={summary} />;
     case "runs": return <JobRuns ws={ws} app={app} verstr={v} paused={live.paused} onPaused={live.onPaused} onLive={live.refresh} />;
-    case "charts": return <Coming text={"The job\u2019s charts are coming in W4."} boardHref={boardHref} />;
+    case "charts": return <JobCharts ws={ws} app={app} summary={summary} />;
     case "failures": return <JobFailures ws={ws} app={app} verstr={v} failed={failedCount(summary)} />;
     case "code": return <RunChangesSection ws={ws} app={app} verstr={v} />;
     case "log": {
