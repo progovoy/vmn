@@ -28,16 +28,11 @@ describe("crumbsFor", () => {
   });
 
   it("app routes link back to the leaderboard", () => {
-    const [app, exps] = crumbsFor(input("code-diff", {}, "v=%401&to=latest"));
+    const [app, exps] = crumbsFor(input("compare-runs", {}, "sel=a&sel=b&sel=c"));
     expect(app.to).toBe(BASE);
     expect(exps).toMatchObject({ label: "experiments", to: BASE });
-    expect(labels(input("code-diff", {}, "v=%401&to=latest")))
-      .toEqual(["ml_app", "experiments", "diff @1 → latest"]);
-    expect(last(labels(input("code-diff")))).toBe("diff @1 → latest");
     expect(labels(input("compare-runs", {}, "sel=a&sel=b&sel=c")))
       .toEqual(["ml_app", "experiments", "compare 3 runs"]);
-    expect(labels(input("overlay", {}, "runs=a,b,c,d")))
-      .toEqual(["ml_app", "experiments", "overlay 4 runs"]);
     expect(labels(input("actions"))).toEqual(["ml_app", "actions"]);
   });
 

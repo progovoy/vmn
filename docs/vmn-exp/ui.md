@@ -300,6 +300,14 @@ lists the closed groups (the parent grouping's `(no parent run)` group never
 folds). Sorting orders the groups (by the aggregate) and the rows within
 them; 50 groups load per page.
 
+A group header's checkbox selects the group's loaded rows, shut or open (it
+is indeterminate while only some are selected); the header's target run is
+not one of them, so Compare (N) and Archive count rows. The Charts tab's
+bar, scatter and parallel charts colour every charted run by its group (the
+board's groups in order, the no-value group grey, a legend above the chart;
+parallel's `color by` offers `group` first), reading each run's group from
+`experiments-columns`' `group:<field>`.
+
 ## Compare
 
 `.../app/<app>/compare-runs` is the one Compare page. Its tabs live in
@@ -326,9 +334,8 @@ On the leaderboard, selecting runs shows a bar with one primary **Compare (N)**
 (it says why it is disabled below two runs) that opens
 `compare-runs?tab=curves&sel=...`, plus Archive/Unarchive.
 
-The old `overlay?runs=a,b` and `compare?v=a&to=b` URLs redirect to
-`compare-runs?tab=curves&sel=a&sel=b` and `?tab=code&sel=a&sel=b`, so
-bookmarks and links in reports keep working.
+The plan-20 `overlay?runs=` and `compare?v=&to=` pages are gone (plan 22
+G8), with no redirect: everything vmn links to is `compare-runs?tab=…`.
 
 ## Keyboard
 
@@ -612,7 +619,9 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 ```
 
 - `keys`: comma list of `metrics.<k>`, `params.<k>`, `timestamp`, `status`,
-  `branch`, `name` (the run's name, else its note); anything else is a 400.
+  `branch`, `name` (the run's name, else its note) and `group:<field>` (the
+  run's group key on the board grouped by `<field>`, as the list's `group=`
+  takes it, `(none)` for no value); anything else is a 400.
   Columns align with `verstrs` and `idx` (the `@N` index).
 - Metric values are numbers or `null`; params are verbatim.
 - `q`, `status`, `sort`, `order`, `archived` work as on the list, in the same

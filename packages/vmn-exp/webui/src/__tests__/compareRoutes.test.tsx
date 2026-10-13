@@ -59,24 +59,24 @@ beforeEach(() => {
   (fetchRunStatuses as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
 });
 
+/** The route a location lands on. */
+const routeId = (router: ReturnType<typeof renderAt>) =>
+  (router.state.matches[router.state.matches.length - 1].route.handle as { id: string }).id;
+
 describe("Compare routes", () => {
-  it("redirects an old overlay link to the curves tab, crumb `compare N runs`", async () => {
-    const router = renderAt("/ws/w/app/a/overlay?runs=a,b");
-    await waitFor(() => expect(where(router)).toBe("/ws/w/app/a/compare-runs?tab=curves&sel=a&sel=b"));
+  it("opens the Compare page's tab, crumb `compare N runs`", async () => {
+    const router = renderAt("/ws/w/app/a/compare-runs?tab=curves&sel=a&sel=b");
     expect(await screen.findByRole("tab", { name: "Curves" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("compare 2 runs")).toBeInTheDocument();
+    expect(where(router)).toBe("/ws/w/app/a/compare-runs?tab=curves&sel=a&sel=b");
   });
 
-  it("redirects an old code diff link to the code tab", async () => {
-    const router = renderAt("/ws/w/app/a/compare?v=a&to=b");
-    await waitFor(() => expect(where(router)).toBe("/ws/w/app/a/compare-runs?tab=code&sel=a&sel=b"));
-    expect(await screen.findByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
-    await waitFor(() => expect(m.experimentsDiff).toHaveBeenCalledWith("w", "a", "a", "b"));
-  });
-
-  it("replaces the old entry, so Back skips the redirect", async () => {
-    const router = renderAt("/ws/w/app/a/overlay?runs=a,b");
-    await waitFor(() => expect(router.state.location.pathname).toBe("/ws/w/app/a/compare-runs"));
-    expect(router.state.historyAction).toBe("REPLACE");
-  });
+  // Plan 22 G8: the plan-20 pages Compare replaced are gone, not redirected.
+  it.each(["/ws/w/app/a/overlay?runs=a,b", "/ws/w/app/a/compare?v=a&to=b"])(
+    "has no page at the old %s", async (path) => {
+      const router = renderAt(path);
+      await waitFor(() => expect(routeId(router)).toBe("not-found"));
+      expect(where(router)).toBe(path);
+    },
+  );
 });
