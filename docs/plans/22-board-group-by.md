@@ -357,3 +357,21 @@ plain cards after the sections (`util/groupItems.ts:memberOf`). Charts draw them
 no-group grey with no legend entry (`util/chartGroups.ts`). Field groupings and
 `code_verstr` keep their `(none)` group as before. Gone: the `(no parent run)` label
 and the header's `foldable` flag.
+
+**F13. The counts belong to the group's head.** User feedback (2026-10-13), on F10's
+count columns: five table columns blank on every run row, filled only on header rows,
+under a "Runs in group" header, read as a property of a column of runs, while the
+counts describe the group's head — the outer job created before its runs are
+submitted (a fork group of one run read `1 · 0 · 0 · 1 · 0`). This reverses F10's web
+part: the count columns, their header group and `hide=c:<count>` are gone (no
+redirect). The header row's own cell carries the counts like the run page's Fleet
+card: a 56px run bar in the status colours before the count line (done, failed,
+stuck, running filling from the left; the empty track is the waiting runs; none for a
+group of one run or none; hidden from screen readers, which hear the counts in words;
+`pages/groupHeaderText.ts:barSegments`, `LeaderboardGroupRow.tsx:GroupBar`, also on
+the phone section label), and the count line has its full wording back (`16 runs · 2
+running · 1 failed`). Sorting groups by a count moves to the Group by menu: a "Sort
+groups" row above the Aggregate (`aggregate`, `runs`, `running`, `failed`, `waiting`,
+`succeeded`; `util/groupCountSort.ts`) writes `sort=c:<name>&order=desc`, `aggregate`
+drops `sort`/`order`. F10's server sort, the caption (`groups sorted by failed runs,
+most first`) and the flat board's drop of a count sort are unchanged.

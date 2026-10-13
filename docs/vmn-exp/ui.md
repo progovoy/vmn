@@ -299,15 +299,15 @@ workspaces have no conf, so the mean). Grouped, the board stays live while
 any run in any group is running, loaded or not. Ungrouped, every run is one
 row, sorted and paged as a flat list.
 
-Grouped, the table also has five count columns under a **Runs in group**
-header: `total`, `waiting`, `running`, `done` and `failed` (stuck runs count
-as failed). Only group header rows fill them, from the group's `counts`; run
-rows leave them blank, and a zero is muted. They are on by default, each
-hideable from Columns or with `hide=c:<name>`, and gone with `group=none`.
-Their header sorts the groups by that count (`sort=c:total`, …; the rows
-within a group keep their order). While they show, a header's own count
-line says only the size (`16 runs`, `5 of 16 runs`); on a phone the section
-label keeps the full wording.
+A group's run counts belong to its head (for a link, the target run — the
+outer job), so they sit on its header row, not in columns: a small bar in the
+status colours (finished runs fill from the left, the empty track is the
+waiting runs; a group of one run has none), then the counts in words
+(`16 runs · 2 running · 1 failed`). The menu's **Sort groups** row orders
+the groups by the aggregate (the default) or by how many of their runs are
+in a state: `runs`, `running`, `failed`, `waiting` or `succeeded`, most
+first (`sort=c:total`, …; the rows within a group keep their order; a count
+sort is dropped with `group=none`).
 
 With a grouping the board lists groups: each
 starts with a header row (the fold, the group's label — for a link the
@@ -647,7 +647,7 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
   is the mean; groups without a value after the others), and by their first
   row for a date or no metric sort. `sort=c:total|c:waiting|c:running|c:done|c:failed`
   orders groups by that count instead (`waiting` = created, `done` =
-  succeeded, `failed` = failed + stuck, as on the board's count columns),
+  succeeded, `failed` = failed + stuck; the board's Sort groups row),
   most first unless `order=asc`; ties keep the default group order, rows
   within a group keep their default order (no sort), and the no-value group
   stays last. Without `group=`, a `c:*` sort is an unknown metric like any
