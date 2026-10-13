@@ -72,9 +72,12 @@ export function windowLayout(layout: RowLayout, range: ColRange | null): RowLayo
     styles.push({ width: `${width}px` });
     kept.push(width);
   };
+  // A range taken from another layout (one render before it is recomputed) is clamped to this one.
+  const end = Math.min(range.end, widths.length);
+  const start = Math.min(Math.max(range.start, sticky), end);
   for (let i = 0; i < sticky; i++) take(i);
-  gap("left", sticky, range.start);
-  for (let i = range.start; i < range.end; i++) take(i);
-  gap("right", range.end, widths.length);
+  gap("left", sticky, start);
+  for (let i = start; i < end; i++) take(i);
+  gap("right", end, widths.length);
   return { ...layout, ids, styles, widths: kept };
 }
