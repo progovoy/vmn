@@ -29,7 +29,7 @@ td.group-metric { line-height: 1.2; }
 td.group-metric .group-agg { display: block; font-weight: 600; }
 td.group-metric .group-own { display: block; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
 .group-more-btn {
-  background: none; border: none; padding: 2px 6px; margin-left: 21px;
+  background: none; border: none; padding: 2px 0;
   color: var(--accent); font-size: 12px; cursor: pointer;
 }
 .group-more-btn:hover:not(:disabled) { text-decoration: underline; }

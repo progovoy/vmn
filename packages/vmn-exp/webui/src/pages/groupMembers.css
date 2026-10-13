@@ -13,7 +13,5 @@ tr.group-member .group-member-body::after {
   width: calc(var(--member-indent) - var(--member-guide) - 6px); border-top: 2px solid var(--line-2);
 }
 .lb-table { --member-indent: 28px; --member-guide: 8px; --member-tick: 10px; }
-/* The +N more row's button sits on the members' line. */
-tr.group-more.group-member .group-more-btn { margin-left: 0; }
 /* Each group starts with a clear rule above its header. */
 tr.group-row:not(:first-child) > td { border-top: 2px solid var(--line-2); }
