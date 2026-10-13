@@ -6,7 +6,8 @@ import { filterMetrics } from "../util/seriesArrays";
 import { xMetricMap, xMetricOptions, type XMap } from "../util/xMetric";
 import { useJoinedSeries } from "../hooks/useJoinedSeries";
 import { useCurveControls, type CurveControlProps } from "../hooks/useCurveControls";
-import { LogToggle, MetricSearch, XMetricSelect, XModeToggle } from "./ChartControls";
+import { LogToggle, MetricSearch } from "./ChartControls";
+import XAxisControl from "./XAxisControl";
 import MetricGrid, { type GridView } from "./MetricGrid";
 import SmoothingSlider from "./SmoothingSlider";
 import MetricKeyPicker from "./MetricKeyPicker";
@@ -95,8 +96,10 @@ function TrainingCurves({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <h2 className="section-title" style={{ marginBottom: 0 }}>Training curves</h2>
-          <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />
-          <XMetricSelect value={xChoice} onChange={setXChoice} metrics={xOptions} enabled={xMode === "step"} />
+          <XAxisControl
+            xMode={xMode} x={xChoice} metrics={xOptions} timeEnabled={hasTimestamps}
+            onXMode={setXMode} onX={setXChoice}
+          />
           <LogToggle value={logY} onChange={setLogY} />
           {downsampled && (
             <span style={{ color: "var(--text-3)", fontSize: 11 }} title="the server downsampled long series">
