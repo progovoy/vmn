@@ -301,7 +301,9 @@ With a grouping the board lists groups: each
 starts with a header row (the fold, the group's label — for a link the
 target run's `@N` name and status pill, for `same code` the code verstr with
 its base version and branch, for a field `branch = main` — and its status
-count, `16 · 2 running · 1 failed`), then up to 10 of its rows and a
+count in words, `16 runs · 2 running · 1 failed`, or `16 runs · all
+succeeded`; `5 of 16 runs` while a filter leaves part of the group, from K1's
+`rows_unfiltered`), then up to 10 of its rows and a
 `+N more` row that loads the rest (a refresh keeps each group as deep as it
 was loaded). Each metric column of a header shows the
 group's aggregate (`?agg=`, default conf `experiment.ui.group_aggregate`,
@@ -326,8 +328,9 @@ parallel's `color by` offers `group` first), reading each run's group from
 
 Below 640px, where the board is one card per run, each group's header is a
 section label above its cards that sticks to the top while you scroll them:
-the fold, the group's name (a link group's target run, linked), its status
-count, and the group's aggregate on the card metric (`0.2327 val_loss mean`).
+the group's checkbox (as on the desktop header), the fold, the group's name
+(a link group's target run, linked), its status count (wrapped, never cut
+short), and the group's aggregate on the card metric (`0.2327 val_loss mean`).
 Its `+N more` is a button under the last card.
 
 ## Compare
