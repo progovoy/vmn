@@ -30,6 +30,8 @@ import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
 import { useCanCreateRun } from "../shell/useAppExists";
 import { useAppStatus } from "../shell/useShellData";
 import AttentionStrip from "../components/AttentionStrip";
+import { LiveText } from "../components/LiveStatus";
+import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 
 const topLevel = (rows: readonly ExperimentRow[]) => topRows(rows, false).length;
 
@@ -68,6 +70,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const appName = toAppName(app);
   const client = useQueryClient();
   const view = useLeaderboardView();
+  const narrow = useMediaQuery(NARROW_QUERY);
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);
   const status = useAppStatus(ws, app).data;
@@ -185,6 +188,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
           loading: rows === undefined, filtered, loaded: all.length, total: data.total,
           shownTop, loadedTop: topLevel(all),
         })}
+        live={narrow && anyRunning && <LiveText paused={paused} updatedAt={data.updatedAt} />}
         actions={!empty && (
           <LeaderboardToolbar
             ws={ws} app={app} view={view} cols={cols}

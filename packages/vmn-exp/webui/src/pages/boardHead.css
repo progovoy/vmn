@@ -6,3 +6,4 @@
 @media (max-width: 639px) {
   .board-head .board-actions { margin-left: 0; flex-basis: 100%; }
 }
+.board-head .board-live { align-self: center; }
