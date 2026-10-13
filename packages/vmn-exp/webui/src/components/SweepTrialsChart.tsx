@@ -3,6 +3,7 @@
 import { lazy, Suspense, useMemo } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import type { FleetRow, Goal } from "./fleetRows";
+import "./sweepTrialsChart.css";
 
 const ParallelCoordinates = lazy(() => import("./ParallelCoordinates"));
 
@@ -21,7 +22,7 @@ export default function SweepTrialsChart({ rows, paramKeys, metric }: {
   const metricCols = useMemo(() => [metric.name], [metric.name]);
   if (rows.length < 2) return null;
   return (
-    <section aria-label="Trials in parallel coordinates" style={{ marginTop: 12 }}>
+    <section className="sweep-trials-chart" aria-label="Trials in parallel coordinates" style={{ marginTop: 12 }}>
       <Suspense fallback={null}>
         <ParallelCoordinates rows={chartRows} metricCols={metricCols} paramCols={paramKeys} schema={schema} />
       </Suspense>

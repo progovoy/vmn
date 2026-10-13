@@ -1,0 +1,2 @@
+/* The chart sits inside the Sweep card: drop ParallelCoordinates' own card frame. */
+.sweep-trials-chart > .card { border: 0; padding: 0; background: none; box-shadow: none; }

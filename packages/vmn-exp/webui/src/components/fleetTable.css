@@ -7,4 +7,5 @@
 .fleet-table th .goal { color: var(--text-3); font-weight: 400; }
 .fleet-table th.num, .fleet-table td.num { text-align: right; }
 .fleet-table tr.best { color: inherit; font-weight: inherit; }
+.fleet-table td { white-space: nowrap; }
 .fleet-table td .badge { margin-left: 6px; }
