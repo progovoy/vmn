@@ -636,7 +636,9 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
   other (no row carries it). `agg` defaults to
   `experiment.ui.group_aggregate` of the conf.yml the app reads on the
   checkout's branch (its branch conf when there is one, as `vmn` resolves
-  it), else `mean` (store workspaces: `mean`); `aggregate` names what it
+  it; a detached HEAD, as in CI, counts as the branch `vmn stamp` resolves
+  it to: the CI env's branch, else the branch last checked out, else the one
+  branch at or containing it; no branch reads the app's conf.yml), else `mean` (store workspaces: `mean`); `aggregate` names what it
   resolved to, and every aggregate is in the payload either way.
 - `offset`/`limit` page groups (default and at most 50); `rows_per_group`
   (default 10, 1..100) caps each group's `rows`, lowered so a page holds at

@@ -268,7 +268,9 @@ line wraps instead of being cut (`1 st…`).
 
 **F3. The effective aggregate comes from the server.** K1's top level gains `aggregate`
 (what `agg=` resolved to, the conf default included, read the same way the server reads
-other app conf, branch conf respected). The board's tag and menu show that value when the
+other app conf, branch conf respected; a detached HEAD counts as the branch vmn
+resolves it to, plan 17, through `version_stamp.api.checkout_branch_of`, cached per
+(checkout, HEAD sha); attached, HEAD is read as a file, no git process). The board's tag and menu show that value when the
 URL has no `agg=`; the client's own conf read (`useConfAggregate`) goes.
 
 **F4. Live while any group runs.** K1's top level gains `running` (running rows across
