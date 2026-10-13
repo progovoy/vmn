@@ -17,6 +17,7 @@ export default function InnerCell({ r, style }: { r: ExperimentRow; style: CSSPr
             {s.parts.map((p) => (
               <span key={p.state}>{" · "}<span className={`inner-${p.state}`}>{p.text}</span></span>
             ))}
+            {s.incomplete && <>{" · "}<span className="inner-incomplete">{s.incomplete}</span></>}
           </span>
           <span className="sr-only">{s.label}</span>
         </>

@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtVal, relTime, runHref } from "../util";
 import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
+import { sweepIncompleteLabel } from "../util/sweepProgress";
 import { PENDING_TEXT } from "./pendingText";
 import StatusPill from "../components/StatusPill";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
@@ -51,7 +52,9 @@ const MCard = memo(function MCard({
     if ((e.target as HTMLElement).closest("a, input, button")) return;
     navigate(href);
   };
-  const inner = r.children?.length ? `${r.children.length} inner` : "";
+  const inner = r.children?.length
+    ? [`${r.children.length} inner`, sweepIncompleteLabel(r)].filter(Boolean).join(" · ")
+    : "";
   return (
     <li
       className={`lb-mcard${selected ? " checked" : ""}${flash ? " flash" : ""}${r.archived ? " archived" : ""}`}

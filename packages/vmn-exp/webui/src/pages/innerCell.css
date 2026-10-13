@@ -5,3 +5,4 @@ td.inner-cell { font-family: var(--mono); font-size: 12px; color: var(--text-3);
 .inner-cell .inner-failed { color: var(--st-bad); }
 .inner-cell .inner-done { color: var(--st-good); }
 .inner-cell .inner-waiting { color: var(--text-2); }
+.inner-cell .inner-incomplete { color: var(--text-2); font-style: italic; }
