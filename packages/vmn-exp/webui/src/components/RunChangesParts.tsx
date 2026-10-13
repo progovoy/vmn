@@ -5,25 +5,20 @@ import type { PatchFile } from "../apiRunCode";
 import type { DiffDelta } from "../types";
 import { fmtVal } from "../util";
 import DiffText from "./DiffText";
+import { deltaTone, fmtDelta, numericChange } from "./diffDeltaTone";
 
 /** Metrics shown before "+N more". */
 export const TOP_METRICS = 5;
 
 type Delta = [string, DiffDelta];
 
-const change = ([, d]: Delta) =>
-  typeof d.from === "number" && typeof d.to === "number" ? d.to - d.from : null;
+const change = ([, d]: Delta) => numericChange(d);
 
 /** Goal metrics first, each group by |Δ| descending, non-numeric last. */
 function ranked(deltas: Delta[]): Delta[] {
   const size = (e: Delta) => Math.abs(change(e) ?? -1);
   return [...deltas].sort((a, b) =>
     Number(b[1].goal != null) - Number(a[1].goal != null) || size(b) - size(a));
-}
-
-function tone(d: DiffDelta, diff: number | null): string {
-  if (diff === null || diff === 0 || d.goal == null) return "flat";
-  return (d.goal === "min" ? diff < 0 : diff > 0) ? "better" : "worse";
 }
 
 export function MetricDelta({ deltas }: { deltas: Record<string, DiffDelta> }) {
@@ -47,8 +42,8 @@ export function MetricDelta({ deltas }: { deltas: Record<string, DiffDelta> }) {
                 <th scope="row">{k}</th>
                 <td className="metric num">{fmtVal(d.from)}</td>
                 <td className="metric num">{fmtVal(d.to)}</td>
-                <td className={`metric num delta ${tone(d, diff)}`}>
-                  {diff === null ? "–" : (diff > 0 ? "+" : "") + fmtVal(diff)}
+                <td className={`metric num delta ${deltaTone(d, diff)}`}>
+                  {fmtDelta(diff)}
                 </td>
               </tr>
             );

@@ -7,7 +7,12 @@ import { Skeleton } from "../../components/ui";
 import DiffText from "../../components/DiffText";
 import RunPicker from "../../components/RunPicker";
 import CopyRefButton from "../../components/CopyRefButton";
+import { deltaTone, fmtDelta, numericChange, type DeltaTone } from "../../components/diffDeltaTone";
 import { useRunLabels } from "./useRunLabels";
+
+const TONE_COLOR: Record<DeltaTone, string> = {
+  better: "var(--good)", worse: "var(--bad)", flat: "var(--text-3)",
+};
 
 /** A delta column's head: the side's `@N name`, verstr in the title (D3). */
 function SideHead({ verstr, label }: { verstr: string; label: string }) {
@@ -104,19 +109,8 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
                 </thead>
                 <tbody>
                   {delta.map(([k, d]) => {
-                    const numeric =
-                      typeof d.from === "number" && typeof d.to === "number";
-                    const diff = numeric ? (d.to as number) - (d.from as number) : null;
-                    const goal = d.goal ?? null;
-                    const neutral = goal === null || d.param;
-                    const improved = !neutral && diff !== null && diff !== 0 &&
-                      (goal === "min" ? diff < 0 : diff > 0);
-                    const color =
-                      diff === null || diff === 0 || neutral
-                        ? "var(--text-3)"
-                        : improved
-                          ? "var(--good)"
-                          : "var(--bad)";
+                    const diff = numericChange(d);
+                    const color = TONE_COLOR[deltaTone(d, diff)];
                     return (
                       <tr key={k}>
                         <td style={{ fontSize: 13 }}>{k}</td>
@@ -125,7 +119,7 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
                         </td>
                         <td className="metric num">{fmtVal(d.to)}</td>
                         <td className="metric num" style={{ color, fontWeight: 600 }}>
-                          {diff === null ? "–" : (diff > 0 ? "+" : "") + fmtVal(diff)}
+                          {fmtDelta(diff)}
                         </td>
                       </tr>
                     );
