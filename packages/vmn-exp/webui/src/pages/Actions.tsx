@@ -3,6 +3,8 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { api, appName as toAppName, appTag } from "../api";
 import type { AppRow, VersionRow } from "../types";
 import { JobCard, PageHead, useJob } from "../components/ui";
+import ConfirmCommandDialog from "../components/ConfirmCommandDialog";
+import { vmnCommand } from "../shell/cliCommands";
 
 export default function Actions() {
   const { ws, app } = useParams() as { ws: string; app: string };
@@ -17,6 +19,7 @@ export default function Actions() {
   const prefill = useSearchParams()[0].get("goto");
   const [gotoVerstr, setGotoVerstr] = useState(prefill ?? "");
   const [gotoVersions, setGotoVersions] = useState<VersionRow[]>([]);
+  const [confirmGoto, setConfirmGoto] = useState(false);
   const { job, error, run } = useJob();
 
   // A repo can manage many vmn apps — goto targets any of them.
@@ -41,8 +44,12 @@ export default function Actions() {
       dry_run: dryRun,
     });
 
-  const gotoRun = () =>
-    run(ws, appTag(gotoApp), "goto", { verstr: gotoVerstr.trim() || undefined });
+  const gotoTarget = gotoVerstr.trim();
+  const gotoCommand = vmnCommand(["goto", ...(gotoTarget ? ["-v", gotoTarget] : []), gotoApp]);
+  const gotoRun = () => {
+    setConfirmGoto(false);
+    run(ws, appTag(gotoApp), "goto", { verstr: gotoTarget || undefined });
+  };
 
   return (
     <>
@@ -142,17 +149,29 @@ export default function Actions() {
                 ))}
               </datalist>
             </label>
-            <button onClick={gotoRun}>Goto</button>
+            <button className="primary" onClick={() => setConfirmGoto(true)}>Goto</button>
           </div>
           <p className="page-sub" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 0 }}>
             Leave version empty to go to the tip of the current branch.
           </p>
-          <div className="cli-hint">
-            vmn goto{gotoVerstr.trim() ? ` -v ${gotoVerstr.trim()}` : ""} {gotoApp}
-          </div>
+          <div className="cli-hint">{gotoCommand}</div>
         </div>
       </div>
 
+      {confirmGoto && (
+        <ConfirmCommandDialog
+          title={gotoTarget ? `Goto ${gotoApp} ${gotoTarget}?` : `Goto the branch tip of ${gotoApp}?`}
+          command={gotoCommand}
+          note={
+            `${gotoTarget ? `Checks out ${gotoApp} and its dependency repos at ${gotoTarget}`
+              : `Returns ${gotoApp} and its dependency repos to the tip of the current branch`}. `
+            + "Other apps in this repo are untouched."
+          }
+          confirmLabel="Run goto"
+          onConfirm={gotoRun}
+          onCancel={() => setConfirmGoto(false)}
+        />
+      )}
       {error && <div className="error">{error}</div>}
       {job && <JobCard job={job} />}
     </>
