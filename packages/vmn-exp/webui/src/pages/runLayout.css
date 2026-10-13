@@ -8,7 +8,6 @@
 .run-part > .section-title { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
 .run-part .kv { grid-template-columns: minmax(88px, max-content) minmax(0, 1fr); column-gap: 16px; }
 .run-part .kv > * { overflow-wrap: anywhere; }
-.run-part + .run-part { margin-top: 0; }
 @media (max-width: 860px) {
   .run-pair { grid-template-columns: minmax(0, 1fr); }
 }

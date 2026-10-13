@@ -110,11 +110,14 @@ function useThreadActions(ws: string, target: string, anchor: CommentAnchor | un
   };
 }
 
+/** The comment thread of *target*, shared by every reader of its count. */
+export const commentsQuery = (ws: string, target: string) => ({
+  queryKey: ["comments", ws, target],
+  queryFn: () => apiReports.listComments(ws, target),
+});
+
 export default function Comments({ ws, target, anchor }: ThreadProps) {
-  const query = useQuery({
-    queryKey: ["comments", ws, target],
-    queryFn: () => apiReports.listComments(ws, target),
-  });
+  const query = useQuery(commentsQuery(ws, target));
   const comments = query.data?.comments ?? [];
   const actions = useThreadActions(ws, target, anchor, comments, query.data?.me);
   const ids = new Set(comments.map((c) => c.id));

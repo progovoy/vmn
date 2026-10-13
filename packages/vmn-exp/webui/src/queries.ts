@@ -93,8 +93,6 @@ export function prefetchRun(client: QueryClient, ws: string, app: string, verstr
   return client.prefetchQuery<ExperimentDetail>(runQuery(ws, app, verstr));
 }
 
-/** A run's leaderboard row from any cached list, so the Run page can paint
- *  its header, status, metrics and params before the detail arrives. */
 /** The longest list of the app's rows any leaderboard query has cached
  *  (empty when none has), e.g. to tell which params vary across its runs. */
 export function cachedRows(client: QueryClient, ws: string, app: string): ExperimentRow[] {
@@ -105,6 +103,8 @@ export function cachedRows(client: QueryClient, ws: string, app: string): Experi
   return best;
 }
 
+/** A run's leaderboard row from any cached list, so the Run page can paint
+ *  its header, status, metrics and params before the detail arrives. */
 export function findCachedRow(
   client: QueryClient, ws: string, app: string, verstr: string,
 ): ExperimentRow | undefined {

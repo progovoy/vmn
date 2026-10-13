@@ -19,7 +19,7 @@ export function Duration({ secs }: { secs: number | null | undefined }) {
 }
 
 /** The run's status facts, for the Status details section (the pill itself
- *  heads the page: `RunStatusLine`). */
+ *  heads the page: `RunHead`). */
 export function StatusFacts({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => string }) {
   return (
     <div className="run-part">
