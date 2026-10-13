@@ -28,6 +28,7 @@ from vmn_exp.ui import (
     routes_models,
     routes_reports,
     routes_run_code,
+    routes_run_search,
     routes_search,
     routes_series,
     routes_shell,
@@ -604,6 +605,7 @@ def create_app(
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
     forget_git = routes_shell.register(app, API_PREFIX, _git_workspace, _status_snapshot,
                                        _app_tags, leaderboards)
+    routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)

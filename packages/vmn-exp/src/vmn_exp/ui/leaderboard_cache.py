@@ -38,9 +38,10 @@ import threading
 import vmn_exp.core.status as experiment_status
 from vmn_exp.core.importance import param_importance
 from vmn_exp.core.log import primary_metric
-from vmn_exp.core.query import query_roots
+from vmn_exp.core.query import parse_query, query_roots
 from vmn_exp.core.status import status_fields
 from vmn_exp.core.tree import annotate_rows
+from vmn_exp.ui import search_prefilter
 from vmn_exp.ui.http_params import MAX_PAGE
 from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, static_moves
@@ -52,6 +53,8 @@ from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import apply_filters, sort_rows
+from vmn_exp.ui.search_index import SearchIndexes
+from vmn_exp.ui.search_rank import results
 
 BUCKET_SEC = 2
 # Importance results kept (each pins its scored runs' params dicts).
@@ -190,10 +193,12 @@ class _Static:
         self.filtered = None if with_metric else filtered
 
     @classmethod
-    def build(cls, base, schema, sort, status, query, order, archived):
-        """Filtered and sorted from scratch: O(N log N)."""
+    def build(cls, base, schema, sort, status, query, order, archived, slots=None):
+        """Filtered and sorted from scratch: O(N log N). *slots*: the storage
+        slots that may pass *query* (None: every one)."""
         changed = set(base.patch.changed)
-        rows = [row for i, row in enumerate(base.rows) if i not in changed]
+        at = range(len(base.rows)) if slots is None else sorted(slots)
+        rows = [base.rows[i] for i in at if i not in changed]
         filtered = _filtered(base.snapshot, rows, status, query, archived)
         ordered = sort_rows(filtered, schema, sort=sort, order=order)
         with_metric = _carrying(sort or primary_metric(schema), filtered)
@@ -258,6 +263,7 @@ class LeaderboardCache:
         self._columns = LRU(size)
         self._importance = LRU(IMPORTANCE_RESULTS)
         self._groups = GroupCache(self, size)
+        self._search = SearchIndexes()
 
     schema_key = staticmethod(_schema_key)
 
@@ -321,9 +327,22 @@ class LeaderboardCache:
         last = self._latest.peek(key)
         moves = last and self._deltas.since(last.token, base)
         static = moves and last.advanced(base, *moves, schema, *filters)
-        static = static or _Static.build(base, schema, *filters)
+        static = static or _Static.build(base, schema, *filters,
+                                         slots=self._candidates(base.snapshot, filters[2]))
         self._latest.put(key, static)
         return static
+
+    def _candidates(self, snapshot, query):
+        """The slots of *snapshot* the search index says may pass *query*'s
+        ``~`` clauses, or None (no clause it answers: every slot)."""
+        if not query or ("~" not in query and "contains" not in query):
+            return None
+        return search_prefilter.candidates(parse_query(query), self._search.get(snapshot))
+
+    def search(self, snapshot, text, limit, archived=False):
+        """``{"results"}``: ⌘K "go to run" over every run (plan 23 S8)."""
+        index = self._search.get(snapshot)
+        return {"results": results(snapshot, index.ranked(text, limit, archived))}
 
     def page(
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,
