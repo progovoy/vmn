@@ -1,0 +1,13 @@
+/* A collapsible page section (plan 20 B5): the heading is a full-width button. */
+.disclosure { margin-bottom: 16px; }
+.disclosure-title { margin: 0; }
+.disclosure-toggle {
+  display: flex; align-items: center; gap: 6px; width: calc(100% + 12px);
+  margin: -4px -6px; padding: 4px 6px; border: 0; border-radius: 6px;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.disclosure-toggle:hover { background: var(--panel-2); }
+.disclosure-toggle svg { flex: none; color: var(--text-3); }
+.disclosure[data-open="true"] > .disclosure-title { margin-bottom: 12px; }
+.disclosure-preview { margin-top: 10px; }
+.disclosure-body[hidden] { display: none; }

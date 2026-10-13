@@ -1,12 +1,12 @@
 /// <reference types="vite/client" />
-/** Plan 20 E3 + E4: the run page's Metadata | Params | Metrics cards.
+/** Plan 20 E3 + B5: the run page's Params | Metrics cards.
  *  jsdom lays nothing out, so the wrapping and grid rules are read from the
  *  component's stylesheet and the structure from the rendered DOM. */
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import css from "../runCards.css?raw";
 import styles from "../../styles.css?raw";
-import RunCards, { SHORT_PARAMS } from "../RunCards";
+import RunCards from "../RunCards";
 import { MetricsCard } from "../RunSections";
 
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -65,34 +65,28 @@ describe("Metrics card summaries wrap cleanly (E3)", () => {
 
 const card = (name: string) => <div className="card"><h2>{name}</h2></div>;
 const params = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`p${i}`, i]));
-const show = (n: number) =>
-  render(<RunCards metadata={card("Metadata")} params={params(n)} metrics={card("Metrics")} />);
+const show = (n: number) => render(<RunCards params={params(n)} metrics={card("Metrics")} />);
 const slotOf = (name: string) => screen.getByText(name).closest(".card")!.parentElement!;
 
-describe("Metadata | Params | Metrics layout (E4)", () => {
+// Plan 20 B5 (D5 7) replaces E4's Metadata | Params | Metrics: Metadata moves
+// into the collapsed Status details, leaving Params | Metrics.
+describe("Params | Metrics layout (B5)", () => {
   it("never stretches the cards to one row height", () => {
     expect(decls(css, ".run-cards")["align-items"]).toBe("start");
     expect(decls(css, ".run-cards-wide")["grid-column"]).toBe("1 / -1");
   });
 
-  it("gives Metrics the full width under a short Params card", () => {
+  it("sets Params before Metrics, side by side", () => {
     show(3);
-    expect(screen.getByText("Parameters")).toBeInTheDocument();
-    expect(slotOf("Metrics")).toHaveClass("run-cards-wide");
+    const params = screen.getByText("Parameters").closest(".card")!;
+    expect(slotOf("Metrics")).toHaveClass("run-cards");
+    expect(params.parentElement).toHaveClass("run-cards");
+    expect(params.compareDocumentPosition(screen.getByText("Metrics")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("stacks Metrics under Metadata beside a long Params card", () => {
-    show(SHORT_PARAMS + 1);
-    const stack = slotOf("Metrics");
-    expect(stack).toHaveClass("run-cards-col");
-    expect(stack).toContainElement(screen.getByText("Metadata"));
-    expect(stack).not.toContainElement(screen.getByText("Parameters"));
-  });
-
-  it("sets Metadata and Metrics side by side without params", () => {
+  it("gives Metrics the full width without params", () => {
     show(0);
     expect(screen.queryByText("Parameters")).toBeNull();
-    expect(slotOf("Metrics")).toHaveClass("run-cards");
-    expect(slotOf("Metadata")).toHaveClass("run-cards");
+    expect(slotOf("Metrics")).toHaveClass("run-cards-wide");
   });
 });

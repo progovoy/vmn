@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MetadataCard } from "../RunSections";
+import { MetadataFacts } from "../RunSections";
 import type { ExperimentDetail } from "../../types";
 
 const detail = (compacted: boolean | null | undefined): ExperimentDetail => ({
@@ -13,13 +13,13 @@ const detail = (compacted: boolean | null | undefined): ExperimentDetail => ({
 
 describe("not compacted badge", () => {
   it("shows on a run whose metrics are still streams", () => {
-    render(<MetadataCard detail={detail(false)} />);
+    render(<MetadataFacts detail={detail(false)} />);
     expect(screen.getByText("not compacted")).toBeTruthy();
   });
 
   it("is absent once compacted, or when the run has no metric files", () => {
     for (const compacted of [true, null, undefined]) {
-      const { unmount } = render(<MetadataCard detail={detail(compacted)} />);
+      const { unmount } = render(<MetadataFacts detail={detail(compacted)} />);
       expect(screen.queryByText("not compacted")).toBeNull();
       unmount();
     }

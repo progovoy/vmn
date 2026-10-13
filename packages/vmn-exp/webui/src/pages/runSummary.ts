@@ -8,6 +8,9 @@ export interface RunSummary {
   name: string | null;
   tags: Record<string, string>;
   branch: string | null;
+  /** `@N`, the storage index `vmn-exp show -v @N` resolves. */
+  idx: number | null;
+  baseVersion: string | null;
   note: string | null;
   status: RunStatus | null;
   metrics: ExperimentDetail["metrics"];
@@ -26,6 +29,8 @@ export function summaryFromDetail(d: ExperimentDetail): RunSummary {
     name: (meta.name as string | undefined) || null,
     tags: (meta.tags as Record<string, string> | undefined) ?? NO_TAGS,
     branch: (meta.branch as string | undefined) ?? null,
+    idx: d.idx ?? null,
+    baseVersion: (meta.base_version as string | undefined) ?? null,
     note: (meta.note as string | undefined) || null,
     status: d.status ?? null,
     metrics: d.metrics,
@@ -65,6 +70,8 @@ export function summaryFromRow(r: ExperimentRow): RunSummary {
     name: r.name || null,
     tags: r.tags ?? NO_TAGS,
     branch: r.branch,
+    idx: r.idx ?? null,
+    baseVersion: r.base_version ?? null,
     note: r.note,
     status: statusFromRow(r),
     metrics: r.metrics,

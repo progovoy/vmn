@@ -1,8 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunState, RunStatus } from "../types";
+import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
-import StatusPill from "../components/StatusPill";
 import FleetTable from "../components/FleetTable";
 import { fleetMetric, fleetRowsOf, varyingParams } from "../components/fleetRows";
 
@@ -19,30 +18,13 @@ export function Duration({ secs }: { secs: number | null | undefined }) {
   );
 }
 
-export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => string }) {
-  // For outers, tree_status is the headline; the run's own status is secondary.
-  const isOuter = st.kind === "outer" && st.tree_status;
-  const primaryStatus = isOuter ? st.tree_status as RunState : st.status;
-  const showOwnStatus = isOuter && (
-    st.status === "failed" || st.status === "stuck"
-    || (st.status === "running" && st.status !== st.tree_status)
-  );
+/** The run's status facts, for the Status details section (the pill itself
+ *  heads the page: `RunStatusLine`). */
+export function StatusFacts({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => string }) {
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <h2 className="section-title">Status</h2>
-      <div className="status-head">
-        <StatusPill status={primaryStatus} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
-        {showOwnStatus && (
-          <span className="tree-roll">own {st.status}</span>
-        )}
-        {st.status === "stuck" && st.stale_sec != null && (
-          <span className="stale">⚠ no heartbeat for {fmtDuration(st.stale_sec)}</span>
-        )}
-        {!isOuter && st.tree_status && st.tree_status !== st.status && (
-          <span className="tree-roll">tree {st.tree_status}</span>
-        )}
-      </div>
-      <div className="kv" style={{ marginTop: 12 }}>
+    <div className="run-part">
+      <h3 className="section-title">Status</h3>
+      <div className="kv">
         {st.exit_code !== null && (
           <><div className="k">exit code</div><div className="mono">{st.exit_code}</div></>
         )}
@@ -50,7 +32,7 @@ export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) 
         <Duration secs={st.duration_sec} />
         {st.pid !== null && <><div className="k">pid</div><div className="mono">{st.pid}</div></>}
         {Boolean(st.host) && <><div className="k">host</div><div className="mono">{st.host}</div></>}
-        {Boolean(st.heartbeat) && st.status !== "succeeded" && st.status !== "failed" && (
+        {Boolean(st.heartbeat) && (
           <><div className="k">heartbeat</div><div title={st.heartbeat ?? ""}>{relTime(st.heartbeat)}</div></>
         )}
         {st.command && st.command.length > 0 && (
@@ -209,7 +191,8 @@ export function FleetCard({ fleet, schema = null, runUrl, table = true }: {
   );
 }
 
-export function MetadataCard({ detail }: { detail: ExperimentDetail }) {
+/** Where the run's code came from, for the Status details section. */
+export function MetadataFacts({ detail }: { detail: ExperimentDetail }) {
   const meta = detail.metadata;
   const captured = Object.entries(detail.patches)
     .filter(([, v]) => v).map(([k]) => k.replaceAll("_", " ")).join(", ") || "clean tree";
@@ -218,8 +201,8 @@ export function MetadataCard({ detail }: { detail: ExperimentDetail }) {
   const runSecs = logTail.filter((e) => e.type === "run")
     .reduce((s, e) => s + (Number(e.duration_sec) || 0), 0);
   return (
-    <div className="card">
-      <h2 className="section-title">Metadata</h2>
+    <div className="run-part">
+      <h3 className="section-title">Metadata</h3>
       <div className="kv">
         <div className="k">branch</div>
         <div className="mono">{meta.branch as string}</div>
