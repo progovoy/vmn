@@ -1,4 +1,5 @@
 import LiveStatus from "../components/LiveStatus";
+import { isGroupCountId } from "./groupCountColumns";
 import "./boardCaption.css";
 
 export const BOARD_CAPTION_ID = "board-caption";
@@ -21,7 +22,9 @@ export default function BoardCaption({ sortLabel, reversed, live }: {
       <span className="legend-chip"><span className="sq" aria-hidden="true" /> best in column</span>
       {sortLabel && (
         <span className="board-caption-sort">
-          sorted by <b>{sortLabel}</b>, {reversed ? "worst first" : "best first"}
+          {isGroupCountId(sortLabel)
+            ? <>groups sorted by <b>{sortLabel.slice(2)} runs</b>, {reversed ? "fewest first" : "most first"}</>
+            : <>sorted by <b>{sortLabel}</b>, {reversed ? "worst first" : "best first"}</>}
         </span>
       )}
       <span className="spacer" />

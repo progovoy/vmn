@@ -5,14 +5,14 @@ import { appName as toAppName } from "../api";
 import ReportsUsing from "../components/ReportsUsing";
 import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
 import { branchClause, combineQueries, searchClause, statusClause } from "../util/searchQuery";
-import { metricGoal, pollIntervalMs } from "../util";
+import { pollIntervalMs } from "../util";
 import type { ExperimentRow } from "../types";
 import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
 import SimilarSearch from "../components/SimilarSearch";
 import { usePolling } from "../hooks/usePolling";
 import { useBoardRows } from "../hooks/useBoardRows";
-import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
+import { useLeaderboardView } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useColumnEdits } from "../hooks/useColumnEdits";
@@ -24,8 +24,8 @@ import { boardRows } from "../util/groupItems";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
 import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
-import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT } from "./LeaderboardTable";
-import { DATE_SORT_OF } from "./leaderboardColumns";
+import LeaderboardTable, { IDX_SORT } from "./LeaderboardTable";
+import { boardSortState } from "./boardSortState";
 import { boardSort, isGroupCountId } from "./groupCountColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import BoardHead, { runCountText } from "./BoardHead";
@@ -39,13 +39,6 @@ import { queryHelpData } from "../util/queryHelp";
 
 /** The runs no other run launched (the subtitle's `N runs`). */
 const topLevel = (rows: readonly ExperimentRow[]) => rows.filter((r) => !r.depth).length;
-
-const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
-
-/** A column's best-first direction: newest first for time, else its goal's.
- *  When the goal is unknown (null), default to desc (high first). */
-const bestOrder = (schema: Parameters<typeof metricGoal>[0], col: string): Order =>
-  !NEWEST_FIRST.has(col) && metricGoal(schema, col) === "min" ? "asc" : "desc";
 
 /** An existing app without runs: the CLI line, plus a New run button where a
  *  run can be created here (a known app, a writable git workspace). */
@@ -160,12 +153,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     (verstr: string) => { prefetchRun(client, ws, app, verstr); },
     [client, ws, app],
   );
-  const sortState = {
-    sort,
-    order: sort ? view.order ?? bestOrder(schema, sort) : null,
-    reversed: Boolean(sort && view.order && view.order !== bestOrder(schema, sort)),
-    onSort: (col: string) => view.clickSort(col, bestOrder(schema, col)),
-  };
+  const sortState = boardSortState(sort, view.order, schema, view.clickSort);
 
   const onCreated = () => {
     const known = new Set(all.map((r) => r.verstr));
