@@ -7,7 +7,7 @@ import { useCanCreateRun } from "../shell/useAppExists";
 import { hideColumn } from "../hooks/useColumnEdits";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
-import type { useBoardGrouping } from "../hooks/useBoardGrouping";
+import type { BoardGrouping } from "../hooks/useBoardAggregate";
 import { NO_GROUP } from "../util/groupBy";
 import "./leaderboardToolbar.css";
 
@@ -21,7 +21,7 @@ export default function LeaderboardToolbar({
   app: string;
   view: ReturnType<typeof useLeaderboardView>;
   cols: ReturnType<typeof useLeaderboardColumns>;
-  grouping: ReturnType<typeof useBoardGrouping>;
+  grouping: BoardGrouping;
   /** A saved view replaced the URL: controls holding their own state reset. */
   onViewApplied: () => void;
   /** Drop the dragged widths and column order; omitted while there are none. */

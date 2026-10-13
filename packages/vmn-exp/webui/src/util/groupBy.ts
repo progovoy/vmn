@@ -57,12 +57,6 @@ export function parseGroup(raw: string | null): GroupBy | null {
 export const parseAggregate = (raw: unknown): Aggregate | null =>
   (AGGREGATES as readonly unknown[]).includes(raw) ? (raw as Aggregate) : null;
 
-/** The app's default aggregate: conf `experiment.ui.group_aggregate`, else mean. */
-export function confAggregate(conf: Record<string, unknown> | undefined): Aggregate {
-  const experiment = conf?.experiment as { ui?: { group_aggregate?: unknown } } | undefined;
-  return parseAggregate(experiment?.ui?.group_aggregate) ?? "mean";
-}
-
 /** The label a grouping shows by: a link's name, a field as written. */
 export const groupLabel = (group: GroupBy): string =>
   LINK_GROUPS.find((l) => l.value === group)?.label ?? group;

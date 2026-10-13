@@ -1,6 +1,6 @@
 /** The grouped board's table items (plan 22 G4): each group's header row,
  *  its loaded rows while open, and a `+N more` row for the rest. */
-import { NONE_GROUP, type RunGroup } from "../apiGroups";
+import { NONE_GROUP, type GroupAggregate, type RunGroup } from "../apiGroups";
 import type { ExperimentRow } from "../types";
 
 /** A group as the board caches it: its rows by verstr, so an edit to the
@@ -14,6 +14,9 @@ export interface GroupedRows {
   total: number;
   groups: BoardGroup[];
   total_groups: number;
+  /** The payload's top level: the effective aggregate, the running rows. */
+  aggregate?: GroupAggregate;
+  running?: number;
 }
 
 export type MoreState = "idle" | "loading" | "error";

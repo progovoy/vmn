@@ -127,8 +127,8 @@ export function useLeaderboardView() {
         else p.set("group", group);
         p.delete("collapse");
       }),
-    /** The aggregate a group header shows; `agg=` is left out at the default. */
-    setAggregate: (agg: Aggregate, dflt: Aggregate) => setParam("agg", agg === dflt ? "" : agg),
+    /** The aggregate a group header shows; `agg=` is left out at the default (when known). */
+    setAggregate: (agg: Aggregate, dflt: Aggregate | undefined) => setParam("agg", agg === dflt ? "" : agg),
     /** Close or reopen a group (all start open, so `collapse=` lists the shut ones). */
     toggleCollapsed: (key: string) => toggleIn("collapse", key),
     setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),

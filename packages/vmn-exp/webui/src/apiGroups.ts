@@ -66,6 +66,10 @@ export interface GroupedPage {
   groups: RunGroup[];
   total_groups: number;
   total_rows: number;
+  /** What `agg=` resolved to (the app's conf default without one; F3). */
+  aggregate?: GroupAggregate;
+  /** Running rows across all groups, after the filters (F4). */
+  running?: number;
 }
 
 export interface GroupOpts extends Omit<PageOpts, "last"> {

@@ -36,7 +36,7 @@ function renderAt(path: string) {
         { path: "tokens", element: null, handle: { id: "tokens" } },
         { path: "ws/:ws", element: null, handle: { id: "apps" } },
         { path: "ws/:ws/app/:app", element: null, handle: { id: "experiments" } },
-        { path: "ws/:ws/app/:app/overlay", element: null, handle: { id: "overlay", wide: true } },
+        { path: "ws/:ws/app/:app/compare-runs", element: null, handle: { id: "compare-runs", wide: true } },
         { path: "ws/:ws/missing", element: <Overrides />, handle: { id: "apps" } },
         { path: "bare", element: null },
       ],
@@ -68,7 +68,7 @@ describe("useShellContext", () => {
   });
 
   it("says whether the deepest route asks for the full content width", async () => {
-    renderAt("/ws/ml-repo/app/root-svc/overlay");
+    renderAt("/ws/ml-repo/app/root-svc/compare-runs");
     await waitFor(() => expect(seen?.workspace?.name).toBe("ml-repo"));
     expect(seen!.wide).toBe(true);
   });

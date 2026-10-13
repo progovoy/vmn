@@ -11,6 +11,8 @@ export function cacheOf(page: GroupedPage): GroupedRows {
     total: page.total_rows,
     groups: page.groups.map(boardGroup),
     total_groups: page.total_groups,
+    aggregate: page.aggregate,
+    running: page.running,
   };
 }
 
@@ -23,6 +25,8 @@ export function withGroups(cur: GroupedRows, next: GroupedPage): GroupedRows {
     total: next.total_rows,
     groups: [...cur.groups, ...fresh.map(boardGroup)],
     total_groups: next.total_groups,
+    aggregate: next.aggregate,
+    running: next.running,
   };
 }
 

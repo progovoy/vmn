@@ -54,6 +54,9 @@ export function useGroupedRows(
   }, client);
 
   const { data, queryError, pageError } = useShownList(query, group !== null);
+  // The aggregate an answer to no `agg=` names: the app's default (F3).
+  const answeredDefault = useRef<GroupAggregate>();
+  if (!agg && !query.isPlaceholderData && query.data?.aggregate) answeredDefault.current = query.data.aggregate;
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const [more, setMore] = useState<ReadonlyMap<string, MoreState>>(new Map());
@@ -106,6 +109,7 @@ export function useGroupedRows(
     data,
     queryError, pageError,
     moreError, more, loadMore, loadGroup, refresh,
+    defaultAggregate: answeredDefault.current,
     updatedAt: query.dataUpdatedAt,
   };
 }
