@@ -243,6 +243,22 @@ before; `pin=`; `pin=-` pins nothing), and dragged
 widths/order in the browser. A fade on the table's right edge shows there are
 more columns to scroll to.
 
+## Compare
+
+`.../app/<app>/compare-runs` is the one Compare page. Its tabs live in
+`?tab=`: `curves` (default; the selected runs' training curves overlaid),
+`table` (params and metrics side by side, up to 50 runs) and `code` (the
+metric delta and source diff of two runs). All three share the repeated
+`?sel=` selection, shown as chips you can remove or add to, so switching tabs
+keeps the runs. With more than two selected, the code tab diffs the first run
+against a picker that defaults to the second (`?to=`). When a run's code can't
+be materialized (422 `code_missing`/`no_code`/`restore_failed`), it shows the
+reason, keeps both pickers and prints the `vmn-exp diff` line.
+
+The old `overlay?runs=a,b` and `compare?v=a&to=b` URLs redirect to
+`compare-runs?tab=curves&sel=a&sel=b` and `?tab=code&sel=a&sel=b`, so
+bookmarks and links in reports keep working.
+
 ## Keyboard
 
 - **Skip to content**: the first Tab stop jumps past the sidebar to the page.
@@ -580,7 +596,7 @@ the same step (for step-less points, the same `log_metrics` call); points
 without a finite x are dropped. The join happens before thinning, and
 `series_total` counts joined points.
 
-In the dashboard, the run page and the overlay have an `x:` picker next to the
+In the dashboard, the run page and the Compare page's curves tab have an `x:` picker next to the
 Step / Wall / Relative toggle (Step mode): `x: declared` (default) uses each
 metric's declared `step_metric`, `x: step` ignores declarations, and a metric
 name plots every other chart against it.
