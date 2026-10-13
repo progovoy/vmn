@@ -169,12 +169,25 @@ describe("filters", () => {
     );
   });
 
-  it("labels the live toggle's off state", async () => {
+  it("offers only Refresh with nothing running", async () => {
     m.experiments.mockResolvedValue(page([row(1)]));
     renderBoard();
-    const toggle = await screen.findByRole("button", { name: /live off/i });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(toggle);
-    expect(screen.getByRole("button", { name: /^live$/i })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh" }));
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    await waitFor(() => expect(m.experiments).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows live with Pause while a row is running; Pause stops polling", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    m.experiments.mockResolvedValue(page([row(1, { status: "running" })]));
+    renderBoard();
+    await screen.findByText("0.0.1-dev.x");
+    expect(screen.getByText(/live · updated \d+s ago/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    const calls = m.experiments.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+    expect(m.experiments.mock.calls.length).toBe(calls);
+    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
   });
 });

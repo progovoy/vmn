@@ -214,8 +214,10 @@ standard library (included above). With the GIL on and a watched app of
 
 Every run row has a status pill (`created`, `running` (pulsing), `stuck`,
 `succeeded`, `failed`). Inner runs nest under their outer run, so a sweep is
-one row whose status rolls up its subtree. Pages auto-refresh while anything
-is unfinished. See [Run status](experiments.md#run-status-did-my-job-die) for
+one row whose status rolls up its subtree. While any run on the page is
+running, the leaderboard and the run page poll on their own and show
+`● live · updated Ns ago` with a Pause button (Resume restarts it); with
+nothing running they show a Refresh button instead. See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
 ## Keyboard

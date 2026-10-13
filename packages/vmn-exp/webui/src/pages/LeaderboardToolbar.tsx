@@ -1,25 +1,30 @@
 import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
-import LiveToggle from "../components/LiveToggle";
+import LiveStatus from "../components/LiveStatus";
 import SavedViews from "../components/SavedViews";
 import { useCanCreateRun } from "../shell/useAppExists";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import { isInnerRunId } from "./innerRunColumns";
 
-/** The bar above the leaderboard: live toggle, the create button (only where
+/** The bar above the leaderboard: live status, the create button (only where
  *  a run can be created), saved views and the columns (the selection's
  *  actions float at the bottom). */
 export default function LeaderboardToolbar({
-  ws, app, view, cols, live, onLive, onViewApplied, onResetColumns,
+  ws, app, view, cols, live, onViewApplied, onResetColumns,
 }: {
   ws: string;
   app: string;
   view: ReturnType<typeof useLeaderboardView>;
   cols: ReturnType<typeof useLeaderboardColumns>;
-  live: boolean;
-  onLive: () => void;
+  live: {
+    running: boolean;
+    paused: boolean;
+    updatedAt: number;
+    onPaused: (paused: boolean) => void;
+    onRefresh: () => unknown;
+  };
   /** A saved view replaced the URL: controls holding their own state reset. */
   onViewApplied: () => void;
   /** Drop the dragged widths and column order; omitted while there are none. */
@@ -36,7 +41,11 @@ export default function LeaderboardToolbar({
   return (
     <div className="toolbar">
       <span className="legend-chip"><span className="sq" /> best in column</span>
-      <LiveToggle live={live} onToggle={onLive} />
+      <LiveStatus
+        running={live.running} paused={live.paused} updatedAt={live.updatedAt}
+        onPause={() => live.onPaused(true)} onResume={() => live.onPaused(false)}
+        onRefresh={live.onRefresh}
+      />
       <span className="spacer" />
       {canCreate && !view.creating && <button onClick={() => view.openCreate(true)}>New run</button>}
       <SavedViews

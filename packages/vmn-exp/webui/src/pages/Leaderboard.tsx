@@ -66,7 +66,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const view = useLeaderboardView();
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);
-  const [live, setLive] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [brushed, setBrushed] = useState<Set<string> | null>(null);
   // Bumped when a saved view replaces the URL, so the filter bar re-reads it.
@@ -96,8 +96,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   }), [similarQuery, view.archived]);
   const rows = data.rows;
 
-  // Keep refreshing on our own while a run is still in flight, at the cadence
-  // its heartbeat can actually move the status at.
+  // Keep refreshing on our own while a run is still in flight (until paused),
+  // at the cadence its heartbeat can actually move the status at.
   const { anyRunning, heartbeatSec } = useMemo(() => {
     let running = false;
     let fastest: number | null = null;
@@ -114,7 +114,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const { refresh: refreshRows } = data;
   const { refresh: refreshInner } = inner;
   const refresh = useCallback(() => { refreshInner(); return refreshRows(); }, [refreshRows, refreshInner]);
-  usePolling(refresh, pollIntervalMs(heartbeatSec), live || anyRunning);
+  usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused);
 
   const base = `/ws/${ws}/app/${app}`;
   const colPrefs = useColumnPrefs(`${ws}/${app}`);
@@ -212,7 +212,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
         <>
           <LeaderboardToolbar
             ws={ws} app={app} view={view} cols={cols}
-            live={live} onLive={() => setLive((v) => !v)}
+            live={{ running: anyRunning, paused, updatedAt: data.updatedAt, onPaused: setPaused, onRefresh: refresh }}
             onViewApplied={() => setFilterGen((g) => g + 1)}
             onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
           />

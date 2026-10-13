@@ -620,11 +620,6 @@ tr.skeleton-row td { border-bottom: 1px solid var(--line); }
   background: var(--panel-2); animation: shimmer 1.4s ease-in-out infinite;
 }
 .load-more { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 10px 0; }
-.live-toggle { display: flex; align-items: center; gap: 6px; }
-.live-dot {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--good);
-  animation: pulse 1.5s infinite;
-}
 
 /* ---- query box autocomplete ---- */
 .query-input { position: relative; flex: 1; min-width: 220px; display: flex; }
