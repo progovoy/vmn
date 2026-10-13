@@ -8,3 +8,5 @@
   box-shadow: inset -12px 0 12px -10px color-mix(in srgb, var(--text) 50%, transparent);
 }
 .lb-card.more-right .lb-edge-fade { opacity: 1; }
+/* Metric and param headers are names (plan 20 D3): never uppercased. */
+.lb-table th[data-col-id^="m:"], .lb-table th[data-col-id^="p:"] { text-transform: none; letter-spacing: 0; }
