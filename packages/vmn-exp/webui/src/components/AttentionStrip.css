@@ -1,0 +1,29 @@
+/* Plan 20 C6: the attention strip above the board. */
+.attention-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  margin: 0 0 12px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--st-stuck, var(--hotfix));
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.attention-icon { color: var(--st-stuck, var(--hotfix)); margin-right: 4px; }
+.attention-sep { color: var(--text-3); }
+.attention-strip a {
+  color: var(--text);
+  font-weight: 500;
+  text-underline-offset: 2px;
+}
+.attention-strip a.attention-stuck { color: var(--st-stuck, var(--hotfix)); }
+.attention-strip a.attention-failed { color: var(--st-bad, var(--bad)); }
+.attention-strip a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
