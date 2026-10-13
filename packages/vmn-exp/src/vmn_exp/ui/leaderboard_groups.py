@@ -23,10 +23,10 @@ from vmn_exp.ui.leaderboard_group_fields import (
     RERUN_OF,
     TARGET_LINKS,
     UnknownGroup,
+    escaped_key,
     key_text,
     label,
     target_payload,
-    value_key,
 )
 from vmn_exp.ui.leaderboard_group_summary import Summary
 from vmn_exp.ui.leaderboard_live import MergedRows, _bisect
@@ -97,7 +97,7 @@ class Grouping:
             summaries[group] = self._owned(summaries, group, dirty).add(rows)
             dirty.add(group)
         if spec.group == RERUN_OF:
-            dirty.update(value_key(row["verstr"]) for row in list(left) + list(joined))
+            dirty.update(escaped_key(row["verstr"]) for row in list(left) + list(joined))
         moved = Grouping(base, spec, members, summaries, key, ranked, with_metric)
         return moved._from(self, dirty)
 
@@ -144,7 +144,7 @@ class Grouping:
             summaries[group] = self._owned(summaries, group, ()).add(add)
             dirty.add(group)
         if spec.group == RERUN_OF:
-            dirty.update(value_key(row["verstr"]) for row in changed)
+            dirty.update(escaped_key(row["verstr"]) for row in changed)
         view = Grouping(base, spec, members, summaries, key, ranked, with_metric, live)
         return view._from(self, dirty)
 

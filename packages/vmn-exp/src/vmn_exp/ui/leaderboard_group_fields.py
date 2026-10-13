@@ -18,7 +18,7 @@ DICT_FIELDS = ("tags", "params")
 AGGREGATES = ("mean", "best", "median", "min", "max")
 DEFAULT_AGGREGATE = "mean"
 # The no-value group's key: no value's key equals it, since a value whose
-# text starts with it is keyed with it doubled (:func:`value_key`).
+# text starts with it is keyed with it doubled (:func:`escaped_key`).
 NONE = "\u2205"
 NONE_LABEL = "(none)"
 NO_PARENT = "(no parent run)"
@@ -66,7 +66,7 @@ def _absent(value):
     return value is None or value == ""
 
 
-def value_key(text):
+def escaped_key(text):
     """The group key of a value spelled *text*."""
     return NONE + text if text.startswith(NONE) else text
 
@@ -81,15 +81,15 @@ def key_of(group):
     if group in TARGET_LINKS:
         def link(row):
             target = row.get(group)
-            return NONE if _absent(target) or target == row["verstr"] else value_key(target)
+            return NONE if _absent(target) or target == row["verstr"] else escaped_key(target)
         return link
     if group in LINKS or group in FIELDS:
-        return lambda row: NONE if _absent(row.get(group)) else value_key(_text(row[group]))
+        return lambda row: NONE if _absent(row.get(group)) else escaped_key(_text(row[group]))
     prefix, _, name = group.partition(".")
 
     def entry(row):
         value = (row.get(prefix) or {}).get(name)
-        return NONE if value is None else value_key(_text(value))
+        return NONE if value is None else escaped_key(_text(value))
 
     return entry
 
