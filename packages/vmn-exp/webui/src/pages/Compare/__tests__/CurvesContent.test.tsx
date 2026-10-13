@@ -118,7 +118,7 @@ describe("Compare curves Log y and smoothing", () => {
     expect(slider).toHaveAttribute("aria-valuetext", "off");
     expect(slider.closest("label")).toHaveTextContent(/smoothing\s*off/);
     fireEvent.change(slider, { target: { value: "0.6" } });
-    expect(slider).toHaveAttribute("aria-valuetext", "0.60");
-    expect(slider.closest("label")).toHaveTextContent(/smoothing\s*0\.60/);
+    expect(slider).toHaveAttribute("aria-valuetext", "0.6");
+    expect(slider.closest("label")).toHaveTextContent(/smoothing\s*0\.6/);
   });
 });

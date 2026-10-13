@@ -80,14 +80,13 @@ describe("the floating selection bar", () => {
     expect(within(toolbar).getByRole("button", { name: "New run" })).toBeInTheDocument();
   });
 
-  it("offers the diff, the compare table and the overlay for two runs", async () => {
+  // Plan 20 M3: one Compare (N) replaced the diff, table and overlay actions.
+  it("offers Compare for two runs", async () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(1)}&sel=${v(2)}`);
     const sel = await bar();
     expect(within(sel).getByText("2", { selector: ".sel-badge" })).toBeInTheDocument();
     expect(within(sel).getByText("runs selected")).toBeInTheDocument();
-    expect(within(sel).getByRole("button", { name: /^code diff$/i })).toBeEnabled();
-    expect(within(sel).getByRole("button", { name: /compare in table/i })).toBeEnabled();
-    expect(within(sel).getByRole("button", { name: /overlay curves/i })).toBeEnabled();
+    expect(within(sel).getByRole("button", { name: "Compare (2)" })).not.toHaveAttribute("aria-disabled");
   });
 
   it("closes with its ✕, clearing the selection", async () => {

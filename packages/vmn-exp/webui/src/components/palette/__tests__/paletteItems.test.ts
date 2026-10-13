@@ -173,6 +173,14 @@ describe("Command row", () => {
     expect(done[0].command).toBe("vmn-exp compare ml_app -v @3 -v @7");
   });
 
+  it("opens overlay and diff on the Compare page's curves and code tabs", () => {
+    const ok = (verstr: string, idx: number) => ({ state: "ok" as const, run: { verstr, idx, name: null } });
+    const overlay = cmd({ text: "overlay @3 @7", refs: { "@3": ok("a1", 3), "@7": ok("b2", 7) } });
+    expect(overlay[0]).toMatchObject({ to: "/ws/w/app/ml_app/compare-runs?tab=curves&sel=a1&sel=b2" });
+    expect(cmd({ text: "diff @3 @7" })[0]).toMatchObject({ to: "/ws/w/app/ml_app/compare-runs?tab=code&sel=%403&sel=%407" });
+    expect(cmd({ text: "diff @3" })[0]).toMatchObject({ to: "/ws/w/app/ml_app/compare-runs?tab=code&sel=%403" });
+  });
+
   it("names a missing or ambiguous ref", () => {
     const none = cmd({ text: "@60", refs: { "@60": { state: "none" } } });
     expect(none[0]).toMatchObject({ label: "ml_app has 53 runs (@1–@53)", disabled: true });

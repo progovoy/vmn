@@ -1,22 +1,19 @@
-import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useOffsetHeight } from "../hooks/useOffsetHeight";
 import { compareSearch } from "./Compare/selection";
-import { MAX_COMPARE_RUNS } from "./compareRunsData";
 import "./selectionBar.css";
 
 const plural = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
 /** Room under the last rows beyond the bar itself: its 24px bottom offset and a 12px gap. */
 const BAR_ROOM_PX = 36;
 
-/** Why an action can't run on *n* selected runs, or null when it can. */
-const diffReason = (n: number) => (n === 2 ? null : "Select exactly 2 runs");
-const compareReason = (n: number) =>
-  n >= 2 && n <= MAX_COMPARE_RUNS ? null : `Select 2–${MAX_COMPARE_RUNS} runs`;
-const overlayReason = (n: number) => (n >= 2 ? null : "Select 2 or more runs");
+/** Why Compare can't run on *n* selected runs, or null when it can. Each
+ *  Compare tab caps the runs it shows itself, so there is no upper bound. */
+const compareReason = (n: number) => (n >= 2 ? null : "Select 2 or more runs");
 
 /** Hiding a focused select-all (every match now picked) would drop focus to
  *  the page; hand it to the bar's first enabled action instead. */
@@ -34,7 +31,7 @@ function useKeepFocusInBar(barRef: RefObject<HTMLDivElement | null>,
  *  fit it, it is aria-disabled rather than disabled: still a Tab stop that
  *  announces its reason (tooltip and description), but inert. */
 function BarAction({ label, reason, primary, onClick }: {
-  label: string; reason: string | null; primary?: boolean; onClick: () => void;
+  label: ReactNode; reason: string | null; primary?: boolean; onClick: () => void;
 }) {
   const id = useId();
   const off = reason !== null;
@@ -53,8 +50,8 @@ function BarAction({ label, reason, primary, onClick }: {
 }
 
 /** The bar floating at the bottom centre while runs are selected (Monday.com
- *  style): the count, what can be done with the runs — diff, compare,
- *  overlay, archive/unarchive (after a confirm), select every match — and a
+ *  style): the count, what can be done with the runs — one Compare (N) to the
+ *  Compare page, archive/unarchive (after a confirm), select every match — and a
  *  ✕ that clears the selection, as Escape does. Its actions and slots are
  *  the same at every count, so it never changes size as runs are picked. */
 export default function LeaderboardSelectionBar({
@@ -115,13 +112,11 @@ export default function LeaderboardSelectionBar({
           </span>
           <span className="sr-only" role="status">{n} selected</span>
           <span className="sel-actions">
-            <BarAction label="Code diff" primary reason={diffReason(n)} onClick={() => go(
-              `compare?v=${encodeURIComponent(selected[0])}&to=${encodeURIComponent(selected[1])}`,
-            )} />
-            <BarAction label="Compare in table" reason={compareReason(n)}
-              onClick={() => go(`compare-runs?${compareSearch("table", selected)}`)} />
-            <BarAction label="Overlay curves" primary reason={overlayReason(n)}
-              onClick={() => go(`overlay?runs=${selected.map(encodeURIComponent).join(",")}`)} />
+            <BarAction
+              label={<>Compare <span className="sel-count">({n})</span></>}
+              primary reason={compareReason(n)}
+              onClick={() => go(`compare-runs?${compareSearch("curves", selected)}`)}
+            />
             <button disabled={archiving} onClick={() => setConfirming("archive")}>Archive</button>
             {showUnarchive && (
               <button disabled={archiving} onClick={() => setConfirming("unarchive")}>Unarchive</button>

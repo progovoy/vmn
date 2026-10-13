@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
+import { compareSearch } from "../pages/Compare/selection";
 import { curvelessRuns, noCurvesNote } from "../pages/overlayCoverage";
 import type { OverlayRunData } from "../pages/overlaySeries";
 
 const overlayHref = (ws: string, app: string, runs: string[]) =>
-  `/ws/${ws}/app/${app}/overlay?runs=${runs.map(encodeURIComponent).join(",")}`;
+  `/ws/${ws}/app/${app}/compare-runs?${compareSearch("curves", runs)}`;
 
 const shortRef = (r: OverlayRunData) => (r.idx != null ? `@${r.idx}` : r.key);
 const trials = (n: number) => `${n} trial${n === 1 ? "" : "s"}`;

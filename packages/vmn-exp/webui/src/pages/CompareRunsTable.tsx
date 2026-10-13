@@ -37,8 +37,8 @@ function Section({ title, kind, rows, width, note }: {
   return (
     <>
       <tr className="compare-section">
-        <th colSpan={width} scope="row">
-          <span className="label-caps">{title}</span>
+        <th colSpan={width} scope="row" className="label-caps">
+          {title}
           {note && <span className="compare-section-note"> · {note}</span>}
         </th>
       </tr>

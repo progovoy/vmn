@@ -3,8 +3,8 @@ interface Props {
   onChange: (v: number) => void;
 }
 
-/** The smoothing amount as shown: "off" at zero, else two decimals. */
-const smoothingText = (v: number) => (v === 0 ? "off" : v.toFixed(2));
+/** The smoothing amount as shown: "off" at zero, else the value. */
+const smoothingText = (v: number) => (v === 0 ? "off" : String(v));
 
 export default function SmoothingSlider({ value, onChange }: Props) {
   const text = smoothingText(value);

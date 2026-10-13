@@ -29,40 +29,36 @@ const action = (name: RegExp) => within(region()).getByRole("button", { name });
 const where = () => screen.getByTestId("where").textContent;
 
 describe("the selection bar's inapplicable actions", () => {
+  // Plan 20 M3: Compare (N) is the bar's one count-gated action.
   it("are marked aria-disabled, not natively disabled, so they stay in the Tab order", () => {
     renderBar(1);
-    const diff = action(/^code diff$/i);
-    expect(diff).toHaveAttribute("aria-disabled", "true");
-    expect(diff).not.toHaveAttribute("disabled");
-    expect(diff).toHaveAttribute("title", "Select exactly 2 runs");
-    expect(diff).toHaveAccessibleDescription("Select exactly 2 runs");
+    const compare = action(/^compare/i);
+    expect(compare).toHaveAttribute("aria-disabled", "true");
+    expect(compare).not.toHaveAttribute("disabled");
+    expect(compare).toHaveAttribute("title", "Select 2 or more runs");
+    expect(compare).toHaveAccessibleDescription("Select 2 or more runs");
   });
 
   it("take keyboard focus, announcing why they can't run", () => {
     renderBar(1);
-    const diff = action(/^code diff$/i);
-    expect(diff.tabIndex).toBe(0);
-    diff.focus();
-    expect(document.activeElement).toBe(diff);
-    const compare = action(/compare in table/i);
+    const compare = action(/^compare/i);
+    expect(compare.tabIndex).toBe(0);
     compare.focus();
     expect(document.activeElement).toBe(compare);
-    expect(compare).toHaveAccessibleDescription(/^Select 2–\d+ runs$/);
+    expect(compare).toHaveAccessibleDescription("Select 2 or more runs");
   });
 
   it("do nothing when activated", () => {
     renderBar(1);
-    fireEvent.click(action(/^code diff$/i));
-    fireEvent.click(action(/compare in table/i));
-    fireEvent.click(action(/overlay curves/i));
+    fireEvent.click(action(/^compare/i));
     expect(where()).toBe("/ws/t/app/a");
   });
 
   it("drop the marker once they apply", () => {
     renderBar(2);
-    const diff = action(/^code diff$/i);
-    expect(diff).not.toHaveAttribute("aria-disabled");
-    expect(diff).not.toHaveAccessibleDescription();
+    const compare = action(/^compare/i);
+    expect(compare).not.toHaveAttribute("aria-disabled");
+    expect(compare).not.toHaveAccessibleDescription();
   });
 });
 

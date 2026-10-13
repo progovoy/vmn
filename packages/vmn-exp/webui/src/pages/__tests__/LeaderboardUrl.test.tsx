@@ -113,7 +113,8 @@ describe("leaderboard view state lives in the URL", () => {
     const second = (await screen.findByText("0.0.2-dev.x")).closest("tr")!;
     fireEvent.click(within(second).getByRole("checkbox"));
     await waitFor(() => expect(urlParams().getAll("sel")).toEqual(["0.0.1-dev.x", "0.0.2-dev.x"]));
-    expect(screen.getByRole("button", { name: /^code diff$/i })).toBeEnabled();
+    // Plan 20 M3: Compare (N) replaced the bar's Code diff.
+    expect(screen.getByRole("button", { name: "Compare (2)" })).not.toHaveAttribute("aria-disabled");
   });
 
   it("hides the columns the URL hides", async () => {
