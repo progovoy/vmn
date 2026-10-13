@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { runColor } from "../../util";
 import { allTimestamped } from "../../util/chartData";
-import { LogToggle, XMetricSelect, XModeToggle } from "../../components/ChartControls";
+import { LogToggle } from "../../components/ChartControls";
+import XAxisControl from "../../components/XAxisControl";
 import { useCurveControls } from "../../hooks/useCurveControls";
 import OverlayChart from "../../components/OverlayChart";
 import OverlayLegend from "../../components/OverlayLegend";
@@ -12,6 +13,7 @@ import { overlaySpec } from "../../reports/viewSpecs";
 import OverlayNoCurves, { TrialLinks } from "../../components/OverlayNoCurves";
 import { useOverlaySeries } from "../overlaySeries";
 import { curvelessRuns, unionMetrics } from "../overlayCoverage";
+import { runText } from "../../shell/crumbs";
 
 /** More runs than this make an unreadable chart and a lot of payload. */
 export const MAX_OVERLAY_RUNS = 100;
@@ -40,6 +42,10 @@ export default function CurvesTab({ ws, app, refs }: { ws: string; app: string; 
     const idx = new Map(runs.map((v, i) => [v, i]));
     return (key: string) => runColor(idx.get(key) ?? 0);
   }, [runs]);
+  const labelOf = useMemo(() => {
+    const byKey = new Map(loaded.map((r) => [r.key, runText({ verstr: r.key, idx: r.idx ?? null, name: r.name ?? null })]));
+    return (key: string) => byKey.get(key) ?? key;
+  }, [loaded]);
   const toggle = useCallback((v: string) => setHidden((prev) => {
     const next = new Set(prev);
     if (!next.delete(v)) next.add(v);
@@ -75,12 +81,14 @@ export default function CurvesTab({ ws, app, refs }: { ws: string; app: string; 
       {metrics.length > 0 && <OverlayNoCurves ws={ws} app={app} runs={loaded} />}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />
-        <XMetricSelect value={xChoice} onChange={setXChoice} metrics={metrics} enabled={xMode === "step"} />
+        <XAxisControl
+          xMode={xMode} x={xChoice} metrics={metrics} timeEnabled={hasTimestamps}
+          onXMode={setXMode} onX={setXChoice}
+        />
         <LogToggle value={logY} onChange={setLogY} />
         <SmoothingSlider value={alpha} onChange={setAlpha} />
         <OverlayLegend
-          runs={legendKeys} colorOf={colorOf} hidden={hidden}
+          runs={legendKeys} colorOf={colorOf} labelOf={labelOf} hidden={hidden}
           onToggle={toggle} onHover={setFocused}
         />
       </div>

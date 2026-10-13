@@ -57,7 +57,8 @@ describe("Overlay page with partial metric coverage", () => {
       "No curves: @36 lr_layers_grid (sweep run; its trials log the curves)",
     )).toBeInTheDocument();
     const link = screen.getByRole("link", { name: /overlay its 2 trials/ });
-    expect(link.getAttribute("href")).toBe("/ws/w/app/app/overlay?runs=0.0.1-dev.a,0.0.1-dev.b");
+    // Plan 20 M3: straight to the Compare page, not through the old overlay redirect.
+    expect(link.getAttribute("href")).toBe("/ws/w/app/app/compare-runs?tab=curves&sel=0.0.1-dev.a&sel=0.0.1-dev.b");
   });
 
   it("names each sweep in its trials link when several are curveless", async () => {
@@ -72,8 +73,9 @@ describe("Overlay page with partial metric coverage", () => {
   it("leaves curveless runs out of the legend", async () => {
     renderOverlay(["0.0.1-dev.a", "0.0.1-dev.o"]);
     await screen.findByText(/No curves:/);
-    expect(screen.getByRole("button", { name: "0.0.1-dev.a" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "0.0.1-dev.o" })).toBeNull();
+    // Plan 20 M2: legend entries read @N name, the verstr in their title.
+    expect(screen.getByRole("button", { name: "@1 alpha" })).toHaveAttribute("title", "0.0.1-dev.a");
+    expect(screen.queryByRole("button", { name: "@36 lr_layers_grid" })).toBeNull();
   });
 
   it("keeps the empty state when no selected run has a curve", async () => {

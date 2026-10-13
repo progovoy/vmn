@@ -76,3 +76,7 @@ button.sel-close:focus-visible { outline-offset: -3px; }
   }
   button.sel-close { order: 2; }
 }
+/* Compare (N): room for "(500)" in tabular digits, so the button never resizes. */
+.sel-count {
+  display: inline-block; min-width: 5ch; text-align: left; font-variant-numeric: tabular-nums;
+}

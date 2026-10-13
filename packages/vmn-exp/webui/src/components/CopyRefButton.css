@@ -1,0 +1,5 @@
+button.copy-ref {
+  display: inline-flex; align-items: center; padding: 2px; margin-left: 4px; line-height: 1;
+  color: var(--text-3); vertical-align: middle;
+}
+button.copy-ref:hover, button.copy-ref:focus-visible { color: var(--text); }

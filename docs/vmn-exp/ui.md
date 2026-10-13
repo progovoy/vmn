@@ -268,6 +268,20 @@ against a picker that defaults to the second (`?to=`). When a run's code can't
 be materialized (422 `code_missing`/`no_code`/`restore_failed`), it shows the
 reason, keeps both pickers and prints the `vmn-exp diff` line.
 
+Runs are named `@N name` everywhere on the page (the curves legend, the table's
+run columns, the code tab's delta columns), with the verstr in the tooltip and
+a copy button next to it. The table tab opens with **Only differing** on
+(`?diff=0` turns it off); its Metrics section leaves out params that were folded
+into `metrics` without ever being logged as a metric, and its Params section
+says how many params changed. A best value is marked only for a metric with a
+goal (declared, or a loss/accuracy-like name). The curves tab has one labelled
+x axis control (Step, Wall, Relative, or a metric), a Log y chip and a
+smoothing slider that reads `off` or its value.
+
+On the leaderboard, selecting runs shows a bar with one primary **Compare (N)**
+(it says why it is disabled below two runs) that opens
+`compare-runs?tab=curves&sel=...`, plus Archive/Unarchive.
+
 The old `overlay?runs=a,b` and `compare?v=a&to=b` URLs redirect to
 `compare-runs?tab=curves&sel=a&sel=b` and `?tab=code&sel=a&sel=b`, so
 bookmarks and links in reports keep working.
@@ -659,10 +673,12 @@ the same step (for step-less points, the same `log_metrics` call); points
 without a finite x are dropped. The join happens before thinning, and
 `series_total` counts joined points.
 
-In the dashboard, the run page and the Compare page's curves tab have an `x:` picker next to the
-Step / Wall / Relative toggle (Step mode): `x: declared` (default) uses each
-metric's declared `step_metric`, `x: step` ignores declarations, and a metric
-name plots every other chart against it.
+In the dashboard, the run page has an `x:` picker next to the Step / Wall /
+Relative toggle (Step mode): `x: declared` (default) uses each metric's declared
+`step_metric`, `x: step` ignores declarations, and a metric name plots every
+other chart against it. The Compare page's curves tab folds these into one
+x axis control: Step (each metric's declared `step_metric`, else the step),
+Wall, Relative, or `x = <metric>` for every chart.
 
 ### Diffs and artifacts
 

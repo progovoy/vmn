@@ -88,11 +88,12 @@ describe("select all filtered", () => {
 });
 
 describe("N-run compare", () => {
-  it("opens the compare table for the selected runs", async () => {
+  // Plan 20 M3: Compare (N) opens the Compare page on its curves tab.
+  it("opens the Compare page for the selected runs", async () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(1)}&sel=${v(2)}&sel=${v(3)}`);
-    fireEvent.click(await screen.findByRole("button", { name: /compare in table/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^compare \(3\)$/i }));
     await waitFor(() => expect(location.pathname).toBe("/ws/test/app/my-app/compare-runs"));
     expect(urlParams().getAll("sel")).toEqual([v(1), v(2), v(3)]);
-    expect(urlParams().get("tab")).toBe("table");
+    expect(urlParams().get("tab")).toBe("curves");
   });
 });

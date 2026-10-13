@@ -6,6 +6,18 @@ import { fmtVal } from "../../util";
 import { Skeleton } from "../../components/ui";
 import DiffText from "../../components/DiffText";
 import RunPicker from "../../components/RunPicker";
+import CopyRefButton from "../../components/CopyRefButton";
+import { useRunLabels } from "./useRunLabels";
+
+/** A delta column's head: the side's `@N name`, verstr in the title (D3). */
+function SideHead({ verstr, label }: { verstr: string; label: string }) {
+  return (
+    <th className="num compare-ident">
+      <span className="mono" title={verstr}>{label}</span>
+      <CopyRefButton text={verstr} />
+    </th>
+  );
+}
 
 /** The metric delta and the real source diff between two runs; on a K6
  *  materialisation failure, the reason, both pickers and the CLI line. */
@@ -21,6 +33,9 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
     queryFn: () => api.experimentsDiff(ws, app, v, to),
   }, client);
   const result = diff.data ?? null;
+  const fromVerstr = result?.from_verstr ?? v;
+  const toVerstr = result?.to_verstr ?? to;
+  const [fromLabel, toLabel] = useRunLabels(ws, app, [fromVerstr, toVerstr]);
 
   const diffError = diff.error as HttpError | undefined;
   const isMaterializeError = diffError?.status === 422;
@@ -29,8 +44,6 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
     return <div className="error">{String(diffError)}</div>;
   if (!result && !diffError) return <Skeleton />;
 
-  const fromVerstr = result?.from_verstr ?? v;
-  const toVerstr = result?.to_verstr ?? to;
   const delta = result ? Object.entries(result.metrics_delta) : [];
   const materializeReason = isMaterializeError
     ? ((diffError as HttpError & { body?: { reason?: string } }).body?.reason ?? "restore_failed")
@@ -84,8 +97,8 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
                 <thead>
                   <tr>
                     <th>metric</th>
-                    <th className="num mono">{fromVerstr}</th>
-                    <th className="num mono">{toVerstr}</th>
+                    <SideHead verstr={fromVerstr} label={fromLabel.text} />
+                    <SideHead verstr={toVerstr} label={toLabel.text} />
                     <th className="num">Δ</th>
                   </tr>
                 </thead>

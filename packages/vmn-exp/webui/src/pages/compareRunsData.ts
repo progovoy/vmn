@@ -2,6 +2,7 @@
 import type { ExperimentDetail, MetricsSchema } from "../types";
 import { metricGoal } from "../util";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
+import { isParamOnly } from "../util/paramKeys";
 import { summaryFromDetail } from "./runSummary";
 
 export const MAX_COMPARE_RUNS = 50;
@@ -15,10 +16,13 @@ export function parseSelection(params: URLSearchParams): { verstrs: string[]; dr
   };
 }
 
-/** A run's display name: its `name`, else its verstr. */
+/** A run's display name: `@N name` (or `@N`) once its index is known, else
+ *  its `name`, else its verstr. */
 export function runLabel(verstr: string, detail: ExperimentDetail | undefined): string {
   const name = detail?.metadata.name;
-  return typeof name === "string" && name ? name : verstr;
+  const named = typeof name === "string" && name ? name : null;
+  if (detail?.idx != null) return named ? `@${detail.idx} ${named}` : `@${detail.idx}`;
+  return named ?? verstr;
 }
 
 export interface CompareRow {
@@ -31,8 +35,12 @@ export interface CompareRow {
   best: number | null;
 }
 
-const sourceOf = (d: ExperimentDetail, kind: "params" | "metrics") =>
-  (kind === "params" ? summaryFromDetail(d).params : d.metrics) ?? {};
+/** A run's params, or its metrics without the params folded into them (D2). */
+function sourceOf(d: ExperimentDetail, kind: "params" | "metrics"): Record<string, unknown> {
+  if (kind === "params") return summaryFromDetail(d).params ?? {};
+  const metrics = d.metrics ?? {};
+  return Object.fromEntries(Object.entries(metrics).filter(([k]) => !isParamOnly(k, d)));
+}
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 

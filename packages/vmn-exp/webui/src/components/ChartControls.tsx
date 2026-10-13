@@ -1,4 +1,5 @@
 import type { XMode } from "../util/chartData";
+import ToggleChip from "./ToggleChip";
 import { AUTO_X, NO_X } from "../util/xMetric";
 
 const X_MODES: { mode: XMode; label: string }[] = [
@@ -58,17 +59,13 @@ export function XMetricSelect({ value, onChange, metrics, enabled }: {
   );
 }
 
+/** Log y as an on/off chip: pressed (and tinted) while the axis is logarithmic. */
 export function LogToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      className={value ? "primary" : ""}
-      style={SMALL_BUTTON}
-      aria-pressed={value}
-      title="logarithmic y axis (non-positive values are left out)"
-      onClick={() => onChange(!value)}
-    >
+    <ToggleChip pressed={value} onChange={onChange}
+      title="logarithmic y axis (non-positive values are left out)">
       Log y
-    </button>
+    </ToggleChip>
   );
 }
 

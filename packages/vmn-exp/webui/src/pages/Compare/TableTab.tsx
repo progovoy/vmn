@@ -31,7 +31,8 @@ export default function TableTab({ ws, app, refs }: { ws: string; app: string; r
   const { params, setParam } = useUrlState();
   const verstrs = refs.slice(0, MAX_COMPARE_RUNS);
   const dropped = refs.length - verstrs.length;
-  const onlyDiffering = params.get("diff") === "1";
+  // On by default (plan 20 M2): only `?diff=0` turns it off.
+  const onlyDiffering = params.get("diff") !== "0";
   const schema = useMetricsSchema(ws, app);
   const results = useQueries({ queries: verstrs.map((v) => runQuery(ws, app, v)) }, client);
   const loaded = verstrs.flatMap((v, i) => (results[i].error ? [] : [{ v, detail: results[i].data }]));
@@ -55,7 +56,7 @@ export default function TableTab({ ws, app, refs }: { ws: string; app: string; r
         <button
           aria-pressed={onlyDiffering}
           className={onlyDiffering ? "primary" : ""}
-          onClick={() => setParam("diff", onlyDiffering ? "" : "1")}
+          onClick={() => setParam("diff", onlyDiffering ? "0" : "")}
         >
           Only differing
         </button>

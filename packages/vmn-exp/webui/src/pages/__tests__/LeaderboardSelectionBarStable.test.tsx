@@ -36,61 +36,57 @@ const reason = (el: HTMLElement) =>
   el.getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)?.textContent).join(" ");
 
 describe("a selection bar that keeps its shape as the count changes", () => {
+  // Plan 20 M3 replaced Code diff / Compare in table / Overlay curves with
+  // one Compare (N); only its count changes, in a fixed-width slot.
+  const withoutCount = (names: string[]) => names.map((n) => n.replace(/ \(\d+\)$/, ""));
+
   it("renders the same actions, in the same order, at 1, 2 and 3 runs", () => {
     const { rerenderWith } = renderBar(1);
-    const at1 = actionNames();
+    const at1 = withoutCount(actionNames());
     rerenderWith(2);
-    const at2 = actionNames();
+    const at2 = withoutCount(actionNames());
     rerenderWith(3);
-    expect(at1).toEqual(["Code diff", "Compare in table", "Overlay curves", "Archive"]);
+    expect(at1).toEqual(["Compare", "Archive"]);
     expect(at2).toEqual(at1);
-    expect(actionNames()).toEqual(at1);
+    expect(withoutCount(actionNames())).toEqual(at1);
   });
 
-  it("keeps counts out of the action labels", () => {
+  it("keeps counts out of every action label but Compare's", () => {
     renderBar(3);
-    for (const name of actionNames()) expect(name).not.toMatch(/\d/);
+    expect(actionNames()[0]).toBe("Compare (3)");
+    for (const name of actionNames().slice(1)) expect(name).not.toMatch(/\d/);
   });
 
   it("marks what one run can't do aria-disabled, saying why", () => {
     renderBar(1);
-    const diff = action(/^code diff$/i);
-    expect(diff).toHaveAttribute("aria-disabled", "true");
-    expect(diff).toHaveAttribute("title", "Select exactly 2 runs");
-    expect(reason(diff)).toBe("Select exactly 2 runs");
-    expect(action(/compare in table/i)).toHaveAttribute("aria-disabled", "true");
-    expect(reason(action(/compare in table/i))).toBe(`Select 2–${MAX_COMPARE_RUNS} runs`);
-    expect(action(/overlay curves/i)).toHaveAttribute("aria-disabled", "true");
-    expect(reason(action(/overlay curves/i))).toBe("Select 2 or more runs");
+    const compare = action(/^compare/i);
+    expect(compare).toHaveAttribute("aria-disabled", "true");
+    expect(compare).toHaveAttribute("title", "Select 2 or more runs");
+    expect(reason(compare)).toBe("Select 2 or more runs");
     expect(action(/^archive$/i)).toBeEnabled();
   });
 
-  it("enables everything at two runs, and only the diff stops at three", () => {
+  it("enables Compare from two runs on", () => {
     const { rerenderWith } = renderBar(2);
-    for (const name of [/^code diff$/i, /compare in table/i, /overlay curves/i]) {
-      expect(action(name)).toBeEnabled();
-      expect(action(name)).not.toHaveAttribute("aria-describedby");
-    }
+    expect(action(/^compare/i)).toBeEnabled();
+    expect(action(/^compare/i)).not.toHaveAttribute("aria-describedby");
     rerenderWith(3);
-    expect(action(/^code diff$/i)).toHaveAttribute("aria-disabled", "true");
-    expect(action(/compare in table/i)).toBeEnabled();
-    expect(action(/overlay curves/i)).toBeEnabled();
+    expect(action(/^compare/i)).not.toHaveAttribute("aria-disabled");
   });
 
-  it("disables the compare table past its cap", () => {
+  it("keeps Compare enabled past the table's cap (each tab caps itself)", () => {
     renderBar(MAX_COMPARE_RUNS + 1);
-    expect(action(/compare in table/i)).toHaveAttribute("aria-disabled", "true");
-    expect(action(/overlay curves/i)).toBeEnabled();
+    expect(action(/^compare/i)).not.toHaveAttribute("aria-disabled");
   });
 
-  it("goes nowhere from a disabled action, and to the diff from an enabled one", () => {
+  it("goes nowhere from a disabled action, and to the Compare page from an enabled one", () => {
     const { rerenderWith } = renderBar(1);
-    fireEvent.click(action(/^code diff$/i));
+    fireEvent.click(action(/^compare/i));
     expect(screen.getByTestId("where").textContent).toBe("/ws/t/app/a");
     rerenderWith(2);
-    fireEvent.click(action(/^code diff$/i));
+    fireEvent.click(action(/^compare/i));
     expect(screen.getByTestId("where").textContent)
-      .toBe(`/ws/t/app/a/compare?v=${encodeURIComponent("0.0.1-dev.x")}&to=${encodeURIComponent("0.0.2-dev.x")}`);
+      .toBe(`/ws/t/app/a/compare-runs?tab=curves&sel=${encodeURIComponent("0.0.1-dev.x")}&sel=${encodeURIComponent("0.0.2-dev.x")}`);
   });
 
   it("keeps the select-all slot in place once every match is selected, hidden from the reader", () => {
@@ -107,7 +103,7 @@ describe("a selection bar that keeps its shape as the count changes", () => {
     const { rerenderWith } = renderBar(1, { total: 3 });
     within(region()).getByRole("button", { name: /select all 3 matching/i }).focus();
     rerenderWith(3, { total: 3 });
-    expect(document.activeElement).toBe(action(/compare in table/i));
+    expect(document.activeElement).toBe(action(/^compare/i));
   });
 
   it("puts select-all in the label area, not among the actions", () => {

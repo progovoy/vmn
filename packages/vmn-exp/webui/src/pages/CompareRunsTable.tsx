@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { ExperimentDetail, MetricsSchema } from "../types";
 import { fmtVal, runHref } from "../util";
+import CopyRefButton from "../components/CopyRefButton";
 import StatusPill from "../components/StatusPill";
 import { compareRows, runLabel, type CompareRow } from "./compareRunsData";
 
@@ -17,9 +18,10 @@ function RunHead({ verstr, detail, base }: {
 }) {
   const st = detail?.status;
   return (
-    <th className="compare-run-head">
+    <th className="compare-run-head compare-ident">
       <div className="compare-run-title">
-        <Link className="mono run-link" to={runHref(base, verstr)}>{runLabel(verstr, detail)}</Link>
+        <Link className="mono run-link" to={runHref(base, verstr)} title={verstr}>{runLabel(verstr, detail)}</Link>
+        <CopyRefButton text={verstr} />
       </div>
       {st?.status && (
         <StatusPill status={st.status} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
@@ -28,15 +30,20 @@ function RunHead({ verstr, detail, base }: {
   );
 }
 
-function Section({ title, kind, rows, width }: {
-  title: string; kind: "params" | "metrics"; rows: CompareRow[]; width: number;
+function Section({ title, kind, rows, width, note }: {
+  title: string; kind: "params" | "metrics"; rows: CompareRow[]; width: number; note?: string;
 }) {
   if (rows.length === 0) return null;
   return (
     <>
-      <tr className="compare-section"><th colSpan={width} className="label-caps">{title}</th></tr>
+      <tr className="compare-section">
+        <th colSpan={width} scope="row" className="label-caps">
+          {title}
+          {note && <span className="compare-section-note"> · {note}</span>}
+        </th>
+      </tr>
       {rows.map((r) => (
-        <tr key={`${kind}:${r.key}`} className={r.differs ? "differs" : ""}>
+        <tr key={`${kind}:${r.key}`} data-section={kind} className={r.differs ? "differs" : ""}>
           <td className="mono compare-key">{r.key}</td>
           {r.values.map((v, i) => (
             <td
@@ -61,7 +68,9 @@ export default function CompareRunsTable({ verstrs, details, schema, base, onlyD
   onlyDiffering: boolean;
 }) {
   const keep = (rows: CompareRow[]) => (onlyDiffering ? rows.filter((r) => r.differs) : rows);
-  const params = keep(compareRows(details, "params", schema));
+  const allParams = compareRows(details, "params", schema);
+  const changed = allParams.filter((r) => r.differs).length;
+  const params = keep(allParams);
   const metrics = keep(compareRows(details, "metrics", schema));
   const width = verstrs.length + 1;
   return (
@@ -78,7 +87,8 @@ export default function CompareRunsTable({ verstrs, details, schema, base, onlyD
           </thead>
           <tbody>
             <Section title="metrics" kind="metrics" rows={metrics} width={width} />
-            <Section title="params" kind="params" rows={params} width={width} />
+            <Section title="params" kind="params" rows={params} width={width}
+              note={`${changed} of ${allParams.length} changed`} />
             {params.length + metrics.length === 0 && (
               <tr><td colSpan={width} className="empty">
                 {onlyDiffering ? "No differences between these runs." : "No params or metrics logged."}

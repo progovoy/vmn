@@ -3,7 +3,11 @@ interface Props {
   onChange: (v: number) => void;
 }
 
+/** The smoothing amount as shown: "off" at zero, else the value. */
+const smoothingText = (v: number) => (v === 0 ? "off" : String(v));
+
 export default function SmoothingSlider({ value, onChange }: Props) {
+  const text = smoothingText(value);
   return (
     <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
       <span style={{ color: "var(--text-3)" }}>smoothing</span>
@@ -13,10 +17,11 @@ export default function SmoothingSlider({ value, onChange }: Props) {
         max="0.99"
         step="0.01"
         value={value}
+        aria-valuetext={text}
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ width: 80 }}
       />
-      <span className="mono" style={{ minWidth: 32 }}>{value}</span>
+      <span className="mono" style={{ minWidth: 32 }} aria-hidden>{text}</span>
     </label>
   );
 }

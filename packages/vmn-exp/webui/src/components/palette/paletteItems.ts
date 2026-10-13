@@ -176,7 +176,7 @@ function refCommand(intent: RefIntent, base: string, input: PaletteInput): Palet
   const verstrs = runs.map((r) => r.verstr);
   const to = intent.kind === "show" ? runHref(base, verstrs[0])
     : intent.kind === "compare" ? `${base}/compare-runs?${compareSearch("table", verstrs)}`
-    : `${base}/overlay?runs=${verstrs.map(enc).join(",")}`;
+    : `${base}/compare-runs?${compareSearch("curves", verstrs)}`;
   const secondary = intent.kind === "show" ? runs[0].name || verstrs[0] : plural(runs.length, "run");
   return [row("cmd:refs", intent.kind === "show" ? "run" : "command", label, {
     mono: true, secondary, title: verstrs.join(" "), to, command,
@@ -225,10 +225,9 @@ function commandItems(input: PaletteInput): PaletteItem[] {
       return v ? [...go, row("cmd:goto-tree", "tree", "Open in stamp tree", { to: `${base}/tree?v=${enc(v)}` })] : go;
     }
     case "diff": {
-      const qs = new URLSearchParams({ v: intent.from, ...(intent.to ? { to: intent.to } : {}) });
       const refs = [intent.from, ...(intent.to ? [intent.to] : [])];
       return c(`diff ${refs.join(" ")}`, {
-        secondary: "code diff", to: `${base}/compare?${qs}`, command: vx(ctx, "diff", app, ...refs.flatMap((r) => ["-v", r])),
+        secondary: "code diff", to: `${base}/compare-runs?${compareSearch("code", refs)}`, command: vx(ctx, "diff", app, ...refs.flatMap((r) => ["-v", r])),
       });
     }
     default: return refCommand(intent, base, input);
