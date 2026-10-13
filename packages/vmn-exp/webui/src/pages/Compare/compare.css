@@ -15,3 +15,7 @@
 }
 .compare-chip.missing { border-color: var(--bad); color: var(--bad); }
 .compare-chip button { padding: 0 4px; line-height: 1; }
+
+/* Identifier headers (run labels, verstrs) keep their case under th's caps (D3). */
+th.compare-ident, .compare-ident { text-transform: none; letter-spacing: 0; }
+.compare-section-note { color: var(--text-3); font-weight: 400; text-transform: none; letter-spacing: 0; }

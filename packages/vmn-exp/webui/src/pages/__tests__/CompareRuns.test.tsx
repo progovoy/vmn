@@ -90,14 +90,15 @@ describe("CompareRuns", () => {
   });
 
   it("the only-differing toggle hides equal rows and lives in the URL", async () => {
-    renderPage(ALL3);
+    // Off is the opt-out (`?diff=0`) since plan 20 M2 made it the default.
+    renderPage(`${ALL3}&diff=0`);
     await screen.findByText("lr");
     const toggle = screen.getByRole("button", { name: /only differing/i });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(toggle);
     await waitFor(() => expect(screen.queryByText("lr")).toBeNull());
     expect(screen.getByText("model")).toBeInTheDocument();
-    expect(new URLSearchParams(loc.search).get("diff")).toBe("1");
+    expect(new URLSearchParams(loc.search).get("diff")).toBeNull();
     expect(screen.getByRole("button", { name: /only differing/i })).toHaveAttribute("aria-pressed", "true");
   });
 
