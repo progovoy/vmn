@@ -188,7 +188,7 @@ export default function Run() {
 
       {summary.status && <StatusCard st={summary.status} runUrl={runUrl} />}
       {summary.status && (
-        <RunErrorCard status={summary.status}
+        <RunErrorCard status={summary.status} context={detail} runPath={runUrl(summary.verstr)}
           hasOutputLog={!!detail?.artifacts?.some((a) => a.name === OUTPUT_LOG)} />
       )}
       {summary.status?.fleet && <FleetCard fleet={summary.status.fleet} runUrl={runUrl} />}

@@ -632,6 +632,13 @@ and a ref that is not a baseline gets its own `vs <ref>` choice. So
 `/ws/<ws>/app/<app>/run/<verstr>?baseline=<ref>#changes` links straight to
 a diff against that run.
 
+A failed run's **Error** card uses the failure fields of the run detail:
+`stopped at step N[ of M]` (`last_step`), "Since it last worked: @N name →
+Changes" (`last_good`; the link is this run's page with
+`?baseline=<last_good>#changes`), and under *last output* the
+`output_tail` lines (the error's own captured tail when there are none),
+scrolled to the end, with *open full output* pointing at the Output card.
+
 ### Series for many runs
 
 A comparison chart fetches the same metrics from many runs at once:
