@@ -161,4 +161,37 @@ describe("IdentityChip", () => {
       expect(c.querySelector(".pulse")).toBeNull();
     }
   });
+
+  describe("on a phone (plan 20 C8: no unexplained initial)", () => {
+    it("keeps the words for a state, never an initial standing for them", () => {
+      const states: Parameters<typeof ctxOf>[0][] = [
+        { meta: { version: "1" } },
+        { metaStatus: "unauthorized" as const, meta: undefined, authEnabled: false },
+        { authEnabled: true, meta: { version: "1", auth: AUTH, principal: { id: "static-token", name: "static token" }, role: "admin" } },
+      ];
+      for (const over of states) {
+        const { c, unmount } = renderShellChip(over);
+        expect(c.querySelector(".id-initial")).toBeNull();
+        expect(chip(c)).not.toHaveClass("has-initial");
+        unmount();
+      }
+    });
+
+    it("shows a signed-in user's initial, the full name and role kept in its title", () => {
+      const { c } = renderShellChip({
+        authEnabled: true, role: "editor",
+        meta: { version: "1", auth: AUTH, principal: { id: "u1", name: "Ada" }, role: null },
+      });
+      expect(c.querySelector(".id-initial")!.textContent).toBe("A");
+      const btn = screen.getByRole("button", { name: /Ada · editor/ });
+      expect(btn).toHaveClass("has-initial");
+      expect(btn).toHaveAttribute("title", "Ada · editor");
+    });
+  });
 });
+
+function renderShellChip(over: Parameters<typeof ctxOf>[0]) {
+  const { container, unmount } = renderShell(<IdentityChip ctx={ctxOf(over)} onSignOut={vi.fn()} />);
+  return { c: container, unmount };
+}
+

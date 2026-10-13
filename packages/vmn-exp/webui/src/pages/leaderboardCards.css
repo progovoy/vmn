@@ -1,0 +1,62 @@
+/* The leaderboard below 640px (LeaderboardCards, plan 20 C8): one card per
+   run, nothing wider than the screen — long names and verstrs truncate. */
+.lb-mcards-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 14px 8px; font-size: 12px; color: var(--text-3);
+}
+.lb-mcards-head input[type="checkbox"] { margin: 0; }
+.lb-mcards-metric { font-family: var(--mono); }
+.lb-mcards-loading { color: var(--text-3); font-size: 13px; padding: 12px 14px; margin: 0; }
+
+.lb-mcards {
+  list-style: none; margin: 0 0 16px; padding: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.lb-mcard {
+  display: flex; align-items: flex-start; gap: 12px; min-width: 0;
+  padding: 12px 14px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+}
+/* A finger-sized box, level with the name. */
+.lb-mcard > input[type="checkbox"] { align-self: flex-start; width: 20px; height: 20px; margin: 1px 0 0; }
+.lb-mcard.checked {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.lb-mcard.flash { animation: flashbg 1.8s ease-out; }
+.lb-mcard.archived { opacity: 0.55; }
+.lb-mcard.archived .run-link { text-decoration: line-through; text-decoration-color: var(--text-3); }
+
+.lb-mcard-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lb-mcard-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lb-mcard-head .status-pill { flex: none; margin-left: auto; }
+.lb-mcard-head .fold-toggle { flex: none; }
+.lb-mcard-name {
+  min-width: 0; font-size: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-mcard-sub {
+  font-size: 11.5px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-mcard-metric { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin-top: 2px; }
+.lb-mcard-value.metric { font-size: 22px; font-weight: 600; line-height: 1.2; color: var(--text); }
+.lb-mcard-value.metric.best { color: var(--good); }
+.lb-mcard-value.metric.missing { font-size: 15px; font-weight: 400; color: var(--text-3); }
+.lb-mcard-label { font-family: var(--mono); font-size: 12px; color: var(--text-2); }
+.lb-mcard-label .goal { color: var(--text-3); }
+.lb-mcard-error {
+  font-family: var(--mono); font-size: 12px; color: color-mix(in srgb, var(--bad) 75%, var(--text-3));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lb-mcard-foot {
+  font-size: 12px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.lb-mcard-pending {
+  padding: 8px 14px; font-size: 12.5px; color: var(--text-3);
+  border: 1px dashed var(--line); border-radius: 12px;
+}
+.lb-mcard-pending.error { color: var(--bad); }

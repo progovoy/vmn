@@ -7,6 +7,9 @@ import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
 import { useMoreRight } from "../hooks/useMoreRight";
+import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
+import LeaderboardCards from "./LeaderboardCards";
+import { PENDING_TEXT } from "./pendingText";
 import Row, { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import Head, { type ColumnEdits, type HeaderCheckProps, type SortState } from "./LeaderboardHead";
 import "./leaderboardTable.css";
@@ -31,12 +34,6 @@ function SkeletonRows({ layout }: { layout: RowLayout }) {
   );
 }
 
-const PENDING_TEXT: Record<PendingRow["state"], (p: PendingRow) => string> = {
-  loading: () => "Loading inner runs…",
-  error: () => "Could not load the inner runs",
-  more: (p) => `${p.count} more inner runs · `,
-};
-
 /** A row standing in for an open outer's inner runs that are not shown,
  *  its text in the (sticky) experiment column, indented like an inner run. */
 function PendingInnerRow({ item, index, layout }: { item: PendingRow; index: number; layout: RowLayout }) {
@@ -56,10 +53,7 @@ function PendingInnerRow({ item, index, layout }: { item: PendingRow; index: num
   );
 }
 
-export default function LeaderboardTable({
-  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
-  collapsedOf, onFold, edits, onFit,
-}: {
+type TableProps = {
   /** Undefined while the first page loads: skeleton rows under a live header. */
   rows: TableItem[] | undefined;
   layout: RowLayout;
@@ -80,7 +74,26 @@ export default function LeaderboardTable({
   edits?: ColumnEdits;
   /** Told the width (px) the table has to fill, and again when it changes. */
   onFit?: (width: number) => void;
-}) {
+};
+
+/** Cards that refresh with the board: about a phone screen's worth and the
+ *  scroll ahead of it, like the grid's virtual window. */
+const CARDS_REFRESHED = 40;
+
+/** The grid, or below 640px one card per run (plan 20 C8). */
+export default function LeaderboardTable(props: TableProps) {
+  const narrow = useMediaQuery(NARROW_QUERY);
+  if (!narrow) return <GridTable {...props} />;
+  const { rows, visibleRef } = props;
+  visibleRef.current = () =>
+    (rows ?? []).flatMap((r) => (isPending(r) ? [] : [r.verstr])).slice(0, CARDS_REFRESHED);
+  return <LeaderboardCards {...props} />;
+}
+
+function GridTable({
+  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
+  collapsedOf, onFold, edits, onFit,
+}: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const scroll = useScrollMemory();
   const list = rows ?? [];

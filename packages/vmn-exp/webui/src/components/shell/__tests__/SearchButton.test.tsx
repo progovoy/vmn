@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import SearchButton from "../SearchButton";
+import { TOUCH_QUERY } from "../../../hooks/useMediaQuery";
+import { dropFakeMedia, fakeMedia } from "../../../hooks/__tests__/fakeMedia";
 
 const setPlatform = (value: string) =>
   Object.defineProperty(navigator, "platform", { value, configurable: true });
@@ -29,5 +31,18 @@ describe("SearchButton", () => {
     render(<SearchButton onSearch={onSearch} />);
     fireEvent.click(screen.getByRole("button", { name: /^Search/ }));
     expect(onSearch).toHaveBeenCalledOnce();
+  });
+
+  it("shows no key cap on a touch screen, where there is no keyboard to press it on", () => {
+    setPlatform("iPhone");
+    fakeMedia([TOUCH_QUERY]);
+    try {
+      render(<SearchButton onSearch={() => {}} />);
+      const btn = screen.getByRole("button", { name: "Search" });
+      expect(btn.querySelector(".search-key")).toBeNull();
+      expect(btn.textContent).toBe("Search");
+    } finally {
+      dropFakeMedia();
+    }
   });
 });

@@ -14,7 +14,9 @@ export const isLoopback = (hostname: string) =>
   || /^127\.\d+\.\d+\.\d+$/.test(hostname);
 
 type MenuKind = "sign-out" | "user";
-interface Chip { text: string; title?: string; bad?: boolean; menu?: MenuKind }
+/** *initial*: a signed-in name, drawn as its initial on a phone; states
+ *  ("local", "not signed in", …) keep their words. */
+interface Chip { text: string; title?: string; bad?: boolean; menu?: MenuKind; initial?: string }
 
 function chipOf(ctx: ShellContext, forbiddenDetail: string | undefined): Chip | null {
   const { meta, metaStatus } = ctx;
@@ -29,7 +31,8 @@ function chipOf(ctx: ShellContext, forbiddenDetail: string | undefined): Chip | 
   const principal = meta?.principal;
   if (!principal) return { text: "not signed in" };
   if (principal.id === "static-token") return { text: `token · ${meta?.role ?? "admin"}`, menu: "sign-out" };
-  return { text: ctx.role ? `${principal.name} · ${ctx.role}` : principal.name, menu: "user" };
+  const text = ctx.role ? `${principal.name} · ${ctx.role}` : principal.name;
+  return { text, title: text, menu: "user", initial: principal.name.charAt(0) };
 }
 
 function ChipText({ chip }: { chip: Chip }) {
@@ -37,7 +40,7 @@ function ChipText({ chip }: { chip: Chip }) {
     <>
       {chip.bad && <Icon name="close" size={12} />}
       <span className="id-text">{chip.text}</span>
-      <span className="id-initial" aria-hidden="true">{chip.text.charAt(0)}</span>
+      {chip.initial && <span className="id-initial" aria-hidden="true">{chip.initial}</span>}
     </>
   );
 }
@@ -54,7 +57,7 @@ function ChipMenu({ chip, ctx, onSignOut }: { chip: Chip; ctx: ShellContext; onS
   return (
     <div className="id-wrap" ref={wrap}>
       <button
-        ref={trigger} type="button" className="id-chip" title={chip.title}
+        ref={trigger} type="button" className={`id-chip${chip.initial ? " has-initial" : ""}`} title={chip.title}
         aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}
       >
         <ChipText chip={chip} />

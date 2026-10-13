@@ -7,6 +7,7 @@ import { useCanCreateRun } from "../shell/useAppExists";
 import { hideColumn } from "../hooks/useColumnEdits";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
+import "./leaderboardToolbar.css";
 
 /** The bar above the leaderboard: live status, the create button (only where
  *  a run can be created), saved views and the columns (the selection's

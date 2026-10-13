@@ -1,0 +1,9 @@
+/* The leaderboard toolbar below 640px (plan 20 C8): a popover anchored to
+   its button's right edge (Views sits near the left) would open off screen,
+   so Views and Columns span the viewport instead, under their button. */
+@media (max-width: 639px) {
+  .toolbar .col-picker {
+    position: fixed; top: auto; left: 12px; right: 12px; min-width: 0;
+    margin-top: 6px; max-height: 60vh;
+  }
+}
