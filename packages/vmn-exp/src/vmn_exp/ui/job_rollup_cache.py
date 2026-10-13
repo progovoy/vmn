@@ -8,7 +8,7 @@ on from the last one served for the app and schema across the deltas since
 """
 import vmn_exp.core.status as experiment_status
 from vmn_exp.ui.job_rollup import JobTree, StaticRollups, overlay
-from vmn_exp.ui.job_rollup_payload import job_payload, job_summary
+from vmn_exp.ui.job_rollup_payload import failure_counts, job_payload, job_summary
 from vmn_exp.ui.job_tally import RollupSpec
 from vmn_exp.ui.memo import LRU
 
@@ -28,24 +28,33 @@ class JobRollupCache:
 
     def job_rollup(self, snapshot, schema, verstr):
         """*verstr*'s full rollup, or None when it is not a job."""
-        return self._answer(snapshot, schema, verstr)
+        return self._answer(snapshot, schema, verstr, job_payload)
 
     def job_rollups(self, snapshot, schema):
         """``{verstr: compact summary}`` for every job."""
-        return self._answer(snapshot, schema, None)
+        return self._answer(snapshot, schema, None, job_summary)
 
-    def _answer(self, snapshot, schema, verstr):
+    def failure_counts(self, snapshot, schema, verstr):
+        """``{failure signature: runs}`` over *verstr*'s subtree, or None
+        when it is not a job."""
+        return self._answer(snapshot, schema, verstr, failure_counts)
+
+    def tree(self, base):
+        """*base*'s :class:`~vmn_exp.ui.job_rollup.JobTree`."""
+        return self._trees.get(base.token, lambda: JobTree(base))
+
+    def _answer(self, snapshot, schema, verstr, answer):
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        tree = self._trees.get(base.token, lambda: JobTree(base))
+        tree = self.tree(base)
         if verstr is not None and verstr not in tree.jobs:
             return None
         schema_key = cache.schema_key(schema)
-        key = (base.token, bucket, cache._bucket(), schema_key, verstr)
+        key = (base.token, bucket, cache._bucket(), schema_key, verstr, answer)
         return self._answers.get(key, lambda: self._compute(
-            snapshot, base, bucket, tree, schema, schema_key, verstr))
+            snapshot, base, bucket, tree, schema, schema_key, verstr, answer))
 
-    def _compute(self, snapshot, base, bucket, tree, schema, schema_key, verstr):
+    def _compute(self, snapshot, base, bucket, tree, schema, schema_key, verstr, answer):
         static = self._static.get(
             (base.token, schema_key),
             lambda: self._static_of(snapshot, base, schema, schema_key),
@@ -62,8 +71,8 @@ class JobRollupCache:
             return base.rows[base.position[job]]
 
         if verstr is not None:
-            return job_payload(row(verstr), parts(verstr), static.spec, now)
-        return {job: job_summary(row(job), parts(job), static.spec, now) for job in tree.jobs}
+            return answer(row(verstr), parts(verstr), static.spec, now)
+        return {job: answer(row(job), parts(job), static.spec, now) for job in tree.jobs}
 
     def _static_of(self, snapshot, base, schema, schema_key):
         key = (snapshot.app_name, schema_key)

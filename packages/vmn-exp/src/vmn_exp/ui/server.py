@@ -23,6 +23,7 @@ from vmn_exp.ui import (
     routes_cache,
     routes_comments,
     routes_events,
+    routes_job,
     routes_leaderboard,
     routes_lineage,
     routes_media,
@@ -45,6 +46,7 @@ from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
+from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
 from vmn_exp.ui.memo import TTLCache
@@ -134,6 +136,7 @@ def create_app(
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn)
     leaderboards = LeaderboardCache()
+    job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
         os.path.join(manager.data_dir, "index") if use_index else None, background_refresh
     )
@@ -360,6 +363,7 @@ def create_app(
             x=x or None,
             step_range=bounds,
             schema=_app_schema(ws, app_name),
+            job_status=lambda v: job_views.detail_status(*_leaderboard_inputs(ws_name, app_tag), v),
             **_detail_options(ws, app_name),
         )
         if err:
@@ -616,7 +620,10 @@ def create_app(
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
-    routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment)
+    routes_job.register(app, API_PREFIX, _leaderboard_inputs, job_views, _segment)
+    routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment,
+                          lambda ws_name, app_tag, verstr: job_views.job_summary(
+                              *_leaderboard_inputs(ws_name, app_tag), verstr))
     routes_run_code.register(app, API_PREFIX, _series_storage, _leaderboard_inputs,
                              leaderboards, _segment)
     def _ws_storage(ws_name):

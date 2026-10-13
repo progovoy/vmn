@@ -31,6 +31,8 @@ DONE = (SUCCEEDED, FAILED)
 # A job's states (D12), as the rollup names them.
 STATES = {RUNNING: "running", CREATED: "waiting", SUCCEEDED: "succeeded",
           FAILED: "failed", STUCK: "stuck"}
+# What a job's timeline counts per minute: runs started, and runs ended per outcome.
+TIMELINE = ("started", SUCCEEDED, FAILED)
 MINUTES_KEPT = 24 * 60
 COARSE_MINUTES = 10
 
@@ -154,12 +156,14 @@ class Tally:
         "finished",
         "metrics",
         "started",
+        "timeline",
     )
 
     def __init__(self):
         self.counts, self.metrics, self.failures = {}, {}, {}
         self.started = self.finished = None  # (stamp, rows holding it)
         self.completions = Completions()
+        self.timeline = {name: Completions() for name in TIMELINE}
         self.duration = QuantileSketch()
 
     @classmethod
@@ -174,6 +178,7 @@ class Tally:
         out.counts, out.failures = dict(self.counts), dict(self.failures)
         out.started, out.finished = self.started, self.finished
         out.completions, out.duration = self.completions.copy(), self.duration.copy()
+        out.timeline = {name: series.copy() for name, series in self.timeline.items()}
         out.metrics = {name: metric.copy() for name, metric in self.metrics.items()}
         return out
 
@@ -184,10 +189,14 @@ class Tally:
         self.started, gone = _extreme(self.started, row.get("started_at"), by, operator.lt)
         self.finished, ended = _extreme(self.finished, row.get("finished_at"), by, operator.gt)
         unknown = gone or ended
+        started = _minute(row["started_at"]) if row.get("started_at") else None
+        if started is not None:
+            self.timeline["started"].add(started, by)
         if status in DONE and row.get("finished_at"):
             minute = _minute(row["finished_at"])
             if minute is not None:
                 self.completions.add(minute, by)
+                self.timeline[status].add(minute, by)
             self.duration.add(row.get("duration_sec"), by)
         metrics = row.get("metrics") or {}
         for name in spec.metrics:

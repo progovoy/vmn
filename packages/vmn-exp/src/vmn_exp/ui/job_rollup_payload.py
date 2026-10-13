@@ -7,6 +7,7 @@ from collections import Counter
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.failure_signature import label
 from vmn_exp.ui.job_tally import DONE, STATES, higher_first
+from vmn_exp.ui.job_timeline import timeline
 from vmn_exp.ui.quantile_sketch import QuantileSketch
 
 THROUGHPUT_WINDOW_MIN = 10
@@ -105,10 +106,16 @@ def metric_fields(parts, name, descending, bins=HIST_BINS, quantiles=True):
     return fields
 
 
-def _failures(parts):
+def failure_counts(job, parts, spec, now):
+    """``{failure signature: runs}`` over the job's subtree."""
     counts = Counter()
     for part in parts:
         counts.update(part.failures)
+    return dict(counts)
+
+
+def _failures(parts):
+    counts = failure_counts(None, parts, None, None)
     top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_FAILURES]
     return [{"sig": sig, "label": label(sig), "count": count} for sig, count in top]
 
@@ -122,6 +129,7 @@ def job_payload(job, parts, spec, now):
         "metrics": {m: metric_fields(parts, m, spec.descending[m]) for m in spec.metrics},
         "duration": {"n": duration.count, "p50": p50, "p90": p90},
         "failures": _failures(parts),
+        "timeline": timeline(parts),
     }
 
 
