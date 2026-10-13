@@ -16,13 +16,15 @@ export interface LiveProps {
 /** Under the board, describing it: the "best in column" legend, the sort and
  *  how fresh the rows are (Pause/Resume while live, else Refresh); then
  *  *tools*, which are not part of the description. */
-export default function BoardCaption({ sortLabel, reversed, live, tools }: {
+export default function BoardCaption({ sortLabel, reversed, live, tools, legend = true }: {
   sortLabel: string | null; reversed: boolean; live: LiveProps; tools?: ReactNode;
+  /** The "best in column" chip; the Jobs view has no best-in-column cells. */
+  legend?: boolean;
 }) {
   return (
     <div className="board-caption">
       <div className="board-caption-desc" id={BOARD_CAPTION_ID}>
-        <span className="legend-chip"><span className="sq" aria-hidden="true" /> best in column</span>
+        {legend && <span className="legend-chip"><span className="sq" aria-hidden="true" /> best in column</span>}
         {sortLabel && (
           <span className="board-caption-sort">
             {isGroupCountId(sortLabel)

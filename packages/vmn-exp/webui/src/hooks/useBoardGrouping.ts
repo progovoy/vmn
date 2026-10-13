@@ -4,25 +4,29 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { facetsQuery } from "../queries";
-import { LINK_GROUPS, defaultGroup as defaultGroupOf, groupFields, type GroupBy } from "../util/groupBy";
+import { LINK_GROUPS, NO_GROUP, defaultGroup as defaultGroupOf, groupFields, type GroupBy } from "../util/groupBy";
 import type { useLeaderboardView } from "./useLeaderboardView";
 
 type View = Pick<ReturnType<typeof useLeaderboardView>, "groupParam" | "aggParam" | "setGroup">;
 
-export function useBoardGrouping(ws: string, app: string, view: View) {
+/** With *onParent* (the experiments page's All runs view, plan 23 §3.4) the
+ *  board never groups by parent run on its own, and picking that grouping
+ *  calls *onParent* instead: it is the Jobs view. */
+export function useBoardGrouping(ws: string, app: string, view: View, onParent?: () => void) {
   const client = useQueryClient();
   const facets = useQuery(facetsQuery(ws, app), client);
   // Unknown (null) until the facets answer; a failed answer means ungrouped,
   // also while it is asked again (Back to the board paints at once).
   const failed = facets.isError || facets.errorUpdatedAt > 0;
-  const defaultGroup: GroupBy | null = facets.data
+  const defaultGroup: GroupBy | null = onParent ? NO_GROUP : facets.data
     ? defaultGroupOf(facets.data) : failed ? defaultGroupOf(null) : null;
   const group = view.groupParam ?? defaultGroup;
   const fields = useMemo(() => groupFields(facets.data), [facets.data]);
 
   const { setGroup: writeGroup } = view;
   const setGroup = useCallback(
-    (g: GroupBy) => writeGroup(g, defaultGroup ?? defaultGroupOf(null)), [writeGroup, defaultGroup],
+    (g: GroupBy) => (g === "parent" && onParent ? onParent() : writeGroup(g, defaultGroup ?? defaultGroupOf(null))),
+    [writeGroup, defaultGroup, onParent],
   );
 
   return {

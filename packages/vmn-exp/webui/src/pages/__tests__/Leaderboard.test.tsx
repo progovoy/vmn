@@ -24,7 +24,7 @@ vi.mock("../../components/NewExperiment", () => ({
 
 import { api } from "../../api";
 import type { ExperimentRow, MetricsSchema } from "../../types";
-import Leaderboard from "../Leaderboard";
+import Leaderboard from "../Experiments/AllRunsView";
 
 const mockedApi = api as unknown as {
   experiments: ReturnType<typeof vi.fn>;

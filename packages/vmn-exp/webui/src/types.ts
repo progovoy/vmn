@@ -172,6 +172,38 @@ export interface ExperimentRow extends Partial<RunStatus> {
   author?: string | null;
   /** Whether the run carries an intent (what a human or agent wrote it tries). */
   has_intent?: boolean;
+  /** Its top-level ancestor's verstr; null for a top-level run (plan 23 S2). */
+  root?: string | null;
+  /** A failed or stuck run's failure signature (plan 23 S1). */
+  failure_sig?: string | null;
+  /** A Jobs-view row's subtree rollup; null for a single run (plan 23 §10). */
+  job?: JobSummary | null;
+}
+
+/** A job's compact rollup on its Jobs-view row (plan 23 §10). */
+export interface JobSummary {
+  total: number;
+  counts: { running: number; waiting: number; succeeded: number; failed: number; stuck: number };
+  /** Finished runs: succeeded + failed. */
+  done: number;
+  /** `sweep_planned`, else `expected_pods`, else the runs so far. */
+  expected: number;
+  progress: number | null;
+  /** 0..100. */
+  failed_pct: number;
+  /** Completions per minute over the last 10 minutes. */
+  throughput_per_min: number;
+  /** Seconds left at that throughput; null when nothing completes. */
+  eta_sec: number | null;
+  /** The main metric the best and spread are of. */
+  metric: string | null;
+  best: number | null;
+  best_verstr: string | null;
+  best_idx?: number | null;
+  /** The main metric's histogram over the job's runs (12 bins). */
+  spread: number[];
+  started_at?: string | null;
+  finished_at?: string | null;
 }
 
 /** Chosen columns over a whole filtered set (`/experiments-columns`):

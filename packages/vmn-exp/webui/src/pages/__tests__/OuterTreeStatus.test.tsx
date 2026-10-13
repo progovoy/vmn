@@ -37,7 +37,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 import { api } from "../../api";
 import type { ExperimentDetail, ExperimentRow, RunState, RunStatus } from "../../types";
 import Run from "../Run";
-import Leaderboard from "../Leaderboard";
+import Leaderboard from "../Experiments/AllRunsView";
 
 const mockedApi = api as unknown as {
   experiment: ReturnType<typeof vi.fn>;

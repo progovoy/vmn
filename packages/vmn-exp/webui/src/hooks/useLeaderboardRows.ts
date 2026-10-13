@@ -10,9 +10,9 @@ import { useShownList } from "./useShownList";
 import { combineQueries } from "../util/searchQuery";
 
 /** The first page for *f*. Unsorted-or-default-direction lists go through
- *  `api.experiments`; an explicit direction or archived rows need the paged call. */
+ *  `api.experiments`; an explicit direction, archived or top-level rows need the paged call. */
 function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
-  if (f.order || f.archived) return api.experimentsPaged(ws, app, { ...f, offset: 0, limit: PAGE_SIZE });
+  if (f.order || f.archived || f.top) return api.experimentsPaged(ws, app, { ...f, offset: 0, limit: PAGE_SIZE });
   const req = f.query
     ? api.experiments(ws, app, f.sort, f.status, f.query)
     : api.experiments(ws, app, f.sort, f.status);

@@ -13,6 +13,10 @@ export type Order = "asc" | "desc";
 export const BOARD_TABS = ["runs", "charts"] as const;
 export type BoardTab = (typeof BOARD_TABS)[number];
 
+/** The params only the board reads (not the filters, `density` or `view`):
+ *  what a switch to the Jobs view (plan 23 W1) leaves behind. */
+export const BOARD_ONLY_PARAMS = ["tab", "sort", "order", "group", "agg", "collapse", "sel", "col", "pin", "hide", "show"];
+
 const isChartView = (v: string | null): v is ChartView =>
   (CHART_VIEWS as readonly string[]).includes(v ?? "");
 

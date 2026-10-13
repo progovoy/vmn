@@ -5,7 +5,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { createQueryClient } from "../../queryClient";
 import type { ExperimentRow } from "../../types";
-import Leaderboard from "../Leaderboard";
+import Leaderboard from "../Experiments/AllRunsView";
 
 export function row(i: number, extra: Partial<ExperimentRow> = {}): ExperimentRow {
   return {
