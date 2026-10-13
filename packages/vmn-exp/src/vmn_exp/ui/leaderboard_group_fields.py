@@ -26,6 +26,10 @@ NO_PARENT = "(no parent run)"
 COUNT_OF = {"running": "running", "created": "waiting", "succeeded": "done",
             "failed": "failed", "stuck": "stuck"}
 COUNT_KEYS = ("total", "running", "waiting", "done", "failed", "stuck")
+# ``sort=`` values that order groups by a count, and the counts each sums
+# (the board's inner-run count columns: ``failed`` takes stuck runs too).
+COUNT_SORTS = {"c:total": ("total",), "c:waiting": ("waiting",), "c:running": ("running",),
+               "c:done": ("done",), "c:failed": ("failed", "stuck")}
 
 
 class UnknownGroup(LookupError):

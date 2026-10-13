@@ -25,6 +25,10 @@ CASES = [
     dict(group="rerun_of", query="metrics.loss < 0.6", agg="median", sort="loss"),
     dict(group="forked_from"), dict(group="forked_from", sort="loss", agg="min"),
     dict(group="forked_from", status="succeeded,failed", archived=True, sort="loss"),
+    dict(group="parent", sort="c:total"), dict(group="parent", sort="c:running", order="asc"),
+    dict(group="status", sort="c:failed", order="desc"),
+    dict(group="rerun_of", sort="c:done", agg="best"),
+    dict(group="branch", sort="c:waiting", query="metrics.loss < 0.6"),
 ]
 
 

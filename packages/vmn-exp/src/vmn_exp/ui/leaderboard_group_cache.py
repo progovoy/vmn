@@ -7,7 +7,8 @@ one served for the same arguments across the deltas since (else built from
 the cache's static order), plus one view per time bucket while runs are live.
 """
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
-from vmn_exp.ui.leaderboard_groups import Grouping, GroupSpec, groups_payload
+from vmn_exp.ui.leaderboard_group_spec import GroupSpec
+from vmn_exp.ui.leaderboard_groups import Grouping, groups_payload
 from vmn_exp.ui.memo import LRU
 
 # Groupings moved on across generations, like the cache's latest orders.
@@ -51,7 +52,7 @@ class GroupCache:
     def grouping(self, snapshot, schema, spec):
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        key = (cache.schema_key(schema), spec.group, spec.agg) + spec.flat
+        key = (cache.schema_key(schema), spec.group, spec.agg, spec.group_sort) + spec.flat
         static = self._static.get(
             (base.token,) + key, lambda: self._static_of(base, key, schema, spec))
         if not base.patch.changed:
