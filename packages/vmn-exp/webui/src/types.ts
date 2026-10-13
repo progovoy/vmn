@@ -102,6 +102,10 @@ export interface RunStatus {
   tree_status: string | null;
   /** Direct inner runs per own status. */
   child_counts?: Record<string, number>;
+  /** A sweep's planned trials (grid size, else run_cap); absent when unbounded. */
+  sweep_planned?: number | null;
+  /** The trial slots a sweep's inner runs fill (a retry counts once). */
+  sweep_trials?: number | null;
   last_metric_at: string | null;
   fleet?: Fleet | null;
   /** One-line `Type: message` of what ended a failed run (rows and detail). */

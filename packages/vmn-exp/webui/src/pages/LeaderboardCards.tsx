@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtVal, relTime, runHref } from "../util";
 import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
+import { sweepIncompleteLabel } from "../util/sweepProgress";
 import { PENDING_TEXT } from "./pendingText";
 import StatusPill from "../components/StatusPill";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
@@ -52,6 +53,7 @@ const MCard = memo(function MCard({
     navigate(href);
   };
   const inner = r.children?.length ? `${r.children.length} inner` : "";
+  const incomplete = sweepIncompleteLabel(r);
   return (
     <li
       className={`lb-mcard${selected ? " checked" : ""}${flash ? " flash" : ""}${r.archived ? " archived" : ""}`}
@@ -81,6 +83,7 @@ const MCard = memo(function MCard({
         {(r.name || inner) && (
           <div className="lb-mcard-sub mono">{[r.name ? r.verstr : "", inner].filter(Boolean).join(" · ")}</div>
         )}
+        {incomplete && <div className="lb-mcard-sweep mono">{incomplete}</div>}
         {metric && <MetricLine r={r} metric={metric} layout={layout} />}
         {r.status === "failed" && r.error_summary && (
           <div className="lb-mcard-error" title={r.error_summary}>{r.error_summary}</div>

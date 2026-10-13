@@ -148,11 +148,13 @@ const FLEET_DISPLAY_ORDER = ["waiting", "running", "succeeded", "failed", "stuck
 
 /** An outer run's children: status counts, a bar, and the fleet table —
  *  left out (`table={false}`) for a sweep, whose Sweep card lists them. */
-export function FleetCard({ fleet, schema = null, runUrl, table = true }: {
+export function FleetCard({ fleet, schema = null, runUrl, table = true, incomplete = null }: {
   fleet: Fleet;
   schema?: MetricsSchema | null;
   runUrl: (v: string) => string;
   table?: boolean;
+  /** An incomplete sweep's `16/20 · incomplete` (plan 20 D12). */
+  incomplete?: string | null;
 }) {
   const nonZeroCounts = FLEET_DISPLAY_ORDER
     .filter((s) => (fleet.counts[s] ?? 0) > 0)
@@ -171,6 +173,7 @@ export function FleetCard({ fleet, schema = null, runUrl, table = true }: {
             <span style={{ color: "var(--text-2)" }}>{status}</span>
           </span>
         ))}
+        {incomplete && <span className="tree-roll">{incomplete}</span>}
       </div>
       <div className="fleet-bar">
         {nonZeroCounts.map(([status, count]) => (

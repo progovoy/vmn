@@ -30,6 +30,7 @@ from vmn_exp.core.fold_facts import (  # noqa: F401  (fold_hypothesis: re-export
 from vmn_exp.core.metric_summary import note_param, summarize, track_extrema
 from vmn_exp.core.rewind import is_rewound, rewind_step
 from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
+from vmn_exp.core.sweep.spec import planned_trials
 
 
 def entry_params(entry):
@@ -347,6 +348,7 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
     *schema* being the app's metrics schema); ``metric_summary`` has the
     last/min/max of every metric logged more than once. ``author`` is who the
     run's features name (:func:`author_display`), ``has_intent`` always a bool.
+    A sweep outer whose spec plans a size carries it as ``sweep_planned``.
     """
     metrics, metric_summary = fold_metrics(fold, schema)
     row = {
@@ -374,6 +376,9 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
         "author": author_display((fold_features(fold) or {}).get("author")),
         "has_intent": fold_intent(fold) is not None,
     }
+    planned = planned_trials(meta["sweep"]) if meta.get("sweep") else None
+    if planned is not None:
+        row["sweep_planned"] = planned
     if with_create_note:
         row["create_note"] = fold["create_note"][0] if fold["create_note"] else None
     return row

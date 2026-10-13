@@ -60,3 +60,5 @@
   border: 1px dashed var(--line); border-radius: 12px;
 }
 .lb-mcard-pending.error { color: var(--bad); }
+/* An incomplete sweep's `16/20 · incomplete` (plan 20 D12). */
+.lb-mcard-sweep { font-size: 12px; color: var(--text-2); font-style: italic; }

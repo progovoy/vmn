@@ -82,12 +82,13 @@ from vmn_exp.core.refs import (
     storage_index,
 )
 from vmn_exp.core.status import (
+    CREATED,
     STUCK,
     load_run_state,
     run_state_observed_at,
     status_fields,
 )
-from vmn_exp.core.tree import annotate_rows, subtree_status
+from vmn_exp.core.tree import annotate_rows, subtree_status, sweep_incomplete
 from vmn_exp.core.writer import (
     append_to_log,
     compute_artifact_info,
@@ -621,12 +622,14 @@ def experiment_push(vcs, params, storage, args):
 
 
 def _status_token(node):
-    """A run's own status, plus its subtree's when the two disagree."""
+    """A run's own status, plus its subtree's when the two disagree, and how
+    far an incomplete sweep got (``created (16/20 incomplete)``)."""
     status = node["status"]
     tree_status = node.get("tree_status")
-    if tree_status and tree_status != status:
-        return f"{status}/{tree_status}"
-    return status
+    token = f"{status}/{tree_status}" if tree_status and tree_status != status else status
+    if tree_status == CREATED and sweep_incomplete(node):
+        token += f" ({node['sweep_trials']}/{node['sweep_planned']} incomplete)"
+    return token
 
 
 def _list_rows(index_rows, last, sort, schema):
@@ -722,6 +725,7 @@ def _subtree(storage, app_name, verstr, metadata, snapshot=None):
     come from the experiment index, and run state (with its store write time)
     is read for the run's subtree only — a handful of rows even when the app
     has thousands of experiments."""
+    snapshot = placement_snapshot(storage, app_name, snapshot)
     parent_of = parent_edges(storage, app_name, snapshot)
     parent_of.setdefault(verstr, metadata.get("parent"))
     observed_at = lambda v: run_state_observed_at(storage, app_name, v)  # noqa: E731
@@ -730,6 +734,7 @@ def _subtree(storage, app_name, verstr, metadata, snapshot=None):
         parent_of,
         lambda v: load_run_state(storage, app_name, v),
         observed_at=observed_at,
+        row_of=snapshot.row,
     )
     return run_state, tree, observed_at(verstr)
 

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { Fleet, RunState, RunStatus } from "../types";
 import { fmtDuration } from "../util";
 import StatusPill from "../components/StatusPill";
+import { sweepIncompleteLabel } from "../util/sweepProgress";
 import { ImportedBadge } from "./RunProvenance";
 import type { RunSummary } from "./runSummary";
 import "./runHead.css";
@@ -22,10 +23,11 @@ function StatusParts({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => str
     st.status === "failed" || st.status === "stuck"
     || (st.status === "running" && st.status !== st.tree_status)
   );
+  const roll = isOuter && (sweepIncompleteLabel(st) ?? (st.fleet && innerCount(st.fleet)));
   return (
     <>
       <StatusPill status={primary} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
-      {isOuter && st.fleet && <span className="tree-roll">{innerCount(st.fleet)}</span>}
+      {roll && <span className="tree-roll">{roll}</span>}
       {showOwn && <span className="tree-roll">own {st.status}</span>}
       {st.status === "stuck" && st.stale_sec != null && (
         <span className="stale">⚠ no heartbeat for {fmtDuration(st.stale_sec)}</span>
