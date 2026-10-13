@@ -126,6 +126,14 @@ export interface FleetChild {
   status: RunState;
   progress: number | null;
   progress_total: number | null;
+  /** From the child's index row; older servers omit them. */
+  idx?: number | null;
+  name?: string | null;
+  params?: Record<string, unknown>;
+  metrics?: Record<string, number | string | null>;
+  /** How far it got (`of` from params.epochs/max_steps); null when it logged
+   *  no step or the store is remote. */
+  last_step?: { step: number; of: number | null } | null;
 }
 
 export interface Fleet {

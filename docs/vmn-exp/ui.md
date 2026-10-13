@@ -240,6 +240,17 @@ rows behind a link are as many as it counts. App tiles count runs the same way
 (archived runs left out). See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
+An outer run's page lists its children once, in the Fleet card (the Status
+card has no `children` row): status counts, a bar, and a table of `@N name`,
+status, the params that vary among the children (at most six), the goal metric
+(the conf's primary metric, else the first child metric with a declared or
+name-inferred goal; best marked) and progress (`step / of`), a column shown
+only when some child's progress is known. Every header sorts (a button, so
+Enter/Space work too, with `aria-sort`); a metric starts toward its goal,
+missing values sort last. A sweep's trials are that table inside the Sweep
+card instead (with the trial number and the sweep metric), followed by a
+parallel-coordinates chart of the metric and the varying params.
+
 ## Leaderboard columns
 
 By default the leaderboard shows `#`, status, experiment, the metrics whose
@@ -388,7 +399,12 @@ Every row of `.../experiments` and the run detail carry:
 
 The run detail also groups them under a top-level `status` object, which also
 carries `error`: the run's full `error` mapping (`type`, `message`,
-`traceback`, `source`, `output_tail`) or `null` — never on list rows. The list
+`traceback`, `source`, `output_tail`) or `null` — never on list rows. An
+outer run's `status.fleet` is `{expected, counts, children}`; each of its first
+50 children is `{verstr, status, idx, name, params, metrics, progress,
+progress_total, last_step}`, where `last_step` is `{step, of}` (`of` from
+`params.epochs`/`max_steps`, else null) read from the child's log on a local
+store, and `null` on a remote store or when it logged no step. The list
 takes `status=running,stuck` (comma-separated) to filter:
 
 ```sh

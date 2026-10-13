@@ -103,7 +103,8 @@ describe("Run status block", () => {
     expect(screen.getByText(/no heartbeat for 10m/)).toBeInTheDocument();
   });
 
-  it("renders parent and children links to the sibling runs", async () => {
+  // Plan 20 B6 drops the Status card's `children` row: the Fleet table lists them.
+  it("renders the parent link and leaves the children to the fleet table", async () => {
     mockedApi.experiment.mockResolvedValue(
       makeDetail(status("succeeded", {
         kind: "inner", depth: 1, parent: "0.0.1-rc.1",
@@ -116,9 +117,8 @@ describe("Run status block", () => {
     await waitFor(() => expect(screen.getByText("parent")).toBeInTheDocument());
     expect(screen.getByRole("link", { name: "0.0.1-rc.1" }))
       .toHaveAttribute("href", "/ws/test/app/my-app/run/0.0.1-rc.1");
-    expect(screen.getByText("children")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "0.0.4-rc.1" }))
-      .toHaveAttribute("href", "/ws/test/app/my-app/run/0.0.4-rc.1");
+    expect(screen.queryByText("children")).toBeNull();
+    expect(screen.queryByRole("link", { name: "0.0.4-rc.1" })).toBeNull();
   });
 
   it("omits the status block when the server reports no run status", async () => {

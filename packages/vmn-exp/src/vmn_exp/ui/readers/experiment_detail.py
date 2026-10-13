@@ -29,6 +29,7 @@ from vmn_exp.core.status import (
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.failure_context import failure_fields
+from vmn_exp.ui.readers.fleet_steps import add_child_steps
 from vmn_exp.ui.readers.histograms import detail_media
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.patches import patch_presence
@@ -269,6 +270,7 @@ def experiment_detail(
         "rewinds": snapshot.rewinds(),
         "compacted": record_compacted(storage, app_name, verstr),
     }
+    add_child_steps(detail["status"].get("fleet"), storage, app_name, _PARSED, read_log)
     detail.update(failure_fields(storage, app_name, verstr, detail, snapshot, last_good))
     return detail, None
 

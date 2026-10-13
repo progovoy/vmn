@@ -256,13 +256,35 @@ def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None
 FLEET_MAX_CHILDREN_DETAIL = 50
 
 
+def _number_of(row, key):
+    """*row*'s numeric ``metrics[key]``, else ``params[key]``, else None."""
+    for source in (row.get("metrics") or {}, row.get("params") or {}):
+        value = source.get(key)
+        if isinstance(value, (int, float)):
+            return value
+    return None
+
+
+def _child_row_fields(row):
+    """What the fleet table shows of a child from its index *row*."""
+    return {
+        "idx": row.get("idx"),
+        "name": row.get("name"),
+        "params": row.get("params") or {},
+        "metrics": row.get("metrics") or {},
+        "progress": _number_of(row, "progress"),
+        "progress_total": _number_of(row, "progress_total"),
+    }
+
+
 def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=None, read_child_row=None):
     """Fleet status for an outer run: per-child status counts and progress.
 
     Returns None when *verstr* has no children. *expected* is the declared
     pod count (from the parent's ``expected_pods`` param); defaults to the
     number of children. *read_child_row(verstr)* returns an indexed row
-    dict for a child (used for per-child progress), or None.
+    dict for a child (its ``idx``/``name``/``params``/``metrics`` and
+    progress), or None.
     """
     children = children_of.get(verstr, [])
     if not children:
@@ -277,29 +299,8 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
         statuses.append(status)
 
         if len(child_details) < FLEET_MAX_CHILDREN_DETAIL:
-            progress = None
-            progress_total = None
-            if read_child_row:
-                row = read_child_row(child)
-                if row:
-                    metrics = row.get("metrics") or {}
-                    params = row.get("params") or {}
-                    progress = (
-                        metrics.get("progress") if isinstance(metrics.get("progress"), (int, float)) else
-                        params.get("progress") if isinstance(params.get("progress"), (int, float)) else
-                        None
-                    )
-                    progress_total = (
-                        metrics.get("progress_total") if isinstance(metrics.get("progress_total"), (int, float)) else
-                        params.get("progress_total") if isinstance(params.get("progress_total"), (int, float)) else
-                        None
-                    )
-            child_details.append({
-                "verstr": child,
-                "status": status,
-                "progress": progress,
-                "progress_total": progress_total,
-            })
+            row = (read_child_row(child) if read_child_row else None) or {}
+            child_details.append(dict(_child_row_fields(row), verstr=child, status=status))
 
     if expected is None:
         expected = len(children)

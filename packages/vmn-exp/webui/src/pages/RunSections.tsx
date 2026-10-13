@@ -1,8 +1,10 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunState, RunStatus } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import StatusPill from "../components/StatusPill";
+import FleetTable from "../components/FleetTable";
+import { fleetMetric, fleetRowsOf, varyingParams } from "../components/fleetRows";
 
 /** A single duration text (rounded seconds for short, ladder for longer),
  *  with the exact seconds in the title attribute. 0s shows as "<1s". */
@@ -58,14 +60,6 @@ export function StatusCard({ st, runUrl }: { st: RunStatus; runUrl: (v: string) 
           <>
             <div className="k">parent</div>
             <div><Link className="mono" to={runUrl(st.parent!)}>{st.parent}</Link></div>
-          </>
-        )}
-        {st.children.length > 0 && (
-          <>
-            <div className="k">children</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {st.children.map((c) => <Link key={c} className="mono" to={runUrl(c)}>{c}</Link>)}
-            </div>
           </>
         )}
       </div>
@@ -169,16 +163,20 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const FLEET_DISPLAY_ORDER = ["waiting", "running", "succeeded", "failed", "stuck", "created"];
-const COLLAPSE_THRESHOLD = 10;
 
-export function FleetCard({ fleet, runUrl }: { fleet: Fleet; runUrl: (v: string) => string }) {
-  const [expanded, setExpanded] = useState(false);
+/** An outer run's children: status counts, a bar, and the fleet table —
+ *  left out (`table={false}`) for a sweep, whose Sweep card lists them. */
+export function FleetCard({ fleet, schema = null, runUrl, table = true }: {
+  fleet: Fleet;
+  schema?: MetricsSchema | null;
+  runUrl: (v: string) => string;
+  table?: boolean;
+}) {
   const nonZeroCounts = FLEET_DISPLAY_ORDER
     .filter((s) => (fleet.counts[s] ?? 0) > 0)
     .map((s) => [s, fleet.counts[s]] as const);
-  const visibleChildren = expanded || fleet.children.length <= COLLAPSE_THRESHOLD
-    ? fleet.children
-    : fleet.children.slice(0, COLLAPSE_THRESHOLD);
+  const metric = fleetMetric(fleet.children, schema);
+  const rows = fleetRowsOf(fleet.children, metric);
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -204,54 +202,9 @@ export function FleetCard({ fleet, runUrl }: { fleet: Fleet; runUrl: (v: string)
           />
         ))}
       </div>
-      <div className="fleet-children">
-        <table>
-          <thead>
-            <tr>
-              <th>run</th>
-              <th>status</th>
-              <th>progress</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleChildren.map((child) => (
-              <tr key={child.verstr}>
-                <td>
-                  <Link className="mono" to={runUrl(child.verstr)}>{child.verstr}</Link>
-                </td>
-                <td>
-                  <StatusPill status={child.status} />
-                </td>
-                <td>
-                  {child.progress != null && child.progress_total != null ? (
-                    <span className="progress-bar">
-                      <span>{child.progress} / {child.progress_total}</span>
-                      <span className="progress-track">
-                        <span
-                          className="progress-fill"
-                          style={{ width: `${(child.progress / child.progress_total) * 100}%` }}
-                        />
-                      </span>
-                    </span>
-                  ) : (
-                    <span style={{ color: "var(--text-3)" }}>{"—"}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {fleet.children.length > COLLAPSE_THRESHOLD && !expanded && (
-          <button
-            className="link"
-            style={{ marginTop: 8 }}
-            onClick={() => setExpanded(true)}
-            aria-label={`Show all ${fleet.children.length} children`}
-          >
-            Show all {fleet.children.length}
-          </button>
-        )}
-      </div>
+      {table && rows.length > 0 && (
+        <FleetTable rows={rows} paramKeys={varyingParams(rows)} metric={metric} runUrl={runUrl} label="Children" />
+      )}
     </div>
   );
 }

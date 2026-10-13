@@ -3,11 +3,13 @@
  *  `vmn-exp sweep status` agree. */
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchSweep, type SweepSpec, type SweepView } from "../apiSweep";
+import { fetchSweep, type SweepSpec, type SweepTrial, type SweepView } from "../apiSweep";
 import { rowsPrefix } from "../queries";
-import { fmtParam, fmtVal } from "../util";
-import StatusPill from "./StatusPill";
+import { fmtVal } from "../util";
 import type { RunState } from "../types";
+import FleetTable from "./FleetTable";
+import SweepTrialsChart from "./SweepTrialsChart";
+import { fleetLabel, varyingParams, type FleetRow } from "./fleetRows";
 
 export type { SweepSpec };
 
@@ -49,65 +51,57 @@ function SpecSummary({ spec }: { spec: SweepSpec }) {
   );
 }
 
-export function SweepCard({ view, boardUrl, runUrl }: {
+/** The fleet table's rows for a sweep's trials, labelled `@N name` once
+ *  *idxOf* knows a trial's index. */
+function trialRows(trials: SweepTrial[], idxOf: (v: string) => number | null): FleetRow[] {
+  return trials.map((t) => ({
+    verstr: t.verstr, label: fleetLabel({ verstr: t.verstr, idx: idxOf(t.verstr), name: t.name }),
+    status: (t.status as RunState | null) ?? null, params: t.params, value: t.value,
+    valueFrom: t.metric_source !== t.verstr ? t.metric_source : undefined,
+    progress: null, trial: t.trial, stoppedEarly: t.stopped_early,
+  }));
+}
+
+export function SweepCard({ view, boardUrl, runUrl, idxOf = () => null }: {
   view: SweepView; boardUrl: string; runUrl: (v: string) => string;
+  /** A trial's `@N`, from the outer run's fleet. */
+  idxOf?: (verstr: string) => number | null;
 }) {
   const { spec, trials } = view;
   const best = view.summary.best;
-  const params = Object.keys(spec.parameters);
+  const rows = trialRows(trials, idxOf);
+  const paramKeys = varyingParams(rows, Object.keys(spec.parameters));
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <h2 className="section-title">Sweep</h2>
       <SpecSummary spec={spec} />
       {best && (
         <div data-testid="sweep-best" style={{ marginTop: 12 }}>
-          best trial: <Link className="mono" to={runUrl(best.verstr)}>{best.name || best.verstr}</Link>
+          best trial: <Link to={runUrl(best.verstr)} title={best.verstr}>
+            {fleetLabel({ verstr: best.verstr, idx: idxOf(best.verstr), name: best.name })}
+          </Link>
           {" "}{spec.metric.name} = <span className="metric best">{fmtVal(best.value)}</span>
         </div>
       )}
       {trials.length === 0 ? (
         <div className="empty" style={{ padding: 12 }}>No trials yet — start one with vmn-exp sweep agent.</div>
       ) : (
-        <table style={{ marginTop: 12 }}>
-          <thead>
-            <tr>
-              <th>trial</th><th>run</th><th>status</th>
-              {params.map((p) => <th key={p}>{p}</th>)}
-              <th>{spec.metric.name}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trials.map((t) => (
-              <tr key={t.verstr} data-testid="sweep-trial"
-                className={t.verstr === best?.verstr ? "best" : undefined}>
-                <td>{t.trial}</td>
-                <td><Link className="mono" to={runUrl(t.verstr)}>{t.name || t.verstr}</Link></td>
-                <td>
-                  {t.status && <StatusPill status={t.status as RunState} />}
-                  {t.stopped_early && <span className="badge">stopped early</span>}
-                </td>
-                {params.map((p) => (
-                  <td key={p} className="mono">{p in t.params ? fmtParam(t.params[p]) : "–"}</td>
-                ))}
-                <td className="mono">
-                  {t.metric_source !== t.verstr && t.value !== null ? (
-                    <Link to={runUrl(t.metric_source)} title={`from ${t.metric_source}`}>{fmtVal(t.value)}</Link>
-                  ) : fmtVal(t.value)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <FleetTable rows={rows} paramKeys={paramKeys} metric={spec.metric} runUrl={runUrl}
+            best={best?.verstr ?? null} rowTestId="sweep-trial" label="Trials" />
+          <SweepTrialsChart rows={rows} paramKeys={paramKeys} metric={spec.metric} />
+        </>
       )}
       <Link className="link" to={boardUrl} style={{ display: "inline-block", marginTop: 8 }}>
-        Compare trials on the leaderboard (parallel coordinates)
+        Open the trials on the leaderboard
       </Link>
     </div>
   );
 }
 
-export default function SweepSection({ ws, app, verstr, runUrl }: {
+export default function SweepSection({ ws, app, verstr, runUrl, idxOf }: {
   ws: string; app: string; verstr: string; runUrl: (v: string) => string;
+  idxOf?: (verstr: string) => number | null;
 }) {
   const sweep = useQuery({
     // Under the rows prefix, so whatever refreshes the app's lists refreshes this.
@@ -116,5 +110,5 @@ export default function SweepSection({ ws, app, verstr, runUrl }: {
   });
   if (!sweep.data) return null;
   const boardUrl = `/ws/${ws}/app/${app}?q=${encodeURIComponent(sweepQuery(verstr))}`;
-  return <SweepCard view={sweep.data} boardUrl={boardUrl} runUrl={runUrl} />;
+  return <SweepCard view={sweep.data} boardUrl={boardUrl} runUrl={runUrl} idxOf={idxOf} />;
 }
