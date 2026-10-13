@@ -233,6 +233,12 @@ how statuses are derived.
   (or the workspace's only one) is used. Keys: ↑↓ move, Home/End, PageUp/PageDown
   between sections, ↵ open, ⌘↵ new tab, ⇧↵ copy the row's CLI equivalent, Tab
   completes the verb or app, Esc clears the input, then closes.
+- **Leaderboard headers**: each sortable header is a button (Enter/Space
+  sorts, again reverses; the cell carries `aria-sort`). Dragging (reorder)
+  and the right-edge grip (resize) are mouse-only; the `⋮` column menu on
+  each header gives the keyboard equivalents: Sort, Hide column, Pin/Unpin
+  column (metrics and params), Move left/right (a pinned column moves among
+  the pinned ones; `#`, status and experiment stay put).
 - **Narrow windows** (below 900 px): the sidebar becomes a drawer opened from
   the topbar's menu button; it focuses the first nav link, and Esc, a click
   outside or a navigation closes it and returns focus to the button.

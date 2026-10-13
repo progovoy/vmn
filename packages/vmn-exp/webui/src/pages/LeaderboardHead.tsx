@@ -1,23 +1,38 @@
-/** The leaderboard's header row: sorting, column drag/resize and the
- *  select-all checkbox. */
-import { useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import type { HeaderCheck } from "../hooks/useBoardSelection";
-import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, MIN_COL_WIDTH, STICKY_BG, isPinned } from "./leaderboardColumns";
+/** The leaderboard's header row: sorting (a button per sortable column,
+ *  `aria-sort` on its cell), column drag/resize, the column menu (their
+ *  keyboard equivalents) and the select-all checkbox. */
+import { useId, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isPinned } from "./leaderboardColumns";
+import ColumnMenu, { type MenuAction } from "./ColumnMenu";
+import { HeaderCheckbox, ResizeGrip, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, type RowLayout } from "./LeaderboardRow";
 import HeadGroups, { GROUP_ROW_HEIGHT } from "./LeaderboardHeadGroups";
 import { headGroups, isInnerRunId } from "./innerRunColumns";
+import "./leaderboardHead.css";
 
 export const TIMESTAMP_SORT = "timestamp";
 export const IDX_SORT = "idx";
+export type { HeaderCheckProps } from "./LeaderboardHeadParts";
 
-/** What the header can change about the columns: widths and order. */
+/** What the header can change about the columns: widths and order (drag),
+ *  and from the column menu, when given: move, hide and pin. */
 export interface ColumnEdits {
   onResize: (id: string, width: number) => void;
   onMove: (from: string, to: string) => void;
+  /** Move a column one place left (-1) or right (1). */
+  onShift?: (id: string, delta: number) => void;
+  /** Hide an `m:`/`p:`/`c:` column. */
+  onHide?: (id: string) => void;
+  /** Pin or unpin an `m:`/`p:` column. */
+  onPin?: (id: string) => void;
+  /** The pinned `m:`/`p:` columns. */
+  pinned?: readonly string[];
 }
 
 export interface SortState {
   sort: string | null;
+  /** The sorted column's direction (null: none sorted). */
+  order: "asc" | "desc" | null;
   /** True when the current direction is the column's worst-first. */
   reversed: boolean;
   onSort: (col: string) => void;
@@ -37,39 +52,6 @@ function headStyle(style: CSSProperties, index: number, top = 0): CSSProperties 
   };
   if (index === EXPERIMENT_COL_INDEX) return { ...base, zIndex: 4 };
   return style.position === "sticky" ? { ...base, zIndex: 3 } : base;
-}
-
-/** A drag grip on a header's right edge: dragging it resizes the column.
- *  The drag moves only the header's `<col>`; the width is kept (and the rows
- *  re-laid out) once, on release. */
-function ResizeGrip({ width, onResize }: { width: number; onResize: (w: number) => void }) {
-  const onMouseDown = (e: ReactMouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const th = (e.currentTarget as HTMLElement).closest("th")!;
-    const col = th.closest("table")?.querySelectorAll("colgroup col")[th.cellIndex] as HTMLElement | undefined;
-    const x0 = e.clientX;
-    const widthAt = (ev: MouseEvent) => Math.max(MIN_COL_WIDTH, Math.round(width + ev.clientX - x0));
-    const move = (ev: MouseEvent) => {
-      const w = `${widthAt(ev)}px`;
-      th.style.width = w;
-      if (col) col.style.width = w;
-    };
-    const up = (ev: MouseEvent) => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      onResize(widthAt(ev));
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
-  return (
-    <span
-      className="col-resize" role="separator" aria-orientation="vertical" aria-label="resize column"
-      onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} draggable={false}
-      onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
-    />
-  );
 }
 
 /** Header label and sort key per column id (null: not sortable). */
@@ -100,30 +82,41 @@ function headInfo(id: string, layout: RowLayout): { label: ReactNode; sort: stri
 const HEAD_CLASS: Record<string, string> = {
   check: "check-cell", idx: "num", status: "status-col-head", experiment: "exp-head", when: "num when-head",
 };
+const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
+const plainName = (id: string) => (id === "idx" ? "#" : id.includes(":") ? id.slice(2) : id);
+const hideable = (id: string) => /^[mpc]:/.test(id);
+const pinnable = (id: string) => /^[mp]:/.test(id);
+
+/** The column menu's entries for *id* (sort key *sort*). */
+function menuActions(
+  id: string, ids: readonly string[], sort: string | null, s: SortState, edits: ColumnEdits,
+): MenuAction[] {
+  const out: MenuAction[] = [];
+  if (sort) out.push({ label: s.sort === sort ? "Reverse sort" : "Sort", run: () => s.onSort(sort) });
+  const { onHide, onPin, onShift } = edits;
+  if (onHide && hideable(id)) out.push({ label: "Hide column", run: () => onHide(id) });
+  const pinned = new Set(edits.pinned);
+  if (onPin && pinnable(id)) {
+    out.push({ label: pinned.has(id) ? "Unpin column" : "Pin column", run: () => onPin(id) });
+  }
+  if (onShift && !isPinned(id)) {
+    out.push(
+      { label: "Move left", run: () => onShift(id, -1), disabled: !canShift(ids, id, -1, pinned) },
+      { label: "Move right", run: () => onShift(id, 1), disabled: !canShift(ids, id, 1, pinned) },
+    );
+  }
+  return out;
+}
+
+/** Enter and Space sort here, so a button's own click on them never runs too. */
+const sortKeys = (onSort: () => void) => (e: KeyboardEvent) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  onSort();
+};
+
 const headClass = (id: string) =>
   HEAD_CLASS[id] ?? (id.startsWith("c:") && id !== "c:tags" && id !== "c:comments" ? "num fleet-head" : id.startsWith("p:") ? "param-head" : "");
-
-/** The header checkbox: how many rows on screen are selected, and its click. */
-export interface HeaderCheckProps {
-  state: HeaderCheck;
-  onToggle: () => void;
-}
-
-/** The header's select-all box: checked when every row on screen is
- *  selected, indeterminate when only some are. */
-function HeaderCheckbox({ state, onToggle }: HeaderCheckProps) {
-  const ref = useRef<HTMLInputElement>(null);
-  // Every render: a click clears the DOM flag even when the state stays put.
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = state === "some";
-  });
-  return (
-    <input
-      ref={ref} type="checkbox" aria-label="Select all visible runs"
-      checked={state === "all"} onChange={onToggle}
-    />
-  );
-}
 
 export default function Head({ layout, sort: s, edits, check }: {
   layout: RowLayout;
@@ -139,6 +132,7 @@ export default function Head({ layout, sort: s, edits, check }: {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const arrow = (col: string) => (s.sort === col ? (s.reversed ? " ▴" : " ▾") : "");
+  const ariaSort = (col: string) => (s.sort === col && s.order ? ARIA_SORT[s.order] : "none");
   return (
     <thead>
       {groups && <HeadGroups groups={groups} styles={layout.styles} helpId={helpId} />}
@@ -147,13 +141,15 @@ export default function Head({ layout, sort: s, edits, check }: {
           const { label, sort, title } = headInfo(id, layout);
           const movable = Boolean(edits) && !isPinned(id);
           const inner = isInnerRunId(id);
+          const actions = edits && id !== "check" ? menuActions(id, ids, sort, s, edits) : [];
           const cls = [
-            headClass(id), sort && "sortable", sort && s.sort === sort && "sorted",
+            headClass(id), sort && "sortable", sort && s.sort === sort && "sorted", actions.length && "has-menu",
             dragging === id && "col-dragging", over === id && dragging !== id && "col-drop",
           ].filter(Boolean).join(" ");
           return (
             <th
-              key={id} data-col-id={id} style={headStyles[i]} className={cls || undefined} title={title}
+              key={id} data-col-id={id} style={headStyles[i]} className={cls || undefined}
+              aria-sort={sort ? ariaSort(sort) : undefined}
               aria-describedby={inner ? helpId : undefined}
               onClick={sort ? () => s.onSort(sort) : undefined}
               draggable={movable}
@@ -176,7 +172,14 @@ export default function Head({ layout, sort: s, edits, check }: {
               }}
               onDragEnd={() => { setDragging(null); setOver(null); }}
             >
-              {id === "check" && check ? <HeaderCheckbox {...check} /> : label}{sort && arrow(sort)}
+              {id === "check" && check ? <HeaderCheckbox {...check} />
+                : sort ? (
+                  // The cell's own click sorts, so a click anywhere in it does.
+                  <button type="button" className="th-sort" aria-label={title} title={title} onKeyDown={sortKeys(() => s.onSort(sort))}>
+                    {label}{arrow(sort)}
+                  </button>
+                ) : label}
+              {actions.length > 0 && <ColumnMenu name={plainName(id)} actions={actions} />}
               {edits && (
                 <ResizeGrip width={layout.widths?.[i] ?? 0} onResize={(w) => edits.onResize(id, w)} />
               )}

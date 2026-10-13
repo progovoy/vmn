@@ -16,14 +16,15 @@ import { useLeaderboardRows } from "../hooks/useLeaderboardRows";
 import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
+import { useColumnEdits } from "../hooks/useColumnEdits";
 import { useBoardSelection } from "../hooks/useBoardSelection";
 import { useInnerRuns } from "../hooks/useInnerRuns";
 import { foldState, isPending, treeRows } from "../util/sweepTree";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
 import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
-import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits } from "./LeaderboardTable";
-import { DATE_SORT_OF, moveColumn } from "./leaderboardColumns";
+import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT } from "./LeaderboardTable";
+import { DATE_SORT_OF } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import { useCanCreateRun } from "../shell/useAppExists";
 
@@ -122,15 +123,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const cols = useLeaderboardColumns(
     rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown,
   );
-  const { setWidth, setOrder } = colPrefs;
-  const ids = cols.layout.ids;
-  const columnEdits = useMemo<ColumnEdits>(() => ({
-    onResize: setWidth,
-    onMove: (from, to) => {
-      const next = moveColumn(ids ?? [], from, to);
-      if (next !== ids) setOrder(next);
-    },
-  }), [setWidth, setOrder, ids]);
+  const columnEdits = useColumnEdits(view, cols, colPrefs);
 
   const charting = view.tab === "charts";
   // A brush in the parallel view (Charts tab) narrows the table.
@@ -157,6 +150,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   );
   const sortState = {
     sort: view.sort,
+    order: view.sort ? view.order ?? bestOrder(schema, view.sort) : null,
     reversed: Boolean(view.sort && view.order && view.order !== bestOrder(schema, view.sort)),
     onSort: (col: string) => view.clickSort(col, bestOrder(schema, col)),
   };

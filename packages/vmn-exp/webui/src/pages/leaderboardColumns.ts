@@ -123,6 +123,31 @@ export function moveColumn(order: readonly string[], from: string, to: string): 
   return out;
 }
 
+/** Which columns a column may trade places with: the fixed ones none, a
+ *  URL-pinned one only another pinned one, the rest each other. */
+const shiftGroup = (id: string, pinned: ReadonlySet<string>) =>
+  isPinned(id) ? null : pinned.has(id) ? "pin" : "free";
+
+/** Whether *id* can move *delta* (±1) places in *ids* within its group. */
+export function canShift(ids: readonly string[], id: string, delta: number, pinned: ReadonlySet<string>): boolean {
+  const i = ids.indexOf(id);
+  const group = shiftGroup(id, pinned);
+  const next = ids[i + delta];
+  return i >= 0 && group !== null && next !== undefined && shiftGroup(next, pinned) === group;
+}
+
+/** *ids* with *id* swapped with its neighbour *delta* places away (the menu's
+ *  move left/right); *ids* itself when it cannot move. */
+export function shiftColumn(
+  ids: readonly string[], id: string, delta: number, pinned: ReadonlySet<string>,
+): readonly string[] {
+  if (!canShift(ids, id, delta, pinned)) return ids;
+  const out = [...ids];
+  const i = out.indexOf(id);
+  [out[i], out[i + delta]] = [out[i + delta], out[i]];
+  return out;
+}
+
 /** Widths for *ids*: the user's where set, else the default — with an
  *  untouched experiment column growing so the table fills *fill* px (at
  *  least its minimum). */

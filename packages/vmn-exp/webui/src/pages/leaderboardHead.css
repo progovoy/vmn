@@ -11,3 +11,12 @@
   overflow: visible;
 }
 .lb-group-label { display: inline-block; }
+
+/* A sortable header's label is a button (keyboard + screen readers), drawn
+   as plain header text; the ring sits inside the cell, which clips. */
+.lb-table th .th-sort {
+  max-width: 100%; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; text-align: inherit;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; cursor: pointer;
+}
+.lb-table th .th-sort:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; border-radius: 3px; }
