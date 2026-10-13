@@ -74,8 +74,10 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [brushed, setBrushed] = useState<Set<string> | null>(null);
-  // Bumped when a saved view replaces the URL, so the filter bar re-reads it.
+  // Bumped when a saved view or the attention strip replaces the URL, so the
+  // filter bar re-reads it.
   const [filterGen, setFilterGen] = useState(0);
+  const resetFilter = () => setFilterGen((g) => g + 1);
   // The search box's "similar" mode text; null shows the table.
   const [similarText, setSimilarText] = useState<string | null>(null);
 
@@ -186,7 +188,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
         actions={!empty && (
           <LeaderboardToolbar
             ws={ws} app={app} view={view} cols={cols}
-            onViewApplied={() => setFilterGen((g) => g + 1)}
+            onViewApplied={resetFilter}
             onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
           />
         )}
@@ -208,7 +210,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
         )
       ) : (
         <>
-          <AttentionStrip status={status} onFollow={() => setFilterGen((g) => g + 1)} />
+          <AttentionStrip status={status} onFollow={resetFilter} />
 
           <LeaderboardFilter
             key={filterGen}

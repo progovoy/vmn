@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent } from "re
 const ITEMS = "button, select, input";
 
 /** Left/Right step (and wrap), Home/End jump; null for any other key. */
-function keyTarget(key: string, at: number, n: number): number | null {
+export function keyTarget(key: string, at: number, n: number): number | null {
   if (key === "ArrowRight") return (at + 1) % n;
   if (key === "ArrowLeft") return (at - 1 + n) % n;
   if (key === "Home") return 0;

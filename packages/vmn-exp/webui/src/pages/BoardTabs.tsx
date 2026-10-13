@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode } from "react";
 import { BOARD_TABS, type BoardTab } from "../hooks/useLeaderboardView";
+import { keyTarget } from "../hooks/useRovingToolbar";
 
 export const BOARD_PANEL_ID = "board-panel";
 export const boardTabId = (tab: BoardTab) => `board-tab-${tab}`;
@@ -29,21 +30,11 @@ const TABS: Record<BoardTab, { label: string; icon: ReactNode }> = {
   },
 };
 
-/** Arrow keys step (and wrap), Home/End jump; the target tab opens. */
-function keyTarget(key: string, at: number): number | null {
-  const n = BOARD_TABS.length;
-  if (key === "ArrowRight") return (at + 1) % n;
-  if (key === "ArrowLeft") return (at - 1 + n) % n;
-  if (key === "Home") return 0;
-  if (key === "End") return n - 1;
-  return null;
-}
-
 /** The board's view switcher (Runs | Charts), right above the board: an
  *  ARIA tablist with one tab stop; the arrow keys move and open a tab. */
 export default function BoardTabs({ tab, onTab }: { tab: BoardTab; onTab: (tab: BoardTab) => void }) {
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
-    const next = keyTarget(e.key, BOARD_TABS.indexOf(tab));
+    const next = keyTarget(e.key, BOARD_TABS.indexOf(tab), BOARD_TABS.length);
     if (next === null) return;
     e.preventDefault();
     onTab(BOARD_TABS[next]);
