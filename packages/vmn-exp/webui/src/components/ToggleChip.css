@@ -1,0 +1,2 @@
+/* The shared on/off chip: its label stays on one line in a narrow toolbar. */
+button.status-toggle { white-space: nowrap; }

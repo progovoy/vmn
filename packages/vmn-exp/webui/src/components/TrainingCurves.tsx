@@ -93,7 +93,7 @@ function TrainingCurves({
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <h2 className="section-title" style={{ marginBottom: 0 }}>Training curves</h2>
           <XModeToggle value={xMode} onChange={setXMode} timeEnabled={hasTimestamps} />
           <XMetricSelect value={xChoice} onChange={setXChoice} metrics={xOptions} enabled={xMode === "step"} />

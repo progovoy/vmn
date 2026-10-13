@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./ToggleChip.css";
 
 /** The shared on/off chip (`button.status-toggle`): the leaderboard's status
  *  and archived shortcuts, the Reports page's archived switch. */
