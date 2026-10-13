@@ -175,8 +175,9 @@ describe("Sidebar", () => {
 
   it("shows the app's compact status rollup in the App group", async () => {
     renderAt("/ws/ml-repo/app/ml_app");
-    const rollup = await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    const rollup = await screen.findByRole("link", { name: "2 stuck" });
     expect(rollup).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?status=stuck");
+    expect(screen.getByRole("link", { name: "1 running" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?status=running");
     expect(appStatus).toHaveBeenCalledWith("ml-repo", "ml_app");
   });
 
@@ -211,7 +212,7 @@ describe("Sidebar", () => {
 
   it("keeps the last app as the switcher's value on a workspace page", async () => {
     const router = renderAt("/ws/ml-repo/app/ml_app");
-    await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    await screen.findByRole("link", { name: "2 stuck" });
     await router.navigate("/ws/ml-repo/models");
     expect(await screen.findByRole("button", { name: "ml_app" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Experiments" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app");
@@ -229,7 +230,7 @@ describe("Sidebar", () => {
 
   it("keeps the last app per workspace", async () => {
     const router = renderAt("/ws/ml-repo/app/ml_app");
-    await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    await screen.findByRole("link", { name: "2 stuck" });
     await router.navigate("/ws/team/models");
     await waitFor(() => expect(wsSelect().value).toBe("team"));
     expect(screen.getByRole("button", { name: /choose app/ })).toBeInTheDocument();
