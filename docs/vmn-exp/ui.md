@@ -159,8 +159,12 @@ and fails after 30 minutes; the server keeps the last 200 jobs and the last
 first, and the job log names the `vmn goto` that brings it back.
 
 There is no Rerun action: [`vmn-exp rerun`](experiments.md#rerun) supervises
-its command for as long as it runs. The run page's *reproduce* card shows the
-`vmn-exp rerun` command and links to its reruns (`rerun_of = "<verstr>"`); a
+its command for as long as it runs. The run header's **Reproduce** menu copies
+the `vmn-exp restore`, `rerun` (runs that recorded a command) and `export`
+commands (`--store` added in a store workspace), links to the run's reruns
+(`rerun_of = "<verstr>"`) and, in a writable git workspace, runs `vmn goto -v
+<verstr> <app>` as a job after a confirm dialog that shows the command. **Copy
+link** copies the run's canonical `/ws/<ws>/app/<app>/run/<verstr>` URL. A
 rerun links back to its source.
 
 ## The index

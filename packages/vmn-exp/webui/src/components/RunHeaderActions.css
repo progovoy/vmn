@@ -32,3 +32,8 @@
 .run-goto-dialog .run-goto-why { color: var(--text-3); font-size: 12.5px; }
 .run-goto-dialog .cli-hint { margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .run-goto-dialog .card { margin-bottom: 14px; }
+@media (max-width: 640px) {
+  .run-actions { position: relative; width: 100%; margin-left: 0; justify-content: flex-start; }
+  .repro-box { position: static; }
+  .repro-menu { left: 0; right: 0; width: auto; max-width: none; }
+}
