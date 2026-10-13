@@ -207,6 +207,44 @@ describe("Sidebar", () => {
     expect(router.state.location.state).toBeNull();
   });
 
+  it("keeps the last app as the switcher's value on a workspace page", async () => {
+    const router = renderAt("/ws/ml-repo/app/ml_app");
+    await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    await router.navigate("/ws/ml-repo/models");
+    expect(await screen.findByRole("button", { name: "ml_app" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Experiments" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app");
+    expect(screen.getByRole("link", { name: "Experiments" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Stamp tree" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app/tree");
+    expect(screen.getByRole("link", { name: "Models" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("shows choose app on a fresh visit to a workspace page", async () => {
+    renderAt("/ws/ml-repo/models");
+    await waitFor(() => expect(wsSelect().value).toBe("ml-repo"));
+    expect(screen.getByRole("button", { name: /choose app/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Experiments" })).toBeNull();
+  });
+
+  it("keeps the last app per workspace", async () => {
+    const router = renderAt("/ws/ml-repo/app/ml_app");
+    await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    await router.navigate("/ws/team/models");
+    await waitFor(() => expect(wsSelect().value).toBe("team"));
+    expect(screen.getByRole("button", { name: /choose app/ })).toBeInTheDocument();
+    await router.navigate("/ws/ml-repo");
+    expect(await screen.findByRole("button", { name: "ml_app" })).toBeInTheDocument();
+  });
+
+  it("never remembers an app the server does not know", async () => {
+    appStatus.mockRejectedValue(Object.assign(new Error("no app"), { status: 404, body: { code: "app_not_found" } }));
+    const router = renderAt("/ws/ml-repo/app/bogus");
+    await waitFor(() => expect(appStatus).toHaveBeenCalledWith("ml-repo", "bogus"));
+    await new Promise((r) => setTimeout(r, 0));
+    await router.navigate("/ws/ml-repo/models");
+    await waitFor(() => expect(screen.getByRole("link", { name: "Models" })).toHaveAttribute("aria-current", "page"));
+    expect(screen.getByRole("button", { name: /choose app/ })).toBeInTheDocument();
+  });
+
   it("renders footExtra in the foot", () => {
     renderAt("/", { footExtra: <button>extra</button> });
     expect(screen.getByRole("button", { name: "extra" }).closest(".sidebar-foot")).not.toBeNull();
