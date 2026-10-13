@@ -1725,7 +1725,7 @@ are in [sdk.md](sdk.md). Set **by** vmn for a `run` child:
 ## Web UI
 
 `vmn-exp ui` (`pip install "vmn-exp[ui]"`) serves a dashboard over the same
-files: a sortable leaderboard with status pills and nested inner runs, live
+files: a sortable board of runs grouped by parent run, fork, rerun, code or a field, live
 curves from `step=` series, compare with a real code diff, an Importance view,
 artifacts, media and lineage. Deployment, workspaces, job actions and the
 HTTP API are in [ui.md](ui.md).

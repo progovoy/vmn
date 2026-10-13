@@ -17,7 +17,10 @@
 > Paths are relative to `packages/vmn-exp/webui/src/` unless they start with
 > `packages/`, `ui/` (= `packages/vmn-exp/src/vmn_exp/ui/`) or `docs/`.
 
-Status: **proposal** (2026-10-13).
+Status: **in progress** (2026-10-13). Done: S1, S2 (no SQL cache serves the list, so
+nothing to fall back from), W1, W2, D1. Pending: W3 (selection, Compare, Charts, the
+Compare redirects), W4 (phone headers). Not built: G6's `5 of 16` on a header the
+filter cut (counts cover the passing rows only).
 
 Sources: the 2026-10-13 discussion. Plan 20 C2 merged the inner counts into one cell, the
 user reverted that to five columns (`ba6e87e0`), then asked whether the inner/outer

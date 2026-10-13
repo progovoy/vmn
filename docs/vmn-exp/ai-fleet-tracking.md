@@ -1,28 +1,36 @@
-# Driving the UI's fleet columns (for AI agents)
+# Driving the UI's fleet counts (for AI agents)
 
-`vmn-exp ui` shows five management columns on every **outer run** (a run that has
-inner runs): **total**, **waiting**, **running**, **done**, **failed**. This page
-tells an agent which call moves each one. `vmn-exp skill` prints a short version of it.
+`vmn-exp ui` lists every run as a row of its board. Grouped by **parent run**
+(the default once any run has a parent; `?group=parent` in the board's URL, or
+the **Group by** menu), each **outer run** (a run that has inner runs) heads a
+group of its inner runs. The group header carries the fleet's counts, e.g.
+`16 · 2 running · 1 waiting · 1 failed`: the total first, then each state that
+has runs, with **done** the rest. The outer run's page shows the same counts in
+its Fleet card. This page tells an agent which call moves each count.
+`vmn-exp skill` prints a short version of it.
 
 There is no API that sets these numbers. Each is counted from the inner runs'
-states on every refresh, so you change a column by moving an inner run through
+states on every refresh, so you change a count by moving an inner run through
 its lifecycle.
 
-## What each column counts
+## What each count covers
 
-| Column | Counts inner runs that are… | Status behind it |
+| Count | Counts inner runs that are… | Status behind it |
 |---|---|---|
 | total | all of them | — |
 | waiting | registered, not started | `created` |
 | running | started, heartbeat fresh | `running` |
 | done | finished with exit code 0 | `succeeded` |
-| failed | finished non-zero, or silent too long | `failed` + `stuck` |
+| failed | finished non-zero | `failed` |
+| stuck | silent too long, no exit code | `stuck` |
+
+Under a filter, a group's counts cover only its inner runs that match.
 
 Status is derived from `run_state.yml`; a run is `stuck` once its heartbeat is
 older than `max(3 × heartbeat interval, 60s)` with no exit code (see
 [experiments.md](experiments.md#run-status-did-my-job-die)).
 
-**total** on the leaderboard is the number of inner runs. The run detail's
+**total** on the group header is the number of inner runs. The run detail's
 `fleet` block also reads the outer run's `expected_pods` param: `expected` is
 the larger of `expected_pods` and the inner-run count, `counts.waiting` is the
 declared pods not registered yet, and registered-but-not-started pods are under
@@ -34,7 +42,7 @@ declared pods not registered yet, and registered-but-not-started pods are under
 ```python
 from vmn_exp.sdk import start_run
 
-# 1. The outer run: the row the columns appear on.
+# 1. The outer run: the group header the counts appear on.
 outer = start_run("my_app", name="lr-sweep", params={"expected_pods": 3})
 ```
 
@@ -67,12 +75,12 @@ with start_run("my_app", run_id=pod_id) as pod:
 ```
 
 If a worker dies without calling `finish()` (OOM kill, lost node), its heartbeat
-stops. After the stale window the pod counts under **failed** as `stuck`. Nothing
+stops. After the stale window the pod counts as **stuck**. Nothing
 has to report it.
 
 ## Starting pods straight in `running`
 
-You can skip step 2 when you don't need the waiting column. Each of these creates
+You can skip step 2 when you don't need the waiting count. Each of these creates
 the inner run already running, so total and running both go up by one:
 
 ```python
@@ -111,7 +119,7 @@ params). See [ui.md](ui.md#api).
 ## Checklist for an agent
 
 - Create the outer run first, and keep its verstr (`outer.id`).
-- Register every pod with `--parent` before dispatching, if the waiting column matters.
+- Register every pod with `--parent` before dispatching, if the waiting count matters.
 - Start each pod with `start_run(run_id=...)` (or `VMN_RESUME_RUN_ID`) on the worker.
 - End it with `finish()` / `finish(exit_code=n)`, or use `with` so a crash is recorded.
-- Never write `run_state.yml` by hand. The heartbeat and exit code are what the columns read.
+- Never write `run_state.yml` by hand. The heartbeat and exit code are what the counts read.

@@ -41,16 +41,19 @@ vmn-exp rerun <app_name> -v <version> [-- <other command>]
 vmn-exp rerun <app_name> -v <version> --print --json
 ```
 
-### Driving the UI's fleet columns (total / waiting / running / done / failed)
+### Driving the UI's fleet counts (total / waiting / running / done / failed / stuck)
 
-The `vmn-exp ui` leaderboard shows these on an outer run (a run with inner runs).
+The `vmn-exp ui` board lists every run as a row. Grouped by parent run (the
+default once a run has a parent; `?group=parent`), each outer run is a group
+header over its inner runs, with their counts (`16 · 2 running · 1 failed`).
 They are derived from the inner runs' states, never written directly:
 
 - **total**: the number of inner runs (register every pod up front so it is right from the start)
 - **waiting**: inner runs registered but not started (`created`)
 - **running**: inner runs with a live heartbeat
-- **done**: inner runs that exited 0
-- **failed**: inner runs that exited non-zero, plus `stuck` ones (heartbeat went stale)
+- **done**: inner runs that exited 0 (the header leaves it implicit)
+- **failed**: inner runs that exited non-zero
+- **stuck**: inner runs whose heartbeat went stale with no exit code
 
 ```python
 from vmn_exp.sdk import start_run
@@ -183,7 +186,7 @@ path = download_model("resnet50@production")
 
 DESCRIPTION = (
     "Use when tracking experiments, checking which past runs are similar before "
-    "submitting one, driving the vmn-exp UI fleet columns, "
+    "submitting one, driving the vmn-exp UI fleet counts, "
     "or registering models via the vmn-exp CLI and SDK in this repo."
 )
 
