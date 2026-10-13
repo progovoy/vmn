@@ -60,6 +60,9 @@ export interface RunGroup {
   aggregates: Record<string, MetricAggregate>;
   rows: ExperimentRow[];
   rows_total: number;
+  /** The group's size with the same `archived` but without `q`/`status`/
+   *  `branch`/`search` (plan 22 F1); equals `rows_total` with no filter. */
+  rows_unfiltered?: number;
 }
 
 export interface GroupedPage {
