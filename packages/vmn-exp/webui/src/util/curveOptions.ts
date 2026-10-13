@@ -89,8 +89,6 @@ export interface CurveOptionsArgs {
   height: number;
   theme: ChartTheme;
   logY?: boolean;
-  /** Hide the x axis (small multiples that only show a trend). */
-  hideX?: boolean;
   read?: (name: string) => string;
 }
 
@@ -109,7 +107,7 @@ export function themedAxis(
 }
 
 export function curveOptions(
-  series: CurveSeries[], { xMode, height, theme, logY = false, hideX = false, read }: CurveOptionsArgs,
+  series: CurveSeries[], { xMode, height, theme, logY = false, read }: CurveOptionsArgs,
 ): Omit<uPlot.Options, "width"> {
   const axis = (extra: Partial<uPlot.Axis> = {}, grid = true) => themedAxis(theme, read, extra, grid);
   const xTick = X_TICK[xMode];
@@ -123,7 +121,6 @@ export function curveOptions(
     axes: [
       // Horizontal grid lines only, as the charts always had.
       axis({
-        show: !hideX,
         ...(xTick ? { values: (_u: unknown, splits: number[]) => splits.map(xTick) } : {}),
       } as Partial<uPlot.Axis>, false),
       axis({ size: yAxisSize }),

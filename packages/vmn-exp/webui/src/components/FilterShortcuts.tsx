@@ -37,15 +37,9 @@ export default function FilterShortcuts({
         {branches.map((b) => <option key={b} value={b}>{b}</option>)}
       </select>
       {STATUS_ORDER.map((s) => (
-        <button
-          key={s}
-          type="button"
-          className="status-toggle"
-          aria-pressed={statuses.includes(s)}
-          onClick={() => toggle(s)}
-        >
+        <ToggleChip key={s} pressed={statuses.includes(s)} onChange={() => toggle(s)}>
           {s}
-        </button>
+        </ToggleChip>
       ))}
       {onArchived && (
         <ToggleChip className="archived-toggle" pressed={archived} title="include archived runs" onChange={onArchived}>

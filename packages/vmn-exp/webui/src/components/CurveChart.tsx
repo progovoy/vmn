@@ -22,7 +22,7 @@ const stepLabel = (x: number) => `step ${x}`;
  *  changes; new values for the same curves are swapped in place. */
 function CurveChart({
   series, xMode, logY = false, height = 280, hidden, focused = null,
-  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, hideX = false, formatX, markX = null, onXRange,
+  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, formatX, markX = null, onXRange,
 }: {
   series: CurveSeries[];
   xMode: XMode;
@@ -33,7 +33,6 @@ function CurveChart({
   /** Key of the curve to highlight. */
   focused?: string | null;
   tooltipLimit?: number;
-  hideX?: boolean;
   formatX?: (x: number) => string;
   /** Step axes only: mark this x with a dashed line (a fork point). */
   markX?: number | null;
@@ -49,10 +48,10 @@ function CurveChart({
   const zoom = useXZoom(series, onXRange);
   const options = useMemo(() => {
     const theme = chartTheme();
-    const opts = curveOptions(series, { xMode, logY, height, hideX, theme });
+    const opts = curveOptions(series, { xMode, logY, height, theme });
     const marked = withStepMarker(opts, xMode === "step" ? markX : null, theme.axis);
     return zoomable ? withScaleHook(marked, zoom.onScale) : marked;
-  }, [shape, xMode, logY, height, hideX, themeVersion, markX, zoomable]);
+  }, [shape, xMode, logY, height, themeVersion, markX, zoomable]);
   const data = useMemo(() => curveData(series), [series]);
   const hiddenFlags = useMemo(() => hidden && series.map((s) => hidden.has(s.key)), [shape, hidden]);
   const focusIdx = focused === null ? -1 : series.findIndex((s) => s.key === focused && !s.faded);
