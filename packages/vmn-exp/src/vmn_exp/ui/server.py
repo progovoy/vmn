@@ -8,7 +8,6 @@ illegal in app names. Request hardening lives in :mod:`vmn_exp.ui.security`.
 """
 import os
 
-import git
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
