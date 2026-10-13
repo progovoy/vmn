@@ -61,7 +61,7 @@ beforeEach(() => {
   appStatus.mockResolvedValue(status());
   httpGet.mockImplementation(async (path) =>
     path === "/workspaces/ml-repo/apps-status" || path === "/workspaces/shared/apps-status"
-      ? { clf: status(), "root-svc": status() }
+      ? { clf: { ...status(), total: 53 }, "root-svc": status() }
       : Promise.reject(new Error(`unexpected ${path}`)));
   cacheStatus.mockResolvedValue(idleCache);
   apps.mockResolvedValue([
@@ -87,6 +87,23 @@ describe("AppsPage", () => {
     expect(other.getAttribute("href")).toBe("/ws/ml-repo/app/root-svc");
     expect(within(other.closest("article")!).getByText("1 run · 1 version")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/experiment/);
+  });
+
+  it("counts a tile's runs like the board: experiments-status, which leaves archived runs out", async () => {
+    // /apps counts record names (archived ones too); the board and its status do not.
+    apps.mockResolvedValue([{ name: "clf", experiments: 54, versions: 12 }]);
+    httpGet.mockResolvedValue({ clf: { ...status({ stuck: 1 }), total: 53 } });
+    renderAt("ml-repo");
+    await screen.findByRole("link", { name: "1 stuck" });
+    const tile = screen.getByRole("link", { name: "clf" }).closest("article") as HTMLElement;
+    expect(within(tile).getByText("53 runs · 12 versions")).toBeTruthy();
+  });
+
+  it("falls back to the listing's count while the status is unknown", async () => {
+    httpGet.mockReturnValue(new Promise(() => {}));
+    renderAt("ml-repo");
+    const tile = (await screen.findByRole("link", { name: "clf" })).closest("article") as HTMLElement;
+    expect(within(tile).getByText("53 runs · 12 versions")).toBeTruthy();
   });
 
   it("omits versions in a store workspace", async () => {
