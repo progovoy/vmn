@@ -1,15 +1,16 @@
-"""Full uiload profile run, opt-in: ``VMN_UILOAD_PROFILE=smoke|load`` (serial,
-not under xdist — it owns the machine for the profile's duration).
+"""Full uiload profile run: ``smoke`` by default, another with
+``VMN_UILOAD_PROFILE=load``. Serial (run_pytest.sh's one-process pass, never
+under xdist): it owns the machine for the profile's duration.
 
-    VMN_UILOAD_PROFILE=smoke python -m pytest -s packages/vmn-exp/tests/test_uiload_profile.py
+    VMN_UILOAD_PROFILE=load python -m pytest -s packages/vmn-exp/tests/test_uiload_profile.py
 """
 import json
 import os
 
 import pytest
 
-PROFILE = os.environ.get("VMN_UILOAD_PROFILE")
-pytestmark = pytest.mark.skipif(not PROFILE, reason="set VMN_UILOAD_PROFILE to run a uiload profile")
+PROFILE = os.environ.get("VMN_UILOAD_PROFILE", "smoke")
+pytestmark = pytest.mark.serial
 
 
 def test_profile_meets_budgets_and_statuses_agree(tmp_path):

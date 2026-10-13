@@ -118,3 +118,14 @@ def test_build_report_aggregates_samples():
     assert report.freshness["max"] == 1.5
     assert report.status_codes == {"200": 1, "304": 1, "500": 1, "error": 1}
     assert report.to_dict()["rate_304"] == 0.5
+
+
+def test_the_live_list_has_its_own_smoke_budget():
+    """The freshness read waits on whatever the UI is parsing for the other
+    routes: it gets 200ms where the other list reads keep 100ms."""
+    report = _report()
+    report.routes["list.live"] = _route(150)
+    assert slo.evaluate(report, "smoke") == []
+    report.routes["list.live"] = _route(201)
+    assert any("list.live" in v and "200ms" in v for v in slo.evaluate(report, "smoke"))
+    assert any("list.first" in v for v in slo.evaluate(_report(list_ms=150), "smoke"))
