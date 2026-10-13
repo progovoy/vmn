@@ -20,6 +20,7 @@ tr.group-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .group-counts .tone-waiting { color: var(--text-3); }
 .group-counts .tone-stuck { color: var(--st-stuck); }
 .group-counts .tone-failed { color: var(--st-bad); }
+.group-counts .tone-done { color: var(--st-good); }
 td.group-metric { line-height: 1.2; }
 td.group-metric .group-agg { display: block; font-weight: 600; }
 td.group-metric .group-own { display: block; font-size: 11px; color: var(--text-3); font-family: var(--mono); }

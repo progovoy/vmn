@@ -1,6 +1,6 @@
 /** A grouped board's group below 640px (plan 22 G9): a sticky section label
- *  — the fold, the group's name (a link group's target run), its status
- *  count and its aggregate on the card metric — above the group's cards,
+ *  — its checkbox, the fold, the group's name (a link group's target run),
+ *  its status count and its aggregate on the card metric — above the cards,
  *  and a `+N more` button under them. */
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -8,8 +8,9 @@ import type { GroupAggregate } from "../apiGroups";
 import { Icon } from "../components/shell/icons";
 import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
-import { MORE_TEXT, aggregateCell, countsText, shownAggregate, spokenCounts } from "./groupHeaderText";
-import { GroupCountParts, groupName } from "./LeaderboardGroupRow";
+import { MORE_TEXT, aggregateCell, shownAggregate } from "./groupHeaderText";
+import { GroupCountParts, groupCountsText, groupName, groupSpoken } from "./LeaderboardGroupRow";
+import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import type { RowLayout } from "./LeaderboardRow";
 import type { GroupActions } from "./LeaderboardTable";
 import "./leaderboardGroupRow.css";
@@ -27,15 +28,18 @@ function Aggregate({ item, metric, agg }: { item: GroupHeaderItem; metric: strin
   );
 }
 
-function CardGroupHead({ item, layout, metric, agg, mono, onFold }: {
+function CardGroupHead({ item, layout, metric, agg, mono, onFold, check }: {
   item: GroupHeaderItem; layout: RowLayout; metric: string | null; agg: GroupAggregate; mono: boolean;
   onFold: (key: string) => void;
+  /** Its checkbox over the group's loaded cards (plan 22 F8). */
+  check: Omit<HeaderCheckProps, "label">;
 }) {
   const { group } = item;
   const t = group.target;
   const name = groupName(group.label, t);
   return (
     <div className={`lb-mgroup-head${item.open ? "" : " shut"}`}>
+      {item.rows.length > 0 && <HeaderCheckbox {...check} label={`Select group ${name}`} />}
       {item.foldable && (
         <button
           className="fold-toggle" aria-expanded={item.open}
@@ -58,8 +62,8 @@ function CardGroupHead({ item, layout, metric, agg, mono, onFold }: {
             {group.label}
           </span>
         )}
-        <GroupCountParts counts={group.counts} className="lb-mgroup-counts" title={countsText(group.counts)} />
-        <span className="sr-only">{`Group ${name}: ${spokenCounts(group.counts)}`}</span>
+        <GroupCountParts group={group} className="lb-mgroup-counts" title={groupCountsText(group)} />
+        <span className="sr-only">{groupSpoken(group)}</span>
       </div>
       {metric && <Aggregate item={item} metric={metric} agg={agg} />}
     </div>
@@ -91,6 +95,7 @@ export default function CardGroup({ item, more, layout, metric, groups, children
       <CardGroupHead
         item={item} layout={layout} metric={metric} agg={groups.aggregate}
         mono={groups.field === "code_verstr"} onFold={groups.onFold}
+        check={{ state: groups.checkOf(item.rows), onToggle: () => groups.onCheck(item.rows) }}
       />
       {item.open && (
         <ul className="lb-mcards" role="list" aria-label={`Runs of ${name}`}>
