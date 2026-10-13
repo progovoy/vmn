@@ -4,7 +4,8 @@ import { fmtVal, metricGoal } from "../util";
 import { chartTheme } from "../util/cssColor";
 import { useThemeVersion } from "../hooks/useTheme";
 import { Y_AXIS_SIZE } from "../util/curveOptions";
-import { colorGroups, nearestPoint, scatterGroups } from "../util/scatterData";
+import { colorGroups, scatterGroups } from "../util/scatterData";
+import { pointGrid } from "../util/pointGrid";
 import { NO_GROUP_COLOR, type ChartGroups } from "../util/chartGroups";
 import { DENSE_POINTS, scatterData, scatterOptions } from "../util/scatterOptions";
 import { TOOLTIP_STYLE } from "./chartStyles";
@@ -23,6 +24,12 @@ interface Props {
   initialY?: string;
   /** Colours each point by its run's group (plan 22 G7). */
   groups?: ChartGroups;
+  /** Controlled axes (plan 23 W4): *x* and *y* are plotted and a pick goes to *onAxes*. */
+  x?: string;
+  y?: string;
+  onAxes?: (x: string, y: string) => void;
+  /** The Y picker's choices (default: every column). */
+  yCols?: string[];
 }
 
 const HEIGHT = 320;
@@ -46,10 +53,15 @@ function AxisSelect({ label, value, cols, onChange }: {
 /** Canvas scatter (uPlot) of any metric or numeric param against another;
  *  the best point by the y metric's goal is highlighted. Hover shows the
  *  nearest run, click opens it. */
-function MetricScatter({ rows, metricCols, paramCols, schema, onSelect, initialX, initialY, groups: byGroup }: Props) {
+function MetricScatter({
+  rows, metricCols, paramCols, schema, onSelect, initialX, initialY, groups: byGroup, x, y, onAxes, yCols,
+}: Props) {
   const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
-  const [xCol, setXCol] = useState(initialX ?? metricCols[0] ?? paramCols[0] ?? "");
-  const [yCol, setYCol] = useState(initialY ?? metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "");
+  const [ownX, setOwnX] = useState(initialX ?? metricCols[0] ?? paramCols[0] ?? "");
+  const [ownY, setOwnY] = useState(initialY ?? metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "");
+  const xCol = x ?? ownX, yCol = y ?? ownY;
+  const setXCol = (v: string) => (onAxes ? onAxes(v, yCol) : setOwnX(v));
+  const setYCol = (v: string) => (onAxes ? onAxes(xCol, v) : setOwnY(v));
   const yGoal = metricGoal(schema, yCol);
   const select = useRunSelect(onSelect);
 
@@ -70,16 +82,14 @@ function MetricScatter({ rows, metricCols, paramCols, schema, onSelect, initialX
   const data = useMemo(() => scatterData(groups), [groups]);
 
   const [cursor, setCursor] = useState<CursorInfo | null>(null);
-  const hovered = useMemo(
-    () => (cursor ? nearestPoint(groups, cursor.x, cursor.y, HIT_RADIUS) : null),
-    [cursor, groups],
-  );
+  const grid = useMemo(() => pointGrid(groups, HIT_RADIUS), [groups]);
+  const hovered = useMemo(() => (cursor ? grid.nearest(cursor.x, cursor.y) : null), [cursor, grid]);
 
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
         <AxisSelect label="X" value={xCol} cols={allCols} onChange={setXCol} />
-        <AxisSelect label="Y" value={yCol} cols={allCols} onChange={setYCol} />
+        <AxisSelect label="Y" value={yCol} cols={yCols ?? allCols} onChange={setYCol} />
       </div>
       <div
         data-testid="scatter-chart"

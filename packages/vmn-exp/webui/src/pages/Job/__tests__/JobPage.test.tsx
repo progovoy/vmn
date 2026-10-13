@@ -12,6 +12,11 @@ vi.mock("../../../api", () => ({
 }));
 vi.mock("../../../apiJob", () => ({ jobSummary: vi.fn(), jobFailures: vi.fn(), jobImportance: vi.fn() }));
 vi.mock("../../../components/TrainingCurves", () => ({ default: () => null }));
+vi.mock("../../../apiJobCharts", () => ({
+  jobFacets: vi.fn(async () => ({ metric_keys: ["val_loss"], param_keys: [], param_values: {} })),
+  jobColumns: vi.fn(async () => ({ verstrs: [], idx: [], total: 0, columns: {} })),
+  jobTopRuns: vi.fn(async () => []),
+}));
 vi.mock("../../../components/RunChanges", () => ({ default: () => <div>changes stub</div> }));
 
 import { api } from "../../../api";
@@ -93,7 +98,7 @@ describe("the job page", () => {
     expect(screen.getByRole("tabpanel")).toHaveTextContent(/coming in W3/);
     fireEvent.keyDown(screen.getByRole("tab", { name: "Runs" }), { key: "ArrowRight" });
     expect(screen.getByTestId("where").textContent).toBe("?tab=charts");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent(/coming in W4/);
+    expect(await within(screen.getByRole("tabpanel")).findByRole("group", { name: "Chart" })).toBeInTheDocument();
   });
 
   it("keeps the job's own Changes and log under Code and Log", async () => {

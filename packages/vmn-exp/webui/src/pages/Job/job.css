@@ -104,6 +104,23 @@
 }
 .job-coming p { margin: 0 0 8px; }
 
+/* Charts tab (W4): one card, the shared charts' own cards flattened into it. */
+.job-chart-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.job-chart-tools .job-picker { margin-bottom: 0; }
+.job-chart { margin: 0; min-width: 0; }
+.job-chart .card { border: 0; padding: 0; margin: 0; background: none; }
+.job-brush-link { margin-left: 6px; font-weight: 500; }
+.job-boxes { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.job-box-row { display: grid; grid-template-columns: minmax(60px, 160px) 1fr 56px; align-items: center; gap: 10px; min-height: 22px; }
+.job-box-head { color: var(--text-3); min-height: 0; }
+.job-box-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.job-box-n { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-3); }
+.job-box-track { position: relative; height: 16px; }
+.job-box-whisker { position: absolute; top: 7.5px; height: 1px; background: var(--text-3); }
+.job-box-iqr { position: absolute; top: 2px; height: 12px; border-radius: 4px; background: var(--series-1); opacity: 0.75; }
+.job-box-median { position: absolute; top: 0; width: 2px; height: 16px; margin-left: -1px; background: var(--text); border-radius: 1px; }
+.job-box-row:hover .job-box-iqr { opacity: 1; }
+
 @media (max-width: 639px) {
   .job-head { position: static; }
   .job-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }

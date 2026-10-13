@@ -17,6 +17,7 @@ import { runSpec } from "../../reports/viewSpecs";
 import type { ExperimentDetail } from "../../types";
 import { pollIntervalMs } from "../../util";
 import { RunChangesSection } from "../RunLayout";
+import JobCharts from "./JobCharts";
 import JobFailures from "./JobFailures";
 import JobHeader, { JOB_PANEL_ID, JobTabs, jobTabId } from "./JobHeader";
 import { failedCount } from "./jobData";
@@ -41,7 +42,7 @@ function Panel({ tab, ws, app, detail, summary }: {
   switch (tab) {
     case "overview": return <JobOverview ws={ws} app={app} summary={summary} />;
     case "runs": return <Coming text={"The job\u2019s runs table is coming in W3."} boardHref={boardHref} />;
-    case "charts": return <Coming text={"The job\u2019s charts are coming in W4."} boardHref={boardHref} />;
+    case "charts": return <JobCharts ws={ws} app={app} summary={summary} />;
     case "failures": return <JobFailures ws={ws} app={app} verstr={v} failed={failedCount(summary)} />;
     case "code": return <RunChangesSection ws={ws} app={app} verstr={v} />;
     case "log": {
