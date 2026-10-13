@@ -10,3 +10,13 @@
 .lb-card.more-right .lb-edge-fade { opacity: 1; }
 /* Metric and param headers are names (plan 20 D3): never uppercased. */
 .lb-table th[data-col-id^="m:"], .lb-table th[data-col-id^="p:"] { text-transform: none; letter-spacing: 0; }
+/* A compact board (plan 23 W8): one-line rows of COMPACT_ROW_HEIGHT, the
+   experiment cell's sub-line in the name's tooltip, and a group header's
+   name, run bar and counts side by side. */
+.lb-table.compact tbody td { padding-top: 0; padding-bottom: 0; line-height: 1.25; }
+.lb-table.compact .group-head { display: flex; align-items: center; gap: 10px; }
+.lb-table.compact .group-head .nest { min-width: 0; }
+.lb-table.compact .group-sub { margin-left: 0; flex-shrink: 0; }
+.lb-table.compact td.group-metric .group-agg,
+.lb-table.compact td.group-metric .group-own { display: inline; }
+.lb-table.compact td.group-metric .group-own { margin-left: 6px; }

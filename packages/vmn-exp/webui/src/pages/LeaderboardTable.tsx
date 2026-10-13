@@ -9,10 +9,11 @@ import { useRowKeys } from "../hooks/useRowKeys";
 import { useMoreRight } from "../hooks/useMoreRight";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import LeaderboardCards from "./LeaderboardCards";
-import Row, { ROW_HEIGHT, type RowLayout } from "./LeaderboardRow";
+import Row, { rowHeight, type RowLayout } from "./LeaderboardRow";
 import { GroupHeaderRow, GroupMoreRow } from "./LeaderboardGroupRow";
 import Head, { type ColumnEdits, type HeaderCheckProps, type SortState } from "./LeaderboardHead";
 import { visibleColumns, windowLayout, type ColRange } from "./columnWindow";
+import type { Density } from "../util/density";
 import "./leaderboardTable.css";
 
 export { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits, type SortState } from "./LeaderboardHead";
@@ -25,7 +26,7 @@ function SkeletonRows({ layout }: { layout: RowLayout }) {
   return (
     <>
       {Array.from({ length: SKELETON_ROWS }, (_, i) => (
-        <tr key={i} className="skeleton-row" style={{ height: ROW_HEIGHT }}>
+        <tr key={i} className="skeleton-row" style={{ height: rowHeight(layout) }}>
           {layout.styles.map((st, c) => (
             <td key={c} style={st}><span className="skel-bar" /></td>
           ))}
@@ -58,6 +59,10 @@ type TableProps = {
   onFit?: (width: number) => void;
   /** The id of the element describing the board (its caption). */
   describedBy?: string;
+  /** Comfortable when omitted; the phone's cards have one density. */
+  density?: Density;
+  /** Escape on the board: forget the last toggled row. */
+  onClearAnchor?: () => void;
 };
 
 export interface GroupActions {
@@ -94,7 +99,7 @@ function columnsAt(full: RowLayout, el: HTMLElement | null): ColRange | null {
 
 function GridTable({
   rows, layout: full, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
-  groups, edits, onFit, describedBy,
+  groups, edits, onFit, describedBy, density, onClearAnchor,
 }: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState<ColRange | null>(() => columnsAt(full, null));
@@ -104,20 +109,28 @@ function GridTable({
       return sameRange(was, now) ? was : now;
     });
   }, [full]);
-  const layout = useMemo(() => windowLayout(full, cols), [full, cols]);
+  const layout = useMemo(() => ({ ...windowLayout(full, cols), density }), [full, cols, density]);
   const scroll = useScrollMemory();
   const list = rows ?? [];
   const places = useMemo(() => memberPlaces(list), [list]);
   const virtualizer = useVirtualizer({
     count: list.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight(layout),
     overscan: 20,
     initialOffset: scroll.initial,
   });
   const items = virtualizer.getVirtualItems();
   const navigate = useNavigate();
-  const keys = useRowKeys(parentRef, list.length, (i) => virtualizer.scrollToIndex?.(i), navigate);
+  const keys = useRowKeys(parentRef, list.length, (i) => virtualizer.scrollToIndex?.(i), {
+    open: navigate,
+    toggle: (i, range) => {
+      const it = list[i];
+      if (!isGroupItem(it)) onToggle(it.verstr, range);
+      else if (it.item === "group" && it.rows.length) groups?.onCheck(it.rows);
+    },
+    clearAnchor: () => onClearAnchor?.(),
+  });
   visibleRef.current = () =>
     items.map((it) => list[it.index]).flatMap((r) => (r && !isGroupItem(r) ? [r.verstr] : []));
 
@@ -145,7 +158,7 @@ function GridTable({
     scroll.save(el.scrollTop);
     const now = columnsAt(full, el);
     if (!sameRange(cols, now)) setCols(now);
-    const nearEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END_ROWS * ROW_HEIGHT;
+    const nearEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END_ROWS * rowHeight(layout);
     if (nearEnd && hasMore) onNearEnd();
   };
 
@@ -157,11 +170,11 @@ function GridTable({
         className="tbl-scroll"
         ref={parentRef}
         onScroll={onScroll}
-        onKeyDown={keys.onKeyDown}
         style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}
       >
         <table
-          role="grid" aria-label="experiments" aria-describedby={describedBy} className="lb-table"
+          role="grid" aria-label="experiments" aria-describedby={describedBy}
+          className={`lb-table${density === "compact" ? " compact" : ""}`}
           style={{ tableLayout: "fixed", width: layout.total }}
         >
           <colgroup>{layout.styles.map((st, i) => <col key={i} style={{ width: st.width }} />)}</colgroup>
@@ -177,7 +190,7 @@ function GridTable({
                 const r = list[it.index];
                 if (isGroupItem(r)) {
                   if (r.item === "more") {
-                    return <GroupMoreRow key={`more:${r.key}`} item={r} index={it.index} layout={layout} onMore={groups!.onMore} member={places.get(it.index)} />;
+                    return <GroupMoreRow key={`more:${r.key}`} item={r} index={it.index} isActive={it.index === keys.active} layout={layout} onMore={groups!.onMore} member={places.get(it.index)} />;
                   }
                   const next = list[it.index + 1];
                   return (

@@ -1,0 +1,14 @@
+/* The board's keyboard help (BoardShortcuts.tsx): a `?` button in the
+   toolbar and a popover of key, action pairs under it. */
+.board-shortcuts { position: relative; display: inline-block; }
+.board-shortcuts-btn { min-width: 26px; font-family: var(--mono); }
+.board-shortcuts-panel { min-width: 220px; }
+.board-shortcuts-panel:focus { outline: none; }
+.board-shortcuts-panel dl { margin: 0; }
+.board-shortcut { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 3px 0; }
+.board-shortcut dt { display: flex; gap: 4px; flex-shrink: 0; }
+.board-shortcut dd { margin: 0; color: var(--text-2); font-size: 12.5px; text-align: right; }
+.board-shortcut kbd {
+  min-width: 18px; padding: 1px 5px; border: 1px solid var(--line-2); border-bottom-width: 2px;
+  border-radius: 4px; background: var(--panel); color: var(--text); font: 11px var(--mono); text-align: center;
+}

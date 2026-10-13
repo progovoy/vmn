@@ -15,7 +15,7 @@ import type { BoardGroup, GroupHeaderItem, GroupMoreItem, MemberPlace } from "..
 import { MORE_TEXT, aggregateCell, barSegments, countParts, countsText, spokenCounts } from "./groupHeaderText";
 import { isGapId } from "./leaderboardColumns";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
-import { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
+import { layoutIds, rowHeight, type RowLayout } from "./LeaderboardRow";
 import "./leaderboardGroupRow.css";
 import "./groupMembers.css";
 
@@ -128,7 +128,7 @@ export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFo
   };
   return (
     <tr
-      className={`group-row${item.open ? "" : " shut"}`} style={{ height: ROW_HEIGHT }}
+      className={`group-row${item.open ? "" : " shut"}`} style={{ height: rowHeight(layout) }}
       data-row-index={index} data-href={t ? runHref(layout.runBase, t.verstr) : undefined}
       tabIndex={isActive ? 0 : -1}
     >
@@ -137,8 +137,9 @@ export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFo
   );
 }
 
-export function GroupMoreRow({ item, index, layout, onMore, member }: {
-  item: GroupMoreItem; index: number; layout: RowLayout; onMore: (key: string) => void; member?: MemberPlace;
+export function GroupMoreRow({ item, index, isActive, layout, onMore, member }: {
+  item: GroupMoreItem; index: number; isActive: boolean; layout: RowLayout; onMore: (key: string) => void;
+  member?: MemberPlace;
 }) {
   const more = (
     <button
@@ -150,7 +151,7 @@ export function GroupMoreRow({ item, index, layout, onMore, member }: {
     </button>
   );
   return (
-    <tr className={`group-more ${item.state}${member ? " group-member group-last" : ""}`} style={{ height: ROW_HEIGHT }} data-row-index={index} tabIndex={-1}>
+    <tr className={`group-more ${item.state}${member ? " group-member group-last" : ""}`} style={{ height: rowHeight(layout) }} data-row-index={index} tabIndex={isActive ? 0 : -1}>
       {layoutIds(layout).map((id, i) => (
         <td key={id} data-col-id={id} style={layout.styles[i]}>
           {id === "experiment" && (member ? <div className="group-member-body">{more}</div> : more)}

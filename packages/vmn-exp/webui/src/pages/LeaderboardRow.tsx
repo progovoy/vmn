@@ -1,6 +1,7 @@
 import { memo, useRef, type CSSProperties, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
+import type { Density } from "../util/density";
 import type { MemberPlace } from "../util/groupItems";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
@@ -14,6 +15,8 @@ import {
  *  memoized object so an unchanged row skips re-rendering entirely. */
 const HOVER_INTENT_MS = 120;
 export const ROW_HEIGHT = 48;
+/** A compact board's one-line rows (plan 23 W8). */
+export const COMPACT_ROW_HEIGHT = 32;
 
 export interface RowLayout {
   /** One style per entry of *ids*. */
@@ -41,7 +44,13 @@ export interface RowLayout {
   /** Highlight column bests only when there is something to beat. */
   showBest: boolean;
   runBase: string;
+  /** Comfortable when omitted. */
+  density?: Density;
 }
+
+/** The height of every row of a board laid out by *layout*. */
+export const rowHeight = (layout: RowLayout) =>
+  layout.density === "compact" ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
 
 function MetricCell({ id, v, col, style, showBest }: {
   id: string; v: number | string | null | undefined; col: ColMeta; style: CSSProperties; showBest: boolean;
@@ -104,28 +113,34 @@ function treeRoll(r: ExperimentRow): string {
   return [tree, sweepIncompleteLabel(r)].filter(Boolean).join(" · ");
 }
 
-function ExperimentCell({ r, href, style, onPrefetch, member }: {
+/** A compact row's name tooltip: the sub-line it has no room for. */
+const subLineTitle = (r: ExperimentRow) =>
+  [r.verstr, r.branch, r.status === "failed" ? r.error_summary : null].filter(Boolean).join(" · ");
+
+function ExperimentCell({ r, href, style, onPrefetch, member, compact }: {
   r: ExperimentRow; href: string; style: CSSProperties; onPrefetch: (verstr: string) => void; member: boolean;
+  compact: boolean;
 }) {
   const roll = treeRoll(r);
   const body = (
     <>
       <div className="nest">
         <Link
-          className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
+          className={`run-link${r.name ? " run-name" : " mono"}`} to={href}
+          title={compact ? subLineTitle(r) : r.verstr}
           onFocus={() => onPrefetch(r.verstr)}
         >
           {r.name || r.verstr}
         </Link>
         {roll && <span className="tree-roll">{roll}</span>}
       </div>
-      <div className="exp-branch">
+      {!compact && <div className="exp-branch">
         {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
         {r.branch}
         {r.status === "failed" && r.error_summary && (
           <span className="exp-error" title={r.error_summary}>{r.error_summary}</span>
         )}
-      </div>
+      </div>}
     </>
   );
   return (
@@ -208,7 +223,10 @@ function Row({
       }
       case "experiment":
         return (
-<ExperimentCell key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} member={!!member} />
+          <ExperimentCell
+            key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} member={!!member}
+            compact={layout.density === "compact"}
+          />
         );
       case "c:tags":
         return <td key={id} data-col-id={id} className="tags-cell" style={style}><TagChips tags={r.tags} /></td>;
@@ -242,7 +260,7 @@ function Row({
 
   return (
     <tr
-      style={{ height: ROW_HEIGHT }}
+      style={{ height: rowHeight(layout) }}
       className={`row${member ? ` group-member${member === "last" ? " group-last" : ""}` : ""}${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
       data-row-index={index}
       data-href={href}
