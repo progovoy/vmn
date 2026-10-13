@@ -70,6 +70,8 @@ describe("Run page", () => {
     renderRun();
     await screen.findByText(/tail-entry-b/);
     expect(screen.queryByText(/older-entry-a/)).toBeNull();
+    // Plan 20 B5: the log is collapsed to its last entries until opened.
+    fireEvent.click(screen.getByRole("button", { name: "Log" }));
     fireEvent.click(screen.getByText(/load older/));
     await screen.findByText(/older-entry-a/);
     expect(mockedRunLog).toHaveBeenCalledWith("w", "app", "0.0.1-dev.a", 0, 1);

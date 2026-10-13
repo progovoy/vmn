@@ -3,10 +3,13 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { runLog } from "../apiRun";
 import type { LogEntry } from "../types";
 import { fmtVal, relTime } from "../util";
+import Disclosure from "./Disclosure";
 import "./RunLog.css";
 
 /** Entries fetched per "load older" click. */
 export const LOG_PAGE = 500;
+/** Entries the collapsed log shows in its summary row (plan 20 D5). */
+export const LOG_PREVIEW = 10;
 /** Up to this many entries render as a plain list; beyond it, virtualized. */
 const VIRTUALIZE_ABOVE = 300;
 const ROW_H = 26;
@@ -114,9 +117,35 @@ function VirtualList({ entries }: { entries: LogEntry[] }) {
   );
 }
 
-/** The run log: the server's tail (newest entries) first, older pages on
- *  demand from `/log`. Never holds or renders more than the user asked for. */
-export default function RunLog({ ws, app, verstr, tail, total }: {
+function Timeline({ entries, start }: { entries: LogEntry[]; start: number }) {
+  return (
+    <ul className="timeline">
+      {entries.map((e, i) => (
+        <li key={start + i} style={dotStyle(e)}>
+          <Entry e={e} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The run log, collapsed by default to its last entries; open, it holds the
+ *  server's tail with older pages on demand (`FullLog`). */
+export default function RunLog(props: {
+  ws: string; app: string; verstr: string; tail: LogEntry[]; total: number;
+}) {
+  const recent = props.tail.slice(-LOG_PREVIEW);
+  return (
+    <Disclosure id="run-log" title="Log" lazy
+      preview={<Timeline entries={recent} start={props.total - recent.length} />}>
+      <FullLog {...props} />
+    </Disclosure>
+  );
+}
+
+/** The server's tail (newest entries) first, older pages on demand from
+ *  `/log`. Never holds or renders more than the user asked for. */
+function FullLog({ ws, app, verstr, tail, total }: {
   ws: string; app: string; verstr: string; tail: LogEntry[]; total: number;
 }) {
   // Older entries as one contiguous block at absolute offset `start`. The live
@@ -163,8 +192,7 @@ export default function RunLog({ ws, app, verstr, tail, total }: {
   };
 
   return (
-    <div className="card">
-      <h2 className="section-title">Log</h2>
+    <>
       {start > 0 && (
         <div className="toolbar" style={{ marginBottom: 8 }}>
           <button className="link" onClick={loadOlder} disabled={loading}>
@@ -173,17 +201,9 @@ export default function RunLog({ ws, app, verstr, tail, total }: {
           {error && <span className="error">{error}</span>}
         </div>
       )}
-      {entries.length > VIRTUALIZE_ABOVE ? (
-        <VirtualList entries={entries} />
-      ) : (
-        <ul className="timeline">
-          {entries.map((e, i) => (
-            <li key={start + i} style={dotStyle(e)}>
-              <Entry e={e} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+      {entries.length > VIRTUALIZE_ABOVE
+        ? <VirtualList entries={entries} />
+        : <Timeline entries={entries} start={start} />}
+    </>
   );
 }

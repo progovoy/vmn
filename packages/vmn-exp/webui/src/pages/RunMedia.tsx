@@ -4,8 +4,10 @@ import { hasMedia } from "../util/media";
 import MediaImages from "../components/MediaImages";
 import MediaTable from "../components/MediaTable";
 import RunHistograms from "../components/RunHistograms";
+import Disclosure from "../components/Disclosure";
 
-/** The run page's Media card: logged images, tables and histograms. */
+/** The run page's Media section (logged images, tables and histograms),
+ *  open by default since it shows only when there is media. */
 export default function RunMediaSection({ ws, app, detail }: {
   ws: string; app: string; detail: ExperimentDetail;
 }) {
@@ -13,8 +15,7 @@ export default function RunMediaSection({ ws, app, detail }: {
   const verstr = detail.metadata.verstr;
   const url = (path: string) => artifactUrl(ws, app, verstr, path);
   return (
-    <div className="card media-card" style={{ marginBottom: 16 }}>
-      <h2 className="section-title">Media</h2>
+    <Disclosure id="run-media" title="Media" defaultOpen className="media-card">
       {detail.media && <MediaImages media={detail.media} url={url} />}
       {detail.tables && Object.keys(detail.tables).length > 0 && (
         <MediaTable ws={ws} app={app} verstr={verstr} tables={detail.tables} />
@@ -23,6 +24,6 @@ export default function RunMediaSection({ ws, app, detail }: {
         <RunHistograms ws={ws} app={app} verstr={verstr} totals={detail.histograms_total}
           inline={detail.histograms} />
       )}
-    </div>
+    </Disclosure>
   );
 }

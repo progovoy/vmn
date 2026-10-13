@@ -33,7 +33,7 @@ function _isMLflow(importedFrom: string | null | undefined): boolean {
 // ---------------------------------------------------------------------------
 
 /** Python/platform summary + optional filterable package table. */
-export function EnvCard({ env }: { env: EnvData }) {
+export function EnvCard({ env, nested = false }: { env: EnvData; nested?: boolean }) {
   const [filter, setFilter] = useState("");
   const pyVersion = _pythonVersion(env.python);
   const platformStr = _platformStr(env.platform);
@@ -46,8 +46,8 @@ export function EnvCard({ env }: { env: EnvData }) {
     : [];
 
   return (
-    <div className="card">
-      <h2 className="section-title">Environment</h2>
+    <div className={nested ? "run-part" : "card"}>
+      {!nested && <h2 className="section-title">Environment</h2>}
       {env.truncated && (
         <div className="env-truncated" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
           Package list truncated (env.yml exceeded size cap)
@@ -96,12 +96,12 @@ export function EnvCard({ env }: { env: EnvData }) {
 // ---------------------------------------------------------------------------
 
 /** Logged dataset / artefact inputs. */
-export function InputsCard({ inputs }: { inputs: Record<string, InputEntry> }) {
+export function InputsCard({ inputs, nested = false }: { inputs: Record<string, InputEntry>; nested?: boolean }) {
   const entries = Object.entries(inputs);
   if (entries.length === 0) return null;
   return (
-    <div className="card">
-      <h2 className="section-title">Inputs</h2>
+    <div className={nested ? "run-part" : "card"}>
+      {nested ? <h3 className="section-title">Inputs</h3> : <h2 className="section-title">Inputs</h2>}
       <table className="inputs-table" style={{ fontSize: 12, width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -136,30 +136,5 @@ export function ImportedBadge({ importedFrom }: { importedFrom: string | null | 
   const label = _isMLflow(importedFrom) ? "Imported from MLflow" : `Imported from ${importedFrom}`;
   return (
     <span className="badge badge-imported" style={{ marginRight: 8 }}>{label}</span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// RunProvenanceSection — rendered on the Run page when data is present
-// ---------------------------------------------------------------------------
-
-export default function RunProvenanceSection({
-  env,
-  inputs,
-  importedFrom,
-}: {
-  env?: EnvData | null;
-  inputs?: Record<string, InputEntry> | null;
-  importedFrom?: string | null;
-}) {
-  const hasEnv = env != null;
-  const hasInputs = inputs != null && Object.keys(inputs).length > 0;
-  if (!hasEnv && !hasInputs && !importedFrom) return null;
-  return (
-    <div className="run-provenance">
-      {importedFrom && <ImportedBadge importedFrom={importedFrom} />}
-      {hasInputs && <InputsCard inputs={inputs!} />}
-      {hasEnv && <EnvCard env={env!} />}
-    </div>
   );
 }
