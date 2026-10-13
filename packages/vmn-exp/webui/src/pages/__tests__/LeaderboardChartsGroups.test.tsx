@@ -44,10 +44,11 @@ const LONE = row(4, { metrics: { loss: 0.5 } });
 const sweep = (): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: null, metrics: {} },
-  counts, aggregates: {}, rows: INNER, rows_total: 2,
+  counts, aggregates: {}, rows: INNER, rows_total: 2, rows_unfiltered: 2,
 });
 const noParent = (): RunGroup => ({
   key: NONE_GROUP, label: "(no parent run)", target: null, counts, aggregates: {}, rows: [OUTER, LONE], rows_total: 2,
+  rows_unfiltered: 2,
 });
 const facets = (parented: number) => ({
   branches: ["main"], metric_keys: ["loss"], param_keys: [], tag_keys: [], param_values: {}, parented, total: 6,

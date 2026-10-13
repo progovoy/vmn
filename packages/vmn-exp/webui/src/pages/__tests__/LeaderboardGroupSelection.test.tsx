@@ -46,11 +46,11 @@ const LONE = row(4);
 const sweep = (): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "succeeded", metrics: {} },
-  counts, aggregates: {}, rows: INNER, rows_total: 3,
+  counts, aggregates: {}, rows: INNER, rows_total: 3, rows_unfiltered: 3,
 });
 const noParent = (): RunGroup => ({
   key: NONE_GROUP, label: "(no parent run)", target: null, counts: { ...counts, total: 2 },
-  aggregates: {}, rows: [OUTER, LONE], rows_total: 2,
+  aggregates: {}, rows: [OUTER, LONE], rows_total: 2, rows_unfiltered: 2,
 });
 const job = (status: string) => ({ id: "j1", status, command: [], exit_code: status === "running" ? null : 0, log: "" });
 

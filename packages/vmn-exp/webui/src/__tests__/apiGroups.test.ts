@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchGroupRows, fetchGroups, GROUP_AGGREGATES, NONE_GROUP } from "../apiGroups";
+import { fetchGroupRows, fetchGroups, GROUP_AGGREGATES, groupKeyText, NONE_GROUP } from "../apiGroups";
 import type { GroupedPage, RunGroup } from "../apiGroups";
 
 const urlOf = (call: unknown[]) => new URL(call[0] as string, "http://x");
@@ -12,7 +12,7 @@ const GROUP: RunGroup = {
             tree_status: "running", metrics: { loss: 0.91 } },
   counts: { total: 16, running: 2, waiting: 0, done: 13, failed: 1, stuck: 0 },
   aggregates: { loss: { mean: 0.5, best: 0.2, median: 0.45, min: 0.2, max: 0.9, n: 16 } },
-  rows: [], rows_total: 16,
+  rows: [], rows_total: 16, rows_unfiltered: 20,
 };
 
 describe("apiGroups", () => {
@@ -24,7 +24,9 @@ describe("apiGroups", () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it("asks the list endpoint for groups with the board's filter", async () => {
-    const page: GroupedPage = { groups: [GROUP], total_groups: 1, total_rows: 16 };
+    const page: GroupedPage = {
+      groups: [GROUP], total_groups: 1, total_rows: 16, aggregate: "best", running: 2,
+    };
     fetchMock.mockImplementation(() => respond(page));
     const got = await fetchGroups("w", "root/svc", {
       group: "parent", agg: "best", sort: "loss", order: "asc", status: "running",
@@ -55,10 +57,28 @@ describe("apiGroups", () => {
     });
     expect(got.rows_total).toBe(16);
     const params = urlOf(fetchMock.mock.calls[0]).searchParams;
-    expect(params.get("group_key")).toBe("(none)");
+    expect(params.get("group_key")).toBe(NONE_GROUP);
     expect(params.get("offset")).toBe("10");
     expect(params.get("limit")).toBe("40");
     expect(params.get("agg")).toBe("median");
+  });
+
+  it("reads the page's resolved aggregate, running count and each group's unfiltered size (plan 22 F1, F3, F4)", async () => {
+    const page: GroupedPage = {
+      groups: [GROUP], total_groups: 1, total_rows: 16, aggregate: "median", running: 2,
+    };
+    fetchMock.mockImplementation(() => respond(page));
+    const got = await fetchGroups("w", "app", { group: "parent" });
+    expect([got.aggregate, got.running]).toEqual(["median", 2]);
+    expect([got.groups[0].rows_total, got.groups[0].rows_unfiltered]).toEqual([16, 20]);
+  });
+
+  it("keys the no-value group with a sentinel no value or label spells (plan 22 F6)", () => {
+    expect(NONE_GROUP).toBe("\u2205");
+    expect(["(none)", "(no parent run)", ""]).not.toContain(NONE_GROUP);
+    expect(groupKeyText("main")).toBe("main");
+    expect(groupKeyText("(none)")).toBe("(none)");
+    expect(groupKeyText("\u2205\u2205x")).toBe("\u2205x");
   });
 
   it("names every aggregate the server takes, mean first (the default)", () => {
