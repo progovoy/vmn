@@ -45,10 +45,16 @@ describe("Metrics card summaries wrap cleanly (E3)", () => {
     const line = screen.getByTestId("metric-summary-grad_norm_l000");
     const pairs = [...line.querySelectorAll(".metric-pair")].map((p) => p.textContent);
     expect(pairs).toEqual(["last 0.9", "min 0.2", "max 1", "first 1", "mean 0.7"]);
-    expect(decls(css, ".metric-pair")["white-space"]).toBe("nowrap");
+    // A separator wraps with the pair after it, never alone at a line start.
+    const chunks = [...line.querySelectorAll(".metric-chunk")].map((c) => c.textContent);
+    expect(chunks).toEqual(["last 0.9", " · min 0.2", " · max 1", " · first 1", " · mean 0.7"]);
+    expect(decls(css, ".metric-chunk")["white-space"]).toBe("nowrap");
     expect(decls(css, ".metric-summary")["flex-wrap"]).toBe("wrap");
-    // The values drop under a long name instead of squeezing it (420px card).
+    // The value stays beside the name; the summary takes its own row under
+    // both, and only a name too long for the card (420px) pushes the value down.
     expect(decls(css, ".metric-line")["flex-wrap"]).toBe("wrap");
+    expect(decls(css, ".metric-values").display).toBe("contents");
+    expect(decls(css, ".metric-summary")["flex-basis"]).toBe("100%");
   });
 
   it("moves the run-page metric rules out of the global stylesheet", () => {

@@ -107,10 +107,10 @@ function SummaryLine({ metric, pairs }: { metric: string; pairs: string[] }) {
   return (
     <span data-testid={`metric-summary-${metric}`} className="metric-summary">
       {pairs.map((p, i) => (
-        <Fragment key={p}>
+        <span key={p} className="metric-chunk">
           {i > 0 && <span className="metric-sep"> · </span>}
           <span className="metric-pair">{p}</span>
-        </Fragment>
+        </span>
       ))}
     </span>
   );
