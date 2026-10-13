@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""An app's filter vocabulary (branches, metric and param keys), once per
-snapshot and moved on from the app's previous one.
+"""An app's filter and Group by vocabulary (branches, metric, param and tag
+keys, distinct values per param, runs with a parent), once per snapshot and
+moved on from the app's previous one.
 
 :func:`~vmn_exp.ui.readers.experiments.facets` scans every row. Here each
 snapshot's answer is kept as per-key row counts, so the next generation's
@@ -9,6 +10,7 @@ is the last one's counts minus the rows that left plus the rows that joined
 """
 import threading
 
+from vmn_exp.ui.facet_values import DISTINCT_CAP, ParamValues
 from vmn_exp.ui.leaderboard_delta import changed_slots, delta_limit, left_rows
 from vmn_exp.ui.memo import LRU
 
@@ -26,13 +28,21 @@ def _tally(counts, keys, by):
             counts.pop(key, None)
 
 
-class FacetCounts:
-    """How many rows carry each branch, metric key and param key."""
+__all__ = ["DISTINCT_CAP", "FacetCounts", "Facets", "visible"]
 
-    def __init__(self, branches=None, metric_keys=None, param_keys=None, total=0):
+
+class FacetCounts:
+    """How many rows carry each branch, metric, param and tag key, each
+    param's values, and how many rows have a parent."""
+
+    def __init__(self, branches=None, metric_keys=None, param_keys=None, total=0,
+                 tag_keys=None, param_values=None, parented=0):
         self.branches = branches or {}
         self.metric_keys = metric_keys or {}
         self.param_keys = param_keys or {}
+        self.tag_keys = tag_keys or {}
+        self.param_values = param_values or ParamValues()
+        self.parented = parented
         self.total = total
 
     @classmethod
@@ -44,13 +54,19 @@ class FacetCounts:
         out = FacetCounts(
             dict(self.branches), dict(self.metric_keys), dict(self.param_keys),
             self.total + len(joined) - len(left),
+            dict(self.tag_keys), self.param_values.copy(), self.parented,
         )
         for rows, by in ((left, -1), (joined, 1)):
             for row in rows:
                 if row.get("branch"):
                     _tally(out.branches, [str(row["branch"])], by)
                 _tally(out.metric_keys, row.get("metrics") or {}, by)
-                _tally(out.param_keys, row.get("params") or {}, by)
+                params = row.get("params") or {}
+                _tally(out.param_keys, params, by)
+                out.param_values.move(params, by)
+                _tally(out.tag_keys, row.get("tags") or {}, by)
+                if row.get("parent"):
+                    out.parented += by
         return out
 
     def payload(self):
@@ -59,6 +75,9 @@ class FacetCounts:
             "branches": sorted(self.branches),
             "metric_keys": sorted(self.metric_keys),
             "param_keys": sorted(self.param_keys),
+            "tag_keys": sorted(self.tag_keys),
+            "param_values": self.param_values.payload(self.param_keys),
+            "parented": self.parented,
             "total": self.total,
         }
 

@@ -14,6 +14,7 @@ from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.tree import annotate_rows
+from vmn_exp.ui.facet_values import distinct_count, value_key
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
 from vmn_exp.ui.readers.versions import version_counts
@@ -145,17 +146,27 @@ def leaderboard(
 
 
 def facets(rows):
-    """The filter vocabulary of *rows*: distinct branches, metric and param keys."""
-    branches, metric_keys, param_keys = set(), set(), set()
+    """The filter and Group by vocabulary of *rows*: distinct branches,
+    metric, param and tag keys, distinct values per param (capped), and how
+    many rows have a parent."""
+    branches, metric_keys, tag_keys = set(), set(), set()
+    param_values = {}
+    parented = 0
     for row in rows:
         if row.get("branch"):
             branches.add(str(row["branch"]))
         metric_keys.update(row.get("metrics") or {})
-        param_keys.update(row.get("params") or {})
+        for key, value in (row.get("params") or {}).items():
+            param_values.setdefault(key, set()).add(value_key(value))
+        tag_keys.update(row.get("tags") or {})
+        parented += bool(row.get("parent"))
     return {
         "branches": sorted(branches),
         "metric_keys": sorted(metric_keys),
-        "param_keys": sorted(param_keys),
+        "param_keys": sorted(param_values),
+        "tag_keys": sorted(tag_keys),
+        "param_values": {k: distinct_count(v) for k, v in sorted(param_values.items())},
+        "parented": parented,
         "total": len(rows),
     }
 
