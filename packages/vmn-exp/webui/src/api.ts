@@ -22,7 +22,7 @@ export interface PageOpts {
 }
 
 /** The leaderboard filter, as the list-shaped endpoints take it. */
-function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "last">) {
+export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "last">) {
   if (opts.sort) p.set("sort", opts.sort);
   if (opts.status) p.set("status", opts.status);
   if (opts.query) p.set("q", opts.query);
