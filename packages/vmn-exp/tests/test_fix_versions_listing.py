@@ -3,6 +3,7 @@ import subprocess
 import time
 
 import git
+import pytest
 import yaml
 
 from vmn_exp.ui.readers import versions as ver_reader
@@ -38,6 +39,7 @@ def _repo_with_tags(tmp_path, count):
     return repo, head
 
 
+@pytest.mark.serial
 def test_list_versions_is_linear_in_tag_count(tmp_path):
     repo, _ = _repo_with_tags(tmp_path, 1000)
 

@@ -109,6 +109,7 @@ def test_require_metric_rejects_a_metric_no_run_carries():
         require_metric(rows, "nope")
 
 
+@pytest.mark.serial
 def test_five_thousand_runs_by_thirty_params_is_fast():
     rnd = random.Random(3)
     rows = []

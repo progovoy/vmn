@@ -118,11 +118,30 @@ fi
 
 echo "Will run the ${suite} suite:"
 export PYTHONPATH=${SRC_PATH}
-cmd='${PYTHON} -m coverage run -m pytest  -n 29 --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
+# Timing benchmarks (marker "serial") run in a second, one-process pass:
+# under 29 busy workers they measure the contention, not the code.
+cmd='${PYTHON} -m coverage run -m pytest  -n 29 -m "not serial" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
+serial_cmd='${PYTHON} -m coverage run -a -m pytest -m serial --html=report_${html_report_suffix}_serial.html --self-contained-html -vv ${COVERAGE:+${COVERAGE} --cov-append} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee -a ${OUT_PATH}/tests_output.log'
+
+# pytest exits 5 when a filter leaves a pass nothing to run; only both empty fails.
+NO_TESTS=5
 
 echo "${cmd}"
 eval "${cmd}"
-
 RET_CODE=$?
+
+echo "${serial_cmd}"
+eval "${serial_cmd}"
+SERIAL_RET_CODE=$?
+
+if [ ${RET_CODE} -eq ${NO_TESTS} ] && [ ${SERIAL_RET_CODE} -ne ${NO_TESTS} ]; then
+	RET_CODE=0
+fi
+if [ ${SERIAL_RET_CODE} -eq ${NO_TESTS} ]; then
+	SERIAL_RET_CODE=0
+fi
+if [ ${RET_CODE} -eq 0 ]; then
+	RET_CODE=${SERIAL_RET_CODE}
+fi
 
 exit ${RET_CODE}

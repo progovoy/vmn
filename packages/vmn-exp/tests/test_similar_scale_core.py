@@ -2,6 +2,8 @@
 import random
 import time
 
+import pytest
+
 from similar_fixtures import FakeSnapshot, changed, dataset, run
 from vmn_exp.core.similar import similar_runs
 
@@ -38,6 +40,7 @@ def _synthetic(n, seed=7):
     return snapshot, rows
 
 
+@pytest.mark.serial
 def test_a_query_over_twenty_thousand_runs_takes_well_under_seconds():
     snapshot, rows = _synthetic(20000)
     target = {"row": rows[123], "features": snapshot.features_of(rows[123]["verstr"]),

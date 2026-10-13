@@ -364,6 +364,7 @@ def test_exit_1_on_failure(tmp_path, capsys):
 # 8. Bench: 1k runs × 1k steps (must complete in < 60 s)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.serial
 def test_import_1k_runs_1k_steps(tmp_path):
     """Import 1000 runs with 1000 metric steps each; must complete in < 60 s."""
     RUNS = 1000

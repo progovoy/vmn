@@ -15,6 +15,7 @@ import pytest  # noqa: E402
 
 from vmn_fixtures import (  # noqa: E402,F401  (fixtures and hooks pytest collects)
     app_layout,
+    pytest_configure,
     pytest_generate_tests,
     session_uuid,
     vmn_env_guard,

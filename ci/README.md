@@ -65,7 +65,7 @@ graph LR
 |-------|-------------|---------|
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
 | `tests_core` | Runs the core vmn suite, `pytest tests -n 29` (parallel, 29 workers; `vmn_exp` is unimportable in it), produces JUnit XML + HTML report | Yes, on `packages/vmn`, `tests`, `pyproject.toml` |
-| `tests_exp` | Runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29`, produces JUnit XML + HTML report | Yes, on `packages`, `tests`, `pyproject.toml` |
+| `tests_exp` | Runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29 -m "not serial"`, then the `serial`-marked timing benchmarks alone (`tests_exp_serial` reports), produces JUnit XML + HTML reports | Yes, on `packages`, `tests`, `pyproject.toml` |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
 | `stamp` | **Optional.** `make _<mode>` (`vmn stamp`) when `--param stamp=<mode>` is set | No |
 | `build` | **Optional.** `make _build` (wheel) when `--param build=1` is set | No |

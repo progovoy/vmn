@@ -77,7 +77,7 @@ def lint(ctx):
     ctx.run(["ruff", "check", "packages", "--output-format", "concise"])
 
 
-def _pytest(ctx, suite_dir, report):
+def _pytest(ctx, suite_dir, report, workers=("-n", "29"), marker=None):
     # ctx.run defaults to check=True: it writes the output card, then fails the
     # stage on any nonzero exit — test failures (exit 1) and pytest crashes
     # (exit >1) both go red. pytest writes the JUnit/HTML report as it runs, so a
@@ -86,8 +86,8 @@ def _pytest(ctx, suite_dir, report):
         [
             "pytest",
             suite_dir,
-            "-n",
-            "29",
+            *workers,
+            *(["-m", marker] if marker else []),
             f"--junitxml=reports/{report}.xml",
             f"--html=reports/{report}.html",
             "--self-contained-html",
@@ -120,11 +120,18 @@ def tests_core(ctx):
     requires=REQUIRES,
     deterministic=True,
     inputs=["packages", "tests", "pyproject.toml"],
-    outputs=["reports/tests_exp.xml", "reports/tests_exp.html"],
+    outputs=[
+        "reports/tests_exp.xml",
+        "reports/tests_exp.html",
+        "reports/tests_exp_serial.xml",
+        "reports/tests_exp_serial.html",
+    ],
     after=["tests_core"],  # one 29-worker suite at a time
 )
 def tests_exp(ctx):
-    _pytest(ctx, "packages/vmn-exp/tests", "tests_exp")
+    _pytest(ctx, "packages/vmn-exp/tests", "tests_exp", marker="not serial")
+    # Timing benchmarks, alone: under 29 busy workers they measure contention.
+    _pytest(ctx, "packages/vmn-exp/tests", "tests_exp_serial", workers=(), marker="serial")
 
 
 @stage(requires=REQUIRES)

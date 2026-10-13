@@ -131,7 +131,9 @@ Skip a test:
 ./tests/run_pytest.sh --skip_test <test_name>
 ```
 
-Tests run in parallel (29 workers by default) using pytest-xdist.
+Tests run in parallel (29 workers by default) using pytest-xdist. Timing benchmarks carry
+`@pytest.mark.serial`: `run_pytest.sh` (and the CI `tests_exp` stage) run them alone in a
+second, one-process pass, since under 29 busy workers they measure contention.
 
 ### Key Concepts
 

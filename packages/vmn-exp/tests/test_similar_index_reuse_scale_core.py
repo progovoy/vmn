@@ -60,6 +60,7 @@ def _warm(lineages, snapshot):
     return lineages.index_for("app", snapshot, deadline=time.monotonic() + 60)
 
 
+@pytest.mark.serial
 def test_a_heartbeat_generation_reuses_the_index_without_a_rebuild(corpus, built):
     rows, features = corpus
     lineages = IndexLineages()
@@ -72,6 +73,7 @@ def test_a_heartbeat_generation_reuses_the_index_without_a_rebuild(corpus, built
     assert elapsed < 0.5, elapsed
 
 
+@pytest.mark.serial
 def test_a_few_changed_runs_reindex_in_a_fraction_of_a_build(corpus, built):
     rows, features = corpus
     lineages = IndexLineages()

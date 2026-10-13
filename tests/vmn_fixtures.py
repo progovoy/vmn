@@ -573,6 +573,12 @@ def session_uuid():
     return uuid.uuid4()
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "serial: timing benchmark; run_pytest.sh runs it alone, after the parallel pass"
+    )
+
+
 def pytest_generate_tests(metafunc):
     if "app_layout" in metafunc.fixturenames:
         metafunc.parametrize("app_layout", ["git"], indirect=True)
