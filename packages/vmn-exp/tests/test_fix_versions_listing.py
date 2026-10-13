@@ -94,3 +94,14 @@ def test_list_versions_matches_stamped_history(app_layout):
     assert rows[-1]["previous_version"] == "0.0.1"
     assert rows[-1]["release_mode"] == "minor"
     assert all(isinstance(r["timestamp"], int) for r in rows)
+
+
+def test_list_versions_parses_tag_messages_with_the_c_loader(tmp_path, monkeypatch):
+    repo, _ = _repo_with_tags(tmp_path, 3)
+
+    def pure_python(*args, **kwargs):
+        raise AssertionError("tag messages must parse on libyaml, not yaml.safe_load")
+
+    monkeypatch.setattr(yaml, "safe_load", pure_python)
+
+    assert len(ver_reader.list_versions(repo, "app")) == 3

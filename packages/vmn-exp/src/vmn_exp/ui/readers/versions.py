@@ -8,6 +8,7 @@ import git
 import yaml
 
 from version_stamp.api import app_name_to_tag_name, deserialize_tag_name
+from vmn_exp._base import yaml_safe_load
 
 _FIELD_SEP = "\x00"
 _RECORD_SEP = "\x1e"
@@ -21,7 +22,7 @@ _TAG_FORMAT = (
 def _message_yaml(message):
     """Parse an annotated tag's YAML message; None for foreign/invalid ones."""
     try:
-        data = yaml.safe_load(message)
+        data = yaml_safe_load(message)
     except yaml.YAMLError:
         return None
     return data if isinstance(data, dict) else None
