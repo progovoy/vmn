@@ -11,13 +11,14 @@ export const isInnerRunId = (id: string) => id === INNER_COLUMN;
  *  older saved views and links. */
 const LEGACY_COUNTS = ["c:total", "c:waiting", "c:running", "c:done", "c:failed"];
 
-/** Whether `show=` turns the inner column on: its own key or an old count's. */
-export const innerShown = (shown: ReadonlySet<string>) =>
-  shown.has(INNER_COLUMN) || LEGACY_COUNTS.some((k) => shown.has(k));
-
-/** Whether `hide=` turns it off: its own key, or an old view that hid every count. */
-export const innerHidden = (hidden: ReadonlySet<string>) =>
-  hidden.has(INNER_COLUMN) || LEGACY_COUNTS.every((k) => hidden.has(k));
+/** Whether the inner column shows: its own `show=`/`hide=` entry wins, then
+ *  an old count's (`show=` of any, `hide=` of every one), then outer rows. */
+export function innerVisible(shown: ReadonlySet<string>, hidden: ReadonlySet<string>, hasOuter: boolean) {
+  if (shown.has(INNER_COLUMN)) return true;
+  if (hidden.has(INNER_COLUMN)) return false;
+  if (LEGACY_COUNTS.some((k) => shown.has(k))) return true;
+  return hasOuter && !LEGACY_COUNTS.every((k) => hidden.has(k));
+}
 
 export const INNER_RUNS_HELP = "Counts of this run's inner runs (sweep trials, fleet pods)";
 

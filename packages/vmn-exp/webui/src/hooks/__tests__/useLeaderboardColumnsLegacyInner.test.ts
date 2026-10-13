@@ -37,4 +37,13 @@ describe("legacy inner-count keys", () => {
     expect(fleet(SINGLE, [], none)).not.toContain("c:inner");
     expect(fleet(SINGLE, [], ["c:total"])).toContain("c:inner");
   });
+
+  it("let an explicit hide of the inner column beat an old show= of a count", () => {
+    expect(fleet(SINGLE, ["c:inner"], ["c:total"])).not.toContain("c:inner");
+    expect(fleet(OUTER, ["c:inner"], ["c:running"])).not.toContain("c:inner");
+  });
+
+  it("let an explicit show of the inner column beat an old hide= of every count", () => {
+    expect(fleet(OUTER, COUNTS, ["c:inner"])).toContain("c:inner");
+  });
 });
