@@ -100,9 +100,45 @@ describe("a grouped board below 640px", () => {
   it("shows the status count in colour, and in words for a screen reader", async () => {
     await shown();
     const h = head("sweep");
-    expect(h.querySelector(".group-counts")?.textContent).toBe("3 · 1 running · 1 failed");
+    expect(h.querySelector(".group-counts")?.textContent).toBe("3 runs · 1 running · 1 failed");
     expect(h.querySelector(".group-counts .tone-failed")?.textContent).toBe("1 failed");
     expect(within(h).getByText("Group sweep: 3 runs, 1 running, 1 failed")).toHaveClass("sr-only");
+  });
+
+  it("says `2 of 5` when the filters leave part of the group (plan 22 F1)", async () => {
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ counts: counts({ total: 2 }), rows_unfiltered: 5 }), noParent()]));
+    await shown();
+    const h = head("sweep");
+    expect(h.querySelector(".group-counts")?.textContent).toBe("2 of 5 runs · 1 running · 1 failed");
+    expect(within(h).getByText("Group sweep: 2 of 5 runs, 1 running, 1 failed")).toHaveClass("sr-only");
+  });
+
+  it("selects a group's loaded cards from its section label's checkbox (plan 22 F8)", async () => {
+    await shown();
+    const box = within(head("sweep")).getByRole("checkbox", { name: "Select group sweep" }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    await waitFor(() => expect(urlParams().getAll("sel").sort()).toEqual([v(2), v(3)]));
+    expect(box.checked).toBe(true);
+    // Not the header's target run.
+    expect(urlParams().getAll("sel")).not.toContain(v(1));
+    fireEvent.click(box);
+    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+  });
+
+  it("shows the section checkbox indeterminate when only some of its cards are selected", async () => {
+    renderBoard(`/ws/test/app/my-app?sel=${v(2)}`);
+    await waitFor(() => expect(sections()).toHaveLength(2));
+    const box = within(head("sweep")).getByRole("checkbox", { name: "Select group sweep" }) as HTMLInputElement;
+    await waitFor(() => expect(box.indeterminate).toBe(true));
+    expect(box.checked).toBe(false);
+  });
+
+  it("has no section checkbox for a group with no loaded cards", async () => {
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ rows: [], rows_total: 2 }), noParent()]));
+    await shown();
+    expect(within(head("sweep")).queryByRole("checkbox")).toBeNull();
+    expect(within(head("(no parent run)")).getByRole("checkbox", { name: "Select group (no parent run)" })).toBeInTheDocument();
   });
 
   it("shows the group's aggregate on the primary metric and names it", async () => {
@@ -176,14 +212,19 @@ describe("the 390px section label (read from its stylesheet)", () => {
     expect(d.background).toMatch(/var\(--/);
   });
 
-  it("truncates a long name and count instead of widening the page", () => {
-    for (const sel of [".lb-mgroup-label", ".lb-mgroup-counts"]) {
-      const d = decls(groupCss, sel);
-      expect(d.overflow, sel).toBe("hidden");
-      expect(d["text-overflow"], sel).toBe("ellipsis");
-      expect(d["white-space"], sel).toBe("nowrap");
-    }
+  it("truncates a long name instead of widening the page", () => {
+    const d = decls(groupCss, ".lb-mgroup-label");
+    expect(d.overflow).toBe("hidden");
+    expect(d["text-overflow"]).toBe("ellipsis");
+    expect(d["white-space"]).toBe("nowrap");
     expect(decls(groupCss, ".lb-mgroup-name")["min-width"]).toBe("0");
     expect(decls(groupCss, ".lb-mgroup")["min-width"]).toBe("0");
+  });
+
+  it("wraps the count line instead of cutting it (plan 22 F2), still never wider than the screen", () => {
+    const d = decls(groupCss, ".lb-mgroup-counts");
+    expect(d["white-space"] ?? "normal").not.toBe("nowrap");
+    expect(d["text-overflow"]).toBeUndefined();
+    expect(d["overflow-wrap"]).toBe("anywhere");
   });
 });

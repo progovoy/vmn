@@ -45,7 +45,7 @@ vmn-exp rerun <app_name> -v <version> --print --json
 
 The `vmn-exp ui` board lists every run as a row. Grouped by parent run (the
 default once a run has a parent; `?group=parent`), each outer run is a group
-header over its inner runs, with their counts (`16 · 2 running · 1 failed`).
+header over its inner runs, with their counts (`16 runs · 2 running · 1 failed`).
 They are derived from the inner runs' states, never written directly:
 
 - **total**: the number of inner runs (register every pod up front so it is right from the start)

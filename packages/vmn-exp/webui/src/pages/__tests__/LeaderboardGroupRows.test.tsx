@@ -108,9 +108,19 @@ describe("the grouped board", () => {
     expect(within(h).getByRole("link", { name: "sweep" })).toHaveAttribute("href", `/ws/test/app/my-app/run/${v(1)}`);
     expect(h.querySelector('td[data-col-id="idx"]')?.textContent).toBe("@1");
     expect(h.querySelector(".status-pill")?.className).toContain("failed");
-    expect(h.querySelector(".group-counts")?.textContent).toBe("3 · 1 running · 1 failed");
+    expect(h.querySelector(".group-counts")?.textContent).toBe("3 runs · 1 running · 1 failed");
     expect(h.querySelector(".group-counts .tone-failed")?.textContent).toBe("1 failed");
     expect(within(h).getByText("Group sweep: 3 runs, 1 running, 1 failed")).toHaveClass("sr-only");
+  });
+
+  it("says `2 of 5` when the filters leave part of the group (plan 22 F1)", async () => {
+    m.experimentGroups.mockResolvedValue(grouped([sweepGroup({ counts: counts({ total: 2 }), rows_unfiltered: 5 }), noParent()]));
+    renderBoard("/ws/test/app/my-app?status=failed");
+    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    const h = header("sweep");
+    expect(h.querySelector(".group-counts")?.textContent).toBe("2 of 5 runs · 1 running · 1 failed");
+    expect(within(h).getByText("Group sweep: 2 of 5 runs, 1 running, 1 failed")).toHaveClass("sr-only");
+    expect(header("(no parent run)").querySelector(".group-counts")?.textContent).toBe("2 runs · all succeeded");
   });
 
   it("shows the group's aggregate per metric, the target's own value, and names the aggregate", async () => {

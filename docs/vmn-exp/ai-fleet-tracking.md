@@ -4,8 +4,9 @@
 (the default once any run has a parent; `?group=parent` in the board's URL, or
 the **Group by** menu), each **outer run** (a run that has inner runs) heads a
 group of its inner runs. The group header carries the fleet's counts, e.g.
-`16 · 2 running · 1 waiting · 1 failed`: the total first, then each state that
-has runs, with **done** the rest. The outer run's page shows the same counts in
+`16 runs · 2 running · 1 waiting · 1 failed`: the total first, then each state
+that has runs, with **done** the rest (`16 runs · all succeeded` when every run
+is done). The outer run's page shows the same counts in
 its Fleet card. This page tells an agent which call moves each count.
 `vmn-exp skill` prints a short version of it.
 

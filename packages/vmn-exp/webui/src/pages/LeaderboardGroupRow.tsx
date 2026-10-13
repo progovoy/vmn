@@ -4,12 +4,12 @@
  *  (with a link target's own value), plus the `+N more` row under it. */
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import type { GroupAggregate, GroupCounts, GroupTarget } from "../apiGroups";
+import type { GroupAggregate, GroupTarget } from "../apiGroups";
 import StatusPill from "../components/StatusPill";
 import { Icon } from "../components/shell/icons";
 import type { ExperimentRow, RunState } from "../types";
 import { fmtVal, runHref } from "../util";
-import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
+import type { BoardGroup, GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
 import { MORE_TEXT, aggregateCell, countParts, countsText, spokenCounts } from "./groupHeaderText";
 import { isGapId } from "./leaderboardColumns";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
@@ -19,14 +19,21 @@ import "./leaderboardGroupRow.css";
 /** What names the group: its target run, else its label. */
 export const groupName = (label: string, t: GroupTarget | null) => (t ? t.name || t.verstr : label);
 
-/** `16 · 2 running · 1 failed`, each state in its colour (hidden from a
- *  screen reader, which gets the counts in words). */
-export function GroupCountParts({ counts, className = "", title }: {
-  counts: GroupCounts; className?: string; title?: string;
+/** A group's counts as text: `5 of 16 runs · 1 failed`. */
+export const groupCountsText = (g: BoardGroup) => countsText(g.counts, g.rows_unfiltered);
+
+/** What a screen reader hears for a group's header. */
+export const groupSpoken = (g: BoardGroup) =>
+  `Group ${groupName(g.label, g.target)}: ${spokenCounts(g.counts, g.rows_unfiltered)}`;
+
+/** `16 runs · 2 running · 1 failed`, each state in its colour (hidden from a
+ *  screen reader, which gets them from groupSpoken). */
+export function GroupCountParts({ group, className = "", title }: {
+  group: BoardGroup; className?: string; title?: string;
 }) {
   return (
     <span className={`group-counts ${className}`.trim()} aria-hidden="true" title={title}>
-      {countParts(counts).map((p, i) => (
+      {countParts(group.counts, group.rows_unfiltered).map((p, i) => (
         <span key={p.tone}>{i > 0 && " · "}<span className={`tone-${p.tone}`}>{p.text}</span></span>
       ))}
     </span>
@@ -60,10 +67,10 @@ function Label({ item, layout, first, onFold }: {
           <span className={`group-label${code ? " mono" : ""}`} title={group.label}>{group.label}</span>
         )}
       </div>
-      <div className={`group-sub${item.foldable ? " under-fold" : ""}`} title={countsText(group.counts)}>
-        <GroupCountParts counts={group.counts} />
+      <div className={`group-sub${item.foldable ? " under-fold" : ""}`} title={groupCountsText(group)}>
+        <GroupCountParts group={group} />
         {code && <span className="group-code"> · {first.base_version} · {first.branch}</span>}
-        <span className="sr-only">{`Group ${name}: ${spokenCounts(group.counts)}`}</span>
+        <span className="sr-only">{groupSpoken(group)}</span>
       </div>
     </div>
   );
