@@ -164,12 +164,10 @@ class BrowserChecks:
         return {"visible": visible, "totals": totals}
 
     def idle_memory_growth(self, duration_sec, interval_sec=1.0):
-        """JS heap while the leaderboard sits with Live polling on."""
+        """JS heap while the board polls its live runs (LiveStatus shows Pause)."""
         self._open_board()
         self.page.wait_for_selector(js.ROW_SELECTOR)
-        live = self.page.locator("button.live-toggle")
-        if live.get_attribute("aria-pressed") != "true":
-            live.click()
+        self.page.locator(".live-status button", has_text="Pause").wait_for(state="visible")
         heap = []
         end = time.monotonic() + duration_sec
         while True:
