@@ -18,7 +18,7 @@ const PAGE_MAX = 1000;
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-export const groupsKey = (
+const groupsKey = (
   ws: string, app: string, filter: RowsFilter, group: string | null, agg: GroupAggregate | undefined,
 ) => [...rowsPrefix(ws, app), "groups", group, agg ?? null, filter] as const;
 
