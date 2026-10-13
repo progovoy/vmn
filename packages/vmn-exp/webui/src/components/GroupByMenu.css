@@ -36,10 +36,18 @@
 .group-by-section[aria-label="Aggregate"] .group-by-title { width: 100%; }
 .group-by-section[aria-label="Aggregate"] .group-by-item { padding: 4px 8px; }
 .group-by-section[aria-label="Aggregate"] .group-by-item::before { display: none; }
+/* A tint of the accent under the theme's own text: #fff on the dark accent
+   reads at 3.3:1 (F9). */
 .group-by-section[aria-label="Aggregate"] .group-by-item[aria-checked="true"] {
-  background: var(--accent); color: #fff;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
-@media (max-width: 640px) {
-  .group-by { position: static; }
-  .group-by-menu { left: 8px; right: 8px; min-width: 0; }
+/* On a phone the menu spans the viewport (like Views and Columns), fixed at
+   its static position: right under the trigger, wherever the page scrolled. */
+@media (max-width: 639px) {
+  .group-by-menu {
+    position: fixed; top: auto; left: 12px; right: 12px; min-width: 0;
+    margin-top: 6px; max-height: 60vh;
+  }
 }
