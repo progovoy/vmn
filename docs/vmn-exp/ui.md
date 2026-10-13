@@ -615,7 +615,9 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
   its rows passes, and its counts and aggregates cover the passing rows.
   `rows_total` counts its passing rows, `rows_unfiltered` its rows with the
   same `archived` setting but without `q`/`status` (equal when no filter is
-  set; the board's `5 of 16`). A link group keeps its `target` even when the
+  set; the board's `5 of 16`). Only `q` and `status` are dropped: the web
+  client sends its branch and search filters inside `q`, so they are dropped
+  too. A link group keeps its `target` even when the
   target fails the filter. A `rerun_of` group's aggregates include the
   original's own value.
 - `running` counts the running rows of every group after the filters, not
@@ -625,7 +627,13 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
 - `sort`/`order` order rows within a group as on the flat list. Groups order
   by `agg=mean|best|median|min|max` of the sort metric (`best` without a goal
   is the mean; groups without a value after the others), and by their first
-  row for a date or no metric sort. `agg` defaults to
+  row for a date or no metric sort. `sort=c:total|c:waiting|c:running|c:done|c:failed`
+  orders groups by that count instead (`waiting` = created, `done` =
+  succeeded, `failed` = failed + stuck, as on the board's count columns),
+  most first unless `order=asc`; ties keep the default group order, rows
+  within a group keep their default order (no sort), and the no-value group
+  stays last. Without `group=`, a `c:*` sort is an unknown metric like any
+  other (no row carries it). `agg` defaults to
   `experiment.ui.group_aggregate` of the conf.yml the app reads on the
   checkout's branch (its branch conf when there is one, as `vmn` resolves
   it), else `mean` (store workspaces: `mean`); `aggregate` names what it
@@ -635,8 +643,9 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
   most 5000 rows. Values out of range are clamped, not refused.
   `group_key=<key>&offset=&limit=` answers that one group with its rows paged
   like the flat list (404 for an unknown key).
-- An unknown field or aggregate, or `last`, is a 400. Groupings are kept per index generation and moved along with it, so a
-  grouped page costs about what a flat one does.
+- An unknown field or aggregate, or `last`, is a 400. Groupings are kept
+  per index generation and moved along with it, so a grouped page costs
+  about what a flat one does.
 
 ```sh
 curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
