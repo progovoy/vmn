@@ -74,12 +74,16 @@ def _depth(verstr, parent_of):
         cursor = parent
 
 
+def own_rollup_status(status, has_children):
+    """What a run's own *status* adds to its tree's rollup: nothing (None)
+    for a container — an outer run that never ran itself."""
+    return None if has_children and status == CREATED else status
+
+
 def _is_container(node, children_of, by_verstr):
     """True when *node* is an outer run that never ran (pure container)."""
-    return (
-        bool(children_of.get(node))
-        and (by_verstr.get(node) or {}).get("status") == CREATED
-    )
+    status = (by_verstr.get(node) or {}).get("status")
+    return status is not None and own_rollup_status(status, bool(children_of.get(node))) is None
 
 
 def _subtree_statuses(verstr, children_of, by_verstr):

@@ -19,6 +19,7 @@ from vmn_exp.core.tree import (
     _depth,
     children_by_parent,
     count_statuses,
+    own_rollup_status,
     rollup_status,
 )
 
@@ -132,7 +133,7 @@ def derive_tree(prev, snapshot, fresh, gone, position):
     moved_under = [kid for g in gone for kid in children_of.get(g, ())]
     depth = _depths(sorted(relinked & position.keys()) + moved_under, edges, children_of)
     was = _Was(prev, fresh, depth)
-    tree_status, counts = _roll_up(prev, edges, dirty | relinked, dirty, was)
+    tree_status, counts = _roll_up(prev, edges, dirty | relinked, dirty, was, children_of)
     rows, rebuilt = _assemble(prev, snapshot, position, (children_of, depth, tree_status),
                               fresh, touched, was)
     return rows, children_of, counts, rebuilt
@@ -170,7 +171,7 @@ class _Was:
         return self._depth[verstr] if verstr in self._depth else self.old(verstr)["depth"]
 
 
-def _roll_up(prev, edges, withdrawn, dirty, was):
+def _roll_up(prev, edges, withdrawn, dirty, was, children_of):
     """``({verstr: tree_status} for *dirty*, new child status counts)``: the
     *withdrawn* rows' old statuses leave their old parents' counts, then the
     dirty rows roll up bottom-up and join their new parents'."""
@@ -181,7 +182,7 @@ def _roll_up(prev, edges, withdrawn, dirty, was):
             counts.add(parent, was.old(verstr)["tree_status"], -1)
     tree_status = {}
     for verstr in sorted(dirty, key=was.depth, reverse=True):
-        own = was.row(verstr)["status"]
+        own = own_rollup_status(was.row(verstr)["status"], bool(children_of.get(verstr)))
         status = tree_status[verstr] = rollup_status({own, *counts.statuses(verstr)})
         if parent_in(edges, verstr):
             counts.add(parent_in(edges, verstr), status, 1)
