@@ -41,6 +41,11 @@ describe("crumbsFor", () => {
     expect(labels(input("actions"))).toEqual(["ml_app", "actions"]);
   });
 
+  it("compare reads `compare N runs` on every tab", () => {
+    expect(last(labels(input("compare-runs", {}, "tab=code&sel=a&sel=b")))).toBe("compare 2 runs");
+    expect(last(labels(input("compare-runs", {}, "tab=curves&sel=a&sel=b&sel=c")))).toBe("compare 3 runs");
+  });
+
   it("compare counts the runs the page shows: deduped, no blanks", () => {
     expect(last(labels(input("compare-runs", {}, "sel=a&sel=a&sel=&sel=b")))).toBe("compare 2 runs");
   });

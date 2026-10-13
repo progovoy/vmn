@@ -93,5 +93,6 @@ describe("N-run compare", () => {
     fireEvent.click(await screen.findByRole("button", { name: /compare in table/i }));
     await waitFor(() => expect(location.pathname).toBe("/ws/test/app/my-app/compare-runs"));
     expect(urlParams().getAll("sel")).toEqual([v(1), v(2), v(3)]);
+    expect(urlParams().get("tab")).toBe("table");
   });
 });

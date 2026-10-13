@@ -4,11 +4,11 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useOffsetHeight } from "../hooks/useOffsetHeight";
+import { compareSearch } from "./Compare/selection";
 import { MAX_COMPARE_RUNS } from "./compareRunsData";
 import "./selectionBar.css";
 
 const plural = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
-const selParams = (verstrs: string[]) => verstrs.map((v) => `sel=${encodeURIComponent(v)}`).join("&");
 /** Room under the last rows beyond the bar itself: its 24px bottom offset and a 12px gap. */
 const BAR_ROOM_PX = 36;
 
@@ -119,7 +119,7 @@ export default function LeaderboardSelectionBar({
               `compare?v=${encodeURIComponent(selected[0])}&to=${encodeURIComponent(selected[1])}`,
             )} />
             <BarAction label="Compare in table" reason={compareReason(n)}
-              onClick={() => go(`compare-runs?${selParams(selected)}`)} />
+              onClick={() => go(`compare-runs?${compareSearch("table", selected)}`)} />
             <BarAction label="Overlay curves" primary reason={overlayReason(n)}
               onClick={() => go(`overlay?runs=${selected.map(encodeURIComponent).join(",")}`)} />
             <button disabled={archiving} onClick={() => setConfirming("archive")}>Archive</button>

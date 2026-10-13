@@ -23,7 +23,7 @@ import { fakeCtx } from "../palette/__tests__/fakeCtx";
 import ArtifactsList from "../ArtifactsList";
 import ErrorBoundary from "../ErrorBoundary";
 import { useJob } from "../ui";
-import Compare from "../../pages/Compare";
+import Compare from "../../pages/Compare/ComparePage";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
@@ -65,9 +65,9 @@ describe("Compare run picker", () => {
       rows: [{ verstr: "0.0.9-dev.abc", idx: 9 }], total: 1,
     });
     renderWithClient(
-      <MemoryRouter initialEntries={["/ws/w/app/app/compare?v=@1&to=latest"]}>
+      <MemoryRouter initialEntries={["/ws/w/app/app/compare-runs?tab=code&sel=@1&sel=latest"]}>
         <Routes>
-          <Route path="/ws/:ws/app/:app/compare" element={<Compare />} />
+          <Route path="/ws/:ws/app/:app/compare-runs" element={<Compare />} />
         </Routes>
       </MemoryRouter>,
     );

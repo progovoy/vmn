@@ -12,7 +12,7 @@ vi.mock("../../api", () => ({
 import { api } from "../../api";
 import { createQueryClient } from "../../queryClient";
 import type { ExperimentDetail } from "../../types";
-import CompareRuns from "../CompareRuns";
+import CompareRuns from "../Compare/ComparePage";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
@@ -40,7 +40,7 @@ const DETAIL2: ExperimentDetail = {
 function renderPage(search: string) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs${search}`]}>
+      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs?tab=table&${search.slice(1)}`]}>
         <Routes>
           <Route path="/ws/:ws/app/:app/compare-runs" element={<CompareRuns />} />
         </Routes>

@@ -11,7 +11,7 @@ vi.mock("../../api", () => ({
 import { api } from "../../api";
 import { createQueryClient } from "../../queryClient";
 import type { ExperimentDetail } from "../../types";
-import CompareRuns from "../CompareRuns";
+import CompareRuns from "../Compare/ComparePage";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
@@ -46,7 +46,7 @@ function Probe() {
 function renderPage(search: string) {
   return render(
     <QueryClientProvider client={createQueryClient()}>
-      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs${search}`]}>
+      <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs?tab=table&${search.slice(1)}`]}>
         <Probe />
         <Routes>
           <Route path="/ws/:ws/app/:app/compare-runs" element={<CompareRuns />} />
@@ -123,7 +123,7 @@ describe("CompareRuns", () => {
     const diffs = screen.getAllByRole("link", { name: /code diff/i });
     expect(diffs).toHaveLength(2);
     expect(diffs[0]).toHaveAttribute(
-      "href", "/ws/w/app/my-app/compare?v=0.0.1-dev.a&to=0.0.2-dev.b",
+      "href", "/ws/w/app/my-app/compare-runs?tab=code&sel=0.0.1-dev.a&sel=0.0.2-dev.b",
     );
   });
 

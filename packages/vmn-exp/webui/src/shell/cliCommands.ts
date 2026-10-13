@@ -3,6 +3,7 @@
  *  adds `--store` to `vmn-exp` commands. Pages with no CLI twin get none. */
 import type { Workspace } from "../types";
 import type { CliCommand, CrumbInput } from "./contracts";
+import { codePair, compareTab } from "../pages/Compare/selection";
 import { compareRefs, diffRefs, runOf } from "./crumbs";
 
 const SAFE = /^[A-Za-z0-9@%_+=:,./-]+$/;
@@ -41,6 +42,7 @@ function vmnExpArgs(input: CrumbInput): string[][] {
       return [["diff", app, "-v", v, "-v", to]];
     }
     case "compare-runs": {
+      if (compareTab(search) === "code") return [["diff", app, ...codePair(search).flatMap((r) => ["-v", r])]];
       const refs = compareRefs(search);
       return refs.length ? [["compare", app, ...refs.flatMap((r) => ["-v", r])]] : [];
     }

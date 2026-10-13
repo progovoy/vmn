@@ -16,7 +16,7 @@ import { fetchRunStatuses, fetchSeriesBatch } from "../../apiSeries";
 import {
   enableCanvas, instances, resetInstances,
 } from "../../components/__tests__/fakeUPlot";
-import Overlay from "../Overlay";
+import Overlay from "../Compare/ComparePage";
 
 const mockedBatch = fetchSeriesBatch as unknown as ReturnType<typeof vi.fn>;
 const mockedStatuses = fetchRunStatuses as unknown as ReturnType<typeof vi.fn>;
@@ -34,8 +34,8 @@ function batch(runs: string[], extra: Record<string, unknown> = {}) {
 
 function renderOverlay(runs: string[]) {
   return renderWithClient(
-    <MemoryRouter initialEntries={[`/ws/w/app/my-app/overlay?runs=${runs.join(",")}`]}>
-      <Routes><Route path="/ws/:ws/app/:app/overlay" element={<Overlay />} /></Routes>
+    <MemoryRouter initialEntries={[`/ws/w/app/my-app/compare-runs?${runs.map((r) => `sel=${r}`).join("&")}`]}>
+      <Routes><Route path="/ws/:ws/app/:app/compare-runs" element={<Overlay />} /></Routes>
     </MemoryRouter>,
   );
 }

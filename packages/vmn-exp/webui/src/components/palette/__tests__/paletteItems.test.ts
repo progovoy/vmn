@@ -168,7 +168,7 @@ describe("Command row", () => {
     expect(pending[0]).toMatchObject({ label: "compare @3 @7", secondary: "resolving…" });
     const ok = (verstr: string, idx: number) => ({ state: "ok" as const, run: { verstr, idx, name: null } });
     const done = cmd({ text: "compare @3 @7", refs: { "@3": ok("a1", 3), "@7": ok("b2", 7) } });
-    expect(done[0]).toMatchObject({ to: "/ws/w/app/ml_app/compare-runs?sel=a1&sel=b2" });
+    expect(done[0]).toMatchObject({ to: "/ws/w/app/ml_app/compare-runs?tab=table&sel=a1&sel=b2" });
     expect(done[0].disabled).toBeFalsy();
     expect(done[0].command).toBe("vmn-exp compare ml_app -v @3 -v @7");
   });

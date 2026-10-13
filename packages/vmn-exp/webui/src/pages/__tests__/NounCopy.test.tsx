@@ -42,7 +42,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 import { api } from "../../api";
 import { createQueryClient } from "../../queryClient";
 import NewExperiment from "../../components/NewExperiment";
-import Compare from "../Compare";
+import Compare from "../Compare/ComparePage";
 import { page, renderBoard, row } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -118,8 +118,8 @@ describe("Compare copy", () => {
     m.recentExperiments.mockResolvedValue([]);
     render(
       <QueryClientProvider client={createQueryClient()}>
-        <MemoryRouter initialEntries={["/ws/w/app/app/compare?v=a&to=b"]}>
-          <Routes><Route path="/ws/:ws/app/:app/compare" element={<Compare />} /></Routes>
+        <MemoryRouter initialEntries={["/ws/w/app/app/compare-runs?tab=code&sel=a&sel=b"]}>
+          <Routes><Route path="/ws/:ws/app/:app/compare-runs" element={<Compare />} /></Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );

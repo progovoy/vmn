@@ -1,41 +1,19 @@
-import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, appName as toAppName } from "../api";
-import type { DiffResult } from "../types";
-import type { HttpError } from "../http";
-import { fmtVal } from "../util";
-import { PageHead, Skeleton } from "../components/ui";
-import RunPicker from "../components/RunPicker";
+import { api, appName as toAppName } from "../../api";
+import type { DiffResult } from "../../types";
+import type { HttpError } from "../../http";
+import { fmtVal } from "../../util";
+import { Skeleton } from "../../components/ui";
+import DiffText from "../../components/DiffText";
+import RunPicker from "../../components/RunPicker";
 
-function DiffView({ text }: { text: string }) {
-  if (!text.trim())
-    return <div className="empty">The two runs have identical code.</div>;
-  return (
-    <div className="diff">
-      <pre>
-        {text.split("\n").map((line, i) => {
-          let cls = "";
-          if (line.startsWith("+") && !line.startsWith("+++")) cls = "add";
-          else if (line.startsWith("-") && !line.startsWith("---")) cls = "del";
-          else if (line.startsWith("@@")) cls = "hunk";
-          else if (line.startsWith("diff --git")) cls = "file";
-          return (
-            <div key={i} className={cls}>
-              {line || " "}
-            </div>
-          );
-        })}
-      </pre>
-    </div>
-  );
-}
-
-export default function Compare() {
-  const { ws, app } = useParams() as { ws: string; app: string };
+/** The metric delta and the real source diff between two runs; on a K6
+ *  materialisation failure, the reason, both pickers and the CLI line. */
+export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
+  ws: string; app: string; v: string; to: string;
+  onFrom: (ref: string) => void; onTo: (ref: string) => void;
+}) {
   const appName = toAppName(app);
-  const [params, setParams] = useSearchParams();
-  const v = params.get("v") ?? "@1";
-  const to = params.get("to") ?? "latest";
   const client = useQueryClient();
   // Cached per pair: a revisit paints at once and revalidates behind it.
   const diff = useQuery<DiffResult>({
@@ -60,10 +38,7 @@ export default function Compare() {
 
   return (
     <>
-      <Link className="back-link" to={`/ws/${ws}/app/${app}`}>
-        ← experiments
-      </Link>
-      <PageHead title="Code diff" mono={false} />
+      <h2 className="section-title">Code diff</h2>
       <p className="page-sub">
         metric delta and the real source diff between two runs
       </p>
@@ -73,24 +48,15 @@ export default function Compare() {
           ws={ws}
           app={app}
           value={fromVerstr}
-          onChange={(nv) => setParams({ v: nv, to: toVerstr })}
+          onChange={onFrom}
         />
         <span style={{ color: "var(--text-3)", fontSize: 16 }}>→</span>
         <RunPicker
           ws={ws}
           app={app}
           value={toVerstr}
-          onChange={(nt) => setParams({ v: fromVerstr, to: nt })}
+          onChange={onTo}
         />
-        <span className="spacer" />
-        {result && (
-          <Link
-            to={`/ws/${ws}/app/${app}/compare-runs?sel=${encodeURIComponent(fromVerstr)}` +
-              `&sel=${encodeURIComponent(toVerstr)}`}
-          >
-            compare as table →
-          </Link>
-        )}
       </div>
 
       {isMaterializeError && (
@@ -158,7 +124,9 @@ export default function Compare() {
 
           <div className="card">
             <h2 className="section-title">What changed</h2>
-            <DiffView text={result.diff} />
+            {result.diff.trim()
+              ? <DiffText text={result.diff} />
+              : <div className="empty">The two runs have identical code.</div>}
           </div>
 
           <div className="cli-card">

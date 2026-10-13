@@ -14,7 +14,8 @@ import { api } from "../api";
 import { runLog } from "../apiRun";
 import { fetchRunStatuses, fetchSeriesBatch } from "../apiSeries";
 import Run from "../pages/Run";
-import Overlay, { MAX_OVERLAY_RUNS } from "../pages/Overlay";
+import Overlay from "../pages/Compare/ComparePage";
+import { MAX_OVERLAY_RUNS } from "../pages/Compare/CurvesTab";
 
 const mockedApi = api as unknown as {
   experiment: ReturnType<typeof vi.fn>;
@@ -111,7 +112,7 @@ describe("Overlay page", () => {
     }));
     (fetchRunStatuses as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
     renderAt(
-      `/ws/w/app/app/overlay?runs=${runs.join(",")}`, "/ws/:ws/app/:app/overlay", <Overlay />,
+      `/ws/w/app/app/compare-runs?${runs.map((r) => `sel=${r}`).join("&")}`, "/ws/:ws/app/:app/compare-runs", <Overlay />,
     );
     await waitFor(() => expect(batch).toHaveBeenCalled());
     expect(batch).toHaveBeenCalledTimes(1);
