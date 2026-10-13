@@ -133,14 +133,29 @@ class BrowserChecks:
 
     def query_filter_ms(self, q):
         """(ms from typing *q* until the table shows its result, the UI's row count).
-        The time includes the query box's 300ms debounce."""
-        self._open_board()
-        self.page.wait_for_selector(js.ROW_SELECTOR)
+        The time includes the query box's 300ms debounce. The answer is the first
+        list read whose parameters differ from the board's before: the filter
+        bar sends *q* as ``q``, or a filter it understands (``status = ...``)
+        as its own parameter."""
+        lists = urlparse(self.api_url).path + "/experiments"
+        reads = []
+
+        def note(request):
+            if urlparse(request.url).path == lists:
+                reads.append(request.url)
+
+        self.page.on("request", note)
+        try:
+            self._open_board()
+            self.page.wait_for_selector(js.ROW_SELECTOR)
+            self.page.wait_for_load_state("networkidle")
+        finally:
+            self.page.remove_listener("request", note)
+        before = parse_qs(urlparse(reads[-1]).query) if reads else None
 
         def is_answer(resp):
             url = urlparse(resp.url)
-            return url.path == urlparse(self.api_url).path + "/experiments" \
-                and parse_qs(url.query).get("q") == [q]
+            return url.path == lists and parse_qs(url.query) != before
 
         with self.page.expect_response(is_answer) as info:
             t0 = time.perf_counter()
