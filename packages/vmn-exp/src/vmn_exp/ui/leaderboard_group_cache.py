@@ -34,7 +34,12 @@ class GroupCache:
         else:
             spec = GroupSpec(group, agg, schema, sort, order, status, None, archived)
             grouping = self._uncached(snapshot, schema, spec, rows_filter)
-        return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key)
+        unfiltered = None
+        if status or query or rows_filter is not None:
+            plain = GroupSpec(group, DEFAULT_AGGREGATE, schema, archived=archived)
+            unfiltered = self.grouping(snapshot, schema, plain)
+        return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
+                              unfiltered)
 
     def _uncached(self, snapshot, schema, spec, rows_filter):
         base, bucket = self._cache._base(snapshot)

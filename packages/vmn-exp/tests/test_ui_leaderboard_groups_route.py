@@ -9,6 +9,7 @@ import yaml
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.ui.leaderboard_group_fields import NONE
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -65,7 +66,7 @@ def _keys(body):
 def test_group_answers_groups_sorted_by_the_mean(tmp_path, repo):
     root, runs = repo
     body = _client(tmp_path, root).get(BASE, params={"group": "parent", "sort": "loss"}).json()
-    assert _keys(body) == [runs[4], runs[1], "(none)"]
+    assert _keys(body) == [runs[4], runs[1], NONE]
     assert body["total_groups"] == 3
     assert body["total_rows"] == 6
     first = body["groups"][0]
@@ -78,7 +79,7 @@ def test_agg_picks_the_sorting_aggregate(tmp_path, repo):
     root, runs = repo
     body = _client(tmp_path, root).get(
         BASE, params={"group": "parent", "sort": "loss", "agg": "best"}).json()
-    assert _keys(body) == [runs[1], runs[4], "(none)"]
+    assert _keys(body) == [runs[1], runs[4], NONE]
 
 
 def test_the_apps_conf_sets_the_default_aggregate(tmp_path, repo):
@@ -86,16 +87,16 @@ def test_the_apps_conf_sets_the_default_aggregate(tmp_path, repo):
     _conf(root, {"metrics": {"loss": {"goal": "min"}}, "ui": {"group_aggregate": "min"}})
     client = _client(tmp_path, root)
     body = client.get(BASE, params={"group": "parent", "sort": "loss"}).json()
-    assert _keys(body) == [runs[1], runs[4], "(none)"]
+    assert _keys(body) == [runs[1], runs[4], NONE]
     explicit = client.get(BASE, params={"group": "parent", "sort": "loss", "agg": "mean"}).json()
-    assert _keys(explicit) == [runs[4], runs[1], "(none)"]
+    assert _keys(explicit) == [runs[4], runs[1], NONE]
 
 
 def test_an_invalid_conf_aggregate_falls_back_to_the_mean(tmp_path, repo):
     root, runs = repo
     _conf(root, {"metrics": {"loss": {"goal": "min"}}, "ui": {"group_aggregate": "sum"}})
     body = _client(tmp_path, root).get(BASE, params={"group": "parent", "sort": "loss"}).json()
-    assert _keys(body) == [runs[4], runs[1], "(none)"]
+    assert _keys(body) == [runs[4], runs[1], NONE]
 
 
 def test_rows_per_group_caps_and_group_key_pages(tmp_path, repo):
@@ -111,11 +112,14 @@ def test_rows_per_group_caps_and_group_key_pages(tmp_path, repo):
     assert page["rows_total"] == 2
 
 
-def test_rows_per_group_is_capped_at_a_hundred(tmp_path, repo):
-    root, _ = repo
-    client = _client(tmp_path, root)
-    assert client.get(BASE, params={"group": "parent", "rows_per_group": 101}).status_code == 400
-    assert client.get(BASE, params={"group": "parent", "rows_per_group": 0}).status_code == 400
+@pytest.mark.parametrize("asked, served", [(101, 2), (10_000, 2), (0, 1), (-3, 1)])
+def test_rows_per_group_out_of_range_is_clamped_not_refused(tmp_path, repo, asked, served):
+    # Plan 22 F5: 1..100 rows per group; sweep 1 has 2 runs.
+    root, runs = repo
+    response = _client(tmp_path, root).get(BASE, params={"group": "parent",
+                                                         "rows_per_group": asked})
+    assert response.status_code == 200
+    assert len(next(g for g in response.json()["groups"] if g["key"] == runs[1])["rows"]) == served
 
 
 @pytest.mark.parametrize("params", [

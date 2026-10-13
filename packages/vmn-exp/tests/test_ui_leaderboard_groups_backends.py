@@ -14,6 +14,7 @@ import yaml
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.ui.leaderboard_group_fields import NONE
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -166,7 +167,7 @@ def reference(tmp_path):
 
 def test_the_reference_groups_every_run_and_follows_changes(tmp_path, repo, reference):
     before, after = reference
-    assert [g["key"] for g in before[0]["groups"]] == [v(1), v(4), "(none)"]
+    assert [g["key"] for g in before[0]["groups"]] == [v(1), v(4), NONE]
     assert (before[0]["total_rows"], after[0]["total_rows"]) == (len(RUNS), len(RUNS) + 1)
     _change(repo[1])
     assert after == _answers(_client(tmp_path, repo, "git-memory"))

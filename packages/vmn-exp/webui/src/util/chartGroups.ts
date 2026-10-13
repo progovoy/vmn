@@ -1,7 +1,7 @@
 /** The Charts tab's colours on a grouped board (plan 22 G7): every charted
  *  run in its group's colour, the groups in the board's order, plus the
  *  legend that names them. */
-import { NONE_GROUP } from "../apiGroups";
+import { groupKeyText, NONE_GROUP } from "../apiGroups";
 import type { ExperimentColumns, ExperimentRow } from "../types";
 import { runColor } from "../util";
 import type { BoardGroup } from "./groupItems";
@@ -32,8 +32,9 @@ export interface ChartGroups {
  *  loaded, its label as the server would give it. */
 function labelOf(key: string, field: string, loaded: BoardGroup | undefined): string {
   if (loaded) return loaded.target?.name || loaded.label;
-  if (key === NONE_GROUP) return field === "parent" ? "(no parent run)" : NONE_GROUP;
-  return TARGET_LINKS.has(field) ? key : `${field} = ${key}`;
+  if (key === NONE_GROUP) return field === "parent" ? "(no parent run)" : "(none)";
+  const text = groupKeyText(key);
+  return TARGET_LINKS.has(field) ? text : `${field} = ${text}`;
 }
 
 /** Each charted run's group colour, with *keyOf* (verstr -> group key) and

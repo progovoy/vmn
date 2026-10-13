@@ -30,9 +30,10 @@ def running(now, age=0):
 class Fleet:
     """Records in storage order; :meth:`snapshot` publishes a generation."""
 
-    def __init__(self, seed=0):
+    def __init__(self, seed=0, links=False):
         self.rng = random.Random(seed)
-        self.specs = []  # [{verstr, parent, values, archived, branch, opt, ts}]
+        self.links = links  # runs also rerun or fork earlier ones
+        self.specs = []  # [{verstr, parent, values, archived, branch, opt, ts, rerun_of, forked_from}]
         self.rows = []
         self.states = {}
         self.observed = {}
@@ -45,6 +46,10 @@ class Fleet:
         meta = {"verstr": spec["verstr"], "timestamp": spec["ts"], "branch": spec["branch"]}
         if spec["parent"]:
             meta["parent"] = spec["parent"]
+        if spec.get("rerun_of"):
+            meta["rerun_of"] = spec["rerun_of"]
+        if spec.get("forked_from"):
+            meta["forked_from"] = {"verstr": spec["forked_from"], "step": 1}
         log = [{"timestamp": "t", "type": "create", "params": {"opt": spec["opt"]}},
                {"timestamp": "t", "type": "metrics", "values": dict(spec["values"])}]
         row = experiment_row(i + 1, meta, log)
@@ -71,10 +76,19 @@ class Fleet:
             "opt": self.rng.choice(["adam", "sgd"]),
             "ts": f"2026-01-01T00:{self.rng.randrange(60):02d}:{self.rng.randrange(60):02d}Z",
         })
+        if self.links:
+            self.specs[-1].update(self._links())
         self.rows.append(self._fold(len(self.specs) - 1))
         self.states[verstr] = state
         self.observed[verstr] = None
         return verstr
+
+    def _links(self):
+        """A rerun and a fork of earlier runs (or of a pruned one), each now and then."""
+        earlier = [s["verstr"] for s in self.specs[:-1]] or [None]
+        pick = lambda: self.rng.choice(earlier + ["1.0.0-dev.pruned", None, None])  # noqa: E731
+        return {"rerun_of": pick() if self.rng.random() < 0.4 else None,
+                "forked_from": pick() if self.rng.random() < 0.3 else None}
 
     def edit(self, i, **changes):
         self.specs[i].update(changes)
@@ -150,6 +164,8 @@ class Fleet:
                 self.remove(n - 1 - rng.randrange(3))
             elif op == "reparent" and reparent:
                 self._reparent(i)
+                if self.links:
+                    self.edit(i, **self._links())
             elif op == "orphan":
                 # A child whose parent shows up only in a later generation.
                 self.append(parent=f"1.0.0-dev.later{rng.randrange(3)}", state=finished())

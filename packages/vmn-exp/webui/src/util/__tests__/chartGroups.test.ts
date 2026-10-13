@@ -11,7 +11,8 @@ const row = (v: string): ExperimentRow => ({
 });
 const counts = { total: 0, running: 0, waiting: 0, done: 0, failed: 0, stuck: 0 };
 const group = (key: string, verstrs: string[], extra: Partial<BoardGroup> = {}): BoardGroup => ({
-  key, label: key, target: null, counts, aggregates: {}, verstrs, rows_total: verstrs.length, ...extra,
+  key, label: key, target: null, counts, aggregates: {}, verstrs, rows_total: verstrs.length,
+  rows_unfiltered: verstrs.length, ...extra,
 });
 const sweep = group("s", ["a", "b"], {
   target: { verstr: "s", idx: 1, name: "sweep", status: "succeeded", tree_status: null, metrics: {} },
@@ -35,6 +36,16 @@ describe("the Charts tab's colours by group (plan 22 G7)", () => {
       ["main", "branch = main"], ["dev", "branch = dev"], ["s", "branch = s"],
     ]);
     expect(g.colorOf.get("y")).toBe(runColor(1));
+  });
+
+  it("labels an unloaded no-value group and a value spelled like the sentinel as the server would (plan 22 F6)", () => {
+    const keys = new Map([["a", NONE_GROUP], ["b", `${NONE_GROUP}${NONE_GROUP}x`]]);
+    const g = chartGroups(["a", "b"].map(row), keys, [], "branch");
+    expect(g.legend.map((e) => [e.key, e.label])).toEqual([
+      [`${NONE_GROUP}${NONE_GROUP}x`, `branch = ${NONE_GROUP}x`], [NONE_GROUP, "(none)"],
+    ]);
+    const parents = chartGroups([row("a")], new Map([["a", NONE_GROUP]]), [], "parent");
+    expect(parents.legend.map((e) => e.label)).toEqual(["(no parent run)"]);
   });
 
   it("leaves a run with no known group uncoloured and out of the legend", () => {

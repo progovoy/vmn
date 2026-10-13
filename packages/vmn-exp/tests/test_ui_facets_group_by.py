@@ -75,3 +75,20 @@ def test_a_value_that_leaves_lowers_the_count():
     rows = [_row(0, params={"opt": "adam"}), _row(1, params={"opt": "sgd"})]
     cache.facets(_snap(rows))
     assert cache.facets(_snap(rows[:1], generation=2))["param_values"] == {"opt": 1}
+
+
+def test_nan_params_are_one_distinct_value():
+    # Each row's NaN is its own float object, and NaN != NaN (plan 22 F6).
+    rows = [_row(i, params={"lr": float("nan"), "opt": "adam"}) for i in range(DISTINCT_CAP + 2)]
+    assert facets(rows)["param_values"] == {"lr": 1, "opt": 1}
+    assert lb.LeaderboardCache().facets(_snap(rows))["param_values"] == {"lr": 1, "opt": 1}
+
+
+def test_a_nan_param_that_leaves_cancels_the_one_that_joined():
+    cache = lb.LeaderboardCache()
+    rows = [_row(0, params={"lr": 0.1}), _row(1, params={"lr": float("nan")})]
+    cache.facets(_snap(rows))
+    # The leaving row's NaN is another object than the one counted in.
+    again = [rows[0], _row(1, params={"lr": float("nan")})]
+    cache.facets(_snap(again, generation=2))
+    assert cache.facets(_snap(rows[:1], generation=3))["param_values"] == {"lr": 1}

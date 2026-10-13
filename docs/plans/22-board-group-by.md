@@ -140,21 +140,29 @@ instead of a flat page:
                 "target": {verstr, idx, name, status, tree_status, metrics} | null,
                 "counts": {total, running, waiting, done, failed, stuck},
                 "aggregates": {"<metric>": {mean, best, median, min, max, n}},
-                "rows": [ ...first N rows by the sort... ], "rows_total": 16 } ],
-  "total_groups": 3, "total_rows": 48 }
+                "rows": [ ...first N rows by the sort... ], "rows_total": 5,
+                "rows_unfiltered": 16 } ],
+  "total_groups": 3, "total_rows": 48, "running": 2, "aggregate": "mean" }
 ```
 `target` is set for the link groups `parent`/`forked_from`/`rerun_of`. It is null for
 `code_verstr` (its label is the verstr) and for field groups. The paging parameters are:
-- `offset`/`limit` page groups;
-- `rows_per_group` (default 10, <= 100) caps each group's `rows`;
+- `offset`/`limit` page groups (default and at most 50, F5);
+- `rows_per_group` (default 10, 1..100, lowered so a page holds <= 5000 rows) caps each
+  group's `rows`; out-of-range values are clamped, not refused (F5);
 - `group_key=<key>&offset=&limit=` pages one group's rows (the `+N more` row).
 
-`agg=mean|best|median|min|max` (default: conf `experiment.ui.group_aggregate`, else
-`mean`) picks the aggregate that sorts groups (G5); every aggregate is in the payload so
-switching needs no refetch. `best` is null for a goal-less metric. Finite values only;
-`n` counts them. `sort`/`order`/`status`/`q`/`archived` behave as in G5/G6. Unknown
-fields or aggregates give 400.
-Rows with no value go to one `(none)` group, last (for `parent`: `(no parent run)`). A
+`agg=mean|best|median|min|max` (default: conf `experiment.ui.group_aggregate` of the
+conf the app reads on the checkout's branch, its branch conf included, else `mean`)
+picks the aggregate that sorts groups (G5); the top-level `aggregate` names what it
+resolved to (F3). Every aggregate is in the payload so switching needs no refetch.
+`best` is null for a goal-less metric. Finite values only; `n` counts them.
+`sort`/`order`/`status`/`q`/`archived` behave as in G5/G6: `rows_total` counts a group's
+passing rows, `rows_unfiltered` its rows with the same `archived` but without
+`q`/`status` (F1), and the top-level `running` the running rows after the filters
+across all groups (F4). Unknown fields or aggregates give 400.
+Rows with no value go to one group, last, labelled `(none)` (for `parent`: `(no parent
+run)`); its `key` is the sentinel `∅` (U+2205), and a value whose text starts with `∅`
+is keyed with it doubled, so no value shares that group (F6). A
 link whose target is not in the index (pruned, another app) groups under the target's
 verstr, with `target: null` and the label `<verstr> (not found)`.
 

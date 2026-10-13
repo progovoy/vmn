@@ -9,7 +9,7 @@ const row = (v: string): ExperimentRow => ({
 });
 const counts = { total: 0, running: 0, waiting: 0, done: 0, failed: 0, stuck: 0 };
 const group = (key: string, verstrs: string[], total = verstrs.length) => ({
-  key, label: key, target: null, counts, aggregates: {}, verstrs, rows_total: total,
+  key, label: key, target: null, counts, aggregates: {}, verstrs, rows_total: total, rows_unfiltered: total,
 });
 const data = (groups: ReturnType<typeof group>[]): GroupedRows => ({
   rows: groups.flatMap((g) => g.verstrs.map(row)), total: 0, groups, total_groups: groups.length,

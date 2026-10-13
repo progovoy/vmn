@@ -7,16 +7,18 @@ own with — so the web leaderboard and the CLI always agree.
 """
 import os
 
-from vmn_exp.storage.areas import RUNS, SNAPSHOTS, local_store_root
-from vmn_exp.storage.open import open_storage
 from vmn_exp.core.log import filter_by_status, sort_by_metric
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.tree import annotate_rows
+from vmn_exp.storage.areas import RUNS, SNAPSHOTS, local_store_root
+from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.facet_values import distinct_count, value_key
 from vmn_exp.ui.leaderboard_group_fields import conf_aggregate
+from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
+from vmn_exp.ui.readers.config import read_conf_file
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
 from vmn_exp.ui.readers.versions import version_counts
 
@@ -35,8 +37,10 @@ def metrics_schema(root_path, app_name):
 
 
 def group_aggregate(root_path, app_name):
-    """The board's default group aggregate: conf ``experiment.ui.group_aggregate``."""
-    return conf_aggregate(experiment_conf(root_path, app_name))
+    """The board's default group aggregate: conf ``experiment.ui.group_aggregate``
+    of the conf the app reads on the checkout's branch (its branch conf, if any)."""
+    conf = read_conf_file(app_conf_path(root_path, app_name))
+    return conf_aggregate(conf.get("experiment"))
 
 
 def list_apps(root_path):

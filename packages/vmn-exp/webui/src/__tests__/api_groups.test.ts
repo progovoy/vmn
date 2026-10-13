@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { api } from "../api";
-import type { GroupedPage } from "../apiGroups";
+import { NONE_GROUP, type GroupedPage } from "../apiGroups";
 
 const urlOf = (call: unknown[]) => new URL(call[0] as string, "http://x");
 
@@ -14,14 +14,14 @@ const K1: GroupedPage = {
     },
     counts: { total: 2, running: 1, waiting: 0, done: 1, failed: 0, stuck: 0 },
     aggregates: { loss: { mean: 0.5, best: 0.4, median: 0.5, min: 0.4, max: 0.6, n: 2 } },
-    rows: [], rows_total: 2,
+    rows: [], rows_total: 2, rows_unfiltered: 2,
   }, {
-    key: "(none)", label: "(no parent run)", target: null,
+    key: NONE_GROUP, label: "(no parent run)", target: null,
     counts: { total: 1, running: 0, waiting: 0, done: 1, failed: 0, stuck: 0 },
     aggregates: { loss: { mean: 1, best: null, median: 1, min: 1, max: 1, n: 1 } },
-    rows: [], rows_total: 1,
+    rows: [], rows_total: 1, rows_unfiltered: 1,
   }],
-  total_groups: 2, total_rows: 3,
+  total_groups: 2, total_rows: 3, aggregate: "mean", running: 1,
 };
 
 describe("api.experimentGroups (plan 22 K1)", () => {

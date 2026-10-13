@@ -16,8 +16,14 @@ export type GroupField = GroupLink | "branch" | "status" | `tags.${string}` | `p
 export const GROUP_AGGREGATES = ["mean", "best", "median", "min", "max"] as const;
 export type GroupAggregate = (typeof GROUP_AGGREGATES)[number];
 
-/** The key of the group of runs without a value (`(no parent run)` for `parent`); last. */
-export const NONE_GROUP = "(none)";
+/** The key of the group of runs without a value, last; labelled `(none)`
+ *  (`(no parent run)` for `parent`). No value's key equals it: a value whose
+ *  text starts with it is keyed with it doubled (plan 22 F6). */
+export const NONE_GROUP = "\u2205";
+
+/** The value a group key other than {@link NONE_GROUP} stands for. */
+export const groupKeyText = (key: string): string =>
+  key.startsWith(NONE_GROUP) ? key.slice(NONE_GROUP.length) : key;
 
 export interface GroupCounts {
   total: number;
@@ -60,19 +66,28 @@ export interface RunGroup {
   aggregates: Record<string, MetricAggregate>;
   rows: ExperimentRow[];
   rows_total: number;
+  /** The group's size with the same `archived` setting but without
+   *  `q`/`status` (= `rows_total` when no filter is set; plan 22 F1). */
+  rows_unfiltered: number;
 }
 
 export interface GroupedPage {
   groups: RunGroup[];
   total_groups: number;
   total_rows: number;
+  /** What `agg=` resolved to: the URL's, else the app's conf default (its
+   *  branch conf respected), else mean (plan 22 F3). */
+  aggregate: GroupAggregate;
+  /** Running rows across every group after the filters (plan 22 F4). */
+  running: number;
 }
 
 export interface GroupOpts extends Omit<PageOpts, "last"> {
   group: GroupField;
   /** Absent: the app's conf `experiment.ui.group_aggregate`, else mean. */
   agg?: GroupAggregate;
-  /** Rows per group, 1..100 (server default 10). */
+  /** Rows per group (server default 10), clamped to 1..100; the server
+   *  pages at most 50 groups and 5000 rows (plan 22 F5). */
   rowsPerGroup?: number;
 }
 

@@ -4,7 +4,6 @@ import os
 
 import git
 import yaml
-
 from vmn_exp.ui.readers.versions import list_versions
 
 
@@ -16,6 +15,15 @@ def _conf_relpath(app_name):
 def read_app_conf(root_path, app_name):
     """The ``conf`` section of ``.vmn/<app>/conf.yml``, or ``{}`` when absent."""
     return _parse_conf(read_app_conf_text(root_path, app_name))
+
+
+def read_conf_file(path):
+    """The ``conf`` section of the conf.yml at *path*, or ``{}`` when absent."""
+    try:
+        with open(path) as f:
+            return _parse_conf(f.read())
+    except OSError:
+        return {}
 
 
 def read_app_conf_text(root_path, app_name):

@@ -20,6 +20,11 @@ CASES = [
     dict(group="parent", query="metrics.loss < 0.6"),
     dict(group="parent", status="running,stuck", agg="best", sort="loss"),
     dict(group="branch", archived=True, sort="loss", agg="min"),
+    dict(group="rerun_of", sort="loss"), dict(group="rerun_of", sort="loss", agg="best"),
+    dict(group="rerun_of", status="running", sort="acc", agg="max"),
+    dict(group="rerun_of", query="metrics.loss < 0.6", agg="median", sort="loss"),
+    dict(group="forked_from"), dict(group="forked_from", sort="loss", agg="min"),
+    dict(group="forked_from", status="succeeded,failed", archived=True, sort="loss"),
 ]
 
 
@@ -71,7 +76,7 @@ def test_moved_groupings_equal_a_fresh_cache(monkeypatch, seed, clock):
     rng = random.Random(seed)
     now = T0
     _at(monkeypatch, now)
-    fleet = Fleet(seed)
+    fleet = Fleet(seed, links=True)
     fleet.seed(rng.randrange(150, 300), now)
     builds = _Builds(monkeypatch)
     cache = lb.LeaderboardCache(bucket_sec=2, size=256)

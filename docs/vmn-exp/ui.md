@@ -589,32 +589,42 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
              "target": {verstr, idx, name, status, tree_status, metrics} | null,
              "counts": {total, running, waiting, done, failed, stuck},
              "aggregates": {"<metric>": {mean, best, median, min, max, n}},
-             "rows": [...], "rows_total": 16}],
- "total_groups": 3, "total_rows": 48}
+             "rows": [...], "rows_total": 5, "rows_unfiltered": 16}],
+ "total_groups": 3, "total_rows": 48, "running": 2, "aggregate": "mean"}
 ```
 
 - `target` is the header run of a `parent`/`forked_from`/`rerun_of` group. A
   target missing from the index (pruned, another app) groups under its verstr
   with `target: null` and the label `<verstr> (not found)`. Runs without a
-  value form the `(none)` group, always last (labelled `(no parent run)` for
-  `parent`).
+  value form one group, always last, labelled `(none)` (`(no parent run)` for
+  `parent`). Its `key` is `∅` (U+2205), which no value's key equals: a value
+  whose text starts with `∅` is keyed with it doubled (`∅x` -> `∅∅x`), so a
+  param literally set to `(none)` is a group of its own.
 - Filters (`q`, `status`, `archived`) select rows; a group shows when one of
-  its rows passes, and its counts and aggregates cover the passing rows. A
-  link group keeps its `target` even when the target fails the filter. A
-  `rerun_of` group's aggregates include the original's own value.
+  its rows passes, and its counts and aggregates cover the passing rows.
+  `rows_total` counts its passing rows, `rows_unfiltered` its rows with the
+  same `archived` setting but without `q`/`status` (equal when no filter is
+  set; the board's `5 of 16`). A link group keeps its `target` even when the
+  target fails the filter. A `rerun_of` group's aggregates include the
+  original's own value.
+- `running` counts the running rows of every group after the filters, not
+  only the page's, so a client can poll while any run is live.
 - `aggregates` cover each metric's finite values, by each run's summary
   policy; `best` follows the metric's goal and is null without one.
 - `sort`/`order` order rows within a group as on the flat list. Groups order
   by `agg=mean|best|median|min|max` of the sort metric (`best` without a goal
   is the mean; groups without a value after the others), and by their first
-  row for a date or no metric sort. `agg` defaults to conf.yml's
-  `experiment.ui.group_aggregate`, else `mean`; every aggregate is in the
-  payload either way.
-- `offset`/`limit` page groups (default 50); `rows_per_group` (1..100, default
-  10) caps each group's `rows`. `group_key=<key>&offset=&limit=` answers that
-  one group with its rows paged (404 for an unknown key).
-- An unknown field or aggregate, `last` or a `rows_per_group` out of range is
-  a 400. Groupings are kept per index generation and moved along with it, so a
+  row for a date or no metric sort. `agg` defaults to
+  `experiment.ui.group_aggregate` of the conf.yml the app reads on the
+  checkout's branch (its branch conf when there is one, as `vmn` resolves
+  it), else `mean` (store workspaces: `mean`); `aggregate` names what it
+  resolved to, and every aggregate is in the payload either way.
+- `offset`/`limit` page groups (default and at most 50); `rows_per_group`
+  (default 10, 1..100) caps each group's `rows`, lowered so a page holds at
+  most 5000 rows. Values out of range are clamped, not refused.
+  `group_key=<key>&offset=&limit=` answers that one group with its rows paged
+  like the flat list (404 for an unknown key).
+- An unknown field or aggregate, or `last`, is a 400. Groupings are kept per index generation and moved along with it, so a
   grouped page costs about what a flat one does.
 
 ```sh
@@ -643,7 +653,7 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 - `keys`: comma list of `metrics.<k>`, `params.<k>`, `timestamp`, `status`,
   `branch`, `name` (the run's name, else its note) and `group:<field>` (the
   run's group key on the board grouped by `<field>`, as the list's `group=`
-  takes it, `(none)` for no value); anything else is a 400.
+  takes it, `∅` for no value); anything else is a 400.
   Columns align with `verstrs` and `idx` (the `@N` index).
 - Metric values are numbers or `null`; params are verbatim.
 - `q`, `status`, `sort`, `order`, `archived` work as on the list, in the same
