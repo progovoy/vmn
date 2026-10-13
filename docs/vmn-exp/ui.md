@@ -293,9 +293,11 @@ what a group header shows per metric: `mean`, `best`, `median`, `min` or
 `rerun_of`, `code_verstr`, `branch`, `status`, `tags.<k>`, `params.<k>`,
 `none`) and `?agg=`, so saved views keep it. Without `?group=` the board is
 grouped by parent run when some run has a parent, else not grouped. Without
-`?agg=` it shows conf.yml's `experiment.ui.group_aggregate`, else the mean
-(store workspaces have no conf, so the mean). Ungrouped, every run is one row,
-sorted and paged as a flat list.
+`?agg=` it shows the aggregate the server applied — conf.yml's
+`experiment.ui.group_aggregate` (branch conf respected), else the mean (store
+workspaces have no conf, so the mean). Grouped, the board stays live while
+any run in any group is running, loaded or not. Ungrouped, every run is one
+row, sorted and paged as a flat list.
 
 With a grouping the board lists groups: each
 starts with a header row (the fold, the group's label — for a link the
