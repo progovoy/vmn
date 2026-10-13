@@ -131,11 +131,13 @@ export function useLeaderboardColumns(
   }, [paramCols, shown, hidden, varied, visibleFleet, visibleMetrics, showTags, showComments, showNote, widths, fill]);
 
   // The visible goal metrics stick by default, until `pin=` says otherwise.
+  const defaultPins = useMemo(
+    () => goals.filter((g) => visibleMetrics.includes(g)).map((g) => `m:${g}`),
+    [goals, visibleMetrics],
+  );
   const pins = useMemo(
-    () => (pinned.length
-      ? pinned.filter((k) => k !== NO_PINS)
-      : goals.filter((g) => visibleMetrics.includes(g)).map((g) => `m:${g}`)),
-    [pinned, goals, visibleMetrics],
+    () => (pinned.length ? pinned.filter((k) => k !== NO_PINS) : defaultPins),
+    [pinned, defaultPins],
   );
 
   // Combined key list for ordering: m:name for metrics, p:name for params.
@@ -204,7 +206,7 @@ export function useLeaderboardColumns(
     ...visibleFleet, ...(showNote ? ["note"] : []), ...(showTags ? ["tags"] : []), ...(showComments ? ["comments"] : []),
   ];
   return {
-    primary, metricCols, paramCols, schemaHidden, visibleMetrics, visibleParams, cells, defaultKeys, layout, pinned: pins,
+    primary, metricCols, paramCols, schemaHidden, visibleMetrics, visibleParams, cells, defaultKeys, layout, pinned: pins, defaultPins,
     suggestFacets, otherCols, visibleOther,
   };
 }

@@ -98,6 +98,24 @@ describe("Leaderboard column menu (C3)", () => {
     await waitFor(() => expect(urlParams().getAll("pin")).toEqual([]));
   });
 
+  it("a goal metric pinned by default offers Unpin, which pins nothing (pin=-)", async () => {
+    mockedApi.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
+    await board();
+    await waitFor(() => expect(head("m:loss").style.zIndex).toBe("3"));
+    choose("loss", "Unpin column");
+    await waitFor(() => expect(urlParams().getAll("pin")).toEqual(["-"]));
+    expect(head("m:loss").style.zIndex).toBe("2");
+  });
+
+  it("pinning back to the default pins drops pin=", async () => {
+    mockedApi.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
+    await board("/ws/test/app/my-app?pin=-");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Column menu: loss" })).toBeTruthy());
+    choose("loss", "Pin column");
+    await waitFor(() => expect(urlParams().has("pin")).toBe(false));
+    expect(head("m:loss").style.zIndex).toBe("3");
+  });
+
   it("a pinned column moves among the pinned ones", async () => {
     await board("/ws/test/app/my-app?pin=m%3Aacc&pin=m%3Aloss");
     expect(metricHeads()).toEqual(["m:acc", "m:loss"]);

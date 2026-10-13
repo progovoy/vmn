@@ -135,12 +135,14 @@ export function useLeaderboardView() {
       update((p) => {
         setAllParams(p, "col", moveKey(p.getAll("col"), key, delta, defaultKeys, pinned ?? p.getAll("pin")));
       }),
-    /** Flip *key* in the pins in effect (*pinned*, else `pin=`); unpinning
-     *  the last one writes `pin=-`, so the defaults don't come back. */
-    togglePin: (key: string, pinned?: readonly string[]) =>
+    /** Flip *key* in the pins in effect (*pinned*, else `pin=`). Landing on
+     *  the board's *defaults* drops `pin=`; unpinning the last one otherwise
+     *  writes `pin=-`, so the defaults don't come back. */
+    togglePin: (key: string, pinned?: readonly string[], defaults: readonly string[] = []) =>
       update((p) => {
-        const next = togglePinUtil(pinned ?? p.getAll("pin"), key);
-        setAllParams(p, "pin", next.length ? next : [NO_PINS]);
+        const next = togglePinUtil(pinned ?? p.getAll("pin").filter((k) => k !== NO_PINS), key);
+        const isDefault = next.length === defaults.length && next.every((k) => defaults.includes(k));
+        setAllParams(p, "pin", isDefault ? [] : next.length ? next : [NO_PINS]);
       }),
   }), [setParam, toggleIn, setAll, update]);
 

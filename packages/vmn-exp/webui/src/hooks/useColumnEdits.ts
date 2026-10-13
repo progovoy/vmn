@@ -16,8 +16,8 @@ export function useColumnEdits(
 ): ColumnEdits {
   const { setWidth, setOrder } = prefs;
   const ids = cols.layout.ids;
-  const { defaultKeys } = cols;
-  const { pinned, moveColumn: moveUrlColumn, toggleHidden, setColumnShown, togglePin } = view;
+  const { defaultKeys, pinned, defaultPins } = cols;
+  const { moveColumn: moveUrlColumn, toggleHidden, setColumnShown, togglePin } = view;
   return useMemo<ColumnEdits>(() => ({
     onResize: setWidth,
     onMove: (from, to) => {
@@ -25,12 +25,12 @@ export function useColumnEdits(
       if (next !== ids) setOrder(next);
     },
     onShift: (id, delta) => {
-      if (pinned.includes(id)) return moveUrlColumn(id, delta, defaultKeys);
+      if (pinned.includes(id)) return moveUrlColumn(id, delta, defaultKeys, pinned);
       const next = shiftColumn(ids ?? [], id, delta, new Set(pinned));
       if (next !== ids) setOrder(next);
     },
     onHide: (id) => (isInnerRunId(id) ? setColumnShown(id, false) : toggleHidden(id)),
-    onPin: togglePin,
+    onPin: (id) => togglePin(id, pinned, defaultPins),
     pinned,
-  }), [setWidth, setOrder, ids, defaultKeys, pinned, moveUrlColumn, toggleHidden, setColumnShown, togglePin]);
+  }), [setWidth, setOrder, ids, defaultKeys, pinned, defaultPins, moveUrlColumn, toggleHidden, setColumnShown, togglePin]);
 }

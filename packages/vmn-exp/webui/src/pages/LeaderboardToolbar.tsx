@@ -76,7 +76,7 @@ export default function LeaderboardToolbar({
         orderedCells={cols.cells}
         pinnedCols={cols.pinned}
         onMoveColumn={onMoveColumn}
-        onTogglePin={(key) => view.togglePin(key, cols.pinned)}
+        onTogglePin={(key) => view.togglePin(key, cols.pinned, cols.defaultPins)}
       />
     </div>
   );
