@@ -11,6 +11,14 @@ export type ArchiveVerb = "archive" | "unarchive";
 /** How many of the rows on screen are selected, for the header checkbox. */
 export type HeaderCheck = "none" | "some" | "all";
 
+/** A selection by query (plan 23 S4): a job's subtree under the board's
+ *  filters, resolved by the server. */
+export interface QuerySelection {
+  scope: string;
+  q: string;
+  status: string;
+}
+
 interface Selection {
   selected: ReadonlySet<string>;
   toggleSelected: (verstr: string) => void;
@@ -19,10 +27,14 @@ interface Selection {
 
 /** The leaderboard's selection actions: toggle (shift extends a range over
  *  the rows on screen), the header checkbox over those rows, a group
- *  header's over its rows, select every filtered run, and bulk archive. */
+ *  header's over its rows, select every filtered run, and bulk archive.
+ *
+ *  With *byQuery* (a job's Runs tab) "select all" selects the query itself,
+ *  without a cap: `matching` counts it until the selection or the filters
+ *  change, and archive then sends the query, after a `dry_run` count. */
 export function useBoardSelection(
   ws: string, app: string, filter: RowsFilter, rows: readonly ExperimentRow[],
-  sel: Selection, onArchived: () => void,
+  sel: Selection, onArchived: () => void, byQuery?: QuerySelection,
 ) {
   const anchor = useRef<string | null>(null);
   // Read at click time, so `toggle` keeps one identity and memoized rows
@@ -66,9 +78,25 @@ export function useBoardSelection(
   const headerCheck = checkOf(shown);
   const toggleAll = () => toggleRows(shown);
 
+  // What a selection by query stands for: valid while neither it nor the
+  // selection it was made over has changed.
+  const [byQueryAll, setByQueryAll] = useState<{ count: number; key: string } | null>(null);
+  const queryKey = `${JSON.stringify(byQuery ?? null)}|${[...sel.selected].join(",")}`;
+  const matching = byQuery && byQueryAll?.key === queryKey ? byQueryAll.count : null;
+  const queryBody = () => {
+    const { scope, q, status } = byQuery!;
+    return { scope, ...(q ? { q } : {}), ...(status ? { status } : {}) };
+  };
+
   /** Every run the filter matches (up to the cap); the loaded rows on a
-   *  server without the columns endpoint. */
-  const selectAll = async () => {
+   *  server without the columns endpoint. By query: the query's *total*. */
+  const selectAll = async (total = 0) => {
+    if (byQuery) {
+      const loaded = rows.map((r) => r.verstr);
+      sel.setSelected(loaded);
+      setByQueryAll({ count: total, key: `${JSON.stringify(byQuery)}|${loaded.join(",")}` });
+      return;
+    }
     try {
       const cols = await api.experimentsColumns(ws, app, [], { ...filter, limit: SELECT_ALL_CAP });
       sel.setSelected(cols.verstrs);
@@ -87,11 +115,16 @@ export function useBoardSelection(
   });
   const archive = (verb: ArchiveVerb) => {
     setArchiveError(null);
-    job.run(ws, app, `exp_${verb}`, { verstrs: [...sel.selected].slice(0, SELECT_ALL_CAP) });
+    const body = matching !== null ? queryBody() : { verstrs: [...sel.selected].slice(0, SELECT_ALL_CAP) };
+    job.run(ws, app, `exp_${verb}`, body);
   };
+  /** How many runs archiving the selection by query acts on (null: not by query). */
+  const preview = matching === null ? undefined
+    : (verb: ArchiveVerb) => api.actionPreview(ws, app, `exp_${verb}`, queryBody()).then((p) => p.count);
 
   return {
     toggle, clearAnchor, headerCheck, toggleAll, checkOf, toggleRows, selectAll, archive,
+    matching, preview, uncapped: Boolean(byQuery),
     archiving: job.job?.status === "running",
     archiveError: archiveError ?? job.error,
   };

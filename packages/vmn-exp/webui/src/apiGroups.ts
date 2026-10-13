@@ -9,7 +9,7 @@ import type { ExperimentRow } from "./types";
 /** Links between runs (the run pointed at heads the group; `code_verstr`:
  *  the code state) and row fields. */
 export type GroupLink = "parent" | "forked_from" | "rerun_of" | "code_verstr";
-export type GroupField = GroupLink | "branch" | "status" | `tags.${string}` | `params.${string}`;
+export type GroupField = GroupLink | "branch" | "status" | "failure_sig" | `tags.${string}` | `params.${string}`;
 
 /** What orders groups by the sort metric; `best` follows the metric's goal
  *  (the mean for a goal-less metric). */
@@ -74,6 +74,8 @@ export interface RunGroup {
   /** The group's size with the same `archived` setting but without
    *  `q`/`status` (= `rows_total` when no filter is set; plan 22 F1). */
   rows_unfiltered: number;
+  /** The group as a filter clause (`params.lr = 0.01`; plan 23 S7), where served. */
+  clause?: string;
 }
 
 export interface GroupedPage {

@@ -21,6 +21,7 @@ import JobFailures from "./JobFailures";
 import JobHeader, { JOB_PANEL_ID, JobTabs, jobTabId } from "./JobHeader";
 import { failedCount } from "./jobData";
 import JobOverview from "./JobOverview";
+import JobRuns from "./JobRuns";
 import { jobSummaryKey, useJobTab, type JobTab } from "./jobQueries";
 import "./job.css";
 
@@ -33,14 +34,16 @@ function Coming({ text, boardHref }: { text: string; boardHref: string }) {
   );
 }
 
-function Panel({ tab, ws, app, detail, summary }: {
+function Panel({ tab, ws, app, detail, summary, live }: {
   tab: JobTab; ws: string; app: string; detail: ExperimentDetail; summary: JobSummary;
+  /** The page's Pause, and its rollup refresh (the Runs tab's live changes move it too). */
+  live: { paused: boolean; onPaused: (paused: boolean) => void; refresh: () => unknown };
 }) {
   const v = detail.metadata.verstr;
   const boardHref = `/ws/${ws}/app/${app}?${new URLSearchParams({ q: sweepQuery(v) })}`;
   switch (tab) {
     case "overview": return <JobOverview ws={ws} app={app} summary={summary} />;
-    case "runs": return <Coming text={"The job\u2019s runs table is coming in W3."} boardHref={boardHref} />;
+    case "runs": return <JobRuns ws={ws} app={app} verstr={v} paused={live.paused} onPaused={live.onPaused} onLive={live.refresh} />;
     case "charts": return <Coming text={"The job\u2019s charts are coming in W4."} boardHref={boardHref} />;
     case "failures": return <JobFailures ws={ws} app={app} verstr={v} failed={failedCount(summary)} />;
     case "code": return <RunChangesSection ws={ws} app={app} verstr={v} />;
@@ -70,8 +73,10 @@ export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
     client.invalidateQueries({ queryKey: jobSummaryKey(ws, app, v) }),
     tab === "log" ? refetchDetail() : null,
   ]);
-  const live = useLiveScope({ ws, app, scope: v, enabled: running && !paused, onChange: refresh });
-  usePolling(refresh, pollIntervalMs(detail.status?.heartbeat_interval_sec), running && !paused && !live.connected);
+  // The Runs tab follows the subtree's events itself, and refreshes the rollup with them.
+  const own = tab !== "runs";
+  const live = useLiveScope({ ws, app, scope: v, enabled: own && running && !paused, onChange: refresh });
+  usePolling(refresh, pollIntervalMs(detail.status?.heartbeat_interval_sec), own && running && !paused && !live.connected);
 
   if (!data) return <Skeleton />;
   return (
@@ -90,7 +95,7 @@ export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
         tabs={<JobTabs tab={tab} onTab={setTab} />}
       />
       <div role="tabpanel" id={JOB_PANEL_ID} aria-labelledby={jobTabId(tab)} className="job-panel">
-        <Panel tab={tab} ws={ws} app={app} detail={detail} summary={data} />
+        <Panel tab={tab} ws={ws} app={app} detail={detail} summary={data} live={{ paused, onPaused: setPaused, refresh }} />
       </div>
     </div>
   );

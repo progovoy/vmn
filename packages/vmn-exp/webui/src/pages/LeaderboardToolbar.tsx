@@ -16,7 +16,7 @@ import "./leaderboardToolbar.css";
  *  where a run can be created), saved views, Group by and the columns (the live status
  *  is the table's caption; the selection's actions float at the bottom). */
 export default function LeaderboardToolbar({
-  ws, app, view, cols, grouping, onViewApplied, onResetColumns,
+  ws, app, view, cols, grouping, onViewApplied, onResetColumns, job,
 }: {
   ws: string;
   app: string;
@@ -27,6 +27,8 @@ export default function LeaderboardToolbar({
   onViewApplied: () => void;
   /** Drop the dragged widths and column order; omitted while there are none. */
   onResetColumns?: () => void;
+  /** A job's Runs tab (its verstr): no New run, and saved views of its own. */
+  job?: string;
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,11 +40,11 @@ export default function LeaderboardToolbar({
   );
   return (
     <div className="toolbar board-actions">
-      {canCreate && !view.creating && (
+      {canCreate && !job && !view.creating && (
         <button className="primary" onClick={() => view.openCreate(true)}>New run</button>
       )}
       <SavedViews
-        ws={ws} app={app} search={location.search}
+        ws={ws} app={job ? `${app}/run/${job}` : app} search={location.search}
         onApply={(search) => { navigate({ search }, { replace: true }); onViewApplied(); }}
       />
       {onResetColumns && (

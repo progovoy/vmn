@@ -10,12 +10,13 @@ import type { GroupAggregate, GroupTarget } from "../apiGroups";
 import StatusPill from "../components/StatusPill";
 import { Icon } from "../components/shell/icons";
 import type { ExperimentRow, RunState } from "../types";
-import { fmtVal, runHref } from "../util";
+import { fmtVal, plural, runHref } from "../util";
 import type { BoardGroup, GroupHeaderItem, GroupMoreItem, MemberPlace } from "../util/groupItems";
 import { MORE_TEXT, aggregateCell, barSegments, countParts, countsText, spokenCounts } from "./groupHeaderText";
 import { isGapId } from "./leaderboardColumns";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, rowHeight, type RowLayout } from "./LeaderboardRow";
+import type { GroupFilter } from "./LeaderboardTable";
 import "./leaderboardGroupRow.css";
 import "./groupMembers.css";
 
@@ -55,8 +56,36 @@ export function GroupBar({ group }: { group: BoardGroup }) {
   );
 }
 
-function Label({ item, layout, first, onFold }: {
+/** A group's fold, or for a group too big to unfold (plan 23 §3.4) the
+ *  button applying its clause as a filter. */
+export function GroupFold({ item, name, onFold, asFilter }: {
+  item: GroupHeaderItem; name: string; onFold: (key: string) => void; asFilter?: GroupFilter;
+}) {
+  const { group } = item;
+  if (item.asFilter) {
+    const clause = asFilter?.clauseOf(group);
+    if (!clause) return null;
+    const label = `Filter to ${clause} (${plural(group.rows_total, "run")})`;
+    return (
+      <button className="fold-toggle group-open-filter" aria-label={label} title={label} onClick={() => asFilter!.onFilter(clause)}>
+        <Icon name="search" size={13} />
+      </button>
+    );
+  }
+  return (
+    <button
+      className="fold-toggle" aria-expanded={item.open}
+      aria-label={`${item.open ? "Collapse" : "Expand"} group ${name}`}
+      onClick={() => onFold(group.key)}
+    >
+      <Icon name={item.open ? "chevron-down" : "chevron-right"} size={14} />
+    </button>
+  );
+}
+
+function Label({ item, layout, first, onFold, asFilter }: {
   item: GroupHeaderItem; layout: RowLayout; first?: ExperimentRow; onFold: (key: string) => void;
+  asFilter?: GroupFilter;
 }) {
   const { group } = item;
   const t = group.target;
@@ -65,13 +94,7 @@ function Label({ item, layout, first, onFold }: {
   return (
     <div className="group-head">
       <div className="nest">
-        <button
-          className="fold-toggle" aria-expanded={item.open}
-          aria-label={`${item.open ? "Collapse" : "Expand"} group ${name}`}
-          onClick={() => onFold(group.key)}
-        >
-          <Icon name={item.open ? "chevron-down" : "chevron-right"} size={14} />
-        </button>
+        <GroupFold item={item} name={name} onFold={onFold} asFilter={asFilter} />
         {t ? (
           <Link className={`group-label run-link${t.name ? " run-name" : " mono"}`} to={runHref(layout.runBase, t.verstr)} title={t.verstr}>
             {name}
@@ -104,7 +127,7 @@ function AggregateCell({ id, item, agg, style }: {
   );
 }
 
-export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFold, check }: {
+export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFold, check, asFilter }: {
   item: GroupHeaderItem; index: number; isActive: boolean; layout: RowLayout;
   /** The aggregate the board shows. */
   agg: GroupAggregate;
@@ -113,6 +136,7 @@ export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFo
   onFold: (key: string) => void;
   /** Its checkbox over the group's loaded rows. */
   check: Omit<HeaderCheckProps, "label">;
+  asFilter?: GroupFilter;
 }) {
   const t = item.group.target;
   const status = (t?.tree_status ?? t?.status) as RunState | null | undefined;
@@ -120,7 +144,7 @@ export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFo
     if (id.startsWith("m:")) return <AggregateCell key={id} id={id} item={item} agg={agg} style={style} />;
     const body = id === "check"
       ? item.rows.length > 0 && <HeaderCheckbox {...check} label={`Select group ${groupName(item.group.label, t)}`} />
-      : id === "experiment" ? <Label item={item} layout={layout} first={first} onFold={onFold} />
+      : id === "experiment" ? <Label item={item} layout={layout} first={first} onFold={onFold} asFilter={asFilter} />
       : id === "idx" && t?.idx != null ? `@${t.idx}`
       : id === "status" && status ? <StatusPill status={status} /> : null;
     const cls = id === "check" ? "check-cell" : id === "experiment" ? "exp-cell" : id === "idx" ? "idx-cell" : id === "status" ? "status-cell" : undefined;

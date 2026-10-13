@@ -1,0 +1,36 @@
+/* The job's facet sidebar (plan 23 W3): value rows with a count bar behind
+   them, and a numeric param's mini histogram of buckets. */
+.facet-sidebar { display: flex; flex-direction: column; gap: 14px; min-width: 0; font-size: 12.5px; }
+.facet-title { margin: 0 0 4px; font-size: 11.5px; font-weight: 600; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facet-values { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.facet-value {
+  position: relative; display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 3px 6px; border: 0; border-radius: 4px; background: none; color: var(--text);
+  text-align: left; cursor: pointer; overflow: hidden;
+}
+.facet-value:hover, .facet-value:focus-visible { background: var(--panel-2); }
+.facet-fill { position: absolute; inset: 0 auto 0 0; background: var(--panel-3); border-radius: 4px; z-index: 0; }
+.facet-name { position: relative; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facet-count { position: relative; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.facet-more { margin: 2px 6px 0; font-size: 11.5px; }
+.facet-all { align-self: flex-start; }
+.facet-loading { display: block; height: 40px; }
+
+.facet-hist {
+  display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: 1fr auto;
+  align-items: end; gap: 2px; height: 70px;
+}
+.facet-bin {
+  display: flex; align-items: flex-end; height: 100%; padding: 0; border: 0; background: none; cursor: pointer;
+}
+.facet-bin span { display: block; width: 100%; min-height: 2px; background: var(--accent); opacity: .7; border-radius: 2px 2px 0 0; }
+.facet-bin:hover span, .facet-bin:focus-visible span { opacity: 1; }
+.facet-bin:disabled { cursor: default; }
+.facet-bin:disabled span { background: var(--line-2); }
+.facet-hist-axis {
+  grid-column: 1 / -1; display: flex; justify-content: space-between;
+  font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+
+.facet-drawer > button { margin-bottom: 8px; }
+.facet-drawer .facet-sidebar { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 10px; }

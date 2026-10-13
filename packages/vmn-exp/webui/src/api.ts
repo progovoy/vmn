@@ -23,6 +23,17 @@ export interface PageOpts {
   archived?: boolean;
   /** Top-level runs only: the Jobs view (plan 23 S2). */
   top?: boolean;
+  /** A run's verstr: its subtree only, without the run (plan 23 S2). */
+  scope?: string;
+}
+
+/** What the facets count over: a job's subtree, after the other filters. */
+export type FacetOpts = Pick<PageOpts, "scope" | "query" | "status">;
+
+/** A bulk action's preview (plan 23 S4 `dry_run`): how many runs it acts on. */
+export interface ActionPreview {
+  count: number;
+  sample: string[];
 }
 
 /** The leaderboard filter, as the list-shaped endpoints take it. */
@@ -33,6 +44,7 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.order) p.set("order", opts.order);
   if (opts.archived) p.set("archived", "1");
   if (opts.top) p.set("top", "1");
+  if (opts.scope) p.set("scope", opts.scope);
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 
@@ -67,8 +79,12 @@ export const api = {
       `/workspaces/${ws}/apps/${appTag(app)}/metrics-schema`
     ),
   /** App-wide filter vocabulary: every branch, metric and param key. */
-  facets: (ws: string, app: string) =>
-    get<ExperimentFacets>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-facets`),
+  facets: (ws: string, app: string, opts?: FacetOpts) => {
+    const p = new URLSearchParams();
+    if (opts) setFilter(p, opts);
+    const q = String(p);
+    return get<ExperimentFacets>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-facets${q ? `?${q}` : ""}`);
+  },
   addWorkspace: (name: string, opts: { remote?: string; path?: string }) =>
     post<Workspace>("/workspaces", { name, ...opts }),
   apps: (ws: string) => get<AppRow[]>(`/workspaces/${ws}/apps`),
@@ -130,6 +146,9 @@ export const api = {
     get<VersionRow[]>(`/workspaces/${ws}/apps/${appTag(app)}/versions`),
   action: (ws: string, app: string, action: string, body: Record<string, unknown>) =>
     post<Job>(`/workspaces/${ws}/apps/${appTag(app)}/actions/${action}`, body),
+  /** How many runs *action* would act on (`dry_run`), without acting. */
+  actionPreview: (ws: string, app: string, action: string, body: Record<string, unknown>) =>
+    post<ActionPreview>(`/workspaces/${ws}/apps/${appTag(app)}/actions/${action}`, { ...body, dry_run: true }),
   job: (id: string) => get<Job>(`/jobs/${id}`),
   changelog: (ws: string, app: string, v: string, from?: string) =>
     get<Changelog>(

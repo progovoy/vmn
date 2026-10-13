@@ -32,14 +32,20 @@ export const AGGREGATES: readonly Aggregate[] = GROUP_AGGREGATES;
 
 type GroupFacets = Partial<ExperimentFacets> | null | undefined;
 
-/** The Fields section: branch, status, every tag key, and each param with
- *  few enough values to make groups of. */
-export function groupFields(facets: GroupFacets): GroupOption[] {
+/** Groups only a job's Runs tab offers (plan 23 §3.4): inside one job, its
+ *  failures by signature. */
+const SCOPED_FIELDS = ["failure_sig"];
+
+/** The Fields section: branch, status (with *scoped*, the failure
+ *  signature), every tag key, and each param with few enough values to make
+ *  groups of. */
+export function groupFields(facets: GroupFacets, scoped = false): GroupOption[] {
   const params = Object.entries(facets?.param_values ?? {})
     .filter(([, n]) => n <= MAX_PARAM_VALUES)
     .map(([k]) => `params.${k}`);
   const tags = (facets?.tag_keys ?? []).map((k) => `tags.${k}`);
-  return [...PLAIN_FIELDS, ...tags, ...params].map((value) => ({ value, label: value }));
+  const plain = scoped ? [...PLAIN_FIELDS, ...SCOPED_FIELDS] : PLAIN_FIELDS;
+  return [...plain, ...tags, ...params].map((value) => ({ value, label: value }));
 }
 
 /** Grouped by parent run when some run has one, else not grouped. */
@@ -49,7 +55,7 @@ export const defaultGroup = (facets: Pick<ExperimentFacets, "parented"> | null |
 /** A URL `group=` value the board knows, else null. */
 export function parseGroup(raw: string | null): GroupBy | null {
   if (!raw) return null;
-  if (raw === NO_GROUP || PLAIN_FIELDS.includes(raw) || KEYED_FIELD.test(raw)) return raw;
+  if (raw === NO_GROUP || [...PLAIN_FIELDS, ...SCOPED_FIELDS].includes(raw) || KEYED_FIELD.test(raw)) return raw;
   return LINK_GROUPS.some((l) => l.value === raw) ? raw : null;
 }
 

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { GroupAggregate } from "../apiGroups";
 import type { HeaderCheck } from "../hooks/useBoardSelection";
-import { boardRows, isGroupItem, memberPlaces, type BoardItem } from "../util/groupItems";
+import { boardRows, isGroupItem, memberPlaces, type BoardGroup, type BoardItem } from "../util/groupItems";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
 import { useMoreRight } from "../hooks/useMoreRight";
@@ -74,6 +74,13 @@ export interface GroupActions {
   /** A group header's checkbox over its rows (plan 22 G7). */
   checkOf: (verstrs: readonly string[]) => HeaderCheck;
   onCheck: (verstrs: readonly string[]) => void;
+  /** A group too big to unfold opens as its clause (plan 23 §3.4). */
+  asFilter?: GroupFilter;
+}
+
+export interface GroupFilter {
+  clauseOf: (g: BoardGroup) => string | null;
+  onFilter: (clause: string) => void;
 }
 
 /** Cards that refresh with the board: about a phone screen's worth and the
@@ -198,6 +205,7 @@ function GridTable({
                       key={`group:${r.group.key}`} item={r} index={it.index} isActive={it.index === keys.active}
                       layout={layout} agg={groups!.aggregate} onFold={groups!.onFold}
                       check={{ state: groups!.checkOf(r.rows), onToggle: () => groups!.onCheck(r.rows) }}
+                      asFilter={groups!.asFilter}
                       first={groups!.field === "code_verstr" && next && !isGroupItem(next) ? next : undefined}
                     />
                   );

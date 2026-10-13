@@ -3,6 +3,7 @@ import { setAllParams, useUrlState } from "./useUrlState";
 import { NO_PINS, moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
 import { parseAggregate, parseGroup, type Aggregate, type GroupBy } from "../util/groupBy";
 import { parseDensity, rememberDensity, storedDensity, type Density } from "../util/density";
+import type { FilterValues } from "../util/filterTokens";
 
 export { DENSITY_KEY } from "../util/density";
 
@@ -110,6 +111,16 @@ export function useLeaderboardView() {
         if (c === "trend") p.delete("view");
         else p.set("view", c);
         setBoardTab(p, "charts");
+      }),
+    /** Replace the filters at once (a facet or a big group's clause, plan 23
+     *  §3.4); *ungroup* also drops `group=`, so the clause shows its runs flat. */
+    setFilters: (values: Required<FilterValues>, ungroup = false) =>
+      update((p) => {
+        const params: [string, string][] = [
+          ["status", values.status], ["q", values.query], ["search", values.search], ["branch", values.branch],
+        ];
+        for (const [k, v] of params) { if (v) p.set(k, v); else p.delete(k); }
+        if (ungroup) { p.delete("group"); p.delete("collapse"); }
       }),
     openCreate: (open: boolean) => setParam("new", open ? "1" : ""),
     toggleHidden: (col: string) => toggleIn("hide", col),

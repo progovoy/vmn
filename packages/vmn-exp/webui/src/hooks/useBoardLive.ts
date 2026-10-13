@@ -13,13 +13,15 @@ import { usePolling } from "./usePolling";
 
 const ownRunning = (r: ExperimentRow) => r.status === "running";
 
-export function useBoardLive({ ws, app, scope, paused, rows, serverRunning, refresh, isRunning = ownRunning }: {
+export function useBoardLive({ ws, app, scope, paused, rows, serverRunning, refresh, isRunning = ownRunning, onChange }: {
   ws: string; app: string; scope?: string; paused: boolean;
   rows: readonly ExperimentRow[] | undefined;
   serverRunning: boolean;
   refresh: () => Promise<unknown>;
   /** Whether a row keeps the board live (default: its own status). */
   isRunning?: (r: ExperimentRow) => boolean;
+  /** Also told of each change (a job page's rollup). */
+  onChange?: () => unknown;
 }) {
   const client = useQueryClient();
   const { anyRunning, heartbeatSec } = useMemo(() => {
@@ -37,6 +39,7 @@ export function useBoardLive({ ws, app, scope, paused, rows, serverRunning, refr
     onChange: () => Promise.all([
       refresh(),
       client.invalidateQueries({ queryKey: facetsQuery(ws, app).queryKey }),
+      onChange?.(),
     ]),
   });
   usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused && !live.connected);

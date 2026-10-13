@@ -110,3 +110,13 @@
   .job-grid { grid-template-columns: minmax(0, 1fr); }
   .job-tabs { overflow-x: auto; }
 }
+
+/* The Runs tab (plan 23 W3): the facet sidebar left of the scoped board;
+   on a phone the sidebar is a drawer above it. */
+.job-runs { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.job-runs > .facet-sidebar { position: sticky; top: 120px; max-height: calc(100vh - 140px); overflow: auto; padding-right: 4px; }
+.job-runs-main { min-width: 0; }
+.job-runs-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.job-runs-head .board-actions { margin-left: auto; }
+.job-runs-count { margin: 0; }
+@media (max-width: 639px) { .job-runs { grid-template-columns: minmax(0, 1fr); } }
