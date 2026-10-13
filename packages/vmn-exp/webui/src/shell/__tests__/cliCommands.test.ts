@@ -55,6 +55,13 @@ describe("cliFor", () => {
       .toEqual(["vmn-exp compare ml_app -v a -v b -v c"]);
   });
 
+  it("compare's code tab copies the diff of the pair it shows", () => {
+    expect(commands(input("compare-runs", {}, "tab=code&sel=a&sel=b&sel=c")))
+      .toEqual(["vmn-exp diff ml_app -v a -v b"]);
+    expect(commands(input("compare-runs", {}, "tab=code&sel=a&sel=b&sel=c&to=c")))
+      .toEqual(["vmn-exp diff ml_app -v a -v c"]);
+  });
+
   it("compare names each selected run once and skips blanks", () => {
     expect(commands(input("compare-runs", {}, "sel=a&sel=a&sel=&sel=b")))
       .toEqual(["vmn-exp compare ml_app -v a -v b"]);
