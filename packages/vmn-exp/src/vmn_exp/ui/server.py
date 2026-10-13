@@ -22,6 +22,7 @@ from vmn_exp.ui import (
     routes_admin,
     routes_cache,
     routes_comments,
+    routes_events,
     routes_leaderboard,
     routes_lineage,
     routes_media,
@@ -602,6 +603,13 @@ def create_app(
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
                                 _comment_counts, _group_aggregate)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
+
+    def _events_reader(ws_name, app_tag):
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        store_storage = _exp_storage_for(ws)
+        return lambda: source.snapshot(ws, app_name, store_storage)
+
+    routes_events.register(app, API_PREFIX, _events_reader, refresher.background, _segment)
     forget_git = routes_shell.register(app, API_PREFIX, _git_workspace, _status_snapshot,
                                        _app_tags, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
