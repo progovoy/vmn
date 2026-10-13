@@ -37,7 +37,7 @@ export interface InnerRunSummary {
   parts: { state: InnerState; count: number; text: string }[];
   /** What the cell shows: `5 · 4 running · 1 failed`. */
   text: string;
-  /** An incomplete sweep's `16/20 · incomplete`, else null. */
+  /** An incomplete sweep's `16/20 · incomplete` (then the whole text), else null. */
   incomplete: string | null;
   /** What a screen reader says: `5 inner runs, 4 running, 1 failed`. */
   label: string;
@@ -51,10 +51,13 @@ export function innerRunSummary(r: ExperimentRow): InnerRunSummary | null {
     .map((state) => ({ state, count: counts[state], text: `${counts[state]} ${state}` }));
   const runs = `${counts.total} inner run${counts.total === 1 ? "" : "s"}`;
   const incomplete = sweepIncompleteLabel(r);
-  const spoken = sweepIncompleteSpoken(r);
+  if (incomplete) {
+    // Every trial finished: the planned size is all the cell has to add.
+    return { total: counts.total, parts: [], incomplete, text: incomplete, label: `${runs}, ${sweepIncompleteSpoken(r)}` };
+  }
   return {
     total: counts.total, parts, incomplete,
-    text: [String(counts.total), ...parts.map((p) => p.text), ...(incomplete ? [incomplete] : [])].join(" · "),
-    label: [runs, ...parts.map((p) => p.text), ...(spoken ? [spoken] : [])].join(", "),
+    text: [String(counts.total), ...parts.map((p) => p.text)].join(" · "),
+    label: [runs, ...parts.map((p) => p.text)].join(", "),
   };
 }

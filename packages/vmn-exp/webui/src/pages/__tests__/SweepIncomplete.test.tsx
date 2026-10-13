@@ -136,13 +136,13 @@ describe("the run page of a sweep", () => {
 });
 
 describe("the leaderboard row of a sweep", () => {
-  it("ends the inner cell with 16/20 · incomplete", async () => {
+  it("reads 16/20 · incomplete in the inner cell, every trial being finished", async () => {
     serve([sweepRow(16), row(1)]);
     renderBoard();
     await screen.findByText("0.0.2-dev.x");
     const inner = rowOf("0.0.2-dev.x").querySelector('td[data-col-id="c:inner"]') as HTMLElement;
-    expect(inner.querySelector("[aria-hidden]")?.textContent).toBe(`16 · 16 done · ${LABEL}`);
-    expect(inner.querySelector(".sr-only")?.textContent).toContain("16 of 20 planned trials, incomplete");
+    expect(inner.querySelector("[aria-hidden]")?.textContent).toBe(LABEL);
+    expect(inner.querySelector(".sr-only")?.textContent).toBe("16 inner runs, 16 of 20 planned trials, incomplete");
     expect(rowOf("0.0.2-dev.x").querySelector(".exp-cell")?.textContent).not.toContain("incomplete");
   });
 
@@ -166,10 +166,11 @@ describe("the mobile card of a sweep", () => {
   beforeEach(() => fakeMedia([NARROW_QUERY]));
   afterEach(dropFakeMedia);
 
-  it("adds 16/20 · incomplete to the inner count", async () => {
+  it("says 16/20 · incomplete on a line of its own, under the inner count", async () => {
     serve([sweepRow(16), row(1)]);
     renderBoard();
     const list = await screen.findByRole("list", { name: "experiments" });
-    expect(within(list).getByText(`16 inner · ${LABEL}`, { exact: false })).toBeInTheDocument();
+    expect(within(list).getByText(LABEL)).toHaveClass("lb-mcard-sweep");
+    expect(within(list).getByText(/^16 inner$/)).toBeInTheDocument();
   });
 });
