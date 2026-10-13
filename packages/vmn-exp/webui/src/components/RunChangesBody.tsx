@@ -6,7 +6,8 @@ import { api } from "../api";
 import { fetchRunPatch } from "../apiRunCode";
 import type { HttpError } from "../http";
 import { diffFiles } from "./diffFiles";
-import { DiffToggle, FilesList, MetricDelta, ParamsChanged } from "./RunChangesParts";
+import { DiffToggle, FilesList, MetricDelta } from "./RunChangesParts";
+import ParamDeltaBlock from "./ParamDeltaBlock";
 
 const PATCH_REASON: Record<string, string> = {
   no_code: "No code changes captured (clean tree).",
@@ -64,7 +65,7 @@ export function RunDiffChanges({ ws, app, from, to }: {
   return (
     <>
       <MetricDelta deltas={result.metrics_delta} />
-      <ParamsChanged deltas={result.metrics_delta} />
+      <ParamDeltaBlock deltas={result.metrics_delta} />
       {result.diff.trim()
         ? <FilesList files={diffFiles(result.diff, result.to_verstr)} />
         : <Reason text="The two runs have identical code." />}
