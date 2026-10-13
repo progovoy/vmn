@@ -66,12 +66,15 @@ describe("Run page failure card", () => {
     expect(card.querySelector(".run-error-since")?.textContent).toContain("@41 hist-000488");
   });
 
-  it("sets the Changes baseline to the last good run", async () => {
+  it("sets the Changes baseline to the last good run and scrolls to the card", async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
     renderRun();
     await screen.findByTestId("training-curves");
     const card = document.querySelector(".run-error-card") as HTMLElement;
     fireEvent.click(card.querySelector(".run-error-since a") as HTMLElement);
     expect(screen.getByTestId("where").textContent).toBe("?baseline=v-good#changes");
     await waitFor(() => expect(mockedApi.experimentsDiff).toHaveBeenCalledWith("test", "my-app", "v-good", RUN));
+    expect(scrolled).toHaveBeenCalled();
   });
 });

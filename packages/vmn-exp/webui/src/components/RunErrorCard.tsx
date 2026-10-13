@@ -1,6 +1,9 @@
 import { useLayoutEffect, useRef } from "react";
 import type { RunError, RunStatus } from "../types";
 import { CopyButton } from "./ui";
+import { OutputTail, SinceLastGood, StopStep, tailText, type FailureContext } from "./RunFailureContext";
+
+export type { FailureContext };
 
 /** Anchor of the Run page's output card (RunOutput). */
 export const OUTPUT_ANCHOR = "run-output";
@@ -47,16 +50,19 @@ function NoException({ exitCode, hasOutputLog }: { exitCode: number | null; hasO
   );
 }
 
-/** Why a run failed, up front: the exception, its traceback and the last
- *  output. Shown for a failed run, or for any run that recorded an error. */
-export default function RunErrorCard({ status, hasOutputLog = false }: {
+/** Why a run failed, up front: the exception, its traceback, where it
+ *  stopped, the last run of its command that worked and the last output.
+ *  Shown for a failed run, or for any run that recorded an error. */
+export default function RunErrorCard({ status, hasOutputLog = false, context, runPath }: {
   status: RunStatus; hasOutputLog?: boolean;
+  /** The detail's failed/stuck-only fields; `runPath` is this run's page. */
+  context?: FailureContext; runPath?: string;
 }) {
   const error = status.error;
   if (!error && status.status !== "failed") return null;
   const headline = headlineOf(error, status.error_summary);
   const traceback = error?.traceback;
-  const tail = error?.output_tail;
+  const tail = tailText(context, error?.output_tail);
   return (
     <section className="card run-error-card" aria-label="Run error">
       <h2 className="section-title">Error</h2>
@@ -64,12 +70,12 @@ export default function RunErrorCard({ status, hasOutputLog = false }: {
         ? <div className="run-error-headline">{headline}</div>
         : <NoException exitCode={status.exit_code} hasOutputLog={hasOutputLog} />}
       <MetaLine status={status} withExit={headline != null} />
+      <StopStep lastStep={context?.last_step} />
+      {runPath && <SinceLastGood lastGood={context?.last_good} runPath={runPath} />}
       {traceback && <Traceback text={traceback} />}
       {tail && (
-        <details className="run-error-output" open={!traceback}>
-          <summary>last output</summary>
-          <pre className="yaml-block run-error-tail">{tail}</pre>
-        </details>
+        <OutputTail text={tail} open={!traceback}
+          fullOutputHref={hasOutputLog ? `#${OUTPUT_ANCHOR}` : null} />
       )}
     </section>
   );
