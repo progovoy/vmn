@@ -147,10 +147,12 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const tableRows = useMemo(() => tableItems && boardRows(tableItems), [tableItems]);
   const { toggleCollapsed } = view;
   const { loadGroup } = data;
-  const groupActions = useMemo<GroupActions | undefined>(() => (data.grouped && grouping.group ? {
-    field: grouping.group, aggregate: grouping.aggregate, onFold: toggleCollapsed, onMore: loadGroup,
-  } : undefined), [data.grouped, grouping.group, grouping.aggregate, toggleCollapsed, loadGroup]);
   const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, () => { refresh(); });
+  const { checkOf, toggleRows } = selection;
+  const groupActions: GroupActions | undefined = data.grouped && grouping.group ? {
+    field: grouping.group, aggregate: grouping.aggregate, onFold: toggleCollapsed, onMore: loadGroup,
+    checkOf, onCheck: toggleRows,
+  } : undefined;
 
   const onPrefetch = useCallback(
     (verstr: string) => { prefetchRun(client, ws, app, verstr); },

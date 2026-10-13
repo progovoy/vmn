@@ -12,6 +12,7 @@ import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
 import { aggregateCell, countParts, countsText, spokenCounts } from "./groupHeaderText";
 import { isGapId } from "./leaderboardColumns";
+import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import "./leaderboardGroupRow.css";
 
@@ -72,22 +73,26 @@ function AggregateCell({ id, item, agg, style }: {
   );
 }
 
-export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFold }: {
+export function GroupHeaderRow({ item, index, isActive, layout, agg, first, onFold, check }: {
   item: GroupHeaderItem; index: number; isActive: boolean; layout: RowLayout;
   /** The aggregate the board shows. */
   agg: GroupAggregate;
   /** A code state's first row (its base version and branch). */
   first?: ExperimentRow;
   onFold: (key: string) => void;
+  /** Its checkbox over the group's loaded rows. */
+  check: Omit<HeaderCheckProps, "label">;
 }) {
   const t = item.group.target;
   const status = (t?.tree_status ?? t?.status) as RunState | null | undefined;
   const cell = (id: string, style: CSSProperties) => {
     if (id.startsWith("m:")) return <AggregateCell key={id} id={id} item={item} agg={agg} style={style} />;
-    const body = id === "experiment" ? <Label item={item} layout={layout} first={first} onFold={onFold} />
+    const body = id === "check"
+      ? item.rows.length > 0 && <HeaderCheckbox {...check} label={`Select group ${groupName(item.group.label, t)}`} />
+      : id === "experiment" ? <Label item={item} layout={layout} first={first} onFold={onFold} />
       : id === "idx" && t?.idx != null ? `@${t.idx}`
       : id === "status" && status ? <StatusPill status={status} /> : null;
-    const cls = id === "experiment" ? "exp-cell" : id === "idx" ? "idx-cell" : id === "status" ? "status-cell" : undefined;
+    const cls = id === "check" ? "check-cell" : id === "experiment" ? "exp-cell" : id === "idx" ? "idx-cell" : id === "status" ? "status-cell" : undefined;
     return <td key={id} data-col-id={id} style={style} className={cls} aria-hidden={isGapId(id) || undefined}>{body}</td>;
   };
   return (

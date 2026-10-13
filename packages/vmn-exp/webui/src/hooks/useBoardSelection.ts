@@ -18,8 +18,8 @@ interface Selection {
 }
 
 /** The leaderboard's selection actions: toggle (shift extends a range over
- *  the rows on screen), the header checkbox over those rows, select every
- *  filtered run, and bulk archive. */
+ *  the rows on screen), the header checkbox over those rows, a group
+ *  header's over its rows, select every filtered run, and bulk archive. */
 export function useBoardSelection(
   ws: string, app: string, filter: RowsFilter, rows: readonly ExperimentRow[],
   sel: Selection, onArchived: () => void,
@@ -45,19 +45,24 @@ export function useBoardSelection(
     sel.setSelected([...new Set([...sel.selected, ...span])]);
   }, []);
 
-  const onScreen = rows.filter((r) => sel.selected.has(r.verstr)).length;
-  const headerCheck: HeaderCheck = onScreen === 0 ? "none" : onScreen === rows.length ? "all" : "some";
-  /** Select every row on screen or, once they all are, clear them (runs
+  /** How many of *verstrs* are selected. */
+  const checkOf = (verstrs: readonly string[]): HeaderCheck => {
+    const n = verstrs.filter((v) => sel.selected.has(v)).length;
+    return n === 0 ? "none" : n === verstrs.length ? "all" : "some";
+  };
+  /** Select every one of *verstrs* or, once they all are, clear them (runs
    *  selected elsewhere, e.g. by "select all matching", stay selected). */
-  const toggleAll = () => {
-    const shown = rows.map((r) => r.verstr);
-    if (headerCheck !== "all") {
-      sel.setSelected([...new Set([...sel.selected, ...shown])]);
+  const toggleRows = (verstrs: readonly string[]) => {
+    if (checkOf(verstrs) !== "all") {
+      sel.setSelected([...new Set([...sel.selected, ...verstrs])]);
       return;
     }
-    const drop = new Set(shown);
+    const drop = new Set(verstrs);
     sel.setSelected([...sel.selected].filter((v) => !drop.has(v)));
   };
+  const shown = rows.map((r) => r.verstr);
+  const headerCheck = checkOf(shown);
+  const toggleAll = () => toggleRows(shown);
 
   /** Every run the filter matches (up to the cap); the loaded rows on a
    *  server without the columns endpoint. */
@@ -84,7 +89,7 @@ export function useBoardSelection(
   };
 
   return {
-    toggle, headerCheck, toggleAll, selectAll, archive,
+    toggle, headerCheck, toggleAll, checkOf, toggleRows, selectAll, archive,
     archiving: job.job?.status === "running",
     archiveError: archiveError ?? job.error,
   };

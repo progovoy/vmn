@@ -24,6 +24,9 @@ export interface GroupHeaderItem {
   open: boolean;
   /** False for the parent grouping's `(no parent run)`: always open. */
   foldable: boolean;
+  /** Its loaded rows (the ones *keep* passes), shown or folded: what its
+   *  checkbox selects (plan 22 G7). */
+  rows: string[];
 }
 
 export interface GroupMoreItem {
@@ -52,7 +55,7 @@ export function groupItems(
     if (keep && !shown.length) continue;
     const foldable = !(field === "parent" && group.key === NONE_GROUP);
     const open = !foldable || !collapsed.has(group.key);
-    out.push({ item: "group", group, open, foldable });
+    out.push({ item: "group", group, open, foldable, rows: shown.map((r) => r.verstr) });
     if (!open) continue;
     out.push(...shown);
     const remaining = group.rows_total - group.verstrs.length;
