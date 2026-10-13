@@ -18,11 +18,12 @@ import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useColumnEdits } from "../hooks/useColumnEdits";
 import { useBoardSelection } from "../hooks/useBoardSelection";
 import { useBoardGrouping } from "../hooks/useBoardGrouping";
+import { useBoardGroupActions } from "../hooks/useBoardGroupActions";
 import { boardRows } from "../util/groupItems";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
 import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
-import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type GroupActions } from "./LeaderboardTable";
+import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT } from "./LeaderboardTable";
 import { DATE_SORT_OF } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import BoardHead, { runCountText } from "./BoardHead";
@@ -145,18 +146,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const filtered = Boolean(view.query || view.status || view.search || view.branch || view.archived);
   const tableItems = data.items;
   const tableRows = useMemo(() => tableItems && boardRows(tableItems), [tableItems]);
-  const { toggleCollapsed } = view;
-  const { loadGroup } = data;
   const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, () => { refresh(); });
-  const { checkOf, toggleRows } = selection;
-  const groupActions: GroupActions | undefined = data.grouped && grouping.group ? {
-    field: grouping.group, aggregate: grouping.aggregate, onFold: toggleCollapsed, onMore: loadGroup,
-    checkOf, onCheck: toggleRows,
-  } : undefined;
-
-  const boardGroups = data.grouped ? data.groups : undefined;
-  const chartGrouping = useMemo(() => (boardGroups && grouping.group
-    ? { field: grouping.group, groups: boardGroups } : undefined), [boardGroups, grouping.group]);
+  const { groupActions, chartGrouping } = useBoardGroupActions(data, grouping, view.toggleCollapsed, selection);
 
   const onPrefetch = useCallback(
     (verstr: string) => { prefetchRun(client, ws, app, verstr); },
