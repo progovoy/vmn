@@ -1,10 +1,12 @@
 import type {
   AppConfig, AppRow, Changelog, DiffResult, ExperimentColumns, ExperimentDetail,
-  ExperimentFacets, ExperimentGroups, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema,
+  ExperimentFacets, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema,
   ParamImportanceEntry, VersionRow, Workspace,
 } from "./types";
 import { appTag, BASE, get, post } from "./http";
 import { PAGE_SIZE } from "./paging";
+import { fetchGroupRows, fetchGroups } from "./apiGroups";
+import type { GroupOpts } from "./apiGroups";
 
 export { appTag };
 
@@ -45,25 +47,6 @@ async function fetchPage(
   return Array.isArray(body) ? { rows: body, total: body.length } : body;
 }
 
-/** The list endpoint's grouped answer (plan 22 K1). `offset`/`limit` page
- *  groups, or one group's rows with `groupKey`; without `agg` the server
- *  sorts groups by the app's conf default. */
-export interface GroupOpts extends Omit<PageOpts, "last"> {
-  group: string;
-  agg?: string;
-  rowsPerGroup?: number;
-  groupKey?: string;
-}
-
-function fetchGroups(ws: string, app: string, opts: GroupOpts): Promise<ExperimentGroups> {
-  const p = new URLSearchParams({ group: opts.group, offset: String(opts.offset ?? 0) });
-  setFilter(p, opts);
-  if (opts.agg) p.set("agg", opts.agg);
-  if (opts.rowsPerGroup) p.set("rows_per_group", String(opts.rowsPerGroup));
-  if (opts.groupKey) p.set("group_key", opts.groupKey);
-  return get<ExperimentGroups>(`/workspaces/${ws}/apps/${appTag(app)}/experiments?${p}`);
-}
-
 /** Inverse of appTag: the real app name behind a URL tag. */
 export const appName = (tag: string) => tag.replaceAll("-", "/");
 
@@ -100,6 +83,9 @@ export const api = {
     fetchPage(ws, app, opts),
   /** The board's runs grouped by a link or a field (plan 22 K1). */
   experimentGroups: (ws: string, app: string, opts: GroupOpts) => fetchGroups(ws, app, opts),
+  /** One group's rows from `opts.offset` (its `+N more` row). */
+  experimentGroupRows: (ws: string, app: string, key: string, opts: Omit<GroupOpts, "rowsPerGroup">) =>
+    fetchGroupRows(ws, app, key, opts),
   /** Chosen columns (`metrics.loss`, `params.lr`, ...) over the whole
    *  filtered set, aligned with its verstrs. */
   experimentsColumns: (

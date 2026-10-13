@@ -208,54 +208,6 @@ export interface ExperimentFacets {
   total: number;
 }
 
-/** A group's runs by status (plan 22 K1). */
-export interface GroupCounts {
-  total: number;
-  running: number;
-  waiting: number;
-  done: number;
-  failed: number;
-  stuck: number;
-}
-
-/** One metric over a group's finite values; `best` is null without a goal. */
-export interface GroupAggregate {
-  mean: number | null;
-  best: number | null;
-  median: number | null;
-  min: number | null;
-  max: number | null;
-  n: number;
-}
-
-/** The run a link group points at (its header). */
-export interface GroupTarget {
-  verstr: string;
-  idx: number | null;
-  name: string | null;
-  status: string;
-  tree_status?: string | null;
-  metrics: Record<string, number | null>;
-}
-
-/** One group of `GET .../experiments?group=` (plan 22 K1): `target` only
- *  for the links parent/forked_from/rerun_of whose run is in the index. */
-export interface ExperimentGroup {
-  key: string;
-  label: string;
-  target: GroupTarget | null;
-  counts: GroupCounts;
-  aggregates: Record<string, GroupAggregate>;
-  rows: ExperimentRow[];
-  rows_total: number;
-}
-
-export interface ExperimentGroups {
-  groups: ExperimentGroup[];
-  total_groups: number;
-  total_rows: number;
-}
-
 /** A page of leaderboard rows, with the server's count of every match. */
 export type ExperimentPage = ExperimentRow[] & { total: number };
 

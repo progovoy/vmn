@@ -1,10 +1,11 @@
 /** What the board can group its runs by (plan 22 G2) and how a group sums
  *  up a metric (G10): the URL's `group=`/`agg=` values and their labels. */
+import { GROUP_AGGREGATES, type GroupAggregate } from "../apiGroups";
 import type { ExperimentFacets } from "../types";
 
 /** `none`, a link, `branch`/`status`, or `tags.<key>`/`params.<key>`. */
 export type GroupBy = string;
-export type Aggregate = "mean" | "best" | "median" | "min" | "max";
+export type Aggregate = GroupAggregate;
 
 export interface GroupOption {
   value: GroupBy;
@@ -27,7 +28,7 @@ const KEYED_FIELD = /^(tags|params)\.(.+)$/;
 /** A param is offered only with at most this many distinct values. */
 export const MAX_PARAM_VALUES = 20;
 
-export const AGGREGATES: readonly Aggregate[] = ["mean", "best", "median", "min", "max"];
+export const AGGREGATES: readonly Aggregate[] = GROUP_AGGREGATES;
 
 type GroupFacets = Partial<ExperimentFacets> | null | undefined;
 

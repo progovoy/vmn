@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { api } from "../api";
-import type { ExperimentGroups } from "../types";
+import type { GroupedPage } from "../apiGroups";
 
 const urlOf = (call: unknown[]) => new URL(call[0] as string, "http://x");
 
 /** A K1 answer (plan 22 §2), as the S1 endpoint builds it. */
-const K1: ExperimentGroups = {
+const K1: GroupedPage = {
   groups: [{
     key: "0.0.1-dev.a", label: "sweep",
     target: {
@@ -57,7 +57,7 @@ describe("api.experimentGroups (plan 22 K1)", () => {
   });
 
   it("pages one group's rows with group_key", async () => {
-    await api.experimentGroups("w", "app", { group: "parent", groupKey: "0.0.1-dev.a", offset: 10, limit: 100 });
+    await api.experimentGroupRows("w", "app", "0.0.1-dev.a", { group: "parent", offset: 10, limit: 100 });
     const p = urlOf(fetchMock.mock.calls[0]).searchParams;
     expect(p.get("group_key")).toBe("0.0.1-dev.a");
     expect(p.get("offset")).toBe("10");
