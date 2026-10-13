@@ -77,6 +77,23 @@ vmn-exp diff my_app -v <run_a> -v <run_b>             # why they differ
 `vmn goto` extends the same guarantee across every tracked dependency
 repository, which has no MLflow equivalent at all.
 
+### A run page that says what changed
+
+Because the diff is on the record, the dashboard's run page opens with a
+**Changes** card under the training curves: the files and lines this run
+changed, the param edits and the metric deltas against a baseline you pick
+from the ones that exist — the base version, the parent, the run it was forked
+from or is a rerun of, the previous run of the same command on the branch, and the
+best run on the declared goal. *Show diff* expands the patch in place; *Open
+in Compare* opens the side-by-side code tab. MLflow's run page shows params
+and metrics, and leaves "what is different about this one" to you.
+
+A failed run's error card goes one step further: it shows the last lines of
+the run's output, the step it stopped at, and **since last good**, a link to
+the Changes card diffed against the latest earlier success of the same
+command. "It worked yesterday" becomes one click to the exact lines that
+changed since.
+
 ### A dead run does not read as a live one
 
 Status in vmn is derived, never stored. `vmn-exp run` and the SDK publish a
