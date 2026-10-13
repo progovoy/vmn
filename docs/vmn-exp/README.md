@@ -23,7 +23,7 @@ Jobs that only record metrics need just `pip install vmn-exp-sdk`
 - [Runnable examples](../../packages/vmn-exp/examples/README.md) — five small SDK scripts.
 - [Migrating from MLflow](migrating-from-mlflow.md) and
   [vmn-exp vs MLflow](vmn-vs-mlflow.md).
-- [Driving the UI fleet columns](ai-fleet-tracking.md) — for AI agents
+- [Driving the UI fleet counts](ai-fleet-tracking.md) — for AI agents
   orchestrating pods.
 - [AI agent skill](agent-skill.md) — what `vmn-exp skill` prints; install it
   with `vmn-exp skill --install [--target claude|cursor|agents]`.

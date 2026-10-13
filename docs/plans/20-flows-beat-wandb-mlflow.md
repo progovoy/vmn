@@ -168,7 +168,9 @@ button shows instead. `LiveToggle` goes away.
 The rest comes from the column picker; user prefs (`useColumnPrefs`) still win. Inner
 runs collapse into one `inner` cell (`5 · 4 running · 1 failed`), shown only when an
 outer row is loaded. *(2026-10-13: the user reverted this to the five per-state count
-columns — total/waiting/running/done/failed under an "Inner runs" header group — see C2.)*
+columns — total/waiting/running/done/failed under an "Inner runs" header group — see C2.
+Both are superseded by [plan 22](22-board-group-by.md): the board is flat and the inner
+counts sit on the outer run's group header when grouped by parent run.)*
 
 **D12. An outer run's headline is its tree.** An outer run that never ran (no run
 state: own status `created`) is a container, and its own `created` is left out of its
@@ -364,6 +366,11 @@ screen readers.
   column). A `c:inner` key in links saved meanwhile maps to all five; the A7
   `16/20 · incomplete` label sits in the total cell; the experiment cell says `N inner`
   only when all five are hidden; mobile cards keep their `N inner` summary.
+- *Superseded by [plan 22](22-board-group-by.md) (G1, G4, G8):* every run is a row, the
+  five count columns, their `c:total`/`c:waiting`/`c:running`/`c:done`/`c:failed`/`c:inner`
+  keys, the fold and `expand=` are deleted (no mapping), and the counts
+  (`16 · 2 running · 1 failed`) sit on each outer run's group header when the board is
+  grouped by parent run, the default once a run has a parent.
 
 **C3. Keyboard and screen-reader sorting.** `LeaderboardHead`: a `<button>` inside each
 sortable `th`, `aria-sort` on the `th`, visible focus ring. Drag/resize stay

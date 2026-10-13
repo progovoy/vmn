@@ -234,9 +234,8 @@ count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
 · 4 running`, from `experiments-status`) appears while a run is stuck or one
 failed in the last 24 hours; each part links to the board filtered to exactly
 those runs (`status=stuck`; the failures also get a `finished_at >= "<24h
-ago>"` token, newest first), replacing the other filters. Under a filter, an
-inner run whose outer is not among the matches is listed on its own, so the
-rows behind a link are as many as it counts. App tiles count runs the same way
+ago>"` token, newest first), replacing the other filters. A filter lists exactly the
+runs that match, so the rows behind a link are as many as it counts. App tiles count runs the same way
 (archived runs left out). See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
@@ -285,7 +284,20 @@ more columns to scroll to.
 
 ## Grouped board
 
-With a grouping (`?group=`, the Group by menu) the board lists groups: each
+The **Group by** menu next to Columns has `none`, then two sections. **Links**:
+`parent run`, `forked from`, `rerun of`, `same code` (`code_verstr`). **Fields**:
+`branch`, `status`, each `tags.<key>`, and each `params.<key>` with at most 20
+distinct values (from the [facets](#facets)). Its **Aggregate** section picks
+what a group header shows per metric: `mean`, `best`, `median`, `min` or
+`max`. The choice lives in the URL as `?group=` (`parent`, `forked_from`,
+`rerun_of`, `code_verstr`, `branch`, `status`, `tags.<k>`, `params.<k>`,
+`none`) and `?agg=`, so saved views keep it. Without `?group=` the board is
+grouped by parent run when some run has a parent, else not grouped. Without
+`?agg=` it shows conf.yml's `experiment.ui.group_aggregate`, else the mean
+(store workspaces have no conf, so the mean). Ungrouped, every run is one row,
+sorted and paged as a flat list.
+
+With a grouping the board lists groups: each
 starts with a header row (the fold, the group's label — for a link the
 target run's `@N` name and status pill, for `same code` the code verstr with
 its base version and branch, for a field `branch = main` — and its status
@@ -298,7 +310,11 @@ falls back to the mean), plus `own 0.91` when the target run logged the
 metric itself; the metric headers carry a small aggregate tag. `?collapse=`
 lists the closed groups (the parent grouping's `(no parent run)` group never
 folds). Sorting orders the groups (by the aggregate) and the rows within
-them; 50 groups load per page.
+them; 50 groups load per page. A filter keeps the groups with a matching run
+and counts only those runs; a link group's header stays even when its target
+run does not match. Grouped by parent run, an outer run heads its inner runs'
+group, and its own row sits in the group of its parent (`(no parent run)` for
+a top-level run).
 
 ## Compare
 
