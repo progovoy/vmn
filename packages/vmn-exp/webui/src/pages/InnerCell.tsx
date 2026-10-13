@@ -13,10 +13,14 @@ export default function InnerCell({ r, style }: { r: ExperimentRow; style: CSSPr
       {s && (
         <>
           <span aria-hidden="true">
-            <span className="inner-total">{s.total}</span>
-            {s.parts.map((p) => (
-              <span key={p.state}>{" · "}<span className={`inner-${p.state}`}>{p.text}</span></span>
-            ))}
+            {s.incomplete ? <span className="inner-incomplete">{s.incomplete}</span> : (
+              <>
+                <span className="inner-total">{s.total}</span>
+                {s.parts.map((p) => (
+                  <span key={p.state}>{" · "}<span className={`inner-${p.state}`}>{p.text}</span></span>
+                ))}
+              </>
+            )}
           </span>
           <span className="sr-only">{s.label}</span>
         </>

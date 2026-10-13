@@ -7,6 +7,7 @@ import { Skeleton } from "../../components/ui";
 import DiffText from "../../components/DiffText";
 import RunPicker from "../../components/RunPicker";
 import CopyRefButton from "../../components/CopyRefButton";
+import ParamDeltaBlock from "../../components/ParamDeltaBlock";
 import { deltaTone, fmtDelta, numericChange, type DeltaTone } from "../../components/diffDeltaTone";
 import { useRunLabels } from "./useRunLabels";
 
@@ -49,7 +50,7 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
     return <div className="error">{String(diffError)}</div>;
   if (!result && !diffError) return <Skeleton />;
 
-  const delta = result ? Object.entries(result.metrics_delta) : [];
+  const delta = result ? Object.entries(result.metrics_delta).filter(([, d]) => !d.param) : [];
   const materializeReason = isMaterializeError
     ? ((diffError as HttpError & { body?: { reason?: string } }).body?.reason ?? "restore_failed")
     : null;
@@ -98,7 +99,7 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
             {delta.length === 0 ? (
               <div className="empty">No metric changes.</div>
             ) : (
-              <table>
+              <table aria-label="Metric changes">
                 <thead>
                   <tr>
                     <th>metric</th>
@@ -127,6 +128,13 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
                 </tbody>
               </table>
             )}
+            <ParamDeltaBlock
+              deltas={result.metrics_delta}
+              heads={[
+                <SideHead key="from" verstr={fromVerstr} label={fromLabel.text} />,
+                <SideHead key="to" verstr={toVerstr} label={toLabel.text} />,
+              ]}
+            />
           </div>
 
           <div className="card">

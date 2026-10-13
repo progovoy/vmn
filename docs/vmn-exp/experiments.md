@@ -352,6 +352,21 @@ outer row as `<own status>/<subtree status>` when they differ:
   [3] 1.6.0-dev.a1b2c3d.1122334  failed  (1s ago)  - lr=0.1
 ```
 
+An outer run that never ran itself (no run state, own status `created`) is a
+container: its own `created` is left out of the rollup, so 16 succeeded trials
+make it read `succeeded`. A sweep outer (`vmn-exp sweep create`) also knows its
+planned size — the grid size (capped by `run_cap`), else `run_cap`; an uncapped
+random/bayes sweep has none. While its trials (a retried trial counts once)
+number fewer than that, `created` joins the rollup: a sweep whose 16 trials all
+finished out of 20 planned reads `created`, and `exp list` says so:
+
+```
+[1] 1.6.0-dev.a1b2c3d.9f8e7d6 'sw'  created (16/20 incomplete)  (3s ago)
+```
+
+Rows of such a sweep carry `sweep_planned` and `sweep_trials`; the UI shows
+`16/20 · incomplete`.
+
 `exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
 it differs) on the outer run.
 

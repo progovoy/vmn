@@ -410,7 +410,8 @@ Every row of `.../experiments` and the run detail carry:
 | `parent` / `children` | verstrs linking outer and inner jobs |
 | `kind` | `outer`, `inner` or `single` |
 | `depth` | nesting depth, for indenting the list |
-| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`) |
+| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created` is left out, an incomplete sweep adds `created` |
+| `sweep_planned` / `sweep_trials` | a sweep outer's planned trials (grid size, else `run_cap`) and the trial slots its inner runs fill; absent for other runs and uncapped random/bayes sweeps. While `sweep_trials < sweep_planned` the UI reads `16/20 · incomplete`, and the detail's `status.fleet.expected` is the planned size |
 | `signal` / `end_reason` | the signal that ended the run (`SIGTERM`), `stopped` for an early-stopped sweep trial |
 | `error_summary` | `Type: message` of a failed run's recorded `error`, else `null` |
 
@@ -661,8 +662,8 @@ read-only workspaces too) offers these baselines as a picker. It defaults to
 `base` when present, else `previous`, else the first that exists. `base` shows
 the `/patch` files and text. Any other baseline is diffed through
 `experiments-diff` (baseline → this run): it shows the top 5 metrics by |Δ|
-(goal metrics first, then "+N more"), the params that changed, the changed
-files and the diff behind *Show diff*, with *Open in Compare →*
+(goal metrics first, then "+N more"), a *Params changed* block (count + one
+row per param), the changed files and the diff behind *Show diff*, with *Open in Compare →*
 (`compare-runs?tab=code&sel=<baseline>&sel=<run>`). Without code or
 baselines, it shows one line with the reason. The picked baseline is kept in
 the page's `?baseline=` param. Its value is a baseline key or any run ref,
@@ -718,12 +719,11 @@ the same step (for step-less points, the same `log_metrics` call); points
 without a finite x are dropped. The join happens before thinning, and
 `series_total` counts joined points.
 
-In the dashboard, the run page has an `x:` picker next to the Step / Wall /
-Relative toggle (Step mode): `x: declared` (default) uses each metric's declared
-`step_metric`, `x: step` ignores declarations, and a metric name plots every
-other chart against it. The Compare page's curves tab folds these into one
-x axis control: Step (each metric's declared `step_metric`, else the step),
-Wall, Relative, or `x = <metric>` for every chart.
+In the dashboard, the run page's training curves and the Compare page's
+curves tab share one x axis control: Step (each metric's declared
+`step_metric`, else the step), Wall, Relative, or `x = <metric>` for every
+chart. `Log y` is an on/off chip; a log axis labels each tick with its own
+value (`1e-4`, `0.001`, `10`).
 
 ### Diffs and artifacts
 
@@ -732,6 +732,13 @@ Results are cached per pair, at most two diffs run at once (a third waits, then
 gets 429), and the text is capped at 2 MB (`truncated: true`). A record with no
 base commit (a git-free run) answers `diff: null` with the reason in
 `diff_unavailable`.
+
+`metrics_delta` maps each key of the two runs' folded `metrics` whose value
+differs to `{from, to, goal, param}` (`from`/`to` are `null` on a run without
+the key). `param: true` marks a numeric param folded into `metrics`: every run
+holding the key holds it as a param with no `metric_summary` entry, so a param
+only one run set is still a param. The Compare *Code* tab and the run page's
+*Changes* card list those under *Params changed*, the rest as metrics.
 
 `GET .../experiments/{verstr}/artifacts/{path}` downloads an artifact, and
 `.../outputs/{path}` one of vmn's own outputs (`output.log`, media, tables;

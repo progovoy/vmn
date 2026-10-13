@@ -55,6 +55,23 @@ export function fmtNumTicks(splits: number[], step: number): string[] {
 const numAxisValues = (_u: unknown, splits: number[], _axis: number, _space: number, step: number) =>
   fmtNumTicks(splits, step);
 
+/** One log-axis tick, compact and free of float noise: 0.001, 2e-4, 1e6. */
+function fmtLogTick(v: number): string {
+  const clean = Number(v.toPrecision(6));
+  const abs = Math.abs(clean);
+  if (abs >= 1e-3 && abs < 1e6) return String(clean);
+  return clean.toExponential().replace("e+", "e");
+}
+
+/** Log-axis tick labels, each written from its own value: uPlot passes a
+ *  log axis the linear increment of the whole range, so precision taken from
+ *  it rounds the small ticks to "0". Splits uPlot filters out come as null. */
+export function fmtLogTicks(splits: (number | null)[]): string[] {
+  return splits.map((v) => (v == null ? "" : fmtLogTick(v)));
+}
+
+const logAxisValues = (_u: unknown, splits: (number | null)[]) => fmtLogTicks(splits);
+
 /** *s* alone, or its raw curve (faded) under an EMA-smoothed copy. */
 export function withSmoothing(s: CurveSeries, alpha: number): CurveSeries[] {
   if (alpha === 0) return [s];
@@ -68,8 +85,11 @@ export function curveData(series: CurveSeries[]): uPlot.AlignedData {
 /** Narrowest y axis, left of the plot area (a tooltip with no measured plot
  *  edge offsets by it). */
 export const Y_AXIS_SIZE = 56;
-/** Advance of one 10.5px monospace glyph, and the tick + gap beside a label. */
-const LABEL_CHAR_PX = 6.5;
+/** Axis label size. Whole pixels: uPlot scales the first /(\d+)px/ by the
+ *  device pixel ratio, so "10.5px" would draw 5px labels on a 2x screen. */
+const AXIS_FONT_PX = 11;
+/** Advance of one AXIS_FONT_PX monospace glyph, and the tick + gap beside a label. */
+const LABEL_CHAR_PX = 6.7;
 const LABEL_PAD_PX = 16;
 
 /** uPlot `size` of a y axis: as wide as its widest tick label (labels like
@@ -100,7 +120,7 @@ export function themedAxis(
     stroke: theme.axis,
     grid: { show: grid, stroke: theme.grid, width: 1 },
     ticks: { stroke: theme.grid, width: 1 },
-    font: `10.5px ${resolveCssColor("var(--mono, monospace)", read)}`,
+    font: `${AXIS_FONT_PX}px ${resolveCssColor("var(--mono, monospace)", read)}`,
     values: numAxisValues,
     ...extra,
   } as uPlot.Axis;
@@ -123,7 +143,7 @@ export function curveOptions(
       axis({
         ...(xTick ? { values: (_u: unknown, splits: number[]) => splits.map(xTick) } : {}),
       } as Partial<uPlot.Axis>, false),
-      axis({ size: yAxisSize }),
+      axis({ size: yAxisSize, ...(logY ? { values: logAxisValues } : {}) } as Partial<uPlot.Axis>),
     ],
     series: [
       {},

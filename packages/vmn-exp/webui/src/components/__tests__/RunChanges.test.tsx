@@ -102,7 +102,10 @@ describe("RunChanges", () => {
     expect(names()).toEqual(["b", "c", "d", "e", "f"]);
     fireEvent.click(screen.getByRole("button", { name: "+2 more" }));
     expect(names()).toEqual(["b", "c", "d", "e", "f", "a", "plain"]);
-    expect(screen.getByText(/params changed/)).toHaveTextContent("lr 0.1 → 0.01");
+    const params = screen.getByRole("region", { name: "Params changed" });
+    expect(within(params).getByRole("heading")).toHaveTextContent(/params changed\s*1/i);
+    const lr = within(params).getByRole("rowheader", { name: "lr" }).closest("tr")!;
+    expect(within(lr).getAllByRole("cell").map((c) => c.textContent)).toEqual(["0.1", "0.01"]);
   });
 
   it("expands the unified diff on demand", async () => {

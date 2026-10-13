@@ -1,6 +1,7 @@
 /** The leaderboard's inner column: one cell per outer run summing its inner
  *  runs (`5 · 4 running · 1 failed`), shown while an outer run is loaded. */
 import type { ExperimentRow } from "../types";
+import { sweepIncompleteLabel, sweepIncompleteSpoken } from "../util/sweepProgress";
 import { fleetCounts } from "./leaderboardColumns";
 
 /** The column's id (the `show=`/`hide=` key). */
@@ -36,6 +37,8 @@ export interface InnerRunSummary {
   parts: { state: InnerState; count: number; text: string }[];
   /** What the cell shows: `5 · 4 running · 1 failed`. */
   text: string;
+  /** An incomplete sweep's `16/20 · incomplete` (then the whole text), else null. */
+  incomplete: string | null;
   /** What a screen reader says: `5 inner runs, 4 running, 1 failed`. */
   label: string;
 }
@@ -47,8 +50,13 @@ export function innerRunSummary(r: ExperimentRow): InnerRunSummary | null {
   const parts = STATES.filter((s) => counts[s] > 0)
     .map((state) => ({ state, count: counts[state], text: `${counts[state]} ${state}` }));
   const runs = `${counts.total} inner run${counts.total === 1 ? "" : "s"}`;
+  const incomplete = sweepIncompleteLabel(r);
+  if (incomplete) {
+    // Every trial finished: the planned size is all the cell has to add.
+    return { total: counts.total, parts: [], incomplete, text: incomplete, label: `${runs}, ${sweepIncompleteSpoken(r)}` };
+  }
   return {
-    total: counts.total, parts,
+    total: counts.total, parts, incomplete,
     text: [String(counts.total), ...parts.map((p) => p.text)].join(" · "),
     label: [runs, ...parts.map((p) => p.text)].join(", "),
   };

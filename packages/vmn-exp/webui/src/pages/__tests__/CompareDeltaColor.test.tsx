@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -72,7 +72,9 @@ describe("Compare delta coloring", () => {
     expect(deltaCell.style.color).toBe("var(--good)");
   });
 
-  it("renders neutral color for param deltas", async () => {
+  // K1/D2: a param sits in the "Params changed" block, never in the coloured
+  // metric table, so it carries no good/bad tone.
+  it("keeps param deltas out of the coloured metric table", async () => {
     m.experimentsDiff.mockResolvedValue({
       from_verstr: "a",
       to_verstr: "b",
@@ -85,7 +87,10 @@ describe("Compare delta coloring", () => {
     renderCompare();
     await screen.findByText("lr");
 
-    const deltaCell = screen.getByText("-0.009");
-    expect(deltaCell.style.color).toBe("var(--text-3)");
+    expect(screen.queryByText("-0.009")).toBeNull();
+    const block = screen.getByRole("region", { name: "Params changed" });
+    expect(within(block).getByRole("rowheader", { name: "lr" })).toBeInTheDocument();
+    for (const td of block.querySelectorAll("td"))
+      expect(td.style.color).not.toMatch(/--good|--bad/);
   });
 });

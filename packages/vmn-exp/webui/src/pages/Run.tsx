@@ -28,6 +28,7 @@ import RunLayout, { RunChangesSection, RunCurves, RunDetailSections, RunOutputs,
 import { ForkOrigin } from "./RunFork";
 import { paramsVariedFirst } from "./runParams";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
+import { sweepIncompleteLabel } from "../util/sweepProgress";
 
 /** The metrics the Metrics card lists: params folded into `metrics` stay
  *  under Params (D2). */
@@ -104,7 +105,10 @@ export default function Run() {
       changes={detail && <RunChangesSection ws={ws} app={app} verstr={summary.verstr} />}
       fleet={(
         <>
-          {st?.fleet && <FleetCard fleet={st.fleet} schema={schema} runUrl={runUrl} table={!sweepSpec} />}
+          {st?.fleet && <FleetCard
+            fleet={st.fleet} schema={schema} runUrl={runUrl} table={!sweepSpec}
+            incomplete={sweepIncompleteLabel(st)}
+          />}
           {sweepSpec && (
             <SweepSection ws={ws} app={app} verstr={summary.verstr} runUrl={runUrl} idxOf={fleetIdxOf(st?.fleet)} />
           )}

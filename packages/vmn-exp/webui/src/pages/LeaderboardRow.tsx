@@ -5,6 +5,7 @@ import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
 import { Icon } from "../components/shell/icons";
 import { tagLabel } from "../util/tags";
+import { sweepIncompleteLabel } from "../util/sweepProgress";
 import {
   DATE_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
@@ -135,7 +136,8 @@ function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold, innerSh
           </Link>
           {r.children && r.children.length > 0 && (() => {
             const tree = r.tree_status && r.tree_status !== r.status ? `tree ${r.tree_status}` : "";
-            const text = innerShown ? tree : `${r.children.length} inner${tree ? ` · ${tree}` : ""}`;
+            if (innerShown) return tree && <span className="tree-roll">{tree}</span>;
+            const text = [`${r.children.length} inner`, tree, sweepIncompleteLabel(r)].filter(Boolean).join(" · ");
             return text && <span className="tree-roll">{text}</span>;
           })()}
         </div>

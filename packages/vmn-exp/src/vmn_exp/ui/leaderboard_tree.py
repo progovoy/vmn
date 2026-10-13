@@ -21,6 +21,7 @@ from vmn_exp.core.tree import (
     count_statuses,
     own_rollup_status,
     rollup_status,
+    sweep_trial_count,
 )
 
 
@@ -133,8 +134,9 @@ def derive_tree(prev, snapshot, fresh, gone, position):
     moved_under = [kid for g in gone for kid in children_of.get(g, ())]
     depth = _depths(sorted(relinked & position.keys()) + moved_under, edges, children_of)
     was = _Was(prev, fresh, depth)
-    tree_status, counts = _roll_up(prev, edges, dirty | relinked, dirty, was, children_of)
-    rows, rebuilt = _assemble(prev, snapshot, position, (children_of, depth, tree_status),
+    trials = _sweep_trials(dirty, was, children_of)
+    tree_status, counts = _roll_up(prev, edges, dirty | relinked, dirty, was, (children_of, trials))
+    rows, rebuilt = _assemble(prev, snapshot, position, (children_of, depth, tree_status, trials),
                               fresh, touched, was)
     return rows, children_of, counts, rebuilt
 
@@ -171,10 +173,20 @@ class _Was:
         return self._depth[verstr] if verstr in self._depth else self.old(verstr)["depth"]
 
 
-def _roll_up(prev, edges, withdrawn, dirty, was, children_of):
+def _sweep_trials(dirty, was, children_of):
+    """``{verstr: sweep_trials}`` of the *dirty* sweep rows (a planned size)."""
+    return {
+        v: sweep_trial_count(was.row(c) for c in children_of.get(v, ()))
+        for v in dirty if was.row(v).get("sweep_planned") is not None
+    }
+
+
+def _roll_up(prev, edges, withdrawn, dirty, was, tree):
     """``({verstr: tree_status} for *dirty*, new child status counts)``: the
     *withdrawn* rows' old statuses leave their old parents' counts, then the
-    dirty rows roll up bottom-up and join their new parents'."""
+    dirty rows roll up bottom-up and join their new parents'. *tree* is
+    ``(children_of, {verstr: sweep_trials})``."""
+    children_of, trials = tree
     counts = _Counts(prev.child_statuses)
     for verstr in withdrawn:
         parent = parent_in(prev.snapshot.edges, verstr)
@@ -182,7 +194,9 @@ def _roll_up(prev, edges, withdrawn, dirty, was, children_of):
             counts.add(parent, was.old(verstr)["tree_status"], -1)
     tree_status = {}
     for verstr in sorted(dirty, key=was.depth, reverse=True):
-        own = own_rollup_status(was.row(verstr)["status"], bool(children_of.get(verstr)))
+        row = was.row(verstr)
+        incomplete = verstr in trials and trials[verstr] < row["sweep_planned"]
+        own = own_rollup_status(row["status"], bool(children_of.get(verstr)), incomplete)
         status = tree_status[verstr] = rollup_status({own, *counts.statuses(verstr)})
         if parent_in(edges, verstr):
             counts.add(parent_in(edges, verstr), status, 1)
@@ -192,7 +206,7 @@ def _roll_up(prev, edges, withdrawn, dirty, was, children_of):
 def _assemble(prev, snapshot, position, tree, fresh, touched, was):
     """``(rows, rebuilt)``: *prev*'s rows with every row whose fields changed
     replaced by a new object (the *fresh* ones completed in place)."""
-    children_of, depth, tree_status = tree
+    children_of, depth, tree_status, trials = tree
     rows = list(prev.rows[: len(snapshot.rows)])
     rows.extend([None] * (len(snapshot.rows) - len(rows)))
     rebuilt = set()
@@ -206,6 +220,8 @@ def _assemble(prev, snapshot, position, tree, fresh, touched, was):
             "tree_status": tree_status[verstr] if verstr in tree_status else row["tree_status"],
             "child_counts": count_statuses(was.row(c)["status"] for c in children),
         }
+        if verstr in trials:
+            fields["sweep_trials"] = trials[verstr]
         if verstr in fresh:
             row.update(fields)
         elif verstr in touched or _tree_fields_changed(row, fields):
@@ -218,4 +234,5 @@ def _assemble(prev, snapshot, position, tree, fresh, touched, was):
 
 
 def _tree_fields_changed(row, fields):
-    return any(row.get(key) != fields[key] for key in ("depth", "tree_status", "child_counts"))
+    return any(row.get(key) != fields.get(key)
+               for key in ("depth", "tree_status", "child_counts", "sweep_trials"))
