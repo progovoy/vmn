@@ -2,6 +2,9 @@ import { useCallback, useMemo } from "react";
 import { setAllParams, useUrlState } from "./useUrlState";
 import { NO_PINS, moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
 import { parseAggregate, parseGroup, type Aggregate, type GroupBy } from "../util/groupBy";
+import { parseDensity, rememberDensity, storedDensity, type Density } from "../util/density";
+
+export { DENSITY_KEY } from "../util/density";
 
 export const CHART_VIEWS = ["trend", "bar", "scatter", "parallel", "grouped", "importance"] as const;
 export type ChartView = (typeof CHART_VIEWS)[number];
@@ -28,7 +31,7 @@ function setBoardTab(p: URLSearchParams, tab: BoardTab) {
 }
 
 /** The leaderboard's whole view — sort, filters, tab, chart, hidden columns,
- *  column order, pinning and selection — read from and written to the URL,
+ *  column order, pinning, selection and density — read from and written to the URL,
  *  so it is bookmarkable and Back returns to exactly what was on screen. */
 export function useLeaderboardView() {
   const { params, update, setParam } = useUrlState();
@@ -50,6 +53,8 @@ export function useLeaderboardView() {
     /** `group=`/`agg=` when the board knows them; null = the default. */
     groupParam: parseGroup(params.get("group")),
     aggParam: parseAggregate(params.get("agg")),
+    /** `density=`, else the user's last pick (plan 23 W8). */
+    density: parseDensity(params.get("density")) ?? storedDensity(),
   };
 
   const hidden = useParamSet(params, "hide");
@@ -138,6 +143,7 @@ export function useLeaderboardView() {
     toggleCollapsed: (key: string) => toggleIn("collapse", key),
     setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),
     setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),
+    setDensity: (d: Density) => { rememberDensity(d); setParam("density", d); },
     setOrder: (keys: readonly string[]) => setAll("col", keys),
     /** *pinned*: the pins in effect (the board's defaults without `pin=`). */
     moveColumn: (key: string, delta: number, defaultKeys: readonly string[], pinned?: readonly string[]) =>

@@ -30,6 +30,7 @@ import { boardSort, isGroupCountId } from "../util/groupCountSort";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import BoardHead, { runCountText } from "./BoardHead";
 import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
+import BoardGridTools from "./BoardGridTools";
 import { useCanCreateRun } from "../shell/useAppExists";
 import { useAppStatus } from "../shell/useShellData";
 import AttentionStrip from "../components/AttentionStrip";
@@ -261,10 +262,13 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
                   edits={columnEdits}
                   onFit={setTableWidth}
                   describedBy={BOARD_CAPTION_ID}
+                  density={view.density}
+                  onClearAnchor={selection.clearAnchor}
                 />
                 <BoardCaption
                   sortLabel={sortLabel} reversed={sortState.reversed}
                   live={{ running: anyRunning, paused, updatedAt: data.updatedAt, onPaused: setPaused, onRefresh: refresh }}
+                  tools={<BoardGridTools density={view.density} onDensity={view.setDensity} />}
                 />
                 {rows !== undefined && data.hasMore && (
                   <div className="load-more">

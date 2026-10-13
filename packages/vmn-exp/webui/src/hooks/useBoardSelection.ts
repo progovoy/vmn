@@ -44,6 +44,8 @@ export function useBoardSelection(
     const span = rows.slice(lo, hi + 1).map((r) => r.verstr);
     sel.setSelected([...new Set([...sel.selected, ...span])]);
   }, []);
+  /** The next shift-toggle starts a range of its own. */
+  const clearAnchor = useCallback(() => { anchor.current = null; }, []);
 
   /** How many of *verstrs* are selected. */
   const checkOf = (verstrs: readonly string[]): HeaderCheck => {
@@ -89,7 +91,7 @@ export function useBoardSelection(
   };
 
   return {
-    toggle, headerCheck, toggleAll, checkOf, toggleRows, selectAll, archive,
+    toggle, clearAnchor, headerCheck, toggleAll, checkOf, toggleRows, selectAll, archive,
     archiving: job.job?.status === "running",
     archiveError: archiveError ?? job.error,
   };

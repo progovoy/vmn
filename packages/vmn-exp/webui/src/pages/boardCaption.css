@@ -3,5 +3,19 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px;
   margin: 8px 2px 0; min-height: 30px; font-size: 12.5px; color: var(--text-3);
 }
+/* The described part flows in the caption's row; the grid tools follow it. */
+.board-caption-desc { display: contents; }
 .board-caption .spacer { margin-left: auto; }
 .board-caption-sort b { color: var(--text-2); font-weight: 500; }
+/* The row density (one joined pair) and the keyboard help (BoardGridTools.tsx). */
+.board-grid-tools { display: inline-flex; align-items: center; gap: 6px; }
+.board-grid-tools button { height: 26px; padding: 0 9px; font-size: 12px; }
+.board-grid-tools .segmented { gap: 0; flex-wrap: nowrap; }
+.board-grid-tools .segmented button:first-child { border-radius: 6px 0 0 6px; }
+.board-grid-tools .segmented button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.board-grid-tools .board-shortcuts-btn { border-radius: 6px; }
+/* Under the table near the page's end, the help opens upwards. */
+.board-grid-tools .board-shortcuts-panel { top: auto; bottom: 100%; margin-bottom: 6px; }
+@media (max-width: 639px) {
+  .board-grid-tools { display: none; }
+}
