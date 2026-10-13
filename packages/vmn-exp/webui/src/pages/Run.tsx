@@ -10,6 +10,7 @@ import { Skeleton } from "../components/ui";
 import NotFound from "../components/shell/NotFound";
 import { isMissingRun } from "../shell/notFoundCopy";
 import { usePolling } from "../hooks/usePolling";
+import { useLiveScope } from "../hooks/useLiveScope";
 import AppendMetrics from "../components/AppendMetrics";
 import LiveStatus from "../components/LiveStatus";
 import NoteEditor from "../components/NoteEditor";
@@ -48,11 +49,16 @@ export default function Run() {
   const [paused, setPaused] = useState(false);
   const detail = query.data;
 
-  // Follow a running run on its own until paused, at the cadence its
-  // heartbeat can move the payload at; anything else refreshes on demand.
+  // Follow a running run on its own until paused: pushed by its subtree's
+  // live events, else polled at the cadence its heartbeat can move the
+  // payload at; anything else refreshes on demand.
   const running = detail?.status?.status === "running";
+  const live = useLiveScope({
+    ws, app, scope: detail?.metadata.verstr, enabled: running && !paused,
+    onChange: () => query.refetch(),
+  });
   const pollMs = pollIntervalMs(detail?.status?.heartbeat_interval_sec);
-  usePolling(() => query.refetch(), pollMs, running && !paused);
+  usePolling(() => query.refetch(), pollMs, running && !paused && !live.connected);
 
   if (query.error && !detail) {
     if (isMissingRun(query.error)) return <NotFound kind="run" ws={ws} appTag={app} runRef={verstr} />;

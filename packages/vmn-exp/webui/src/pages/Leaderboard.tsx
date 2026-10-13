@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { appName as toAppName } from "../api";
 import ReportsUsing from "../components/ReportsUsing";
-import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
+import { facetsQuery, prefetchRun, useFacets, useMetricsSchema } from "../queries";
 import { branchClause, combineQueries, searchClause, statusClause } from "../util/searchQuery";
 import { pollIntervalMs } from "../util";
 import type { ExperimentRow } from "../types";
@@ -11,6 +11,7 @@ import NewExperiment from "../components/NewExperiment";
 import LeaderboardFilter from "../components/LeaderboardFilter";
 import SimilarSearch from "../components/SimilarSearch";
 import { usePolling } from "../hooks/usePolling";
+import { useLiveScope } from "../hooks/useLiveScope";
 import { useBoardRows } from "../hooks/useBoardRows";
 import { useLeaderboardView } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
@@ -129,7 +130,15 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   }, [rows, serverRunning]);
   const all = useMemo(() => rows ?? [], [rows]);
   const { refresh } = data;
-  usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused);
+  // Pushed by the app's live events (new runs too), else polled.
+  const live = useLiveScope({
+    ws, app, enabled: !paused,
+    onChange: () => Promise.all([
+      refresh(),
+      client.invalidateQueries({ queryKey: facetsQuery(ws, app).queryKey }),
+    ]),
+  });
+  usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused && !live.connected);
 
   const base = `/ws/${ws}/app/${app}`;
   const colPrefs = useColumnPrefs(`${ws}/${app}`);

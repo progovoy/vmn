@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { useTabVisible } from "./useTabVisible";
 
 const isThenable = (v: unknown): v is PromiseLike<unknown> =>
   typeof (v as PromiseLike<unknown> | null)?.then === "function";
@@ -14,15 +15,7 @@ export function usePolling(
 ) {
   const savedCallback = useRef(callback);
   savedCallback.current = callback;
-  const [visible, setVisible] = useState(
-    () => document.visibilityState !== "hidden"
-  );
-
-  useEffect(() => {
-    const onChange = () => setVisible(document.visibilityState !== "hidden");
-    document.addEventListener("visibilitychange", onChange);
-    return () => document.removeEventListener("visibilitychange", onChange);
-  }, []);
+  const visible = useTabVisible();
 
   useEffect(() => {
     if (!enabled || !visible) return;
