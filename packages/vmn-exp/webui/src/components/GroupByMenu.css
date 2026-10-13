@@ -43,11 +43,13 @@
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
-/* On a phone the menu spans the viewport (like Views and Columns), fixed at
-   its static position: right under the trigger, wherever the page scrolled. */
+/* On a phone the menu spans the viewport (like Views and Columns), fixed
+   right under its trigger: GroupByMenu sets --group-by-top to the trigger's
+   bottom on open and on scroll (a fixed box's static top ignores the
+   scroll of the page's own scroller). */
 @media (max-width: 639px) {
   .group-by-menu {
-    position: fixed; top: auto; left: 12px; right: 12px; min-width: 0;
-    margin-top: 6px; max-height: 60vh;
+    position: fixed; top: var(--group-by-top, auto); left: 12px; right: 12px; min-width: 0;
+    max-height: min(60vh, calc(100vh - var(--group-by-top, 0px) - 12px));
   }
 }

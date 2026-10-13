@@ -85,10 +85,12 @@ describe("the Group by menu's selected aggregate (plan 22 F9)", () => {
 });
 
 describe("the phone Group by menu (plan 22 F9)", () => {
-  it("opens under its trigger at any scroll: fixed at its static top, inside the viewport", () => {
+  it("opens under its trigger at any scroll: fixed at the trigger's bottom, inside the viewport", () => {
     const d = decls(media(menuCss, "(max-width: 639px)"), ".group-by-menu");
     expect(d.position).toBe("fixed");
-    expect(d.top).toBe("auto");
+    // GroupByMenu sets --group-by-top to its trigger's bottom (a fixed box's
+    // static top ignores the scroll of the page's own scroller).
+    expect(d.top).toBe("var(--group-by-top, auto)");
     expect(d.left).toBe("12px");
     expect(d.right).toBe("12px");
     expect(d["min-width"]).toBe("0");

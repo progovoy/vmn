@@ -1,6 +1,7 @@
 /** The board's `Group by ▾` (plan 22 G2, G10): none, the links between runs,
  *  the fields, and — while grouped — the aggregate a group's header shows. */
 import { useCallback, useRef, useState } from "react";
+import { useAnchorTop } from "../hooks/useAnchorTop";
 import { useDismiss } from "../hooks/useDismiss";
 import { useMenuKeys } from "../hooks/useMenuKeys";
 import { AGGREGATES, NO_GROUP, groupLabel, type Aggregate, type GroupBy, type GroupOption } from "../util/groupBy";
@@ -42,6 +43,7 @@ export default function GroupByMenu({ value, links, fields, onChange, aggregate,
   const close = useCallback(() => setOpen(false), []);
   useDismiss(open, close, box, trigger);
   const onMenuKey = useMenuKeys(open, menu, close);
+  useAnchorTop(open, trigger, menu, "--group-by-top");
 
   // A URL group the facets no longer offer stays listed, so it shows checked.
   const known = [...links, ...fields].some((o) => o.value === value);
