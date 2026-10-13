@@ -10,7 +10,7 @@ import { Icon } from "../components/shell/icons";
 import type { ExperimentRow, RunState } from "../types";
 import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
-import { aggregateCell, countParts, spokenCounts } from "./groupHeaderText";
+import { aggregateCell, countParts, countsText, spokenCounts } from "./groupHeaderText";
 import { isGapId } from "./leaderboardColumns";
 import { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import "./leaderboardGroupRow.css";
@@ -45,7 +45,7 @@ function Label({ item, layout, first, onFold }: {
           <span className={`group-label${code ? " mono" : ""}`} title={group.label}>{group.label}</span>
         )}
       </div>
-      <div className="group-sub">
+      <div className={`group-sub${item.foldable ? " under-fold" : ""}`} title={countsText(group.counts)}>
         <span className="group-counts" aria-hidden="true">
           {countParts(group.counts).map((p, i) => (
             <span key={p.tone}>{i > 0 && " · "}<span className={`tone-${p.tone}`}>{p.text}</span></span>

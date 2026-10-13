@@ -177,12 +177,17 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const empty = rows !== undefined && rows.length === 0 && !filtered;
   const sortLabel = view.sort ?? cols.primary;
   const shownTop = topLevel(tableRows ?? []);
+  // Groups hold only their first rows: the facets count the board's runs.
+  const wholeBoard = data.grouped && rows !== undefined && !filtered && facets !== null;
 
   return (
     <>
       <BoardHead
         title={appName}
-        count={runCountText({
+        count={runCountText(wholeBoard ? {
+          loading: false, filtered, loaded: data.total, total: data.total,
+          shownTop, loadedTop: Math.max(0, data.total - facets.parented),
+        } : {
           loading: rows === undefined, filtered, loaded: all.length, total: data.total,
           shownTop, loadedTop: topLevel(all),
         })}

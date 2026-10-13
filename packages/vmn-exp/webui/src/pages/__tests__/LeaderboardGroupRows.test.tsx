@@ -217,4 +217,12 @@ describe("the grouped board", () => {
     await waitFor(() => expect(headerRows()).toHaveLength(2));
     expect(document.querySelector(".page-sub")?.textContent).toBe("2 runs · 4 incl. inner");
   });
+
+  it("counts the whole board's runs while groups hold only their first rows", async () => {
+    m.facets.mockResolvedValue({ ...facets(40), total: 50 });
+    m.experimentGroups.mockResolvedValue({ ...grouped([sweepGroup({ rows_total: 40 }), noParent()]), total_rows: 50 });
+    renderBoard();
+    await waitFor(() => expect(headerRows()).toHaveLength(2));
+    expect(document.querySelector(".page-sub")?.textContent).toBe("10 runs · 50 incl. inner");
+  });
 });

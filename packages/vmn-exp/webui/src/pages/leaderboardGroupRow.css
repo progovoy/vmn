@@ -11,8 +11,10 @@ tr.group-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .group-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .group-sub {
   font-size: 11.5px; color: var(--text-3); font-family: var(--mono);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 27px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Under the label, past the fold chevron. */
+.group-sub.under-fold { margin-left: 27px; }
 .group-counts .tone-total { color: var(--text-2); font-weight: 600; }
 .group-counts .tone-running { color: var(--st-running); }
 .group-counts .tone-waiting { color: var(--text-3); }
