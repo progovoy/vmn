@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import RunPicker from "../../components/RunPicker";
 import { useRunLabels } from "./useRunLabels";
 import "./compare.css";
@@ -10,6 +10,13 @@ export default function SelectionChips({ ws, app, refs, onRemove, onAdd }: {
 }) {
   const labels = useRunLabels(ws, app, refs);
   const [adding, setAdding] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const reopened = useRef(false);
+  // Closing the picker hands focus back to the button that opened it.
+  useEffect(() => {
+    if (adding) reopened.current = true;
+    else if (reopened.current) addButton.current?.focus();
+  }, [adding]);
   return (
     <div className="compare-chips">
       <ul aria-label="selected runs">
@@ -23,9 +30,10 @@ export default function SelectionChips({ ws, app, refs, onRemove, onAdd }: {
         ))}
       </ul>
       {adding ? (
-        <RunPicker ws={ws} app={app} value="" label="run to add" onChange={(v) => { setAdding(false); onAdd(v); }} />
+        <RunPicker ws={ws} app={app} value="" label="run to add" autoFocus
+          onCancel={() => setAdding(false)} onChange={(v) => { setAdding(false); onAdd(v); }} />
       ) : (
-        <button className="link" onClick={() => setAdding(true)}>+ add run</button>
+        <button ref={addButton} className="link" onClick={() => setAdding(true)}>+ add run</button>
       )}
     </div>
   );

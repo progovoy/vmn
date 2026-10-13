@@ -9,12 +9,15 @@ const SUGGESTIONS = 20;
 
 /** A typeahead over the server: suggestions come from a bounded search (the
  *  newest runs until something is typed), never from loading every run. */
-export default function RunPicker({ ws, app, value, onChange, label = "experiment" }: {
+export default function RunPicker({ ws, app, value, onChange, label = "experiment", autoFocus, onCancel }: {
   ws: string;
   app: string;
   value: string;
   onChange: (verstr: string) => void;
   label?: string;
+  autoFocus?: boolean;
+  /** Escape in the input. */
+  onCancel?: () => void;
 }) {
   const [text, setText] = useState(value);
   const [options, setOptions] = useState<ExperimentRow[]>([]);
@@ -53,7 +56,11 @@ export default function RunPicker({ ws, app, value, onChange, label = "experimen
           setText(e.target.value);
           if (options.some((o) => o.verstr === e.target.value)) commit(e.target.value);
         }}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(text.trim()); }}
+        autoFocus={autoFocus}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit(text.trim());
+          else if (e.key === "Escape" && onCancel) { e.stopPropagation(); onCancel(); }
+        }}
         style={{ width: 280, fontFamily: "var(--mono)", fontSize: 12.5 }}
       />
       <datalist id={listId}>

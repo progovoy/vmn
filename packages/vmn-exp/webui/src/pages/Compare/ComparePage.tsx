@@ -38,7 +38,10 @@ export default function ComparePage() {
   const refs = selectedRefs(params);
   const [from, to] = codePair(params);
 
-  const setSel = (next: string[]) => update((p) => setAllParams(p, "sel", next));
+  const setSel = (next: string[]) => update((p) => {
+    setAllParams(p, "sel", next);
+    if (next.length <= 2) p.delete("to");
+  });
   const onRemove = (ref: string) => setSel(refs.filter((r) => r !== ref));
   const onAdd = (ref: string) => { if (!refs.includes(ref)) setSel([...refs, ref]); };
   // With more than two selected, the "to" picker keeps the selection and

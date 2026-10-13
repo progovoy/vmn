@@ -7,6 +7,7 @@ import { DOCS_URL, type ShellContext } from "../../shell/contracts";
 import type { AppRow, ExperimentRow, Workspace } from "../../types";
 import { appHref, modelHref, plural, relTime, runHref } from "../../util";
 import { runSearchQuery } from "../../util/searchQuery";
+import { compareSearch } from "../../pages/Compare/selection";
 import type { IconName } from "../shell/icons";
 import { wsLocation } from "../ui";
 import type { CliIntent, PageName } from "./parseCliQuery";
@@ -174,7 +175,7 @@ function refCommand(intent: RefIntent, base: string, input: PaletteInput): Palet
   const runs = states.map((s) => (s as Extract<RefState, { state: "ok" }>).run);
   const verstrs = runs.map((r) => r.verstr);
   const to = intent.kind === "show" ? runHref(base, verstrs[0])
-    : intent.kind === "compare" ? `${base}/compare-runs?${verstrs.map((v) => `sel=${enc(v)}`).join("&")}`
+    : intent.kind === "compare" ? `${base}/compare-runs?${compareSearch("table", verstrs)}`
     : `${base}/overlay?runs=${verstrs.map(enc).join(",")}`;
   const secondary = intent.kind === "show" ? runs[0].name || verstrs[0] : plural(runs.length, "run");
   return [row("cmd:refs", intent.kind === "show" ? "run" : "command", label, {

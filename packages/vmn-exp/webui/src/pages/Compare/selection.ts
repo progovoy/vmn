@@ -13,11 +13,12 @@ export const selectedRefs = (search: URLSearchParams) =>
   [...new Set(search.getAll("sel").filter(Boolean))];
 
 /** The pair the code tab diffs: the first selected run against `?to=` (the
- *  picker used with more than two selected), else the second; the old code
- *  diff page's defaults fill a missing side. */
+ *  picker used with more than two selected; ignored otherwise), else the
+ *  second; the old code diff page's defaults fill a missing side. */
 export function codePair(search: URLSearchParams): [string, string] {
   const refs = selectedRefs(search);
-  return [refs[0] ?? "@1", search.get("to") || refs[1] || "latest"];
+  const to = refs.length > 2 ? search.get("to") : null;
+  return [refs[0] ?? "@1", to || refs[1] || "latest"];
 }
 
 /** `?tab=…&sel=…` for *refs*, plus any *extra* params. */
