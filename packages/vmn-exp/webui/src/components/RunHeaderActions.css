@@ -1,0 +1,39 @@
+/* The run header's actions (plan 20 D8): wraps under the title on a narrow screen. */
+.run-head { flex-wrap: wrap; row-gap: 8px; }
+.run-actions {
+  margin-left: auto; display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: flex-end; gap: 8px; min-width: 0;
+}
+.run-actions .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; }
+.repro-box { position: relative; display: inline-flex; }
+.repro-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  display: flex; flex-direction: column; gap: 2px;
+  width: max-content; max-width: min(560px, calc(100vw - 32px));
+  padding: 4px; border: 1px solid var(--line-2); border-radius: 8px;
+  background: var(--panel); box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.45);
+}
+.repro-item, .repro-link {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 7px 10px; border: 0; border-radius: 5px; background: none;
+  color: var(--text-2); text-align: left; font-weight: 400; cursor: pointer;
+}
+.repro-cmd { font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+.repro-hint { font-size: 11.5px; color: var(--text-3); }
+.repro-link { font-size: 12.5px; color: var(--accent); }
+.repro-item:hover, .repro-item:focus-visible,
+.repro-link:hover, .repro-link:focus-visible {
+  background: var(--panel-2); text-decoration: none; outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.repro-live { font-size: 11.5px; color: var(--text-3); min-width: 0; }
+.repro-live:empty { display: none; }
+.run-goto-dialog { max-width: min(560px, calc(100vw - 32px)); }
+.run-goto-dialog .run-goto-why { color: var(--text-3); font-size: 12.5px; }
+.run-goto-dialog .cli-hint { margin: 0 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.run-goto-dialog .card { margin-bottom: 14px; }
+@media (max-width: 640px) {
+  .run-actions { position: relative; width: 100%; margin-left: 0; justify-content: flex-start; }
+  .repro-box { position: static; }
+  .repro-menu { left: 0; right: 0; width: auto; max-width: none; }
+}

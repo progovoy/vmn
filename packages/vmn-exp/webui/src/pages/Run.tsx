@@ -20,6 +20,7 @@ import Comments from "../components/Comments";
 import ReportsUsing from "../components/ReportsUsing";
 import { commentTarget } from "../apiReports";
 import AddToReport from "../reports/AddToReport";
+import RunHeaderActions from "../components/RunHeaderActions";
 import { runSpec } from "../reports/viewSpecs";
 import TagEditor from "../components/TagEditor";
 import RunLog from "../components/RunLog";
@@ -36,7 +37,6 @@ import RunCards from "./RunCards";
 import RunMediaSection from "./RunMedia";
 import RunProvenanceSection from "./RunProvenance";
 import { ForkOrigin } from "./RunFork";
-import { RerunHints } from "./RunRerun";
 import { summaryFromDetail, summaryFromRow } from "./runSummary";
 
 function RegisterModelButton({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
@@ -103,16 +103,7 @@ function RunBody({ ws, app, appName, detail }: {
       />
       <RunChangesSection ws={ws} app={app} verstr={verstr} />
       <RunMediaSection ws={ws} app={app} detail={detail} />
-      <div className="card-grid-wide">
-        <RunLog ws={ws} app={app} verstr={verstr} tail={logTail} total={logTotal} />
-        <div className="card">
-          <h2 className="section-title">Reproduce</h2>
-          <div className="cli-hint">vmn-exp restore {appName} -v {verstr}</div>
-          <div className="cli-hint">vmn-exp export {appName} -v {verstr}</div>
-          <RerunHints boardBase={`/ws/${ws}/app/${app}`} appName={appName} verstr={verstr}
-            command={detail.status?.command} />
-        </div>
-      </div>
+      <RunLog ws={ws} app={app} verstr={verstr} tail={logTail} total={logTotal} />
       {detail.artifacts && detail.artifacts.length > 0 && (
         <>
           <RunOutput
@@ -174,18 +165,20 @@ export default function Run() {
   return (
     <>
       <Link className="back-link" to={`/ws/${ws}/app/${app}`}>← experiments</Link>
-      <div className="page-head" style={{ alignItems: "center", marginBottom: 6 }}>
+      <div className="page-head run-head" style={{ alignItems: "center", marginBottom: 6 }}>
         <h1 className={summary.name ? undefined : "mono"} style={{ fontSize: 20 }}>
           {summary.name || summary.verstr}
         </h1>
         {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
         {summary.branch && <span className="badge">{summary.branch}</span>}
-        <span style={{ marginLeft: "auto" }}><AddToReport ws={ws} spec={() => runSpec(app, summary.verstr)} /></span>
-        <LiveStatus
-          running={running} paused={paused} updatedAt={query.dataUpdatedAt}
-          onPause={() => setPaused(true)} onResume={() => setPaused(false)}
-          onRefresh={() => query.refetch()}
-        />
+        <RunHeaderActions ws={ws} app={app} verstr={summary.verstr} command={detail?.status?.command}>
+          <AddToReport ws={ws} spec={() => runSpec(app, summary.verstr)} />
+          <LiveStatus
+            running={running} paused={paused} updatedAt={query.dataUpdatedAt}
+            onPause={() => setPaused(true)} onResume={() => setPaused(false)}
+            onRefresh={() => query.refetch()}
+          />
+        </RunHeaderActions>
       </div>
       {detail && (
         <ForkOrigin forkedFrom={detail.forked_from} rerunOf={detail.rerun_of} rewinds={detail.rewinds} runUrl={runUrl} />
