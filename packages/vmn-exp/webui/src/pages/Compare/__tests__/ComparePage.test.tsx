@@ -128,6 +128,17 @@ describe("Compare page selection chips", () => {
     await waitFor(() => expect(sel()).toEqual(["a", "b", "c"]));
   });
 
+  it("focuses the add picker on open; Escape closes it and returns focus to the button", async () => {
+    renderPage("?sel=a&sel=b");
+    fireEvent.click(await screen.findByRole("button", { name: /add run/i }));
+    const picker = await screen.findByRole("combobox", { name: "run to add" });
+    expect(picker).toHaveFocus();
+    fireEvent.keyDown(picker, { key: "Escape" });
+    expect(screen.queryByRole("combobox", { name: "run to add" })).toBeNull();
+    expect(screen.getByRole("button", { name: /add run/i })).toHaveFocus();
+    expect(sel()).toEqual(["a", "b"]);
+  });
+
   it("marks a ref the table could not load as not found", async () => {
     renderPage("?sel=a&sel=gone&sel=b&tab=table");
     const chips = await screen.findByRole("list", { name: "selected runs" });
@@ -153,6 +164,25 @@ describe("Compare page code tab", () => {
     fireEvent.change(fromPicker, { target: { value: "c" } });
     fireEvent.keyDown(fromPicker, { key: "Enter" });
     await waitFor(() => expect(sel()).toEqual(["c", "b"]));
+  });
+
+  it("drops a stale ?to= once a removed chip leaves two runs, so the picker edits the pair", async () => {
+    renderPage("?sel=a&sel=b&sel=c&tab=code&to=x");
+    await waitFor(() => expect(m.experimentsDiff).toHaveBeenCalledWith("w", "my-app", "a", "x"));
+    fireEvent.click(await screen.findByRole("button", { name: "remove c" }));
+    await waitFor(() => expect(sel()).toEqual(["a", "b"]));
+    expect(new URLSearchParams(loc.search).get("to")).toBeNull();
+    const [, toPicker] = await screen.findAllByRole("combobox");
+    fireEvent.change(toPicker, { target: { value: "y" } });
+    fireEvent.keyDown(toPicker, { key: "Enter" });
+    await waitFor(() => expect(sel()).toEqual(["a", "y"]));
+    await waitFor(() => expect(m.experimentsDiff).toHaveBeenLastCalledWith("w", "my-app", "a", "y"));
+  });
+
+  it("ignores a leftover ?to= with two runs selected", async () => {
+    renderPage("?sel=a&sel=b&tab=code&to=x");
+    await waitFor(() => expect(m.experimentsDiff).toHaveBeenCalledWith("w", "my-app", "a", "b"));
+    expect(m.experimentsDiff).not.toHaveBeenCalledWith("w", "my-app", "a", "x");
   });
 
   it("renders the diff lines through the shared diff renderer", async () => {
