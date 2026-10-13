@@ -10,6 +10,7 @@ at most :attr:`QuantileSketch.MAX_BINS` buckets (≤ 2 KB as packed counts);
 past that the smallest magnitudes collapse into one floor bucket, which
 only ever rises, so a removal lands where its value was counted.
 """
+import heapq
 import math
 
 from vmn_exp.core.values import is_finite_number
@@ -60,7 +61,7 @@ class _Side:
 
     def bound(self, limit):
         if len(self.bins) > limit:
-            self.raise_floor(sorted(self.bins)[len(self.bins) - limit])
+            self.raise_floor(heapq.nsmallest(len(self.bins) - limit + 1, self.bins)[-1])
 
     def __eq__(self, other):
         return self.bins == other.bins and self.floor == other.floor
@@ -121,14 +122,23 @@ class QuantileSketch:
 
     def quantile(self, q):
         """The value at rank ``round(q * (count - 1))``, or None when empty."""
+        return self.quantiles([q])[0]
+
+    def quantiles(self, qs):
+        """:meth:`quantile` of each of *qs*, in one pass over the buckets."""
         if self.count <= 0:
-            return None
-        rank, seen = round(min(max(q, 0.0), 1.0) * (self.count - 1)), 0
+            return [None] * len(qs)
+        ranks = sorted((round(min(max(q, 0.0), 1.0) * (self.count - 1)), i)
+                       for i, q in enumerate(qs))
+        out, seen, at = [None] * len(qs), 0, 0
         for value, count in self._items():
             seen += count
-            if seen > rank:
-                return value
-        return None
+            while at < len(ranks) and seen > ranks[at][0]:
+                out[ranks[at][1]] = value
+                at += 1
+            if at == len(ranks):
+                break
+        return out
 
     def histogram(self, bins=20, lo=None, hi=None):
         """``[{lo, hi, count}]`` of *bins* equal-width bins over [*lo*, *hi*]

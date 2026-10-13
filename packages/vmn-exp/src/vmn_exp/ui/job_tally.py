@@ -11,6 +11,7 @@ takes away the last row holding one reports it and the caller recomputes
 that tally from its rows.
 """
 import math
+import operator
 
 from vmn_exp.core.log import primary_metric, sort_descending
 from vmn_exp.core.metric_schema import metric_goal
@@ -68,14 +69,6 @@ def _extreme(current, value, by, better):
     return current, False
 
 
-def _lower(a, b):
-    return a < b
-
-
-def _higher(a, b):
-    return a > b
-
-
 def higher_first(a, b):
     """Higher value wins; on a tie the lower verstr does."""
     return a[0] > b[0] or (a[0] == b[0] and a[1] < b[1])
@@ -100,7 +93,7 @@ class MetricTally:
         self.n += by
         self.total += by * value
         self.sketch.add(value, by)
-        self.low, low_gone = _extreme(self.low, (value, verstr), by, _lower)
+        self.low, low_gone = _extreme(self.low, (value, verstr), by, operator.lt)
         self.high, high_gone = _extreme(self.high, (value, verstr), by, higher_first)
         return low_gone or high_gone
 
@@ -176,10 +169,6 @@ class Tally:
             tally.add(row, spec)
         return tally
 
-    @property
-    def total(self):
-        return sum(self.counts.values())
-
     def copy(self):
         out = Tally()
         out.counts, out.failures = dict(self.counts), dict(self.failures)
@@ -192,8 +181,8 @@ class Tally:
         """Adds *row* (``by=-1``: removes it); whether an extreme is now unknown."""
         status = row.get("status")
         _move(self.counts, status, by)
-        self.started, gone = _extreme(self.started, row.get("started_at"), by, _lower)
-        self.finished, ended = _extreme(self.finished, row.get("finished_at"), by, _higher)
+        self.started, gone = _extreme(self.started, row.get("started_at"), by, operator.lt)
+        self.finished, ended = _extreme(self.finished, row.get("finished_at"), by, operator.gt)
         unknown = gone or ended
         if status in DONE and row.get("finished_at"):
             minute = _minute(row["finished_at"])
@@ -210,7 +199,9 @@ class Tally:
         return unknown
 
     def _add_metric(self, name, value, verstr, by):
-        metric = self.metrics.get(name) or self.metrics.setdefault(name, MetricTally())
+        metric = self.metrics.get(name)
+        if metric is None:
+            metric = self.metrics[name] = MetricTally()
         unknown = metric.add(value, verstr, by)
         if metric.n <= 0:
             del self.metrics[name]

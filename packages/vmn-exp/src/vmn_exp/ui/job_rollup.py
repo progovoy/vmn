@@ -19,8 +19,9 @@ built per time bucket (:func:`overlay`).
 
 Archived rows are left out, as the board leaves them out by default.
 """
+from vmn_exp.core.tree import subtree_verstrs
 from vmn_exp.ui.job_tally import Tally
-from vmn_exp.ui.leaderboard_tree import parent_in
+from vmn_exp.ui.leaderboard_facets import visible
 
 
 def _parent(row):
@@ -31,9 +32,9 @@ def _parent(row):
 def _tallies(rows, spec):
     """``{parent: Tally}`` of the visible *rows*."""
     tallies = {}
-    for row in rows:
+    for row in visible(rows, False):
         parent = _parent(row)
-        if parent and not row.get("archived"):
+        if parent:
             tallies.setdefault(parent, Tally()).add(row, spec)
     return tallies
 
@@ -43,8 +44,8 @@ def _static_rows(base, changed):
 
 
 def _static_children(base, parent, changed):
-    rows = (base.rows[base.position[kid]] for kid in base.children_of.get(parent, ()))
-    return [row for row in rows if base.position[row["verstr"]] not in changed]
+    at = (base.position[kid] for kid in base.children_of.get(parent, ()))
+    return visible([base.rows[i] for i in at if i not in changed], False)
 
 
 class StaticRollups:
@@ -63,10 +64,11 @@ class StaticRollups:
     def advanced(self, base, left, joined):
         """These tallies moved to *base*: the *left* rows out, the *joined* in."""
         tallies, owned, unknown = dict(self.tallies), set(), set()
-        for rows, by in ((left, -1), (joined, 1)):
-            for row in rows:
+        # Joined first: a row replaced by an equal one keeps the extremes it holds.
+        for rows, by in ((joined, 1), (left, -1)):
+            for row in visible(rows, False):
                 parent = _parent(row)
-                if not parent or row.get("archived"):
+                if not parent:
                     continue
                 if parent not in owned:
                     owned.add(parent)
@@ -76,7 +78,7 @@ class StaticRollups:
         changed = set(base.patch.changed) if unknown else ()
         for parent in unknown:
             children = _static_children(base, parent, changed)
-            tallies[parent] = _tallies(children, self.spec).get(parent, Tally())
+            tallies[parent] = Tally.of(children, self.spec)
         for parent in owned:
             if not tallies[parent].counts:
                 del tallies[parent]
@@ -93,19 +95,9 @@ class JobTree:
 
     def __init__(self, base):
         self.jobs = {v for v, kids in base.children_of.items() if kids and v in base.position}
-        self.nested = {}
-        for job in self.jobs:
-            parent = parent_in(base.snapshot.edges, job)
-            if parent in self.jobs:
-                self.nested.setdefault(parent, []).append(job)
+        self.nested = {job: [kid for kid in base.children_of[job] if kid in self.jobs]
+                       for job in self.jobs}
 
     def subtree_jobs(self, job):
         """*job* and every job below it (cycle-safe)."""
-        out, stack, seen = [], [job], set()
-        while stack:
-            verstr = stack.pop()
-            if verstr not in seen:
-                seen.add(verstr)
-                out.append(verstr)
-                stack.extend(self.nested.get(verstr, ()))
-        return out
+        return subtree_verstrs(job, self.nested)

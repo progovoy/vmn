@@ -7,6 +7,7 @@ the shape of what went wrong (status, ``end_reason``, ``signal``,
 run: uuids, versions, paths, hex ids and numbers. "CUDA out of memory.
 Tried to allocate 2.31 GiB" and "... 1.07 GiB" give the same signature.
 """
+import functools
 import re
 
 from vmn_exp.core.status import FAILED, STUCK
@@ -24,6 +25,7 @@ _MASKS = [
 ]
 
 
+@functools.lru_cache(maxsize=4096)
 def mask(text):
     """*text* with per-run detail masked and whitespace collapsed."""
     for pattern, placeholder in _MASKS:

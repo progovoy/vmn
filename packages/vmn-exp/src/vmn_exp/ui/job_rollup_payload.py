@@ -2,9 +2,12 @@
 """A job's rollup as JSON, from the :class:`~vmn_exp.ui.job_tally.Tally`
 parts its subtree is split into (static rows and live overlay, per nested
 job): read side by side, never merged into one tally."""
+from collections import Counter
+
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.failure_signature import label
 from vmn_exp.ui.job_tally import DONE, STATES, higher_first
+from vmn_exp.ui.quantile_sketch import QuantileSketch
 
 THROUGHPUT_WINDOW_MIN = 10
 HIST_BINS = 20
@@ -82,7 +85,7 @@ def _highest(tallies):
     return high
 
 
-def metric_fields(parts, name, descending, bins=HIST_BINS):
+def metric_fields(parts, name, descending, bins=HIST_BINS, quantiles=True):
     """One tracked metric over the subtree, or None when no run carries it."""
     tallies = _metric_parts(parts, name)
     if not tallies:
@@ -92,34 +95,32 @@ def metric_fields(parts, name, descending, bins=HIST_BINS):
     high = _highest(tallies)
     best = high if descending else low
     sketch = _merged([t.sketch for t in tallies])
-    return {
+    fields = {
         "n": n, "min": low[0], "max": high[0], "mean": _significant(sum(t.total for t in tallies) / n),
         "best": best[0], "best_verstr": best[1],
-        "p10": sketch.quantile(0.1), "p50": sketch.quantile(0.5), "p90": sketch.quantile(0.9),
         "hist": sketch.histogram(bins=bins, lo=low[0], hi=high[0]),
     }
+    if quantiles:
+        fields.update(zip(("p10", "p50", "p90"), sketch.quantiles([0.1, 0.5, 0.9])))
+    return fields
 
 
 def _failures(parts):
-    counts = {}
+    counts = Counter()
     for part in parts:
-        for sig, count in part.failures.items():
-            counts[sig] = counts.get(sig, 0) + count
+        counts.update(part.failures)
     top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_FAILURES]
     return [{"sig": sig, "label": label(sig), "count": count} for sig, count in top]
 
 
 def job_payload(job, parts, spec, now):
     """The full rollup of the job whose row is *job*."""
-    duration = _merged([p.duration for p in parts]) if parts else None
+    duration = _merged([p.duration for p in parts]) if parts else QuantileSketch()
+    p50, p90 = duration.quantiles([0.5, 0.9])
     return {
         **progress_fields(job, parts, now),
         "metrics": {m: metric_fields(parts, m, spec.descending[m]) for m in spec.metrics},
-        "duration": {
-            "n": duration.count if duration else 0,
-            "p50": duration.quantile(0.5) if duration else None,
-            "p90": duration.quantile(0.9) if duration else None,
-        },
+        "duration": {"n": duration.count, "p50": p50, "p90": p90},
         "failures": _failures(parts),
     }
 
@@ -128,11 +129,12 @@ def job_summary(job, parts, spec, now):
     """The compact rollup a Jobs view sorts on: progress, plus the main
     metric's best and a spread histogram (counts only)."""
     main = spec.main and metric_fields(parts, spec.main, spec.descending[spec.main],
-                                       bins=SPREAD_BINS)
+                                       bins=SPREAD_BINS, quantiles=False)
+    main = main or {}
     return {
         **progress_fields(job, parts, now),
         "metric": spec.main,
-        "best": main["best"] if main else None,
-        "best_verstr": main["best_verstr"] if main else None,
-        "spread": [b["count"] for b in main["hist"]] if main else [],
+        "best": main.get("best"),
+        "best_verstr": main.get("best_verstr"),
+        "spread": [b["count"] for b in main.get("hist", ())],
     }
