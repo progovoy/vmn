@@ -73,7 +73,14 @@
 @media (max-width: 599px) {
   .cmdk-veil { padding-top: 8vh; }
   .cmdk { width: min(560px, calc(100vw - 16px)); }
-  .cmdk-row::after { max-width: 14ch; }
+  /* The CLI equivalent takes its own line under the label, at full width,
+     instead of a 14ch stub squeezing both (plan 20 C8). */
+  .cmdk-row { row-gap: 2px; }
+  .cmdk-row::after { grid-column: 2 / -1; grid-row: 2; max-width: none; }
+  .cmdk-foot { display: none; }
+}
+/* No keyboard to press the legend's keys on. */
+@media (hover: none) and (pointer: coarse) {
   .cmdk-foot { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

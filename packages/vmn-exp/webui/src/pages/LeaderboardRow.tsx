@@ -92,7 +92,7 @@ export function layoutIds(layout: RowLayout): readonly string[] {
     : defaultColumnIds(fleet, layout.metricCols, layout.paramCols, tags);
 }
 
-function FoldToggle({ r, collapsed, onFold }: {
+export function FoldToggle({ r, collapsed, onFold }: {
   r: ExperimentRow; collapsed: boolean; onFold: (r: ExperimentRow) => void;
 }) {
   return (

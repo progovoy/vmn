@@ -79,9 +79,12 @@ button.id-chip:hover, button.id-chip[aria-expanded="true"] { border-color: var(-
   .topbar-right .theme-toggle { display: none; }
   .search-label, .search-key { display: none; }
   .search-btn { width: 30px; padding: 0; justify-content: center; }
-  .id-text {
+  /* A signed-in name shrinks to its initial (the title keeps it); a state
+     keeps its words, truncated (plan 20 C8: no unexplained initial). */
+  .id-chip.has-initial .id-text {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
   }
+  .id-chip:not(.has-initial) .id-text { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
   .id-initial {
     display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
     font-size: 11.5px; font-weight: 600; text-transform: uppercase; color: var(--text);
