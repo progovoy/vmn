@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""Per-job rollups over each job's whole subtree (plan 23 S1).
+
+A job is any run with children. Each row's contribution goes to one
+:class:`~vmn_exp.ui.job_tally.Tally`, its parent's, and a job's rollup
+reads its own tally plus those of the jobs nested under it — so re-linking
+a job moves its subtree with it at no cost, and a row is always taken back
+out of the tally it went into (its ``parent`` field, on the row object the
+delta hands back).
+
+As :class:`~vmn_exp.ui.leaderboard_cache._Static` keeps its orders, the
+tallies cover the rows no time bucket changes and move across generations
+by the cache's deltas (:meth:`StaticRollups.advanced`): the left rows out,
+the joined ones in, each tally copied on its first write. A removal that
+takes away a tally's extreme (min, max, best, first start, last end)
+recomputes that one tally from its parent's static children, at most once a
+generation. The live rows (and their ancestors) are an overlay of tallies
+built per time bucket (:func:`overlay`).
+
+Archived rows are left out, as the board leaves them out by default.
+"""
+from vmn_exp.core.tree import subtree_verstrs
+from vmn_exp.ui.job_tally import Tally
+from vmn_exp.ui.leaderboard_facets import visible
+
+
+def _parent(row):
+    parent = row.get("parent")
+    return parent if parent and parent != row["verstr"] else None
+
+
+def _tallies(rows, spec):
+    """``{parent: Tally}`` of the visible *rows*."""
+    tallies = {}
+    for row in visible(rows, False):
+        parent = _parent(row)
+        if parent:
+            tallies.setdefault(parent, Tally()).add(row, spec)
+    return tallies
+
+
+def _static_rows(base, changed):
+    return [row for i, row in enumerate(base.rows) if i not in changed]
+
+
+def _static_children(base, parent, changed):
+    at = (base.position[kid] for kid in base.children_of.get(parent, ()))
+    return visible([base.rows[i] for i in at if i not in changed], False)
+
+
+class StaticRollups:
+    """``{parent: Tally}`` of one base's static rows, for one schema's spec."""
+
+    def __init__(self, token, spec, tallies):
+        self.token = token  # of the base these tallies were built or moved for
+        self.spec = spec
+        self.tallies = tallies
+
+    @classmethod
+    def build(cls, base, spec):
+        """From scratch: O(N)."""
+        return cls(base.token, spec, _tallies(_static_rows(base, set(base.patch.changed)), spec))
+
+    def advanced(self, base, left, joined):
+        """These tallies moved to *base*: the *left* rows out, the *joined* in."""
+        tallies, owned, unknown = dict(self.tallies), set(), set()
+        # Joined first: a row replaced by an equal one keeps the extremes it holds.
+        for rows, by in ((joined, 1), (left, -1)):
+            for row in visible(rows, False):
+                parent = _parent(row)
+                if not parent:
+                    continue
+                if parent not in owned:
+                    owned.add(parent)
+                    tallies[parent] = tallies[parent].copy() if parent in tallies else Tally()
+                if tallies[parent].add(row, self.spec, by):
+                    unknown.add(parent)
+        changed = set(base.patch.changed) if unknown else ()
+        for parent in unknown:
+            children = _static_children(base, parent, changed)
+            tallies[parent] = Tally.of(children, self.spec)
+        for parent in owned:
+            if not tallies[parent].counts:
+                del tallies[parent]
+        return StaticRollups(base.token, self.spec, tallies)
+
+
+def overlay(base, bucket, spec):
+    """``{parent: Tally}`` of *base*'s changed rows as of *bucket*."""
+    return _tallies(base.changed_at(bucket), spec)
+
+
+class JobTree:
+    """One base's jobs (present runs with children) and the jobs right under each."""
+
+    def __init__(self, base):
+        self.jobs = {v for v, kids in base.children_of.items() if kids and v in base.position}
+        self.nested = {job: [kid for kid in base.children_of[job] if kid in self.jobs]
+                       for job in self.jobs}
+
+    def subtree_jobs(self, job):
+        """*job* and every job below it (cycle-safe)."""
+        return subtree_verstrs(job, self.nested)
