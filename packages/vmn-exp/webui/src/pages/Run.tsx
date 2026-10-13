@@ -32,6 +32,7 @@ import TrainingCurves from "../components/TrainingCurves";
 import RunChanges from "../components/RunChanges";
 import { BASELINE_PARAM } from "../components/runChangesBaseline";
 import SweepSection, { sweepSpecOf } from "../components/SweepSection";
+import { fleetIdxOf } from "../components/fleetRows";
 import { FleetCard, MetadataCard, MetricsCard, StatusCard } from "./RunSections";
 import RunCards from "./RunCards";
 import RunMediaSection from "./RunMedia";
@@ -191,9 +192,12 @@ export default function Run() {
         <RunErrorCard status={summary.status}
           hasOutputLog={!!detail?.artifacts?.some((a) => a.name === OUTPUT_LOG)} />
       )}
-      {summary.status?.fleet && <FleetCard fleet={summary.status.fleet} runUrl={runUrl} />}
+      {summary.status?.fleet && (
+        <FleetCard fleet={summary.status.fleet} schema={schema} runUrl={runUrl} table={!sweepSpec} />
+      )}
       {sweepSpec && (
-        <SweepSection ws={ws} app={app} verstr={summary.verstr} runUrl={runUrl} />
+        <SweepSection ws={ws} app={app} verstr={summary.verstr} runUrl={runUrl}
+          idxOf={fleetIdxOf(summary.status?.fleet)} />
       )}
 
       <RunCards

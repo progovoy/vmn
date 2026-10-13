@@ -1,7 +1,29 @@
-/** The header cell's own controls: the resize grip and the select-all box. */
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from "react";
+/** The header cell's own controls: the sort button, the resize grip and the
+ *  select-all box. */
+import { useEffect, useRef, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { HeaderCheck } from "../hooks/useBoardSelection";
 import { MIN_COL_WIDTH } from "./leaderboardColumns";
+import "./sortButton.css";
+
+export const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
+
+/** Enter and Space sort here, so a button's own click on them never runs too. */
+const sortKeys = (onSort: () => void) => (e: KeyboardEvent) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  onSort();
+};
+
+/** A sortable header's label: a button (keyboard + screen readers) drawn as
+ *  header text. A click bubbles to the cell, whose own click sorts; the
+ *  cell carries `aria-sort`. */
+export function SortButton({ title, onSort, children }: { title?: string; onSort: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="th-sort" aria-label={title} title={title} onKeyDown={sortKeys(onSort)}>
+      {children}
+    </button>
+  );
+}
 
 /** A drag grip on a header's right edge: dragging it resizes the column.
  *  The drag moves only the header's `<col>`; the width is kept (and the rows

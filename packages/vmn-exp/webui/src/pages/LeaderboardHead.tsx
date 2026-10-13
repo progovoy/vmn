@@ -1,13 +1,12 @@
 /** The leaderboard's header row: sorting (a button per sortable column,
  *  `aria-sort` on its cell), column drag/resize, the column menu (their
  *  keyboard equivalents) and the select-all checkbox. */
-import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isGapId, isPinned } from "./leaderboardColumns";
 import ColumnMenu, { type MenuAction } from "./ColumnMenu";
-import { HeaderCheckbox, ResizeGrip, type HeaderCheckProps } from "./LeaderboardHeadParts";
+import { ARIA_SORT, HeaderCheckbox, ResizeGrip, SortButton, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, type RowLayout } from "./LeaderboardRow";
 import { INNER_RUNS_HELP, isInnerRunId } from "./innerRunColumns";
-import "./leaderboardHead.css";
 
 export const TIMESTAMP_SORT = "timestamp";
 export const IDX_SORT = "idx";
@@ -83,7 +82,6 @@ const HEAD_CLASS: Record<string, string> = {
   check: "check-cell", idx: "num", status: "status-col-head", experiment: "exp-head", when: "num when-head",
   "c:tags": "", "c:comments": "", "c:inner": "inner-head",
 };
-const ARIA_SORT = { asc: "ascending", desc: "descending" } as const;
 const plainName = (id: string) => (id === "idx" ? "#" : id.includes(":") ? id.slice(2) : id);
 const hideable = (id: string) => /^[mpc]:/.test(id);
 const pinnable = (id: string) => /^[mp]:/.test(id);
@@ -108,13 +106,6 @@ function menuActions(
   }
   return out;
 }
-
-/** Enter and Space sort here, so a button's own click on them never runs too. */
-const sortKeys = (onSort: () => void) => (e: KeyboardEvent) => {
-  if (e.key !== "Enter" && e.key !== " ") return;
-  e.preventDefault();
-  onSort();
-};
 
 const headClass = (id: string) =>
   HEAD_CLASS[id] ?? (id.startsWith("c:") ? "num fleet-head" : id.startsWith("p:") ? "param-head" : "");
@@ -172,9 +163,7 @@ export default function Head({ layout, sort: s, edits, check }: {
               {id === "check" && check ? <HeaderCheckbox {...check} />
                 : sort ? (
                   // The cell's own click sorts, so a click anywhere in it does.
-                  <button type="button" className="th-sort" aria-label={title} title={title} onKeyDown={sortKeys(() => s.onSort(sort))}>
-                    {label}{arrow(sort)}
-                  </button>
+                  <SortButton title={title} onSort={() => s.onSort(sort)}>{label}{arrow(sort)}</SortButton>
                 ) : label}
               {actions.length > 0 && <ColumnMenu name={plainName(id)} actions={actions} />}
               {edits && (
