@@ -1,0 +1,18 @@
+.run-changes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
+.run-changes-head .section-title { margin: 0; }
+.run-changes .changes-reason { color: var(--text-3); margin: 4px 0; }
+.run-changes .changes-metrics { margin-bottom: 10px; }
+.run-changes .changes-metrics table { width: auto; min-width: 360px; }
+.run-changes .changes-metrics th[scope="row"] { font-weight: 500; text-align: left; font-size: 13px; }
+.run-changes .delta { font-weight: 600; }
+.run-changes .delta.flat { color: var(--text-3); }
+.run-changes .delta.better { color: var(--good); }
+.run-changes .delta.worse { color: var(--bad); }
+.run-changes .changes-params { font-size: 13px; color: var(--text-2); margin: 0 0 10px; overflow-wrap: anywhere; }
+.run-changes .changes-files { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; }
+.run-changes .changes-files li { display: flex; gap: 10px; align-items: baseline; padding: 2px 0; }
+.run-changes .changes-files .path { overflow-wrap: anywhere; min-width: 0; }
+.run-changes .changes-files .add { color: var(--good); font-family: var(--mono); }
+.run-changes .changes-files .del { color: var(--bad); font-family: var(--mono); }
+.run-changes .changes-diff .diff { margin-top: 8px; max-height: 480px; overflow: auto; }
+.run-changes-foot { margin-top: 10px; display: flex; justify-content: flex-end; font-size: 13px; }

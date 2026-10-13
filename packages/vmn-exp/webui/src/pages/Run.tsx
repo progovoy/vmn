@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName, artifactUrl } from "../api";
 import { fetchSeriesBatch, fetchSeriesRange } from "../apiSeries";
@@ -28,6 +28,8 @@ import SimilarRuns from "../components/SimilarRuns";
 import RunOutput, { OUTPUT_LOG } from "../components/RunOutput";
 import RunErrorCard from "../components/RunErrorCard";
 import TrainingCurves from "../components/TrainingCurves";
+import RunChanges from "../components/RunChanges";
+import { BASELINE_PARAM } from "../components/runChangesBaseline";
 import SweepSection, { sweepSpecOf } from "../components/SweepSection";
 import { FleetCard, MetadataCard, MetricsCard, StatusCard } from "./RunSections";
 import RunCards from "./RunCards";
@@ -51,6 +53,21 @@ function RegisterModelButton({ ws, app, verstr }: { ws: string; app: string; ver
         <RegisterModelDialog ws={ws} app={app} verstr={verstr} onDone={() => setOpen(false)} />
       )}
     </>
+  );
+}
+
+/** The Changes card, its baseline kept in `?baseline=` (a link like the
+ *  failure card's "since last good" sets it with `changesSearch(ref)`). */
+function RunChangesSection({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
+  const [search, setSearch] = useSearchParams();
+  const onBaseline = (ref: string) => setSearch((prev) => {
+    const next = new URLSearchParams(prev);
+    next.set(BASELINE_PARAM, ref);
+    return next;
+  }, { replace: true });
+  return (
+    <RunChanges ws={ws} app={app} verstr={verstr}
+      baseline={search.get(BASELINE_PARAM)} onBaseline={onBaseline} />
   );
 }
 
@@ -84,6 +101,7 @@ function RunBody({ ws, app, appName, detail }: {
         fetchRange={fetchRange} fetchKeys={fetchKeys}
         markStep={detail.forked_from?.step} hiddenMetrics={detail.hidden_metrics}
       />
+      <RunChangesSection ws={ws} app={app} verstr={verstr} />
       <RunMediaSection ws={ws} app={app} detail={detail} />
       <div className="card-grid-wide">
         <RunLog ws={ws} app={app} verstr={verstr} tail={logTail} total={logTotal} />

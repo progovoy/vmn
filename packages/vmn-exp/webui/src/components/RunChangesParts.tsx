@@ -1,0 +1,100 @@
+/** The Changes card's pieces: the metric delta (top goal metrics by |Δ|),
+ *  the params that changed, the files list and the expandable diff. */
+import { useState } from "react";
+import type { PatchFile } from "../apiRunCode";
+import type { DiffDelta } from "../types";
+import { fmtVal } from "../util";
+import DiffText from "./DiffText";
+
+/** Metrics shown before "+N more". */
+export const TOP_METRICS = 5;
+
+type Delta = [string, DiffDelta];
+
+const change = ([, d]: Delta) =>
+  typeof d.from === "number" && typeof d.to === "number" ? d.to - d.from : null;
+
+/** Goal metrics first, each group by |Δ| descending, non-numeric last. */
+function ranked(deltas: Delta[]): Delta[] {
+  const size = (e: Delta) => Math.abs(change(e) ?? -1);
+  return [...deltas].sort((a, b) =>
+    Number(b[1].goal != null) - Number(a[1].goal != null) || size(b) - size(a));
+}
+
+function tone(d: DiffDelta, diff: number | null): string {
+  if (diff === null || diff === 0 || d.goal == null) return "flat";
+  return (d.goal === "min" ? diff < 0 : diff > 0) ? "better" : "worse";
+}
+
+export function MetricDelta({ deltas }: { deltas: Record<string, DiffDelta> }) {
+  const [all, setAll] = useState(false);
+  const metrics = ranked(Object.entries(deltas).filter(([, d]) => !d.param));
+  if (metrics.length === 0) return null;
+  const shown = all ? metrics : metrics.slice(0, TOP_METRICS);
+  const more = metrics.length - shown.length;
+  return (
+    <div className="changes-metrics">
+      <table aria-label="Metric changes">
+        <thead>
+          <tr><th>metric</th><th className="num">baseline</th><th className="num">this run</th><th className="num">Δ</th></tr>
+        </thead>
+        <tbody>
+          {shown.map((entry) => {
+            const [k, d] = entry;
+            const diff = change(entry);
+            return (
+              <tr key={k}>
+                <th scope="row">{k}</th>
+                <td className="metric num">{fmtVal(d.from)}</td>
+                <td className="metric num">{fmtVal(d.to)}</td>
+                <td className={`metric num delta ${tone(d, diff)}`}>
+                  {diff === null ? "–" : (diff > 0 ? "+" : "") + fmtVal(diff)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {more > 0 && <button type="button" className="link" onClick={() => setAll(true)}>+{more} more</button>}
+    </div>
+  );
+}
+
+export function ParamsChanged({ deltas }: { deltas: Record<string, DiffDelta> }) {
+  const params = Object.entries(deltas).filter(([, d]) => d.param && d.from !== d.to);
+  if (params.length === 0) return null;
+  return (
+    <p className="changes-params">
+      {`params changed: ${params.map(([k, d]) => `${k} ${fmtVal(d.from)} → ${fmtVal(d.to)}`).join(", ")}`}
+    </p>
+  );
+}
+
+export function FilesList({ files }: { files: PatchFile[] }) {
+  if (files.length === 0) return null;
+  return (
+    <ul className="changes-files" aria-label="Changed files">
+      {files.map((f) => (
+        <li key={f.path}>
+          <span className="mono path">{f.path}</span>
+          <span className="add">+{f.added}</span>
+          <span className="del">−{f.removed}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function DiffToggle({ text, truncated }: { text: string; truncated?: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!text.trim()) return null;
+  return (
+    <div className="changes-diff">
+      <button type="button" className="link" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? "Hide diff" : "Show diff"}
+      </button>
+      {truncated && <span className="muted"> truncated</span>}
+      {open && <DiffText text={text} />}
+    </div>
+  );
+}
