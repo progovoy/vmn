@@ -97,14 +97,16 @@ describe("Sidebar", () => {
     expect(router.state.location.pathname).toBe("/ws/team");
   });
 
-  it("renders three nav landmarks and one visible Workspace heading", async () => {
+  it("renders three labelled nav landmarks and no headings before the page's h1", async () => {
     renderAt("/ws/ml-repo/app/ml_app");
     await screen.findByRole("navigation", { name: "Server" });
     expect(screen.getAllByRole("navigation")).toHaveLength(3);
     for (const name of ["App", "Workspace", "Server"]) {
-      expect(screen.getByRole("navigation", { name })).toBeInTheDocument();
+      const nav = screen.getByRole("navigation", { name });
+      expect(nav).toHaveAttribute("aria-label", name);
+      expect(within(nav).getByText(name, { selector: ".nav-label" })).toHaveAttribute("aria-hidden", "true");
     }
-    expect(screen.getAllByRole("heading", { name: "Workspace" })).toHaveLength(1);
+    expect(screen.queryAllByRole("heading")).toHaveLength(0);
   });
 
   it("links the vmn-exp wordmark home with state.home", async () => {
@@ -173,8 +175,9 @@ describe("Sidebar", () => {
 
   it("shows the app's compact status rollup in the App group", async () => {
     renderAt("/ws/ml-repo/app/ml_app");
-    const rollup = await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    const rollup = await screen.findByRole("link", { name: "2 stuck" });
     expect(rollup).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?status=stuck");
+    expect(screen.getByRole("link", { name: "1 running" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?status=running");
     expect(appStatus).toHaveBeenCalledWith("ml-repo", "ml_app");
   });
 
@@ -209,7 +212,7 @@ describe("Sidebar", () => {
 
   it("keeps the last app as the switcher's value on a workspace page", async () => {
     const router = renderAt("/ws/ml-repo/app/ml_app");
-    await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    await screen.findByRole("link", { name: "2 stuck" });
     await router.navigate("/ws/ml-repo/models");
     expect(await screen.findByRole("button", { name: "ml_app" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Experiments" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app");
@@ -227,7 +230,7 @@ describe("Sidebar", () => {
 
   it("keeps the last app per workspace", async () => {
     const router = renderAt("/ws/ml-repo/app/ml_app");
-    await screen.findByRole("link", { name: "2 stuck · 1 running" });
+    await screen.findByRole("link", { name: "2 stuck" });
     await router.navigate("/ws/team/models");
     await waitFor(() => expect(wsSelect().value).toBe("team"));
     expect(screen.getByRole("button", { name: /choose app/ })).toBeInTheDocument();
@@ -243,6 +246,16 @@ describe("Sidebar", () => {
     await router.navigate("/ws/ml-repo/models");
     await waitFor(() => expect(screen.getByRole("link", { name: "Models" })).toHaveAttribute("aria-current", "page"));
     expect(screen.getByRole("button", { name: /choose app/ })).toBeInTheDocument();
+  });
+
+  it("gives an unknown app no context: choose app, and the app nav disabled", async () => {
+    appStatus.mockRejectedValue(Object.assign(new Error("no app"), { status: 404, body: { code: "app_not_found" } }));
+    renderAt("/ws/ml-repo/app/bogus");
+    expect(await screen.findByRole("button", { name: /choose app/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "bogus" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Experiments" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Stamp tree" })).toBeNull();
+    expect(screen.getByText("Experiments").closest(".nav-item")).toHaveAttribute("aria-disabled", "true");
   });
 
   it("renders footExtra in the foot", () => {

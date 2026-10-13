@@ -22,7 +22,8 @@ function partsOf({ counts, failed_recent }: AppStatus): Part[] {
 }
 
 /** *href* turns a leaderboard search (`?status=stuck`) into a link target.
- *  *compact* shows the dot and the first part, the full text as its name. */
+ *  *compact* (the sidebar) wraps the parts instead of keeping one line; every
+ *  link is named by exactly what it shows. */
 export default function StatusRollup({ status, href, compact }: {
   status?: AppStatus | null;
   href: (search: string) => string;
@@ -31,15 +32,13 @@ export default function StatusRollup({ status, href, compact }: {
   if (!status) return null;
   const parts = partsOf(status);
   if (!parts.length) return null;
-  const full = parts.map((p) => p.text).join(" · ");
-  const shown = compact ? parts.slice(0, 1) : parts;
   return (
     <span className={`status-rollup${compact ? " compact" : ""}`}>
       {status.rollup && <span className={`rollup-dot rollup-${status.rollup}`} aria-hidden="true" />}
-      {shown.map((p, i) => (
+      {parts.map((p, i) => (
         <Fragment key={p.search}>
           {i > 0 && <span className="rollup-sep" aria-hidden="true">·</span>}
-          <Link to={href(p.search)} title={p.title} aria-label={compact ? full : undefined}>
+          <Link to={href(p.search)} title={p.title}>
             {p.text}
           </Link>
         </Fragment>

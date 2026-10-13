@@ -82,12 +82,15 @@ describe("StatusRollup", () => {
     expect(renderRollup(status({ succeeded: 3, failed: 2 })).innerHTML).toBe("");
   });
 
-  it("compact shows the dot and the first part, the full text in aria-label", () => {
+  it("compact shows every part, each named by exactly its visible text", () => {
     const c = renderRollup(status({ stuck: 2, running: 3 }, 1, "stuck"), true);
     expect(dotOf(c)).toHaveClass("rollup-stuck");
+    expect(c.querySelector(".status-rollup")).toHaveClass("compact");
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(1);
-    expect(links[0]).toHaveTextContent("2 stuck");
-    expect(links[0]).toHaveAccessibleName("2 stuck · 1 failed (24h) · 3 running");
+    expect(links.map((a) => a.textContent)).toEqual(["2 stuck", "1 failed (24h)", "3 running"]);
+    links.forEach((a) => {
+      expect(a).not.toHaveAttribute("aria-label");
+      expect(a).toHaveAccessibleName(a.textContent!);
+    });
   });
 });

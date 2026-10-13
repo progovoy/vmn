@@ -44,7 +44,13 @@ function appLeaf(input: CrumbInput): Crumb | null {
   return null;
 }
 
+/** A workspace named after its app already says the app in the root. */
 function appCrumbs(input: CrumbInput, base: string): Crumb[] {
+  const crumbs = appTrail(input, base);
+  return input.ws === input.app ? crumbs.slice(1) : crumbs;
+}
+
+function appTrail(input: CrumbInput, base: string): Crumb[] {
   const { routeId, app = "", search } = input;
   const appCrumb: Crumb = { label: app, mono: true };
   if (routeId === "experiments") return [appCrumb, { label: "experiments" }];

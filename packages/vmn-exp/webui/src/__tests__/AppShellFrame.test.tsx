@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll, afterEach } 
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 vi.mock("../api", () => ({
   api: {
@@ -25,6 +26,7 @@ import { api } from "../api";
 import App from "../App";
 import { clearUnauthorized, reportUnauthorized } from "../auth/authState";
 import RouteError from "../components/shell/RouteError";
+import NotFound from "../components/shell/NotFound";
 import { createQueryClient } from "../queryClient";
 import { routes } from "../routes";
 import { RECENT_KEY } from "../shell/contracts";
@@ -44,12 +46,20 @@ afterAll(() => { globalThis.Request = NodeRequest; });
 
 function Boom(): never { throw new Error("kaboom"); }
 
+/** A page that learns only after loading that its subject is gone. */
+function LateNotFound() {
+  const [gone, setGone] = useState(false);
+  useEffect(() => { setTimeout(() => setGone(true), 10); }, []);
+  return gone ? <NotFound kind="route" pathname="/ws/w/gone" /> : <div>loading page</div>;
+}
+
 const frameTree: RouteObject[] = [{
   path: "/", element: <App />,
   children: [
     { index: true, element: <div>home page</div>, handle: { id: "home" }, errorElement: <RouteError /> },
     { path: "ws/:ws", element: <div>apps page</div>, handle: { id: "apps" }, errorElement: <RouteError /> },
     { path: "boom", element: <Boom />, handle: { id: "home" }, errorElement: <RouteError /> },
+    { path: "ws/:ws/gone", element: <LateNotFound />, handle: { id: "apps" }, errorElement: <RouteError /> },
   ],
 }];
 
@@ -117,6 +127,28 @@ describe("shell frame", () => {
       const recents = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
       expect(recents[0]).toMatchObject({ to: "/ws/w", label: "w" });
     });
+  });
+
+  it("forgets a destination for ⌘K's Recent once it turns out missing", async () => {
+    const router = renderShell(frameTree, "/ws/w");
+    await screen.findByText("apps page");
+    await act(async () => { await router.navigate("/ws/w/gone"); });
+    await screen.findByText("loading page");
+    await screen.findByRole("heading", { name: /No page/ });
+    await waitFor(() => {
+      const recents: { to: string }[] = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+      expect(recents.map((r) => r.to)).toEqual(["/ws/w"]);
+    });
+  });
+
+  it("never keeps a page that failed to render in ⌘K's Recent", async () => {
+    const router = renderShell(frameTree, "/ws/w");
+    await screen.findByText("apps page");
+    await act(async () => { await router.navigate("/boom"); });
+    await screen.findByRole("heading", { name: "This page failed to render" });
+    await new Promise((r) => setTimeout(r, 20));
+    const recents: { to: string }[] = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    expect(recents.map((r) => r.to)).toEqual(["/ws/w"]);
   });
 
   it("moves focus to main and announces the title after a palette or drawer navigation", async () => {

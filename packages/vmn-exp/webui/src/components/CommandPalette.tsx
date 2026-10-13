@@ -15,7 +15,10 @@ import { useRefResolution } from "./palette/useRefResolution";
 import "./palette/palette.css";
 
 const PLACEHOLDER = "Jump to @54, show -v <ref>, compare @3 @7, goto <version>, app or page…";
-const KEYS = "↑↓ move · ↵ open · ⌘↵ new tab · ⇧↵ copy CLI · tab complete · esc close";
+const KEYS = "↑↓ move · ↵ open · ⌘↵ new tab · ⇧↵ copy CLI · tab complete";
+/** The first Esc in a filled input only clears it, so the hint says so. */
+const escHint = (filled: boolean, cleared: boolean) =>
+  filled ? "esc clear" : cleared ? "esc again to close" : "esc close";
 
 interface Entry { item: PaletteItem; section: string; index: number; more?: boolean }
 
@@ -36,6 +39,7 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
   const [active, setActive] = useState(0);
   const [expanded, setExpanded] = useState<string[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
+  const [escCleared, setEscCleared] = useState(false);
   const [recents] = useState(readRecents);
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +74,7 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
   const flat = groups.flatMap((g) => g.entries);
   const current = Math.min(active, flat.length - 1);
   const announce = useDebounce(plural(flat.length, "result"), 300);
+  const keys = `${KEYS} · ${escHint(q !== "", escCleared)}`;
 
   useEffect(() => { setActive(0); setCopied(null); }, [q]);
   useEffect(() => {
@@ -129,7 +134,9 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
       case "Escape":
         e.preventDefault();
         e.stopPropagation();
-        return q ? setQ("") : onClose();
+        if (!q) return onClose();
+        setEscCleared(true);
+        return setQ("");
     }
   };
 
@@ -159,7 +166,7 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
             spellCheck={false}
             autoComplete="off"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => { setEscCleared(false); setQ(e.target.value); }}
           />
         </div>
         <div className="cmdk-list" role="listbox" id="cmdk-list" aria-label="Results">
@@ -184,8 +191,8 @@ export default function CommandPalette({ ctx, onClose }: { ctx: ShellContext; on
             No match for "{text}". Try @12, show -v &lt;verstr&gt;, compare @3 @7, or metrics.loss &lt; 0.3.
           </p>
         )}
-        <div className="cmdk-foot" aria-hidden="true">{KEYS}</div>
-        <span id="cmdk-keys" className="cmdk-sr">{KEYS}</span>
+        <div className="cmdk-foot" aria-hidden="true">{keys}</div>
+        <span id="cmdk-keys" className="cmdk-sr">{keys}</span>
         <div role="status" aria-live="polite" className="cmdk-sr">{copied ?? announce}</div>
       </div>
     </div>

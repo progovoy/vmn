@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
-import { pushRecent } from "../components/palette/recents";
+import { forgetRecent, pushRecent, recentKindOf } from "../components/palette/recents";
 import { WORKSPACES_KEY } from "../queries";
 import type { RouteId } from "./contracts";
 
@@ -22,13 +22,12 @@ export function usePaletteHotkey(setOpen: Dispatch<SetStateAction<boolean>>) {
   }, [setOpen]);
 }
 
-const RECENT_KIND: Partial<Record<RouteId, string>> = { run: "run", experiments: "app", apps: "ws" };
 const UNREMEMBERED = new Set<RouteId>(["not-found", "sign-in"]);
 
 /** On a pathname change: the new title goes to the live region, and focus
  *  moves to main only after a palette or drawer navigation (`state.focusMain`),
  *  so a mouse user never sees it jump. The destination joins ⌘K's Recent. */
-export function useRouteAnnouncer(title: string, subject: string, routeId: RouteId): string {
+export function useRouteAnnouncer(title: string, subject: string, routeId: RouteId, deadEnd = false): string {
   const location = useLocation();
   const [announced, setAnnounced] = useState("");
   const first = useRef(true);
@@ -45,12 +44,14 @@ export function useRouteAnnouncer(title: string, subject: string, routeId: Route
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // The label follows the subject, which may improve once a run's name loads.
+  // The label follows the subject, which may improve once a run's name loads;
+  // a page that turns out missing or broken is dropped again.
   useEffect(() => {
-    if (UNREMEMBERED.has(routeId)) return;
-    pushRecent({ label: subject, to: location.pathname + location.search, kind: RECENT_KIND[routeId] ?? "page" });
+    const to = location.pathname + location.search;
+    if (deadEnd || UNREMEMBERED.has(routeId)) return forgetRecent(to);
+    pushRecent({ label: subject, to, kind: recentKindOf(routeId) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, subject, routeId]);
+  }, [location.pathname, subject, routeId, deadEnd]);
 
   return announced;
 }

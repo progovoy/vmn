@@ -1,13 +1,12 @@
 /** The breadcrumb's root, read like a prompt: the workspace, then where its
- *  checkout stands (`main @ e71c74d`, dirty) and the store the UI reads. */
+ *  checkout stands (`main @ e71c74d`, dirty). The paths it reads from sit in
+ *  the Data source popover, not in the trail. */
 import { Link } from "react-router-dom";
 import type { GitContext, ShellContext } from "../../shell/contracts";
 import { useGitContext } from "../../shell/useShellData";
-import { midTruncate } from "../../util/midTruncate";
-import { wsLocation } from "../ui";
+import type { Workspace } from "../../types";
+import Provenance, { type Source } from "./Provenance";
 import "./Topbar.css";
-
-const STORE_MAX = 32;
 
 // The {" "} separators are dropped by the flex layout but keep copied text and
 // screen-reader output readable.
@@ -26,10 +25,17 @@ function GitSegment({ git, app }: { git: GitContext; app?: string }) {
           dirty
         </span>
       )}
-      {" "}
-      <span className="ctx-store mono">{`· ${git.store}`}</span>
     </>
   );
+}
+
+function sourcesOf(workspace: Workspace | undefined, git: GitContext | undefined): Source[] {
+  if (!workspace) return [];
+  if (workspace.kind === "store") return workspace.store ? [{ label: "store", value: workspace.store }] : [];
+  const out: Source[] = [];
+  if (workspace.path) out.push({ label: "checkout", value: workspace.path });
+  if (git?.store) out.push({ label: "store", value: git.store });
+  return out;
 }
 
 export default function ContextRoot({ ctx }: { ctx: ShellContext }) {
@@ -37,21 +43,18 @@ export default function ContextRoot({ ctx }: { ctx: ShellContext }) {
   // Only a workspace known to be a checkout is asked: a store has none.
   const git = useGitContext(ws, Boolean(workspace) && ctx.isGit).data;
   if (!ws) return null;
-  const store = workspace?.kind === "store" ? wsLocation(workspace) : null;
+  const isStore = workspace?.kind === "store";
   const shownGit = git && !git.error ? git : undefined;
-  // Narrow widths hide the store segment; the root's title still names it.
-  const storeTitle = store ?? shownGit?.store;
   return (
-    <span className="ctx-root" title={storeTitle && `store · ${storeTitle}`}>
+    <span className="ctx-root">
       <Link to={`/ws/${ws}`} className="ctx-ws">{ws}</Link>
-      {store !== null ? (
-        <>
-          {" "}
-          <span className="ctx-store mono" title={store}>{`store · ${midTruncate(store, STORE_MAX)}`}</span>
-        </>
+      {isStore ? (
+        <>{" "}<span className="ctx-kind">store</span></>
       ) : (
         shownGit && <GitSegment git={shownGit} app={ctx.app} />
       )}
+      {" "}
+      <Provenance sources={sourcesOf(workspace, shownGit)} />
     </span>
   );
 }

@@ -15,7 +15,7 @@ import Sidebar from "./components/shell/Sidebar";
 import Topbar from "./components/shell/Topbar";
 import { setInert, useDrawer } from "./hooks/useDrawer";
 import { useDocumentTitle } from "./hooks/useDocumentTitle";
-import { ShellOverrideProvider } from "./shell/shellOverride";
+import { ShellOverrideProvider, useShellDeadEnd } from "./shell/shellOverride";
 import { useShellContext } from "./shell/useShellContext";
 import { useShellCrumbs } from "./shell/useShellCrumbs";
 import { useAppStatusPoll } from "./shell/useShellData";
@@ -31,7 +31,7 @@ function Shell() {
 
   const { crumbs, cli, title, subject } = useShellCrumbs(ctx);
   useDocumentTitle(title);
-  const announced = useRouteAnnouncer(title, subject, ctx.override ?? ctx.routeId);
+  const announced = useRouteAnnouncer(title, subject, ctx.override ?? ctx.routeId, useShellDeadEnd());
   usePaletteHotkey(setPaletteOpen);
   useHomeRevalidation();
   useAppStatusPoll(ctx.ws, ctx.appTag);

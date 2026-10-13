@@ -56,6 +56,12 @@ describe("NotFound", () => {
     expect(screen.getByTestId("override").textContent).toBe("not-found");
   });
 
+  it("keeps the route's own crumbs for a page whose feature is off (/tokens without a control plane)", () => {
+    renderNotFound({ kind: "control-plane" });
+    expect(screen.getByRole("heading", { level: 1, name: "API tokens need a control plane" })).toBeInTheDocument();
+    expect(screen.getByTestId("override").textContent).toBe("none");
+  });
+
   it("renders the first action as the primary one", async () => {
     renderNotFound({ kind: "route", pathname: "/ws/ml-repo/bogus" });
     const open = await screen.findByRole("link", { name: "Open ml-repo" });
