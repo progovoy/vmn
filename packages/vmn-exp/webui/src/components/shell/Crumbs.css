@@ -86,7 +86,8 @@ a.crumb-text:hover { color: var(--text); text-decoration: underline; }
 }
 .crumb-copy,
 .crumb-copy-more { display: inline-flex; }
-.crumb-copy { width: 24px; }
+/* The copy-as-CLI icon is the trail's one action: --text-2, not the faint crumb grey. */
+.crumb-copy { width: 24px; color: var(--text-2); }
 .crumb-copy-more { width: 18px; margin-left: -2px; }
 .crumb-copy:hover,
 .crumb-copy-more:hover,

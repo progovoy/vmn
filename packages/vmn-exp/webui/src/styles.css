@@ -2,6 +2,7 @@
 @import "./styles/checkbox.css";
 @import "./styles/board.css";
 @import "./styles/filter.css";
+@import "./styles/forms.css";
 :root {
   /* surfaces */
   --bg: #0c0c0b;
@@ -10,6 +11,8 @@
   --panel-3: #242421;
   --line: #2b2b27;
   --line-2: #3a3a34;
+  /* the sidebar's edge: --line is too close to --bg to separate it in dark */
+  --sidebar-line: var(--line-2);
 
   /* text */
   --text: #f2f1ec;
@@ -57,7 +60,7 @@
   /* light palette, defined once and switched on by the two rules below */
   --light-bg: #f7f6f2; --light-panel: #ffffff; --light-panel-2: #f1f0eb;
   --light-panel-3: #e8e7e1; --light-line: #e0ded6; --light-line-2: #cbc9bf;
-  --light-text: #1b1b18; --light-text-2: #4b4a43; --light-text-3: #6f6e65;
+  --light-text: #1b1b18; --light-text-2: #4b4a43; --light-text-3: #6b6a61;
   --light-accent: #2563d6; --light-good: #1c8560; --light-bad: #c43f42;
   --light-hotfix: #9c660b; --light-pre: #6a58d3; --light-series-4: #007000;
   --light-st-good: #17704f; --light-st-bad: #a8353a; --light-st-stuck: #7f5207;
@@ -180,7 +183,7 @@ tr.flash { animation: flashbg 1.8s ease-out; }
 
 .sidebar {
   width: 250px; flex: none; background: var(--panel);
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--sidebar-line);
   display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
 }
 /* Only the drawer shows the workspace's git context and the theme toggle. */
@@ -196,10 +199,13 @@ tr.flash { animation: flashbg 1.8s ease-out; }
   border: 1px solid var(--line-2); border-radius: 8px;
   padding: 8px 30px 8px 10px; font-size: 13px; cursor: pointer;
 }
+/* The shell's chevron-down icon (icons.tsx), drawn in currentColor's place. */
 .select-wrap::after {
-  content: "▾"; position: absolute; right: 11px; top: 50%;
-  transform: translateY(-50%); color: var(--text-3);
-  pointer-events: none; font-size: 10px;
+  content: ""; position: absolute; right: 9px; top: 50%; width: 15px; height: 15px;
+  transform: translateY(-50%); background: var(--text-2); pointer-events: none;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+  -webkit-mask: var(--chevron) center / 15px 15px no-repeat;
+  mask: var(--chevron) center / 15px 15px no-repeat;
 }
 
 /* Full workspace path/URI + a copy button — kept visible wherever a

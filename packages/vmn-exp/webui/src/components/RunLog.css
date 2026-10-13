@@ -1,0 +1,2 @@
+/* The log's writer badge: readable (11px), and one line even on a phone. */
+.log-writer { margin-left: 6px; font-size: 11px; white-space: nowrap; }

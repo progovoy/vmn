@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { runLog } from "../apiRun";
 import type { LogEntry } from "../types";
 import { fmtVal, relTime } from "../util";
+import "./RunLog.css";
 
 /** Entries fetched per "load older" click. */
 export const LOG_PAGE = 500;
@@ -80,7 +81,7 @@ function Entry({ e }: { e: LogEntry }) {
   return (
     <>
       <span className="ts">{relTime(e.timestamp)}</span>
-      {e._writer && <span className="badge" style={{ fontSize: 10, marginLeft: 6 }}>{e._writer}</span>}
+      {e._writer && <span className="badge log-writer">{e._writer}</span>}
       <span className="what">{describeEntry(e)}</span>
     </>
   );
