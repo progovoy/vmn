@@ -1,0 +1,8 @@
+/* The leaderboard's head (BoardHead.tsx): name + run count on the left, the
+   board's actions on the right; they wrap under it on a narrow screen. */
+.page-head.board-head { flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 14px; }
+.board-head .board-count { margin: 0; }
+.board-head .board-actions { margin: 0 0 0 auto; align-self: center; gap: 8px; min-height: 0; }
+@media (max-width: 639px) {
+  .board-head .board-actions { margin-left: 0; flex-basis: 100%; }
+}

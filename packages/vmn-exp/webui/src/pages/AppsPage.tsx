@@ -17,7 +17,9 @@ function AppTile({ ws, app, isGit, status }: {
   ws: string; app: AppRow; isGit: boolean; status?: AppStatus;
 }) {
   const href = appHref(ws, app.name);
-  const runs = plural(app.experiments, "run");
+  // The status counts what the board does (archived runs left out); the
+  // listing's count (record names) stands in until it arrives.
+  const runs = plural(status?.total ?? app.experiments, "run");
   return (
     <article className="app-tile">
       <h2><Link className="app-tile-link" to={href}>{app.name}</Link></h2>

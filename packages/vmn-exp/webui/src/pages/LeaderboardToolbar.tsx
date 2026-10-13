@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
-import LiveStatus from "../components/LiveStatus";
 import SavedViews from "../components/SavedViews";
 import { useCanCreateRun } from "../shell/useAppExists";
 import { hideColumn } from "../hooks/useColumnEdits";
@@ -9,23 +8,16 @@ import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import "./leaderboardToolbar.css";
 
-/** The bar above the leaderboard: live status, the create button (only where
- *  a run can be created), saved views and the columns (the selection's
- *  actions float at the bottom). */
+/** The board's actions, in its page head: the create button (primary, only
+ *  where a run can be created), saved views and the columns (the live status
+ *  is the table's caption; the selection's actions float at the bottom). */
 export default function LeaderboardToolbar({
-  ws, app, view, cols, live, onViewApplied, onResetColumns,
+  ws, app, view, cols, onViewApplied, onResetColumns,
 }: {
   ws: string;
   app: string;
   view: ReturnType<typeof useLeaderboardView>;
   cols: ReturnType<typeof useLeaderboardColumns>;
-  live: {
-    running: boolean;
-    paused: boolean;
-    updatedAt: number;
-    onPaused: (paused: boolean) => void;
-    onRefresh: () => unknown;
-  };
   /** A saved view replaced the URL: controls holding their own state reset. */
   onViewApplied: () => void;
   /** Drop the dragged widths and column order; omitted while there are none. */
@@ -40,15 +32,10 @@ export default function LeaderboardToolbar({
     [view.moveColumn, cols.defaultKeys, cols.pinned],
   );
   return (
-    <div className="toolbar">
-      <span className="legend-chip"><span className="sq" /> best in column</span>
-      <LiveStatus
-        running={live.running} paused={live.paused} updatedAt={live.updatedAt}
-        onPause={() => live.onPaused(true)} onResume={() => live.onPaused(false)}
-        onRefresh={live.onRefresh}
-      />
-      <span className="spacer" />
-      {canCreate && !view.creating && <button onClick={() => view.openCreate(true)}>New run</button>}
+    <div className="toolbar board-actions">
+      {canCreate && !view.creating && (
+        <button className="primary" onClick={() => view.openCreate(true)}>New run</button>
+      )}
       <SavedViews
         ws={ws} app={app} search={location.search}
         onApply={(search) => { navigate({ search }, { replace: true }); onViewApplied(); }}

@@ -106,7 +106,7 @@ function PendingCard({ item, runBase }: { item: PendingRow; runBase: string }) {
 }
 
 export default function LeaderboardCards({
-  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, collapsedOf, onFold,
+  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, collapsedOf, onFold, describedBy,
 }: {
   rows: TableItem[] | undefined;
   layout: RowLayout;
@@ -118,6 +118,7 @@ export default function LeaderboardCards({
   onPrefetch: (verstr: string) => void;
   collapsedOf: (r: ExperimentRow) => boolean | null;
   onFold: (r: ExperimentRow) => void;
+  describedBy?: string;
 }) {
   const metric = cardMetric(layout, sort.sort);
   return (
@@ -129,7 +130,7 @@ export default function LeaderboardCards({
       {rows === undefined ? (
         <p className="lb-mcards-loading" role="status">loading runs…</p>
       ) : (
-        <ul className="lb-mcards" role="list" aria-label="experiments">
+        <ul className="lb-mcards" role="list" aria-label="experiments" aria-describedby={describedBy}>
           {rows.map((r) => (isPending(r) ? (
             <PendingCard key={r.key} item={r} runBase={layout.runBase} />
           ) : (

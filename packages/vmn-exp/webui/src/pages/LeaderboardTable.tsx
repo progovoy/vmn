@@ -74,6 +74,8 @@ type TableProps = {
   edits?: ColumnEdits;
   /** Told the width (px) the table has to fill, and again when it changes. */
   onFit?: (width: number) => void;
+  /** The id of the element describing the board (its caption). */
+  describedBy?: string;
 };
 
 /** Cards that refresh with the board: about a phone screen's worth and the
@@ -92,7 +94,7 @@ export default function LeaderboardTable(props: TableProps) {
 
 function GridTable({
   rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
-  collapsedOf, onFold, edits, onFit,
+  collapsedOf, onFold, edits, onFit, describedBy,
 }: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const scroll = useScrollMemory();
@@ -148,7 +150,7 @@ function GridTable({
         style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}
       >
         <table
-          role="grid" aria-label="experiments" className="lb-table"
+          role="grid" aria-label="experiments" aria-describedby={describedBy} className="lb-table"
           style={{ tableLayout: "fixed", width: layout.total }}
         >
           <colgroup>{layout.styles.map((st, i) => <col key={i} style={{ width: st.width }} />)}</colgroup>

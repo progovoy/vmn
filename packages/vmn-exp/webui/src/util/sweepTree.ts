@@ -25,6 +25,14 @@ export function foldState(r: ExperimentRow, expanded: ReadonlySet<string>): bool
   return r.children?.length ? !expanded.has(r.verstr) : null;
 }
 
+/** The board's top-level rows: those of depth 0, plus, under a filter
+ *  (*orphans*), the inner runs whose outer is not among *rows* — else a
+ *  match would be counted but never shown. */
+export function topRows(rows: readonly ExperimentRow[], orphans: boolean): ExperimentRow[] {
+  const loaded = orphans ? new Set(rows.map((r) => r.verstr)) : null;
+  return rows.filter((r) => !r.depth || Boolean(loaded && r.parent && !loaded.has(r.parent)));
+}
+
 /** *top* with every open outer's inner runs (from *innerOf*, filtered by
  *  *keep*) under it, depth-first; a placeholder where they are not loaded. */
 export function treeRows(

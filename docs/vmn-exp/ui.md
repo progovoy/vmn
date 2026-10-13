@@ -217,7 +217,16 @@ Every run row has a status pill (`created`, `running` (pulsing), `stuck`,
 one row whose status rolls up its subtree. While any run on the page is
 running, the leaderboard and the run page poll on their own and show
 `● live · updated Ns ago` with a Pause button (Resume restarts it); with
-nothing running they show a Refresh button instead. See [Run status](experiments.md#run-status-did-my-job-die) for
+nothing running they show a Refresh button instead. On the leaderboard this
+sits in the table's caption, under the board, with the "best in column" legend
+and the sort. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
+· 4 running`, from `experiments-status`) appears while a run is stuck or one
+failed in the last 24 hours; each part links to the board filtered to exactly
+those runs (`status=stuck`; the failures also get a `finished_at >= "<24h
+ago>"` token, newest first), replacing the other filters. Under a filter, an
+inner run whose outer is not among the matches is listed on its own, so the
+rows behind a link are as many as it counts. App tiles count runs the same way
+(archived runs left out). See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
 ## Leaderboard columns
@@ -680,7 +689,8 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   removable token worded as its clause (`status = "failed"`, `branch = "main"`,
   `text ~ "batch"` for free text over verstr/note/branch, `archived`, and each
   top-level `and` conjunct of the query). The status chips, branch picker and
-  archived switch write tokens; a hand-typed `status = ...`/`status in (...)`/
+  archived switch (one toolbar, a single Tab stop; the arrow keys move inside
+  it) write tokens; a hand-typed `status = ...`/`status in (...)`/
   `branch = ...` clause becomes the same token (Enter commits the text,
   Backspace in an empty box drops the last token). The URL keeps `q`, `status`,
   `branch`, `search` and `archived`.
