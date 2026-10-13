@@ -52,7 +52,6 @@ export function useLeaderboardView() {
   const shown = useParamSet(params, "show");
   const selected = useParamSet(params, "sel");
   const expanded = useParamSet(params, "expand");
-  const collapsed = useParamSet(params, "collapse");
 
   // Column order (col=) and pinned set (pin=) — stable arrays for useMemo deps.
   const colOrder = useParamList(params, "col");
@@ -86,18 +85,14 @@ export function useLeaderboardView() {
     [update],
   );
 
-  /** Flip a sweep open/shut; the URL records only departures from its
-   *  default (big sweeps start collapsed). */
-  const toggleCollapsed = useCallback(
-    (verstr: string, collapsedByDefault: boolean) =>
+  /** Open/shut an outer run (all start shut, so `expand=` lists the open
+   *  ones); a `collapse=` left by older links is dropped on the way. */
+  const toggleExpanded = useCallback(
+    (verstr: string) =>
       update((p) => {
-        const drop = (name: string) => setAllParams(p, name, p.getAll(name).filter((v) => v !== verstr));
-        const shut = p.getAll("collapse").includes(verstr) ||
-          (collapsedByDefault && !p.getAll("expand").includes(verstr));
-        drop("collapse");
-        drop("expand");
-        if (shut && collapsedByDefault) p.append("expand", verstr);
-        if (!shut && !collapsedByDefault) p.append("collapse", verstr);
+        const open = p.getAll("expand");
+        setAllParams(p, "expand", open.includes(verstr) ? open.filter((v) => v !== verstr) : [...open, verstr]);
+        setAllParams(p, "collapse", p.getAll("collapse").filter((v) => v !== verstr));
       }),
     [update],
   );
@@ -145,9 +140,9 @@ export function useLeaderboardView() {
 
   return {
     ...view,
-    hidden, shown, selected, expanded, collapsed,
+    hidden, shown, selected, expanded,
     colOrder, pinned,
-    clickSort, toggleCollapsed, ...setters,
+    clickSort, toggleExpanded, ...setters,
   };
 }
 

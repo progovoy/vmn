@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { ExperimentRow } from "../types";
+import { runHref } from "../util";
+import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
-import Row, { ROW_HEIGHT, type RowLayout } from "./LeaderboardRow";
+import Row, { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
 import Head, { type ColumnEdits, type HeaderCheckProps, type SortState } from "./LeaderboardHead";
 
 export { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits, type SortState } from "./LeaderboardHead";
@@ -27,12 +29,37 @@ function SkeletonRows({ layout }: { layout: RowLayout }) {
   );
 }
 
+const PENDING_TEXT: Record<PendingRow["state"], (p: PendingRow) => string> = {
+  loading: () => "Loading inner runs…",
+  error: () => "Could not load the inner runs",
+  more: (p) => `${p.count} more inner runs · `,
+};
+
+/** A row standing in for an open outer's inner runs that are not shown,
+ *  its text in the (sticky) experiment column, indented like an inner run. */
+function PendingInnerRow({ item, index, layout }: { item: PendingRow; index: number; layout: RowLayout }) {
+  return (
+    <tr className={`row inner-pending ${item.state}`} style={{ height: ROW_HEIGHT }} data-row-index={index} tabIndex={-1}>
+      {layoutIds(layout).map((id, i) => (
+        <td key={id} data-col-id={id} style={layout.styles[i]}>
+          {id === "experiment" && (
+            <div className="nest" style={{ paddingLeft: item.depth * 14 }} role={item.state === "error" ? "alert" : "status"}>
+              {PENDING_TEXT[item.state](item)}
+              {item.state === "more" && <Link to={runHref(layout.runBase, item.parent)}>open the outer run</Link>}
+            </div>
+          )}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
 export default function LeaderboardTable({
   rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
   collapsedOf, onFold, edits, onFit,
 }: {
   /** Undefined while the first page loads: skeleton rows under a live header. */
-  rows: ExperimentRow[] | undefined;
+  rows: TableItem[] | undefined;
   layout: RowLayout;
   sort: SortState;
   selected: ReadonlySet<string>;
@@ -65,7 +92,8 @@ export default function LeaderboardTable({
   const items = virtualizer.getVirtualItems();
   const navigate = useNavigate();
   const keys = useRowKeys(parentRef, list.length, (i) => virtualizer.scrollToIndex?.(i), navigate);
-  visibleRef.current = () => items.map((it) => list[it.index]?.verstr).filter(Boolean);
+  visibleRef.current = () =>
+    items.map((it) => list[it.index]).flatMap((r) => (r && !isPending(r) ? [r.verstr] : []));
 
   // Back to this entry: put the table where it was once its rows are there.
   const restored = useRef(false);
@@ -115,6 +143,7 @@ export default function LeaderboardTable({
               )}
               {items.map((it) => {
                 const r = list[it.index];
+                if (isPending(r)) return <PendingInnerRow key={r.key} item={r} index={it.index} layout={layout} />;
                 return (
                   <Row
                     key={r.verstr}

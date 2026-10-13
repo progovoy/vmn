@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import StatusPill from "../components/StatusPill";
+import { Icon } from "../components/shell/icons";
 import { tagLabel } from "../util/tags";
 import {
   DATE_SORT_OF, cellId, columnIds, defaultColumnIds, type ColMeta, type ColumnCell, type FleetCol,
@@ -99,7 +100,7 @@ function FoldToggle({ r, collapsed, onFold }: {
       aria-label={`${collapsed ? "Expand" : "Collapse"} ${r.verstr}`}
       onClick={() => onFold(r)}
     >
-      {collapsed ? "▸" : "▾"}
+      <Icon name={collapsed ? "chevron-right" : "chevron-down"} size={14} />
     </button>
   );
 }

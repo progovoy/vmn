@@ -719,9 +719,14 @@ a.run-name { font-weight: 500; }
 tr.row.archived td { opacity: 0.55; }
 tr.row.archived .run-link { text-decoration: line-through; text-decoration-color: var(--text-3); }
 .fold-toggle {
-  border: 0; background: transparent; color: var(--text-2); padding: 0 2px;
-  width: 16px; cursor: pointer; font-size: 11px; line-height: 1;
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: transparent; color: var(--text-2); padding: 0;
+  width: 24px; height: 24px; margin-left: -4px; cursor: pointer;
 }
+.fold-toggle:hover { background: var(--panel-3); color: var(--text); }
+.fold-toggle:focus-visible { outline-offset: -2px; }
+tr.inner-pending td { color: var(--text-3); font-size: 12px; }
+tr.inner-pending.error td { color: var(--bad); }
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(6, 6, 5, 0.6); z-index: 60;
   display: flex; justify-content: center; align-items: flex-start; padding-top: 18vh;

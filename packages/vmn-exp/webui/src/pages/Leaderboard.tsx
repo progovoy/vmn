@@ -17,7 +17,8 @@ import { useLeaderboardView, type Order } from "../hooks/useLeaderboardView";
 import { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
 import { useColumnPrefs } from "../hooks/useColumnPrefs";
 import { useBoardSelection } from "../hooks/useBoardSelection";
-import { collapsedByDefault, foldState, visibleRows } from "../util/sweepTree";
+import { useInnerRuns } from "../hooks/useInnerRuns";
+import { foldState, isPending, treeRows } from "../util/sweepTree";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "./BoardTabs";
 import LeaderboardChartsPanel from "./LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "./LeaderboardSelectionBar";
@@ -25,6 +26,8 @@ import LeaderboardTable, { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits } from "./
 import { DATE_SORT_OF, moveColumn } from "./leaderboardColumns";
 import LeaderboardToolbar from "./LeaderboardToolbar";
 import { useCanCreateRun } from "../shell/useAppExists";
+
+const topLevel = (rows: readonly ExperimentRow[]) => rows.filter((r) => !r.depth).length;
 
 const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 
@@ -105,7 +108,13 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     }
     return { anyRunning: running, heartbeatSec: fastest };
   }, [rows]);
-  usePolling(data.refresh, pollIntervalMs(heartbeatSec), live || anyRunning);
+  const all = useMemo(() => rows ?? [], [rows]);
+  const { expanded } = view;
+  const inner = useInnerRuns(ws, app, all, expanded, filter);
+  const { refresh: refreshRows } = data;
+  const { refresh: refreshInner } = inner;
+  const refresh = useCallback(() => { refreshInner(); return refreshRows(); }, [refreshRows, refreshInner]);
+  usePolling(refresh, pollIntervalMs(heartbeatSec), live || anyRunning);
 
   const base = `/ws/${ws}/app/${app}`;
   const colPrefs = useColumnPrefs(`${ws}/${app}`);
@@ -123,24 +132,24 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
     },
   }), [setWidth, setOrder, ids]);
 
-  const all = useMemo(() => rows ?? [], [rows]);
   const charting = view.tab === "charts";
   // A brush in the parallel view (Charts tab) narrows the table.
   const brush = charting && view.chart === "parallel" ? brushed : null;
-  const { expanded, collapsed } = view;
-  const tableRows = useMemo(() => {
+  // Inner runs sit under their outer, shown only once it is unfolded.
+  const tableItems = useMemo(() => {
     if (!rows) return rows;
-    const topLevel = rows.filter((r) => !r.depth);
-    const brushedRows = brush ? topLevel.filter((r) => brush.has(r.verstr)) : topLevel;
-    return visibleRows(brushedRows, expanded, collapsed);
-  }, [rows, brush, expanded, collapsed]);
-  const collapsedOf = useCallback(
-    (r: ExperimentRow) => foldState(r, expanded, collapsed),
-    [expanded, collapsed],
+    const keep = brush ? (r: ExperimentRow) => brush.has(r.verstr) : undefined;
+    const top = rows.filter((r) => !r.depth && (keep?.(r) ?? true));
+    return treeRows(top, expanded, inner.innerOf, keep);
+  }, [rows, brush, expanded, inner.innerOf]);
+  const tableRows = useMemo(
+    () => tableItems?.filter((r): r is ExperimentRow => !isPending(r)),
+    [tableItems],
   );
-  const { toggleCollapsed } = view;
-  const onFold = useCallback((r: ExperimentRow) => toggleCollapsed(r.verstr, collapsedByDefault(r)), [toggleCollapsed]);
-  const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, () => { data.refresh(); });
+  const collapsedOf = useCallback((r: ExperimentRow) => foldState(r, expanded), [expanded]);
+  const { toggleExpanded } = view;
+  const onFold = useCallback((r: ExperimentRow) => toggleExpanded(r.verstr), [toggleExpanded]);
+  const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, () => { refresh(); });
 
   const onPrefetch = useCallback(
     (verstr: string) => { prefetchRun(client, ws, app, verstr); },
@@ -166,6 +175,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
   const filtered = view.query || view.status || view.search || view.branch || view.archived;
   const empty = rows !== undefined && rows.length === 0 && !filtered;
   const sortLabel = view.sort ?? cols.primary;
+  // Inner runs shown under an open outer do not count as runs on the board.
+  const shownTop = topLevel(tableRows ?? []);
 
   return (
     <>
@@ -173,14 +184,8 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
       <p className="page-sub">
         {rows === undefined ? "loading runs…"
           : filtered || all.length < data.total
-            ? (tableRows!.length !== data.total ? `${tableRows!.length} of ${data.total} runs` : `${data.total} runs`)
-            : (() => {
-                const topLevel = rows!.filter((r) => !r.depth).length;
-                const innerCount = data.total - topLevel;
-                return innerCount > 0
-                  ? `${topLevel} runs · ${data.total} incl. inner`
-                  : `${topLevel} runs`;
-              })()}
+            ? (shownTop !== data.total ? `${shownTop} of ${data.total} runs` : `${data.total} runs`)
+            : `${topLevel(all)} runs${data.total > topLevel(all) ? ` · ${data.total} incl. inner` : ""}`}
         {sortLabel && (
           <>
             {" · sorted by "}<b>{sortLabel}</b>
@@ -244,7 +249,7 @@ function AppLeaderboard({ ws, app }: { ws: string; app: string }) {
                 )}
 
                 <LeaderboardTable
-                  rows={tableRows}
+                  rows={tableItems}
                   layout={cols.layout}
                   sort={sortState}
                   selected={view.selected}
