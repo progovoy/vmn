@@ -29,7 +29,8 @@ import RunOutput, { OUTPUT_LOG } from "../components/RunOutput";
 import RunErrorCard from "../components/RunErrorCard";
 import TrainingCurves from "../components/TrainingCurves";
 import SweepSection, { sweepSpecOf } from "../components/SweepSection";
-import { FleetCard, MetadataCard, MetricsCard, ParamsCard, StatusCard } from "./RunSections";
+import { FleetCard, MetadataCard, MetricsCard, StatusCard } from "./RunSections";
+import RunCards from "./RunCards";
 import RunMediaSection from "./RunMedia";
 import RunProvenanceSection from "./RunProvenance";
 import { ForkOrigin } from "./RunFork";
@@ -184,15 +185,17 @@ export default function Run() {
         <SweepSection ws={ws} app={app} verstr={summary.verstr} runUrl={runUrl} />
       )}
 
-      <div className="card-grid-2" style={{ marginBottom: 16 }}>
-        {detail ? <MetadataCard detail={detail} /> : <Skeleton />}
-        <ParamsCard params={summary.params} />
-        <MetricsCard metrics={summary.metrics} summary={summary.metricSummary} schema={schema}>
-          {detail && (
-            <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={onMetricsAdded} />
-          )}
-        </MetricsCard>
-      </div>
+      <RunCards
+        metadata={detail ? <MetadataCard detail={detail} /> : <Skeleton />}
+        params={summary.params}
+        metrics={(
+          <MetricsCard metrics={summary.metrics} summary={summary.metricSummary} schema={schema}>
+            {detail && (
+              <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={onMetricsAdded} />
+            )}
+          </MetricsCard>
+        )}
+      />
 
       {detail ? <RunBody ws={ws} app={app} appName={appName} detail={detail} /> : <Skeleton />}
       <ReportsUsing ws={ws} app={appName} verstr={summary.verstr} />

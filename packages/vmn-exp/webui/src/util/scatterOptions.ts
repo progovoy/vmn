@@ -2,7 +2,7 @@
  *  per point group, each with its own x/y arrays (faceted mode). */
 import type uPlot from "uplot";
 import { resolveCssColor, type ChartTheme } from "./cssColor";
-import { themedAxis, Y_AXIS_SIZE } from "./curveOptions";
+import { themedAxis, yAxisSize } from "./curveOptions";
 import type { PointGroup } from "./scatterData";
 
 /** Past this many points they are drawn smaller, so dense clouds stay legible. */
@@ -59,7 +59,7 @@ export function scatterOptions(
     legend: { show: false },
     cursor: { drag: { x: true, y: true, setScale: true }, points: { show: false } },
     scales: { x: { time: false } },
-    axes: [themedAxis(theme, read), themedAxis(theme, read, { size: Y_AXIS_SIZE })],
+    axes: [themedAxis(theme, read), themedAxis(theme, read, { size: yAxisSize })],
     series: [
       {},
       ...colors.map((color): uPlot.Series => {

@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal, seriesColor } from "../util";
+import { fmtVal, metricGoal } from "../util";
 import type { CurveSeries } from "../util/curveOptions";
 import { downsampleLTTB } from "../util/downsample";
 import { isFiniteNumber, maxOf, minOf } from "../util/stats";
@@ -11,6 +11,8 @@ import LazyMount from "./LazyMount";
 const PLOT_POINTS = 200;
 const PLOT_H = 110;
 const runLabel = (x: number) => `@${x}`;
+/** One series colour on every card: the cards compare metrics, not runs. */
+const TREND_COLOR = "var(--accent)";
 
 interface Plot {
   metric: string;
@@ -25,7 +27,7 @@ function hasTwoValues(rows: ExperimentRow[], m: string): boolean {
   return false;
 }
 
-function buildPlot(sorted: ExperimentRow[], metric: string, cols: string[], schema: MetricsSchema | null): Plot {
+function buildPlot(sorted: ExperimentRow[], metric: string, schema: MetricsSchema | null): Plot {
   const goal = metricGoal(schema, metric);
   const xy: { x: number; y: number }[] = [];
   for (const r of sorted) {
@@ -39,7 +41,7 @@ function buildPlot(sorted: ExperimentRow[], metric: string, cols: string[], sche
     metric, goal,
     best: goal !== null && !Number.isNaN(extreme) ? extreme : null,
     curves: [{
-      key: metric, label: metric, color: seriesColor(cols, metric),
+      key: metric, label: metric, color: TREND_COLOR,
       xs: Float64Array.from(thin, (d) => d.x), ys: Float64Array.from(thin, (d) => d.y),
     }],
   };
@@ -54,7 +56,7 @@ function ParamPlots({ rows, metricCols, schema }: {
   const plots = useMemo(() => {
     const cols = metricCols.filter((m) => hasTwoValues(rows, m));
     const sorted = [...rows].sort((a, b) => a.idx - b.idx);
-    return cols.map((m) => buildPlot(sorted, m, cols, schema));
+    return cols.map((m) => buildPlot(sorted, m, schema));
   }, [rows, metricCols, schema]);
 
   if (plots.length === 0) return null;
@@ -81,7 +83,7 @@ function ParamPlots({ rows, metricCols, schema }: {
               )}
             </div>
             <LazyMount height={PLOT_H}>
-              <CurveChart series={curves} xMode="step" height={PLOT_H} hideX formatX={runLabel} />
+              <CurveChart series={curves} xMode="step" height={PLOT_H} formatX={runLabel} />
             </LazyMount>
           </div>
         ))}

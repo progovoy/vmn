@@ -83,7 +83,7 @@ function MetricScatter({ rows, metricCols, paramCols, schema, onSelect, initialX
         {cursor && hovered && (
           <div
             data-testid="scatter-tooltip"
-            style={{ ...TOOLTIP_STYLE, top: cursor.top + 12, left: cursor.left + Y_AXIS_SIZE + 12 }}
+            style={{ ...TOOLTIP_STYLE, top: cursor.top + 12, left: cursor.left + (cursor.plotLeft ?? Y_AXIS_SIZE) + 12 }}
           >
             <div className="mono">@{hovered.idx} <span style={{ color: "var(--text-3)" }}>{hovered.verstr}</span></div>
             <div>{xCol}: <span className="mono">{fmtVal(hovered.x)}</span></div>

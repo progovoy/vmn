@@ -12,7 +12,7 @@ export default function CurveTooltip({ rows, series, cursor, width, formatX }: {
   formatX: (x: number) => string;
 }) {
   const byKey = new Map(series.map((s) => [s.key, s]));
-  const left = cursor.left + Y_AXIS_SIZE;
+  const left = cursor.left + (cursor.plotLeft ?? Y_AXIS_SIZE);
   // Past the middle the box opens to the left of the cursor, never off-card.
   const flip = width > 0 && left > width / 2;
   return (

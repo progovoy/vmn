@@ -1,0 +1,31 @@
+/* Run page: Metadata | Params | Metrics cards (plan 20 E3, E4). */
+.run-cards {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  align-items: start; margin-bottom: 16px;
+}
+.run-cards .card { margin-bottom: 0; }
+.run-cards-wide { grid-column: 1 / -1; }
+.run-cards-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (max-width: 860px) {
+  .run-cards { grid-template-columns: 1fr; }
+}
+
+/* A metric line: the name (with its goal arrow) never splits; under a long
+   name the values drop to their own line, and the summary wraps as whole
+   label/value pairs. */
+.metric-line {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 2px 12px; padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.metric-name { color: var(--text-2); font-size: 13px; white-space: nowrap; }
+.metric-goal { color: var(--text-3); font-size: 11px; }
+.metric-values {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  margin-left: auto; min-width: 0;
+}
+.metric-summary {
+  display: flex; flex-wrap: wrap; justify-content: flex-end; column-gap: 0;
+  color: var(--text-3); font-size: 11px; font-family: var(--mono);
+}
+.metric-pair { white-space: nowrap; }
+.metric-sep { white-space: pre; }
