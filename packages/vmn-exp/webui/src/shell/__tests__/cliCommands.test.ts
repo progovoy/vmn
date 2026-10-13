@@ -45,11 +45,6 @@ describe("cliFor", () => {
       .toBe("vmn-exp show ml_app -v 0.4.1-dev.x");
   });
 
-  it("code diff copies its URL refs verbatim", () => {
-    expect(commands(input("code-diff", {}, "v=%403&to=latest")))
-      .toEqual(["vmn-exp diff ml_app -v @3 -v latest"]);
-  });
-
   it("compare names every selected run", () => {
     expect(commands(input("compare-runs", {}, "sel=a&sel=b&sel=c")))
       .toEqual(["vmn-exp compare ml_app -v a -v b -v c"]);
@@ -95,7 +90,7 @@ describe("cliFor", () => {
   });
 
   it.each<RouteId>([
-    "home", "apps", "overlay", "actions", "reports", "report", "report-edit", "tokens", "not-found", "sign-in",
+    "home", "apps", "actions", "reports", "report", "report-edit", "tokens", "not-found", "sign-in",
   ])("%s has no command", (routeId) => {
     expect(cliFor(input(routeId, {}, "runs=a,b"))).toEqual([]);
   });

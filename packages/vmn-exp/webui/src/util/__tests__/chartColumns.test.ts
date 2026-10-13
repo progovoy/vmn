@@ -13,6 +13,15 @@ describe("chartKeys", () => {
     expect(chartKeys("grouped", ["loss"], ["lr"])).toEqual(["metrics.loss", "params.lr", "branch"]);
     expect(chartKeys("importance", ["loss"], ["lr"])).toEqual(["metrics.loss", "params.lr"]);
   });
+
+  it("asks the charts that colour by group for the board's group key (plan 22 G7)", () => {
+    expect(chartKeys("bar", ["loss"], ["lr"], "parent")).toEqual(["metrics.loss", "group:parent"]);
+    expect(chartKeys("scatter", ["loss"], ["lr"], "params.lr")).toEqual(["metrics.loss", "params.lr", "group:params.lr"]);
+    expect(chartKeys("parallel", ["loss"], [], "branch")).toEqual(["metrics.loss", "group:branch"]);
+    expect(chartKeys("trend", ["loss"], [], "parent")).toEqual(["metrics.loss"]);
+    expect(chartKeys("grouped", ["loss"], [], "parent")).toEqual(["metrics.loss", "branch"]);
+    expect(chartKeys("importance", ["loss"], [], "parent")).toEqual(["metrics.loss"]);
+  });
 });
 
 describe("columnsToRows", () => {

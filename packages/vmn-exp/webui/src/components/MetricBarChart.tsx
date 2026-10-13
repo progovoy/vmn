@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal } from "../util";
 import { isFiniteNumber } from "../util/stats";
+import type { ChartGroups } from "../util/chartGroups";
 import { useRunSelect } from "./chartHooks";
 
 /** One bar per run stops being readable (and renderable) long before 50k runs. */
@@ -14,8 +15,11 @@ function widthPct(value: number, maxAbs: number): string {
   return `${maxAbs > 0 ? (Math.abs(value) / maxAbs) * 100 : 0}%`;
 }
 
-function Bar({ d, maxAbs, isBest, onClick }: {
-  d: BarDatum; maxAbs: number; isBest: boolean; onClick: () => void;
+function Bar({ d, maxAbs, isBest, color, onClick }: {
+  d: BarDatum; maxAbs: number; isBest: boolean;
+  /** Its run's group colour on a grouped board. */
+  color?: string;
+  onClick: () => void;
 }) {
   return (
     <button
@@ -32,7 +36,7 @@ function Bar({ d, maxAbs, isBest, onClick }: {
           style={{
             display: "block", height: "100%", borderRadius: "0 4px 4px 0",
             width: widthPct(d.value, maxAbs),
-            background: isBest ? "var(--good)" : "var(--accent)",
+            background: color ?? (isBest ? "var(--good)" : "var(--accent)"),
             opacity: isBest ? 1 : 0.6,
           }}
         />
@@ -44,14 +48,18 @@ function Bar({ d, maxAbs, isBest, onClick }: {
 
 /** The top runs by one metric, best first, as plain HTML bars that fill any
  *  width. Click a bar to open its run. */
-function MetricBarChart({ rows, metricCols, schema, onSelect }: {
+function MetricBarChart({ rows, metricCols, schema, groups, onSelect }: {
   rows: ExperimentRow[];
   metricCols: string[];
   schema: MetricsSchema | null;
+  /** Colours each bar by its run's group (plan 22 G7). */
+  groups?: ChartGroups;
   /** Called with a clicked bar's run; defaults to opening the run page. */
   onSelect?: (verstr: string) => void;
 }) {
-  const [metric, setMetric] = useState(metricCols[0] ?? "");
+  const [chosen, setMetric] = useState(metricCols[0] ?? "");
+  // The metrics can arrive after the chart mounted.
+  const metric = metricCols.includes(chosen) ? chosen : metricCols[0] ?? "";
   const select = useRunSelect(onSelect);
   const goal = metricGoal(schema, metric);
 
@@ -92,7 +100,10 @@ function MetricBarChart({ rows, metricCols, schema, onSelect }: {
           <div style={{ color: "var(--text-3)", fontSize: 12 }}>No finite values for {metric}.</div>
         )}
         {data.map((d) => (
-          <Bar key={d.verstr} d={d} maxAbs={maxAbs} isBest={d.value === best} onClick={() => select(d.verstr)} />
+          <Bar
+            key={d.verstr} d={d} maxAbs={maxAbs} isBest={d.value === best}
+            color={groups?.colorOf.get(d.verstr)} onClick={() => select(d.verstr)}
+          />
         ))}
       </div>
     </div>

@@ -16,8 +16,7 @@ export interface NavItem {
 export interface NavGroup { id: "app" | "workspace" | "server"; label: string; items: NavItem[] }
 
 const ACTIVE: Partial<Record<RouteId, NavId>> = {
-  experiments: "experiments", run: "experiments", "code-diff": "experiments",
-  "compare-runs": "experiments", overlay: "experiments",
+  experiments: "experiments", run: "experiments", "compare-runs": "experiments",
   tree: "tree", actions: "actions", apps: "apps",
   models: "models", model: "models",
   reports: "reports", report: "reports", "report-edit": "reports",

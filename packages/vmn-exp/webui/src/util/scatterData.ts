@@ -1,5 +1,6 @@
 /** Pure data prep for the metric scatter: typed point arrays split into the
- *  "rest" and "best" groups, and a nearest-point lookup for hover/click. */
+ *  "rest" and "best" groups (or one per group colour on a grouped board), and
+ *  a nearest-point lookup for hover/click. */
 import type { ExperimentRow } from "../types";
 import { paramValue } from "../util";
 import { finiteOrNull } from "./stats";
@@ -49,6 +50,25 @@ export function scatterGroups(
     rest: toGroup(points.filter((p) => bestY === null || p.y !== bestY)),
     best: toGroup(points.filter((p) => bestY !== null && p.y === bestY)),
   };
+}
+
+/** Rows with finite x and y, one group per colour: *colorOf*'s colours in
+ *  first-seen order of *colors*, and *fallback* for a run without one. */
+export function colorGroups(
+  rows: ExperimentRow[], xCol: string, yCol: string, paramCols: string[],
+  colorOf: ReadonlyMap<string, string>, fallback: string,
+): { colors: string[]; groups: PointGroup[] } {
+  const byColor = new Map<string, ScatterPoint[]>();
+  for (const r of rows) {
+    const x = numericValue(r, xCol, paramCols);
+    const y = numericValue(r, yCol, paramCols);
+    if (x === null || y === null) continue;
+    const color = colorOf.get(r.verstr) ?? fallback;
+    const points = byColor.get(color);
+    const p = { x, y, verstr: r.verstr, idx: r.idx };
+    if (points) points.push(p); else byColor.set(color, [p]);
+  }
+  return { colors: [...byColor.keys()], groups: [...byColor.values()].map(toGroup) };
 }
 
 function span(groups: PointGroup[], key: "xs" | "ys"): number {

@@ -18,15 +18,8 @@ export function runText({ verstr, idx, name }: RunLabel): string {
   return name ? `@${idx} ${name}` : `@${idx}`;
 }
 
-/** The code-diff page's refs, with the page's own defaults. */
-export const diffRefs = (search: URLSearchParams) =>
-  [search.get("v") ?? "@1", search.get("to") ?? "latest"] as const;
-
 /** The runs the compare page shows (deduped, capped). */
 export const compareRefs = (search: URLSearchParams) => parseSelection(search).verstrs;
-
-const overlayRefs = (search: URLSearchParams) =>
-  (search.get("runs") ?? "").split(",").filter(Boolean);
 
 /** The last crumb of every app route below `experiments`. */
 function appLeaf(input: CrumbInput): Crumb | null {
@@ -35,12 +28,7 @@ function appLeaf(input: CrumbInput): Crumb | null {
     const run = runOf(input);
     return { label: runText(run), mono: true, title: run.verstr, run };
   }
-  if (routeId === "code-diff") {
-    const [v, to] = diffRefs(search);
-    return { label: `diff ${v} → ${to}` };
-  }
   if (routeId === "compare-runs") return { label: `compare ${plural(compareRefs(search).length, "run")}` };
-  if (routeId === "overlay") return { label: `overlay ${plural(overlayRefs(search).length, "run")}` };
   return null;
 }
 
@@ -69,7 +57,7 @@ const GLOBAL: Partial<Record<RouteId, string>> = {
 };
 
 const APP_ROUTES = new Set<RouteId>([
-  "experiments", "run", "code-diff", "compare-runs", "overlay", "tree", "actions",
+  "experiments", "run", "compare-runs", "tree", "actions",
 ]);
 export const isAppRoute = (routeId: RouteId) => APP_ROUTES.has(routeId);
 

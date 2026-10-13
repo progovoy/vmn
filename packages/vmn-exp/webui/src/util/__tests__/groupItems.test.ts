@@ -51,4 +51,13 @@ describe("the grouped board's items (plan 22 G4)", () => {
     const items = groupItems(data([group("a", ["a1"], 3), group("b", ["b1"])]), "parent", new Set());
     expect(boardRows(items).map((r) => r.verstr)).toEqual(["a1", "b1"]);
   });
+
+  it("names each header's loaded rows, the ones *keep* passes, whether the group is open or shut", () => {
+    const d = data([group("a", ["a1", "a2"], 5), group("b", ["b1"])]);
+    const heads = (items: ReturnType<typeof groupItems>) =>
+      items.flatMap((it) => (isGroupItem(it) && it.item === "group" ? [it.rows] : []));
+    expect(heads(groupItems(d, "parent", new Set(["a"])))).toEqual([["a1", "a2"], ["b1"]]);
+    const keep = (r: ExperimentRow) => r.verstr !== "a2";
+    expect(heads(groupItems(d, "parent", new Set(), new Map(), keep))).toEqual([["a1"], ["b1"]]);
+  });
 });

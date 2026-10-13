@@ -3,8 +3,8 @@
 import type { Meta, Role, Workspace } from "../types";
 
 export type RouteId =
-  | "home" | "tokens" | "apps" | "experiments" | "run" | "code-diff" | "compare-runs"
-  | "overlay" | "tree" | "actions" | "models" | "model" | "reports" | "report"
+  | "home" | "tokens" | "apps" | "experiments" | "run" | "compare-runs"
+  | "tree" | "actions" | "models" | "model" | "reports" | "report"
   | "report-edit" | "not-found" | "sign-in";
 /** Every route's `handle` (routes.tsx). */
 export interface RouteHandle { id: RouteId; wide?: boolean }

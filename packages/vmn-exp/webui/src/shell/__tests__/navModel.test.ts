@@ -28,7 +28,7 @@ function ctx(over: Partial<ShellContext> = {}): ShellContext {
 const items = (groups: NavGroup[]): NavItem[] => groups.flatMap((g) => g.items);
 const item = (groups: NavGroup[], id: string) => items(groups).find((i) => i.id === id)!;
 const ALL_ROUTES: RouteId[] = [
-  "home", "tokens", "apps", "experiments", "run", "code-diff", "compare-runs", "overlay",
+  "home", "tokens", "apps", "experiments", "run", "compare-runs",
   "tree", "actions", "models", "model", "reports", "report", "report-edit", "not-found", "sign-in",
 ];
 
@@ -59,8 +59,8 @@ describe("navModel", () => {
   });
 
   it.each<[RouteId, string]>([
-    ["experiments", "experiments"], ["run", "experiments"], ["code-diff", "experiments"],
-    ["compare-runs", "experiments"], ["overlay", "experiments"], ["tree", "tree"],
+    ["experiments", "experiments"], ["run", "experiments"],
+    ["compare-runs", "experiments"], ["tree", "tree"],
     ["actions", "actions"], ["apps", "apps"], ["models", "models"], ["model", "models"],
     ["reports", "reports"], ["report", "reports"], ["report-edit", "reports"],
   ])("marks %s as the %s item", (routeId, active) => {

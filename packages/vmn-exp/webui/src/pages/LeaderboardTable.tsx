@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefO
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { GroupAggregate } from "../apiGroups";
+import type { HeaderCheck } from "../hooks/useBoardSelection";
 import { boardRows, isGroupItem, type BoardItem } from "../util/groupItems";
 import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
@@ -65,6 +66,9 @@ export interface GroupActions {
   aggregate: GroupAggregate;
   onFold: (key: string) => void;
   onMore: (key: string) => void;
+  /** A group header's checkbox over its rows (plan 22 G7). */
+  checkOf: (verstrs: readonly string[]) => HeaderCheck;
+  onCheck: (verstrs: readonly string[]) => void;
 }
 
 /** Cards that refresh with the board: about a phone screen's worth and the
@@ -180,6 +184,7 @@ function GridTable({
                     <GroupHeaderRow
                       key={`group:${r.group.key}`} item={r} index={it.index} isActive={it.index === keys.active}
                       layout={layout} agg={groups!.aggregate} onFold={groups!.onFold}
+                      check={{ state: groups!.checkOf(r.rows), onToggle: () => groups!.onCheck(r.rows) }}
                       first={groups!.field === "code_verstr" && next && !isGroupItem(next) ? next : undefined}
                     />
                   );

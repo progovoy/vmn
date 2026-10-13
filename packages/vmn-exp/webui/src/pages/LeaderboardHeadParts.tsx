@@ -62,11 +62,13 @@ export function ResizeGrip({ width, onResize }: { width: number; onResize: (w: n
 export interface HeaderCheckProps {
   state: HeaderCheck;
   onToggle: () => void;
+  /** Its accessible name (default: the whole table's). */
+  label?: string;
 }
 
 /** The header's select-all box: checked when every row on screen is
  *  selected, indeterminate when only some are. */
-export function HeaderCheckbox({ state, onToggle }: HeaderCheckProps) {
+export function HeaderCheckbox({ state, onToggle, label = "Select all visible runs" }: HeaderCheckProps) {
   const ref = useRef<HTMLInputElement>(null);
   // Every render: a click clears the DOM flag even when the state stays put.
   useEffect(() => {
@@ -74,7 +76,7 @@ export function HeaderCheckbox({ state, onToggle }: HeaderCheckProps) {
   });
   return (
     <input
-      ref={ref} type="checkbox" aria-label="Select all visible runs"
+      ref={ref} type="checkbox" aria-label={label}
       checked={state === "all"} onChange={onToggle}
     />
   );

@@ -116,7 +116,7 @@ describe("routes", () => {
     m.experimentsDiff.mockResolvedValue({ from_verstr: "a", to_verstr: "b", metrics_delta: {}, diff: "" });
     m.metricsSchema.mockResolvedValue({});
     m.recentExperiments.mockResolvedValue([]);
-    renderShell(routes, "/ws/w/app/a/compare?v=a&to=b");
+    renderShell(routes, "/ws/w/app/a/compare-runs?tab=code&sel=a&sel=b");
     expect(document.querySelector(".route-fallback")).not.toBeNull();
     expect(await screen.findByText("Code diff")).toBeInTheDocument();
   });

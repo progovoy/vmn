@@ -4,7 +4,7 @@
 import type { Workspace } from "../types";
 import type { CliCommand, CrumbInput } from "./contracts";
 import { codePair, compareTab } from "../pages/Compare/selection";
-import { compareRefs, diffRefs, runOf } from "./crumbs";
+import { compareRefs, runOf } from "./crumbs";
 
 const SAFE = /^[A-Za-z0-9@%_+=:,./-]+$/;
 
@@ -36,10 +36,6 @@ function vmnExpArgs(input: CrumbInput): string[][] {
     case "run": {
       const v = runOf(input).verstr;
       return ["show", "restore", "rerun"].map((cmd) => [cmd, app, "-v", v]);
-    }
-    case "code-diff": {
-      const [v, to] = diffRefs(search);
-      return [["diff", app, "-v", v, "-v", to]];
     }
     case "compare-runs": {
       if (compareTab(search) === "code") return [["diff", app, ...codePair(search).flatMap((r) => ["-v", r])]];

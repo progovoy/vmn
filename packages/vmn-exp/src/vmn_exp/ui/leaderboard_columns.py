@@ -6,10 +6,13 @@ A chart of every filtered run needs a few values per run, not whole rows, so
 each column aligned to ``verstrs``.
 """
 from vmn_exp.core.values import is_finite_number
+from vmn_exp.ui.leaderboard_group_fields import check_group, key_of
 
 COLUMNS_LIMIT = 20000
 MAX_COLUMNS_LIMIT = 50000
 _FIELDS = ("timestamp", "status", "branch")
+# ``group:<field>``: a row's group key on the board grouped by <field>.
+GROUP_PREFIX = "group:"
 
 
 def clamp_columns_limit(limit):
@@ -36,6 +39,8 @@ def _name(row):
 
 def column_getter(key):
     """The value reader of *key*; ValueError for a key no row can answer."""
+    if key.startswith(GROUP_PREFIX):
+        return key_of(check_group(key[len(GROUP_PREFIX):]))
     group, _, name = key.partition(".")
     if group == "metrics" and name:
         return _metric(name)
@@ -46,7 +51,8 @@ def column_getter(key):
     if key in _FIELDS:
         return lambda row: row.get(key)
     raise ValueError(
-        f"Unknown column '{key}' (use metrics.<k>, params.<k>, timestamp, status, branch or name)"
+        f"Unknown column '{key}' (use metrics.<k>, params.<k>, group:<field>, timestamp, "
+        "status, branch or name)"
     )
 
 

@@ -6,8 +6,7 @@ export interface RecentEntry { label: string; to: string; kind: string }
 /** A route's Recent kind: the icon Go to and the search rows use for it
  *  (`app` and `ws` are the stored names of the app and workspace icons). */
 const KIND: Partial<Record<RouteId, string>> = {
-  run: "run", experiments: "app", "compare-runs": "experiments", "code-diff": "experiments",
-  overlay: "experiments", tree: "tree", actions: "actions", apps: "ws", home: "workspace",
+  run: "run", experiments: "app", "compare-runs": "experiments", tree: "tree", actions: "actions", apps: "ws", home: "workspace",
   models: "models", model: "models", reports: "reports", report: "reports", "report-edit": "reports",
   tokens: "key",
 };

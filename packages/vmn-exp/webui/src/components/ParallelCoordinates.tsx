@@ -6,6 +6,7 @@ import {
 } from "../util/parallelData";
 import ParallelCanvas, { type PlotGeometry } from "./ParallelCanvas";
 import { useAxisBrush } from "./useAxisBrush";
+import type { ChartGroups } from "../util/chartGroups";
 
 interface Props {
   rows: ExperimentRow[];
@@ -14,6 +15,8 @@ interface Props {
   schema: MetricsSchema | null;
   /** Row indices inside every brush, or null when no brush is active. */
   onBrush?: (indices: number[] | null) => void;
+  /** Colours each line by its run's group (plan 22 G7), the default "color by". */
+  groups?: ChartGroups;
 }
 
 const PAD = 20, CHART_H = 300, LABEL_H = 24, PLOT_H = CHART_H - 2 * PAD;
@@ -21,6 +24,8 @@ const CANVAS_THRESHOLD = 500;
 /** Colour steps: few distinct strokes lets the canvas batch one path per colour. */
 const COLOR_STEPS = 31;
 const NO_TARGET = "var(--text-3)";
+/** The "color by" choice of the run's group. */
+const BY_GROUP = "group:";
 
 function rowPath(m: Float64Array, nDims: number, r: number, xs: number[]): string {
   const s: string[] = [];
@@ -117,7 +122,7 @@ function CanvasPlot(p: RenderProps) {
 const defaultTarget = (metricCols: string[], schema: MetricsSchema | null) =>
   metricCols.find((m) => schema?.[m]?.primary) ?? metricCols[0] ?? null;
 
-function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush }: Props) {
+function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush, groups }: Props) {
   const dims = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
   const axes = useMemo(() => buildAxes(rows, dims, metricCols), [rows, dims, metricCols]);
   const matrix = useMemo(() => buildMatrix(rows, dims, metricCols, axes), [rows, dims, metricCols, axes]);
@@ -126,12 +131,15 @@ function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush }: P
     : dims.map((_, i) => 40 + i * ((w - 80) / (dims.length - 1)))), [dims, w]);
 
   const [chosen, setChosen] = useState<string | null>(null);
-  const target = chosen !== null && metricCols.includes(chosen) ? chosen : defaultTarget(metricCols, schema);
+  const choices = groups ? [BY_GROUP, ...metricCols] : metricCols;
+  const target = chosen !== null && choices.includes(chosen) ? chosen
+    : groups ? BY_GROUP : defaultTarget(metricCols, schema);
   const strokes = useMemo(() => {
+    if (target === BY_GROUP) return rows.map((r) => groups?.colorOf.get(r.verstr) ?? NO_TARGET);
     if (!target) return rows.map(() => NO_TARGET);
     return targetTs(rows, target, metricGoal(schema, target)).map((t) =>
       t === null ? NO_TARGET : colorScale(Math.round(t * COLOR_STEPS) / COLOR_STEPS));
-  }, [rows, target, schema]);
+  }, [rows, target, schema, groups]);
 
   const plotRef = useRef<HTMLDivElement>(null);
   const toY = useCallback((cy: number) => cy - (plotRef.current?.getBoundingClientRect().top ?? 0), []);
@@ -161,7 +169,7 @@ function ParallelCoordinates({ rows, metricCols, paramCols, schema, onBrush }: P
           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
             color by
             <select aria-label="color by" value={target} onChange={(e) => setChosen(e.target.value)}>
-              {metricCols.map((m) => <option key={m} value={m}>{m}</option>)}
+              {choices.map((m) => <option key={m} value={m}>{m === BY_GROUP ? "group" : m}</option>)}
             </select>
           </label>
         )}
