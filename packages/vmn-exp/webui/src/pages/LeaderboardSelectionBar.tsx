@@ -4,10 +4,11 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useOffsetHeight } from "../hooks/useOffsetHeight";
+import { fmtCount } from "../util";
 import { compareSearch } from "./Compare/selection";
 import "./selectionBar.css";
 
-const plural = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
+const plural = (n: number) => `${fmtCount(n)} run${n === 1 ? "" : "s"}`;
 /** Room under the last rows beyond the bar itself: its 24px bottom offset and a 12px gap. */
 const BAR_ROOM_PX = 36;
 
@@ -56,7 +57,7 @@ function BarAction({ label, reason, primary, onClick }: {
  *  the same at every count, so it never changes size as runs are picked. */
 export default function LeaderboardSelectionBar({
   selected, total, base, showUnarchive, archiving, archiveError,
-  onClear, onSelectAll, onArchive,
+  onClear, onSelectAll, onArchive, matching = null, onPreview, uncapped = false,
 }: {
   selected: string[];
   total: number;
@@ -67,21 +68,40 @@ export default function LeaderboardSelectionBar({
   onClear: () => void;
   onSelectAll: () => void;
   onArchive: (verb: ArchiveVerb) => void;
+  /** Every run matching the query is selected (plan 23 S4): how many. */
+  matching?: number | null;
+  /** Counts what an archive by query acts on, for its confirm. */
+  onPreview?: (verb: ArchiveVerb) => Promise<number>;
+  /** "Select all" selects the query itself: no cap. */
+  uncapped?: boolean;
 }) {
   const navigate = useNavigate();
-  const [confirming, setConfirming] = useState<ArchiveVerb | null>(null);
+  const [confirming, setConfirming] = useState<{ verb: ArchiveVerb; count: number } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const n = selected.length;
   const barRef = useRef<HTMLDivElement>(null);
   const allRef = useRef<HTMLButtonElement>(null);
   const barHeight = useOffsetHeight(barRef, n > 0);
-  const matching = Math.min(total, SELECT_ALL_CAP);
-  const canSelectAll = n < matching;
+  const selectable = uncapped ? total : Math.min(total, SELECT_ALL_CAP);
+  const canSelectAll = matching === null && n < selectable;
   useKeepFocusInBar(barRef, allRef, canSelectAll);
   useEscapeKey(n > 0, onClear);
   if (n === 0) return null;
 
   const go = (path: string) => navigate(`${base}/${path}`);
   const verb = (v: ArchiveVerb) => (v === "archive" ? "Archive" : "Unarchive");
+  // By query, the server counts the runs first (`dry_run`).
+  const ask = (v: ArchiveVerb) => {
+    setPreviewError(null);
+    if (matching === null || !onPreview) {
+      setConfirming({ verb: v, count: Math.min(n, SELECT_ALL_CAP) });
+      return;
+    }
+    onPreview(v).then(
+      (count) => setConfirming({ verb: v, count }),
+      (e) => setPreviewError(`Could not count the runs: ${String((e as Error).message ?? e)}`),
+    );
+  };
 
   return (
     <>
@@ -91,35 +111,39 @@ export default function LeaderboardSelectionBar({
         style={barHeight === null ? undefined : { height: barHeight + BAR_ROOM_PX }}
       />
       <div className="sel-dock">
-        <div className="sel-toast" role="alert">{archiveError}</div>
+        <div className="sel-toast" role="alert">{previewError ?? archiveError}</div>
         <div ref={barRef} className="sel-bar" role="region" aria-label="Selection">
-          <span key={n} className="sel-badge" aria-hidden>{n}</span>
+          {matching === null && <span key={n} className="sel-badge" aria-hidden>{n}</span>}
           <span className="sel-label">
-            <span className="sel-label-text" aria-hidden data-widest="runs selected">
-              {n === 1 ? "run" : "runs"} selected
-            </span>
+            {matching === null ? (
+              <span className="sel-label-text" aria-hidden data-widest="runs selected">
+                {n === 1 ? "run" : "runs"} selected
+              </span>
+            ) : (
+              <span className="sel-label-text" aria-hidden>{`${fmtCount(matching)} matching selected`}</span>
+            )}
             <span
               className="sel-all" aria-hidden={canSelectAll ? undefined : true}
               style={canSelectAll ? undefined : { visibility: "hidden" }}
             >
               <button
                 ref={allRef} className="link" tabIndex={canSelectAll ? undefined : -1} onClick={onSelectAll}
-                title={`select every matching run (at most ${SELECT_ALL_CAP})`}
+                title={uncapped ? "select every matching run" : `select every matching run (at most ${SELECT_ALL_CAP})`}
               >
-                Select all {matching} matching
+                Select all {fmtCount(selectable)} matching
               </button>
             </span>
           </span>
-          <span className="sr-only" role="status">{n} selected</span>
+          <span className="sr-only" role="status">{matching === null ? n : fmtCount(matching)} selected</span>
           <span className="sel-actions">
             <BarAction
               label={<>Compare <span className="sel-count">({n})</span></>}
               primary reason={compareReason(n)}
               onClick={() => go(`compare-runs?${compareSearch("curves", selected)}`)}
             />
-            <button disabled={archiving} onClick={() => setConfirming("archive")}>Archive</button>
+            <button disabled={archiving} onClick={() => ask("archive")}>Archive</button>
             {showUnarchive && (
-              <button disabled={archiving} onClick={() => setConfirming("unarchive")}>Unarchive</button>
+              <button disabled={archiving} onClick={() => ask("unarchive")}>Unarchive</button>
             )}
           </span>
           <button className="sel-close" aria-label="Clear selection" title="Clear selection (Esc)" onClick={onClear}>
@@ -129,9 +153,9 @@ export default function LeaderboardSelectionBar({
       </div>
       {confirming && (
         <ConfirmDialog
-          message={`${verb(confirming)} ${plural(Math.min(n, SELECT_ALL_CAP))}?`}
+          message={`${verb(confirming.verb)} ${plural(confirming.count)}?`}
           onCancel={() => setConfirming(null)}
-          onConfirm={() => { onArchive(confirming); setConfirming(null); }}
+          onConfirm={() => { onArchive(confirming.verb); setConfirming(null); }}
         />
       )}
     </>

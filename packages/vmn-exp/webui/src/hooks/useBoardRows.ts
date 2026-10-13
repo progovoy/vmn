@@ -15,17 +15,19 @@ import { useLeaderboardRows } from "./useLeaderboardRows";
 export function useBoardRows(ws: string, app: string, filter: RowsFilter, grouping: {
   group: GroupBy | null; aggregateInUrl: GroupAggregate | null; collapsed: ReadonlySet<string>;
   keep?: (r: ExperimentRow) => boolean;
+  /** Groups of more runs open as a filter (plan 23 §3.4). */
+  filterOver?: number;
 }) {
-  const { group, aggregateInUrl, collapsed, keep } = grouping;
+  const { group, aggregateInUrl, collapsed, keep, filterOver } = grouping;
   const grouped = group !== null && group !== NO_GROUP;
   const flat = useLeaderboardRows(ws, app, filter, group === NO_GROUP);
   const groups = useGroupedRows(ws, app, filter, grouped ? group : null, aggregateInUrl ?? undefined);
   const data = groups.data;
 
   const items = useMemo<BoardItem[] | undefined>(() => {
-    if (grouped) return data && groupItems(data, collapsed, groups.more, keep);
+    if (grouped) return data && groupItems(data, collapsed, groups.more, keep, filterOver);
     return flat.rows && (keep ? flat.rows.filter(keep) : flat.rows);
-  }, [grouped, data, group, collapsed, groups.more, keep, flat.rows]);
+  }, [grouped, data, group, collapsed, groups.more, keep, filterOver, flat.rows]);
 
   if (!grouped) {
     const remaining = flat.total - (flat.rows?.length ?? 0);

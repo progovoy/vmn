@@ -30,6 +30,8 @@ export interface GroupHeaderItem {
   /** Its loaded rows (the ones *keep* passes), shown or folded: what its
    *  checkbox selects (plan 22 G7). */
   rows: string[];
+  /** Too big to unfold (plan 23 §3.4): the header opens it as a filter. */
+  asFilter?: boolean;
 }
 
 export interface GroupMoreItem {
@@ -45,14 +47,20 @@ export const isGroupItem = (it: BoardItem): it is GroupHeaderItem | GroupMoreIte
 
 /** The table's items for grouped *data*, minus the *collapsed*
  *  groups' rows; with *keep* (a chart brush), only its rows and the groups
- *  that keep one. */
+ *  that keep one. A group of more than *filterOver* runs is a header alone,
+ *  opened as a filter rather than unfolded (plan 23 §3.4). */
 export function groupItems(
   data: GroupedRows, collapsed: ReadonlySet<string>,
   more: ReadonlyMap<string, MoreState> = new Map(), keep?: (r: ExperimentRow) => boolean,
+  filterOver?: number,
 ): BoardItem[] {
   const byVerstr = new Map(data.rows.map((r) => [r.verstr, r]));
   const out: BoardItem[] = [];
   for (const group of data.groups) {
+    if (filterOver !== undefined && !group.loose && group.rows_total > filterOver) {
+      out.push({ item: "group", group, open: false, rows: [], asFilter: true });
+      continue;
+    }
     const rows = group.verstrs.flatMap((v) => byVerstr.get(v) ?? []);
     const shown = keep ? rows.filter(keep) : rows;
     if (keep && !shown.length) continue;

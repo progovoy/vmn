@@ -6,7 +6,12 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { renderWithClient } from "../../../test-utils";
 
 vi.mock("../../../api", () => ({
-  api: { experiment: vi.fn(), experiments: vi.fn(), metricsSchema: vi.fn() },
+  api: {
+    experiment: vi.fn(), experiments: vi.fn(), metricsSchema: vi.fn(),
+    experimentsPaged: vi.fn(() => Promise.resolve({ rows: [], total: 0 })),
+    facets: vi.fn(() => Promise.reject(new Error("no facets"))),
+    experimentGroups: vi.fn(() => Promise.reject(new Error("no groups"))),
+  },
   appName: (tag: string) => tag.replaceAll("-", "/"),
   appTag: (n: string) => n.replaceAll("/", "-"),
 }));
@@ -90,7 +95,9 @@ describe("the job page", () => {
     expect(await screen.findByText("CUDA out of memory")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
     expect(screen.getByTestId("where").textContent).toBe("?tab=runs");
-    expect(screen.getByRole("tabpanel")).toHaveTextContent(/coming in W3/);
+    // The Runs tab is the job's own board (plan 23 W3).
+    expect(within(screen.getByRole("tabpanel")).getByRole("complementary", { name: "Facets" })).toBeInTheDocument();
+    expect(await within(screen.getByRole("tabpanel")).findByRole("grid", { name: "experiments" })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("tab", { name: "Runs" }), { key: "ArrowRight" });
     expect(screen.getByTestId("where").textContent).toBe("?tab=charts");
     expect(screen.getByRole("tabpanel")).toHaveTextContent(/coming in W4/);

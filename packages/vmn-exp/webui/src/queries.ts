@@ -1,6 +1,6 @@
 /** Query keys and cached reads shared across pages. */
 import { useQuery, type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, type FacetOpts } from "./api";
 import { withSignal } from "./requestScope";
 import { SHARED_STALE_MS } from "./queryClient";
 import type {
@@ -20,6 +20,8 @@ export interface RowsFilter {
   archived?: boolean;
   /** Top-level runs only (the Jobs view). */
   top?: boolean;
+  /** A job's subtree only (its verstr). */
+  scope?: string;
 }
 export interface RowsData {
   rows: ExperimentRow[];
@@ -72,14 +74,16 @@ export function useMetricsSchema(ws: string, app: string): MetricsSchema | null 
 
 /** The app's filter vocabulary, or null — loading, or a server without the
  *  facets endpoint; callers fall back to what the loaded rows show. */
-export function useFacets(ws: string, app: string): ExperimentFacets | null {
+export function useFacets(ws: string, app: string, opts?: FacetOpts): ExperimentFacets | null {
   const client = useQueryClient();
-  return useQuery<ExperimentFacets>(facetsQuery(ws, app), client).data ?? null;
+  return useQuery<ExperimentFacets>(facetsQuery(ws, app, opts), client).data ?? null;
 }
 
-export const facetsQuery = (ws: string, app: string) => ({
-  queryKey: ["facets", ws, app],
-  queryFn: () => api.facets(ws, app),
+/** The app's facets; with *opts*, over a job's subtree and filters (keyed
+ *  under the app's, so refreshing the app's facets refreshes them too). */
+export const facetsQuery = (ws: string, app: string, opts?: FacetOpts) => ({
+  queryKey: opts ? ["facets", ws, app, opts] : ["facets", ws, app],
+  queryFn: () => (opts ? api.facets(ws, app, opts) : api.facets(ws, app)),
   ...shared,
 });
 

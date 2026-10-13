@@ -5,14 +5,13 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { GroupAggregate } from "../apiGroups";
-import { Icon } from "../components/shell/icons";
 import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
 import { MORE_TEXT, aggregateCell, shownAggregate } from "./groupHeaderText";
-import { GroupBar, GroupCountParts, groupCountsText, groupName, groupSpoken } from "./LeaderboardGroupRow";
+import { GroupBar, GroupCountParts, GroupFold, groupCountsText, groupName, groupSpoken } from "./LeaderboardGroupRow";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import type { RowLayout } from "./LeaderboardRow";
-import type { GroupActions } from "./LeaderboardTable";
+import type { GroupActions, GroupFilter } from "./LeaderboardTable";
 import "./leaderboardGroupRow.css";
 import "./leaderboardCardGroup.css";
 
@@ -28,11 +27,12 @@ function Aggregate({ item, metric, agg }: { item: GroupHeaderItem; metric: strin
   );
 }
 
-function CardGroupHead({ item, layout, metric, agg, mono, onFold, check }: {
+function CardGroupHead({ item, layout, metric, agg, mono, onFold, check, asFilter }: {
   item: GroupHeaderItem; layout: RowLayout; metric: string | null; agg: GroupAggregate; mono: boolean;
   onFold: (key: string) => void;
   /** Its checkbox over the group's loaded cards (plan 22 F8). */
   check: Omit<HeaderCheckProps, "label">;
+  asFilter?: GroupFilter;
 }) {
   const { group } = item;
   const t = group.target;
@@ -40,13 +40,7 @@ function CardGroupHead({ item, layout, metric, agg, mono, onFold, check }: {
   return (
     <div className={`lb-mgroup-head${item.open ? "" : " shut"}`}>
       {item.rows.length > 0 && <HeaderCheckbox {...check} label={`Select group ${name}`} />}
-      <button
-        className="fold-toggle" aria-expanded={item.open}
-        aria-label={`${item.open ? "Collapse" : "Expand"} group ${name}`}
-        onClick={() => onFold(group.key)}
-      >
-        <Icon name={item.open ? "chevron-down" : "chevron-right"} size={14} />
-      </button>
+      <GroupFold item={item} name={name} onFold={onFold} asFilter={asFilter} />
       <div className="lb-mgroup-name">
         {t ? (
           <Link
@@ -97,6 +91,7 @@ export default function CardGroup({ item, more, layout, metric, groups, children
         item={item} layout={layout} metric={metric} agg={groups.aggregate}
         mono={groups.field === "code_verstr"} onFold={groups.onFold}
         check={{ state: groups.checkOf(item.rows), onToggle: () => groups.onCheck(item.rows) }}
+        asFilter={groups.asFilter}
       />
       {item.open && (
         <ul className="lb-mcards" role="list" aria-label={`Runs of ${name}`}>
