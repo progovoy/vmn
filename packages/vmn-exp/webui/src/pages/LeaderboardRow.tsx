@@ -96,6 +96,9 @@ export function layoutIds(layout: RowLayout): readonly string[] {
 export const headStatus = (r: ExperimentRow) =>
   (r.kind === "outer" && r.tree_status ? r.tree_status : r.status) as ExperimentRow["status"];
 
+/** The tree level as the `--depth` custom property `innerRows.css` indents by. */
+export const depthStyle = (depth: number | undefined) => ({ "--depth": depth ?? 0 }) as CSSProperties;
+
 export function FoldToggle({ r, collapsed, onFold }: {
   r: ExperimentRow; collapsed: boolean; onFold: (r: ExperimentRow) => void;
 }) {
@@ -120,27 +123,29 @@ function ExperimentCell({ r, href, style, onPrefetch, collapsed, onFold, innerSh
 }) {
   return (
     <td style={style} className="exp-cell" data-col-id="experiment">
-      <div className="nest" style={{ paddingLeft: (r.depth ?? 0) * 14 }}>
-        {collapsed !== null && <FoldToggle r={r} collapsed={collapsed} onFold={onFold} />}
-        {(r.depth ?? 0) > 0 && <span className="nest-mark" title="inner run">⤷</span>}
-        <Link
-          className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
-          onFocus={() => onPrefetch(r.verstr)}
-        >
-          {r.name || r.verstr}
-        </Link>
-        {r.children && r.children.length > 0 && (() => {
-          const tree = r.tree_status && r.tree_status !== r.status ? `tree ${r.tree_status}` : "";
-          const text = innerShown ? tree : `${r.children.length} inner${tree ? ` · ${tree}` : ""}`;
-          return text && <span className="tree-roll">{text}</span>;
-        })()}
-      </div>
-      <div className="exp-branch">
-        {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
-        {r.branch}
-        {r.status === "failed" && r.error_summary && (
-          <span className="exp-error" title={r.error_summary}>{r.error_summary}</span>
-        )}
+      <div className="exp-tree" style={depthStyle(r.depth)}>
+        <div className="nest">
+          {collapsed !== null && <FoldToggle r={r} collapsed={collapsed} onFold={onFold} />}
+          {(r.depth ?? 0) > 0 && <span className="nest-mark" title="inner run">⤷</span>}
+          <Link
+            className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
+            onFocus={() => onPrefetch(r.verstr)}
+          >
+            {r.name || r.verstr}
+          </Link>
+          {r.children && r.children.length > 0 && (() => {
+            const tree = r.tree_status && r.tree_status !== r.status ? `tree ${r.tree_status}` : "";
+            const text = innerShown ? tree : `${r.children.length} inner${tree ? ` · ${tree}` : ""}`;
+            return text && <span className="tree-roll">{text}</span>;
+          })()}
+        </div>
+        <div className="exp-branch">
+          {r.name && <span className="mono exp-verstr">{r.verstr}</span>}
+          {r.branch}
+          {r.status === "failed" && r.error_summary && (
+            <span className="exp-error" title={r.error_summary}>{r.error_summary}</span>
+          )}
+        </div>
       </div>
     </td>
   );
@@ -259,7 +264,7 @@ function Row({
   return (
     <tr
       style={{ height: ROW_HEIGHT }}
-      className={`row${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
+      className={`row${(r.depth ?? 0) > 0 ? " inner" : ""}${isSelected ? " checked" : ""}${isFlash ? " flash" : ""}${r.archived ? " archived" : ""}`}
       data-row-index={index}
       data-href={href}
       tabIndex={isActive ? 0 : -1}

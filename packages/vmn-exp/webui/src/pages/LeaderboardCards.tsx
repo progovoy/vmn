@@ -9,9 +9,10 @@ import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
 import { PENDING_TEXT } from "./pendingText";
 import StatusPill from "../components/StatusPill";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
-import { FoldToggle, headStatus, type RowLayout } from "./LeaderboardRow";
+import { FoldToggle, depthStyle, headStatus, type RowLayout } from "./LeaderboardRow";
 import type { SortState } from "./LeaderboardHead";
 import "./leaderboardCards.css";
+import "./innerRows.css";
 
 /** The metric a card shows large: the one sorted by, else the primary
  *  (the bar column), else the first shown. */
@@ -54,8 +55,8 @@ const MCard = memo(function MCard({
   const inner = r.children?.length ? `${r.children.length} inner` : "";
   return (
     <li
-      className={`lb-mcard${selected ? " checked" : ""}${flash ? " flash" : ""}${r.archived ? " archived" : ""}`}
-      style={{ marginLeft: (r.depth ?? 0) * 14 }}
+      className={`lb-mcard${(r.depth ?? 0) > 0 ? " inner" : ""}${selected ? " checked" : ""}${flash ? " flash" : ""}${r.archived ? " archived" : ""}`}
+      style={depthStyle(r.depth)}
       onClick={onClick}
     >
       <input
@@ -96,7 +97,7 @@ const MCard = memo(function MCard({
 function PendingCard({ item, runBase }: { item: PendingRow; runBase: string }) {
   return (
     <li
-      className={`lb-mcard-pending ${item.state}`} style={{ marginLeft: item.depth * 14 }}
+      className={`lb-mcard-pending inner ${item.state}`} style={depthStyle(item.depth)}
       role={item.state === "error" ? "alert" : undefined}
     >
       {PENDING_TEXT[item.state](item)}

@@ -10,10 +10,11 @@ import { useMoreRight } from "../hooks/useMoreRight";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import LeaderboardCards from "./LeaderboardCards";
 import { PENDING_TEXT } from "./pendingText";
-import Row, { ROW_HEIGHT, layoutIds, type RowLayout } from "./LeaderboardRow";
+import Row, { ROW_HEIGHT, depthStyle, layoutIds, type RowLayout } from "./LeaderboardRow";
 import Head, { type ColumnEdits, type HeaderCheckProps, type SortState } from "./LeaderboardHead";
 import { visibleColumns, windowLayout, type ColRange } from "./columnWindow";
 import "./leaderboardTable.css";
+import "./innerRows.css";
 
 export { IDX_SORT, TIMESTAMP_SORT, type ColumnEdits, type SortState } from "./LeaderboardHead";
 
@@ -39,11 +40,11 @@ function SkeletonRows({ layout }: { layout: RowLayout }) {
  *  its text in the (sticky) experiment column, indented like an inner run. */
 function PendingInnerRow({ item, index, layout }: { item: PendingRow; index: number; layout: RowLayout }) {
   return (
-    <tr className={`row inner-pending ${item.state}`} style={{ height: ROW_HEIGHT }} data-row-index={index} tabIndex={-1}>
+    <tr className={`row inner inner-pending ${item.state}`} style={{ height: ROW_HEIGHT }} data-row-index={index} tabIndex={-1}>
       {layoutIds(layout).map((id, i) => (
         <td key={id} data-col-id={id} style={layout.styles[i]}>
           {id === "experiment" && (
-            <div className="nest" style={{ paddingLeft: item.depth * 14 }} role={item.state === "error" ? "alert" : "status"}>
+            <div className="nest exp-tree" style={depthStyle(item.depth)} role={item.state === "error" ? "alert" : "status"}>
               {PENDING_TEXT[item.state](item)}
               {item.state === "more" && <Link to={runHref(layout.runBase, item.parent)}>open the outer run</Link>}
             </div>
