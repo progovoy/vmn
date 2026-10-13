@@ -4,7 +4,14 @@ import datetime
 import os
 
 import pytest
-from run_code_seed import client, finished_state, metrics, run_url, seed_run, write_output
+from run_code_seed import (
+    client,
+    finished_state,
+    metrics,
+    run_url,
+    seed_run,
+    write_output,
+)
 
 pytest.importorskip("fastapi")
 

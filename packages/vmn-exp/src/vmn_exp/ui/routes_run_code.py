@@ -12,7 +12,6 @@ import hashlib
 import json
 
 from fastapi import HTTPException, Request
-
 from vmn_exp.cli.views import PATCH_MAX_BYTES, patch_payload
 from vmn_exp.core.code_store import CODE_MISSING
 from vmn_exp.ui.auth.authz import require

@@ -21,6 +21,7 @@ from vmn_exp.ui.cache_health import SqliteHealth
 from vmn_exp.ui.cache_resync import WorkspaceCache
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.ui.readers.baselines import last_good
 from vmn_exp.ui.refresher import InlineRefresher
 from vmn_exp.ui.schema_cache import MetricsSchemaCache
 
@@ -187,13 +188,15 @@ class ExperimentSource:
         return self._schemas.get(ws.path, app_name)
 
     def detail_options(self, ws, snap):
-        """``edges``/``resolve``/``read_run_state``/``read_observed_at`` for a
+        """``edges``/``resolve``/``read_child_row``/``last_good`` (and with a background
+        refresher ``read_run_state``/``read_observed_at``) for a
         run-detail read."""
         # The same edges mapping per snapshot, so the children index is reused.
         options = {
             "edges": lambda storage, app_name: snap.edges,
             "resolve": self._resolvers.per_snapshot(snap, lambda: _latest_memoized(snap)),
             "read_child_row": lambda verstr: snap.row(verstr),
+            "last_good": lambda verstr: last_good(snap, verstr),
         }
         if self.refresher.background:
             # A refreshed-inline snapshot leaves the subtree's states to be

@@ -62,8 +62,7 @@ def seed_run(
     log = os.path.join(path, "log", "w0.jsonl")
     os.makedirs(os.path.dirname(log), exist_ok=True)
     with open(log, "a") as f:
-        for entry in entries:
-            f.write(json.dumps(dict({"timestamp": meta["timestamp"]}, **entry)) + "\n")
+        f.writelines(json.dumps(dict({"timestamp": meta["timestamp"]}, **entry)) + "\n" for entry in entries)
     return path
 
 
