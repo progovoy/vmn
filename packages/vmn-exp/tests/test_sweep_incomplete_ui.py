@@ -7,7 +7,6 @@ import datetime
 
 import pytest
 from run_code_seed import client, finished_state, run_url, seed_run
-
 from vmn_exp.core import status as status_mod
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row

@@ -67,6 +67,8 @@ _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
     "kind",
     "depth",
     "tree_status",
+    "sweep_planned",
+    "sweep_trials",
     "last_metric_at",
     "fleet",
     "error",
@@ -136,6 +138,7 @@ def status_detail(
         read_state_fn,
         observed_at=observed_at_fn,
         children_of=children_of,
+        row_of=read_child_row,
     )
     detail["parent"] = metadata.get("parent")
     detail["error"] = _full_error(storage, app_name, verstr, own_state)
@@ -150,6 +153,8 @@ def status_detail(
             ep = log.params.get("expected_pods")
             if isinstance(ep, (int, float)):
                 expected = int(ep)
+        if expected is None:
+            expected = detail.get("sweep_planned")
         detail["fleet"] = fleet_summary(
             verstr, children_of, read_state_fn,
             observed_at=observed_at_fn, expected=expected,

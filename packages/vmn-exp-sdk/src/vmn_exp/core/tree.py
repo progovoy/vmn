@@ -74,29 +74,38 @@ def _depth(verstr, parent_of):
         cursor = parent
 
 
-def own_rollup_status(status, has_children):
+def own_rollup_status(status, has_children, incomplete=False):
     """What a run's own *status* adds to its tree's rollup: nothing (None)
-    for a container — an outer run that never ran itself."""
-    return None if has_children and status == CREATED else status
+    for a container — an outer run that never ran itself — and ``created``
+    on top for an *incomplete* sweep (see :func:`sweep_incomplete`)."""
+    own = None if has_children and status == CREATED else status
+    return rollup_status((own, CREATED)) if incomplete else own
 
 
-def _is_container(node, children_of, by_verstr):
-    """True when *node* is an outer run that never ran (pure container)."""
-    status = (by_verstr.get(node) or {}).get("status")
-    return status is not None and own_rollup_status(status, bool(children_of.get(node))) is None
+def sweep_trial_count(children):
+    """How many trial slots a sweep's child rows fill (a retry counts once)."""
+    return len({(c.get("tags") or {}).get("sweep_trial", c.get("verstr")) for c in children})
+
+
+def sweep_incomplete(row):
+    """Whether *row* is a sweep whose planned size (``sweep_planned``, put on
+    the row by the index) is more than the trials it has (``sweep_trials``)."""
+    planned = row.get("sweep_planned")
+    return planned is not None and row.get("sweep_trials", 0) < planned
+
+
+def _own(verstr, children_of, by_verstr):
+    row = by_verstr.get(verstr) or {}
+    return own_rollup_status(
+        row.get("status"), bool(children_of.get(verstr)), sweep_incomplete(row)
+    )
 
 
 def _subtree_statuses(verstr, children_of, by_verstr):
-    """Own statuses of *verstr* and everything reachable below it (cycle-safe).
-
-    A container outer's own ``created`` is excluded so it does not pollute the
-    rollup — if all children succeeded, the tree should be ``succeeded``.
-    """
-    return [
-        (by_verstr.get(v) or {}).get("status")
-        for v in subtree_verstrs(verstr, children_of)
-        if not _is_container(v, children_of, by_verstr)
-    ]
+    """What *verstr* and everything reachable below it add to its rollup
+    (cycle-safe): a container outer adds nothing, so if all its children
+    succeeded the tree is ``succeeded``."""
+    return [_own(v, children_of, by_verstr) for v in subtree_verstrs(verstr, children_of)]
 
 
 def _has_cycle(verstrs, parent_of):
@@ -134,11 +143,7 @@ def _tree_statuses(verstrs, children_of, by_verstr, parent_of):
                 stack.append((node, True))
                 stack.extend((c, False) for c in children if c not in best)
                 continue
-            status = (by_verstr.get(node) or {}).get("status")
-            if children and status == CREATED:
-                own = len(rank)
-            else:
-                own = rank.get(status, len(rank))
+            own = rank.get(_own(node, children_of, by_verstr), len(rank))
             best[node] = min([own] + [best[c] for c in children])
     return {v: (_PRECEDENCE + (None,))[best[v]] for v in verstrs}
 
@@ -174,6 +179,10 @@ def _annotate_tree_in_place(rows):
     parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
 
     children_of = children_by_parent(rows)
+    for row in rows:
+        if row.get("sweep_planned") is not None:
+            kids = children_of.get(row["verstr"], [])
+            row["sweep_trials"] = sweep_trial_count(by_verstr[c] for c in kids)
     tree_statuses = _tree_statuses(list(by_verstr), children_of, by_verstr, parent_of)
 
     for row in rows:
@@ -202,7 +211,9 @@ def count_statuses(statuses):
 TREE_FIELDS = ("children", "kind", "depth", "tree_status", "child_counts")
 
 
-def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=None):
+def subtree_status(
+    verstr, parent_of, read_state, children_of=None, observed_at=None, row_of=None,
+):
     """``(run_state, tree_fields)`` for one run, reading its subtree's states only.
 
     *parent_of* is ``{verstr: parent}`` for the app's runs (only ``.get`` is
@@ -212,6 +223,10 @@ def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=
     are walked for ``depth`` but never read. *observed_at(verstr)*, when
     given, returns the store's write time of a member's run state (see
     :func:`~version_stamp.core.experiment_status.derive_status`).
+    *row_of(verstr)*, when given, returns a run's index row (or None): a sweep
+    row's ``sweep_planned`` and its trials' tags make an incomplete sweep
+    ``created`` (see :func:`sweep_incomplete`) and add ``sweep_planned`` /
+    ``sweep_trials`` to the tree fields.
     """
     if children_of is None:
         children_of = children_by_parent(
@@ -224,29 +239,38 @@ def subtree_status(verstr, parent_of, read_state, children_of=None, observed_at=
     def status_of(v):
         return derive_status(states[v], observed_at=observed_at(v) if observed_at else None)
 
-    # A container outer (has children, own status "created") is a pure wrapper:
-    # exclude its own status so the rollup reflects only its subtree.
-    is_container = children and derive_status(states[verstr]) == CREATED
-    rollup_members = (v for v in states if not (is_container and v == verstr))
-
+    sweep = _sweep_fields(verstr, children, row_of)
+    own = own_rollup_status(status_of(verstr), bool(children), sweep_incomplete(sweep))
+    below = (status_of(v) for v in states if v != verstr)
     tree = {
         "children": children,
         "kind": OUTER if children else (INNER if parent else SINGLE),
         "depth": _depth(verstr, parent_of),
-        "tree_status": rollup_status(status_of(v) for v in rollup_members),
+        "tree_status": rollup_status([own, *below]),
         "child_counts": count_statuses(status_of(c) for c in children),
+        **sweep,
     }
     return states[verstr], tree
 
 
-def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None):
+def _sweep_fields(verstr, children, row_of):
+    """``{sweep_planned, sweep_trials}`` of a sweep row *row_of* knows, else {}."""
+    planned = ((row_of(verstr) if row_of else None) or {}).get("sweep_planned")
+    if planned is None:
+        return {}
+    rows = ((row_of(c) or {"verstr": c}) for c in children)
+    return {"sweep_planned": planned, "sweep_trials": sweep_trial_count(rows)}
+
+
+def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None, row_of=None):
     """One run's status fields plus its tree fields, reading its subtree only.
 
     Arguments as for :func:`subtree_status`; *observed_at(verstr)* weighs the
     store's write time into the run's own status as well as the rollup.
     """
     run_state, tree = subtree_status(
-        verstr, parent_of, read_state, children_of=children_of, observed_at=observed_at
+        verstr, parent_of, read_state, children_of=children_of, observed_at=observed_at,
+        row_of=row_of,
     )
     status = status_fields(run_state, observed_at=observed_at(verstr) if observed_at else None)
     status.update(tree)

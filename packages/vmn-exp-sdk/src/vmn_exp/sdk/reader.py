@@ -214,6 +214,7 @@ def _subtree_row(app_name, storage, verstr, snapshot):
         dict(snapshot.edges),
         lambda v: load_run_state(storage, app_name, v),
         observed_at=lambda v: run_state_observed_at(storage, app_name, v),
+        row_of=snapshot.row,
     )
     return {"idx": row["idx"], "meta": meta}, status
 

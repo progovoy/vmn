@@ -73,6 +73,15 @@ def trial_limit(spec):
     return cap
 
 
+def planned_trials(stored):
+    """:func:`trial_limit` of a stored spec (a sweep's metadata ``sweep``);
+    None when it plans no size or is no readable spec."""
+    try:
+        return trial_limit(parse_spec(stored))
+    except (SpecError, TypeError, ValueError):
+        return None
+
+
 def _metric(metric):
     if not isinstance(metric, dict) or not metric.get("name"):
         raise SpecError("metric needs a name")
