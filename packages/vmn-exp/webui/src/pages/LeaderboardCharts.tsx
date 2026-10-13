@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import type { RowsFilter } from "../queries";
 import { CHART_VIEWS, type ChartView } from "../hooks/useLeaderboardView";
+import Segmented from "../components/Segmented";
 import AddToReport from "../reports/AddToReport";
 import { leaderboardSpec } from "../reports/viewSpecs";
 
@@ -18,6 +19,7 @@ const LABELS: Record<ChartView, string> = {
   trend: "Trend", bar: "Bar", scatter: "Scatter", parallel: "Parallel", grouped: "Grouped",
   importance: "Importance",
 };
+const VIEW_OPTIONS = CHART_VIEWS.map((v) => [v, LABELS[v]] as const);
 
 /** What the importance panel asks the server about: the board's app and filter. */
 export interface ImportanceSource {
@@ -53,16 +55,7 @@ export default function LeaderboardCharts({
   return (
     <>
       <div className="chart-views">
-        <div className="segmented" role="group" aria-label="Chart type">
-          {CHART_VIEWS.map((v) => (
-            <button
-              key={v} className={view === v ? "primary" : ""}
-              aria-pressed={view === v} onClick={() => onView(v)}
-            >
-              {LABELS[v]}
-            </button>
-          ))}
-        </div>
+        <Segmented label="Chart type" options={VIEW_OPTIONS} value={view} onChange={onView} />
         {label && <span className="chart-coverage">{label}</span>}
         <span style={{ marginLeft: "auto" }}><AddToReport ws={importance.ws} spec={spec} /></span>
       </div>

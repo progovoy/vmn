@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { apiReports, type ReportRow } from "../apiReports";
 import { relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
+import NewReportDialog from "../components/NewReportDialog";
+import ToggleChip from "../components/ToggleChip";
 
 const dash = <span style={{ color: "var(--text-3)" }}>—</span>;
 
@@ -36,43 +38,26 @@ function ReportTable({ ws, reports }: { ws: string; reports: ReportRow[] }) {
   );
 }
 
-function NewReport({ ws }: { ws: string }) {
-  const navigate = useNavigate();
-  const [title, setTitle] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const create = async () => {
-    try {
-      const { rid } = await apiReports.createReport(ws, { title: title.trim() || "Untitled report", body: "" });
-      navigate(`/ws/${ws}/reports/${encodeURIComponent(rid)}/edit`);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <span style={{ display: "inline-flex", gap: 6, marginLeft: 16 }}>
-      <input aria-label="New report title" placeholder="title" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <button type="button" className="btn" onClick={() => void create()}>New report</button>
-      {error && <span role="alert" className="error">{error}</span>}
-    </span>
-  );
-}
-
 export default function Reports() {
   const { ws = "" } = useParams();
   const [archived, setArchived] = useState(false);
+  const [creating, setCreating] = useState(false);
   const query = useQuery({
     queryKey: ["reports", ws, archived],
     queryFn: () => apiReports.listReports(ws, archived),
   });
   return (
     <>
-      <PageHead title="Reports" what={ws} mono={false} />
-      <label style={{ display: "inline-flex", gap: 6, marginBottom: 12 }}>
-        <input type="checkbox" aria-label="Show archived" checked={archived}
-          onChange={(e) => setArchived(e.target.checked)} />
-        show archived
-      </label>
-      <NewReport ws={ws} />
+      <PageHead title="Reports" mono={false} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <ToggleChip pressed={archived} title="include archived reports" onChange={setArchived}>
+          archived
+        </ToggleChip>
+        <button type="button" className="primary" style={{ marginLeft: "auto" }} onClick={() => setCreating(true)}>
+          New report
+        </button>
+      </div>
+      {creating && <NewReportDialog ws={ws} onClose={() => setCreating(false)} />}
       {query.error ? <div className="error">{(query.error as Error).message}</div>
         : query.data ? <ReportTable ws={ws} reports={query.data.reports} /> : <Skeleton />}
     </>

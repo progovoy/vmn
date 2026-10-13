@@ -4,10 +4,15 @@ import { apiModels } from "../apiModels";
 import type { ModelKind, ModelRow } from "../apiModels";
 import { modelHref, relTime } from "../util";
 import { PageHead, Skeleton } from "../components/ui";
+import Segmented from "../components/Segmented";
 
-const KIND_OPTIONS: [ModelKind | "", string][] = [
+const KIND_OPTIONS: readonly (readonly [ModelKind | "", string])[] = [
   ["", "all kinds"], ["model", "models"], ["dataset", "datasets"],
 ];
+
+/** What a row without its own description says: its newest version. */
+const fallbackDescription = (model: ModelRow): string =>
+  model.latest_version === null ? "no versions yet" : `latest v${model.latest_version}`;
 
 function AliasBadges({ aliases }: { aliases: Record<string, number> }) {
   const pairs = Object.entries(aliases);
@@ -31,19 +36,18 @@ function ModelTableRow({ model, ws }: { model: ModelRow; ws: string }) {
         {" "}
         <AliasBadges aliases={model.aliases} />
       </td>
-      <td>{model.description ?? <span style={{ color: "var(--text-3)" }}>—</span>}</td>
+      <td>{model.description ?? <span style={{ color: "var(--text-3)" }}>{fallbackDescription(model)}</span>}</td>
       <td className="mono">{model.versions_count}</td>
       <td title={model.updated ?? ""}>{model.updated ? relTime(model.updated) : "—"}</td>
     </tr>
   );
 }
 
-function KindFilter({ kind, onChange }: { kind: string; onChange: (kind: string) => void }) {
+function KindFilter({ kind, onChange }: { kind: ModelKind | ""; onChange: (kind: string) => void }) {
   return (
-    <select aria-label="Kind" value={kind} onChange={(e) => onChange(e.target.value)}
-      style={{ marginBottom: 12 }}>
-      {KIND_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-    </select>
+    <div style={{ marginBottom: 12 }}>
+      <Segmented label="Kind" options={KIND_OPTIONS} value={kind} onChange={onChange} />
+    </div>
   );
 }
 
@@ -95,7 +99,7 @@ export default function Models() {
 
   return (
     <>
-      <PageHead title="Models" what="model registry" mono={false} />
+      <PageHead title="Models" mono={false} />
       <KindFilter kind={kind ?? ""} onChange={setKind} />
       {query.error && !query.data ? (
         <div className="error">{String(query.error)}</div>

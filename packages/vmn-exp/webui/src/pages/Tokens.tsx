@@ -37,9 +37,11 @@ function CreateForm({ onCreated }: { onCreated: (token: string) => void }) {
         onChange={(e) => setName(e.target.value)} />
       <input aria-label="Workspace" placeholder="workspace or *" value={ws}
         onChange={(e) => setWs(e.target.value)} />
-      <select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-        {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-      </select>
+      <div className="select-wrap">
+        <select aria-label="Role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+          {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </div>
       <button type="submit" disabled={!name || create.isPending}>Create token</button>
       {create.error && <span className="error">{String(create.error)}</span>}
     </form>
