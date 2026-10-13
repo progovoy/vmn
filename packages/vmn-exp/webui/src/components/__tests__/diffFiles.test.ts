@@ -31,6 +31,18 @@ describe("diffFiles", () => {
     ]);
   });
 
+  it("drops the run-vs-run diff's materialised <verstr>/ directory", () => {
+    const text = [
+      "diff --git a/v-prev/optim.py b/v-run/optim.py",
+      "--- a/v-prev/optim.py",
+      "+++ b/v-run/optim.py",
+      "@@ -1 +1 @@",
+      "-a",
+      "+b",
+    ].join("\n");
+    expect(diffFiles(text, "v-run")).toEqual([{ path: "optim.py", added: 1, removed: 1 }]);
+  });
+
   it("is empty without a diff", () => {
     expect(diffFiles("")).toEqual([]);
   });

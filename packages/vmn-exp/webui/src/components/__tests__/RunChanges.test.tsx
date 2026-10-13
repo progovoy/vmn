@@ -68,6 +68,10 @@ describe("RunChanges", () => {
   });
 
   it("defaults to the previous run for a clean tree and diffs it against this run", async () => {
+    diffMock.mockResolvedValue({
+      from_verstr: "v-prev", to_verstr: RUN, metrics_delta: {},
+      diff: DIFF_TEXT.replace("a/train.py b/train.py", `a/v-prev/train.py b/${RUN}/train.py`),
+    });
     renderCard({ previous: run("v-prev", 3, "prev"), best: run("v-best", 7) });
     expect(await screen.findByText("train.py")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "previous @3 prev" })).toHaveAttribute("aria-pressed", "true");

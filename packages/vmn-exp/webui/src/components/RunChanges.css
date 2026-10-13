@@ -1,9 +1,12 @@
 .run-changes-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
 .run-changes-head .section-title { margin: 0; }
 .run-changes .changes-reason { color: var(--text-3); margin: 4px 0; }
-.run-changes .changes-metrics { margin-bottom: 10px; }
-.run-changes .changes-metrics table { width: auto; min-width: 360px; }
-.run-changes .changes-metrics th[scope="row"] { font-weight: 500; text-align: left; font-size: 13px; }
+.run-changes .changes-metrics { margin-bottom: 10px; overflow-x: auto; }
+.run-changes .changes-metrics table { width: auto; }
+.run-changes .changes-metrics th[scope="row"] {
+  font-weight: 500; text-align: left; font-size: 13px;
+  text-transform: none; letter-spacing: normal; color: var(--text);
+}
 .run-changes .delta { font-weight: 600; }
 .run-changes .delta.flat { color: var(--text-3); }
 .run-changes .delta.better { color: var(--good); }

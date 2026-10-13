@@ -66,7 +66,7 @@ export function RunDiffChanges({ ws, app, from, to }: {
       <MetricDelta deltas={result.metrics_delta} />
       <ParamsChanged deltas={result.metrics_delta} />
       {result.diff.trim()
-        ? <FilesList files={diffFiles(result.diff)} />
+        ? <FilesList files={diffFiles(result.diff, result.to_verstr)} />
         : <Reason text="The two runs have identical code." />}
       <DiffToggle text={result.diff} />
     </>
