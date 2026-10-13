@@ -26,6 +26,10 @@ re-listing, one stat of ``log/`` on a scan.
 A listing of at least ``PARALLEL_MIN_DIRS`` directories spreads them over
 threads (:func:`map_dirs`): every scandir/stat releases the GIL, so their
 syscalls overlap (a cold listing of 100k records went from ~19s to ~5s).
+Though not everywhere: where the syscalls are slow (an endpoint-security
+agent hooking each open), the threads mostly queue for the GIL, so a listing
+of at least ``PROCESS_MIN_DIRS`` scans in worker processes instead
+(:mod:`~vmn_exp.storage.listing_workers`; 100k records: ~17s -> ~5s).
 """
 import os
 import stat
@@ -34,10 +38,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.logfiles import LOG_DIR, local_log_sig
 from vmn_exp.core.metric_files import METRICS_DIR
+from vmn_exp.storage import listing_workers
 
 _COARSE_SETTLED_NS = 2 * 10**9  # FAT's mtime granularity
 _FINE_SETTLED_NS = 10**8  # well past exFAT's 10ms and a coarse kernel clock tick
 PARALLEL_MIN_DIRS = 2000
+PROCESS_MIN_DIRS = 10_000
 _THREADS = 16
 _SUBDIRS = (LOG_DIR, METRICS_DIR)
 _LOG_AT = _SUBDIRS.index(LOG_DIR)
@@ -81,13 +87,21 @@ def files_in(path, identity=False):
 
 
 def _files_in(path, log_mtime_ns):
-    files = _scan_files(path)
+    # Only the folders the directory has are opened: most have no metrics/.
+    files, folders = {}, set()
+    for f in os.scandir(path):
+        if f.name in _SUBDIRS and f.is_dir():
+            folders.add(f.name)
+        elif f.is_file() and not f.name.startswith("."):
+            files[f.name] = _sig(f.stat())
     for sub in _SUBDIRS:
+        if sub not in folders:
+            continue
         mtime_ns = log_mtime_ns if sub == LOG_DIR else None
         try:
             files.update(_scan_files(os.path.join(path, sub), sub + "/", mtime_ns))
         except (FileNotFoundError, NotADirectoryError):
-            pass
+            pass  # replaced since its parent's scan
     return files
 
 
@@ -99,8 +113,19 @@ def _dir_sig(path):
     return st.st_mtime_ns, st.st_ino
 
 
-def _sub_sigs(path):
-    return tuple(_dir_sig(os.path.join(path, sub)) for sub in _SUBDIRS)
+def _sub_sigs(path, had=None):
+    """The ``log/``/``metrics/`` folders' sigs; only those *had* (a
+    settled scan's) has, when given."""
+    return tuple(
+        _dir_sig(os.path.join(path, sub)) if had is None or had[i] else None
+        for i, sub in enumerate(_SUBDIRS)
+    )
+
+
+def _had(known, st):
+    """*known*'s folder sigs while the directory still has its sig: no
+    folder came or went (that would move its mtime). None otherwise."""
+    return known[0][2] if known and known[0][:2] == (st.st_mtime_ns, st.st_ino) else None
 
 
 def _settle_ns(mtime_ns):
@@ -124,6 +149,29 @@ def _stat_again(path, names, log_mtime_ns=None):
     return files
 
 
+def scan_dir(path, known=None, identity=False):
+    """``(files_in(path, identity), (sig, file names) to keep or None)``:
+    *known*, the ``(sig, names)`` of its last trusted scan, spares the scan
+    while the directory's signature has not moved; a scan too recent to
+    trust (see the module doc) is kept for nothing."""
+    st = os.stat(path)  # before the scan: a change racing it moves the sig
+    sub_sigs = _sub_sigs(path, _had(known, st))
+    sig = (st.st_mtime_ns, st.st_ino, sub_sigs)
+    log_sig = sub_sigs[_LOG_AT] if identity else None
+    log_mtime_ns = log_sig[0] if log_sig else None
+    files = _stat_again(path, known[1], log_mtime_ns) if known and known[0] == sig else None
+    if files is None:
+        scanned_at = time.time_ns()
+        if log_mtime_ns is None:
+            files = files_in(path)
+        else:
+            files = _files_in(path, log_mtime_ns)
+        mtime_ns = max([st.st_mtime_ns] + [sub[0] for sub in sub_sigs if sub])
+        if mtime_ns > scanned_at - _settle_ns(mtime_ns):
+            return files, None
+    return files, (sig, list(files))
+
+
 class RecordListings:
     """The file names of each settled record directory at its last scan."""
 
@@ -136,34 +184,20 @@ class RecordListings:
         stat-only shortcut applies to the default *scan* alone: a storage
         listing its files its own way is always asked."""
         entries = [entry for entry in os.scandir(base) if entry.is_dir()]
-        settled = {}
+        if scan is files_in:
+            found = self._scan_all([entry.path for entry in entries], identity)
+        else:
+            found = map_dirs(lambda entry: scan(entry.path), entries)
+        return {e.name: files for e, files in zip(entries, found) if keep(files)}
 
-        def files_of(entry):
-            return self._files_of(entry, settled, scan, identity)
-
-        found = map_dirs(files_of, entries)
-        listed = {e.name: files for e, files in zip(entries, found) if keep(files)}
-        self._settled = settled  # removed records drop out
-        return listed
-
-    def _files_of(self, entry, settled, scan, identity):
-        if scan is not files_in:
-            return scan(entry.path)
-        st = entry.stat()  # before the scan: a change racing it moves the sig
-        sub_sigs = _sub_sigs(entry.path)
-        sig = (st.st_mtime_ns, st.st_ino, sub_sigs)
-        log_sig = sub_sigs[_LOG_AT] if identity else None
-        log_mtime_ns = log_sig[0] if log_sig else None
-        known = self._settled.get(entry.path)
-        files = _stat_again(entry.path, known[1], log_mtime_ns) if known and known[0] == sig else None
-        if files is None:
-            scanned_at = time.time_ns()
-            if log_mtime_ns is None:
-                files = files_in(entry.path)
-            else:
-                files = _files_in(entry.path, log_mtime_ns)
-            mtime_ns = max([st.st_mtime_ns] + [sub[0] for sub in sub_sigs if sub])
-            if mtime_ns > scanned_at - _settle_ns(mtime_ns):
-                return files
-        settled[entry.path] = (sig, list(files))
-        return files
+    def _scan_all(self, paths, identity):
+        items = [(path, self._settled.get(path)) for path in paths]
+        many = len(items) >= PROCESS_MIN_DIRS
+        found = listing_workers.scan_dirs(items, identity) if many else [None] * len(items)
+        missing = [i for i, result in enumerate(found) if result is None]
+        scanned = map_dirs(lambda i: scan_dir(*items[i], identity), missing)
+        for i, result in zip(missing, scanned):
+            found[i] = result
+        # Removed records drop out.
+        self._settled = {path: kept for path, (_, kept) in zip(paths, found) if kept}
+        return [files for files, _ in found]

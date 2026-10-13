@@ -36,6 +36,7 @@ import os
 import threading
 
 import vmn_exp.core.status as experiment_status
+from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.importance import param_importance
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.query import query_roots
@@ -109,13 +110,16 @@ class _Base:
 
     @classmethod
     def build(cls, snapshot, token, bucket):
-        """From scratch: O(N)."""
+        """From scratch: O(N) — a copy of every row, so with collection
+        paused (see :mod:`~vmn_exp.core.gc_pause`)."""
         states = snapshot.run_states
-        live = [i for i, row in enumerate(snapshot.rows) if _is_live(states.get(row["verstr"]))]
-        rows = annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)
-        position = {row["verstr"]: i for i, row in enumerate(rows)}
-        patch = LivePatch.of_rows(rows, live, position)
-        return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows))
+        with gc_paused():
+            live = [i for i, row in enumerate(snapshot.rows)
+                    if _is_live(states.get(row["verstr"]))]
+            rows = annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)
+            position = {row["verstr"]: i for i, row in enumerate(rows)}
+            patch = LivePatch.of_rows(rows, live, position)
+            return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows))
 
     @classmethod
     def derived(cls, prev, snapshot, token, bucket):

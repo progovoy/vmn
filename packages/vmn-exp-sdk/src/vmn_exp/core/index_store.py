@@ -101,16 +101,16 @@ class SqliteStore:
         ``rs_sig``/``run_state``; ``{}`` when unavailable."""
         return self._read(lambda: self._records(app_name), {})
 
+    def load_raw(self, app_name):
+        """:meth:`load`'s rows undecoded, for :func:`decode_records`:
+        ``([(key, record JSON)], [(key, run state JSON)])``."""
+        return self._read(lambda: self._raw(app_name), ([], []))
+
+    def _raw(self, app_name):
+        return self._select("exp_index", app_name), self._select("exp_index_state", app_name)
+
     def _records(self, app_name, keys=None):
-        records = {
-            key: dict(_state_of({}), **json.loads(data))
-            for key, data in self._select("exp_index", app_name)
-            if keys is None or key in keys
-        }
-        for key, data in self._select("exp_index_state", app_name):
-            if key in records:
-                records[key].update(json.loads(data))
-        return records
+        return decode_records(*self._raw(app_name), keys)
 
     def _read(self, query, default):
         if self._conn is None:
@@ -271,7 +271,22 @@ class SqliteStore:
 IndexStore = SqliteStore
 
 
+def decode_records(rows, states, keys=None):
+    """``{key: record}`` of :meth:`SqliteStore.load_raw`'s rows (only
+    *keys*' when given)."""
+    records = {
+        key: {**_NO_STATE, **json.loads(data)}
+        for key, data in rows
+        if keys is None or key in keys
+    }
+    for key, data in states:
+        if key in records:
+            records[key].update(json.loads(data))
+    return records
+
+
 _STATE_KEYS = ("rs_sig", "run_state")
+_NO_STATE = dict.fromkeys(_STATE_KEYS)
 
 
 def _state_of(record):
