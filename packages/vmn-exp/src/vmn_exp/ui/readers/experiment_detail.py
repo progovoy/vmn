@@ -28,6 +28,7 @@ from vmn_exp.core.status import (
 )
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.failure_context import failure_fields
 from vmn_exp.ui.readers.histograms import detail_media
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.patches import patch_presence
@@ -194,6 +195,7 @@ def experiment_detail(
     x=None,
     schema=None,
     step_range=None,
+    last_good=None,
 ):
     """``(detail, error)``; the ref supports @N / prefix / 'latest'.
 
@@ -211,7 +213,9 @@ def experiment_detail(
     :mod:`~vmn_exp.ui.readers.range_series`); ``compacted`` tells whether
     every metrics writer of the run has its ``.vmx``. ``idx`` / ``name`` come
     from the resolved run's index row (*read_child_row*); ``idx`` is None
-    without it.
+    without it. A failed or stuck run adds ``output_tail``/``last_step``/
+    ``last_good`` (:mod:`~vmn_exp.ui.readers.failure_context`; *last_good*
+    is ``verstr -> {verstr, idx, name} | None``).
     """
     verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
     if err:
@@ -228,7 +232,7 @@ def experiment_detail(
         series, series_total = thinned_series(snapshot, keys, max_points, x=x)
     metrics, metric_summary = snapshot.summarized_metrics(schema)
     row = (read_child_row(verstr) if read_child_row else None) or {}
-    return {
+    detail = {
         "metadata": metadata,
         "idx": row.get("idx"),
         "name": row.get("name") or metadata.get("name"),
@@ -264,7 +268,9 @@ def experiment_detail(
         "rerun_of": metadata.get("rerun_of"),
         "rewinds": snapshot.rewinds(),
         "compacted": record_compacted(storage, app_name, verstr),
-    }, None
+    }
+    detail.update(failure_fields(storage, app_name, verstr, detail, snapshot, last_good))
+    return detail, None
 
 
 _THINNED_PER_SNAPSHOT = 4

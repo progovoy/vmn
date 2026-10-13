@@ -116,6 +116,11 @@ class LogSnapshot:
     def series_keys(self):
         return self._counts.keys()
 
+    def last_step(self):
+        """The highest step among the metrics' newest points, or None."""
+        steps = (self._series[k][n - 1].get("step") for k, n in self._counts.items() if n)
+        return max((s for s in steps if isinstance(s, (int, float))), default=None)
+
     def series(self, keys=None):
         """``{metric: [points]}`` — every metric, or those of *keys* it has."""
         names = self._counts if keys is None else [k for k in keys if k in self._counts]

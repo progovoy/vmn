@@ -289,6 +289,8 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `.../experiments/{verstr}/table/{path}` | A page of a logged [table](#media) |
 | `GET` | `.../experiments/{verstr}/histograms/{name}` | One histogram key's [steps](#media) |
 | `GET` | `.../experiments/{verstr}/lineage` | [Run lineage](#lineage) |
+| `GET` | `.../experiments/{verstr}/patch?max_bytes=` | [The run's patch and changed files](#run-code-patch-and-baselines) |
+| `GET` | `.../experiments/{verstr}/baselines` | [Runs to diff it against](#run-code-patch-and-baselines) |
 | `GET` | `.../experiments/{verstr}/sweep` | The sweep's spec, summary and trials ([sweeps.md](sweeps.md#status)) |
 | `GET` | `.../experiments/{verstr}/similar?top=&all_apps=&archived=&q=` | [Runs most like this one](#similar-runs) |
 | `GET` | `ws/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=&q=` | [Runs matching a text](#similar-runs) |
@@ -533,11 +535,45 @@ Query params: `max_points` (default 2000, at most 20000), `keys=loss,acc`
 | `media` / `tables` / `histograms` | logged images, tables, histograms per name, one item per step ([Media](#media)); `histograms` is `{}` once they would serve more than 100 steps in all |
 | `histograms_total` | `{name: steps logged}` for every histogram name |
 | `compacted` | whether every metrics writer of the run has its compacted `.vmx` (the UI shows a "not compacted" badge otherwise) |
+| `output_tail` | failed/stuck runs only: `{lines, truncated}`, the last 40 lines of `outputs/output.log` (one range read of at most 16 KB; a partial first line is dropped, a `\r`-rewritten line keeps its last rewrite), `null` without one |
+| `last_step` | failed/stuck only: `{step, of}`, the highest step of the metrics' newest points; `of` = numeric `params.epochs`, else `params.max_steps`, else `null`; `null` without a stepped metric |
+| `last_good` | failed/stuck only: `{verstr, idx, name}` of the latest earlier succeeded run of the same command (unarchived), else `null` |
 | `idx` / `name` | the run's `@N` index and its name (from its index row, else `name` from its metadata); `null` when unknown |
 
 Page older entries with `.../log`. A live run's poll parses only the log bytes
 appended since the last one. Detail and log carry an `ETag` and
 `Cache-Control: no-cache` (304 when unchanged).
+
+### Run code: patch and baselines
+
+`GET .../experiments/{verstr}/patch?max_bytes=200000` is `vmn-exp show
+--patch --json`'s `patch` object plus `files`:
+
+```json
+{"text": "=== working_tree ===\ndiff --git ...", "truncated": false,
+ "files": [{"path": "train.py", "added": 3, "removed": 1}]}
+```
+
+`files` counts each path's hunk lines in the served (possibly truncated) text,
+summed over its sections; dep paths read `deps/<dep>/<path>`. Without text it
+is `{"text": null, "reason": "no_code"|"code_missing"|"untracked_only", "files": []}`
+(`untracked_only` adds `untracked_files`). `max_bytes` must be >= 1 (400) and is
+capped at 10 MB. The ETag is the run's code identity, so a 304 never loads the
+code object (none on `code_missing`, whose object may still be pushed).
+
+`GET .../experiments/{verstr}/baselines` names the runs the Changes card can
+diff against, from the index snapshot (no git, no lock). Each key is present
+only when it exists, each `{verstr, idx, name, status}`:
+
+| Key | Run |
+|---|---|
+| `base` | the run itself, when it captured a working-tree or local-commits patch |
+| `parent` / `forked_from` / `rerun_of` | its origins, when indexed |
+| `previous` | the latest earlier unarchived run on the same `branch` with the same `command` |
+| `best` | the best other run on the primary declared goal (`primary: true` with a goal, else the first exactly named schema metric with one); absent without a declared goal |
+
+A run not indexed yet answers `{}`; an unknown run is 404. Both are viewer
+reads with a body-digest ETag.
 
 ### Series for many runs
 

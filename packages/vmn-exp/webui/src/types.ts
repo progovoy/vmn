@@ -301,6 +301,14 @@ export interface ExperimentDetail {
   compacted?: boolean | null;
   /** Rewinds of this run, in log order: history past `step` was hidden. */
   rewinds?: RunRewind[];
+  /** Failed/stuck runs only (absent otherwise): the last <= 40 lines of
+   *  `outputs/output.log` (one 16 KB range read), null without one. */
+  output_tail?: { lines: string[]; truncated: boolean } | null;
+  /** Failed/stuck only: the highest logged step; `of` = numeric
+   *  `params.epochs`/`params.max_steps`, else null. */
+  last_step?: { step: number; of: number | null } | null;
+  /** Failed/stuck only: the latest earlier succeeded run of the same command. */
+  last_good?: { verstr: string; idx: number | null; name: string | null } | null;
 }
 
 export interface ForkOrigin {
