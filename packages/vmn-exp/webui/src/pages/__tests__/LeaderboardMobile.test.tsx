@@ -58,7 +58,8 @@ describe("the leaderboard below 640px", () => {
   it("shows a card per run instead of the wide grid", async () => {
     const list = await cards();
     expect(screen.queryByRole("grid", { name: "experiments" })).toBeNull();
-    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    // Every run is a card, inner runs too (plan 22 G1).
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
   });
 
   it("puts the name and the status on the first line", async () => {
@@ -100,13 +101,12 @@ describe("the leaderboard below 640px", () => {
     expect(foot).toHaveTextContent("@2");
   });
 
-  it("heads an outer run with its tree status, and still folds its inner runs", async () => {
+  it("heads an outer run with its tree status, its inner run a card of its own (plan 22 G1)", async () => {
     await cards();
     const outer = card(v(3));
     expect(within(outer).getByText("succeeded")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: v(4) })).toBeNull();
-    fireEvent.click(within(outer).getByRole("button", { name: `Expand ${v(3)}` }));
-    expect(await screen.findByRole("link", { name: v(4) })).toBeInTheDocument();
+    expect(within(outer).queryByRole("button", { name: `Expand ${v(3)}` })).toBeNull();
+    expect(screen.getByRole("link", { name: v(4) })).toBeInTheDocument();
   });
 
   it("still selects runs, one at a time and all on screen", async () => {
@@ -116,7 +116,7 @@ describe("the leaderboard below 640px", () => {
     expect(card("baseline")).toHaveClass("checked");
     expect(await screen.findByRole("region", { name: "Selection" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible runs" }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toHaveLength(3));
+    await waitFor(() => expect(urlParams().getAll("sel")).toHaveLength(4));
   });
 
   it("opens the run from anywhere on the card", async () => {

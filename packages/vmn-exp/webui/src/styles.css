@@ -716,8 +716,6 @@ tr.row.archived .run-link { text-decoration: line-through; text-decoration-color
 }
 .fold-toggle:hover { background: var(--panel-3); color: var(--text); }
 .fold-toggle:focus-visible { outline-offset: -2px; }
-tr.inner-pending td { color: var(--text-3); font-size: 12px; }
-tr.inner-pending.error td { color: var(--bad); }
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(6, 6, 5, 0.6); z-index: 60;
   display: flex; justify-content: center; align-items: flex-start; padding-top: 18vh;

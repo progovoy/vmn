@@ -174,13 +174,26 @@ describe("the grouped board", () => {
     expect(screen.queryByRole("button", { name: /more$/ })).toBeNull();
   });
 
+  it("pages groups: Load more asks for the groups after the loaded ones", async () => {
+    const third = { ...noParent(), key: "x", label: "x", rows: [row(9)], rows_total: 1 };
+    m.experimentGroups
+      .mockResolvedValueOnce({ ...grouped([sweepGroup(), noParent()]), total_groups: 3 })
+      .mockResolvedValueOnce({ ...grouped([third]), total_groups: 3 });
+    renderBoard();
+    fireEvent.click(await screen.findByRole("button", { name: "Load more (1 group remaining)" }));
+    await waitFor(() => expect(headerRows()).toHaveLength(3));
+    expect(m.experimentGroups.mock.calls[1][2]).toMatchObject({ group: "parent", offset: 2 });
+    expect(screen.getByRole("link", { name: v(9) })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^load more/i })).toBeNull();
+  });
+
   it("orders groups by the sorted column: the server's group order, the sort sent with it", async () => {
     renderBoard();
     await waitFor(() => expect(headerRows()).toHaveLength(2));
     m.experimentGroups.mockResolvedValue(grouped([noParent(), sweepGroup()]));
     fireEvent.click(screen.getByRole("button", { name: /sort by loss/i }));
     await waitFor(() => expect(headerRows()[0].textContent).toContain("(no parent run)"));
-    expect(m.experimentGroups.mock.calls.at(-1)![2]).toMatchObject({ sort: "loss", order: "asc" });
+    expect(m.experimentGroups.mock.calls.slice(-1)[0][2]).toMatchObject({ sort: "loss", order: "asc" });
   });
 
   it("labels a code-state group by its verstr and a field group as field = value", async () => {

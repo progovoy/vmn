@@ -5,15 +5,12 @@ import { memo, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtVal, relTime, runHref } from "../util";
-import { isPending, type PendingRow, type TableItem } from "../util/sweepTree";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
-import { PENDING_TEXT } from "./pendingText";
 import StatusPill from "../components/StatusPill";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
-import { FoldToggle, depthStyle, headStatus, type RowLayout } from "./LeaderboardRow";
+import { headStatus, type RowLayout } from "./LeaderboardRow";
 import type { SortState } from "./LeaderboardHead";
 import "./leaderboardCards.css";
-import "./innerRows.css";
 
 /** The metric a card shows large: the one sorted by, else the primary
  *  (the bar column), else the first shown. */
@@ -38,12 +35,10 @@ function MetricLine({ r, metric, layout }: { r: ExperimentRow; metric: string; l
 }
 
 const MCard = memo(function MCard({
-  r, layout, metric, selected, flash, collapsed, onToggle, onFold, onPrefetch,
+  r, layout, metric, selected, flash, onToggle, onPrefetch,
 }: {
   r: ExperimentRow; layout: RowLayout; metric: string | null; selected: boolean; flash: boolean;
-  collapsed: boolean | null;
   onToggle: (verstr: string, range: boolean) => void;
-  onFold: (r: ExperimentRow) => void;
   onPrefetch: (verstr: string) => void;
 }) {
   const navigate = useNavigate();
@@ -53,12 +48,10 @@ const MCard = memo(function MCard({
     if ((e.target as HTMLElement).closest("a, input, button")) return;
     navigate(href);
   };
-  const inner = r.children?.length ? `${r.children.length} inner` : "";
   const incomplete = sweepIncompleteLabel(r);
   return (
     <li
-      className={`lb-mcard${(r.depth ?? 0) > 0 ? " inner" : ""}${selected ? " checked" : ""}${flash ? " flash" : ""}${r.archived ? " archived" : ""}`}
-      style={depthStyle(r.depth)}
+      className={`lb-mcard${selected ? " checked" : ""}${flash ? " flash" : ""}${r.archived ? " archived" : ""}`}
       onClick={onClick}
     >
       <input
@@ -67,7 +60,6 @@ const MCard = memo(function MCard({
       />
       <div className="lb-mcard-body">
         <div className="lb-mcard-head">
-          {collapsed !== null && <FoldToggle r={r} collapsed={collapsed} onFold={onFold} />}
           <Link
             className={`lb-mcard-name run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
             onFocus={() => onPrefetch(r.verstr)}
@@ -81,9 +73,7 @@ const MCard = memo(function MCard({
             />
           )}
         </div>
-        {(r.name || inner) && (
-          <div className="lb-mcard-sub mono">{[r.name ? r.verstr : "", inner].filter(Boolean).join(" · ")}</div>
-        )}
+        {r.name && <div className="lb-mcard-sub mono">{r.verstr}</div>}
         {incomplete && <div className="lb-mcard-sweep mono">{incomplete}</div>}
         {metric && <MetricLine r={r} metric={metric} layout={layout} />}
         {r.status === "failed" && r.error_summary && (
@@ -97,22 +87,10 @@ const MCard = memo(function MCard({
   );
 });
 
-function PendingCard({ item, runBase }: { item: PendingRow; runBase: string }) {
-  return (
-    <li
-      className={`lb-mcard-pending inner ${item.state}`} style={depthStyle(item.depth)}
-      role={item.state === "error" ? "alert" : undefined}
-    >
-      {PENDING_TEXT[item.state](item)}
-      {item.state === "more" && <Link to={runHref(runBase, item.parent)}>open the outer run</Link>}
-    </li>
-  );
-}
-
 export default function LeaderboardCards({
-  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, collapsedOf, onFold, describedBy,
+  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, describedBy,
 }: {
-  rows: TableItem[] | undefined;
+  rows: ExperimentRow[] | undefined;
   layout: RowLayout;
   sort: SortState;
   selected: ReadonlySet<string>;
@@ -120,8 +98,6 @@ export default function LeaderboardCards({
   onToggle: (verstr: string, range: boolean) => void;
   headerCheck?: HeaderCheckProps;
   onPrefetch: (verstr: string) => void;
-  collapsedOf: (r: ExperimentRow) => boolean | null;
-  onFold: (r: ExperimentRow) => void;
   describedBy?: string;
 }) {
   const metric = cardMetric(layout, sort.sort);
@@ -135,15 +111,13 @@ export default function LeaderboardCards({
         <p className="lb-mcards-loading" role="status">loading runs…</p>
       ) : (
         <ul className="lb-mcards" role="list" aria-label="experiments" aria-describedby={describedBy}>
-          {rows.map((r) => (isPending(r) ? (
-            <PendingCard key={r.key} item={r} runBase={layout.runBase} />
-          ) : (
+          {rows.map((r) => (
             <MCard
               key={r.verstr} r={r} layout={layout} metric={metric}
               selected={selected.has(r.verstr)} flash={flash === r.verstr}
-              collapsed={collapsedOf(r)} onToggle={onToggle} onFold={onFold} onPrefetch={onPrefetch}
+              onToggle={onToggle} onPrefetch={onPrefetch}
             />
-          )))}
+          ))}
         </ul>
       )}
     </div>

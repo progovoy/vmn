@@ -121,29 +121,6 @@ describe("Leaderboard status column", () => {
     ]);
   });
 
-  it("hides inner runs from the list and shows the child count on the outer", async () => {
-    mockedApi.experiments.mockResolvedValue([
-      row(1, "running", {
-        kind: "outer", children: ["0.0.2-rc.1", "0.0.3-rc.1"], tree_status: "running",
-      }),
-      row(2, "succeeded", { kind: "inner", depth: 1, parent: "0.0.1-rc.1" }),
-      row(3, "failed", { kind: "inner", depth: 1, parent: "0.0.1-rc.1", exit_code: 1 }),
-    ]);
-
-    // The count sits in the experiment cell while the inner column is hidden (plan 20 C2).
-    renderLeaderboard("/ws/test/app/my-app?hide=c:inner");
-
-    await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
-
-    const outer = cellOf("0.0.1-rc.1");
-    expect(outer.querySelector(".nest-mark")).toBeNull();
-    expect(outer.querySelector(".tree-roll")?.textContent).toContain("2 inner");
-
-    // Inner runs are filtered from the default list view
-    expect(screen.queryByText("0.0.2-rc.1")).not.toBeInTheDocument();
-    expect(screen.queryByText("0.0.3-rc.1")).not.toBeInTheDocument();
-  });
-
   it("shows the subtree rollup on an outer row when it differs", async () => {
     mockedApi.experiments.mockResolvedValue([
       row(1, "succeeded", {
@@ -166,13 +143,12 @@ describe("Leaderboard status column", () => {
       }),
     ]);
 
-    // The count sits in the experiment cell while the inner column is hidden (plan 20 C2).
-    renderLeaderboard("/ws/test/app/my-app?hide=c:inner");
+    renderLeaderboard();
 
     await waitFor(() => expect(screen.getByText("status")).toBeInTheDocument());
-    const roll = cellOf("0.0.1-rc.1").querySelector(".tree-roll");
-    expect(roll?.textContent).toContain("1 inner");
-    expect(roll?.textContent).not.toContain("tree");
+    // Plan 22 G1: no "N inner" count, and no rollup that repeats the status.
+    expect(cellOf("0.0.1-rc.1").textContent).not.toContain("tree");
+    expect(cellOf("0.0.1-rc.1").textContent).not.toContain("inner");
   });
 });
 

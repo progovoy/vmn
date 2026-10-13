@@ -5,7 +5,7 @@ import type { AppStatus } from "../shell/contracts";
 /** experiments-status counts failures this far back (status_summary.py). */
 const RECENT_MS = 24 * 3600 * 1000;
 /** The board's filters: following a part replaces them all. */
-const FILTER_PARAMS = ["q", "status", "search", "branch", "archived", "expand", "sel", "offset"];
+const FILTER_PARAMS = ["q", "status", "search", "branch", "archived", "sel", "offset"];
 
 export interface AttentionPart { key: "stuck" | "failed" | "running"; text: string; search: string; title?: string }
 

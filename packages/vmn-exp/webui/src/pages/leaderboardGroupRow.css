@@ -1,0 +1,35 @@
+/* The grouped board's header rows (LeaderboardGroupRow.tsx): a tinted band
+   over the table (an inset shadow, as pinned cells carry their own solid
+   background), the label over the status count, and per metric the group's
+   aggregate over the target run's own value. */
+tr.group-row > td {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--text) 5%, transparent);
+  border-top: 1px solid var(--line-2);
+}
+tr.group-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.group-head { min-width: 0; }
+.group-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.group-sub {
+  font-size: 11.5px; color: var(--text-3); font-family: var(--mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 27px;
+}
+.group-counts .tone-total { color: var(--text-2); font-weight: 600; }
+.group-counts .tone-running { color: var(--st-running); }
+.group-counts .tone-waiting { color: var(--text-3); }
+.group-counts .tone-stuck { color: var(--st-stuck); }
+.group-counts .tone-failed { color: var(--st-bad); }
+td.group-metric { line-height: 1.2; }
+td.group-metric .group-agg { display: block; font-weight: 600; }
+td.group-metric .group-own { display: block; font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+.group-more-btn {
+  background: none; border: none; padding: 2px 6px; margin-left: 21px;
+  color: var(--accent); font-size: 12px; cursor: pointer;
+}
+.group-more-btn:hover:not(:disabled) { text-decoration: underline; }
+.group-more-btn:disabled { color: var(--text-3); cursor: default; }
+tr.group-more.error .group-more-btn { color: var(--bad); }
+/* The column header's aggregate tag while grouped (plan 22 G10). */
+.agg-tag {
+  margin-left: 4px; padding: 0 4px; border-radius: 3px; font-size: 9.5px; font-weight: 500;
+  color: var(--text-3); background: var(--panel-3); text-transform: none; letter-spacing: 0;
+}

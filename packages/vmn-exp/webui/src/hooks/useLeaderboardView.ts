@@ -55,7 +55,6 @@ export function useLeaderboardView() {
   const hidden = useParamSet(params, "hide");
   const shown = useParamSet(params, "show");
   const selected = useParamSet(params, "sel");
-  const expanded = useParamSet(params, "expand");
   const collapsed = useParamSet(params, "collapse");
 
   // Column order (col=) and pinned set (pin=) — stable arrays for useMemo deps.
@@ -89,9 +88,6 @@ export function useLeaderboardView() {
       update((p) => setAllParams(p, name, values)),
     [update],
   );
-
-  /** Open/shut an outer run (all start shut, so `expand=` lists the open ones). */
-  const toggleExpanded = useCallback((verstr: string) => toggleIn("expand", verstr), [toggleIn]);
 
   const setters = useMemo(() => ({
     setStatus: (csv: string) => setParam("status", csv),
@@ -156,9 +152,9 @@ export function useLeaderboardView() {
 
   return {
     ...view,
-    hidden, shown, selected, expanded, collapsed,
+    hidden, shown, selected, collapsed,
     colOrder, pinned,
-    clickSort, toggleExpanded, ...setters,
+    clickSort, ...setters,
   };
 }
 
