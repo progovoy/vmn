@@ -31,7 +31,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../api";
-import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { page, renderBoard, row, selection } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
@@ -66,7 +66,7 @@ describe("the Charts tab with rows selected", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Show all" }));
     expect(await screen.findByText(ALL)).toBeInTheDocument();
     expect(screen.getByText("charting 3 of 3 runs")).toBeInTheDocument();
-    expect(urlParams().getAll("sel")).toEqual([v(2), v(3)]);
+    expect(selection()).toEqual([v(2), v(3)]);
     fireEvent.click(screen.getByRole("button", { name: "Show 2 selected" }));
     expect(await screen.findByText(`bar:${v(2)},${v(3)}`)).toBeInTheDocument();
   });

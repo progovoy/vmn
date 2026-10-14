@@ -27,7 +27,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../api";
-import { location, page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { location, page, renderBoard, row, selection, urlParams } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
@@ -48,7 +48,7 @@ describe("selection counter", () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(1)}&sel=${v(2)}`);
     expect(await screen.findByText("2 selected")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
     expect(screen.queryByText(/selected$/)).toBeNull();
   });
 });
@@ -59,7 +59,7 @@ describe("shift-click range select", () => {
     await screen.findByRole("link", { name: v(1) });
     fireEvent.click(checkbox(2));
     fireEvent.click(checkbox(4), { shiftKey: true });
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(2), v(3), v(4)]));
+    await waitFor(() => expect(selection()).toEqual([v(2), v(3), v(4)]));
   });
 });
 
@@ -72,7 +72,7 @@ describe("select all filtered", () => {
     await screen.findByRole("link", { name: v(1) });
     fireEvent.click(checkbox(1));
     fireEvent.click(await screen.findByRole("button", { name: /select all 500/i }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual(["a", "b", "c"]));
+    await waitFor(() => expect(selection()).toEqual(["a", "b", "c"]));
     expect(m.experimentsColumns).toHaveBeenCalledWith(
       "test", "my-app", [], expect.objectContaining({ status: "failed", limit: 500 }),
     );
@@ -83,7 +83,7 @@ describe("select all filtered", () => {
     await screen.findByRole("link", { name: v(1) });
     fireEvent.click(checkbox(1));
     fireEvent.click(await screen.findByRole("button", { name: /select all/i }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([1, 2, 3, 4, 5].map(v)));
+    await waitFor(() => expect(selection()).toEqual([1, 2, 3, 4, 5].map(v)));
   });
 });
 
@@ -93,7 +93,7 @@ describe("N-run compare", () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(1)}&sel=${v(2)}&sel=${v(3)}`);
     fireEvent.click(await screen.findByRole("button", { name: /^compare \(3\)$/i }));
     await waitFor(() => expect(location.pathname).toBe("/ws/test/app/my-app/compare-runs"));
-    expect(urlParams().getAll("sel")).toEqual([v(1), v(2), v(3)]);
+    expect(selection()).toEqual([v(1), v(2), v(3)]);
     expect(urlParams().get("tab")).toBe("curves");
   });
 });

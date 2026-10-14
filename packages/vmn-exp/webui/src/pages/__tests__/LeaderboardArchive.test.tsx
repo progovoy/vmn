@@ -27,7 +27,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../api";
-import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { page, renderBoard, row, selection, urlParams } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
@@ -75,7 +75,7 @@ describe("bulk archive", () => {
     expect(dialog).toHaveTextContent("Archive 1 run?");
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     expect(m.action).toHaveBeenCalledWith("test", "my-app", "exp_archive", { verstrs: [v(1)] });
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
   });
 
   it("unarchives through exp_unarchive", async () => {
@@ -94,6 +94,6 @@ describe("bulk archive", () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(m.action).not.toHaveBeenCalled();
-    expect(urlParams().getAll("sel")).toEqual([v(1)]);
+    expect(selection()).toEqual([v(1)]);
   });
 });

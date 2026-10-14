@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { createQueryClient } from "../../../queryClient";
 import type { ExperimentRow } from "../../../types";
+import { readPicks } from "../../../util/runSelection";
 import { job } from "../../../util/__tests__/jobFixture";
 import ExperimentsPage from "../ExperimentsPage";
 
@@ -20,6 +21,8 @@ function LocationProbe() {
   return null;
 }
 export const urlParams = () => new URLSearchParams(location.search);
+/** The app's run selection (the tray's picks), which replaced the URL's `sel`. */
+export const selection = (ws = "test", app = "my-app") => readPicks(ws, app).map((p) => p.verstr);
 
 export function renderExperiments(path = "/ws/test/app/my-app") {
   const client = createQueryClient();

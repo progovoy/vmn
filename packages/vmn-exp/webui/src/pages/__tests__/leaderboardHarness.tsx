@@ -5,6 +5,7 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { createQueryClient } from "../../queryClient";
 import type { ExperimentRow } from "../../types";
+import { readPicks } from "../../util/runSelection";
 import Leaderboard from "../Experiments/AllRunsView";
 
 export function row(i: number, extra: Partial<ExperimentRow> = {}): ExperimentRow {
@@ -42,6 +43,8 @@ function RunStub() {
 }
 
 export const urlParams = () => new URLSearchParams(location.search);
+/** The app's run selection (the tray's picks), which replaced the URL's `sel`. */
+export const selection = (ws = "test", app = "my-app") => readPicks(ws, app).map((p) => p.verstr);
 
 export function renderBoard(path = "/ws/test/app/my-app", client: QueryClient = createQueryClient()) {
   const utils = render(

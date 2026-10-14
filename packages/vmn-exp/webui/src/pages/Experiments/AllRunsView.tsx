@@ -12,7 +12,7 @@ import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { BIG_GROUP } from "../../util/groupClause";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "../BoardTabs";
 import LeaderboardChartsPanel from "../LeaderboardChartsPanel";
-import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
+import SelectionTray from "../SelectionTray";
 import { isGroupCountId } from "../../util/groupCountSort";
 import LeaderboardToolbar from "../LeaderboardToolbar";
 import BoardHead, { runCountText } from "../BoardHead";
@@ -184,17 +184,11 @@ export function AllRunsView({ ws, app, views, onJobs }: {
           <div className="cli-card">
             vmn-exp list {appName}{cliSort ? ` --sort ${cliSort}` : ""}
           </div>
-          <LeaderboardSelectionBar
-            selected={[...view.selected]}
-            total={data.total}
-            base={board.base}
-            showUnarchive={view.archived}
-            archiving={selection.archiving}
-            archiveError={selection.archiveError}
-            onClear={() => view.setSelected([])}
-            onSelectAll={selection.selectAll}
-            onArchive={selection.archive}
-          />
+          <SelectionTray ws={ws} app={app} board={{
+            total: data.total, showUnarchive: view.archived,
+            archiving: selection.archiving, archiveError: selection.archiveError,
+            onSelectAll: selection.selectAll, onArchive: selection.archive,
+          }} />
         </>
       )}
     </>

@@ -1,5 +1,7 @@
 import { useCallback, useMemo } from "react";
+import { useParams } from "react-router-dom";
 import { setAllParams, useUrlState } from "./useUrlState";
+import { useRunSelection, useSeedSelection } from "./useRunSelection";
 import { NO_PINS, moveKey, togglePin as togglePinUtil } from "../util/columnOrder";
 import { parseAggregate, parseGroup, type Aggregate, type GroupBy } from "../util/groupBy";
 import { parseDensity, rememberDensity, storedDensity, type Density } from "../util/density";
@@ -36,8 +38,9 @@ function setBoardTab(p: URLSearchParams, tab: BoardTab) {
 }
 
 /** The leaderboard's whole view — sort, filters, tab, chart, hidden columns,
- *  column order, pinning, selection and density — read from and written to the URL,
- *  so it is bookmarkable and Back returns to exactly what was on screen. */
+ *  column order, pinning and density — read from and written to the URL,
+ *  so it is bookmarkable and Back returns to exactly what was on screen —
+ *  and the app's run selection (per app in sessionStorage, useRunSelection). */
 export function useLeaderboardView() {
   const { params, update, setParam } = useUrlState();
   const read = (k: string) => params.get(k) ?? "";
@@ -64,7 +67,11 @@ export function useLeaderboardView() {
 
   const hidden = useParamSet(params, "hide");
   const shown = useParamSet(params, "show");
-  const selected = useParamSet(params, "sel");
+  // The selection is the app's (the tray's), not the URL's: `sel=` only seeds it.
+  const { ws = "", app = "" } = useParams();
+  const dropSel = useCallback(() => update((p) => p.delete("sel")), [update]);
+  useSeedSelection(ws, app, params.getAll("sel"), dropSel);
+  const { selected, toggleSelected, setSelected } = useRunSelection(ws, app);
   const collapsed = useParamSet(params, "collapse");
 
   // Column order (col=) and pinned set (pin=) — stable arrays for useMemo deps.
@@ -138,7 +145,6 @@ export function useLeaderboardView() {
       update((p) => {
         for (const name of ["show", "hide"]) setAllParams(p, name, p.getAll(name).filter((v) => v !== col));
       }),
-    toggleSelected: (verstr: string) => toggleIn("sel", verstr),
     /** Group the board by *group*; `group=` is left out at the default
      *  *dflt*, and the closed groups of the old grouping are forgotten. */
     setGroup: (group: GroupBy, dflt: GroupBy) =>
@@ -156,7 +162,6 @@ export function useLeaderboardView() {
       }),
     /** Close or reopen a group (all start open, so `collapse=` lists the shut ones). */
     toggleCollapsed: (key: string) => toggleIn("collapse", key),
-    setSelected: (verstrs: readonly string[]) => setAll("sel", verstrs),
     setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),
     setDensity: (d: Density) => { rememberDensity(d); setParam("density", d); },
     setOrder: (keys: readonly string[]) => setAll("col", keys),
@@ -178,7 +183,7 @@ export function useLeaderboardView() {
 
   return {
     ...view,
-    hidden, shown, selected, collapsed,
+    hidden, shown, selected, toggleSelected, setSelected, collapsed,
     colOrder, pinned,
     clickSort, ...setters,
   };

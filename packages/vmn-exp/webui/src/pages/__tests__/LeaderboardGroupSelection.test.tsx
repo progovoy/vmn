@@ -34,7 +34,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 import { api } from "../../api";
 import { NONE_GROUP, type RunGroup } from "../../apiGroups";
-import { location, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { location, renderBoard, row, selection } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
@@ -78,11 +78,11 @@ describe("a group header's checkbox", () => {
     renderBoard();
     await waitFor(() => expect(header("sweep")).toBeTruthy());
     fireEvent.click(groupBox("sweep"));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(2), v(3)]));
+    await waitFor(() => expect(selection()).toEqual([v(2), v(3)]));
     expect(groupBox("sweep").checked).toBe(true);
     expect(groupBox("sweep").indeterminate).toBe(false);
     fireEvent.click(groupBox("sweep"));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
     expect(groupBox("sweep").checked).toBe(false);
   });
 
@@ -92,7 +92,7 @@ describe("a group header's checkbox", () => {
     expect(groupBox("sweep").indeterminate).toBe(true);
     expect(groupBox("sweep").checked).toBe(false);
     fireEvent.click(groupBox("sweep"));
-    await waitFor(() => expect(urlParams().getAll("sel").sort()).toEqual([v(2), v(3), v(4)]));
+    await waitFor(() => expect(selection().sort()).toEqual([v(2), v(3), v(4)]));
     expect(groupBox("sweep").indeterminate).toBe(false);
   });
 
@@ -101,7 +101,7 @@ describe("a group header's checkbox", () => {
     await waitFor(() => expect(header("sweep")).toBeTruthy());
     expect(screen.queryByRole("link", { name: v(2) })).toBeNull();
     fireEvent.click(groupBox("sweep"));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(2), v(3)]));
+    await waitFor(() => expect(selection()).toEqual([v(2), v(3)]));
   });
 
   it("is not there for the loose runs, which have no header: each is selected on its own row", async () => {
@@ -109,7 +109,7 @@ describe("a group header's checkbox", () => {
     await waitFor(() => expect(header("sweep")).toBeTruthy());
     expect(screen.getAllByRole("checkbox", { name: /^Select group/ })).toEqual([groupBox("sweep")]);
     fireEvent.click(screen.getByRole("checkbox", { name: `Select ${v(4)}` }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(4)]));
+    await waitFor(() => expect(selection()).toEqual([v(4)]));
     expect(groupBox("sweep").checked).toBe(false);
   });
 });

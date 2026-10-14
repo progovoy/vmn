@@ -19,6 +19,7 @@ import JobHeader, { JOB_PANEL_ID, JobCliCard, JobTabs, jobTabId } from "./JobHea
 import { failedCount } from "./jobData";
 import JobOverview from "./JobOverview";
 import JobRuns from "./JobRuns";
+import SelectionTray from "../SelectionTray";
 import { jobSummaryKey, useJobTab, type JobTab } from "./jobQueries";
 import "./job.css";
 
@@ -87,6 +88,8 @@ export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
         <Panel tab={tab} ws={ws} app={app} detail={detail} summary={data} live={{ paused, onPaused: setPaused, refresh }} />
       </div>
       <JobCliCard ws={ws} app={app} verstr={v} />
+      {/* The Runs tab's board shows the tray with its own actions. */}
+      {tab !== "runs" && <SelectionTray ws={ws} app={app} />}
     </div>
   );
 }

@@ -17,7 +17,7 @@ import type { BoardGroup } from "../../util/groupItems";
 import BoardGridTools from "../BoardGridTools";
 import BoardCaption from "../BoardCaption";
 import BoardHead from "../BoardHead";
-import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
+import SelectionTray from "../SelectionTray";
 import { EmptyBoard } from "./AllRunsView";
 import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
@@ -124,11 +124,11 @@ export default function JobsView({ ws, app, views, kind }: {
             </div>
           )}
           <div className="cli-card">vmn-exp list {appName} --query &apos;{kindQuery(kind.kind)}&apos;</div>
-          <LeaderboardSelectionBar
-            selected={[...view.selected]} total={data.total} base={base}
-            showUnarchive={view.archived} archiving={selection.archiving} archiveError={selection.archiveError}
-            onClear={() => view.setSelected([])} onSelectAll={selection.selectAll} onArchive={selection.archive}
-          />
+          <SelectionTray ws={ws} app={app} board={{
+            total: data.total, showUnarchive: view.archived,
+            archiving: selection.archiving, archiveError: selection.archiveError,
+            onSelectAll: selection.selectAll, onArchive: selection.archive,
+          }} />
         </>
       )}
     </>

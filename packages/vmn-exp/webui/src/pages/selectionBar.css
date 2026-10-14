@@ -80,3 +80,31 @@ button.sel-close:focus-visible { outline-offset: -3px; }
 .sel-count {
   display: inline-block; min-width: 5ch; text-align: left; font-variant-numeric: tabular-nums;
 }
+
+/* The tray's `from 3 jobs ▾`, and the picks it opens above the bar, by job. */
+.sel-expand.link { align-self: flex-start; font-size: 12px; color: var(--text-2); }
+.sel-picks {
+  list-style: none; margin: 0 0 8px; padding: 8px 12px; box-sizing: border-box;
+  max-height: min(50vh, 360px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+}
+.sel-picks-group + .sel-picks-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.sel-picks-job {
+  display: block; font-size: 11px; font-weight: 600; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis;
+}
+.sel-picks-runs { list-style: none; margin: 4px 0 0; padding: 0; }
+.sel-pick { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }
+.sel-pick a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+button.sel-pick-remove {
+  flex: none; min-width: 28px; min-height: 28px; padding: 0; border: none; background: none;
+  color: var(--text-3);
+}
+button.sel-pick-remove:hover { color: var(--text); }
+/* Phones: the list spans the dock; remove targets are thumb-sized. */
+@media (max-width: 599px) {
+  .sel-picks { max-height: 45vh; }
+  .sel-pick { min-height: 40px; }
+  button.sel-pick-remove { min-width: 40px; min-height: 40px; }
+}
