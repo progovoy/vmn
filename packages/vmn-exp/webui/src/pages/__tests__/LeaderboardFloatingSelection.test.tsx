@@ -33,7 +33,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../api";
-import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { page, renderBoard, row, selection } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
@@ -92,7 +92,7 @@ describe("the floating selection bar", () => {
   it("closes with its ✕, clearing the selection", async () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(1)}`);
     fireEvent.click(within(await bar()).getByRole("button", { name: "Clear selection" }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
     noBar();
   });
 
@@ -110,20 +110,20 @@ describe("Escape clears the selection", () => {
     fireEvent.click(checkbox(1));
     await bar();
     fireEvent.keyDown(checkbox(1), { key: "Escape" });
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
     noBar();
 
     fireEvent.click(checkbox(2));
     await bar();
     fireEvent.keyDown(document.body, { key: "Escape" });
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
   });
 
   it("but not while typing in a field", async () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(1)}`);
     await bar();
     fireEvent.keyDown(screen.getByPlaceholderText(/search/i), { key: "Escape" });
-    expect(urlParams().getAll("sel")).toEqual([v(1)]);
+    expect(selection()).toEqual([v(1)]);
     expect(screen.getByRole("region", { name: "Selection" })).toBeInTheDocument();
   });
 
@@ -132,7 +132,7 @@ describe("Escape clears the selection", () => {
     fireEvent.click(within(await bar()).getByRole("button", { name: "Archive" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.keyDown(document.body, { key: "Escape" });
-    expect(urlParams().getAll("sel")).toEqual([v(1)]);
+    expect(selection()).toEqual([v(1)]);
   });
 });
 
@@ -144,17 +144,17 @@ describe("the header checkbox", () => {
     expect(all).not.toBeChecked();
     expect(all).not.toBePartiallyChecked();
     fireEvent.click(all);
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual(ALL));
+    await waitFor(() => expect(selection()).toEqual(ALL));
     expect(await headerBox()).toBeChecked();
     fireEvent.click(await headerBox());
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
   });
 
   it("is indeterminate while only some rows are selected, and then selects the rest", async () => {
     renderBoard(`/ws/test/app/my-app?sel=${v(2)}`);
     await waitFor(async () => expect(await headerBox()).toBePartiallyChecked());
     fireEvent.click(await headerBox());
-    await waitFor(() => expect([...urlParams().getAll("sel")].sort()).toEqual(ALL));
+    await waitFor(() => expect([...selection()].sort()).toEqual(ALL));
   });
 
   it("clears only the rows on screen", async () => {
@@ -162,6 +162,6 @@ describe("the header checkbox", () => {
     renderBoard(`/ws/test/app/my-app?${qs}`);
     await waitFor(async () => expect(await headerBox()).toBeChecked());
     fireEvent.click(await headerBox());
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual(["off-screen"]));
+    await waitFor(() => expect(selection()).toEqual(["off-screen"]));
   });
 });

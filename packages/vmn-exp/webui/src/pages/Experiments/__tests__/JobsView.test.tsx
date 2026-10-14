@@ -25,7 +25,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 import { api } from "../../../api";
 import { job } from "../../../util/__tests__/jobFixture";
-import { jobsPage, location, notFound, renderExperiments, singleRow, topRow, urlParams } from "./jobsHarness";
+import { jobsPage, location, notFound, renderExperiments, singleRow, topRow, selection, urlParams } from "./jobsHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const GRID = topRow(36, { name: "lr_layers_grid", branch: "feature-x" });
@@ -240,7 +240,7 @@ describe("the Jobs view", () => {
     fireEvent.keyDown(document.body, { key: "j" });
     await waitFor(() => expect(document.activeElement).toBe(rowOf("lr_layers_grid")));
     fireEvent.keyDown(document.activeElement!, { key: "x" });
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([GRID.verstr]));
+    await waitFor(() => expect(selection()).toEqual([GRID.verstr]));
   });
 
   it("shows skeleton rows while the first page loads", async () => {

@@ -31,7 +31,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../api";
-import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { page, renderBoard, row, selection, urlParams } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
@@ -107,12 +107,12 @@ describe("leaderboard view state lives in the URL", () => {
     expect(screen.getByRole("button", { name: "Bar" }).className).toContain("primary");
   });
 
-  it("keeps the selection in the URL", async () => {
+  it("seeds the app's selection from the URL's sel", async () => {
     m.experiments.mockResolvedValue(page([row(1), row(2)]));
     renderBoard("/ws/test/app/my-app?sel=0.0.1-dev.x");
     const second = (await screen.findByText("0.0.2-dev.x")).closest("tr")!;
     fireEvent.click(within(second).getByRole("checkbox"));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual(["0.0.1-dev.x", "0.0.2-dev.x"]));
+    await waitFor(() => expect(selection()).toEqual(["0.0.1-dev.x", "0.0.2-dev.x"]));
     // Plan 20 M3: Compare (N) replaced the bar's Code diff.
     expect(screen.getByRole("button", { name: "Compare (2)" })).not.toHaveAttribute("aria-disabled");
   });

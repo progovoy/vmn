@@ -263,6 +263,20 @@ Search and the query bar match every run of the app, whichever view is open:
   carries a `412 matching runs` chip that opens its Runs tab filtered.
 - ⌘K finds any run by `@N`, name or verstr prefix.
 
+**The selection** belongs to the app, not to one board, so runs from several
+jobs can be picked and compared:
+- It is kept per workspace and app in sessionStorage. It follows you across
+  Jobs, All runs, job pages and inner run pages, and is capped at 500 runs. A
+  `sel=` in a shared link replaces it on load and then leaves the URL.
+  Compare keeps its own `compare-runs?sel=`.
+- A tray at the bottom of every page of the app shows it while anything is
+  picked: `7 runs selected · from 3 jobs ▾ · Compare (7) · Archive · ✕`. A job
+  ticked in Jobs counts as one run, the job itself, never its subtree.
+- `from 3 jobs ▾` expands the picks grouped by job. Each pick links to its run
+  page and has its own remove button.
+- A status region announces each count change. `x`, `shift+x` and the
+  checkboxes pick runs. Esc clears the picks only on a board's page.
+
 Group by groups the rows of the view it is in: jobs in Jobs, runs across jobs
 in All runs, and runs inside one job on its Runs tab. A group of more than 50
 runs has no fold; its header button adds the group's clause as a filter.

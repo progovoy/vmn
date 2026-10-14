@@ -1,4 +1,10 @@
 import "@testing-library/jest-dom/vitest";
+import { afterEach } from "vitest";
+
+// The app-wide run selection lives in sessionStorage: no test inherits another's picks.
+afterEach(() => {
+  for (const k of Object.keys(sessionStorage)) if (k.startsWith("vmn-exp:selection:")) sessionStorage.removeItem(k);
+});
 
 // Newer Node ships its own `localStorage` global (unusable without
 // --localstorage-file) which shadows jsdom's: give tests a working one.

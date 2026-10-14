@@ -2,12 +2,11 @@ import { useCallback, useRef, useState } from "react";
 import { api } from "../api";
 import type { RowsFilter } from "../queries";
 import type { ExperimentRow } from "../types";
-import { useJob } from "../components/ui";
+import { SELECT_ALL_CAP, pickOf, type RunPick } from "../util/runSelection";
+import { useArchiveJob, type ArchiveVerb } from "./useArchiveJob";
+import type { PickMeta } from "./useRunSelection";
 
-/** Most runs "select all" picks — and one archive job takes. */
-export const SELECT_ALL_CAP = 500;
-
-export type ArchiveVerb = "archive" | "unarchive";
+export type { ArchiveVerb };
 /** How many of the rows on screen are selected, for the header checkbox. */
 export type HeaderCheck = "none" | "some" | "all";
 
@@ -21,8 +20,8 @@ export interface QuerySelection {
 
 interface Selection {
   selected: ReadonlySet<string>;
-  toggleSelected: (verstr: string) => void;
-  setSelected: (verstrs: readonly string[]) => void;
+  toggleSelected: (verstr: string, meta?: RunPick) => void;
+  setSelected: (verstrs: readonly string[], metaOf?: PickMeta) => void;
 }
 
 /** The leaderboard's selection actions: toggle (shift extends a range over
@@ -41,7 +40,18 @@ export function useBoardSelection(
   // are not re-rendered by it.
   const latest = useRef({ rows, sel });
   latest.current = { rows, sel };
-  const [archiveError, setArchiveError] = useState<string | null>(null);
+  // Picks carry what their rows say (their job, name, @N) for the tray.
+  const metaOf = useCallback((verstr: string) => {
+    const r = latest.current.rows.find((row) => row.verstr === verstr);
+    return r && pickOf(r);
+  }, []);
+  const setPicks = useCallback((verstrs: readonly string[]) => {
+    const byVerstr = new Map(latest.current.rows.map((r) => [r.verstr, r]));
+    latest.current.sel.setSelected(verstrs, (v) => {
+      const r = byVerstr.get(v);
+      return r && pickOf(r);
+    });
+  }, []);
 
   const toggle = useCallback((verstr: string, range: boolean) => {
     const { rows, sel } = latest.current;
@@ -49,13 +59,13 @@ export function useBoardSelection(
     const to = rows.findIndex((r) => r.verstr === verstr);
     anchor.current = verstr;
     if (!range || from < 0 || to < 0) {
-      sel.toggleSelected(verstr);
+      sel.toggleSelected(verstr, metaOf(verstr));
       return;
     }
     const [lo, hi] = from < to ? [from, to] : [to, from];
     const span = rows.slice(lo, hi + 1).map((r) => r.verstr);
-    sel.setSelected([...new Set([...sel.selected, ...span])]);
-  }, []);
+    setPicks([...new Set([...sel.selected, ...span])]);
+  }, [metaOf, setPicks]);
   /** The next shift-toggle starts a range of its own. */
   const clearAnchor = useCallback(() => { anchor.current = null; }, []);
 
@@ -68,11 +78,11 @@ export function useBoardSelection(
    *  selected elsewhere, e.g. by "select all matching", stay selected). */
   const toggleRows = (verstrs: readonly string[]) => {
     if (checkOf(verstrs) !== "all") {
-      sel.setSelected([...new Set([...sel.selected, ...verstrs])]);
+      setPicks([...new Set([...sel.selected, ...verstrs])]);
       return;
     }
     const drop = new Set(verstrs);
-    sel.setSelected([...sel.selected].filter((v) => !drop.has(v)));
+    setPicks([...sel.selected].filter((v) => !drop.has(v)));
   };
   const shown = rows.map((r) => r.verstr);
   const headerCheck = checkOf(shown);
@@ -92,32 +102,25 @@ export function useBoardSelection(
    *  server without the columns endpoint. By query: the query's *total*. */
   const selectAll = async (total = 0) => {
     if (byQuery) {
-      const loaded = rows.map((r) => r.verstr);
-      sel.setSelected(loaded);
+      const loaded = rows.slice(0, SELECT_ALL_CAP).map((r) => r.verstr);
+      setPicks(loaded);
       setByQueryAll({ count: total, key: `${JSON.stringify(byQuery)}|${loaded.join(",")}` });
       return;
     }
     try {
       const cols = await api.experimentsColumns(ws, app, [], { ...filter, limit: SELECT_ALL_CAP });
-      sel.setSelected(cols.verstrs);
+      setPicks(cols.verstrs);
     } catch {
-      sel.setSelected(rows.slice(0, SELECT_ALL_CAP).map((r) => r.verstr));
+      setPicks(rows.map((r) => r.verstr)); // the store caps it
     }
   };
 
-  const job = useJob((j) => {
-    if (j.status === "succeeded") {
-      sel.setSelected([]);
-      onArchived();
-    } else {
-      setArchiveError(`${j.command.join(" ") || "archive"} failed`);
-    }
+  const job = useArchiveJob(ws, app, () => {
+    setPicks([]);
+    onArchived();
   });
-  const archive = (verb: ArchiveVerb) => {
-    setArchiveError(null);
-    const body = matching !== null ? queryBody() : { verstrs: [...sel.selected].slice(0, SELECT_ALL_CAP) };
-    job.run(ws, app, `exp_${verb}`, body);
-  };
+  // The store caps the selection, so it fits one archive job.
+  const archive = (verb: ArchiveVerb) => job.run(verb, matching !== null ? queryBody() : { verstrs: [...sel.selected] });
   /** How many runs archiving the selection by query acts on (null: not by query). */
   const preview = matching === null ? undefined
     : (verb: ArchiveVerb) => api.actionPreview(ws, app, `exp_${verb}`, queryBody()).then((p) => p.count);
@@ -125,7 +128,7 @@ export function useBoardSelection(
   return {
     toggle, clearAnchor, headerCheck, toggleAll, checkOf, toggleRows, selectAll, archive,
     matching, preview, uncapped: Boolean(byQuery),
-    archiving: job.job?.status === "running",
-    archiveError: archiveError ?? job.error,
+    archiving: job.archiving,
+    archiveError: job.archiveError,
   };
 }

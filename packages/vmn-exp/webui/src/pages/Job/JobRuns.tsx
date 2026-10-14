@@ -13,7 +13,7 @@ import { Link } from "react-router-dom";
 import { plural } from "../../util";
 import { allRunsHref, hasSearch } from "../../util/searchScope";
 import { BIG_GROUP } from "../../util/groupClause";
-import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
+import SelectionTray from "../SelectionTray";
 import LeaderboardToolbar from "../LeaderboardToolbar";
 import RunsBoardGrid from "../RunsBoardGrid";
 
@@ -69,20 +69,12 @@ export default function JobRuns({ ws, app, verstr, paused, onPaused, onLive }: {
         />
         <RunsBoardGrid board={board} view={view} paused={paused} onPaused={onPaused} />
       </div>
-      <LeaderboardSelectionBar
-        selected={[...view.selected]}
-        total={data.total}
-        base={board.base}
-        showUnarchive={view.archived}
-        archiving={selection.archiving}
-        archiveError={selection.archiveError}
-        onClear={() => view.setSelected([])}
-        onSelectAll={() => selection.selectAll(data.total)}
-        onArchive={selection.archive}
-        matching={selection.matching}
-        onPreview={selection.preview}
-        uncapped={selection.uncapped}
-      />
+      <SelectionTray ws={ws} app={app} board={{
+        total: data.total, showUnarchive: view.archived,
+        archiving: selection.archiving, archiveError: selection.archiveError,
+        onSelectAll: () => selection.selectAll(data.total), onArchive: selection.archive,
+        matching: selection.matching, onPreview: selection.preview, uncapped: selection.uncapped,
+      }} />
     </div>
   );
 }

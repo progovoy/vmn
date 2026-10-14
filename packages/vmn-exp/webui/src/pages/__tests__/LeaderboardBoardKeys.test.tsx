@@ -31,13 +31,13 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../api";
-import { location, page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { location, page, renderBoard, row, selection } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
 const rowOf = (i: number) => screen.getByRole("link", { name: v(i) }).closest("tr")!;
 const press = (key: string, extra: KeyboardEventInit = {}) => fireEvent.keyDown(document.activeElement ?? document.body, { key, ...extra });
-const selected = () => urlParams().getAll("sel");
+const selected = () => selection();
 
 beforeEach(() => {
   vi.clearAllMocks();

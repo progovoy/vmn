@@ -1,14 +1,15 @@
 import { type ReactNode, type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { SELECT_ALL_CAP, type ArchiveVerb } from "../hooks/useBoardSelection";
+import type { ArchiveVerb } from "../hooks/useArchiveJob";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useOffsetHeight } from "../hooks/useOffsetHeight";
-import { fmtCount } from "../util";
+import { fmtCount, plural } from "../util";
+import { SELECT_ALL_CAP, summarizePicks, type RunPick } from "../util/runSelection";
 import { compareSearch } from "./Compare/selection";
+import SelectionPicks from "./SelectionPicks";
 import "./selectionBar.css";
 
-const plural = (n: number) => `${fmtCount(n)} run${n === 1 ? "" : "s"}`;
 /** Room under the last rows beyond the bar itself: its 24px bottom offset and a 12px gap. */
 const BAR_ROOM_PX = 36;
 
@@ -51,13 +52,15 @@ function BarAction({ label, reason, primary, onClick }: {
 }
 
 /** The bar floating at the bottom centre while runs are selected (Monday.com
- *  style): the count, what can be done with the runs — one Compare (N) to the
+ *  style), the app-wide tray: the count and its jobs (expandable to the
+ *  picks by job, each removable), what can be done with the runs — one Compare (N) to the
  *  Compare page, archive/unarchive (after a confirm), select every match — and a
  *  ✕ that clears the selection, as Escape does. Its actions and slots are
  *  the same at every count, so it never changes size as runs are picked. */
 export default function LeaderboardSelectionBar({
   selected, total, base, showUnarchive, archiving, archiveError,
   onClear, onSelectAll, onArchive, matching = null, onPreview, uncapped = false,
+  picks, onRemove, escClears = true,
 }: {
   selected: string[];
   total: number;
@@ -74,18 +77,27 @@ export default function LeaderboardSelectionBar({
   onPreview?: (verb: ArchiveVerb) => Promise<number>;
   /** "Select all" selects the query itself: no cap. */
   uncapped?: boolean;
+  /** The tray's picks (their jobs): with *onRemove*, the bar expands to list them. */
+  picks?: readonly RunPick[];
+  onRemove?: (verstr: string) => void;
+  /** Escape clears the selection (a board's page; not a page without a board). */
+  escClears?: boolean;
 }) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState<{ verb: ArchiveVerb; count: number } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
   const n = selected.length;
+  const jobs = picks ? summarizePicks(picks).jobs : 0;
+  const fromJobs = jobs ? ` from ${plural(jobs, "job")}` : "";
   const barRef = useRef<HTMLDivElement>(null);
   const allRef = useRef<HTMLButtonElement>(null);
   const barHeight = useOffsetHeight(barRef, n > 0);
   const selectable = uncapped ? total : Math.min(total, SELECT_ALL_CAP);
   const canSelectAll = matching === null && n < selectable;
   useKeepFocusInBar(barRef, allRef, canSelectAll);
-  useEscapeKey(n > 0, onClear);
+  useEscapeKey(n > 0 && escClears, onClear);
   if (n === 0) return null;
 
   const go = (path: string) => navigate(`${base}/${path}`);
@@ -112,6 +124,9 @@ export default function LeaderboardSelectionBar({
       />
       <div className="sel-dock">
         <div className="sel-toast" role="alert">{previewError ?? archiveError}</div>
+        {expanded && picks && onRemove && (
+          <SelectionPicks id={listId} picks={picks} base={base} onRemove={onRemove} />
+        )}
         <div ref={barRef} className="sel-bar" role="region" aria-label="Selection">
           {matching === null && <span key={n} className="sel-badge" aria-hidden>{n}</span>}
           <span className="sel-label">
@@ -121,6 +136,15 @@ export default function LeaderboardSelectionBar({
               </span>
             ) : (
               <span className="sel-label-text" aria-hidden>{`${fmtCount(matching)} matching selected`}</span>
+            )}
+            {picks && onRemove && (
+              <button
+                className="link sel-expand" aria-expanded={expanded} aria-controls={expanded ? listId : undefined}
+                title={expanded ? "Hide the selected runs" : "List the selected runs by job"}
+                onClick={() => setExpanded((e) => !e)}
+              >
+                {jobs ? fromJobs.trim() : "list runs"} {expanded ? "▴" : "▾"}
+              </button>
             )}
             <span
               className="sel-all" aria-hidden={canSelectAll ? undefined : true}
@@ -134,7 +158,7 @@ export default function LeaderboardSelectionBar({
               </button>
             </span>
           </span>
-          <span className="sr-only" role="status">{matching === null ? n : fmtCount(matching)} selected</span>
+          <span className="sr-only" role="status">{matching === null ? n : fmtCount(matching)} selected{fromJobs}</span>
           <span className="sel-actions">
             <BarAction
               label={<>Compare <span className="sel-count">({n})</span></>}
@@ -153,7 +177,7 @@ export default function LeaderboardSelectionBar({
       </div>
       {confirming && (
         <ConfirmDialog
-          message={`${verb(confirming.verb)} ${plural(confirming.count)}?`}
+          message={`${verb(confirming.verb)} ${plural(confirming.count, "run")}?`}
           onCancel={() => setConfirming(null)}
           onConfirm={() => { onArchive(confirming.verb); setConfirming(null); }}
         />

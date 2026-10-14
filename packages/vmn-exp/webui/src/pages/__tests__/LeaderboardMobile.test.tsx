@@ -21,7 +21,7 @@ import { api } from "../../api";
 import { NARROW_QUERY } from "../../hooks/useMediaQuery";
 import { fmtVal } from "../../util";
 import { dropFakeMedia, fakeMedia } from "../../hooks/__tests__/fakeMedia";
-import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { page, renderBoard, row, selection } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
@@ -112,11 +112,11 @@ describe("the leaderboard below 640px", () => {
   it("still selects runs, one at a time and all on screen", async () => {
     await cards();
     fireEvent.click(within(card("baseline")).getByRole("checkbox", { name: `Select ${v(1)}` }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([v(1)]));
+    await waitFor(() => expect(selection()).toEqual([v(1)]));
     expect(card("baseline")).toHaveClass("checked");
     expect(await screen.findByRole("region", { name: "Selection" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible runs" }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toHaveLength(4));
+    await waitFor(() => expect(selection()).toHaveLength(4));
   });
 
   it("opens the run from anywhere on the card", async () => {

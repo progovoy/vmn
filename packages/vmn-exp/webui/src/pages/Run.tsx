@@ -6,6 +6,7 @@ import { cachedRows, findCachedRow, rowsPrefix, runQuery, useMetricsSchema } fro
 import type { ExperimentDetail, ExperimentRow } from "../types";
 import { runHref } from "../util";
 import { isParamOnly } from "../util/paramKeys";
+import { isJobRow } from "../util/runSelection";
 import { Skeleton } from "../components/ui";
 import NotFound from "../components/shell/NotFound";
 import { isMissingRun } from "../shell/notFoundCopy";
@@ -25,6 +26,7 @@ import { fleetIdxOf } from "../components/fleetRows";
 import { FleetCard, MetricsCard } from "./RunSections";
 import RunCards from "./RunCards";
 import RunHead from "./RunHead";
+import SelectionTray from "./SelectionTray";
 import RunLayout, { RunChangesSection, RunCurves, RunDetailSections, RunOutputs, RunRelated } from "./RunLayout";
 import { ForkOrigin } from "./RunFork";
 import { paramsVariedFirst } from "./runParams";
@@ -42,8 +44,7 @@ function shownMetrics(metrics: ExperimentDetail["metrics"], detail: ExperimentDe
 }
 
 /** Whether a board's cached row is a job: its summary needn't wait for the detail. */
-const listedAsJob = (row: ExperimentRow | undefined) =>
-  !!row && (row.kind === "outer" || !!row.job || !!row.children?.length);
+const listedAsJob = (row: ExperimentRow | undefined) => !!row && isJobRow(row);
 
 /** A run with children opens the job page (plan 23 W2) once its summary
  *  lands; a single or inner run, or a server without the summary endpoint
@@ -60,7 +61,7 @@ export default function Run() {
   if (detail && isJob && (summary.data || summary.isPending)) {
     return <JobPage ws={ws} app={app} detail={detail} summary={summary} refetchDetail={() => query.refetch()} />;
   }
-  return <SingleRun />;
+  return <><SingleRun /><SelectionTray ws={ws} app={app} /></>;
 }
 
 function SingleRun() {

@@ -27,7 +27,7 @@ import { NONE_GROUP, type RunGroup } from "../../apiGroups";
 import { NARROW_QUERY } from "../../hooks/useMediaQuery";
 import { dropFakeMedia, fakeMedia } from "../../hooks/__tests__/fakeMedia";
 import groupCss from "../leaderboardCardGroup.css?raw";
-import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
+import { page, renderBoard, row, selection, urlParams } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
@@ -126,12 +126,12 @@ describe("a grouped board below 640px", () => {
     const box = within(head("sweep")).getByRole("checkbox", { name: "Select group sweep" }) as HTMLInputElement;
     expect(box.checked).toBe(false);
     fireEvent.click(box);
-    await waitFor(() => expect(urlParams().getAll("sel").sort()).toEqual([v(2), v(3)]));
+    await waitFor(() => expect(selection().sort()).toEqual([v(2), v(3)]));
     expect(box.checked).toBe(true);
     // Not the header's target run.
-    expect(urlParams().getAll("sel")).not.toContain(v(1));
+    expect(selection()).not.toContain(v(1));
     fireEvent.click(box);
-    await waitFor(() => expect(urlParams().getAll("sel")).toEqual([]));
+    await waitFor(() => expect(selection()).toEqual([]));
   });
 
   it("shows the section checkbox indeterminate when only some of its cards are selected", async () => {
@@ -215,7 +215,7 @@ describe("a grouped board below 640px", () => {
   it("still selects every card on screen", async () => {
     await shown();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible runs" }));
-    await waitFor(() => expect(urlParams().getAll("sel")).toHaveLength(3));
+    await waitFor(() => expect(selection()).toHaveLength(3));
   });
 });
 
