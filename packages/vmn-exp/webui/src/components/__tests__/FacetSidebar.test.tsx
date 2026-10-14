@@ -51,10 +51,48 @@ describe("FacetSidebar", () => {
     expect(onAdd).toHaveBeenCalledWith(["params.seed >= 0", "params.seed < 3.25"]);
   });
 
+  it("never groups a param with more values than it lists (a costly grouping on a big job)", async () => {
+    renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
+    await screen.findByRole("group", { name: "params.seed histogram" });
+    const grouped = m.experimentGroups.mock.calls.map((c) => (c[2] as GroupOpts).group);
+    expect(grouped).not.toContain("params.seed");
+  });
+
+  it("counts a many-valued param's text values from its column", async () => {
+    m.experimentsColumns.mockResolvedValue({
+      verstrs: [], idx: [], total: 40,
+      columns: { "params.seed": Array.from({ length: 40 }, (_, i) => (i < 30 ? "adam" : `opt${i}`)) },
+    });
+    renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
+    const list = await screen.findByRole("list", { name: "params.seed values" });
+    expect(within(list).getAllByRole("button")[0]).toHaveAccessibleName('params.seed = "adam" (30 runs)');
+  });
+
   it("leaves out a param with one value", async () => {
     renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
     await screen.findByRole("group", { name: "params.seed histogram" });
     expect(screen.queryByText("params.same")).toBeNull();
+  });
+
+  it("counts a many-valued param's distinct values when they aren't numbers to bin", async () => {
+    m.experimentsColumns.mockResolvedValue({
+      verstrs: [], idx: [], total: 40, columns: { "params.seed": Array.from({ length: 40 }, (_, i) => String(i)) },
+    });
+    renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
+    const facet = await screen.findByRole("region", { name: "params.seed" });
+    await waitFor(() => expect(facet).toHaveTextContent("40 distinct values"));
+    expect(facet.querySelector(".facet-loading")).toBeNull();
+  });
+
+  it("says so instead of a placeholder when a param's counts fail", async () => {
+    m.experimentGroups.mockImplementation((_w: string, _a: string, o: GroupOpts) => (o.group === "status"
+      ? Promise.resolve({ groups: [group("succeeded", 40)], total_groups: 1, total_rows: 40, aggregate: "mean", running: 0 })
+      : Promise.reject(new Error("boom"))));
+    m.experimentsColumns.mockRejectedValue(new Error("boom"));
+    renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
+    const facet = await screen.findByRole("region", { name: "params.seed" });
+    await waitFor(() => expect(facet).toHaveTextContent("Couldn't count its values"), { timeout: 4000 });
+    expect(facet.querySelector(".facet-loading")).toBeNull();
   });
 
   it("is a drawer behind a Filters button on a phone", async () => {

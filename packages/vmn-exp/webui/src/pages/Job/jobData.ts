@@ -74,7 +74,7 @@ export interface KpiTile {
 
 export function jobKpis(s: JobSummary): KpiTile[] {
   const tiles: KpiTile[] = [
-    { label: "done", value: `${fmtCount(s.done)} / ${fmtCount(s.expected)}`, tone: "done" },
+    { label: "done", value: fmtCount(s.done), sub: `of ${fmtCount(s.expected)}`, tone: "done" },
     {
       label: "failed", value: `${fmtVal(s.failed_pct)}%`, tone: "failed",
       sub: plural(s.counts.failed, "run"),
@@ -89,19 +89,6 @@ export function jobKpis(s: JobSummary): KpiTile[] {
   const m = metric ? s.metrics[metric] : null;
   if (metric && m) tiles.push({ label: `best ${metric}`, value: fmtVal(m.best), href: m.best_verstr });
   return tiles;
-}
-
-/** `41/min`, null while nothing completes. */
-export function throughputText(perMin: number): string | null {
-  if (!perMin) return null;
-  return `${perMin >= 10 ? Math.round(perMin) : round2(perMin)}/min`;
-}
-
-/** `ETA 14m`; a job with runs left and no recent completion is stalled;
- *  null once nothing is left. */
-export function etaText(etaSec: number | null, left: number): string | null {
-  if (left <= 0) return null;
-  return etaSec == null ? "no ETA (stalled)" : `ETA ${fmtDuration(etaSec)}`;
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;

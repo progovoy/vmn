@@ -1,6 +1,6 @@
 /** A job's progress line and run bar (plan 23 W1, §3.1). */
 import { describe, it, expect } from "vitest";
-import { fmtThroughput, jobBarSegments, jobEtaCell, jobProgressText, jobRateCell, jobSpoken } from "../jobProgress";
+import { fmtThroughput, jobBarSegments, jobEtaCell, jobProgressParts, jobProgressText, jobRateCell, jobSpoken } from "../jobProgress";
 import { NO_COUNTS, job } from "./jobFixture";
 
 describe("jobProgressText", () => {
@@ -14,7 +14,6 @@ describe("jobProgressText", () => {
       counts: { ...NO_COUNTS, succeeded: 5 },
     });
     expect(jobProgressText(done)).toBe("5/5");
-    expect(jobProgressText(job({ eta_sec: null }))).toBe("1,412/2,000 · 3 failed · 41/min");
   });
 
   it("names stuck runs next to failed ones", () => {
@@ -24,6 +23,38 @@ describe("jobProgressText", () => {
 
   it("has a sentence for a screen reader", () => {
     expect(jobSpoken(job())).toBe("1,412 of 2,000 runs done, 3 failed, 41/min, about 14m left");
+  });
+});
+
+const ago = (sec: number) => new Date(Date.now() - sec * 1000).toISOString();
+
+describe("the job's time words", () => {
+  it("calls a job stalled while runs run and nothing completes", () => {
+    expect(jobProgressText(job({ eta_sec: null, throughput_per_min: 0 }))).toBe("1,412/2,000 · 3 failed · stalled");
+  });
+
+  it("says when a job that stopped short ended and how many runs never started", () => {
+    const ended = job({
+      total: 3820, done: 3611, expected: 4000, throughput_per_min: 0, eta_sec: null, finished_at: ago(21 * 86400 + 5),
+      counts: { running: 0, waiting: 0, succeeded: 3252, failed: 359, stuck: 209 },
+    });
+    expect(jobProgressText(ended)).toBe("3,611/4,000 · 359 failed · 209 stuck · ended 21d ago · 180 never started");
+  });
+
+  it("says when a complete job finished", () => {
+    const done = job({
+      done: 5, expected: 5, total: 5, throughput_per_min: 0, eta_sec: null, finished_at: ago(2 * 3600 + 5),
+      counts: { ...NO_COUNTS, succeeded: 5 },
+    });
+    expect(jobProgressText(done)).toBe("5/5 · finished 2h ago");
+  });
+
+  it("tones the failed and stuck parts for the job header", () => {
+    const parts = jobProgressParts(job({ counts: { ...NO_COUNTS, succeeded: 1407, failed: 3, stuck: 2, running: 3 } }));
+    expect(parts).toEqual([
+      { text: "1,412/2,000" }, { text: "3 failed", tone: "failed" }, { text: "2 stuck", tone: "stuck" },
+      { text: "41/min" }, { text: "ETA 14m" },
+    ]);
   });
 });
 

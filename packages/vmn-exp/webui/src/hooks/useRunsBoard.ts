@@ -7,6 +7,8 @@ import { useCallback, useMemo, useState } from "react";
 import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
 import type { ExperimentRow } from "../types";
 import { boardRows } from "../util/groupItems";
+import { NO_GROUP } from "../util/groupBy";
+import { runContextSearch } from "../util/runContext";
 import { boardSort } from "../util/groupCountSort";
 import { queryHelpData } from "../util/queryHelp";
 import { branchClause, combineQueries, searchClause } from "../util/searchQuery";
@@ -80,6 +82,14 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
     rows, schema, view.hidden, base, facets, view.colOrder, view.pinned, colPrefs, tableWidth, view.shown,
   );
   const columnEdits = useColumnEdits(view, cols, colPrefs);
+  // A flat job board's run links carry its order and their place in it (W7).
+  const flatJob = scope && groupBy.group === NO_GROUP;
+  const layout = useMemo(() => (flatJob ? {
+    ...cols.layout,
+    runSearch: (i: number) => runContextSearch({
+      scope, q: filter.query, status: filter.status, sort: filter.sort, order: filter.order,
+    }, i),
+  } : cols.layout), [flatJob, cols.layout, scope, filter]);
   const queryHelp = useMemo(() => queryHelpData({
     facets: cols.suggestFacets, branches: facets?.branches ?? [], rows: all, schema,
     primary: sort ?? cols.primary ?? cols.visibleMetrics[0],
@@ -106,7 +116,7 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
 
   return {
     schema, facets, sort, filter, serverQuery, data, grouping, rows, all, refresh, anyRunning,
-    base, colPrefs, setTableWidth, cols, columnEdits, queryHelp, filtered,
+    base, colPrefs, setTableWidth, cols, layout, columnEdits, queryHelp, filtered,
     tableItems, tableRows, selection, groupActions, chartGrouping, onPrefetch, sortState,
     sortLabel: sort ?? cols.primary,
   };

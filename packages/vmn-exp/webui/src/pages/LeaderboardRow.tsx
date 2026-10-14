@@ -44,6 +44,9 @@ export interface RowLayout {
   /** Highlight column bests only when there is something to beat. */
   showBest: boolean;
   runBase: string;
+  /** A flat board's query for its run links at *index* (a job's Runs tab
+   *  carries its order to the run page, plan 23 W7). */
+  runSearch?: (index: number) => string;
   /** Comfortable when omitted. */
   density?: Density;
 }
@@ -186,7 +189,7 @@ function Row({
   const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
   const onLeave = () => clearTimeout(hover.current);
   const { styles, colMeta } = layout;
-  const href = runHref(layout.runBase, r.verstr);
+  const href = runHref(layout.runBase, r.verstr) + (member ? "" : layout.runSearch?.(index) ?? "");
   const ids = layoutIds(layout);
   const params = layout.paramCols.length ? rowParams(r) : {};
   // Links and the checkbox handle their own clicks (cmd/middle-click on the

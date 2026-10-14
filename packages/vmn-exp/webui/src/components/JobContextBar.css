@@ -1,0 +1,10 @@
+/* An inner run's job context bar (plan 23 W7): one line under the header. */
+.job-context {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 12px;
+  font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums;
+}
+.job-context-peers { display: block; flex: none; }
+.job-context-bin { fill: var(--accent); fill-opacity: 0.45; }
+.job-context-mark { stroke: var(--text); stroke-width: 2px; }
+.job-context-nav { display: inline-flex; gap: 10px; margin-left: auto; }
+@media (max-width: 639px) { .job-context-nav { margin-left: 0; } }

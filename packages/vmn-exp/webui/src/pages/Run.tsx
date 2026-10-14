@@ -20,6 +20,7 @@ import { runSpec } from "../reports/viewSpecs";
 import TagEditor from "../components/TagEditor";
 import { OUTPUT_LOG } from "../components/RunOutput";
 import RunErrorCard from "../components/RunErrorCard";
+import JobContextBar from "../components/JobContextBar";
 import SweepSection, { sweepSpecOf } from "../components/SweepSection";
 import { fleetIdxOf } from "../components/fleetRows";
 import { FleetCard, MetricsCard } from "./RunSections";
@@ -112,6 +113,9 @@ function SingleRun() {
               />
             </RunHeaderActions>
           )} />
+      )}
+      context={st?.parent && (
+        <JobContextBar ws={ws} app={app} verstr={summary.verstr} idx={summary.idx ?? null} job={st.parent} metrics={summary.metrics} />
       )}
       notes={(
         <>

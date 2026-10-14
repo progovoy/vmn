@@ -8,7 +8,7 @@ import { api, type FacetOpts } from "../api";
 import { useFacets } from "../queries";
 import type { GroupField } from "../apiGroups";
 import { MAX_PARAM_VALUES } from "../util/groupBy";
-import { numericKeys } from "../util/facetBins";
+import { columnCounts, numericKeys } from "../util/facetBins";
 
 export interface ValueCount {
   key: string;
@@ -34,12 +34,30 @@ const groupCounts = (ws: string, app: string, group: GroupField, opts: FacetOpts
 
 /** The params worth a facet: the ones whose value varies across the runs
  *  the filters leave (the app's order). */
-export function useFacetParams(ws: string, app: string, opts: FacetOpts): string[] {
+export function useFacetParams(ws: string, app: string, opts: FacetOpts): FacetParam[] {
   const facets = useFacets(ws, app, clean(opts));
   return useMemo(() => {
     const counts = facets?.param_values ?? {};
-    return (facets?.param_keys ?? []).filter((k) => (counts[k] ?? 0) > 1);
+    return (facets?.param_keys ?? []).filter((k) => (counts[k] ?? 0) > 1)
+      .map((key) => ({ key, many: counts[key] > MAX_PARAM_VALUES }));
   }, [facets]);
+}
+
+export interface FacetParam {
+  key: string;
+  /** More distinct values than a facet lists (the facets cap the count past 20). */
+  many: boolean;
+}
+
+/** A many-valued param's counts from its column, never its grouping: on a
+ *  big job, grouping by a value almost every run has its own builds a group
+ *  (with its aggregates) per run, and every facet queued behind it waits. */
+async function fromColumn(ws: string, app: string, field: string, f: FacetOpts): Promise<ParamCounts> {
+  const cols = await api.experimentsColumns(ws, app, [field], f);
+  const column = cols.columns[field] ?? [];
+  const { values, distinct } = columnCounts(column, MAX_PARAM_VALUES);
+  if (numericKeys(values.map((v) => v.key))) return { values: [], more: distinct, numbers: column };
+  return { values, more: distinct - values.length, numbers: null };
 }
 
 /** Runs per status under the other filters (not the status filter itself). */
@@ -55,12 +73,13 @@ export function useStatusCounts(ws: string, app: string, opts: FacetOpts) {
 
 /** *param*'s most common values (all of them up to 20), and with more
  *  numeric values than that, every value for a histogram. */
-export function useParamCounts(ws: string, app: string, param: string, opts: FacetOpts) {
+export function useParamCounts(ws: string, app: string, { key: param, many }: FacetParam, opts: FacetOpts) {
   const f = clean(opts);
   const field = `params.${param}` as const;
   return useQuery({
     queryKey: ["facets", ws, app, "param", param, f],
     queryFn: async (): Promise<ParamCounts> => {
+      if (many) return fromColumn(ws, app, field, f);
       const page = await groupCounts(ws, app, field, f, MAX_PARAM_VALUES);
       const values = page.groups.map((g) => ({ key: g.key, count: g.rows_total }));
       const more = Math.max(0, page.total_groups - values.length);

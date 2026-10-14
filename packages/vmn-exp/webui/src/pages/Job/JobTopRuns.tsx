@@ -5,10 +5,20 @@ import type { JobTopRun } from "../../apiJob";
 import StatusPill from "../../components/StatusPill";
 import { fmtVal, runHref } from "../../util";
 
-export default function JobTopRuns({ top, metric, appBase, allHref }: {
-  top: JobTopRun[]; metric: string | null; appBase: string; allHref: string;
+/** Why there is no top: no metric at all, no goal to rank on, or no value yet. */
+function emptyText(metric: string | null, ranked: boolean): string {
+  if (!metric) return "No run in this job logged a metric yet.";
+  if (!ranked) {
+    return `No goal declared for ${metric} — runs aren't ranked. Declare one with `
+      + `experiment.metrics.${metric}.goal or run.define_metric(goal=...)`;
+  }
+  return "No run has a value to rank yet.";
+}
+
+export default function JobTopRuns({ top, metric, ranked = true, appBase, allHref }: {
+  top: JobTopRun[]; metric: string | null; ranked?: boolean; appBase: string; allHref: string;
 }) {
-  if (!metric || !top.length) return <p className="muted job-empty">No run has a value to rank yet.</p>;
+  if (!metric || !ranked || !top.length) return <p className="muted job-empty">{emptyText(metric, ranked)}</p>;
   return (
     <>
       <table className="job-top" aria-label={`Top runs on ${metric}`}>

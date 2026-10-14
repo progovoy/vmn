@@ -11,29 +11,55 @@ export function fmtThroughput(perMin: number): string {
 }
 
 /** The job's completions a minute, null while nothing completes. */
-export const throughputText = (j: JobSummary) => (j.throughput_per_min > 0 ? fmtThroughput(j.throughput_per_min) : null);
+export const throughputText = (j: Pick<JobSummary, "throughput_per_min">) => (j.throughput_per_min > 0 ? fmtThroughput(j.throughput_per_min) : null);
 
 /** The time left, null when done or unknown. */
-export const etaText = (j: JobSummary) => (j.eta_sec ? humanizeSeconds(j.eta_sec) : null);
+export const etaText = (j: Pick<JobSummary, "eta_sec">) => (j.eta_sec ? humanizeSeconds(j.eta_sec) : null);
 
-function parts(j: JobSummary, done: string, eta: (left: string) => string): string[] {
-  const left = etaText(j);
-  const troubles = (["failed", "stuck"] as const)
-    .filter((t) => j.counts[t] > 0).map((t) => `${fmtCount(j.counts[t])} ${t}`);
-  return [done, ...troubles, throughputText(j), left && eta(left)].filter((p): p is string => Boolean(p));
+type Progress = Pick<JobSummary, "counts" | "done" | "expected" | "throughput_per_min" | "eta_sec">
+  & { finished_at?: string | null };
+
+export interface ProgressPart {
+  text: string;
+  tone?: "failed" | "stuck";
 }
 
-export const jobProgressText = (j: JobSummary) =>
-  parts(j, `${fmtCount(j.done)}/${fmtCount(j.expected)}`, (left) => `ETA ${left}`).join(" · ");
+/** Where the job stands in time: `ETA 14m`; `stalled` while runs run and
+ *  none completes; `ended 21d ago · 180 never started` once nothing runs
+ *  short of the expected; `finished 2h ago` when complete. */
+function timeParts(j: Progress, eta: (left: string) => string): string[] {
+  const when = j.finished_at ? ` ${relTime(j.finished_at)}` : "";
+  const left = j.expected - j.done;
+  if (left <= 0) return when ? [`finished${when}`] : [];
+  const etaLeft = etaText(j);
+  if (etaLeft) return [eta(etaLeft)];
+  if (j.counts.running > 0) return ["stalled"];
+  const never = left - j.counts.stuck;
+  return [`ended${when}`, never > 0 ? `${fmtCount(never)} never started` : ""].filter(Boolean);
+}
+
+function parts(j: Progress, done: string, eta: (left: string) => string): ProgressPart[] {
+  const troubles = (["failed", "stuck"] as const)
+    .filter((t) => j.counts[t] > 0).map((t): ProgressPart => ({ text: `${fmtCount(j.counts[t])} ${t}`, tone: t }));
+  const rate = throughputText(j);
+  return [{ text: done }, ...troubles, ...(rate ? [{ text: rate }] : []), ...timeParts(j, eta).map((text) => ({ text }))];
+}
+
+/** The progress line's parts, failed and stuck toned (the job header's). */
+export const jobProgressParts = (j: Progress) =>
+  parts(j, `${fmtCount(j.done)}/${fmtCount(j.expected)}`, (left) => `ETA ${left}`);
+
+export const jobProgressText = (j: Progress) => jobProgressParts(j).map((p) => p.text).join(" · ");
 
 /** The same, for a screen reader. */
-export const jobSpoken = (j: JobSummary) =>
-  parts(j, `${fmtCount(j.done)} of ${fmtCount(j.expected)} runs done`, (left) => `about ${left} left`).join(", ");
+export const jobSpoken = (j: Progress) =>
+  parts(j, `${fmtCount(j.done)} of ${fmtCount(j.expected)} runs done`, (left) => `about ${left} left`)
+    .map((p) => p.text).join(", ");
 
 /** Each state's share (percent) of the expected runs (of the runs so far,
  *  once more ran than expected), like a group header's bar; the rest is
  *  the empty track. Null for a job of one run or none. */
-export function jobBarSegments(j: JobSummary) {
+export function jobBarSegments(j: Pick<JobSummary, "counts" | "expected">) {
   const c = j.counts;
   const of = Math.max(j.expected, c.running + c.waiting + c.succeeded + c.failed + c.stuck);
   return barSegments({ total: of, done: c.succeeded, failed: c.failed, stuck: c.stuck, running: c.running });

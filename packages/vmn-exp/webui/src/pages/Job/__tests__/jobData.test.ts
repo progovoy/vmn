@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  etaText, failureQuery, jobKpis, mainMetric, paramShareText, quantileMarks, rerunCommand,
-  throughputText, timelineSeries,
+  failureQuery, jobKpis, mainMetric, paramShareText, quantileMarks, rerunCommand,
+  timelineSeries,
 } from "../jobData";
 import { jobSummaryFixture } from "./jobFixture";
 
@@ -44,7 +44,8 @@ describe("jobKpis", () => {
   it("names done/expected, failures, the live states, durations and the best run", () => {
     const tiles = jobKpis(jobSummaryFixture());
     const byLabel = Object.fromEntries(tiles.map((t) => [t.label, t]));
-    expect(byLabel["done"].value).toBe("1,412 / 2,000");
+    expect(byLabel["done"].value).toBe("1,412");
+    expect(byLabel["done"].sub).toBe("of 2,000");
     expect(byLabel["failed"].value).toBe("1.5%");
     expect(byLabel["failed"].sub).toBe("3 runs");
     expect(byLabel["running"].value).toBe("40");
@@ -62,17 +63,6 @@ describe("mainMetric", () => {
     expect(mainMetric(jobSummaryFixture())).toBe("val_loss");
     expect(mainMetric({ ...jobSummaryFixture(), metric: undefined, metrics: { a: null, b: jobSummaryFixture().metrics.val_loss } })).toBe("b");
     expect(mainMetric({ ...jobSummaryFixture(), metric: null, metrics: {} })).toBeNull();
-  });
-});
-
-describe("progress words", () => {
-  it("reads throughput and ETA", () => {
-    expect(throughputText(41)).toBe("41/min");
-    expect(throughputText(0.25)).toBe("0.25/min");
-    expect(throughputText(0)).toBeNull();
-    expect(etaText(840, 588)).toBe("ETA 14m");
-    expect(etaText(null, 588)).toBe("no ETA (stalled)");
-    expect(etaText(0, 0)).toBeNull();
   });
 });
 

@@ -22,12 +22,15 @@ import "./runLayout.css";
 /** The run page in the order it answers questions (plan 20 D5): what it is,
  *  how it went, what changed, then the details, collapsed. */
 export default function RunLayout(s: {
-  head: ReactNode; notes: ReactNode; failure: ReactNode; curves: ReactNode; changes: ReactNode;
+  head: ReactNode;
+  /** An inner run's job context bar (plan 23 W7), under the header. */
+  context?: ReactNode;
+  notes: ReactNode; failure: ReactNode; curves: ReactNode; changes: ReactNode;
   fleet: ReactNode; cards: ReactNode; related: ReactNode; outputs: ReactNode; details: ReactNode;
 }) {
   return (
     <>
-      {s.head}{s.notes}{s.failure}{s.curves}{s.changes}{s.fleet}
+      {s.head}{s.context}{s.notes}{s.failure}{s.curves}{s.changes}{s.fleet}
       {s.cards}{s.related}{s.outputs}{s.details}
     </>
   );

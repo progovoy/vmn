@@ -17,7 +17,7 @@ import { pollIntervalMs } from "../../util";
 import { RunChangesSection } from "../RunLayout";
 import JobCharts from "./JobCharts";
 import JobFailures from "./JobFailures";
-import JobHeader, { JOB_PANEL_ID, JobTabs, jobTabId } from "./JobHeader";
+import JobHeader, { JOB_PANEL_ID, JobCliCard, JobTabs, jobTabId } from "./JobHeader";
 import { failedCount } from "./jobData";
 import JobOverview from "./JobOverview";
 import JobRuns from "./JobRuns";
@@ -71,7 +71,7 @@ export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
   return (
     <div className="job-page">
       <JobHeader
-        ws={ws} app={app} summary={data}
+        summary={data}
         actions={(
           <RunHeaderActions ws={ws} app={app} verstr={v} command={detail.status?.command}>
             <AddToReport ws={ws} spec={() => runSpec(app, v)} />
@@ -81,11 +81,12 @@ export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
             />
           </RunHeaderActions>
         )}
-        tabs={<JobTabs tab={tab} onTab={setTab} />}
       />
+      <JobTabs tab={tab} onTab={setTab} />
       <div role="tabpanel" id={JOB_PANEL_ID} aria-labelledby={jobTabId(tab)} className="job-panel">
         <Panel tab={tab} ws={ws} app={app} detail={detail} summary={data} live={{ paused, onPaused: setPaused, refresh }} />
       </div>
+      <JobCliCard ws={ws} app={app} verstr={v} />
     </div>
   );
 }
