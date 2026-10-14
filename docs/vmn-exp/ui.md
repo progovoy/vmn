@@ -239,6 +239,58 @@ runs that match, so the rows behind a link are as many as it counts. App tiles c
 (archived runs left out). See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
+## Jobs and the job page
+
+A **job** is a run other runs point at with `parent` (a sweep, a k-fold
+grid, an eval fan-out, a fleet of pods), and it is the unit of the
+experiments screen: one job can have thousands of runs.
+
+**The experiments page** opens on **Jobs** (`view=jobs`). Its switch next to
+the app name has `Jobs (N)`, `Single runs (N)` and `All runs`. The last view
+is remembered per app, and `view=`/`kind=` in the URL win.
+- **Jobs** has one row per top-level job. Each row shows:
+  - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished job reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`.
+  - the best run on the main metric, linked (`—` when no goal is declared), and a sparkline of the metric's spread.
+  - runs, failed %, rate, ETA, branch and start.
+
+  Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`).
+- **Single runs** lists the top-level runs without children.
+- **All runs** is the flat board with Group by ([below](#grouped-board)).
+
+Search and the query bar match every run of the app, whichever view is open:
+- In Jobs, the list narrows to the jobs that match or have matching runs. A
+  line reads `2 jobs · 413 runs match · show all 413 runs`, and each job
+  carries a `412 matching runs` chip that opens its Runs tab filtered.
+- ⌘K finds any run by `@N`, name or verstr prefix.
+
+Group by groups the rows of the view it is in: jobs in Jobs, runs across jobs
+in All runs, and runs inside one job on its Runs tab. A group of more than 50
+runs has no fold; its header button adds the group's clause as a filter.
+
+**The job page** is what a run with children opens on (`?tab=`).
+- **The header** has the name, `@N`, the tree status, the actions and the live
+  indicator, then the full-width run bar and its counts.
+- **The tabs** (each a URL value of `tab=`):
+  - `overview` (the default): KPI tiles (done of expected, failed, running, waiting, stuck, median and p90 duration, best), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
+  - `runs`: the board scoped to the job's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching". That selection archives every matching run, with a count confirm first.
+  - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
+  - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
+  - `code` and `log`.
+
+  Every number comes from a per-job rollup the index keeps up to date.
+
+Without a declared goal, a job tracks the app's most common metrics, never a
+param folded into metrics. It shows their spread but crowns no best
+(`ranked: false`).
+
+**An inner run's page** carries a job context bar: `Job <name> › run 1,903 of
+2,000 · rank 1 of 1,409 on val_loss · ‹ prev  next ›`. It also shows the run's
+value marked on the job's distribution. Prev and next follow the Runs tab's
+order (`from=`/`at=` in the URL), and `[` / `]` step between runs.
+
+Live pages update from the server's change stream (SSE, `.../events`) and
+poll only as a fallback.
+
 ## The run page
 
 A run's page reads top to bottom in the order of the questions it answers:
@@ -256,16 +308,8 @@ last 10 entries), **Environment** (Python, platform, packages, inputs),
 are any). Each section's heading is a button (`aria-expanded`); the open or
 closed choice is remembered per browser (localStorage `vmn-exp:disclosures`).
 
-An outer run's page lists its children once, in the Fleet card (Status
-details has no `children` row): status counts, a bar, and a table of `@N name`,
-status, the params that vary among the children (at most six), the goal metric
-(the conf's primary metric, else the first child metric with a declared or
-name-inferred goal; best marked) and progress (`step / of`), a column shown
-only when some child's progress is known. Every header sorts (a button, so
-Enter/Space work too, with `aria-sort`); a metric starts toward its goal,
-missing values sort last. A sweep's trials are that table inside the Sweep
-card instead (with the trial number and the sweep metric), followed by a
-parallel-coordinates chart of the metric and the varying params.
+A run with children opens the [job page](#jobs-and-the-job-page) instead;
+its runs are the Runs tab, not a card.
 
 ## Leaderboard columns
 
@@ -403,6 +447,11 @@ G8), with no redirect: everything vmn links to is `compare-runs?tab=…`.
   each header gives the keyboard equivalents: Sort, Hide column, Pin/Unpin
   column (metrics and params), Move left/right (a pinned column moves among
   the pinned ones; `#`, status and experiment stay put).
+- **Boards**: `j`/`k` (or ↑↓ in the table) move the active row, `x` toggles
+  its selection, `shift+x` selects a range, Enter/`o` opens it, `/` focuses
+  the filter, Esc leaves the row, `?` lists the keys. `density=compact|comfortable`
+  (the toggle under the table, remembered per browser) sets the row height.
+- **Run pages**: `[` / `]` go to the previous / next run of the job.
 - **Narrow windows** (below 900 px): the sidebar becomes a drawer opened from
   the topbar's menu button; it focuses the first nav link, and Esc, a click
   outside or a navigation closes it and returns focus to the button.
@@ -460,6 +509,45 @@ answer a ref they cannot resolve with `{"detail": "<message>", "code": "<code>"}
 404, `ambiguous_ref` (a prefix matching several runs) a 409, `invalid_ref`
 (a malformed ref such as `@x`) a 400. Clients branch on `code`, never on the
 message.
+
+### Jobs, scope and search
+
+- **Rows** carry `root` (the top-level ancestor's verstr, null at the top) and
+  `failure_sig`. Both are query fields, as is `under("<verstr>")` (in that
+  run's subtree).
+- **`experiments?top=1|jobs|singles`** lists top-level runs only (all, those
+  with children, those without). A job row carries `job`: `{total, counts,
+  done, expected, progress, failed_pct, throughput_per_min, eta_sec, metric,
+  best, best_verstr, best_idx, spread}`. It takes the `job:*` sorts.
+  - With `match_subtree=1` and a `q`, a job matches when it or any run of its
+    subtree does. Each row then gets `matched`, and the page gets
+    `jobs_matched`/`runs_matched`.
+  - `experiments-facets` returns `jobs`/`singles` counts.
+- **`scope=<verstr>`** keeps that run's subtree, without the run itself. It
+  works on `experiments` (flat and grouped), `experiments-columns`,
+  `experiments-facets` (which also takes `q`/`status`) and
+  `experiments-importance`. An unknown run is a 404.
+- **Grouped answers** give every group a `clause`, the filter text that
+  selects exactly it. With `top=`, groups add `job_counts`, `runs`, `failed`
+  and `job_aggregates` (over the jobs' best values).
+- **`experiments/{v}/summary`** is the job's rollup: counts, `expected`,
+  progress, throughput, ETA, `metric`, `ranked`, per-metric
+  `{n,min,max,mean,best,best_verstr,p10,p50,p90,hist}`, duration p50/p90,
+  failure signatures, `top` (10 best) and a `timeline` (epoch-second buckets
+  of `started`/`succeeded`/`failed`, sparse).
+- **`experiments/{v}/failures?limit=`** returns the clusters. Both job
+  endpoints 404 for a run without children, and answer 304 on an early ETag.
+- **`search?text=&limit=`** is ⌘K's run search over every run. It ranks exact
+  `@N`, then verstr prefix, then name prefix, then a substring in any indexed
+  field.
+- **`events?scope=<verstr>|top`** is a Server-Sent Events stream of
+  `change` events (`{generation, changed: {rows, jobs}}`), coalesced to one a
+  second, with a heartbeat every 25 s. It is 404 without a background
+  refresher and 503 past 256 streams.
+- **`POST actions/exp_archive|exp_unarchive|exp_tag`** also take
+  `{scope, q, status, archived}` instead of `verstrs`. `dry_run: true`
+  returns `{count, sample}`. Otherwise the action runs as a job in batches of
+  500, with `progress: {done, total}`.
 
 ### Experiment status fields
 

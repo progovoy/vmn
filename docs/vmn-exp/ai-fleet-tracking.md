@@ -1,13 +1,11 @@
 # Driving the UI's fleet counts (for AI agents)
 
-`vmn-exp ui` lists every run as a row of its board. Grouped by **parent run**
-(the default once any run has a parent; `?group=parent` in the board's URL, or
-the **Group by** menu), each **outer run** (a run that has inner runs) heads a
-group of its inner runs. The group header carries the fleet's counts, e.g.
-`16 runs · 2 running · 1 waiting · 1 failed`: the total first, then each state
-that has runs, with **done** the rest (`16 runs · all succeeded` when every run
-is done). The outer run's page shows the same counts in
-its Fleet card. This page tells an agent which call moves each count.
+`vmn-exp ui` opens an app on its **Jobs** view: one row per **job** (a run
+that has inner runs, an outer run), carrying the fleet's counts on its run
+bar, e.g. `16/20 · 1 failed · 2 stuck · 3/min · ETA 2m`. The job's page shows
+the same counts in its header and Overview tiles. The counts cover the job's
+whole subtree (nested jobs included).
+This page tells an agent which call moves each count.
 `vmn-exp skill` prints a short version of it.
 
 There is no API that sets these numbers. Each is counted from the inner runs'
