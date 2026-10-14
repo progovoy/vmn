@@ -70,8 +70,15 @@ export interface JobCell { text: string; title: string }
 
 const STALLED_TITLE = "no run finished in the last 10 minutes";
 
-/** Runs waiting, running or stuck: the job has not ended. */
-const inFlight = (j: JobSummary) => j.counts.running + j.counts.waiting + j.counts.stuck > 0;
+/** Nothing running and no run finished for this long: the job has ended,
+ *  whatever is still waiting or stuck (as the job header says). */
+const QUIET_MS = 3_600_000;
+const quiet = (j: JobSummary) =>
+  j.counts.running === 0 && Boolean(j.finished_at) && Date.now() - Date.parse(j.finished_at!) > QUIET_MS;
+
+/** Runs waiting, running or stuck, and not quiet for long: the job has not ended. */
+const inFlight = (j: JobSummary) =>
+  j.counts.running + j.counts.waiting + j.counts.stuck > 0 && !quiet(j);
 
 /** `14m` left, `stalled`, `finished 3d ago` or `ended · 180 never started`. */
 export function jobEtaCell(j: JobSummary): JobCell {
@@ -79,7 +86,7 @@ export function jobEtaCell(j: JobSummary): JobCell {
   if (inFlight(j)) {
     return left ? { text: left, title: `about ${left} left` } : { text: "stalled", title: STALLED_TITLE };
   }
-  const never = j.expected - j.total;
+  const never = j.expected - j.done - j.counts.stuck;
   if (never > 0) return { text: `ended · ${fmtCount(never)} never started`, title: "the job has ended" };
   const when = relTime(j.finished_at);
   return { text: when ? `finished ${when}` : "finished", title: j.finished_at ?? "the job has finished" };

@@ -118,6 +118,23 @@ describe("a Jobs-view row's ETA cell", () => {
   });
 });
 
+describe("the row's ETA cell and the job header agree (plan 23)", () => {
+  const OLD = () => new Date(Date.now() - 57 * 86_400_000).toISOString();
+  const quietLong = ended({ expected: 4000, total: 3820, done: 3611, finished_at: OLD(),
+    counts: { ...NO_COUNTS, succeeded: 3252, failed: 359, stuck: 209 } });
+
+  it("calls a job quiet for long, with stuck runs left, ended — in both places", () => {
+    expect(jobEtaCell(quietLong).text).toBe("ended · 180 never started");
+    expect(jobProgressText(quietLong)).toMatch(/· ended 57d ago · 180 never started$/);
+  });
+
+  it("calls a job whose runs still run without finishing stalled — in both places", () => {
+    const live = job({ eta_sec: null, throughput_per_min: 0 });
+    expect(jobEtaCell(live).text).toBe("stalled");
+    expect(jobProgressText(live)).toMatch(/· stalled$/);
+  });
+});
+
 describe("a Jobs-view row's rate cell", () => {
   it("is the throughput while runs complete", () => {
     expect(jobRateCell(job()).text).toBe("41/min");
