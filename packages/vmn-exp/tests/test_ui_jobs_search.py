@@ -106,6 +106,16 @@ def test_match_subtree_without_a_query_is_the_plain_jobs_view(board):
     assert _page(cache, snap) == plain
 
 
+@pytest.mark.parametrize("top", ["jobs", "singles"])
+def test_match_subtree_keeps_the_kind_top_names(board, top):
+    fleet, jobs, hits, deep, single, others, cache = board
+    page = cache.page(fleet.snapshot(), SCHEMA, limit=100, top=top, match_subtree=True,
+                      query=NEEDLE)
+    want = {jobs[0], jobs[1]} if top == "jobs" else {single}
+    assert {r["verstr"] for r in page["rows"]} == want
+    assert page["jobs_matched"] == len(want) and page["runs_matched"] == 5
+
+
 def test_match_subtree_needs_top(board):
     fleet, *_, cache = board
     with pytest.raises(ValueError):

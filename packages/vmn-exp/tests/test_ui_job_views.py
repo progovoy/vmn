@@ -157,3 +157,52 @@ def test_the_detail_fleet_reads_counts_and_expected_from_the_rollup():
     assert status["kind"] == "outer" and len(status["children"]) == 30
     assert status["tree_status"] == views.summary(snap, SCHEMA, jobs[0])["tree_status"]
     assert views.detail_status(snap, SCHEMA, fleet.specs[1]["verstr"]) is None
+
+
+def test_without_a_goal_the_summary_tracks_the_most_common_metrics_unranked():
+    fleet = Fleet(38)
+    jobs = fleet.seed_jobs(1, 40, T0)
+    for i in range(1, 41):
+        fleet.edit(i, values={"loss": i / 10, **({"acc": 0.5} if i % 4 else {})})
+    views, snap = JobViews(LeaderboardCache()), fleet.snapshot()
+    summary = views.summary(snap, {}, jobs[0])
+    assert summary["ranked"] is False and summary["metric"] == "loss"
+    assert set(summary["metrics"]) == {"loss", "acc"}
+    loss = summary["metrics"]["loss"]
+    assert (loss["n"], loss["min"], loss["max"]) == (40, 0.1, 4.0)
+    assert loss["best"] is None and loss["best_verstr"] is None
+    assert sum(b["count"] for b in loss["hist"]) == 40 and loss["p50"] is not None
+    assert summary["top"] == []
+    job = views.job_summary(snap, {}, jobs[0])
+    assert job["metric"] == "loss" and job["best"] is None and job["best_verstr"] is None
+    assert sum(job["spread"]) == 40
+
+
+def test_the_goal_less_fallback_keeps_the_five_most_common_metrics():
+    fleet = Fleet(39)
+    jobs = fleet.seed_jobs(1, 20, T0)
+    for i in range(1, 21):
+        fleet.edit(i, values={f"m{k}": 1.0 for k in range(7) if i <= 20 - k})
+    summary = JobViews(LeaderboardCache()).summary(fleet.snapshot(), {}, jobs[0])
+    assert sorted(summary["metrics"]) == ["m0", "m1", "m2", "m3", "m4"]
+    assert summary["metric"] == "m0"
+
+
+def test_the_goal_less_fallback_follows_metrics_logged_in_a_later_generation():
+    fleet = Fleet(40)
+    jobs = fleet.seed_jobs(1, 10, T0)
+    for i in range(11):  # the job's own row too
+        fleet.edit(i, values={})
+    views = JobViews(LeaderboardCache())
+    assert views.summary(fleet.snapshot(), {}, jobs[0])["metric"] is None
+    for i in range(1, 11):
+        fleet.edit(i, values={"f1": i / 10})
+    summary = views.summary(fleet.snapshot(), {}, jobs[0])
+    assert summary["metric"] == "f1" and summary["metrics"]["f1"]["n"] == 10
+
+
+def test_a_declared_goal_ranks_as_before():
+    fleet = Fleet(41)
+    jobs = fleet.seed_jobs(1, 20, T0)
+    summary = JobViews(LeaderboardCache()).summary(fleet.snapshot(), SCHEMA, jobs[0])
+    assert summary["ranked"] is True and summary["top"]

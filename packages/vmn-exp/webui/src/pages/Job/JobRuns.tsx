@@ -4,15 +4,15 @@
  *  filter, §3.4) and selection by query. The URL keeps `tab=runs` beside the
  *  board's own params. A search has a `search all runs` link that drops the
  *  scope (plan 23 W11). */
-import { useCallback, useState } from "react";
 import FacetSidebar from "../../components/FacetSidebar";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
+import { useAddFilterClauses } from "../../hooks/useAddFilterClauses";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { useRunsBoard } from "../../hooks/useRunsBoard";
 import { Link } from "react-router-dom";
 import { plural } from "../../util";
 import { allRunsHref, hasSearch } from "../../util/searchScope";
-import { BIG_GROUP, addFilterClause } from "../../util/groupClause";
+import { BIG_GROUP } from "../../util/groupClause";
 import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
 import LeaderboardToolbar from "../LeaderboardToolbar";
 import RunsBoardGrid from "../RunsBoardGrid";
@@ -25,17 +25,8 @@ export default function JobRuns({ ws, app, verstr, paused, onPaused, onLive }: {
   onLive?: () => unknown;
 }) {
   const view = useLeaderboardView();
-  // Bumped when a facet or a group writes the filters, so the bar re-reads them.
-  const [filterGen, setFilterGen] = useState(0);
-  const resetFilter = () => setFilterGen((g) => g + 1);
-
-  const { setFilters, status, query, search, branch } = view;
-  const addClauses = useCallback((clauses: string[], ungroup = false) => {
-    const next = clauses.reduce(addFilterClause, { status, query, search, branch });
-    setFilters(next, ungroup);
-    setFilterGen((g) => g + 1);
-  }, [setFilters, status, query, search, branch]);
-  const openGroup = useCallback((clause: string) => addClauses([clause], true), [addClauses]);
+  // A facet or a group writes the filters: the bar re-reads them.
+  const { gen: filterGen, resetFilter, addClauses, openGroup } = useAddFilterClauses(view);
 
   const board = useRunsBoard(ws, app, view, {
     paused, scope: verstr, onLive, openGroup: { over: BIG_GROUP, onOpen: openGroup },

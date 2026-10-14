@@ -61,6 +61,7 @@ from vmn_exp.ui.leaderboard_scope import (
     scope_positions,
 )
 from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
+from vmn_exp.ui.leaderboard_top_counts import TopCounts
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
@@ -276,6 +277,7 @@ class LeaderboardCache(SetAnswers):
         self._job_view = JobsView(self, size)
         self._subtree = SubtreeMatch(self, size)
         self._filtered_facets = LRU(size)
+        self._top_counts = TopCounts(self)
 
     schema_key = staticmethod(_schema_key)
 
@@ -398,9 +400,9 @@ class LeaderboardCache(SetAnswers):
         return cut if limit is None else {"rows": cut, "total": len(rows)}
 
     def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False,
-                scope=None, top=False):
-        """Every row passing *status* in :meth:`page`'s order, unpaged."""
-        f = Filters(sort, status, None, order, archived, scope, top)
+                scope=None, top=False, query=None):
+        """Every row passing the filters in :meth:`page`'s order, unpaged."""
+        f = Filters(sort, status, query, order, archived, scope, top)
         return self._job_view.ordered(snapshot, schema, None, f)
 
     def clock(self):

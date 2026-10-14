@@ -35,11 +35,31 @@ def jobs(rows):
     return sorted(v for v in children_by_parent(rows) if v in present)
 
 
-def tracked_metrics(schema):
+def goal_metrics(schema):
     names = {m for m in (schema or {}) if metric_goal(schema, m) and not set(m) & set("*?[")}
     if primary_metric(schema):
         names.add(primary_metric(schema))
     return sorted(names)
+
+
+def common_metrics(rows, count=5):
+    """The app's *count* metrics most runs carry (archived ones left out)."""
+    counts = {}
+    for row in rows:
+        if not row.get("archived"):
+            for name in row.get("metrics") or {}:
+                counts[name] = counts.get(name, 0) + 1
+    return sorted(counts, key=lambda m: (-counts[m], m))[:count]
+
+
+def tracked_metrics(schema, rows):
+    """``(metrics, main, ranked)``: the goal metrics, else the most common
+    ones, goal-less (never crowned)."""
+    goals = goal_metrics(schema)
+    if goals:
+        return goals, primary_metric(schema) or goals[0], True
+    common = common_metrics(rows)
+    return common, (common[0] if common else None), False
 
 
 def _finite(value):
@@ -51,14 +71,14 @@ def exact_quantile(values, q):
     return ordered[round(q * (len(ordered) - 1))] if ordered else None
 
 
-def _metric(rows, name, schema):
+def _metric(rows, name, schema, ranked=True):
     pairs = [(row["metrics"][name], row["verstr"]) for row in rows
              if _finite(row["metrics"].get(name))]
     if not pairs:
         return None
     low = min(pairs)
     high = min(pairs, key=lambda p: (-p[0], p[1]))
-    best = high if sort_descending(schema, name) else low
+    best = (high if sort_descending(schema, name) else low) if ranked else (None, None)
     values = [v for v, _ in pairs]
     return {"n": len(values), "min": low[0], "max": high[0], "mean": sum(values) / len(values),
             "best": best[0], "best_verstr": best[1], "values": values}
@@ -99,12 +119,14 @@ def rollup(rows, verstr, schema):
     events += [(row["status"], _minute(row["finished_at"])) for row in members
                if row["status"] in ("succeeded", "failed") and row.get("finished_at")]
     finished = [row["finished_at"] for row in members if row.get("finished_at")]
+    metrics, main, ranked = tracked_metrics(schema, rows)
     return {
+        "metric": main, "ranked": ranked,
         "total": len(members), "counts": counts, "done": done,
         "expected": _expected(by_verstr[verstr], len(members)),
         "throughput_per_min": recent / 10,
         "started_at": min(started, default=None), "finished_at": max(finished, default=None),
-        "metrics": {m: _metric(members, m, schema) for m in tracked_metrics(schema)},
+        "metrics": {m: _metric(members, m, schema, ranked) for m in metrics},
         "durations": durations,
         "failures": sorted(failures.items(), key=lambda kv: (-kv[1], kv[0]))[:10],
         "events": events,

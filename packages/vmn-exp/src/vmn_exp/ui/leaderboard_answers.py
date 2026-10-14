@@ -4,6 +4,7 @@ over a whole filtered set rather than a page: parameter importance and the
 facets (plan 23 S2: within a scope and the filters too)."""
 from vmn_exp.core.importance import param_importance
 from vmn_exp.ui.leaderboard_scope import Filters, check_scope
+from vmn_exp.ui.leaderboard_top_counts import top_counts
 from vmn_exp.ui.readers.experiments import facets as facets_of
 
 # Importance results kept (each pins its scored runs' params dicts).
@@ -11,7 +12,8 @@ IMPORTANCE_RESULTS = 8
 
 
 class SetAnswers:
-    """Mixed into the cache: needs its ``_base``, ``schema_key`` and the ``_importance``/``_facets``/``_filtered_facets`` memos."""
+    """Mixed into the cache: needs its ``_base``, ``schema_key`` and the
+    ``_importance``/``_facets``/``_filtered_facets``/``_top_counts`` memos."""
 
     def importance(self, snapshot, schema, metric, status=None, query=None, archived=False,
                    scope=None):
@@ -51,3 +53,14 @@ class SetAnswers:
         f = Filters(None, status, query, None, archived, scope)
         return self._filtered_facets.get(
             (base.token, bucket) + f, lambda: facets_of(base.tail(bucket, 0, f)))
+
+    def top_counts(self, snapshot, archived=False, scope=None, query=None, status=None):
+        """``{"jobs", "singles"}``: the top-level runs with and without
+        children (plan 23 S7) among the rows :meth:`facets` reads."""
+        if scope is None and not query and not status:
+            return self._top_counts.get(snapshot, bool(archived))
+        base, bucket = self._base(snapshot)
+        check_scope(base, scope)
+        f = Filters(None, status, query, None, archived, scope)
+        return self._filtered_facets.get(
+            ("top", base.token, bucket) + f, lambda: top_counts(base.tail(bucket, 0, f)))

@@ -1,7 +1,7 @@
 /** What a job's progress says (plan 23 W1, §3.1): `1,412/2,000 · 3 failed ·
  *  41/min · ETA 14m`, and its run bar over the expected runs. */
 import type { JobSummary } from "../types";
-import { fmtCount, humanizeSeconds } from "../util";
+import { fmtCount, humanizeSeconds, relTime } from "../util";
 import { barSegments } from "../pages/groupHeaderText";
 
 /** `41/min`; one decimal below 10 a minute (`0.3/min`). */
@@ -37,4 +37,31 @@ export function jobBarSegments(j: JobSummary) {
   const c = j.counts;
   const of = Math.max(j.expected, c.running + c.waiting + c.succeeded + c.failed + c.stuck);
   return barSegments({ total: of, done: c.succeeded, failed: c.failed, stuck: c.stuck, running: c.running });
+}
+
+/** What a Jobs-view cell shows, and its tooltip. */
+export interface JobCell { text: string; title: string }
+
+const STALLED_TITLE = "no run finished in the last 10 minutes";
+
+/** Runs waiting, running or stuck: the job has not ended. */
+const inFlight = (j: JobSummary) => j.counts.running + j.counts.waiting + j.counts.stuck > 0;
+
+/** `14m` left, `stalled`, `finished 3d ago` or `ended · 180 never started`. */
+export function jobEtaCell(j: JobSummary): JobCell {
+  const left = etaText(j);
+  if (inFlight(j)) {
+    return left ? { text: left, title: `about ${left} left` } : { text: "stalled", title: STALLED_TITLE };
+  }
+  const never = j.expected - j.total;
+  if (never > 0) return { text: `ended · ${fmtCount(never)} never started`, title: "the job has ended" };
+  const when = relTime(j.finished_at);
+  return { text: when ? `finished ${when}` : "finished", title: j.finished_at ?? "the job has finished" };
+}
+
+/** `41/min`, else a dash saying why nothing completes. */
+export function jobRateCell(j: JobSummary): JobCell {
+  const rate = throughputText(j);
+  if (rate) return { text: rate, title: "runs finished a minute, over the last 10 minutes" };
+  return { text: "—", title: inFlight(j) ? STALLED_TITLE : "the job has ended" };
 }

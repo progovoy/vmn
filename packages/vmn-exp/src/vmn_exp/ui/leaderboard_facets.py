@@ -87,14 +87,26 @@ class Facets:
 
     def __init__(self, size=8):
         self._payloads = LRU(size)
+        self._counted_memo = LRU(size)
         self._counts = {}  # {(app, archived): (snapshot, FacetCounts)}, the latest
         self._lock = threading.Lock()
 
     def get(self, snapshot, archived=False):
         archived = bool(archived)
         return self._payloads.per_snapshot(
-            snapshot, lambda: self._counted(snapshot, archived).payload(), key=(archived,)
+            snapshot, lambda: self.counts(snapshot, archived).payload(), key=(archived,)
         )
+
+    def counts(self, snapshot, archived=False):
+        """*snapshot*'s :class:`FacetCounts`, once per snapshot."""
+        archived = bool(archived)
+        return self._counted_memo.per_snapshot(
+            snapshot, lambda: self._counted(snapshot, archived), key=(archived,))
+
+    def common_metrics(self, snapshot):
+        """The metric names most visible rows carry, most first (ties by name)."""
+        keys = self.counts(snapshot).metric_keys
+        return sorted(keys, key=lambda m: (-keys[m], m))
 
     def _counted(self, snapshot, archived):
         key, rows = (snapshot.app_name, archived), snapshot.rows

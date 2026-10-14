@@ -9,7 +9,7 @@ export function setAllParams(p: URLSearchParams, name: string, values: readonly 
 
 /** View state kept in the query string, so a view is shareable and Back
  *  restores it. Every update *merges* into the current params (replacing the
- *  history entry), several updates in one tick compose, and an update that
+ *  history entry, unless *push* asks for a new one Back returns from), several updates in one tick compose, and an update that
  *  changes nothing does not navigate at all. */
 export function useUrlState() {
   const [params, setSearchParams] = useSearchParams();
@@ -27,12 +27,12 @@ export function useUrlState() {
   }
 
   const update = useCallback(
-    (edit: (p: URLSearchParams) => void) => {
+    (edit: (p: URLSearchParams) => void, opts?: { push?: boolean }) => {
       const next = new URLSearchParams(latest.current);
       edit(next);
       if (next.toString() === latest.current.toString()) return;
       latest.current = next;
-      setRef.current(next, { replace: true });
+      setRef.current(next, { replace: !opts?.push });
     },
     [],
   );

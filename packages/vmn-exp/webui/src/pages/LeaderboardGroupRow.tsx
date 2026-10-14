@@ -58,14 +58,16 @@ export function GroupBar({ group }: { group: BoardGroup }) {
 
 /** A group's fold, or for a group too big to unfold (plan 23 §3.4) the
  *  button applying its clause as a filter. */
-export function GroupFold({ item, name, onFold, asFilter }: {
+export function GroupFold({ item, name, onFold, asFilter, noun = "run" }: {
   item: GroupHeaderItem; name: string; onFold: (key: string) => void; asFilter?: GroupFilter;
+  /** What the group counts. */
+  noun?: string;
 }) {
   const { group } = item;
   if (item.asFilter) {
     const clause = asFilter?.clauseOf(group);
     if (!clause) return null;
-    const label = `Filter to ${clause} (${plural(group.rows_total, "run")})`;
+    const label = `Filter to ${clause} (${plural(group.rows_total, noun)})`;
     return (
       <button className="fold-toggle group-open-filter" aria-label={label} title={label} onClick={() => asFilter!.onFilter(clause)}>
         <Icon name="search" size={13} />

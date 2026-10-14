@@ -15,6 +15,7 @@ import uuid
 from collections import OrderedDict
 
 from vmn_exp.ui.jobs_exp_meta import (
+    MAX_ARCHIVE_BATCH,
     exp_archive_command,
     exp_push_command,
     exp_rewind_command,
@@ -176,15 +177,19 @@ class Job:
         self.status = "running"
         self.exit_code = None
         self.log = ""
+        self.progress = None
 
     def to_dict(self):
-        return {
+        job = {
             "id": self.id,
             "command": self.command,
             "status": self.status,
             "exit_code": self.exit_code,
             "log": self.log,
         }
+        if self.progress is not None:
+            job["progress"] = dict(self.progress)
+        return job
 
 
 class JobRunner:
@@ -226,6 +231,45 @@ class JobRunner:
         job = Job(uuid.uuid4().hex, command, None)
         return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, call))
 
+    def submit_bulk(self, workspace_name, command, resolve, act):
+        """Start a bulk job (plan 23 S4): *resolve()* names its runs when it
+        starts, *act(batch)* acts on each :data:`MAX_ARCHIVE_BATCH` of them
+        (returning log text, raising to fail); ``progress`` counts them."""
+        job = Job(uuid.uuid4().hex, command, None)
+        job.progress = {"done": 0, "total": None}
+
+        def call():
+            verstrs = resolve()
+            job.progress["total"] = len(verstrs)
+            logs = []
+            for at in range(0, len(verstrs), MAX_ARCHIVE_BATCH):
+                batch = verstrs[at : at + MAX_ARCHIVE_BATCH]
+                logs.append(str(act(batch) or ""))
+                job.progress["done"] += len(batch)
+            return "\n".join(logs)
+
+        return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, call))
+
+    def run_command(self, command, cwd):
+        """Run *command* as a job does; ``(exit_code, output)``, raising
+        :class:`subprocess.TimeoutExpired` past the job timeout."""
+        # Prefer the real console script (faithful to the CLI equivalent
+        # shown to the user); fall back to the current interpreter otherwise.
+        if shutil.which(command[0]):
+            argv = command
+        else:
+            argv = [sys.executable, "-m", _CLI_MODULES[command[0]]] + command[1:]
+        proc = subprocess.run(
+            argv,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            # The server's stdin is not the job's: a prompt must fail, not hang.
+            stdin=subprocess.DEVNULL,
+            timeout=self._timeout_sec,
+        )
+        return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+
     def _start(self, workspace_name, job, target):
         with self._lock:
             if workspace_name in self._active_workspaces:
@@ -233,10 +277,11 @@ class JobRunner:
             self._jobs[job.id] = job
             self._evict_finished()
             self._active_workspaces.add(workspace_name)
+            submitted = job.to_dict()
 
         thread = threading.Thread(target=target, args=(workspace_name, job), daemon=True)
         thread.start()
-        return job.to_dict(), None
+        return submitted, None
 
     def _call(self, workspace_name, job, call):
         try:
@@ -250,26 +295,10 @@ class JobRunner:
                 self._active_workspaces.discard(workspace_name)
 
     def _run(self, workspace_name, job):
-        # Prefer the real console script (faithful to the CLI equivalent
-        # shown to the user); fall back to the current interpreter otherwise.
-        if shutil.which(job.command[0]):
-            argv = job.command
-        else:
-            module = _CLI_MODULES[job.command[0]]
-            argv = [sys.executable, "-m", module] + job.command[1:]
         try:
-            proc = subprocess.run(
-                argv,
-                cwd=job.cwd,
-                capture_output=True,
-                text=True,
-                # The server's stdin is not the job's: a prompt must fail, not hang.
-                stdin=subprocess.DEVNULL,
-                timeout=self._timeout_sec,
-            )
-            job.log = _tail((proc.stdout or "") + (proc.stderr or ""))
-            job.exit_code = proc.returncode
-            job.status = "succeeded" if proc.returncode == 0 else "failed"
+            job.exit_code, output = self.run_command(job.command, job.cwd)
+            job.log = _tail(output)
+            job.status = "succeeded" if job.exit_code == 0 else "failed"
         except subprocess.TimeoutExpired as e:
             output = _as_text(e.stdout) + _as_text(e.stderr)
             job.log = _tail(output + f"\nJob timed out after {self._timeout_sec}s")

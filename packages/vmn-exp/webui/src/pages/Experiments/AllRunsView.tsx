@@ -7,7 +7,9 @@ import type { ExperimentRow } from "../../types";
 import NewExperiment from "../../components/NewExperiment";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
 import SimilarSearch from "../../components/SimilarSearch";
+import { useAddFilterClauses } from "../../hooks/useAddFilterClauses";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
+import { BIG_GROUP } from "../../util/groupClause";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "../BoardTabs";
 import LeaderboardChartsPanel from "../LeaderboardChartsPanel";
 import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
@@ -62,10 +64,9 @@ export function AllRunsView({ ws, app, views, onJobs }: {
   const [paused, setPaused] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [brushed, setBrushed] = useState<Set<string> | null>(null);
-  // Bumped when a saved view or the attention strip replaces the URL, so the
+  // A saved view, the attention strip or a big group replaces the URL: the
   // filter bar re-reads it.
-  const [filterGen, setFilterGen] = useState(0);
-  const resetFilter = () => setFilterGen((g) => g + 1);
+  const { gen: filterGen, resetFilter, openGroup } = useAddFilterClauses(view);
   // The search box's "similar" mode text; null shows the table.
   const [similarText, setSimilarText] = useState<string | null>(null);
 
@@ -73,7 +74,9 @@ export function AllRunsView({ ws, app, views, onJobs }: {
   // A brush in the parallel view (Charts tab) narrows the table.
   const brush = charting && view.chart === "parallel" ? brushed : null;
   const keep = useMemo(() => (brush ? (r: ExperimentRow) => brush.has(r.verstr) : undefined), [brush]);
-  const board = useRunsBoard(ws, app, view, { paused, onParent: onJobs, keep });
+  const board = useRunsBoard(ws, app, view, {
+    paused, onParent: onJobs, keep, openGroup: { over: BIG_GROUP, onOpen: openGroup },
+  });
   const { data, facets, filter, cols, colPrefs, schema, rows, all, tableRows, filtered } = board;
   // The similar mode keeps the bar's tokens: the box holds its text.
   const similarQuery = combineQueries(board.serverQuery, statusClause(view.status));
