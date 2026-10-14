@@ -111,6 +111,7 @@ class _Base:
         # (previous base's token, static rows that left, static rows that joined)
         self.delta = None
         self._at = (bucket, [rows[i] for i in patch.changed])
+        self._patched = (None, None)  # (changed_at's rows, patched() of them)
         self._lock = threading.Lock()
 
     @classmethod
@@ -160,11 +161,20 @@ class _Base:
                 self._at = (bucket, self._rederive_live())
             return self._at[1]
 
+    def patched(self, bucket):
+        """``{storage index: row as of *bucket*}`` of the rows a time bucket
+        can change, built once per bucket."""
+        rows = self.changed_at(bucket)
+        with self._lock:
+            if self._patched[0] is not rows:
+                self._patched = (rows, dict(zip(self.patch.changed, rows)))
+            return self._patched[1]
+
     def tail(self, bucket, count, f):
         """The last *count* rows passing the :class:`Filters` *f* (every one
         when *count* < 1) in storage order, as of *bucket*: scans back only
         as needed, within the scope's subtree when *f* has one."""
-        patched = dict(zip(self.patch.changed, self.changed_at(bucket)))
+        patched = self.patched(bucket)
         at = scope_positions(self, f.scope) if f.scope else range(len(self.rows))
         out, stop, chunk = [], len(at), max(count, 64)
         while stop and (count < 1 or len(out) < count):
@@ -273,7 +283,7 @@ class LeaderboardCache(SetAnswers):
         self._columns = LRU(size)
         self._importance = LRU(IMPORTANCE_RESULTS)
         self._groups = GroupCache(self, size)
-        self._jobs = JobRollupCache(self, size)
+        self.jobs = JobRollupCache(self, size)
         self._search = SearchIndexes()
         self._job_view = JobsView(self, size)
         self._subtree = SubtreeMatch(self, size)
@@ -422,10 +432,6 @@ class LeaderboardCache(SetAnswers):
         f = Filters(sort, status, query, order, archived, scope, top)
         return self._job_view.ordered(snapshot, schema, None, f)
 
-    def clock(self):
-        """The time bucket a Jobs view's summaries (throughput, ETA) follow."""
-        return self._bucket()
-
     def groups(self, snapshot, schema, group, **params):
         """The grouped board (plan 22 K1), see
         :meth:`~vmn_exp.ui.leaderboard_group_cache.GroupCache.groups`."""
@@ -435,11 +441,11 @@ class LeaderboardCache(SetAnswers):
         """*verstr*'s rollup over its whole subtree (plan 23 S1), or None when
         it is not a job; see :mod:`~vmn_exp.ui.job_rollup`. Archived runs
         are left out."""
-        return self._jobs.job_rollup(snapshot, schema, verstr)
+        return self.jobs.job_rollup(snapshot, schema, verstr)
 
     def job_rollups(self, snapshot, schema):
         """``{verstr: compact rollup}`` for every job (for a Jobs view)."""
-        return self._jobs.job_rollups(snapshot, schema)
+        return self.jobs.job_rollups(snapshot, schema)
 
     def rows(self, snapshot, archived=False):
         """Every row, with its status as of now, in storage order: no sort, for

@@ -5,14 +5,15 @@ null for a single run), and ordered by a rollup field with a ``job:*`` sort.
 
 The top-level rows are few (tens to thousands), so a ``job:*`` order is the
 board's default order of them stably sorted by the summaries, memoized per
-base, time bucket and clock bucket (the summaries' throughput and ETA follow
-the clock). Rows without the value (single runs, a job without the metric)
+base, time bucket and minute (the summaries' throughput and ETA follow
+:func:`~vmn_exp.ui.job_rollup_cache.minute`). Rows without the value (single runs, a job without the metric)
 come last, ties keep the default order.
 """
 from operator import itemgetter
 
 from vmn_exp.core.log import sort_descending
 from vmn_exp.core.values import is_finite_number
+from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 
@@ -79,8 +80,8 @@ class JobsView:
         check_job_sort(f.sort, f.top)
         if f.sort not in JOB_SORTS:
             return cache._ordered(snapshot, schema, last, f)
-        base = cache._base(snapshot)[0]
-        key = (base.token, cache._bucket(), cache.schema_key(schema), last) + f
+        base, bucket = cache._base(snapshot)
+        key = (base.token, bucket, minute(), cache.schema_key(schema), last) + f
         return self._orders.get(key, lambda: job_sorted(
             cache._ordered(snapshot, schema, last, f._replace(sort=None, order=None)),
             cache.job_rollups(snapshot, schema), f.sort, f.order, schema))

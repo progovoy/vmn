@@ -54,7 +54,7 @@ class GroupCache:
 
     def _uncached(self, snapshot, schema, spec, rows_filter):
         base, bucket = self._cache._base(snapshot)
-        live = dict(zip(base.patch.changed, base.changed_at(bucket)))
+        live = base.patched(bucket)
         f = spec.flat
         rows = rows_filter(self._cache.ordered(snapshot, schema, f.sort, f.status, f.order,
                                                f.archived, f.scope, f.top))

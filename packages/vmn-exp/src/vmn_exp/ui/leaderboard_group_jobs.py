@@ -7,7 +7,7 @@ among those; ``job_aggregates``: ``{metric: stats}`` over the group's jobs'
 ``best`` of the rollups' main metric (mean/best/median/min/max of the
 bests, ``best`` by the metric's goal).
 
-Built once per grouping and job summaries (which follow the clock bucket):
+Built once per grouping and job summaries (which follow the live bucket and the minute):
 O(jobs), not O(rows).
 """
 from vmn_exp.core.metric_schema import metric_goal

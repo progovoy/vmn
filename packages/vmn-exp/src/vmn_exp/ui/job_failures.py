@@ -64,16 +64,18 @@ def _cluster(sig, count, total_failed, members, base, distinct, total):
     }
 
 
-def failure_clusters(counts, rows, limit):
+def failure_clusters(counts, rows, limit, sig=None):
     """``{total_failed, clusters}``: the *limit* largest of *counts*
-    (``{signature: runs}``), detailed from the job's *rows*."""
+    (``{signature: runs}``), detailed from the job's *rows*; *sig(row)* a
+    row's signature (default :func:`signature`)."""
+    sig_of = sig or signature
     total_failed = sum(counts.values())
     top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:max(0, limit)]
     wanted = {sig: [] for sig, _ in top}
     for row in rows:
-        sig = signature(row)
-        if sig in wanted:
-            wanted[sig].append(row)
+        found = sig_of(row)
+        if found in wanted:
+            wanted[found].append(row)
     base = Counter(pair for row in rows for pair in _pairs(row)) if top else Counter()
     distinct = Counter(key for key, _, _ in base)
     total = len(rows)

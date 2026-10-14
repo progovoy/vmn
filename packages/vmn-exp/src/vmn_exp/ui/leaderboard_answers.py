@@ -3,12 +3,19 @@
 over a whole filtered set rather than a page: parameter importance and the
 facets (plan 23 S2: within a scope and the filters too)."""
 from vmn_exp.core.importance import param_importance
-from vmn_exp.ui.leaderboard_scope import Filters, check_scope
+from vmn_exp.ui.leaderboard_scope import Filters, check_scope, scope_positions
 from vmn_exp.ui.leaderboard_top_counts import top_counts
 from vmn_exp.ui.readers.experiments import facets as facets_of
 
 # Importance results kept (each pins its scored runs' params dicts).
 IMPORTANCE_RESULTS = 8
+# A job's importance is scored again per this share of its runs scored.
+IMPORTANCE_STEP = 0.05
+
+
+def _importance_step(base, scope):
+    """How many more scored runs of *scope* score its importance again."""
+    return max(1, round(len(scope_positions(base, scope)) * IMPORTANCE_STEP))
 
 
 class SetAnswers:
@@ -34,7 +41,11 @@ class SetAnswers:
             (row["verstr"], row["metrics"].get(metric), row.get("params"))
             for row in rows if metric in row["metrics"]
         )
-        key = (self.schema_key(schema), metric, tuple((v, m, id(p)) for v, m, p in scored))
+        if scope is None:
+            what = tuple((v, m, id(p)) for v, m, p in scored)
+        else:
+            what = (snapshot.app_name, f, len(scored) // _importance_step(base, scope))
+        key = (self.schema_key(schema), metric, what)
         universe = lambda: base.tail(bucket, 0, Filters(archived=archived))  # noqa: E731
         # The value keeps the params dicts alive, so their ids stay unique.
         return self._importance.get(
