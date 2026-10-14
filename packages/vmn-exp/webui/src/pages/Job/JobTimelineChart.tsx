@@ -64,6 +64,24 @@ function averageText(s: TimelineSeries, bucketMs: number): string | null {
   return `${minutes < 120 ? `${round2(minutes)}-min` : `${round2(minutes / 60)}-h`} average`;
 }
 
+/** The run-count axis: the top, a round middle when it differs, and 0. */
+function countTicks(max: number): number[] {
+  const mid = Math.round(max / 2);
+  return mid > 0 && mid < max ? [max, mid, 0] : [max, 0];
+}
+
+/** Tick labels beside a plot, each at its value's height (top = *max*). */
+function YAxis({ className, ticks, max }: { className: string; ticks: number[]; max: number }) {
+  return (
+    <div className={`job-axis-y ${className}`} aria-hidden="true">
+      {ticks.map((v, i) => (
+        <span key={v} className={`job-tick${i === 0 ? " job-axis-max" : ""}`}
+          style={{ top: `${100 - (v / (max || 1)) * 100}%` }}>{fmtCount(v)}</span>
+      ))}
+    </div>
+  );
+}
+
 function bucketTitle(s: TimelineSeries, i: number) {
   return `${timeText(s.t[i])}: ${fmtCount(s.running[i])} running, ${fmtCount(s.succeeded[i])} succeeded, `
     + `${fmtCount(s.failed[i])} failed, ${round2(s.perMin[i])} completions/min`;
@@ -89,24 +107,35 @@ export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }
           <li key={key}><span className={`job-swatch tone-${tone}`} aria-hidden="true" />{key}</li>
         ))}
       </ul>
-      <div className="job-axis-max" aria-hidden="true">{fmtCount(max)}</div>
-      <div className="job-chart-frame">
-        <svg className="job-area" viewBox={`0 0 ${W} ${AREA_H}`} preserveAspectRatio="none" role="img" aria-label={summary}>
-          {paths.map((p) => <path key={p.tone} d={p.d} className={`job-fill tone-${p.tone}`} />)}
-          {s.t.map((t, i) => (
-            <rect key={t} className="job-hit" x={x(t)} y={0} width={x(t + bucketMs) - x(t)} height={AREA_H}>
-              <title>{bucketTitle(s, i)}</title>
-            </rect>
-          ))}
-        </svg>
+      <div className="job-axis-unit" aria-hidden="true">runs</div>
+      <div className="job-plot">
+        <YAxis className="job-axis-runs" ticks={countTicks(max)} max={max} />
+        <div className="job-chart-frame">
+          <svg className="job-area" viewBox={`0 0 ${W} ${AREA_H}`} preserveAspectRatio="none" role="img" aria-label={summary}>
+            {countTicks(max).map((v) => (
+              <line key={v} className="job-grid" x1={0} x2={W} y1={AREA_H - (v / max) * AREA_H} y2={AREA_H - (v / max) * AREA_H}
+                vectorEffect="non-scaling-stroke" />
+            ))}
+            {paths.map((p) => <path key={p.tone} d={p.d} className={`job-fill tone-${p.tone}`} />)}
+            {s.t.map((t, i) => (
+              <rect key={t} className="job-hit" x={x(t)} y={0} width={x(t + bucketMs) - x(t)} height={AREA_H}>
+                <title>{bucketTitle(s, i)}</title>
+              </rect>
+            ))}
+          </svg>
+        </div>
       </div>
       <div className="job-chart-caption">
         completions per minute <span className="mono">({average && `${average}, `}peak {round2(rate.max)})</span>
       </div>
-      <svg className="job-rate" viewBox={`0 0 ${W} ${RATE_H}`} preserveAspectRatio="none" role="img"
-        aria-label={`Completions per minute${average ? ` (${average})` : ""}: latest ${rateNow}`}>
-        <path d={rate.d} className="job-rate-line" vectorEffect="non-scaling-stroke" />
-      </svg>
+      <div className="job-axis-unit" aria-hidden="true">per min</div>
+      <div className="job-plot">
+        <YAxis className="job-axis-rate" ticks={[round2(rate.max), 0]} max={rate.max} />
+        <svg className="job-rate" viewBox={`0 0 ${W} ${RATE_H}`} preserveAspectRatio="none" role="img"
+          aria-label={`Completions per minute${average ? ` (${average})` : ""}: latest ${rateNow}`}>
+          <path d={rate.d} className="job-rate-line" vectorEffect="non-scaling-stroke" />
+        </svg>
+      </div>
       <div className="job-axis-x" aria-hidden="true"><span>{timeText(lo)}</span><span>{timeText(hi)}</span></div>
     </div>
   );

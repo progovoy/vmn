@@ -29,4 +29,14 @@ describe("JobTimelineChart", () => {
     expect(container.querySelector(".job-chart-frame .job-axis-max")).toBeNull();
     expect(container.querySelector(".job-axis-max")?.textContent).toBe("16");
   });
+
+  it("labels both y axes: runs from 0 to the top, completions per minute from 0 to the peak", () => {
+    const { container } = render(<JobTimelineChart timeline={timeline} />);
+    const ticks = (sel: string) => [...container.querySelectorAll(`${sel} .job-tick`)].map((t) => t.textContent);
+    expect(ticks(".job-axis-runs")).toEqual(["16", "8", "0"]);
+    expect(ticks(".job-axis-rate")).toEqual(["12", "0"]);
+    const units = [...container.querySelectorAll(".job-axis-unit")].map((u) => u.textContent);
+    expect(units).toEqual(["runs", "per min"]);
+    expect(container.querySelectorAll(".job-area .job-grid")).toHaveLength(3);
+  });
 });
