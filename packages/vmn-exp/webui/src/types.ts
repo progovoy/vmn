@@ -239,7 +239,13 @@ export interface ExperimentFacets {
   param_values: Record<string, number>;
   parented: number;
   total: number;
+  /** Top-level runs with children, and without (plan 23 §3.1), where served. */
+  jobs?: number;
+  singles?: number;
 }
+
+/** The top-level runs a list asks for: every one, the jobs, or the single runs. */
+export type TopRuns = boolean | "jobs" | "singles";
 
 /** A page of leaderboard rows, with the server's count of every match. */
 export type ExperimentPage = ExperimentRow[] & { total: number };

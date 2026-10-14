@@ -4,7 +4,7 @@ import { api, type FacetOpts } from "./api";
 import { withSignal } from "./requestScope";
 import { SHARED_STALE_MS } from "./queryClient";
 import type {
-  AppRow, ExperimentDetail, ExperimentFacets, ExperimentRow, Meta, MetricsSchema, Workspace,
+  AppRow, ExperimentDetail, ExperimentFacets, ExperimentRow, Meta, MetricsSchema, TopRuns, Workspace,
 } from "./types";
 
 /** Run detail served from cache for this long before a mount refetches it —
@@ -18,8 +18,8 @@ export interface RowsFilter {
   query?: string;
   /** Include archived runs. */
   archived?: boolean;
-  /** Top-level runs only (the Jobs view). */
-  top?: boolean;
+  /** Top-level runs only (the Jobs view): all of them, or the jobs or single runs. */
+  top?: TopRuns;
   /** A job's subtree only (its verstr). */
   scope?: string;
 }

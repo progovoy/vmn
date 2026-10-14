@@ -1,7 +1,7 @@
 import type {
   AppConfig, AppRow, Changelog, DiffResult, ExperimentColumns, ExperimentDetail,
   ExperimentFacets, ExperimentPage, ExperimentRow, Job, Meta, MetricsSchema,
-  ParamImportanceEntry, VersionRow, Workspace,
+  ParamImportanceEntry, TopRuns, VersionRow, Workspace,
 } from "./types";
 import { appTag, BASE, get, post } from "./http";
 import { PAGE_SIZE } from "./paging";
@@ -21,8 +21,9 @@ export interface PageOpts {
   order?: "asc" | "desc";
   /** Include archived runs (hidden by default). */
   archived?: boolean;
-  /** Top-level runs only: the Jobs view (plan 23 S2). */
-  top?: boolean;
+  /** Top-level runs only: the Jobs view (plan 23 S2); `true` all of them,
+   *  else only the jobs or the single runs. */
+  top?: TopRuns;
   /** A run's verstr: its subtree only, without the run (plan 23 S2). */
   scope?: string;
 }
@@ -43,7 +44,7 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.query) p.set("q", opts.query);
   if (opts.order) p.set("order", opts.order);
   if (opts.archived) p.set("archived", "1");
-  if (opts.top) p.set("top", "1");
+  if (opts.top) p.set("top", opts.top === true ? "1" : opts.top);
   if (opts.scope) p.set("scope", opts.scope);
   if (opts.limit) p.set("limit", String(opts.limit));
 }

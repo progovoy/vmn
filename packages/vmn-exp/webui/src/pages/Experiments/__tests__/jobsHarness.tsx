@@ -2,15 +2,19 @@
  *  route, with the URL readable from the test. Mock `../../../api` first. */
 import { render } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { createQueryClient } from "../../../queryClient";
 import type { ExperimentRow } from "../../../types";
 import { job } from "../../../util/__tests__/jobFixture";
 import ExperimentsPage from "../ExperimentsPage";
 
 export const location = { search: "", pathname: "" };
+/** The browser's Back button. */
+export const nav = { back: () => {} };
 function LocationProbe() {
   const loc = useLocation();
+  const navigate = useNavigate();
+  nav.back = () => navigate(-1);
   location.search = loc.search;
   location.pathname = loc.pathname;
   return null;

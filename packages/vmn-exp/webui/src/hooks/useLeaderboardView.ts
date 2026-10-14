@@ -16,7 +16,7 @@ export type BoardTab = (typeof BOARD_TABS)[number];
 
 /** The params only the board reads (not the filters, `density` or `view`):
  *  what a switch to the Jobs view (plan 23 W1) leaves behind. */
-export const BOARD_ONLY_PARAMS = ["tab", "sort", "order", "group", "agg", "collapse", "sel", "col", "pin", "hide", "show"];
+export const BOARD_ONLY_PARAMS = ["tab", "sort", "order", "group", "agg", "collapse", "sel", "col", "pin", "hide", "show", "kind"];
 
 const isChartView = (v: string | null): v is ChartView =>
   (CHART_VIEWS as readonly string[]).includes(v ?? "");
@@ -121,7 +121,7 @@ export function useLeaderboardView() {
         ];
         for (const [k, v] of params) { if (v) p.set(k, v); else p.delete(k); }
         if (ungroup) { p.delete("group"); p.delete("collapse"); }
-      }),
+      }, { push: ungroup }), // leaving the grouping is a step Back undoes (plan 23 §3.4)
     openCreate: (open: boolean) => setParam("new", open ? "1" : ""),
     toggleHidden: (col: string) => toggleIn("hide", col),
     /** Record the user's explicit choice for a column whose default depends

@@ -5,8 +5,8 @@ import { memo, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import StatusPill from "../../components/StatusPill";
 import type { ExperimentRow } from "../../types";
-import { relTime, runHref } from "../../util";
-import { isGroupItem } from "../../util/groupItems";
+import { plural, relTime, runHref } from "../../util";
+import { isGroupItem, type GroupHeaderItem } from "../../util/groupItems";
 import { HeaderCheckbox } from "../LeaderboardHeadParts";
 import { CardGroupMore } from "../LeaderboardCardGroup";
 import { headStatus } from "../LeaderboardRow";
@@ -50,7 +50,25 @@ const JobCard = memo(function JobCard({ r, ctx, selected, onToggle, onPrefetch }
   );
 });
 
-export default function JobCards({ items, ctx, selected, headerCheck, groups, onToggle, onPrefetch }: JobsTableProps) {
+/** A group's section label: its fold, or over 50 runs its Filter to button. */
+function CardGroupLabel({ item, groups }: { item: GroupHeaderItem; groups: JobsTableProps["groups"] }) {
+  const { group } = item;
+  const clause = item.asFilter ? groups.asFilter?.clauseOf(group) : null;
+  if (clause) {
+    return (
+      <button type="button" className="fold-toggle" onClick={() => groups.asFilter!.onFilter(clause)}>
+        Filter to {clause} ({plural(group.rows_total, groups.noun)})
+      </button>
+    );
+  }
+  return (
+    <button type="button" className="fold-toggle" aria-expanded={item.open} onClick={() => groups.onFold(group.key)}>
+      {group.label}
+    </button>
+  );
+}
+
+export default function JobCards({ items, ctx, selected, headerCheck, groups, onToggle, onPrefetch, emptyText }: JobsTableProps) {
   return (
     <div className="lb-mcards-wrap">
       <div className="lb-mcards-head">
@@ -59,6 +77,8 @@ export default function JobCards({ items, ctx, selected, headerCheck, groups, on
       </div>
       {items === undefined ? (
         <p className="lb-mcards-loading" role="status">loading jobs…</p>
+      ) : items.length === 0 ? (
+        <p className="lb-mcards-loading">{emptyText}</p>
       ) : (
         <ul className="lb-mcards" role="list" aria-label="jobs">
           {items.map((it) => {
@@ -68,9 +88,7 @@ export default function JobCards({ items, ctx, selected, headerCheck, groups, on
             if (it.item === "more") return <CardGroupMore key={`more:${it.key}`} item={it} onMore={groups.onMore} />;
             return (
               <li key={`group:${it.group.key}`} className="lb-mcard-group">
-                <button type="button" className="fold-toggle" aria-expanded={it.open} onClick={() => groups.onFold(it.group.key)}>
-                  {it.group.label}
-                </button>
+                <CardGroupLabel item={it} groups={groups} />
               </li>
             );
           })}
