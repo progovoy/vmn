@@ -61,7 +61,7 @@ function BarAction({ label, reason, title, primary, onClick }: {
 export default function LeaderboardSelectionBar({
   selected, total, base, showUnarchive, archiving, archiveError,
   onClear, onSelectAll, onArchive, matching = null, onPreview, uncapped = false,
-  picks, groups = [], onRemove, onRemoveGroup, escClears = true,
+  picks, groups = [], onRemove, onRemoveGroup, escClears = true, overlap = 0, approximate = false, tagAction,
 }: {
   selected: string[];
   total: number;
@@ -86,13 +86,20 @@ export default function LeaderboardSelectionBar({
   onRemoveGroup?: (group: QueryGroup) => void;
   /** Escape clears the selection (a board's page; not a page without a board). */
   escClears?: boolean;
+  /** Explicit picks a group also matches: counted once. */
+  overlap?: number;
+  /** Not every such pick is known yet: the count is an upper bound. */
+  approximate?: boolean;
+  /** The Tag action, next to Archive. */
+  tagAction?: ReactNode;
 }) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState<{ verb: ArchiveVerb; count: number } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
-  const n = selected.length + groups.reduce((sum, g) => sum + g.count, 0);
+  const n = selected.length + groups.reduce((sum, g) => sum + g.count, 0) - overlap;
+  const atMost = approximate ? "≤" : "";
   const jobs = picks ? summarizeSelection(picks, groups).jobs : 0;
   const compared = compareList(selected.map((verstr) => ({ verstr })), groups);
   const fromJobs = jobs ? ` from ${plural(jobs, "job")}` : "";
@@ -135,7 +142,7 @@ export default function LeaderboardSelectionBar({
           />
         )}
         <div ref={barRef} className="sel-bar" role="region" aria-label="Selection">
-          <span key={n} className="sel-badge" aria-hidden>{fmtCount(n)}</span>
+          <span key={n} className="sel-badge" aria-hidden>{atMost}{fmtCount(n)}</span>
           <span className="sel-label">
             <span className="sel-label-text" aria-hidden data-widest="runs selected">
               {n === 1 ? "run" : "runs"} selected
@@ -161,7 +168,7 @@ export default function LeaderboardSelectionBar({
               </button>
             </span>
           </span>
-          <span className="sr-only" role="status">{fmtCount(n)} selected{fromJobs}</span>
+          <span className="sr-only" role="status">{approximate && "at most "}{fmtCount(n)} selected{fromJobs}</span>
           <span className="sel-actions">
             <BarAction
               label={<>Compare <span className="sel-count">({compared.length})</span></>}
@@ -170,6 +177,7 @@ export default function LeaderboardSelectionBar({
               onClick={() => go(`compare-runs?${compareSearch("curves", compared)}`)}
             />
             <button disabled={archiving} onClick={() => ask("archive")}>Archive</button>
+            {tagAction}
             {showUnarchive && (
               <button disabled={archiving} onClick={() => ask("unarchive")}>Unarchive</button>
             )}

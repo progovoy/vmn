@@ -108,3 +108,14 @@ button.sel-pick-remove:hover { color: var(--text); }
   .sel-pick { min-height: 40px; }
   button.sel-pick-remove { min-width: 40px; min-height: 40px; }
 }
+
+/* The tray's Tag popover, above the bar's right end (positioned off the
+   dock, so the bar's overflow does not clip it). */
+.sel-tag-popover {
+  position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 1;
+  display: grid; gap: 8px; width: min(320px, 100%); padding: 12px; box-sizing: border-box;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+}
+.sel-tag-popover label { display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
+.sel-tag-popover .error { font-size: 12px; }
+.sel-tag-actions { display: flex; justify-content: flex-end; gap: 8px; }

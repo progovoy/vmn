@@ -289,6 +289,12 @@ jobs can be picked and compared:
   can't take thousands of runs: with queries selected it compares the picks
   plus the first 10 loaded runs of each query, in the board's order, and its
   tooltip says so.
+- A pick that a selected query also matches but the board never loaded is
+  counted once: the tray asks the list endpoint (`scope`, `q = (<query>) and
+  verstr in (…)`) and leaves such picks out of the by-verstr bodies; until it
+  answers the count reads `≤N`. Tag (next to Archive) takes `key=value` tags
+  to set and keys to remove, counts the runs it changes, then runs one
+  `exp_tag` by query per query plus one (`verstr in (…)`) for the other picks.
 - A status region announces each count change. `x`, `shift+x` and the
   checkboxes pick runs. Esc clears the picks only on a board's page.
 
