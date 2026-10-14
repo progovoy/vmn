@@ -7,7 +7,9 @@
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import type { GroupAggregate, GroupTarget } from "../apiGroups";
+import SegmentBar from "../components/SegmentBar";
 import StatusPill from "../components/StatusPill";
+import ToneParts from "../components/ToneParts";
 import { Icon } from "../components/shell/icons";
 import type { ExperimentRow, RunState } from "../types";
 import { fmtVal, plural, runHref } from "../util";
@@ -34,11 +36,7 @@ export const groupSpoken = (g: BoardGroup) =>
  *  screen reader, which gets them from groupSpoken). */
 export function GroupCountParts({ group, title }: { group: BoardGroup; title?: string }) {
   return (
-    <span className="group-counts" aria-hidden="true" title={title}>
-      {countParts(group.counts, group.rows_unfiltered).map((p, i) => (
-        <span key={p.tone}>{i > 0 && " · "}<span className={`tone-${p.tone}`}>{p.text}</span></span>
-      ))}
-    </span>
+    <ToneParts className="group-counts" parts={countParts(group.counts, group.rows_unfiltered)} title={title} aria-hidden="true" />
   );
 }
 
@@ -47,13 +45,7 @@ export function GroupCountParts({ group, title }: { group: BoardGroup; title?: s
 export function GroupBar({ group }: { group: BoardGroup }) {
   const segments = barSegments(group.counts);
   if (!segments) return null;
-  return (
-    <span className="group-bar" aria-hidden="true">
-      {segments.map((sg) => (
-        <span key={sg.tone} className={`group-bar-seg tone-${sg.tone}`} data-tone={sg.tone} style={{ width: `${sg.pct}%` }} />
-      ))}
-    </span>
-  );
+  return <SegmentBar className="group-bar" segments={segments} aria-hidden="true" />;
 }
 
 /** A group's fold, or for a group too big to unfold (plan 23 §3.4) the

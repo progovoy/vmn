@@ -1,0 +1,8 @@
+/* SegmentBar.tsx: the track and the status colours; a container's own class
+   sets only its size. */
+.seg-bar { display: inline-flex; overflow: hidden; border-radius: 3px; background: var(--line-2); }
+.bar-seg { height: 100%; }
+.bar-seg.tone-done { background: var(--st-good); }
+.bar-seg.tone-failed { background: var(--st-bad); }
+.bar-seg.tone-stuck { background: var(--st-stuck); }
+.bar-seg.tone-running { background: var(--st-running); }

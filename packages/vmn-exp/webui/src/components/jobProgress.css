@@ -2,15 +2,7 @@
   display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%;
   font-size: 12px; color: var(--text-2);
 }
-.job-bar {
-  display: inline-flex; flex: none; width: 72px; height: 6px;
-  border-radius: 3px; overflow: hidden; background: var(--line-2);
-}
-.job-bar-seg { height: 100%; }
-.job-bar-seg.tone-done { background: var(--st-good); }
-.job-bar-seg.tone-failed { background: var(--st-bad); }
-.job-bar-seg.tone-stuck { background: var(--st-stuck); }
-.job-bar-seg.tone-running { background: var(--st-running); }
+.job-bar { flex: none; width: 72px; height: 6px; }
 .job-progress-text {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

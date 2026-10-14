@@ -3,6 +3,7 @@
 import type { JobSummary } from "../types";
 import { fmtCount, humanizeSeconds, relTime } from "../util";
 import { barSegments } from "../pages/groupHeaderText";
+import { joinParts } from "./toneParts";
 
 /** `41/min`; one decimal below 10 a minute (`0.3/min`). */
 export function fmtThroughput(perMin: number): string {
@@ -49,12 +50,11 @@ function parts(j: Progress, done: string, eta: (left: string) => string): Progre
 export const jobProgressParts = (j: Progress) =>
   parts(j, `${fmtCount(j.done)}/${fmtCount(j.expected)}`, (left) => `ETA ${left}`);
 
-export const jobProgressText = (j: Progress) => jobProgressParts(j).map((p) => p.text).join(" · ");
+export const jobProgressText = (j: Progress) => joinParts(jobProgressParts(j));
 
 /** The same, for a screen reader. */
 export const jobSpoken = (j: Progress) =>
-  parts(j, `${fmtCount(j.done)} of ${fmtCount(j.expected)} runs done`, (left) => `about ${left} left`)
-    .map((p) => p.text).join(", ");
+  joinParts(parts(j, `${fmtCount(j.done)} of ${fmtCount(j.expected)} runs done`, (left) => `about ${left} left`), ", ");
 
 /** Each state's share (percent) of the expected runs (of the runs so far,
  *  once more ran than expected), like a group header's bar; the rest is

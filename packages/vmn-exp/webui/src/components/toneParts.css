@@ -1,0 +1,7 @@
+/* ToneParts.tsx: each status's colour in a line of counts. */
+.tone-parts .tone-total { color: var(--text-2); font-weight: 600; }
+.tone-parts .tone-running { color: var(--st-running); }
+.tone-parts .tone-waiting { color: var(--text-3); }
+.tone-parts .tone-stuck { color: var(--st-stuck); }
+.tone-parts .tone-failed { color: var(--st-bad); }
+.tone-parts .tone-done { color: var(--st-good); }

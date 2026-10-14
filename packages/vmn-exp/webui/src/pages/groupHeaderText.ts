@@ -1,6 +1,7 @@
 /** What a group header row says (plan 22 G4, G10): its status count and,
  *  per metric, the aggregate the board shows. */
 import { fmtCount, plural } from "../util";
+import { joinParts } from "../util/toneParts";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "done";
@@ -28,11 +29,11 @@ export function countParts(c: GroupCounts, unfiltered?: number): { text: string;
 
 /** `16 runs · 2 running · 1 failed`. */
 export const countsText = (c: GroupCounts, unfiltered?: number) =>
-  countParts(c, unfiltered).map((p) => p.text).join(" · ");
+  joinParts(countParts(c, unfiltered));
 
 /** `16 runs, 2 running, 1 failed`, for a screen reader. */
 export const spokenCounts = (c: GroupCounts, unfiltered?: number) =>
-  countParts(c, unfiltered).map((p) => p.text).join(", ");
+  joinParts(countParts(c, unfiltered), ", ");
 
 /** The states a group's run bar fills, left to right: the finished runs,
  *  then the running; the waiting ones are the empty track. */
