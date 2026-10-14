@@ -384,9 +384,9 @@ class LeaderboardCache(SetAnswers):
         return cut if limit is None else {"rows": cut, "total": len(rows)}
 
     def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False,
-                scope=None, top=False):
-        """Every row passing *status* in :meth:`page`'s order, unpaged."""
-        f = Filters(sort, status, None, order, archived, scope, top)
+                scope=None, top=False, query=None):
+        """Every row passing the filters in :meth:`page`'s order, unpaged."""
+        f = Filters(sort, status, query, order, archived, scope, top)
         return self._job_view.ordered(snapshot, schema, None, f)
 
     def clock(self):

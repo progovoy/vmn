@@ -7,12 +7,14 @@ Reads go straight to the vmn library (lock-free); the SPA is served from
 illegal in app names. Request hardening lives in :mod:`vmn_exp.ui.security`.
 """
 import os
+from functools import partial
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.metric_schema import effective_schema
+from vmn_exp.core.query import QueryError
 from vmn_exp.core.similar_search import conf_weights
 from vmn_exp.storage.areas import app_key
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
@@ -50,6 +52,7 @@ from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
+from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.readers import changelog as changelog_reader
@@ -106,6 +109,7 @@ def create_app(
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui import storage_access
+    from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
     from vmn_exp.ui.jobs import JobRunner, build_command
     from vmn_exp.ui.jobs_store import build_store_action
     from vmn_exp.ui.storage_access import EDIT, READ
@@ -470,6 +474,8 @@ def create_app(
             raise HTTPException(403, "Server is read-only")
         ws = _workspace(ws_name)
         app_name = _app_name(app_tag)
+        if is_bulk(action, body):
+            return _bulk_action(ws, app_tag, app_name, action, body)
         if ws.kind == "store":
             return _submit_store_action(ws, app_name, action, body)
         command, err = build_command(action, app_name, body)
@@ -492,6 +498,38 @@ def create_app(
         if ws.name not in edit_storages:
             edit_storages[ws.name] = open_storage(ws.store, area=RUNS, buffer_logs=True)
         return edit_storages[ws.name]
+
+    def _bulk_action(ws, app_tag, app_name, action, body):
+        """An action on the runs of a query (plan 23 S4): a ``dry_run``
+        preview, else a batched job resolving them again when it starts."""
+        spec, err = BulkSpec.build(action, app_name, body)
+        if err:
+            raise HTTPException(400, err)
+        _optional_segment(body.get("scope"))
+        if ws.kind == "store" and EDIT not in _capabilities(ws):
+            raise HTTPException(403, "The server has no edit access to this store")
+
+        def resolve():
+            snapshot, schema = _leaderboard_inputs(ws.name, app_tag)
+            return spec.matching(leaderboards.ordered(snapshot, schema, **spec.filters()))
+
+        try:
+            verstrs = resolve()
+        except UnknownScope as e:
+            raise HTTPException(404, str(e))
+        except QueryError as e:
+            raise HTTPException(400, str(e))
+        if body.get("dry_run"):
+            return JSONResponse(spec.preview(verstrs))
+        if ws.kind == "store":
+            storage, reads = _edit_storage(ws), _exp_storage_for(ws)
+            act = partial(spec.apply, storage, hint=lambda app, v: source.touched(ws, app, reads))
+        else:
+            act = partial(spec.run_in_checkout, jobs.run_command, ws.path)
+        job, err = jobs.submit_bulk(ws.name, spec.label, resolve, act)
+        if err:
+            raise HTTPException(409, err)
+        return job
 
     def _submit_store_action(ws, app_name, action, body):
         store_action, err = build_store_action(action, app_name, body)
