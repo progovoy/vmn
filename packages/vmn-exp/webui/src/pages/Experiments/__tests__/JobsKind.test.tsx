@@ -50,18 +50,18 @@ describe("Jobs | Single runs | All runs", () => {
     renderExperiments();
     await screen.findByRole("link", { name: "grid" });
     expect(screen.getAllByRole("button", { name: /^Single runs/ })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: /^Jobs/ })).toHaveLength(1);
-    expect(options()).toEqual(["Jobs (20)", "Single runs (19,580)", "All runs"]);
+    expect(screen.getAllByRole("button", { name: /^Outer runs/ })).toHaveLength(1);
+    expect(options()).toEqual(["Outer runs (20)", "Single runs (19,580)", "All runs"]);
     expect(screen.queryByRole("group", { name: "Jobs or single runs" })).toBeNull();
   });
 
   it("opens on the jobs, counting each side from the facets", async () => {
     renderExperiments();
     await screen.findByRole("link", { name: "grid" });
-    expect(within(switcher()!).getByRole("button", { name: "Jobs (20)" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(switcher()!).getByRole("button", { name: "Outer runs (20)" })).toHaveAttribute("aria-pressed", "true");
     expect(within(switcher()!).getByRole("button", { name: "Single runs (19,580)" })).toHaveAttribute("aria-pressed", "false");
     expect(lastOpts()).toEqual(expect.objectContaining({ top: "jobs" }));
-    expect(screen.getByText("20 jobs")).toBeInTheDocument();
+    expect(screen.getByText("20 outer runs")).toBeInTheDocument();
   });
 
   it("switches to the single runs, kind=singles in the URL", async () => {
@@ -120,7 +120,7 @@ describe("Jobs | Single runs | All runs", () => {
   it("filtered down to nothing, says no job matches", async () => {
     m.experimentsPaged.mockResolvedValue(jobsPage([]));
     renderExperiments("/ws/test/app/my-app?status=failed");
-    expect(await screen.findByText("No jobs match the filters.")).toBeInTheDocument();
+    expect(await screen.findByText("No outer runs match the filters.")).toBeInTheDocument();
   });
 
   it("the CLI line lists what the view shows", async () => {

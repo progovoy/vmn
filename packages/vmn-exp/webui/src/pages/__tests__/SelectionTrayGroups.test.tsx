@@ -50,19 +50,19 @@ describe("the tray with query groups", () => {
   it("counts the explicit picks plus the groups' counts", () => {
     renderTray();
     expect(within(tray()).getByText("4,012", { selector: ".sel-badge" })).toBeInTheDocument();
-    expect(within(tray()).getByRole("status")).toHaveTextContent("4,012 selected from 4 jobs");
+    expect(within(tray()).getByRole("status")).toHaveTextContent("4,012 selected from 4 outer runs");
   });
 
   it("lists a group as one removable entry", () => {
     renderTray();
-    fireEvent.click(within(tray()).getByRole("button", { name: /from 4 jobs/ }));
+    fireEvent.click(within(tray()).getByRole("button", { name: /from 4 outer runs/ }));
     const list = screen.getByRole("list", { name: "Selected runs" });
     expect(within(list).getByText("all 4,000 matching in hist-0012 (status = failed)")).toBeInTheDocument();
     fireEvent.click(within(list).getByRole("button", {
       name: "Remove all 4,000 matching in hist-0012 (status = failed)",
     }));
     expect(readGroups("w", "a").map((g) => g.scope)).toEqual(["J4"]);
-    expect(within(tray()).getByRole("status")).toHaveTextContent("12 selected from 3 jobs");
+    expect(within(tray()).getByRole("status")).toHaveTextContent("12 selected from 3 outer runs");
   });
 
   it("compares the explicit picks and the top 10 runs of each group, and says so", () => {

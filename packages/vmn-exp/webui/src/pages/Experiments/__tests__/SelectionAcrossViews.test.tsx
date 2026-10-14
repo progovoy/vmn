@@ -55,7 +55,7 @@ describe("the app-wide selection", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: `Select ${GRID.verstr}` }));
     const sel = await tray();
     expect(within(sel).getByText("1", { selector: ".sel-badge" })).toBeInTheDocument();
-    expect(within(sel).getByRole("status")).toHaveTextContent("1 selected from 1 job");
+    expect(within(sel).getByRole("status")).toHaveTextContent("1 selected from 1 outer run");
     expect(readPicks("test", "my-app")).toEqual([{ verstr: GRID.verstr, job: GRID.verstr, name: "grid", idx: 2 }]);
   });
 
@@ -68,13 +68,13 @@ describe("the app-wide selection", () => {
     expect(within(await tray()).getByText("1", { selector: ".sel-badge" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: `Select ${INNER.verstr}` }));
     await waitFor(async () =>
-      expect(within(await tray()).getByRole("status")).toHaveTextContent("2 selected from 2 jobs"));
+      expect(within(await tray()).getByRole("status")).toHaveTextContent("2 selected from 2 outer runs"));
   });
 
   it("shows picks made on another page when the page opens", async () => {
     writePicks("test", "my-app", [{ verstr: "elsewhere", job: "J" }]);
     renderExperiments();
     await screen.findByRole("link", { name: "grid" });
-    expect(within(await tray()).getByRole("status")).toHaveTextContent("1 selected from 1 job");
+    expect(within(await tray()).getByRole("status")).toHaveTextContent("1 selected from 1 outer run");
   });
 });

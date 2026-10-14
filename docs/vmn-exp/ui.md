@@ -239,51 +239,61 @@ runs that match, so the rows behind a link are as many as it counts. App tiles c
 (archived runs left out). See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
 
-## Jobs and the job page
+## Outer runs and the outer run's page
 
-A **job** is a run other runs point at with `parent` (a sweep, a k-fold
-grid, an eval fan-out, a fleet of pods), and it is the unit of the
-experiments screen: one job can have thousands of runs.
+An **outer run** (`kind = "outer"`, as `vmn-exp list <app> --query 'kind =
+"outer"'` selects them) is a run other runs point at with `parent`: a sweep,
+a k-fold grid, an eval fan-out, a fleet of pods. It is the unit of the
+experiments screen: one outer run can have thousands of runs. (The code and
+the URL still say *job*: `view=jobs`, `kind=jobs`, the `job` row field and the
+`job:*` sorts keep their names.)
 
-**The experiments page** opens on **Jobs** (`view=jobs`). Its switch next to
-the app name has `Jobs (N)`, `Single runs (N)` and `All runs`. The last view
-is remembered per app, and `view=`/`kind=` in the URL win.
-- **Jobs** has one row per top-level job. Each row shows:
-  - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished job reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`.
+**The experiments page** opens on **Outer runs** (`view=jobs`). Its switch next
+to the app name has `Outer runs (N)`, `Single runs (N)` and `All runs`. The
+last view is remembered per app, and `view=`/`kind=` in the URL win.
+- **Outer runs** has one row per top-level outer run. Each row shows:
+  - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`.
   - the best run on the main metric, linked (`—` when no goal is declared), and a sparkline of the metric's spread.
   - runs, failed %, rate, ETA, branch and start.
 
-  Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`).
+  Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the name column is headed `outer run · progress`.
 - **Single runs** lists the top-level runs without children.
 - **All runs** is the flat board with Group by ([below](#grouped-board)).
 
+An **`outer · N runs` badge** marks an outer run wherever it shows: beside its
+tree status in All runs' name cell, on the phone's cards, in its page header,
+on its Compare chip and in ⌘K. N is the subtree's run count the row already
+carries; the badge links to the outer run's page.
+
 Search and the query bar match every run of the app, whichever view is open:
-- In Jobs, the list narrows to the jobs that match or have matching runs. A
-  line reads `2 jobs · 413 runs match · show all 413 runs`, and each job
-  carries a `412 matching runs` chip that opens its Runs tab filtered.
+- In Outer runs, the list narrows to the outer runs that match or have
+  matching runs. A line reads `2 outer runs · 413 runs match · show all 413
+  runs`, and each outer run carries a `412 matching runs` chip that opens its
+  Runs tab filtered.
 - ⌘K finds any run by `@N`, name or verstr prefix.
 
 **The selection** belongs to the app, not to one board, so runs from several
-jobs can be picked and compared:
+outer runs can be picked and compared:
 - It is kept per workspace and app in sessionStorage. It follows you across
-  Jobs, All runs, job pages and inner run pages, and is capped at 500 runs. A
-  `sel=` in a shared link replaces it on load and then leaves the URL.
-  Compare keeps its own `compare-runs?sel=`.
-- One tray at the bottom of every page of the app (boards, job and run pages,
-  compare-runs, the stamp tree, actions) shows it while anything is picked:
-  `7 runs selected · from 3 jobs ▾ · Compare (7) · Archive · ✕`. A job ticked
-  in Jobs counts as one run, the job itself, never its subtree. The board on
-  screen adds its own actions (select all matching, Unarchive on an archived
-  view); on the Compare page, Compare replaces the current comparison.
-- "Select all N matching" on a job's Runs tab adds that query (the job, its
-  filter and status) to the selection instead of replacing it, so picks from
-  other jobs stay: `4,012 runs selected · from 3 jobs`. Selecting the same
-  query again replaces its entry. Its loaded runs are part of it, not counted
-  twice; unticking one of them turns the query back into those loaded runs
-  minus that one.
-- `from 3 jobs ▾` expands the picks grouped by job. Each pick links to its run
-  page and has its own remove button; a selected query is one removable entry,
-  e.g. `all 4,000 matching in hist-0012 (status = failed)`.
+  Outer runs, All runs, outer run pages and inner run pages, and is capped at
+  500 runs. A `sel=` in a shared link replaces it on load and then leaves the
+  URL. Compare keeps its own `compare-runs?sel=`.
+- One tray at the bottom of every page of the app (boards, outer and inner run
+  pages, compare-runs, the stamp tree, actions) shows it while anything is
+  picked: `7 runs selected · from 3 outer runs ▾ · Compare (7) · Archive · ✕`.
+  An outer run ticked in Outer runs counts as one run, the outer run itself,
+  never its subtree. The board on screen adds its own actions (select all
+  matching, Unarchive on an archived view); on the Compare page, Compare
+  replaces the current comparison.
+- "Select all N matching" on an outer run's Runs tab adds that query (the
+  outer run, its filter and status) to the selection instead of replacing it,
+  so picks from other outer runs stay: `4,012 runs selected · from 3 outer
+  runs`. Selecting the same query again replaces its entry. Its loaded runs
+  are part of it, not counted twice; unticking one of them turns the query
+  back into those loaded runs minus that one.
+- `from 3 outer runs ▾` expands the picks grouped by outer run. Each pick
+  links to its run page and has its own remove button; a selected query is one
+  removable entry, e.g. `all 4,000 matching in hist-0012 (status = failed)`.
 - Archive counts every selected query on the server first (`dry_run`), then
   runs one archive by query per query plus one for the other picks. Compare
   can't take thousands of runs: with queries selected it compares the picks
@@ -292,30 +302,40 @@ jobs can be picked and compared:
 - A status region announces each count change. `x`, `shift+x` and the
   checkboxes pick runs. Esc clears the picks only on a board's page.
 
-Group by groups the rows of the view it is in: jobs in Jobs, runs across jobs
-in All runs, and runs inside one job on its Runs tab. A group of more than 50
-runs has no fold; its header button adds the group's clause as a filter.
+Group by groups the rows of the view it is in: outer runs in Outer runs, runs
+across outer runs in All runs, and runs inside one outer run on its Runs tab.
+A group of more than 50 runs has no fold; its header button adds the group's
+clause as a filter.
 
-**The job page** is what a run with children opens on (`?tab=`).
-- **The header** has the name, `@N`, the tree status, the actions and the live
-  indicator, then the full-width run bar and its counts.
+**The outer run's page** is what a run with children opens on (`?tab=`).
+- **The header** has the name, `@N`, the tree status, the `outer · N runs`
+  badge, the actions and the live indicator, then the full-width run bar and
+  its counts.
 - **The tabs** (each a URL value of `tab=`):
   - `overview` (the default): KPI tiles (done of expected, failed, running, waiting, stuck, median and p90 duration, best), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
-  - `runs`: the board scoped to the job's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
+  - `runs`: the board scoped to the outer run's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
   - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
   - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
   - `code` and `log`.
 
-  Every number comes from a per-job rollup the index keeps up to date.
+  Every number comes from a per-outer-run rollup the index keeps up to date.
 
-Without a declared goal, a job tracks the app's most common metrics, never a
-param folded into metrics. It shows their spread but crowns no best
+Without a declared goal, an outer run tracks the app's most common metrics,
+never a param folded into metrics. It shows their spread but crowns no best
 (`ranked: false`).
 
-**An inner run's page** carries a job context bar: `Job <name> › run 1,903 of
-2,000 · rank 1 of 1,409 on val_loss · ‹ prev  next ›`. It also shows the run's
-value marked on the job's distribution. Prev and next follow the Runs tab's
-order (`from=`/`at=` in the URL), and `[` / `]` step between runs.
+**An inner run's page** carries an outer run context bar: `Outer run <name> ›
+run 1,903 of 2,000 · rank 1 of 1,409 on val_loss · ‹ prev  next ›`. It also
+shows the run's value marked on the outer run's distribution. Prev and next
+follow the Runs tab's order (`from=`/`at=` in the URL), and `[` / `]` step
+between runs.
+
+**Compare** takes outer runs too. An outer run that logs metrics itself (its
+aggregates) compares like any run. One that logs none gets a note on Curves
+and Table, `kfold-cv is an outer run of 5 runs and logs no metrics itself`,
+with `Compare its best run` (swaps it for its best run on the primary goal,
+from `experiments/{v}/summary`'s `top`, else its first run) and `Add its 5
+runs` (at most 20, and the note says so when capped).
 
 Live pages update from the server's change stream (SSE, `.../events`) and
 poll only as a fallback.
@@ -337,7 +357,7 @@ last 10 entries), **Environment** (Python, platform, packages, inputs),
 are any). Each section's heading is a button (`aria-expanded`); the open or
 closed choice is remembered per browser (localStorage `vmn-exp:disclosures`).
 
-A run with children opens the [job page](#jobs-and-the-job-page) instead;
+A run with children opens the [outer run's page](#outer-runs-and-the-outer-runs-page) instead;
 its runs are the Runs tab, not a card.
 
 ## Leaderboard columns
@@ -480,7 +500,7 @@ G8), with no redirect: everything vmn links to is `compare-runs?tab=…`.
   its selection, `shift+x` selects a range, Enter/`o` opens it, `/` focuses
   the filter, Esc leaves the row, `?` lists the keys. `density=compact|comfortable`
   (the toggle under the table, remembered per browser) sets the row height.
-- **Run pages**: `[` / `]` go to the previous / next run of the job.
+- **Run pages**: `[` / `]` go to the previous / next run of the outer run.
 - **Narrow windows** (below 900 px): the sidebar becomes a drawer opened from
   the topbar's menu button; it focuses the first nav link, and Esc, a click
   outside or a navigation closes it and returns focus to the button.
@@ -539,16 +559,16 @@ answer a ref they cannot resolve with `{"detail": "<message>", "code": "<code>"}
 (a malformed ref such as `@x`) a 400. Clients branch on `code`, never on the
 message.
 
-### Jobs, scope and search
+### Outer runs, scope and search
 
 - **Rows** carry `root` (the top-level ancestor's verstr, null at the top) and
   `failure_sig`. Both are query fields, as is `under("<verstr>")` (in that
   run's subtree).
 - **`experiments?top=1|jobs|singles`** lists top-level runs only (all, those
-  with children, those without). A job row carries `job`: `{total, counts,
+  with children, those without). An outer run's row carries `job`: `{total, counts,
   done, expected, progress, failed_pct, throughput_per_min, eta_sec, metric,
   best, best_verstr, best_idx, spread}`. It takes the `job:*` sorts.
-  - With `match_subtree=1` and a `q`, a job matches when it or any run of its
+  - With `match_subtree=1` and a `q`, an outer run matches when it or any run of its
     subtree does. Each row then gets `matched`, and the page gets
     `jobs_matched`/`runs_matched`.
   - `experiments-facets` returns `jobs`/`singles` counts.
@@ -558,13 +578,13 @@ message.
   `experiments-importance`. An unknown run is a 404.
 - **Grouped answers** give every group a `clause`, the filter text that
   selects exactly it. With `top=`, groups add `job_counts`, `runs`, `failed`
-  and `job_aggregates` (over the jobs' best values).
-- **`experiments/{v}/summary`** is the job's rollup: counts, `expected`,
+  and `job_aggregates` (over the outer runs' best values).
+- **`experiments/{v}/summary`** is the outer run's rollup: counts, `expected`,
   progress, throughput, ETA, `metric`, `ranked`, per-metric
   `{n,min,max,mean,best,best_verstr,p10,p50,p90,hist}`, duration p50/p90,
   failure signatures, `top` (10 best) and a `timeline` (epoch-second buckets
   of `started`/`succeeded`/`failed`, sparse).
-- **`experiments/{v}/failures?limit=`** returns the clusters. Both job
+- **`experiments/{v}/failures?limit=`** returns the clusters. Both outer run
   endpoints 404 for a run without children, and answer 304 on an early ETag.
 - **`search?text=&limit=`** is ⌘K's run search over every run. It ranks exact
   `@N`, then verstr prefix, then name prefix, then a substring in any indexed

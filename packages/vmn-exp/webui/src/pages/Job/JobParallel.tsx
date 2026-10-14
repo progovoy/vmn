@@ -33,7 +33,7 @@ function Plot({ data, dims, color, y }: { data: ExperimentColumns; dims: string[
   // Stable props: a brush commit re-renders this, and must not rebuild 50k rows' axes.
   const metricCols = useMemo(() => [y], [y]);
   const onBrush = useCallback((idx: number[] | null) => setBrushed(idx ? idx.length : null), []);
-  if (!rows.length) return <ChartEmpty text="No run of this job is in yet." />;
+  if (!rows.length) return <ChartEmpty text="No run of this outer run is in yet." />;
   return (
     <ChartFigure
       label={`Parallel coordinates of ${y} and ${plural(dims.length, "param")}, coloured by ${color}`}

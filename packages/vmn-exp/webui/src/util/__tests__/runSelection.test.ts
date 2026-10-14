@@ -77,7 +77,7 @@ describe("the tray's summary", () => {
   ];
 
   it("counts runs and the distinct known jobs", () => {
-    expect(summarizePicks(picks)).toEqual({ runs: 5, jobs: 2, text: "5 runs from 2 jobs" });
+    expect(summarizePicks(picks)).toEqual({ runs: 5, jobs: 2, text: "5 runs from 2 outer runs" });
   });
 
   it("leaves the jobs out when none is known", () => {

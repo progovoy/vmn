@@ -33,7 +33,7 @@ export type JobsKindState = ReturnType<typeof useJobsKind>;
 
 /** The noun of what the view lists. */
 export const kindNoun = (kind: JobsKind | null) =>
-  kind === "jobs" ? "job" : kind === "singles" ? "single run" : "top-level run";
+  kind === "jobs" ? "outer run" : kind === "singles" ? "single run" : "top-level run";
 
 /** The `vmn-exp list --query` selecting the same rows. */
 export const kindQuery = (kind: JobsKind | null) =>

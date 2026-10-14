@@ -75,7 +75,7 @@ export function ColumnsState({ query, children }: {
   query: UseQueryResult<ExperimentColumns>; children: (data: ExperimentColumns) => ReactNode;
 }) {
   if (query.isError) {
-    return <div className="error" role="alert">Could not load the job&apos;s runs: {query.error.message}</div>;
+    return <div className="error" role="alert">Could not load the outer run&apos;s runs: {query.error.message}</div>;
   }
   return query.data ? <>{children(query.data)}</> : <Skeleton />;
 }

@@ -57,7 +57,7 @@ beforeEach(() => {
 describe("JobContextBar", () => {
   it("names the job, the run's place in the Runs tab's order and its neighbours", async () => {
     renderBar(runContextSearch(ORDER, 5));
-    const bar = await screen.findByRole("navigation", { name: "Job context" });
+    const bar = await screen.findByRole("navigation", { name: "Outer run context" });
     expect(await screen.findByRole("link", { name: "lr_layers_grid" })).toHaveAttribute("href", `/ws/test/app/my-app/run/${JOB}?tab=runs`);
     await waitFor(() => expect(bar).toHaveTextContent("run 6 of 40"));
     expect(m.experimentsPaged).toHaveBeenCalledWith("test", "my-app",
@@ -72,7 +72,7 @@ describe("JobContextBar", () => {
 
   it("ranks the run on the job's metric within the job", async () => {
     renderBar(runContextSearch(ORDER, 5));
-    const bar = await screen.findByRole("navigation", { name: "Job context" });
+    const bar = await screen.findByRole("navigation", { name: "Outer run context" });
     await waitFor(() => expect(bar).toHaveTextContent("rank 3 of 1,409 on val_loss"));
     expect(m.experimentsPaged).toHaveBeenCalledWith("test", "my-app",
       expect.objectContaining({ scope: JOB, query: "metrics.val_loss < 0.25", limit: 1 }));
@@ -80,7 +80,7 @@ describe("JobContextBar", () => {
 
   it("without an order, follows the job's default one (newest first)", async () => {
     renderBar();
-    const bar = await screen.findByRole("navigation", { name: "Job context" });
+    const bar = await screen.findByRole("navigation", { name: "Outer run context" });
     await waitFor(() => expect(bar).toHaveTextContent("run 8 of 40"));
     expect(m.experimentsPaged).toHaveBeenCalledWith("test", "my-app",
       expect.objectContaining({ scope: JOB, query: "idx > 5", sort: "idx", limit: 1 }));
@@ -97,13 +97,13 @@ describe("JobContextBar", () => {
 
   it("marks the run's value on the job's distribution", async () => {
     renderBar(runContextSearch(ORDER, 5));
-    expect(await screen.findByRole("img", { name: "val_loss 0.25 among 1,409 runs of the job" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "val_loss 0.25 among 1,409 runs of the outer run" })).toBeInTheDocument();
   });
 
   it("ranks nothing when the job's metrics have no goal", async () => {
     vi.mocked(jobSummary).mockResolvedValue(jobSummaryFixture({ ranked: false }));
     renderBar(runContextSearch(ORDER, 5));
-    const bar = await screen.findByRole("navigation", { name: "Job context" });
+    const bar = await screen.findByRole("navigation", { name: "Outer run context" });
     await waitFor(() => expect(bar).toHaveTextContent("run 6 of 40"));
     expect(bar).not.toHaveTextContent("rank");
   });

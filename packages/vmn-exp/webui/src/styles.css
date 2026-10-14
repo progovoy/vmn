@@ -351,6 +351,9 @@ td.idx-cell { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
   color: var(--text-2); background: transparent; font-family: var(--mono);
 }
 .badge.mode { text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.5px; }
+/* An outer run's `outer · N runs` (components/OuterBadge.tsx). */
+.badge.outer-badge { flex: none; margin-left: 6px; font-size: 11px; white-space: nowrap; text-decoration: none; }
+a.badge.outer-badge:hover { color: var(--text); border-color: var(--text-3); }
 .badge.mode-major { border-color: var(--major); color: var(--major); }
 .badge.mode-minor { border-color: var(--minor); color: var(--minor); }
 .badge.mode-patch { border-color: var(--patch); color: var(--patch); }

@@ -57,7 +57,7 @@ describe("Jobs view search", () => {
 
   it("shows the result line and switches to All runs keeping the filter", async () => {
     renderExperiments(SEARCHED);
-    expect(await screen.findByText("2 jobs · 413 runs match")).toBeInTheDocument();
+    expect(await screen.findByText("2 outer runs · 413 runs match")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: "show all 413 runs" }));
     await waitFor(() => expect(urlParams().get("view")).toBe("all"));
     expect(urlParams().get("search")).toBe("grid");

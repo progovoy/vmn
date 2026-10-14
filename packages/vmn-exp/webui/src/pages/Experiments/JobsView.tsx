@@ -28,12 +28,12 @@ import { useJobsBoard } from "./useJobsBoard";
 /** `20 jobs`, `19,580 single runs`; listing every top-level run, `14 jobs ·
  *  3 single runs` once every row is loaded, else the total. */
 function countText(loading: boolean, rows: { job?: unknown }[], total: number, kind: JobsKind | null): string {
-  if (loading) return "loading jobs…";
+  if (loading) return "loading outer runs…";
   if (kind) return plural(total, kindNoun(kind));
   if (rows.length < total) return `${fmtCount(total)} top-level runs`;
   const jobs = rows.filter((r) => r.job).length;
   const singles = rows.length - jobs;
-  return [jobs && plural(jobs, "job"), singles && plural(singles, "single run")].filter(Boolean).join(" · ") || "0 runs";
+  return [jobs && plural(jobs, "outer run"), singles && plural(singles, "single run")].filter(Boolean).join(" · ") || "0 runs";
 }
 
 /** `No jobs match the filters.`, `No single runs yet.` */
@@ -102,14 +102,14 @@ export default function JobsView({ ws, app, views, kind }: {
             onArchivedChange={view.setArchived}
           />
           <JobsMatchLine matches={data.matches} appBase={base} search={board.search} />
-          <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "job" : "run"} onShow={data.showNew} />
+          <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "outer run" : "run"} onShow={data.showNew} />
           <JobsTable
             items={data.items} ctx={ctx} sort={board.sort}
             selected={view.selected} density={view.density}
-            headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll, label: "Select all visible jobs" }}
+            headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll, label: "Select all visible outer runs" }}
             emptyText={emptyText(kind.kind, board.filtered)}
             groups={{
-              noun: kind.kind === "jobs" ? "job" : "run", asFilter,
+              noun: kind.kind === "jobs" ? "outer run" : "run", asFilter,
               onFold: view.toggleCollapsed, onMore: data.loadGroup,
               checkOf: selection.checkOf, onCheck: selection.toggleRows,
             }}

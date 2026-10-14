@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import type { JobPageSummary } from "../../apiJob";
 import { appName as toAppName } from "../../api";
+import OuterBadge from "../../components/OuterBadge";
 import StatusPill from "../../components/StatusPill";
 import Tabs from "../../components/Tabs";
 import { sweepQuery } from "../../components/SweepSection";
@@ -35,7 +36,7 @@ export function JobCliCard({ ws, app, verstr }: { ws: string; app: string; verst
 export function JobTabs({ tab, onTab }: { tab: JobTab; onTab: (tab: JobTab) => void }) {
   return (
     <Tabs
-      tabs={JOB_TABS} tab={tab} onTab={onTab} label="Job" className="board-tabs job-tabs job-tabbar"
+      tabs={JOB_TABS} tab={tab} onTab={onTab} label="Outer run" className="board-tabs job-tabs job-tabbar"
       panelId={JOB_PANEL_ID} tabId={jobTabId} render={(t) => JOB_TAB_LABELS[t]}
     />
   );
@@ -50,9 +51,10 @@ export default function JobHeader({ summary, actions }: { summary: JobPageSummar
         {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
         {summary.idx != null && <span className="mono run-idx">@{summary.idx}</span>}
         <StatusPill status={status} />
+        <OuterBadge count={summary.total} />
         {summary.sweep && <span className="badge">sweep</span>}
       </div>
-      <div className="job-actions" role="group" aria-label="Job actions">{actions}</div>
+      <div className="job-actions" role="group" aria-label="Outer run actions">{actions}</div>
       <JobHeaderProgress summary={summary} />
     </header>
   );

@@ -92,7 +92,7 @@ describe("the app-wide tray", () => {
     renderAt(path);
     await screen.findByText(text);
     expect(trays()).toHaveLength(1);
-    expect(within(trays()[0]).getByRole("status")).toHaveTextContent("2 selected from 2 jobs");
+    expect(within(trays()[0]).getByRole("status")).toHaveTextContent("2 selected from 2 outer runs");
   });
 
   it("is not shown outside an app", async () => {

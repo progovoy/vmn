@@ -28,7 +28,7 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
   { id: "check", label: "", width: 36 },
   { id: "idx", label: "#", width: 72, sort: IDX_SORT, title: "sort by run number (newest first)", numeric: true },
   { id: "status", label: "status", width: 124 },
-  { id: "name", label: "job · progress", width: 440, sort: JOB_SORTS.progress, title: "sort by progress (furthest first)" },
+  { id: "name", label: "outer run · progress", width: 440, sort: JOB_SORTS.progress, title: "sort by progress (furthest first)" },
   { id: "best", label: "best", width: 120, sort: JOB_SORTS.best, title: "sort by best (best first)", numeric: true },
   { id: "spread", label: "spread", width: 84 },
   { id: "runs", label: "runs", width: 76, sort: JOB_SORTS.total, title: "sort by runs (most first)", numeric: true },

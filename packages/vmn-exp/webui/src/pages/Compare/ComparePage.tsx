@@ -6,9 +6,11 @@ import { PageHead } from "../../components/ui";
 import { setAllParams, useUrlState } from "../../hooks/useUrlState";
 import CodeTab from "./CodeTab";
 import CurvesTab from "./CurvesTab";
+import OuterRunNotes from "./OuterRunNotes";
 import SelectionChips from "./SelectionChips";
 import TableTab from "./TableTab";
 import { codePair, compareTab, selectedRefs, type CompareTab } from "./selection";
+import { useRunLabels } from "./useRunLabels";
 import "./compare.css";
 
 const TAB_LABELS: Record<CompareTab, string> = { curves: "Curves", table: "Table", code: "Code" };
@@ -37,6 +39,7 @@ export default function ComparePage() {
   const tab = compareTab(params);
   const refs = selectedRefs(params);
   const [from, to] = codePair(params);
+  const labels = useRunLabels(ws, app, refs);
 
   const setSel = (next: string[]) => update((p) => {
     setAllParams(p, "sel", next);
@@ -44,6 +47,8 @@ export default function ComparePage() {
   });
   const onRemove = (ref: string) => setSel(refs.filter((r) => r !== ref));
   const onAdd = (ref: string) => { if (!refs.includes(ref)) setSel([...refs, ref]); };
+  const onAddMany = (more: string[]) => setSel([...new Set([...refs, ...more])]);
+  const onReplace = (ref: string, by: string) => setSel([...new Set(refs.map((r) => (r === ref ? by : r)))]);
   // With more than two selected, the "to" picker keeps the selection and
   // picks the other side in `?to=`; otherwise a picker edits the selection.
   const onFrom = (ref: string) => setSel(refs.length > 2 ? [ref, ...refs.slice(1)] : [ref, to]);
@@ -55,8 +60,9 @@ export default function ComparePage() {
     <>
       <Link className="back-link" to={base}>← experiments</Link>
       <PageHead title="Compare" what={toAppName(app)} mono={false} />
-      <SelectionChips ws={ws} app={app} refs={refs} onRemove={onRemove} onAdd={onAdd} />
+      <SelectionChips ws={ws} app={app} labels={labels} onRemove={onRemove} onAdd={onAdd} />
       <Tabs base={base} current={tab} params={params} />
+      {tab !== "code" && <OuterRunNotes ws={ws} app={app} labels={labels} onReplace={onReplace} onAdd={onAddMany} />}
       <div role="tabpanel" aria-label={TAB_LABELS[tab]}>
         {tab === "curves" && <CurvesTab ws={ws} app={app} refs={refs} />}
         {tab === "table" && <TableTab ws={ws} app={app} refs={refs} />}

@@ -20,7 +20,7 @@ function TileBody({ tile }: { tile: KpiTile }) {
 
 export default function JobKpiTiles({ summary, runBase }: { summary: JobPageSummary; runBase: string }) {
   return (
-    <ul className="job-kpis" aria-label="Job KPIs">
+    <ul className="job-kpis" aria-label="Outer run KPIs">
       {jobKpis(summary).map((tile) => (
         <li key={tile.label} className="job-kpi">
           {tile.href

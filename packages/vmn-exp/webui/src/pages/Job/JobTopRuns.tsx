@@ -7,7 +7,7 @@ import { fmtVal, runHref } from "../../util";
 
 /** Why there is no top: no metric at all, no goal to rank on, or no value yet. */
 function emptyText(metric: string | null, ranked: boolean): string {
-  if (!metric) return "No run in this job logged a metric yet.";
+  if (!metric) return "No run in this outer run logged a metric yet.";
   if (!ranked) {
     return `No goal declared for ${metric} — runs aren't ranked. Declare one with `
       + `experiment.metrics.${metric}.goal or run.define_metric(goal=...)`;

@@ -1,10 +1,10 @@
 # Driving the UI's fleet counts (for AI agents)
 
-`vmn-exp ui` opens an app on its **Jobs** view: one row per **job** (a run
-that has inner runs, an outer run), carrying the fleet's counts on its run
-bar, e.g. `16/20 · 1 failed · 2 stuck · 3/min · ETA 2m`. The job's page shows
-the same counts in its header and Overview tiles. The counts cover the job's
-whole subtree (nested jobs included).
+`vmn-exp ui` opens an app on its **Outer runs** view: one row per **outer
+run** (a run that has inner runs, `kind = "outer"`), carrying the fleet's
+counts on its run bar, e.g. `16/20 · 1 failed · 2 stuck · 3/min · ETA 2m`. The
+outer run's page shows the same counts in its header and Overview tiles. The
+counts cover the outer run's whole subtree (nested outer runs included).
 This page tells an agent which call moves each count.
 `vmn-exp skill` prints a short version of it.
 

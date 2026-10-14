@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import type { Fleet, RunState, RunStatus } from "../types";
 import { fmtDuration } from "../util";
 import StatusPill from "../components/StatusPill";
+import OuterBadge from "../components/OuterBadge";
+import { isOuterRun, outerRunCount } from "../util/outerRun";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
 import { ImportedBadge } from "./RunProvenance";
 import type { RunSummary } from "./runSummary";
@@ -62,6 +64,9 @@ export default function RunHead({ ws, app, summary, importedFrom, runUrl, action
       <div className="status-head run-status-line">
         {summary.idx != null && <span className="mono run-idx">@{summary.idx}</span>}
         {summary.status && <StatusParts st={summary.status} runUrl={runUrl} />}
+        {summary.status && isOuterRun(summary.status) && (
+          <OuterBadge count={outerRunCount(summary.status)} to={runUrl(summary.verstr)} />
+        )}
         {summary.baseVersion && <span className="run-base">base {summary.baseVersion}</span>}
         <ImportedBadge importedFrom={importedFrom} />
       </div>

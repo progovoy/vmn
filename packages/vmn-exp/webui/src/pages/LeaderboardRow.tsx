@@ -6,6 +6,8 @@ import type { MemberPlace } from "../util/groupItems";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import RowCheckbox from "../components/RowCheckbox";
 import StatusPill from "../components/StatusPill";
+import OuterBadge from "../components/OuterBadge";
+import { isOuterRun, outerRunCount } from "../util/outerRun";
 import { useRowNavigate } from "../hooks/useRowNavigate";
 import { tagLabel } from "../util/tags";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
@@ -141,6 +143,7 @@ function ExperimentCell({ r, href, style, onPrefetch, member, compact }: {
           {r.name || r.verstr}
         </Link>
         {roll && <span className="tree-roll">{roll}</span>}
+        {isOuterRun(r) && <OuterBadge count={outerRunCount(r)} to={href} />}
       </div>
       {!compact && <div className="exp-branch">
         {r.name && <span className="mono exp-verstr">{r.verstr}</span>}

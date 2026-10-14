@@ -70,7 +70,7 @@ describe("the selection tray on a job page", () => {
     renderRun(`/ws/test/app/my-app/run/${JOB}`);
     await screen.findByRole("tab", { name: /overview/i });
     expect(trays()).toHaveLength(1);
-    expect(within(trays()[0]).getByRole("status")).toHaveTextContent("2 selected from 2 jobs");
+    expect(within(trays()[0]).getByRole("status")).toHaveTextContent("2 selected from 2 outer runs");
   });
 
   it("shows one tray, the board's, on the Runs tab", async () => {
@@ -97,6 +97,6 @@ describe("the selection tray on an inner run's page", () => {
     });
     renderRun("/ws/test/app/my-app/run/k1");
     expect(within(await screen.findByRole("region", { name: "Selection" })).getByRole("status"))
-      .toHaveTextContent("2 selected from 2 jobs");
+      .toHaveTextContent("2 selected from 2 outer runs");
   });
 });

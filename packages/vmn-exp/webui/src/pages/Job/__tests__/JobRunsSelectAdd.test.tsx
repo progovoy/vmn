@@ -84,7 +84,7 @@ describe("select all matching on a job's Runs tab", () => {
   it("adds the query to the selection: picks of other jobs stay", async () => {
     renderRuns();
     await selectAllMatching();
-    await waitFor(() => expect(within(tray()).getByRole("status")).toHaveTextContent("4,001 selected from 2 jobs"));
+    await waitFor(() => expect(within(tray()).getByRole("status")).toHaveTextContent("4,001 selected from 2 outer runs"));
     expect(readPicks("test", "my-app").map((p) => p.verstr)).toEqual(["other"]);
     expect(readGroups("test", "my-app")).toEqual([expect.objectContaining({
       scope: JOB, q: "", status: "failed", count: 4000, job: JOB, label: "hist-0012",

@@ -71,11 +71,11 @@ export default function JobCards({ items, ctx, selected, headerCheck, groups, on
         {ctx.metric && <span className="lb-mcards-metric">{ctx.metric}</span>}
       </div>
       {items === undefined ? (
-        <p className="lb-mcards-loading" role="status">loading jobs…</p>
+        <p className="lb-mcards-loading" role="status">loading outer runs…</p>
       ) : items.length === 0 ? (
         <p className="lb-mcards-loading">{emptyText}</p>
       ) : (
-        <ul className="lb-mcards" role="list" aria-label="jobs">
+        <ul className="lb-mcards" role="list" aria-label="outer runs">
           {items.map((it) => {
             if (!isGroupItem(it)) {
               return <JobCard key={it.verstr} r={it} ctx={ctx} selected={selected.has(it.verstr)} onToggle={onToggle} onPrefetch={onPrefetch} />;
