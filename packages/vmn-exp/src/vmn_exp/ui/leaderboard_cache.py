@@ -384,6 +384,10 @@ class LeaderboardCache(SetAnswers):
         """Build or move *snapshot*'s board base and search index now (the
         refresher and the startup warm-up, off the request path)."""
         self._base(snapshot)
+        self.warm_search(snapshot)
+
+    def warm_search(self, snapshot):
+        """Build or move *snapshot*'s search index now."""
         self._search.get(snapshot)
 
     def search_etag(self, snapshot, **params):
