@@ -129,6 +129,8 @@ def test_facets_list_the_filter_vocabulary(tmp_path, use_index):
         "param_values": {"lr": 1, "opt": 1},
         "parented": 0,
         "total": 3,
+        "jobs": 0,
+        "singles": 3,
     }
 
 
