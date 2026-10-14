@@ -192,13 +192,11 @@ def test_vmn_exp_skill_says_untracked_files_is_listed_only_when_readable(capfd):
             "when readable)") in section
 
 
-def test_vmn_exp_skill_puts_the_fleet_counts_on_the_parent_group_header(capfd):
-    # Plan 22 G1/G4: the board is flat and the counts sit on the outer run's
-    # group header (Group by parent run), not in per-row count columns.
+def test_vmn_exp_skill_puts_the_fleet_counts_on_the_jobs_view_row(capfd):
+    # Plan 23: the app opens on its Jobs view, one row per job carrying its
+    # counts over the whole subtree; grouping by parent run is no longer how.
     assert _skill() == 0
     out = " ".join(capfd.readouterr().out.split())
-    assert "group header" in out and "parent run" in out
-    assert "?group=parent" in out
-    assert "shows these on an outer run (a run with inner runs)" not in out
-    # The header names stuck on its own; failed no longer includes it.
+    assert "Jobs view" in out and "whole subtree" in out
+    assert "?group=parent" not in out
     assert "plus `stuck` ones" not in out

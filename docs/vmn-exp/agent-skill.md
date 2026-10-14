@@ -34,9 +34,9 @@ vmn-exp rerun <app_name> -v <version> --print --json
 
 ### Driving the UI's fleet counts (total / waiting / running / done / failed / stuck)
 
-The `vmn-exp ui` board lists every run as a row. Grouped by parent run (the
-default once a run has a parent; `?group=parent`), each outer run is a group
-header over its inner runs, with their counts (`16 runs · 2 running · 1 failed`).
+`vmn-exp ui` opens an app on its Jobs view: one row per job (an outer run),
+whose run bar carries the counts over its whole subtree
+(`16/20 · 1 failed · 2 stuck · 3/min · ETA 2m`); the job's page repeats them.
 They are derived from the inner runs' states, never written directly:
 
 - **total**: the number of inner runs (register every pod up front so it is right from the start)
