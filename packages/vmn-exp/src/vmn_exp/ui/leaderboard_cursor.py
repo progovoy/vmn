@@ -19,8 +19,14 @@ from collections import ChainMap
 
 from vmn_exp.core.log import DATE_SORTS, primary_metric
 from vmn_exp.core.values import is_finite_number
-from vmn_exp.ui.leaderboard_jobs import JOB_SORTS, job_descending, job_value, sortable
-from vmn_exp.ui.leaderboard_live import Desc, bisect_key, order_key
+from vmn_exp.ui.leaderboard_jobs import (
+    JOB_SORTS,
+    job_descending,
+    job_key,
+    job_value,
+    sortable,
+)
+from vmn_exp.ui.leaderboard_live import bisect_key, order_key
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 
 TAIL = 4
@@ -101,20 +107,15 @@ class JobKey:
     def _value(self, row):
         return job_value(self.summaries, row, self.field)
 
-    def _wrap(self, value, rest):
-        if value is None:
-            return (1, rest)
-        return (0, Desc(value) if self.descending else value, rest)
-
     def key(self, row):
-        return self._wrap(self._value(row), self.inner.key(row))
+        return job_key(self._value(row), self.descending, self.inner.key(row))
 
     def project(self, row):
         return self.inner.project(row) + [self._value(row)]
 
     def target(self, proj):
         value = proj[4] if len(proj) > 4 and sortable(proj[4]) else None
-        return self._wrap(value, self.inner.target(proj))
+        return job_key(value, self.descending, self.inner.target(proj))
 
 
 def keyed(cache, snapshot, schema, last, f, projs):

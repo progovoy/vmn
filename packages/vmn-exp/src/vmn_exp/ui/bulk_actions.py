@@ -8,8 +8,8 @@ carrying the tags is not tagged again), so a bulk action is idempotent.
 :class:`BulkSpec` resolves them, previews them (``dry_run``) and acts on a
 batch, in a store (in-process) or a checkout (``vmn-exp`` argv).
 """
-from vmn_exp.core.manage import set_archived, tag_run
-from vmn_exp.ui.jobs_exp_meta import _tag_args
+from vmn_exp.ui.jobs_exp_meta import _tag_args, exp_archive_command, exp_tag_command
+from vmn_exp.ui.jobs_store import build_store_action
 
 BULK_ACTIONS = ("exp_archive", "exp_unarchive", "exp_tag")
 QUERY_KEYS = ("scope", "q", "status")
@@ -24,18 +24,18 @@ def is_bulk(action, body):
 
 
 class BulkSpec:
-    def __init__(self, action, app_name, body, tag_args=None):
+    def __init__(self, action, app_name, body):
         self.action, self.app_name, self.body = action, app_name, body
         self.verb = action.split("_", 1)[1]
-        self.tag_args = tag_args
 
     @classmethod
     def build(cls, action, app_name, body):
         """``(BulkSpec, None)`` or ``(None, error)``."""
-        if action != "exp_tag":
-            return cls(action, app_name, body), None
-        args, err = _tag_args(body.get("set") or {}, body.get("remove") or [])
-        return (None, err) if err else (cls(action, app_name, body, args), None)
+        if action == "exp_tag":
+            _, err = _tag_args(body.get("set") or {}, body.get("remove") or [])
+            if err:
+                return None, err
+        return cls(action, app_name, body), None
 
     @property
     def label(self):
@@ -66,12 +66,22 @@ class BulkSpec:
     def preview(verstrs):
         return {"count": len(verstrs), "sample": verstrs[:SAMPLE_SIZE]}
 
+    def _bodies(self, batch):
+        """The single-run action bodies acting on *batch*: one per run for a
+        tag, one for an archive/unarchive batch."""
+        if self.action == "exp_tag":
+            edit = {k: self.body[k] for k in ("set", "remove") if k in self.body}
+            return [dict(edit, verstr=v) for v in batch]
+        return [{"verstrs": list(batch)}]
+
     def commands(self, batch):
         """The ``vmn-exp`` argv acting on *batch* in a checkout."""
-        head = ["vmn-exp", "experiment", self.verb, self.app_name]
         if self.action == "exp_tag":
-            return [head + [v] + self.tag_args for v in batch]
-        return [head + list(batch)]
+            built = [exp_tag_command(self.app_name, body) for body in self._bodies(batch)]
+        else:
+            built = [exp_archive_command(self.verb, self.app_name, body)
+                     for body in self._bodies(batch)]
+        return [_built(command, err) for command, err in built]
 
     def run_in_checkout(self, run_command, cwd, batch):
         """Act on *batch* through ``vmn-exp`` in *cwd*; the log text."""
@@ -85,13 +95,13 @@ class BulkSpec:
 
     def apply(self, storage, batch, hint):
         """Act on *batch* in a store; the log text."""
-        for verstr in batch:
-            if self.action == "exp_tag":
-                done = tag_run(storage, self.app_name, verstr,
-                               self.body.get("set") or {}, self.body.get("remove") or [])
-            else:
-                done = set_archived(storage, self.app_name, verstr, self.action == "exp_archive")
-            if not done:
-                raise RuntimeError(f"Experiment '{verstr}' not found for {self.app_name}")
-            hint(self.app_name, verstr)
-        return "\n".join(batch)
+        actions = [build_store_action(self.action, self.app_name, body)
+                   for body in self._bodies(batch)]
+        return "\n".join(_built(action, err).run(storage, hint) for action, err in actions)
+
+
+def _built(value, err):
+    """What a single-run builder built; its error raised."""
+    if err:
+        raise RuntimeError(err)
+    return value

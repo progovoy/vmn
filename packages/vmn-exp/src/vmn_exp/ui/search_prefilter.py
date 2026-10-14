@@ -5,7 +5,9 @@ A ``field ~ "text"`` clause on an indexed field holds only for the slots
 whose packed text of that field holds the text, so :func:`candidates` reads
 them off the index, intersects them across ``and`` (ignoring clauses it
 cannot answer) and unions them across ``or`` (only when every branch can be
-answered). The result is a superset: the query is still evaluated on each
+answered). A ``verstr in (...)`` clause (the web client's row refresh)
+holds only for the named runs' slots, read off the storage positions when
+:class:`Slots` has them. The result is a superset: the query is still evaluated on each
 candidate, so what matches never changes — only how many rows are looked at.
 """
 from vmn_exp.ui.search_index import FIELDS, needle_of
@@ -25,6 +27,24 @@ def _field(path):
     return None
 
 
+class Slots:
+    """What :func:`candidates` reads: the search index (``index_of()``, got
+    at the first ``~`` clause) and the storage positions ``{verstr: slot}``
+    (None: a ``verstr in`` clause is not answered)."""
+
+    def __init__(self, index_of, position):
+        self._index_of, self._position = index_of, position
+
+    def slots(self, needle, fields):
+        return self._index_of().slots(needle, fields)
+
+    def of_verstrs(self, verstrs):
+        position = self._position
+        if position is None:
+            return None
+        return {position[v] for v in verstrs if isinstance(v, str) and v in position}
+
+
 def candidates(node, index):
     """The set of slots that may satisfy the query AST *node* (see
     :func:`~vmn_exp.core.query.parse_query`), or None for every slot."""
@@ -35,6 +55,8 @@ def candidates(node, index):
     if kind == "or":
         found = [candidates(term, index) for term in node[1]]
         return None if any(c is None for c in found) else set().union(*found)
+    if kind == "in" and node[1] == ("path", ("verstr",)) and hasattr(index, "of_verstrs"):
+        return index.of_verstrs(node[2])
     if kind != "cmp" or node[2] != "~" or node[1][0] != "path":
         return None
     field, needle = _field(node[1][1]), needle_of(node[3])

@@ -244,11 +244,13 @@ def _slot_of(snapshot, verstr):
 
 
 class SearchIndexes:
-    """A :class:`SearchIndex` per snapshot, each moved on from the app's latest."""
+    """A :class:`SearchIndex` per snapshot, each moved on from the app's
+    latest; the last *size* of each app kept, so apps never evict each other."""
 
     def __init__(self, size=2, chunk=CHUNK):
         self.chunk = chunk
-        self._indexes = LRU(size)
+        self._size = size
+        self._indexes = {}  # app -> LRU of its snapshots' indexes
         self._latest = {}  # app -> SearchIndex
         self._lock = threading.Lock()
 
@@ -256,7 +258,9 @@ class SearchIndexes:
         """*snapshot*'s index; a schema view (``IndexSnapshot.summarized``)
         shares its base snapshot's: its rows differ in metrics only, slot for slot."""
         snapshot = getattr(snapshot, "_base", None) or snapshot
-        return self._indexes.per_snapshot(snapshot, lambda: self._moved(snapshot))
+        with self._lock:
+            indexes = self._indexes.setdefault(snapshot.app_name, LRU(self._size))
+        return indexes.per_snapshot(snapshot, lambda: self._moved(snapshot))
 
     def _moved(self, snapshot):
         with self._lock:

@@ -42,7 +42,7 @@ from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE, UnknownGroup
 from vmn_exp.ui.leaderboard_scope import UnknownScope, top_filter
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import ORDERS
-from vmn_exp.ui.responses import json_response, memoized_json_response
+from vmn_exp.ui.responses import memoized_json_response
 from vmn_exp.ui.security import safe_segment
 
 # Encoded bodies kept per ETag (pages, chart columns): a few generations' worth.
@@ -165,15 +165,15 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         scope: str = None, q: str = None, status: str = None,
     ):
         snapshot, _ = inputs(ws_name, app_tag)
-        scope = _scope(scope)
+        where = dict(archived=archived, scope=_scope(scope), query=q, status=status)
+        etag = cache.etag(snapshot, None, route="facets", **where)
         try:
-            where = dict(archived=archived, scope=scope, query=q, status=status)
-            payload = dict(cache.facets(snapshot, **where), **cache.top_counts(snapshot, **where))
+            return memoized_json_response(
+                request, etag, lambda: cache.facets_payload(snapshot, **where), bodies)
         except UnknownScope as e:
             raise HTTPException(404, str(e))
         except QueryError as e:
             raise HTTPException(400, str(e))
-        return json_response(payload, request=request)
 
     def _top(top):
         try:

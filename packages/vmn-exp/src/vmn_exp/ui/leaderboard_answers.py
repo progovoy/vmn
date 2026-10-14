@@ -9,6 +9,7 @@ from vmn_exp.ui.readers.experiments import facets as facets_of
 
 # Importance results kept (each pins its scored runs' params dicts).
 IMPORTANCE_RESULTS = 8
+NO_TOP_RUNS = {"jobs": 0, "singles": 0}
 
 
 class SetAnswers:
@@ -48,19 +49,29 @@ class SetAnswers:
         order needed: storage order)."""
         if scope is None and not query and not status:
             return self._facets.get(snapshot, archived)
-        base, bucket = self._base(snapshot)
-        check_scope(base, scope)
-        f = Filters(None, status, query, None, archived, scope)
-        return self._filtered_facets.get(
-            (base.token, bucket) + f, lambda: facets_of(base.tail(bucket, 0, f)))
+        return self._filtered(snapshot, archived, scope, query, status)[0]
 
     def top_counts(self, snapshot, archived=False, scope=None, query=None, status=None):
         """``{"jobs", "singles"}``: the top-level runs with and without
         children (plan 23 S7) among the rows :meth:`facets` reads."""
         if scope is None and not query and not status:
             return self._top_counts.get(snapshot, bool(archived))
+        return self._filtered(snapshot, archived, scope, query, status)[1]
+
+    def facets_payload(self, snapshot, **where):
+        """What ``experiments-facets`` answers: :meth:`facets` with
+        :meth:`top_counts`, from one walk of the filtered rows."""
+        return dict(self.facets(snapshot, **where), **self.top_counts(snapshot, **where))
+
+    def _filtered(self, snapshot, archived, scope, query, status):
+        """``(facets, top counts)`` of the filtered rows, once per time
+        bucket; a scope's subtree has no top-level run to count."""
         base, bucket = self._base(snapshot)
         check_scope(base, scope)
         f = Filters(None, status, query, None, archived, scope)
-        return self._filtered_facets.get(
-            ("top", base.token, bucket) + f, lambda: top_counts(base.tail(bucket, 0, f)))
+
+        def both():
+            rows = base.tail(bucket, 0, f)
+            return facets_of(rows), (NO_TOP_RUNS if scope else top_counts(rows))
+
+        return self._filtered_facets.get((base.token, bucket) + f, both)

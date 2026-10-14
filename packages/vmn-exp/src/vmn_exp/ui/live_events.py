@@ -21,7 +21,11 @@ import asyncio
 import json
 import threading
 import time
+from itertools import compress
+from operator import is_not
 
+from vmn_exp.core.tree import ancestors
+from vmn_exp.ui.leaderboard_delta import changed_slots, left_rows
 from vmn_exp.ui.memo import LRU
 
 COALESCE_SEC = 1.0
@@ -34,8 +38,8 @@ RETRY_MS = 3000
 # No scope, or the Jobs view's: every change of the app counts.
 TOP = (None, "top")
 
-_DIFFS = LRU(8)  # (old id, new id) -> (old, new, changed verstrs)
-_LIVE = LRU(16)  # (snapshot id, scope) -> (snapshot, live verstrs in scope)
+_DIFFS = LRU(2)  # (old id, new id) -> (old, new, changed verstrs)
+_LIVE = LRU(2)  # (snapshot id,) -> (snapshot, live verstrs)
 
 
 class StreamSlots:
@@ -60,13 +64,19 @@ class StreamSlots:
 
 def _changed(old, new):
     """Verstrs whose row or run state moved between *old* and *new*, plus
-    the rows that left."""
-    moved = [
-        row["verstr"] for row in new.rows
+    the rows that left: the slots whose row object changed (C-speed, see
+    :func:`~vmn_exp.ui.leaderboard_delta.changed_slots`), checked by verstr
+    so rows a removal shifted are not counted."""
+    slots = changed_slots(new.rows, old.rows, len(new.rows))
+    moved = {
+        row["verstr"] for row in (new.rows[i] for i in slots)
         if old.row(row["verstr"]) is not row
-        or old.run_states.get(row["verstr"]) is not new.run_states.get(row["verstr"])
-    ]
-    return moved + [row["verstr"] for row in old.rows if new.row(row["verstr"]) is None]
+    }
+    verstrs, states, was = list(new.edges), new.run_states, old.run_states
+    moved.update(compress(verstrs, map(is_not, map(states.get, verstrs), map(was.get, verstrs))))
+    left = [row["verstr"] for row in left_rows(new.rows, old.rows, slots)
+            if new.row(row["verstr"]) is None]
+    return list(moved) + left
 
 
 def _changed_memo(old, new):
@@ -77,19 +87,21 @@ def _changed_memo(old, new):
     )[2]
 
 
+class _Edges:
+    """The parent links of the first of *snapshots* that knows each run;
+    a parent no snapshot knows ends a chain."""
+
+    def __init__(self, snapshots):
+        self._snapshots = snapshots
+
+    def get(self, verstr):
+        parent = next((s.edges[verstr] for s in self._snapshots if verstr in s.edges), None)
+        return parent if any(parent in s.edges for s in self._snapshots) else None
+
+
 def _lineage(verstr, *snapshots):
-    """*verstr*, its parent, ... up to its top-level ancestor, by the edges
-    of the first of *snapshots* that knows each run."""
-
-    def parent(v):
-        return next((s.edges[v] for s in snapshots if v in s.edges), None)
-
-    chain = [verstr]
-    p = parent(verstr)
-    while p is not None and p not in chain and any(p in s.edges for s in snapshots):
-        chain.append(p)
-        p = parent(p)
-    return chain
+    """*verstr*, its parent, ... up to its top-level ancestor."""
+    return [verstr] + ancestors(verstr, _Edges(snapshots))
 
 
 def _payload(verstrs, *snapshots):
@@ -123,9 +135,9 @@ def _is_live(run_state):
 
 def live_change(snapshot, scope=None):
     """``{rows, jobs?}`` of the live runs in *scope*; None without any."""
-    live = _LIVE.per_snapshot(snapshot, lambda: _in_scope(
-        [v for v, state in snapshot.run_states.items() if _is_live(state)], scope, snapshot,
-    ), key=(scope,))
+    live = _LIVE.per_snapshot(snapshot, lambda: [
+        v for v, state in snapshot.run_states.items() if _is_live(state)])
+    live = _in_scope(live, scope, snapshot)
     return _payload(live, snapshot) if live else None
 
 
