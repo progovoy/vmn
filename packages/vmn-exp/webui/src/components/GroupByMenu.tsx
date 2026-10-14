@@ -31,9 +31,12 @@ function Section<V extends string | null>({ title, options, value, onPick }: {
 }
 
 export default function GroupByMenu({
-  value, links, fields, onChange, aggregate, onAggregate, groupSort, onGroupSort,
+  value, links, fields, onChange, aggregate, onAggregate, groupSort, onGroupSort, viewGroup = NO_GROUP,
 }: {
   value: GroupBy;
+  /** The grouping the view itself is (the Jobs view: parent run, plan 23
+   *  §3.4): shown checked while *value* is none, with no groups to sort. */
+  viewGroup?: GroupBy;
   links: readonly GroupOption[];
   fields: readonly GroupOption[];
   onChange: (group: GroupBy) => void;
@@ -52,9 +55,10 @@ export default function GroupByMenu({
   const onMenuKey = useMenuKeys(open, menu, close);
   useAnchorTop(open, trigger, menu, "--group-by-top");
 
+  const shown = value === NO_GROUP ? viewGroup : value;
   // A URL group the facets no longer offer stays listed, so it shows checked.
-  const known = [...links, ...fields].some((o) => o.value === value);
-  const shownFields = known || value === NO_GROUP ? fields : [...fields, { value, label: value }];
+  const known = [...links, ...fields].some((o) => o.value === shown);
+  const shownFields = known || shown === NO_GROUP ? fields : [...fields, { value: shown, label: shown }];
   const pick = (group: GroupBy) => {
     close();
     trigger.current?.focus();
@@ -68,13 +72,13 @@ export default function GroupByMenu({
         ref={trigger} type="button" aria-haspopup="menu" aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {grouped ? `Group by: ${groupLabel(value)} ▾` : "Group by ▾"}
+        {shown !== NO_GROUP ? `Group by: ${groupLabel(shown)} ▾` : "Group by ▾"}
       </button>
       {open && (
         <div className="group-by-menu" role="menu" aria-label="Group by" ref={menu} onKeyDown={onMenuKey}>
-          <Choice label="none" checked={!grouped} onPick={() => pick(NO_GROUP)} />
-          <Section title="Links" options={links} value={value} onPick={pick} />
-          <Section title="Fields" options={shownFields} value={value} onPick={pick} />
+          <Choice label="none" checked={shown === NO_GROUP} onPick={() => pick(NO_GROUP)} />
+          <Section title="Links" options={links} value={shown} onPick={pick} />
+          <Section title="Fields" options={shownFields} value={shown} onPick={pick} />
           {grouped && (
             <div className="group-by-footer">
               <Section title="Sort groups" value={groupSort} options={GROUP_SORTS} onPick={onGroupSort} />
