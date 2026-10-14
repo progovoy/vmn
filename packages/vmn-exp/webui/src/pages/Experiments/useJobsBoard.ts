@@ -52,7 +52,7 @@ export function useJobsBoard(ws: string, app: string, view: View, top: TopRuns |
     ws, app, scope: "top", paused, rows, serverRunning: data.running > 0, refresh, isRunning: treeRunning,
   });
 
-  const selection = useBoardSelection(ws, app, filter, rows, view, () => { refresh(); });
+  const selection = useBoardSelection(ws, app, filter, rows, view);
   const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobBestOrder(s, metric, schema));
 
   return {

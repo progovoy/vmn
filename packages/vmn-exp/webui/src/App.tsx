@@ -9,12 +9,14 @@ import { signOut } from "./auth/authState";
 import CommandPalette from "./components/CommandPalette";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ThemeToggle from "./components/ThemeToggle";
+import SelectionTrayHost from "./pages/SelectionTrayHost";
 import ContextRoot from "./components/shell/ContextRoot";
 import Crumbs from "./components/shell/Crumbs";
 import Sidebar from "./components/shell/Sidebar";
 import Topbar from "./components/shell/Topbar";
 import { setInert, useDrawer } from "./hooks/useDrawer";
 import { useDocumentTitle } from "./hooks/useDocumentTitle";
+import { isAppRoute } from "./shell/crumbs";
 import { ShellOverrideProvider, useShellDeadEnd } from "./shell/shellOverride";
 import { useShellContext } from "./shell/useShellContext";
 import { useShellCrumbs } from "./shell/useShellCrumbs";
@@ -40,6 +42,8 @@ function Shell() {
   useLayoutEffect(() => setInert(shellRef.current, paletteOpen), [paletteOpen]);
 
   const onNavigate = drawer.narrow ? drawer.close : undefined;
+  // The one selection tray, under every page of an app.
+  const trayApp = isAppRoute(ctx.routeId) ? { ws: ctx.params.ws, app: ctx.appTag } : {};
   return (
     <>
       <a className="skip-link" href="#main">Skip to content</a>
@@ -63,11 +67,13 @@ function Shell() {
           <main id="main" className="content" tabIndex={-1}>
             <div className={`content-inner${ctx.wide ? " wide" : ""}`}>
               <AuthGate>
-                {/* Pages stay mounted across param changes (their caches paint
-                    at once); only a render error is reset by navigating. */}
-                <ErrorBoundary resetKey={location.pathname}>
-                  <Outlet />
-                </ErrorBoundary>
+                <SelectionTrayHost {...trayApp}>
+                  {/* Pages stay mounted across param changes (their caches paint
+                      at once); only a render error is reset by navigating. */}
+                  <ErrorBoundary resetKey={location.pathname}>
+                    <Outlet />
+                  </ErrorBoundary>
+                </SelectionTrayHost>
               </AuthGate>
             </div>
           </main>

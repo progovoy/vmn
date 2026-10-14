@@ -12,7 +12,7 @@ import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { BIG_GROUP } from "../../util/groupClause";
 import BoardTabs, { BOARD_PANEL_ID, boardTabId } from "../BoardTabs";
 import LeaderboardChartsPanel from "../LeaderboardChartsPanel";
-import SelectionTray from "../SelectionTray";
+import { useTrayBoard } from "../SelectionTrayHost";
 import { isGroupCountId } from "../../util/groupCountSort";
 import LeaderboardToolbar from "../LeaderboardToolbar";
 import BoardHead, { runCountText } from "../BoardHead";
@@ -78,6 +78,10 @@ export function AllRunsView({ ws, app, views, onJobs }: {
     paused, onParent: onJobs, keep, openGroup: { over: BIG_GROUP, onOpen: openGroup },
   });
   const { data, facets, filter, cols, colPrefs, schema, rows, all, tableRows, filtered } = board;
+  useTrayBoard({
+    total: data.total, showUnarchive: view.archived, onSelectAll: () => void board.selection.selectAll(),
+    onArchived: board.refresh,
+  });
   // The similar mode keeps the bar's tokens: the box holds its text.
   const similarQuery = combineQueries(board.serverQuery, statusClause(view.status));
   const similarFilter = useMemo(() => ({
@@ -97,7 +101,7 @@ export function AllRunsView({ ws, app, views, onJobs }: {
   if (data.pageError) return <div className="error">{data.pageError}</div>;
 
   const empty = rows !== undefined && rows.length === 0 && !filtered;
-  const { sortLabel, anyRunning, selection } = board;
+  const { sortLabel, anyRunning } = board;
   // `vmn-exp list` sorts runs, not groups.
   const cliSort = isGroupCountId(sortLabel) ? null : sortLabel;
   const shownTop = topLevel(tableRows ?? []);
@@ -184,11 +188,6 @@ export function AllRunsView({ ws, app, views, onJobs }: {
           <div className="cli-card">
             vmn-exp list {appName}{cliSort ? ` --sort ${cliSort}` : ""}
           </div>
-          <SelectionTray ws={ws} app={app} board={{
-            total: data.total, showUnarchive: view.archived,
-            archiving: selection.archiving, archiveError: selection.archiveError,
-            onSelectAll: selection.selectAll, onArchive: selection.archive,
-          }} />
         </>
       )}
     </>

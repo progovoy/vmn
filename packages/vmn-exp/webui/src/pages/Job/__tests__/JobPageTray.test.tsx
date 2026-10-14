@@ -30,6 +30,7 @@ import { FakeSource } from "../../../hooks/__tests__/fakeEventSource";
 import type { ExperimentDetail } from "../../../types";
 import { writePicks } from "../../../util/runSelection";
 import Run from "../../Run";
+import { WithTray } from "../../__tests__/withTray";
 import { JOB, jobSummaryFixture } from "./jobFixture";
 
 const m = api as unknown as Record<"experiment" | "experiments" | "metricsSchema", ReturnType<typeof vi.fn>>;
@@ -46,7 +47,7 @@ const jobDetail = {
 function renderRun(path: string) {
   return renderWithClient(
     <MemoryRouter initialEntries={[path]}>
-      <Routes><Route path="/ws/:ws/app/:app/run/:verstr" element={<Run />} /></Routes>
+      <Routes><Route path="/ws/:ws/app/:app/run/:verstr" element={<WithTray><Run /></WithTray>} /></Routes>
     </MemoryRouter>,
   );
 }

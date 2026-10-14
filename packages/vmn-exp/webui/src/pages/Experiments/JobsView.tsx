@@ -17,7 +17,7 @@ import type { BoardGroup } from "../../util/groupItems";
 import BoardGridTools from "../BoardGridTools";
 import BoardCaption from "../BoardCaption";
 import BoardHead from "../BoardHead";
-import SelectionTray from "../SelectionTray";
+import { useTrayBoard } from "../SelectionTrayHost";
 import { EmptyBoard } from "./AllRunsView";
 import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
@@ -57,6 +57,10 @@ export default function JobsView({ ws, app, views, kind }: {
     clauseOf: (g: BoardGroup) => g.clause, onFilter: openGroup,
   } : undefined, [data.grouped, openGroup]);
   const onPrefetch = useCallback((v: string) => { prefetchRun(client, ws, app, v); }, [client, ws, app]);
+  useTrayBoard({
+    total: data.total, showUnarchive: view.archived, onSelectAll: () => void selection.selectAll(),
+    onArchived: data.refresh,
+  });
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;
   const loading = data.items === undefined;
@@ -124,11 +128,6 @@ export default function JobsView({ ws, app, views, kind }: {
             </div>
           )}
           <div className="cli-card">vmn-exp list {appName} --query &apos;{kindQuery(kind.kind)}&apos;</div>
-          <SelectionTray ws={ws} app={app} board={{
-            total: data.total, showUnarchive: view.archived,
-            archiving: selection.archiving, archiveError: selection.archiveError,
-            onSelectAll: selection.selectAll, onArchive: selection.archive,
-          }} />
         </>
       )}
     </>

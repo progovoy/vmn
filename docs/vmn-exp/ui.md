@@ -269,11 +269,26 @@ jobs can be picked and compared:
   Jobs, All runs, job pages and inner run pages, and is capped at 500 runs. A
   `sel=` in a shared link replaces it on load and then leaves the URL.
   Compare keeps its own `compare-runs?sel=`.
-- A tray at the bottom of every page of the app shows it while anything is
-  picked: `7 runs selected · from 3 jobs ▾ · Compare (7) · Archive · ✕`. A job
-  ticked in Jobs counts as one run, the job itself, never its subtree.
+- One tray at the bottom of every page of the app (boards, job and run pages,
+  compare-runs, the stamp tree, actions) shows it while anything is picked:
+  `7 runs selected · from 3 jobs ▾ · Compare (7) · Archive · ✕`. A job ticked
+  in Jobs counts as one run, the job itself, never its subtree. The board on
+  screen adds its own actions (select all matching, Unarchive on an archived
+  view); on the Compare page, Compare replaces the current comparison.
+- "Select all N matching" on a job's Runs tab adds that query (the job, its
+  filter and status) to the selection instead of replacing it, so picks from
+  other jobs stay: `4,012 runs selected · from 3 jobs`. Selecting the same
+  query again replaces its entry. Its loaded runs are part of it, not counted
+  twice; unticking one of them turns the query back into those loaded runs
+  minus that one.
 - `from 3 jobs ▾` expands the picks grouped by job. Each pick links to its run
-  page and has its own remove button.
+  page and has its own remove button; a selected query is one removable entry,
+  e.g. `all 4,000 matching in hist-0012 (status = failed)`.
+- Archive counts every selected query on the server first (`dry_run`), then
+  runs one archive by query per query plus one for the other picks. Compare
+  can't take thousands of runs: with queries selected it compares the picks
+  plus the first 10 loaded runs of each query, in the board's order, and its
+  tooltip says so.
 - A status region announces each count change. `x`, `shift+x` and the
   checkboxes pick runs. Esc clears the picks only on a board's page.
 
@@ -286,7 +301,7 @@ runs has no fold; its header button adds the group's clause as a filter.
   indicator, then the full-width run bar and its counts.
 - **The tabs** (each a URL value of `tab=`):
   - `overview` (the default): KPI tiles (done of expected, failed, running, waiting, stuck, median and p90 duration, best), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
-  - `runs`: the board scoped to the job's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching". That selection archives every matching run, with a count confirm first.
+  - `runs`: the board scoped to the job's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
   - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
   - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
   - `code` and `log`.

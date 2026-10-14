@@ -7,6 +7,7 @@ import { createQueryClient } from "../../queryClient";
 import type { ExperimentRow } from "../../types";
 import { readPicks } from "../../util/runSelection";
 import Leaderboard from "../Experiments/AllRunsView";
+import { WithTray } from "./withTray";
 
 export function row(i: number, extra: Partial<ExperimentRow> = {}): ExperimentRow {
   return {
@@ -52,7 +53,7 @@ export function renderBoard(path = "/ws/test/app/my-app", client: QueryClient = 
       <MemoryRouter initialEntries={[path]}>
         <LocationProbe />
         <Routes>
-          <Route path="/ws/:ws/app/:app" element={<Leaderboard />} />
+          <Route path="/ws/:ws/app/:app" element={<WithTray><Leaderboard /></WithTray>} />
           <Route path="/ws/:ws/app/:app/run/:verstr" element={<RunStub />} />
         </Routes>
       </MemoryRouter>

@@ -8,6 +8,7 @@ import type { ExperimentRow } from "../../../types";
 import { readPicks } from "../../../util/runSelection";
 import { job } from "../../../util/__tests__/jobFixture";
 import ExperimentsPage from "../ExperimentsPage";
+import { WithTray } from "../../__tests__/withTray";
 
 export const location = { search: "", pathname: "" };
 /** The browser's Back button. */
@@ -31,7 +32,7 @@ export function renderExperiments(path = "/ws/test/app/my-app") {
       <MemoryRouter initialEntries={[path]}>
         <LocationProbe />
         <Routes>
-          <Route path="/ws/:ws/app/:app" element={<ExperimentsPage />} />
+          <Route path="/ws/:ws/app/:app" element={<WithTray><ExperimentsPage /></WithTray>} />
           <Route path="/ws/:ws/app/:app/run/:verstr" element={<div>run page</div>} />
         </Routes>
       </MemoryRouter>

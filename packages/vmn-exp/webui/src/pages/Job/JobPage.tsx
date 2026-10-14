@@ -19,7 +19,6 @@ import JobHeader, { JOB_PANEL_ID, JobCliCard, JobTabs, jobTabId } from "./JobHea
 import { failedCount } from "./jobData";
 import JobOverview from "./JobOverview";
 import JobRuns from "./JobRuns";
-import SelectionTray from "../SelectionTray";
 import { jobSummaryKey, useJobTab, type JobTab } from "./jobQueries";
 import "./job.css";
 
@@ -31,7 +30,7 @@ function Panel({ tab, ws, app, detail, summary, live }: {
   const v = detail.metadata.verstr;
   switch (tab) {
     case "overview": return <JobOverview ws={ws} app={app} summary={summary} />;
-    case "runs": return <JobRuns ws={ws} app={app} verstr={v} paused={live.paused} onPaused={live.onPaused} onLive={live.refresh} />;
+    case "runs": return <JobRuns ws={ws} app={app} verstr={v} name={summary.name ?? undefined} paused={live.paused} onPaused={live.onPaused} onLive={live.refresh} />;
     case "charts": return <JobCharts ws={ws} app={app} summary={summary} />;
     case "failures": return <JobFailures ws={ws} app={app} verstr={v} failed={failedCount(summary)} />;
     case "code": return <RunChangesSection ws={ws} app={app} verstr={v} />;
@@ -88,8 +87,6 @@ export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
         <Panel tab={tab} ws={ws} app={app} detail={detail} summary={data} live={{ paused, onPaused: setPaused, refresh }} />
       </div>
       <JobCliCard ws={ws} app={app} verstr={v} />
-      {/* The Runs tab's board shows the tray with its own actions. */}
-      {tab !== "runs" && <SelectionTray ws={ws} app={app} />}
     </div>
   );
 }

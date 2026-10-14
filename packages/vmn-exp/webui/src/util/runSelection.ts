@@ -40,8 +40,11 @@ export function writePicks(ws: string, app: string, picks: readonly RunPick[], n
   const kept = picks.filter((p) => !seen.has(p.verstr) && seen.add(p.verstr)).slice(0, SELECT_ALL_CAP);
   if (kept.length) sessionStorage.setItem(keyOf(ws, app), JSON.stringify(kept));
   else sessionStorage.removeItem(keyOf(ws, app));
-  if (notify) listeners.forEach((l) => l());
+  if (notify) notifySelection();
 }
+
+/** Tell every subscriber the selection changed. */
+export const notifySelection = () => listeners.forEach((l) => l());
 
 export function subscribePicks(listener: () => void): () => void {
   listeners.add(listener);
@@ -61,10 +64,10 @@ export function pickOf(r: ExperimentRow): RunPick {
   return pick;
 }
 
-/** `7 runs from 3 jobs`, `1 run`. */
-export function summarizePicks(picks: readonly RunPick[]) {
-  const jobs = new Set(picks.map((p) => p.job).filter(Boolean)).size;
-  const runs = picks.length;
+/** `7 runs from 3 jobs`, `1 run`; *queries* add their counts and jobs. */
+export function summarizePicks(picks: readonly RunPick[], queries: readonly { job: string; count: number }[] = []) {
+  const jobs = new Set([...picks.map((p) => p.job), ...queries.map((g) => g.job)].filter(Boolean)).size;
+  const runs = picks.length + queries.reduce((n, g) => n + g.count, 0);
   const text = jobs ? `${plural(runs, "run")} from ${plural(jobs, "job")}` : plural(runs, "run");
   return { runs, jobs, text };
 }

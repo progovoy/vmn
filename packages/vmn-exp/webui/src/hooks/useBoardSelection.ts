@@ -1,12 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { api } from "../api";
 import type { RowsFilter } from "../queries";
 import type { ExperimentRow } from "../types";
 import { SELECT_ALL_CAP, pickOf, type RunPick } from "../util/runSelection";
-import { useArchiveJob, type ArchiveVerb } from "./useArchiveJob";
-import type { PickMeta } from "./useRunSelection";
+import { addQueryGroup, sameQuery } from "../util/selectionGroups";
+import { useRunSelection, type PickMeta } from "./useRunSelection";
 
-export type { ArchiveVerb };
 /** How many of the rows on screen are selected, for the header checkbox. */
 export type HeaderCheck = "none" | "some" | "all";
 
@@ -16,6 +15,8 @@ export interface QuerySelection {
   scope: string;
   q: string;
   status: string;
+  /** The job's name, for the tray. */
+  label?: string;
 }
 
 interface Selection {
@@ -26,14 +27,16 @@ interface Selection {
 
 /** The leaderboard's selection actions: toggle (shift extends a range over
  *  the rows on screen), the header checkbox over those rows, a group
- *  header's over its rows, select every filtered run, and bulk archive.
+ *  header's over its rows, and select every filtered run (archive is the
+ *  tray's, SelectionTray).
  *
- *  With *byQuery* (a job's Runs tab) "select all" selects the query itself,
- *  without a cap: `matching` counts it until the selection or the filters
- *  change, and archive then sends the query, after a `dry_run` count. */
+ *  With *byQuery* (a job's Runs tab) "select all" adds the query itself to
+ *  the app's selection, without a cap, next to the other picks: `matching`
+ *  is its count while it stays selected. Unticking one of its runs turns it
+ *  back into explicit picks of the others (selectExactly). */
 export function useBoardSelection(
   ws: string, app: string, filter: RowsFilter, rows: readonly ExperimentRow[],
-  sel: Selection, onArchived: () => void, byQuery?: QuerySelection,
+  sel: Selection, byQuery?: QuerySelection,
 ) {
   const anchor = useRef<string | null>(null);
   // Read at click time, so `toggle` keeps one identity and memoized rows
@@ -88,23 +91,26 @@ export function useBoardSelection(
   const headerCheck = checkOf(shown);
   const toggleAll = () => toggleRows(shown);
 
-  // What a selection by query stands for: valid while neither it nor the
-  // selection it was made over has changed.
-  const [byQueryAll, setByQueryAll] = useState<{ count: number; key: string } | null>(null);
-  const queryKey = `${JSON.stringify(byQuery ?? null)}|${[...sel.selected].join(",")}`;
-  const matching = byQuery && byQueryAll?.key === queryKey ? byQueryAll.count : null;
-  const queryBody = () => {
-    const { scope, q, status } = byQuery!;
-    return { scope, ...(q ? { q } : {}), ...(status ? { status } : {}) };
-  };
+  // The board's query, selected as a group: its rows show ticked, and rows
+  // loaded since (more pages, live arrivals) join its members.
+  const { groups } = useRunSelection(ws, app);
+  const active = byQuery ? groups.find((g) => sameQuery(g, byQuery)) : undefined;
+  useEffect(() => {
+    if (!active || active.members.length >= SELECT_ALL_CAP) return;
+    const known = new Set(active.members.map((p) => p.verstr));
+    const missing = rows.filter((r) => !known.has(r.verstr));
+    if (missing.length) addQueryGroup(ws, app, { ...active, members: [...active.members, ...missing.map(pickOf)] });
+  }, [ws, app, active, rows]);
 
   /** Every run the filter matches (up to the cap); the loaded rows on a
-   *  server without the columns endpoint. By query: the query's *total*. */
+   *  server without the columns endpoint. By query: adds the query (its
+   *  *total* runs) to the selection, absorbing its loaded rows. */
   const selectAll = async (total = 0) => {
     if (byQuery) {
-      const loaded = rows.slice(0, SELECT_ALL_CAP).map((r) => r.verstr);
-      setPicks(loaded);
-      setByQueryAll({ count: total, key: `${JSON.stringify(byQuery)}|${loaded.join(",")}` });
+      const { scope, q, status, label } = byQuery;
+      addQueryGroup(ws, app, {
+        scope, q, status, count: total, job: scope, label: label || scope, members: rows.map(pickOf),
+      });
       return;
     }
     try {
@@ -115,20 +121,8 @@ export function useBoardSelection(
     }
   };
 
-  const job = useArchiveJob(ws, app, () => {
-    setPicks([]);
-    onArchived();
-  });
-  // The store caps the selection, so it fits one archive job.
-  const archive = (verb: ArchiveVerb) => job.run(verb, matching !== null ? queryBody() : { verstrs: [...sel.selected] });
-  /** How many runs archiving the selection by query acts on (null: not by query). */
-  const preview = matching === null ? undefined
-    : (verb: ArchiveVerb) => api.actionPreview(ws, app, `exp_${verb}`, queryBody()).then((p) => p.count);
-
   return {
-    toggle, clearAnchor, headerCheck, toggleAll, checkOf, toggleRows, selectAll, archive,
-    matching, preview, uncapped: Boolean(byQuery),
-    archiving: job.archiving,
-    archiveError: job.archiveError,
+    toggle, clearAnchor, headerCheck, toggleAll, checkOf, toggleRows, selectAll,
+    matching: active?.count ?? null, uncapped: Boolean(byQuery),
   };
 }

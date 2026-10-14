@@ -26,7 +26,6 @@ import { fleetIdxOf } from "../components/fleetRows";
 import { FleetCard, MetricsCard } from "./RunSections";
 import RunCards from "./RunCards";
 import RunHead from "./RunHead";
-import SelectionTray from "./SelectionTray";
 import RunLayout, { RunChangesSection, RunCurves, RunDetailSections, RunOutputs, RunRelated } from "./RunLayout";
 import { ForkOrigin } from "./RunFork";
 import { paramsVariedFirst } from "./runParams";
@@ -61,7 +60,7 @@ export default function Run() {
   if (detail && isJob && (summary.data || summary.isPending)) {
     return <JobPage ws={ws} app={app} detail={detail} summary={summary} refetchDetail={() => query.refetch()} />;
   }
-  return <><SingleRun /><SelectionTray ws={ws} app={app} /></>;
+  return <SingleRun />;
 }
 
 function SingleRun() {

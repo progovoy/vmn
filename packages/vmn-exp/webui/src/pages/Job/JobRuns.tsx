@@ -13,12 +13,14 @@ import { Link } from "react-router-dom";
 import { plural } from "../../util";
 import { allRunsHref, hasSearch } from "../../util/searchScope";
 import { BIG_GROUP } from "../../util/groupClause";
-import SelectionTray from "../SelectionTray";
+import { useTrayBoard } from "../SelectionTrayHost";
 import LeaderboardToolbar from "../LeaderboardToolbar";
 import RunsBoardGrid from "../RunsBoardGrid";
 
-export default function JobRuns({ ws, app, verstr, paused, onPaused, onLive }: {
+export default function JobRuns({ ws, app, verstr, name, paused, onPaused, onLive }: {
   ws: string; app: string; verstr: string;
+  /** The job's name, naming its selected queries in the tray. */
+  name?: string;
   paused: boolean;
   onPaused: (paused: boolean) => void;
   /** Told of each live change of the subtree (the job's rollup refreshes). */
@@ -29,9 +31,13 @@ export default function JobRuns({ ws, app, verstr, paused, onPaused, onLive }: {
   const { gen: filterGen, resetFilter, addClauses, openGroup } = useAddFilterClauses(view);
 
   const board = useRunsBoard(ws, app, view, {
-    paused, scope: verstr, onLive, openGroup: { over: BIG_GROUP, onOpen: openGroup },
+    paused, scope: verstr, scopeLabel: name, onLive, openGroup: { over: BIG_GROUP, onOpen: openGroup },
   });
   const { data, cols, selection, facets } = board;
+  useTrayBoard({
+    total: data.total, showUnarchive: view.archived, onSelectAll: () => void selection.selectAll(data.total),
+    matching: selection.matching, uncapped: selection.uncapped, onArchived: board.refresh,
+  });
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;
   return (
@@ -69,12 +75,6 @@ export default function JobRuns({ ws, app, verstr, paused, onPaused, onLive }: {
         />
         <RunsBoardGrid board={board} view={view} paused={paused} onPaused={onPaused} />
       </div>
-      <SelectionTray ws={ws} app={app} board={{
-        total: data.total, showUnarchive: view.archived,
-        archiving: selection.archiving, archiveError: selection.archiveError,
-        onSelectAll: () => selection.selectAll(data.total), onArchive: selection.archive,
-        matching: selection.matching, onPreview: selection.preview, uncapped: selection.uncapped,
-      }} />
     </div>
   );
 }
