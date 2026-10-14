@@ -10,7 +10,7 @@ vi.mock("../../api", async (orig) => {
 });
 
 import { api } from "../../api";
-import type { GroupOpts } from "../../apiGroups";
+import { NONE_GROUP, type GroupOpts } from "../../apiGroups";
 import { NARROW_QUERY } from "../../hooks/useMediaQuery";
 import { dropFakeMedia, fakeMedia } from "../../hooks/__tests__/fakeMedia";
 import FacetSidebar from "../FacetSidebar";
@@ -51,6 +51,34 @@ describe("FacetSidebar", () => {
     expect(onAdd).toHaveBeenCalledWith(["params.seed >= 0", "params.seed < 3.25"]);
   });
 
+  it("bins a continuous param sent as numeric strings, the runs without it aside", async () => {
+    m.experimentsColumns.mockResolvedValue({
+      verstrs: [], idx: [], total: 41,
+      columns: { "params.seed": [null, ...Array.from({ length: 40 }, (_, i) => String(i / 100 + 0.006))] },
+    });
+    renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
+    const hist = await screen.findByRole("group", { name: "params.seed histogram" });
+    expect(within(hist).getAllByRole("button")).toHaveLength(12);
+  });
+
+  it("bins a grouped numeric param whose groups include the no-value one", async () => {
+    m.facets.mockResolvedValue({
+      branches: [], metric_keys: [], param_keys: ["seed"], tag_keys: [],
+      param_values: { seed: 20 }, parented: 0, total: 41,
+    });
+    m.experimentGroups.mockImplementation((_w: string, _a: string, o: GroupOpts) => Promise.resolve({
+      groups: o.group === "status" ? [group("succeeded", 41)]
+        : [group("0.006", 3), group(NONE_GROUP, 1), ...Array.from({ length: 18 }, (_, i) => group(String(i / 10), 2))],
+      total_groups: o.group === "status" ? 1 : 30, total_rows: 41, aggregate: "mean", running: 0,
+    }));
+    m.experimentsColumns.mockResolvedValue({
+      verstrs: [], idx: [], total: 41,
+      columns: { "params.seed": [null, ...Array.from({ length: 40 }, (_, i) => i / 10)] },
+    });
+    renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
+    await screen.findByRole("group", { name: "params.seed histogram" });
+  });
+
   it("never groups a param with more values than it lists (a costly grouping on a big job)", async () => {
     renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
     await screen.findByRole("group", { name: "params.seed histogram" });
@@ -76,7 +104,7 @@ describe("FacetSidebar", () => {
 
   it("counts a many-valued param's distinct values when they aren't numbers to bin", async () => {
     m.experimentsColumns.mockResolvedValue({
-      verstrs: [], idx: [], total: 40, columns: { "params.seed": Array.from({ length: 40 }, (_, i) => String(i)) },
+      verstrs: [], idx: [], total: 40, columns: { "params.seed": Array.from({ length: 40 }, (_, i) => `${i}e999`) },
     });
     renderWithClient(<FacetSidebar ws="w" app="a" scope="J" query="" status="" onAdd={() => {}} />);
     const facet = await screen.findByRole("region", { name: "params.seed" });

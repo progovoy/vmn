@@ -1,6 +1,6 @@
 /** The Jobs view (plan 23 W1, §3.1): one row per top-level run — a job with
  *  its progress, best, spread, size, failures, throughput and ETA, or a
- *  single run — the jobs or the single runs (Jobs | Single runs), filtered
+ *  single run — the jobs or the single runs (*kind*, the page's switch), filtered
  *  by the board's filter bar, sorted by the job sort keys and grouped into
  *  groups of jobs, a group over 50 opening as a filter (§3.4). */
 import { useCallback, useMemo, type ReactNode } from "react";
@@ -22,7 +22,7 @@ import { EmptyBoard } from "./AllRunsView";
 import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
 import JobsToolbar from "./JobsToolbar";
-import { kindNoun, kindQuery, useJobsKind, type JobsKind } from "./jobsKind";
+import { kindNoun, kindQuery, type JobsKind, type JobsKindState } from "./jobsKind";
 import { useJobsBoard } from "./useJobsBoard";
 
 /** `20 jobs`, `19,580 single runs`; listing every top-level run, `14 jobs ·
@@ -40,11 +40,12 @@ function countText(loading: boolean, rows: { job?: unknown }[], total: number, k
 const emptyText = (kind: JobsKind | null, filtered: boolean) =>
   filtered ? `No ${kindNoun(kind)}s match the filters.` : `No ${kindNoun(kind)}s yet.`;
 
-export default function JobsView({ ws, app, views }: { ws: string; app: string; views?: ReactNode }) {
+export default function JobsView({ ws, app, views, kind }: {
+  ws: string; app: string; views?: ReactNode; kind: JobsKindState;
+}) {
   const appName = toAppName(app);
   const client = useQueryClient();
   const view = useLeaderboardView();
-  const kind = useJobsKind(ws, app);
   const board = useJobsBoard(ws, app, view, kind.top);
   const { data, rows, selection, live } = board;
   const base = `/ws/${ws}/app/${app}`;
@@ -70,7 +71,7 @@ export default function JobsView({ ws, app, views }: { ws: string; app: string; 
         title={appName}
         count={countText(loading, rows, data.total, kind.kind)}
         views={views}
-        actions={!empty && <JobsToolbar ws={ws} app={app} view={view} board={board} kind={kind} onViewApplied={resetFilter} />}
+        actions={!empty && <JobsToolbar ws={ws} app={app} view={view} board={board} onViewApplied={resetFilter} />}
       />
       {view.creating && (
         <NewExperiment

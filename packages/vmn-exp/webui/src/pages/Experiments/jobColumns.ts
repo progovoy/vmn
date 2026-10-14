@@ -44,9 +44,12 @@ export const JOBS_WIDTH = JOB_COLUMNS.reduce((w, c) => w + c.width, 0);
 /** Each column's width, one object per column for every row to share. */
 export const COLUMN_STYLES: readonly CSSProperties[] = JOB_COLUMNS.map((c) => ({ width: c.width }));
 
+/** The board's shared cell classes: the `#` cell is 12px mono, the width sized to it. */
+const SHARED_CELL: Record<string, string> = { check: " check-cell", idx: " idx-cell" };
+
 /** Each column's body cell class. */
 export const CELL_CLASSES: readonly string[] = JOB_COLUMNS.map((c) =>
-  `jobs-cell-${c.id}${c.numeric ? " num" : ""}${c.id === "check" ? " check-cell" : ""}`);
+  `jobs-cell-${c.id}${c.numeric ? " num" : ""}${SHARED_CELL[c.id] ?? ""}`);
 
 /** The metric the Best and Spread columns are of: the jobs' rollup metric,
  *  else the schema's primary, else its first metric with a goal. */

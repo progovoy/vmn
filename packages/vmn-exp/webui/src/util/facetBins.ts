@@ -10,13 +10,27 @@ export interface FacetBin {
   last: boolean;
 }
 
+const NUMBER = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
 /** *n* rounded to 4 significant digits, so edges read as typed numbers. */
 const tidy = (n: number) => Number(n.toPrecision(4));
 
-/** The finite numbers among *values* in *count* equal-width bins (one bin
- *  when they are all the same). */
+const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+/** *values*' finite numbers; their strings too when every one spells a finite number. */
+function finiteNumbers(values: readonly unknown[]): number[] {
+  const nums = values.filter(isFiniteNumber);
+  const strings = values.filter((v): v is string => typeof v === "string");
+  const others = values.length - nums.length - strings.length - values.filter((v) => v == null).length;
+  const parsed = strings.map((v) => (NUMBER.test(v.trim()) ? Number(v) : Number.NaN));
+  return !others && parsed.every(Number.isFinite) ? [...nums, ...parsed] : nums;
+}
+
+/** The finite numbers among *values* (numeric strings too, when every
+ *  value is one) in *count* equal-width bins (one bin when they are all
+ *  the same). */
 export function numericBins(values: readonly unknown[], count = 12): FacetBin[] {
-  const nums = values.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const nums = finiteNumbers(values);
   if (!nums.length) return [];
   let min = Infinity;
   let max = -Infinity;
@@ -40,8 +54,6 @@ export function binClauses(field: string, bin: FacetBin): string[] {
   return [`${field} >= ${bin.lo}`, `${field} ${bin.last ? "<=" : "<"} ${bin.hi}`];
 }
 
-const NUMBER = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
-
 /** A column value's group key, as the grouped list spells it: text as is,
  *  anything else as JSON, no value the no-value group. */
 function keyOf(v: unknown): string {
@@ -60,6 +72,12 @@ export function columnCounts(column: readonly unknown[], top: number) {
   const values = [...counts].map(([key, count]) => ({ key, count }))
     .sort((a, b) => b.count - a.count).slice(0, top);
   return { values, distinct: counts.size };
+}
+
+/** Whether every group key but the no-value group spells a number (one at least). */
+export function numericLike(keys: readonly string[]): boolean {
+  const spelled = keys.filter((k) => k !== NONE_GROUP);
+  return spelled.length > 0 && spelled.every((k) => NUMBER.test(k));
 }
 
 /** Group keys as numbers when every one spells a number, else null. */

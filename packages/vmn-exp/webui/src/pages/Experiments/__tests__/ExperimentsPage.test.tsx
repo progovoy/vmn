@@ -46,11 +46,12 @@ beforeEach(() => {
   m.experiments.mockResolvedValue(board([singleRow(1, { name: "solo" }), singleRow(3, { name: "inner", depth: 1, kind: "inner" })]));
 });
 
+// Without facets (mocked away here) the app's jobs are unknown: the Jobs view reads Runs.
 describe("Jobs | All runs", () => {
   it("opens on the Jobs view: the top-level runs only", async () => {
     renderExperiments();
     await screen.findByRole("link", { name: "grid" });
-    expect(pressed("Jobs")).toBe("true");
+    expect(pressed("Runs")).toBe("true");
     expect(pressed("All runs")).toBe("false");
     expect(m.experimentsPaged).toHaveBeenCalledWith("test", "my-app", expect.objectContaining({ top: true }));
     expect(m.experiments).not.toHaveBeenCalled();
@@ -75,7 +76,7 @@ describe("Jobs | All runs", () => {
     localStorage.setItem(`${VIEW_KEY}:test/my-app`, "all");
     renderExperiments("/ws/test/app/my-app?view=jobs");
     await screen.findByRole("link", { name: "grid" });
-    expect(pressed("Jobs")).toBe("true");
+    expect(pressed("Runs")).toBe("true");
   });
 
   it("switching views keeps the filters", async () => {
@@ -103,7 +104,7 @@ describe("Jobs | All runs", () => {
   it("group=parent in the URL (a bookmark, a saved view) is the Jobs view, ungrouped", async () => {
     renderExperiments("/ws/test/app/my-app?view=all&group=parent");
     await screen.findByRole("link", { name: "grid" });
-    expect(pressed("Jobs")).toBe("true");
+    expect(pressed("Runs")).toBe("true");
     expect(m.experimentGroups).not.toHaveBeenCalled();
   });
 

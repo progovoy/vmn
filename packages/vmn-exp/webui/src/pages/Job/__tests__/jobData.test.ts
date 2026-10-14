@@ -34,6 +34,26 @@ describe("timelineSeries", () => {
     expect(s.perMin).toEqual([0, 0, 0, 3]);
   });
 
+  it("keeps a short timeline's rate per bucket (an average over one bucket)", () => {
+    const s = timelineSeries({
+      bucket_sec: 60, start: 0,
+      buckets: [{ t: 0, started: 3, succeeded: 1, failed: 0 }, { t: 60, started: 0, succeeded: 2, failed: 0 }],
+    });
+    expect(s.rateWindow).toBe(1);
+    expect(s.perMinAvg).toEqual([1, 2]);
+  });
+
+  it("smooths a long timeline's rate with a trailing average over ~1/120 of its buckets", () => {
+    // 2 days of minutes: 2880 buckets, a 24-minute window; one run ends every other minute.
+    const buckets = Array.from({ length: 2880 }, (_, i) => ({ t: i * 60, started: 1, succeeded: i % 2, failed: 0 }));
+    const s = timelineSeries({ bucket_sec: 60, start: 0, buckets });
+    expect(s.rateWindow).toBe(24);
+    expect(s.perMin.slice(-2)).toEqual([0, 1]);
+    expect(s.perMinAvg[0]).toBe(0);
+    expect(s.perMinAvg[1]).toBe(0.5);
+    expect(s.perMinAvg.slice(23)).toEqual(s.perMinAvg.slice(23).map(() => 0.5));
+  });
+
   it("never reports fewer than zero running", () => {
     const s = timelineSeries({ bucket_sec: 60, start: 0, buckets: [{ t: 0, started: 0, succeeded: 2, failed: 0 }] });
     expect(s.running).toEqual([0]);
@@ -55,6 +75,11 @@ describe("jobKpis", () => {
     expect(byLabel["p90 duration"].value).toBe("7m");
     expect(byLabel["best val_loss"].value).toBe("0.182");
     expect(byLabel["best val_loss"].href).toBe("0.0.2-dev.t1903");
+  });
+
+  it("has no best tile when nothing is ranked (no goal declared)", () => {
+    const tiles = jobKpis(jobSummaryFixture({ ranked: false }));
+    expect(tiles.map((t) => t.label)).not.toContain("best val_loss");
   });
 });
 

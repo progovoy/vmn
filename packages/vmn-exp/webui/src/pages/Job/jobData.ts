@@ -18,6 +18,20 @@ export interface TimelineSeries {
   failed: number[];
   /** Completions per minute in each bucket. */
   perMin: number[];
+  /** `perMin`'s trailing average over `rateWindow` buckets: what the chart plots. */
+  perMinAvg: number[];
+  rateWindow: number;
+}
+
+/** Buckets a rate's trailing average spans: ~1/120 of the timeline, at least one. */
+const RATE_POINTS = 120;
+
+function trailingMean(values: number[], window: number): number[] {
+  let sum = 0;
+  return values.map((v, i) => {
+    sum += v - (i >= window ? values[i - window] : 0);
+    return sum / Math.min(i + 1, window);
+  });
 }
 
 /** The server's buckets are sparse (only those something happened in):
@@ -36,9 +50,10 @@ function denseBuckets({ bucket_sec: size, buckets }: JobTimeline) {
 }
 
 /** The stacked area's series: running(t) = cumulative started - cumulative
- *  ended, the finished ones cumulative; plus completions per minute. */
+ *  ended, the finished ones cumulative; plus completions per minute, raw
+ *  and as a trailing average (2 days of minutes would be noise). */
 export function timelineSeries(timeline: JobTimeline): TimelineSeries {
-  const out: TimelineSeries = { t: [], running: [], succeeded: [], failed: [], perMin: [] };
+  const out: TimelineSeries = { t: [], running: [], succeeded: [], failed: [], perMin: [], perMinAvg: [], rateWindow: 1 };
   const minutes = timeline.bucket_sec / 60;
   let started = 0, succeeded = 0, failed = 0;
   for (const b of denseBuckets(timeline)) {
@@ -51,6 +66,8 @@ export function timelineSeries(timeline: JobTimeline): TimelineSeries {
     out.failed.push(failed);
     out.perMin.push(minutes > 0 ? (b.succeeded + b.failed) / minutes : 0);
   }
+  out.rateWindow = Math.max(1, Math.round(out.t.length / RATE_POINTS));
+  out.perMinAvg = trailingMean(out.perMin, out.rateWindow);
   return out;
 }
 
@@ -87,7 +104,7 @@ export function jobKpis(s: JobSummary): KpiTile[] {
   ];
   const metric = mainMetric(s);
   const m = metric ? s.metrics[metric] : null;
-  if (metric && m) tiles.push({ label: `best ${metric}`, value: fmtVal(m.best), href: m.best_verstr });
+  if (metric && m && s.ranked !== false) tiles.push({ label: `best ${metric}`, value: fmtVal(m.best), href: m.best_verstr });
   return tiles;
 }
 

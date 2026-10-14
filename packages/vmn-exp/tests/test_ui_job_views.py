@@ -178,6 +178,15 @@ def test_without_a_goal_the_summary_tracks_the_most_common_metrics_unranked():
     assert sum(job["spread"]) == 40
 
 
+def test_the_goal_less_fallback_leaves_out_numeric_params_folded_into_metrics():
+    fleet = Fleet(42)
+    jobs = fleet.seed_jobs(1, 20, T0)
+    for i in range(21):  # the job's own row too
+        fleet.edit(i, opt=32, values={"loss": i / 10} if i else {})
+    summary = JobViews(LeaderboardCache()).summary(fleet.snapshot(), {}, jobs[0])
+    assert summary["metric"] == "loss" and set(summary["metrics"]) == {"loss"}
+
+
 def test_the_goal_less_fallback_keeps_the_five_most_common_metrics():
     fleet = Fleet(39)
     jobs = fleet.seed_jobs(1, 20, T0)

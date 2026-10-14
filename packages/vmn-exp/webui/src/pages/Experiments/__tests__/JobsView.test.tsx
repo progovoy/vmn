@@ -70,6 +70,17 @@ describe("a job's row", () => {
       .toHaveAttribute("href", `/ws/test/app/my-app/run/${encodeURIComponent("0.0.1-dev.t1903")}`);
   });
 
+  it("a job without a best (no goal declared) reads a dash that says why", async () => {
+    m.metricsSchema.mockResolvedValue({});
+    m.experimentsPaged.mockResolvedValue(jobsPage([
+      topRow(36, { name: "lr_layers_grid", job: job({ metric: "loss", best: null, best_verstr: null, best_idx: null }) }),
+    ]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    const dash = within(cellOf("lr_layers_grid", "best") as HTMLElement).getByText("—");
+    expect(dash).toHaveAttribute("title", "no goal declared for loss — not ranked");
+  });
+
   it("draws the spread and names what it shows", async () => {
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });

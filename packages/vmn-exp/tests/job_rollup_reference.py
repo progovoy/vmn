@@ -43,12 +43,16 @@ def goal_metrics(schema):
 
 
 def common_metrics(rows, count=5):
-    """The app's *count* metrics most runs carry (archived ones left out)."""
-    counts = {}
+    """The app's *count* metrics most runs carry (archived ones left out),
+    never a param folded into ``metrics``."""
+    counts, folded = {}, set()
     for row in rows:
         if not row.get("archived"):
             for name in row.get("metrics") or {}:
                 counts[name] = counts.get(name, 0) + 1
+                if name in (row.get("params") or {}):
+                    folded.add(name)
+    counts = {m: n for m, n in counts.items() if m not in folded}
     return sorted(counts, key=lambda m: (-counts[m], m))[:count]
 
 
