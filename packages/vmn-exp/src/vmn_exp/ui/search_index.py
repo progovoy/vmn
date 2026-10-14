@@ -253,6 +253,9 @@ class SearchIndexes:
         self._lock = threading.Lock()
 
     def get(self, snapshot):
+        """*snapshot*'s index; a schema view (``IndexSnapshot.summarized``)
+        shares its base snapshot's: its rows differ in metrics only, slot for slot."""
+        snapshot = getattr(snapshot, "_base", None) or snapshot
         return self._indexes.per_snapshot(snapshot, lambda: self._moved(snapshot))
 
     def _moved(self, snapshot):

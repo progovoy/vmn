@@ -60,6 +60,7 @@ from vmn_exp.ui.leaderboard_scope import (
     left_filtered,
     scope_positions,
 )
+from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
@@ -273,6 +274,7 @@ class LeaderboardCache(SetAnswers):
         self._jobs = JobRollupCache(self, size)
         self._search = SearchIndexes()
         self._job_view = JobsView(self, size)
+        self._subtree = SubtreeMatch(self, size)
         self._filtered_facets = LRU(size)
 
     schema_key = staticmethod(_schema_key)
@@ -351,6 +353,11 @@ class LeaderboardCache(SetAnswers):
         index = self._search.get(snapshot)
         return {"results": results(snapshot, index.ranked(text, limit, archived))}
 
+    def warm_search(self, snapshot):
+        """Build or move *snapshot*'s search index now (the refresher, off
+        the request path)."""
+        self._search.get(snapshot)
+
     def search_etag(self, snapshot, **params):
         """:meth:`search`'s ETag: the snapshot's token and the time bucket
         (statuses age), without building the leaderboard's base."""
@@ -361,17 +368,24 @@ class LeaderboardCache(SetAnswers):
     def page(
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,
         status=None, query=None, order=None, archived=False, scope=None, top=False,
+        match_subtree=False,
     ):
         """What ``leaderboard`` answers for the same arguments, from the memo.
 
         Without *limit* a plain list of at most ``max_page`` rows; with it
         ``{"rows", "total"}``. Archived rows are left out unless *archived*;
         *scope* keeps a run's subtree (without it), *top* the top-level runs,
-        each then carrying ``job`` (plan 23 S2). Raises ``QueryError`` on a
+        each then carrying ``job`` (plan 23 S2), and with *match_subtree*
+        the query matches their subtrees (:mod:`~vmn_exp.ui.leaderboard_subtree_match`).
+        Raises ``QueryError`` on a
         bad *query*, :class:`~vmn_exp.ui.leaderboard_scope.UnknownScope` on an
         unknown *scope*.
         """
         f = Filters(sort, status, query, order, archived, scope, top)
+        if match_subtree and not top:
+            raise ValueError("match_subtree needs top=1")
+        if match_subtree and query and query.strip():
+            return self._subtree.page(snapshot, schema, last, offset, limit, f)
         rows = self._job_view.ordered(snapshot, schema, last, f)
         return self.paged(snapshot, schema, rows, offset, limit, top)
 

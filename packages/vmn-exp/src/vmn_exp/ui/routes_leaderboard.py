@@ -15,7 +15,9 @@ Archived rows are left out of all of them unless the request passes
 (plan 22 K1, :mod:`~vmn_exp.ui.leaderboard_groups`). ``scope=<verstr>``
 narrows each of them to that run's subtree (without it; an unknown run is a
 404), and ``top=1`` the list to the top-level runs, each with its ``job``
-summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`).
+summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`);
+``match_subtree=1`` matches ``q`` over their subtrees instead (plan 23 S8b,
+:mod:`~vmn_exp.ui.leaderboard_subtree_match`; flat pages only).
 """
 from functools import partial
 
@@ -76,6 +78,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         group_key: str = None,
         scope: str = None,
         top: bool = False,
+        match_subtree: bool = False,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
@@ -101,10 +104,13 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
             return _answer(request, lambda s, sc, **p: joined_groups(compute(s, sc, group, **p),
                                                                      counts),
                            snapshot, schema, params, comments=generation, group=group)
-        compute = (partial(page_by_comments, cache, counts=counts) if by_comments
-                   else cache.page)
-        return _answer(request, lambda *a, **p: joined(compute(*a, **p), counts),
-                       snapshot, schema, dict(params, last=last), comments=generation, **clock)
+        if by_comments:
+            compute = partial(page_by_comments, cache, counts=counts)
+        else:
+            compute = partial(cache.page, match_subtree=match_subtree)
+        return _answer(request, lambda *a, **p: joined(compute(*a, **p), counts), snapshot,
+                       schema, dict(params, last=last), comments=generation,
+                       match_subtree=match_subtree and not by_comments, **clock)
 
     @app.get(f"{base}/experiments-columns", dependencies=[require(VIEWER)])
     def experiment_columns(

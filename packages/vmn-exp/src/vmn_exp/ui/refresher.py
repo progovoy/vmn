@@ -15,6 +15,9 @@ along: one thread per journal ticks it every ``interval_sec``, hinting the
 watched indexes, which then list only hinted and live records; their full
 (reconcile) listing runs every ``full_sweep_sec`` (``reconcile_sec``).
 
+Each refreshed snapshot is handed to ``on_refresh`` (the server warms its
+search index with it, plan 23 S8b); a failure there is logged at debug.
+
 A watched index does its filesystem work in an I/O helper process
 (``use_io_process``): each stat/open on this process's threads would wait for
 the GIL behind busy request threads, which starved refreshes under load.
@@ -63,9 +66,10 @@ class Refresher:
     background = True
     full_sweep_sec = RECONCILE_SEC
 
-    def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC):
+    def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC, on_refresh=None):
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec
+        self.on_refresh = on_refresh  # called with each refreshed snapshot
         self._watches = {}  # index -> _Watch
         self._journals = {}  # WorkspaceJournal -> its thread
         self._journal_of = {}  # index -> its WorkspaceJournal
@@ -181,4 +185,14 @@ class Refresher:
             watch.failing = True
         else:
             watch.failing = False
-            self.gil_hint.note(len(getattr(index.snapshot(), "rows", ())))
+            snapshot = index.snapshot()
+            self.gil_hint.note(len(getattr(snapshot, "rows", ())))
+            self._hand_on(snapshot)
+
+    def _hand_on(self, snapshot):
+        if self.on_refresh is None:
+            return
+        try:
+            self.on_refresh(snapshot)
+        except Exception:
+            _LOGGER.debug("Warming after a refresh failed", exc_info=True)

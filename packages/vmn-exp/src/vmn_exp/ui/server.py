@@ -137,6 +137,8 @@ def create_app(
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn)
     leaderboards = LeaderboardCache()
+    if refresher.background:  # the first search after a restart pays no build
+        refresher.on_refresh = leaderboards.warm_search
     job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
         os.path.join(manager.data_dir, "index") if use_index else None, background_refresh
