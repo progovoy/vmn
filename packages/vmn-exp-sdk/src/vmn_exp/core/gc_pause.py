@@ -34,3 +34,13 @@ def gc_paused():
             _depth -= 1
             if _depth == 0 and _resume:
                 gc.enable()
+
+
+def freeze_long_lived():
+    """Move every object alive now out of the collected generations, after a
+    young collection reclaims the recent cycles. For a long-lived server
+    whose bulk data (a board's 100k rows) would otherwise be traversed by
+    each full collection; frozen objects are still freed by reference
+    counting, only cycles among them would outlive their use."""
+    gc.collect(1)
+    gc.freeze()

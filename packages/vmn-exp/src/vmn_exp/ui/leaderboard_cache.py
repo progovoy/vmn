@@ -38,7 +38,7 @@ import os
 import threading
 
 import vmn_exp.core.status as experiment_status
-from vmn_exp.core.gc_pause import gc_paused
+from vmn_exp.core.gc_pause import freeze_long_lived, gc_paused
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.query import parse_query
 from vmn_exp.core.status import status_fields
@@ -310,7 +310,9 @@ class LeaderboardCache(SetAnswers):
         derived = prev and _Base.derived(prev, snapshot, token, bucket)
         if derived:
             self._deltas.add(derived)
-        return derived or _Base.build(snapshot, token, bucket)
+        base = derived or _Base.build(snapshot, token, bucket)
+        freeze_long_lived()  # the base lives for its generation (no cycles)
+        return base
 
     def _ordered(self, snapshot, schema, last, f):
         """The rows passing the :class:`Filters` *f* in order (no ``job:*`` sort)."""
