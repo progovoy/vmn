@@ -18,4 +18,14 @@ describe("JobProgress", () => {
     })} />);
     expect(screen.getByText("5/5")).toBeInTheDocument();
   });
+
+  it("stacks the line below the bar, so the line gets the cell's width", () => {
+    const { container } = render(<JobProgress job={job()} />);
+    expect(container.querySelector(".job-progress")).toHaveClass("stacked");
+  });
+
+  it("keeps bar and line on one row inline (a compact row)", () => {
+    const { container } = render(<JobProgress job={job()} inline />);
+    expect(container.querySelector(".job-progress")).not.toHaveClass("stacked");
+  });
 });

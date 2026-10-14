@@ -3,6 +3,9 @@
   font-size: 12px; color: var(--text-2);
 }
 .job-bar { flex: none; width: 72px; height: 6px; }
+.job-progress.stacked { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.job-progress.stacked .job-bar { width: 100%; max-width: 320px; }
+.job-progress.stacked .job-progress-text { white-space: normal; line-height: 1.35; }
 .job-progress-text {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

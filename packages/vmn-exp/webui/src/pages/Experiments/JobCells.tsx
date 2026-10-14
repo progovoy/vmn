@@ -20,8 +20,8 @@ export interface JobContext {
 
 /** Under the name: a job's progress, a single run's base (its branch is the
  *  Branch column's). */
-export function JobSubLine({ r }: { r: ExperimentRow }) {
-  if (r.job) return <JobProgress job={r.job} />;
+export function JobSubLine({ r, inline = false }: { r: ExperimentRow; inline?: boolean }) {
+  if (r.job) return <JobProgress job={r.job} inline={inline} />;
   return <span className="job-sub mono">{r.base_version}</span>;
 }
 

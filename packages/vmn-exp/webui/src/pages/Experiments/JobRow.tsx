@@ -35,7 +35,7 @@ function NameCell({ r, href, compact, ctx, onPrefetch }: {
           {r.name || r.verstr}
         </Link>
         <MatchingRunsChip r={r} runBase={ctx.runBase} search={ctx.search} />
-        {compact && <span className="job-inline"><JobSubLine r={r} /></span>}
+        {compact && <span className="job-inline"><JobSubLine r={r} inline /></span>}
       </div>
       {!compact && <div className="exp-branch job-line"><JobSubLine r={r} /></div>}
     </>
