@@ -154,5 +154,5 @@ def test_grouped_answers_have_their_own_etag(tmp_path, repo):
 def test_without_group_the_list_is_unchanged(tmp_path, repo):
     root, _ = repo
     body = _client(tmp_path, root).get(BASE, params={"limit": 50}).json()
-    assert set(body) == {"rows", "total"}
+    assert set(body) == {"rows", "total", "next_cursor"}
     assert body["total"] == 7

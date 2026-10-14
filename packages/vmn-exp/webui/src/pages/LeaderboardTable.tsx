@@ -8,6 +8,8 @@ import { useScrollMemory } from "../hooks/useScrollMemory";
 import { useRowKeys } from "../hooks/useRowKeys";
 import { useMoreRight } from "../hooks/useMoreRight";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
+import type { BoardViewport } from "../hooks/useLeaderboardRows";
+import { useHeldViewport } from "../components/NewRowsBar";
 import LeaderboardCards from "./LeaderboardCards";
 import Row, { rowHeight, type RowLayout } from "./LeaderboardRow";
 import { GroupHeaderRow, GroupMoreRow } from "./LeaderboardGroupRow";
@@ -53,6 +55,8 @@ type TableProps = {
   hasMore: boolean;
   onNearEnd: () => void;
   visibleRef: MutableRefObject<() => string[]>;
+  /** Told whether the reader is scrolled down or selecting (plan 23 W6). */
+  viewportRef?: MutableRefObject<BoardViewport>;
   /** Column resizing/reordering; the header is fixed when omitted. */
   edits?: ColumnEdits;
   /** Told the width (px) the table has to fill, and again when it changes. */
@@ -90,6 +94,9 @@ const CARDS_REFRESHED = 40;
 /** The grid, or below 640px one card per run (plan 20 C8). */
 export default function LeaderboardTable(props: TableProps) {
   const narrow = useMediaQuery(NARROW_QUERY);
+  // The phone's cards scroll the window; the grid its own element.
+  const windowScroll = useRef<HTMLElement | null>(null);
+  useHeldViewport(narrow ? props.viewportRef : undefined, windowScroll, props.selected);
   if (!narrow) return <GridTable {...props} />;
   const { rows, visibleRef } = props;
   visibleRef.current = () => boardRows(rows ?? []).map((r) => r.verstr).slice(0, CARDS_REFRESHED);
@@ -106,9 +113,10 @@ function columnsAt(full: RowLayout, el: HTMLElement | null): ColRange | null {
 
 function GridTable({
   rows, layout: full, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
-  groups, edits, onFit, describedBy, density, onClearAnchor,
+  groups, edits, onFit, describedBy, density, onClearAnchor, viewportRef,
 }: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  useHeldViewport(viewportRef, parentRef, selected);
   const [cols, setCols] = useState<ColRange | null>(() => columnsAt(full, null));
   useLayoutEffect(() => {
     setCols((was) => {

@@ -109,11 +109,27 @@ describe("useLiveScope", () => {
     expect(result.current.connected).toBe(false);
   });
 
-  it("leaves a bearer-token session to polling (EventSource sends no header)", () => {
+  it("follows a bearer-token session's stream over fetch, with its Authorization header", async () => {
     sessionStorage.setItem("vmn_token", "t");
-    const { result } = mount();
+    const enc = new TextEncoder();
+    let ctl!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({ start(c) { ctl = c; } });
+    const fetchMock = vi.fn(async (_u: string, _i: RequestInit) => new Response(body));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result, onChange, unmount } = mount({ scope: "top" });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(FakeSource.instances).toHaveLength(0);
-    expect(result.current.connected).toBe(false);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/workspaces/w/apps/root-svc/events?scope=top");
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get("Authorization")).toBe("Bearer t");
+    expect(result.current.connected).toBe(true);
+    await act(async () => {
+      ctl.enqueue(enc.encode('event: change\ndata: {"generation":"2.0","changed":{"rows":1}}\n\n'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(onChange).toHaveBeenCalledWith({ generation: "2.0", changed: { rows: 1 } });
+    const signal = fetchMock.mock.calls[0][1].signal!;
+    unmount();
+    expect(signal.aborted).toBe(true);
   });
 
   it("closes on unmount", () => {

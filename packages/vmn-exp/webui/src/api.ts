@@ -28,6 +28,8 @@ export interface PageOpts {
   scope?: string;
   /** With `top`: keep the top-level runs whose subtree matches `query` (plan 23 W11). */
   matchSubtree?: boolean;
+  /** The page after this keyset cursor (a page's `next_cursor`, plan 23 S6) instead of `offset`. */
+  cursor?: string;
 }
 
 /** The Jobs view search's counts (plan 23 W11): every matching run of the app. */
@@ -58,15 +60,18 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 
+/** A page of rows, the server's total and the next page's keyset cursor. */
+export type RowsPage = { rows: ExperimentRow[]; total: number; next_cursor?: string | null } & SubtreeMatches;
+
 /** One page of rows plus the server's total. Tolerates a server that still
  *  answers a plain list. */
 async function fetchPage(
   ws: string, app: string, opts: PageOpts = {}
-): Promise<{ rows: ExperimentRow[]; total: number } & SubtreeMatches> {
-  const p = new URLSearchParams({ offset: String(opts.offset ?? 0) });
+): Promise<RowsPage> {
+  const p = new URLSearchParams(opts.cursor ? { cursor: opts.cursor } : { offset: String(opts.offset ?? 0) });
   setFilter(p, { ...opts, limit: opts.limit ?? PAGE_SIZE });
   if (opts.last) p.set("last", String(opts.last));
-  const body = await get<ExperimentRow[] | ({ rows: ExperimentRow[]; total: number } & SubtreeMatches)>(
+  const body = await get<ExperimentRow[] | RowsPage>(
     `/workspaces/${ws}/apps/${appTag(app)}/experiments?${p}`
   );
   return Array.isArray(body) ? { rows: body, total: body.length } : body;
@@ -107,7 +112,7 @@ export const api = {
     ws: string, app: string, sort?: string, status?: string, query?: string
   ) =>
     fetchPage(ws, app, { sort, status, query, offset: 0, limit: PAGE_SIZE })
-      .then(({ rows, total }) => Object.assign(rows, { total }) as ExperimentPage),
+      .then(({ rows, total, next_cursor }) => Object.assign(rows, { total, next_cursor }) as ExperimentPage),
   experimentsPaged: (ws: string, app: string, opts?: PageOpts) =>
     fetchPage(ws, app, opts),
   /** The board's runs grouped by a link or a field (plan 22 K1). */

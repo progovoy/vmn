@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName } from "../../api";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
 import NewExperiment from "../../components/NewExperiment";
+import NewRowsBar from "../../components/NewRowsBar";
 import { useAddFilterClauses } from "../../hooks/useAddFilterClauses";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { prefetchRun } from "../../queries";
@@ -98,6 +99,7 @@ export default function JobsView({ ws, app, views }: { ws: string; app: string; 
             onArchivedChange={view.setArchived}
           />
           <JobsMatchLine matches={data.matches} appBase={base} search={board.search} />
+          <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "job" : "run"} onShow={data.showNew} />
           <JobsTable
             items={data.items} ctx={ctx} sort={board.sort}
             selected={view.selected} density={view.density}
@@ -108,7 +110,7 @@ export default function JobsView({ ws, app, views }: { ws: string; app: string; 
               onFold: view.toggleCollapsed, onMore: data.loadGroup,
               checkOf: selection.checkOf, onCheck: selection.toggleRows,
             }}
-            hasMore={data.hasMore} onNearEnd={data.loadMore} visibleRef={data.visibleRef}
+            hasMore={data.hasMore} onNearEnd={data.loadMore} visibleRef={data.visibleRef} viewportRef={data.viewportRef}
             onToggle={selection.toggle} onPrefetch={onPrefetch} onClearAnchor={selection.clearAnchor}
           />
           <BoardCaption

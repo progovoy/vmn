@@ -34,7 +34,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
     return {
       ...flat, items, grouped, loadGroup: groups.loadGroup,
       aggregate: undefined, defaultAggregate: undefined, running: 0,
-      hasMore: remaining > 0, moreLabel: `Load more (${remaining} remaining)`,
+      moreLabel: remaining > 0 ? `Load more (${remaining} remaining)` : "Load more",
     };
   }
   const remaining = data ? data.total_groups - data.groups.length : 0;
@@ -45,7 +45,9 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
     aggregate: data?.aggregate, defaultAggregate: groups.defaultAggregate, running: data?.running ?? 0,
     queryError: groups.queryError, pageError: groups.pageError, moreError: groups.moreError,
     loadMore: groups.loadMore, loadGroup: groups.loadGroup, refresh: groups.refresh,
-    visibleRef: flat.visibleRef, updatedAt: groups.updatedAt,
+    visibleRef: flat.visibleRef, viewportRef: flat.viewportRef, updatedAt: groups.updatedAt,
+    // Grouped boards apply every change (no `N new` bar).
+    pending: null, showNew: flat.showNew,
     hasMore: remaining > 0, moreLabel: `Load more (${plural(remaining, "group")} remaining)`,
   };
 }

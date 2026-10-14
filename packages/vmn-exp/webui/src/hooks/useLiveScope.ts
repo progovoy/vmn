@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { BASE } from "../http";
+import { authHeaders, BASE } from "../http";
 import { TOKEN_KEY } from "../shell/contracts";
+import { FetchEventSource } from "../util/fetchEventSource";
 import { useTabVisible } from "./useTabVisible";
 
 /** One `change` event of `GET .../apps/{app}/events` (plan 23 S5). */
@@ -24,11 +25,12 @@ export type LiveScope = {
  *  page revalidates what it shows (with its ETags). Once a dropped stream is
  *  back, *onChange* runs once (changes may have been missed meanwhile).
  *
- *  Closed while disabled (paused) or the tab is hidden. Never connected —
- *  the caller keeps polling — where EventSource is missing, for a bearer-
- *  token session (EventSource sends no Authorization header), once the
- *  server refuses the stream (no background refresher, too many streams) or
- *  after repeated errors; a new app or scope tries again. */
+ *  A bearer-token session reads the stream over fetch (EventSource sends no
+ *  Authorization header, `FetchEventSource`). Closed while disabled
+ *  (paused) or the tab is hidden. Never connected — the caller keeps
+ *  polling — where EventSource is missing, once the server refuses the
+ *  stream (no background refresher, too many streams) or after repeated
+ *  errors; a new app or scope tries again. */
 export function useLiveScope({ ws, app, scope, enabled, onChange }: {
   ws: string;
   /** The app in URL tag form. */
@@ -49,12 +51,13 @@ export function useLiveScope({ ws, app, scope, enabled, onChange }: {
 
   const query = scope ? `?scope=${encodeURIComponent(scope)}` : "";
   const url = `${BASE}/workspaces/${ws}/apps/${app}/events${query}`;
-  const supported = typeof EventSource !== "undefined" && !sessionStorage.getItem(TOKEN_KEY);
+  const token = Boolean(sessionStorage.getItem(TOKEN_KEY));
+  const supported = token ? typeof fetch !== "undefined" : typeof EventSource !== "undefined";
   const active = supported && enabled && visible && failedUrl !== url;
 
   useEffect(() => {
     if (!active) return;
-    const source = new EventSource(url);
+    const source = token ? new FetchEventSource(url, authHeaders()) : new EventSource(url);
     let errors = 0;
     source.onopen = () => {
       errors = 0;
@@ -65,7 +68,7 @@ export function useLiveScope({ ws, app, scope, enabled, onChange }: {
     source.onerror = () => {
       setConnected(false);
       errors += 1;
-      if (source.readyState === EventSource.CLOSED || errors >= MAX_ERRORS) {
+      if (source.readyState === FetchEventSource.CLOSED || errors >= MAX_ERRORS) {
         source.close();
         setFailedUrl(url);
       }
@@ -78,7 +81,7 @@ export function useLiveScope({ ws, app, scope, enabled, onChange }: {
       source.close();
       setConnected(false);
     };
-  }, [active, url, fire]);
+  }, [active, url, fire, token]);
 
   return { connected: active && connected, lastChangeAt };
 }

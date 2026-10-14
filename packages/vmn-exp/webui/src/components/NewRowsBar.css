@@ -1,0 +1,17 @@
+.new-rows-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.new-rows-bar button {
+  border: none;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 12px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}

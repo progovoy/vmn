@@ -32,11 +32,11 @@ def check_job_sort(sort, top):
         raise ValueError(f"sort {sort} needs top=1")
 
 
-def _sortable(value):
+def sortable(value):
     return isinstance(value, str) or is_finite_number(value)
 
 
-def _descending(field, order, summaries, schema):
+def job_descending(field, order, summaries, schema):
     """Most first unless *order* says otherwise; ``best`` best-first by its goal."""
     descending = DESCENDING.get(order)
     if descending is not None:
@@ -47,17 +47,23 @@ def _descending(field, order, summaries, schema):
     return bool(metric) and sort_descending(schema, metric)
 
 
+def job_value(summaries, row, field):
+    """*row*'s job summary *field*, None when missing or not sortable."""
+    value = (summaries.get(row["verstr"]) or {}).get(field)
+    return value if sortable(value) else None
+
+
 def job_sorted(rows, summaries, sort, order, schema):
     """*rows* (in the default order) ordered by their job summary's *sort* field."""
     field = JOB_SORTS[sort]
     valued, rest = [], []
     for row in rows:
-        value = (summaries.get(row["verstr"]) or {}).get(field)
-        if _sortable(value):
+        value = job_value(summaries, row, field)
+        if value is not None:
             valued.append((value, row))
         else:
             rest.append(row)
-    valued.sort(key=itemgetter(0), reverse=_descending(field, order, summaries, schema))
+    valued.sort(key=itemgetter(0), reverse=job_descending(field, order, summaries, schema))
     return [row for _, row in valued] + rest
 
 

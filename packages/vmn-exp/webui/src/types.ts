@@ -250,7 +250,9 @@ export interface ExperimentFacets {
 export type TopRuns = boolean | "jobs" | "singles";
 
 /** A page of leaderboard rows, with the server's count of every match. */
-export type ExperimentPage = ExperimentRow[] & { total: number };
+/** `next_cursor`: the keyset cursor of the page after it (plan 23 S6), null at
+ *  the end; absent from a server without keyset paging. */
+export type ExperimentPage = ExperimentRow[] & { total: number; next_cursor?: string | null };
 
 export interface SeriesPoint {
   step: number | null;

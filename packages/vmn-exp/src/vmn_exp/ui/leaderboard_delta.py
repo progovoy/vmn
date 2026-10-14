@@ -13,7 +13,7 @@ from collections import OrderedDict
 from itertools import compress
 from operator import is_not, ne, or_
 
-from vmn_exp.ui.leaderboard_live import _bisect
+from vmn_exp.ui.leaderboard_live import bisect_key
 
 # A delta above this share of the rows is cheaper to rebuild from scratch.
 MAX_DELTA_SHARE = 0.1
@@ -93,12 +93,12 @@ def splice(rows, drop, old_key, add, new_key):
     a dropped row is not where its key says (the caller rebuilds)."""
     cuts = []
     for row in drop:
-        at = _bisect(rows, old_key(row), old_key)
+        at = bisect_key(rows, old_key(row), old_key)
         if at == len(rows) or rows[at] is not row:
             return None
         cuts.append((at, 1, row))
     for row in sorted(add, key=new_key):
-        cuts.append((_bisect(rows, new_key(row), old_key), 0, row))
+        cuts.append((bisect_key(rows, new_key(row), old_key), 0, row))
     # Inserts before a drop at the same index; inserts keep their order.
     cuts.sort(key=lambda cut: cut[:2])
     out, cursor = [], 0

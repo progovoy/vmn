@@ -79,4 +79,28 @@ describe("refreshRows", () => {
     });
     expect(out.rows.map((x) => x.verstr)).toEqual(["new", "a", "b", "c"]);
   });
+
+  it("holds the rows in place, drops a re-asked one that no longer matches, keeps the held cursor", async () => {
+    const prev = [r("a"), r("b"), r("c", { status: "running" }), r("gone", { status: "running" })];
+    const out = await refreshRows({
+      getRows: () => prev,
+      fetchFirst: async () => ({ rows: [r("new"), r("b", { v: 2 })], total: 5, next_cursor: "first" }),
+      fetchWhere: async () => ({ rows: [r("c", { status: "succeeded" })] }),
+      hold: true,
+      getCursor: () => "held",
+    });
+    expect(out.rows.map((x) => x.verstr)).toEqual(["a", "b", "c"]);
+    expect(out.rows[0]).toBe(prev[0]);
+    expect(out.rows[1]).toMatchObject({ v: 2 });
+    expect(out.rows[2]).toMatchObject({ status: "succeeded" });
+    expect(out.held).toEqual({ added: 1, reordered: false });
+    expect(out.next_cursor).toBe("held");
+  });
+
+  it("keeps the held cursor while rows past the first page are kept, else the first page's", async () => {
+    const page = { rows: [r("a")], total: 3, next_cursor: "first" };
+    const opts = { fetchFirst: async () => page, fetchWhere: async () => ({ rows: [] }), getCursor: () => "held" };
+    expect((await refreshRows({ ...opts, getRows: () => [r("a"), r("b")] })).next_cursor).toBe("held");
+    expect((await refreshRows({ ...opts, getRows: () => [r("a")] })).next_cursor).toBe("first");
+  });
 });

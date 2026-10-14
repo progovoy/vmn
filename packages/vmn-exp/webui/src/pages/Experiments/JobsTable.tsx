@@ -5,6 +5,8 @@ import { useMemo, useRef, type CSSProperties, type MutableRefObject } from "reac
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { HeaderCheck } from "../../hooks/useBoardSelection";
+import type { BoardViewport } from "../../hooks/useLeaderboardRows";
+import { useHeldViewport } from "../../components/NewRowsBar";
 import { useRowKeys } from "../../hooks/useRowKeys";
 import { useScrollMemory } from "../../hooks/useScrollMemory";
 import { NARROW_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
@@ -57,6 +59,8 @@ export interface JobsTableProps {
   hasMore: boolean;
   onNearEnd: () => void;
   visibleRef: MutableRefObject<() => string[]>;
+  /** Told whether the reader is scrolled down or selecting (plan 23 W6). */
+  viewportRef?: MutableRefObject<BoardViewport>;
   onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
   onClearAnchor: () => void;
@@ -68,6 +72,9 @@ export default function JobsTable(props: JobsTableProps) {
   const narrow = useMediaQuery(NARROW_QUERY);
   const { items } = props;
   const rows = useMemo(() => (narrow ? boardRows(items ?? []) : []), [narrow, items]);
+  // The phone's cards scroll the window; the grid its own element.
+  const windowScroll = useRef<HTMLElement | null>(null);
+  useHeldViewport(narrow ? props.viewportRef : undefined, windowScroll, props.selected);
   if (!narrow) return <JobsGrid {...props} />;
   props.visibleRef.current = () => rows.slice(0, CARDS_REFRESHED).map((r) => r.verstr);
   return <JobCards {...props} />;
@@ -102,9 +109,10 @@ function Head({ sort, check }: { sort: JobsSort; check: HeaderCheckProps }) {
 
 function JobsGrid({
   items, ctx, sort, selected, density, headerCheck, groups, hasMore, onNearEnd, visibleRef,
-  onToggle, onPrefetch, onClearAnchor, emptyText,
+  onToggle, onPrefetch, onClearAnchor, emptyText, viewportRef,
 }: JobsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  useHeldViewport(viewportRef, parentRef, selected);
   const scroll = useScrollMemory();
   const list = useMemo(() => items ?? [], [items]);
   const height = densityRowHeight(density);
