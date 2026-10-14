@@ -12,7 +12,6 @@ import heapq
 from vmn_exp.core.tree import subtree_verstrs
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.job_failures import failure_clusters
-from vmn_exp.ui.job_tally import RollupSpec
 from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.memo import LRU
 
@@ -103,9 +102,9 @@ class JobViews:
                               lambda: self._summary(snapshot, schema, verstr))
 
     def _summary(self, snapshot, schema, verstr):
-        row, spec = self._row(snapshot, verstr), RollupSpec(schema)
-        rows = self.subtree_rows(snapshot, verstr)
-        main = spec.main
+        row, spec = self._row(snapshot, verstr), self.cache._jobs.spec(snapshot, schema)
+        main = spec.main if spec.ranked else None
+        rows = self.subtree_rows(snapshot, verstr) if main else []
         first = self._first_child(snapshot, verstr)
         return {
             **self.cache.job_rollup(snapshot, schema, verstr),

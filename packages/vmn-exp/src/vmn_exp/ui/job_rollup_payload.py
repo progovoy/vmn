@@ -86,15 +86,16 @@ def _highest(tallies):
     return high
 
 
-def metric_fields(parts, name, descending, bins=HIST_BINS, quantiles=True):
-    """One tracked metric over the subtree, or None when no run carries it."""
+def metric_fields(parts, name, descending, bins=HIST_BINS, quantiles=True, ranked=True):
+    """One tracked metric over the subtree, or None when no run carries it;
+    a goal-less one (not *ranked*) has no best."""
     tallies = _metric_parts(parts, name)
     if not tallies:
         return None
     n = sum(t.n for t in tallies)
     low = min(t.low[0] for t in tallies)
     high = _highest(tallies)
-    best = high if descending else low
+    best = (high if descending else low) if ranked else (None, None)
     sketch = _merged([t.sketch for t in tallies])
     fields = {
         "n": n, "min": low[0], "max": high[0], "mean": _significant(sum(t.total for t in tallies) / n),
@@ -126,8 +127,9 @@ def job_payload(job, parts, spec, now):
     p50, p90 = duration.quantiles([0.5, 0.9])
     return {
         **progress_fields(job, parts, now),
-        "metric": spec.main,
-        "metrics": {m: metric_fields(parts, m, spec.descending[m]) for m in spec.metrics},
+        "metric": spec.main, "ranked": spec.ranked,
+        "metrics": {m: metric_fields(parts, m, spec.descending[m], ranked=spec.ranked)
+                    for m in spec.metrics},
         "duration": {"n": duration.count, "p50": p50, "p90": p90},
         "failures": _failures(parts),
         "timeline": timeline(parts),
@@ -138,7 +140,7 @@ def job_summary(job, parts, spec, now):
     """The compact rollup a Jobs view sorts on: progress, plus the main
     metric's best and a spread histogram (counts only)."""
     main = spec.main and metric_fields(parts, spec.main, spec.descending[spec.main],
-                                       bins=SPREAD_BINS, quantiles=False)
+                                       bins=SPREAD_BINS, quantiles=False, ranked=spec.ranked)
     main = main or {}
     return {
         **progress_fields(job, parts, now),

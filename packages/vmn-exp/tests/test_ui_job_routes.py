@@ -71,7 +71,7 @@ def test_failures_cluster_the_jobs_failed_runs(app_layout):
     (cluster,) = body["clusters"]
     assert cluster["count"] == 2 and cluster["share"] == 1.0
     assert cluster["hosts"] == [{"host": "gpu1", "count": 2}]
-    assert cluster["params"] == [{"key": "bs", "value": 512, "share": 1.0, "base_share": 0.25}]
+    assert cluster["params"] == []  # 2 runs: below the 5-run support (test_ui_job_failures.py)
     assert cluster["example_verstr"] in (_kid(0), _kid(1))
     again = http.get(run_url(app_layout, OUTER, "/failures"),
                      headers={"If-None-Match": resp.headers["etag"]})
@@ -122,3 +122,25 @@ def test_the_detail_of_a_job_reads_no_child_run_state(app_layout, monkeypatch):
                         lambda storage, app, verstr: read.append(verstr) or real(storage, app, verstr))
     assert http.get(run_url(app_layout, OUTER)).status_code == 200
     assert read and set(read) <= {OUTER}
+
+
+GOALS = [{"type": "define_metric", "name": n, "goal": g}
+         for n, g in (("acc", "max"), ("f1", "max"), ("loss", "min"))]
+
+
+def test_job_endpoints_rank_on_the_goals_runs_declare_without_a_conf(app_layout):
+    seed_run(app_layout, OUTER, 1, finished_state(0), name="grid")
+    for n in range(6):
+        seed_run(app_layout, _kid(n), n + 2, finished_state(0), parent=OUTER,
+                 entries=GOALS + [metrics({"acc": n / 10, "f1": n / 5, "loss": 1 - n / 10})])
+    http = client(app_layout)
+    api = f"/api/v1/workspaces/main/apps/{app_layout.app_name}"
+    schema = http.get(f"{api}/metrics-schema").json()
+    assert schema == {"acc": {"goal": "max"}, "f1": {"goal": "max"}, "loss": {"goal": "min"}}
+    body = http.get(run_url(app_layout, OUTER, "/summary")).json()
+    assert body["ranked"] is True and body["metric"] == "acc"
+    assert set(body["metrics"]) == {"acc", "f1", "loss"}
+    assert body["metrics"]["loss"]["best_verstr"] == _kid(5)
+    assert body["top"][0]["verstr"] == _kid(5)
+    (job,) = [r["job"] for r in http.get(f"{api}/experiments?top=1").json()]
+    assert (job["metric"], job["best_verstr"]) == ("acc", _kid(5))

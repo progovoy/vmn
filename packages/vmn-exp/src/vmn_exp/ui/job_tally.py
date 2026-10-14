@@ -41,19 +41,28 @@ def _is_glob(name):
     return any(c in name for c in "*?[")
 
 
+FALLBACK_METRICS = 5
+
+
 class RollupSpec:
     """What a schema makes a rollup track: its goal metrics (exact names)
     and primary metric, each with its direction; ``main`` names the one a
-    compact summary shows."""
+    compact summary shows. A schema without any tracks the app's
+    :data:`FALLBACK_METRICS` most *common()* metrics instead, goal-less
+    (``ranked`` False: no best, nothing to rank — plan 20)."""
 
-    def __init__(self, schema):
+    def __init__(self, schema, common=tuple):
         schema = schema or {}
         names = {m for m in schema if not _is_glob(m) and metric_goal(schema, m)}
         primary = primary_metric(schema)
         names.update([primary] if primary else [])
-        self.metrics = tuple(sorted(names))
+        self.ranked = bool(names)
+        self.metrics = tuple(sorted(names)) if names else tuple(common())[:FALLBACK_METRICS]
         self.descending = {m: sort_descending(schema, m) for m in self.metrics}
         self.main = primary or (self.metrics[0] if self.metrics else None)
+
+    def same_metrics(self, other):
+        return (self.metrics, self.main, self.ranked) == (other.metrics, other.main, other.ranked)
 
 
 def _extreme(current, value, by, better):
