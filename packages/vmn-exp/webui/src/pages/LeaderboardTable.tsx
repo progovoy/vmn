@@ -181,8 +181,8 @@ function GridTable({
 
   return (
     <div className={`card flush lb-card${edge.more ? " more-right" : ""}`}>
-      {/* A fade over the right edge while columns run past it. */}
-      <div className="lb-edge-fade" aria-hidden="true" />
+      {/* A fade over the right edge while columns run past it, short of the scrollbars. */}
+      <div className="lb-edge-fade" aria-hidden="true" style={{ right: edge.gutter.right, bottom: edge.gutter.bottom }} />
       <div
         className="tbl-scroll"
         ref={parentRef}

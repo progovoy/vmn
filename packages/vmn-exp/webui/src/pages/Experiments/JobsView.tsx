@@ -40,8 +40,10 @@ function countText(loading: boolean, rows: { job?: unknown }[], total: number, k
 const emptyText = (kind: JobsKind | null, filtered: boolean) =>
   filtered ? `No ${kindNoun(kind)}s match the filters.` : `No ${kindNoun(kind)}s yet.`;
 
-export default function JobsView({ ws, app, views, kind }: {
+export default function JobsView({ ws, app, views, kind, onAll }: {
   ws: string; app: string; views?: ReactNode; kind: JobsKindState;
+  /** Open the All runs view. */
+  onAll: () => void;
 }) {
   const appName = toAppName(app);
   const client = useQueryClient();
@@ -74,7 +76,7 @@ export default function JobsView({ ws, app, views, kind }: {
         title={appName}
         count={countText(loading, rows, data.total, kind.kind)}
         views={views}
-        actions={!empty && <JobsToolbar ws={ws} app={app} view={view} board={board} onViewApplied={resetFilter} />}
+        actions={!empty && <JobsToolbar ws={ws} app={app} view={view} board={board} onViewApplied={resetFilter} onAll={onAll} />}
       />
       {view.creating && (
         <NewExperiment

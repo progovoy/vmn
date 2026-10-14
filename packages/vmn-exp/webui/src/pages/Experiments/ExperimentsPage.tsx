@@ -34,6 +34,7 @@ function AppExperiments({ ws, app }: { ws: string; app: string }) {
   const { view, setView } = useExperimentsView(ws, app);
   const kind = useJobsKind(ws, app);
   const onJobs = useCallback(() => setView("jobs"), [setView]);
+  const onAll = useCallback(() => setView("all"), [setView]);
   const onPick = useCallback((v: ViewOption) => (v === "all" ? setView("all") : setView("jobs", v)), [setView]);
   const views = (
     <span className="board-views">
@@ -44,6 +45,6 @@ function AppExperiments({ ws, app }: { ws: string; app: string }) {
     </span>
   );
   return view === "jobs"
-    ? <JobsView ws={ws} app={app} views={views} kind={kind} />
+    ? <JobsView ws={ws} app={app} views={views} kind={kind} onAll={onAll} />
     : <AllRunsView ws={ws} app={app} views={views} onJobs={onJobs} />;
 }

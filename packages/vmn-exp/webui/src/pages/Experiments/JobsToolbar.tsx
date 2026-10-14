@@ -1,7 +1,8 @@
 /** The Jobs view's actions in the page head (Jobs | Single runs is the
  *  page's view switch, §3.1): New run (where a run can be created), saved
- *  views and Group by over the jobs (plan 23 §3.4: fields from the facets;
- *  "parent run" is left out, a job has none). */
+ *  views and Group by over the jobs (plan 23 §3.4: fields from the facets).
+ *  Ungrouped, the view is grouped by parent run, so the menu checks that;
+ *  "none" opens All runs flat. */
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import GroupByMenu from "../../components/GroupByMenu";
@@ -13,10 +14,13 @@ import { groupSortOf } from "../../util/groupCountSort";
 import type { useJobsBoard } from "./useJobsBoard";
 import "../leaderboardToolbar.css";
 
-const JOB_LINKS = LINK_GROUPS.filter((l) => l.value !== "parent");
+const PARENT = "parent";
+const JOB_LINKS = LINK_GROUPS.map((l) => (l.value === PARENT ? { ...l, label: `${l.label} (this view)` } : l));
 
-export default function JobsToolbar({ ws, app, view, board, onViewApplied }: {
+export default function JobsToolbar({ ws, app, view, board, onViewApplied, onAll }: {
   ws: string; app: string;
+  /** Open All runs (Group by none). */
+  onAll: () => void;
   /** A saved view replaced the URL: controls holding their own state reset. */
   onViewApplied: () => void;
   view: ReturnType<typeof useLeaderboardView>;
@@ -37,8 +41,8 @@ export default function JobsToolbar({ ws, app, view, board, onViewApplied }: {
         onApply={(search) => { navigate({ search }, { replace: true }); onViewApplied(); }}
       />
       <GroupByMenu
-        value={board.group} links={JOB_LINKS} fields={fields}
-        onChange={(g) => view.setGroup(g, NO_GROUP)}
+        value={board.group} viewGroup={PARENT} links={JOB_LINKS} fields={fields}
+        onChange={(g) => (g === NO_GROUP ? onAll() : view.setGroup(g === PARENT ? NO_GROUP : g, NO_GROUP))}
         aggregate={view.aggParam ?? data.aggregate ?? data.defaultAggregate ?? "mean"}
         onAggregate={(a) => view.setAggregate(a, data.defaultAggregate)}
         groupSort={groupSortOf(view.sort)} onGroupSort={view.setGroupSort}

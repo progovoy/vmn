@@ -62,6 +62,20 @@ describe("the leaderboard's overflow cue", () => {
     await waitFor(() => expect(card).not.toHaveClass("more-right"));
   });
 
+  it("stops the fade before the scroller's scrollbars, so they stay visible", async () => {
+    renderBoard();
+    await screen.findByText("0.0.1-dev.x");
+    const scroller = document.querySelector(".tbl-scroll") as HTMLElement;
+    const fade = scroller.closest(".lb-card")!.querySelector(".lb-edge-fade") as HTMLElement;
+    // A 10px vertical scrollbar (offset - client) and a 10px horizontal one.
+    Object.defineProperty(scroller, "offsetWidth", { configurable: true, value: 1010 });
+    Object.defineProperty(scroller, "offsetHeight", { configurable: true, value: 410 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 400 });
+    scrollTo(scroller, 0);
+    await waitFor(() => expect(fade.style.right).toBe("10px"));
+    expect(fade.style.bottom).toBe("10px");
+  });
+
   it("shows no cue when every column fits", async () => {
     renderBoard();
     await screen.findByText("0.0.1-dev.x");
