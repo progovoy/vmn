@@ -4,7 +4,6 @@
 import { useMemo } from "react";
 import type { GroupAggregate } from "../apiGroups";
 import type { GroupActions } from "../pages/LeaderboardTable";
-import { groupClause } from "../util/groupClause";
 import type { BoardGroup } from "../util/groupItems";
 import type { HeaderCheck } from "./useBoardSelection";
 
@@ -21,7 +20,7 @@ export function useBoardGroupActions(
     field, aggregate: grouping.aggregate, onFold, onMore: data.loadGroup,
     checkOf: selection.checkOf, onCheck: selection.toggleRows,
     asFilter: onFilter && {
-      clauseOf: (g: BoardGroup) => g.clause ?? groupClause(field, g.key),
+      clauseOf: (g: BoardGroup) => g.clause,
       onFilter,
     },
   } : undefined;

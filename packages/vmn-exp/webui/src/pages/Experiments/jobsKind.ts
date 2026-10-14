@@ -12,7 +12,7 @@ export type JobsKind = "jobs" | "singles";
 
 const asKind = (v: string | null): JobsKind | null => (v === "jobs" || v === "singles" ? v : null);
 
-const hasJobs = (f: ExperimentFacets | undefined) => Boolean(f && (f.jobs ?? f.parented) > 0);
+const hasJobs = (f: ExperimentFacets | undefined) => Boolean(f && f.jobs > 0);
 
 export function useJobsKind(ws: string, app: string) {
   const client = useQueryClient();
@@ -25,8 +25,7 @@ export function useJobsKind(ws: string, app: string) {
   // Not known yet: the URL's side at once, else wait (null fetches nothing).
   const top: TopRuns | null = jobs ? kind : known ? true : urlKind;
   const f = facets.data;
-  const counts = f && typeof f.jobs === "number" && typeof f.singles === "number"
-    ? { jobs: f.jobs, singles: f.singles } : null;
+  const counts = f ? { jobs: f.jobs, singles: f.singles } : null;
   return { kind, top, counts };
 }
 

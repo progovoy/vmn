@@ -23,7 +23,7 @@ import { JOB, jobSummaryFixture } from "./jobFixture";
 
 const FACETS: ExperimentFacets = {
   branches: ["main"], metric_keys: ["val_loss", "acc"], param_keys: ["lr", "opt", "seed"], tag_keys: [],
-  param_values: { lr: 3, opt: 2, seed: 1 }, parented: 3, total: 3,
+  param_values: { lr: 3, opt: 2, seed: 1 }, parented: 3, jobs: 0, singles: 0, total: 3,
 };
 
 /** Whatever keys are asked for, from three runs. */

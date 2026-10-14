@@ -38,7 +38,7 @@ const FACETS = {
 const counts = (total: number) => ({ total, running: 0, waiting: 0, done: total, failed: 0, stuck: 0 });
 const group = (key: string, label: string, rows: ExperimentRow[], total: number, extra = {}) => ({
   key, label, target: null, loose: false, counts: counts(total), aggregates: {},
-  rows, rows_total: total, rows_unfiltered: total, ...extra,
+  rows, rows_total: total, rows_unfiltered: total, clause: null, ...extra,
 });
 const SMALL = singleRow(1, { name: "small_one", branch: "dev" });
 const BIG = singleRow(2, { name: "big_one" });
@@ -56,7 +56,7 @@ beforeEach(() => {
   m.experimentsPaged.mockResolvedValue(jobsPage([BIG, SMALL]));
   m.experiments.mockResolvedValue(Object.assign([BIG, SMALL], { total: 2 }));
   m.experimentGroups.mockResolvedValue(groups([
-    group("main", "branch = main", [BIG], 3000),
+    group("main", "branch = main", [BIG], 3000, { clause: 'branch = "main"' }),
     group("dev", "branch = dev", [SMALL], 20),
   ]));
 });
@@ -89,7 +89,7 @@ describe("the Jobs view, grouped", () => {
 
   it("counts a group of jobs in jobs", async () => {
     m.facets.mockResolvedValue({ ...FACETS, parented: 9000, jobs: 80, singles: 3000 });
-    m.experimentGroups.mockResolvedValue(groups([group("main", "branch = main", [BIG], 60)]));
+    m.experimentGroups.mockResolvedValue(groups([group("main", "branch = main", [BIG], 60, { clause: 'branch = "main"' })]));
     renderExperiments("/ws/test/app/my-app?group=branch");
     expect(await screen.findByRole("button", { name: 'Filter to branch = "main" (60 jobs)' })).toBeInTheDocument();
   });
@@ -98,7 +98,7 @@ describe("the Jobs view, grouped", () => {
 describe("All runs, grouped", () => {
   it("a group over 50 runs opens as a filter; Back restores the grouping", async () => {
     m.experimentGroups.mockResolvedValue(groups([
-      group("0.01", "params.lr = 0.01", [BIG], 200),
+      group("0.01", "params.lr = 0.01", [BIG], 200, { clause: "params.lr = 0.01" }),
       group("0.1", "params.lr = 0.1", [SMALL], 20),
     ]));
     renderExperiments("/ws/test/app/my-app?view=all&group=params.lr");

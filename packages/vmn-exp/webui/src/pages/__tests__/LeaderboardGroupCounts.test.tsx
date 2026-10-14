@@ -44,7 +44,7 @@ const sweep = (): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "failed", metrics: {} },
   counts: { total: 4, running: 1, waiting: 0, done: 1, failed: 1, stuck: 1 },
-  aggregates: {}, rows: INNER, rows_total: 4, rows_unfiltered: 4, loose: false,
+  aggregates: {}, rows: INNER, rows_total: 4, rows_unfiltered: 4, clause: null, loose: false,
 });
 const grouped = (groups: RunGroup[]) => ({ groups, total_groups: groups.length, total_rows: 4, running: 1, aggregate: "mean" });
 const header = () => document.querySelector("tbody tr.group-row") as HTMLElement;

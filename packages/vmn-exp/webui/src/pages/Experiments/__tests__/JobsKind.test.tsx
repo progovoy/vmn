@@ -91,14 +91,6 @@ describe("Jobs | Single runs | All runs", () => {
     expect(m.experimentsPaged).not.toHaveBeenCalled();
   });
 
-  it("leaves the counts out when the facets have none", async () => {
-    m.facets.mockResolvedValue({ ...FACETS, parented: 5 });
-    renderExperiments();
-    await screen.findByRole("link", { name: "grid" });
-    expect(within(switcher()!).getByRole("button", { name: "Jobs" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(switcher()!).getByRole("button", { name: "Single runs" })).toBeInTheDocument();
-  });
-
   it("an app without jobs reads Runs | All runs and lists its single runs", async () => {
     m.facets.mockResolvedValue({ ...FACETS, parented: 0, jobs: 0, singles: 3 });
     m.experimentsPaged.mockResolvedValue(jobsPage([singleRow(1, { name: "solo" })]));

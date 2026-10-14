@@ -13,7 +13,6 @@ import { useAddFilterClauses } from "../../hooks/useAddFilterClauses";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { prefetchRun } from "../../queries";
 import { fmtCount, plural } from "../../util";
-import { groupClause } from "../../util/groupClause";
 import type { BoardGroup } from "../../util/groupItems";
 import BoardGridTools from "../BoardGridTools";
 import BoardCaption from "../BoardCaption";
@@ -54,10 +53,9 @@ export default function JobsView({ ws, app, views, kind }: {
     [base, board.metric, board.goal, board.search]);
   // A saved view or a big group replaces the URL: the filter bar re-reads it.
   const { gen: filterGen, resetFilter, openGroup } = useAddFilterClauses(view);
-  const field = data.grouped ? board.group : null;
-  const asFilter = useMemo(() => field ? {
-    clauseOf: (g: BoardGroup) => g.clause ?? groupClause(field, g.key), onFilter: openGroup,
-  } : undefined, [field, openGroup]);
+  const asFilter = useMemo(() => data.grouped ? {
+    clauseOf: (g: BoardGroup) => g.clause, onFilter: openGroup,
+  } : undefined, [data.grouped, openGroup]);
   const onPrefetch = useCallback((v: string) => { prefetchRun(client, ws, app, v); }, [client, ws, app]);
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;

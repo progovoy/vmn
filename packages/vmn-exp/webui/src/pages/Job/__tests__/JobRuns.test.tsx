@@ -45,7 +45,7 @@ const row = (i: number, extra: Partial<ExperimentRow> = {}): ExperimentRow => ({
 const counts = (total: number) => ({ total, running: 0, waiting: 0, done: total, failed: 0, stuck: 0 });
 const group = (key: string, total: number, rows: ExperimentRow[] = []): RunGroup => ({
   key, label: key, target: null, loose: false, counts: counts(total), aggregates: {},
-  rows, rows_total: total, rows_unfiltered: total,
+  rows, rows_total: total, rows_unfiltered: total, clause: null,
 });
 const grouped = (groups: RunGroup[]) => ({
   groups, total_groups: groups.length, total_rows: groups.reduce((n, g) => n + g.rows_total, 0),
@@ -83,7 +83,7 @@ beforeEach(() => {
   m.experimentsColumns.mockResolvedValue({ verstrs: [], idx: [], columns: {}, total: 0 });
   m.experimentGroups.mockImplementation((_ws: string, _app: string, o: GroupOpts) => {
     if (o.group === "status") return Promise.resolve(grouped([group("succeeded", 300), group("failed", 12)]));
-    if (o.group === "params.lr") return Promise.resolve(grouped([group("0.01", 200, [row(1)]), group("0.1", 30, [row(2)])]));
+    if (o.group === "params.lr") return Promise.resolve(grouped([{ ...group("0.01", 200, [row(1)]), clause: "params.lr = 0.01" }, group("0.1", 30, [row(2)])]));
     if (o.group === "params.opt") return Promise.resolve(grouped([group("adam", 250), group("sgd", 62)]));
     return Promise.reject(new Error(`unexpected group ${o.group}`));
   });

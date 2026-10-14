@@ -12,7 +12,7 @@ const GROUP: RunGroup = {
             tree_status: "running", metrics: { loss: 0.91 } },
   counts: { total: 16, running: 2, waiting: 0, done: 13, failed: 1, stuck: 0 },
   aggregates: { loss: { mean: 0.5, best: 0.2, median: 0.45, min: 0.2, max: 0.9, n: 16 } },
-  rows: [], rows_total: 16, rows_unfiltered: 20, loose: false,
+  rows: [], rows_total: 16, rows_unfiltered: 20, clause: null, loose: false,
 };
 
 describe("apiGroups", () => {
