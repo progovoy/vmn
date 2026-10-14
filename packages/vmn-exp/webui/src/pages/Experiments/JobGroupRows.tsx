@@ -2,12 +2,12 @@
  *  group of jobs spans the table, its fold (over 50 runs, its Filter to
  *  button), label, the jobs' status bar and
  *  their count. */
+import MoreButton from "../../components/MoreButton";
 import { plural } from "../../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../../util/groupItems";
 import { GroupBar, GroupFold } from "../LeaderboardGroupRow";
 import type { GroupFilter } from "../LeaderboardTable";
 import { HeaderCheckbox, type HeaderCheckProps } from "../LeaderboardHeadParts";
-import { MORE_TEXT } from "../groupHeaderText";
 import { JOB_COLUMNS } from "./jobColumns";
 
 const SPAN = JOB_COLUMNS.length - 1;
@@ -50,12 +50,7 @@ export function JobMoreRow({ item, index, isActive, height, onMore }: {
     <tr className={`group-more ${item.state}`} style={{ height }} data-row-index={index} tabIndex={isActive ? 0 : -1}>
       <td />
       <td colSpan={SPAN}>
-        <button
-          type="button" className="group-more-btn" disabled={item.state === "loading"}
-          role={item.state === "error" ? "alert" : undefined} onClick={() => onMore(item.key)}
-        >
-          {MORE_TEXT[item.state](item.remaining)}
-        </button>
+        <MoreButton item={item} onMore={onMore} />
       </td>
     </tr>
   );

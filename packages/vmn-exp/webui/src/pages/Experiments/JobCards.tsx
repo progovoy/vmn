@@ -1,9 +1,11 @@
 /** The Jobs view below 640px (plan 23 W1): a card per top-level run (name,
  *  status, a job's progress, its best value) in the board's card style;
  *  grouped, a section label per group of jobs. */
-import { memo, type MouseEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { memo } from "react";
+import { Link } from "react-router-dom";
+import RowCheckbox from "../../components/RowCheckbox";
 import StatusPill from "../../components/StatusPill";
+import { useRowNavigate } from "../../hooks/useRowNavigate";
 import type { ExperimentRow } from "../../types";
 import { plural, relTime, runHref } from "../../util";
 import { isGroupItem, type GroupHeaderItem } from "../../util/groupItems";
@@ -19,19 +21,12 @@ const JobCard = memo(function JobCard({ r, ctx, selected, onToggle, onPrefetch }
   onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
 }) {
-  const navigate = useNavigate();
   const href = runHref(ctx.runBase, r.verstr);
   const status = headStatus(r);
-  const onClick = (e: MouseEvent) => {
-    if ((e.target as HTMLElement).closest("a, input, button")) return;
-    navigate(href);
-  };
+  const onClick = useRowNavigate(href);
   return (
     <li className={`lb-mcard job-mcard${selected ? " checked" : ""}${r.archived ? " archived" : ""}`} onClick={onClick}>
-      <input
-        type="checkbox" checked={selected} aria-label={`Select ${r.verstr}`}
-        onChange={() => {}} onClick={(e) => onToggle(r.verstr, e.shiftKey)}
-      />
+      <RowCheckbox verstr={r.verstr} checked={selected} onToggle={onToggle} />
       <div className="lb-mcard-body">
         <div className="lb-mcard-head">
           <Link

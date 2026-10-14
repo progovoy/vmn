@@ -1,10 +1,12 @@
-import { memo, useRef, type CSSProperties, type MouseEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { memo, useRef, type CSSProperties } from "react";
+import { Link } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import type { Density } from "../util/density";
 import type { MemberPlace } from "../util/groupItems";
 import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
+import RowCheckbox from "../components/RowCheckbox";
 import StatusPill from "../components/StatusPill";
+import { useRowNavigate } from "../hooks/useRowNavigate";
 import { tagLabel } from "../util/tags";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
 import {
@@ -183,7 +185,6 @@ function Row({
   /** Its place under a group header, when it is a group's member. */
   member?: MemberPlace;
 }) {
-  const navigate = useNavigate();
   // Prefetch on a resting pointer, not on every row a scroll slides under it.
   const hover = useRef<ReturnType<typeof setTimeout>>();
   const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
@@ -192,12 +193,7 @@ function Row({
   const href = runHref(layout.runBase, r.verstr) + (member ? "" : layout.runSearch?.(index) ?? "");
   const ids = layoutIds(layout);
   const params = layout.paramCols.length ? rowParams(r) : {};
-  // Links and the checkbox handle their own clicks (cmd/middle-click on the
-  // link opens a tab); anywhere else on the row opens the run.
-  const onClick = (e: MouseEvent) => {
-    if ((e.target as HTMLElement).closest("a, input, button")) return;
-    navigate(href);
-  };
+  const onClick = useRowNavigate(href);
 
   const cell = (id: string, style: CSSProperties) => {
     const name = id.slice(2);
@@ -205,10 +201,7 @@ function Row({
       case "check":
         return (
           <td key={id} data-col-id={id} style={style} className="check-cell">
-            <input
-              type="checkbox" checked={isSelected} aria-label={`Select ${r.verstr}`}
-              onChange={() => {}} onClick={(e) => onToggle(r.verstr, e.shiftKey)}
-            />
+            <RowCheckbox verstr={r.verstr} checked={isSelected} onToggle={onToggle} />
           </td>
         );
       case "idx":

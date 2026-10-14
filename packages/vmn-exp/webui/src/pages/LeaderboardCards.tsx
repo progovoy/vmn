@@ -1,12 +1,14 @@
 /** The leaderboard below 640px (plan 20 C8): one card per run — name and
  *  status, the primary metric large, branch · when — instead of a grid
  *  the phone would scroll sideways; grouped, a section per group (plan 22 G9). */
-import { Fragment, memo, type MouseEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Fragment, memo } from "react";
+import { Link } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import { fmtVal, relTime, runHref } from "../util";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
+import RowCheckbox from "../components/RowCheckbox";
 import StatusPill from "../components/StatusPill";
+import { useRowNavigate } from "../hooks/useRowNavigate";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { headStatus, type RowLayout } from "./LeaderboardRow";
 import type { SortState } from "./LeaderboardHead";
@@ -44,23 +46,16 @@ const MCard = memo(function MCard({
   onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
 }) {
-  const navigate = useNavigate();
   const href = runHref(layout.runBase, r.verstr);
   const status = headStatus(r);
-  const onClick = (e: MouseEvent) => {
-    if ((e.target as HTMLElement).closest("a, input, button")) return;
-    navigate(href);
-  };
+  const onClick = useRowNavigate(href);
   const incomplete = sweepIncompleteLabel(r);
   return (
     <li
       className={`lb-mcard${selected ? " checked" : ""}${flash ? " flash" : ""}${r.archived ? " archived" : ""}`}
       onClick={onClick}
     >
-      <input
-        type="checkbox" checked={selected} aria-label={`Select ${r.verstr}`}
-        onChange={() => {}} onClick={(e) => onToggle(r.verstr, e.shiftKey)}
-      />
+      <RowCheckbox verstr={r.verstr} checked={selected} onToggle={onToggle} />
       <div className="lb-mcard-body">
         <div className="lb-mcard-head">
           <Link

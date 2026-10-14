@@ -7,6 +7,7 @@
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import type { GroupAggregate, GroupTarget } from "../apiGroups";
+import MoreButton from "../components/MoreButton";
 import SegmentBar from "../components/SegmentBar";
 import StatusPill from "../components/StatusPill";
 import ToneParts from "../components/ToneParts";
@@ -14,7 +15,7 @@ import { Icon } from "../components/shell/icons";
 import type { ExperimentRow, RunState } from "../types";
 import { fmtVal, plural, runHref } from "../util";
 import type { BoardGroup, GroupHeaderItem, GroupMoreItem, MemberPlace } from "../util/groupItems";
-import { MORE_TEXT, aggregateCell, barSegments, countParts, countsText, spokenCounts } from "./groupHeaderText";
+import { aggregateCell, barSegments, countParts, countsText, spokenCounts } from "./groupHeaderText";
 import { isGapId } from "./leaderboardColumns";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, rowHeight, type RowLayout } from "./LeaderboardRow";
@@ -159,15 +160,7 @@ export function GroupMoreRow({ item, index, isActive, layout, onMore, member }: 
   item: GroupMoreItem; index: number; isActive: boolean; layout: RowLayout; onMore: (key: string) => void;
   member?: MemberPlace;
 }) {
-  const more = (
-    <button
-      type="button" className="group-more-btn" disabled={item.state === "loading"}
-      role={item.state === "error" ? "alert" : undefined}
-      onClick={() => onMore(item.key)}
-    >
-      {MORE_TEXT[item.state](item.remaining)}
-    </button>
-  );
+  const more = <MoreButton item={item} onMore={onMore} />;
   return (
     <tr className={`group-more ${item.state}${member ? " group-member group-last" : ""}`} style={{ height: rowHeight(layout) }} data-row-index={index} tabIndex={isActive ? 0 : -1}>
       {layoutIds(layout).map((id, i) => (

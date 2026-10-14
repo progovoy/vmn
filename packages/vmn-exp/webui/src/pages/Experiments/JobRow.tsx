@@ -1,11 +1,13 @@
 /** One Jobs-view row (plan 23 W1, §3.1): a job, or a single run, across the
  *  JOB_COLUMNS. A click outside its links and checkbox opens the run. */
-import { memo, useRef, type MouseEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { memo, useRef } from "react";
+import { Link } from "react-router-dom";
 import MatchingRunsChip from "../../components/MatchingRunsChip";
+import RowCheckbox from "../../components/RowCheckbox";
 import StatusPill from "../../components/StatusPill";
 import type { ExperimentRow } from "../../types";
 import type { Density } from "../../util/density";
+import { useRowNavigate } from "../../hooks/useRowNavigate";
 import { relTime, runHref } from "../../util";
 import { HOVER_INTENT_MS, densityRowHeight, headStatus } from "../LeaderboardRow";
 import type { JobCell } from "../../util/jobProgress";
@@ -48,24 +50,17 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, onPref
   onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
 }) {
-  const navigate = useNavigate();
   const hover = useRef<ReturnType<typeof setTimeout>>();
   const href = runHref(ctx.runBase, r.verstr);
   const numbers = jobNumbers(r);
   const status = headStatus(r);
-  const onClick = (e: MouseEvent) => {
-    if ((e.target as HTMLElement).closest("a, input, button")) return;
-    navigate(href);
-  };
+  const onClick = useRowNavigate(href);
 
   const body = (id: string) => {
     switch (id) {
       case "check":
         return (
-          <input
-            type="checkbox" checked={isSelected} aria-label={`Select ${r.verstr}`}
-            onChange={() => {}} onClick={(e) => onToggle(r.verstr, e.shiftKey)}
-          />
+          <RowCheckbox verstr={r.verstr} checked={isSelected} onToggle={onToggle} />
         );
       case "idx": return `@${r.idx}`;
       case "status":

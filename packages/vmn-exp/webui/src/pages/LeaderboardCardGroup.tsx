@@ -7,7 +7,8 @@ import { Link } from "react-router-dom";
 import type { GroupAggregate } from "../apiGroups";
 import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
-import { MORE_TEXT, aggregateCell, shownAggregate } from "./groupHeaderText";
+import MoreButton from "../components/MoreButton";
+import { aggregateCell, shownAggregate } from "./groupHeaderText";
 import { GroupBar, GroupCountParts, GroupFold, groupCountsText, groupName, groupSpoken } from "./LeaderboardGroupRow";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import type { RowLayout } from "./LeaderboardRow";
@@ -68,13 +69,7 @@ function CardGroupHead({ item, layout, metric, agg, mono, onFold, check, asFilte
 export function CardGroupMore({ item, onMore }: { item: GroupMoreItem; onMore: (key: string) => void }) {
   return (
     <li className={`lb-mgroup-more ${item.state}`}>
-      <button
-        type="button" className="group-more-btn" disabled={item.state === "loading"}
-        role={item.state === "error" ? "alert" : undefined}
-        onClick={() => onMore(item.key)}
-      >
-        {MORE_TEXT[item.state](item.remaining)}
-      </button>
+      <MoreButton item={item} onMore={onMore} />
     </li>
   );
 }
