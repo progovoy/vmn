@@ -340,16 +340,20 @@ class LeaderboardCache(SetAnswers):
         moves = last and self._deltas.since(last.token, base)
         static = moves and last.advanced(base, *moves, schema, filters)
         static = static or _Static.build(base, schema, filters,
-                                         slots=self._candidates(base.snapshot, filters.query))
+                                         slots=self._candidates(base.snapshot, filters.query,
+                                                                base.position))
         self._latest.put(key, static)
         return static
 
-    def _candidates(self, snapshot, query):
+    def _candidates(self, snapshot, query, position=None):
         """The slots of *snapshot* the search index says may pass *query*'s
-        ``~`` clauses, or None (no clause it answers: every slot)."""
-        if not query or ("~" not in query and "contains" not in query.lower()):
+        ``~`` clauses (and, given its storage *position*, its ``verstr in``
+        clauses), or None (no clause it answers: every slot)."""
+        if not query or ("~" not in query and "contains" not in query.lower()
+                         and (position is None or "verstr" not in query)):
             return None
-        return search_prefilter.candidates(parse_query(query), self._search.get(snapshot))
+        slots = search_prefilter.Slots(lambda: self._search.get(snapshot), position)
+        return search_prefilter.candidates(parse_query(query), slots)
 
     def search(self, snapshot, text, limit, archived=False):
         """``{"results"}``: ⌘K "go to run" over every run (plan 23 S8)."""
