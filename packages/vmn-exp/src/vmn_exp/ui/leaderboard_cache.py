@@ -380,9 +380,10 @@ class LeaderboardCache(SetAnswers):
         index = self._search.get(snapshot)
         return {"results": results(snapshot, index.ranked(text, limit, archived))}
 
-    def warm_search(self, snapshot):
-        """Build or move *snapshot*'s search index now (the refresher, off
-        the request path)."""
+    def warm(self, snapshot):
+        """Build or move *snapshot*'s board base and search index now (the
+        refresher and the startup warm-up, off the request path)."""
+        self._base(snapshot)
         self._search.get(snapshot)
 
     def search_etag(self, snapshot, **params):

@@ -68,6 +68,7 @@ from vmn_exp.ui import (
     routes_similar,
     routes_sweep,
     routes_tree,
+    startup_warmup,
 )
 from vmn_exp.ui.readers import changelog as changelog_reader
 from vmn_exp.ui.readers import config as config_reader
@@ -143,8 +144,8 @@ def create_app(
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn)
     leaderboards = LeaderboardCache()
-    if refresher.background:  # the first search after a restart pays no build
-        refresher.on_refresh = leaderboards.warm_search
+    if refresher.background:  # requests after a refresh pay no base or search build
+        refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
         os.path.join(manager.data_dir, "index") if use_index else None, background_refresh
@@ -697,6 +698,7 @@ def create_app(
     routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
     routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment,
                             _similar_weights)
+    startup_warmup.install(app, manager, list_apps, _app_inputs, leaderboards, refresher.background)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 
