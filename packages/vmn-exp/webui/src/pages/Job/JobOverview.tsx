@@ -33,7 +33,7 @@ export default function JobOverview({ ws, app, summary }: { ws: string; app: str
         <Card title="Progress over time"><JobTimelineChart timeline={summary.timeline} /></Card>
         <Card title="Distribution"><JobMetricHistogram metrics={summary.metrics} initial={metric} /></Card>
         <Card title={metric ? `Top runs on ${metric}` : "Top runs"}>
-          <JobTopRuns top={summary.top} metric={metric} appBase={appBase} allHref={jobTabHref(runBase, "runs")} />
+          <JobTopRuns top={summary.top} metric={metric} ranked={summary.ranked !== false} appBase={appBase} allHref={jobTabHref(runBase, "runs")} />
         </Card>
         <Card title="Failure clusters">
           <JobFailureTop ws={ws} app={app} verstr={summary.verstr} failed={failedCount(summary)} failuresHref={jobTabHref(runBase, "failures")} />

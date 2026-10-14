@@ -5,7 +5,7 @@
 import { useId, useMemo, useState } from "react";
 import type { FacetOpts } from "../api";
 import { NONE_GROUP } from "../apiGroups";
-import { useFacetParams, useParamCounts, useStatusCounts, type ValueCount } from "../hooks/useFacetCounts";
+import { useFacetParams, useParamCounts, useStatusCounts, type FacetParam, type ValueCount } from "../hooks/useFacetCounts";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { fmtCount, plural } from "../util";
 import { binClauses, numericBins, numericKeys } from "../util/facetBins";
@@ -41,8 +41,14 @@ function Values({ title, values, clauseOf, onAdd }: {
   );
 }
 
-function Histogram({ field, numbers, onAdd }: { field: string; numbers: unknown[]; onAdd: Add }) {
+/** `412 distinct values`: a many-valued param with no numbers to bin. */
+const Distinct = ({ n }: { n: number }) => <p className="facet-more muted">{plural(n, "distinct value")}</p>;
+
+function Histogram({ field, numbers, distinct, onAdd }: {
+  field: string; numbers: unknown[]; distinct: number; onAdd: Add;
+}) {
   const bins = useMemo(() => numericBins(numbers), [numbers]);
+  if (!bins.length) return <Distinct n={distinct} />;
   const top = Math.max(1, ...bins.map((b) => b.count));
   return (
     <div role="group" aria-label={`${field} histogram`} className="facet-hist">
@@ -68,9 +74,9 @@ function Histogram({ field, numbers, onAdd }: { field: string; numbers: unknown[
 }
 
 function ParamFacet({ ws, app, param, opts, onAdd }: {
-  ws: string; app: string; param: string; opts: FacetOpts; onAdd: Add;
+  ws: string; app: string; param: FacetParam; opts: FacetOpts; onAdd: Add;
 }) {
-  const field = `params.${param}`;
+  const field = `params.${param.key}`;
   const q = useParamCounts(ws, app, param, opts);
   const data = q.data;
   const nums = data && numericKeys(data.values.map((v) => v.key));
@@ -81,8 +87,10 @@ function ParamFacet({ ws, app, param, opts, onAdd }: {
   return (
     <section className="facet" aria-label={field}>
       <h3 className="facet-title mono">{field}</h3>
-      {!data ? <div className="facet-loading skel-bar" aria-hidden="true" />
-        : data.numbers ? <Histogram field={field} numbers={data.numbers} onAdd={onAdd} />
+      {!data ? (q.isError
+        ? <p className="facet-more muted">Couldn't count its values</p>
+        : <div className="facet-loading skel-bar" aria-hidden="true" />)
+        : data.numbers ? <Histogram field={field} numbers={data.numbers} distinct={data.values.length + data.more} onAdd={onAdd} />
         : (
           <>
             <Values title={`${field} values`} values={values!} clauseOf={(k) => groupClause(field, k)} onAdd={onAdd} />
@@ -115,7 +123,7 @@ function Facets({ ws, app, opts, onAdd }: { ws: string; app: string; opts: Facet
   return (
     <>
       <StatusFacet ws={ws} app={app} opts={opts} onAdd={onAdd} />
-      {shown.map((p) => <ParamFacet key={p} ws={ws} app={app} param={p} opts={opts} onAdd={onAdd} />)}
+      {shown.map((p) => <ParamFacet key={p.key} ws={ws} app={app} param={p} opts={opts} onAdd={onAdd} />)}
       {params.length > shown.length && (
         <button type="button" className="link facet-all" onClick={() => setAll(true)}>
           {`More params (${params.length - shown.length})`}

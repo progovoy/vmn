@@ -94,6 +94,26 @@ describe("the job page", () => {
     expect(jobSummary).toHaveBeenCalledWith("test", "my-app", JOB);
   });
 
+  it("lays the header out as title and actions, the progress, then the tabs; the CLI card last", async () => {
+    vi.mocked(jobSummary).mockResolvedValue(jobSummaryFixture({
+      counts: { running: 40, waiting: 546, succeeded: 1409, failed: 3, stuck: 2 },
+    }));
+    renderRun();
+    const tabs = await screen.findByRole("tablist", { name: "Job" });
+    expect(screen.queryByRole("link", { name: /← experiments/ })).toBeNull();
+    const actions = screen.getByRole("group", { name: "Job actions" });
+    expect(within(actions).getByRole("button", { name: /Reproduce/ })).toBeInTheDocument();
+    expect(within(actions).getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+    expect(within(actions).getByRole("button", { name: /Add to report/ })).toBeInTheDocument();
+    const bar = screen.getByRole("progressbar");
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(actions, bar) && follows(bar, tabs)).toBe(true);
+    expect(screen.getByText("3 failed")).toBeInTheDocument();
+    expect(screen.getByText("2 stuck")).toBeInTheDocument();
+    const cli = screen.getByText(`vmn-exp list my/app --query 'parent = "${JOB}"'`);
+    expect(follows(screen.getByRole("tabpanel"), cli)).toBe(true);
+  });
+
   it("keeps the tab in the URL and moves with the arrow keys", async () => {
     renderRun("?tab=failures");
     expect(await screen.findByRole("tab", { name: "Failures" })).toHaveAttribute("aria-selected", "true");

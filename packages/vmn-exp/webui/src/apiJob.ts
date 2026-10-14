@@ -76,6 +76,8 @@ export interface JobSummary {
   /** The main metric's name, when the server names it (else the first of `metrics`). */
   metric?: string | null;
   metrics: Record<string, JobMetric | null>;
+  /** False when no tracked metric has a declared goal: `top` and `best` rank nothing. */
+  ranked?: boolean;
   duration: { n: number; p50: number | null; p90: number | null };
   failures: { sig: string; label: string; count: number }[];
   top: JobTopRun[];

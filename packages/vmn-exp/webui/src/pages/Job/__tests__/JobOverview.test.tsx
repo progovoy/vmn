@@ -32,7 +32,8 @@ describe("job overview", () => {
   it("shows the KPI tiles, the best one linked to its run", () => {
     renderOverview();
     const tiles = screen.getByRole("list", { name: "Job KPIs" });
-    expect(within(tiles).getByText("1,412 / 2,000")).toBeInTheDocument();
+    expect(within(tiles).getByText("1,412")).toBeInTheDocument();
+    expect(within(tiles).getByText("of 2,000")).toBeInTheDocument();
     expect(within(tiles).getByText("1.5%")).toBeInTheDocument();
     expect(within(tiles).getByText("3 runs")).toBeInTheDocument();
     expect(within(tiles).getByRole("link", { name: /best val_loss/ }))
@@ -65,6 +66,20 @@ describe("job overview", () => {
     expect(within(top).getByRole("link", { name: "@1903 t1903" })).toHaveAttribute("href", `${BASE}/run/0.0.2-dev.t1903`);
     expect(within(top).getByRole("link", { name: "@12" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Show all in Runs" })).toHaveAttribute("href", `${BASE}/run/${JOB}?tab=runs`);
+  });
+
+  it("says no goal is declared when the job's metrics aren't ranked", () => {
+    renderOverview(jobSummaryFixture({ ranked: false, top: [] }));
+    const card = screen.getByRole("region", { name: "Top runs on val_loss" });
+    expect(card).toHaveTextContent(
+      "No goal declared for val_loss — runs aren't ranked. Declare one with experiment.metrics.val_loss.goal or run.define_metric(goal=...)",
+    );
+  });
+
+  it("says so when no run of the job logged a metric", () => {
+    renderOverview(jobSummaryFixture({ metric: null, metrics: {}, top: [] }));
+    expect(screen.getByRole("region", { name: "Distribution" })).toHaveTextContent("No run in this job logged a metric yet");
+    expect(screen.getByRole("region", { name: "Top runs" })).toHaveTextContent("No run in this job logged a metric yet");
   });
 
   it("names the top failure clusters, each linking to the Failures tab", async () => {

@@ -1,7 +1,7 @@
-/** The job page's sticky header (plan 23 §3.2): name, `@N`, tree status,
- *  progress, live state, the Reproduce menu, the CLI twin; then the tabs. */
+/** The job page's header (plan 23 §3.2): name, `@N` and tree status left,
+ *  the actions right; the full-width progress under them. The tabs follow
+ *  as their own sticky row, the CLI twin closes the page. */
 import type { KeyboardEvent, ReactNode } from "react";
-import { Link } from "react-router-dom";
 import type { JobSummary } from "../../apiJob";
 import { appName as toAppName } from "../../api";
 import StatusPill from "../../components/StatusPill";
@@ -20,11 +20,11 @@ export const jobTabId = (tab: JobTab) => `job-tab-${tab}`;
 export const jobListCommand = (appName: string, v: string, storeUri?: string) =>
   vmnExpCommand(["list", appName, "--query", sweepQuery(v)], storeUri);
 
-function CliCard({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
+export function JobCliCard({ ws, app, verstr }: { ws: string; app: string; verstr: string }) {
   const scope = usePageScope(ws);
   const command = jobListCommand(toAppName(app), verstr, storeUriOf(scope.workspace));
   return (
-    <div className="job-cli">
+    <div className="cli-card job-cli">
       <code className="mono">{command}</code>
       <CopyButton text={command} className="link" label="Copy the CLI command" />
     </div>
@@ -40,7 +40,7 @@ export function JobTabs({ tab, onTab }: { tab: JobTab; onTab: (tab: JobTab) => v
     e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
   };
   return (
-    <div className="board-tabs job-tabs" role="tablist" aria-label="Job" onKeyDown={onKeyDown}>
+    <div className="board-tabs job-tabs job-tabbar" role="tablist" aria-label="Job" onKeyDown={onKeyDown}>
       {JOB_TABS.map((t) => (
         <button
           key={t} type="button" role="tab" id={jobTabId(t)} aria-selected={t === tab}
@@ -53,26 +53,21 @@ export function JobTabs({ tab, onTab }: { tab: JobTab; onTab: (tab: JobTab) => v
   );
 }
 
-export default function JobHeader({ ws, app, summary, actions, tabs }: {
-  ws: string; app: string; summary: JobSummary; actions: ReactNode; tabs: ReactNode;
-}) {
+export default function JobHeader({ summary, actions }: { summary: JobSummary; actions: ReactNode }) {
   const status = summary.tree_status ?? summary.status;
   return (
     <header className="job-head">
-      <Link className="back-link" to={`/ws/${ws}/app/${app}`}>← experiments</Link>
-      <div className="page-head run-head job-title">
-        <h1 className={summary.name ? undefined : "mono"}>{summary.name || summary.verstr}</h1>
-        {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
-        {summary.sweep && <span className="badge">sweep</span>}
-        {actions}
+      <div className="job-title-row">
+        <div className="job-title">
+          <h1 className={summary.name ? undefined : "mono"}>{summary.name || summary.verstr}</h1>
+          {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
+          {summary.idx != null && <span className="mono run-idx">@{summary.idx}</span>}
+          <StatusPill status={status} />
+          {summary.sweep && <span className="badge">sweep</span>}
+        </div>
+        <div className="job-actions" role="group" aria-label="Job actions">{actions}</div>
       </div>
-      <div className="status-head run-status-line job-status-line">
-        {summary.idx != null && <span className="mono run-idx">@{summary.idx}</span>}
-        <StatusPill status={status} />
-        <JobHeaderProgress summary={summary} />
-      </div>
-      <CliCard ws={ws} app={app} verstr={summary.verstr} />
-      {tabs}
+      <JobHeaderProgress summary={summary} />
     </header>
   );
 }

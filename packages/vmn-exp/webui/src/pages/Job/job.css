@@ -1,27 +1,27 @@
 /* The job page (plan 23 W2, W5): sticky header with the tabs, the
    Overview's tiles and cards, the Failures tab's clusters. Status colours
    are the --st-* tokens, the same the pills and the group bar wear. */
-.job-head {
-  position: sticky; top: 0; z-index: 3; background: var(--bg);
-  padding-top: 4px; margin-bottom: 12px;
-}
-.job-title h1 { font-size: 20px; }
-.job-title { align-items: center; margin-bottom: 6px; }
-.job-status-line { margin-bottom: 8px; flex-wrap: wrap; }
-.job-tabs { margin-bottom: 0; }
+.job-head { padding-top: 4px; margin-bottom: 8px; }
+.job-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.job-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.job-title h1 { font-size: 20px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+.job-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.job-actions .run-actions { flex-wrap: nowrap; }
 
-.job-progress { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.job-bar {
-  display: inline-flex; width: 140px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line-2);
+.job-head-progress { display: flex; flex-direction: column; gap: 6px; }
+.job-head-bar {
+  display: flex; width: 100%; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line-2);
 }
-.job-progress-text { font-variant-numeric: tabular-nums; color: var(--text-2); }
-.job-progress-text .tone-failed { color: var(--st-bad); }
+.job-head-counts { font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 12.5px; }
+.job-head-counts .tone-failed { color: var(--st-bad); }
+.job-head-counts .tone-stuck { color: var(--st-stuck); }
 
-.job-cli { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; font-size: 12px; }
-.job-cli code {
-  color: var(--text-2); background: var(--panel-2); padding: 2px 6px; border-radius: 4px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
-}
+/* Only the tab row sticks while the page scrolls. */
+.job-tabbar { position: sticky; top: 0; z-index: 3; background: var(--bg); margin-bottom: 12px; }
+
+.job-cli { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.job-cli code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.job-cli::before { flex: none; }
 
 .job-kpis {
   list-style: none; margin: 0 0 12px; padding: 0;
@@ -121,7 +121,9 @@
 .job-box-row:hover .job-box-iqr { opacity: 1; }
 
 @media (max-width: 639px) {
-  .job-head { position: static; }
+  .job-tabbar { position: static; }
+  .job-actions { margin-left: 0; }
+  .job-actions .run-actions { flex-wrap: wrap; justify-content: flex-start; }
   .job-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .job-grid { grid-template-columns: minmax(0, 1fr); }
   .job-tabs { overflow-x: auto; }
@@ -130,7 +132,7 @@
 /* The Runs tab (plan 23 W3): the facet sidebar left of the scoped board;
    on a phone the sidebar is a drawer above it. */
 .job-runs { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
-.job-runs > .facet-sidebar { position: sticky; top: 120px; max-height: calc(100vh - 140px); overflow: auto; padding-right: 4px; }
+.job-runs > .facet-sidebar { position: sticky; top: 52px; max-height: calc(100vh - 64px); overflow: auto; padding-right: 4px; }
 .job-runs-main { min-width: 0; }
 .job-runs-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .job-runs-head .board-actions { margin-left: auto; }

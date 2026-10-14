@@ -1,5 +1,6 @@
 /** A numeric param's facet (plan 23 W3): its values as a mini histogram,
  *  each bar a range clause for the filter bar. */
+import { NONE_GROUP } from "../apiGroups";
 
 export interface FacetBin {
   lo: number;
@@ -40,6 +41,26 @@ export function binClauses(field: string, bin: FacetBin): string[] {
 }
 
 const NUMBER = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+/** A column value's group key, as the grouped list spells it: text as is,
+ *  anything else as JSON, no value the no-value group. */
+function keyOf(v: unknown): string {
+  if (v === null || v === undefined || v === "") return NONE_GROUP;
+  return typeof v === "string" ? v : JSON.stringify(v);
+}
+
+/** A column's *top* most common values (by count, then first seen) and how
+ *  many distinct values it holds: a facet's counts without a grouping. */
+export function columnCounts(column: readonly unknown[], top: number) {
+  const counts = new Map<string, number>();
+  for (const v of column) {
+    const k = keyOf(v);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const values = [...counts].map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count).slice(0, top);
+  return { values, distinct: counts.size };
+}
 
 /** Group keys as numbers when every one spells a number, else null. */
 export function numericKeys(keys: readonly string[]): number[] | null {
