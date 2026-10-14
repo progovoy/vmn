@@ -33,6 +33,7 @@ class Fleet:
     def __init__(self, seed=0, links=False):
         self.rng = random.Random(seed)
         self.links = links  # runs also rerun or fork earlier ones
+        self.app = APP
         self.specs = []  # [{verstr, parent, values, archived, branch, opt, ts, rerun_of, forked_from}]
         self.rows = []
         self.states = {}
@@ -122,7 +123,7 @@ class Fleet:
     def snapshot(self):
         self.generation += 1
         return IndexSnapshot.build(
-            APP, self.generation, list(self.rows), dict(self.states),
+            self.app, self.generation, list(self.rows), dict(self.states),
             observed_at=dict(self.observed),
         )
 

@@ -75,7 +75,7 @@ def job_sorted(rows, summaries, sort, order, schema):
 class JobsView:
     def __init__(self, cache, size=32):
         self._cache = cache
-        self._orders = LRU(size)
+        self._orders = cache.generations.track(LRU(size))
 
     def ordered(self, snapshot, schema, last, f):
         """The rows passing the :class:`~vmn_exp.ui.leaderboard_scope.Filters`

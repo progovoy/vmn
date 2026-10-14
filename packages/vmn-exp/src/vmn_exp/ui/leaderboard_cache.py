@@ -64,7 +64,7 @@ from vmn_exp.ui.leaderboard_scope import (
 from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
 from vmn_exp.ui.leaderboard_top_counts import TopCounts
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
-from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.memo import LRU, Generations
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import sort_rows
 from vmn_exp.ui.search_index import SearchIndexes
@@ -76,6 +76,9 @@ BUCKET_SEC = 2
 # Orders moved on across generations: the dashboard's mix of sorts and
 # queries at 100k rows, each a list of row references.
 LATEST_ORDERS = 64
+# Index generations each app keeps in the per-generation caches: the newest
+# serves, the one before it covers a refresh's old/new snapshot handoff.
+GENERATIONS_KEPT = 3
 # Tokens are per process, so an ETag from before a restart never matches.
 _NONCE = os.urandom(8).hex()
 
@@ -275,19 +278,22 @@ class LeaderboardCache(SetAnswers):
         # 100k+ runs); keep just enough to survive a refresh's old/new
         # snapshot handoff, and to derive the next generation from.
         self._bases = LRU(2)
+        # Caches keyed by a base token first keep each app's newest generations.
+        self.generations = Generations(GENERATIONS_KEPT)
+        track = self.generations.track
         self._facets = Facets()
-        self._static = LRU(size)
+        self._static = track(LRU(size))
         self._latest = LRU(LATEST_ORDERS)  # (schema, filters) -> newest _Static
         self._deltas = DeltaLog()
-        self._sorted = LRU(size)
-        self._columns = LRU(size)
+        self._sorted = track(LRU(size))
+        self._columns = track(LRU(size))
         self._importance = LRU(IMPORTANCE_RESULTS)
         self._groups = GroupCache(self, size)
         self.jobs = JobRollupCache(self, size)
         self._search = SearchIndexes()
         self._job_view = JobsView(self, size)
         self._subtree = SubtreeMatch(self, size)
-        self._filtered_facets = LRU(size)
+        self._filtered_facets = track(LRU(size))
         self._top_counts = TopCounts(self)
 
     schema_key = staticmethod(_schema_key)
@@ -305,12 +311,14 @@ class LeaderboardCache(SetAnswers):
     def _new_base(self, snapshot, token, bucket):
         """Derived from the app's latest kept base, else built. Any base is a
         valid start (even another workspace's): the delta is found by identity."""
-        kept = [base for snap, base in self._bases.values() if snap.app_name == snapshot.app_name]
+        kept = [base for _, base in self._bases.values()
+                if base.snapshot.app_name == snapshot.app_name]
         prev = max(kept, key=lambda base: base.token, default=None)
         derived = prev and _Base.derived(prev, snapshot, token, bucket)
         if derived:
             self._deltas.add(derived)
         base = derived or _Base.build(snapshot, token, bucket)
+        self.generations.advance(snapshot.app_name, token)
         freeze_long_lived()  # the base lives for its generation (no cycles)
         return base
 

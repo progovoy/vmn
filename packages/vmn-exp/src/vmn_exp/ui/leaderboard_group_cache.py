@@ -21,8 +21,8 @@ LATEST_GROUPINGS = 32
 class GroupCache:
     def __init__(self, cache, size=32):
         self._cache = cache
-        self._static = LRU(size)
-        self._views = LRU(size)
+        self._static = cache.generations.track(LRU(size))
+        self._views = cache.generations.track(LRU(size))
         self._latest = LRU(LATEST_GROUPINGS)
 
     def groups(self, snapshot, schema, group, sort=None, status=None, query=None,

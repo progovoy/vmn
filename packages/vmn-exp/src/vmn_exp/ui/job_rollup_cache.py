@@ -35,12 +35,13 @@ def _failure_counts(job, parts, spec, now, idx_of):
 class JobRollupCache:
     def __init__(self, cache, size=32):
         self._cache = cache
-        self._static = LRU(size)
+        track = cache.generations.track
+        self._static = track(LRU(size))
         self._latest = LRU(LATEST_ROLLUPS)
-        self._overlays = LRU(size)
-        self._trees = LRU(size)
-        self._answers = LRU(ANSWERS)
-        self._specs = LRU(size)
+        self._overlays = track(LRU(size))
+        self._trees = track(LRU(size))
+        self._answers = track(LRU(ANSWERS))
+        self._specs = track(LRU(size))
 
     def job_rollup(self, snapshot, schema, verstr):
         """*verstr*'s full rollup, or None when it is not a job."""

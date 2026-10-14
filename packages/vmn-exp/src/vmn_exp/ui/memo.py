@@ -2,6 +2,7 @@
 """Small thread-safe memos for the ui's read paths."""
 import threading
 import time
+import weakref
 from collections import OrderedDict
 
 
@@ -40,7 +41,7 @@ def _single_flight(lock, in_flight_map, key, in_flight, compute, keep):
     exception) to every waiter on *in_flight*."""
     try:
         value = compute()
-    except BaseException as exc:  # noqa: BLE001 - relayed to every waiter
+    except BaseException as exc:
         with lock:
             del in_flight_map[key]
         in_flight.finish(None, exc)
@@ -69,6 +70,12 @@ class LRU:
     def clear(self):
         with self._lock:
             self._entries.clear()
+
+    def drop_where(self, predicate):
+        """Forget every kept entry whose key *predicate* accepts."""
+        with self._lock:
+            for key in [key for key in self._entries if predicate(key)]:
+                del self._entries[key]
 
     def peek(self, key):
         """*key*'s value if it is kept, else None; never computes or reorders."""
@@ -106,12 +113,56 @@ class LRU:
                               lambda value: store(value) and self.put(key, value))
 
     def per_snapshot(self, snapshot, compute, key=()):
-        """``compute()`` once per *snapshot* object (keyed by identity) and *key*."""
+        """``compute()`` once per *snapshot* object (keyed by identity) and
+        *key*. The entry holds an index snapshot weakly, so it never keeps an
+        old generation alive; a dead or reused id fails the identity check."""
         return self.get(
             (id(snapshot),) + tuple(key),
-            lambda: (snapshot, compute()),
-            valid=lambda hit: hit[0] is snapshot,
+            lambda: (_ref(snapshot), compute()),
+            valid=lambda hit: hit[0]() is snapshot,
         )[1]
+
+
+def _ref(obj):
+    """A weak reference to *obj*, else (a plain dict or list) a strong one."""
+    try:
+        return weakref.ref(obj)
+    except TypeError:
+        return lambda: obj
+
+
+class Generations:
+    """Each app's newest *keep* base tokens. Caches registered with
+    :meth:`track` are keyed by a token first (alone or heading a tuple); as
+    an app advances, its older generations' entries leave them all."""
+
+    def __init__(self, keep):
+        self._keep = keep
+        self._newest = {}  # app -> its newest tokens, oldest first
+        self._caches = []
+        self._lock = threading.Lock()
+
+    def track(self, lru):
+        self._caches.append(lru)
+        return lru
+
+    def advance(self, app, token):
+        """*token* is *app*'s newest generation; tokens only count up, so an
+        older one (an evicted base rebuilt for a held snapshot) changes nothing."""
+        with self._lock:
+            tokens = self._newest.setdefault(app, [])
+            if tokens and token <= tokens[-1]:
+                return
+            tokens.append(token)
+            retired = set(tokens[:-self._keep])
+            del tokens[:-self._keep]
+        if retired:
+            for lru in self._caches:
+                lru.drop_where(lambda key: _token_of(key) in retired)
+
+
+def _token_of(key):
+    return key[0] if isinstance(key, tuple) and key else key
 
 
 class TTLCache:

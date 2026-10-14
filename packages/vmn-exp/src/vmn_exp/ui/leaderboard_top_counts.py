@@ -29,7 +29,7 @@ def _plus(a, b, by=1):
 class TopCounts:
     def __init__(self, cache, size=8):
         self._cache = cache
-        self._answers = LRU(size)
+        self._answers = cache.generations.track(LRU(size))
         self._latest = {}  # {(app, archived): (base token, static counts)}
         self._lock = threading.Lock()
 

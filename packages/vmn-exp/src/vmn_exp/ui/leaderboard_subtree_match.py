@@ -19,7 +19,7 @@ from vmn_exp.ui.memo import LRU
 class SubtreeMatch:
     def __init__(self, cache, size=32):
         self._cache = cache
-        self._hits = LRU(size)
+        self._hits = cache.generations.track(LRU(size))
 
     def hits(self, snapshot, query, archived):
         """``Counter({top-level verstr: runs of its tree passing *query*})``."""
