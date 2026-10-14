@@ -27,3 +27,23 @@ export function applyTagEdit(tags: Tags | undefined, set: Tags, remove: string[]
   remove.forEach((k) => delete next[k]);
   return next;
 }
+
+export interface TagEdit { set: Tags; remove: string[] }
+
+const entries = (text: string, sep: RegExp) => text.split(sep).map((s) => s.trim()).filter(Boolean);
+
+/** A bulk tag edit: `key=value` entries (comma or line separated) to set and
+ *  keys (comma or space separated) to remove; else the first problem. */
+export function parseTagEdit(setText: string, removeText: string): { edit: TagEdit } | { error: string } {
+  const set: Tags = {};
+  for (const entry of entries(setText, /[,\n]/)) {
+    const tag = parseTag(entry);
+    if (!tag) return { error: `"${entry}": use key=value (no spaces in key, no leading -)` };
+    set[tag.key] = tag.value;
+  }
+  const remove = entries(removeText, /[,\s]/);
+  const bad = remove.find((k) => k.includes("=") || parseTag(k)?.key !== k);
+  if (bad !== undefined) return { error: `"${bad}" is not a tag key` };
+  if (!Object.keys(set).length && !remove.length) return { error: "Add a tag to set or a key to remove" };
+  return { edit: { set, remove } };
+}

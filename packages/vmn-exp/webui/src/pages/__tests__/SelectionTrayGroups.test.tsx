@@ -2,8 +2,9 @@
  *  listed as one removable entry each, archived by query, and compared
  *  through their top runs. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../api", () => ({ api: { action: vi.fn(), actionPreview: vi.fn(), job: vi.fn() } }));
 
@@ -31,7 +32,7 @@ function renderTray() {
   writePicks("w", "a", PICKS);
   addQueryGroup("w", "a", GROUP);
   addQueryGroup("w", "a", { ...GROUP, scope: "J4", job: "J4", label: "sweep-4", count: 10, members: [] });
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={["/ws/w/app/a/tree"]}>
       <Routes><Route path="*" element={<><SelectionTray ws="w" app="a" /><Where /></>} /></Routes>
     </MemoryRouter>,

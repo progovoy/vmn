@@ -2,8 +2,9 @@
  *  picked, `7 runs from 3 jobs · Compare · Archive · Clear`, expandable to
  *  the picks grouped by job. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { renderWithClient } from "../../test-utils";
 
 vi.mock("../../api", () => ({ api: { action: vi.fn(), job: vi.fn() } }));
 
@@ -26,7 +27,7 @@ function Where() {
 
 function renderTray(picks: RunPick[] = PICKS) {
   writePicks("w", "a", picks);
-  return render(
+  return renderWithClient(
     <MemoryRouter initialEntries={["/ws/w/app/a/run/t1"]}>
       <Routes><Route path="*" element={<><SelectionTray ws="w" app="a" /><Where /></>} /></Routes>
     </MemoryRouter>,
