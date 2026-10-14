@@ -2,7 +2,7 @@
  *  Runs tab showed, carried to the run page as `?from=<board order>&at=<i>`
  *  (the run's index in it), and the clauses that place and rank it. Pure. */
 import type { HistBin } from "../apiJob";
-import { quoteLiteral } from "./searchQuery";
+import { fieldPath } from "./brushQuery";
 
 /** The board order a run link carries: the job (scope), filters and sort. */
 export interface BoardOrder {
@@ -44,8 +44,8 @@ export const runContextSearch = (o: BoardOrder, at: number) =>
 
 /** The runs better than *value* on *metric* toward *goal*. */
 export function betterClause(metric: string, value: number, goal: "min" | "max"): string | null {
-  const name = /^\w+$/.test(metric) ? metric : quoteLiteral(metric);
-  return name && `metrics.${name} ${goal === "min" ? "<" : ">"} ${value}`;
+  const field = fieldPath("metrics", metric);
+  return field && `${field} ${goal === "min" ? "<" : ">"} ${value}`;
 }
 
 /** The runs ahead of run *idx* in the default order (newest first). */

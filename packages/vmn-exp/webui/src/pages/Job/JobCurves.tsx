@@ -19,7 +19,7 @@ function useTopVerstrs({ ws, app, summary, y, state }: JobChartProps) {
   // The summary ranks on its main metric; another metric needs the list.
   const fromSummary = y === (summary.metric ?? y)
     && (state.k <= summary.top.length || summary.top.length < SUMMARY_TOP);
-  const query = useJobTopRuns(ws, app, summary.verstr, y, state.k, !fromSummary, summary.done);
+  const query = useJobTopRuns(ws, app, summary.verstr, y, state.k, !fromSummary, summary);
   const verstrs = useMemo(
     () => (fromSummary ? summary.top.slice(0, state.k).map((t) => t.verstr) : query.data ?? null),
     [fromSummary, summary.top, state.k, query.data],

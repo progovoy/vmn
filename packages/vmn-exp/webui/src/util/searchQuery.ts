@@ -18,11 +18,14 @@ export function searchClause(text: string): string | null {
   return `name ~ ${lit} or verstr ~ ${lit} or note ~ ${lit} or branch ~ ${lit}`;
 }
 
-/** The branch filter as a server clause (null for "all branches"). */
-export function branchClause(branch: string): string | null {
-  const lit = branch ? quoteLiteral(branch) : null;
-  return lit && `branch = ${lit}`;
+/** `field = "text"`; null for text no literal can hold. */
+export function eqClause(field: string, text: string): string | null {
+  const lit = quoteLiteral(text);
+  return lit && `${field} = ${lit}`;
 }
+
+/** The branch filter as a server clause (null for "all branches"). */
+export const branchClause = (branch: string): string | null => (branch ? eqClause("branch", branch) : null);
 
 /** The query language's membership test of *field* over values that never
  *  hold a quote, so plain double quotes are always a valid literal. */

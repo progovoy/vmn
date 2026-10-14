@@ -45,12 +45,12 @@ const LONE = row(4);
 const sweep = (): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "succeeded", metrics: {} },
-  loose: false, counts, aggregates: {}, rows: INNER, rows_total: 3, rows_unfiltered: 3,
+  loose: false, counts, aggregates: {}, rows: INNER, rows_total: 3, rows_unfiltered: 3, clause: null,
 });
 // The runs with no parent that head no group (plan 22 F12): the sweep's run is its header.
 const loose = (): RunGroup => ({
   key: NONE_GROUP, label: "(none)", target: null, loose: true, counts: { ...counts, total: 1 },
-  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1,
+  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1, clause: null,
 });
 const job = (status: string) => ({ id: "j1", status, command: [], exit_code: status === "running" ? null : 0, log: "" });
 

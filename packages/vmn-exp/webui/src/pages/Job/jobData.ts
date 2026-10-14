@@ -4,7 +4,7 @@
 import type { FailureCluster, JobMetric, JobPageSummary, JobTimeline, TimelineBucket } from "../../apiJob";
 import { vmnExpCommand } from "../../shell/cliCommands";
 import { fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal, plural } from "../../util";
-import { quoteLiteral } from "../../util/searchQuery";
+import { eqClause } from "../../util/searchQuery";
 
 const toMs = (t: number | string) => (typeof t === "number" ? t * 1000 : Date.parse(t));
 
@@ -112,10 +112,7 @@ export const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** The query clause selecting a failure cluster's runs; null for a
  *  signature holding both quotes (the language has no escapes). */
-export function failureQuery(sig: string): string | null {
-  const lit = quoteLiteral(sig);
-  return lit && `failure_sig = ${lit}`;
-}
+export const failureQuery = (sig: string): string | null => eqClause("failure_sig", sig);
 
 /** A share (0..1) in whole percent. */
 export const sharePct = (share: number) => Math.round(share * 100);

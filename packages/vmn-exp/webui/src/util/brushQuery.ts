@@ -9,8 +9,8 @@ import { literal } from "./queryHelp";
 import { quoteLiteral } from "./searchQuery";
 import { maxOf, minOf } from "./stats";
 
-/** `metrics.<name>` / `params.<name>`, quoted when the name is no plain identifier. */
-export function fieldPath(group: "metrics" | "params", name: string): string | null {
+/** `metrics.<name>` / `params.<name>` / `tags.<name>`, quoted when the name is no plain identifier. */
+export function fieldPath(group: "metrics" | "params" | "tags", name: string): string | null {
   if (/^\w+$/.test(name)) return `${group}.${name}`;
   const quoted = quoteLiteral(name);
   return quoted && `${group}.${quoted}`;

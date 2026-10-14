@@ -41,7 +41,7 @@ function vocabulary(summary: JobPageSummary, facets: ExperimentFacets | undefine
 
 export default function JobCharts({ ws, app, summary }: { ws: string; app: string; summary: JobPageSummary }) {
   const state = useJobChartState();
-  const facets = useJobFacets(ws, app, summary.verstr, summary.done);
+  const facets = useJobFacets(ws, app, summary.verstr);
   // Every poll brings a new summary; the charts keep the same name lists
   // (and so their 50k-row memos) until a name really changes.
   const fresh = vocabulary(summary, facets.data);

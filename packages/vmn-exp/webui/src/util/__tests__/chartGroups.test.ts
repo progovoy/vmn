@@ -12,7 +12,7 @@ const row = (v: string): ExperimentRow => ({
 const counts = { total: 0, running: 0, waiting: 0, done: 0, failed: 0, stuck: 0 };
 const group = (key: string, verstrs: string[], extra: Partial<BoardGroup> = {}): BoardGroup => ({
   key, label: key, target: null, loose: false, counts, aggregates: {}, verstrs, rows_total: verstrs.length,
-  rows_unfiltered: verstrs.length, ...extra,
+  rows_unfiltered: verstrs.length, clause: null, ...extra,
 });
 const sweep = group("s", ["a", "b"], {
   target: { verstr: "s", idx: 1, name: "sweep", status: "succeeded", tree_status: null, metrics: {} },

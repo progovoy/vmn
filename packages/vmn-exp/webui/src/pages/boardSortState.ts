@@ -13,14 +13,18 @@ type Schema = Parameters<typeof metricGoal>[0];
 const bestOrder = (schema: Schema, col: string): Order =>
   !NEWEST_FIRST.has(col) && metricGoal(schema, col) === "min" ? "asc" : "desc";
 
+/** *bestOf* overrides a column's best-first direction where it knows one
+ *  (the Jobs view's `job:best` follows its metric's goal). */
 export function boardSortState(
   sort: string | null, order: Order | null | undefined, schema: Schema,
   clickSort: (col: string, best: Order) => void,
+  bestOf?: (col: string) => Order | null,
 ) {
+  const best = (col: string) => bestOf?.(col) ?? bestOrder(schema, col);
   return {
     sort,
-    order: sort ? order ?? bestOrder(schema, sort) : null,
-    reversed: Boolean(sort && order && order !== bestOrder(schema, sort)),
-    onSort: (col: string) => clickSort(col, bestOrder(schema, col)),
+    order: sort ? order ?? best(sort) : null,
+    reversed: Boolean(sort && order && order !== best(sort)),
+    onSort: (col: string) => clickSort(col, best(col)),
   };
 }

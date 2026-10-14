@@ -9,12 +9,10 @@ import type { ExperimentRow } from "../types";
 import { boardRows } from "../util/groupItems";
 import { NO_GROUP } from "../util/groupBy";
 import { runContextSearch } from "../util/runContext";
-import { boardSort } from "../util/groupCountSort";
 import { queryHelpData } from "../util/queryHelp";
-import { branchClause, combineQueries, searchClause } from "../util/searchQuery";
-import { IDX_SORT } from "../pages/LeaderboardHead";
 import { boardSortState } from "../pages/boardSortState";
 import { useBoardAggregate } from "./useBoardAggregate";
+import { useBoardFilter } from "./useBoardFilter";
 import { useBoardGroupActions } from "./useBoardGroupActions";
 import { useBoardGrouping } from "./useBoardGrouping";
 import { useBoardLive } from "./useBoardLive";
@@ -48,20 +46,7 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
   const facets = useFacets(ws, app, scope ? { scope } : undefined);
   const groupBy = useBoardGrouping(ws, app, view, opts.onParent, scope);
 
-  // Search, branch and the typed query all travel to the server as one query.
-  const serverQuery = combineQueries(
-    combineQueries(view.query, searchClause(view.search)), branchClause(view.branch),
-  );
-  // A count sort orders groups only (plan 22 F10): the flat board drops it.
-  const sort = boardSort(view.sort, groupBy.group);
-  const filter = useMemo(() => ({
-    sort: sort ?? IDX_SORT,
-    order: sort ? view.order : undefined,
-    status: view.status || undefined,
-    query: serverQuery || undefined,
-    archived: view.archived || undefined,
-    ...(scope ? { scope } : {}),
-  }), [sort, view.order, view.status, serverQuery, view.archived, scope]);
+  const { sort, serverQuery, filter, filtered } = useBoardFilter(view, groupBy.group, { scope });
   // Every run is a row (plan 22 G1); grouped, under its group's header row.
   const data = useBoardRows(ws, app, filter, {
     group: groupBy.group, aggregateInUrl: groupBy.aggregateInUrl, collapsed: view.collapsed, keep,
@@ -95,7 +80,6 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
     primary: sort ?? cols.primary ?? cols.visibleMetrics[0],
   }), [cols.suggestFacets, facets, all, schema, sort, cols.primary, cols.visibleMetrics]);
 
-  const filtered = Boolean(view.query || view.status || view.search || view.branch || view.archived);
   const tableItems = data.items;
   const tableRows = useMemo(() => tableItems && boardRows(tableItems), [tableItems]);
   // A job's selection may be its whole query (plan 23 S4) rather than verstrs.

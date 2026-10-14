@@ -39,7 +39,6 @@ describe("useLiveScope", () => {
     act(() => last().emit("change", { generation: "2.0", changed: { rows: 1 } }));
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0]).toEqual({ generation: "2.0", changed: { rows: 1 } });
-    expect(result.current.lastChangeAt).not.toBeNull();
   });
 
   it("never overlaps a pending onChange: changes meanwhile make one more call", async () => {

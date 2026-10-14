@@ -43,12 +43,12 @@ const sweepGroup = (extra: Partial<RunGroup> = {}): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "failed", metrics: { loss: 0.91 } },
   counts: counts(), aggregates: { loss: agg(0.3), acc: agg(0.8, { best: null }) }, rows: INNER, rows_total: 2,
-  rows_unfiltered: (extra.counts ?? counts()).total, loose: false, ...extra,
+  rows_unfiltered: (extra.counts ?? counts()).total, loose: false, clause: null, ...extra,
 });
 // The runs with no parent that head no group (plan 22 F12): the sweep's run is its header.
 const loose = (extra: Partial<RunGroup> = {}): RunGroup => ({
   key: NONE_GROUP, label: "(none)", target: null, loose: true, counts: counts({ total: 1, running: 0, failed: 0 }),
-  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1, ...extra,
+  aggregates: {}, rows: [LONE], rows_total: 1, rows_unfiltered: 1, clause: null, ...extra,
 });
 const grouped = (groups: RunGroup[]) => ({ groups, total_groups: groups.length, total_rows: 4 });
 

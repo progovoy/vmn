@@ -14,12 +14,12 @@ const K1: GroupedPage = {
     },
     counts: { total: 2, running: 1, waiting: 0, done: 1, failed: 0, stuck: 0 },
     aggregates: { loss: { mean: 0.5, best: 0.4, median: 0.5, min: 0.4, max: 0.6, n: 2 } },
-    rows: [], rows_total: 2, rows_unfiltered: 2, loose: false,
+    rows: [], rows_total: 2, rows_unfiltered: 2, clause: null, loose: false,
   }, {
     key: NONE_GROUP, label: "(none)", target: null, loose: true,
     counts: { total: 1, running: 0, waiting: 0, done: 1, failed: 0, stuck: 0 },
     aggregates: { loss: { mean: 1, best: null, median: 1, min: 1, max: 1, n: 1 } },
-    rows: [], rows_total: 1, rows_unfiltered: 1,
+    rows: [], rows_total: 1, rows_unfiltered: 1, clause: null,
   }],
   total_groups: 2, total_rows: 3, aggregate: "mean", running: 1,
 };

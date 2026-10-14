@@ -60,9 +60,9 @@ export function mainMetric(rows: readonly ExperimentRow[], schema: MetricsSchema
   return entries.find(([, s]) => s.primary)?.[0] ?? entries.find(([, s]) => s.goal)?.[0] ?? null;
 }
 
-/** The direction a header's first click sorts: best first for `job:best`
- *  (ascending for a metric that goes down), else the most first. */
-export function bestOrder(sort: string, metric: string | null, schema: MetricsSchema | null | undefined): Order {
-  if (sort === JOB_SORTS.best && metric && metricGoal(schema ?? null, metric) === "min") return "asc";
-  return "desc";
+/** `job:best`'s best-first direction: its metric's (ascending for a metric
+ *  that goes down); null for every other column. */
+export function jobBestOrder(sort: string, metric: string | null, schema: MetricsSchema | null | undefined): Order | null {
+  if (sort !== JOB_SORTS.best) return null;
+  return metric && metricGoal(schema ?? null, metric) === "min" ? "asc" : "desc";
 }

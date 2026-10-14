@@ -106,7 +106,7 @@ describe("row density, grouped", () => {
     key: v(1), label: v(1),
     target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "succeeded", metrics: {} },
     counts: { total: 5, running: 0, waiting: 0, done: 5, failed: 0, stuck: 0 },
-    aggregates: {}, rows: INNER, rows_total: 5, rows_unfiltered: 5, loose: false,
+    aggregates: {}, rows: INNER, rows_total: 5, rows_unfiltered: 5, clause: null, loose: false,
   });
 
   beforeEach(() => {

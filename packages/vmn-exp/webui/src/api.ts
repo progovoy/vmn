@@ -132,7 +132,7 @@ export const api = {
   /** Which params drive *metric* over the filtered runs, most important first. */
   experimentsImportance: (
     ws: string, app: string, metric: string,
-    opts: Pick<PageOpts, "status" | "query" | "archived"> = {},
+    opts: Pick<PageOpts, "status" | "query" | "archived" | "scope"> = {},
   ) => {
     const p = new URLSearchParams({ metric });
     setFilter(p, opts);

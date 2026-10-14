@@ -9,7 +9,7 @@ const row = (v: string): ExperimentRow => ({
 });
 const counts = { total: 0, running: 0, waiting: 0, done: 0, failed: 0, stuck: 0 };
 const group = (key: string, verstrs: string[], total = verstrs.length, loose = false) => ({
-  key, label: key, target: null, loose, counts, aggregates: {}, verstrs, rows_total: total, rows_unfiltered: total,
+  key, label: key, target: null, loose, counts, aggregates: {}, verstrs, rows_total: total, rows_unfiltered: total, clause: null,
 });
 const loose = (verstrs: string[], total = verstrs.length) => group(NONE_GROUP, verstrs, total, true);
 const data = (groups: ReturnType<typeof group>[]): GroupedRows => ({

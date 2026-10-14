@@ -74,8 +74,9 @@ export interface RunGroup {
   /** The group's size with the same `archived` setting but without
    *  `q`/`status` (= `rows_total` when no filter is set; plan 22 F1). */
   rows_unfiltered: number;
-  /** The group as a filter clause (`params.lr = 0.01`; plan 23 S7), where served. */
-  clause?: string;
+  /** The group as a filter clause (`params.lr = 0.01`; plan 23 S7); null
+   *  for a link grouping and for a key no literal can hold. */
+  clause: string | null;
 }
 
 export interface GroupedPage {

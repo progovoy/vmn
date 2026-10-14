@@ -8,12 +8,10 @@ import LiveStatus from "../../components/LiveStatus";
 import RunHeaderActions from "../../components/RunHeaderActions";
 import RunLog from "../../components/RunLog";
 import { Skeleton } from "../../components/ui";
-import { useLiveScope } from "../../hooks/useLiveScope";
-import { usePolling } from "../../hooks/usePolling";
+import { useLiveOrPoll } from "../../hooks/useLiveOrPoll";
 import AddToReport from "../../reports/AddToReport";
 import { runSpec } from "../../reports/viewSpecs";
 import type { ExperimentDetail } from "../../types";
-import { pollIntervalMs } from "../../util";
 import { RunChangesSection } from "../RunLayout";
 import JobCharts from "./JobCharts";
 import JobFailures from "./JobFailures";
@@ -64,8 +62,10 @@ export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
   ]);
   // The Runs tab follows the subtree's events itself, and refreshes the rollup with them.
   const own = tab !== "runs";
-  const live = useLiveScope({ ws, app, scope: v, enabled: own && running && !paused, onChange: refresh });
-  usePolling(refresh, pollIntervalMs(detail.status?.heartbeat_interval_sec), own && running && !paused && !live.connected);
+  useLiveOrPoll({
+    ws, app, scope: v, enabled: own && running && !paused,
+    heartbeatSec: detail.status?.heartbeat_interval_sec, refresh,
+  });
 
   if (!data) return <Skeleton />;
   return (

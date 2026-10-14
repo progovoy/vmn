@@ -255,9 +255,9 @@ export interface ExperimentFacets {
   param_values: Record<string, number>;
   parented: number;
   total: number;
-  /** Top-level runs with children, and without (plan 23 §3.1), where served. */
-  jobs?: number;
-  singles?: number;
+  /** Top-level runs with children, and without (plan 23 §3.1). */
+  jobs: number;
+  singles: number;
 }
 
 /** The top-level runs a list asks for: every one, the jobs, or the single runs. */

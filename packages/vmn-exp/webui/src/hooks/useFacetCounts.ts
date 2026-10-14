@@ -1,7 +1,10 @@
 /** The facet sidebar's counts (plan 23 W3), from the §10 endpoints: status
  *  and param value counts are the grouped list's group sizes, a many-valued
- *  numeric param's values its `experiments-columns`. Keyed under the app's
- *  facets, so a live change refreshes them with the rest. */
+ *  numeric param's values its `experiments-columns`. The status counts are
+ *  keyed under the app's facets, so a live change refreshes them with the
+ *  rest; a param's counts only follow the filtered facets' total and the
+ *  param's distinct values, so a change that moved neither costs no
+ *  request per param. */
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api, type FacetOpts } from "../api";
@@ -38,8 +41,9 @@ export function useFacetParams(ws: string, app: string, opts: FacetOpts): FacetP
   const facets = useFacets(ws, app, clean(opts));
   return useMemo(() => {
     const counts = facets?.param_values ?? {};
+    const total = facets?.total ?? 0;
     return (facets?.param_keys ?? []).filter((k) => (counts[k] ?? 0) > 1)
-      .map((key) => ({ key, many: counts[key] > MAX_PARAM_VALUES }));
+      .map((key) => ({ key, many: counts[key] > MAX_PARAM_VALUES, moved: `${total}:${counts[key]}` }));
   }, [facets]);
 }
 
@@ -47,6 +51,8 @@ export interface FacetParam {
   key: string;
   /** More distinct values than a facet lists (the facets cap the count past 20). */
   many: boolean;
+  /** Moves when its counts may: the filtered runs' total and its distinct values. */
+  moved: string;
 }
 
 /** A many-valued param's counts from its column, never its grouping: on a
@@ -73,11 +79,12 @@ export function useStatusCounts(ws: string, app: string, opts: FacetOpts) {
 
 /** *param*'s most common values (all of them up to 20), and with more
  *  numeric values than that, every value for a histogram. */
-export function useParamCounts(ws: string, app: string, { key: param, many }: FacetParam, opts: FacetOpts) {
+export function useParamCounts(ws: string, app: string, { key: param, many, moved }: FacetParam, opts: FacetOpts) {
   const f = clean(opts);
   const field = `params.${param}` as const;
   return useQuery({
-    queryKey: ["facets", ws, app, "param", param, f],
+    queryKey: ["facet-params", ws, app, param, f, moved],
+    staleTime: Infinity,
     queryFn: async (): Promise<ParamCounts> => {
       if (many) return fromColumn(ws, app, field, f);
       const page = await groupCounts(ws, app, field, f, MAX_PARAM_VALUES);

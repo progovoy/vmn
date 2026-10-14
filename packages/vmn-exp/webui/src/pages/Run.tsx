@@ -3,14 +3,13 @@ import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
 import { cachedRows, findCachedRow, rowsPrefix, runQuery, useMetricsSchema } from "../queries";
-import type { ExperimentDetail } from "../types";
-import { pollIntervalMs, runHref } from "../util";
+import type { ExperimentDetail, ExperimentRow } from "../types";
+import { runHref } from "../util";
 import { isParamOnly } from "../util/paramKeys";
 import { Skeleton } from "../components/ui";
 import NotFound from "../components/shell/NotFound";
 import { isMissingRun } from "../shell/notFoundCopy";
-import { usePolling } from "../hooks/usePolling";
-import { useLiveScope } from "../hooks/useLiveScope";
+import { useLiveOrPoll } from "../hooks/useLiveOrPoll";
 import AppendMetrics from "../components/AppendMetrics";
 import LiveStatus from "../components/LiveStatus";
 import NoteEditor from "../components/NoteEditor";
@@ -42,17 +41,22 @@ function shownMetrics(metrics: ExperimentDetail["metrics"], detail: ExperimentDe
   return keys.length === Object.keys(metrics).length ? metrics : Object.fromEntries(keys.map((k) => [k, metrics[k]]));
 }
 
+/** Whether a board's cached row is a job: its summary needn't wait for the detail. */
+const listedAsJob = (row: ExperimentRow | undefined) =>
+  !!row && (row.kind === "outer" || !!row.job || !!row.children?.length);
+
 /** A run with children opens the job page (plan 23 W2) once its summary
  *  lands; a single or inner run, or a server without the summary endpoint
- *  (any error before one landed, a 404 above all), the run page. */
+ *  (any error before one landed, a 404 above all), the run page. A run a
+ *  board lists as a job asks for its summary alongside the detail. */
 export default function Run() {
   const { ws, app, verstr } = useParams() as { ws: string; app: string; verstr: string };
   const client = useQueryClient();
   const query = useQuery(runQuery(ws, app, verstr), client);
   const detail = query.data;
   const st = detail?.status;
-  const isJob = !!st && (st.kind === "outer" || !!st.fleet);
-  const summary = useQuery({ ...jobSummaryQuery(ws, app, detail?.metadata.verstr ?? ""), enabled: isJob }, client);
+  const isJob = st ? st.kind === "outer" || !!st.fleet : listedAsJob(findCachedRow(client, ws, app, verstr));
+  const summary = useQuery({ ...jobSummaryQuery(ws, app, detail?.metadata.verstr ?? verstr), enabled: isJob }, client);
   if (detail && isJob && (summary.data || summary.isPending)) {
     return <JobPage ws={ws} app={app} detail={detail} summary={summary} refetchDetail={() => query.refetch()} />;
   }
@@ -73,12 +77,10 @@ function SingleRun() {
   // live events, else polled at the cadence its heartbeat can move the
   // payload at; anything else refreshes on demand.
   const running = detail?.status?.status === "running";
-  const live = useLiveScope({
+  useLiveOrPoll({
     ws, app, scope: detail?.metadata.verstr, enabled: running && !paused,
-    onChange: () => query.refetch(),
+    heartbeatSec: detail?.status?.heartbeat_interval_sec, refresh: () => query.refetch(),
   });
-  const pollMs = pollIntervalMs(detail?.status?.heartbeat_interval_sec);
-  usePolling(() => query.refetch(), pollMs, running && !paused && !live.connected);
 
   if (query.error && !detail) {
     if (isMissingRun(query.error)) return <NotFound kind="run" ws={ws} appTag={app} runRef={verstr} />;
