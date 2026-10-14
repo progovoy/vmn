@@ -2,6 +2,7 @@
  *  headers sorting by the job sort keys, the board's keys (useRowKeys) and
  *  density; grouped, a header row per group of jobs. Below 640px, cards. */
 import { useMemo, useRef, type CSSProperties, type MutableRefObject } from "react";
+import { useFillHeight } from "../../hooks/useFillHeight";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { HeaderCheck } from "../../hooks/useBoardSelection";
@@ -112,6 +113,7 @@ function JobsGrid({
   onToggle, onPrefetch, onClearAnchor, emptyText, viewportRef,
 }: JobsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  useFillHeight(parentRef);
   useHeldViewport(viewportRef, parentRef, selected);
   const scroll = useScrollMemory();
   const list = useMemo(() => items ?? [], [items]);

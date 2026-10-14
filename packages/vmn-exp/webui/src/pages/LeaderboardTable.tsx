@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useFillHeight } from "../hooks/useFillHeight";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { GroupAggregate } from "../apiGroups";
@@ -116,6 +117,7 @@ function GridTable({
   groups, edits, onFit, describedBy, density, onClearAnchor, viewportRef,
 }: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  useFillHeight(parentRef);
   useHeldViewport(viewportRef, parentRef, selected);
   const [cols, setCols] = useState<ColRange | null>(() => columnsAt(full, null));
   useLayoutEffect(() => {

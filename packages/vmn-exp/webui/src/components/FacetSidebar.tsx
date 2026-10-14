@@ -2,10 +2,11 @@
  *  per value (a mini histogram for a many-valued numeric param), counted
  *  over the job's subtree after the other filters. A click adds the value's
  *  clause as a filter token. On a phone it is a drawer behind a button. */
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type { FacetOpts } from "../api";
 import { NONE_GROUP } from "../apiGroups";
 import { useFacetParams, useParamCounts, useStatusCounts, type FacetParam, type ValueCount } from "../hooks/useFacetCounts";
+import { useFillHeight } from "../hooks/useFillHeight";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { fmtCount, plural } from "../util";
 import { binClauses, numericBins, numericKeys } from "../util/facetBins";
@@ -142,9 +143,12 @@ export default function FacetSidebar({ ws, app, scope, query, status, onAdd }: {
   const narrow = useMediaQuery(NARROW_QUERY);
   const [open, setOpen] = useState(false);
   const id = useId();
+  // Beside the table, its own one scroll: the page around both never scrolls.
+  const side = useRef<HTMLElement>(null);
+  useFillHeight(side);
   const opts = useMemo(() => ({ scope, query, status }), [scope, query, status]);
   const body = <Facets ws={ws} app={app} opts={opts} onAdd={onAdd} />;
-  if (!narrow) return <aside className="facet-sidebar" aria-label="Facets">{body}</aside>;
+  if (!narrow) return <aside ref={side} className="facet-sidebar" aria-label="Facets">{body}</aside>;
   return (
     <div className="facet-drawer">
       <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>Facets</button>
