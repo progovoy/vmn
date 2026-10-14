@@ -149,6 +149,14 @@ describe("the job page", () => {
     expect(jobSummary).not.toHaveBeenCalled();
   });
 
+  it("gives an inner run's page its job context bar (plan 23 W7)", async () => {
+    m.experiment.mockResolvedValue(detail({ kind: "inner", children: [], fleet: null, tree_status: null, parent: JOB }));
+    renderRun();
+    const bar = await screen.findByRole("navigation", { name: "Job context" });
+    expect(await within(bar).findByRole("link", { name: "lr_layers_grid" })).toBeInTheDocument();
+    expect(jobSummary).toHaveBeenCalledWith("test", "my-app", JOB);
+  });
+
   it("follows the job's subtree live and refreshes its summary on a change", async () => {
     renderRun();
     await screen.findByRole("tablist", { name: "Job" });

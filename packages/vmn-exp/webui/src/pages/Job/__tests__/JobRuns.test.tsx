@@ -99,6 +99,15 @@ describe("the job's Runs tab", () => {
     expect(url().get("tab")).toBe("runs");
   });
 
+  it("links each run with the tab's order and its place in it (plan 23 W7)", async () => {
+    renderRuns(`?tab=runs&sort=loss&order=asc&q=${encodeURIComponent("metrics.loss < 1")}`);
+    const link = await screen.findByRole("link", { name: "0.0.2-dev.t2" });
+    const params = new URLSearchParams(link.getAttribute("href")!.split("?")[1]);
+    expect(params.get("at")).toBe("1");
+    expect(Object.fromEntries(new URLSearchParams(params.get("from")!)))
+      .toEqual({ scope: JOB, q: "metrics.loss < 1", sort: "loss", order: "asc" });
+  });
+
   it("lands filtered from a Failures tab link", async () => {
     renderRuns(`?tab=runs&q=${encodeURIComponent('failure_sig = "oom"')}`);
     await screen.findByText("0.0.2-dev.t1");

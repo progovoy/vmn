@@ -14,12 +14,12 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
   paused: boolean;
   onPaused: (paused: boolean) => void;
 }) {
-  const { data, cols, selection, sortState } = board;
+  const { data, selection, sortState } = board;
   return (
     <>
       <LeaderboardTable
         rows={board.tableItems}
-        layout={cols.layout}
+        layout={board.layout}
         sort={sortState}
         selected={view.selected}
         flash={flash}
