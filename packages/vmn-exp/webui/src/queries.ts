@@ -2,6 +2,7 @@
 import { useQuery, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { api, type FacetOpts, type SubtreeMatches } from "./api";
 import { withSignal } from "./requestScope";
+import type { HeldChange } from "./pages/leaderboardRefresh";
 import { SHARED_STALE_MS } from "./queryClient";
 import type {
   AppRow, ExperimentDetail, ExperimentFacets, ExperimentRow, Meta, MetricsSchema, TopRuns, Workspace,
@@ -28,6 +29,10 @@ export interface RowsFilter {
 export interface RowsData extends SubtreeMatches {
   rows: ExperimentRow[];
   total: number;
+  /** The keyset cursor after the last row held (plan 23 S6); absent: page by offset. */
+  next_cursor?: string | null;
+  /** What a held refresh kept off screen (the `N new · show` bar, plan 23 W6). */
+  held?: HeldChange;
 }
 
 /** Every cached leaderboard list of an app, whatever its filter. */

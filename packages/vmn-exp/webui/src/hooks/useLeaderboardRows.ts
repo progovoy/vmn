@@ -6,6 +6,7 @@ import { PAGE_SIZE } from "../paging";
 import { isAbortError, withSignal } from "../requestScope";
 import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
+import { stabilizeRows } from "../util/stableRows";
 import { useShownList } from "./useShownList";
 import { combineQueries } from "../util/searchQuery";
 import type { ExperimentRow } from "../types";
@@ -17,8 +18,19 @@ function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
   const req = f.query
     ? api.experiments(ws, app, f.sort, f.status, f.query)
     : api.experiments(ws, app, f.sort, f.status);
-  return req.then((r) => ({ rows: [...r], total: r.total ?? r.length }));
+  return req.then((r) => ({
+    rows: [...r], total: r.total ?? r.length, next_cursor: r.next_cursor,
+  }));
 }
+
+/** What the table tells the rows (plan 23 W6): whether a refresh must hold
+ *  the rows in place (scrolled down, rows selected), and how to get back to
+ *  the top of the list. */
+export type BoardViewport = { held: () => boolean; toTop: () => void };
+
+/** Whether rows past *data*'s are left: by its keyset cursor, else its total. */
+const hasMoreOf = (data: RowsData) =>
+  (data.next_cursor !== undefined ? data.next_cursor !== null : data.rows.length < data.total);
 
 /** Re-asked top-level rows of a subtree search, by verstr: a subtree query
  *  `and verstr in (...)` would ask for runs that are both, so they are
@@ -34,12 +46,16 @@ async function byVerstrKeepingMatched(
 /** Leaderboard rows for one filter, through the request cache: a revisited
  *  filter (Back) paints its cached rows at once and revalidates behind them.
  *  A refresh re-asks only the first page plus the running / on-screen rows
- *  past it (see refreshRows), and unchanged rows keep their identity. */
+ *  past it (see refreshRows), and unchanged rows keep their identity.
+ *  Pages after the first follow the server's keyset cursor (plan 23 S6).
+ *  While the table holds its rows (*viewportRef*) a refresh reshuffles
+ *  nothing: `pending` says what is new until `showNew` reloads page 1. */
 export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, enabled = true) {
   const client = useQueryClient();
   const key = rowsKey(ws, app, filter);
   /** Verstrs on screen right now — the table keeps it current. */
   const visibleRef = useRef<() => string[]>(() => []);
+  const viewportRef = useRef<BoardViewport>({ held: () => false, toTop: () => {} });
 
   const query = useQuery<RowsData, HttpError>({
     queryKey: key,
@@ -56,6 +72,8 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
             ...filter, query: combineQueries(filter.query ?? "", q), offset: 0, limit,
           })),
         extraVerstrs: visibleRef.current(),
+        hold: viewportRef.current.held(),
+        getCursor: () => client.getQueryData<RowsData>(key)?.next_cursor,
       });
     },
     // While a new filter loads, keep the previous rows on screen (a hook
@@ -72,18 +90,18 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
   const keyHash = JSON.stringify(key);
   const loadMore = useCallback(async () => {
     const cur = client.getQueryData<RowsData>(key);
-    if (!cur || loadingMore.current || cur.rows.length >= cur.total) return;
+    if (!cur || loadingMore.current || !hasMoreOf(cur)) return;
     loadingMore.current = true;
     try {
-      const more = await api.experimentsPaged(ws, app, {
-        ...filter, offset: cur.rows.length, limit: PAGE_SIZE,
-      });
+      const from = cur.next_cursor ? { cursor: cur.next_cursor } : { offset: cur.rows.length };
+      const more = await api.experimentsPaged(ws, app, { ...filter, ...from, limit: PAGE_SIZE });
       const latest = client.getQueryData<RowsData>(key) ?? cur;
       const known = new Set(latest.rows.map((r) => r.verstr));
       client.setQueryData<RowsData>(key, {
         ...latest,
         rows: [...latest.rows, ...more.rows.filter((r) => !known.has(r.verstr))],
         total: more.total,
+        next_cursor: more.next_cursor,
       });
       setMoreError(null);
     } catch (e) {
@@ -96,6 +114,18 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
 
   const refresh = useCallback(() => query.refetch().then((r) => r.data), [query.refetch]);
 
+  const showNew = useCallback(async () => {
+    try {
+      const first = await firstPage(ws, app, filter);
+      const cur = client.getQueryData<RowsData>(key);
+      client.setQueryData<RowsData>(key, { ...first, rows: stabilizeRows(cur?.rows, first.rows) });
+      viewportRef.current.toTop();
+    } catch (e) {
+      if (!isAbortError(e)) setMoreError(String(e));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, keyHash]);
+
   return {
     rows: data?.rows,
     total: data ? Math.max(data.total, data.rows.length) : 0,
@@ -103,7 +133,10 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
     matches: data?.runs_matched === undefined ? undefined
       : { jobs: data.jobs_matched ?? 0, runs: data.runs_matched },
     queryError, pageError, moreError,
-    loadMore, refresh, visibleRef,
+    loadMore, refresh, visibleRef, viewportRef, showNew,
+    hasMore: data ? hasMoreOf(data) : false,
+    /** What a held refresh kept off screen, null when nothing is waiting. */
+    pending: data?.held ?? null,
     /** When the first page last arrived (ms since the epoch). */
     updatedAt: query.dataUpdatedAt,
   };

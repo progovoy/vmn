@@ -33,7 +33,7 @@ from vmn_exp.ui.leaderboard_group_fields import (
 )
 from vmn_exp.ui.leaderboard_group_loose import Loose
 from vmn_exp.ui.leaderboard_group_summary import Summary
-from vmn_exp.ui.leaderboard_live import MergedRows, _bisect
+from vmn_exp.ui.leaderboard_live import MergedRows, bisect_key
 
 
 def _partition(rows, key_of):
@@ -176,7 +176,7 @@ class Grouping:
             self.order = sorted(placed, key=okey)
             return self
         for group in sorted(placed, key=okey):
-            kept.insert(_bisect(kept, okey(group), okey), group)
+            kept.insert(bisect_key(kept, okey(group), okey), group)
         self.order = kept
         return self
 

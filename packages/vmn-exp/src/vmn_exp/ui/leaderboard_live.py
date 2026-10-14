@@ -158,7 +158,7 @@ class LivePatch:
         return out
 
 
-class _Desc:
+class Desc:
     """Reverses the order of a value inside a sort key."""
 
     __slots__ = ("value",)
@@ -200,7 +200,7 @@ def _date_value(field, newest_first):
         stamp = row.get(field)
         if not stamp:
             return None
-        return _Desc(stamp) if newest_first else stamp
+        return Desc(stamp) if newest_first else stamp
 
     return value_of
 
@@ -222,11 +222,14 @@ def order_key(schema, sort, descending, metric_present, position):
     return _ranked(_metric_value(metric, descending), position), True
 
 
-def _bisect(rows, target, key):
+def bisect_key(rows, target, key, right=False):
+    """Where *target* goes in *rows* sorted by *key* (after equal keys when
+    *right*); *rows* may be any sliceable sequence, :class:`MergedRows` too."""
     lo, hi = 0, len(rows)
     while lo < hi:
         mid = (lo + hi) // 2
-        if key(rows[mid]) < target:
+        at = key(rows[mid : mid + 1][0])
+        if (not target < at) if right else at < target:
             lo = mid + 1
         else:
             hi = mid
@@ -239,12 +242,12 @@ class MergedRows:
 
     def __init__(self, static, live, key):
         self._static = static
-        self._live = live
+        self.live = live
         # Where each live row lands in the merged order.
-        self._at = [_bisect(static, key(row), key) + j for j, row in enumerate(live)]
+        self._at = [bisect_key(static, key(row), key) + j for j, row in enumerate(live)]
 
     def __len__(self):
-        return len(self._static) + len(self._live)
+        return len(self._static) + len(self.live)
 
     def __iter__(self):
         return iter(self[:])
@@ -258,7 +261,7 @@ class MergedRows:
                 break
             # Static rows before position *pos* number pos - j.
             out.extend(self._static[pos - j : at - j])
-            out.append(self._live[j])
+            out.append(self.live[j])
             j, pos = j + 1, at + 1
         out.extend(self._static[pos - j : stop - j])
         return out

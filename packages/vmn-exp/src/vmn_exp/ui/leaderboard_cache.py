@@ -48,6 +48,7 @@ from vmn_exp.ui.http_params import MAX_PAGE
 from vmn_exp.ui.job_rollup_cache import JobRollupCache
 from vmn_exp.ui.leaderboard_answers import IMPORTANCE_RESULTS, SetAnswers
 from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
+from vmn_exp.ui.leaderboard_cursor import Pager, fingerprint, keyed
 from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, static_moves
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
@@ -370,12 +371,14 @@ class LeaderboardCache(SetAnswers):
     def page(
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,
         status=None, query=None, order=None, archived=False, scope=None, top=False,
-        match_subtree=False,
+        match_subtree=False, cursor=None,
     ):
         """What ``leaderboard`` answers for the same arguments, from the memo.
 
         Without *limit* a plain list of at most ``max_page`` rows; with it
-        ``{"rows", "total"}``. Archived rows are left out unless *archived*;
+        ``{"rows", "total", "next_cursor"}``, the page starting after
+        *cursor* when given (a :class:`~vmn_exp.ui.leaderboard_cursor.BadCursor`
+        when it is from another sort or filter), else at *offset*. Archived rows are left out unless *archived*;
         *scope* keeps a run's subtree (without it), *top* the top-level runs,
         each then carrying ``job`` (plan 23 S2), and with *match_subtree*
         the query matches their subtrees (:mod:`~vmn_exp.ui.leaderboard_subtree_match`).
@@ -386,18 +389,32 @@ class LeaderboardCache(SetAnswers):
         f = Filters(sort, status, query, order, archived, scope, top)
         if match_subtree and not top:
             raise ValueError("match_subtree needs top=1")
-        if match_subtree and query and query.strip():
-            return self._subtree.page(snapshot, schema, last, offset, limit, f)
+        subtree = bool(match_subtree and query and query.strip())
+        pager = self.pager(snapshot, schema, last, f, cursor, match_subtree,
+                           ordered=(last, f._replace(query=None)) if subtree else None)
+        if subtree:
+            return self._subtree.page(snapshot, schema, last, offset, limit, f, pager)
         rows = self._job_view.ordered(snapshot, schema, last, f)
-        return self.paged(snapshot, schema, rows, offset, limit, top)
+        return self.paged(snapshot, schema, rows, offset, limit, top, pager)
 
-    def paged(self, snapshot, schema, rows, offset, limit, top):
+    def pager(self, snapshot, schema, last, f, cursor, match_subtree=False, ordered=None):
+        """A :class:`~vmn_exp.ui.leaderboard_cursor.Pager` for the request
+        (*last*, *f*, *match_subtree*) over the order of *ordered* (``(last,
+        filters)``, default the request's), or a subsequence of it."""
+        by_last, by = ordered or (last, f)
+        return Pager(lambda projs: keyed(self, snapshot, schema, by_last, by, projs),
+                     fingerprint(f, last, match_subtree), cursor)
+
+    def paged(self, snapshot, schema, rows, offset, limit, top, pager):
         """*rows* cut as :meth:`page` answers (carrying ``job`` when *top*)."""
         offset = offset or 0
-        cut = rows[offset : offset + (self.max_page if limit is None else limit)]
+        if limit is None:
+            cut = rows[offset : offset + self.max_page]
+            return self._job_view.with_jobs(snapshot, schema, cut) if top else cut
+        cut, after = pager.cut(rows, offset, limit)
         if top:
             cut = self._job_view.with_jobs(snapshot, schema, cut)
-        return cut if limit is None else {"rows": cut, "total": len(rows)}
+        return {"rows": cut, "total": len(rows), "next_cursor": after}
 
     def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False,
                 scope=None, top=False, query=None):

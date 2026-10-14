@@ -19,6 +19,8 @@ summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`)
 ``match_subtree=1`` matches ``q`` over their subtrees instead (plan 23 S8b,
 :mod:`~vmn_exp.ui.leaderboard_subtree_match`; flat pages only).
 ``top=jobs``/``top=singles`` those with and without children (plan 23 S7).
+A flat page carries ``next_cursor``; ``cursor=`` asks for the page after it
+(keyset paging, plan 23 S6, :mod:`~vmn_exp.ui.leaderboard_cursor`).
 Grouped with ``top``, each group sums its jobs' rollups; every group carries
 the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
 """
@@ -82,6 +84,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         scope: str = None,
         top: str = None,
         match_subtree: bool = False,
+        cursor: str = None,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
@@ -97,8 +100,8 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         except QueryError as e:
             raise HTTPException(400, str(e))
         if group is not None:
-            if last:
-                raise HTTPException(400, "last cannot be combined with group")
+            if last or cursor is not None:
+                raise HTTPException(400, "last and cursor cannot be combined with group")
             if group_key is None:
                 params["limit"], rows_per_group = grouped_page(limit, rows_per_group)
             params.update(agg=agg or aggregate_of(ws_name, app_tag),
@@ -114,7 +117,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         else:
             compute = partial(cache.page, match_subtree=match_subtree)
         return _answer(request, lambda *a, **p: joined(compute(*a, **p), counts), snapshot,
-                       schema, dict(params, last=last), comments=generation,
+                       schema, dict(params, last=last, cursor=cursor), comments=generation,
                        match_subtree=match_subtree and not by_comments, **clock)
 
     @app.get(f"{base}/experiments-columns", dependencies=[require(VIEWER)])

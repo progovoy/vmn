@@ -5,6 +5,7 @@ import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
 import BoardGridTools from "./BoardGridTools";
 import LeaderboardTable from "./LeaderboardTable";
+import NewRowsBar from "../components/NewRowsBar";
 
 export default function RunsBoardGrid({ board, view, flash = null, paused, onPaused }: {
   board: RunsBoard;
@@ -17,6 +18,7 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
   const { data, selection, sortState } = board;
   return (
     <>
+      <NewRowsBar pending={data.pending} onShow={data.showNew} />
       <LeaderboardTable
         rows={board.tableItems}
         layout={board.layout}
@@ -30,6 +32,7 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
         hasMore={data.hasMore}
         onNearEnd={data.loadMore}
         visibleRef={data.visibleRef}
+        viewportRef={data.viewportRef}
         edits={board.columnEdits}
         onFit={board.setTableWidth}
         describedBy={BOARD_CAPTION_ID}
