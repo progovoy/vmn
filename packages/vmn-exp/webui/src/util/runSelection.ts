@@ -3,6 +3,7 @@
  *  pages and All runs, and the tray on every page shows them. */
 import type { ExperimentRow } from "../types";
 import { plural } from "../util";
+import { isOuterRun } from "./outerRun";
 
 /** Most runs "select all" picks — and one archive job takes. */
 export const SELECT_ALL_CAP = 500;
@@ -52,7 +53,7 @@ export function subscribePicks(listener: () => void): () => void {
 }
 
 /** Whether a board's row is a job (a run with children). */
-export const isJobRow = (r: ExperimentRow) => r.kind === "outer" || !!r.job || !!r.children?.length;
+export const isJobRow: (r: ExperimentRow) => boolean = isOuterRun;
 
 /** A row as a pick: its job is its root, else its parent, else itself for
  *  a top-level job (which counts as one run, never its subtree). */
@@ -68,7 +69,7 @@ export function pickOf(r: ExperimentRow): RunPick {
 export function summarizePicks(picks: readonly RunPick[], queries: readonly { job: string; count: number }[] = []) {
   const jobs = new Set([...picks.map((p) => p.job), ...queries.map((g) => g.job)].filter(Boolean)).size;
   const runs = picks.length + queries.reduce((n, g) => n + g.count, 0);
-  const text = jobs ? `${plural(runs, "run")} from ${plural(jobs, "job")}` : plural(runs, "run");
+  const text = jobs ? `${plural(runs, "run")} from ${plural(jobs, "outer run")}` : plural(runs, "run");
   return { runs, jobs, text };
 }
 
@@ -93,5 +94,5 @@ export function groupPicks(picks: readonly RunPick[]): PickGroup[] {
   const jobs = [...groups].filter(([job]) => job !== null)
     .map(([job, ps]) => ({ job, label: named(job!), picks: ps }));
   const loose = groups.get(null);
-  return loose ? [...jobs, { job: null, label: "Runs outside a job", picks: loose }] : jobs;
+  return loose ? [...jobs, { job: null, label: "Runs outside an outer run", picks: loose }] : jobs;
 }

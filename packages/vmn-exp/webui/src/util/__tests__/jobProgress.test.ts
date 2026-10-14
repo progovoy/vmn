@@ -141,7 +141,7 @@ describe("a Jobs-view row's rate cell", () => {
   });
 
   it("is a dash saying why once nothing completes", () => {
-    expect(jobRateCell(ended())).toEqual({ text: "—", title: "the job has ended" });
+    expect(jobRateCell(ended())).toEqual({ text: "—", title: "the outer run has ended" });
     const stalled = jobRateCell(job({ throughput_per_min: 0, eta_sec: null }));
     expect(stalled.text).toBe("—");
     expect(stalled.title).toMatch(/no run finished/);

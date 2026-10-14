@@ -31,7 +31,7 @@ beforeEach(() => {
 describe("job overview", () => {
   it("shows the KPI tiles, the best one linked to its run", () => {
     renderOverview();
-    const tiles = screen.getByRole("list", { name: "Job KPIs" });
+    const tiles = screen.getByRole("list", { name: "Outer run KPIs" });
     expect(within(tiles).getByText("1,412")).toBeInTheDocument();
     expect(within(tiles).getByText("of 2,000")).toBeInTheDocument();
     expect(within(tiles).getByText("1.5%")).toBeInTheDocument();
@@ -87,8 +87,8 @@ describe("job overview", () => {
 
   it("says so when no run of the job logged a metric", () => {
     renderOverview(jobSummaryFixture({ metric: null, metrics: {}, top: [] }));
-    expect(screen.getByRole("region", { name: "Distribution" })).toHaveTextContent("No run in this job logged a metric yet");
-    expect(screen.getByRole("region", { name: "Top runs" })).toHaveTextContent("No run in this job logged a metric yet");
+    expect(screen.getByRole("region", { name: "Distribution" })).toHaveTextContent("No run in this outer run logged a metric yet");
+    expect(screen.getByRole("region", { name: "Top runs" })).toHaveTextContent("No run in this outer run logged a metric yet");
   });
 
   it("names the top failure clusters, each linking to the Failures tab", async () => {

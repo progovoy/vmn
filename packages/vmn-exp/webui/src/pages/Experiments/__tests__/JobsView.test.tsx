@@ -124,7 +124,7 @@ describe("a finished job's row", () => {
     renderExperiments();
     await screen.findByRole("link", { name: "done_grid" });
     expect(cellOf("done_grid", "throughput").textContent).toBe("—");
-    expect(cellOf("done_grid", "throughput").getAttribute("title")).toBe("the job has ended");
+    expect(cellOf("done_grid", "throughput").getAttribute("title")).toBe("the outer run has ended");
     expect(cellOf("done_grid", "eta").textContent).toBe("finished 3d ago");
   });
 
@@ -146,7 +146,7 @@ describe("a finished job's row", () => {
 
 describe("the Jobs view's columns", () => {
   const head = (col: string) =>
-    screen.getByRole("grid", { name: "jobs" }).querySelector(`th[data-col-id="${col}"]`) as HTMLElement;
+    screen.getByRole("grid", { name: "outer runs" }).querySelector(`th[data-col-id="${col}"]`) as HTMLElement;
 
   it("fit a six-digit @N and the longest status pill", async () => {
     renderExperiments();
@@ -222,7 +222,7 @@ describe("the Jobs view", () => {
     renderExperiments("/ws/test/app/my-app?density=compact");
     await screen.findByRole("link", { name: "lr_layers_grid" });
     expect(rowOf("lr_layers_grid").style.height).toBe("32px");
-    expect(screen.getByRole("grid", { name: "jobs" })).toHaveClass("compact");
+    expect(screen.getByRole("grid", { name: "outer runs" })).toHaveClass("compact");
   });
 
   it("moves with j and opens a row with Enter", async () => {

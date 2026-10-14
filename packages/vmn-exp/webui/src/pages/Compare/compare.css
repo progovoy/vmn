@@ -19,3 +19,11 @@
 /* Identifier headers (run labels, verstrs) keep their case under th's caps (D3). */
 th.compare-ident, .compare-ident { text-transform: none; letter-spacing: 0; }
 .compare-section-note { color: var(--text-3); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* An outer run that logs no metrics itself (OuterRunNotes.tsx). */
+.compare-outer-notes { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+.compare-outer-note {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0;
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--text-2); font-size: 13px;
+}
+.compare-chip .outer-badge { margin-left: 2px; }

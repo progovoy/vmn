@@ -102,7 +102,7 @@ export default function LeaderboardSelectionBar({
   const atMost = approximate ? "≤" : "";
   const jobs = picks ? summarizeSelection(picks, groups).jobs : 0;
   const compared = compareList(selected.map((verstr) => ({ verstr })), groups);
-  const fromJobs = jobs ? ` from ${plural(jobs, "job")}` : "";
+  const fromJobs = jobs ? ` from ${plural(jobs, "outer run")}` : "";
   const barRef = useRef<HTMLDivElement>(null);
   const allRef = useRef<HTMLButtonElement>(null);
   const barHeight = useOffsetHeight(barRef, n > 0);
@@ -150,7 +150,7 @@ export default function LeaderboardSelectionBar({
             {picks && onRemove && (
               <button
                 className="link sel-expand" aria-expanded={expanded} aria-controls={expanded ? listId : undefined}
-                title={expanded ? "Hide the selected runs" : "List the selected runs by job"}
+                title={expanded ? "Hide the selected runs" : "List the selected runs by outer run"}
                 onClick={() => setExpanded((e) => !e)}
               >
                 {jobs ? fromJobs.trim() : "list runs"} {expanded ? "▴" : "▾"}

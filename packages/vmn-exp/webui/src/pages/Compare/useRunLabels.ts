@@ -6,12 +6,38 @@ import { api } from "../../api";
 import { findCachedRow, runQuery } from "../../queries";
 import { runText } from "../../shell/crumbs";
 import { verstrInQuery } from "../../util/searchQuery";
+import { isOuterRun, outerRunCount } from "../../util/outerRun";
+import type { ExperimentDetail, ExperimentRow } from "../../types";
 
 export interface RunChipLabel {
   ref: string;
   text: string;
   /** Loading the run (on the table tab) failed: an unknown ref. */
   missing: boolean;
+  /** An outer run: its verstr, name, subtree size and whether it logs metrics itself. */
+  outer: OuterInfo | null;
+}
+
+export interface OuterInfo {
+  verstr: string;
+  name: string;
+  count: number | null;
+  logsMetrics: boolean;
+}
+
+/** Metrics the run logged, not its numeric params' fold. */
+const logsMetrics = (metrics: Record<string, unknown> = {}, params: Record<string, unknown> = {}) =>
+  Object.keys(metrics).some((k) => !(k in params));
+
+function outerOf(ref: string, d: ExperimentDetail | undefined, row: ExperimentRow | undefined): OuterInfo | null {
+  const fields = d?.status ?? row;
+  if (!fields || !isOuterRun(fields)) return null;
+  const verstr = d?.metadata.verstr ?? row?.verstr ?? ref;
+  return {
+    verstr, name: d?.name || row?.name || verstr,
+    count: (row && outerRunCount(row)) ?? (d?.status ? outerRunCount(d.status) : null),
+    logsMetrics: logsMetrics(d?.metrics ?? row?.metrics, d?.params ?? row?.params),
+  };
 }
 
 export function useRunLabels(ws: string, app: string, refs: string[]): RunChipLabel[] {
@@ -39,6 +65,7 @@ export function useRunLabels(ws: string, app: string, refs: string[]): RunChipLa
       ref,
       text: idx == null ? ref : runText({ verstr: ref, idx, name }),
       missing: !!details[i]?.error,
+      outer: outerOf(ref, d, row),
     };
   });
 }

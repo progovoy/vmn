@@ -19,7 +19,7 @@ const counted = (text: string, n: number | undefined) => (n === undefined ? text
 function viewOptions(kind: JobsKindState): [ViewOption, string][] {
   if (!kind.kind) return [["jobs", "Runs"], ["all", "All runs"]];
   return [
-    ["jobs", counted("Jobs", kind.counts?.jobs)],
+    ["jobs", counted("Outer runs", kind.counts?.jobs)],
     ["singles", counted("Single runs", kind.counts?.singles)],
     ["all", "All runs"],
   ];

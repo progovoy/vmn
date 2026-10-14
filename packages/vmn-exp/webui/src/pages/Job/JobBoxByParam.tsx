@@ -41,7 +41,7 @@ function BoxTable({ groups, param }: { groups: Box[]; param: string }) {
 
 function Plot({ data, param, y }: { data: ExperimentColumns; param: string; y: string }) {
   const { groups, dropped } = useMemo(() => boxGroups(jobRows(data), `params.${param}`, y), [data, param, y]);
-  if (!groups.length) return <ChartEmpty text={`No run of this job has both ${param} and ${y} yet.`} />;
+  if (!groups.length) return <ChartEmpty text={`No run of this outer run has both ${param} and ${y} yet.`} />;
   const lo = Math.min(...groups.map((b) => b.min)), hi = Math.max(...groups.map((b) => b.max));
   const at = (v: number) => (hi > lo ? ((v - lo) / (hi - lo)) * 100 : 50);
   const runs = groups.reduce((n, b) => n + b.n, 0);
@@ -76,7 +76,7 @@ export default function JobBoxByParam(p: JobChartProps) {
       </div>
       {param
         ? <ColumnsState query={query}>{(data) => <Plot data={data} param={param} y={p.y} />}</ColumnsState>
-        : <ChartEmpty text="No param of this job takes between 2 and 20 values to group by." />}
+        : <ChartEmpty text="No param of this outer run takes between 2 and 20 values to group by." />}
     </>
   );
 }

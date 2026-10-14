@@ -24,7 +24,7 @@ function PeersMark({ metric, m, value }: { metric: string; m: JobMetric; value: 
   const w = W / Math.max(m.hist.length, 1);
   return (
     <svg className="job-context-peers" viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img"
-      aria-label={`${metric} ${fmtVal(value)} among ${fmtCount(m.n)} runs of the job`}>
+      aria-label={`${metric} ${fmtVal(value)} among ${fmtCount(m.n)} runs of the outer run`}>
       {m.hist.map((b, i) => {
         const h = (b.count / top) * (H - 2);
         return <rect key={i} className="job-context-bin" x={i * w + 0.5} y={H - h} width={Math.max(w - 1, 1)} height={h} />;
@@ -64,8 +64,8 @@ export default function JobContextBar({ ws, app, verstr, idx, job, metrics }: {
   if (!ctx.summary) return null;
   const name = ctx.summary.name || job;
   return (
-    <nav className="job-context" aria-label="Job context">
-      <span>Job <Link className={ctx.summary.name ? undefined : "mono"} to={jobTabHref(runHref(base, job), "runs")}>{name}</Link></span>
+    <nav className="job-context" aria-label="Outer run context">
+      <span>Outer run <Link className={ctx.summary.name ? undefined : "mono"} to={jobTabHref(runHref(base, job), "runs")}>{name}</Link></span>
       {ctx.place && <><span aria-hidden="true">›</span><span>{`run ${fmtCount(ctx.place.at + 1)} of ${fmtCount(ctx.place.total)}`}</span></>}
       {ctx.rank && (
         <span>{`· rank ${fmtCount(ctx.rank.rank)} of ${fmtCount(ctx.rank.of)} on ${ctx.rank.metric}`}</span>

@@ -8,6 +8,8 @@ import { fmtVal, relTime, runHref } from "../util";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
 import RowCheckbox from "../components/RowCheckbox";
 import StatusPill from "../components/StatusPill";
+import OuterBadge from "../components/OuterBadge";
+import { isOuterRun, outerRunCount } from "../util/outerRun";
 import { useRowNavigate } from "../hooks/useRowNavigate";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { headStatus, type RowLayout } from "./LeaderboardRow";
@@ -71,6 +73,7 @@ const MCard = memo(function MCard({
             />
           )}
         </div>
+        {isOuterRun(r) && <div className="lb-mcard-outer"><OuterBadge count={outerRunCount(r)} to={href} /></div>}
         {r.name && <div className="lb-mcard-sub mono">{r.verstr}</div>}
         {incomplete && <div className="lb-mcard-sweep mono">{incomplete}</div>}
         {metric && <MetricLine r={r} metric={metric} layout={layout} />}

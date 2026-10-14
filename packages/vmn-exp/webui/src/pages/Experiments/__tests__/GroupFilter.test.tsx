@@ -91,7 +91,7 @@ describe("the Jobs view, grouped", () => {
     m.facets.mockResolvedValue({ ...FACETS, parented: 9000, jobs: 80, singles: 3000 });
     m.experimentGroups.mockResolvedValue(groups([group("main", "branch = main", [BIG], 60, { clause: 'branch = "main"' })]));
     renderExperiments("/ws/test/app/my-app?group=branch");
-    expect(await screen.findByRole("button", { name: 'Filter to branch = "main" (60 jobs)' })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: 'Filter to branch = "main" (60 outer runs)' })).toBeInTheDocument();
   });
 });
 

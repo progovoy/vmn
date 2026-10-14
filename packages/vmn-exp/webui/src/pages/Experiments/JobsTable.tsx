@@ -151,7 +151,7 @@ function JobsGrid({
     <div className="card flush lb-card jobs-card">
       <div className="tbl-scroll" ref={parentRef} onScroll={onScroll} style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}>
         <table
-          role="grid" aria-label="jobs"
+          role="grid" aria-label="outer runs"
           className={`lb-table jobs-table${density === "compact" ? " compact" : ""}`}
           style={{ tableLayout: "fixed", width: JOBS_WIDTH }}
         >

@@ -33,7 +33,7 @@ export default function JobMetricHistogram({ metrics, initial }: {
   const [picked, setPicked] = useState<string | null>(null);
   const metric = [picked, initial].find((k) => k && metrics[k]) ?? names[0];
   const m = metric ? metrics[metric] : null;
-  if (!metric || !m) return <p className="muted job-empty">No run in this job logged a metric yet.</p>;
+  if (!metric || !m) return <p className="muted job-empty">No run in this outer run logged a metric yet.</p>;
   const marks = quantileMarks(m);
   const label = `${metric} over ${fmtCount(m.n)} runs`
     + (marks.length ? `: ${marks.map((q) => `${q.label} ${fmtVal(q.value)}`).join(", ")}` : "");

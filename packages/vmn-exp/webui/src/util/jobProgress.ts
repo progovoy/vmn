@@ -102,10 +102,10 @@ export function jobEtaCell(j: Progress): JobCell {
   switch (state.kind) {
     case "eta": return { text: state.left, title: `about ${state.left} left` };
     case "stalled": return { text: "stalled", title: STALLED_TITLE };
-    case "ended": return { text: `ended · ${fmtCount(state.never)} never started`, title: "the job has ended" };
+    case "ended": return { text: `ended · ${fmtCount(state.never)} never started`, title: "the outer run has ended" };
     case "finished": {
       const when = relTime(j.finished_at);
-      return { text: when ? `finished ${when}` : "finished", title: j.finished_at ?? "the job has finished" };
+      return { text: when ? `finished ${when}` : "finished", title: j.finished_at ?? "the outer run has finished" };
     }
   }
 }
@@ -114,5 +114,5 @@ export function jobEtaCell(j: Progress): JobCell {
 export function jobRateCell(j: Progress): JobCell {
   const rate = throughputText(j);
   if (rate) return { text: rate, title: "runs finished a minute, over the last 10 minutes" };
-  return { text: "—", title: inFlight(j) ? STALLED_TITLE : "the job has ended" };
+  return { text: "—", title: inFlight(j) ? STALLED_TITLE : "the outer run has ended" };
 }

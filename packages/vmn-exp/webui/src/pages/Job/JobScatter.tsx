@@ -24,7 +24,7 @@ function Plot({ data, x, y, color, p }: { data: ExperimentColumns; x: string; y:
     () => rows.filter((r) => isFiniteNumber(columnValue(r, xKey)) && isFiniteNumber(r.metrics[y])).length,
     [rows, xKey, y],
   );
-  if (!points) return <ChartEmpty text={`No run of this job has both ${x} and ${y} yet.`} />;
+  if (!points) return <ChartEmpty text={`No run of this outer run has both ${x} and ${y} yet.`} />;
   return (
     <ChartFigure
       label={`Scatter of ${y} against ${x}, coloured by ${color}`}

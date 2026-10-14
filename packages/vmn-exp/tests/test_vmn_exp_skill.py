@@ -197,6 +197,6 @@ def test_vmn_exp_skill_puts_the_fleet_counts_on_the_jobs_view_row(capfd):
     # counts over the whole subtree; grouping by parent run is no longer how.
     assert _skill() == 0
     out = " ".join(capfd.readouterr().out.split())
-    assert "Jobs view" in out and "whole subtree" in out
+    assert "Outer runs view" in out and "whole subtree" in out
     assert "?group=parent" not in out
     assert "plus `stuck` ones" not in out

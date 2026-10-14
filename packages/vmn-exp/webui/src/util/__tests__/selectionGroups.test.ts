@@ -51,7 +51,7 @@ describe("the selection's summary", () => {
     const picks = [{ verstr: "x", job: "J2" }, { verstr: "y", job: "J3" }, { verstr: "z", job: "J3" }];
     const sum = summarizeSelection(picks, [group(), group({ scope: "J4", job: "J4", count: 9 })]);
     expect(sum).toMatchObject({ runs: 4012, jobs: 4 });
-    expect(sum.text).toBe("4,012 runs from 4 jobs");
+    expect(sum.text).toBe("4,012 runs from 4 outer runs");
   });
 });
 

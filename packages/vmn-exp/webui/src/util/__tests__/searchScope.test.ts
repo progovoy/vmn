@@ -32,9 +32,9 @@ describe("searchScope", () => {
   });
 
   it("the result line counts jobs and runs", () => {
-    expect(matchLine(3, 412)).toEqual({ found: "3 jobs · 412 runs match", all: "show all 412 runs" });
-    expect(matchLine(1, 1)).toEqual({ found: "1 job · 1 run matches", all: "show the 1 run" });
+    expect(matchLine(3, 412)).toEqual({ found: "3 outer runs · 412 runs match", all: "show all 412 runs" });
+    expect(matchLine(1, 1)).toEqual({ found: "1 outer run · 1 run matches", all: "show the 1 run" });
     expect(matchLine(0, 0)).toEqual({ found: "no runs match", all: null });
-    expect(matchLine(2, 1903).found).toBe("2 jobs · 1,903 runs match");
+    expect(matchLine(2, 1903).found).toBe("2 outer runs · 1,903 runs match");
   });
 });

@@ -33,7 +33,7 @@ export const hasSearch = (f: SearchFilter) => Boolean(f.query?.trim() || f.searc
 export function matchLine(jobs: number, runs: number): { found: string; all: string | null } {
   if (!runs) return { found: "no runs match", all: null };
   return {
-    found: `${plural(jobs, "job")} · ${plural(runs, "run")} match${runs === 1 ? "es" : ""}`,
+    found: `${plural(jobs, "outer run")} · ${plural(runs, "run")} match${runs === 1 ? "es" : ""}`,
     all: runs === 1 ? "show the 1 run" : `show all ${fmtCount(runs)} runs`,
   };
 }

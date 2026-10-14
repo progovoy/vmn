@@ -79,7 +79,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 describe("the job page", () => {
   it("opens on its header and the Overview tab", async () => {
     renderRun();
-    const tabs = await screen.findByRole("tablist", { name: "Job" });
+    const tabs = await screen.findByRole("tablist", { name: "Outer run" });
     expect(within(tabs).getAllByRole("tab").map((t) => t.textContent))
       .toEqual(["Overview", "Runs", "Charts", "Failures", "Code", "Log"]);
     expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
@@ -99,9 +99,9 @@ describe("the job page", () => {
       counts: { running: 40, waiting: 546, succeeded: 1409, failed: 3, stuck: 2 },
     }));
     renderRun();
-    const tabs = await screen.findByRole("tablist", { name: "Job" });
+    const tabs = await screen.findByRole("tablist", { name: "Outer run" });
     expect(screen.queryByRole("link", { name: /← experiments/ })).toBeNull();
-    const actions = screen.getByRole("group", { name: "Job actions" });
+    const actions = screen.getByRole("group", { name: "Outer run actions" });
     expect(within(actions).getByRole("button", { name: /Reproduce/ })).toBeInTheDocument();
     expect(within(actions).getByRole("button", { name: "Copy link" })).toBeInTheDocument();
     expect(within(actions).getByRole("button", { name: /Add to report/ })).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe("the job page", () => {
     vi.mocked(jobSummary).mockImplementation(notFound);
     renderRun();
     await waitFor(() => expect(screen.getByText("Fleet")).toBeInTheDocument());
-    expect(screen.queryByRole("tablist", { name: "Job" })).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Outer run" })).toBeNull();
   });
 
   it("never asks a single run for a summary", async () => {
@@ -152,14 +152,14 @@ describe("the job page", () => {
   it("gives an inner run's page its job context bar (plan 23 W7)", async () => {
     m.experiment.mockResolvedValue(detail({ kind: "inner", children: [], fleet: null, tree_status: null, parent: JOB }));
     renderRun();
-    const bar = await screen.findByRole("navigation", { name: "Job context" });
+    const bar = await screen.findByRole("navigation", { name: "Outer run context" });
     expect(await within(bar).findByRole("link", { name: "lr_layers_grid" })).toBeInTheDocument();
     expect(jobSummary).toHaveBeenCalledWith("test", "my-app", JOB);
   });
 
   it("follows the job's subtree live and refreshes its summary on a change", async () => {
     renderRun();
-    await screen.findByRole("tablist", { name: "Job" });
+    await screen.findByRole("tablist", { name: "Outer run" });
     await waitFor(() => expect(lastSource().url).toBe(`/api/v1/workspaces/test/apps/my-app/events?scope=${JOB}`));
     act(() => lastSource().open());
     expect(screen.getByText(/live · updated/)).toBeInTheDocument();

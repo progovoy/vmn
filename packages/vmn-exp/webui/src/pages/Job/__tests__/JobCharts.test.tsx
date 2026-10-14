@@ -143,7 +143,7 @@ describe("the job Charts tab", () => {
   it("says why a chart is empty, and shows a failed load", async () => {
     vi.mocked(jobColumns).mockResolvedValueOnce({ verstrs: [], idx: [], total: 0, columns: {} });
     renderCharts();
-    expect(await screen.findByText(/No run of this job has both lr and val_loss yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No run of this outer run has both lr and val_loss yet/)).toBeInTheDocument();
     vi.mocked(jobColumns).mockRejectedValue(new Error("boom"));
     fireEvent.click(screen.getByRole("button", { name: "By param" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
@@ -152,7 +152,7 @@ describe("the job Charts tab", () => {
   it("has nothing to chart before any run logs a metric", async () => {
     vi.mocked(jobFacets).mockResolvedValue({ ...FACETS, metric_keys: [] });
     renderCharts("", jobSummaryFixture({ metrics: {}, metric: null }));
-    expect(await screen.findByText(/No run of this job has logged a metric yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No run of this outer run has logged a metric yet/)).toBeInTheDocument();
     expect(jobColumns).not.toHaveBeenCalled();
   });
 });

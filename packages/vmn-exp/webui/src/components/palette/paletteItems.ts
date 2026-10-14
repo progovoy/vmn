@@ -8,6 +8,7 @@ import type { AppRow, Workspace } from "../../types";
 import { appHref, fmtCount, modelHref, plural, relTime, runHref } from "../../util";
 import type { PaletteRun } from "./usePaletteRuns";
 import { runSearchQuery } from "../../util/searchQuery";
+import { isOuterRun, outerLabel, outerRunCount } from "../../util/outerRun";
 import { compareSearch } from "../../pages/Compare/selection";
 import type { IconName } from "../shell/icons";
 import { wsLocation } from "../ui";
@@ -105,13 +106,14 @@ function gotoItems(ctx: PaletteCtx): PaletteItem[] {
   return out;
 }
 
-/** `@1,903 name · in <job>` for a search hit inside a job. */
+/** `@1,903 name · in <job>` for a search hit inside a job; an outer run's `outer · N runs`. */
 function runItem(r: PaletteRun, ctx: PaletteCtx, base: string, app: string): PaletteItem {
   const ref = r.idx ? `@${r.idx}` : r.verstr;
   const where = r.root_name ? `in ${r.root_name}` : null;
+  const outer = isOuterRun(r) ? outerLabel(outerRunCount(r)) : null;
   return row(`run:${r.verstr}`, "run", r.name || r.verstr, {
     prefix: r.idx ? `@${fmtCount(r.idx)}` : undefined, mono: !r.name, title: r.verstr,
-    secondary: [where, r.status, r.note, relTime(r.timestamp)].filter(Boolean).join(" · "),
+    secondary: [outer, where, r.status, r.note, relTime(r.timestamp)].filter(Boolean).join(" · "),
     to: runHref(base, r.verstr), command: vx(ctx, "show", app, "-v", ref),
   });
 }

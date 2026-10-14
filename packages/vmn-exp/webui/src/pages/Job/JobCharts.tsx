@@ -50,7 +50,7 @@ export default function JobCharts({ ws, app, summary }: { ws: string; app: strin
   const vocab = useMemo(() => fresh, [names]);
 
   if (facets.isPending) return <Skeleton />;
-  if (!vocab.metrics.length) return <ChartEmpty text="No run of this job has logged a metric yet." />;
+  if (!vocab.metrics.length) return <ChartEmpty text="No run of this outer run has logged a metric yet." />;
   const main = mainMetric(summary);
   const y = state.y && vocab.metrics.includes(state.y) ? state.y
     : main && vocab.metrics.includes(main) ? main : vocab.metrics[0];

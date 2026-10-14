@@ -44,10 +44,10 @@ export default function JobCurves(p: JobChartProps) {
 
   const body = error ? <div className="error" role="alert">Could not load the top runs: {error.message}</div>
     : !verstrs ? <Skeleton />
-    : !verstrs.length ? <ChartEmpty text={`No run of this job has logged ${p.y} yet.`} />
+    : !verstrs.length ? <ChartEmpty text={`No run of this outer run has logged ${p.y} yet.`} />
     : (
       <ChartFigure
-        label={`${p.y} curves of the job's top ${verstrs.length} runs`}
+        label={`${p.y} curves of the outer run's top ${verstrs.length} runs`}
         caption={`The ${verstrs.length} best runs on ${p.y}, best first. Hover a run to highlight it, click to hide it.`}
       >
         <OverlayLegend runs={verstrs} colorOf={colorOf} labelOf={(v) => labels.get(v) ?? v}

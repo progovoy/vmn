@@ -51,18 +51,18 @@ describe("the selection tray", () => {
   it("says how many runs from how many jobs", () => {
     renderTray();
     expect(within(tray()).getByText("4", { selector: ".sel-badge" })).toBeInTheDocument();
-    expect(within(tray()).getByRole("button", { name: /from 2 jobs/ })).toBeInTheDocument();
+    expect(within(tray()).getByRole("button", { name: /from 2 outer runs/ })).toBeInTheDocument();
   });
 
   it("announces the count and its jobs in a status region", () => {
     renderTray();
-    expect(within(tray()).getByRole("status")).toHaveTextContent("4 selected from 2 jobs");
+    expect(within(tray()).getByRole("status")).toHaveTextContent("4 selected from 2 outer runs");
   });
 
   it("follows the store as another page changes it", () => {
     renderTray();
     act(() => writePicks("w", "a", PICKS.slice(0, 2)));
-    expect(within(tray()).getByRole("status")).toHaveTextContent("2 selected from 1 job");
+    expect(within(tray()).getByRole("status")).toHaveTextContent("2 selected from 1 outer run");
   });
 
   it("compares every pick", () => {
@@ -99,21 +99,21 @@ describe("the selection tray", () => {
 });
 
 describe("the expanded tray", () => {
-  const expand = () => fireEvent.click(within(tray()).getByRole("button", { name: /from 2 jobs/ }));
+  const expand = () => fireEvent.click(within(tray()).getByRole("button", { name: /from 2 outer runs/ }));
   const list = () => screen.getByRole("list", { name: "Selected runs" });
 
   it("starts closed", () => {
     renderTray();
-    expect(within(tray()).getByRole("button", { name: /from 2 jobs/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(tray()).getByRole("button", { name: /from 2 outer runs/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("list", { name: "Selected runs" })).toBeNull();
   });
 
   it("lists the picks grouped by job, linked to their run pages", () => {
     renderTray();
     expand();
-    expect(within(tray()).getByRole("button", { name: /from 2 jobs/ })).toHaveAttribute("aria-expanded", "true");
+    expect(within(tray()).getByRole("button", { name: /from 2 outer runs/ })).toHaveAttribute("aria-expanded", "true");
     const groups = within(list()).getAllByRole("group");
-    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(["grid", "J2", "Runs outside a job"]);
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(["grid", "J2", "Runs outside an outer run"]);
     expect(within(groups[0]).getByRole("link", { name: "trial-1" })).toHaveAttribute("href", "/ws/w/app/a/run/t1");
     expect(within(groups[1]).getByRole("link", { name: "@9" })).toHaveAttribute("href", "/ws/w/app/a/run/t9");
   });
