@@ -32,6 +32,7 @@ import { api } from "../../../api";
 import type { GroupOpts, RunGroup } from "../../../apiGroups";
 import type { ExperimentRow } from "../../../types";
 import JobRuns from "../JobRuns";
+import { WithTray } from "../../__tests__/withTray";
 
 const JOB = "0.0.2-rc.1";
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -64,7 +65,7 @@ function renderRuns(search = "?tab=runs") {
       <Routes>
         <Route
           path="/ws/:ws/app/:app/run/:verstr"
-          element={<><JobRuns ws="test" app="my-app" verstr={JOB} paused={false} onPaused={() => {}} /><Where /></>}
+          element={<WithTray><JobRuns ws="test" app="my-app" verstr={JOB} paused={false} onPaused={() => {}} /><Where /></WithTray>}
         />
       </Routes>
     </MemoryRouter>,
@@ -169,7 +170,8 @@ describe("the job's Runs tab", () => {
     await screen.findByText("0.0.2-dev.t1");
     fireEvent.click(screen.getByRole("checkbox", { name: /select all/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Select all 312 matching" }));
-    expect(await screen.findByText("312 matching selected")).toBeInTheDocument();
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Selection" })).getByRole("status"))
+      .toHaveTextContent("312 selected"));
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
     const body = { scope: JOB, q: "metrics.loss < 1", status: "succeeded" };
     await waitFor(() => expect(m.actionPreview).toHaveBeenCalledWith("test", "my-app", "exp_archive", body));

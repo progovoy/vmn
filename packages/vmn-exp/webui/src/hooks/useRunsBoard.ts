@@ -29,6 +29,8 @@ export interface RunsBoardOptions {
   paused: boolean;
   /** A job's verstr: the board is its subtree. */
   scope?: string;
+  /** The job's name, naming its selected queries in the tray. */
+  scopeLabel?: string;
   /** Picking "parent run" calls it instead (the Jobs view, §3.4). */
   onParent?: () => void;
   /** Narrows the rows on screen (a chart brush). */
@@ -83,11 +85,12 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
   const tableItems = data.items;
   const tableRows = useMemo(() => tableItems && boardRows(tableItems), [tableItems]);
   // A job's selection may be its whole query (plan 23 S4) rather than verstrs.
+  const { scopeLabel } = opts;
   const byQuery = useMemo(
-    () => (scope ? { scope, q: serverQuery, status: view.status } : undefined),
-    [scope, serverQuery, view.status],
+    () => (scope ? { scope, q: serverQuery, status: view.status, label: scopeLabel } : undefined),
+    [scope, serverQuery, view.status, scopeLabel],
   );
-  const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, () => { refresh(); }, byQuery);
+  const selection = useBoardSelection(ws, app, filter, tableRows ?? [], view, byQuery);
   const { groupActions, chartGrouping } = useBoardGroupActions(
     data, grouping, view.toggleCollapsed, selection, opts.openGroup?.onOpen,
   );

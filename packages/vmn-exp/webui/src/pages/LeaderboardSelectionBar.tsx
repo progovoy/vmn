@@ -5,7 +5,8 @@ import type { ArchiveVerb } from "../hooks/useArchiveJob";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useOffsetHeight } from "../hooks/useOffsetHeight";
 import { fmtCount, plural } from "../util";
-import { SELECT_ALL_CAP, summarizePicks, type RunPick } from "../util/runSelection";
+import { SELECT_ALL_CAP, type RunPick } from "../util/runSelection";
+import { COMPARE_PER_GROUP, compareList, summarizeSelection, type QueryGroup } from "../util/selectionGroups";
 import { compareSearch } from "./Compare/selection";
 import SelectionPicks from "./SelectionPicks";
 import "./selectionBar.css";
@@ -32,8 +33,8 @@ function useKeepFocusInBar(barRef: RefObject<HTMLDivElement | null>,
 /** An action that stays in place at every count. When the selection doesn't
  *  fit it, it is aria-disabled rather than disabled: still a Tab stop that
  *  announces its reason (tooltip and description), but inert. */
-function BarAction({ label, reason, primary, onClick }: {
-  label: ReactNode; reason: string | null; primary?: boolean; onClick: () => void;
+function BarAction({ label, reason, title, primary, onClick }: {
+  label: ReactNode; reason: string | null; title?: string; primary?: boolean; onClick: () => void;
 }) {
   const id = useId();
   const off = reason !== null;
@@ -41,7 +42,7 @@ function BarAction({ label, reason, primary, onClick }: {
     <>
       <button
         className={primary && !off ? "primary" : undefined}
-        aria-disabled={off || undefined} title={reason ?? undefined}
+        aria-disabled={off || undefined} title={reason ?? title}
         aria-describedby={off ? id : undefined} onClick={off ? undefined : onClick}
       >
         {label}
@@ -60,7 +61,7 @@ function BarAction({ label, reason, primary, onClick }: {
 export default function LeaderboardSelectionBar({
   selected, total, base, showUnarchive, archiving, archiveError,
   onClear, onSelectAll, onArchive, matching = null, onPreview, uncapped = false,
-  picks, onRemove, escClears = true,
+  picks, groups = [], onRemove, onRemoveGroup, escClears = true,
 }: {
   selected: string[];
   total: number;
@@ -71,7 +72,7 @@ export default function LeaderboardSelectionBar({
   onClear: () => void;
   onSelectAll: () => void;
   onArchive: (verb: ArchiveVerb) => void;
-  /** Every run matching the query is selected (plan 23 S4): how many. */
+  /** The board's query is selected as a group (plan 23 S4): how many it matched. */
   matching?: number | null;
   /** Counts what an archive by query acts on, for its confirm. */
   onPreview?: (verb: ArchiveVerb) => Promise<number>;
@@ -80,6 +81,9 @@ export default function LeaderboardSelectionBar({
   /** The tray's picks (their jobs): with *onRemove*, the bar expands to list them. */
   picks?: readonly RunPick[];
   onRemove?: (verstr: string) => void;
+  /** The selected queries (a job's "Select all N matching"), each counted and removable. */
+  groups?: readonly QueryGroup[];
+  onRemoveGroup?: (group: QueryGroup) => void;
   /** Escape clears the selection (a board's page; not a page without a board). */
   escClears?: boolean;
 }) {
@@ -88,14 +92,15 @@ export default function LeaderboardSelectionBar({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
-  const n = selected.length;
-  const jobs = picks ? summarizePicks(picks).jobs : 0;
+  const n = selected.length + groups.reduce((sum, g) => sum + g.count, 0);
+  const jobs = picks ? summarizeSelection(picks, groups).jobs : 0;
+  const compared = compareList(selected.map((verstr) => ({ verstr })), groups);
   const fromJobs = jobs ? ` from ${plural(jobs, "job")}` : "";
   const barRef = useRef<HTMLDivElement>(null);
   const allRef = useRef<HTMLButtonElement>(null);
   const barHeight = useOffsetHeight(barRef, n > 0);
   const selectable = uncapped ? total : Math.min(total, SELECT_ALL_CAP);
-  const canSelectAll = matching === null && n < selectable;
+  const canSelectAll = matching === null && (uncapped ? selectable > 0 : n < selectable);
   useKeepFocusInBar(barRef, allRef, canSelectAll);
   useEscapeKey(n > 0 && escClears, onClear);
   if (n === 0) return null;
@@ -105,7 +110,7 @@ export default function LeaderboardSelectionBar({
   // By query, the server counts the runs first (`dry_run`).
   const ask = (v: ArchiveVerb) => {
     setPreviewError(null);
-    if (matching === null || !onPreview) {
+    if (!onPreview) {
       setConfirming({ verb: v, count: Math.min(n, SELECT_ALL_CAP) });
       return;
     }
@@ -125,18 +130,16 @@ export default function LeaderboardSelectionBar({
       <div className="sel-dock">
         <div className="sel-toast" role="alert">{previewError ?? archiveError}</div>
         {expanded && picks && onRemove && (
-          <SelectionPicks id={listId} picks={picks} base={base} onRemove={onRemove} />
+          <SelectionPicks
+            id={listId} picks={picks} groups={groups} base={base} onRemove={onRemove} onRemoveGroup={onRemoveGroup}
+          />
         )}
         <div ref={barRef} className="sel-bar" role="region" aria-label="Selection">
-          {matching === null && <span key={n} className="sel-badge" aria-hidden>{n}</span>}
+          <span key={n} className="sel-badge" aria-hidden>{fmtCount(n)}</span>
           <span className="sel-label">
-            {matching === null ? (
-              <span className="sel-label-text" aria-hidden data-widest="runs selected">
-                {n === 1 ? "run" : "runs"} selected
-              </span>
-            ) : (
-              <span className="sel-label-text" aria-hidden>{`${fmtCount(matching)} matching selected`}</span>
-            )}
+            <span className="sel-label-text" aria-hidden data-widest="runs selected">
+              {n === 1 ? "run" : "runs"} selected
+            </span>
             {picks && onRemove && (
               <button
                 className="link sel-expand" aria-expanded={expanded} aria-controls={expanded ? listId : undefined}
@@ -158,12 +161,13 @@ export default function LeaderboardSelectionBar({
               </button>
             </span>
           </span>
-          <span className="sr-only" role="status">{matching === null ? n : fmtCount(matching)} selected{fromJobs}</span>
+          <span className="sr-only" role="status">{fmtCount(n)} selected{fromJobs}</span>
           <span className="sel-actions">
             <BarAction
-              label={<>Compare <span className="sel-count">({n})</span></>}
-              primary reason={compareReason(n)}
-              onClick={() => go(`compare-runs?${compareSearch("curves", selected)}`)}
+              label={<>Compare <span className="sel-count">({compared.length})</span></>}
+              primary reason={compareReason(compared.length)}
+              title={groups.length ? `Compares the picked runs and the top ${COMPARE_PER_GROUP} runs of each selected query` : undefined}
+              onClick={() => go(`compare-runs?${compareSearch("curves", compared)}`)}
             />
             <button disabled={archiving} onClick={() => ask("archive")}>Archive</button>
             {showUnarchive && (
