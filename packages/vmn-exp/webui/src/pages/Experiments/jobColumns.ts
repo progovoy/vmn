@@ -26,15 +26,15 @@ export const JOB_SORTS = {
 
 export const JOB_COLUMNS: readonly JobColumn[] = [
   { id: "check", label: "", width: 36 },
-  { id: "idx", label: "#", width: 64, sort: IDX_SORT, title: "sort by run number (newest first)", numeric: true },
-  { id: "status", label: "status", width: 112 },
+  { id: "idx", label: "#", width: 72, sort: IDX_SORT, title: "sort by run number (newest first)", numeric: true },
+  { id: "status", label: "status", width: 124 },
   { id: "name", label: "job · progress", width: 380, sort: JOB_SORTS.progress, title: "sort by progress (furthest first)" },
   { id: "best", label: "best", width: 150, sort: JOB_SORTS.best, title: "sort by best (best first)", numeric: true },
   { id: "spread", label: "spread", width: 84 },
   { id: "runs", label: "runs", width: 76, sort: JOB_SORTS.total, title: "sort by runs (most first)", numeric: true },
   { id: "failed", label: "failed", width: 72, sort: JOB_SORTS.failed, title: "sort by failed share (most first)", numeric: true },
   { id: "throughput", label: "rate", width: 80, sort: JOB_SORTS.throughput, title: "sort by throughput (fastest first)", numeric: true },
-  { id: "eta", label: "ETA", width: 64, numeric: true },
+  { id: "eta", label: "ETA", width: 132, numeric: true },
   { id: "branch", label: "branch", width: 120 },
   { id: "when", label: "started", width: 92, sort: JOB_SORTS.started, title: "sort by start (newest first)", numeric: true },
 ];

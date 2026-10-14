@@ -11,6 +11,7 @@ import { NARROW_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
 import type { Density } from "../../util/density";
 import { boardRows, isGroupItem, type BoardItem } from "../../util/groupItems";
 import { STICKY_BG } from "../leaderboardColumns";
+import type { GroupFilter } from "../LeaderboardTable";
 import { ARIA_SORT, HeaderCheckbox, SortButton, type HeaderCheckProps } from "../LeaderboardHeadParts";
 import type { JobContext } from "./JobCells";
 import JobCards from "./JobCards";
@@ -35,6 +36,10 @@ export interface JobsSort {
 }
 
 export interface JobGroupActions {
+  /** What a group counts: `job`, `run`. */
+  noun: string;
+  /** A group too big to unfold opens as its clause (plan 23 §3.4). */
+  asFilter?: GroupFilter;
   onFold: (key: string) => void;
   onMore: (key: string) => void;
   checkOf: (verstrs: readonly string[]) => HeaderCheck;
@@ -55,6 +60,8 @@ export interface JobsTableProps {
   onToggle: (verstr: string, range: boolean) => void;
   onPrefetch: (verstr: string) => void;
   onClearAnchor: () => void;
+  /** Said in place of the rows when there are none. */
+  emptyText: string;
 }
 
 export default function JobsTable(props: JobsTableProps) {
@@ -95,7 +102,7 @@ function Head({ sort, check }: { sort: JobsSort; check: HeaderCheckProps }) {
 
 function JobsGrid({
   items, ctx, sort, selected, density, headerCheck, groups, hasMore, onNearEnd, visibleRef,
-  onToggle, onPrefetch, onClearAnchor,
+  onToggle, onPrefetch, onClearAnchor, emptyText,
 }: JobsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const scroll = useScrollMemory();
@@ -146,6 +153,9 @@ function JobsGrid({
                 {JOB_COLUMNS.map((c) => <td key={c.id}><span className="skel-bar" /></td>)}
               </tr>
             ))}
+            {items?.length === 0 && (
+              <tr className="jobs-empty"><td colSpan={JOB_COLUMNS.length}>{emptyText}</td></tr>
+            )}
             {virtual.length > 0 && virtual[0].start > 0 && <tr aria-hidden style={{ height: virtual[0].start }} />}
             {virtual.map((v) => {
               const it = list[v.index];
@@ -156,7 +166,7 @@ function JobsGrid({
                   : (
                     <JobGroupRow
                       key={`group:${it.group.key}`} item={it} index={v.index} isActive={active} height={height}
-                      onFold={groups.onFold} check={{ state: groups.checkOf(it.rows), onToggle: () => groups.onCheck(it.rows) }}
+                      onFold={groups.onFold} asFilter={groups.asFilter} noun={groups.noun} check={{ state: groups.checkOf(it.rows), onToggle: () => groups.onCheck(it.rows) }}
                     />
                   );
               }

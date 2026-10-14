@@ -1,6 +1,6 @@
 /** A job's progress line and run bar (plan 23 W1, §3.1). */
 import { describe, it, expect } from "vitest";
-import { fmtThroughput, jobBarSegments, jobProgressText, jobSpoken } from "../jobProgress";
+import { fmtThroughput, jobBarSegments, jobEtaCell, jobProgressText, jobRateCell, jobSpoken } from "../jobProgress";
 import { NO_COUNTS, job } from "./jobFixture";
 
 describe("jobProgressText", () => {
@@ -52,5 +52,50 @@ describe("jobBarSegments", () => {
 
   it("draws nothing for an empty job", () => {
     expect(jobBarSegments(job({ expected: 0, counts: NO_COUNTS }))).toBeNull();
+  });
+});
+
+const ended = (extra = {}) => job({
+  total: 20, done: 20, expected: 20, throughput_per_min: 0, eta_sec: null,
+  counts: { ...NO_COUNTS, succeeded: 20 }, ...extra,
+});
+const DAYS_3 = () => new Date(Date.now() - 3 * 86_400_000 - 60_000).toISOString();
+
+describe("a Jobs-view row's ETA cell", () => {
+  it("is the time left while runs are in flight", () => {
+    expect(jobEtaCell(job()).text).toBe("14m");
+  });
+
+  it("reads stalled while runs are left and none finishes", () => {
+    const cell = jobEtaCell(job({ eta_sec: null, throughput_per_min: 0 }));
+    expect(cell.text).toBe("stalled");
+    expect(cell.title).toMatch(/no run finished/);
+  });
+
+  it("is when a finished job finished", () => {
+    expect(jobEtaCell(ended({ finished_at: DAYS_3() })).text).toBe("finished 3d ago");
+    expect(jobEtaCell(ended()).text).toBe("finished");
+  });
+
+  it("counts the runs an ended job never started", () => {
+    const cell = jobEtaCell(ended({ expected: 200, finished_at: DAYS_3() }));
+    expect(cell.text).toBe("ended · 180 never started");
+  });
+
+  it("stuck runs with nothing else in flight are a stall", () => {
+    expect(jobEtaCell(ended({ counts: { ...NO_COUNTS, succeeded: 18, stuck: 2 } })).text).toBe("stalled");
+  });
+});
+
+describe("a Jobs-view row's rate cell", () => {
+  it("is the throughput while runs complete", () => {
+    expect(jobRateCell(job()).text).toBe("41/min");
+  });
+
+  it("is a dash saying why once nothing completes", () => {
+    expect(jobRateCell(ended())).toEqual({ text: "—", title: "the job has ended" });
+    const stalled = jobRateCell(job({ throughput_per_min: 0, eta_sec: null }));
+    expect(stalled.text).toBe("—");
+    expect(stalled.title).toMatch(/no run finished/);
   });
 });

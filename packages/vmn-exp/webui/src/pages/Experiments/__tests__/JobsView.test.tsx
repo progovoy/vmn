@@ -87,12 +87,67 @@ describe("a job's row", () => {
     expect(cellOf("lr_layers_grid", "branch").textContent).toBe("feature-x");
   });
 
-  it("a single run reads its base and branch, and its own value as best", async () => {
+  it("a single run reads its base (its branch is the Branch column's), and its own value as best", async () => {
     renderExperiments();
     await screen.findByRole("link", { name: "solo" });
-    expect(cellOf("solo", "name").textContent).toContain("0.3.0 · main");
+    expect(cellOf("solo", "name").textContent).toContain("0.3.0");
+    expect(cellOf("solo", "name").textContent).not.toContain("main");
+    expect(cellOf("solo", "branch").textContent).toBe("main");
     expect(cellOf("solo", "best").textContent).toContain("0.4");
     expect(cellOf("solo", "runs").textContent).toBe("");
+  });
+});
+
+describe("a finished job's row", () => {
+  const ended = (extra: Partial<ReturnType<typeof job>> = {}) => topRow(40, {
+    name: "done_grid", status: "succeeded", tree_status: "succeeded",
+    job: job({
+      total: 20, done: 20, expected: 20, throughput_per_min: 0, eta_sec: null,
+      counts: { running: 0, waiting: 0, succeeded: 20, failed: 0, stuck: 0 },
+      finished_at: new Date(Date.now() - 3 * 86_400_000 - 60_000).toISOString(), ...extra,
+    }),
+  });
+
+  it("dashes its rate with a reason, and its ETA says when it finished", async () => {
+    m.experimentsPaged.mockResolvedValue(jobsPage([ended()]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "done_grid" });
+    expect(cellOf("done_grid", "throughput").textContent).toBe("—");
+    expect(cellOf("done_grid", "throughput").getAttribute("title")).toBe("the job has ended");
+    expect(cellOf("done_grid", "eta").textContent).toBe("finished 3d ago");
+  });
+
+  it("counts the runs an ended job never started", async () => {
+    m.experimentsPaged.mockResolvedValue(jobsPage([ended({ expected: 200 })]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "done_grid" });
+    expect(cellOf("done_grid", "eta").textContent).toBe("ended · 180 never started");
+  });
+
+  it("a job with runs left and none finishing is stalled", async () => {
+    m.experimentsPaged.mockResolvedValue(jobsPage([topRow(36, { name: "slow", job: job({ eta_sec: null, throughput_per_min: 0 }) })]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "slow" });
+    expect(cellOf("slow", "eta").textContent).toBe("stalled");
+    expect(cellOf("slow", "throughput").textContent).toBe("—");
+  });
+});
+
+describe("the Jobs view's columns", () => {
+  const head = (col: string) =>
+    screen.getByRole("grid", { name: "jobs" }).querySelector(`th[data-col-id="${col}"]`) as HTMLElement;
+
+  it("fit a six-digit @N and the longest status pill", async () => {
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    expect(parseInt(head("idx").style.width, 10)).toBeGreaterThanOrEqual(72);
+    expect(parseInt(head("status").style.width, 10)).toBeGreaterThanOrEqual(124);
+  });
+
+  it("keep the header in view while the rows scroll", async () => {
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    expect(head("name").style.position).toBe("sticky");
   });
 });
 

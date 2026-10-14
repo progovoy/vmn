@@ -4,10 +4,12 @@
 .jobs-table .job-line { display: flex; min-width: 0; }
 .jobs-table .job-inline { margin-left: 10px; min-width: 0; overflow: hidden; }
 .jobs-table td.jobs-cell-spread { vertical-align: middle; }
+.jobs-table td.jobs-cell-eta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .jobs-table td.jobs-cell-branch, .jobs-table td.jobs-cell-when {
   color: var(--text-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .jobs-table td.num { font-variant-numeric: tabular-nums; }
+.jobs-table tr.jobs-empty td { padding: 28px 16px; text-align: center; color: var(--text-3); }
 .job-sub { color: var(--text-3); font-size: 12px; }
 .job-best { white-space: nowrap; }
 .job-best .goal { color: var(--text-3); }

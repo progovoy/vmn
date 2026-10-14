@@ -7,11 +7,20 @@ import type { ExperimentRow } from "../../types";
 import type { Density } from "../../util/density";
 import { relTime, runHref } from "../../util";
 import { HOVER_INTENT_MS, densityRowHeight, headStatus } from "../LeaderboardRow";
+import type { JobCell } from "../../util/jobProgress";
 import { BestValue, JobSubLine, SpreadCell, jobNumbers, type JobContext } from "./JobCells";
 import { CELL_CLASSES, COLUMN_STYLES, JOB_COLUMNS } from "./jobColumns";
 
 /** When a top-level run started: its subtree's first start, else its own. */
 const startedAt = (r: ExperimentRow) => r.job?.started_at ?? r.started_at ?? r.timestamp;
+
+const cellText = (c: JobCell | string) => (typeof c === "string" ? c : c.text);
+
+function titleOf(id: string, r: ExperimentRow, numbers: ReturnType<typeof jobNumbers>): string | undefined {
+  if (id === "when") return startedAt(r) ?? undefined;
+  const c = numbers[id as keyof typeof numbers];
+  return c && typeof c !== "string" ? c.title : undefined;
+}
 
 function NameCell({ r, href, compact, onPrefetch }: {
   r: ExperimentRow; href: string; compact: boolean; onPrefetch: (verstr: string) => void;
@@ -70,7 +79,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, onPref
       case "name": return <NameCell r={r} href={href} compact={density === "compact"} onPrefetch={onPrefetch} />;
       case "best": return <BestValue r={r} ctx={ctx} />;
       case "spread": return <SpreadCell r={r} />;
-      case "runs": case "failed": case "throughput": case "eta": return numbers[id];
+      case "runs": case "failed": case "throughput": case "eta": return cellText(numbers[id]);
       case "branch": return r.branch;
       case "when": return relTime(startedAt(r));
     }
@@ -89,7 +98,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, onPref
       {JOB_COLUMNS.map((c, i) => (
         <td
           key={c.id} data-col-id={c.id} style={COLUMN_STYLES[i]} className={CELL_CLASSES[i]}
-          title={c.id === "when" ? startedAt(r) ?? undefined : undefined}
+          title={titleOf(c.id, r, numbers)}
         >
           {body(c.id)}
         </td>
