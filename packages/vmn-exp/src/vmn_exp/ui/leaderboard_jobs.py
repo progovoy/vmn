@@ -13,6 +13,7 @@ from operator import itemgetter
 
 from vmn_exp.core.log import sort_descending
 from vmn_exp.core.values import is_finite_number
+from vmn_exp.ui.leaderboard_live import Desc
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 
@@ -53,18 +54,21 @@ def job_value(summaries, row, field):
     return value if sortable(value) else None
 
 
+def job_key(value, descending, rest):
+    """A ``job:*`` order's sort key: rows with the *value* first, by it,
+    the rest after; *rest* (the default order's key) breaks ties."""
+    if value is None:
+        return (1, rest)
+    return (0, Desc(value) if descending else value, rest)
+
+
 def job_sorted(rows, summaries, sort, order, schema):
     """*rows* (in the default order) ordered by their job summary's *sort* field."""
     field = JOB_SORTS[sort]
-    valued, rest = [], []
-    for row in rows:
-        value = job_value(summaries, row, field)
-        if value is not None:
-            valued.append((value, row))
-        else:
-            rest.append(row)
-    valued.sort(key=itemgetter(0), reverse=job_descending(field, order, summaries, schema))
-    return [row for _, row in valued] + rest
+    descending = job_descending(field, order, summaries, schema)
+    keyed = [(job_key(job_value(summaries, row, field), descending, i), row)
+             for i, row in enumerate(rows)]
+    return [row for _, row in sorted(keyed, key=itemgetter(0))]
 
 
 class JobsView:
