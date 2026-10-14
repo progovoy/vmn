@@ -14,7 +14,7 @@ const PATCH_REASON: Record<string, string> = {
   code_missing: "This run's code object is missing from the store, so its changes can't be shown.",
 };
 
-const DIFF_REASON: Record<string, string> = {
+export const DIFF_REASON: Record<string, string> = {
   no_code: "One of the two runs has no captured code to diff.",
   code_missing: "A run's code object is missing from the store, so the diff can't be built.",
   restore_failed: "Restoring the two runs' code to diff them failed.",

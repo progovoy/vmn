@@ -8,6 +8,7 @@ import DiffText from "../../components/DiffText";
 import RunPicker from "../../components/RunPicker";
 import CopyRefButton from "../../components/CopyRefButton";
 import ParamDeltaBlock from "../../components/ParamDeltaBlock";
+import { DIFF_REASON } from "../../components/RunChangesBody";
 import { deltaTone, fmtDelta, numericChange, type DeltaTone } from "../../components/diffDeltaTone";
 import { useRunLabels } from "./useRunLabels";
 
@@ -54,6 +55,7 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
   const materializeReason = isMaterializeError
     ? ((diffError as HttpError & { body?: { reason?: string } }).body?.reason ?? "restore_failed")
     : null;
+  const reasonText = materializeReason ? DIFF_REASON[materializeReason] : undefined;
 
   return (
     <>
@@ -81,7 +83,8 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
       {isMaterializeError && (
         <div className="card" style={{ borderLeft: "3px solid var(--bad)" }}>
           <p>
-            <strong>Code diff unavailable</strong>: {materializeReason}
+            <strong>Code diff unavailable</strong>: {reasonText ?? materializeReason}
+            {reasonText && <span className="mono muted"> ({materializeReason})</span>}
           </p>
           <p style={{ color: "var(--text-muted)", marginTop: 4 }}>
             {String(diffError)}

@@ -82,6 +82,14 @@ describe("Compare 422 error", () => {
     expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
   });
 
+  it("says in words why a 422 diff is unavailable, the reason code beside it", async () => {
+    m.experimentsDiff.mockRejectedValue(Object.assign(new Error("Failed to materialize"), {
+      status: 422, body: { reason: "code_missing" },
+    }));
+    renderCompare();
+    expect(await screen.findByText(/code object is missing from the store/)).toBeInTheDocument();
+  });
+
   it("shows a generic error message for non-422 failures", async () => {
     m.experimentsDiff.mockRejectedValue(new Error("Internal server error"));
     renderCompare();
