@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
 import { cachedRows, findCachedRow, rowsPrefix, runQuery, useMetricsSchema } from "../queries";
-import type { ExperimentDetail } from "../types";
+import type { ExperimentDetail, ExperimentRow } from "../types";
 import { runHref } from "../util";
 import { isParamOnly } from "../util/paramKeys";
 import { Skeleton } from "../components/ui";
@@ -41,17 +41,22 @@ function shownMetrics(metrics: ExperimentDetail["metrics"], detail: ExperimentDe
   return keys.length === Object.keys(metrics).length ? metrics : Object.fromEntries(keys.map((k) => [k, metrics[k]]));
 }
 
+/** Whether a board's cached row is a job: its summary needn't wait for the detail. */
+const listedAsJob = (row: ExperimentRow | undefined) =>
+  !!row && (row.kind === "outer" || !!row.job || !!row.children?.length);
+
 /** A run with children opens the job page (plan 23 W2) once its summary
  *  lands; a single or inner run, or a server without the summary endpoint
- *  (any error before one landed, a 404 above all), the run page. */
+ *  (any error before one landed, a 404 above all), the run page. A run a
+ *  board lists as a job asks for its summary alongside the detail. */
 export default function Run() {
   const { ws, app, verstr } = useParams() as { ws: string; app: string; verstr: string };
   const client = useQueryClient();
   const query = useQuery(runQuery(ws, app, verstr), client);
   const detail = query.data;
   const st = detail?.status;
-  const isJob = !!st && (st.kind === "outer" || !!st.fleet);
-  const summary = useQuery({ ...jobSummaryQuery(ws, app, detail?.metadata.verstr ?? ""), enabled: isJob }, client);
+  const isJob = st ? st.kind === "outer" || !!st.fleet : listedAsJob(findCachedRow(client, ws, app, verstr));
+  const summary = useQuery({ ...jobSummaryQuery(ws, app, detail?.metadata.verstr ?? verstr), enabled: isJob }, client);
   if (detail && isJob && (summary.data || summary.isPending)) {
     return <JobPage ws={ws} app={app} detail={detail} summary={summary} refetchDetail={() => query.refetch()} />;
   }
