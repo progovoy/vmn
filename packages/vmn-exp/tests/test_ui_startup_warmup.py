@@ -8,10 +8,10 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 from leaderboard_fleet import T0, Fleet
 from test_fix_ui_list_serving import BASE, _app, _run
-from vmn_exp.ui import leaderboard_cache
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
 from vmn_exp.core import status as status_mod
+from vmn_exp.ui import leaderboard_cache
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
