@@ -1,6 +1,7 @@
-/** The Jobs view's Jobs | Single runs switch (plan 23 §3.1): the jobs are
- *  not buried under thousands of single runs. `kind=jobs|singles` in the
- *  URL, else jobs when the app has any; requests send `top=jobs|singles`. */
+/** The experiments page's one view switch, Jobs | Single runs | All runs
+ *  (plan 23 §3.1): the jobs are not buried under thousands of single runs.
+ *  `kind=jobs|singles` in the URL, else jobs when the app has any; requests
+ *  send `top=jobs|singles`. An app without jobs reads Runs | All runs. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
@@ -30,7 +31,8 @@ import { jobsPage, notFound, renderExperiments, singleRow, topRow, urlParams } f
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const FACETS = { branches: ["main"], metric_keys: [], param_keys: [], tag_keys: [], param_values: {}, total: 99_600 };
 const WITH_JOBS = { ...FACETS, parented: 80_000, jobs: 20, singles: 19_580 };
-const switcher = () => screen.queryByRole("group", { name: "Jobs or single runs" });
+const switcher = () => screen.queryByRole("group", { name: "Experiments view" });
+const options = () => within(switcher()!).getAllByRole("button").map((b) => b.textContent);
 const pressed = (name: RegExp) => within(switcher()!).getByRole("button", { name }).getAttribute("aria-pressed");
 const lastOpts = () => m.experimentsPaged.mock.calls.slice(-1)[0][2];
 
@@ -43,7 +45,16 @@ beforeEach(() => {
   m.experimentsPaged.mockResolvedValue(jobsPage([topRow(2, { name: "grid" })], 20));
 });
 
-describe("Jobs | Single runs", () => {
+describe("Jobs | Single runs | All runs", () => {
+  it("is one switch beside the title, Jobs and Single runs counted, then All runs", async () => {
+    renderExperiments();
+    await screen.findByRole("link", { name: "grid" });
+    expect(screen.getAllByRole("button", { name: /^Single runs/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Jobs/ })).toHaveLength(1);
+    expect(options()).toEqual(["Jobs (20)", "Single runs (19,580)", "All runs"]);
+    expect(screen.queryByRole("group", { name: "Jobs or single runs" })).toBeNull();
+  });
+
   it("opens on the jobs, counting each side from the facets", async () => {
     renderExperiments();
     await screen.findByRole("link", { name: "grid" });
@@ -88,20 +99,21 @@ describe("Jobs | Single runs", () => {
     expect(within(switcher()!).getByRole("button", { name: "Single runs" })).toBeInTheDocument();
   });
 
-  it("an app without jobs has no switch and lists its single runs", async () => {
+  it("an app without jobs reads Runs | All runs and lists its single runs", async () => {
     m.facets.mockResolvedValue({ ...FACETS, parented: 0, jobs: 0, singles: 3 });
     m.experimentsPaged.mockResolvedValue(jobsPage([singleRow(1, { name: "solo" })]));
     renderExperiments("/ws/test/app/my-app?kind=jobs");
     await screen.findByRole("link", { name: "solo" });
-    expect(switcher()).toBeNull();
+    expect(options()).toEqual(["Runs", "All runs"]);
+    expect(pressed(/^Runs/)).toBe("true");
     expect(lastOpts()).toEqual(expect.objectContaining({ top: true }));
   });
 
-  it("without facets it lists every top-level run, no switch", async () => {
+  it("without facets it lists every top-level run, Runs | All runs", async () => {
     m.facets.mockRejectedValue(notFound());
     renderExperiments();
     await screen.findByRole("link", { name: "grid" });
-    expect(switcher()).toBeNull();
+    expect(options()).toEqual(["Runs", "All runs"]);
     expect(lastOpts()).toEqual(expect.objectContaining({ top: true }));
   });
 
@@ -131,5 +143,19 @@ describe("Jobs | Single runs", () => {
     fireEvent.click(within(screen.getByRole("group", { name: "Experiments view" })).getByRole("button", { name: "All runs" }));
     await waitFor(() => expect(urlParams().get("view")).toBe("all"));
     expect(urlParams().has("kind")).toBe(false);
+  });
+
+  it("from All runs, Single runs opens the Jobs view on the single runs", async () => {
+    m.experiments.mockResolvedValue(Object.assign([], { total: 0 }));
+    m.experimentsColumns.mockRejectedValue(notFound());
+    renderExperiments("/ws/test/app/my-app?view=all");
+    const single = await screen.findByRole("button", { name: /^Single runs/ });
+    expect(pressed(/^All runs/)).toBe("true");
+    m.experimentsPaged.mockResolvedValue(jobsPage([singleRow(1, { name: "solo" })]));
+    fireEvent.click(single);
+    await screen.findByRole("link", { name: "solo" });
+    expect(urlParams().get("view")).toBe("jobs");
+    expect(urlParams().get("kind")).toBe("singles");
+    expect(pressed(/^Single runs/)).toBe("true");
   });
 });

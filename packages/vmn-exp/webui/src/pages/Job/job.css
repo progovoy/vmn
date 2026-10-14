@@ -1,14 +1,18 @@
 /* The job page (plan 23 W2, W5): sticky header with the tabs, the
    Overview's tiles and cards, the Failures tab's clusters. Status colours
    are the --st-* tokens, the same the pills and the group bar wear. */
-.job-head { padding-top: 4px; margin-bottom: 8px; }
-.job-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.job-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+/* The header (plan 23 §3.2): title and actions on row 1, the progress across row 2. */
+.job-header {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "title actions" "progress progress";
+  align-items: center; column-gap: 12px; row-gap: 10px; padding-top: 4px; margin-bottom: 8px;
+}
+.job-title { grid-area: title; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
 .job-title h1 { font-size: 20px; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
-.job-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.job-actions { grid-area: actions; justify-self: end; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .job-actions .run-actions { flex-wrap: nowrap; }
 
-.job-head-progress { display: flex; flex-direction: column; gap: 6px; }
+.job-head-progress { grid-area: progress; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .job-head-bar {
   display: flex; width: 100%; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line-2);
 }
@@ -122,7 +126,8 @@
 
 @media (max-width: 639px) {
   .job-tabbar { position: static; }
-  .job-actions { margin-left: 0; }
+  .job-header { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "actions" "progress"; }
+  .job-actions { justify-self: start; }
   .job-actions .run-actions { flex-wrap: wrap; justify-content: flex-start; }
   .job-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .job-grid { grid-template-columns: minmax(0, 1fr); }

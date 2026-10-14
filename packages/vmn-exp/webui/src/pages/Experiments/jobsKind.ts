@@ -4,7 +4,6 @@
  *  app without jobs (or facets that never answer) lists every top-level
  *  run, with no switch: that reads like single runs and works on any server. */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
 import { useUrlState } from "../../hooks/useUrlState";
 import { facetsQuery } from "../../queries";
 import type { ExperimentFacets, TopRuns } from "../../types";
@@ -18,7 +17,7 @@ const hasJobs = (f: ExperimentFacets | undefined) => Boolean(f && (f.jobs ?? f.p
 export function useJobsKind(ws: string, app: string) {
   const client = useQueryClient();
   const facets = useQuery(facetsQuery(ws, app), client);
-  const { params, setParam } = useUrlState();
+  const { params } = useUrlState();
   const urlKind = asKind(params.get("kind"));
   const known = facets.data !== undefined || facets.isError || facets.errorUpdatedAt > 0;
   const jobs = hasJobs(facets.data);
@@ -28,8 +27,7 @@ export function useJobsKind(ws: string, app: string) {
   const f = facets.data;
   const counts = f && typeof f.jobs === "number" && typeof f.singles === "number"
     ? { jobs: f.jobs, singles: f.singles } : null;
-  const setKind = useCallback((k: JobsKind) => setParam("kind", k), [setParam]);
-  return { kind, top, counts, setKind };
+  return { kind, top, counts };
 }
 
 export type JobsKindState = ReturnType<typeof useJobsKind>;

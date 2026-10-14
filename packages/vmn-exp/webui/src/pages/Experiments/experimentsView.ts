@@ -39,10 +39,12 @@ export function useExperimentsView(ws: string, app: string) {
   const view = urlView(params) ?? stored(ws, app) ?? "jobs";
   useEffect(() => { remember(ws, app, view); }, [ws, app, view]);
 
-  const setView = useCallback((next: ExperimentsView) => update((p) => {
+  /** *kind* (`jobs`/`singles`) picks the Jobs view's side. */
+  const setView = useCallback((next: ExperimentsView, kind?: string) => update((p) => {
     // The filters and `density` stay; what only one view's board reads goes.
     for (const k of BOARD_ONLY_PARAMS) p.delete(k);
     p.set("view", next);
+    if (kind) p.set("kind", kind);
   }), [update]);
 
   return { view, setView };

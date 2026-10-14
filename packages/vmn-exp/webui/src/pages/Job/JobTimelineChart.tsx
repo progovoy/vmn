@@ -1,7 +1,7 @@
 /** Progress over time (plan 23 §3.2): a stacked area of the job's runs by
  *  state per time bucket (succeeded and failed cumulative, running between
- *  them), and below it, on its own axis, completions per minute — where a
- *  stall or a failure storm shows. Status colours from the CSS tokens,
+ *  them), and below it, on its own axis, completions per minute (a trailing
+ *  average on a long timeline) — where a stall or a failure storm shows. Status colours from the CSS tokens,
  *  legend in words, a per-bucket tooltip. */
 import type { JobTimeline } from "../../apiJob";
 import { fmtCount } from "../../util";
@@ -49,11 +49,18 @@ function stackPaths(s: TimelineSeries, bucketMs: number, x: X) {
 }
 
 function ratePath(s: TimelineSeries, bucketMs: number, x: X) {
-  const max = Math.max(1e-9, ...s.perMin);
+  const max = Math.max(1e-9, ...s.perMinAvg);
   return {
-    d: s.t.map((t, i) => `${i ? "L" : "M"}${x(t + bucketMs / 2)},${RATE_H - (s.perMin[i] / max) * (RATE_H - 4) - 2}`).join(""),
+    d: s.t.map((t, i) => `${i ? "L" : "M"}${x(t + bucketMs / 2)},${RATE_H - (s.perMinAvg[i] / max) * (RATE_H - 4) - 2}`).join(""),
     max,
   };
+}
+
+/** `24-min average` (`2-h` past two hours); null for a one-bucket window. */
+function averageText(s: TimelineSeries, bucketMs: number): string | null {
+  if (s.rateWindow <= 1) return null;
+  const minutes = (s.rateWindow * bucketMs) / 60_000;
+  return `${minutes < 120 ? `${round2(minutes)}-min` : `${round2(minutes / 60)}-h`} average`;
 }
 
 function bucketTitle(s: TimelineSeries, i: number) {
@@ -72,7 +79,8 @@ export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }
   const rate = ratePath(s, bucketMs, x);
   const summary = `Progress over time: ${fmtCount(started)} started, ${fmtCount(s.succeeded[last])} succeeded, `
     + `${fmtCount(s.failed[last])} failed, ${fmtCount(s.running[last])} running`;
-  const rateNow = round2(s.perMin[last]);
+  const rateNow = round2(s.perMinAvg[last]);
+  const average = averageText(s, bucketMs);
   return (
     <div className="job-timeline">
       <ul className="job-legend" aria-label="Status legend">
@@ -91,9 +99,11 @@ export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }
           ))}
         </svg>
       </div>
-      <div className="job-chart-caption">completions per minute <span className="mono">(peak {round2(rate.max)})</span></div>
+      <div className="job-chart-caption">
+        completions per minute <span className="mono">({average && `${average}, `}peak {round2(rate.max)})</span>
+      </div>
       <svg className="job-rate" viewBox={`0 0 ${W} ${RATE_H}`} preserveAspectRatio="none" role="img"
-        aria-label={`Completions per minute: latest ${rateNow}`}>
+        aria-label={`Completions per minute${average ? ` (${average})` : ""}: latest ${rateNow}`}>
         <path d={rate.d} className="job-rate-line" vectorEffect="non-scaling-stroke" />
       </svg>
       <div className="job-axis-x" aria-hidden="true"><span>{timeText(lo)}</span><span>{timeText(hi)}</span></div>

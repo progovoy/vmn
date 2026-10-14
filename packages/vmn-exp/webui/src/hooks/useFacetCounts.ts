@@ -8,7 +8,7 @@ import { api, type FacetOpts } from "../api";
 import { useFacets } from "../queries";
 import type { GroupField } from "../apiGroups";
 import { MAX_PARAM_VALUES } from "../util/groupBy";
-import { columnCounts, numericKeys } from "../util/facetBins";
+import { columnCounts, numericLike } from "../util/facetBins";
 
 export interface ValueCount {
   key: string;
@@ -56,7 +56,7 @@ async function fromColumn(ws: string, app: string, field: string, f: FacetOpts):
   const cols = await api.experimentsColumns(ws, app, [field], f);
   const column = cols.columns[field] ?? [];
   const { values, distinct } = columnCounts(column, MAX_PARAM_VALUES);
-  if (numericKeys(values.map((v) => v.key))) return { values: [], more: distinct, numbers: column };
+  if (numericLike(values.map((v) => v.key))) return { values: [], more: distinct, numbers: column };
   return { values, more: distinct - values.length, numbers: null };
 }
 
@@ -83,7 +83,7 @@ export function useParamCounts(ws: string, app: string, { key: param, many }: Fa
       const page = await groupCounts(ws, app, field, f, MAX_PARAM_VALUES);
       const values = page.groups.map((g) => ({ key: g.key, count: g.rows_total }));
       const more = Math.max(0, page.total_groups - values.length);
-      if (!more || !numericKeys(values.map((v) => v.key))) return { values, more, numbers: null };
+      if (!more || !numericLike(values.map((v) => v.key))) return { values, more, numbers: null };
       const cols = await api.experimentsColumns(ws, app, [field], f);
       return { values, more, numbers: cols.columns[field] ?? [] };
     },

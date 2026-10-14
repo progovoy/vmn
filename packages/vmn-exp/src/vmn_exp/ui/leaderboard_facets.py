@@ -36,13 +36,14 @@ class FacetCounts:
     param's values, and how many rows have a parent."""
 
     def __init__(self, branches=None, metric_keys=None, param_keys=None, total=0,
-                 tag_keys=None, param_values=None, parented=0):
+                 tag_keys=None, param_values=None, parented=0, folded_params=None):
         self.branches = branches or {}
         self.metric_keys = metric_keys or {}
         self.param_keys = param_keys or {}
         self.tag_keys = tag_keys or {}
         self.param_values = param_values or ParamValues()
         self.parented = parented
+        self.folded_params = folded_params or {}  # metric names a row also has as a param
         self.total = total
 
     @classmethod
@@ -55,13 +56,16 @@ class FacetCounts:
             dict(self.branches), dict(self.metric_keys), dict(self.param_keys),
             self.total + len(joined) - len(left),
             dict(self.tag_keys), self.param_values.copy(), self.parented,
+            dict(self.folded_params),
         )
         for rows, by in ((left, -1), (joined, 1)):
             for row in rows:
                 if row.get("branch"):
                     _tally(out.branches, [str(row["branch"])], by)
-                _tally(out.metric_keys, row.get("metrics") or {}, by)
+                metrics = row.get("metrics") or {}
+                _tally(out.metric_keys, metrics, by)
                 params = row.get("params") or {}
+                _tally(out.folded_params, [m for m in metrics if m in params], by)
                 _tally(out.param_keys, params, by)
                 out.param_values.move(params, by)
                 _tally(out.tag_keys, row.get("tags") or {}, by)
@@ -104,8 +108,10 @@ class Facets:
             snapshot, lambda: self._counted(snapshot, archived), key=(archived,))
 
     def common_metrics(self, snapshot):
-        """The metric names most visible rows carry, most first (ties by name)."""
-        keys = self.counts(snapshot).metric_keys
+        """The metric names most visible rows carry, most first (ties by name),
+        leaving out numeric params folded into ``metrics``."""
+        counts = self.counts(snapshot)
+        keys = {m: n for m, n in counts.metric_keys.items() if m not in counts.folded_params}
         return sorted(keys, key=lambda m: (-keys[m], m))
 
     def _counted(self, snapshot, archived):

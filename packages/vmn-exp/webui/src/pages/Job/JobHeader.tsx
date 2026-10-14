@@ -1,5 +1,6 @@
-/** The job page's header (plan 23 §3.2): name, `@N` and tree status left,
- *  the actions right; the full-width progress under them. The tabs follow
+/** The job page's header (plan 23 §3.2), a grid: name, `@N` and tree
+ *  status left with the actions right on one row (the actions wrap under
+ *  on a narrow screen), the full-width progress under them. The tabs follow
  *  as their own sticky row, the CLI twin closes the page. */
 import type { KeyboardEvent, ReactNode } from "react";
 import type { JobSummary } from "../../apiJob";
@@ -56,17 +57,15 @@ export function JobTabs({ tab, onTab }: { tab: JobTab; onTab: (tab: JobTab) => v
 export default function JobHeader({ summary, actions }: { summary: JobSummary; actions: ReactNode }) {
   const status = summary.tree_status ?? summary.status;
   return (
-    <header className="job-head">
-      <div className="job-title-row">
-        <div className="job-title">
-          <h1 className={summary.name ? undefined : "mono"}>{summary.name || summary.verstr}</h1>
-          {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
-          {summary.idx != null && <span className="mono run-idx">@{summary.idx}</span>}
-          <StatusPill status={status} />
-          {summary.sweep && <span className="badge">sweep</span>}
-        </div>
-        <div className="job-actions" role="group" aria-label="Job actions">{actions}</div>
+    <header className="job-header">
+      <div className="job-title">
+        <h1 className={summary.name ? undefined : "mono"}>{summary.name || summary.verstr}</h1>
+        {summary.name && <span className="mono run-verstr">{summary.verstr}</span>}
+        {summary.idx != null && <span className="mono run-idx">@{summary.idx}</span>}
+        <StatusPill status={status} />
+        {summary.sweep && <span className="badge">sweep</span>}
       </div>
+      <div className="job-actions" role="group" aria-label="Job actions">{actions}</div>
       <JobHeaderProgress summary={summary} />
     </header>
   );

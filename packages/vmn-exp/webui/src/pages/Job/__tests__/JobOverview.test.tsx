@@ -48,6 +48,15 @@ describe("job overview", () => {
     expect(within(legend).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["running", "succeeded", "failed"]);
   });
 
+  it("plots a long timeline's completions per minute as a rolling average, named in the caption", () => {
+    const buckets = Array.from({ length: 2880 }, (_, i) => ({ t: i * 60, started: 1, succeeded: i % 2, failed: 0 }));
+    renderOverview(jobSummaryFixture({ timeline: { bucket_sec: 60, start: 0, buckets } }));
+    expect(screen.getByText(/^completions per minute/)).toHaveTextContent(
+      "completions per minute (24-min average, peak 0.5)",
+    );
+    expect(screen.getByRole("img", { name: "Completions per minute (24-min average): latest 0.5" })).toBeInTheDocument();
+  });
+
   it("says so when no run has started yet", () => {
     renderOverview(jobSummaryFixture({ timeline: { bucket_sec: 60, start: null, buckets: [] } }));
     expect(screen.getByText("No run has started yet.")).toBeInTheDocument();

@@ -1,7 +1,7 @@
 /** Plan 23 W3: a numeric param's facet is a mini histogram whose bars are
  *  range clauses. */
 import { describe, it, expect } from "vitest";
-import { binClauses, numericBins, numericKeys } from "../facetBins";
+import { binClauses, numericBins, numericKeys, numericLike } from "../facetBins";
 
 describe("numericBins", () => {
   it("counts finite numbers into equal-width bins, the last one closed", () => {
@@ -15,6 +15,16 @@ describe("numericBins", () => {
   it("is one bin for a single value, and none without numbers", () => {
     expect(numericBins([3, 3, 3], 5)).toEqual([{ lo: 3, hi: 3, count: 3, last: true }]);
     expect(numericBins(["a", null], 5)).toEqual([]);
+  });
+
+  it("bins numeric strings as numbers when every value is a finite number", () => {
+    const bins = numericBins(["0.006", "0.259", null, 0.1, "1e-1"], 2);
+    expect(bins.map((b) => b.count)).toEqual([3, 1]);
+  });
+
+  it("leaves strings out when one of them isn't a finite number", () => {
+    expect(numericBins(["0.1", "adam", 0.5, 0.7], 2).map((b) => b.count)).toEqual([1, 1]);
+    expect(numericBins(["0.1", "1e999"], 2)).toEqual([]);
   });
 
   it("rounds the edges to readable numbers", () => {
@@ -37,5 +47,13 @@ describe("numericKeys", () => {
     expect(numericKeys(["1", "0.5", "-2e-3"])).toEqual([1, 0.5, -0.002]);
     expect(numericKeys(["1", "adam"])).toBeNull();
     expect(numericKeys([])).toBeNull();
+  });
+});
+
+describe("numericLike", () => {
+  it("is true when every key but the no-value group spells a number", () => {
+    expect(numericLike(["0.006", "∅", "0.259"])).toBe(true);
+    expect(numericLike(["0.006", "adam"])).toBe(false);
+    expect(numericLike(["∅"])).toBe(false);
   });
 });

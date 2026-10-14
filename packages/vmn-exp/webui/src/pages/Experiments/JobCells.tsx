@@ -27,11 +27,16 @@ export function JobSubLine({ r }: { r: ExperimentRow }) {
 
 const arrow = (goal: JobContext["goal"]) => (goal === "min" ? "↓" : goal === "max" ? "↑" : "");
 
-/** A job's best run on the metric (its `@N` linked), a single run's own value. */
+/** A job's best run on the metric (its `@N` linked), a single run's own
+ *  value; a dash for a job whose runs have the metric but no best (no goal
+ *  declared: the server ranks nothing). */
 export function BestValue({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
   const j = r.job;
   const value = j ? j.best : ctx.metric ? r.metrics[ctx.metric] : null;
-  if (value == null) return null;
+  if (value == null) {
+    if (!j?.metric || !j.spread?.some(Boolean)) return null;
+    return <span className="job-best muted" title={`no goal declared for ${j.metric} — not ranked`}>—</span>;
+  }
   const metric = j?.metric ?? ctx.metric;
   const goal = arrow(ctx.goal);
   return (
