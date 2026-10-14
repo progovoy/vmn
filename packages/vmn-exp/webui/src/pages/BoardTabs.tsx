@@ -1,6 +1,6 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
+import Tabs from "../components/Tabs";
 import { BOARD_TABS, type BoardTab } from "../hooks/useLeaderboardView";
-import { keyTarget } from "../hooks/useRovingToolbar";
 
 export const BOARD_PANEL_ID = "board-panel";
 export const boardTabId = (tab: BoardTab) => `board-tab-${tab}`;
@@ -30,27 +30,12 @@ const TABS: Record<BoardTab, { label: string; icon: ReactNode }> = {
   },
 };
 
-/** The board's view switcher (Runs | Charts), right above the board: an
- *  ARIA tablist with one tab stop; the arrow keys move and open a tab. */
+/** The board's view switcher (Runs | Charts), right above the board. */
 export default function BoardTabs({ tab, onTab }: { tab: BoardTab; onTab: (tab: BoardTab) => void }) {
-  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
-    const next = keyTarget(e.key, BOARD_TABS.indexOf(tab), BOARD_TABS.length);
-    if (next === null) return;
-    e.preventDefault();
-    onTab(BOARD_TABS[next]);
-    e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
-  };
   return (
-    <div className="board-tabs" role="tablist" aria-label="Board view" onKeyDown={onKeyDown}>
-      {BOARD_TABS.map((t) => (
-        <button
-          key={t} role="tab" id={boardTabId(t)} aria-selected={t === tab} aria-controls={BOARD_PANEL_ID}
-          tabIndex={t === tab ? 0 : -1} className="board-tab" onClick={() => onTab(t)}
-        >
-          {TABS[t].icon}
-          {TABS[t].label}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      tabs={BOARD_TABS} tab={tab} onTab={onTab} label="Board view" className="board-tabs"
+      panelId={BOARD_PANEL_ID} tabId={boardTabId} render={(t) => <>{TABS[t].icon}{TABS[t].label}</>}
+    />
   );
 }

@@ -2,13 +2,13 @@
  *  status left with the actions right on one row (the actions wrap under
  *  on a narrow screen), the full-width progress under them. The tabs follow
  *  as their own sticky row, the CLI twin closes the page. */
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { JobSummary } from "../../apiJob";
 import { appName as toAppName } from "../../api";
 import StatusPill from "../../components/StatusPill";
+import Tabs from "../../components/Tabs";
 import { sweepQuery } from "../../components/SweepSection";
 import { CopyButton } from "../../components/ui";
-import { keyTarget } from "../../hooks/useRovingToolbar";
 import { storeUriOf, vmnExpCommand } from "../../shell/cliCommands";
 import { usePageScope } from "../../shell/usePageScope";
 import JobHeaderProgress from "./JobHeaderProgress";
@@ -33,24 +33,11 @@ export function JobCliCard({ ws, app, verstr }: { ws: string; app: string; verst
 }
 
 export function JobTabs({ tab, onTab }: { tab: JobTab; onTab: (tab: JobTab) => void }) {
-  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
-    const next = keyTarget(e.key, JOB_TABS.indexOf(tab), JOB_TABS.length);
-    if (next === null) return;
-    e.preventDefault();
-    onTab(JOB_TABS[next]);
-    e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
-  };
   return (
-    <div className="board-tabs job-tabs job-tabbar" role="tablist" aria-label="Job" onKeyDown={onKeyDown}>
-      {JOB_TABS.map((t) => (
-        <button
-          key={t} type="button" role="tab" id={jobTabId(t)} aria-selected={t === tab}
-          aria-controls={JOB_PANEL_ID} tabIndex={t === tab ? 0 : -1} className="board-tab" onClick={() => onTab(t)}
-        >
-          {JOB_TAB_LABELS[t]}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      tabs={JOB_TABS} tab={tab} onTab={onTab} label="Job" className="board-tabs job-tabs job-tabbar"
+      panelId={JOB_PANEL_ID} tabId={jobTabId} render={(t) => JOB_TAB_LABELS[t]}
+    />
   );
 }
 
