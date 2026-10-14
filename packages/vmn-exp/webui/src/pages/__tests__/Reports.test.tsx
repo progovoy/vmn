@@ -38,6 +38,16 @@ beforeEach(() => {
 });
 
 describe("Reports page", () => {
+  it("names an author the server sends as an identity, as the run log does", async () => {
+    listReports.mockResolvedValue({ reports: [{
+      rid: "r3", title: "By identity", rev: 1, published_rev: null, archived: false, pinned: false,
+      author: { git_user_email: "p@x.io", os_user: "pavel", writer: "vmn-server" },
+      created_by: { os_user: "pavel", writer: "vmn-server" },
+    }] });
+    renderReports();
+    expect(await screen.findByText("p@x.io")).toBeTruthy();
+  });
+
   it("lists title, author and published state with links", async () => {
     renderReports();
     const link = await screen.findByRole("link", { name: "LR sweep" });

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { identityName } from "../util/identity";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { apiReports, type RevisionMeta } from "../apiReports";
@@ -49,7 +50,7 @@ export default function ReportHistory({ ws, rid, revisions, defaultBase }: {
         {revisions.map((r) => (
           <li key={r.rev}>
             <Link to={`${base}?rev=${r.rev}`}>v{r.rev}</Link>{" "}
-            {r.author && <span>{r.author}</span>}{" "}
+            {identityName(r.author) && <span>{identityName(r.author)}</span>}{" "}
             {r.created_at && <span className="muted" title={r.created_at}>{relTime(r.created_at)}</span>}{" "}
             {r.message && <span>{r.message}</span>}
           </li>

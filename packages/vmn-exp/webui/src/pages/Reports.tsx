@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { apiReports, type ReportRow } from "../apiReports";
 import { relTime } from "../util";
+import { identityName } from "../util/identity";
 import { PageHead, Skeleton } from "../components/ui";
 import NewReportDialog from "../components/NewReportDialog";
 import ToggleChip from "../components/ToggleChip";
@@ -17,7 +18,7 @@ function ReportTableRow({ ws, report }: { ws: string; report: ReportRow }) {
         <Link to={`/ws/${ws}/reports/${encodeURIComponent(report.rid)}`}>{report.title || report.rid}</Link>
         {report.archived && <> <span className="badge">archived</span></>}
       </td>
-      <td>{report.author ?? report.created_by ?? dash}</td>
+      <td>{identityName(report.author) ?? identityName(report.created_by) ?? dash}</td>
       <td title={updated ?? ""}>{updated ? relTime(updated) : dash}</td>
       <td>{report.published_rev ? <span className="badge">v{report.published_rev}</span> : dash}</td>
     </tr>

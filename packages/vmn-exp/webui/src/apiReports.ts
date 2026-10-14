@@ -1,13 +1,14 @@
 /** Reports and comments API (plan 13 §8.1), all under /workspaces/{ws}. */
+import type { Identity } from "./util/identity";
 import { appTag, del, get, patch, post } from "./http";
 
 export interface ReportRow {
   rid: string;
   title?: string;
   created_at?: string | null;
-  created_by?: string | null;
+  created_by?: Identity | null;
   updated_at?: string | null;
-  author?: string | null;
+  author?: Identity | null;
   rev: number;
   published_rev?: number | null;
   published_at?: string | null;
@@ -17,7 +18,7 @@ export interface ReportRow {
 
 export interface RevisionMeta {
   rev: number;
-  author?: string | null;
+  author?: Identity | null;
   created_at?: string | null;
   message?: string | null;
 }
@@ -39,7 +40,7 @@ export type CommentAnchor = { metric?: string; step?: number; panel?: string };
 export interface Comment {
   id: string;
   ts?: string | null;
-  author?: string | null;
+  author?: Identity | null;
   text: string | null;
   reply_to?: string | null;
   anchor?: CommentAnchor | null;

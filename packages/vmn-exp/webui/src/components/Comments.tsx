@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { identityName } from "../util/identity";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiReports, type Comment, type CommentAnchor, type NewComment } from "../apiReports";
 import { Markdown } from "../reports/Markdown";
@@ -75,7 +76,7 @@ function CommentItem({ c, actions }: { c: Comment; actions: Actions }) {
   return (
     <div className={`comment${c.resolved ? " resolved" : ""}`} data-testid={`comment-${c.id}`}>
       <div className="comment-meta">
-        <strong>{c.author ?? "unknown"}</strong>
+        <strong>{identityName(c.author) ?? "unknown"}</strong>
         {c.ts && <span className="muted" title={c.ts}> {relTime(c.ts)}</span>}
         {c.resolved && <span className="badge">resolved</span>}
       </div>
@@ -102,7 +103,7 @@ function useThreadActions(ws: string, target: string, anchor: CommentAnchor | un
   });
   const remove = useMutation({ mutationFn: (id: string) => apiReports.deleteComment(ws, target, id), onSuccess: refresh });
   return {
-    canEdit: (c) => !me || c.author === me,
+    canEdit: (c) => !me || identityName(c.author) === me,
     add: (body) => add.mutate({ target, ...body, ...(anchor && !body.reply_to ? { anchor } : {}) }),
     edit: (id, body) => edit.mutate({ id, body }),
     remove: (id) => remove.mutate(id),
