@@ -20,6 +20,7 @@ and :meth:`Grouping.merged` places a bucket's changed rows into it. Rows
 handed out are shared: callers must treat them as read-only.
 """
 from vmn_exp.ui.leaderboard_delta import splice
+from vmn_exp.ui.leaderboard_group_clause import clause
 from vmn_exp.ui.leaderboard_group_fields import (
     NONE,
     RERUN_OF,
@@ -59,6 +60,7 @@ class Grouping:
         self._total = self._running = None
         self._aggregates = {}  # memo: {group: aggregates payload}
         self._loose_rows = None  # memo: a link grouping's Loose
+        self._job_groups = None  # memo: (job summaries, JobGroups) of a Jobs view
 
     @classmethod
     def build(cls, base, spec, static):
@@ -260,27 +262,35 @@ class Grouping:
         group's size in *unfiltered* (the same grouping without the filters)."""
         linked = self.spec.group in TARGET_LINKS and key != NONE
         target = self.row_of(key_text(key)) if linked else None
+        first = self._rows(key, 0, 1)
         return {"key": key, "label": label(self.spec.group, key, target is not None),
                 "target": target_payload(target) if target else None,
                 "loose": self._is_loose(key),
                 "counts": self._own(key).counts(),
                 "aggregates": self._aggregates_of(key),
                 "rows": self._rows(key, offset, limit), "rows_total": self.size(key),
-                "rows_unfiltered": (unfiltered or self).size(key)}
+                "rows_unfiltered": (unfiltered or self).size(key),
+                "clause": clause(self.spec.group, key, first[0] if first else {},
+                                 self._is_loose(key))}
 
 
 def groups_payload(grouping, offset=0, limit=None, rows_per_group=10, group_key=None,
-                   unfiltered=None):
+                   unfiltered=None, extra=None):
     """K1's answer: a page of groups, or with *group_key* one group's rows
     paged by *offset*/*limit* (:class:`UnknownGroup` when there is none).
-    *unfiltered* (default: *grouping*) sizes each group before the filters."""
+    *unfiltered* (default: *grouping*) sizes each group before the filters;
+    *extra* (key -> dict) adds fields to each group."""
     limit = 50 if limit is None else limit
+
+    def group(key, start, count):
+        out = grouping.group(key, start, count, unfiltered)
+        return dict(out, **extra(key)) if extra else out
+
     if group_key is not None:
         if not grouping.has(group_key):
             raise UnknownGroup(f"no group {group_key!r}")
-        return grouping.group(group_key, offset, limit, unfiltered)
+        return group(group_key, offset, limit)
     keys = grouping.keys()
-    return {"groups": [grouping.group(k, 0, rows_per_group, unfiltered)
-                       for k in keys[offset:offset + limit]],
+    return {"groups": [group(k, 0, rows_per_group) for k in keys[offset:offset + limit]],
             "total_groups": len(keys), "total_rows": grouping.total,
             "running": grouping.running, "aggregate": grouping.spec.agg}
