@@ -1,9 +1,9 @@
 /** A job's summary and failures as the §10 contract serves them. */
-import type { FailureCluster, JobFailures, JobSummary } from "../../../apiJob";
+import type { FailureCluster, JobFailures, JobPageSummary } from "../../../apiJob";
 
 export const JOB = "0.0.2-rc.1";
 
-export function jobSummaryFixture(over: Partial<JobSummary> = {}): JobSummary {
+export function jobSummaryFixture(over: Partial<JobPageSummary> = {}): JobPageSummary {
   return {
     verstr: JOB, name: "lr_layers_grid", idx: 36, status: "succeeded", tree_status: "running",
     kind: "outer", sweep: false,

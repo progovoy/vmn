@@ -1,6 +1,6 @@
 /** What a job's progress says (plan 23 W1, §3.1): `1,412/2,000 · 3 failed ·
  *  41/min · ETA 14m`, and its run bar over the expected runs. */
-import type { JobSummary } from "../types";
+import type { JobProgressFields, JobRollup } from "../types";
 import { fmtCount, humanizeSeconds, relTime } from "../util";
 import { barSegments } from "../pages/groupHeaderText";
 import { joinParts } from "./toneParts";
@@ -12,12 +12,12 @@ export function fmtThroughput(perMin: number): string {
 }
 
 /** The job's completions a minute, null while nothing completes. */
-export const throughputText = (j: Pick<JobSummary, "throughput_per_min">) => (j.throughput_per_min > 0 ? fmtThroughput(j.throughput_per_min) : null);
+export const throughputText = (j: Pick<JobProgressFields, "throughput_per_min">) => (j.throughput_per_min > 0 ? fmtThroughput(j.throughput_per_min) : null);
 
 /** The time left, null when done or unknown. */
-export const etaText = (j: Pick<JobSummary, "eta_sec">) => (j.eta_sec ? humanizeSeconds(j.eta_sec) : null);
+export const etaText = (j: Pick<JobProgressFields, "eta_sec">) => (j.eta_sec ? humanizeSeconds(j.eta_sec) : null);
 
-type Progress = Pick<JobSummary, "counts" | "done" | "expected" | "throughput_per_min" | "eta_sec">
+type Progress = Pick<JobProgressFields, "counts" | "done" | "expected" | "throughput_per_min" | "eta_sec">
   & { finished_at?: string | null };
 
 export interface ProgressPart {
@@ -59,7 +59,7 @@ export const jobSpoken = (j: Progress) =>
 /** Each state's share (percent) of the expected runs (of the runs so far,
  *  once more ran than expected), like a group header's bar; the rest is
  *  the empty track. Null for a job of one run or none. */
-export function jobBarSegments(j: Pick<JobSummary, "counts" | "expected">) {
+export function jobBarSegments(j: Pick<JobProgressFields, "counts" | "expected">) {
   const c = j.counts;
   const of = Math.max(j.expected, c.running + c.waiting + c.succeeded + c.failed + c.stuck);
   return barSegments({ total: of, done: c.succeeded, failed: c.failed, stuck: c.stuck, running: c.running });
@@ -73,15 +73,15 @@ const STALLED_TITLE = "no run finished in the last 10 minutes";
 /** Nothing running and no run finished for this long: the job has ended,
  *  whatever is still waiting or stuck (as the job header says). */
 const QUIET_MS = 3_600_000;
-const quiet = (j: JobSummary) =>
+const quiet = (j: JobRollup) =>
   j.counts.running === 0 && Boolean(j.finished_at) && Date.now() - Date.parse(j.finished_at!) > QUIET_MS;
 
 /** Runs waiting, running or stuck, and not quiet for long: the job has not ended. */
-const inFlight = (j: JobSummary) =>
+const inFlight = (j: JobRollup) =>
   j.counts.running + j.counts.waiting + j.counts.stuck > 0 && !quiet(j);
 
 /** `14m` left, `stalled`, `finished 3d ago` or `ended · 180 never started`. */
-export function jobEtaCell(j: JobSummary): JobCell {
+export function jobEtaCell(j: JobRollup): JobCell {
   const left = etaText(j);
   if (inFlight(j)) {
     return left ? { text: left, title: `about ${left} left` } : { text: "stalled", title: STALLED_TITLE };
@@ -93,7 +93,7 @@ export function jobEtaCell(j: JobSummary): JobCell {
 }
 
 /** `41/min`, else a dash saying why nothing completes. */
-export function jobRateCell(j: JobSummary): JobCell {
+export function jobRateCell(j: JobRollup): JobCell {
   const rate = throughputText(j);
   if (rate) return { text: rate, title: "runs finished a minute, over the last 10 minutes" };
   return { text: "—", title: inFlight(j) ? STALLED_TITLE : "the job has ended" };

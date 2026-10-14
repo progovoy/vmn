@@ -1,7 +1,7 @@
 /** What the job page derives from a job's summary and failures (plan 23
  *  W2, W5): the timeline's series, the KPI tiles, and the words and commands
  *  around them. Pure. */
-import type { FailureCluster, JobMetric, JobSummary, JobTimeline, TimelineBucket } from "../../apiJob";
+import type { FailureCluster, JobMetric, JobPageSummary, JobTimeline, TimelineBucket } from "../../apiJob";
 import { vmnExpCommand } from "../../shell/cliCommands";
 import { fmtCount, fmtDuration, fmtParam, fmtVal, plural } from "../../util";
 import { quoteLiteral } from "../../util/searchQuery";
@@ -72,10 +72,10 @@ export function timelineSeries(timeline: JobTimeline): TimelineSeries {
 }
 
 /** The runs the failure clusters cover: failed and stuck. */
-export const failedCount = (s: Pick<JobSummary, "counts">) => s.counts.failed + s.counts.stuck;
+export const failedCount = (s: Pick<JobPageSummary, "counts">) => s.counts.failed + s.counts.stuck;
 
 /** The main metric: the server's, else the first tracked one with values. */
-export function mainMetric(s: JobSummary): string | null {
+export function mainMetric(s: JobPageSummary): string | null {
   if (s.metric && s.metrics[s.metric]) return s.metric;
   return Object.keys(s.metrics).find((m) => s.metrics[m]) ?? null;
 }
@@ -89,7 +89,7 @@ export interface KpiTile {
   tone?: "running" | "waiting" | "stuck" | "failed" | "done";
 }
 
-export function jobKpis(s: JobSummary): KpiTile[] {
+export function jobKpis(s: JobPageSummary): KpiTile[] {
   const tiles: KpiTile[] = [
     { label: "done", value: fmtCount(s.done), sub: `of ${fmtCount(s.expected)}`, tone: "done" },
     {

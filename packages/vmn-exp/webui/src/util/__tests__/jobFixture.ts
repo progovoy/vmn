@@ -1,7 +1,7 @@
 /** A Jobs-view row's compact job summary (plan 23 §10), for tests. */
-import type { JobSummary } from "../../types";
+import type { JobRollup } from "../../types";
 
-export function job(extra: Partial<JobSummary> = {}): JobSummary {
+export function job(extra: Partial<JobRollup> = {}): JobRollup {
   return {
     total: 1415, done: 1412, expected: 2000, progress: 0.706,
     counts: { running: 3, waiting: 0, succeeded: 1409, failed: 3, stuck: 0 },

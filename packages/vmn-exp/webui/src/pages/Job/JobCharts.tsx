@@ -3,7 +3,7 @@
  *  `color`, `k`). The param/metric vocabulary comes from the scoped facets,
  *  the main metric from the job's summary. */
 import { useMemo } from "react";
-import type { JobSummary } from "../../apiJob";
+import type { JobPageSummary } from "../../apiJob";
 import Segmented from "../../components/Segmented";
 import { Skeleton } from "../../components/ui";
 import type { ExperimentFacets } from "../../types";
@@ -26,7 +26,7 @@ const CHARTS: Record<JobChart, (p: JobChartProps) => JSX.Element> = {
 };
 
 /** The job's metrics (the facets', else the summary's) and its params by spread. */
-function vocabulary(summary: JobSummary, facets: ExperimentFacets | undefined) {
+function vocabulary(summary: JobPageSummary, facets: ExperimentFacets | undefined) {
   const tracked = Object.keys(summary.metrics).filter((m) => summary.metrics[m]);
   const metrics = [...new Set([...tracked, ...(facets?.metric_keys ?? [])])];
   const params = facets?.param_keys ?? [];
@@ -39,7 +39,7 @@ function vocabulary(summary: JobSummary, facets: ExperimentFacets | undefined) {
   };
 }
 
-export default function JobCharts({ ws, app, summary }: { ws: string; app: string; summary: JobSummary }) {
+export default function JobCharts({ ws, app, summary }: { ws: string; app: string; summary: JobPageSummary }) {
   const state = useJobChartState();
   const facets = useJobFacets(ws, app, summary.verstr, summary.done);
   // Every poll brings a new summary; the charts keep the same name lists

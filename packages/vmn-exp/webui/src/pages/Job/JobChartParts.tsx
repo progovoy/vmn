@@ -3,7 +3,7 @@
  *  loading / error / empty states. */
 import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { JobSummary } from "../../apiJob";
+import type { JobPageSummary } from "../../apiJob";
 import { Skeleton } from "../../components/ui";
 import type { ExperimentColumns } from "../../types";
 import { plural } from "../../util";
@@ -13,7 +13,7 @@ import type { JobChartState } from "./jobChartQueries";
 export interface JobChartProps {
   ws: string;
   app: string;
-  summary: JobSummary;
+  summary: JobPageSummary;
   metrics: string[];
   params: string[];
   /** Params taking more than one value. */

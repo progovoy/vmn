@@ -9,11 +9,11 @@ vi.mock("../../../apiJob", () => ({ jobSummary: vi.fn(), jobFailures: vi.fn(), j
 import { jobFailures, jobImportance } from "../../../apiJob";
 import JobOverview from "../JobOverview";
 import { clusterFixture, failuresFixture, JOB, jobSummaryFixture } from "./jobFixture";
-import type { JobSummary } from "../../../apiJob";
+import type { JobPageSummary } from "../../../apiJob";
 
 const BASE = "/ws/test/app/my-app";
 
-function renderOverview(summary: JobSummary = jobSummaryFixture()) {
+function renderOverview(summary: JobPageSummary = jobSummaryFixture()) {
   return renderWithClient(
     <MemoryRouter><JobOverview ws="test" app="my-app" summary={summary} /></MemoryRouter>,
   );

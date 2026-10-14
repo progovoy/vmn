@@ -16,7 +16,7 @@ vi.mock("../../../components/OverlayChart", () => ({
 
 import { jobColumns, jobFacets, jobTopRuns } from "../../../apiJobCharts";
 import { enableCanvas, instances, resetInstances } from "../../../components/__tests__/fakeUPlot";
-import type { JobSummary } from "../../../apiJob";
+import type { JobPageSummary } from "../../../apiJob";
 import type { ExperimentColumns, ExperimentFacets } from "../../../types";
 import JobCharts from "../JobCharts";
 import { JOB, jobSummaryFixture } from "./jobFixture";
@@ -49,7 +49,7 @@ const lastColumnsCall = () => {
 };
 const where = () =>new URLSearchParams(screen.getByTestId("where").textContent ?? "");
 
-function renderCharts(search = "", summary: JobSummary = jobSummaryFixture()) {
+function renderCharts(search = "", summary: JobPageSummary = jobSummaryFixture()) {
   return renderWithClient(
     <MemoryRouter initialEntries={[`/ws/test/app/my-app/run/${JOB}?tab=charts${search}`]}>
       <Routes>

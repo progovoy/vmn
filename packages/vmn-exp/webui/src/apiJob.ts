@@ -1,16 +1,7 @@
 /** A job's endpoints (plan 23 §10, S3): its rollup summary, its failure
  *  clusters, and param importance scoped to its subtree. */
 import { appTag, get } from "./http";
-import type { ParamImportanceEntry, RunState } from "./types";
-
-/** A job's runs per state (the D12 states; `waiting` = created). */
-export interface JobCounts {
-  running: number;
-  waiting: number;
-  succeeded: number;
-  failed: number;
-  stuck: number;
-}
+import type { JobProgressFields, ParamImportanceEntry, RunState } from "./types";
 
 export interface HistBin {
   lo: number;
@@ -55,7 +46,8 @@ export interface JobTimeline {
   buckets: TimelineBucket[];
 }
 
-export interface JobSummary {
+/** A job page's summary (`experiments/{v}/summary`). */
+export interface JobPageSummary extends JobProgressFields {
   verstr: string;
   name: string | null;
   idx: number | null;
@@ -63,14 +55,6 @@ export interface JobSummary {
   tree_status: RunState | null;
   kind: "outer" | "inner" | "single";
   sweep: boolean;
-  total: number;
-  counts: JobCounts;
-  done: number;
-  expected: number;
-  progress: number | null;
-  failed_pct: number;
-  throughput_per_min: number;
-  eta_sec: number | null;
   started_at: string | null;
   finished_at: string | null;
   /** The main metric's name, when the server names it (else the first of `metrics`). */
@@ -108,7 +92,7 @@ const runPath = (ws: string, app: string, v: string) =>
 
 /** The rollup of job *v*; 404 when *v* has no children. */
 export const jobSummary = (ws: string, app: string, v: string) =>
-  get<JobSummary>(`${runPath(ws, app, v)}/summary`);
+  get<JobPageSummary>(`${runPath(ws, app, v)}/summary`);
 
 export const FAILURES_LIMIT = 20;
 

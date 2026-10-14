@@ -3,7 +3,7 @@
  *  runs, the top failure clusters and, for a sweep, the params that matter.
  *  (Best-so-far by completion order is not in the §10 contract: left out.) */
 import type { ReactNode } from "react";
-import type { JobSummary } from "../../apiJob";
+import type { JobPageSummary } from "../../apiJob";
 import { runHref } from "../../util";
 import { failedCount, mainMetric } from "./jobData";
 import JobKpiTiles from "./JobKpiTiles";
@@ -22,7 +22,7 @@ function Card({ title, wide, children }: { title: string; wide?: boolean; childr
   );
 }
 
-export default function JobOverview({ ws, app, summary }: { ws: string; app: string; summary: JobSummary }) {
+export default function JobOverview({ ws, app, summary }: { ws: string; app: string; summary: JobPageSummary }) {
   const appBase = `/ws/${ws}/app/${app}`;
   const runBase = runHref(appBase, summary.verstr);
   const metric = mainMetric(summary);

@@ -3,7 +3,7 @@
  *  on a narrow screen), the full-width progress under them. The tabs follow
  *  as their own sticky row, the CLI twin closes the page. */
 import type { ReactNode } from "react";
-import type { JobSummary } from "../../apiJob";
+import type { JobPageSummary } from "../../apiJob";
 import { appName as toAppName } from "../../api";
 import StatusPill from "../../components/StatusPill";
 import Tabs from "../../components/Tabs";
@@ -41,7 +41,7 @@ export function JobTabs({ tab, onTab }: { tab: JobTab; onTab: (tab: JobTab) => v
   );
 }
 
-export default function JobHeader({ summary, actions }: { summary: JobSummary; actions: ReactNode }) {
+export default function JobHeader({ summary, actions }: { summary: JobPageSummary; actions: ReactNode }) {
   const status = summary.tree_status ?? summary.status;
   return (
     <header className="job-header">

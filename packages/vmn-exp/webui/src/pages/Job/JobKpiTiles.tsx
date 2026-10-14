@@ -1,7 +1,7 @@
 /** The Overview's KPI tiles (plan 23 §3.2): stat tiles, not charts — each
  *  a label over one number; the best metric links to its run. */
 import { Link } from "react-router-dom";
-import type { JobSummary } from "../../apiJob";
+import type { JobPageSummary } from "../../apiJob";
 import { runHref } from "../../util";
 import { jobKpis, type KpiTile } from "./jobData";
 
@@ -18,7 +18,7 @@ function TileBody({ tile }: { tile: KpiTile }) {
   );
 }
 
-export default function JobKpiTiles({ summary, runBase }: { summary: JobSummary; runBase: string }) {
+export default function JobKpiTiles({ summary, runBase }: { summary: JobPageSummary; runBase: string }) {
   return (
     <ul className="job-kpis" aria-label="Job KPIs">
       {jobKpis(summary).map((tile) => (

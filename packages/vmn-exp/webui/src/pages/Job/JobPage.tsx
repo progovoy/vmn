@@ -3,7 +3,7 @@
  *  failures, and the job's own code and log, each tab in `?tab=`. */
 import { useState } from "react";
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import type { JobSummary } from "../../apiJob";
+import type { JobPageSummary } from "../../apiJob";
 import LiveStatus from "../../components/LiveStatus";
 import RunHeaderActions from "../../components/RunHeaderActions";
 import RunLog from "../../components/RunLog";
@@ -25,7 +25,7 @@ import { jobSummaryKey, useJobTab, type JobTab } from "./jobQueries";
 import "./job.css";
 
 function Panel({ tab, ws, app, detail, summary, live }: {
-  tab: JobTab; ws: string; app: string; detail: ExperimentDetail; summary: JobSummary;
+  tab: JobTab; ws: string; app: string; detail: ExperimentDetail; summary: JobPageSummary;
   /** The page's Pause, and its rollup refresh (the Runs tab's live changes move it too). */
   live: { paused: boolean; onPaused: (paused: boolean) => void; refresh: () => unknown };
 }) {
@@ -45,7 +45,7 @@ function Panel({ tab, ws, app, detail, summary, live }: {
 
 export default function JobPage({ ws, app, detail, summary, refetchDetail }: {
   ws: string; app: string; detail: ExperimentDetail;
-  summary: UseQueryResult<JobSummary>; refetchDetail: () => unknown;
+  summary: UseQueryResult<JobPageSummary>; refetchDetail: () => unknown;
 }) {
   const client = useQueryClient();
   const v = detail.metadata.verstr;

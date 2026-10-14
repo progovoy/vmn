@@ -2,12 +2,12 @@
  *  the waiting and not yet launched ones the empty track) and the line
  *  `1,412/2,000 · 3 failed · 41/min · ETA 14m`. Shared by the Jobs view's
  *  rows and cards, and the job page's header. */
-import type { JobSummary } from "../types";
+import type { JobRollup } from "../types";
 import SegmentBar from "./SegmentBar";
 import { jobBarSegments, jobProgressText, jobSpoken } from "../util/jobProgress";
 import "./jobProgress.css";
 
-export default function JobProgress({ job }: { job: JobSummary }) {
+export default function JobProgress({ job }: { job: JobRollup }) {
   const segments = jobBarSegments(job);
   const text = jobProgressText(job);
   return (

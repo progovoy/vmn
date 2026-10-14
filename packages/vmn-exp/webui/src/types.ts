@@ -179,13 +179,23 @@ export interface ExperimentRow extends Partial<RunStatus> {
   /** A failed or stuck run's failure signature (plan 23 S1). */
   failure_sig?: string | null;
   /** A Jobs-view row's subtree rollup; null for a single run (plan 23 §10). */
-  job?: JobSummary | null;
+  job?: JobRollup | null;
 }
 
-/** A job's compact rollup on its Jobs-view row (plan 23 §10). */
-export interface JobSummary {
+/** A job's runs per state (the D12 states; `waiting` = created). */
+export interface JobCounts {
+  running: number;
+  waiting: number;
+  succeeded: number;
+  failed: number;
+  stuck: number;
+}
+
+/** What a job's progress is read from: its Jobs-view row's rollup and its
+ *  page's summary both carry these. */
+export interface JobProgressFields {
   total: number;
-  counts: { running: number; waiting: number; succeeded: number; failed: number; stuck: number };
+  counts: JobCounts;
   /** Finished runs: succeeded + failed. */
   done: number;
   /** `sweep_planned`, else `expected_pods`, else the runs so far. */
@@ -197,6 +207,12 @@ export interface JobSummary {
   throughput_per_min: number;
   /** Seconds left at that throughput; null when nothing completes. */
   eta_sec: number | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+/** A job's compact rollup on its Jobs-view row (plan 23 §10). */
+export interface JobRollup extends JobProgressFields {
   /** The main metric the best and spread are of. */
   metric: string | null;
   best: number | null;
@@ -204,8 +220,6 @@ export interface JobSummary {
   best_idx?: number | null;
   /** The main metric's histogram over the job's runs (12 bins). */
   spread: number[];
-  started_at?: string | null;
-  finished_at?: string | null;
 }
 
 /** Chosen columns over a whole filtered set (`/experiments-columns`):
