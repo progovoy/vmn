@@ -56,8 +56,8 @@
 .job-area { height: 140px; }
 .job-hit { fill: transparent; }
 .job-hit:hover { fill: color-mix(in srgb, var(--text) 8%, transparent); }
-.job-axis-max { position: absolute; top: 0; left: 4px; font-size: 10.5px; color: var(--text-3); }
-.job-chart-caption { margin-top: 8px; font-size: 11.5px; color: var(--text-3); }
+.job-axis-max { font-size: 10.5px; color: var(--text-3); margin-bottom: 2px; }
+.job-chart-caption { margin: 10px 0 6px; font-size: 11.5px; color: var(--text-3); }
 .job-rate { display: block; width: 100%; height: 48px; }
 .job-rate-line { fill: none; stroke: var(--text-2); stroke-width: 2px; }
 .job-axis-x { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-3); margin-top: 2px; }

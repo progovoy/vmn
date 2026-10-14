@@ -48,12 +48,13 @@ function stackPaths(s: TimelineSeries, bucketMs: number, x: X) {
   return { paths, max };
 }
 
+/** A step line over the same bucket edges as the area, so both charts read
+ *  on one x axis. */
 function ratePath(s: TimelineSeries, bucketMs: number, x: X) {
   const max = Math.max(1e-9, ...s.perMinAvg);
-  return {
-    d: s.t.map((t, i) => `${i ? "L" : "M"}${x(t + bucketMs / 2)},${RATE_H - (s.perMinAvg[i] / max) * (RATE_H - 4) - 2}`).join(""),
-    max,
-  };
+  const y = (v: number) => RATE_H - (v / max) * (RATE_H - 4) - 2;
+  const points = s.t.flatMap((t, i) => [`${x(t)},${y(s.perMinAvg[i])}`, `${x(t + bucketMs)},${y(s.perMinAvg[i])}`]);
+  return { d: `M${points.join("L")}`, max };
 }
 
 /** `24-min average` (`2-h` past two hours); null for a one-bucket window. */
@@ -88,8 +89,8 @@ export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }
           <li key={key}><span className={`job-swatch tone-${tone}`} aria-hidden="true" />{key}</li>
         ))}
       </ul>
+      <div className="job-axis-max" aria-hidden="true">{fmtCount(max)}</div>
       <div className="job-chart-frame">
-        <span className="job-axis-max" aria-hidden="true">{fmtCount(max)}</span>
         <svg className="job-area" viewBox={`0 0 ${W} ${AREA_H}`} preserveAspectRatio="none" role="img" aria-label={summary}>
           {paths.map((p) => <path key={p.tone} d={p.d} className={`job-fill tone-${p.tone}`} />)}
           {s.t.map((t, i) => (
