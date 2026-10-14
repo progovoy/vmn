@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import JobProgress from "../../components/JobProgress";
 import Sparkline from "../../components/Sparkline";
 import type { ExperimentRow } from "../../types";
-import { fmtCount, fmtVal, runHref } from "../../util";
+import { fmtCount, fmtPct, fmtVal, runHref } from "../../util";
 import type { SearchFilter } from "../../util/searchScope";
 import { jobEtaCell, jobRateCell, type JobCell } from "../../util/jobProgress";
 
@@ -59,12 +59,16 @@ export function SpreadCell({ r }: { r: ExperimentRow }) {
   return <Sparkline counts={j.spread} title={`distribution of ${j.metric} over ${fmtCount(n)} runs`} />;
 }
 
-const pct = (v: number) => `${v >= 10 || v === 0 ? Math.round(v) : Math.round(v * 10) / 10}%`;
+export type JobNumber = "runs" | "failed" | "throughput" | "eta";
+const EMPTY: JobCell = { text: "" };
 
 /** A job's number columns, with a tooltip where the text needs one; empty
  *  for a single run. */
-export function jobNumbers(r: ExperimentRow): Record<"runs" | "failed" | "throughput" | "eta", JobCell | string> {
+export function jobNumbers(r: ExperimentRow): Record<JobNumber, JobCell> {
   const j = r.job;
-  if (!j) return { runs: "", failed: "", throughput: "", eta: "" };
-  return { runs: fmtCount(j.total), failed: pct(j.failed_pct), throughput: jobRateCell(j), eta: jobEtaCell(j) };
+  if (!j) return { runs: EMPTY, failed: EMPTY, throughput: EMPTY, eta: EMPTY };
+  return {
+    runs: { text: fmtCount(j.total) }, failed: { text: fmtPct(j.failed_pct) },
+    throughput: jobRateCell(j), eta: jobEtaCell(j),
+  };
 }

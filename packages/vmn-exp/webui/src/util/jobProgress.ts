@@ -1,6 +1,6 @@
 /** What a job's progress says (plan 23 W1, §3.1): `1,412/2,000 · 3 failed ·
  *  41/min · ETA 14m`, and its run bar over the expected runs. */
-import type { JobProgressFields, JobRollup } from "../types";
+import type { JobProgressFields } from "../types";
 import { fmtCount, humanizeSeconds, relTime } from "../util";
 import { barSegments } from "../pages/groupHeaderText";
 import { joinParts } from "./toneParts";
@@ -17,26 +17,52 @@ export const throughputText = (j: Pick<JobProgressFields, "throughput_per_min">)
 /** The time left, null when done or unknown. */
 export const etaText = (j: Pick<JobProgressFields, "eta_sec">) => (j.eta_sec ? humanizeSeconds(j.eta_sec) : null);
 
-type Progress = Pick<JobProgressFields, "counts" | "done" | "expected" | "throughput_per_min" | "eta_sec">
-  & { finished_at?: string | null };
+type Progress = Pick<JobProgressFields, "counts" | "done" | "expected" | "throughput_per_min" | "eta_sec" | "finished_at">;
 
 export interface ProgressPart {
   text: string;
   tone?: "failed" | "stuck";
 }
 
-/** Where the job stands in time: `ETA 14m`; `stalled` while runs run and
- *  none completes; `ended 21d ago · 180 never started` once nothing runs
- *  short of the expected; `finished 2h ago` when complete. */
+/** Nothing running and no run finished for this long: the job has ended,
+ *  whatever is still waiting or stuck. */
+const QUIET_MS = 3_600_000;
+const quiet = (j: Progress) =>
+  j.counts.running === 0 && Boolean(j.finished_at) && Date.now() - Date.parse(j.finished_at!) > QUIET_MS;
+
+/** Runs waiting, running or stuck, and not quiet for long: the job has not ended. */
+const inFlight = (j: Progress) =>
+  j.counts.running + j.counts.waiting + j.counts.stuck > 0 && !quiet(j);
+
+/** Where a job stands in time: runs in flight with the time *left*, or
+ *  none finishing (stalled); ended short of the expected with *never* runs
+ *  never started; or finished. */
+export type JobTimeState =
+  | { kind: "eta"; left: string }
+  | { kind: "stalled" }
+  | { kind: "ended"; never: number }
+  | { kind: "finished" };
+
+export function jobTimeState(j: Progress): JobTimeState {
+  if (inFlight(j)) {
+    const left = etaText(j);
+    return left ? { kind: "eta", left } : { kind: "stalled" };
+  }
+  const never = j.expected - j.done - j.counts.stuck;
+  return never > 0 ? { kind: "ended", never } : { kind: "finished" };
+}
+
+/** The progress line's words for the time state: `ETA 14m`, `stalled`,
+ *  `ended 21d ago · 180 never started`, `finished 2h ago`. */
 function timeParts(j: Progress, eta: (left: string) => string): string[] {
   const when = j.finished_at ? ` ${relTime(j.finished_at)}` : "";
-  const left = j.expected - j.done;
-  if (left <= 0) return when ? [`finished${when}`] : [];
-  const etaLeft = etaText(j);
-  if (etaLeft) return [eta(etaLeft)];
-  if (j.counts.running > 0) return ["stalled"];
-  const never = left - j.counts.stuck;
-  return [`ended${when}`, never > 0 ? `${fmtCount(never)} never started` : ""].filter(Boolean);
+  const state = jobTimeState(j);
+  switch (state.kind) {
+    case "eta": return [eta(state.left)];
+    case "stalled": return ["stalled"];
+    case "ended": return [`ended${when}`, `${fmtCount(state.never)} never started`];
+    case "finished": return when ? [`finished${when}`] : [];
+  }
 }
 
 function parts(j: Progress, done: string, eta: (left: string) => string): ProgressPart[] {
@@ -66,34 +92,26 @@ export function jobBarSegments(j: Pick<JobProgressFields, "counts" | "expected">
 }
 
 /** What a Jobs-view cell shows, and its tooltip. */
-export interface JobCell { text: string; title: string }
+export interface JobCell { text: string; title?: string }
 
 const STALLED_TITLE = "no run finished in the last 10 minutes";
 
-/** Nothing running and no run finished for this long: the job has ended,
- *  whatever is still waiting or stuck (as the job header says). */
-const QUIET_MS = 3_600_000;
-const quiet = (j: JobRollup) =>
-  j.counts.running === 0 && Boolean(j.finished_at) && Date.now() - Date.parse(j.finished_at!) > QUIET_MS;
-
-/** Runs waiting, running or stuck, and not quiet for long: the job has not ended. */
-const inFlight = (j: JobRollup) =>
-  j.counts.running + j.counts.waiting + j.counts.stuck > 0 && !quiet(j);
-
 /** `14m` left, `stalled`, `finished 3d ago` or `ended · 180 never started`. */
-export function jobEtaCell(j: JobRollup): JobCell {
-  const left = etaText(j);
-  if (inFlight(j)) {
-    return left ? { text: left, title: `about ${left} left` } : { text: "stalled", title: STALLED_TITLE };
+export function jobEtaCell(j: Progress): JobCell {
+  const state = jobTimeState(j);
+  switch (state.kind) {
+    case "eta": return { text: state.left, title: `about ${state.left} left` };
+    case "stalled": return { text: "stalled", title: STALLED_TITLE };
+    case "ended": return { text: `ended · ${fmtCount(state.never)} never started`, title: "the job has ended" };
+    case "finished": {
+      const when = relTime(j.finished_at);
+      return { text: when ? `finished ${when}` : "finished", title: j.finished_at ?? "the job has finished" };
+    }
   }
-  const never = j.expected - j.done - j.counts.stuck;
-  if (never > 0) return { text: `ended · ${fmtCount(never)} never started`, title: "the job has ended" };
-  const when = relTime(j.finished_at);
-  return { text: when ? `finished ${when}` : "finished", title: j.finished_at ?? "the job has finished" };
 }
 
 /** `41/min`, else a dash saying why nothing completes. */
-export function jobRateCell(j: JobRollup): JobCell {
+export function jobRateCell(j: Progress): JobCell {
   const rate = throughputText(j);
   if (rate) return { text: rate, title: "runs finished a minute, over the last 10 minutes" };
   return { text: "—", title: inFlight(j) ? STALLED_TITLE : "the job has ended" };

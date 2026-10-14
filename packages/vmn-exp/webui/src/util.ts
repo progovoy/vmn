@@ -132,3 +132,6 @@ export const modelHref = (ws: string, model: string) => `/ws/${ws}/models/${enco
 /** *n* with its thousands grouped: `4,000`. */
 export const fmtCount = (n: number) => n.toLocaleString("en-US");
 export const plural = (n: number, noun: string) => `${fmtCount(n)} ${noun}${n === 1 ? "" : "s"}`;
+
+/** A percent (0..100): whole from 10, one decimal below (`0.2%`, `33%`). */
+export const fmtPct = (v: number) => `${v >= 10 || v === 0 ? Math.round(v) : Math.round(v * 10) / 10}%`;

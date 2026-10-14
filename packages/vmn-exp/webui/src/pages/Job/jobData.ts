@@ -3,7 +3,7 @@
  *  around them. Pure. */
 import type { FailureCluster, JobMetric, JobPageSummary, JobTimeline, TimelineBucket } from "../../apiJob";
 import { vmnExpCommand } from "../../shell/cliCommands";
-import { fmtCount, fmtDuration, fmtParam, fmtVal, plural } from "../../util";
+import { fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal, plural } from "../../util";
 import { quoteLiteral } from "../../util/searchQuery";
 
 const toMs = (t: number | string) => (typeof t === "number" ? t * 1000 : Date.parse(t));
@@ -93,7 +93,7 @@ export function jobKpis(s: JobPageSummary): KpiTile[] {
   const tiles: KpiTile[] = [
     { label: "done", value: fmtCount(s.done), sub: `of ${fmtCount(s.expected)}`, tone: "done" },
     {
-      label: "failed", value: `${fmtVal(s.failed_pct)}%`, tone: "failed",
+      label: "failed", value: fmtPct(s.failed_pct), tone: "failed",
       sub: plural(s.counts.failed, "run"),
     },
     { label: "running", value: fmtCount(s.counts.running), tone: "running" },
@@ -119,7 +119,7 @@ export function failureQuery(sig: string): string | null {
 
 /** A share (0..1) in whole percent. */
 export const sharePct = (share: number) => Math.round(share * 100);
-const pct = (share: number) => `${sharePct(share)}%`;
+const pct = (share: number) => fmtPct(share * 100);
 
 /** `batch_size = 512 · 94% vs 25%`: in the cluster vs in the job. */
 export const paramShareText = (p: FailureCluster["params"][number]) =>
