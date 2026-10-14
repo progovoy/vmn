@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import FleetTable from "../components/FleetTable";
+import { statusColor } from "../util/statusColors";
 import { fleetMetric, fleetRowsOf, varyingParams } from "../components/fleetRows";
 
 /** A single duration text (rounded seconds for short, ladder for longer),
@@ -135,15 +136,6 @@ export function MetricsCard({ metrics, summary, schema, children }: {
   );
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  running: "var(--accent)",
-  succeeded: "var(--good)",
-  failed: "var(--bad)",
-  stuck: "var(--hotfix)",
-  created: "var(--text-3)",
-  waiting: "var(--text-3)",
-};
-
 const FLEET_DISPLAY_ORDER = ["waiting", "running", "succeeded", "failed", "stuck", "created"];
 
 /** An outer run's children: status counts, a bar, and the fleet table —
@@ -169,7 +161,7 @@ export function FleetCard({ fleet, schema = null, runUrl, table = true, incomple
       <div className="fleet-summary">
         {nonZeroCounts.map(([status, count]) => (
           <span key={status} className="fleet-count">
-            <span className="dot" style={{ background: STATUS_COLORS[status] ?? "var(--text-3)" }} />
+            <span className="dot" style={{ background: statusColor(status) }} />
             <span>{count}</span>
             <span style={{ color: "var(--text-2)" }}>{status}</span>
           </span>
@@ -183,7 +175,7 @@ export function FleetCard({ fleet, schema = null, runUrl, table = true, incomple
             className="segment"
             style={{
               width: `${(count / fleet.expected) * 100}%`,
-              background: STATUS_COLORS[status] ?? "var(--text-3)",
+              background: statusColor(status),
             }}
           />
         ))}

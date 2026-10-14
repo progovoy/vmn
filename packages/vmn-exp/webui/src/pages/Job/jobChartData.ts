@@ -7,6 +7,7 @@ import { paramValue, runColor } from "../../util";
 import { NO_GROUP_COLOR, type ChartGroup, type ChartGroups } from "../../util/chartGroups";
 import { columnsToRows } from "../../util/chartColumns";
 import { STATUS_ORDER } from "../../util/filterTokens";
+import { STATUS_COLORS, statusLabel } from "../../util/statusColors";
 import { isFiniteNumber } from "../../util/stats";
 
 export const JOB_CHARTS = ["scatter", "parallel", "curves", "bypar"] as const;
@@ -32,11 +33,7 @@ export const OTHER_COLOR = NO_GROUP_COLOR;
 /** Most groups the box chart draws. */
 export const MAX_BOXES = 20;
 
-export const STATUS_COLORS: Record<RunState, string> = {
-  running: "var(--st-running)", stuck: "var(--st-stuck)", failed: "var(--st-bad)",
-  succeeded: "var(--st-good)", created: "var(--text-3)",
-};
-const STATUS_LABEL = (s: RunState) => (s === "created" ? "waiting" : s);
+export { STATUS_COLORS };
 
 const uniq = (keys: string[]) => keys.filter((k, i) => k && keys.indexOf(k) === i);
 
@@ -103,7 +100,7 @@ function statusGroups(rows: JobRow[]): ChartGroups {
     count.set(r.status, (count.get(r.status) ?? 0) + 1);
   }
   const legend = STATUS_ORDER.filter((s) => count.has(s)).map((s): ChartGroup => ({
-    key: s, label: STATUS_LABEL(s), color: STATUS_COLORS[s], count: count.get(s)!,
+    key: s, label: statusLabel(s), color: STATUS_COLORS[s], count: count.get(s)!,
   }));
   return { colorOf, legend };
 }
