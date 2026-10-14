@@ -4,13 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
 import { cachedRows, findCachedRow, rowsPrefix, runQuery, useMetricsSchema } from "../queries";
 import type { ExperimentDetail } from "../types";
-import { pollIntervalMs, runHref } from "../util";
+import { runHref } from "../util";
 import { isParamOnly } from "../util/paramKeys";
 import { Skeleton } from "../components/ui";
 import NotFound from "../components/shell/NotFound";
 import { isMissingRun } from "../shell/notFoundCopy";
-import { usePolling } from "../hooks/usePolling";
-import { useLiveScope } from "../hooks/useLiveScope";
+import { useLiveOrPoll } from "../hooks/useLiveOrPoll";
 import AppendMetrics from "../components/AppendMetrics";
 import LiveStatus from "../components/LiveStatus";
 import NoteEditor from "../components/NoteEditor";
@@ -73,12 +72,10 @@ function SingleRun() {
   // live events, else polled at the cadence its heartbeat can move the
   // payload at; anything else refreshes on demand.
   const running = detail?.status?.status === "running";
-  const live = useLiveScope({
+  useLiveOrPoll({
     ws, app, scope: detail?.metadata.verstr, enabled: running && !paused,
-    onChange: () => query.refetch(),
+    heartbeatSec: detail?.status?.heartbeat_interval_sec, refresh: () => query.refetch(),
   });
-  const pollMs = pollIntervalMs(detail?.status?.heartbeat_interval_sec);
-  usePolling(() => query.refetch(), pollMs, running && !paused && !live.connected);
 
   if (query.error && !detail) {
     if (isMissingRun(query.error)) return <NotFound kind="run" ws={ws} appTag={app} runRef={verstr} />;

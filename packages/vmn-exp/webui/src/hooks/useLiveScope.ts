@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { authHeaders, BASE } from "../http";
 import { TOKEN_KEY } from "../shell/contracts";
 import { FetchEventSource } from "../util/fetchEventSource";
+import { isThenable } from "./usePolling";
 import { useTabVisible } from "./useTabVisible";
 
 /** One `change` event of `GET .../apps/{app}/events` (plan 23 S5). */
@@ -16,8 +17,6 @@ const MAX_ERRORS = 3;
 export type LiveScope = {
   /** The stream is open: the page needs no polling of its own. */
   connected: boolean;
-  /** When the last change arrived (ms since the epoch), null before one. */
-  lastChangeAt: number | null;
 };
 
 /** Push instead of polling: follows the app's (or one run subtree's)
@@ -45,7 +44,6 @@ export function useLiveScope({ ws, app, scope, enabled, onChange }: {
   const fire = useSerialized(saved);
   const visible = useTabVisible();
   const [connected, setConnected] = useState(false);
-  const [lastChangeAt, setLastChangeAt] = useState<number | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const opened = useRef<string | null>(null);
 
@@ -74,7 +72,6 @@ export function useLiveScope({ ws, app, scope, enabled, onChange }: {
       }
     };
     source.addEventListener("change", (e) => {
-      setLastChangeAt(Date.now());
       fire(parseChange((e as MessageEvent).data));
     });
     return () => {
@@ -83,11 +80,8 @@ export function useLiveScope({ ws, app, scope, enabled, onChange }: {
     };
   }, [active, url, fire, token]);
 
-  return { connected: active && connected, lastChangeAt };
+  return { connected: active && connected };
 }
-
-const isThenable = (v: unknown): v is PromiseLike<unknown> =>
-  typeof (v as PromiseLike<unknown> | null)?.then === "function";
 
 type OnChange = (change?: LiveChange) => unknown;
 

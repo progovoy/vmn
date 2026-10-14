@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useTabVisible } from "./useTabVisible";
 
-const isThenable = (v: unknown): v is PromiseLike<unknown> =>
+export const isThenable = (v: unknown): v is PromiseLike<unknown> =>
   typeof (v as PromiseLike<unknown> | null)?.then === "function";
 
 /** Polling that pauses while the tab is backgrounded — a hidden tab nobody is

@@ -7,9 +7,7 @@ import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { facetsQuery } from "../queries";
 import type { ExperimentRow } from "../types";
-import { pollIntervalMs } from "../util";
-import { useLiveScope } from "./useLiveScope";
-import { usePolling } from "./usePolling";
+import { useLiveOrPoll } from "./useLiveOrPoll";
 
 const ownRunning = (r: ExperimentRow) => r.status === "running";
 
@@ -34,14 +32,13 @@ export function useBoardLive({ ws, app, scope, paused, rows, serverRunning, refr
     }
     return { anyRunning: running, heartbeatSec: fastest };
   }, [rows, serverRunning, isRunning]);
-  const live = useLiveScope({
-    ws, app, scope, enabled: !paused,
+  useLiveOrPoll({
+    ws, app, scope, enabled: !paused, heartbeatSec, refresh, poll: anyRunning,
     onChange: () => Promise.all([
       refresh(),
       client.invalidateQueries({ queryKey: facetsQuery(ws, app).queryKey }),
       onChange?.(),
     ]),
   });
-  usePolling(refresh, pollIntervalMs(heartbeatSec), anyRunning && !paused && !live.connected);
   return anyRunning;
 }
