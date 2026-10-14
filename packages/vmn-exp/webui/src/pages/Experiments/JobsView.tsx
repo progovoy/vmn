@@ -15,6 +15,7 @@ import BoardCaption from "../BoardCaption";
 import BoardHead from "../BoardHead";
 import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
 import { EmptyBoard } from "./AllRunsView";
+import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
 import JobsToolbar from "./JobsToolbar";
 import { useJobsBoard } from "./useJobsBoard";
@@ -35,7 +36,8 @@ export default function JobsView({ ws, app, views }: { ws: string; app: string; 
   const board = useJobsBoard(ws, app, view);
   const { data, rows, selection, live } = board;
   const base = `/ws/${ws}/app/${app}`;
-  const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal }), [base, board.metric, board.goal]);
+  const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal, search: board.search }),
+    [base, board.metric, board.goal, board.search]);
   // Bumped when a saved view replaces the URL, so the filter bar re-reads it.
   const [filterGen, setFilterGen] = useState(0);
   const onPrefetch = useCallback((v: string) => { prefetchRun(client, ws, app, v); }, [client, ws, app]);
@@ -77,6 +79,7 @@ export default function JobsView({ ws, app, views }: { ws: string; app: string; 
             archived={view.archived}
             onArchivedChange={view.setArchived}
           />
+          <JobsMatchLine matches={data.matches} appBase={base} search={board.search} />
           <JobsTable
             items={data.items} ctx={ctx} sort={board.sort}
             selected={view.selected} density={view.density}

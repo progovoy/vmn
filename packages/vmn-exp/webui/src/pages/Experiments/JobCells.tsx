@@ -6,6 +6,7 @@ import JobProgress from "../../components/JobProgress";
 import Sparkline from "../../components/Sparkline";
 import type { ExperimentRow } from "../../types";
 import { fmtCount, fmtVal, runHref } from "../../util";
+import type { SearchFilter } from "../../util/searchScope";
 import { etaText, throughputText } from "../../util/jobProgress";
 
 export interface JobContext {
@@ -13,6 +14,8 @@ export interface JobContext {
   /** The Best column's metric, and the way it improves. */
   metric: string | null;
   goal: "min" | "max" | null;
+  /** The search every run is matched by (plan 23 W11), for the job chips. */
+  search?: SearchFilter | null;
 }
 
 /** Under the name: a job's progress, a single run's `base · branch`. */

@@ -20,16 +20,17 @@ type Row = { verstr: string; status?: string | null };
  *  screen). Everything else is kept as it was, and unchanged rows keep their
  *  identity. *fetchWhere* must apply the active filters too, so a re-asked
  *  row that no longer matches them drops out. */
-export async function refreshRows<R extends Row>({
+export async function refreshRows<R extends Row, P extends Page<R> = Page<R>>({
   getRows, fetchFirst, fetchWhere, extraVerstrs = [],
 }: {
   /** The rows currently held — read after the requests, so a page appended
    *  meanwhile survives. */
   getRows: () => readonly R[] | undefined;
-  fetchFirst: () => Promise<Page<R>>;
+  /** Its other fields (a Jobs view search's counts) are kept. */
+  fetchFirst: () => Promise<P>;
   fetchWhere: (query: string, limit: number) => Promise<{ rows: R[] }>;
   extraVerstrs?: readonly string[];
-}): Promise<Page<R>> {
+}): Promise<P> {
   const first = await fetchFirst();
   const inFirst = new Set(first.rows.map((r) => r.verstr));
   const before = (getRows() ?? []).filter((r) => !inFirst.has(r.verstr));
@@ -49,5 +50,5 @@ export async function refreshRows<R extends Row>({
     .filter((r) => !inFirst.has(r.verstr))
     .filter((r) => !askedSet.has(r.verstr) || fresh.has(r.verstr))
     .map((r) => fresh.get(r.verstr) ?? r);
-  return { rows: stabilizeRows(current, [...first.rows, ...tail]), total: first.total };
+  return { ...first, rows: stabilizeRows(current, [...first.rows, ...tail]), total: first.total };
 }

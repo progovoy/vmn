@@ -40,6 +40,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
   const remaining = data ? data.total_groups - data.groups.length : 0;
   return {
     rows: data?.rows, total: data ? Math.max(data.total, data.rows.length) : 0, items, grouped,
+    matches: undefined,
     groups: data?.groups,
     aggregate: data?.aggregate, defaultAggregate: groups.defaultAggregate, running: data?.running ?? 0,
     queryError: groups.queryError, pageError: groups.pageError, moreError: groups.moreError,

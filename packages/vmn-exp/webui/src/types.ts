@@ -174,6 +174,8 @@ export interface ExperimentRow extends Partial<RunStatus> {
   has_intent?: boolean;
   /** Its top-level ancestor's verstr; null for a top-level run (plan 23 S2). */
   root?: string | null;
+  /** Jobs view search (plan 23 W11): runs of this row's tree that match. */
+  matched?: number;
   /** A failed or stuck run's failure signature (plan 23 S1). */
   failure_sig?: string | null;
   /** A Jobs-view row's subtree rollup; null for a single run (plan 23 §10). */

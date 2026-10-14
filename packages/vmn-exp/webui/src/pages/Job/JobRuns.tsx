@@ -2,13 +2,16 @@
  *  subtree (`scope=` on every list, columns and facets request), with a facet
  *  sidebar, Group by inside the job (a group of more than 50 runs opens as a
  *  filter, §3.4) and selection by query. The URL keeps `tab=runs` beside the
- *  board's own params. */
+ *  board's own params. A search has a `search all runs` link that drops the
+ *  scope (plan 23 W11). */
 import { useCallback, useState } from "react";
 import FacetSidebar from "../../components/FacetSidebar";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { useRunsBoard } from "../../hooks/useRunsBoard";
+import { Link } from "react-router-dom";
 import { plural } from "../../util";
+import { allRunsHref, hasSearch } from "../../util/searchScope";
 import { BIG_GROUP, addFilterClause } from "../../util/groupClause";
 import LeaderboardSelectionBar from "../LeaderboardSelectionBar";
 import LeaderboardToolbar from "../LeaderboardToolbar";
@@ -50,6 +53,7 @@ export default function JobRuns({ ws, app, verstr, paused, onPaused, onLive }: {
         <div className="job-runs-head">
           <p className="page-sub job-runs-count">
             {board.rows === undefined ? "loading runs…" : plural(data.total, "run")}
+            {hasSearch(view) && <> · <Link to={allRunsHref(board.base, view)}>search all runs</Link></>}
           </p>
           <LeaderboardToolbar
             ws={ws} app={app} view={view} cols={cols} grouping={board.grouping} job={verstr}

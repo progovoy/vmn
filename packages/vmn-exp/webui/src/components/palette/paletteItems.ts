@@ -4,8 +4,9 @@ import type { ModelRow } from "../../apiModels";
 import type { ReportRow } from "../../apiReports";
 import { storeUriOf, vmnCommand, vmnExpCommand } from "../../shell/cliCommands";
 import { DOCS_URL, type ShellContext } from "../../shell/contracts";
-import type { AppRow, ExperimentRow, Workspace } from "../../types";
-import { appHref, modelHref, plural, relTime, runHref } from "../../util";
+import type { AppRow, Workspace } from "../../types";
+import { appHref, fmtCount, modelHref, plural, relTime, runHref } from "../../util";
+import type { PaletteRun } from "./usePaletteRuns";
 import { runSearchQuery } from "../../util/searchQuery";
 import { compareSearch } from "../../pages/Compare/selection";
 import type { IconName } from "../shell/icons";
@@ -34,7 +35,7 @@ export type PaletteCtx = Pick<
 >;
 export interface PaletteInput {
   ctx: PaletteCtx; text: string; intent: CliIntent; refs: RefResolution;
-  runs: ExperimentRow[]; searched: boolean; apps: AppRow[];
+  runs: PaletteRun[]; searched: boolean; apps: AppRow[];
   models: ModelRow[]; reports: ReportRow[]; recents: RecentEntry[];
 }
 
@@ -104,11 +105,13 @@ function gotoItems(ctx: PaletteCtx): PaletteItem[] {
   return out;
 }
 
-function runItem(r: ExperimentRow, ctx: PaletteCtx, base: string, app: string): PaletteItem {
+/** `@1,903 name · in <job>` for a search hit inside a job. */
+function runItem(r: PaletteRun, ctx: PaletteCtx, base: string, app: string): PaletteItem {
   const ref = r.idx ? `@${r.idx}` : r.verstr;
+  const where = r.root_name ? `in ${r.root_name}` : null;
   return row(`run:${r.verstr}`, "run", r.name || r.verstr, {
-    prefix: r.idx ? ref : undefined, mono: !r.name, title: r.verstr,
-    secondary: [r.status, r.note, relTime(r.timestamp)].filter(Boolean).join(" · "),
+    prefix: r.idx ? `@${fmtCount(r.idx)}` : undefined, mono: !r.name, title: r.verstr,
+    secondary: [where, r.status, r.note, relTime(r.timestamp)].filter(Boolean).join(" · "),
     to: runHref(base, r.verstr), command: vx(ctx, "show", app, "-v", ref),
   });
 }

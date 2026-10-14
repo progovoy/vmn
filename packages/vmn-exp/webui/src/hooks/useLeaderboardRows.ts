@@ -8,6 +8,7 @@ import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
 import { useShownList } from "./useShownList";
 import { combineQueries } from "../util/searchQuery";
+import type { ExperimentRow } from "../types";
 
 /** The first page for *f*. Unsorted-or-default-direction lists go through
  *  `api.experiments`; an explicit direction, archived, top-level or scoped rows need the paged call. */
@@ -17,6 +18,17 @@ function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
     ? api.experiments(ws, app, f.sort, f.status, f.query)
     : api.experiments(ws, app, f.sort, f.status);
   return req.then((r) => ({ rows: [...r], total: r.total ?? r.length }));
+}
+
+/** Re-asked top-level rows of a subtree search, by verstr: a subtree query
+ *  `and verstr in (...)` would ask for runs that are both, so they are
+ *  re-read by their own fields and keep the `matched` count they had. */
+async function byVerstrKeepingMatched(
+  ws: string, app: string, f: RowsFilter, q: string, limit: number, held: readonly ExperimentRow[] = [],
+) {
+  const page = await api.experimentsPaged(ws, app, { ...f, query: q, matchSubtree: false, offset: 0, limit });
+  const matched = new Map(held.map((r) => [r.verstr, r.matched] as const));
+  return { ...page, rows: page.rows.map((r) => ({ ...r, matched: matched.get(r.verstr) })) };
 }
 
 /** Leaderboard rows for one filter, through the request cache: a revisited
@@ -38,8 +50,9 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
       return refreshRows({
         getRows: () => client.getQueryData<RowsData>(key)?.rows,
         fetchFirst: () => scoped(() => firstPage(ws, app, filter)),
-        fetchWhere: (q, limit) =>
-          scoped(() => api.experimentsPaged(ws, app, {
+        fetchWhere: (q, limit) => scoped(() => filter.matchSubtree
+          ? byVerstrKeepingMatched(ws, app, filter, q, limit, client.getQueryData<RowsData>(key)?.rows)
+          : api.experimentsPaged(ws, app, {
             ...filter, query: combineQueries(filter.query ?? "", q), offset: 0, limit,
           })),
         extraVerstrs: visibleRef.current(),
@@ -68,6 +81,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
       const latest = client.getQueryData<RowsData>(key) ?? cur;
       const known = new Set(latest.rows.map((r) => r.verstr));
       client.setQueryData<RowsData>(key, {
+        ...latest,
         rows: [...latest.rows, ...more.rows.filter((r) => !known.has(r.verstr))],
         total: more.total,
       });
@@ -85,6 +99,9 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
   return {
     rows: data?.rows,
     total: data ? Math.max(data.total, data.rows.length) : 0,
+    /** A Jobs view search's counts (plan 23 W11), when the server sent them. */
+    matches: data?.runs_matched === undefined ? undefined
+      : { jobs: data.jobs_matched ?? 0, runs: data.runs_matched },
     queryError, pageError, moreError,
     loadMore, refresh, visibleRef,
     /** When the first page last arrived (ms since the epoch). */

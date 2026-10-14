@@ -2,6 +2,7 @@
  *  JOB_COLUMNS. A click outside its links and checkbox opens the run. */
 import { memo, useRef, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import MatchingRunsChip from "../../components/MatchingRunsChip";
 import StatusPill from "../../components/StatusPill";
 import type { ExperimentRow } from "../../types";
 import type { Density } from "../../util/density";
@@ -13,8 +14,8 @@ import { CELL_CLASSES, COLUMN_STYLES, JOB_COLUMNS } from "./jobColumns";
 /** When a top-level run started: its subtree's first start, else its own. */
 const startedAt = (r: ExperimentRow) => r.job?.started_at ?? r.started_at ?? r.timestamp;
 
-function NameCell({ r, href, compact, onPrefetch }: {
-  r: ExperimentRow; href: string; compact: boolean; onPrefetch: (verstr: string) => void;
+function NameCell({ r, href, compact, ctx, onPrefetch }: {
+  r: ExperimentRow; href: string; compact: boolean; ctx: JobContext; onPrefetch: (verstr: string) => void;
 }) {
   return (
     <>
@@ -25,6 +26,7 @@ function NameCell({ r, href, compact, onPrefetch }: {
         >
           {r.name || r.verstr}
         </Link>
+        <MatchingRunsChip r={r} runBase={ctx.runBase} search={ctx.search} />
         {compact && <span className="job-inline"><JobSubLine r={r} /></span>}
       </div>
       {!compact && <div className="exp-branch job-line"><JobSubLine r={r} /></div>}
@@ -67,7 +69,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, onPref
             staleSec={r.stale_sec} errorSummary={r.error_summary}
           />
         );
-      case "name": return <NameCell r={r} href={href} compact={density === "compact"} onPrefetch={onPrefetch} />;
+      case "name": return <NameCell r={r} href={href} compact={density === "compact"} ctx={ctx} onPrefetch={onPrefetch} />;
       case "best": return <BestValue r={r} ctx={ctx} />;
       case "spread": return <SpreadCell r={r} />;
       case "runs": case "failed": case "throughput": case "eta": return numbers[id];

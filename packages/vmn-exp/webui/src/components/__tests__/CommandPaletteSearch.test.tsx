@@ -8,13 +8,16 @@ vi.mock("../../api", () => ({
   appTag: (n: string) => n.replaceAll("/", "-"),
   appName: (t: string) => t.replaceAll("-", "/"),
 }));
+vi.mock("../../apiRunSearch", () => ({ searchRuns: vi.fn() }));
 
 import { api } from "../../api";
+import * as runSearch from "../../apiRunSearch";
 import { createQueryClient } from "../../queryClient";
 import CommandPalette from "../CommandPalette";
 import { fakeCtx } from "../palette/__tests__/fakeCtx";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
+const s = runSearch as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
 function open(client: QueryClient) {
   return render(
@@ -42,17 +45,29 @@ describe("CommandPalette", () => {
     expect(m.recentExperiments).toHaveBeenCalledTimes(1);
   });
 
-  it("searches every run on the server with RunPicker's clause, debounced", async () => {
-    m.experimentsPaged.mockResolvedValue({ rows: [{ verstr: "0.0.9-dev.abc", note: "deep" }], total: 1 });
+  it("goes to any run through the server's run search, debounced (plan 23 W11)", async () => {
+    s.searchRuns.mockResolvedValue([{
+      verstr: "0.0.9-dev.abc", idx: 1903, name: "lr_layers_grid-t1903", status: "succeeded",
+      root: "0.0.1-dev.j", root_name: "lr_layers_grid", match: "name",
+    }]);
     open(createQueryClient());
-    fireEvent.change(screen.getByPlaceholderText(/jump to/i), { target: { value: "abc" } });
+    fireEvent.change(screen.getByPlaceholderText(/jump to/i), { target: { value: "t1903" } });
+    expect(s.searchRuns).not.toHaveBeenCalled();
+    await waitFor(() => expect(s.searchRuns).toHaveBeenCalledWith("w", "app", "t1903", 20));
     expect(m.experimentsPaged).not.toHaveBeenCalled();
-    await waitFor(() =>
-      expect(m.experimentsPaged).toHaveBeenCalledWith(
-        "w", "app", expect.objectContaining({ query: 'verstr ~ "abc" or note ~ "abc"', limit: 20 }),
-      ),
-    );
-    expect(await screen.findByText("0.0.9-dev.abc")).toBeInTheDocument();
+    const item = (await screen.findByText("lr_layers_grid-t1903")).closest("[role=option]")!;
+    expect(item.textContent).toContain("@1,903");
+    expect(item.textContent).toContain("in lr_layers_grid");
+  });
+
+  it("a top-level hit is not said to be in a job", async () => {
+    s.searchRuns.mockResolvedValue([{
+      verstr: "0.0.9-dev.top", idx: 7, name: "solo", status: "running", root: null, root_name: null, match: "name",
+    }]);
+    open(createQueryClient());
+    fireEvent.change(screen.getByPlaceholderText(/jump to/i), { target: { value: "solo" } });
+    const item = (await screen.findByText("solo")).closest("[role=option]")!;
+    expect(item.textContent).not.toContain(" in ");
   });
 
   it("offers no Snapshots page", async () => {

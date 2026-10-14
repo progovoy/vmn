@@ -25,6 +25,14 @@ export interface PageOpts {
   top?: boolean;
   /** A run's verstr: its subtree only, without the run (plan 23 S2). */
   scope?: string;
+  /** With `top`: keep the top-level runs whose subtree matches `query` (plan 23 W11). */
+  matchSubtree?: boolean;
+}
+
+/** The Jobs view search's counts (plan 23 W11): every matching run of the app. */
+export interface SubtreeMatches {
+  jobs_matched?: number;
+  runs_matched?: number;
 }
 
 /** What the facets count over: a job's subtree, after the other filters. */
@@ -45,6 +53,7 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.archived) p.set("archived", "1");
   if (opts.top) p.set("top", "1");
   if (opts.scope) p.set("scope", opts.scope);
+  if (opts.matchSubtree) p.set("match_subtree", "1");
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 
@@ -52,11 +61,11 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
  *  answers a plain list. */
 async function fetchPage(
   ws: string, app: string, opts: PageOpts = {}
-): Promise<{ rows: ExperimentRow[]; total: number }> {
+): Promise<{ rows: ExperimentRow[]; total: number } & SubtreeMatches> {
   const p = new URLSearchParams({ offset: String(opts.offset ?? 0) });
   setFilter(p, { ...opts, limit: opts.limit ?? PAGE_SIZE });
   if (opts.last) p.set("last", String(opts.last));
-  const body = await get<ExperimentRow[] | { rows: ExperimentRow[]; total: number }>(
+  const body = await get<ExperimentRow[] | ({ rows: ExperimentRow[]; total: number } & SubtreeMatches)>(
     `/workspaces/${ws}/apps/${appTag(app)}/experiments?${p}`
   );
   return Array.isArray(body) ? { rows: body, total: body.length } : body;

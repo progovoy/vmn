@@ -1,6 +1,6 @@
 /** Query keys and cached reads shared across pages. */
 import { useQuery, type QueryClient, useQueryClient } from "@tanstack/react-query";
-import { api, type FacetOpts } from "./api";
+import { api, type FacetOpts, type SubtreeMatches } from "./api";
 import { withSignal } from "./requestScope";
 import { SHARED_STALE_MS } from "./queryClient";
 import type {
@@ -22,8 +22,10 @@ export interface RowsFilter {
   top?: boolean;
   /** A job's subtree only (its verstr). */
   scope?: string;
+  /** With `top`: match `query` over each top-level run's subtree. */
+  matchSubtree?: boolean;
 }
-export interface RowsData {
+export interface RowsData extends SubtreeMatches {
   rows: ExperimentRow[];
   total: number;
 }
