@@ -46,7 +46,7 @@ export default function JobScatter(p: JobChartProps) {
     chart: "scatter", x: colKey(x, p.params), y: p.y,
     color: colorKey(color), params: [],
   }), [x, p.params, p.y, color]);
-  const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary.done);
+  const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary);
   return (
     <>
       <div className="job-chart-tools"><ColorPicker value={color} groupable={p.groupable} state={p.state} /></div>

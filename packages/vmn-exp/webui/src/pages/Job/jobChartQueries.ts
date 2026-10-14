@@ -1,39 +1,56 @@
 /** The job Charts tab's queries and its URL state (plan 23 W4):
  *  `?chart=scatter|parallel|curves|bypar&x=&y=&color=&k=`. */
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { JobSummary } from "../../apiJob";
 import { jobColumns, jobFacets, jobTopRuns } from "../../apiJobCharts";
 import { useUrlState } from "../../hooks/useUrlState";
+import { facetsQuery } from "../../queries";
 import { withSignal } from "../../requestScope";
 import { JOB_CHARTS, type JobChart } from "./jobChartData";
 import { jobPrefix } from "./jobQueries";
 
-/** The job's param/metric vocabulary; it moves as runs finish (*done*). */
-export function useJobFacets(ws: string, app: string, v: string, done: number) {
+/** The job's param/metric vocabulary: the subtree's facets, the same cache
+ *  entry as its Runs tab's (so a live change refreshes both). */
+export function useJobFacets(ws: string, app: string, v: string) {
   return useQuery({
-    queryKey: [...jobPrefix(ws, app, v), "facets", done],
+    ...facetsQuery(ws, app, { scope: v }),
     queryFn: ({ signal }) => withSignal(signal, () => jobFacets(ws, app, v)),
     placeholderData: keepPreviousData,
   }, useQueryClient());
 }
 
+type Progress = Pick<JobSummary, "done" | "expected">;
+
+/** The share of the job a chart refetch waits for (each read is up to 50k runs). */
+const REFETCH_SHARE = 0.05;
+
+/** What the chart queries key on: *done* in steps of ~5% of the job, and
+ *  once more when it is all done. */
+export function chartProgressKey({ done, expected }: Progress): number | "all" {
+  if (expected > 0 && done >= expected) return "all";
+  return Math.floor(done / Math.max(1, Math.ceil(expected * REFETCH_SHARE)));
+}
+
 const COLUMNS_GC_MS = 30_000;
 
-/** Columns *keys* over the job, refetched once more of its runs are *done*. */
-export function useJobColumns(ws: string, app: string, v: string, keys: string[], done: number) {
+/** Columns *keys* over the job, refetched once ~5% more of its runs are done. */
+export function useJobColumns(ws: string, app: string, v: string, keys: string[], progress: Progress) {
   return useQuery({
-    queryKey: [...jobPrefix(ws, app, v), "columns", keys, done],
+    queryKey: [...jobPrefix(ws, app, v), "columns", keys, chartProgressKey(progress)],
     queryFn: ({ signal }) => withSignal(signal, () => jobColumns(ws, app, v, keys)),
     enabled: keys.length > 0,
     placeholderData: keepPreviousData,
-    // Each `done` is a new entry of up to 50k runs: don't keep the old ones around.
+    // Each step is a new entry of up to 50k runs: don't keep the old ones around.
     gcTime: COLUMNS_GC_MS,
   }, useQueryClient());
 }
 
 /** The best *k* runs on *metric*, when the summary's top ones are too few. */
-export function useJobTopRuns(ws: string, app: string, v: string, metric: string, k: number, enabled: boolean, done: number) {
+export function useJobTopRuns(
+  ws: string, app: string, v: string, metric: string, k: number, enabled: boolean, progress: Progress,
+) {
   return useQuery({
-    queryKey: [...jobPrefix(ws, app, v), "top", metric, k, done],
+    queryKey: [...jobPrefix(ws, app, v), "top", metric, k, chartProgressKey(progress)],
     queryFn: ({ signal }) => withSignal(signal, () => jobTopRuns(ws, app, v, metric, k)),
     enabled,
     placeholderData: keepPreviousData,

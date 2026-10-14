@@ -1,15 +1,12 @@
 /** The job Charts tab's reads (plan 23 §10, S2 `scope=`): the job's facets,
  *  chosen columns over every run of its subtree, and its top runs on a metric. */
 import { api } from "./api";
-import { appTag, get } from "./http";
-import type { ExperimentFacets } from "./types";
 
 /** Every run a chart may plot (the columns endpoint's cap). */
 export const JOB_COLUMNS_LIMIT = 50_000;
 
 /** The params and metrics of job *v*'s runs, with each param's value count. */
-export const jobFacets = (ws: string, app: string, v: string) =>
-  get<ExperimentFacets>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-facets?${new URLSearchParams({ scope: v })}`);
+export const jobFacets = (ws: string, app: string, v: string) => api.facets(ws, app, { scope: v });
 
 /** Columns *keys* over job *v*'s subtree, up to JOB_COLUMNS_LIMIT runs. */
 export const jobColumns = (ws: string, app: string, v: string, keys: string[]) =>

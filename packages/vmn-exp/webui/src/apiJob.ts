@@ -1,7 +1,9 @@
 /** A job's endpoints (plan 23 §10, S3): its rollup summary, its failure
  *  clusters, and param importance scoped to its subtree. */
-import { appTag, get } from "./http";
-import type { ParamImportanceEntry, RunState } from "./types";
+import { api } from "./api";
+import { runBase } from "./apiRunCode";
+import { get } from "./http";
+import type { RunState } from "./types";
 
 /** A job's runs per state (the D12 states; `waiting` = created). */
 export interface JobCounts {
@@ -103,20 +105,15 @@ export interface JobFailures {
   clusters: FailureCluster[];
 }
 
-const runPath = (ws: string, app: string, v: string) =>
-  `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(v)}`;
-
 /** The rollup of job *v*; 404 when *v* has no children. */
 export const jobSummary = (ws: string, app: string, v: string) =>
-  get<JobSummary>(`${runPath(ws, app, v)}/summary`);
+  get<JobSummary>(`${runBase(ws, app, v)}/summary`);
 
 export const FAILURES_LIMIT = 20;
 
 export const jobFailures = (ws: string, app: string, v: string) =>
-  get<JobFailures>(`${runPath(ws, app, v)}/failures?limit=${FAILURES_LIMIT}`);
+  get<JobFailures>(`${runBase(ws, app, v)}/failures?limit=${FAILURES_LIMIT}`);
 
 /** Which params drive *metric* over job *v*'s subtree. */
-export function jobImportance(ws: string, app: string, v: string, metric: string) {
-  const p = new URLSearchParams({ metric, scope: v });
-  return get<ParamImportanceEntry[]>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-importance?${p}`);
-}
+export const jobImportance = (ws: string, app: string, v: string, metric: string) =>
+  api.experimentsImportance(ws, app, metric, { scope: v });

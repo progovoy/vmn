@@ -67,7 +67,7 @@ export default function JobBoxByParam(p: JobChartProps) {
     () => (param ? jobChartKeys({ chart: "bypar", x: `params.${param}`, y: p.y, color: "", params: [] }) : []),
     [param, p.y],
   );
-  const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary.done);
+  const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary);
   return (
     <>
       <div className="job-chart-tools">

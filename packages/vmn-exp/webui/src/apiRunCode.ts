@@ -40,7 +40,8 @@ export interface RunBaselines {
   best?: BaselineRun;
 }
 
-const runBase = (ws: string, app: string, verstr: string) =>
+/** A run's endpoint, its verstr encoded. */
+export const runBase = (ws: string, app: string, verstr: string) =>
   `/workspaces/${ws}/apps/${appTag(app)}/experiments/${encodeURIComponent(verstr)}`;
 
 /** The run's own patches (working tree, local commits, deps), at most

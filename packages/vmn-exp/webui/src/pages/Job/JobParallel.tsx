@@ -54,7 +54,7 @@ export default function JobParallel(p: JobChartProps) {
   const keys = useMemo(() => jobChartKeys({
     chart: "parallel", x: "", y: p.y, color: colorKey(color), params: dims,
   }), [p.y, color, dims]);
-  const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary.done);
+  const query = useJobColumns(p.ws, p.app, p.summary.verstr, keys, p.summary);
   return (
     <>
       <div className="job-chart-tools">
