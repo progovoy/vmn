@@ -3,8 +3,9 @@
 :class:`~vmn_exp.ui.leaderboard_cache.LeaderboardCache` keeps its orders:
 one :class:`~vmn_exp.ui.job_rollup.StaticRollups` per (base, schema), moved
 on from the last one served for the app and schema across the deltas since
-(else built), one live overlay per time bucket, and the JSON answers per
-(base, bucket, clock bucket, schema) — a request is a memo hit.
+(else built), one live overlay per time bucket, and every job answer (these
+rollups and :class:`~vmn_exp.ui.job_views.JobViews`') in one memo per
+(base, live bucket, :func:`minute`, schema) — a request is a memo hit.
 """
 import vmn_exp.core.status as experiment_status
 from vmn_exp.ui.job_rollup import JobTree, StaticRollups, overlay
@@ -15,6 +16,20 @@ from vmn_exp.ui.memo import LRU
 # Rollups moved on across generations: one per (app, schema) in use.
 LATEST_ROLLUPS = 16
 ANSWERS = 256
+
+
+def minute():
+    """The clock job answers follow besides the live bucket: throughput and
+    ETA count completions per minute back from now."""
+    return int(experiment_status._now().timestamp() // 60)
+
+
+def _payload(job, parts, spec, now, idx_of):
+    return job_payload(job, parts, spec, now)
+
+
+def _failure_counts(job, parts, spec, now, idx_of):
+    return failure_counts(parts)
 
 
 class JobRollupCache:
@@ -29,16 +44,16 @@ class JobRollupCache:
 
     def job_rollup(self, snapshot, schema, verstr):
         """*verstr*'s full rollup, or None when it is not a job."""
-        return self._answer(snapshot, schema, verstr, job_payload)
+        return self._rolled_up(snapshot, schema, verstr, _payload)
 
     def job_rollups(self, snapshot, schema):
         """``{verstr: compact summary}`` for every job."""
-        return self._answer(snapshot, schema, None, job_summary)
+        return self._rolled_up(snapshot, schema, None, job_summary)
 
     def failure_counts(self, snapshot, schema, verstr):
         """``{failure signature: runs}`` over *verstr*'s subtree, or None
         when it is not a job."""
-        return self._answer(snapshot, schema, verstr, failure_counts)
+        return self._rolled_up(snapshot, schema, verstr, _failure_counts)
 
     def spec(self, snapshot, schema):
         """The :class:`~vmn_exp.ui.job_tally.RollupSpec` of *schema* over
@@ -52,18 +67,23 @@ class JobRollupCache:
         """*base*'s :class:`~vmn_exp.ui.job_rollup.JobTree`."""
         return self._trees.get(base.token, lambda: JobTree(base))
 
-    def _answer(self, snapshot, schema, verstr, answer):
+    def answer(self, snapshot, schema, verstr, kind, build):
+        """*build()*, memoized per (base, live bucket, minute, schema, job,
+        *kind*); None when *verstr* is not a job (None: every job)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        tree = self.tree(base)
-        if verstr is not None and verstr not in tree.jobs:
+        if verstr is not None and verstr not in self.tree(base).jobs:
             return None
-        schema_key = cache.schema_key(schema)
-        key = (base.token, bucket, cache._bucket(), schema_key, verstr, answer)
-        return self._answers.get(key, lambda: self._compute(
-            snapshot, base, bucket, tree, schema, schema_key, verstr, answer))
+        key = (base.token, bucket, minute(), cache.schema_key(schema), verstr, kind)
+        return self._answers.get(key, build)
 
-    def _compute(self, snapshot, base, bucket, tree, schema, schema_key, verstr, answer):
+    def _rolled_up(self, snapshot, schema, verstr, answer):
+        return self.answer(snapshot, schema, verstr, answer,
+                           lambda: self._compute(snapshot, schema, verstr, answer))
+
+    def _compute(self, snapshot, schema, verstr, answer):
+        base, bucket = self._cache._base(snapshot)
+        tree, schema_key = self.tree(base), self._cache.schema_key(schema)
         spec = self.spec(snapshot, schema)
         static = self._static.get(
             (base.token, schema_key),
@@ -80,12 +100,11 @@ class JobRollupCache:
         def row(job):
             return base.rows[base.position[job]]
 
+        def idx_of(job):
+            return row(job)["idx"] if job in base.position else None
+
         def answered(job):
-            out = answer(row(job), parts(job), static.spec, now)
-            if answer is job_summary:
-                best = out["best_verstr"]
-                out["best_idx"] = row(best)["idx"] if best in base.position else None
-            return out
+            return answer(row(job), parts(job), static.spec, now, idx_of)
 
         if verstr is not None:
             return answered(verstr)

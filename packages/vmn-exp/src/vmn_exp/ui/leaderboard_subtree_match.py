@@ -45,7 +45,7 @@ class SubtreeMatch:
 
 
 def _hits(base, bucket, slots, query, archived):
-    patched = dict(zip(base.patch.changed, base.changed_at(bucket)))
+    patched = base.patched(bucket)
     at = range(len(base.rows)) if slots is None else sorted(slots)
     rows = [patched.get(i, base.rows[i]) for i in at]
     passing = filtered(base.snapshot, rows, Filters(query=query, archived=archived))

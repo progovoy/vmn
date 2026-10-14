@@ -107,7 +107,7 @@ def metric_fields(parts, name, descending, bins=HIST_BINS, quantiles=True, ranke
     return fields
 
 
-def failure_counts(job, parts, spec, now):
+def failure_counts(parts):
     """``{failure signature: runs}`` over the job's subtree."""
     counts = Counter()
     for part in parts:
@@ -116,7 +116,7 @@ def failure_counts(job, parts, spec, now):
 
 
 def _failures(parts):
-    counts = failure_counts(None, parts, None, None)
+    counts = failure_counts(parts)
     top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_FAILURES]
     return [{"sig": sig, "label": label(sig), "count": count} for sig, count in top]
 
@@ -136,9 +136,10 @@ def job_payload(job, parts, spec, now):
     }
 
 
-def job_summary(job, parts, spec, now):
+def job_summary(job, parts, spec, now, idx_of=None):
     """The compact rollup a Jobs view sorts on: progress, plus the main
-    metric's best and a spread histogram (counts only)."""
+    metric's best (its ``idx`` from *idx_of(verstr)*) and a spread
+    histogram (counts only)."""
     main = spec.main and metric_fields(parts, spec.main, spec.descending[spec.main],
                                        bins=SPREAD_BINS, quantiles=False, ranked=spec.ranked)
     main = main or {}
@@ -147,5 +148,6 @@ def job_summary(job, parts, spec, now):
         "metric": spec.main,
         "best": main.get("best"),
         "best_verstr": main.get("best_verstr"),
+        "best_idx": idx_of(main["best_verstr"]) if idx_of and main.get("best_verstr") else None,
         "spread": [b["count"] for b in main.get("hist", ())],
     }

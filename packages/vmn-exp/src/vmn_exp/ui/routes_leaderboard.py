@@ -31,6 +31,7 @@ from vmn_exp.core.query import QueryError
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.http_params import clamp_page, key_list
+from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.leaderboard_comments import (
     groups_by_comments,
     joined,
@@ -92,8 +93,9 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
                       order=order, archived=archived, scope=_scope(scope), top=top)
-        # A Jobs view's summaries (throughput, ETA) follow the clock.
-        clock = dict(clock=cache.clock()) if top else {}
+        # A Jobs view's summaries (throughput, ETA) follow the minute; the
+        # etag carries the live bucket already.
+        clock = dict(minute=minute()) if top else {}
         counts, generation = comments_of(ws_name, app_tag)
         try:
             by_comments = reads_comments(q)
