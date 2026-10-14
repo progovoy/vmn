@@ -60,6 +60,7 @@ from vmn_exp.ui.leaderboard_scope import (
     left_filtered,
     scope_positions,
 )
+from vmn_exp.ui.leaderboard_top_counts import TopCounts
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
@@ -274,6 +275,7 @@ class LeaderboardCache(SetAnswers):
         self._search = SearchIndexes()
         self._job_view = JobsView(self, size)
         self._filtered_facets = LRU(size)
+        self._top_counts = TopCounts(self)
 
     schema_key = staticmethod(_schema_key)
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The board's row filters (plan 23 S2): archived, ``top`` (top-level runs
-only, the Jobs view), ``scope`` (a run's subtree without the run), the
+only, the Jobs view: ``True`` all of them, ``"jobs"`` those with children,
+``"singles"`` those without, plan 23 S7), ``scope`` (a run's subtree without the run), the
 status whitelist and the query language, as one hashable :class:`Filters`
 the cached orders are keyed by.
 
@@ -16,9 +17,29 @@ snapshot's ``outputs`` or ancestry (``under()``).
 from collections import namedtuple
 
 from vmn_exp.core.query import query_roots
-from vmn_exp.core.tree import ancestors, subtree_verstrs
+from vmn_exp.core.tree import OUTER, ancestors, subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.readers.experiments import SNAPSHOT_FIELDS, apply_filters
+
+
+JOBS, SINGLES = "jobs", "singles"
+_TOPS = {None: False, "": False, "0": False, "false": False, "1": True, "true": True,
+         JOBS: JOBS, SINGLES: SINGLES}
+
+
+def top_filter(text):
+    """The ``top`` filter a route's ``top=`` text names; ValueError when none."""
+    key = text.lower() if isinstance(text, str) else text
+    if key not in _TOPS:
+        raise ValueError(f"top must be one of 1, {JOBS}, {SINGLES}, not {text!r}")
+    return _TOPS[key]
+
+
+def is_top(row, top):
+    """Whether *row* is a top-level run of the kind *top* (truthy) keeps."""
+    if row["depth"]:
+        return False
+    return top is True or (row["kind"] == OUTER) == (top == JOBS)
 
 
 class UnknownScope(LookupError):
@@ -33,7 +54,7 @@ def filtered(snapshot, rows, f):
     """*rows* of *snapshot* passing the filters *f* (``sort``/``order`` unused)."""
     rows = visible(rows, f.archived)
     if f.top:
-        rows = [row for row in rows if not row["depth"]]
+        rows = [row for row in rows if is_top(row, f.top)]
     if f.scope is not None:
         edges = snapshot.edges
         rows = [row for row in rows if f.scope in ancestors(row["verstr"], edges)]

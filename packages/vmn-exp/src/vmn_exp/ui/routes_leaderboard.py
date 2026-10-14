@@ -15,7 +15,10 @@ Archived rows are left out of all of them unless the request passes
 (plan 22 K1, :mod:`~vmn_exp.ui.leaderboard_groups`). ``scope=<verstr>``
 narrows each of them to that run's subtree (without it; an unknown run is a
 404), and ``top=1`` the list to the top-level runs, each with its ``job``
-summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`).
+summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`);
+``top=jobs``/``top=singles`` those with and without children (plan 23 S7).
+Grouped with ``top``, each group sums its jobs' rollups; every group carries
+the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
 """
 from functools import partial
 
@@ -32,7 +35,7 @@ from vmn_exp.ui.leaderboard_comments import (
     reads_comments,
 )
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE, UnknownGroup
-from vmn_exp.ui.leaderboard_scope import UnknownScope
+from vmn_exp.ui.leaderboard_scope import UnknownScope, top_filter
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import ORDERS
 from vmn_exp.ui.responses import json_response, memoized_json_response
@@ -75,10 +78,11 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         rows_per_group: int = 10,
         group_key: str = None,
         scope: str = None,
-        top: bool = False,
+        top: str = None,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
+        top = _top(top)
         offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
                       order=order, archived=archived, scope=_scope(scope), top=top)
@@ -100,7 +104,8 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
                        else cache.groups)
             return _answer(request, lambda s, sc, **p: joined_groups(compute(s, sc, group, **p),
                                                                      counts),
-                           snapshot, schema, params, comments=generation, group=group)
+                           snapshot, schema, params, comments=generation, group=group,
+                           **clock)
         compute = (partial(page_by_comments, cache, counts=counts) if by_comments
                    else cache.page)
         return _answer(request, lambda *a, **p: joined(compute(*a, **p), counts),
@@ -153,13 +158,19 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         snapshot, _ = inputs(ws_name, app_tag)
         scope = _scope(scope)
         try:
-            payload = cache.facets(snapshot, archived=archived, scope=scope, query=q,
-                                   status=status)
+            where = dict(archived=archived, scope=scope, query=q, status=status)
+            payload = dict(cache.facets(snapshot, **where), **cache.top_counts(snapshot, **where))
         except UnknownScope as e:
             raise HTTPException(404, str(e))
         except QueryError as e:
             raise HTTPException(400, str(e))
         return json_response(payload, request=request)
+
+    def _top(top):
+        try:
+            return top_filter(top)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     def _scope(scope):
         """*scope*, 400 when it is not a verstr (no run having it is the
