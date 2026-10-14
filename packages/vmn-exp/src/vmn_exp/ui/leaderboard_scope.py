@@ -21,7 +21,6 @@ from vmn_exp.core.tree import OUTER, ancestors, subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.readers.experiments import SNAPSHOT_FIELDS, apply_filters
 
-
 JOBS, SINGLES = "jobs", "singles"
 _TOPS = {None: False, "": False, "0": False, "false": False, "1": True, "true": True,
          JOBS: JOBS, SINGLES: SINGLES}

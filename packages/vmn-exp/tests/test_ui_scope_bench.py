@@ -8,8 +8,9 @@ import time
 
 import pytest
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
+from vmn_exp.core import status as status_mod
 
 JOBS, INNERS, LIVE = 20, 5000, 4000
 SCHEMA = {"loss": {"goal": "min", "primary": True}, "acc": {"goal": "max"}}

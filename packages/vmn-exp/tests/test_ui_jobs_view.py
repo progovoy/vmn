@@ -3,8 +3,9 @@
 those summaries."""
 import pytest
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
+from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 FIELDS = {"total", "counts", "done", "expected", "progress", "failed_pct",

@@ -3,12 +3,13 @@ scratch over freshly annotated rows, for the cache's incremental answer to
 be checked against."""
 import math
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.log import primary_metric, sort_descending
 from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.status import parse_iso
 from vmn_exp.core.tree import annotate_rows, children_by_parent
 from vmn_exp.ui.failure_signature import signature
+
+from vmn_exp.core import status as status_mod
 
 STATES = {"running": "running", "created": "waiting", "succeeded": "succeeded",
           "failed": "failed", "stuck": "stuck"}

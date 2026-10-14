@@ -7,10 +7,11 @@ import random
 
 import pytest
 from leaderboard_fleet import T0, Fleet, running
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.failure_signature import signature
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
+from vmn_exp.core import status as status_mod
 
 
 def _at(monkeypatch, when):

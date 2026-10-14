@@ -25,7 +25,6 @@ from vmn_exp.core.log import (
     primary_metric,
     sort_descending,
 )
-from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.status import CREATED
 from vmn_exp.core.tree import (
     children_by_parent,
@@ -34,6 +33,7 @@ from vmn_exp.core.tree import (
     subtree_verstrs,
     sweep_incomplete,
 )
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_tree import parent_in
 
 

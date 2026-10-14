@@ -8,10 +8,10 @@ paying for it, so without one (an embedded ``create_app``) the route is a
 ``MAX_STREAMS`` open streams it is a 503 (the client polls too)."""
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
-
-from vmn_exp.ui import live_events
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
+
+from vmn_exp.ui import live_events
 
 NO_LIVE_EVENTS = "no_live_events"
 TOO_MANY_STREAMS = "too_many_streams"

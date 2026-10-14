@@ -8,14 +8,14 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
-from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
+
 from vmn_exp.core import index as experiment_index
+from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import leaderboard_cache
 from vmn_exp.ui.readers import experiments as exp_reader
-from vmn_exp.storage.areas import local_store_root
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"

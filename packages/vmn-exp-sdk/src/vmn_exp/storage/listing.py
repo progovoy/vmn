@@ -38,6 +38,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.logfiles import LOG_DIR, local_log_sig
 from vmn_exp.core.metric_files import METRICS_DIR
+
 from vmn_exp.storage import listing_workers
 
 _COARSE_SETTLED_NS = 2 * 10**9  # FAT's mtime granularity

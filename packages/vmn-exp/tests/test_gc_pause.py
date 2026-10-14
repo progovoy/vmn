@@ -10,10 +10,10 @@ import gc
 import threading
 
 import pytest
-
 from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_store import SqliteStore
+
 from vmn_exp.snapshot import LocalSnapshotStorage
 
 
@@ -88,8 +88,9 @@ def test_loading_the_persisted_records_pauses_collection(tmp_path, monkeypatch):
 
 
 def test_a_leaderboard_base_builds_with_collection_paused(tmp_path, monkeypatch):
-    from vmn_exp.ui import leaderboard_cache
     from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
+    from vmn_exp.ui import leaderboard_cache
 
     st = LocalSnapshotStorage(str(tmp_path), area="runs")
     st.save("app", "0.0.1-dev.abc.r1", {"verstr": "0.0.1-dev.abc.r1", "timestamp": "t"}, {})

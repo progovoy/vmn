@@ -3,9 +3,10 @@ with children, ``top=singles`` those without, ``top=1`` both; the facets
 count them (``jobs``/``singles``, the cache's ``top_counts``), moved on across generations."""
 import pytest
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_scope import top_filter
+
+from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 

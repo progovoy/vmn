@@ -12,8 +12,6 @@ new bytes (:mod:`~vmn_exp.ui.readers.parsed_logs`).
 from collections import ChainMap
 
 import yaml
-
-from vmn_exp.snapshot import _resolve_verstr
 from vmn_exp.core.fold import fold_inputs_dict, fold_outputs_dict
 from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
@@ -34,6 +32,8 @@ from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.patches import patch_presence
 from vmn_exp.ui.readers.range_series import range_series
 from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
+
+from vmn_exp.snapshot import _resolve_verstr
 
 _ENV_SIZE_CAP = 256 * 1024  # 256 KB
 
@@ -138,7 +138,7 @@ def status_detail(
     read_state_fn = lambda v: (  # noqa: E731
         own_state if v == verstr else read_run_state(storage, app_name, v)
     )
-    observed_at_fn = lambda v: read_observed_at(storage, app_name, v)
+    observed_at_fn = lambda v: read_observed_at(storage, app_name, v)  # noqa: E731
     detail = run_status(
         verstr,
         parent_of,

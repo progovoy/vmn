@@ -4,8 +4,9 @@ carries ``matched`` (how many runs of its tree pass), and the page carries
 ``jobs_matched`` and ``runs_matched`` (every passing run of the app)."""
 import pytest
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
+from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 

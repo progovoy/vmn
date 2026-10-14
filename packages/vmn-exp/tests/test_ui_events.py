@@ -5,8 +5,9 @@ import asyncio
 import json
 
 from vmn_exp.core.index_snapshot import IndexSnapshot
-from vmn_exp.ui import live_events
 from vmn_exp.ui.live_events import StreamSlots, event_stream, snapshot_change
+
+from vmn_exp.ui import live_events
 
 
 def _row(verstr, parent=None):

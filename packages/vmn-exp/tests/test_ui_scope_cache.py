@@ -8,10 +8,11 @@ import random
 
 import pytest
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.readers.experiments import apply_filters, facets, sort_rows
+
+from vmn_exp.core import status as status_mod
 
 VOLATILE = ("stale_sec", "duration_sec", "job")  # job: test_ui_jobs_view.py
 SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}}]

@@ -9,9 +9,9 @@ import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.open import open_storage
+
 from vmn_exp.ui import live_events
 
 APP = "app"

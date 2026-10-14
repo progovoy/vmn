@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 fastapi = pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient  # noqa: E402
 
 API = "/api/v1/workspaces/main/apps"
 

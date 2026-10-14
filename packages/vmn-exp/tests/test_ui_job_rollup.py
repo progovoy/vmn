@@ -8,9 +8,10 @@ import math
 import pytest
 from job_rollup_reference import annotated, exact_quantile, jobs, rollup, timeline
 from leaderboard_fleet import T0, Fleet
+from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_rollup
-from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
 SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}},
            {"acc": {"goal": "max"}, "loss": {"goal": "min"}, "val_*": {"goal": "min"}}]

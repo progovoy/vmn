@@ -4,13 +4,14 @@ exactly what the plain filter-and-sort answers, generation after generation."""
 import pytest
 from leaderboard_fleet import T0
 from search_fleet import TextFleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.query import parse_query
 from vmn_exp.core.tree import annotate_rows
-from vmn_exp.ui import search_prefilter
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.readers.experiments import apply_filters, sort_rows
 from vmn_exp.ui.search_index import SearchIndex
+
+from vmn_exp.core import status as status_mod
+from vmn_exp.ui import search_prefilter
 
 SCHEMA = {"loss": {"goal": "min"}}
 QUERIES = [

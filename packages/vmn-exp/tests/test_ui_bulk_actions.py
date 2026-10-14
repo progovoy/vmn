@@ -7,10 +7,9 @@ import time
 import pytest
 
 pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient  # noqa: E402
-
-from vmn_exp.storage.areas import RUNS  # noqa: E402
-from vmn_exp.storage.open import open_storage  # noqa: E402
+from fastapi.testclient import TestClient
+from vmn_exp.storage.areas import RUNS
+from vmn_exp.storage.open import open_storage
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"

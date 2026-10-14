@@ -7,9 +7,10 @@ import pytest
 from leaderboard_fleet import T0
 from search_fleet import TextFleet
 from test_fix_ui_refresher import FakeIndex, _wait_for
-from vmn_exp.ui import search_index
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.refresher import Refresher
+
+from vmn_exp.ui import search_index
 
 
 @pytest.fixture

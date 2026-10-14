@@ -7,13 +7,12 @@ The first :data:`MAX_TRIALS` trials are served (``trials_total`` counts
 them all; the rest are the job's Runs tab), and ``job`` is the job's compact
 rollup (plan 23 S3)."""
 from fastapi import HTTPException, Request
-
-from vmn_exp.ui.auth.authz import require
-from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.core.sweep.claims import claimed_trials
 from vmn_exp.core.sweep.spec import SpecError, parse_spec
 from vmn_exp.core.sweep.summary import snapshot_trials
 from vmn_exp.core.sweep.view import sweep_view
+from vmn_exp.ui.auth.authz import require
+from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.responses import json_response
 
 MAX_TRIALS = 50

@@ -4,7 +4,15 @@ live, 10k single runs) a Jobs view page searching every run
 answers in <= 100 ms. Timed, so serial; ``-s`` prints the numbers."""
 import pytest
 from leaderboard_fleet import T0, finished
-from test_ui_search_index_bench import SCHEMA, TEXTS, _BenchFleet, _board_clause, _p95, _timed
+from test_ui_search_index_bench import (
+    SCHEMA,
+    TEXTS,
+    _BenchFleet,
+    _board_clause,
+    _p95,
+    _timed,
+)
+
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 

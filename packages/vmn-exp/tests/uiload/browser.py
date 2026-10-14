@@ -39,6 +39,20 @@ def _ms_since(t0):
     return (time.perf_counter() - t0) * 1000
 
 
+def _settled(page, reads, quiet_ms=500, timeout_ms=30_000):
+    """Wait until *reads* stops growing for *quiet_ms*. Not "networkidle":
+    the board's live-events stream (plan 23) keeps a request open."""
+    seen, quiet_since = len(reads), time.monotonic()
+    deadline = quiet_since + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        page.wait_for_timeout(100)
+        if len(reads) != seen:
+            seen, quiet_since = len(reads), time.monotonic()
+        elif time.monotonic() - quiet_since >= quiet_ms / 1000:
+            return
+    raise TimeoutError("the board's list requests never settled")
+
+
 class BrowserChecks:
     """One headless chromium page on the dashboard of app *app* in workspace *ws*."""
 
@@ -85,7 +99,8 @@ class BrowserChecks:
     # -- navigation ---------------------------------------------------------
 
     def _open_board(self, **params):
-        url = self.board_url + (f"?{urlencode(params)}" if params else "")
+        # The checks measure the runs board; the page opens on Jobs (plan 23).
+        url = f"{self.board_url}?{urlencode({'view': 'all', **params})}"
         t0 = time.perf_counter()
         self.page.goto(url, wait_until="commit")
         return t0
@@ -148,7 +163,7 @@ class BrowserChecks:
         try:
             self._open_board()
             self.page.wait_for_selector(js.ROW_SELECTOR)
-            self.page.wait_for_load_state("networkidle")
+            _settled(self.page, reads)
         finally:
             self.page.remove_listener("request", note)
         before = parse_qs(urlparse(reads[-1]).query) if reads else None

@@ -4,9 +4,10 @@ of the whole app, and what matches never changes."""
 import pytest
 from leaderboard_fleet import T0
 from test_ui_search_index_query import SCHEMA, _expected, _fleet
+from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache
-from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
 
 @pytest.fixture(autouse=True)

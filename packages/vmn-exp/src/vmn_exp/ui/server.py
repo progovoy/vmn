@@ -19,6 +19,35 @@ from vmn_exp.core.similar_search import conf_weights
 from vmn_exp.storage.areas import app_key
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.storage.store_marker import require_store
+from vmn_exp.ui.api_errors import APP_NOT_FOUND, CodedError, raise_read_error
+from vmn_exp.ui.app_presence import app_exists
+from vmn_exp.ui.audit import AuditLog, install_audit_middleware
+from vmn_exp.ui.auth import build_chain
+from vmn_exp.ui.auth.authz import require, require_action
+from vmn_exp.ui.auth.principal import ADMIN, VIEWER
+from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
+from vmn_exp.ui.experiment_source import ExperimentSource
+from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
+from vmn_exp.ui.job_views import JobViews
+from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
+from vmn_exp.ui.leaderboard_scope import UnknownScope
+from vmn_exp.ui.memo import TTLCache
+from vmn_exp.ui.middleware import SelectiveGZipMiddleware
+from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.ui.report_index import ReportIndexes
+from vmn_exp.ui.responses import (
+    GZIP_LEVEL,
+    GZIP_MIN_BYTES,
+    SafeJSONResponse,
+    json_response,
+)
+from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
+from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
+from vmn_exp.ui.static_files import mount_static
+from vmn_exp.ui.tenancy import install_org_middleware
+from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
+
 from vmn_exp.ui import (
     api_errors,
     routes_admin,
@@ -40,39 +69,11 @@ from vmn_exp.ui import (
     routes_sweep,
     routes_tree,
 )
-from vmn_exp.ui.api_errors import APP_NOT_FOUND, CodedError, raise_read_error
-from vmn_exp.ui.app_presence import app_exists
-from vmn_exp.ui.audit import AuditLog, install_audit_middleware
-from vmn_exp.ui.auth import build_chain
-from vmn_exp.ui.auth.authz import require, require_action
-from vmn_exp.ui.auth.principal import ADMIN, VIEWER
-from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
-from vmn_exp.ui.experiment_source import ExperimentSource
-from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
-from vmn_exp.ui.job_views import JobViews
-from vmn_exp.ui.leaderboard_cache import LeaderboardCache
-from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
-from vmn_exp.ui.leaderboard_scope import UnknownScope
-from vmn_exp.ui.memo import TTLCache
-from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.readers import changelog as changelog_reader
 from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
 from vmn_exp.ui.readers import experiment_detail as detail_reader
 from vmn_exp.ui.readers import experiments as exp_reader
-from vmn_exp.ui.refresher import InlineRefresher, Refresher
-from vmn_exp.ui.report_index import ReportIndexes
-from vmn_exp.ui.responses import (
-    GZIP_LEVEL,
-    GZIP_MIN_BYTES,
-    SafeJSONResponse,
-    json_response,
-)
-from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
-from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
-from vmn_exp.ui.static_files import mount_static
-from vmn_exp.ui.tenancy import install_org_middleware
-from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
 
 API_PREFIX = "/api/v1"
 # A chart's worth of points per metric, however much a client asks for.
@@ -108,11 +109,12 @@ def create_app(
     workspaces' indexes there, refreshed by one elected replica."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
-    from vmn_exp.ui import storage_access
     from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
     from vmn_exp.ui.jobs import JobRunner, build_command
     from vmn_exp.ui.jobs_store import build_store_action
     from vmn_exp.ui.storage_access import EDIT, READ
+
+    from vmn_exp.ui import storage_access
 
     app = FastAPI(
         title="vmn-exp ui",

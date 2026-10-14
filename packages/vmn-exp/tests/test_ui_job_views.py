@@ -6,11 +6,12 @@ import datetime
 import pytest
 from job_rollup_reference import annotated, subtree
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.tree import children_by_parent
 from vmn_exp.ui.failure_signature import signature
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
+from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 

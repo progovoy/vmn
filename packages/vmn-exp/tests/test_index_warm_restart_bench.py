@@ -6,8 +6,8 @@ import time
 
 import pytest
 from uiload import seeder
-
 from vmn_exp.core.index import ExperimentIndex
+
 from vmn_exp.snapshot import LocalSnapshotStorage
 
 APP = "benchapp"

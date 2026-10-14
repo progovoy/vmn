@@ -9,9 +9,10 @@ import time
 import pytest
 from leaderboard_fleet import T0, finished, running
 from search_fleet import TextFleet
+from vmn_exp.ui.search_index import SearchIndex
+
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
-from vmn_exp.ui.search_index import SearchIndex
 
 JOBS, TRIALS, SINGLES = 20, 4500, 10_000
 N = JOBS * (TRIALS + 1) + SINGLES
@@ -108,7 +109,7 @@ def test_list_text_search_without_the_index_for_reference(fleet, monkeypatch):
     snap = fleet.snapshot()
     cache = lb.LeaderboardCache()
     cache.page(snap, SCHEMA, limit=50)
-    monkeypatch.setattr(cache, "_candidates", lambda snapshot, query: None)
+    monkeypatch.setattr(cache, "_candidates", lambda *args, **kwargs: None)
     listed = [_timed(lambda t=t: cache.page(snap, SCHEMA, query=_board_clause(t), limit=50))
               for t in TEXTS]
     print(f"\nS8 list text search, no index (today): p95 {_p95(listed) * 1000:.1f} ms")

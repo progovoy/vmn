@@ -4,9 +4,10 @@ a scope (a subtree has no top-level run), and is served by an ETag known
 before anything is computed."""
 import pytest
 from leaderboard_fleet import T0, Fleet
+from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_answers, leaderboard_cache
-from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
 
 @pytest.fixture
@@ -83,7 +84,7 @@ def test_a_repeated_facets_request_is_a_304_without_computing(tmp_path, monkeypa
             real = getattr(LeaderboardCache, name, None)
             if real is not None:
                 monkeypatch.setattr(LeaderboardCache, name,
-                                    lambda *a, _r=real, **k: calls.append(1) or _r(*a, **k))
+                                    lambda *a, _r=real, _c=calls, **k: _c.append(1) or _r(*a, **k))
         again = client.get(f"{BASE}/experiments-facets", params=params,
                            headers={"If-None-Match": first.headers["etag"]})
         assert again.status_code == 304 and not calls

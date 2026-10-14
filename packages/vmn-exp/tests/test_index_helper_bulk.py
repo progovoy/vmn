@@ -11,9 +11,10 @@ import io
 import pickle
 import sys
 
-from vmn_exp.core import index_io_process, index_workers
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_io_process import _Helper
+
+from vmn_exp.core import index_io_process, index_workers
 from vmn_exp.snapshot import LocalSnapshotStorage
 
 APP = "app"
