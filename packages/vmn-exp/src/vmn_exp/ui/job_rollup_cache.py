@@ -25,6 +25,7 @@ class JobRollupCache:
         self._overlays = LRU(size)
         self._trees = LRU(size)
         self._answers = LRU(ANSWERS)
+        self._specs = LRU(size)
 
     def job_rollup(self, snapshot, schema, verstr):
         """*verstr*'s full rollup, or None when it is not a job."""
@@ -38,6 +39,14 @@ class JobRollupCache:
         """``{failure signature: runs}`` over *verstr*'s subtree, or None
         when it is not a job."""
         return self._answer(snapshot, schema, verstr, failure_counts)
+
+    def spec(self, snapshot, schema):
+        """The :class:`~vmn_exp.ui.job_tally.RollupSpec` of *schema* over
+        *snapshot* (its fallback metrics are the snapshot's most common)."""
+        cache = self._cache
+        base, _ = cache._base(snapshot)
+        return self._specs.get((base.token, cache.schema_key(schema)), lambda: RollupSpec(
+            schema, lambda: cache._facets.common_metrics(snapshot)))
 
     def tree(self, base):
         """*base*'s :class:`~vmn_exp.ui.job_rollup.JobTree`."""
@@ -55,9 +64,10 @@ class JobRollupCache:
             snapshot, base, bucket, tree, schema, schema_key, verstr, answer))
 
     def _compute(self, snapshot, base, bucket, tree, schema, schema_key, verstr, answer):
+        spec = self.spec(snapshot, schema)
         static = self._static.get(
             (base.token, schema_key),
-            lambda: self._static_of(snapshot, base, schema, schema_key),
+            lambda: self._static_of(snapshot, base, spec, schema_key),
         )
         live = self._overlays.get((base.token, bucket, schema_key),
                                   lambda: overlay(base, bucket, static.spec))
@@ -81,11 +91,11 @@ class JobRollupCache:
             return answered(verstr)
         return {job: answered(job) for job in tree.jobs}
 
-    def _static_of(self, snapshot, base, schema, schema_key):
+    def _static_of(self, snapshot, base, spec, schema_key):
         key = (snapshot.app_name, schema_key)
         last = self._latest.peek(key)
-        moves = last and self._cache._deltas.since(last.token, base)
-        static = last.advanced(base, *moves) if moves else StaticRollups.build(
-            base, RollupSpec(schema))
+        moves = last and last.spec.same_metrics(spec) and self._cache._deltas.since(
+            last.token, base)
+        static = last.advanced(base, *moves) if moves else StaticRollups.build(base, spec)
         self._latest.put(key, static)
         return static
