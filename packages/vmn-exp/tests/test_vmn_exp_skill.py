@@ -37,7 +37,7 @@ def test_vmn_exp_skill_explains_how_to_drive_the_ui_fleet_columns(capfd):
     assert "total / waiting / running / done / failed" in out
     assert "--parent" in out
     assert "start_run(" in out and "run_id=" in out
-    assert "docs/vmn-exp/ai-fleet-tracking.md" in out
+    assert "vmn_exp/cli/docs/ai-fleet-tracking.md" in out
 
 
 def test_vmn_exp_skill_covers_experiments_and_model_registry(capfd):

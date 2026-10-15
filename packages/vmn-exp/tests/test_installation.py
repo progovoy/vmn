@@ -141,6 +141,8 @@ def test_the_skill_names_only_shipped_docs(wheelhouse):
     assert "ai-fleet-tracking.md" in named
     shipped = _names(wheelhouse["vmn-exp"])
     assert [n for n in named if f"vmn_exp/cli/docs/{n}" not in shipped] == []
+    # A pip install has no repo checkout: name only the shipped copies.
+    assert not re.search(r"(?<![\w/])docs/vmn-exp/", VMN_EXP_TEXT)
 
 
 def test_the_installed_commands_run(full_venv, tmp_path):

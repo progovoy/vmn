@@ -82,11 +82,9 @@ start_study_run(study, outer="<outer verstr>").finish()  # once: logs best_* on 
 ```
 
 Without an Optuna storage, `vmn-exp sweep` (`method: bayes`) coordinates pods
-through the store alone (docs/vmn-exp/sweeps.md).
-Full guide: docs/vmn-exp/ai-fleet-tracking.md. The guides ship with vmn-exp as
-`vmn_exp/cli/docs/*.md` (e.g. `vmn_exp/cli/docs/ai-fleet-tracking.md`,
-`vmn_exp/cli/docs/sweeps.md`); find them with
-`python -c "import vmn_exp.cli, os; print(os.path.dirname(vmn_exp.cli.__file__))"`.
+through the store alone (`vmn_exp/cli/docs/sweeps.md`).
+Full guide: `vmn_exp/cli/docs/ai-fleet-tracking.md` (the guides ship with vmn-exp;
+find them with `python -c "import vmn_exp.cli, os; print(os.path.dirname(vmn_exp.cli.__file__))"`).
 
 ### Saving uncommitted work
 
