@@ -47,6 +47,7 @@ from vmn_exp.sdk.models import (  # noqa: E402
     remove_alias,
     set_alias,
 )
+from vmn_exp.sdk.create import create_run  # noqa: E402
 from vmn_exp.sdk.datasets import get_dataset_version, register_dataset  # noqa: E402
 from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
 from vmn_exp.sdk.run import Run, install_signal_handlers, start_run  # noqa: E402  (needs the helper above)
@@ -58,6 +59,7 @@ __all__ = [
     "Run",
     "autolog",
     "autolog_disable",
+    "create_run",
     "current_run",
     "download_model",
     "get_dataset_version",

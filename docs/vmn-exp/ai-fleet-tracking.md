@@ -39,16 +39,20 @@ declared pods not registered yet, and registered-but-not-started pods are under
 ## The lifecycle, call by call
 
 ```python
-from vmn_exp.sdk import start_run
+from vmn_exp.sdk import create_run, start_run
 
 # 1. The outer run: the group header the counts appear on.
 outer = start_run("my_app", name="lr-sweep", params={"expected_pods": 3})
+
+# 2. Register each pod before it starts: total +1, waiting +1.
+#    Inside the outer run no parent= is needed; returns the pod's verstr.
+pod_ids = [create_run("my_app", name=f"pod{i}") for i in range(3)]
 ```
 
-```sh
-# 2. Register each pod before it starts: total +1, waiting +1.
-vmn-exp create my_app --name pod0 --parent <outer verstr>
-```
+From a shell, step 2 is `vmn-exp create my_app --name pod0 --parent <outer verstr>`.
+`create_run(app_name, name=, params=, note=, parent=)` opens nothing (no
+heartbeat, no thread); its parent is `parent=`, else the calling context's open
+run, else `$VMN_EXPERIMENT_ID`.
 
 ```python
 # 3. On the worker: reopen the registered pod.   waiting -1, running +1
@@ -118,7 +122,7 @@ params). See [ui.md](ui.md#api).
 ## Checklist for an agent
 
 - Create the outer run first, and keep its verstr (`outer.id`).
-- Register every pod with `--parent` before dispatching, if the waiting count matters.
+- Register every pod (`create_run()` or `vmn-exp create --parent`) before dispatching, if the waiting count matters.
 - Start each pod with `start_run(run_id=...)` (or `VMN_RESUME_RUN_ID`) on the worker.
 - End it with `finish()` / `finish(exit_code=n)`, or use `with` so a crash is recorded.
 - Never write `run_state.yml` by hand. The heartbeat and exit code are what the counts read.

@@ -618,6 +618,18 @@ with start_run("my_app", note="lr sweep"):
         subprocess.run(["vmn-exp", "run", "my_app", "--", "python", "train.py", "--lr", str(lr)])
 ```
 
+To register a run without starting it (a fleet's *waiting* count),
+`create_run("my_app", name=, params=, note=, parent=)` returns the new verstr
+and opens nothing; it nests like `nested=True`. A worker later takes it with
+`start_run("my_app", run_id=<verstr>)`
+([fleet counts](ai-fleet-tracking.md)):
+
+```python
+with start_run("my_app", name="sweep") as outer:
+    pod_ids = [create_run("my_app", name=f"pod{i}") for i in range(8)]
+    submit_pods(pod_ids)                 # each pod: start_run("my_app", run_id=...)
+```
+
 Either way you get the [outer/inner structure](experiments.md#outer--inner-jobs-sweeps)
 (`kind`, `tree_status`) a CLI sweep produces.
 

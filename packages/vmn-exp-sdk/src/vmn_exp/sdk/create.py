@@ -10,6 +10,7 @@ import contextlib
 import os
 
 import yaml
+from vmn_exp._base import ensure_logger
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.env import (
     capture_env_safe,
@@ -37,6 +38,24 @@ def gitmode():
     except ImportError as exc:
         raise RuntimeError(GIT_MODE_MISSING) from exc
     return checkout
+
+
+def create_run(
+    app_name=None, *, name=None, params=None, note=None, parent=None, storage=None,
+    capture_env=None,
+):
+    """Register a run without starting it; returns its verstr.
+
+    The run reads ``created`` (a fleet's *waiting*) until a process takes it
+    with ``start_run(run_id=<verstr>)``. Its parent is *parent*, else the
+    calling context's open run, else ``VMN_EXPERIMENT_ID`` — so a launcher
+    inside its outer run registers every pod up front and the outer run's
+    totals are right before any pod starts.
+    """
+    ensure_logger()
+    return create_record(
+        app_name, note, params, parent, True, storage, name, capture_env=capture_env,
+    )[2]
 
 
 def create_record(
