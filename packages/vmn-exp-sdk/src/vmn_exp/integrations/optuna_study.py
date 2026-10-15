@@ -6,6 +6,11 @@ that records each trial as an inner run, then pass that to
 ``study.optimize()``.  Call ``tracker.finish()`` after optimizing to record the
 best result on the outer run.
 
+Trials in separate processes (pods sharing an Optuna RDB/journal storage)
+attach to one existing outer run with ``start_study_run(study, outer=<ref>)``:
+no outer run is opened, trials nest under *outer*, and ``finish()`` (called
+once, by whoever finishes the study) reopens it to record the best result.
+
 Design notes
 ------------
 * Each trial opens its own inner run with ``parent=outer.id`` (explicit) and
@@ -39,13 +44,19 @@ from typing import Any, Callable, Optional
 _LOGGER = logging.getLogger(__name__)
 
 
-def start_study_run(study, app_name: Optional[str] = None, **start_run_kwargs):
-    """Open an outer experiment run for an Optuna study.
+def start_study_run(
+    study, app_name: Optional[str] = None, outer: Optional[str] = None,
+    **start_run_kwargs,
+):
+    """Open an outer experiment run for an Optuna study, or attach to one.
 
     Args:
         study: an ``optuna.Study`` object.
         app_name: experiment app name; resolved from the git checkout when
             ``None``.
+        outer: a ref of an existing outer run (e.g. ``VMN_EXPERIMENT_ID``) to
+            nest trials under instead of opening a new one; for trials that
+            run in separate processes.  ``finish()`` then reopens it.
         **start_run_kwargs: forwarded verbatim to ``start_run()`` for the
             outer run.  ``name`` defaults to ``study.study_name``.
 
@@ -61,10 +72,20 @@ def start_study_run(study, app_name: Optional[str] = None, **start_run_kwargs):
 
     from vmn_exp.sdk import start_run
 
+    if outer is not None:
+        if start_run_kwargs:
+            raise ValueError(
+                f"outer= attaches to an existing run; drop {sorted(start_run_kwargs)}"
+            )
+        from vmn_exp.sdk import resume
+
+        # Resolved once: trials then pass an exact verstr, not a ref to re-list.
+        app_name, _, outer_id, _, _ = resume.locate(app_name, outer, None, action="attach to")
+        return StudyTracker(app_name, outer_id, study)
     params = _study_params(study)
     name = start_run_kwargs.pop("name", study.study_name or "optuna-study")
-    outer = start_run(app_name, name=name, params=params, **start_run_kwargs)
-    return StudyTracker(outer, study)
+    outer_run = start_run(app_name, name=name, params=params, **start_run_kwargs)
+    return StudyTracker(outer_run.app_name, outer_run.id, study, outer_run)
 
 
 class StudyTracker:
@@ -73,9 +94,11 @@ class StudyTracker:
     Returned by :func:`start_study_run`.
     """
 
-    def __init__(self, outer_run, study):
-        self._outer = outer_run
+    def __init__(self, app_name, outer_id, study, outer_run=None):
+        self._app_name = app_name
+        self._outer_id = outer_id
         self._study = study
+        self._outer = outer_run  # None when attached to an existing outer run
 
     def wrap(self, objective: Callable) -> Callable:
         """Return a wrapped objective that records each trial as an inner run.
@@ -94,8 +117,8 @@ class StudyTracker:
         from vmn_exp.sdk import start_run as _sr
 
         TrialPruned = _optuna.TrialPruned
-        outer_id = self._outer.id
-        app_name = self._outer.app_name
+        outer_id = self._outer_id
+        app_name = self._app_name
 
         def _wrapped(trial):
             run = _sr(
@@ -124,9 +147,19 @@ class StudyTracker:
         return _wrapped
 
     def finish(self):
-        """Log best trial result on the outer run and close it."""
-        _log_best(self._outer, self._study)
-        self._outer.finish()
+        """Log best trial result on the outer run and close it.
+
+        An attached tracker reopens the existing outer run for this, logging
+        the study's params too; call it from one process only.
+        """
+        outer = self._outer
+        if outer is None:
+            from vmn_exp.sdk import start_run
+
+            outer = start_run(self._app_name, run_id=self._outer_id)
+            outer.log_params(_study_params(self._study))
+        _log_best(outer, self._study)
+        outer.finish()
 
 
 # ---------------------------------------------------------------------------

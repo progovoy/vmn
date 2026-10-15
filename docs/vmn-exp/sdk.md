@@ -964,6 +964,36 @@ tracker.finish()
 - `tracker.finish()` logs `best_value` and `best_<param>` on the outer run
   (multi-objective: `best_n_pareto_trials`) and closes it.
 
+**Trials in separate pods.** When trials run in separate processes that share
+an Optuna storage (RDB or journal), every pod calling `start_study_run(study)`
+would open its own outer run. Instead, create the outer run once and attach
+each pod to it with `outer=` (a run ref; pods launched as in the
+[Kubernetes recipe](client-guide.md) already carry it as `VMN_EXPERIMENT_ID`):
+
+```python
+# launcher, once:  vmn-exp create my_app --name lr_sweep   -> <outer verstr>
+# each pod:
+study = optuna.load_study(study_name="lr_sweep", storage=os.environ["OPTUNA_STORAGE"])
+tracker = start_study_run(study, outer=os.environ["VMN_EXPERIMENT_ID"])
+study.optimize(tracker.wrap(objective), n_trials=5)
+
+# whoever finishes the study, once:
+start_study_run(study, outer="<outer verstr>").finish()
+```
+
+- `outer` is resolved once, when attaching (an unknown ref raises
+  `ValueError` there, not at the first trial).
+- An attached tracker opens no run: each trial is an inner run of `outer`, with
+  the same params, `objective`, `intermediate` and pruned/failed handling.
+- Its `finish()` reopens the outer run (`start_run(run_id=outer)`), logs the
+  study params and `best_*` from the shared study, and closes it as succeeded.
+  Call it from one process only; pods just don't call it.
+- `outer=` takes no `start_run` kwargs (those configure a new outer run):
+  combining them raises `ValueError`.
+- With no Optuna storage to run, `vmn-exp sweep` with `method: bayes` does the
+  same across pods with the store as the only shared state
+  ([sweeps.md](sweeps.md)).
+
 ### Ray Tune — `TuneRecorder` + `VmnTuneCallback`
 
 Driver-side only: it records trial outcomes from the process running Tune; no

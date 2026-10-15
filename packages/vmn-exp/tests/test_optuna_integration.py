@@ -273,3 +273,65 @@ def test_autolog_in_objective_lands_in_trial(app_layout):
     assert any("sklearn" in k for k in params), (
         f"autolog params not found in trial run: {params}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 9. outer=<ref>: trials in separate processes (pods) share one outer run
+# ---------------------------------------------------------------------------
+
+def _create_outer(app_layout):
+    """An outer run made elsewhere (``vmn-exp create``), as a pod launcher would."""
+    from exp_helpers import _experiment
+
+    assert _experiment(app_layout.app_name) == 0
+    (row,) = _rows(app_layout)
+    return row["verstr"]
+
+
+def _quadratic(trial):
+    return trial.suggest_float("x", -5.0, 5.0) ** 2
+
+
+def test_pods_attach_trials_to_one_existing_outer(app_layout):
+    """Trackers attached with outer= open no outer run of their own."""
+    _bootstrap(app_layout)
+    outer_id = _create_outer(app_layout)
+
+    study = optuna.create_study()
+    for _pod in range(2):
+        tracker = start_study_run(study, app_name=app_layout.app_name, outer=outer_id)
+        study.optimize(tracker.wrap(_quadratic), n_trials=2)
+
+    rows = _rows(app_layout)
+    assert [r["verstr"] for r in rows if r.get("parent") is None] == [outer_id]
+    inner = [r for r in rows if r.get("parent") is not None]
+    assert len(inner) == 4
+    assert {r["parent"] for r in inner} == {outer_id}
+    assert {r["tags"]["trial_number"] for r in inner} == {"0", "1", "2", "3"}
+
+
+def test_attached_finish_logs_best_on_existing_outer(app_layout):
+    """finish() of an attached tracker records the study's best on the outer run."""
+    _bootstrap(app_layout)
+    outer_id = _create_outer(app_layout)
+
+    study = optuna.create_study(direction="minimize")
+    pod = start_study_run(study, app_name=app_layout.app_name, outer=outer_id)
+    study.optimize(pod.wrap(_quadratic), n_trials=3)
+    start_study_run(study, app_name=app_layout.app_name, outer=outer_id).finish()
+
+    outer = next(r for r in _rows(app_layout) if r["verstr"] == outer_id)
+    assert outer["metrics"]["best_value"] == pytest.approx(study.best_value)
+    assert outer["params"]["best_x"] == pytest.approx(study.best_params["x"])
+    assert outer["params"]["sampler"] == "TPESampler"
+    assert outer["status"] == "succeeded"
+
+
+def test_outer_rejects_outer_run_kwargs(app_layout):
+    """start_run kwargs configure a new outer run, so they make no sense with outer=."""
+    _bootstrap(app_layout)
+    with pytest.raises(ValueError, match="outer"):
+        start_study_run(
+            optuna.create_study(), app_name=app_layout.app_name,
+            outer="@0", name="ignored",
+        )

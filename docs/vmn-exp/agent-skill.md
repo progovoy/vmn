@@ -60,6 +60,19 @@ pod.finish()               # running -> done    (exit_code=0)
 `start_run("<app_name>", nested=True)` inside the outer run (or
 `vmn-exp run <app_name> --parent <ref> -- <cmd>`) starts a pod straight in
 `running`. Use `with start_run(...) as pod:` so a crash records `failed`.
+
+Optuna trials in separate pods (shared Optuna storage): attach each pod to the
+one outer run instead of opening one per pod, and finish it once:
+
+```python
+from vmn_exp.integrations.optuna_study import start_study_run
+tracker = start_study_run(study, outer=os.environ["VMN_EXPERIMENT_ID"])
+study.optimize(tracker.wrap(objective), n_trials=5)   # one inner run per trial
+start_study_run(study, outer="<outer verstr>").finish()  # once: logs best_* on the outer run
+```
+
+Without an Optuna storage, `vmn-exp sweep` (`method: bayes`) coordinates pods
+through the store alone (docs/vmn-exp/sweeps.md).
 Full guide: docs/vmn-exp/ai-fleet-tracking.md
 
 ### Saving uncommitted work
