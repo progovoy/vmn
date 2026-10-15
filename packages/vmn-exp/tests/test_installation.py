@@ -9,8 +9,10 @@ The installs need the package index for third-party dependencies. If it is
 unreachable the tests skip; anything else is a real packaging defect.
 """
 import os
+import re
 import subprocess
 import zipfile
+from pathlib import Path
 
 import pytest
 from exp_helpers import _PROJECT_ROOT, _PY
@@ -122,6 +124,23 @@ def test_vmn_exp_ships_the_dashboard_assets(wheelhouse):
     static = [n for n in _names(wheelhouse["vmn-exp"]) if "/ui/static/" in n]
     assert any(n.endswith("index.html") for n in static), static
     assert any("/assets/" in n for n in static), static
+
+
+def test_vmn_exp_ships_its_docs(wheelhouse):
+    # `vmn-exp skill` points agents at these guides; a pip install has no repo.
+    shipped = _names(wheelhouse["vmn-exp"])
+    docs = sorted(p.name for p in (Path(_PROJECT_ROOT) / "docs" / "vmn-exp").glob("*.md"))
+    assert docs
+    assert [d for d in docs if f"vmn_exp/cli/docs/{d}" not in shipped] == []
+
+
+def test_the_skill_names_only_shipped_docs(wheelhouse):
+    from vmn_exp.cli.skill import VMN_EXP_TEXT
+
+    named = set(re.findall(r"vmn_exp/cli/docs/([\w.-]+\.md)", VMN_EXP_TEXT))
+    assert "ai-fleet-tracking.md" in named
+    shipped = _names(wheelhouse["vmn-exp"])
+    assert [n for n in named if f"vmn_exp/cli/docs/{n}" not in shipped] == []
 
 
 def test_the_installed_commands_run(full_venv, tmp_path):

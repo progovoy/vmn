@@ -47,12 +47,13 @@ They are derived from the inner runs' states, never written directly:
 - **stuck**: inner runs whose heartbeat went stale with no exit code
 
 ```python
-from vmn_exp.sdk import start_run
+from vmn_exp.sdk import create_run, start_run
 
 outer = start_run("<app_name>", name="sweep", params={"expected_pods": 8})
-# register each pod up front (total +1, waiting +1):
-#   vmn-exp create <app_name> --name pod3 --parent <outer.id>
-pod = start_run("<app_name>", run_id="<pod verstr>")  # waiting -> running
+# register each pod up front (total +1, waiting +1); nests under the open outer run
+pod_ids = [create_run("<app_name>", name=f"pod{i}") for i in range(8)]
+# (shell: vmn-exp create <app_name> --name pod3 --parent <outer.id>)
+pod = start_run("<app_name>", run_id=pod_ids[3])  # on the worker: waiting -> running
 pod.finish()               # running -> done    (exit_code=0)
 # or pod.finish(exit_code=1)  running -> failed (any non-zero)
 ```
@@ -73,7 +74,10 @@ start_study_run(study, outer="<outer verstr>").finish()  # once: logs best_* on 
 
 Without an Optuna storage, `vmn-exp sweep` (`method: bayes`) coordinates pods
 through the store alone (docs/vmn-exp/sweeps.md).
-Full guide: docs/vmn-exp/ai-fleet-tracking.md
+Full guide: docs/vmn-exp/ai-fleet-tracking.md. The guides ship with vmn-exp as
+`vmn_exp/cli/docs/*.md` (e.g. `vmn_exp/cli/docs/ai-fleet-tracking.md`,
+`vmn_exp/cli/docs/sweeps.md`); find them with
+`python -c "import vmn_exp.cli, os; print(os.path.dirname(vmn_exp.cli.__file__))"`.
 
 ### Saving uncommitted work
 
