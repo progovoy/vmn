@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 
 import yaml
@@ -34,7 +35,13 @@ from vmn_exp.storage.files import (
 )
 from vmn_exp.storage.local_metrics import LocalMetrics
 from vmn_exp.storage.local_streams import LocalStreams
-from vmn_exp.storage.listing import SIGNED_SUBDIRS, RecordListings, files_in, map_dirs
+from vmn_exp.storage.listing import (
+    SIGNED_SUBDIRS,
+    RecordListings,
+    files_in,
+    map_dirs,
+    settle_ns,
+)
 
 
 def _ensure_parent(path):
@@ -213,6 +220,19 @@ class LocalSnapshotStorage(LocalStreams, LocalMetrics, SnapshotStorage):
     def list_record_keys(self, app_name):
         """:meth:`list_record_names`' keys alone: one directory listing, no stat."""
         return {unsafe_verstr(entry.name) for entry in self._scan_records(app_name)}
+
+    def record_names_sig(self, app_name):
+        """``[mtime_ns, inode]`` of the app's directory — which moves
+        whenever a record comes or goes — once settled (no later change can
+        share that mtime: see :mod:`~vmn_exp.storage.listing`); None until
+        then, or without the directory."""
+        try:
+            st = os.stat(self._snapshot_base_dir(app_name))
+        except FileNotFoundError:
+            return None
+        if st.st_mtime_ns > time.time_ns() - settle_ns(st.st_mtime_ns):
+            return None
+        return [st.st_mtime_ns, st.st_ino]
 
     def _record_entries(self, app_name):
         return list(self._scan_records(app_name))

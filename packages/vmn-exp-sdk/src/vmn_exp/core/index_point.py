@@ -22,6 +22,7 @@ from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.index_store import IndexStore
 
 _STORES = {}  # cache path -> its store, shared by the process's point reads
+_SIG_SCOPE, _SIG_FORMAT = "record-names:", "record-names-sig-1"
 _STORES_LOCK = threading.Lock()
 
 
@@ -47,7 +48,13 @@ def point_view(storage, app_name):
 
 def _sync(storage, app_name, store):
     """Persist the records the storage lists that *store* does not know, and
-    forget the ones it no longer lists; False when that cannot be told."""
+    forget the ones it no longer lists; False when that cannot be told. When
+    no record came or went since the last sync (the storage's
+    ``record_names_sig`` held still), nothing is listed."""
+    sig_of = getattr(storage, "record_names_sig", None)
+    sig = sig_of(app_name) if sig_of else None
+    if sig is not None and store.kv_get(_SIG_SCOPE + app_name, _SIG_FORMAT) == sig:
+        return True
     names = record_keys(storage, app_name)
     diff = store.diff_keys(app_name, names) if names is not None else None
     if diff is None:
@@ -61,9 +68,11 @@ def _sync(storage, app_name, store):
         for key, files in listed.items()
         if METADATA_FILE in files
     }
-    if not (records or gone):
-        return True
-    return store.save(app_name, records, gone, records) is not False
+    if (records or gone) and store.save(app_name, records, gone, records) is False:
+        return False
+    if sig is not None and len(records) == len(new):  # every name is a persisted run
+        store.kv_put(_SIG_SCOPE + app_name, _SIG_FORMAT, sig)
+    return True
 
 
 def record_keys(storage, app_name):
