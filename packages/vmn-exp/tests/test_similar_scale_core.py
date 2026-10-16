@@ -1,57 +1,69 @@
-"""Similar runs stay interactive on a large app: 20k runs, index build included."""
-import random
-import time
+"""Similar runs at scale (plan 24 F1): the synthetic store of
+:mod:`scale_store` (a 20k-word vocabulary, 150-word intents, changed files
+and symbols, a third of the runs inner runs), its experiment index built
+once and cached (:mod:`similar_bench`).
+
+Budgets at 100k runs (``VMN_SCALE_BENCH=1``): a fresh process answers a full
+query (a run's code, params, intent) within 1 s and a text-only one within
+0.3 s, a warm process within 0.1 s, a save refiles 100 changed runs within
+0.2 s, and a query adds at most 150 MB of resident memory. The 20k-run
+variant runs always, under budgets scaled by 0.3. A fresh process's time is
+its wall time to the first answer minus the wall time of a process that only
+imports (Python start and the CLI's imports, measured in the same run; both
+printed). What is timed is the search over the persisted index file;
+bringing the index up to date with the store is the index's own cost
+(plan 25).
+"""
+import os
 
 import pytest
+from similar_bench import indexed_store, measure, refile_seconds, target_verstr
 
-from similar_fixtures import FakeSnapshot, changed, dataset, run
-from vmn_exp.core.similar import similar_runs
-
-WORDS = ("focal loss label smoothing mixup cutout warmup cosine schedule adam sgd "
-         "dropout weight decay imbalance recall precision augmentation distill").split()
+SCALE = {20_000: 0.3, 100_000: 1.0}
+FULL_SEC, TEXT_SEC, WARM_SEC, REFILE_SEC, RSS_MB = 1.0, 0.3, 0.1, 0.2, 150
 
 
-def _synthetic(n, seed=7):
-    rnd = random.Random(seed)
-    rows, features, intents = [], {}, {}
-    for i in range(n):
-        verstr = f"1.{i % 40}.0-dev.{i % 97:07d}.{i:07d}.1"
-        rows.append(run(
-            verstr, code=verstr.rsplit(".", 1)[0], base=f"1.{i % 40}.0",
-            parent=f"1.0.0-dev.outer.{i // 50}" if i % 3 == 0 else None,
-            timestamp=f"2026-01-{1 + i % 28:02d}T00:00:{i % 60:02d}Z",
-            params={"lr": rnd.choice([1e-4, 3e-4, 1e-3]), "bs": rnd.choice([16, 32]),
-                    f"p{i % 30}": i % 5},
-            metrics={"val_loss": rnd.random(), "acc": rnd.random(), f"m{i % 20}": 1.0},
-            inputs=dataset(f"ds{i % 15}@{i % 4}", f"sha256:{i % 60}"),
-            note=" ".join(rnd.sample(WORDS, 4)),
-            tags={"team": f"t{i % 9}"},
-        ))
-        features[verstr] = changed(
-            files=[f"src/m{i % 120}.py", f"src/m{(i * 7) % 120}.py"],
-            symbols=[f"src/m{i % 120}.py::f{i % 300}"],
-            commits=[" ".join(rnd.sample(WORDS, 3))],
-        )
-        if i % 4 == 0:
-            intents[verstr] = {"text": " ".join(rnd.sample(WORDS, 8)),
-                               "keywords": rnd.sample(WORDS, 2)}
-    snapshot = FakeSnapshot(rows, features=features, intents=intents,
-                            declared={"val_loss": {"goal": "min"}})
-    return snapshot, rows
+def _runs(n):
+    if n > 20_000 and os.environ.get("VMN_SCALE_BENCH") != "1":
+        pytest.skip("set VMN_SCALE_BENCH=1 for the 100k-run benchmarks")
+    return n
+
+
+@pytest.fixture(scope="module", params=sorted(SCALE), ids=lambda n: f"{n // 1000}k")
+def store(request):
+    n = _runs(request.param)
+    return n, indexed_store(n)
+
+
+def _measured(n, built, kind, verstr=None):
+    got = measure(*built, kind, verstr)
+    print(f"\n{n} runs, {kind} query: wall {got['wall']:.3f}s - import baseline "
+          f"{got['baseline']:.3f}s = {got['cold']:.3f}s cold, {got['warm']:.3f}s warm, "
+          f"+{got['rss_mb']:.0f} MB")
+    return got
 
 
 @pytest.mark.serial
-def test_a_query_over_twenty_thousand_runs_takes_well_under_seconds():
-    snapshot, rows = _synthetic(20000)
-    target = {"row": rows[123], "features": snapshot.features_of(rows[123]["verstr"]),
-              "intent": snapshot.intent_of(rows[123]["verstr"]), "hypothesis": None,
-              "text": None, "text_only": False}
-    started = time.perf_counter()
-    items = similar_runs(snapshot, target, top=10)
-    cold = time.perf_counter() - started
-    started = time.perf_counter()
-    similar_runs(snapshot, dict(target, text="focal loss imbalance"), top=10)
-    warm = time.perf_counter() - started
-    assert len(items) == 10
-    assert cold < 5.0, cold
-    assert warm < 2.0, warm
+def test_a_full_query_answers_within_budget_cold_and_warm(store):
+    n, built = store
+    got = _measured(n, built, "run", target_verstr(built))
+    assert got["items"] == 10
+    assert got["cold"] <= FULL_SEC * SCALE[n], got
+    assert got["warm"] <= WARM_SEC * SCALE[n], got
+    assert got["rss_mb"] <= RSS_MB * SCALE[n], got
+
+
+@pytest.mark.serial
+def test_a_text_only_query_answers_within_budget_cold_and_warm(store):
+    n, built = store
+    got = _measured(n, built, "text")
+    assert got["items"] == 10
+    assert got["cold"] <= TEXT_SEC * SCALE[n], got
+    assert got["warm"] <= WARM_SEC * SCALE[n], got
+    assert got["rss_mb"] <= RSS_MB * SCALE[n], got
+
+
+@pytest.mark.serial
+def test_a_save_refiles_a_hundred_changed_runs_within_budget(store):
+    n, built = store
+    assert refile_seconds(*built) <= REFILE_SEC * SCALE[n]
