@@ -833,6 +833,8 @@ note ~ "baseline"
 params.optimizer = "adam" and not params.frozen = true
 metrics.acc >= 0.9 and (kind = "inner" or depth = 0)
 metrics."train/loss" < 0.3
+similar("focal loss imbalance") and status = "succeeded"
+keywords ~ "long tail"
 ```
 
 **Operators**
@@ -858,12 +860,14 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `duration_sec`, `pid`, `host`, `command`, `stale_sec`,
   `heartbeat_interval_sec`, `children`, `kind`, `depth`, `tree_status`,
   `imported_from`, `forked_from`, `forked_from_step`, `rerun_of`,
-  `end_reason`, `error_summary`, `signal`, `author`, `has_intent` (see
-  [ui.md](ui.md#experiment-status-fields)). `author` is who
+  `end_reason`, `error_summary`, `signal`, `author`, `has_intent`, `intent`,
+  `keywords` (see [ui.md](ui.md#experiment-status-fields)). `author` is who
   ran it (the [features](experiments.md#what-a-run-records-for-similar)
   author's git email, else OS user, else writer; `null` when unknown);
-  `has_intent` is a bool on every row. `archived = true` only matters with
-  `include_archived=True`.
+  `has_intent` is a bool on every row. `intent` is the latest
+  [intent](experiments.md#intent-what-a-run-is-for)'s text and `keywords` its
+  keyword list (`~` matches any element); both are missing on a run without
+  an intent. `archived = true` only matters with `include_archived=True`.
 - `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
   is missing), `env.<key>` (the captured environment summary: `python`,
   `platform`, `packages_count`, …) and `env.packages.<pkg>` for the key packages
@@ -873,6 +877,24 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   ([lineage](#lineage)).
 - Quote a key containing `/`, `.` or `-`: `metrics."train/loss"`,
   `params.'val-acc'`, `outputs."model.pkl".digest`, `inputs."resnet50@3".kind`.
+
+**Predicates**
+
+- `under("<verstr>")`: the runs in that run's subtree (not the run itself).
+- `similar("<text>")`: the runs whose [similar-runs](experiments.md#similar)
+  text document (intent text and keywords, name, note, tag keys and values,
+  commit subjects, hypothesis) holds **every** word of the text. Words are
+  the lowercased runs of letters and digits (`ResNet-18` is `resnet` and
+  `18`), matched with porter stemming (`losses` finds `loss`). Each is a
+  quoted FTS5 string, so `"`, `*`, `:`, `NEAR` or `OR` in the text are only
+  words. It is a filter, not a ranking: no score threshold and no stopword
+  list (`similar("the loss")` needs a `the`). It searches the app's FTS5
+  table in its persisted
+  [index](experiments.md#the-experiment-index-per-host-cache); without an
+  index file, an in-memory FTS5 table filled from the listed runs. A
+  `QueryError`: a text with no word (`similar() needs a word to match`), an
+  argument that is not one quoted string, Python's sqlite3 without FTS5, or a
+  caller that filters plain rows with no index behind them.
 
 `metrics` and `params` read different dicts. **`metrics` is numeric only**:
 params that parse as finite numbers are folded in (bools as 1.0/0.0; `nan`

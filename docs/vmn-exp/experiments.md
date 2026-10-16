@@ -411,11 +411,10 @@ leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
 
 Read-only actions — `list`, `show`, `compare`, `diff`, `export`, `watch`,
 `importance`, `lineage`, `similar`, `export-metrics` (and `import-mlflow`) —
-take no repo lock. `list`, `show`, `compare` and ref resolution read through the experiment index
-(a per-host SQLite cache under `$VMN_EXP_CACHE_DIR`, else
-`$XDG_CACHE_HOME/vmn-exp` / `~/Library/Caches/vmn-exp` / `~/.cache/vmn-exp`,
-never inside the store), so
-thousands of runs cost one listing plus whatever changed.
+take no repo lock. `list`, `show`, `compare`, `similar` and ref resolution
+read through the [experiment index](#the-experiment-index-per-host-cache), a
+per-host SQLite cache never inside the store, so thousands of runs cost one
+names listing plus whatever changed, and resolving one run is a point read.
 
 Flags shared by most actions:
 
@@ -1038,39 +1037,80 @@ vmn-exp similar my_app -v @7 --query 'status = "succeeded" and author ~ "alice"'
   on the group's goal metric (the [schema](#metrics-schema-sorting--goals)
   `goal` metric most of its runs carry), else the most similar one, with `(+N
   runs)`. Ties sort newest first.
-- **Candidates** are the runs sharing at least one fact with the target (a
-  changed file or function, an input digest or dataset, a param key, the
-  script, a metric name, the base commit, a word of its text), at most 5000,
-  rarest facts first; then each is scored.
-- Read-only and lock-free; reads through the experiment index like `list`.
-  Git-free mode needs `-v`/`--latest` or `--text-only` (a working tree needs a
-  checkout). A bad `--query` exits 1. SDK: `reader.similar_runs`,
-  `run.similar()` ([sdk.md](sdk.md#similar-runs)); UI: the run page's similar
-  runs card and the leaderboard's similar mode ([ui.md](ui.md#similar-runs)).
+- Read-only and lock-free. An app is searched in its persisted
+  [experiment index](#the-experiment-index-per-host-cache) file, brought up to
+  date with the store first; the few runs a search shows are read by verstr,
+  so no snapshot of the app is loaded. A `--query`, a store never indexed on
+  this host or no index file at all (`VMN_INDEX_CACHE_DIR=none`, an
+  unwritable cache dir) read a refreshed snapshot instead; without a file the
+  same search runs on an in-memory SQLite database filled from it (slower to
+  start, same answers). Git-free mode needs `-v`/`--latest` or `--text-only` (a
+  working tree needs a checkout). A bad `--query` exits 1. SDK:
+  `reader.similar_runs`, `run.similar()` ([sdk.md](sdk.md#similar-runs)); UI:
+  the run page's similar runs card and the leaderboard's similar mode
+  ([ui.md](ui.md#similar-runs)).
 
-Each signal is a similarity in [0, 1]; the score is their weighted mean:
+**How runs are ranked.** Every save of the index files each run as one
+document in a SQLite FTS5 table of that index file, one column per signal,
+in the same transaction as the run's record (a run whose document did not
+change writes nothing). A search turns the target into one FTS5 `MATCH` and
+ranks the documents with FTS5's `bm25` in SQLite; Python never scores the
+corpus. FTS5 is required: without it `similar` fails with `similar runs need
+SQLite with FTS5 (python's sqlite3 lacks it)` (the rest of vmn-exp works on).
 
-| Signal | Similarity | Weight |
+| Signal | FTS column holds | Default weight |
 |---|---|---|
-| `code` | same base commit 1.0, same base version 0.7, else decaying with the version distance | 2 |
-| `files` | Jaccard of the changed files (untracked paths included) | 2 |
-| `symbols` | Jaccard of the changed functions (`path::name`, from hunk headers and from definitions on added/removed lines, any language) | 3 |
-| `inputs` | same digest 1.0, same dataset name at another version 0.6 | 2 |
-| `params` | key Jaccard × mean value closeness (positive numbers `1 - min(1, \|log10(a/b)\|/2)`, else equality) | 1.5 |
-| `entrypoint` | same script 0.7, plus the same subcommand/args 1.0; launchers (`torchrun`, `accelerate launch`, `deepspeed`, `mpirun`, `srun`, `python -m torch.distributed.run`, …) are looked past | 1 |
-| `objective` | Jaccard of the metric names (minus params and `sys_*`) | 1 |
-| `branch` | equality | 0.5 |
-| `text` | BM25 over the intent text, its keywords (×3), name, note, tag keys and values, commit subjects and `create`/`run -f`'s `hypothesis` (words match whatever their case; a camelCase word also matches its parts; `ResNet-18` also matches `resnet18`; bare numbers under 4 digits are ignored), scaled by the best candidate's score | 1.5; code + inputs when the target has an intent or a context |
+| `code` | the base commit (the base version and its `major.minor` line are kept for reasons only, never matched) | 2 |
+| `files` | the changed files (untracked paths included), or a clean-tree token | 2 |
+| `symbols` | the changed functions (`path::name`, from hunk headers and from definitions on added/removed lines, any language), or a clean-tree token | 3 |
+| `inputs` | input digests and dataset names | 2 |
+| `params` | each param key, and each scalar param's `key=value` | 1.5 |
+| `entrypoint` | the script, its subcommand and its full argument list; launchers (`torchrun`, `accelerate launch`, `deepspeed`, `mpirun`, `srun`, `python -m torch.distributed.run`, …) are looked past | 1 |
+| `objective` | the metric names (minus params and `sys_*`) | 1 |
+| `branch` | the branch | 0.5 |
+| `text` | the intent text, its keywords (each ×3), name, note, tag keys and values, commit subjects and `create`/`run -f`'s `hypothesis` | 1.5 |
 
-A signal missing on either side is left out and the rest renormalised (it is
-unknown, not different), so an MLflow import without code still compares on
-params, inputs and metrics. A run whose features entry names no changes ran a
-clean tree: two clean trees score 1 on `files`/`symbols`, a clean tree against
-changed code 0. Changes stay unknown without a features entry, for MLflow
-imports, for an export's author-only entry and for a backfill that found the
-code object gone. `files`/`symbols` count half when either side's
-changes are a branch's cumulative diff (`changed_source: commit`, from
-`import-mlflow --repo`). Conf overrides, per app:
+- **Structured signals are words too.** Every value of the structured columns
+  is filed as one opaque word (a hash of `file:src/a.py`, `sym:…`,
+  `pkey:lr`, …), so identical structure matches exactly and nothing else
+  does: `lr=3e-4` and `lr=1e-4` share the `lr` key, not a value.
+- **Text is FTS5's.** The `text` column uses the `porter unicode61`
+  tokenizer: case-insensitive words split at anything that is no letter or
+  digit (`ResNet-18` is `resnet` and `18`), stemmed (`losses` matches
+  `loss`, `smoothing` matches `smooth`). No stopword list; common words just
+  weigh little in bm25.
+- **The query is bounded by rarity.** Per column the target asks for at most
+  64 of its tokens, the rarest first (document frequencies from the FTS
+  vocabulary); tokens no document holds are dropped. Past the 8 rarest
+  tokens overall, more are added only while their documents add up to at
+  most the number of documents filed (at least 40,000), so a common token
+  never costs a pass over the app. Each token is a quoted FTS5 string, so
+  `"`, `*`, `:` or `NEAR` in a context text are only words.
+- **Weights are bm25 column weights.** Conf `experiment.similar.weights`
+  (merged over the defaults above; values that are not numbers ≥ 0 are
+  ignored) sets them; a weight of 0 drops its column from the query. When the
+  target has an intent, a `--context` or intent keywords, the default `text`
+  weight becomes `code` + `inputs` (4 by default); an explicit `text` weight
+  still wins. `--text-only` asks the `text` column alone.
+- **Paged, then shaped.** SQL returns the best 500 matches (then 1000, 2000,
+  … more) while fewer than `--top` groups are found; Python drops the
+  left-out runs, applies `--query` and the archived filter and groups, as
+  above. There is no candidate cap.
+- **Scores** are bm25 relative to the best run found (that run scores 1.0;
+  the target and the runs it leaves out aside), rounded to 4 digits — a
+  ranking, not an absolute similarity, never stored.
+- **Reasons and signals** are computed for the items shown only: per signal
+  the overlap (Jaccard) of the target's and the run's filed tokens — for
+  `text` the share of the target's (stemmed) words the run holds — left out
+  when either side has none. Reasons are those of the 3 heaviest overlaps
+  (weight × overlap); shared text names the keywords both hold, then the
+  rarest shared words.
+
+A run whose features entry names no changes ran a clean tree: two clean
+trees share the clean-tree token on `files`/`symbols`. Changes stay unknown
+(nothing filed) without a features entry, for MLflow imports, for an
+export's author-only entry and for a backfill that found the code object
+gone. Conf overrides, per app:
 
 ```yaml
 conf:
@@ -1103,8 +1143,14 @@ one). Cheap or nothing, and never affecting the run:
   which the hint does not read. It never refreshes from the store, so a cold
   cache prints nothing and runs since the last refresh are not seen
   (`vmn-exp similar <app> -v <verstr>` shows them).
-- It is skipped for an app whose persisted index holds more than 4000 runs,
-  and prints nothing past a 300 ms budget.
+- It needs that index file and a local side of the storage (the
+  repo-local store, or the local copy in front of a remote one; a store
+  written to directly gets no hint): of the store it reads only the new run's
+  own record, where the command just wrote it, never a remote listing.
+- Its 300 ms budget bounds the work, not just the wait: the search's SQLite
+  queries are interrupted at the deadline and nothing is printed. It reads
+  the FTS table and the few runs it shows by verstr, so its cost does not
+  grow with the number of runs (there is no run-count cutoff).
 - Never for inner runs (`--parent`, an enclosing run's `VMN_EXPERIMENT_ID`,
   sweep trials).
 - Off with `--no-similar` or conf `experiment.similar.hint: false`. The SDK
@@ -1397,7 +1443,7 @@ The repo-local root is `<repo>/.vmn/store/` with one `.gitignore` of `*`.
 The first writer creates `store.yml` (`layout: 2`); readers and writers
 refuse an unknown layout, and a v1 store (records but no `store.yml`) is
 refused with a hint to run [`vmn-exp migrate`](#migrate). Per-host state
-(the index cache and the [push](#offline-recording-and-push) ledger) lives
+(the [index cache](#the-experiment-index-per-host-cache) and the [push](#offline-recording-and-push) ledger) lives
 outside the store, in the user cache/state dirs (`$VMN_EXP_CACHE_DIR`
 overrides both).
 
@@ -1561,6 +1607,74 @@ backends are built.
   `show`, the UI and the SDK skip records from a newer format with a warning
   to upgrade, and records without it (v1) with a warning to run
   `vmn-exp migrate`.
+
+### The experiment index (per-host cache)
+
+`list`, `show`, `compare`, `similar`, ref resolution, the SDK readers and the
+submission hint read an app's runs through its *experiment index*: one
+SQLite file per app per store on this host, never inside the store. It is a
+cache: deleting it costs one rebuild from the store, never data.
+
+- **Location**: `<cache>/index/<store-id>/<app-slug>.<hash8>.sqlite`.
+  `<cache>` is `$VMN_EXP_CACHE_DIR`, else `$XDG_CACHE_HOME/vmn-exp`, else
+  `~/Library/Caches/vmn-exp` (macOS) or `~/.cache/vmn-exp`;
+  `$VMN_INDEX_CACHE_DIR` replaces the index root alone (`none` turns the file
+  off). `<store-id>` is a hash of the store's identity (a local root's
+  absolute path, a bucket's endpoint, bucket and prefix), so two stores never share a file; the
+  app slug carries a hash of the app name, so apps whose slugs collide never
+  do either. Without a file (off, or an unwritable dir) every command builds
+  the index in memory from the store. The CLI and the SDK of one host share
+  the file; `vmn-exp ui` keeps its own under its data dir
+  ([server.md](server.md)).
+- **Network filesystems**: SQLite's locking and WAL are unreliable on NFS,
+  SMB, sshfs and the like. A default cache dir on one is warned about once and
+  replaced by `$TMPDIR/vmn-exp-cache-<uid>`; a dir chosen with
+  `VMN_EXP_CACHE_DIR` (or `VMN_INDEX_CACHE_DIR`) is used as given.
+- **What it holds**, each written in the refresh's one transaction: every
+  record's folded log and run state; its *lean row* in `exp_rows` (the row
+  `list` prints, with `idx`, `status`, `parent`, `root`, `timestamp`, `name`
+  and `archived` as indexed SQL columns); its side tables (features, intent,
+  hypothesis, outputs, metric summaries, declared metrics) in `exp_sides`;
+  and its [similar-runs](#similar) document in the FTS5 tables. A new process
+  starts from the lean rows without decoding any full record.
+- **Point reads**: resolving a ref (an exact verstr, `@N`, a unique prefix,
+  `latest`) for `show -v`, `reader.get_run`, `restore`, `export`, a dev-version
+  `goto` and every other `-v` is one indexed query on `exp_rows`, with no
+  snapshot of the app. Records created since the last refresh are read and
+  persisted first and records gone from the store forgotten, so refs and
+  parent/child links are current; the record names are not even listed while
+  the local app directory's mtime has not moved since the last such read. A
+  run edited in place since keeps its persisted row until the next refresh
+  (the command reads the run itself from the store). `list` lets SQL pick
+  the rows it can keep (the archived filter, `--last N` without a query, and
+  a query's top-level `status`/`parent`/`verstr`/`name`/`archived` clauses)
+  and reads only those runs and their trees.
+- **Revalidation**: a refresh lists the record *names* (one directory
+  listing, or a delimiter LIST on a bucket) with a cheap per-record
+  signature where the backend has one (a local record directory's mtime and
+  inode, which every vmn write moves), and lists the files of only the new
+  records, the running ones, the recently changed ones (5 minutes) and those
+  whose signature moved. A name gone from the listing drops its run at once.
+  The listing baselines persist in the file, so a new process does the same
+  rather than starting over. Every 300 s (across processes) one full sweep
+  lists every record's files, which catches what no signature shows: a
+  finished run changed in place behind vmn's back, on a pure S3 store (S3
+  has no per-record signature), or by another host on a cached remote store
+  (behind this host's local copy) shows up within 300 s, at the first
+  command after.
+- **Rebuilds never delete a live file**: a rebuild or a corruption recovery
+  writes a new generation `<name>.<n>.sqlite` beside it and atomically
+  flips the pointer file `<name>.sqlite.current`; every open follows the
+  pointer, and an old file is removed only once no connection holds it.
+- **Schema versions**: a file written by an older vmn-exp has its tables
+  replaced in one transaction (a rebuild). A file written by a *newer*
+  vmn-exp is left alone: the older process works without it (in memory),
+  so two versions sharing a host never wipe each other's cache.
+- **Failures are never fatal**: WAL with `synchronous=NORMAL`, a 5 s busy
+  timeout, writes in `BEGIN IMMEDIATE`. A file that will not open is
+  retried with a backoff (up to 60 s); a failed save keeps its records
+  dirty for the next refresh; each kind of trouble with a file warns once,
+  naming the file and the reason.
 
 ### Metric storage
 

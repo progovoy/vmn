@@ -96,3 +96,28 @@ def test_the_similar_docs_call_the_working_tree_default_the_one_exception(capsys
     for where, text in texts.items():
         assert "snapshot diff" not in text, where
         assert NO_REF_EXCEPTION in text, where
+
+
+def test_the_similar_docs_give_the_fts_column_weights_the_code_uses():
+    from vmn_exp.core.similar_weights import DEFAULT_WEIGHTS
+
+    cli = _section(EXPERIMENTS, "### `similar`")
+    for signal, weight in DEFAULT_WEIGHTS.items():
+        assert re.search(rf"\| `{signal}` \|[^|]*\| {weight:g} \|", cli), signal
+    assert "bm25" in cli and "FTS5" in cli
+
+
+def test_the_similar_docs_no_longer_describe_the_in_memory_index():
+    cli = _section(EXPERIMENTS, "### `similar`")
+    for stale in ("weighted mean", "renormalis", "at most 5000", "more than 4000 runs"):
+        assert stale not in cli, stale
+    server = _flat(_read("docs/vmn-exp/server.md"))
+    assert "scored in Python from each app's index snapshot" not in server
+    ui = _section("docs/vmn-exp/ui.md", "### Similar runs")
+    assert "Scored from the apps' index snapshots" not in ui
+
+
+def test_the_query_language_docs_name_intent_keywords_and_similar():
+    query = _section("docs/vmn-exp/sdk.md", "## The query language")
+    assert '`similar("<text>")`' in query
+    assert "`intent`" in query and "`keywords`" in query

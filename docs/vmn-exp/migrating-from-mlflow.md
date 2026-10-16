@@ -127,7 +127,8 @@ ran at. With `--repo <path>` (on new imports and with `--refresh-features`),
 a run whose source commit exists in that checkout records the files and
 functions of `git diff $(git merge-base <default branch> <commit>) <commit>` as
 its `changed`, marked `changed_source: commit`. That is the branch's
-cumulative change rather than the run's own, so similar runs weighs it half.
+cumulative change rather than the run's own; similar runs matches it like a
+captured change.
 The default branch is origin/HEAD's target, else `main`, `master`,
 `origin/main`, `origin/master`; the diff runs no textconv or external diff
 driver and is read up to 5 MB (`truncated` past it). Nothing is recorded when
