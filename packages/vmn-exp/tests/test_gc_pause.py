@@ -77,8 +77,9 @@ def test_loading_the_persisted_records_pauses_collection(tmp_path, monkeypatch):
     db = str(tmp_path / "idx.sqlite")
     ExperimentIndex(st, "app", cache_path=db).refresh()
     seen = []
-    real = SqliteStore.load
-    monkeypatch.setattr(SqliteStore, "load",
+    # A warm start reads the persisted rows (plan 25 F1), not every record.
+    real = SqliteStore.load_warm
+    monkeypatch.setattr(SqliteStore, "load_warm",
                         lambda self, app: seen.append(gc.isenabled()) or real(self, app))
 
     ExperimentIndex(st, "app", cache_path=db).refresh()
