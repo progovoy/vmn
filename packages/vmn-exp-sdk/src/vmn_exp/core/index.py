@@ -54,6 +54,7 @@ from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # no
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
+from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
@@ -109,6 +110,7 @@ class ExperimentIndex:
         self.last_refresh_at = None  # monotonic start of the last refresh
         self._cache_gen = None  # a follower's CacheStore generation; None for a leader
         self._lean = False  # see sync()
+        self._lean_index = None  # the lean copy sync() refreshes while this one is unloaded
 
     @classmethod
     def follower(cls, cache_store, scope):
@@ -118,6 +120,11 @@ class ExperimentIndex:
         index._store = cache_store
         index._cache_gen = 0
         return index
+
+    @property
+    def path(self):
+        """The file the index persists in, or None."""
+        return getattr(self._store, "path", None)
 
     @property
     def full_sweep_sec(self):
@@ -178,13 +185,20 @@ class ExperimentIndex:
         them are. An index not loaded yet stays so: a *lean* copy refreshes
         them, decoding no record it does not re-read, building no snapshot."""
         with self._lock:
-            if self._records is not None or self._io is not None or self._lean:
-                self._refresh_locked()
-                return not self._unsaved.pending
+            if self._records is not None or self._io is not None:
+                self._lean_index = None
+                index = self
+            else:
+                index = self._lean_index = self._lean_index or self._lean_copy()
+        with index._lock:
+            index._refresh_locked()
+            return not index._unsaved.pending
+
+    def _lean_copy(self):
         lean = ExperimentIndex(self._storage, self.app_name, self._cache_path,
                                self.full_sweep_sec, self._store)
         lean._lean = True
-        return lean.sync()
+        return lean
 
     def refresh_if_stale(self, max_age_sec):
         """The current snapshot, refreshed first if older than a positive
@@ -521,18 +535,23 @@ def shared_index(storage, app_name, cache_path=None, full_sweep_sec=None):
 
 
 def _process_index(storage, app_name, cache_path):
+    # The storage's own index file is the one point reads, listings and
+    # similar searches read: the process's one store of it. A caller's file
+    # (the ui's, one per workspace) keeps a store per index.
+    store = None
     if cache_path is None:
-        path_of = getattr(storage, "index_cache_path", None)
-        cache_path = path_of(app_name) if path_of else None
+        cache_path = index_path(storage, app_name)
+        store = shared_store(cache_path) if cache_path else None
     identity_of = getattr(storage, "cache_identity", None)
     identity = identity_of() if identity_of else None
     if identity is None:
-        return ExperimentIndex(storage, app_name, cache_path)
+        return ExperimentIndex(storage, app_name, cache_path, cache_store=store)
     key = (identity, app_name, cache_path)
     with _SHARED_LOCK:
         index = _SHARED.get(key)
         if index is None:
-            index = _SHARED[key] = ExperimentIndex(storage, app_name, cache_path)
+            index = _SHARED[key] = ExperimentIndex(storage, app_name, cache_path,
+                                                   cache_store=store)
         return index
 
 
@@ -631,18 +650,9 @@ def indexed_status_rows(
     row copies (see :meth:`ExperimentIndex.rows`), the run states and
     ``{verstr: run_state.yml store write time}``, the ``observed_at`` a status
     derivation takes. *schema*: see :func:`indexed_snapshot`."""
-    return indexed_status_view(storage, app_name, with_create_note, cache_path, schema)[:3]
-
-
-def indexed_status_view(
-    storage, app_name, with_create_note=False, cache_path=None, schema=None
-):
-    """:func:`indexed_status_rows` plus the snapshot's declared schema
-    (:meth:`IndexSnapshot.declared_schema`)."""
     snap = indexed_snapshot(storage, app_name, cache_path, wait=True, schema=schema)
     return (
         _row_copies(snap, with_create_note),
         dict(snap.run_states),
         dict(snap.run_state_observed_at),
-        snap.declared_schema(),
     )

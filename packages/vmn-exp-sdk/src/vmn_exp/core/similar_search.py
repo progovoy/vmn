@@ -25,6 +25,7 @@ from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.fold import fold_log
 from vmn_exp.core.index import direct_snapshot, indexed_snapshot, shared_index, snapshot_of_folds
+from vmn_exp.core.index_point import index_path, point_view
 from vmn_exp.core.log import load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import snapshot_extra
@@ -76,12 +77,6 @@ def app_snapshot(storage, app_name, schema=None):
     return indexed_snapshot(storage, app_name, wait=True, fallback=direct_snapshot, schema=schema)
 
 
-def index_path(storage, app_name):
-    """Where *storage* persists *app_name*'s index, or None."""
-    path_of = getattr(storage, "index_cache_path", None)
-    return path_of(app_name) if path_of else None
-
-
 def app_scope(storage, app_name, schema=None, with_snapshot=False):
     """The :class:`~vmn_exp.core.similar_corpus.Scope` *app_name* is searched
     in (see the module docstring); *with_snapshot* reads its rows from a
@@ -94,6 +89,18 @@ def app_scope(storage, app_name, schema=None, with_snapshot=False):
     snapshot = app_snapshot(storage, app_name, schema)
     scope = file_scope(app_name, path, schema, snapshot) if path else None
     return scope or snapshot_scope(app_name, snapshot, schema)
+
+
+def _placement(storage, app_name, scope):
+    """Where to resolve a ref once :func:`app_scope` gave *scope*: its
+    snapshot, else the index file it just synced (no second listing)."""
+    if isinstance(scope.rows, SnapshotRows):
+        return scope.rows.snapshot
+    try:
+        return point_view(storage, app_name, sync=False)
+    except Exception:
+        VMN_LOGGER.debug("Experiment index point read unavailable", exc_info=True)
+        return None
 
 
 def _synced(storage, app_name):
@@ -120,10 +127,12 @@ def record_target(storage, app_name, verstr, context=None, text_only=False, comm
     return target
 
 
-def run_target(storage, app_name, ref, latest=False, context=None, text_only=False):
-    """The target of run *ref* (or the latest); *context* replaces its text.
-    ValueError when nothing matches."""
-    verstr, err = resolve_experiment(storage, app_name, ref, latest=latest)
+def run_target(storage, app_name, ref, latest=False, context=None, text_only=False,
+               placement=None):
+    """The target of run *ref* (or the latest), resolved in *placement*
+    (an up-to-date snapshot or point view; default: the storage's index);
+    *context* replaces its text. ValueError when nothing matches."""
+    verstr, err = resolve_experiment(storage, app_name, ref, latest=latest, snapshot=placement)
     if err:
         raise ValueError(err)
     try:
@@ -221,12 +230,12 @@ def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, que
     if text_only and not (context or "").strip():
         raise ValueError("A text-only search needs a context text")
     schema = conf_schema(exp_conf)
+    scope = app_scope(storage, app_name, schema, with_snapshot=bool(_query(query)))
     if target is None and ref is None and text_only:
         target = text_target(context)
     elif target is None:
         target = run_target(storage, app_name, ref or "latest", context=context,
-                            text_only=text_only)
-    scope = app_scope(storage, app_name, schema, with_snapshot=bool(_query(query)))
+                            text_only=text_only, placement=_placement(storage, app_name, scope))
     return search(storage, app_name, scope, target, schema=schema, top=top, query=query,
                   all_apps=all_apps, schema_of=schema_of, weights=conf_weights(exp_conf),
                   include_archived=include_archived)

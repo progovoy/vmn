@@ -18,33 +18,55 @@ An app the index never saved, a storage that cannot list record names or an
 unavailable database answer None: the caller builds the index instead (which
 persists it, so the next call is a point read).
 """
+import os
 import threading
 
+from vmn_exp.core import sqlite_files
 from vmn_exp.core.index_listing import METADATA_FILE, as_sigs
 from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.index_store import IndexStore
 
-_STORES = {}  # cache path -> its store, shared by the process's point reads
+_STORES = {}  # cache path -> (its store, the file's inode): the process's one per file
 _SIG_SCOPE, _SIG_FORMAT = "record-names:", "record-names-sig-1"
 _STORES_LOCK = threading.Lock()
 
 
-def _store(path):
+def index_path(storage, app_name):
+    """Where *storage* persists *app_name*'s index, or None."""
+    path_of = getattr(storage, "index_cache_path", None)
+    return path_of(app_name) if path_of else None
+
+
+def shared_store(path):
+    """The process's store of the index file at *path* (what the process
+    index, point reads, listings and similar searches all read through); a
+    file removed and created again gets a new one. A path that names no file
+    (None, ``:memory:``) gets a store of its own."""
+    if not sqlite_files.is_file_path(path):
+        return IndexStore(path)
     with _STORES_LOCK:
-        store = _STORES.get(path)
-        if store is None:
-            store = _STORES[path] = IndexStore(path)
+        store, inode = _STORES.get(path, (None, None))
+        if store is None or _inode(path) != inode:
+            store = IndexStore(path)
+            _STORES[path] = (store, _inode(path))
         return store
 
 
-def point_view(storage, app_name):
-    """A :class:`PointView` of *app_name*'s runs, or None (see the module)."""
-    path_of = getattr(storage, "index_cache_path", None)
-    path = path_of(app_name) if path_of else None
+def _inode(path):
+    try:
+        return os.stat(sqlite_files.live_path(path)).st_ino
+    except OSError:
+        return None
+
+
+def point_view(storage, app_name, sync=True):
+    """A :class:`PointView` of *app_name*'s runs, or None (see the module);
+    *sync* False: the caller just brought the persisted index up to date."""
+    path = index_path(storage, app_name)
     if not path:
         return None
-    store = _store(path)
-    if not store.generation(app_name) or not _sync(storage, app_name, store):
+    store = shared_store(path)
+    if not store.generation(app_name) or (sync and not _sync(storage, app_name, store)):
         return None
     return PointView(store, app_name)
 

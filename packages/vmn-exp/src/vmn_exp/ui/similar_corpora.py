@@ -33,8 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def index_file(index):
     """The SQLite file *index* persists in, or None."""
-    db = getattr(getattr(index, "_store", None), "_db", None)
-    path = getattr(db, "path", None)
+    path = getattr(index, "path", None)
     return path if sqlite_files.is_file_path(path) else None
 
 
