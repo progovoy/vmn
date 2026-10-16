@@ -31,6 +31,9 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
 
 FINISHED = "state: finished\nexit_code: 0\n"
+# The other clone's writes arrive through the remote, which signs no record:
+# the indexes here list fully on every refresh (full_sweep_sec=0), so each is
+# compared with a full read (the default tier sees them by its next full sweep).
 
 
 @pytest.fixture(autouse=True)
@@ -86,14 +89,14 @@ def test_one_shot_turns_keep_each_entry_once_and_each_index_exact(tmp_path, seed
         if rng.random() < 0.5:  # a `vmn-exp list` on some root
             r = rng.choice("ab")
             quietly(lambda r=r: ExperimentIndex(cached_host(tmp_path, r), APP,
-                                                cache_path=caches[r]).refresh())
+                                                cache_path=caches[r], full_sweep_sec=0).refresh())
     for r in "ab":  # the network is back: each clone ships once more
         host = cached_host(tmp_path, r)
         host.sync_log_to_remote(APP, V, stream(host))
     assert remote_tag_keys() == sorted(appended), "remote keeps each entry once"
     for r in "ab":
         host = cached_host(tmp_path, r)
-        rows = ExperimentIndex(host, APP, cache_path=caches[r]).refresh().rows()
+        rows = ExperimentIndex(host, APP, cache_path=caches[r], full_sweep_sec=0).refresh().rows()
         assert rows == direct_rows(host, APP)[0], f"root {r} index"
 
 
@@ -103,7 +106,7 @@ def _offline(tmp_path):
 
 def _read(kind, tmp_path, cache):
     storage = cached_host(tmp_path, "b") if kind == "online" else _offline(tmp_path)
-    index = ExperimentIndex(storage, APP, cache_path=cache)
+    index = ExperimentIndex(storage, APP, cache_path=cache, full_sweep_sec=0)
     try:
         if kind == "helper":
             assert index.use_io_process()
@@ -254,7 +257,7 @@ def _seal_turn(tmp_path, step, rng, done):
         quietly(compact_writer, host, APP, V, own)
     else:
         cache = str(tmp_path / f"i{root}.sqlite")
-        quietly(lambda: ExperimentIndex(host, APP, cache_path=cache).refresh())
+        quietly(lambda: ExperimentIndex(host, APP, cache_path=cache, full_sweep_sec=0).refresh())
 
 
 @pytest.mark.parametrize("seed", range(40))

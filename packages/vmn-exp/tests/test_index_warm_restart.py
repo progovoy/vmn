@@ -19,7 +19,14 @@ FINISHED = "state: finished\nexit_code: 0\n"
 
 
 class GatedStorage(LocalSnapshotStorage):
-    """Its listings wait for :attr:`gate`; :attr:`listed` counts those done."""
+    """Its listings — of names or of files — wait for :attr:`gate`;
+    :attr:`listed` counts those done."""
+
+    def list_record_names(self, app_name):
+        self.gate.wait(30)
+        names = super().list_record_names(app_name)
+        self.listed += 1
+        return names
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

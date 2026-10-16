@@ -48,12 +48,13 @@ class InlineRefresher:
     # False: a snapshot costs a refresh, and its run states are left to be
     # read from storage.
     background = False
-    # None leaves the index's sweep interval alone: every refresh lists fully.
+    # None leaves the sweep interval to snapshot(), whatever reconcile_sec says.
     full_sweep_sec = None
     on_index_refresh = None
 
     def snapshot(self, index, journal=None):
-        snapshot = index.refresh_if_stale(0)
+        index.full_sweep_sec = 0  # every refresh lists fully: an in-place write shows at once
+        snapshot = index.refresh().snapshot()
         if self.on_index_refresh is not None:
             self.on_index_refresh(index, snapshot)
         return snapshot

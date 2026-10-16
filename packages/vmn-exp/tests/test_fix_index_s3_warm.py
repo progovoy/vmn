@@ -6,12 +6,14 @@ should be needed for unchanged records, and the total LIST count should be
 bounded by ceil(N*8/1000)+2 for N runs.
 """
 import math
+import time
 
 import pytest
 from s3_helpers import mocked_bucket, op_counts, record_calls, s3_storage
 
 moto = pytest.importorskip("moto")
 
+from vmn_exp.core import index_sweep  # noqa: E402
 from vmn_exp.core.index import ExperimentIndex, indexed_snapshot  # noqa: E402
 
 APP = "myapp"
@@ -79,7 +81,7 @@ def test_warm_new_process_zero_gets(s3_env):
     assert len(idx2.rows()) == n
 
 
-def test_changed_record_reads_only_its_files(s3_env):
+def test_changed_record_reads_only_its_files(s3_env, monkeypatch):
     """After a record's log grows, only that record's log is re-read."""
     storage = s3_storage()
     verstrs = _seed(storage, 3)
@@ -97,6 +99,10 @@ def test_changed_record_reads_only_its_files(s3_env):
         "w0",
         {"timestamp": "2026-01-01T00:02:00Z", "type": "metrics", "values": {"acc": 0.99}},
     )
+    # S3 signs no record: a finished one's append shows up at the next full
+    # sweep (plan 25 F2), due once 300 s passed since the last one.
+    later = time.time() + 301
+    monkeypatch.setattr(index_sweep, "_wall", lambda: later)
     calls = record_calls(storage2._s3)
     idx2 = ExperimentIndex(storage2, APP, cache_path=cache)
     idx2.refresh()

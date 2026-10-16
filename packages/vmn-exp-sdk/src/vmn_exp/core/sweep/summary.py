@@ -22,11 +22,14 @@ RETRYABLE = (FAILED, STUCK)
 _CHILDREN = weakref.WeakKeyDictionary()  # IndexSnapshot -> {parent: [child]}
 
 
-def trial_rows(storage, app_name, sweep_verstr, spec, wait=True):
+def trial_rows(storage, app_name, sweep_verstr, spec, wait=True, max_age_sec=0):
     """Every run of the sweep (retries included), status-annotated, with the
     target metric attributed (see :func:`attribute_metric`). *wait*: refresh
-    the app's index first; False takes the current snapshot as is."""
-    snap = experiment_index.indexed_snapshot(storage, app_name, wait=wait)
+    the app's index first; False takes the current snapshot, refreshed first
+    only when older than a positive *max_age_sec*."""
+    snap = experiment_index.indexed_snapshot(
+        storage, app_name, max_age_sec=max_age_sec, wait=wait
+    )
     return snapshot_trials(spec, sweep_verstr, snap)
 
 

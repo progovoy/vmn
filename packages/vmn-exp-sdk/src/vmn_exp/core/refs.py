@@ -41,9 +41,10 @@ def _listed_snapshot(storage, app_name, schema):
 
 
 def placement_snapshot(storage, app_name, snapshot=None):
-    """*snapshot*, else the index's, else one built from a metadata-only listing."""
+    """*snapshot*, else the index's refreshed now (``latest`` right after a
+    create resolves to it), else one built from a metadata-only listing."""
     return snapshot or experiment_index.indexed_snapshot(
-        storage, app_name, fallback=_listed_snapshot
+        storage, app_name, wait=True, fallback=_listed_snapshot
     )
 
 

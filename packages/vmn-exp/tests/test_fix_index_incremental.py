@@ -253,10 +253,22 @@ def test_a_backend_that_cannot_list_names_gets_a_full_listing(st, listed, clock)
 # -- opting in -----------------------------------------------------------------
 
 
-def test_by_default_every_refresh_is_a_full_listing(st, listed, clock):
-    verstr = _make(st, 1, FINISHED)
+def test_by_default_a_full_listing_runs_every_300_seconds(st, listed, clock):
+    # Plan 25 F2: no longer every refresh (that was the default before).
+    _make(st, 1, FINISHED)
     index = ExperimentIndex(st, APP)
-    assert index.full_sweep_sec == 0
+    assert index.full_sweep_sec == 300
+    index.refresh()
+    clock.now += 299
+    index.refresh()
+    clock.now += 1
+    index.refresh()
+    assert listed == [None, None]
+
+
+def test_full_sweep_sec_0_makes_every_refresh_a_full_listing(st, listed, clock):
+    verstr = _make(st, 1, FINISHED)
+    index = ExperimentIndex(st, APP, full_sweep_sec=0)
     index.refresh()
     folder = st._snapshot_dir(APP, verstr)
     os.makedirs(os.path.dirname(os.path.join(folder, "log/w.jsonl")), exist_ok=True)
@@ -269,7 +281,7 @@ def test_by_default_every_refresh_is_a_full_listing(st, listed, clock):
 
 def test_the_fast_tier_can_be_switched_on_later(st, listed, clock):
     _make(st, 1, FINISHED)
-    index = ExperimentIndex(st, APP)
+    index = ExperimentIndex(st, APP, full_sweep_sec=0)
     index.refresh()
     index.full_sweep_sec = 300
     clock.now += 1

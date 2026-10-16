@@ -2,10 +2,10 @@
 """An incremental index of an app's experiments: leaderboard rows without
 re-reading every log whenever anything changes.
 
-Which records a refresh looks at is :mod:`experiment_index_sweep`'s call: by
-default all of them; with ``full_sweep_sec`` set (opt-in, for a server that
-refreshes often), the new and live ones from a names-only listing and all of
-them every ``full_sweep_sec``. Of those only what moved is read: a new record
+Which records a refresh looks at is :mod:`experiment_index_sweep`'s call: the
+new, changed, live and recently changed ones from a names-only listing, and
+all of them every ``full_sweep_sec`` (300 s, across processes: the listing
+baselines persist beside the records, :mod:`experiment_index_baseline`). Of those only what moved is read: a new record
 is loaded, a changed ``metadata.yml`` re-read, a grown log read from where it
 was last read up to (:mod:`experiment_index_logs`), a rewritten
 ``run_state.yml`` — a heartbeat — re-read on its own. The folded state
@@ -49,6 +49,7 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp.core.fold import fold_log, fold_row
 from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index_follower import apply_delta
+from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
@@ -95,6 +96,7 @@ class ExperimentIndex:
         self._store = cache_store or IndexStore(cache_path)
         self._unsaved = PendingSave()  # what a failed save left to persist
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
+        self._baseline = ListingBaseline(self._store, app_name)
         self._io = None  # the I/O helper process, once use_io_process() started it
         self._records = None
         self._order = None  # record keys in storage order
@@ -121,7 +123,7 @@ class ExperimentIndex:
 
     @property
     def full_sweep_sec(self):
-        """Seconds between full listings; 0 (the default) lists fully every time."""
+        """Seconds between full listings (default 300); 0 lists fully every time."""
         return self._sweep.full_sweep_sec
 
     @full_sweep_sec.setter
@@ -174,14 +176,19 @@ class ExperimentIndex:
         return self
 
     def refresh_if_stale(self, max_age_sec):
-        """The current snapshot, refreshed first if older than *max_age_sec*.
+        """The current snapshot, refreshed first if older than a positive
+        *max_age_sec*; 0 (or None) answers it as it is.
 
         While another thread refreshes, the current snapshot is returned at
-        once — only the very first load waits for it.
+        once — only the very first load waits for it (and loads whatever the
+        age). A caller that must see every write made before it calls
+        :meth:`refresh`.
         """
         snap = self._snapshot
         if snap is None:
             return self._first_load()
+        if (max_age_sec or 0) <= 0:
+            return snap
         fresh_at = self.last_refresh_at  # None: persisted rows not revalidated yet
         if fresh_at is not None and _monotonic() - fresh_at < max_age_sec:
             return snap
@@ -233,6 +240,10 @@ class ExperimentIndex:
             self._records, self._order, self._stamps = other._records, other._order, other._stamps
             self._rows, self._sweep = other._rows, other._sweep
             self._store, self._unsaved = store or other._store, other._unsaved
+            if self._store is not other._store:
+                self._baseline = ListingBaseline(self._store, self.app_name)
+            else:
+                self._baseline = other._baseline
             self.generation += 1
             self._snapshot = self._build_snapshot()
 
@@ -255,6 +266,8 @@ class ExperimentIndex:
 
     def _refresh_from_storage(self, started):
         if self._records is None:
+            if self._keeps_baseline():  # read before the records it vouches for
+                self._baseline.load(self._sweep, started)
             self._records = self._load_records()
             if self._records and self._snapshot is None:
                 self._publish_persisted()
@@ -294,6 +307,14 @@ class ExperimentIndex:
         if touched or removed or self._snapshot is None:
             self.generation += 1
             self._snapshot = self._build_snapshot(None if removed else touched)
+        if self._keeps_baseline() and not self._unsaved.pending:
+            self._baseline.save(self._sweep, started)
+
+    def _keeps_baseline(self):
+        """Whether listing baselines persist: not for a journaled sweep, one
+        whose listings run in the I/O helper process, or one listing fully
+        every time (nothing to carry on from)."""
+        return self._io is None and not self._sweep.journaled and bool(self.full_sweep_sec)
 
     def _publish_persisted(self):
         """Serve the records as persisted until the listing under way
@@ -604,9 +625,10 @@ def indexed_snapshot(
     fallback=direct_snapshot,
     schema=None,
 ):
-    """The shared index's :class:`IndexSnapshot`, refreshed when older than
-    *max_age_sec* — or, with *wait*, refreshed now even if another thread's
-    refresh has to finish first. *full_sweep_sec* is passed on to
+    """The shared index's :class:`IndexSnapshot`, refreshed when older than a
+    positive *max_age_sec* (the default 0 takes a loaded index as it is: see
+    :meth:`ExperimentIndex.refresh_if_stale`) — or, with *wait*, refreshed now
+    even if another thread's refresh has to finish first. *full_sweep_sec* is passed on to
     :func:`shared_index`. Rows follow the metrics *schema* the caller passes
     (:meth:`IndexSnapshot.summarized`), none by default. If the index fails,
     ``fallback(storage, app_name, schema)`` answers instead; a None
