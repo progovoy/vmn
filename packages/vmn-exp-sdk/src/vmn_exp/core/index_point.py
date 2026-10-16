@@ -10,6 +10,9 @@ records created since it was last refreshed are read and persisted first
 references and parent/child links are as current as a refresh would make
 them. A run edited in place since (a note, a new metric) keeps its persisted
 row until the next refresh; the callers read the run itself from storage.
+The records' names are listed (no stat per record) unless the storage's
+``record_names_sig`` — a local app directory's settled mtime — held still
+since a point read that found every name persisted: then none came or went.
 
 An app the index never saved, a storage that cannot list record names or an
 unavailable database answer None: the caller builds the index instead (which
