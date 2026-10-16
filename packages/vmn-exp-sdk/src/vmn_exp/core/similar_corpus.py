@@ -16,6 +16,7 @@ import weakref
 from collections import OrderedDict
 
 from vmn_exp.core import similar_fts, sqlite_files
+from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.similar_filing import SnapshotFiler, file_lean
 from vmn_exp.core.similar_rows import SnapshotRows, StoreRows
 from vmn_exp.core.sqlite_conn import connect, write_tx
@@ -61,59 +62,37 @@ def snapshot_scope(app, snapshot, schema=None):
                  cache_key=key)
 
 
-_POOL = OrderedDict()  # logical path -> (live file, connection, lock): its cache stays warm
-_POOL_SIZE = 8
-_POOL_LOCK = threading.Lock()
+_LOCKS = weakref.WeakKeyDictionary()  # index store -> the lock of its connection's searches
+_LOCKS_LOCK = threading.Lock()
 
 
-def _close(conn, lock):
-    if lock.acquire(blocking=False):  # in use: left to the garbage collector
-        conn.close()
-
-
-def _pooled(path, file):
-    """The process's connection to the index at *path* (now in *file*: its
-    name and inode) and its lock: opened once, reopened once a rebuild
-    flipped the file (at most
-    :data:`_POOL_SIZE` kept, the least recently used closed)."""
-    with _POOL_LOCK:
-        found = _POOL.get(path)
-        if found is not None and found[0] == file:
-            _POOL.move_to_end(path)
-            return found[1:]
-    conn = connect(file[0])
-    conn.execute("PRAGMA mmap_size=0")  # pages read into the cache, not the RSS
-    with _POOL_LOCK:
-        old = _POOL.pop(path, None)
-        if old is not None:
-            _close(*old[1:])
-        _POOL[path] = (file, conn, threading.Lock())
-        while len(_POOL) > _POOL_SIZE:
-            _close(*_POOL.popitem(last=False)[1][1:])
-        return _POOL[path][1:]
+def _lock_of(store):
+    with _LOCKS_LOCK:
+        return _LOCKS.setdefault(store, threading.Lock())
 
 
 def open_file(path):
-    """``(connection, lock, (live file, inode))`` of the index file at *path*
-    when it holds the similar tables, else None."""
+    """``(store, connection, lock, (live file, inode))`` of the index file at
+    *path* — its process-wide store (:func:`~vmn_exp.core.index_point.shared_store`)
+    — when it holds the similar tables, else None."""
     similar_fts.require_fts5()
     if not sqlite_files.is_file_path(path):
         return None
-    file = sqlite_files.live_path(path)
+    store = shared_store(path)
+    lock = _lock_of(store)
     try:
+        with lock:
+            live = store.connection()
+            if live is None:
+                return None
+            conn, file = live
+            conn.execute("PRAGMA mmap_size=0")  # pages read into the cache, not the RSS
+            found = similar_fts.has_tables(conn)
         # The inode too: a file removed and created again is another database.
         file = (file, os.stat(file).st_ino)
-        conn, lock = _pooled(path, file)
-        with lock:
-            found = similar_fts.has_tables(conn)
     except Exception:
         return None
-    return (conn, lock, file) if found else None
-
-
-def _generation(conn, app):
-    found = conn.execute("SELECT gen FROM exp_index_gen WHERE app = ?", (app,)).fetchone()
-    return found[0] if found else 0
+    return (store, conn, lock, file) if found else None
 
 
 def repaired(conn, app):
@@ -137,12 +116,12 @@ def file_scope(app, path, schema=None, snapshot=None, repair=True):
     opened = open_file(path)
     if opened is None:
         return None
-    conn, lock, file = opened
+    store, conn, lock, file = opened
     with lock:
-        key = (file, app, _generation(conn, app))
+        key = (file, app, store.generation(app))
         if repair and key not in _CHECKED:
             repaired(conn, app)
-            key = (file, app, _generation(conn, app))
+            key = (file, app, store.generation(app))
             _CHECKED[key] = None
             while len(_CHECKED) > 64:
                 _CHECKED.popitem(last=False)

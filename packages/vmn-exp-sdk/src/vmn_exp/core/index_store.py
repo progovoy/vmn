@@ -58,6 +58,16 @@ class SqliteStore(LeanReads, KeyValues):
         self._db.get()
 
     @property
+    def path(self):
+        """The database's logical path; None for a no-op store."""
+        return self._db.path
+
+    def connection(self):
+        """``(live connection, the file it holds)``, or None while unavailable."""
+        conn = self._db.get()
+        return None if conn is None else (conn, self._db.file)
+
+    @property
     def _conn(self):
         return self._db.conn
 

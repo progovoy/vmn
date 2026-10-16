@@ -16,6 +16,7 @@ filled from the snapshot (:func:`~vmn_exp.core.similar_corpus.snapshot_scope`).
 """
 import weakref
 
+from vmn_exp.core.index_point import index_path
 from vmn_exp.core.query import ANCESTORS, SIMILAR
 from vmn_exp.core.query_similar import scope_matcher
 from vmn_exp.core.tree import ancestors
@@ -78,7 +79,6 @@ def store_extra(storage, app_name, snapshot):
 
     def scope_of(snap):
         from vmn_exp.core.similar_corpus import file_scope
-        from vmn_exp.core.similar_search import index_path  # it imports this module
 
         path = index_path(storage, app_name)
         return (file_scope(app_name, path, snapshot=snap) if path else None) or _memory_scope(snap)

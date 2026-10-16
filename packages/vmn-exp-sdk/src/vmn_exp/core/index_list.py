@@ -20,7 +20,7 @@ none: a status clause leaves it out, where a full listing fails on it.)
 """
 from vmn_exp.core import index_list_sql as sql
 from vmn_exp.core import index as experiment_index
-from vmn_exp.core.index_point import _store
+from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.index_snapshot import IndexSnapshot, _observed_at, new_side_tables
 from vmn_exp.core.index_snapshot import put_side_tables
@@ -71,13 +71,12 @@ def list_view(storage, app_name, query=None, archived=False, last=None, schema=N
     *query* and the archived filter keep (the *last* ones without a query),
     in storage order, as a full listing builds them — or None when the
     persisted index cannot answer (the caller lists from a snapshot)."""
-    path_of = getattr(storage, "index_cache_path", None)
-    path = path_of(app_name) if path_of else None
+    path = index_path(storage, app_name)
     if not path or not experiment_index.shared_index(storage, app_name).sync():
         return None
     where, params = sql_filter(query, archived)
     has_query = bool(query and query.strip())
-    parts = _store(path).listing(app_name, lambda conn: _read(
+    parts = shared_store(path).listing(app_name, lambda conn: _read(
         conn, app_name, where, params, None if has_query else last))
     if parts is None:
         return None
