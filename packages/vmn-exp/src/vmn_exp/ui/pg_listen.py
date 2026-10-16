@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """``LISTEN`` on Postgres channels from a daemon thread (plan 11 §4.3).
 
-:class:`PgListener` calls ``handlers[channel](payload)`` per notification and
-reconnects after a lost connection (notifications sent meanwhile are lost;
-the refresh poll covers them).
+:class:`PgListener` calls ``handlers[channel](payload)`` per notification on
+a dedicated connection (LISTEN needs one session). After a lost connection it
+reconnects, re-LISTENs and then calls *on_resync*: notifications sent
+meanwhile are lost, so the caller catches up instead of waiting for its poll.
 """
 import logging
 import threading
+
+from vmn_exp.ui import pg_pool
 
 _LOGGER = logging.getLogger(__name__)
 _WAIT_SEC = 0.5
@@ -14,9 +17,12 @@ _RETRY_SEC = 1.0
 
 
 class PgListener:
-    def __init__(self, dsn, handlers):
+    def __init__(self, dsn, handlers, on_resync=None):
         self._dsn = dsn
         self._handlers = dict(handlers)
+        self._on_resync = on_resync
+        self._lost = False
+        self.backend_pid = None
         self._stopped = threading.Event()
         self.listening = False
         self._thread = threading.Thread(target=self._run, daemon=True, name="vmn-ui-listen")
@@ -33,18 +39,29 @@ class PgListener:
             except Exception:
                 _LOGGER.debug("LISTEN connection lost", exc_info=True)
             self.listening = False
+            self._lost = True
             self._stopped.wait(_RETRY_SEC)
 
     def _listen(self):
-        import psycopg
-
-        with psycopg.connect(self._dsn, autocommit=True) as conn:
+        with pg_pool.connect(self._dsn) as conn:
             for channel in self._handlers:
                 conn.execute(f'LISTEN "{channel}"')
+            self.backend_pid = conn.info.backend_pid
             self.listening = True
+            if self._lost:
+                self._lost = False
+                self._resync()
             while not self._stopped.is_set():
                 for note in conn.notifies(timeout=_WAIT_SEC):
                     self._dispatch(note)
+
+    def _resync(self):
+        if self._on_resync is None:
+            return
+        try:
+            self._on_resync()
+        except Exception:
+            _LOGGER.warning("Resync after a lost LISTEN connection failed", exc_info=True)
 
     def _dispatch(self, note):
         try:

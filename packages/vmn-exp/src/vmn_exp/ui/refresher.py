@@ -98,6 +98,13 @@ class Refresher:
         for watch in watches:
             watch.wake.set()
 
+    def wake_all(self):
+        """Refresh every watched index at once (missed ``vmn_gen`` notifies)."""
+        with self._lock:
+            watches = list(self._watches.values())
+        for watch in watches:
+            watch.wake.set()
+
     def stop(self):
         """End every refresh thread and I/O helper (for tests and shutdown)."""
         self._stopped.set()

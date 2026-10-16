@@ -66,7 +66,8 @@ class PgIndexes:
         if refresher.background:
             from vmn_exp.ui.pg_listen import PgListener
 
-            self._listener = PgListener(dsn, {"vmn_gen": refresher.wake_scope})
+            self._listener = PgListener(
+                dsn, {"vmn_gen": refresher.wake_scope}, on_resync=refresher.wake_all)
 
     def index(self, ws, app_name, storage):
         from vmn_exp.ui.elected_index import ElectedIndex
