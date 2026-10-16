@@ -137,18 +137,19 @@ def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, q
     """
     scopes = [source if isinstance(source, Scope)
               else snapshot_scope(app_name, source, schema or {})]
-    others = (_other_scopes(storage, app_name, schema_of, bool(query and query.strip()))
-              if all_apps else [])
-    try:
-        scopes += others
-        keep = candidate_filter(scopes, query, include_archived)
-        items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
-                                   deadline=deadline)
-        rows_of = {scope.label: scope.rows for scope in scopes}
-        return [item_payload(item, rows_of[item["app"]]) for item in items]
-    finally:
-        for scope in others:
-            scope.close()
+    query = _query(query)
+    if all_apps:
+        scopes += _other_scopes(storage, app_name, schema_of, bool(query))
+    keep = candidate_filter(scopes, query, include_archived)
+    items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
+                               deadline=deadline)
+    rows_of = {scope.label: scope.rows for scope in scopes}
+    return [item_payload(item, rows_of[item["app"]]) for item in items]
+
+
+def _query(query):
+    """*query* stripped, None when blank."""
+    return (query or "").strip() or None
 
 
 def _other_scopes(storage, app_name, schema_of, with_snapshot):
@@ -169,7 +170,8 @@ def candidate_filter(scopes, query, include_archived):
     status- and tree-annotated snapshot rows, like ``list --query`` (each
     scope's rows then come from a snapshot); None when it keeps everything."""
     matched = None
-    if query and query.strip():
+    query = _query(query)
+    if query:
         matched = {}
         for scope in scopes:
             snap = scope.rows.snapshot if isinstance(scope.rows, SnapshotRows) else None
@@ -207,10 +209,7 @@ def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, que
     elif target is None:
         target = run_target(storage, app_name, ref or "latest", context=context,
                             text_only=text_only)
-    scope = app_scope(storage, app_name, schema, with_snapshot=bool(query and query.strip()))
-    try:
-        return search(storage, app_name, scope, target, schema=schema, top=top, query=query,
-                      all_apps=all_apps, schema_of=schema_of, weights=conf_weights(exp_conf),
-                      include_archived=include_archived)
-    finally:
-        scope.close()
+    scope = app_scope(storage, app_name, schema, with_snapshot=bool(_query(query)))
+    return search(storage, app_name, scope, target, schema=schema, top=top, query=query,
+                  all_apps=all_apps, schema_of=schema_of, weights=conf_weights(exp_conf),
+                  include_archived=include_archived)

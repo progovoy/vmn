@@ -143,6 +143,12 @@ class _Search:
     def __init__(self, scope, query, rows_filter):
         self.scope, self.query, self.rows_filter = scope, query, rows_filter
         self.match = None
+        self._schema = None
+
+    def _goal_schema(self):
+        if self._schema is None:
+            self._schema = effective_schema(self.scope.schema, self.scope.rows.declared_schema())
+        return self._schema
 
     def groups(self, top):
         conn, scope = self.scope.conn, self.scope
@@ -189,8 +195,7 @@ class _Search:
         pool = [m for m in members if not m["container"]] or members
         ranked = _ordered(pool, "raw")
         best, goal = ranked[0], None
-        schema = effective_schema(self.scope.schema, self.scope.rows.declared_schema())
-        found = goal_metric(schema, [m["row"] for m in ranked])
+        found = goal_metric(self._goal_schema(), [m["row"] for m in ranked])
         if found:
             metric, direction = found
             valued = [m for m in ranked

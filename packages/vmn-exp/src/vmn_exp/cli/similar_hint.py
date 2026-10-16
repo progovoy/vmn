@@ -97,10 +97,7 @@ def _lines(local, app_name, verstr, exp_conf, path, deadline, command):
     scope = file_scope(app_name, path, schema, repair=False)
     if scope is None:
         return None
-    try:
-        items = search(local, app_name, scope, target, schema=schema, top=HINT_TOP,
-                       weights=conf_weights(exp_conf), deadline=deadline)
-    finally:
-        scope.close()
+    items = search(local, app_name, scope, target, schema=schema, top=HINT_TOP,
+                   weights=conf_weights(exp_conf), deadline=deadline)
     _check(deadline)
     return hint_lines(items)

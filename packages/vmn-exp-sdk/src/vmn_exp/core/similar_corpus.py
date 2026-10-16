@@ -34,9 +34,6 @@ class Scope:
         # What the documents are at (None: unknown): equal keys, equal rankings.
         self.cache_key = cache_key
 
-    def close(self):
-        """Done with the scope (its connection stays open for the next)."""
-
 
 def memory_conn():
     conn = connect(":memory:")

@@ -18,9 +18,10 @@ import json
 import weakref
 
 from vmn_exp.core import similar_fts
-from vmn_exp.core.index_lean_store import NOTE, is_run
+from vmn_exp.core.index_lean_store import is_run, read_lean
 from vmn_exp.core.index_views import SIDE_TABLES, lean_row
 from vmn_exp.core.similar_doc import build_doc
+from vmn_exp.core.sqlite_conn import write_tx
 
 _FEATURES, _INTENTS, _HYPOTHESES = (SIDE_TABLES.index(k) for k in
                                     ("features", "intents", "hypotheses"))
@@ -63,29 +64,22 @@ def _commands_moved(conn, app, states):
              for key, r in states.items() if _command(r.get("run_state"))}
     if not named:
         return {}
-    filed = similar_fts._filed(conn, app, list(named), "cmd")
+    filed = similar_fts.filed(conn, app, list(named), "cmd")
     return {key: states[key] for key, (cmd,) in filed.items() if cmd != named[key]}
 
 
 def file_lean(conn, app):
     """Refile every run of *app* from the index's lean tables (``exp_rows``,
     ``exp_sides``, ``exp_index_state``), forgetting documents of runs gone."""
-    sides = {}
-    for key, kind, data in conn.execute(
-            "SELECT key, kind, data FROM exp_sides WHERE app = ?", (app,)):
-        sides.setdefault(key, {})[kind] = json.loads(data)
+    keys, lean, _ = read_lean(conn, app)
     states = {key: json.loads(data) for key, data in conn.execute(
         "SELECT key, data FROM exp_index_state WHERE app = ?", (app,))}
     entries, commands = [], {}
-    for key, row in conn.execute("SELECT key, row FROM exp_rows WHERE app = ?", (app,)):
-        own = sides.get(key, {})
+    for key in keys:
+        row, note, *sides = lean[key]
         commands[key] = _command((states.get(key) or {}).get("run_state"))
-        entries.append((key, lean_doc(json.loads(row), own.get(NOTE),
-                                      [own.get(kind) for kind in SIDE_TABLES], commands[key])))
-    keep = {key for key, _ in entries}
-    gone = [key for (key,) in conn.execute("SELECT key FROM similar_doc WHERE app = ?", (app,))
-            if key not in keep]
-    similar_fts.forget(conn, app, gone)
+        entries.append((key, lean_doc(row, note, sides, commands[key])))
+    similar_fts.forget_except(conn, app, set(keys))
     similar_fts.file_docs(conn, app, entries, commands)
 
 
@@ -145,15 +139,9 @@ class SnapshotFiler:
         if not self._seen:  # a file filed before this process: forget what it no longer has
             gone = [key for (key,) in self.conn.execute(
                 "SELECT key FROM similar_doc WHERE app = ?", (self.app,)) if key not in seen]
-        self.conn.execute("BEGIN IMMEDIATE")
-        try:
+        with write_tx(self.conn):
             similar_fts.forget(self.conn, self.app, gone)
             similar_fts.file_docs(self.conn, self.app, entries, commands)
-            self.conn.execute("COMMIT")
-        except BaseException:
-            if self.conn.in_transaction:
-                self.conn.execute("ROLLBACK")
-            raise
         self._seen, self._synced = seen, weakref.ref(snapshot)
         if entries or gone:
             self.syncs += 1

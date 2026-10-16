@@ -81,10 +81,7 @@ def _query(store, path, kind, verstr):
     target = (text_target(CONTEXT) if kind == "text"
               else record_target(storage, APP, verstr))
     scope = file_scope(APP, path, repair=False)
-    try:
-        items = search(storage, APP, scope, target, top=10)
-    finally:
-        scope.close()
+    items = search(storage, APP, scope, target, top=10)
     return time.perf_counter() - started, len(items)
 
 

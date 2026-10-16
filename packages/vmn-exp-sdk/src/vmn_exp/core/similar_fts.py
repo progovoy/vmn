@@ -43,7 +43,8 @@ def require_fts5():
         raise Fts5Missing()
 
 
-def _create(conn, exists=""):
+def _create(conn):
+    exists = "IF NOT EXISTS "
     conn.execute(
         f"CREATE VIRTUAL TABLE {exists}similar_fts USING fts5(app UNINDEXED, verstr UNINDEXED, "
         + ", ".join(COLUMNS) + ", tokenize = 'porter unicode61')")
@@ -52,6 +53,7 @@ def _create(conn, exists=""):
                  " verstr TEXT, rerun TEXT, cmd TEXT, version TEXT, sig TEXT, data TEXT,"
                  " UNIQUE (app, key))")
     conn.execute(f"CREATE INDEX {exists}similar_doc_verstr ON similar_doc (app, verstr)")
+    conn.execute(f"CREATE INDEX {exists}similar_doc_version ON similar_doc (app, version)")
 
 
 def create_tables(conn):
@@ -66,8 +68,8 @@ def create_tables(conn):
 
 def ensure_tables(conn):
     require_fts5()
-    if not has_tables(conn):
-        _create(conn, "IF NOT EXISTS ")
+    if not has_tables(conn):  # never a write on a file that has them
+        _create(conn)
 
 
 def has_tables(conn):
@@ -76,23 +78,23 @@ def has_tables(conn):
     ).fetchone()[0] == len(TABLES)
 
 
-def _chunks(items):
+def chunks(items):
     items = list(items)
     for i in range(0, len(items), _CHUNK):
         yield items[i:i + _CHUNK]
 
 
-def _marks(chunk):
+def marks(chunk):
     return ", ".join("?" * len(chunk))
 
 
-def _filed(conn, app, keys, columns="id, sig, version"):
+def filed(conn, app, keys, columns="id, sig, version"):
     """``{key: (columns...)}`` of *keys*' stored docs."""
     out = {}
-    for chunk in _chunks(keys):
+    for chunk in chunks(keys):
         for key, *values in conn.execute(
                 f"SELECT key, {columns} FROM similar_doc"
-                f" WHERE app = ? AND key IN ({_marks(chunk)})",
+                f" WHERE app = ? AND key IN ({marks(chunk)})",
                 (app, *chunk)):
             out[key] = values
     return out
@@ -110,12 +112,12 @@ def file_docs(conn, app, entries, commands=None):
     if not entries:
         return
     commands = commands or {}
-    filed = _filed(conn, app, [key for key, _ in entries])
+    known = filed(conn, app, [key for key, _ in entries])
     for key, doc in entries:
         data = json.dumps(doc.data(), sort_keys=True, default=str)
         sig = hashlib.sha1(f"{doc.verstr}\0{doc.rerun}\0{doc.text}\0{data}".encode(
             "utf-8", "replace")).hexdigest()[:16]
-        old = filed.get(key)
+        old = known.get(key)
         if old is not None and old[1:] == [sig, PROFILE_VERSION]:
             continue
         if old is not None:
@@ -128,15 +130,21 @@ def file_docs(conn, app, entries, commands=None):
              data))
         conn.execute(
             f"INSERT INTO similar_fts (rowid, app, verstr, {', '.join(COLUMNS)})"
-            f" VALUES (?, ?, ?, {_marks(COLUMNS)})",
+            f" VALUES (?, ?, ?, {marks(COLUMNS)})",
             (cur.lastrowid, app, doc.verstr, *doc.fts_values()))
+
+
+def forget_except(conn, app, keep):
+    """Drop *app*'s documents whose keys are not in *keep*."""
+    forget(conn, app, [key for (key,) in conn.execute(
+        "SELECT key FROM similar_doc WHERE app = ?", (app,)) if key not in keep])
 
 
 def forget(conn, app, keys):
     """Drop *keys*' documents."""
-    for chunk in _chunks(keys):
+    for chunk in chunks(keys):
         ids = [i for (i,) in conn.execute(
-            f"SELECT id FROM similar_doc WHERE app = ? AND key IN ({_marks(chunk)})",
+            f"SELECT id FROM similar_doc WHERE app = ? AND key IN ({marks(chunk)})",
             (app, *chunk))]
         conn.executemany("DELETE FROM similar_fts WHERE rowid = ?", [(i,) for i in ids])
         conn.executemany("DELETE FROM similar_doc WHERE id = ?", [(i,) for i in ids])
@@ -159,9 +167,9 @@ def document_frequencies(conn, terms):
     left out. Over the whole file: a file shared by apps counts them all."""
     out = {}
     for column, wanted in terms.items():
-        for chunk in _chunks(sorted(set(wanted))):
+        for chunk in chunks(sorted(set(wanted))):
             out.update(((column, term), doc) for term, doc in conn.execute(
-                f"SELECT term, doc FROM similar_vocab WHERE col = ? AND term IN ({_marks(chunk)})",
+                f"SELECT term, doc FROM similar_vocab WHERE col = ? AND term IN ({marks(chunk)})",
                 (column, *chunk)))
     return out
 
@@ -169,11 +177,11 @@ def document_frequencies(conn, terms):
 def stored_docs(conn, app, verstrs):
     """``{verstr: Doc}`` as filed, with their text."""
     out = {}
-    for chunk in _chunks(verstrs):
+    for chunk in chunks(verstrs):
         for verstr, rerun, data, text in conn.execute(
                 "SELECT d.verstr, d.rerun, d.data, f.text FROM similar_doc d"
                 " JOIN similar_fts f ON f.rowid = d.id"
-                f" WHERE d.app = ? AND d.verstr IN ({_marks(chunk)})", (app, *chunk)):
+                f" WHERE d.app = ? AND d.verstr IN ({marks(chunk)})", (app, *chunk)):
             out[verstr] = Doc.from_data(verstr, rerun, json.loads(data), text)
     return out
 
@@ -181,9 +189,9 @@ def stored_docs(conn, app, verstrs):
 def reruns_of(conn, app, verstrs):
     """``{verstr: rerun key}`` of *verstrs*' documents."""
     out = {}
-    for chunk in _chunks(verstrs):
+    for chunk in chunks(verstrs):
         out.update(conn.execute(
-            f"SELECT verstr, rerun FROM similar_doc WHERE app = ? AND verstr IN ({_marks(chunk)})",
+            f"SELECT verstr, rerun FROM similar_doc WHERE app = ? AND verstr IN ({marks(chunk)})",
             (app, *chunk)))
     return out
 

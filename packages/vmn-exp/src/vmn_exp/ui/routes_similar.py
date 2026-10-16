@@ -41,7 +41,7 @@ from vmn_exp.core.similar import (
 )
 from vmn_exp.core.similar_fts import Fts5Missing
 from vmn_exp.core.similar_search import candidate_filter, text_target
-from vmn_exp.core.similar_search import intent_excerpt as _excerpt
+from vmn_exp.core.similar_items import item_payload
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.responses import json_response
@@ -55,10 +55,9 @@ SEARCH_DEADLINE_SEC = 10.0
 RETRY_AFTER_SEC = 5
 
 
-def intent_excerpt(intent):
-    """``{"text", "keywords", "truncated"}`` of an intent — the CLI's excerpt
+def _intent(excerpt):
+    """``{"text", "keywords", "truncated"}`` of the CLI's intent *excerpt*
     (its first 2 KB, its string keywords), every key always there — or None."""
-    excerpt = _excerpt(intent)
     if excerpt is None:
         return None
     return {"text": excerpt["text"], "keywords": excerpt.get("keywords", []),
@@ -66,15 +65,12 @@ def intent_excerpt(intent):
 
 
 def _item(found, rows):
-    (workspace, app), verstr, row = found["app"], found["verstr"], found["row"]
-    return {
-        "workspace": workspace, "app": app, "verstr": verstr, "name": row.get("name"),
-        "score": found["score"], "reasons": found["reasons"], "signals": found["signals"],
-        "group_size": found["group_size"], "goal": found["goal"],
-        "author": row.get("author"), "timestamp": row.get("timestamp"),
-        "status": rows.status_of(verstr),
-        "note": row.get("note"), "intent": intent_excerpt(rows.facts(row)[1]),
-    }
+    """The CLI's item (:func:`item_payload`) keyed by workspace and app."""
+    payload = item_payload(found, rows)
+    workspace, app = payload.pop("app")
+    del payload["features"]
+    return {"workspace": workspace, "app": app, **payload,
+            "intent": _intent(payload["intent"])}
 
 
 def _answer(request, scope_of, scopes, target, top, archived, query=None, weights=None):
@@ -101,9 +97,6 @@ def _answer(request, scope_of, scopes, target, top, archived, query=None, weight
             headers={"Retry-After": str(RETRY_AFTER_SEC)}) from None
     except Fts5Missing as e:
         raise HTTPException(501, str(e)) from None
-    finally:
-        for scope in built:
-            scope.close()
     return json_response({"items": items, "truncated": len(found) > top}, request=request)
 
 

@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 
+from vmn_exp.core.similar_items import utf8_safe
 from vmn_exp.core.similar_profile import build_profile
 
 # Bump when what a run files changes: runs filed by another version are refiled.
@@ -25,12 +26,6 @@ CLEAN = "clean:"
 # Tokens kept for reasons only, never filed for matching: nearly every run of
 # an app shares its base version, which would make every run a match.
 UNMATCHED = ("base:", "line:")
-
-
-def _utf8(text):
-    """*text* with ``?`` for each lone surrogate (only a hand-written log holds
-    one): SQLite stores UTF-8."""
-    return text.encode("utf-8", "replace").decode("utf-8")
 
 
 def word(token):
@@ -113,7 +108,7 @@ class Doc:
 
     def __init__(self, verstr, rerun, cols, text, keywords=(), has_intent=False):
         self.verstr, self.rerun, self.cols = verstr, rerun, cols
-        self.text, self.keywords, self.has_intent = _utf8(text or ""), tuple(keywords), has_intent
+        self.text, self.keywords, self.has_intent = utf8_safe(text or ""), tuple(keywords), has_intent
 
     def fts_values(self):
         """The FTS row's column values, in :data:`COLUMNS` order."""

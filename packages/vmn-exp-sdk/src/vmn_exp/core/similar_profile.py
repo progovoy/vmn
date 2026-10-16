@@ -29,7 +29,7 @@ CLEAN_DIFF = "0000000"
 
 KEYWORD_REPEAT = 3
 
-Input = namedtuple("Input", "name dataset digest kind")
+Input = namedtuple("Input", "name dataset digest")
 
 
 def _dict(value):
@@ -70,7 +70,6 @@ class Profile:
         "branch",
         "clean",
         "commit",
-        "commit_changes",
         "files",
         "has_intent",
         "inputs",
@@ -142,7 +141,7 @@ def _digest(value):
 
 def _inputs(inputs):
     return tuple(
-        Input(name, _dataset(name), _digest(value.get("digest")), value.get("kind"))
+        Input(name, _dataset(name), _digest(value.get("digest")))
         for name, value in sorted(_named(inputs).items())
         if isinstance(value, dict)
     )
@@ -267,7 +266,6 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
     p.files = frozenset(_strings(changed.get("files")) + _strings(changed.get("untracked")))
     p.symbols = frozenset(_strings(changed.get("symbols")))
     p.clean = known and not (p.files or p.symbols)
-    p.commit_changes = features.get("changed_source") == "commit"
     p.inputs = _inputs(row.get("inputs"))
     p.params = _named(row.get("params"))
     p.rerun = rerun_key(row)

@@ -17,10 +17,8 @@ import json
 from vmn_exp.core.index_lean_store import NOTE, run_status
 from vmn_exp.core.index_views import runs_declared_schema
 from vmn_exp.core.similar_filing import snapshot_facts
+from vmn_exp.core.similar_fts import chunks, marks
 from vmn_exp.core.status import derive_status
-
-_CHUNK = 500
-
 
 class SnapshotRows:
     def __init__(self, snapshot):
@@ -77,23 +75,17 @@ class SnapshotRows:
         return declared() if declared else {}
 
 
-def _marks(chunk):
-    return ", ".join("?" * len(chunk))
-
-
 class StoreRows:
     """The runs of *app* as the index file *conn* holds them."""
 
     def __init__(self, conn, app):
         self._conn, self._app = conn, app
-        self._rows, self._keys, self._roots = {}, {}, {}
+        self._rows, self._keys, self._roots, self._states = {}, {}, {}, {}
         self._declared = None
 
     def _select(self, sql, values):
-        values = list(values)
-        for i in range(0, len(values), _CHUNK):
-            chunk = values[i:i + _CHUNK]
-            yield from self._conn.execute(sql.format(marks=_marks(chunk)), (self._app, *chunk))
+        for chunk in chunks(values):
+            yield from self._conn.execute(sql.format(marks=marks(chunk)), (self._app, *chunk))
 
     def rows_of(self, verstrs):
         wanted = [v for v in dict.fromkeys(verstrs) if v not in self._rows]
@@ -119,11 +111,13 @@ class StoreRows:
         return out
 
     def _state(self, verstr):
-        self.row(verstr)
-        found = self._conn.execute(
-            "SELECT data FROM exp_index_state WHERE app = ? AND key = ?",
-            (self._app, self._keys.get(verstr))).fetchone()
-        return json.loads(found[0]) if found else {}
+        if verstr not in self._states:
+            self.row(verstr)
+            found = self._conn.execute(
+                "SELECT data FROM exp_index_state WHERE app = ? AND key = ?",
+                (self._app, self._keys.get(verstr))).fetchone()
+            self._states[verstr] = json.loads(found[0]) if found else {}
+        return self._states[verstr]
 
     def facts(self, row):
         sides = self._sides(row["verstr"])

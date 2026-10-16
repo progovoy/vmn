@@ -21,6 +21,7 @@ import time
 
 from vmn_exp.core import similar_fts
 from vmn_exp.core.similar_doc import COLUMNS, STRUCTURED, word
+from vmn_exp.core.similar_items import utf8_safe
 
 MAX_TERMS = 64
 MIN_TERMS = 8
@@ -59,7 +60,7 @@ def words(text):
     """The distinct lowercased words of *text*, in order."""
     if not isinstance(text, str):
         return []
-    found = _WORD.findall(text.encode("utf-8", "replace").decode("utf-8").lower())
+    found = _WORD.findall(utf8_safe(text).lower())
     return list(dict.fromkeys(found))
 
 
@@ -150,10 +151,9 @@ def rank(conn, app, expression, weights, offset, limit):
         " WHERE similar_fts MATCH ? ORDER BY s, rowid LIMIT ? OFFSET ?",
         (expression, limit, offset)).fetchall()
     owners = {}
-    for i in range(0, len(ranked), 500):
-        chunk = [rowid for rowid, _ in ranked[i:i + 500]]
+    for chunk in similar_fts.chunks(rowid for rowid, _ in ranked):
         owners.update((doc_id, (owner, verstr)) for doc_id, owner, verstr in conn.execute(
-            f"SELECT id, app, verstr FROM similar_doc WHERE id IN ({', '.join('?' * len(chunk))})",
+            f"SELECT id, app, verstr FROM similar_doc WHERE id IN ({similar_fts.marks(chunk)})",
             chunk))
     page = [(owners[rowid][1], -score) for rowid, score in ranked
             if score < 0 and owners.get(rowid, (None,))[0] == app]
