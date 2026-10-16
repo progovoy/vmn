@@ -67,3 +67,28 @@ class FakeSnapshot:
 
 def verstrs(items):
     return [item["verstr"] for item in items]
+
+
+def view_doc(view):
+    """The similar-runs document of a run view ``{"row", "features"?,
+    "intent"?, "hypothesis"?, "command"?, "text"?}``."""
+    from vmn_exp.core.similar_doc import build_doc
+
+    return build_doc(view.get("row") or {}, view.get("features"), view.get("intent"),
+                     view.get("hypothesis"), command=view.get("command"), text=view.get("text"))
+
+
+def explain(target, candidate, weights=None, text_only=False):
+    """``(reasons, signals)`` of run view *candidate* shown against *target*."""
+    import sqlite3
+
+    from vmn_exp.core import similar_fts
+    from vmn_exp.core.similar_reasons import Explainer
+    from vmn_exp.core.similar_weights import resolve_weights
+
+    conn = sqlite3.connect(":memory:", isolation_level=None)
+    similar_fts.ensure_tables(conn)
+    doc = view_doc(candidate)
+    similar_fts.file_docs(conn, "app", [(doc.verstr, doc)])
+    explainer = Explainer(conn, view_doc(target), resolve_weights(weights), text_only)
+    return explainer.explain(doc, candidate.get("row") or {}, target.get("row") or {})

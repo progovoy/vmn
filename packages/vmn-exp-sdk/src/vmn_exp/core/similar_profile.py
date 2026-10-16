@@ -4,7 +4,7 @@
 A profile is built from a leaderboard row plus the run's ``features``,
 ``intent`` and ``hypothesis`` (see the plan's formats), and holds each signal
 in the shape its comparison wants — sets for Jaccard, a parsed base commit
-and version, the script of the command line, the text document's term counts.
+and version, the script of the command line, the text document.
 
 Rows carry the base code as ``code_verstr`` (``<base>-dev.<commit7>.<diff7>``)
 and ``base_version``; an MLflow import has neither, but may name its source
@@ -19,22 +19,46 @@ skipped one by one. Pure: no storage.
 import hashlib
 import json
 import re
-from collections import Counter, namedtuple
+from collections import namedtuple
 
 from vmn_exp.core.features import AUTHOR_ONLY_VERSION
-from vmn_exp.core.similar_text import (
-    _dict,
-    _strings,
-    document_terms,
-    keyword_phrases,
-    tokenize,
-)
 
 SYS_PREFIX = "sys_"
 # The diff part of a clean tree's dev verstr (version_stamp's snapshot identity).
 CLEAN_DIFF = "0000000"
 
-Input = namedtuple("Input", "name dataset digest kind")
+KEYWORD_REPEAT = 3
+
+Input = namedtuple("Input", "name dataset digest")
+
+
+def _dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _strings(value):
+    """The non-empty strings of a list (none for anything else)."""
+    return [v for v in value if isinstance(v, str) and v] if isinstance(value, list) else []
+
+
+def keyword_phrases(intent):
+    """The intent's keywords, lowercased, in their order (none for an intent
+    that is no mapping)."""
+    return [k.strip().lower() for k in _strings(_dict(intent).get("keywords")) if k.strip()]
+
+
+def document_text(row, features=None, intent=None, hypothesis=None, create_note=None):
+    """A run's text document: what people wrote about it — its intent (the
+    text, and each keyword :data:`KEYWORD_REPEAT` times, since a keyword is a
+    deliberate label), name, note (*create_note*, the first ``create`` entry's,
+    standing in for a missing one), tags (keys and values), local commit
+    subjects and hypothesis."""
+    row, intent = _dict(row), _dict(intent)
+    parts = [intent.get("text"), row.get("name"), row.get("note") or create_note, hypothesis]
+    parts += [str(part) for pair in _dict(row.get("tags")).items() for part in pair]
+    parts += _strings(_dict(features).get("commits"))
+    parts += [phrase for phrase in keyword_phrases(intent) for _ in range(KEYWORD_REPEAT)]
+    return "\n".join(part for part in parts if isinstance(part, str) and part)
 
 
 class Profile:
@@ -46,18 +70,16 @@ class Profile:
         "branch",
         "clean",
         "commit",
-        "commit_changes",
         "files",
         "has_intent",
         "inputs",
         "keywords",
-        "length",
         "objective",
         "params",
         "rerun",
         "script",
         "symbols",
-        "terms",
+        "text",
     )
 
 
@@ -119,7 +141,7 @@ def _digest(value):
 
 def _inputs(inputs):
     return tuple(
-        Input(name, _dataset(name), _digest(value.get("digest")), value.get("kind"))
+        Input(name, _dataset(name), _digest(value.get("digest")))
         for name, value in sorted(_named(inputs).items())
         if isinstance(value, dict)
     )
@@ -244,7 +266,6 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
     p.files = frozenset(_strings(changed.get("files")) + _strings(changed.get("untracked")))
     p.symbols = frozenset(_strings(changed.get("symbols")))
     p.clean = known and not (p.files or p.symbols)
-    p.commit_changes = features.get("changed_source") == "commit"
     p.inputs = _inputs(row.get("inputs"))
     p.params = _named(row.get("params"))
     p.rerun = rerun_key(row)
@@ -253,53 +274,11 @@ def build_profile(row=None, features=None, intent=None, hypothesis=None,
     branch = row.get("branch") or features.get("branch")
     p.branch = branch if isinstance(branch, str) and branch else None
     if text is not None:
-        terms, p.keywords = tokenize(text), ()
+        p.text, p.keywords = (text if isinstance(text, str) else ""), ()
     else:
-        terms = document_terms(row, features, intent, hypothesis, create_note)
+        p.text = document_text(row, features, intent, hypothesis, create_note)
         p.keywords = tuple(keyword_phrases(intent))
-    p.terms, p.length = Counter(terms), len(terms)
     context = text.strip() if isinstance(text, str) else ""
     p.has_intent = bool(context or intent.get("text") or p.keywords)
     return p
 
-
-def as_profile(run):
-    """*run* if it is a :class:`Profile`, else the profile of a run view
-    ``{"row", "features"?, "intent"?, "hypothesis"?, "command"?, "text"?}``."""
-    if isinstance(run, Profile):
-        return run
-    return build_profile(run.get("row"), run.get("features"), run.get("intent"),
-                         run.get("hypothesis"), command=run.get("command"), text=run.get("text"))
-
-
-WORD_PREFIX = "w:"
-
-
-def word_tokens(p):
-    """The ``w:`` tokens of a profile: the words of its text document."""
-    return {WORD_PREFIX + term for term in p.terms}
-
-
-def structured_tokens(p):
-    """The ``file:``/``sym:``/``input:``/``ds:``/``pkey:``/``cmd:``/``metric:``/
-    ``commit:`` tokens of a profile."""
-    tokens = {"file:" + f for f in p.files}
-    tokens.update("sym:" + s for s in p.symbols)
-    tokens.update("ds:" + i.dataset for i in p.inputs)
-    tokens.update("input:" + i.digest for i in p.inputs if i.digest)
-    tokens.update("pkey:" + k for k in p.params)
-    tokens.update("metric:" + m for m in p.objective)
-    if p.script:
-        tokens.add("cmd:" + p.script)
-    if p.commit:
-        tokens.add("commit:" + p.commit)
-    return tokens
-
-
-def profile_tokens(p, structured=True):
-    """The inverted-index tokens of a profile: its :func:`word_tokens`, and
-    with *structured* its :func:`structured_tokens`."""
-    tokens = word_tokens(p)
-    if structured:
-        tokens |= structured_tokens(p)
-    return tokens

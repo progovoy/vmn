@@ -9,7 +9,7 @@ import pytest
 from exp_helpers import _bootstrap, _exp, _storage
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli import similar_hint
-from vmn_exp.core import similar, similar_index
+from vmn_exp.core import similar_match
 
 CHANGES = features(["train.py"], [TRAIN_STEP], author="alice@x.io")
 
@@ -71,20 +71,18 @@ def test_a_hint_over_budget_prints_nothing_and_leaves_no_thread_behind(app_layou
     assert _hint_threads() == []
 
 
-def test_the_budget_stops_the_scoring_itself(app_layout, capfd, monkeypatch):
+def test_the_budget_interrupts_the_search_in_sqlite(app_layout, capfd, monkeypatch):
     storage, new = _warm_app_with_priors(app_layout, 3)
-    now = [0.0]
+    now, looks = [0.0], []
     monkeypatch.setattr(similar_hint, "_clock", lambda: now[0])
-    monkeypatch.setattr(similar_index, "_clock", lambda: now[0])
-    monkeypatch.setattr(similar_index, "DEADLINE_CHECK_EVERY", 1)
     monkeypatch.setattr(similar_hint, "BUDGET_SEC", 0.3)
-    scored, real = [], similar.score
+    monkeypatch.setattr(similar_match, "PROGRESS_OPS", 1)
 
-    def one_second_each(*args, **kwargs):
-        scored.append(1)
-        now[0] += 1.0
-        return real(*args, **kwargs)
+    def a_tenth_each():
+        looks.append(1)
+        now[0] += 0.1
+        return now[0]
 
-    monkeypatch.setattr(similar, "score", one_second_each)
+    monkeypatch.setattr(similar_match, "_clock", a_tenth_each)
     assert _hint(storage, app_layout, new, capfd) == []
-    assert len(scored) == 1
+    assert len(looks) > 2  # the progress handler stopped a query under way

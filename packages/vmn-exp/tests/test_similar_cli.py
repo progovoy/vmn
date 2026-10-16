@@ -145,6 +145,17 @@ def test_no_similar_run_is_a_note_on_stderr_and_exit_0(app_layout, capfd):
     assert _items(app_layout, capfd, "-v", target) == []
 
 
+def test_without_fts5_similar_says_so_and_exits_1(app_layout, capfd, monkeypatch):
+    from vmn_exp.core import similar_fts
+
+    _bootstrap(app_layout)
+    target = _train_step_run(_storage(app_layout), app_layout.app_name, 1)
+    monkeypatch.setattr(similar_fts, "_FTS5", [False])
+    rc, out = _similar(app_layout, capfd, "-v", target)
+    assert rc == 1 and "similar runs need SQLite with FTS5" in out.err
+    assert "Traceback" not in out.err
+
+
 def test_an_unknown_ref_is_an_error(app_layout, capfd):
     _bootstrap(app_layout)
     _train_step_run(_storage(app_layout), app_layout.app_name, 1)
