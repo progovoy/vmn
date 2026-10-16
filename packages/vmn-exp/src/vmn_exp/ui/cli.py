@@ -201,9 +201,13 @@ def handle_ui(args):
             from vmn_exp.ui.onboarding_cli import handle_onboarding
 
             return handle_onboarding(args)
+        if args.ui_args[0] == "backup":
+            from vmn_exp.ui import backup_cli
+
+            return backup_cli.handle_backup(args)
         if args.ui_args[0] != "cache":
             VMN_LOGGER.error(
-                f"Unknown ui action {args.ui_args[0]!r} (use: cache, onboarding)")
+                f"Unknown ui action {args.ui_args[0]!r} (use: backup, cache, onboarding)")
             return 2
         from vmn_exp.ui.cache_cli import handle_cache
 

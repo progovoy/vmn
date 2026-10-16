@@ -240,10 +240,12 @@ def _add_ui_parser(subprasers):  # noqa: N802
     pui = subprasers.add_parser(
         "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
     )
-    pui.add_argument("ui_args", nargs="*", metavar="cache resync|rebuild | onboarding",
+    pui.add_argument("ui_args", nargs="*",
+                     metavar="cache resync|rebuild | onboarding | backup <path>",
                      help="Maintenance: 'cache resync' re-checks every record of the "
                           "cache, 'cache rebuild' rebuilds it; 'onboarding' prints the "
-                          "BYO-bucket IAM policy for --store")
+                          "BYO-bucket IAM policy for --store; 'backup <path>' copies the "
+                          "SQLite control plane (Postgres: prints the pg_dump command)")
     pui.add_argument("--workspace", default=None,
                      help="cache: the workspace to resync (default: every one)")
     pui.add_argument("--config", default=None,
