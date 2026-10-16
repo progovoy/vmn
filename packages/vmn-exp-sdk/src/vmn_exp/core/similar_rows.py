@@ -14,10 +14,10 @@ the app ends it), a run with neither parent nor children its own.
 """
 import json
 
-from vmn_exp.core.index_lean_store import NOTE, run_status
+from vmn_exp.core.index_lean_store import NOTE, decode_row, run_status
 from vmn_exp.core.index_views import runs_declared_schema
 from vmn_exp.core.similar_filing import snapshot_facts
-from vmn_exp.core.similar_fts import chunks, marks
+from vmn_exp.core.sqlite_conn import in_chunks
 from vmn_exp.core.status import derive_status
 
 class SnapshotRows:
@@ -84,16 +84,15 @@ class StoreRows:
         self._declared = None
 
     def _select(self, sql, values):
-        for chunk in chunks(values):
-            yield from self._conn.execute(sql.format(marks=marks(chunk)), (self._app, *chunk))
+        for chunk, marks in in_chunks(values):
+            yield from self._conn.execute(sql.format(marks=marks), (self._app, *chunk))
 
     def rows_of(self, verstrs):
         wanted = [v for v in dict.fromkeys(verstrs) if v not in self._rows]
         for key, verstr, idx, root, row in self._select(
                 "SELECT key, verstr, idx, root, row FROM exp_rows WHERE app = ?"
                 " AND verstr IN ({marks})", wanted):
-            row = json.loads(row)
-            row["idx"] = idx
+            row = decode_row(idx, row)
             self._rows[verstr], self._keys[verstr], self._roots[verstr] = row, key, root
         return {v: self._rows[v] for v in verstrs if v in self._rows}
 

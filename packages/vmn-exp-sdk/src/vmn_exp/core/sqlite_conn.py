@@ -37,6 +37,25 @@ def connect(path, *, readonly=False, busy_timeout_ms=BUSY_TIMEOUT_MS):
     return conn
 
 
+def in_chunks(values, size=500):
+    """``(chunk, marks)`` of *values*, *size* at a time (under SQLite's
+    bound-parameter limit); *marks* the chunk's ``?, ?, ...`` placeholders."""
+    values = list(values)
+    for i in range(0, len(values), size):
+        chunk = values[i:i + size]
+        yield chunk, ", ".join("?" * len(chunk))
+
+
+@contextlib.contextmanager
+def read_tx(conn):
+    """One read transaction on *conn*: its reads see one state of the file."""
+    conn.execute("BEGIN")
+    try:
+        yield conn
+    finally:
+        conn.execute("COMMIT")
+
+
 @contextlib.contextmanager
 def write_tx(conn):
     """One write transaction on *conn*, holding the write lock from its

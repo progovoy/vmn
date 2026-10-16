@@ -9,6 +9,7 @@ import json
 from vmn_exp.core import index_point_sql
 from vmn_exp.core.index_lazy import STATE_KEYS, LazyRecord, LazyRecords
 from vmn_exp.core.index_lean_store import read_lean
+from vmn_exp.core.sqlite_conn import in_chunks, read_tx
 
 _CHUNK = 256  # records read per query, under SQLite's bound-parameter limit
 
@@ -26,18 +27,14 @@ class LeanReads:
         return self._read(lambda: self._warm(app_name), None)
 
     def _warm(self, app_name):
-        if not self.generation(app_name):
+        read = self._at_one_generation(app_name, lambda conn: (
+            dict(conn.execute("SELECT key, seq FROM exp_index WHERE app = ?", (app_name,))),
+            dict(self._select("exp_index_state", app_name)),
+            read_lean(conn, app_name),
+        ))
+        if read is None:
             return None  # never saved: nothing to start warm from
-        conn = self._conn
-        conn.execute("BEGIN")
-        try:
-            seqs = dict(conn.execute(
-                "SELECT key, seq FROM exp_index WHERE app = ?", (app_name,)
-            ).fetchall())
-            states = dict(self._select("exp_index_state", app_name))
-            keys, lean, stamps = read_lean(conn, app_name)
-        finally:
-            conn.execute("COMMIT")
+        seqs, states, (keys, lean, stamps) = read
         fetch = _Prefetch(self, app_name, seqs)
         records = {
             key: LazyRecord(key, _state_from(states.get(key)), fetch, key in lean)
@@ -68,11 +65,8 @@ class LeanReads:
     def _at_one_generation(self, app_name, read):
         if not self.generation(app_name):
             return None
-        self._conn.execute("BEGIN")
-        try:
-            return read(self._conn)
-        finally:
-            self._conn.execute("COMMIT")
+        with read_tx(self._conn) as conn:
+            return read(conn)
 
     def records_parts(self, app_name, seqs):
         """``{key: (head JSON, fold JSON, run state JSON or None)}`` of the
@@ -80,11 +74,12 @@ class LeanReads:
         seq: as stored now); ``{}`` when unavailable."""
         return self._read(lambda: {
             key: (head, data, state)
+            for chunk, marks in in_chunks(seqs)
             for key, seq, head, data, state in self._conn.execute(
                 "SELECT i.key, i.seq, i.head, i.data, s.data FROM exp_index i"
                 " LEFT JOIN exp_index_state s ON s.app = i.app AND s.key = i.key"
-                f" WHERE i.app = ? AND i.key IN ({', '.join('?' * len(seqs))})",
-                (app_name, *seqs),
+                f" WHERE i.app = ? AND i.key IN ({marks})",
+                (app_name, *chunk),
             )
             if seqs[key] in (None, seq)
         }, {})
@@ -95,17 +90,17 @@ class LeanReads:
         return self._read(lambda: self._diff(app_name, names), None)
 
     def _diff(self, app_name, names):
-        query = "SELECT key FROM exp_index WHERE app = ?"
-        gone, known = [], 0
-        for (key,) in self._conn.execute(query, (app_name,)):
+        gone, known = [], set()
+        for (key,) in self._conn.execute(
+            "SELECT key FROM exp_index WHERE app = ?", (app_name,)
+        ):
             if key in names:
-                known += 1
+                known.add(key)
             else:
                 gone.append(key)
-        if known == len(names):  # every name is persisted (the usual case)
+        if len(known) == len(names):  # every name is persisted (the usual case)
             return [], gone
-        persisted = {key for (key,) in self._conn.execute(query, (app_name,))}
-        return [name for name in names if name not in persisted], gone
+        return [name for name in names if name not in known], gone
 
     def keys(self, app_name):
         """Every persisted record key of *app_name*; None when unavailable."""

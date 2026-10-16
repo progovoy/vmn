@@ -10,21 +10,14 @@ its ``idx``, create note, side table values
 """
 import json
 
-from vmn_exp.core.index_lean_store import NOTE
+from vmn_exp.core.index_lean_store import NOTE, decode_row
 from vmn_exp.core.index_views import SIDE_TABLES
+from vmn_exp.core.sqlite_conn import in_chunks
 
-_CHUNK = 500  # keys per query, under SQLite's bound-parameter limit
 _NO_STATE = {"rs_sig": None, "run_state": None}
 # The side tables a row copy and a query read (the rest feed similarity):
 # intents for `intent`/`keywords` (plan 24 F5).
 ROW_SIDES = (NOTE, "metric_parts", "outputs", "intents")
-
-
-def _chunks(values):
-    values = list(values)
-    for i in range(0, len(values), _CHUNK):
-        chunk = values[i:i + _CHUNK]
-        yield chunk, ", ".join("?" * len(chunk))
 
 
 def count(conn, app):
@@ -47,7 +40,7 @@ def matching(conn, app, where, params, last=None):
 def by_verstr(conn, app, verstrs):
     """``{verstr: (key, parent)}`` of those of *verstrs* that are runs."""
     out = {}
-    for chunk, marks in _chunks(verstrs):
+    for chunk, marks in in_chunks(verstrs):
         out.update((v, (k, p)) for v, k, p in conn.execute(
             f"SELECT verstr, key, parent FROM exp_rows WHERE app = ? AND verstr IN ({marks})",
             (app, *chunk),
@@ -58,7 +51,7 @@ def by_verstr(conn, app, verstrs):
 def children(conn, app, verstrs):
     """``{verstr: (key, parent)}`` of the runs whose parent is one of *verstrs*."""
     out = {}
-    for chunk, marks in _chunks(verstrs):
+    for chunk, marks in in_chunks(verstrs):
         out.update((v, (k, p)) for v, k, p in conn.execute(
             f"SELECT verstr, key, parent FROM exp_rows WHERE app = ? AND parent IN ({marks})"
             " AND verstr != parent", (app, *chunk),
@@ -73,7 +66,7 @@ def rows_of(conn, app, keys):
     keys = list(keys)
     found, sides, states = [], {}, {}
     kinds = ", ".join("?" * len(ROW_SIDES))
-    for chunk, marks in _chunks(keys):
+    for chunk, marks in in_chunks(keys):
         args = (app, *chunk)
         found += conn.execute(
             f"SELECT key, idx, row FROM exp_rows WHERE app = ? AND key IN ({marks})", args
@@ -88,7 +81,7 @@ def rows_of(conn, app, keys):
         ))
     out = []
     for key, idx, row in sorted(found, key=lambda found_row: found_row[1]):
-        row = dict(json.loads(row), idx=idx)
+        row = decode_row(idx, row)
         own = sides.get(key, {})
         state = dict(_NO_STATE, **json.loads(states[key])) if key in states else _NO_STATE
         out.append((row, own.get(NOTE), [own.get(kind) for kind in SIDE_TABLES], state))
@@ -106,5 +99,5 @@ def declared(conn, app):
         (app,),
     ):
         defs[verstr] = json.loads(data)
-        rows[verstr] = dict(json.loads(row), idx=idx)
+        rows[verstr] = decode_row(idx, row)
     return defs, rows

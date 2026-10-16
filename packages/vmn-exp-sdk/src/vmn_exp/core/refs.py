@@ -18,11 +18,11 @@ Storage is duck-typed; like the rest of ``core`` this imports nothing from
 import vmn_exp.core.index as experiment_index
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.index_point import point_view
+from vmn_exp.core.index_point_sql import LATEST_WORDS
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.tree import children_by_parent
 
 KIND = "experiment"
-_LATEST_WORDS = ("latest", "@latest")
 
 
 def _listed_snapshot(storage, app_name, schema):
@@ -90,7 +90,7 @@ class _Own:
 
 
 def _needs_listing(storage, app_name, ref, latest):
-    if latest or ref in _LATEST_WORDS:
+    if latest or ref in LATEST_WORDS:
         return True
     if ref is None:
         return False

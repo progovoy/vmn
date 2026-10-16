@@ -7,11 +7,10 @@ of the app.
 :meth:`~vmn_exp.core.index_snapshot.IndexSnapshot.resolve` answers over the
 same rows — results and error strings alike.
 """
-import json
-
+from vmn_exp.core.index_lean_store import decode_row
 from vmn_exp.core.resolve_ref import AMBIGUOUS_REF, INVALID_REF, RefError
 
-_LATEST_WORDS = ("latest", "@latest")
+LATEST_WORDS = ("latest", "@latest")
 _PREFIX_END = "\U0010ffff"  # sorts after any character a verstr carries
 
 
@@ -19,7 +18,7 @@ def resolve(conn, app, ref, latest=False, kind="experiment"):
     """``(verstr, error)`` for *ref*: ``latest``/``@latest`` (or *latest*),
     ``@N``, an exact verstr, a unique dev-verstr prefix, or a stamped
     version passed through."""
-    if latest or ref in _LATEST_WORDS:
+    if latest or ref in LATEST_WORDS:
         return _latest(conn, app, kind)
     if ref is None:
         return None, None
@@ -82,9 +81,7 @@ def row_of(conn, app, verstr):
     ).fetchone()
     if found is None:
         return None
-    row = json.loads(found[1])
-    row["idx"] = found[0]
-    return row
+    return decode_row(*found)
 
 
 def parent_of(conn, app, verstr):
