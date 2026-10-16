@@ -68,7 +68,13 @@ def point_view(storage, app_name, sync=True):
     store = shared_store(path)
     if not store.generation(app_name) or (sync and not _sync(storage, app_name, store)):
         return None
-    return PointView(store, app_name)
+    return PointView(store, app_name, fallback=lambda: _snapshot_of(storage, app_name))
+
+
+def _snapshot_of(storage, app_name):
+    from vmn_exp.core.refs import placement_snapshot  # refs builds on this module
+
+    return placement_snapshot(storage, app_name)
 
 
 def _sync(storage, app_name, store):
@@ -121,18 +127,21 @@ class PointView:
     :class:`~vmn_exp.core.index_snapshot.IndexSnapshot` that resolving and
     placing one run use."""
 
-    def __init__(self, store, app_name):
-        self._store, self.app_name = store, app_name
+    def __init__(self, store, app_name, fallback=None):
+        self._store, self.app_name, self._fallback = store, app_name, fallback
         self.parent_of = _Lookup(lambda v: store.parent_of(app_name, v))
         self.children_of = _Lookup(lambda v: store.children_of(app_name, v) or None)
         # row(verstr): its persisted lean row (``idx`` set), or None. Shared: copy to change.
         self.row = _Lookup(lambda v: store.lean_row_of(app_name, v)).get
 
     def resolve(self, ref, latest=False, kind="experiment"):
-        """``(verstr, error)`` like :meth:`IndexSnapshot.resolve`."""
+        """``(verstr, error)`` like :meth:`IndexSnapshot.resolve`; when the
+        database went away under us, *fallback*'s snapshot answers."""
         answer = self._store.resolve_one(self.app_name, ref, latest, kind)
-        if answer is None:  # the database went away under us
-            raise RuntimeError("experiment index unavailable")
+        if answer is None:
+            if self._fallback is None:
+                raise RuntimeError("experiment index unavailable")
+            return self._fallback().resolve(ref, latest=latest, kind=kind)
         return answer
 
 

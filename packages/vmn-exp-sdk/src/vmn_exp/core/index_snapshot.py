@@ -19,8 +19,9 @@ from vmn_exp.core.index_views import (
     runs_declared_schema,
     schema_key,
 )
-from vmn_exp.core.resolve_ref import AMBIGUOUS_REF, INVALID_REF, RefError
+from vmn_exp.core.resolve_ref import RefLookups, no_runs_error, resolve_with
 from vmn_exp.core.status import derive_status, observed_at_from_mtime
+from vmn_exp.core.tree import children_by_parent
 
 _VIEWS_PER_SNAPSHOT = 4
 
@@ -52,6 +53,7 @@ class IndexSnapshot:
     intents: dict = field(default_factory=dict, repr=False)
     hypotheses: dict = field(default_factory=dict, repr=False)
     _declared: list = field(default_factory=list, repr=False)  # memo, shared by views
+    _children: list = field(default_factory=list, repr=False)  # children_of memo, ditto
     _by_verstr: dict = field(default_factory=dict, repr=False)
     _schema_rows: SchemaRows = field(default_factory=SchemaRows, repr=False)
     _views: dict = field(default_factory=dict, repr=False)  # schema key -> view
@@ -147,51 +149,40 @@ class IndexSnapshot:
             _views={}, _base=self,
         )
 
-    def resolve(self, ref, latest=False, kind="experiment"):
-        """``(verstr, error)`` for *ref*, like the CLI's ``_resolve_verstr``.
+    @property
+    def parent_of(self):
+        """``{verstr: parent verstr or None}`` (:attr:`edges`), like
+        :class:`~vmn_exp.core.index_point.PointView`'s."""
+        return self.edges
 
-        Accepts ``latest``/``@latest`` (or *latest*), ``@N`` (the storage
-        index), an exact verstr, a unique dev-verstr prefix, or a stamped
-        (non-dev) version passed through untouched.
-        """
-        if latest or ref in ("latest", "@latest"):
-            return self._latest(kind)
-        if ref is None:
-            return None, None
-        if ref.startswith("@"):
-            return self._at_index(ref)
-        if ref in self._by_verstr or "-dev." not in ref:
-            return ref, None
-        return self._by_prefix(ref, kind)
+    @property
+    def children_of(self):
+        """``{parent verstr: [child verstr]}`` in storage order, computed once
+        per snapshot. Shared: copy before changing."""
+        if not self._children:
+            self._children.append(
+                children_by_parent({"verstr": v, "parent": p} for v, p in self.edges.items())
+            )
+        return self._children[0]
+
+    def resolve(self, ref, latest=False, kind="experiment"):
+        """``(verstr, error)`` for *ref*, like the CLI's ``_resolve_verstr``
+        (see :func:`~vmn_exp.core.resolve_ref.resolve_with`)."""
+        rows, by_verstr = self.rows, self._by_verstr
+        lookups = RefLookups(
+            latest=lambda: self._latest(kind)[0],
+            at=lambda n: rows[n - 1]["verstr"] if n <= len(rows) else None,
+            count=lambda: len(rows),
+            exists=by_verstr.__contains__,
+            with_prefix=lambda prefix: sorted(v for v in by_verstr if v.startswith(prefix)),
+        )
+        return resolve_with(lookups, self.app_name, ref, latest, kind)
 
     def _latest(self, kind):
         if not self.rows:
-            return None, RefError(f"No {kind}s found for {self.app_name}")
+            return None, no_runs_error(kind, self.app_name)
         newest = max(self.rows, key=lambda r: r.get("timestamp") or "")
         return newest["verstr"], None
-
-    def _at_index(self, ref):
-        idx = ref[1:]
-        if not idx.isdigit():
-            return None, RefError(
-                f"Invalid index reference '{ref}' (use @N, e.g. @1)", INVALID_REF
-            )
-        n = int(idx)
-        if n < 1 or n > len(self.rows):
-            return None, RefError(f"Index '{ref}' out of range (1..{len(self.rows)})")
-        return self.rows[n - 1]["verstr"], None
-
-    def _by_prefix(self, ref, kind):
-        matches = sorted(v for v in self._by_verstr if v.startswith(ref))
-        if len(matches) == 1:
-            return matches[0], None
-        if matches:
-            return None, RefError(
-                f"Ambiguous prefix '{ref}': matches {len(matches)} {kind}s: "
-                + ", ".join(matches),
-                AMBIGUOUS_REF,
-            )
-        return None, RefError(f"{kind.capitalize()} '{ref}' not found")
 
 
 class RowCache:

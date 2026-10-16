@@ -8,70 +8,38 @@ of the app.
 same rows — results and error strings alike.
 """
 from vmn_exp.core.index_lean_store import decode_row
-from vmn_exp.core.resolve_ref import AMBIGUOUS_REF, INVALID_REF, RefError
+from vmn_exp.core.resolve_ref import RefLookups, resolve_with
 
-LATEST_WORDS = ("latest", "@latest")
 _PREFIX_END = "\U0010ffff"  # sorts after any character a verstr carries
 
 
 def resolve(conn, app, ref, latest=False, kind="experiment"):
-    """``(verstr, error)`` for *ref*: ``latest``/``@latest`` (or *latest*),
-    ``@N``, an exact verstr, a unique dev-verstr prefix, or a stamped
-    version passed through."""
-    if latest or ref in LATEST_WORDS:
-        return _latest(conn, app, kind)
-    if ref is None:
-        return None, None
-    if ref.startswith("@"):
-        return _at_index(conn, app, ref)
-    if "-dev." not in ref or _exists(conn, app, ref):
-        return ref, None
-    return _by_prefix(conn, app, ref, kind)
+    """``(verstr, error)`` for *ref* (see
+    :func:`~vmn_exp.core.resolve_ref.resolve_with`), each lookup one indexed
+    query."""
+    return resolve_with(_lookups(conn, app), app, ref, latest, kind)
 
 
-def _latest(conn, app, kind):
-    row = conn.execute(
-        "SELECT verstr FROM exp_rows WHERE app = ? AND timestamp ="
-        " (SELECT MAX(timestamp) FROM exp_rows WHERE app = ?) ORDER BY key LIMIT 1",
-        (app, app),
-    ).fetchone()
-    if row is None:
-        return None, RefError(f"No {kind}s found for {app}")
-    return row[0], None
+def _lookups(conn, app):
+    def one(sql, *args):
+        row = conn.execute(sql, (app, *args)).fetchone()
+        return row[0] if row else None
 
-
-def _at_index(conn, app, ref):
-    idx = ref[1:]
-    if not idx.isdigit():
-        return None, RefError(f"Invalid index reference '{ref}' (use @N, e.g. @1)", INVALID_REF)
-    row = conn.execute(
-        "SELECT verstr FROM exp_rows WHERE app = ? AND idx = ?", (app, int(idx))
-    ).fetchone()
-    if row is not None and int(idx) >= 1:
-        return row[0], None
-    (count,) = conn.execute("SELECT COUNT(*) FROM exp_rows WHERE app = ?", (app,)).fetchone()
-    return None, RefError(f"Index '{ref}' out of range (1..{count})")
-
-
-def _exists(conn, app, verstr):
-    return conn.execute(
-        "SELECT 1 FROM exp_rows WHERE app = ? AND verstr = ?", (app, verstr)
-    ).fetchone() is not None
-
-
-def _by_prefix(conn, app, ref, kind):
-    matches = [verstr for (verstr,) in conn.execute(
-        "SELECT verstr FROM exp_rows WHERE app = ? AND verstr >= ? AND verstr < ?"
-        " ORDER BY verstr", (app, ref, ref + _PREFIX_END),
-    )]
-    if len(matches) == 1:
-        return matches[0], None
-    if matches:
-        return None, RefError(
-            f"Ambiguous prefix '{ref}': matches {len(matches)} {kind}s: " + ", ".join(matches),
-            AMBIGUOUS_REF,
-        )
-    return None, RefError(f"{kind.capitalize()} '{ref}' not found")
+    return RefLookups(
+        latest=lambda: one(
+            "SELECT verstr FROM exp_rows WHERE app = ? AND timestamp ="
+            " (SELECT MAX(timestamp) FROM exp_rows WHERE app = ?) ORDER BY key LIMIT 1", app,
+        ),
+        at=lambda n: one("SELECT verstr FROM exp_rows WHERE app = ? AND idx = ?", n),
+        count=lambda: one("SELECT COUNT(*) FROM exp_rows WHERE app = ?"),
+        exists=lambda verstr: one(
+            "SELECT 1 FROM exp_rows WHERE app = ? AND verstr = ?", verstr
+        ) is not None,
+        with_prefix=lambda prefix: [verstr for (verstr,) in conn.execute(
+            "SELECT verstr FROM exp_rows WHERE app = ? AND verstr >= ? AND verstr < ?"
+            " ORDER BY verstr", (app, prefix, prefix + _PREFIX_END),
+        )],
+    )
 
 
 def row_of(conn, app, verstr):

@@ -18,9 +18,8 @@ Storage is duck-typed; like the rest of ``core`` this imports nothing from
 import vmn_exp.core.index as experiment_index
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.index_point import point_view
-from vmn_exp.core.index_point_sql import LATEST_WORDS
 from vmn_exp.core.index_snapshot import IndexSnapshot
-from vmn_exp.core.tree import children_by_parent
+from vmn_exp.core.resolve_ref import LATEST_WORDS
 
 KIND = "experiment"
 
@@ -67,16 +66,10 @@ def tree_links(placement, verstr=None, parent=None):
     """``(parent_of, children_of)`` lookups (``.get``) of a
     :func:`point_placement`; *verstr*'s *parent* stands in when the
     placement does not know the run."""
-    if hasattr(placement, "children_of"):
-        parent_of, children_of = placement.parent_of, placement.children_of
-        if verstr is not None and placement.row(verstr) is None:
-            parent_of = _Own(parent_of, verstr, parent)
-        return parent_of, children_of
-    parent_of = dict(placement.edges)
-    if verstr is not None:
-        parent_of.setdefault(verstr, parent)
-    nodes = [{"verstr": v, "parent": p} for v, p in parent_of.items()]
-    return parent_of, children_by_parent(nodes)
+    parent_of = placement.parent_of
+    if verstr is not None and placement.row(verstr) is None:
+        parent_of = _Own(parent_of, verstr, parent)
+    return parent_of, placement.children_of
 
 
 class _Own:
@@ -106,12 +99,7 @@ def resolve_experiment(storage, app_name, ref, latest=False, snapshot=None):
     """
     if not _needs_listing(storage, app_name, ref, latest):
         return ref, None
-    placement = point_placement(storage, app_name, snapshot)
-    try:
-        return placement.resolve(ref, latest=latest, kind=KIND)
-    except RuntimeError:  # the persisted index went away mid-read
-        return placement_snapshot(storage, app_name).resolve(ref, latest=latest, kind=KIND)
-
+    return point_placement(storage, app_name, snapshot).resolve(ref, latest=latest, kind=KIND)
 
 
 def resolve_parent(storage, app_name, explicit=None, env_ref=None):
@@ -135,11 +123,6 @@ def resolve_parent(storage, app_name, explicit=None, env_ref=None):
         return None, 1
     VMN_LOGGER.warning(f"Ignoring stale VMN_EXPERIMENT_ID '{ref}': {err}")
     return None, None
-
-
-def parent_edges(storage, app_name, snapshot=None):
-    """``{verstr: parent}`` for every run of the app."""
-    return dict(placement_snapshot(storage, app_name, snapshot).edges)
 
 
 def storage_index(storage, app_name, verstr, snapshot=None):
