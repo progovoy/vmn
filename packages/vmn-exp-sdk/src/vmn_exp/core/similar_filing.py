@@ -38,13 +38,14 @@ def lean_doc(row, note, sides, command):
                      command=row.get("command") or command, create_note=note)
 
 
-def _record_doc(record):
-    row, note, *sides = lean_row(0, record["meta"], record["fold"])
+def _record_doc(record, lean=None):
+    row, note, *sides = lean or lean_row(0, record["meta"], record["fold"])
     return lean_doc(row, note, sides, _command(record.get("run_state")))
 
 
-def file_records(conn, app, changed, removed, states=None):
-    """Bring *app*'s documents in line with a save (see the module)."""
+def file_records(conn, app, changed, removed, states=None, leans=None):
+    """Bring *app*'s documents in line with a save (see the module); *leans*:
+    the changed runs' lean rows, when already derived."""
     if not similar_fts.has_tables(conn):
         return
     runs = {key: r for key, r in changed.items() if is_run(r)}
@@ -53,8 +54,9 @@ def file_records(conn, app, changed, removed, states=None):
                                         if k not in changed})
     runs.update((key, record) for key, record in moved.items() if is_run(record))
     commands = {key: _command(r.get("run_state")) for key, r in runs.items()}
-    similar_fts.file_docs(conn, app, [(key, _record_doc(r)) for key, r in runs.items()],
-                          commands)
+    leans = leans or {}
+    similar_fts.file_docs(conn, app, [(key, _record_doc(r, leans.get(key)))
+                                      for key, r in runs.items()], commands)
 
 
 def _commands_moved(conn, app, states):

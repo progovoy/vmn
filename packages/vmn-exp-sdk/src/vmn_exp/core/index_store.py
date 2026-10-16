@@ -24,9 +24,9 @@ import time
 
 from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
 from vmn_exp.core.index_lazy import STATE_KEYS as _STATE_KEYS
-from vmn_exp.core.index_lean_store import write_lean
+from vmn_exp.core.index_lean_store import leans_of, write_lean
 from vmn_exp.core.index_store_conn import StoreConnection
-from vmn_exp.core.index_store_kv import KeyValues
+from vmn_exp.core.index_store_kv import KeyValues, joining
 from vmn_exp.core.index_store_reads import LeanReads
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
 from vmn_exp.core.similar_filing import file_records as file_similar
@@ -166,36 +166,46 @@ class SqliteStore(LeanReads, KeyValues):
             f"SELECT key, data FROM {table} WHERE app = ?", (app_name,)
         ).fetchall()
 
-    def save(self, app_name, changed, removed, states=None):
+    # save() takes kv_puts: they commit with the records, or not at all.
+    JOINS_KV = True
+
+    def save(self, app_name, changed, removed, states=None, kv_puts=None):
         """Persist *changed* records and the run state of the *states* records
-        (both ``{key: record}``), forget *removed* keys. A record's
+        (both ``{key: record}``), forget *removed* keys, then make the
+        :meth:`kv_put_many` *kv_puts* — all in one transaction. A record's
         ``rs_sig``/``run_state`` are stored only through *states*. True when
         persisted (or nothing to persist), False when the caller should try
         again later; never raises."""
         states = states or {}
-        if self._db.path is None or not (changed or removed or states):
+        if self._db.path is None or not (changed or removed or states or kv_puts):
             return True
         conn = self._db.get()
         if conn is None:
             return False
         try:
-            with write_tx(conn):
-                seq = self._bump_generation(app_name)
-                self._upsert_records(app_name, seq, changed)
-                self._upsert_states(app_name, seq, states)
-                self._forget(app_name, seq, removed)
-                write_lean(conn, app_name, seq, changed, removed, states)
-                file_similar(conn, app_name, changed, removed, states)
-                conn.executemany(
-                    "DELETE FROM exp_index_tombstones WHERE app = ? AND key = ?",
-                    [(app_name, key) for key in changed],
-                )
-                self._trim_tombstones(app_name)
+            with write_tx(conn), joining(conn):
+                if changed or removed or states:
+                    self._save_records(conn, app_name, changed, removed, states)
+                self.kv_put_many(kv_puts)
         except sqlite3.Error as exc:  # locked past the timeout, read-only, full disk
             self._db.on_error(exc, "Could not persist the experiment index {file}"
                                    " ({exc}); the next refresh retries")
             return False
         return True
+
+    def _save_records(self, conn, app_name, changed, removed, states):
+        seq = self._bump_generation(app_name)
+        self._upsert_records(app_name, seq, changed)
+        self._upsert_states(app_name, seq, states)
+        self._forget(app_name, seq, removed)
+        leans = leans_of(changed)
+        write_lean(conn, app_name, seq, changed, removed, states, leans)
+        file_similar(conn, app_name, changed, removed, states, leans)
+        conn.executemany(
+            "DELETE FROM exp_index_tombstones WHERE app = ? AND key = ?",
+            [(app_name, key) for key in changed],
+        )
+        self._trim_tombstones(app_name)
 
     def _bump_generation(self, app_name):
         (gen,) = self._conn.execute(
