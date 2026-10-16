@@ -122,6 +122,33 @@ Also measure loading the experiment index itself at 100k (`_cached_snapshot`). I
 alone breaks the budget, F3 reads candidate rows by verstr instead of loading the
 snapshot.
 
+Time budgets are a fresh process's wall time minus the wall time of a process that
+only imports (Python start + the CLI's imports, 0.23-0.26 s here), both measured in the
+same run. A wall-time budget of 0.3 s could not be met by any search.
+
+*Measured* (F1-F4 landed; serial benches, a laptop at load 9-14; budgets at 20k are ×0.3):
+
+| runs | full cold | text cold | warm | refile 100 | extra RSS |
+|------|-----------|-----------|------|------------|-----------|
+| 20k  | 0.06 s    | 0.08 s    | 0.016 s | 0.024 s | 24 MB |
+| 100k | 0.20 s    | 0.13 s    | 0.026 s | 0.042 s | 24 MB |
+
+Loading the snapshot at 100k takes 5-8 s, so F3 reads rows by verstr from `exp_rows`.
+At load 30+ the 100k text-only query took 0.40 s net (the baseline doubled to 0.57 s too).
+Its floor is bm25: it is computed per matching document and phrase, about 0.09 s for the
+~64k matches the postings budget lets a 150-word context reach.
+
+End to end, `vmn-exp similar --text-only --context` (`bench_scale.py`):
+
+| runs | before cold / warm | after cold / warm |
+|------|--------------------|-------------------|
+| 20k  | 9.3 s, 951 MB / 4.3 s, 821 MB | 7.9 s, 743 MB / 0.51 s, 80 MB |
+| 100k | 50.8 s, 4.7 GB / 21.2 s, 3.4 GB | 50.7 s, 3.3 GB / 1.7 s, 198 MB |
+
+The cold column is building the index from the store, which is plan 25's cost. Of the
+1.7 s warm, 1.3 s is `index_point.point_view` listing the store's 100k record
+directories to check the index is fresh (plan 25). The search itself takes 0.12 s.
+
 **F2. Filing** (`core/similar_fts.py`, new; called from `core/index_store.py` `save`
 in the same transaction, and from the Postgres server's host-local writer).
 - A changed record: `similar_profile.build_profile` → column strings → delete and
