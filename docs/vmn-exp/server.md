@@ -33,7 +33,14 @@ dashboard, see [ui.md](ui.md). For giving a server access to your bucket, see
 
 The control-plane DB holds the workspace registry, API tokens, login sessions
 and the audit log. Unlike the cache, it is not rebuilt from storage, so back it
-up. `--db` accepts `sqlite:///<path>` or a Postgres DSN
+up with `vmn-exp ui backup <path> [--config server.yml | --db <dsn>]`:
+- **SQLite:** an online copy taken while the server runs (SQLite's backup API),
+  verified with `PRAGMA integrity_check`. It exits 1 if the check fails or there
+  is no control plane.
+- **Postgres:** the command prints the matching `pg_dump` command (never the
+  password) for you to run.
+
+`--db` accepts `sqlite:///<path>` or a Postgres DSN
 (`postgresql://user@host/db`; `pip install "psycopg[binary]>=3"`). Without it,
 a configured server keeps a SQLite DB in the data dir. On Postgres the numbered
 migrations under `vmn_exp/ui/migrations/` are applied at startup, and the same
@@ -51,6 +58,8 @@ server:
   endpoint_allowlist: []                # store endpoint_urls allowed in multi tenancy
 data_dir: /var/lib/vmn-exp              # default ~/.vmn-ui
 db: sqlite:////var/lib/vmn-exp/control.db   # or postgresql://vmn@db/vmn; default: SQLite in data_dir
+audit:
+  retention_days: 365                   # entries older than this are deleted (hourly sweep)
 auth:
   static_token_env: VMN_UI_TOKEN        # env var holding the static token
   oidc:
@@ -95,7 +104,16 @@ The server refuses to bind beyond localhost without a token unless
 ## The cache
 
 The cache is SQLite, one database file per workspace under
-`<data_dir>/index/`. It holds the folded run rows (params, metric summaries,
+`<data_dir>/index/`. Every vmn SQLite file runs in WAL mode with
+`synchronous=NORMAL`, and its writes take the write lock up front (`BEGIN
+IMMEDIATE`). A rebuild (resync, a corrupt file, an older schema) writes a new file
+beside the old one and switches a small `<file>.current` pointer to it. The old
+file is deleted only once no process has it open, so a reader never loses its
+database mid-read. A file written by a *newer* vmn is left alone: that process
+runs without a cache and warns once. A cache directory on a network filesystem
+(NFS, SMB, sshfs) is replaced by a local one under `$TMPDIR` with a warning,
+because SQLite's WAL locking is unreliable there. Set `VMN_EXP_CACHE_DIR` to keep
+your own choice. It holds the folded run rows (params, metric summaries,
 tags, notes, status), the per-app listing state and the journal cursor. Logs,
 series, artifacts, media and code are not cached. Run pages read them from
 storage on demand. `--no-index` keeps the cache in memory only.
@@ -116,7 +134,25 @@ the per-workspace SQLite files, so several replicas can share one cache:
   reconciles fully first).
 - A save sends `NOTIFY vmn_gen`; followers `LISTEN` and refresh at once,
   falling back to their once-a-second tick.
+- Every Postgres store (cache, control plane, search) uses a connection pool per
+  DSN with these defaults:
+  - 1 to 10 connections, checked when taken from the pool;
+  - `connect_timeout=5`;
+  - TCP keepalives;
+  - `statement_timeout=30s` and `idle_in_transaction_session_timeout=60s`.
+
+  Settings in the DSN win, e.g.
+  `postgresql://vmn@db/vmn?options=-c%20statement_timeout%3D10s`. A restarted
+  database is reconnected without restarting the server; requests fail within
+  the timeout while it is down. Migrations run once per process, under an
+  advisory lock, with no statement timeout.
+- Leader election (session advisory locks) and `LISTEN` keep their own
+  dedicated connections, reconnected after a drop (a listener then triggers a
+  catch-up refresh, so no change is missed). They need direct connections to
+  Postgres: put PgBouncer in session mode, or bypass it, never transaction mode.
 - `GET /api/v1/search` runs the query language as SQL over the synced rows.
+  The replica leading each app's index writes them right after its refresh.
+  Requests only read them, so every replica answers from the same current rows.
   Queries that read `outputs` (not kept on the synced rows) are filtered in
   Python instead.
 - `GET /api/v1/similar?text=&top=&archived=&q=` is its free-text sibling: the
@@ -249,8 +285,11 @@ sign-in page reads:
 `login_url` is `null` without OIDC. `GET /api/v1/meta` carries the same hints
 under `auth`.
 
-Only a salted hash of each API token's secret is stored (scrypt, or PBKDF2
-where scrypt is unavailable). Admins manage tokens through the API:
+Only an HMAC-SHA256 of each API token's secret is stored. Its key is generated
+once per control plane and kept in it. Secrets are 256-bit random, so a slow
+password hash would add cost and no safety. Expired sessions and login states
+are deleted at startup, hourly and on every login. Admins manage tokens through
+the API:
 
 ```
 GET    /api/v1/tokens                       list (no secrets)
@@ -281,8 +320,9 @@ workspace, its `*` entry, and every `role_mappings` entry whose `group` is in
 its OIDC groups claim. With authentication off, everything is allowed.
 
 The audit log records mutations and logins. Admins page it with
-`GET /api/v1/audit?offset=&limit=`, or download it as JSONL from
-`GET /api/v1/audit/export`.
+`GET /api/v1/audit?offset=&limit=` (one indexed page per request), or stream it
+as JSONL from `GET /api/v1/audit/export`. Entries older than
+`audit.retention_days` (default 365) are deleted by the hourly sweep.
 
 ## Edits on store workspaces
 
