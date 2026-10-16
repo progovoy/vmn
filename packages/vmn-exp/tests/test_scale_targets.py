@@ -1,11 +1,12 @@
 """Plan 25 §1 targets, enforced: at 100k runs (``VMN_SCALE_BENCH=1``; a few
 minutes) each command, in a fresh process on the persisted index, takes at
-most its target beyond importing its entry point, and ``show``/``get_run``
-add at most 50 MB to that process. The 20k variant always runs: what the
-store's size adds — its time and memory minus the same command's on a
-300-run store — stays within 0.3 of the targets, so a regression back to
-reading every run fails in CI. Each figure is the best of a few runs (the
-machine is shared). Timed, so serial."""
+most its target in wall time beyond a process that only imports the same
+entry point (Python and the CLI import alone take ~0.25 s), and
+``show``/``get_run`` add at most 50 MB to that process. The 20k variant
+always runs: what the store's size adds — that time and memory minus the
+same command's on a 300-run store — stays within 0.3 of the targets, so a
+regression back to reading every run fails in CI. Each figure is the best of
+a few runs (the machine is shared). Timed, so serial."""
 import json
 import os
 import resource
@@ -34,23 +35,26 @@ def _rss_mb():
     return peak / (1 << 20) if sys.platform == "darwin" else peak / 1024
 
 
-def child(case, work, exact, out):
-    """Run *case* in this process; write ``{sec, extra_mb}`` beyond the import."""
+def child(case, work, exact, out, import_only):
+    """Run *case* in this process (only import its entry point with
+    *import_only* ``"1"``); write ``{extra_mb}`` beyond the import."""
     os.chdir(work)
     if case == "get_run":
         from vmn_exp.sdk.reader import get_run as run
-    else:
-        from vmn_exp.cli.main import main
-    before, started = _rss_mb(), time.perf_counter()
-    if case == "get_run":
-        run(APP, exact)
     elif case == "refresh":
         from vmn_exp.core import index as experiment_index
         from vmn_exp.snapshot import open_storage
-
+    else:
+        from vmn_exp.cli.main import main
+    before = _rss_mb()
+    if import_only == "1":
+        case = None
+    if case == "get_run":
+        run(APP, exact)
+    elif case == "refresh":
         storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs")
         assert experiment_index.shared_index(storage, APP).sync()
-    else:
+    elif case is not None:
         argv = {"show": ["show", APP, "-v", exact], "last20": ["list", APP, "--last", "20"],
                 "query": ["list", APP, "--query", 'status = "failed"']}[case]
         sys.argv = ["vmn-exp", *argv]
@@ -59,24 +63,36 @@ def child(case, work, exact, out):
             assert not main()
         except SystemExit as e:
             assert not e.code
-    sec = time.perf_counter() - started
     with open(out, "w") as f:
-        json.dump({"sec": sec, "extra_mb": _rss_mb() - before}, f)
+        json.dump({"extra_mb": _rss_mb() - before}, f)
 
 
-def _measure(case, work, cache, exact):
+def _measure(case, work, cache, exact, import_only=False):
+    """``{wall, extra_mb}`` of *case* in a fresh process."""
     out = os.path.join(cache, "result.json")
     env = dict(os.environ, VMN_EXP_CACHE_DIR=cache, PYTHONPATH=os.pathsep.join(SRC))
-    proc = subprocess.run([sys.executable, __file__, case, work, exact, out],
-                          env=env, capture_output=True, text=True)
+    argv = [sys.executable, __file__, case, work, exact, out, "1" if import_only else "0"]
+    started = time.perf_counter()
+    proc = subprocess.run(argv, env=env, capture_output=True, text=True)
+    wall = time.perf_counter() - started
     assert proc.returncode == 0, proc.stderr[-2000:]
     with open(out) as f:
-        return json.load(f)
+        return dict(json.load(f), wall=wall)
+
+
+def _import_wall(case, work, cache, exact):
+    return min(_measure(case, work, cache, exact, True)["wall"] for _ in range(TRIES))
+
+
+def _figures(runs, imported):
+    """``(wall beyond the import, extra MB, wall, import wall)`` of the best *runs*."""
+    wall = min(r["wall"] for r in runs)
+    return wall - imported, min(r["extra_mb"] for r in runs), wall, imported
 
 
 def _best(case, work, cache, exact):
     runs = [_measure(case, work, cache, exact) for _ in range(TRIES)]
-    return min(r["sec"] for r in runs), min(r["extra_mb"] for r in runs)
+    return _figures(runs, _import_wall(case, work, cache, exact))
 
 
 def _private_store(root, n):
@@ -128,7 +144,8 @@ class Bench:
             for attempt in range(TRIES):
                 _change(work, changed, f"changed since the last refresh ({attempt})")
                 runs.append(_measure("refresh", work, cache, self.exact))
-            self._refresh = min(r["sec"] for r in runs), min(r["extra_mb"] for r in runs)
+            imported = _import_wall("refresh", work, cache, self.exact)
+            self._refresh = _figures(runs, imported)
             shutil.rmtree(work, ignore_errors=True)
         return self._refresh
 
@@ -154,10 +171,11 @@ def benches():
 @pytest.mark.serial
 @pytest.mark.parametrize("case", sorted(TARGET_SEC))
 def test_a_20k_store_adds_little_to_each_command(benches, case):
-    sec, extra = benches(CI_RUNS).figures(case)
-    base_sec, base_extra = benches(BASE_RUNS).figures(case)
-    print(f"\n{case}: {CI_RUNS} runs {sec:.3f}s +{extra:.0f}MB, "
-          f"{BASE_RUNS} runs {base_sec:.3f}s +{base_extra:.0f}MB")
+    sec, extra, wall, imported = benches(CI_RUNS).figures(case)
+    base_sec, base_extra, base_wall, base_imported = benches(BASE_RUNS).figures(case)
+    print(f"\n{case}: {CI_RUNS} runs {wall:.3f}s - import {imported:.3f}s = {sec:.3f}s"
+          f" +{extra:.0f}MB; {BASE_RUNS} runs {base_wall:.3f}s - import {base_imported:.3f}s"
+          f" = {base_sec:.3f}s +{base_extra:.0f}MB")
     assert sec - base_sec <= CI_SCALE * TARGET_SEC[case]
     if case in EXTRA_MB:
         assert extra - base_extra <= CI_SCALE * EXTRA_MB[case]
@@ -167,8 +185,8 @@ def test_a_20k_store_adds_little_to_each_command(benches, case):
 @pytest.mark.skipif(not FULL, reason="the 100k targets run with VMN_SCALE_BENCH=1 (minutes)")
 @pytest.mark.parametrize("case", sorted(TARGET_SEC))
 def test_each_command_meets_its_target_at_100k(benches, case):
-    sec, extra = benches(100_000).figures(case)
-    print(f"\n{case}: 100k runs {sec:.3f}s +{extra:.0f}MB")
+    sec, extra, wall, imported = benches(100_000).figures(case)
+    print(f"\n{case}: 100k runs {wall:.3f}s - import {imported:.3f}s = {sec:.3f}s +{extra:.0f}MB")
     assert sec <= TARGET_SEC[case]
     if case in EXTRA_MB:
         assert extra <= EXTRA_MB[case]
