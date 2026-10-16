@@ -56,8 +56,10 @@ def _sync(storage, app_name, store):
     new = [key for key in names if key not in known]
     gone = known.difference(names)
     listed = storage.list_files(app_name, keys=new) if new else {}
+    direct_files = getattr(storage, "direct_files", None)
+    direct = direct_files() if direct_files else storage
     records = {
-        key: _read(storage, app_name, key, files)
+        key: _read(storage, direct, app_name, key, files)
         for key, files in listed.items()
         if METADATA_FILE in files
     }
@@ -66,22 +68,23 @@ def _sync(storage, app_name, store):
     return store.save(app_name, records, gone, records) is not False
 
 
-def _read(storage, app_name, key, files):
-    direct_files = getattr(storage, "direct_files", None)
-    direct = direct_files() if direct_files else storage
+def _read(storage, direct, app_name, key, files):
     update = lambda *args: update_record(storage, direct, app_name, *args)  # noqa: E731
     return refresh_record(key, files, None, update)[0]
 
 
 class PointView:
-    """The persisted placement of an app's runs, read one query at a time:
-    the parts of :class:`~vmn_exp.core.index_snapshot.IndexSnapshot` that
-    resolving and placing one run use."""
+    """The persisted placement of an app's runs, read one query at a time
+    (each answer kept for the view's short life): the parts of
+    :class:`~vmn_exp.core.index_snapshot.IndexSnapshot` that resolving and
+    placing one run use."""
 
     def __init__(self, store, app_name):
         self._store, self.app_name = store, app_name
         self.parent_of = _Lookup(lambda v: store.parent_of(app_name, v))
         self.children_of = _Lookup(lambda v: store.children_of(app_name, v) or None)
+        # row(verstr): its persisted lean row (``idx`` set), or None. Shared: copy to change.
+        self.row = _Lookup(lambda v: store.lean_row_of(app_name, v)).get
 
     def resolve(self, ref, latest=False, kind="experiment"):
         """``(verstr, error)`` like :meth:`IndexSnapshot.resolve`."""
@@ -90,17 +93,15 @@ class PointView:
             raise RuntimeError("experiment index unavailable")
         return answer
 
-    def row(self, verstr):
-        """*verstr*'s persisted lean row (``idx`` set), or None."""
-        return self._store.lean_row_of(self.app_name, verstr)
-
 
 class _Lookup:
     """A read-only mapping's ``get`` over a per-key query."""
 
     def __init__(self, query):
-        self._query = query
+        self._query, self._known = query, {}
 
     def get(self, key, default=None):
-        value = self._query(key)
+        if key not in self._known:
+            self._known[key] = self._query(key)
+        value = self._known[key]
         return default if value is None else value

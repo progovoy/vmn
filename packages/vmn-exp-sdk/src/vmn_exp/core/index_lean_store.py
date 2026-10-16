@@ -19,8 +19,9 @@ Only records with metadata and a fold get rows: the others are not runs.
 import json
 
 from vmn_exp.core.index_lean_tree import fix_roots
+from vmn_exp.core.index_snapshot import _observed_at
 from vmn_exp.core.index_views import SIDE_TABLES, lean_row
-from vmn_exp.core.status import derive_status, observed_at_from_mtime
+from vmn_exp.core.status import derive_status
 
 NOTE = "create_note"
 _KEYS_PER_QUERY = 500
@@ -30,7 +31,8 @@ def _dumps(value):
     return json.dumps(value, default=str)
 
 
-def _timestamp(meta):
+def sort_timestamp(meta):
+    """The timestamp *meta* sorts by in storage order (``""`` unless a str)."""
     ts = meta.get("timestamp", "")
     return ts if isinstance(ts, str) else ""
 
@@ -41,10 +43,9 @@ def is_run(record):
 
 def run_status(record):
     """*record*'s derived status, or None when its run state cannot say."""
-    rs_sig = record.get("rs_sig")
-    observed = observed_at_from_mtime(rs_sig[1]) if rs_sig and len(rs_sig) > 1 else None
     try:
-        return derive_status(record.get("run_state"), observed_at=observed)
+        return derive_status(record.get("run_state"),
+                             observed_at=_observed_at(record.get("rs_sig")))
     except (TypeError, ValueError):  # a hand-edited, unparseable exit code
         return None
 
@@ -95,7 +96,7 @@ def _upsert(conn, app, seq, runs):
         row, note, *values = lean_row(0, meta, record["fold"])
         rows.append((
             app, key, meta["verstr"], run_status(record), row.get("parent"),
-            _timestamp(meta), row.get("name"), int(row["archived"]), seq, _dumps(row),
+            sort_timestamp(meta), row.get("name"), int(row["archived"]), seq, _dumps(row),
         ))
         if note is not None:
             sides.append((app, key, NOTE, _dumps(note)))
@@ -122,13 +123,15 @@ def _renumber(conn, app, runs, gone, before):
     every other row are numbered on; any other move renumbers the app."""
     new = [key for key in runs if key not in before]
     redescribed = any(
-        before[key][0] != _timestamp(runs[key]["meta"]) for key in runs if key in before
+        before[key][0] != sort_timestamp(runs[key]["meta"]) for key in runs if key in before
     )
-    if not new and not redescribed and not any(key in before for key in gone):
+    reshuffled = redescribed or any(key in before for key in gone)
+    if not new and not reshuffled:
         return
-    if not redescribed and not any(key in before for key in gone):
-        if _number_on(conn, app, sorted((_timestamp(runs[k]["meta"]), k) for k in new)):
-            return
+    if not reshuffled and _number_on(
+        conn, app, sorted((sort_timestamp(runs[k]["meta"]), k) for k in new)
+    ):
+        return
     ranked = conn.execute(
         "SELECT key, idx FROM exp_rows WHERE app = ? ORDER BY timestamp, key", (app,)
     ).fetchall()

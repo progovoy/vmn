@@ -51,6 +51,7 @@ from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
+from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_record import refresh_record, update_record
@@ -76,11 +77,6 @@ _LOGGER = logging.getLogger(__name__)
 # Records a remote backend re-reads at once (each costs a few round trips).
 _REMOTE_WORKERS = 16
 _monotonic = time.monotonic
-
-
-def _timestamp(meta):
-    ts = meta.get("timestamp", "")
-    return ts if isinstance(ts, str) else ""
 
 
 class ExperimentIndex:

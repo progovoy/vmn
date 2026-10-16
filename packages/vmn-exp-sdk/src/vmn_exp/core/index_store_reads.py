@@ -2,6 +2,7 @@
 """The reads of :class:`vmn_exp.core.index_store.SqliteStore` that decode no
 record (plan 25 F1): a warm start's lean rows over lazy records, and point
 reads on ``exp_rows`` (:mod:`vmn_exp.core.index_point_sql`)."""
+import itertools
 import json
 
 from vmn_exp.core import index_point_sql
@@ -107,7 +108,7 @@ class _Prefetch:
 
     def _read_from(self, start):
         chunk = []
-        for key in self._order[start:]:
+        for key in itertools.islice(self._order, start, None):
             if key not in self._asked:
                 chunk.append(key)
                 if len(chunk) == _CHUNK:
