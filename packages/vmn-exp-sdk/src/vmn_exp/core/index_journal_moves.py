@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record names with signatures that cost no stat per record (plan 25 §1:
+"""What moved among an app's records, at no stat per record (plan 25 §1:
 a refresh after 100 changed runs within 0.2 s at 100k).
 
 A local store's ``list_record_names`` signs each record with its
@@ -7,20 +7,20 @@ directory's ``(mtime, inode)`` — a stat per record, ~0.3 s at 100k, and
 listing the names alone still costs ~0.07 s. But a journaled local store
 (:mod:`vmn_exp.storage.journal`: every write that changes what a reader
 sees — a claim and a delete included — puts an entry naming its record)
-already says which records changed. So :func:`journal_names` answers the
-previous listing's names and signatures, updated for the records the journal
-named since it — minus a skew window, for writers whose clocks lag or whose
-entry landed late: one whose directory is gone is dropped, any other is
-signed with its newest journal key, a value it never had, so the sweep lists
-its files again (and re-reads it only if they moved).
+already says which records changed. So :func:`journal_moves` answers what
+moved since the previous listing from the records the journal named since
+it, minus a skew window (for writers whose clocks lag or whose entry landed
+late): one whose directory is gone is gone, any other is signed with its
+newest journal key — a value it never had, so the sweep lists its files
+again (and re-reads it only if they moved).
 
 It answers None — the caller signs every record — when it cannot vouch or
 need not: fewer than :data:`MIN_RECORDS` records, no previous listing
 time, a store with a writer that does not journal into it (a local root
 fronting a remote store), or more journal entries in the window than
-:data:`MAX_ENTRIES`. What no journal entry names (a hand edit,
-a writer bypassing the store) shows up by the next full sweep, as for a
-change no signature shows.
+:data:`MAX_ENTRIES`. What no journal entry names (a hand edit or delete, a
+writer bypassing the store) shows up by the next full sweep, as for a change
+no signature shows.
 """
 from vmn_exp.core.journal_reader import JournalReader
 from vmn_exp.storage.areas import app_key
@@ -43,11 +43,12 @@ def journal_source(storage):
     return (sinks[0].list, local.area, local) if sinks else None
 
 
-def journal_names(storage, app_name, before, since, now):
-    """``{name: sig}`` for every record name of *app_name*: *before*'s sig
-    (``{name: sig}`` of the listing at wall time *since*), or the newest
-    journal key naming the record since then; None when it cannot tell (see
-    the module)."""
+def journal_moves(storage, app_name, before, since, now):
+    """``(changed {name: sig}, gone names)`` of *app_name*'s records since
+    the listing at wall time *since* that found *before* (``{name: sig}``):
+    the records the journal named since, signed with their newest journal
+    key, and those of them whose directory is gone; None when it cannot tell
+    (see the module)."""
     wanted = since is not None and len(before) >= MIN_RECORDS
     source = journal_source(storage) if wanted else None
     if source is None:
@@ -56,13 +57,14 @@ def journal_names(storage, app_name, before, since, now):
     named = _named_since(list_fn, area, app_key(app_name), since, now)
     if named is None:
         return None
-    names = dict(before)
+    changed, gone = {}, set()
     for name, token in named.items():
-        if _has_dir(local, app_name, name):
-            names[name] = token
-        else:
-            names.pop(name, None)
-    return names
+        if not _has_dir(local, app_name, name):
+            if name in before:
+                gone.add(name)
+        elif before.get(name) != token:
+            changed[name] = token
+    return changed, gone
 
 
 def _has_dir(local, app_name, name):

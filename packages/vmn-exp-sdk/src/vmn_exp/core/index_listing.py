@@ -20,7 +20,7 @@ stable across processes for that (``hash()`` of a string is not).
 """
 import hashlib
 
-from vmn_exp.core.index_journal_names import journal_names
+from vmn_exp.core.index_journal_moves import journal_moves
 
 METADATA_FILE = "metadata.yml"
 
@@ -79,21 +79,30 @@ class ListingWatch:
         """``(changed {name: sig}, gone names)`` since the last call; None when
         the backend cannot list names. At wall time *wall*, with *journal*,
         the store's change journal may stand in for signing every record
-        (:mod:`~vmn_exp.core.index_journal_names`)."""
-        names = journal_names(
+        (:mod:`~vmn_exp.core.index_journal_moves`)."""
+        moves = journal_moves(
             self._storage, self._app_name, self._names, self.names_at, wall
         ) if journal and wall is not None else None
-        if names is None:
-            names_of = getattr(self._storage, "list_record_names", None)
-            names = as_sigs(names_of(self._app_name)) if names_of else None
-        if names is None:
+        if moves is None:
+            moves = self._listed_moves()
+        if moves is None:
             return None
+        changed, gone = moves
+        for key in gone:
+            del self._names[key]
+        self._names.update(changed)
         self.names_at = wall
-        before, self._names = self._names, names
-        changed = {k: sig for k, sig in names.items() if k not in before or before[k] != sig}
-        gone = set(before).difference(names)
         self._moved_keys(changed, gone)
         return changed, gone
+
+    def _listed_moves(self):
+        names_of = getattr(self._storage, "list_record_names", None)
+        names = as_sigs(names_of(self._app_name)) if names_of else None
+        if names is None:
+            return None
+        before = self._names
+        changed = {k: sig for k, sig in names.items() if k not in before or before[k] != sig}
+        return changed, set(before).difference(names)
 
     def files(self, keys):
         """``{key: {filename: signature}}`` of *keys* (records gone are left out)."""

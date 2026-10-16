@@ -6,7 +6,7 @@ the records that moved."""
 import pytest
 
 from vmn_exp.core import index as experiment_index
-from vmn_exp.core import index_journal_names, index_sweep
+from vmn_exp.core import index_journal_moves, index_sweep
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.journal import journaled
@@ -25,7 +25,7 @@ class Clock:
 
 @pytest.fixture(autouse=True)
 def journal_at_any_size(monkeypatch):
-    monkeypatch.setattr(index_journal_names, "MIN_RECORDS", 0)
+    monkeypatch.setattr(index_journal_moves, "MIN_RECORDS", 0)
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ def process(tmp_path, clocks, monkeypatch):
 def seeded(process, clocks):
     first = process()
     # Written before the skew window: the next listings need not look again.
-    first.storage._journal_state.clock = Clock(clocks[1].now - 2 * index_journal_names.SKEW_SEC)
+    first.storage._journal_state.clock = Clock(clocks[1].now - 2 * index_journal_moves.SKEW_SEC)
     runs = [_make(first.storage, i) for i in range(20)]
     first.rows()  # the first listing is a full one
     return runs
@@ -135,7 +135,7 @@ def test_a_change_journaled_late_within_the_skew_window_is_seen(process, seeded,
 
 
 def test_a_journal_too_busy_to_read_falls_back_to_signing(process, seeded, monkeypatch):
-    monkeypatch.setattr(index_journal_names, "MAX_ENTRIES", 1)
+    monkeypatch.setattr(index_journal_moves, "MAX_ENTRIES", 1)
     writer = process()
     writer.storage.update_note(APP, seeded[1], "one")
     writer.storage.update_note(APP, seeded[2], "two")
@@ -159,7 +159,7 @@ def test_a_refresh_rewrites_only_the_baseline_of_the_records_it_moved(process, c
     from vmn_exp.core.index_store import SqliteStore
 
     first = process()
-    first.storage._journal_state.clock = Clock(clocks[1].now - 2 * index_journal_names.SKEW_SEC)
+    first.storage._journal_state.clock = Clock(clocks[1].now - 2 * index_journal_moves.SKEW_SEC)
     runs = [_make(first.storage, i) for i in range(3000)]
     first.rows()
     writer = process()
