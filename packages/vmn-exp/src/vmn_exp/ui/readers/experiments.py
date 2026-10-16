@@ -9,9 +9,10 @@ import os
 
 from vmn_exp.core.log import filter_by_status, sort_by_metric
 from vmn_exp.core.log import load_log as _load_log
-from vmn_exp.core.query import ANCESTORS, filter_rows
+from vmn_exp.core.query import filter_rows
+from vmn_exp.core.query_extra import snapshot_extra
 from vmn_exp.core.status import load_run_state
-from vmn_exp.core.tree import ancestors, annotate_rows
+from vmn_exp.core.tree import annotate_rows
 from vmn_exp.storage.areas import RUNS, SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.facet_values import distinct_count, value_key
@@ -97,22 +98,10 @@ def apply_filters(rows, status=None, query=None, snapshot=None):
     ordering and paging — so ``total`` counts the rows that matched. Raises
     :class:`~version_stamp.core.experiment_query.QueryError` on a bad *query*;
     the API turns that into a 400. *snapshot*: the index snapshot the lean
-    *rows* came from, whose ``outputs`` and run tree a query may read.
+    *rows* came from, whose ``outputs``, run tree, intents and similar-runs
+    documents a query may read (:func:`~vmn_exp.core.query_extra.snapshot_extra`).
     """
-    return filter_rows(filter_by_status(rows, status), query, extra=snapshot_fields(snapshot))
-
-
-# What a query may read of the snapshot rather than the rows.
-SNAPSHOT_FIELDS = frozenset({"outputs", ANCESTORS})
-
-
-def snapshot_fields(snapshot):
-    """What a query reads of *snapshot* beyond its rows: ``outputs`` and the
-    ``ancestors`` ``under()`` tests (None without a snapshot)."""
-    if snapshot is None:
-        return None
-    edges = snapshot.edges
-    return {"outputs": snapshot.outputs_of, ANCESTORS: lambda verstr: ancestors(verstr, edges)}
+    return filter_rows(filter_by_status(rows, status), query, extra=snapshot_extra(snapshot))
 
 
 ORDERS = ("asc", "desc")

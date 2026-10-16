@@ -13,7 +13,7 @@ Grammar::
     or_expr    = and_expr { "or" and_expr }
     and_expr   = not_expr { "and" not_expr }
     not_expr   = "not" not_expr | primary
-    primary    = "(" or_expr ")" | "under" "(" string ")" | comparison
+    primary    = "(" or_expr ")" | ( "under" | "similar" ) "(" string ")" | comparison
     comparison = field cmp_op literal
                | field [ "not" ] "in" "(" literal { "," literal } ")"
     cmp_op     = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
@@ -53,8 +53,11 @@ current tags, which are always strings (``tags.stage = "prod"``); a removed
 or never-set tag is missing. ``name ~ "sweep"`` matches the run name and
 ``archived = true`` the archived runs. ``author ~ "alice"`` matches who ran it
 (git email, else OS user, else writer) and ``has_intent = false`` the runs
-nobody described yet. ``under("<verstr>")`` matches the runs in that run's
-subtree (not the run itself).
+nobody described yet; ``intent ~ "focal"`` reads the latest intent's text
+and ``keywords ~ "imbalance"`` its keywords. ``under("<verstr>")`` matches
+the runs in that run's subtree (not the run itself) and ``similar("<text>")``
+the runs whose similar-runs text document holds every word of the text
+(:mod:`vmn_exp.core.query_similar`).
 """
 
 import functools
@@ -70,7 +73,7 @@ ROW_FIELDS = frozenset(
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status imported_from forked_from forked_from_step rerun_of
-    author has_intent
+    author has_intent intent keywords
     end_reason error_summary signal root failure_sig
     """.split()
 )
@@ -91,6 +94,17 @@ NESTED_SUBFIELDS = {
 
 # ``under("v")`` reads each row's ancestor verstrs, supplied as this field.
 UNDER, ANCESTORS = "under", "ancestors"
+# ``similar("text")`` reads a resolver ``text -> verstrs`` given as this extra.
+SIMILAR = "similar"
+_CALLS = {UNDER: "under() takes one quoted verstr", SIMILAR: "similar() takes one quoted text"}
+_CALL_FIELDS = {UNDER: ANCESTORS, SIMILAR: SIMILAR}  # what a call's predicate reads
+
+
+def _has_words(text):
+    """Whether ``similar(text)`` has a word to match (what it matches on)."""
+    from vmn_exp.core.similar_match import words  # the FTS layer, only when asked
+
+    return bool(words(text))
 
 _KEYWORDS = frozenset({"and", "or", "not", "in", "contains", "true", "false", "null"})
 _OPERATORS = ("==", "!=", "<=", ">=", "!~", "=", "<", ">", "~")
@@ -339,9 +353,9 @@ def _predicate(node):
     if kind == "not":
         inner = _predicate(node[1])
         return lambda row: not inner(row)
-    if kind == "under":
-        verstr = node[1]
-        return lambda row: verstr in (row.get(ANCESTORS) or ())
+    if kind in _CALLS:  # the row's ancestors / similar() texts hold the argument
+        arg, key = node[1], _CALL_FIELDS[kind]
+        return lambda row: arg in (row.get(key) or ())
     get = _getter(node[1])
     if kind == "in":
         values = node[2]
@@ -432,8 +446,8 @@ class _Parser:
         if token[0] != "name":
             _fail(f"expected a field name, found {_describe(token)}", token[2])
         self.next()
-        if token[1] == UNDER and self.peek()[0] == "(":
-            return self.parse_under()
+        if token[1] in _CALLS and self.peek()[0] == "(":
+            return self.parse_call(token[1])
         field = _field(token[1], token[2])
 
         negate = bool(self.accept("kw", "not"))
@@ -452,14 +466,17 @@ class _Parser:
             _fail(f"'{operator[1]}' needs a string on the right", operator[2])
         return ("cmp", field, _CANONICAL_OPS.get(operator[1], operator[1]), literal)
 
-    def parse_under(self):
-        """``under("<verstr>")``: the rows in that run's subtree."""
+    def parse_call(self, name):
+        """``under("<verstr>")`` (the rows in that run's subtree) or
+        ``similar("<text>")`` (the runs whose text holds its words)."""
         self.next()
         token = self.next()
         if token[0] != "lit" or not isinstance(token[1], str):
-            _fail("under() takes one quoted verstr", token[2])
+            _fail(_CALLS[name], token[2])
+        if name == SIMILAR and not _has_words(token[1]):
+            _fail("similar() needs a word to match", token[2])
         self.expect(")", ")", "')'")
-        return ("under", token[1])
+        return (name, token[1])
 
     def parse_literal(self):
         token = self.next()
@@ -489,7 +506,8 @@ def parse_query(text):
     ``("in", field, [literals])`` or ``("cmp", field, op, literal)``, with
     ``op`` one of ``= != < <= > >= ~ !~`` and ``field`` either
     ``("path", keys)`` (nested dict keys from the row) or
-    ``("env_packages", package)``; ``under("v")`` is ``("under", v)``. Raises :class:`QueryError` like
+    ``("env_packages", package)``; ``under("v")`` is ``("under", v)``, ``similar("t")``
+    ``("similar", t)``. Raises :class:`QueryError` like
     :func:`compile_query`; the SQL backend compiles the same tree."""
     if not text or not text.strip():
         raise QueryError("empty query")
@@ -540,14 +558,21 @@ def filter_rows(rows, text, extra=None):
     """Rows matching *text*; all of them when *text* is empty or None.
 
     *extra* ``{key: of(verstr)}`` supplies fields kept off lean rows (the
-    index snapshot's ``outputs``): a query reading one sees it, the rows
-    returned are the ones given. ``under()`` reads ``ancestors``, by default
-    from the *rows*' own ``parent`` links.
+    index snapshot's ``outputs``, :mod:`vmn_exp.core.query_extra`): a query
+    reading one sees it, the rows returned are the ones given. ``under()``
+    reads ``ancestors``, by default from the *rows*' own ``parent`` links;
+    ``similar()`` asks ``extra["similar"](text)`` for its verstrs, once per
+    distinct text (:func:`~vmn_exp.core.query_similar.similar_hits`).
     """
     if not text or not text.strip():
         return rows
     predicate = compile_query(text)
-    if ANCESTORS in query_roots(text) and ANCESTORS not in (extra or {}):
+    roots = query_roots(text)
+    if ANCESTORS in roots and ANCESTORS not in (extra or {}):
         extra = dict(extra or {}, ancestors=ancestry_of(rows))
+    if SIMILAR in roots:
+        from vmn_exp.core.query_similar import similar_hits  # it imports this module
+
+        extra = dict(extra or {}, similar=similar_hits(parse_query(text), extra))
     complete = _completing(text, extra)
     return [row for row in rows if predicate(complete(row))]

@@ -53,7 +53,6 @@ from vmn_exp.snapshot import (
     _restore_with_safety_net,
     get_git_difftool,
 )
-import vmn_exp.core.index as experiment_index
 import vmn_exp.core.index_list as index_list
 import vmn_exp.core.writer as experiment_writer
 from vmn_exp.core.from_snapshot import (
@@ -73,7 +72,7 @@ from vmn_exp.core.log import (
 from vmn_exp.core.metric_entries import is_metric_entry
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
-from vmn_exp.core.query import QueryError, filter_rows
+from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import (
     placement_snapshot,
     point_placement,
@@ -90,7 +89,7 @@ from vmn_exp.core.status import (
     run_state_observed_at,
     status_fields,
 )
-from vmn_exp.core.tree import annotate_rows, subtree_status, sweep_incomplete
+from vmn_exp.core.tree import subtree_status, sweep_incomplete
 from vmn_exp.core.writer import (
     append_to_log,
     compute_artifact_info,
@@ -686,14 +685,10 @@ def _listed(storage, app_name, args, schema):
     )
     if view is not None:
         return view
-    index_rows, run_states, observed, declared = experiment_index.indexed_status_view(
-        storage, app_name, with_create_note=True, schema=schema
+    matching, declared, any_runs = index_list.snapshot_listing(
+        storage, app_name, query, schema, with_create_note=True
     )
-    # Status and tree fields span every run, so depth, tree_status and the
-    # query see the whole tree whatever subset is shown.
-    tree_rows = annotate_rows(index_rows, run_states, observed)
-    matching = filter_archived(filter_rows(tree_rows, query), archived)
-    return matching, declared, bool(index_rows)
+    return filter_archived(matching, archived), declared, any_runs
 
 
 @measure_runtime_decorator

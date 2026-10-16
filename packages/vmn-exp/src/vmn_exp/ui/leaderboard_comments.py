@@ -7,8 +7,8 @@ memoized filtered orders — the counts change without a new snapshot — so it
 filters the memoized unfiltered order instead.
 """
 from vmn_exp.core.query import filter_rows, query_roots
+from vmn_exp.core.query_extra import snapshot_extra
 from vmn_exp.ui.leaderboard_scope import Filters
-from vmn_exp.ui.readers.experiments import snapshot_fields
 
 
 def reads_comments(query):
@@ -37,7 +37,7 @@ def joined_groups(payload, counts):
 
 def groups_by_comments(cache, snapshot, schema, group, counts, query=None, **params):
     """:meth:`LeaderboardCache.groups` for a *query* reading ``comments``."""
-    extra = {"comments": counts.get, **snapshot_fields(snapshot)}
+    extra = {"comments": counts.get, **snapshot_extra(snapshot)}
     return cache.groups(snapshot, schema, group,
                         rows_filter=lambda rows: filter_rows(rows, query, extra=extra), **params)
 
@@ -50,7 +50,7 @@ def page_by_comments(cache, snapshot, schema, counts, sort=None, last=None, offs
     # The rows are the unfiltered order's (no query, no last) narrowed.
     pager = cache.pager(snapshot, schema, last, f, cursor, ordered=(None, f._replace(query=None)))
     ordered = cache.ordered(snapshot, schema, sort, status, order, archived, scope, top)
-    extra = {"comments": counts.get, **snapshot_fields(snapshot)}
+    extra = {"comments": counts.get, **snapshot_extra(snapshot)}
     rows = filter_rows(ordered, query, extra=extra)
     if last:
         newest = set(sorted(row["idx"] for row in rows)[-int(last):])

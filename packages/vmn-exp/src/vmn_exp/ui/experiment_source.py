@@ -17,6 +17,7 @@ import threading
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.index_store import SqliteStore
+from vmn_exp.core.query_extra import bind_similar_scope
 from vmn_exp.core.status import run_state_observed_at
 from vmn_exp.ui import index as ui_index
 from vmn_exp.ui.cache_health import SqliteHealth
@@ -121,7 +122,14 @@ class ExperimentSource:
 
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):
         """The app's current :class:`IndexSnapshot`, its rows summarized by the
-        metrics *schema* when one is given."""
+        metrics *schema* when one is given; a query's ``similar()`` over it
+        searches the app's similar-runs scope."""
+        snap = self._snapshot(ws, app_name, s3_storage, schema)
+        key = (ws.name, app_name)
+        bind_similar_scope(snap, lambda s: self.similar.scope(key, app_name, s))
+        return snap
+
+    def _snapshot(self, ws, app_name, s3_storage, schema):
         refresher = self._refresher_of(ws, app_name, s3_storage)
         if s3_storage is not None and self._pg is not None:
             return self._pg_snapshot(ws, app_name, s3_storage, schema, refresher)

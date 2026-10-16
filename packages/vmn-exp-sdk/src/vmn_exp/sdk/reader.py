@@ -43,7 +43,9 @@ from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
 from vmn_exp.core.metric_schema import effective_schema
+from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.query import filter_rows
+from vmn_exp.core.query_extra import snapshot_extra, store_extra
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_storage
 from vmn_exp.core.step_metric import join_all, step_metrics
@@ -51,7 +53,6 @@ from vmn_exp.core.refs import point_placement, resolve_experiment, tree_links
 from vmn_exp.core.similar_search import find as _find_similar
 from vmn_exp.core.status import (
     load_run_state,
-    observed_at_by_verstr,
     run_state_observed_at,
 )
 from vmn_exp.core.tree import annotate_rows, run_status
@@ -102,31 +103,26 @@ def _metrics_schema(root_path, app_name):
 # ---------------------------------------------------------------------------
 
 
-def _all_rows(app_name, storage, use_index=True, schema=None):
-    """Every run of an app, status-annotated, in storage order (oldest first).
+def _rows_and_declared(app_name, storage, use_index=True, schema=None):
+    """``(rows, declared schema, extra)``: every run of an app,
+    status-annotated, in storage order (oldest first); the goals/hidden flags
+    the runs declare (:mod:`vmn_exp.core.metric_schema`) and what a query
+    reads of their snapshot (:mod:`vmn_exp.core.query_extra`).
 
     With *use_index* the rows come from the experiment index, which re-reads
     only what changed since the last call; without, every run's log and run
-    state is read. Asking about a single run goes through
-    :func:`_subtree_row` instead.
+    state is read (and ``similar()`` searches a ``:memory:`` database).
+    Asking about a single run goes through :func:`_subtree_row` instead.
     """
-    return _rows_and_declared(app_name, storage, use_index, schema)[0]
-
-
-def _rows_and_declared(app_name, storage, use_index=True, schema=None):
-    """``(rows, declared schema)``: :func:`_all_rows` plus the goals/hidden
-    flags the runs declare (:mod:`vmn_exp.core.metric_schema`)."""
     if use_index:
-        rows, run_states, observed, declared = experiment_index.indexed_status_view(
-            storage, app_name, schema=schema
-        )
+        snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
+        extra = store_extra(storage, app_name, snap)
     else:
-        rows, run_states, declared = experiment_index.direct_view(
-            storage, app_name, read_log=_load_log, read_run_state=load_run_state,
-            schema=schema,
-        )
-        observed = observed_at_by_verstr(storage, app_name, run_states)
-    return annotate_rows(rows, run_states, observed), declared
+        snap = experiment_index.direct_snapshot(
+            storage, app_name, schema, read_log=_load_log, read_run_state=load_run_state)
+        extra = snapshot_extra(snap)
+    rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at)
+    return rows, snap.declared_schema(), extra
 
 
 # ---------------------------------------------------------------------------
@@ -169,9 +165,9 @@ def list_runs(
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     schema = _metrics_schema(root_path, app_name)
-    rows, declared = _rows_and_declared(app_name, storage, use_index, schema)
+    rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema)
     rows = filter_archived(rows, include_archived)
-    rows = filter_rows(filter_by_status(rows, status), query)
+    rows = filter_rows(filter_by_status(rows, status), query, extra=extra)
     if last:
         rows = rows[-int(last) :]
     # Summaries follow the conf schema only; direction also what runs declare.
@@ -191,8 +187,9 @@ def param_importance(
     *query*.
     """
     app_name, storage, _ = _resolve(app_name, storage)
-    rows = filter_archived(_all_rows(app_name, storage), include_archived)
-    matching = filter_rows(filter_by_status(rows, status), query)
+    rows, _, extra = _rows_and_declared(app_name, storage)
+    rows = filter_archived(rows, include_archived)
+    matching = filter_rows(filter_by_status(rows, status), query, extra=extra)
     return _param_importance(matching, metric, universe=rows)
 
 

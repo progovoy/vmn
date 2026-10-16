@@ -15,8 +15,9 @@ from vmn_exp.core.index_views import SIDE_TABLES
 
 _CHUNK = 500  # keys per query, under SQLite's bound-parameter limit
 _NO_STATE = {"rs_sig": None, "run_state": None}
-# The side tables a row copy and a query read (the rest feed similarity).
-ROW_SIDES = (NOTE, "metric_parts", "outputs")
+# The side tables a row copy and a query read (the rest feed similarity):
+# intents for `intent`/`keywords` (plan 24 F5).
+ROW_SIDES = (NOTE, "metric_parts", "outputs", "intents")
 
 
 def _chunks(values):

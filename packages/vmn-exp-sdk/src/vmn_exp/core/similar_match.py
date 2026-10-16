@@ -82,7 +82,7 @@ def stems(conn, wanted):
     return out
 
 
-def _quoted(text):
+def quoted(text):
     return '"' + text.replace('"', '""') + '"'
 
 
@@ -106,11 +106,11 @@ def _candidates(conn, doc, columns):
     found, stems_of = {}, {}
     if "text" in columns:
         stems_of = stems(conn, words(doc.text))
-        found["text"] = list({stem: _quoted(w) for w, ss in stems_of.items()
+        found["text"] = list({stem: quoted(w) for w, ss in stems_of.items()
                               for stem in ss}.items())
     for column in STRUCTURED:
         if column in columns and doc.cols.get(column):
-            found[column] = [(word(t), _quoted(word(t))) for t in doc.cols[column]]
+            found[column] = [(word(t), quoted(word(t))) for t in doc.cols[column]]
     return found, stems_of
 
 

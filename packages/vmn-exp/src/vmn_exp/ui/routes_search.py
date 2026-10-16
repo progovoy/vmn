@@ -7,13 +7,16 @@ Postgres ``search_dsn`` the query runs as SQL over ``vmn_search_rows``
 (:mod:`vmn_exp.ui.search_pg`), which the replica leading each app's index
 writes on its refreshes (:mod:`vmn_exp.ui.search_rows_writer`) — a request
 only reads them. Archived runs are left
-out unless ``archived=1``. Synced rows carry no ``outputs`` (the index keeps
-them off its lean rows), so a query reading ``outputs`` is answered in Python. One more row than *limit* is looked for, so
-``truncated`` says whether more matched.
+out unless ``archived=1``. Synced rows carry no ``outputs``, ancestry, intent
+or similar-runs document (the index keeps them off its lean rows), so a query
+reading one (:data:`~vmn_exp.core.query_extra.SNAPSHOT_FIELDS`) is answered
+in Python. One more row than *limit* is looked for, so ``truncated`` says
+whether more matched.
 """
 from fastapi import HTTPException, Request
 from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import QueryError, query_roots
+from vmn_exp.core.query_extra import SNAPSHOT_FIELDS
 from vmn_exp.ui.auth.authz import allowed, require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import experiments as exp_reader
@@ -44,10 +47,11 @@ def _python_search(scopes, text, limit, archived):
     return found
 
 
-def references_outputs(text):
-    """Whether query *text* reads a run's ``outputs`` (False when it doesn't parse)."""
+def reads_snapshot_fields(text):
+    """Whether query *text* reads what synced rows lack — a run's ``outputs``,
+    intent or similar-runs document (False when it doesn't parse)."""
     try:
-        return bool(text and text.strip()) and "outputs" in query_roots(text)
+        return bool(text and text.strip()) and bool(SNAPSHOT_FIELDS & query_roots(text))
     except QueryError:
         return False
 
@@ -69,7 +73,7 @@ def register(app, api_prefix, scopes_of, sql=None):
         limit = max(1, min(limit, MAX_LIMIT))
         names = sorted(viewable(request, [ws.name for ws in app.state.manager.list()]))
         try:
-            if sql is None or references_outputs(q):
+            if sql is None or reads_snapshot_fields(q):
                 found = _python_search(scopes_of(names), q, limit + 1, archived)
             else:
                 found = _sql_search(sql, scopes_of(names), names, q, limit + 1, archived)

@@ -60,7 +60,6 @@ from vmn_exp.core.index_rows import row_copies as _row_copies
 from vmn_exp.core.index_snapshot import (
     IndexSnapshot,
     RowCache,
-    _put_sparse,
     new_side_tables,
     put_side_tables,
 )
@@ -70,7 +69,7 @@ from vmn_exp.core.index_sweep import (
     METADATA_FILE,
     Sweep,
 )
-from vmn_exp.core.index_views import lean_row, run_declared, runs_declared_schema
+from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import load_log
 from vmn_exp.core.status import load_run_state, observed_at_by_verstr
@@ -560,19 +559,6 @@ def direct_rows(
     return rows, _run_states(storage, app_name, rows, read_run_state)
 
 
-def direct_view(
-    storage, app_name, read_log=load_log, read_run_state=load_run_state, schema=None,
-):
-    """``(rows, run_states, declared schema)``: :func:`direct_rows` plus what
-    the runs declare (:meth:`IndexSnapshot.declared_schema`)."""
-    rows, declared = [], {}
-    for idx, meta, fold in _direct_folds(storage, app_name, read_log):
-        rows.append(fold_row(idx, meta, fold, schema=schema))
-        _put_sparse(declared, meta["verstr"], run_declared(fold))
-    merged = runs_declared_schema(declared, {r["verstr"]: r for r in rows}.get)
-    return rows, _run_states(storage, app_name, rows, read_run_state), merged
-
-
 def _direct_folds(storage, app_name, read_log):
     metas = storage.list_snapshots(app_name)
     for idx, meta in enumerate(metas, 1):
@@ -597,15 +583,17 @@ def snapshot_of_folds(app_name, folds, run_states=None):
     return IndexSnapshot.build(app_name, 0, rows, states, notes, observed, **sides)
 
 
-def direct_snapshot(storage, app_name, schema=None):
-    """An :class:`IndexSnapshot` (generation 0) built by reading every record,
-    summarized by *schema* like :func:`indexed_snapshot`'s."""
+def direct_snapshot(storage, app_name, schema=None, read_log=load_log,
+                    read_run_state=load_run_state):
+    """An :class:`IndexSnapshot` (generation 0) built by reading every record
+    (with the caller's loaders), summarized by *schema* like
+    :func:`indexed_snapshot`'s."""
 
     def run_states(rows):
-        states = _run_states(storage, app_name, rows)
+        states = _run_states(storage, app_name, rows, read_run_state)
         return states, observed_at_by_verstr(storage, app_name, states)
 
-    folds = _direct_folds(storage, app_name, load_log)
+    folds = _direct_folds(storage, app_name, read_log)
     return snapshot_of_folds(app_name, folds, run_states).summarized(schema)
 
 

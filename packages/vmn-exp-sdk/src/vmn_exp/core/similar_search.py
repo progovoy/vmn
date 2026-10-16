@@ -27,6 +27,7 @@ from vmn_exp.core.fold import fold_log
 from vmn_exp.core.index import direct_snapshot, indexed_snapshot, shared_index, snapshot_of_folds
 from vmn_exp.core.log import load_log
 from vmn_exp.core.query import filter_rows
+from vmn_exp.core.query_extra import snapshot_extra
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.similar import similar_runs_multi, target_from_snapshot
 from vmn_exp.core.similar_corpus import Scope, file_scope, snapshot_scope
@@ -187,7 +188,7 @@ def candidate_filter(scopes, query, include_archived):
         for scope in scopes:
             snap = scope.rows.snapshot if isinstance(scope.rows, SnapshotRows) else None
             rows = snap.rows if snap is not None else ()
-            matched[scope.label] = {r["verstr"] for r in _matching(snap, rows, query)}
+            matched[scope.label] = {r["verstr"] for r in _matching(scope, snap, rows, query)}
     elif include_archived:
         return None
 
@@ -197,11 +198,11 @@ def candidate_filter(scopes, query, include_archived):
     return keep
 
 
-def _matching(snap, rows, query):
+def _matching(scope, snap, rows, query):
+    """*rows* of *snap* matching *query*, its ``similar()`` searching *scope*."""
     annotated = annotate_rows(list(rows), getattr(snap, "run_states", None),
                               getattr(snap, "run_state_observed_at", None))
-    outputs_of = getattr(snap, "outputs_of", None)
-    return filter_rows(annotated, query, extra={"outputs": outputs_of} if outputs_of else None)
+    return filter_rows(annotated, query, extra=snapshot_extra(snap, lambda _: scope))
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,
