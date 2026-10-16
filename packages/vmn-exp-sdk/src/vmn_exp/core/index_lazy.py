@@ -159,3 +159,35 @@ def _reduce(self, protocol=None):
 
 LazyRecord.__reduce_ex__ = _reduce
 LazyRecord.__reduce__ = _reduce
+
+
+class LazyRecords(dict):
+    """``{key: LazyRecord}`` whose records are made the first time one is
+    looked up — what a refresh building no snapshot starts from, which
+    touches a few of them. Iterating, ``in`` and ``len`` see every key;
+    ``items``/``values`` make every record. Not for :func:`dict` copies,
+    which would see the keys of records never made as None."""
+
+    __slots__ = ("_fetch",)
+
+    def __init__(self, keys, fetch):
+        super().__init__(dict.fromkeys(keys))
+        self._fetch = fetch
+
+    def _made(self, key, value):
+        if value is None:
+            value = LazyRecord(key, None, self._fetch, None)
+            dict.__setitem__(self, key, value)
+        return value
+
+    def __getitem__(self, key):
+        return self._made(key, dict.__getitem__(self, key))
+
+    def get(self, key, default=None):
+        return self[key] if dict.__contains__(self, key) else default
+
+    def items(self):
+        return [(key, self[key]) for key in list(self)]
+
+    def values(self):
+        return [self[key] for key in list(self)]

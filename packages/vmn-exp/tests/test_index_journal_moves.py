@@ -105,8 +105,8 @@ def test_a_refresh_between_sweeps_signs_no_record(process, seeded):
 
 
 def test_a_sync_after_a_cold_build_reads_only_the_changed_record(process, seeded, monkeypatch):
-    """The build judged each record it loaded: the next refresh does not
-    read every persisted record back to judge it again."""
+    """The build judged each record it loaded: the next refresh neither
+    reads nor makes every persisted record to judge it again."""
     from vmn_exp.core.index_lazy import LazyRecord
     from vmn_exp.core.index_store import SqliteStore
 
@@ -116,9 +116,12 @@ def test_a_sync_after_a_cold_build_reads_only_the_changed_record(process, seeded
     fetched, parts = [], SqliteStore.records_parts
     monkeypatch.setattr(SqliteStore, "records_parts",
                         lambda self, app, seqs: (fetched.extend(seqs), parts(self, app, seqs))[1])
+    made, init = [], LazyRecord.__init__
+    monkeypatch.setattr(LazyRecord, "__init__",
+                        lambda self, key, *a: (made.append(key), init(self, key, *a))[1])
     again = process()
     assert again.index.sync() and again.signed == []
-    assert set(read) == set(fetched) == {seeded[3]}
+    assert set(read) == set(fetched) == set(made) == {seeded[3]}
 
 
 def test_a_record_changed_before_the_last_refresh_is_not_read_again(process, seeded):

@@ -7,7 +7,7 @@ import threading
 import json
 
 from vmn_exp.core import index_point_sql
-from vmn_exp.core.index_lazy import STATE_KEYS, LazyRecord
+from vmn_exp.core.index_lazy import STATE_KEYS, LazyRecord, LazyRecords
 from vmn_exp.core.index_lean_store import read_lean
 
 _CHUNK = 256  # records read per query, under SQLite's bound-parameter limit
@@ -58,8 +58,7 @@ class LeanReads:
         seqs = dict.fromkeys(key for (key,) in self._conn.execute(
             "SELECT key FROM exp_index WHERE app = ?", (app_name,)
         ))
-        fetch = _Prefetch(self, app_name, seqs, first_chunk=1)
-        return {key: LazyRecord(key, None, fetch, None) for key in seqs}
+        return LazyRecords(seqs, _Prefetch(self, app_name, seqs, first_chunk=1))
 
     def listing(self, app_name, read):
         """``read(conn)``'s answer, all of it read at one generation; None
