@@ -136,6 +136,12 @@ truncated: true                 # only when caps cut a list
 
 ### 3.3 Index
 
+> **Superseded in part by [plan 24](24-persistent-similar-index.md).** The fold and
+> side tables below still hold. The in-memory `similar_index.py` (inverted index,
+> 5000-candidate cap) and `similar_score.py` are gone: each run is one SQLite FTS5
+> document filed by every index save, ranked by bm25 with the signal weights as
+> column weights. Exclusion and grouping are unchanged.
+
 - `core/fold.py` / `core/fold_facts.py`: `features` (highest int `features_version`,
   then latest), `intent` (latest; a blank text clears it), `hypothesis` (the first create
   entry's, like `create_note`); accessors `fold_features`, `fold_intent`,
@@ -339,6 +345,11 @@ short one-liner `list` shows, while the intent is the long description used for
 matching. `-f`'s `hypothesis:` (create entry) also feeds the text signal.
 
 ### 4.2 Matching text without a model
+
+> **Superseded by [plan 24](24-persistent-similar-index.md).** The tokenizer and BM25
+> below are deleted: the `text` column of the FTS5 document is tokenized and
+> stemmed by FTS5 (`porter unicode61`) and ranked by its bm25. Matching is still
+> lexical, and the agent still expands synonyms.
 
 - `core/similar_text.py` (pure): a tokenizer (splits on punctuation and `_`; each word
   counts lowercased, and a camelCase word also counts its parts when every part has 2+
