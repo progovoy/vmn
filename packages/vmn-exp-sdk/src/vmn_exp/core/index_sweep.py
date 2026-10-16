@@ -39,21 +39,25 @@ record names (for records no journal entry announced). What the check finds
 changed that no hint or live listing explains is counted in :attr:`Sweep.drift`.
 Its only full listings are the first one and :meth:`Sweep.request_full`.
 
-The fast tier is opt-in: ``full_sweep_sec`` defaults to 0, where every refresh
-is a full listing and an in-place write by anyone shows up at once. A server
-that refreshes often sets it (a mutable attribute) and sweeps in the background.
+``full_sweep_sec`` (default 300; 0 lists fully every time) holds across
+processes: the baselines persist (:mod:`~vmn_exp.core.index_baseline`), so a
+new process lists names once and the files of only the records above. What no
+sig shows — a settled record changed in place behind vmn's back (every vmn
+write moves its sig), on another host behind its local copy, or on S3 — shows
+up by the next full sweep, whichever process runs it.
 """
 import threading
 import time
 
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
+from vmn_exp.core.index_sweep_state import SweepState
 from vmn_exp.core.status import (
     RUNNING,
     derive_status,
     observed_at_from_mtime,
 )
 
-DEFAULT_FULL_SWEEP_SEC = 0  # 0: every refresh is a full listing
+DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
 _wall = time.time
@@ -84,7 +88,7 @@ def _settled(record):
     return status != RUNNING
 
 
-class Sweep:
+class Sweep(SweepState):
     """The listing policy of one index; times are the caller's monotonic clock."""
 
     def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC, watch=None):
@@ -104,11 +108,13 @@ class Sweep:
         self._wrapped = False  # the rolling slice started a new round
         self.drift = 0  # records the consistency check found changed unannounced
         self.last_reconcile_at = None  # wall time a full listing or round last began
+        self._restored = False  # baselines restored: check the records against them
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""
         self.watch.reset()
         self._last_full, self._sigs, self._live, self._pending = None, {}, None, set()
+        self._restored = False
         self._ring, self._cursor, self._credit, self._rolled_at = [], 0, 0.0, None
 
     def touch(self, key, now):
@@ -150,6 +156,8 @@ class Sweep:
                 self._apply_sigs(*changes)
             return self._full_listing(records, now)
         changed, gone_names = changes
+        if self._restored:
+            changed, gone_names = self._against_records(records, changed, gone_names)
         keys = self._to_list(records, changed, gone_names, now)
         listing = self.watch.files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
@@ -275,6 +283,7 @@ class Sweep:
 
     def _full_listing(self, records, now):
         self._last_full = self._rolled_at = now
+        self._restored = False  # every record is compared below
         self.last_reconcile_at = _wall()
         listing, present = self.watch.full_changes()
         if self._live is None:

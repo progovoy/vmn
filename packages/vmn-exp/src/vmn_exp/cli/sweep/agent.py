@@ -137,8 +137,11 @@ class _EarlyStopCheck:
 
     def _check(self, _item):
         # Compare the runs that carry the metric: a trial's own, or the run a
-        # start_run() inside it nested under it.
-        rows = trial_rows(self._storage, self._app_name, self._sweep, self._spec, wait=False)
+        # start_run() inside it nested under it. The rows are as fresh as the
+        # check interval asks; a refresh in between is not waited for.
+        interval = self._spec["early_terminate"]["check_interval_sec"]
+        rows = trial_rows(self._storage, self._app_name, self._sweep, self._spec,
+                          wait=False, max_age_sec=interval)
         own_row = next((r for r in rows if r["verstr"] == self._verstr), None)
         own = self._points.of(own_row["metric_source"] if own_row else self._verstr)
         if not self._stopper.past_min_iter(own):

@@ -224,8 +224,23 @@ def test_a_cold_build_persists_in_one_transaction(tmp_path, monkeypatch):
 
     _cold(storage, tmp_path)
 
-    commits = [s for s in statements if s.strip().upper().startswith("COMMIT")]
-    assert len(commits) == 1, statements
+    # The records in one transaction; the listing baseline (plan 25 F2) goes
+    # to the key-value table after them, in transactions of its own.
+    transactions, current = [], []
+    for statement in statements:
+        current.append(statement)
+        if statement.strip().upper().startswith("COMMIT"):
+            transactions.append(current)
+            current = []
+    writes = [t for t in transactions if any(_writes_records(s) for s in t)]
+    assert len(writes) == 1, statements
+    assert transactions[0] is writes[0]
+    assert all("exp_index_kv" in " ".join(t) for t in transactions[1:]), statements
+
+
+def _writes_records(statement):
+    words = statement.upper().split()
+    return bool(words) and words[0] in ("INSERT", "UPDATE", "DELETE") and "EXP_INDEX_KV" not in words
 
 
 def test_a_cold_build_reads_every_file_once(tmp_path, monkeypatch):

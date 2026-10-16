@@ -65,12 +65,15 @@ def test_each_clones_persisted_index_equals_a_full_read(tmp_path, seed):
         if rng.random() < 0.5:
             root = rng.choice("ab")
             ExperimentIndex(cached_host(tmp_path, root), APP,
-                            cache_path=caches[root]).refresh()
+                            cache_path=caches[root], full_sweep_sec=0).refresh()
     for root in "ab":
         host = cached_host(tmp_path, root)
         host.sync_log_to_remote(APP, V, own_stream(host, APP, V))
 
     for root in "ab":
         host = cached_host(tmp_path, root)
-        rows = ExperimentIndex(host, APP, cache_path=caches[root]).refresh().rows()
+        # The other clone's lines arrive through the remote, which signs no
+        # record: compared at a full listing.
+        rows = ExperimentIndex(host, APP, cache_path=caches[root],
+                               full_sweep_sec=0).refresh().rows()
         assert rows == direct_rows(host, APP)[0], f"clone {root}"

@@ -34,7 +34,7 @@ from vmn_exp.storage.files import (
 )
 from vmn_exp.storage.local_metrics import LocalMetrics
 from vmn_exp.storage.local_streams import LocalStreams
-from vmn_exp.storage.listing import RecordListings, files_in, map_dirs
+from vmn_exp.storage.listing import SIGNED_SUBDIRS, RecordListings, files_in, map_dirs
 
 
 def _ensure_parent(path):
@@ -304,9 +304,14 @@ class LocalSnapshotStorage(LocalStreams, LocalMetrics, SnapshotStorage):
     def save_file(self, app_name, verstr, filename, data):
         if self._refuse_orphan_write(app_name, verstr, filename):
             return False
-        path = os.path.join(self._snapshot_dir(app_name, verstr), filename)
+        snap_dir = self._snapshot_dir(app_name, verstr)
+        path = os.path.join(snap_dir, filename)
         _ensure_parent(path)
         atomic_write(path, data)
+        if filename.partition("/")[0] in SIGNED_SUBDIRS:
+            # The rename moved only its folder's mtime: move the record's
+            # signature (list_record_names) too.
+            os.utime(snap_dir)
         return True
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):

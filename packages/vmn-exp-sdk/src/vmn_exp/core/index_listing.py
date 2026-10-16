@@ -12,7 +12,14 @@ where the baselines live next to the listings and only changes cross the pipe.
 
 A caller that failed to apply a change calls :meth:`reset`: the next listings
 then report everything again.
+
+The baselines outlive the process (:mod:`~vmn_exp.core.index_baseline`):
+:meth:`ListingWatch.baseline` hands them out with the keys that moved since
+the last call, :meth:`ListingWatch.restore` takes them back. Fingerprints are
+stable across processes for that (``hash()`` of a string is not).
 """
+import hashlib
+
 METADATA_FILE = "metadata.yml"
 
 
@@ -25,11 +32,13 @@ def as_sigs(names):
 
 
 def _fingerprint(files):
-    """A cheap equality stand-in for a record's ``{name: signature}``."""
-    return hash(tuple(
+    """A cheap equality stand-in for a record's ``{name: signature}``, the
+    same in every process."""
+    text = repr(tuple(
         (name, tuple(sig) if isinstance(sig, list) else sig)
         for name, sig in sorted(files.items())
     ))
+    return int.from_bytes(hashlib.blake2b(text.encode(), digest_size=8).digest(), "big")
 
 
 class ListingWatch:
@@ -45,9 +54,23 @@ class ListingWatch:
         self._listing = {"identity": True} if identity else {}
         self._names = {}  # name -> sig at the last name_changes
         self._prints = {}  # key -> fingerprint of its files when last listed
+        self._moved = set()  # keys whose baseline changed since baseline(); None: all
 
     def reset(self):
-        self._names, self._prints = {}, {}
+        self._names, self._prints, self._moved = {}, {}, None
+
+    def baseline(self):
+        """``(names, prints, keys moved since the last call or None for
+        all)`` — the state :meth:`restore` takes back."""
+        moved, self._moved = self._moved, set()
+        return self._names, self._prints, moved
+
+    def restore(self, names, prints):
+        self._names, self._prints, self._moved = names, prints, set()
+
+    def _moved_keys(self, *keys):
+        if self._moved is not None:
+            self._moved.update(*keys)
 
     def name_changes(self):
         """``(changed {name: sig}, gone names)`` since the last call; None when
@@ -58,7 +81,9 @@ class ListingWatch:
             return None
         before, self._names = self._names, names
         changed = {k: sig for k, sig in names.items() if k not in before or before[k] != sig}
-        return changed, set(before).difference(names)
+        gone = set(before).difference(names)
+        self._moved_keys(changed, gone)
+        return changed, gone
 
     def files(self, keys):
         """``{key: {filename: signature}}`` of *keys* (records gone are left out)."""
@@ -73,6 +98,7 @@ class ListingWatch:
         prints = {key: _fingerprint(files) for key, files in listing.items()}
         before, self._prints = self._prints, prints
         changed = {k: files for k, files in listing.items() if before.get(k) != prints[k]}
+        self._moved_keys(changed, before.keys() - prints.keys())
         return changed, {k for k, files in listing.items() if METADATA_FILE in files}
 
     def slice_changes(self, keys):
@@ -88,4 +114,5 @@ class ListingWatch:
         gone = set(keys).difference(listing)
         for key in gone:
             self._prints.pop(key, None)
+        self._moved_keys(changed, gone)
         return changed, gone

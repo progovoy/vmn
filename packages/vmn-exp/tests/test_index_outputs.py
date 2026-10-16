@@ -42,6 +42,7 @@ def _append(app_layout, verstr, entries):
     with open(os.path.join(_exp_dir(app_layout, verstr), "log/w0.jsonl"), "a") as f:
         for entry in entries:
             f.write(json.dumps(entry) + "\n")
+    os.utime(_exp_dir(app_layout, verstr))  # as vmn's own append does
 
 
 def _image(step, sha=SHA, size=7):
