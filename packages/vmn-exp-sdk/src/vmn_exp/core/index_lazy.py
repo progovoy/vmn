@@ -17,7 +17,6 @@ dict.
 """
 import json
 
-
 STATE_KEYS = ("rs_sig", "run_state")
 _PENDING = object()  # nothing read yet; a str: the head read, the fold not decoded
 FOLD = "fold"
@@ -37,7 +36,8 @@ def has_meta(record):
 
 
 def _blank():
-    from vmn_exp.core.index_record import new_record  # it imports the sweep, which imports us
+    # Imported here: index_record imports the sweep, which imports this module.
+    from vmn_exp.core.index_record import new_record
 
     return {k: v for k, v in new_record().items() if k not in STATE_KEYS}
 
