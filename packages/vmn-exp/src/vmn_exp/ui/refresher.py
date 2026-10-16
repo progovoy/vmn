@@ -17,8 +17,10 @@ watched indexes, which then list only hinted and live records; their full
 
 Each refreshed snapshot is handed to ``on_refresh`` (the server warms its
 search index with it, plan 23 S8b); a failure there is logged at debug.
-``on_index_refresh(index, snapshot)`` follows every refresh, inline ones too
-(the server writes its Postgres search rows with it).
+Each listener of :meth:`add_listener` is called with ``(index, snapshot)``
+after every refresh, inline ones too (the server files similar-runs
+documents and writes its Postgres search rows with them); a
+:class:`NotingRefresher` tells a listener which app an index serves.
 
 A watched index does its filesystem work in an I/O helper process
 (``use_io_process``): each stat/open on this process's threads would wait for
@@ -40,7 +42,32 @@ RECONCILE_SEC = 3600
 _LOGGER = logging.getLogger(__name__)
 
 
-class InlineRefresher:
+class _Listeners:
+    def add_listener(self, listener):
+        """Call ``listener(index, snapshot)`` after every refresh."""
+        self._listeners.append(listener)
+
+    def _notify(self, index, snapshot):
+        for listener in self._listeners:
+            listener(index, snapshot)
+
+
+class NotingRefresher:
+    """*refresher*, calling ``on_snapshot(index)`` with each index it is asked
+    about (what app it serves, for the refresh listeners)."""
+
+    def __init__(self, refresher, on_snapshot):
+        self._refresher, self._on_snapshot = refresher, on_snapshot
+
+    def __getattr__(self, name):
+        return getattr(self._refresher, name)
+
+    def snapshot(self, index, journal=None):
+        self._on_snapshot(index)
+        return self._refresher.snapshot(index, journal)
+
+
+class InlineRefresher(_Listeners):
     """:class:`Refresher`'s interface, refreshing on the request path instead:
     a snapshot sees every write made before it (what ``create_app`` embeds
     without ``background_refresh``)."""
@@ -50,13 +77,14 @@ class InlineRefresher:
     background = False
     # None leaves the sweep interval to snapshot(), whatever reconcile_sec says.
     full_sweep_sec = None
-    on_index_refresh = None
+
+    def __init__(self):
+        self._listeners = []
 
     def snapshot(self, index, journal=None):
-        index.full_sweep_sec = 0  # every refresh lists fully: an in-place write shows at once
+        index.reconcile()  # a full listing: an in-place write shows at once
         snapshot = index.refresh().snapshot()
-        if self.on_index_refresh is not None:
-            self.on_index_refresh(index, snapshot)
+        self._notify(index, snapshot)
         return snapshot
 
 
@@ -68,7 +96,7 @@ class _Watch:
         self.wake = threading.Event()
 
 
-class Refresher:
+class Refresher(_Listeners):
     # True: a snapshot is served at once, at most ~interval_sec behind.
     background = True
     full_sweep_sec = RECONCILE_SEC
@@ -77,7 +105,7 @@ class Refresher:
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec
         self.on_refresh = on_refresh  # called with each refreshed snapshot
-        self.on_index_refresh = None  # called with each refreshed index and its snapshot
+        self._listeners = []
         self._watches = {}  # index -> _Watch
         self._journals = {}  # WorkspaceJournal -> its thread
         self._journal_of = {}  # index -> its WorkspaceJournal
@@ -202,8 +230,7 @@ class Refresher:
             watch.failing = False
             snapshot = index.snapshot()
             self.gil_hint.note(len(getattr(snapshot, "rows", ())))
-            if self.on_index_refresh is not None:
-                self.on_index_refresh(index, snapshot)
+            self._notify(index, snapshot)
             self._hand_on(snapshot)
 
     def _hand_on(self, snapshot):

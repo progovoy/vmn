@@ -8,12 +8,12 @@ cached in Postgres, ``--no-index`` — gets a host-local database of its own
 (``<data_dir>/index/similar/``, or ``:memory:`` without a data dir) kept in
 step with the app's snapshots by a
 :class:`~vmn_exp.core.similar_filing.SnapshotFiler`: on every refresh of its
-index (the refresher's ``on_index_refresh``, :meth:`SimilarCorpora.refreshed`)
+index (a refresher listener, :meth:`SimilarCorpora.refreshed`)
 and, when a request finds it behind its snapshot, on a background thread
 the request waits for up to its deadline (then
 :class:`~vmn_exp.core.similar.SimilarDeadlineExceeded`, the sync going on).
-Which index serves which app is noted by :meth:`SimilarCorpora.scoped`'s
-refresher, as the server asks it for snapshots.
+Which index serves which app is noted (:meth:`SimilarCorpora.note`) as the
+server asks its refresher for snapshots.
 """
 import hashlib
 import logging
@@ -23,10 +23,10 @@ import time
 
 from vmn_exp.core import similar_fts, sqlite_files
 from vmn_exp.core.similar import SimilarDeadlineExceeded
-from vmn_exp.core.similar_corpus import Scope, file_scope
+from vmn_exp.core.similar_corpus import Scope, file_scope, memory_conn
 from vmn_exp.core.similar_filing import SnapshotFiler
 from vmn_exp.core.similar_rows import SnapshotRows
-from vmn_exp.core.sqlite_conn import connect
+from vmn_exp.ui.refresher import NotingRefresher
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,22 +82,6 @@ def _run(corpus):
             _LOGGER.warning("Filing similar-runs documents failed", exc_info=True)
 
 
-class _Scoped:
-    """*refresher*, noting each index it is asked about as *key*'s."""
-
-    def __init__(self, refresher, corpora, key, app):
-        self._refresher, self._corpora, self._key, self._app = refresher, corpora, key, app
-
-    def __getattr__(self, name):
-        return getattr(self._refresher, name)
-
-    def snapshot(self, index, journal=None):
-        self._corpora.note(index, self._key, self._app)
-        if journal is None:
-            return self._refresher.snapshot(index)
-        return self._refresher.snapshot(index, journal)
-
-
 class SimilarCorpora:
     def __init__(self, db_dir=None):
         self._db_dir = db_dir
@@ -107,7 +91,9 @@ class SimilarCorpora:
         self._lock = threading.Lock()
 
     def scoped(self, refresher, ws_name, app_name):
-        return _Scoped(refresher, self, (ws_name, app_name), app_name)
+        """*refresher*, noting each index it is asked about as *app_name*'s."""
+        return NotingRefresher(refresher,
+                               lambda index: self.note(index, (ws_name, app_name), app_name))
 
     def note(self, index, key, app):
         with self._lock:
@@ -139,13 +125,11 @@ class SimilarCorpora:
             os.makedirs(folder, exist_ok=True)
             name = hashlib.sha256(repr(key).encode()).hexdigest()[:16]
             path = os.path.join(folder, f"{name}.sqlite")
-        conn = connect(path)
-        similar_fts.ensure_tables(conn)
-        return conn
+        return memory_conn(path)
 
     def scope(self, key, app_name, snapshot, schema=None, deadline=None):
         """The :class:`~vmn_exp.core.similar_corpus.Scope` of *key*'s app at
-        *snapshot* (labelled *key*). Close it once done."""
+        *snapshot* (labelled *key*)."""
         with self._lock:
             path = index_file(self._indexes.get(key))
         if path:
