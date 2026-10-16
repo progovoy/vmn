@@ -8,9 +8,14 @@ export const ROW_FIELDS = [
   "exit_code", "duration_sec", "started_at", "finished_at", "heartbeat",
   "last_metric_at", "host", "pid", "command", "stale_sec",
   "heartbeat_interval_sec", "forked_from", "rerun_of", "author", "has_intent",
+  "intent", "keywords",
   "error_summary", "signal", "end_reason", "name", "archived", "tags",
   "imported_from", "forked_from_step", "root", "failure_sig",
 ];
+
+/** Predicates written as calls: `similar("focal loss")` keeps the runs whose
+ *  text holds every word (plan 24 F5); offered with the caret in the quotes. */
+export const FUNCTIONS = ['similar("'];
 
 export const OPERATORS = ["=", "!=", "<", "<=", ">", ">=", "~", "!~", "in", "not in", "contains"];
 const CONNECTIVES = ["and", "or"];
@@ -38,6 +43,7 @@ function fieldsFor(facets: SuggestFacets): string[] {
     ...(facets.metric_keys ?? []).map((k) => `metrics.${k}`),
     ...(facets.param_keys ?? []).map((k) => `params.${k}`),
     ...ROW_FIELDS,
+    ...FUNCTIONS,
   ];
 }
 
@@ -62,7 +68,7 @@ export function suggest(text: string, caret: number, facets: SuggestFacets): str
 export function applySuggestion(text: string, caret: number, choice: string) {
   const head = text.slice(0, caret);
   const start = head.length - head.match(WORD)![0].length;
-  const inserted = `${choice} `;
+  const inserted = FUNCTIONS.includes(choice) ? choice : `${choice} `;
   return {
     text: text.slice(0, start) + inserted + text.slice(caret),
     caret: start + inserted.length,
