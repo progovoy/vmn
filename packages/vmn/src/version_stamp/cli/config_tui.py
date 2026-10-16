@@ -6,7 +6,6 @@ import pathlib
 import subprocess
 import sys
 
-import questionary
 import yaml
 from rich.console import Console
 from rich.panel import Panel
@@ -31,6 +30,19 @@ from version_stamp.core.utils import (
 )
 from version_stamp.core.version_math import get_root_app_name_from_name
 from version_stamp.stamping.base import IVersionsStamper
+
+
+class _Questionary:
+    """``questionary``, imported on first use: it loads prompt_toolkit (~0.13 s),
+    and every vmn command imports this module while only `vmn config` prompts."""
+
+    def __getattr__(self, name):
+        import questionary
+
+        return getattr(questionary, name)
+
+
+questionary = _Questionary()
 
 
 @measure_runtime_decorator
