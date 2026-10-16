@@ -19,7 +19,7 @@ class SweepState:
             "last_full": round(wall - (now - self._last_full), 3),
             "touched": {k: round(wall - (now - t), 3) for k, t in self._touched.items()},
             "live": sorted(self._live), "pending": sorted(self._pending),
-            "sigs_known": self._sigs_known,
+            "sigs_known": self._sigs_known, "names_at": self.watch.names_at,
         }
 
     def restore_state(self, state, sigs, now, wall):
@@ -31,6 +31,7 @@ class SweepState:
         self._touched = {k: now - (wall - t) for k, t in state["touched"].items()}
         self._live, self._pending = set(state["live"]), set(state["pending"])
         self._sigs_known, self._sigs, self._restored = state["sigs_known"], dict(sigs), True
+        self.watch.names_at = state.get("names_at") if age >= 0 else None
 
     def _against_records(self, records, changed, gone):
         """The first listing after a restore also judges what the persisted

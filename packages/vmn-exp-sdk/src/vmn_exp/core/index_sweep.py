@@ -151,8 +151,9 @@ class Sweep(SweepState):
         """``(files of the records to refresh, keys of records gone)``."""
         if self.journaled:
             return self._journaled_listing(records, now)
-        changes = self._name_changes()
-        if changes is None or self._full_due(now):
+        full_due = self._full_due(now)
+        changes = self._name_changes(journal=not full_due)
+        if changes is None or full_due:
             if changes is not None:
                 self._apply_sigs(*changes)
             return self._full_listing(records, now)
@@ -217,13 +218,13 @@ class Sweep(SweepState):
             return False
         return True
 
-    def _name_changes(self):
+    def _name_changes(self, journal=False):
         # Sigs are kept even while every refresh is full, so switching the
         # fast tier on later does not re-list every record once — unless the
         # backend has no sigs to give (S3), where asking is a wasted listing.
         if not self.full_sweep_sec and not self._sigs_known:
             return None
-        changes = self.watch.name_changes()
+        changes = self.watch.name_changes(_wall(), journal)
         if changes is None:
             return None
         changed, gone = changes

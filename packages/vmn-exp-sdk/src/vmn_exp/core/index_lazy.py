@@ -19,6 +19,7 @@ import json
 
 STATE_KEYS = ("rs_sig", "run_state")
 _PENDING = object()  # nothing read yet; a str: the head read, the fold not decoded
+_DECODED = object()  # the run state is in the dict
 FOLD = "fold"
 
 
@@ -43,14 +44,24 @@ def _blank():
 
 
 class LazyRecord(dict):
-    __slots__ = ("_fetch", "_key", "_raw", "_run")
+    __slots__ = ("_fetch", "_key", "_raw", "_run", "_state")
 
     def __init__(self, key, state, fetch, run):
-        """*state*: the record's run state fields; *fetch(key)*: its stored
+        """*state*: the record's run state fields, or their stored JSON (None:
+        none stored), decoded on first use; *fetch(key)*: its stored
         ``(head JSON, fold JSON)``, or None when no longer stored as read;
         *run*: whether it was stored as a run (with metadata)."""
-        super().__init__(state)
+        raw_state = state is None or isinstance(state, str)
+        super().__init__(() if raw_state else state)
         self._key, self._fetch, self._raw, self._run = key, fetch, _PENDING, run
+        self._state = state if raw_state else _DECODED
+
+    def _decode_state(self):
+        if self._state is not _DECODED:
+            raw, self._state = self._state, _DECODED
+            dict.update(self, dict.fromkeys(STATE_KEYS))
+            if raw is not None:
+                dict.update(self, json.loads(raw))
 
     def has_meta(self):
         """Whether the record has metadata, without reading its head."""
@@ -71,12 +82,14 @@ class LazyRecord(dict):
         self._raw = data
 
     def _all(self):
+        self._decode_state()
         self._head()
         if isinstance(self._raw, str):
             raw, self._raw = self._raw, None
             dict.__setitem__(self, FOLD, decode_fold(self._key, raw))
 
     def _load(self, key):
+        self._decode_state()
         if key == FOLD:
             self._all()
         elif key not in STATE_KEYS:

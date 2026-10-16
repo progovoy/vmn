@@ -45,6 +45,44 @@ class LeanReads:
         }
         return records, keys, lean, stamps
 
+    def load_lazy(self, app_name):
+        """``{key: LazyRecord}`` with nothing decoded, run states included —
+        what a refresh that builds no snapshot starts from — or None when
+        never saved or unavailable."""
+        return self._read(lambda: self._lazy(app_name), None)
+
+    def _lazy(self, app_name):
+        if not self.generation(app_name):
+            return None
+        conn = self._conn
+        conn.execute("BEGIN")
+        try:
+            seqs = dict(conn.execute(
+                "SELECT key, seq FROM exp_index WHERE app = ?", (app_name,)
+            ).fetchall())
+            states = dict(self._select("exp_index_state", app_name))
+            runs = {key for (key,) in conn.execute(
+                "SELECT key FROM exp_rows WHERE app = ?", (app_name,)
+            )}
+        finally:
+            conn.execute("COMMIT")
+        fetch = _Prefetch(self, app_name, seqs)
+        return {key: LazyRecord(key, states.get(key), fetch, key in runs) for key in seqs}
+
+    def listing(self, app_name, read):
+        """``read(conn)``'s answer, all of it read at one generation; None
+        when unavailable or the app was never saved."""
+        return self._read(lambda: self._at_one_generation(app_name, read), None)
+
+    def _at_one_generation(self, app_name, read):
+        if not self.generation(app_name):
+            return None
+        self._conn.execute("BEGIN")
+        try:
+            return read(self._conn)
+        finally:
+            self._conn.execute("COMMIT")
+
     def records_parts(self, app_name, seqs):
         """``{key: (head JSON, fold JSON)}`` of the records of *seqs*
         (``{key: seq}``) still stored at that seq; ``{}`` when unavailable."""
