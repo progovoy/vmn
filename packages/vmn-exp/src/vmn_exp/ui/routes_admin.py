@@ -1,9 +1,8 @@
 """Admin routes on the control plane: API tokens and the audit log."""
-import json
 from dataclasses import asdict
 
 from fastapi import HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN
@@ -65,12 +64,12 @@ def register(app, api_prefix):
         _control_plane(app)
         offset, limit = clamp_page(offset, limit)
         audit = app.state.audit
-        return {"entries": audit.page(offset, limit), "total": len(audit.entries()),
+        return {"entries": audit.page(offset, limit), "total": audit.count(),
                 "offset": offset}
 
     @app.get(f"{api_prefix}/audit/export", dependencies=[require(ADMIN)])
     def audit_export():
         _control_plane(app)
-        body = "".join(json.dumps(e) + "\n" for e in app.state.audit.entries())
-        return Response(body, media_type="application/x-ndjson",
-                        headers={"Content-Disposition": 'attachment; filename="audit.jsonl"'})
+        return StreamingResponse(
+            app.state.audit.export_lines(), media_type="application/x-ndjson",
+            headers={"Content-Disposition": 'attachment; filename="audit.jsonl"'})

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """API tokens for scripts calling the server: ``vmnx_<id>_<secret>``.
 
-Only a salted hash of the secret is stored: stdlib ``hashlib.scrypt`` (no new
-dependency; argon2 is not installed), PBKDF2-SHA256 where the Python build
-lacks scrypt. The id locates the record. Tokens carry roles per workspace,
-an optional expiry, and are revoked by id.
+Only ``hmac-sha256$<hex>`` of the secret is stored, keyed by the server's
+``token_hmac`` key (:meth:`~vmn_exp.ui.control_plane.ControlPlaneStore.server_key`):
+the secrets are 256 random bits, so a slow KDF would add nothing but cost per
+request, and a leaked table can't be checked without the key. The id locates
+the record. Tokens carry roles per workspace, an optional expiry, and are
+revoked by id.
 """
-import base64
 import hashlib
 import hmac
 import secrets
@@ -17,9 +18,8 @@ from vmn_exp.ui.auth.principal import Principal, check_roles
 from vmn_exp.ui.tenancy import org_context
 
 PREFIX = "vmnx"
-_SCRYPT = {"n": 2**14, "r": 8, "p": 1}
-# Secrets are 256 random bits, so the KDF only guards a leaked table.
-PBKDF2_ITERATIONS = 100_000
+SCHEME = "hmac-sha256"
+KEY_NAME = "token_hmac"
 
 
 @dataclass(frozen=True)
@@ -34,41 +34,13 @@ class TokenRecord:
     secret_hash: str
 
 
-def _b64(raw):
-    return base64.urlsafe_b64encode(raw).decode()
+def hash_secret(secret, key):
+    """``hmac-sha256$<hex digest>`` of *secret* under *key*."""
+    return f"{SCHEME}${hmac.new(key, secret.encode(), hashlib.sha256).hexdigest()}"
 
 
-def _derive(scheme, params, secret, salt):
-    if scheme == "scrypt":
-        n, r, p = (int(x) for x in params.split(","))
-        return hashlib.scrypt(secret.encode(), salt=salt, n=n, r=r, p=p, dklen=32)
-    if scheme == "pbkdf2_sha256":
-        return hashlib.pbkdf2_hmac("sha256", secret.encode(), salt, int(params))
-    raise ValueError(f"unknown hash scheme {scheme}")
-
-
-def _default_scheme():
-    # hashlib.scrypt needs OpenSSL 1.1+; some builds (macOS LibreSSL) lack it.
-    if hasattr(hashlib, "scrypt"):
-        return "scrypt", "{n},{r},{p}".format(**_SCRYPT)
-    return "pbkdf2_sha256", str(PBKDF2_ITERATIONS)
-
-
-def hash_secret(secret):
-    """``<scheme>$<params>$<salt>$<digest>`` of *secret*."""
-    scheme, params = _default_scheme()
-    salt = secrets.token_bytes(16)
-    digest = _derive(scheme, params, secret, salt)
-    return f"{scheme}${params}${_b64(salt)}${_b64(digest)}"
-
-
-def secret_matches(secret, stored):
-    try:
-        scheme, params, salt, digest = stored.split("$")
-        given = _derive(scheme, params, secret, base64.urlsafe_b64decode(salt))
-    except ValueError:
-        return False
-    return hmac.compare_digest(_b64(given), digest)
+def secret_matches(secret, stored, key):
+    return hmac.compare_digest(hash_secret(secret, key), stored)
 
 
 def parse_token(token):
@@ -91,7 +63,7 @@ class TokenService:
         record = TokenRecord(
             id=token_id, name=name, roles=check_roles(roles), owner=owner,
             created_at=now, expires_at=now + ttl_sec if ttl_sec else 0,
-            revoked=False, secret_hash=hash_secret(secret),
+            revoked=False, secret_hash=hash_secret(secret, self._key()),
         )
         self.store.put("token", token_id, asdict(record))
         return f"{PREFIX}_{token_id}_{secret}", record
@@ -106,7 +78,9 @@ class TokenService:
             return None
         with org_context(org_id):
             record = self._get(parsed[0])
-        if record is None or record.revoked or not secret_matches(parsed[1], record.secret_hash):
+        if record is None or record.revoked:
+            return None
+        if not secret_matches(parsed[1], record.secret_hash, self._key()):
             return None
         if record.expires_at and self.clock() >= record.expires_at:
             return None
@@ -121,6 +95,9 @@ class TokenService:
 
     def list(self):
         return [TokenRecord(**doc) for doc in self.store.list("token")]
+
+    def _key(self):
+        return self.store.server_key(KEY_NAME)
 
     def _get(self, token_id):
         doc = self.store.get("token", token_id)

@@ -17,6 +17,8 @@ watched indexes, which then list only hinted and live records; their full
 
 Each refreshed snapshot is handed to ``on_refresh`` (the server warms its
 search index with it, plan 23 S8b); a failure there is logged at debug.
+``on_index_refresh(index, snapshot)`` follows every refresh, inline ones too
+(the server writes its Postgres search rows with it).
 
 A watched index does its filesystem work in an I/O helper process
 (``use_io_process``): each stat/open on this process's threads would wait for
@@ -48,9 +50,13 @@ class InlineRefresher:
     background = False
     # None leaves the index's sweep interval alone: every refresh lists fully.
     full_sweep_sec = None
+    on_index_refresh = None
 
     def snapshot(self, index, journal=None):
-        return index.refresh_if_stale(0)
+        snapshot = index.refresh_if_stale(0)
+        if self.on_index_refresh is not None:
+            self.on_index_refresh(index, snapshot)
+        return snapshot
 
 
 class _Watch:
@@ -70,6 +76,7 @@ class Refresher:
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec
         self.on_refresh = on_refresh  # called with each refreshed snapshot
+        self.on_index_refresh = None  # called with each refreshed index and its snapshot
         self._watches = {}  # index -> _Watch
         self._journals = {}  # WorkspaceJournal -> its thread
         self._journal_of = {}  # index -> its WorkspaceJournal
@@ -194,6 +201,8 @@ class Refresher:
             watch.failing = False
             snapshot = index.snapshot()
             self.gil_hint.note(len(getattr(snapshot, "rows", ())))
+            if self.on_index_refresh is not None:
+                self.on_index_refresh(index, snapshot)
             self._hand_on(snapshot)
 
     def _hand_on(self, snapshot):

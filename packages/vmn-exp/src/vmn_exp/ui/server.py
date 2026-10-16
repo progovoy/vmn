@@ -26,6 +26,7 @@ from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.auth.authz import require, require_action
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
+from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.job_views import JobViews
@@ -50,6 +51,7 @@ from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
 
 from vmn_exp.ui import (
     api_errors,
+    control_plane_sweep,
     routes_admin,
     routes_cache,
     routes_comments,
@@ -96,6 +98,7 @@ def create_app(
     control_plane=None,
     search_dsn=None,
     cache_dsn=None,
+    audit_retention_days=DEFAULT_AUDIT_RETENTION_DAYS,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -105,7 +108,8 @@ def create_app(
     static *token*; with neither the API is open. *role_mappings* map OIDC
     groups to roles (``{group, workspace or "*", role}``). A *control_plane*
     enables API tokens (``vmnx_...`` bearer tokens, managed under
-    ``/api/v1/tokens``) and the audit log. A Postgres *search_dsn* answers
+    ``/api/v1/tokens``) and the audit log, kept *audit_retention_days* by its
+    hourly sweep (:mod:`~vmn_exp.ui.control_plane_sweep`). A Postgres *search_dsn* answers
     ``/api/v1/search`` in SQL; a Postgres *cache_dsn* caches store
     workspaces' indexes there, refreshed by one elected replica."""
     from vmn_exp.storage.areas import RUNS
@@ -129,6 +133,8 @@ def create_app(
     jobs = JobRunner()
     app.state.control_plane = control_plane
     app.state.audit = AuditLog(control_plane) if control_plane else None
+    if control_plane:
+        control_plane_sweep.install(app, control_plane, audit_retention_days)
     extra = list(auth.authenticators) if auth else []
     if control_plane:
         extra.append(ApiTokenAuthenticator(TokenService(control_plane)))
@@ -141,8 +147,15 @@ def create_app(
 
     refresher = Refresher() if background_refresh else InlineRefresher()
     app.state.refresher = refresher
+    search_sql = search_rows = None
+    if search_dsn:
+        from vmn_exp.ui.search_pg import PgRowSearch
+        from vmn_exp.ui.search_rows_writer import SearchRowsWriter
+
+        search_sql = PgRowSearch(search_dsn)
+        search_rows = SearchRowsWriter(search_sql)
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
-                              cache_dsn=cache_dsn)
+                              cache_dsn=cache_dsn, search_rows=search_rows)
     leaderboards = LeaderboardCache()
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm
@@ -164,7 +177,7 @@ def create_app(
 
     @app.middleware("http")
     async def _authenticate(request: Request, call_next):
-        # Off the event loop: API token checks run scrypt and hit the control plane.
+        # Off the event loop: API token and session checks hit the control plane.
         principal = await run_in_threadpool(chain.authenticate, request) if chain else None
         request.state.principal = principal
         if chain and principal is None and request.url.path.startswith("/api"):
@@ -690,11 +703,6 @@ def create_app(
     def _search_scopes(ws_names):
         return ((ws, name, snap) for ws, name, snap, _ in _app_scopes(ws_names))
 
-    search_sql = None
-    if search_dsn:
-        from vmn_exp.ui.search_pg import PgRowSearch
-
-        search_sql = PgRowSearch(search_dsn)
     routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
     routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment,
                             _similar_weights)

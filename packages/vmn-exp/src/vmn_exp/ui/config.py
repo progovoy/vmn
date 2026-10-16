@@ -16,6 +16,7 @@ DEFAULT_PORT = 8265
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".vmn-ui")
 TENANCIES = ("single", "multi")
 DOWNLOAD_MODES = ("stream", "redirect")
+DEFAULT_AUDIT_RETENTION_DAYS = 365
 
 # Environment fallbacks for keys that have no other env var.
 ENV_DB = "VMN_UI_DB"
@@ -59,6 +60,11 @@ class AuthSection:
 
 
 @dataclass(frozen=True)
+class AuditSection:
+    retention_days: int = DEFAULT_AUDIT_RETENTION_DAYS
+
+
+@dataclass(frozen=True)
 class WorkspaceSeed:
     name: str
     store: str
@@ -72,6 +78,7 @@ class ServerConfig:
     db: Optional[str] = None
     data_dir: str = DEFAULT_DATA_DIR
     auth: AuthSection = AuthSection()
+    audit: AuditSection = AuditSection()
     workspaces: Tuple[WorkspaceSeed, ...] = ()
 
     def token(self, env=None):
@@ -134,6 +141,15 @@ def _auth(data):
     return _build(AuthSection, data, "auth")
 
 
+def _audit(data):
+    audit = _build(AuditSection, {} if data is None else data, "audit")
+    _int(audit.retention_days, "audit.retention_days")
+    if audit.retention_days <= 0:
+        raise ConfigError(f"audit.retention_days: expected a positive number of days,"
+                          f" got {audit.retention_days}")
+    return audit
+
+
 def _workspace(data, i):
     ws = _build(WorkspaceSeed, data, f"workspaces[{i}]")
     _choice(ws.downloads, DOWNLOAD_MODES, f"workspaces[{i}].downloads")
@@ -148,6 +164,7 @@ def parse_config(data):
     fields = dict(data)
     fields["server"] = _server(data.get("server"))
     fields["auth"] = _auth(data.get("auth"))
+    fields["audit"] = _audit(data.get("audit"))
     fields["workspaces"] = tuple(
         _workspace(w, i) for i, w in enumerate(data.get("workspaces") or ())
     )

@@ -41,7 +41,7 @@ def test_only_a_hash_is_stored(svc):
     secret, _ = tokens.create("ci", {"ml": VIEWER})
     dump = "\n".join(sqlite3.connect(str(path)).iterdump())
     assert secret.split("_", 2)[2] not in dump
-    assert "scrypt$" in dump or "pbkdf2_sha256$" in dump
+    assert "hmac-sha256$" in dump
 
 
 def test_wrong_secret_and_garbage_rejected(svc):

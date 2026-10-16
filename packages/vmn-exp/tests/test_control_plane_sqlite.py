@@ -6,6 +6,7 @@ import sqlite3
 from vmn_exp.ui.control_plane import SQLiteControlPlane
 
 KEYS = 300
+STEPS = ["0002_identity.sql", "0003_audit.sql", "0006_control_plane_queries.sql"]
 
 
 def _pop_all(path, start, results):
@@ -53,21 +54,22 @@ def _applied(path):
 def test_records_the_postgres_numbered_steps_it_applied(tmp_path):
     path = str(tmp_path / "cp.sqlite3")
     SQLiteControlPlane(path)
-    assert _applied(path) == ["0002_identity.sql", "0003_audit.sql"]
+    assert _applied(path) == STEPS
     SQLiteControlPlane(path)  # reopening applies nothing twice
-    assert _applied(path) == ["0002_identity.sql", "0003_audit.sql"]
+    assert _applied(path) == STEPS
 
 
 def test_a_file_from_before_the_version_table_is_brought_forward(tmp_path):
     path = str(tmp_path / "cp.sqlite3")
     old = sqlite3.connect(path)
-    old.execute("CREATE TABLE vmn_api_tokens (id TEXT PRIMARY KEY, doc TEXT NOT NULL)")
-    old.execute("""INSERT INTO vmn_api_tokens VALUES ('a', '{"id": "a"}')""")
+    # Workspaces, not tokens: 0006 drops pre-HMAC tokens by design.
+    old.execute("CREATE TABLE vmn_workspaces (id TEXT PRIMARY KEY, doc TEXT NOT NULL)")
+    old.execute("""INSERT INTO vmn_workspaces VALUES ('a', '{"id": "a"}')""")
     old.commit()
     old.close()
     cp = SQLiteControlPlane(path)
-    assert _applied(path) == ["0002_identity.sql", "0003_audit.sql"]
-    assert cp.list("token") == [{"id": "a"}]
+    assert _applied(path) == STEPS
+    assert cp.list("workspace") == [{"id": "a"}]
     cp.put("audit", "e", {"x": 1})
     assert cp.get("audit", "e") == {"x": 1}
 

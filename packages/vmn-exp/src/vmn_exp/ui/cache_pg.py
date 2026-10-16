@@ -169,11 +169,13 @@ class PostgresStore:
 
 
 def _records(conn, key, keys=None):
-    rows = conn.execute(f"SELECT key, data FROM vmn_records WHERE {_SCOPE}", key)
-    records = {
-        k: dict(_state_of({}), **data) for k, data in rows if keys is None or k in keys
-    }
-    for k, data in conn.execute(f"SELECT key, data FROM vmn_run_states WHERE {_SCOPE}", key):
+    """The scope's records, or only those of *keys* (filtered in SQL)."""
+    where, args = _SCOPE, key
+    if keys is not None:
+        where, args = f"{_SCOPE} AND key = ANY(%s)", key + (list(keys),)
+    rows = conn.execute(f"SELECT key, data FROM vmn_records WHERE {where}", args)
+    records = {k: dict(_state_of({}), **data) for k, data in rows}
+    for k, data in conn.execute(f"SELECT key, data FROM vmn_run_states WHERE {where}", args):
         if k in records:
             records[k].update(data)
     return records
