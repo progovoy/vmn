@@ -8,7 +8,9 @@ Git workspaces persist their index under ``<data_dir>/index``
 (:class:`WorkspaceIndex`; in memory only with ``--no-index``), S3 workspaces
 in a database of their own next to it, so a restarted server starts warm
 either way. With a Postgres *cache_dsn* store workspaces are cached there
-instead, shared by every replica (:mod:`vmn_exp.ui.pg_mode`).
+instead, shared by every replica (:mod:`vmn_exp.ui.pg_mode`). With
+*search_rows* each refresh writes the app's Postgres search rows
+(:mod:`vmn_exp.ui.search_rows_writer`).
 """
 import os
 import threading
@@ -25,6 +27,7 @@ from vmn_exp.ui.readers.baselines import last_good
 from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.refresher import InlineRefresher
 from vmn_exp.ui.schema_cache import MetricsSchemaCache
+from vmn_exp.ui.similar_corpora import SimilarCorpora
 
 
 def _state_reader(run_states):
@@ -64,6 +67,14 @@ def _latest_memoized(snap):
     return resolve
 
 
+def _each(hooks):
+    """One ``on_index_refresh`` calling each of *hooks* in turn."""
+    def refreshed(index, snapshot):
+        for hook in hooks:
+            hook(index, snapshot)
+    return refreshed
+
+
 def _open_journal(ws, storage, cache_path):
     from vmn_exp.storage.journal_sinks import journal_list_fn
     from vmn_exp.ui.journal_follow import WorkspaceJournal
@@ -76,7 +87,8 @@ def _open_journal(ws, storage, cache_path):
 
 
 class ExperimentSource:
-    def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None):
+    def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
+                 search_rows=None):
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -89,6 +101,11 @@ class ExperimentSource:
         self._group_aggregates = MetricsSchemaCache(read=exp_reader.group_aggregate,
                                                     path=app_conf_path)
         self._lock = threading.Lock()
+        self._search_rows = search_rows
+        # Where similar runs are searched, kept in step on every refresh.
+        self.similar = SimilarCorpora(self._ws_db_dir)
+        hooks = [self.similar.refreshed] + ([search_rows.refreshed] if search_rows else [])
+        self.refresher.on_index_refresh = _each(hooks)
         self._pg = None
         if cache_dsn:
             from vmn_exp.ui.pg_mode import PgIndexes
@@ -105,26 +122,37 @@ class ExperimentSource:
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):
         """The app's current :class:`IndexSnapshot`, its rows summarized by the
         metrics *schema* when one is given."""
+        refresher = self._refresher_of(ws, app_name, s3_storage)
         if s3_storage is not None and self._pg is not None:
-            return self._pg_snapshot(ws, app_name, s3_storage, schema)
+            return self._pg_snapshot(ws, app_name, s3_storage, schema, refresher)
         if s3_storage is not None:
             cache_path = ui_index.s3_cache_path(self._db_dir, ws)
             snap = ui_index.app_snapshot(
-                s3_storage, app_name, cache_path, self.refresher, schema,
+                s3_storage, app_name, cache_path, refresher, schema,
                 self._journal(ws, s3_storage, cache_path), ws.reconcile_sec,
             )
             self._heal(ws, app_name, s3_storage, cache_path, lambda: experiment_index.shared_index(
                 s3_storage, app_name, cache_path))
             return snap
         index = self.workspace_index(ws)
-        snap = index.snapshot(app_name, self.refresher, schema)
+        snap = index.snapshot(app_name, refresher, schema)
         self._heal(ws, app_name, index.storage, index.db_path, lambda: index.index_of(app_name))
         return snap
 
-    def _pg_snapshot(self, ws, app_name, storage, schema):
+    def _refresher_of(self, ws, app_name, s3_storage):
+        """The refresher of *app_name*'s index, noting it for similar runs and
+        the search rows."""
+        refresher = self.similar.scoped(self.refresher, ws.name, app_name)
+        if self._search_rows is None:
+            return refresher
+        schema_of = ((lambda: {}) if s3_storage is not None
+                     else (lambda: self.metrics_schema(ws, app_name)))
+        return self._search_rows.scoped(refresher, ws.name, app_name, schema_of)
+
+    def _pg_snapshot(self, ws, app_name, storage, schema, refresher):
         index = self._pg.index(ws, app_name, storage)
         journal = self._journal(ws, storage, ui_index.s3_cache_path(self._db_dir, ws))
-        snap = ui_index.snapshot_of_index(index, storage, app_name, self.refresher, schema,
+        snap = ui_index.snapshot_of_index(index, storage, app_name, refresher, schema,
                                           journal, ws.reconcile_sec)
         self._heal(ws, app_name, storage, None, lambda: index)
         return snap

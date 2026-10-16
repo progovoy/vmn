@@ -18,6 +18,7 @@ pip
 numpy
 playwright
 psycopg[binary]
+psycopg_pool
 pandas
 pillow
 pyarrow

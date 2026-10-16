@@ -3,25 +3,13 @@
 
 :func:`apply_migrations` runs the ones not yet recorded in
 ``vmn_schema_migrations``, in order, under a ``pg_advisory_lock`` so replicas
-starting together apply each file once.
+starting together apply each file once. :func:`vmn_exp.ui.pg_pool.pool` runs
+them once per DSN per process, before it opens the DSN's pool.
 """
 import pathlib
 
 _DIR = pathlib.Path(__file__).parent
 _LOCK_ID = 0x766D6E  # "vmn"
-
-
-def connect(dsn):
-    """An autocommit connection to *dsn* with every migration applied."""
-    import psycopg
-
-    conn = psycopg.connect(dsn, autocommit=True)
-    try:
-        apply_migrations(conn)
-    except Exception:
-        conn.close()
-        raise
-    return conn
 
 
 def migration_files():

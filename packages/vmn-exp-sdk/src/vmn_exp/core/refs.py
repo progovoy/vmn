@@ -5,10 +5,11 @@
 and a run's place in the tree needs every parent edge. The index already holds
 both and re-reads only what changed, where walking storage parses every
 record's metadata. An exact verstr or a stamped version needs no list at all
-and never touches the index. Resolution goes through
-:meth:`IndexSnapshot.resolve`, which matches the CLI's ``_resolve_verstr``
-results and error strings; if the index is unavailable, a snapshot built from
-a metadata-only listing answers instead.
+and never touches the index. Once the app is indexed, resolving and placing
+one run are point reads on the persisted index (:func:`point_placement`, plan
+25 F1); otherwise resolution goes through :meth:`IndexSnapshot.resolve`. Both
+match the CLI's ``_resolve_verstr`` results and error strings; if the index is
+unavailable, a snapshot built from a metadata-only listing answers instead.
 
 Storage is duck-typed; like the rest of ``core`` this imports nothing from
 ``cli``, ``ui`` or ``exp``.
@@ -16,7 +17,9 @@ Storage is duck-typed; like the rest of ``core`` this imports nothing from
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.index_point import point_view
 from vmn_exp.core.index_snapshot import IndexSnapshot
+from vmn_exp.core.tree import children_by_parent
 
 KIND = "experiment"
 _LATEST_WORDS = ("latest", "@latest")
@@ -38,10 +41,52 @@ def _listed_snapshot(storage, app_name, schema):
 
 
 def placement_snapshot(storage, app_name, snapshot=None):
-    """*snapshot*, else the index's, else one built from a metadata-only listing."""
+    """*snapshot*, else the index's refreshed now (``latest`` right after a
+    create resolves to it), else one built from a metadata-only listing."""
     return snapshot or experiment_index.indexed_snapshot(
-        storage, app_name, fallback=_listed_snapshot
+        storage, app_name, wait=True, fallback=_listed_snapshot
     )
+
+
+def point_placement(storage, app_name, snapshot=None):
+    """*snapshot*, else a point view of the persisted index
+    (:func:`~vmn_exp.core.index_point.point_view`), else
+    :func:`placement_snapshot`'s. What it answers resolves a ref (``resolve``),
+    gives a run's row (``row``) and its links (:func:`tree_links`)."""
+    if snapshot is not None:
+        return snapshot
+    try:
+        view = point_view(storage, app_name)
+    except Exception:
+        VMN_LOGGER.debug("Experiment index point read unavailable", exc_info=True)
+        view = None
+    return view or placement_snapshot(storage, app_name)
+
+
+def tree_links(placement, verstr=None, parent=None):
+    """``(parent_of, children_of)`` lookups (``.get``) of a
+    :func:`point_placement`; *verstr*'s *parent* stands in when the
+    placement does not know the run."""
+    if hasattr(placement, "children_of"):
+        parent_of, children_of = placement.parent_of, placement.children_of
+        if verstr is not None and placement.row(verstr) is None:
+            parent_of = _Own(parent_of, verstr, parent)
+        return parent_of, children_of
+    parent_of = dict(placement.edges)
+    if verstr is not None:
+        parent_of.setdefault(verstr, parent)
+    nodes = [{"verstr": v, "parent": p} for v, p in parent_of.items()]
+    return parent_of, children_by_parent(nodes)
+
+
+class _Own:
+    def __init__(self, links, verstr, parent):
+        self._links, self._verstr, self._parent = links, verstr, parent
+
+    def get(self, key, default=None):
+        if key == self._verstr:
+            return self._parent or default
+        return self._links.get(key, default)
 
 
 def _needs_listing(storage, app_name, ref, latest):
@@ -61,8 +106,11 @@ def resolve_experiment(storage, app_name, ref, latest=False, snapshot=None):
     """
     if not _needs_listing(storage, app_name, ref, latest):
         return ref, None
-    snapshot = placement_snapshot(storage, app_name, snapshot)
-    return snapshot.resolve(ref, latest=latest, kind=KIND)
+    placement = point_placement(storage, app_name, snapshot)
+    try:
+        return placement.resolve(ref, latest=latest, kind=KIND)
+    except RuntimeError:  # the persisted index went away mid-read
+        return placement_snapshot(storage, app_name).resolve(ref, latest=latest, kind=KIND)
 
 
 
@@ -96,7 +144,7 @@ def parent_edges(storage, app_name, snapshot=None):
 
 def storage_index(storage, app_name, verstr, snapshot=None):
     """The 1-based storage index (what ``@N`` resolves) of *verstr*, or None."""
-    row = placement_snapshot(storage, app_name, snapshot).row(verstr)
+    row = point_placement(storage, app_name, snapshot).row(verstr)
     return row["idx"] if row else None
 
 

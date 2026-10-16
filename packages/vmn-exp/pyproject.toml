@@ -25,7 +25,7 @@ s3 = ["vmn-exp-sdk[s3]"]
 gcs = ["vmn-exp-sdk[gcs]"]
 azure = ["vmn-exp-sdk[azure]"]
 mlflow = ["mlflow-skinny"]
-postgres = ["psycopg[binary]>=3"]
+postgres = ["psycopg[binary]>=3", "psycopg_pool>=3.2"]
 parquet = ["pyarrow"]
 
 [project.scripts]

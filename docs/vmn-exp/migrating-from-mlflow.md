@@ -83,8 +83,8 @@ resumed — the run log is appended to, not duplicated.
 
 ### No code snapshot
 
-Imported runs have no code snapshot and no git ref.  `vmn-exp restore` and `vmn
-exp diff` will refuse with a message explaining that the run has no associated
+Imported runs have no code snapshot and no git ref.  `vmn-exp restore` and
+`vmn-exp diff` will refuse with a message explaining that the run has no associated
 code, naming the source (`imported from mlflow run <run_id>; no code snapshot`,
 plus the MLflow source commit when it was recorded).
 
@@ -278,7 +278,7 @@ trainer = Trainer(..., callbacks=[VmnCallback()])
 | `client.get_model_version(name, n)` | `vmn-exp model resolve name@n` / `get_model_version("name@n")` |
 | `mlflow.pyfunc.load_model("models:/name/Production")` | `download_model("name@production")` returns a local path |
 
-See [docs/models.md](models.md) for the full vmn-exp model registry reference.
+See [models.md](models.md) for the full vmn-exp model registry reference.
 
 ---
 

@@ -39,7 +39,7 @@ app `vmn_examples`.
 - [Library logging](#library-logging)
 - [Slim install](#slim-install)
 
-Public names in `vmn_exp.sdk`: `start_run`, `Run`, `NoOpRun`, `current_run`,
+Public names in `vmn_exp.sdk`: `start_run`, `create_run`, `Run`, `NoOpRun`, `current_run`,
 `install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`, and the
 registry functions `register_model`, `set_alias`, `remove_alias`,
 `get_model_version`, `list_models`, `download_model`, `register_dataset`,
@@ -912,7 +912,7 @@ with start_run("serving") as run:
 
 | Function | Signature |
 |---|---|
-| `register_model` | `(name, run=None, app_name=None, artifact_path=None, alias=None, description=None, *, storage=None)` |
+| `register_model` | `(name, run=None, app_name=None, artifact_path=None, description=None, alias=None, *, storage=None)` |
 | `set_alias` / `remove_alias` | `(model, alias, version, expect=None, *, storage=None)` / `(model, alias, *, storage=None)` |
 | `get_model_version` / `get_dataset_version` | `(ref, *, storage=None)`; never records a use |
 | `list_models` | `(*, storage=None)`; models and datasets |

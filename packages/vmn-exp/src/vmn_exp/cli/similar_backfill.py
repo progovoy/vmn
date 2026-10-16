@@ -18,7 +18,9 @@ A clean tree's entry, with nothing changed, is complete; a run whose code
 object is gone counts as ``partial`` and gets one without ``changed`` — or
 with its older entry's. Code the store lists but could not read fails the run
 (nothing written: the next backfill retries it), as does any other error of
-one run, a malformed run state included.
+one run, a malformed run state included. The runs it appended to are
+refreshed into the index right after, which refiles their similar-runs
+documents (plan 24).
 """
 from collections import Counter, defaultdict
 
@@ -72,6 +74,27 @@ def backfill_app(storage, app_name, dry_run=False):
     *dry_run* derives every entry and appends none."""
     snap = experiment_index.indexed_snapshot(storage, app_name, wait=True)
     code = _CodeFeatures(storage, app_name)
+    appended = []
+    try:
+        yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended)
+    finally:
+        _refile(storage, app_name, appended)
+
+
+def _refile(storage, app_name, verstrs):
+    """Refresh *verstrs* into the app's index: their documents are refiled."""
+    if not verstrs:
+        return
+    index = experiment_index.shared_index(storage, app_name)
+    for verstr in verstrs:
+        index.hint(verstr)
+    try:
+        index.refresh()
+    except Exception:
+        VMN_LOGGER.debug("Refreshing the backfilled runs failed", exc_info=True)
+
+
+def _backfill_rows(storage, app_name, snap, code, dry_run, appended):
     for row in snap.rows:
         verstr = row["verstr"]
         try:
@@ -84,6 +107,7 @@ def backfill_app(storage, app_name, dry_run=False):
                                             snap.run_states.get(verstr))
             if not dry_run:
                 _append(storage, app_name, verstr, entry)
+                appended.append(verstr)
         except Exception as exc:
             VMN_LOGGER.debug(f"Backfilling {verstr} failed", exc_info=True)
             yield verstr, FAILED, str(exc) or type(exc).__name__

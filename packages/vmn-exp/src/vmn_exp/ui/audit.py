@@ -4,7 +4,12 @@
 Every request to a mutating API route (any route whose declared role is above
 ``viewer``) leaves one entry, refused ones included, as do logins. Entries
 live in the control plane (backed up, never part of the disposable cache).
+An entry's id starts with its zero-padded microsecond timestamp
+(:func:`audit_key`), so ids sort by time and retention deletes by id range
+(:mod:`~vmn_exp.ui.control_plane_sweep`). Pages and counts run in SQL; the
+export streams.
 """
+import json
 import secrets
 import time
 
@@ -17,6 +22,11 @@ from vmn_exp.ui.auth.principal import VIEWER
 READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
 
+def audit_key(ts):
+    """The id prefix of entries recorded at *ts*; every earlier entry's id sorts below it."""
+    return f"{int(ts * 1e6):020d}"
+
+
 class AuditLog:
     def __init__(self, store, clock=time.time):
         self.store = store
@@ -24,7 +34,7 @@ class AuditLog:
 
     def record(self, actor, action, actor_name="", **fields):
         ts = self.clock()
-        entry_id = f"{int(ts * 1e6):020d}-{secrets.token_hex(4)}"
+        entry_id = f"{audit_key(ts)}-{secrets.token_hex(4)}"
         entry = {"id": entry_id, "ts": ts, "actor": actor, "actor_name": actor_name,
                  "action": action, **fields}
         self.store.put("audit", entry_id, entry)
@@ -41,7 +51,15 @@ class AuditLog:
 
     def page(self, offset=0, limit=100):
         """Newest first."""
-        return self.entries()[::-1][offset:offset + limit]
+        return self.store.page("audit", offset, limit)
+
+    def count(self):
+        return self.store.count("audit")
+
+    def export_lines(self):
+        """Every entry as a JSON line, oldest first, read in batches."""
+        entries = self.store.scan("audit")  # called here, so it captures the request's org
+        return (json.dumps(entry) + "\n" for entry in entries)
 
 
 def audited_route(method, route):

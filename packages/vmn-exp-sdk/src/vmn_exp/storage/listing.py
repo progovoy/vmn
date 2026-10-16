@@ -47,6 +47,7 @@ PARALLEL_MIN_DIRS = 2000
 PROCESS_MIN_DIRS = 10_000
 _THREADS = 16
 _SUBDIRS = (LOG_DIR, METRICS_DIR)
+SIGNED_SUBDIRS = frozenset(_SUBDIRS)  # folders listed as part of a record
 _LOG_AT = _SUBDIRS.index(LOG_DIR)
 _LOG_PREFIX = LOG_DIR + "/"
 
@@ -129,7 +130,8 @@ def _had(known, st):
     return known[0][2] if known and known[0][:2] == (st.st_mtime_ns, st.st_ino) else None
 
 
-def _settle_ns(mtime_ns):
+def settle_ns(mtime_ns):
+    """How long after *mtime_ns* a later change surely stamps a later mtime."""
     return _FINE_SETTLED_NS if mtime_ns % 10**9 else _COARSE_SETTLED_NS
 
 
@@ -168,7 +170,7 @@ def scan_dir(path, known=None, identity=False):
         else:
             files = _files_in(path, log_mtime_ns)
         mtime_ns = max([st.st_mtime_ns] + [sub[0] for sub in sub_sigs if sub])
-        if mtime_ns > scanned_at - _settle_ns(mtime_ns):
+        if mtime_ns > scanned_at - settle_ns(mtime_ns):
             return files, None
     return files, (sig, list(files))
 

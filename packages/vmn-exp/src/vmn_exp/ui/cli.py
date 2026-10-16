@@ -168,6 +168,7 @@ def _oidc_chain(cfg, control_plane, env):
 def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):
     """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
     from vmn_exp.core.writer import set_default_writer_id
+    from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS
     from vmn_exp.ui.onboarding import SERVER_WRITER_ID
     from vmn_exp.ui.server import create_app
 
@@ -188,6 +189,7 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
         control_plane=control_plane,
         search_dsn=dsn,
         cache_dsn=dsn,
+        audit_retention_days=cfg.audit.retention_days if cfg else DEFAULT_AUDIT_RETENTION_DAYS,
         **kwargs,
     )
     app.state.config = cfg
@@ -201,9 +203,13 @@ def handle_ui(args):
             from vmn_exp.ui.onboarding_cli import handle_onboarding
 
             return handle_onboarding(args)
+        if args.ui_args[0] == "backup":
+            from vmn_exp.ui import backup_cli
+
+            return backup_cli.handle_backup(args)
         if args.ui_args[0] != "cache":
             VMN_LOGGER.error(
-                f"Unknown ui action {args.ui_args[0]!r} (use: cache, onboarding)")
+                f"Unknown ui action {args.ui_args[0]!r} (use: backup, cache, onboarding)")
             return 2
         from vmn_exp.ui.cache_cli import handle_cache
 

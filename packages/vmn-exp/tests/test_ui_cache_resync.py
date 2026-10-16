@@ -1,6 +1,6 @@
 """Plan 11 §4.6: a workspace's cache heals itself without a restart. A
 detected problem (or ``resync(full=True)``) rebuilds in the background into
-a new SQLite file swapped in by rename while the live indexes keep serving;
+a new SQLite file swapped in by a pointer flip while the live indexes keep serving;
 a plain ``resync()`` re-checks every record's signature."""
 import os
 import threading
@@ -9,6 +9,7 @@ import pytest
 
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_store import SqliteStore
+from vmn_exp.core.sqlite_files import live_path
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import cache_resync
 from vmn_exp.ui.cache_health import SqliteHealth
@@ -66,11 +67,11 @@ def test_a_healthy_cache_is_left_alone(st, path):
     assert cache.status()["rebuilds"] == 0
 
 
-def test_a_full_resync_swaps_a_new_file_in_by_rename(st, path):
+def test_a_full_resync_swaps_a_new_file_in_by_a_pointer_flip(st, path):
     index, cache, verstrs = _setup(st, path)
     swapped = []
-    cache.on_swapped(lambda: swapped.append(os.stat(path).st_ino))
-    before = os.stat(path).st_ino
+    cache.on_swapped(lambda: swapped.append(os.stat(live_path(path)).st_ino))
+    before = os.stat(live_path(path)).st_ino
     cache.resync(full=True)
     assert cache.wait(10)
     assert swapped and swapped[0] != before

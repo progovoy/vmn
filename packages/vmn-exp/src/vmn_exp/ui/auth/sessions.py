@@ -24,7 +24,9 @@ class SessionService:
     def open(self, principal):
         """A new session id (the cookie value) for *principal*."""
         session_id = secrets.token_urlsafe(32)
-        expires = self.clock() + self.ttl_sec
+        now = self.clock()
+        self.store.sweep_expired(now)
+        expires = now + self.ttl_sec
         with org_context(principal.org_id or effective_org(0)):
             self.store.put("session", _key(session_id), asdict(principal), expires)
         return session_id

@@ -75,8 +75,8 @@ def reads(monkeypatch):
     return calls
 
 
-def _index(storage, tmp_path, name="index.sqlite"):
-    return ExperimentIndex(storage, APP, cache_path=str(tmp_path / name))
+def _index(storage, tmp_path, name="index.sqlite", **kwargs):
+    return ExperimentIndex(storage, APP, cache_path=str(tmp_path / name), **kwargs)
 
 
 def test_rows_and_run_states_match_the_direct_fold(tmp_path):
@@ -150,7 +150,8 @@ def test_new_and_deleted_experiments(tmp_path):
 def test_a_rewritten_log_is_refolded_from_scratch(tmp_path):
     storage = _storage(tmp_path / "repo")
     verstrs = _seed(storage, n=2)
-    index = _index(storage, tmp_path)
+    # Written in place, behind vmn's back: only a full listing sees it.
+    index = _index(storage, tmp_path, full_sweep_sec=0)
     index.refresh()
 
     log = os.path.join(storage._local._snapshot_dir(APP, verstrs[1]), "log/w0.jsonl")
@@ -166,7 +167,8 @@ def test_a_rewritten_log_is_refolded_from_scratch(tmp_path):
 def test_a_partial_trailing_line_is_folded_once_it_completes(tmp_path):
     storage = _storage(tmp_path / "repo")
     verstrs = _seed(storage, n=1)
-    index = _index(storage, tmp_path)
+    # Written in place, behind vmn's back: only a full listing sees it.
+    index = _index(storage, tmp_path, full_sweep_sec=0)
     index.refresh()
 
     log = os.path.join(storage._local._snapshot_dir(APP, verstrs[0]), "log/w0.jsonl")

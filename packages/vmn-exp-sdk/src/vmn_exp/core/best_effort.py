@@ -8,6 +8,8 @@ never thrown at the workload.
 """
 import threading
 
+from vmn_exp._base import VMN_LOGGER
+
 
 class BestEffort:
     """Call a step; on failure report it and return None instead of raising.
@@ -47,3 +49,16 @@ def quiet(logger):
     """A :class:`BestEffort` that only ever logs at debug."""
     return BestEffort(logger, describe=None, warn_first=False)
 
+
+
+_warned_keys = set()
+_warned_lock = threading.Lock()
+
+
+def warn_once(key, message):
+    """*message* as a warning the first time this process sees *key*, as
+    debug after (a flapping file or mount cannot flood the output)."""
+    with _warned_lock:
+        first = key not in _warned_keys
+        _warned_keys.add(key)
+    (VMN_LOGGER.warning if first else VMN_LOGGER.debug)(message)

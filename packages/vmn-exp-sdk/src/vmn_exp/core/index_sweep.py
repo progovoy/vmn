@@ -39,52 +39,27 @@ record names (for records no journal entry announced). What the check finds
 changed that no hint or live listing explains is counted in :attr:`Sweep.drift`.
 Its only full listings are the first one and :meth:`Sweep.request_full`.
 
-The fast tier is opt-in: ``full_sweep_sec`` defaults to 0, where every refresh
-is a full listing and an in-place write by anyone shows up at once. A server
-that refreshes often sets it (a mutable attribute) and sweeps in the background.
+``full_sweep_sec`` (default 300; 0 lists fully every time) holds across
+processes: the baselines persist (:mod:`~vmn_exp.core.index_baseline`), so a
+new process lists names once and the files of only the records above. What no
+sig shows — a settled record changed in place behind vmn's back (every vmn
+write moves its sig), on another host behind its local copy, or on S3 — shows
+up by the next full sweep, whichever process runs it.
 """
 import threading
 import time
 
+from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
-from vmn_exp.core.status import (
-    RUNNING,
-    derive_status,
-    observed_at_from_mtime,
-)
+from vmn_exp.core.index_sweep_state import SweepState, _settled
 
-DEFAULT_FULL_SWEEP_SEC = 0  # 0: every refresh is a full listing
+DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
 _wall = time.time
 
 
-def _observed_at(rs_sig):
-    """The run state file's storage mtime from its ``[size, mtime, ...]``
-    signature (mirrors :mod:`experiment_index_snapshot`'s own reading of it)
-    — the store-side clock ``derive_status`` wants for clock-skew-proof
-    ``stuck`` detection."""
-    return observed_at_from_mtime(rs_sig[1]) if rs_sig and len(rs_sig) > 1 else None
-
-
-def _settled(record):
-    """False only for ``running``: every other status will not change on its
-    own, so it may drop to the reduced re-listing rate (sig-diff + the
-    touched window) instead of being listed on every fast cycle forever.
-
-    ``stuck`` is included: it is not going to recover by itself, and if it
-    somehow does (a write resuming it), that write bumps the record's
-    directory signature, which the caller's sig-diff check still catches on
-    the very next cycle regardless of status.
-    """
-    try:
-        status = derive_status(record["run_state"], observed_at=_observed_at(record.get("rs_sig")))
-    except (TypeError, ValueError):  # a hand-edited, unparseable exit code
-        return False
-    return status != RUNNING
-
-
-class Sweep:
+class Sweep(SweepState):
     """The listing policy of one index; times are the caller's monotonic clock."""
 
     def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC, watch=None):
@@ -104,19 +79,26 @@ class Sweep:
         self._wrapped = False  # the rolling slice started a new round
         self.drift = 0  # records the consistency check found changed unannounced
         self.last_reconcile_at = None  # wall time a full listing or round last began
+        self._restored = False  # baselines restored: check the records against them
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""
         self.watch.reset()
         self._last_full, self._sigs, self._live, self._pending = None, {}, None, set()
+        self._restored = False
         self._ring, self._cursor, self._credit, self._rolled_at = [], 0, 0.0, None
 
     def touch(self, key, now):
         self._touched[key] = now
 
-    def track(self, key):
-        """*key*'s record was (re)loaded: judge it again at the next listing."""
-        if self._live is not None:
+    def track(self, key, record=None):
+        """*key*'s record was (re)loaded as *record*: judge it again at the
+        next listing — unless *record* already says it is no live run."""
+        if self._live is None:
+            return
+        if record is not None and (not has_meta(record) or _settled(record)):
+            self._live.discard(key)
+        else:
             self._live.add(key)
 
     def hint(self, key):
@@ -144,12 +126,15 @@ class Sweep:
         """``(files of the records to refresh, keys of records gone)``."""
         if self.journaled:
             return self._journaled_listing(records, now)
-        changes = self._name_changes()
-        if changes is None or self._full_due(now):
+        full_due = self._full_due(now)
+        changes = self._name_changes(journal=not full_due)
+        if changes is None or full_due:
             if changes is not None:
                 self._apply_sigs(*changes)
             return self._full_listing(records, now)
         changed, gone_names = changes
+        if self._restored:
+            changed, gone_names = self._against_records(records, changed, gone_names)
         keys = self._to_list(records, changed, gone_names, now)
         listing = self.watch.files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
@@ -203,18 +188,18 @@ class Sweep:
         record = records.get(key)
         if record is None:
             return True  # a claim still waiting for its metadata
-        if record["meta"] is None or _settled(record):
+        if not has_meta(record) or _settled(record):
             self._live.discard(key)
             return False
         return True
 
-    def _name_changes(self):
+    def _name_changes(self, journal=False):
         # Sigs are kept even while every refresh is full, so switching the
         # fast tier on later does not re-list every record once — unless the
         # backend has no sigs to give (S3), where asking is a wasted listing.
         if not self.full_sweep_sec and not self._sigs_known:
             return None
-        changes = self.watch.name_changes()
+        changes = self.watch.name_changes(_wall(), journal)
         if changes is None:
             return None
         changed, gone = changes
@@ -231,7 +216,9 @@ class Sweep:
         self._touched = {
             k: t for k, t in self._touched.items() if now - t < self._touch_window()
         }
-        candidates = (set(changed) | self._pending | self._live | set(self._touched)) - gone
+        # A journal names every later write, appends included: no touch window.
+        touched = () if getattr(self.watch, "from_journal", False) else self._touched
+        candidates = (set(changed) | self._pending | self._live | set(touched)) - gone
         keys = []
         for key in candidates:
             if self._judge(records, key, changed.get(key, self._sigs.get(key)), now):
@@ -242,7 +229,7 @@ class Sweep:
     def _judge(self, records, key, sig, now):
         """:meth:`_may_change`, keeping the live set current on the way."""
         record = records.get(key)
-        if record is None or record["meta"] is None:
+        if record is None or not has_meta(record):
             self._live.discard(key)
             return record is None
         settled = _settled(record)
@@ -275,11 +262,12 @@ class Sweep:
 
     def _full_listing(self, records, now):
         self._last_full = self._rolled_at = now
+        self._restored = False  # every record is compared below
         self.last_reconcile_at = _wall()
         listing, present = self.watch.full_changes()
         if self._live is None:
             self._live = {
-                k for k, r in records.items() if r["meta"] is not None and not _settled(r)
+                k for k, r in records.items() if has_meta(r) and not _settled(r)
             }
         self._pending = {k for k in self._sigs if k not in present}
         return listing, [key for key in records if key not in present]
@@ -298,7 +286,7 @@ class Sweep:
         record = records.get(key)
         if record is None:
             return True
-        if record["meta"] is None:
+        if not has_meta(record):
             return False  # not an experiment (a legacy verinfo file)
         return self._changed_since(key, sig, now, _settled(record))
 

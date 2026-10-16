@@ -2,10 +2,10 @@
 """An incremental index of an app's experiments: leaderboard rows without
 re-reading every log whenever anything changes.
 
-Which records a refresh looks at is :mod:`experiment_index_sweep`'s call: by
-default all of them; with ``full_sweep_sec`` set (opt-in, for a server that
-refreshes often), the new and live ones from a names-only listing and all of
-them every ``full_sweep_sec``. Of those only what moved is read: a new record
+Which records a refresh looks at is :mod:`experiment_index_sweep`'s call: the
+new, changed, live and recently changed ones from a names-only listing, and
+all of them every ``full_sweep_sec`` (300 s, across processes: the listing
+baselines persist beside the records, :mod:`experiment_index_baseline`). Of those only what moved is read: a new record
 is loaded, a changed ``metadata.yml`` re-read, a grown log read from where it
 was last read up to (:mod:`experiment_index_logs`), a rewritten
 ``run_state.yml`` — a heartbeat — re-read on its own. The folded state
@@ -49,9 +49,14 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp.core.fold import fold_log, fold_row
 from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index_follower import apply_delta
+from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
+from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
 from vmn_exp.core.index_listing import ListingWatch
+from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_record import refresh_record, update_record
+from vmn_exp.core.index_rows import adopted as _adopted
+from vmn_exp.core.index_rows import row_copies as _row_copies
 from vmn_exp.core.index_snapshot import (
     IndexSnapshot,
     RowCache,
@@ -76,11 +81,6 @@ _REMOTE_WORKERS = 16
 _monotonic = time.monotonic
 
 
-def _timestamp(meta):
-    ts = meta.get("timestamp", "")
-    return ts if isinstance(ts, str) else ""
-
-
 class ExperimentIndex:
     """Incrementally maintained rows for one app of one storage backend."""
 
@@ -92,7 +92,9 @@ class ExperimentIndex:
         self.app_name = app_name
         self._cache_path = cache_path
         self._store = cache_store or IndexStore(cache_path)
+        self._unsaved = PendingSave()  # what a failed save left to persist
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
+        self._baseline = ListingBaseline(self._store, app_name)
         self._io = None  # the I/O helper process, once use_io_process() started it
         self._records = None
         self._order = None  # record keys in storage order
@@ -107,6 +109,7 @@ class ExperimentIndex:
         self.generation = 0
         self.last_refresh_at = None  # monotonic start of the last refresh
         self._cache_gen = None  # a follower's CacheStore generation; None for a leader
+        self._lean = False  # see sync()
 
     @classmethod
     def follower(cls, cache_store, scope):
@@ -119,7 +122,7 @@ class ExperimentIndex:
 
     @property
     def full_sweep_sec(self):
-        """Seconds between full listings; 0 (the default) lists fully every time."""
+        """Seconds between full listings (default 300); 0 lists fully every time."""
         return self._sweep.full_sweep_sec
 
     @full_sweep_sec.setter
@@ -171,15 +174,33 @@ class ExperimentIndex:
             self._refresh_locked()
         return self
 
+    def sync(self):
+        """Bring the persisted rows up to date with storage; whether all of
+        them are. An index not loaded yet stays so: a *lean* copy refreshes
+        them, decoding no record it does not re-read, building no snapshot."""
+        with self._lock:
+            if self._records is not None or self._io is not None or self._lean:
+                self._refresh_locked()
+                return not self._unsaved.pending
+        lean = ExperimentIndex(self._storage, self.app_name, self._cache_path,
+                               self.full_sweep_sec, self._store)
+        lean._lean = True
+        return lean.sync()
+
     def refresh_if_stale(self, max_age_sec):
-        """The current snapshot, refreshed first if older than *max_age_sec*.
+        """The current snapshot, refreshed first if older than a positive
+        *max_age_sec*; 0 (or None) answers it as it is.
 
         While another thread refreshes, the current snapshot is returned at
-        once — only the very first load waits for it.
+        once — only the very first load waits for it (and loads whatever the
+        age). A caller that must see every write made before it calls
+        :meth:`refresh`.
         """
         snap = self._snapshot
         if snap is None:
             return self._first_load()
+        if (max_age_sec or 0) <= 0:
+            return snap
         fresh_at = self.last_refresh_at  # None: persisted rows not revalidated yet
         if fresh_at is not None and _monotonic() - fresh_at < max_age_sec:
             return snap
@@ -230,7 +251,11 @@ class ExperimentIndex:
                 other._sweep.hint(key)
             self._records, self._order, self._stamps = other._records, other._order, other._stamps
             self._rows, self._sweep = other._rows, other._sweep
-            self._store = store or other._store
+            self._store, self._unsaved = store or other._store, other._unsaved
+            if self._store is not other._store:
+                self._baseline = ListingBaseline(self._store, self.app_name)
+            else:
+                self._baseline = other._baseline
             self.generation += 1
             self._snapshot = self._build_snapshot()
 
@@ -253,8 +278,10 @@ class ExperimentIndex:
 
     def _refresh_from_storage(self, started):
         if self._records is None:
+            if self._keeps_baseline():  # read before the records it vouches for
+                self._baseline.load(self._sweep, started)
             self._records = self._load_records()
-            if self._records and self._snapshot is None:
+            if self._records and self._snapshot is None and not self._lean:
                 self._publish_persisted()
         listing, removed = self._sweep.listing(self._records, started)
 
@@ -277,7 +304,7 @@ class ExperimentIndex:
                 redescribed = True
             if old is None or dirty or state_moved:
                 touched.add(key)
-                self._sweep.track(key)
+                self._sweep.track(key, record)
             if dirty:
                 self._rows.pop(key, None)
             self._records[key] = _adopted(old, record, state_moved)
@@ -285,6 +312,12 @@ class ExperimentIndex:
             del self._records[key]
             self._rows.pop(key, None)
             self._sweep.forget(key)
+        if not self._lean:
+            self._publish(new, removed, redescribed, touched)
+        if self._keeps_baseline() and not self._unsaved.pending:
+            self._baseline.save(self._sweep, started)
+
+    def _publish(self, new, removed, redescribed, touched):
         # Only a new, removed or re-described record can move in the order.
         if new or removed or redescribed or self._order is None:
             self._reorder = (new, redescribed or bool(removed))
@@ -292,6 +325,12 @@ class ExperimentIndex:
         if touched or removed or self._snapshot is None:
             self.generation += 1
             self._snapshot = self._build_snapshot(None if removed else touched)
+
+    def _keeps_baseline(self):
+        """Whether listing baselines persist: not for a journaled sweep, one
+        whose listings run in the I/O helper process, or one listing fully
+        every time (nothing to carry on from)."""
+        return self._io is None and not self._sweep.journaled and bool(self.full_sweep_sec)
 
     def _publish_persisted(self):
         """Serve the records as persisted until the listing under way
@@ -319,7 +358,19 @@ class ExperimentIndex:
             self._snapshot = self._build_snapshot(None if removed else changed)
 
     def _load_records(self):
-        return self._io.load() if self._io else self._store.load(self.app_name)
+        if self._io:
+            return self._io.load()
+        lazy_of = getattr(self._store, "load_lazy", None) if self._lean else None
+        lazy = lazy_of(self.app_name) if lazy_of else None
+        if lazy is not None:
+            return lazy
+        warm = getattr(self._store, "load_warm", None)
+        loaded = warm(self.app_name) if warm else None
+        if loaded is None:
+            return self._store.load(self.app_name)
+        records, self._order, lean, self._stamps = loaded
+        self._rows.seed(lean)
+        return records
 
     def _refresh_and_persist(self, work, removed):
         """``(key, record or None, dirty, moved, state moved)`` per item of
@@ -330,8 +381,8 @@ class ExperimentIndex:
         direct_files = getattr(self._storage, "direct_files", None)
         direct = direct_files() if direct_files else self._storage
         results = self._refresh_records(work, direct)
-        self._store.save(
-            self.app_name,
+        self._unsaved.save(
+            self._store, self.app_name,
             {key: record for key, record, dirty, _, _ in results if dirty},
             removed,
             {key: record for key, record, _, _, state_moved in results if state_moved},
@@ -367,22 +418,22 @@ class ExperimentIndex:
         return update_record(self._storage, direct, self.app_name, key, names, record)
 
     def _sorted_keys(self):
-        """Record keys in storage order (by timestamp, stably). New records
+        """Record keys in storage order (by timestamp, then key — the order
+        the persisted ``exp_rows`` number, see
+        :mod:`vmn_exp.core.index_lean_store`). New records
         are bisected into the current order; a first build, a re-described
         record (its timestamp may have moved) or a removal sorts them all."""
         new, resort = self._reorder
         if self._order is None or resort:
             keys = [k for k, r in self._records.items() if r["meta"] is not None]
-            pairs = sorted(((_timestamp(self._records[k]["meta"]), k) for k in keys),
-                           key=lambda pair: pair[0])
-            self._stamps = [stamp for stamp, _ in pairs]
-            return [key for _, key in pairs]
+            self._stamps = sorted((_timestamp(self._records[k]["meta"]), k) for k in keys)
+            return [key for _, key in self._stamps]
         order = list(self._order)
         for key in new:
             meta = self._records[key]["meta"]
             if meta is None:
                 continue  # not an experiment
-            stamp = _timestamp(meta)
+            stamp = (_timestamp(meta), key)
             at = bisect.bisect_right(self._stamps, stamp)
             self._stamps.insert(at, stamp)
             order.insert(at, key)
@@ -446,32 +497,6 @@ class ExperimentIndex:
         """``{verstr: raw run state or None}`` for the rows' experiments."""
         snap = self._snapshot
         return dict(snap.run_states) if snap is not None else {}
-
-
-def _adopted(old, record, state_moved):
-    """*record* as refreshed. A copy back from the helper process keeps
-    *old*'s run state object unless it moved: readers diff generations by
-    identity."""
-    if old is not None and record is not old and not state_moved:
-        record["run_state"] = old["run_state"]
-    return record
-
-
-def _row_copies(snap, with_create_note):
-    """Copies of *snap*'s rows with their ``metric_summary`` and ``outputs``
-    (and create note)."""
-    rows = [
-        dict(
-            row,
-            metric_summary=snap.metric_summary(row["verstr"]),
-            outputs=dict(snap.outputs_of(row["verstr"])),
-        )
-        for row in snap.rows
-    ]
-    if with_create_note:
-        for row in rows:
-            row["create_note"] = snap.create_notes[row["verstr"]]
-    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -594,9 +619,10 @@ def indexed_snapshot(
     fallback=direct_snapshot,
     schema=None,
 ):
-    """The shared index's :class:`IndexSnapshot`, refreshed when older than
-    *max_age_sec* — or, with *wait*, refreshed now even if another thread's
-    refresh has to finish first. *full_sweep_sec* is passed on to
+    """The shared index's :class:`IndexSnapshot`, refreshed when older than a
+    positive *max_age_sec* (the default 0 takes a loaded index as it is: see
+    :meth:`ExperimentIndex.refresh_if_stale`) — or, with *wait*, refreshed now
+    even if another thread's refresh has to finish first. *full_sweep_sec* is passed on to
     :func:`shared_index`. Rows follow the metrics *schema* the caller passes
     (:meth:`IndexSnapshot.summarized`), none by default. If the index fails,
     ``fallback(storage, app_name, schema)`` answers instead; a None

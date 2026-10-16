@@ -47,7 +47,7 @@ from vmn_exp.core.query import filter_rows
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_storage
 from vmn_exp.core.step_metric import join_all, step_metrics
-from vmn_exp.core.refs import placement_snapshot, resolve_experiment
+from vmn_exp.core.refs import point_placement, resolve_experiment, tree_links
 from vmn_exp.core.similar_search import find as _find_similar
 from vmn_exp.core.status import (
     load_run_state,
@@ -209,11 +209,13 @@ def _subtree_row(app_name, storage, verstr, snapshot):
     if meta is None:
         return None, None
 
+    parent_of, children_of = tree_links(snapshot)
     status = run_status(
         verstr,
-        dict(snapshot.edges),
+        parent_of,
         lambda v: load_run_state(storage, app_name, v),
         observed_at=lambda v: run_state_observed_at(storage, app_name, v),
+        children_of=children_of,
         row_of=snapshot.row,
     )
     return {"idx": row["idx"], "meta": meta}, status
@@ -233,7 +235,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     metric's value at the same step, and points without one are dropped.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    snapshot = placement_snapshot(storage, app_name)
+    snapshot = point_placement(storage, app_name)
     verstr, err = resolve_experiment(
         storage, app_name, ref or "latest", snapshot=snapshot
     )

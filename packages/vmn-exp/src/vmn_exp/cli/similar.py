@@ -24,6 +24,7 @@ from vmn_exp.cli.similar_args import read_context
 from vmn_exp.cli.similar_output import print_items
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.query import QueryError
+from vmn_exp.core.similar_fts import Fts5Missing
 from vmn_exp.core.similar_search import DEFAULT_TOP, conf_schema_of, find
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.features import features_for_working_tree
@@ -62,7 +63,7 @@ def experiment_similar(vcs, storage, app_name, args):
     except QueryError as exc:
         VMN_LOGGER.error(f"Invalid --query: {exc}")
         return 1
-    except ValueError as exc:
+    except (ValueError, Fts5Missing) as exc:
         VMN_LOGGER.error(str(exc))
         return 1
     print_items(items, app_name, as_json=args.json, with_app=args.all_apps)

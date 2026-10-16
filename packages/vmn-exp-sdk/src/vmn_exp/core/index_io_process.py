@@ -92,7 +92,7 @@ class _Watch:
     def __init__(self, io):
         self._io = io
 
-    def name_changes(self):
+    def name_changes(self, wall=None, journal=False):
         return self._io.call("name_changes")
 
     def files(self, keys):

@@ -54,6 +54,7 @@ from vmn_exp.snapshot import (
     get_git_difftool,
 )
 import vmn_exp.core.index as experiment_index
+import vmn_exp.core.index_list as index_list
 import vmn_exp.core.writer as experiment_writer
 from vmn_exp.core.from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
@@ -74,12 +75,13 @@ from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.core.query import QueryError, filter_rows
 from vmn_exp.core.refs import (
-    parent_edges,
     placement_snapshot,
+    point_placement,
     recent_verstrs,
     resolve_experiment,
     resolve_parent,
     storage_index,
+    tree_links,
 )
 from vmn_exp.core.status import (
     CREATED,
@@ -674,29 +676,39 @@ def _format_list_row(row, node, columns):
     )
 
 
-@measure_runtime_decorator
-def experiment_list(vcs, params, storage, args):
-    app_name = _app_name(vcs, args)
-    # Through the experiment index: after the first listing, only the logs and
-    # run states that changed since are read again.
-    schema = metrics_schema(vcs)
+def _listed(storage, app_name, args, schema):
+    """``(rows, declared schema, app has runs)``: the annotated runs the
+    query and archived filter keep, in storage order — from the persisted
+    index (only ``--last``'s without a query), else from a snapshot."""
+    query, archived = getattr(args, "query", None), getattr(args, "archived", False)
+    view = index_list.list_view(
+        storage, app_name, query, archived, getattr(args, "last", None), schema
+    )
+    if view is not None:
+        return view
     index_rows, run_states, observed, declared = experiment_index.indexed_status_view(
         storage, app_name, with_create_note=True, schema=schema
     )
-    as_json = getattr(args, "json", False)
-    if not index_rows and not as_json:
-        print(f"No experiments found for {app_name}")
-        return 0
-
     # Status and tree fields span every run, so depth, tree_status and the
     # query see the whole tree whatever subset is shown.
     tree_rows = annotate_rows(index_rows, run_states, observed)
+    matching = filter_archived(filter_rows(tree_rows, query), archived)
+    return matching, declared, bool(index_rows)
+
+
+@measure_runtime_decorator
+def experiment_list(vcs, params, storage, args):
+    app_name = _app_name(vcs, args)
+    schema = metrics_schema(vcs)
     try:
-        matching = filter_rows(tree_rows, getattr(args, "query", None))
-        matching = filter_archived(matching, getattr(args, "archived", False))
+        matching, declared, any_runs = _listed(storage, app_name, args, schema)
     except QueryError as e:
         VMN_LOGGER.error(f"Invalid --query: {e}")
         return 1
+    as_json = getattr(args, "json", False)
+    if not any_runs and not as_json:
+        print(f"No experiments found for {app_name}")
+        return 0
 
     rows = _list_rows(
         matching, getattr(args, "last", None), args.sort, effective_schema(schema, declared)
@@ -708,10 +720,9 @@ def experiment_list(vcs, params, storage, args):
         print(dumps([row["meta"] for row in rows]))
         return 0
 
-    tree = {row["verstr"]: row for row in tree_rows}
     columns = _metric_columns(schema, rows)
     for row in rows:
-        print(_format_list_row(row, tree[row["meta"]["verstr"]], columns))
+        print(_format_list_row(row, row["meta"], columns))
     return 0
 
 
@@ -721,18 +732,18 @@ def experiment_list(vcs, params, storage, args):
 
 
 def _subtree(storage, app_name, verstr, metadata, snapshot=None):
-    """``(run_state, tree fields, observed_at)`` of *verstr*: the parent edges
-    come from the experiment index, and run state (with its store write time)
-    is read for the run's subtree only — a handful of rows even when the app
-    has thousands of experiments."""
-    snapshot = placement_snapshot(storage, app_name, snapshot)
-    parent_of = parent_edges(storage, app_name, snapshot)
-    parent_of.setdefault(verstr, metadata.get("parent"))
+    """``(run_state, tree fields, observed_at)`` of *verstr*: the parent/child
+    links come from the experiment index (point reads once it is persisted),
+    and run state (with its store write time) is read for the run's subtree
+    only — a handful of rows even when the app has thousands of experiments."""
+    snapshot = point_placement(storage, app_name, snapshot)
+    parent_of, children_of = tree_links(snapshot, verstr, metadata.get("parent"))
     observed_at = lambda v: run_state_observed_at(storage, app_name, v)  # noqa: E731
     run_state, tree = subtree_status(
         verstr,
         parent_of,
         lambda v: load_run_state(storage, app_name, v),
+        children_of=children_of,
         observed_at=observed_at,
         row_of=snapshot.row,
     )
@@ -777,7 +788,7 @@ def _print_output_log(storage, app_name, verstr):
 
 def experiment_show(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
-    snapshot = placement_snapshot(storage, app_name)
+    snapshot = point_placement(storage, app_name)
     verstr, err = _resolve_experiment_version(
         storage, vcs, args, default_latest=True, snapshot=snapshot
     )

@@ -3,14 +3,14 @@
 
 Each target hands the rebuild a store per app, takes each built index, and
 switches every app at once in :meth:`commit`, so a reader never sees a
-half-built cache: SQLite builds a new file next to the live one and renames
-it over it; Postgres publishes each scope as one transaction under a
-generation past any a follower holds (the shadow generation). Without a
-persisted cache the rebuild only lives in memory.
+half-built cache: SQLite builds a new generation file beside the live one and
+flips the pointer to it (:mod:`vmn_exp.core.sqlite_files`; the old file goes
+once nothing holds it open); Postgres publishes each scope as one transaction
+under a generation past any a follower holds (the shadow generation). Without
+a persisted cache the rebuild only lives in memory.
 """
-import os
-
-from vmn_exp.core.index_store import SqliteStore, _remove_database
+from vmn_exp.core import sqlite_files
+from vmn_exp.core.index_store import SqliteStore
 
 
 class MemoryTarget:
@@ -30,12 +30,11 @@ class MemoryTarget:
 class SqliteSwap:
     def __init__(self, path):
         self.path = path
-        self._tmp = path + ".rebuild"
+        self._new = sqlite_files.new_generation(path)
         self._stores = []
-        _remove_database(self._tmp)
 
     def store_for(self, app):
-        store = SqliteStore(self._tmp)
+        store = SqliteStore(self._new)
         self._stores.append(store)
         return store
 
@@ -45,12 +44,8 @@ class SqliteSwap:
     def commit(self):
         for store in self._stores:
             store.close()  # checkpoints the WAL into the file
-        for suffix in ("-wal", "-shm"):
-            try:
-                os.remove(self.path + suffix)
-            except OSError:
-                pass
-        os.replace(self._tmp, self.path)
+        sqlite_files.flip(self.path, self._new)
+        sqlite_files.sweep(self.path)
 
     def live_store(self, app):
         return SqliteStore(self.path)

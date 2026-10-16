@@ -10,6 +10,9 @@ from s3_helpers import cached_host, entry, meta, mocked_bucket, s3_storage
 from vmn_exp.core.index import ExperimentIndex, direct_rows
 
 APP = "app"
+# Another host's writes reach this host's index through the remote only, which
+# signs no record: these indexes list fully on every poll (full_sweep_sec=0)
+# so each poll is compared with a full re-read.
 
 
 @pytest.fixture(autouse=True)
@@ -66,7 +69,7 @@ def test_a_cached_storage_with_a_remote_is_read_per_file(tmp_path):
 
 def test_a_new_remote_segment_is_the_only_remote_log_read(tmp_path):
     a, b = _two_hosts_one_record(tmp_path)
-    index = ExperimentIndex(a, APP).refresh()
+    index = ExperimentIndex(a, APP, full_sweep_sec=0).refresh()
     gets = _log_gets(a)
     b.append_log_entry(APP, "v", "wb", entry(2))
     b.sync_log_to_remote(APP, "v", "wb")
@@ -77,7 +80,7 @@ def test_a_new_remote_segment_is_the_only_remote_log_read(tmp_path):
 
 def test_local_growth_reads_only_the_new_bytes(tmp_path):
     a, _ = _two_hosts_one_record(tmp_path)
-    index = ExperimentIndex(a, APP).refresh()
+    index = ExperimentIndex(a, APP, full_sweep_sec=0).refresh()
     gets, reads = _log_gets(a), _local_reads(a)
     a.append_log_entry(APP, "v", "wa", entry(3))
     index.refresh()
@@ -88,7 +91,7 @@ def test_local_growth_reads_only_the_new_bytes(tmp_path):
 
 def test_an_idle_poll_reads_no_log(tmp_path):
     a, _ = _two_hosts_one_record(tmp_path)
-    index = ExperimentIndex(a, APP).refresh()
+    index = ExperimentIndex(a, APP, full_sweep_sec=0).refresh()
     gets, reads = _log_gets(a), _local_reads(a)
     index.refresh()
     assert gets == [] and reads == []
@@ -128,9 +131,9 @@ def test_incremental_fold_equals_a_full_refold(tmp_path, seed):
     a, b = cached_host(tmp_path, "a"), cached_host(tmp_path, "b")
     a.save(APP, "v0", meta("v0"), {})
     verstrs = ["v0"]
-    index = ExperimentIndex(a, APP)
+    index = ExperimentIndex(a, APP, full_sweep_sec=0)
     for step in range(40):
         _ops(a, b, verstrs, rng, step)
         rows = index.refresh().rows()
-        assert rows == ExperimentIndex(a, APP).refresh().rows(), f"step {step}"
+        assert rows == ExperimentIndex(a, APP, full_sweep_sec=0).refresh().rows(), f"step {step}"
         assert rows == direct_rows(a, APP)[0], f"step {step}"

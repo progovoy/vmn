@@ -88,12 +88,14 @@ def test_append_and_heartbeat_cost_a_fraction_of_the_cold_build(tmp_path):
     with open(os.path.join(base, target, "log/w.jsonl"), "a") as f:
         f.write(json.dumps({"timestamp": "2027-01-01T00:00:00Z", "type": "metrics",
                             "values": {"loss": 0.0001}}) + "\n")
+    os.utime(os.path.join(base, target))  # as vmn's own append does
     append, rows, _ = _refresh(index, counter)
     assert rows[RUNS // 2]["metrics"]["loss"] == 0.0001
 
     state_path = os.path.join(base, rows[7]["verstr"], "run_state.yml")
     with open(state_path, "w") as f:
         f.write("state: finished\nexit_code: 9\nheartbeat: '2026-01-01T00:00:09Z'\n")
+    os.utime(os.path.dirname(state_path))  # vmn's atomic rewrite moves it too
     heartbeat, _, states = _refresh(index, counter)
     assert states[rows[7]["verstr"]]["exit_code"] == 9
 

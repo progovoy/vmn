@@ -218,6 +218,12 @@ class RowCache:
     def pop(self, key, default=None):
         return self._rows.pop(key, default)
 
+    def seed(self, lean):
+        """Start from persisted :func:`lean_row` tuples ``{key: (row, ...)}``
+        (a warm start, plan 25 F1): those records are not folded again until
+        they change."""
+        self._rows.update(lean)
+
     def _row(self, key, idx, record):
         cached = self._rows.get(key)
         if cached is None:

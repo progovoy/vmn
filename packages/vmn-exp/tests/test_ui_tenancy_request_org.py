@@ -52,7 +52,10 @@ def test_the_org_setting_does_not_outlive_its_transaction(app_dsn):
     cp = PostgresControlPlane(app_dsn)
     with org_context(1):
         cp.put("workspace", "w", {"name": "w"})
-    (value,) = cp._db.execute("SELECT current_setting('app.org_id', true)").fetchone()
+    from vmn_exp.ui import pg_pool
+
+    with pg_pool.pool(app_dsn).connection() as conn:  # the one connection put used
+        (value,) = conn.execute("SELECT current_setting('app.org_id', true)").fetchone()
     assert value in (None, "")
 
 

@@ -20,6 +20,7 @@ SINGLE_TENANT_ORG = 0
 RLS_TABLES = (
     "vmn_records", "vmn_run_states", "vmn_tombstones", "vmn_scope_gen", "vmn_kv",
     "vmn_api_tokens", "vmn_sessions", "vmn_login_states", "vmn_workspaces", "vmn_audit",
+    "vmn_search_rows",
 )
 CREDENTIAL_TABLES = ("vmn_api_tokens", "vmn_sessions")
 

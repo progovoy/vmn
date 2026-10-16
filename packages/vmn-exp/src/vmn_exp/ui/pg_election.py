@@ -6,10 +6,15 @@
 leads. When that session dies (a crashed replica, a killed backend) the locks
 free and another replica takes them on its next try. A replica that finds its
 own session lost sits out one try, so the handover goes to a replica that
-was waiting rather than straight back to it.
+was waiting rather than straight back to it. The connection is dedicated
+(session locks need one session, never a pooled or pgbouncer-transaction one)
+and reopened on the next try, with :mod:`vmn_exp.ui.pg_pool`'s timeouts and
+keepalives so a half-open socket is noticed.
 """
 import logging
 import threading
+
+from vmn_exp.ui import pg_pool
 
 _LOGGER = logging.getLogger(__name__)
 # Two-int advisory keys (class, hashtext(name)) never overlap the single
@@ -70,15 +75,19 @@ class AdvisoryElection:
 
     def _connection(self):
         if self._conn is None:
-            import psycopg
-
-            self._conn = psycopg.connect(self._dsn, autocommit=True)
+            self._conn = pg_pool.connect(self._dsn)
             self.backend_pid = self._conn.info.backend_pid
         return self._conn
 
     def _drop(self):
         self._held.clear()
         if self._conn is not None:
+            try:
+                # Released now, not when the closed backend exits a moment later,
+                # so a waiting replica takes over on its next try.
+                self._conn.execute("SELECT pg_advisory_unlock_all()")
+            except Exception:
+                pass
             try:
                 self._conn.close()
             except Exception:

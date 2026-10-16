@@ -13,6 +13,8 @@ from vmn_exp.core.index import (  # noqa: E402
 )
 
 APP = "root/svc"
+# What a poll costs when it lists fully (full_sweep_sec=0): S3 signs no record,
+# so the default tier sees these changes only at its next full sweep.
 BUCKET = "vmn-bucket"
 
 
@@ -57,7 +59,7 @@ def _refresh(index, calls):
 def test_s3_rows_match_and_an_idle_poll_is_one_listing(s3):
     storage, calls = _storage()
     _seed(storage)
-    index = ExperimentIndex(storage, APP)
+    index = ExperimentIndex(storage, APP, full_sweep_sec=0)
     index.refresh()
     assert (index.rows(), index.run_states()) == direct_rows(storage, APP)
 
@@ -67,7 +69,7 @@ def test_s3_rows_match_and_an_idle_poll_is_one_listing(s3):
 def test_s3_append_is_one_ranged_get(s3, monkeypatch):
     storage, calls = _storage()
     verstrs = _seed(storage)
-    index = ExperimentIndex(storage, APP)
+    index = ExperimentIndex(storage, APP, full_sweep_sec=0)
     index.refresh()
 
     ranges = []
@@ -89,7 +91,7 @@ def test_s3_append_is_one_ranged_get(s3, monkeypatch):
 def test_s3_new_segment_is_read_alone(s3):
     storage, calls = _storage()
     verstrs = _seed(storage)
-    index = ExperimentIndex(storage, APP)
+    index = ExperimentIndex(storage, APP, full_sweep_sec=0)
     index.refresh()
 
     storage.save_file(APP, verstrs[0], "log/w0@000001.jsonl",
@@ -102,7 +104,7 @@ def test_s3_new_segment_is_read_alone(s3):
 def test_s3_same_size_rewrite_in_the_same_second_is_seen(s3):
     storage, calls = _storage()
     verstrs = _seed(storage)
-    index = ExperimentIndex(storage, APP)
+    index = ExperimentIndex(storage, APP, full_sweep_sec=0)
     index.refresh()
 
     # Same byte length, same LastModified second: only the ETag tells them apart.
