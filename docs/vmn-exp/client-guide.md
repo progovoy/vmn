@@ -103,7 +103,7 @@ every 30 s and at exit; one without records straight to the store.
 
 Many people and pods can write to the same store at once. Each new run claims
 its verstr atomically (two hosts on the same commit get `...` and `....r2`),
-and each writer appends to its own `log/<writer>.jsonl`, so there is no lock
+and each writer appends to its own `log/<writer>~<owner>.jsonl`, so there is no lock
 and nothing to merge. The writer id defaults to the hostname; set
 `VMN_WRITER_ID` (or `--writer-id`, or conf `experiment.storage.writer_id`)
 to also put it in new run names. Details:

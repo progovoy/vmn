@@ -18,7 +18,7 @@ recovery, root apps for microservices, and hotfix versions. See the
 | `--release-as 1.2.3` | `--ov 1.2.2 -r patch` | `--ov` sets the version the bump starts from |
 | `--prerelease alpha` | `--pr alpha` | Promote later with `vmn release` |
 | `--dry-run` | `--dry-run` | |
-| `--first-release` | Nothing, or `vmn init-app -v <version> my_app` | The first stamp auto-initializes |
+| `--first-release` | Nothing, or `vmn init` + `vmn init-app -v <version> my_app` | The first stamp auto-initializes |
 | `--tag-prefix v` | Not configurable | Tags are `<app>_<version>` |
 | `CHANGELOG.md` generation | `changelog.path` in conf.yml | Opt-in |
 | `--skip.changelog` | Omit `changelog` | |
@@ -34,6 +34,7 @@ recovery, root apps for microservices, and hotfix versions. See the
    tag sets can coexist. Seed the app once:
 
    ```bash
+   vmn init                       # once per repository
    vmn init-app -v 1.4.2 my_app   # next stamp continues from 1.4.2
    ```
 

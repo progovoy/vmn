@@ -180,7 +180,7 @@ restart.
   and dependency graphs are recomputed only after a stamp.
 - **Background refresh**: requests never refresh the index. Each app requested
   within the last minute gets a thread that refreshes it about once a second,
-  with a full listing every 30 seconds; requests read the latest snapshot, so
+  with every record re-listed at least once an hour; requests read the latest snapshot, so
   the dashboard lags the files by about a second. Only an app's first request
   waits for the initial load. A failed refresh (say, the bucket is
   unreachable) is logged and the last snapshot keeps being served.
@@ -629,11 +629,8 @@ Every row of `.../experiments` and the run detail carry:
 The run detail also groups them under a top-level `status` object, which also
 carries `error`: the run's full `error` mapping (`type`, `message`,
 `traceback`, `source`, `output_tail`) or `null` — never on list rows. An
-outer run's `status.fleet` is `{expected, counts, children}`; each of its first
-50 children is `{verstr, status, idx, name, params, metrics, progress,
-progress_total, last_step}`, where `last_step` is `{step, of}` (`of` from
-`params.epochs`/`max_steps`, else null) read from the child's log on a local
-store, and `null` on a remote store or when it logged no step. The list
+outer run's `status.fleet` is `{expected, counts}` (no `children`: its runs
+are the outer run page's Runs tab). The list
 takes `status=running,stuck` (comma-separated) to filter:
 
 ```sh

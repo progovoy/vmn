@@ -33,6 +33,7 @@ multi-repo dependency tracking and `vmn goto` state recovery. See the
    `current_version`; vmn ignores existing `v1.2.3` tags, and both sets coexist.
 
    ```bash
+   vmn init                        # once per repository
    vmn init-app -v 1.2.3 my_app
    ```
 

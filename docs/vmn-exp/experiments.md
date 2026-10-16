@@ -59,8 +59,9 @@ Experiments are **content-addressed**:
 
 Identical code yields an identical verstr, so a new run over an existing
 state gets a `.r2`, `.r3`, … suffix instead of overwriting — "same config,
-different seed" stays as distinct rows. (Offline runs use a writer-id suffix
-instead; see [Offline recording](#offline-recording-and-push).)
+different seed" stays as distinct rows. (Offline runs, and runs with an
+explicit writer id — `$VMN_WRITER_ID`, `--writer-id` or conf `writer_id` — use
+a writer-id suffix instead; see [Offline recording](#offline-recording-and-push).)
 
 The first `create`/`run` in a fresh repo **cold-starts**: it initializes vmn
 and stamps a `0.0.0` baseline (the repo needs a git remote). A new app name in
@@ -1464,7 +1465,7 @@ factory)` does the same at runtime. The contract:
   `metadata.yml` makes a record exist: write it last, delete it first.
   Implement the abstract methods (`save`, `load_record`, `list_snapshots`,
   `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
-  `list_artifact_files`) and override the defaulted ones your store does
+  `local_record_dir`) and override the defaulted ones your store does
   better (`list_verstrs`, `exists`, `update_metadata`, `list_files`,
   `read_file_from`, the log methods, `list_artifacts`, `artifact_uri`).
   Every backend implements `list_apps()`.
@@ -1602,7 +1603,7 @@ dir whose v1 records sit under `<dir>/.vmn`; `--store` an object store (or
 meanwhile), copies each record to its v2 path (area, tag-form key, `log/`,
 `outputs/`; `metadata.yml` last) and deletes the old copy, then clears the
 flag. On the way, each writer's JSONL `metrics` entries move into one
-compacted `metrics/<writer>.vmx` (rewinds applied) and the record gets
+compacted `metrics/<writer>@000000-000000.vmx` (rewinds applied) and the record gets
 `format_version: 2`. Record by record, so a killed migration resumes on rerun. Running or
 stuck runs stop it with a list unless `--skip-live` (rerun later for those).
 `--dry-run` prints the plan and changes nothing.

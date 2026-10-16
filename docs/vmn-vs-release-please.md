@@ -53,8 +53,8 @@ records the exact revision of every dependency repository.
 1. **Install:** `pipx install vmn` (see the
    [README quick start](https://github.com/progovoy/vmn#quick-start)).
 2. **Start at your current version:** vmn tags are `<app>_<version>` and it
-   does not read release-please's tags or manifest. Seed each app once with
-   `vmn init-app -v <current> <app>` (for a monorepo, one app per component,
+   does not read release-please's tags or manifest. Run `vmn init` once, then
+   seed each app with `vmn init-app -v <current> <app>` (for a monorepo, one app per component,
    or `root/service` names for a root app).
 3. **Files:** configure `version_backends` (plus `changelog.path` and
    `github_release` if you want them) in `.vmn/<app>/conf.yml` for the

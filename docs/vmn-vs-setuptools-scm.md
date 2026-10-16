@@ -48,7 +48,7 @@ repository. It is not tied to Python.
 1. **Install:** `pipx install vmn` (see the
    [README quick start](https://github.com/progovoy/vmn#quick-start)).
 2. **Start at your current version:** vmn does not read `v1.2.3` tags. Seed
-   the app once with `vmn init-app -v 1.2.3 my_app`.
+   the app once with `vmn init && vmn init-app -v 1.2.3 my_app`.
 3. **Let vmn maintain `pyproject.toml`:** replace the dynamic version with a
    static one and add the `pep621` backend:
 

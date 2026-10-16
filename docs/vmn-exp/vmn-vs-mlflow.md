@@ -37,7 +37,7 @@ stronger on everything downstream of a finished run.
 | System metrics (CPU/mem/GPU) | Yes, on by default, sampled on the heartbeat (GPU with `pynvml`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
 | Run status | **Derived** — `created`/`running`/`stuck`/`succeeded`/`failed` | Stored; a dead run can stay `RUNNING` forever |
-| Query language | `metrics.loss < 0.5 and params.model = "xgb"`, `inputs.uri ~ s3://`, `env.packages.torch = "2.0.0"` | `search_runs` filter strings |
+| Query language | `metrics.loss < 0.5 and params.model = "xgb"`, `inputs.train.uri ~ "s3://"`, `env.packages.torch = "2.0.0"` | `search_runs` filter strings |
 | Environment capture | **Auto** — Python version, platform, packages captured at run create (`env.yml` + summary) | With logged models (requirements/conda files) |
 | Dataset / input tracking | `run.log_input(uri, digest, kind)` / `--input uri` on CLI | `mlflow.log_input(mlflow.data.from_*(...))` |
 | Exact source reproduction | **Snapshot of the working tree, dirty included** | Git commit + dirty *flag* |
@@ -47,8 +47,8 @@ stronger on everything downstream of a finished run.
 | Backing store | Files: local filesystem, S3, GCS or Azure Blob | DB-backed tracking server (a local file store exists, but not for teams) |
 | Server required | No — `vmn-exp ui` is optional and read-mostly | Yes, for any real deployment |
 | Remote logging over HTTP | **No** — clients write to the store directly; nodes without access record offline and `vmn-exp push` later | Yes, the tracking server's REST API |
-| Multi-user / permissions | **One bearer token, all-or-nothing** | Users, experiment permissions, auth plugins |
-| Model registry (versions, aliases, deprecation) | **Yes** — `vmn-exp model register\|alias\|list\|show\|…`; SDK `register_model`/`set_alias`/`download_model`; UI Models page — see [docs/models.md](models.md) | Yes — a core feature; also has stages approval workflow |
+| Multi-user / permissions | Standalone: one bearer token, all-or-nothing. Configured server: OIDC sign-in, API tokens, per-workspace `viewer`/`editor`/`admin` roles ([server.md](server.md#roles)) | Users, experiment permissions, auth plugins |
+| Model registry (versions, aliases, deprecation) | **Yes** — `vmn-exp model register\|alias\|list\|show\|…`; SDK `register_model`/`set_alias`/`download_model`; UI Models page — see [models.md](models.md) | Yes — a core feature; also has stages approval workflow |
 | Model serving / packaging | **Absent** | `mlflow models serve`, pyfunc flavors, SageMaker/Docker targets |
 | Artifact rendering in the UI | Logged images, tables and histograms inline; other artifacts download | Inline images, plots, tables, HTML |
 | `evaluate()`, LLM/prompt tracing, Projects | **Absent** | Yes |
@@ -153,8 +153,9 @@ compute.
 ### More than one kind of user
 
 `vmn-exp ui --token` is a single shared bearer token: everyone who has it can do
-everything (unless the whole server is `--read-only`). There are no users and no
-per-experiment permissions. MLflow has both.
+everything (unless the whole server is `--read-only`). A configured server
+([server.md](server.md)) adds users (OIDC, API tokens) with per-workspace roles,
+but there are no per-experiment permissions. MLflow has them.
 
 ### Rendering arbitrary artifacts
 
@@ -185,7 +186,7 @@ ecosystem.
 | Need formal stage-transition approval workflow for models | MLflow |
 | Need to serve or package a model | MLflow |
 | Log live from compute with no store access at all | MLflow |
-| Need per-user permissions | MLflow |
+| Need per-experiment permissions | MLflow |
 | Depend on an autologged framework vmn doesn't cover | MLflow |
 
 The two are not mutually exclusive. vmn's log is plain files with a documented

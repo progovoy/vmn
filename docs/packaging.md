@@ -52,8 +52,8 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 | Install | Import packages | Commands | Depends on |
 |---|---|---|---|
 | `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, git-cliff, … (as today) |
-| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `mlflow` |
-| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil; extra `s3` |
+| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `gcs`, `azure`, `mlflow`, `postgres`, `parquet` |
+| `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil; extras `s3`, `gcs`, `azure`, `pandas` |
 
 `vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
 subpackage belongs to exactly one distribution.
