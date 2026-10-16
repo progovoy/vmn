@@ -51,6 +51,7 @@ from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_listing import ListingWatch
+from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.index_snapshot import (
     IndexSnapshot,
@@ -92,6 +93,7 @@ class ExperimentIndex:
         self.app_name = app_name
         self._cache_path = cache_path
         self._store = cache_store or IndexStore(cache_path)
+        self._unsaved = PendingSave()  # what a failed save left to persist
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
         self._io = None  # the I/O helper process, once use_io_process() started it
         self._records = None
@@ -230,7 +232,7 @@ class ExperimentIndex:
                 other._sweep.hint(key)
             self._records, self._order, self._stamps = other._records, other._order, other._stamps
             self._rows, self._sweep = other._rows, other._sweep
-            self._store = store or other._store
+            self._store, self._unsaved = store or other._store, other._unsaved
             self.generation += 1
             self._snapshot = self._build_snapshot()
 
@@ -330,8 +332,8 @@ class ExperimentIndex:
         direct_files = getattr(self._storage, "direct_files", None)
         direct = direct_files() if direct_files else self._storage
         results = self._refresh_records(work, direct)
-        self._store.save(
-            self.app_name,
+        self._unsaved.save(
+            self._store, self.app_name,
             {key: record for key, record, dirty, _, _ in results if dirty},
             removed,
             {key: record for key, record, _, _, state_moved in results if state_moved},

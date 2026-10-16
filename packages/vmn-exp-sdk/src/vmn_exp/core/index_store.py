@@ -2,10 +2,12 @@
 """SQLite persistence for :mod:`vmn_exp.core.index`.
 
 The index is a derived cache: losing it costs one rebuild, never data. So this
-store never raises. A database that will not open, is corrupt, or stays locked
-is treated as missing — the in-memory index is still correct, just colder next
-time. Several processes (the CLI, the SDK, a ``vmn-exp ui`` server) may share one
-database: WAL, a busy timeout and one short transaction per refresh.
+store never raises. A database that will not open or stays locked is treated
+as missing for now (retried later, :mod:`vmn_exp.core.index_store_conn`); a
+corrupt one is rebuilt beside it; a failed save answers False so the caller
+keeps its records dirty. Several processes (the CLI, the SDK, a ``vmn-exp ui``
+server) may share one database: the :mod:`vmn_exp.core.sqlite_conn` policy and
+one short ``BEGIN IMMEDIATE`` transaction per refresh.
 
 A record's run state lives in its own table: a heartbeat rewrites one small
 row, never the record's folded log. Each save bumps the scope generation (see
@@ -14,87 +16,45 @@ row, never the record's folded log. Each save bumps the scope generation (see
 """
 import json
 import logging
-import os
 import sqlite3
 import time
 
 from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
+from vmn_exp.core.index_store_conn import StoreConnection
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
+from vmn_exp.core.sqlite_conn import connect, write_tx
 
 _BUSY_TIMEOUT_MS = 5000
 TOMBSTONE_TTL_SEC = 600
+_KEYS_PER_QUERY = 500  # under SQLite's bound-parameter limit, with room to spare
 _now = time.time
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _connect(path):
-    conn = sqlite3.connect(path, timeout=_BUSY_TIMEOUT_MS / 1000, check_same_thread=False)
-    conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
+    conn = connect(path, busy_timeout_ms=_BUSY_TIMEOUT_MS)
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
-    except sqlite3.DatabaseError:
-        pass  # e.g. a filesystem without shared memory: the default journal works
-    ensure_schema(conn)
+        ensure_schema(conn)
+    except BaseException:
+        conn.close()
+        raise
     return conn
-
-
-def _remove_database(path):
-    for suffix in ("", "-wal", "-shm"):
-        try:
-            os.remove(path + suffix)
-        except OSError:
-            pass
 
 
 class SqliteStore:
     """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None."""
 
     def __init__(self, path):
-        self._conn = None
-        self._path = None
-        if path:
-            self._path = path
-            self._conn = self._open(self._path)
+        self._db = StoreConnection(path or None, _connect)
+        self._db.get()
 
-    @staticmethod
-    def _open(path):
-        try:
-            return _connect(path)
-        except (sqlite3.OperationalError, OSError):
-            # Locked by another process, read-only, missing directory: the file
-            # may hold other caches too, so it is left alone — just not used.
-            _LOGGER.debug("Experiment index %s unavailable", path, exc_info=True)
-            return None
-        except sqlite3.DatabaseError:
-            # Not a database (or a corrupt one): it is only a cache — start over.
-            _LOGGER.debug("Rebuilding unreadable experiment index %s", path, exc_info=True)
-            _remove_database(path)
-        except sqlite3.Error:
-            _LOGGER.debug("Experiment index %s unavailable", path, exc_info=True)
-            return None
-        try:
-            return _connect(path)
-        except (sqlite3.Error, OSError):
-            _LOGGER.debug("Experiment index %s unavailable", path, exc_info=True)
-            return None
+    @property
+    def _conn(self):
+        return self._db.conn
 
     def close(self):
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-
-    def _reset(self):
-        """Discard a corrupt connection and reconnect via _open (which deletes
-        the unreadable file and rebuilds a fresh one)."""
-        if self._conn is not None:
-            try:
-                self._conn.close()
-            except Exception:
-                pass
-            self._conn = None
-        if self._path:
-            self._conn = self._open(self._path)
+        self._db.close()
 
     def load(self, app_name):
         """``{key: record}`` persisted for *app_name*, each with its
@@ -109,25 +69,19 @@ class SqliteStore:
     def _raw(self, app_name):
         return self._select("exp_index", app_name), self._select("exp_index_state", app_name)
 
-    def _records(self, app_name, keys=None):
-        return decode_records(*self._raw(app_name), keys)
+    def _records(self, app_name):
+        return decode_records(*self._raw(app_name))
 
     def _read(self, query, default):
-        if self._conn is None:
+        if self._db.get() is None:
             return default
         try:
             return query()
-        except (sqlite3.Error, ValueError) as exc:
-            if type(exc) is sqlite3.DatabaseError:
-                # File corruption detected on a read (e.g. file was replaced
-                # after the connection was opened).  Reset so future calls work.
-                _LOGGER.debug(
-                    "Corrupt experiment index on read %s; resetting",
-                    self._path, exc_info=True,
-                )
-                self._reset()
-            else:
-                _LOGGER.debug("Could not read the experiment index", exc_info=True)
+        except sqlite3.Error as exc:
+            self._db.on_error(exc)  # corrupt (e.g. replaced since opened): recovers
+            return default
+        except ValueError:
+            _LOGGER.debug("Could not decode the experiment index", exc_info=True)
             return default
 
     def count(self, app_name):
@@ -154,24 +108,40 @@ class SqliteStore:
 
     def _delta(self, app_name, generation):
         gen, horizon = self._gen_row(app_name)
-        if generation < horizon:
+        if generation < horizon or generation > gen:
+            # Past the tombstones kept, or ahead of a rebuilt file: reload all.
             return self._records(app_name), FULL_LOAD, gen
-        keys = {
+        keys = sorted({
             key
             for table in ("exp_index", "exp_index_state")
             for (key,) in self._conn.execute(
                 f"SELECT key FROM {table} WHERE app = ? AND seq > ?",
                 (app_name, generation),
             )
-        }
+        })
         removed = {
             key for (key,) in self._conn.execute(
                 "SELECT key FROM exp_index_tombstones WHERE app = ? AND seq > ?",
                 (app_name, generation),
             )
         }
-        changed = self._records(app_name, keys) if keys else {}
+        changed = decode_records(
+            self._keyed("exp_index", app_name, keys),
+            self._keyed("exp_index_state", app_name, keys),
+        ) if keys else {}
         return changed, removed, gen
+
+    def _keyed(self, table, app_name, keys):
+        """``(key, data)`` of *keys*' rows in *table*, a chunk of keys per query."""
+        rows = []
+        for i in range(0, len(keys), _KEYS_PER_QUERY):
+            chunk = keys[i:i + _KEYS_PER_QUERY]
+            rows += self._conn.execute(
+                f"SELECT key, data FROM {table} WHERE app = ?"
+                f" AND key IN ({', '.join('?' * len(chunk))})",
+                (app_name, *chunk),
+            ).fetchall()
+        return rows
 
     def _select(self, table, app_name):
         return self._conn.execute(
@@ -180,34 +150,40 @@ class SqliteStore:
 
     def save(self, app_name, changed, removed, states=None):
         """Persist *changed* records and the run state of the *states* records
-        (both ``{key: record}``), forget *removed* keys — best effort. A
-        record's ``rs_sig``/``run_state`` are stored only through *states*."""
+        (both ``{key: record}``), forget *removed* keys. A record's
+        ``rs_sig``/``run_state`` are stored only through *states*. True when
+        persisted (or nothing to persist), False when the caller should try
+        again later; never raises."""
         states = states or {}
-        if self._conn is None or not (changed or removed or states):
-            return
+        if self._db.path is None or not (changed or removed or states):
+            return True
+        conn = self._db.get()
+        if conn is None:
+            return False
         try:
-            with self._conn:
+            with write_tx(conn):
                 seq = self._bump_generation(app_name)
                 self._upsert("exp_index", app_name, seq, changed, _without_state)
                 self._upsert("exp_index_state", app_name, seq, states, _state_of)
                 self._forget(app_name, seq, removed)
-                self._conn.executemany(
+                conn.executemany(
                     "DELETE FROM exp_index_tombstones WHERE app = ? AND key = ?",
                     [(app_name, key) for key in changed],
                 )
                 self._trim_tombstones(app_name)
-        except sqlite3.Error:
-            # Locked by another process past the timeout, read-only, full disk:
-            # the next refresh recomputes whatever did not get persisted.
-            _LOGGER.debug("Could not persist the experiment index", exc_info=True)
+        except sqlite3.Error as exc:  # locked past the timeout, read-only, full disk
+            self._db.on_error(exc, "Could not persist the experiment index {file}"
+                                   " ({exc}); the next refresh retries")
+            return False
+        return True
 
     def _bump_generation(self, app_name):
-        gen, horizon = self._gen_row(app_name)
-        self._conn.execute(
-            "INSERT OR REPLACE INTO exp_index_gen (app, gen, horizon) VALUES (?, ?, ?)",
-            (app_name, gen + 1, horizon),
-        )
-        return gen + 1
+        (gen,) = self._conn.execute(
+            "INSERT INTO exp_index_gen (app, gen, horizon) VALUES (?, 1, 0)"
+            " ON CONFLICT (app) DO UPDATE SET gen = gen + 1 RETURNING gen",
+            (app_name,),
+        ).fetchone()
+        return gen
 
     def _upsert(self, table, app_name, seq, records, shape):
         self._conn.executemany(
@@ -255,11 +231,12 @@ class SqliteStore:
 
     def kv_put(self, scope, fingerprint, payload):
         """Store *payload* under *scope* — best effort."""
-        if self._conn is None:
+        conn = self._db.get()
+        if conn is None:
             return
         try:
-            with self._conn:
-                self._conn.execute(
+            with write_tx(conn):
+                conn.execute(
                     "INSERT OR REPLACE INTO exp_index_kv (scope, fingerprint, payload)"
                     " VALUES (?, ?, ?)",
                     (scope, fingerprint, json.dumps(payload)),
@@ -271,14 +248,9 @@ class SqliteStore:
 IndexStore = SqliteStore
 
 
-def decode_records(rows, states, keys=None):
-    """``{key: record}`` of :meth:`SqliteStore.load_raw`'s rows (only
-    *keys*' when given)."""
-    records = {
-        key: {**_NO_STATE, **json.loads(data)}
-        for key, data in rows
-        if keys is None or key in keys
-    }
+def decode_records(rows, states):
+    """``{key: record}`` of :meth:`SqliteStore.load_raw`'s rows."""
+    records = {key: {**_NO_STATE, **json.loads(data)} for key, data in rows}
     for key, data in states:
         if key in records:
             records[key].update(json.loads(data))

@@ -72,6 +72,40 @@ Postgres server: p99 ≤ 10 ms for an authenticated request's database work at 1
 A database restart is survived with no process restart; requests fail fast
 (≤ `statement_timeout`) while the database is down and recover within 5 s after it is back.
 
+## 1.1 Baselines (measured 2026-10-16)
+
+`packages/vmn-exp/tests/scale_store.py` writes the store: one app, layout 2, format-2
+runs (params, a `features` entry, a 150-word intent over a 20k-word vocabulary with 5
+keywords, 3 metrics × 20 steps in one `.vmx`), a third of them inner runs of an outer
+run, 75% succeeded, 15% failed and 10% running (stuck once the cached store ages). It
+takes 7 s for 20k runs and 38 s for 100k, and is cached under
+`$TMPDIR/vmn-scale-store/v<VERSION>-n<N>`. `packages/vmn-exp/tests/bench_scale.py`
+runs each case in a fresh process in a checkout whose `.vmn/store` links to it. *Cold*
+starts with an empty `VMN_EXP_CACHE_DIR`; *warm* runs the same command again on the
+index file the cold run left (93 MB at 20k, 467 MB at 100k).
+
+The machine was an Apple M5 Pro (15 cores, APFS) on Python 3.9.6, shared with other
+test runs (load average 3–25), so single numbers move by up to 2×. The table gives
+the second of two runs; the first run's figure follows it where they differ by more
+than 30%. Memory is the process's peak RSS; importing the CLI alone takes 0.25 s and
+42 MB.
+
+| command | 20k cold | 20k warm | 100k cold | 100k warm | peak RSS 20k / 100k |
+|---|---|---|---|---|---|
+| `vmn-exp show -v <exact>` | 5.5 s (8.6) | 3.9 s (12.8) | 66 s (42) | 45 s | 0.63 / 3.0 GB |
+| `reader.get_run(<exact>)` | 5.3 s (12.1) | 3.6 s | 58 s | 24 s (50) | 0.61 / 2.9 GB |
+| `vmn-exp list --last 20` | 6.0 s (11.7) | 4.4 s | 45 s (101) | 23 s (77) | 0.73 / 3.5 GB |
+| `vmn-exp list --query 'status = "failed"'` | 6.0 s (19.0) | 4.4 s (9.9) | 58 s (88) | 41 s | 0.72 / 3.5 GB |
+| `vmn-exp similar --text-only --context …` | 8.6 s (20.0) | 8.3 s | 55 s | 37 s | 0.94 / 4.6 GB |
+
+Every row misses its §1 target by two orders of magnitude, warm as well as cold, and
+memory by 50×. A warm process is barely faster than a cold one because it repeats the
+expensive parts. A profile of a warm `list --last 20` at 100k (25 s under the profiler)
+spends 11 s in the full stat sweep of the store (`index_sweep._full_listing` →
+`local.list_files`, F2), 4 s copying every row (`index._row_copies`) and 1.6 s decoding
+the persisted records (`index_store.load`, F1). `show` and `get_run` pay the same as
+`list`, because they build the whole snapshot to resolve one exact verstr.
+
 ## 2. Decisions
 
 - **Persist what is read, not what is folded.** `exp_index` keeps the full record for

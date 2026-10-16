@@ -8,7 +8,10 @@
   ``~/Library/Application Support/vmn-exp``, else ``~/.local/state/vmn-exp``).
   The push ledger lives at ``<state>/push/<store-id>/<remote_id>/<app>``.
 
-``$VMN_EXP_CACHE_DIR`` replaces the base of both (containers). ``<store-id>``
+``$VMN_EXP_CACHE_DIR`` replaces the base of both (containers). A default cache
+dir on a network filesystem (NFS, SMB, sshfs: SQLite's locking and WAL are
+unreliable there) is warned about once and replaced by a local temp dir; an
+explicitly chosen dir is kept (:mod:`vmn_exp.storage.fs_type`). ``<store-id>``
 is a stable hash of the backend's ``cache_identity()`` (a local root's
 identity holds its absolute path), so two stores never share a file.
 """
@@ -17,6 +20,10 @@ import hashlib
 import os
 import re
 import sys
+import tempfile
+
+from vmn_exp.core.best_effort import warn_once
+from vmn_exp.storage.fs_type import filesystem_type, is_network_fs
 
 _verified_dirs: set = set()
 
@@ -33,7 +40,20 @@ def _base(xdg_var, mac_parts, other_parts):
 
 
 def cache_base():
-    return _base("XDG_CACHE_HOME", ("Library", "Caches"), (".cache",))
+    base = _base("XDG_CACHE_HOME", ("Library", "Caches"), (".cache",))
+    if os.environ.get("VMN_EXP_CACHE_DIR"):
+        return base
+    kind = filesystem_type(base)
+    if not is_network_fs(kind):
+        return base
+    uid = os.getuid() if hasattr(os, "getuid") else "user"
+    fallback = os.path.join(tempfile.gettempdir(), f"vmn-exp-cache-{uid}")
+    warn_once((base, "network"), (
+        f"The vmn-exp cache dir {base} is on a network filesystem ({kind}), where "
+        f"SQLite is unreliable; using {fallback} instead (set VMN_EXP_CACHE_DIR "
+        "to choose)"
+    ))
+    return fallback
 
 
 def state_base():

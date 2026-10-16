@@ -13,10 +13,14 @@
 > 20k-word vocabulary, one changed file and symbol each; `FakeSnapshot`, so loading the
 > experiment index is not included):
 >
-> | runs | first query (build) | next query, same process | index heap |
-> |---|---|---|---|
-> | 20k | ~4 s | 0.1 s | ~340 MB |
-> | 100k | 14 s | 0.03 s | ~1.6 GB |
+> | runs | first query (build) | next query, same process | index heap | `vmn-exp similar --text-only`, fresh process |
+> |---|---|---|---|---|
+> | 20k | ~4 s | 0.1 s | ~340 MB | 8–20 s, 0.9 GB peak RSS |
+> | 100k | 14 s | 0.03 s | ~1.6 GB | 37–55 s, 4.6 GB peak RSS |
+>
+> The last column is end to end, loading the experiment index included, on the
+> [plan 25](25-database-production-grade.md) §1.1 store (cold and warm index cache,
+> two runs on a shared machine).
 >
 > The repo's bench (`test_similar_scale_core.py`) stops at 20k runs over 17 words. Other
 > limits at scale: the submission hint switches off past 4000 runs
