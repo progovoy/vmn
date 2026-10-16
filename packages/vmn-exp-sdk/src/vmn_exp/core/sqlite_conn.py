@@ -7,13 +7,22 @@ busy timeout, a bigger page cache, memory-mapped reads, temp tables in
 memory. Connections are in autocommit mode (``isolation_level=None``): every
 write runs in an explicit :func:`write_tx`, which takes the write lock up
 front (``BEGIN IMMEDIATE``), so a read-then-write inside it is never raced.
+A connection may be shared by a process's threads: its transactions take
+turns under the connection's own lock.
 """
 import contextlib
 import sqlite3
+import threading
 
 BUSY_TIMEOUT_MS = 5000
 CACHE_SIZE = -16384  # KiB (16 MiB), negative as SQLite counts it
 MMAP_SIZE = 256 << 20
+
+
+class _Connection(sqlite3.Connection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tx_lock = threading.RLock()
 
 
 def connect(path, *, readonly=False, busy_timeout_ms=BUSY_TIMEOUT_MS):
@@ -22,7 +31,7 @@ def connect(path, *, readonly=False, busy_timeout_ms=BUSY_TIMEOUT_MS):
     target, uri = (f"file:{path}?mode=ro", True) if readonly else (path, False)
     conn = sqlite3.connect(
         target, uri=uri, timeout=busy_timeout_ms / 1000,
-        isolation_level=None, check_same_thread=False,
+        isolation_level=None, check_same_thread=False, factory=_Connection,
     )
     conn.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
     if not readonly:
@@ -49,22 +58,25 @@ def in_chunks(values, size=500):
 @contextlib.contextmanager
 def read_tx(conn):
     """One read transaction on *conn*: its reads see one state of the file."""
-    conn.execute("BEGIN")
-    try:
-        yield conn
-    finally:
-        conn.execute("COMMIT")
+    with conn.tx_lock:
+        conn.execute("BEGIN")
+        try:
+            yield conn
+        finally:
+            conn.execute("COMMIT")
 
 
 @contextlib.contextmanager
 def write_tx(conn):
     """One write transaction on *conn*, holding the write lock from its
     start; rolled back when the block raises."""
-    conn.execute("BEGIN IMMEDIATE")
-    try:
-        yield conn
-        conn.execute("COMMIT")
-    except BaseException:
-        if conn.in_transaction:  # an I/O error may have rolled it back already
-            conn.execute("ROLLBACK")
-        raise
+    with conn.tx_lock:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+            conn.execute("COMMIT")
+        except BaseException:
+            if conn.in_transaction:  # an I/O error may have rolled it back already
+                conn.execute("ROLLBACK")
+            raise
+
