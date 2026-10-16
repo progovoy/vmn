@@ -55,6 +55,8 @@ from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_record import refresh_record, update_record
+from vmn_exp.core.index_rows import adopted as _adopted
+from vmn_exp.core.index_rows import row_copies as _row_copies
 from vmn_exp.core.index_snapshot import (
     IndexSnapshot,
     RowCache,
@@ -107,6 +109,7 @@ class ExperimentIndex:
         self.generation = 0
         self.last_refresh_at = None  # monotonic start of the last refresh
         self._cache_gen = None  # a follower's CacheStore generation; None for a leader
+        self._lean = False  # see sync()
 
     @classmethod
     def follower(cls, cache_store, scope):
@@ -170,6 +173,19 @@ class ExperimentIndex:
         with self._lock:
             self._refresh_locked()
         return self
+
+    def sync(self):
+        """Bring the persisted rows up to date with storage; whether all of
+        them are. An index not loaded yet stays so: a *lean* copy refreshes
+        them, decoding no record it does not re-read, building no snapshot."""
+        with self._lock:
+            if self._records is not None or self._io is not None or self._lean:
+                self._refresh_locked()
+                return not self._unsaved.pending
+        lean = ExperimentIndex(self._storage, self.app_name, self._cache_path,
+                               self.full_sweep_sec, self._store)
+        lean._lean = True
+        return lean.sync()
 
     def refresh_if_stale(self, max_age_sec):
         """The current snapshot, refreshed first if older than a positive
@@ -265,7 +281,7 @@ class ExperimentIndex:
             if self._keeps_baseline():  # read before the records it vouches for
                 self._baseline.load(self._sweep, started)
             self._records = self._load_records()
-            if self._records and self._snapshot is None:
+            if self._records and self._snapshot is None and not self._lean:
                 self._publish_persisted()
         listing, removed = self._sweep.listing(self._records, started)
 
@@ -288,7 +304,7 @@ class ExperimentIndex:
                 redescribed = True
             if old is None or dirty or state_moved:
                 touched.add(key)
-                self._sweep.track(key)
+                self._sweep.track(key, record)
             if dirty:
                 self._rows.pop(key, None)
             self._records[key] = _adopted(old, record, state_moved)
@@ -296,6 +312,12 @@ class ExperimentIndex:
             del self._records[key]
             self._rows.pop(key, None)
             self._sweep.forget(key)
+        if not self._lean:
+            self._publish(new, removed, redescribed, touched)
+        if self._keeps_baseline() and not self._unsaved.pending:
+            self._baseline.save(self._sweep, started)
+
+    def _publish(self, new, removed, redescribed, touched):
         # Only a new, removed or re-described record can move in the order.
         if new or removed or redescribed or self._order is None:
             self._reorder = (new, redescribed or bool(removed))
@@ -303,8 +325,6 @@ class ExperimentIndex:
         if touched or removed or self._snapshot is None:
             self.generation += 1
             self._snapshot = self._build_snapshot(None if removed else touched)
-        if self._keeps_baseline() and not self._unsaved.pending:
-            self._baseline.save(self._sweep, started)
 
     def _keeps_baseline(self):
         """Whether listing baselines persist: not for a journaled sweep, one
@@ -340,6 +360,10 @@ class ExperimentIndex:
     def _load_records(self):
         if self._io:
             return self._io.load()
+        lazy_of = getattr(self._store, "load_lazy", None) if self._lean else None
+        lazy = lazy_of(self.app_name) if lazy_of else None
+        if lazy is not None:
+            return lazy
         warm = getattr(self._store, "load_warm", None)
         loaded = warm(self.app_name) if warm else None
         if loaded is None:
@@ -473,32 +497,6 @@ class ExperimentIndex:
         """``{verstr: raw run state or None}`` for the rows' experiments."""
         snap = self._snapshot
         return dict(snap.run_states) if snap is not None else {}
-
-
-def _adopted(old, record, state_moved):
-    """*record* as refreshed. A copy back from the helper process keeps
-    *old*'s run state object unless it moved: readers diff generations by
-    identity."""
-    if old is not None and record is not old and not state_moved:
-        record["run_state"] = old["run_state"]
-    return record
-
-
-def _row_copies(snap, with_create_note):
-    """Copies of *snap*'s rows with their ``metric_summary`` and ``outputs``
-    (and create note)."""
-    rows = [
-        dict(
-            row,
-            metric_summary=snap.metric_summary(row["verstr"]),
-            outputs=dict(snap.outputs_of(row["verstr"])),
-        )
-        for row in snap.rows
-    ]
-    if with_create_note:
-        for row in rows:
-            row["create_note"] = snap.create_notes[row["verstr"]]
-    return rows
 
 
 # ---------------------------------------------------------------------------

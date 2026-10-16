@@ -19,6 +19,7 @@ import json
 
 STATE_KEYS = ("rs_sig", "run_state")
 _PENDING = object()  # nothing read yet; a str: the head read, the fold not decoded
+_DECODED = object()  # the run state is in the dict; else _PENDING, or its JSON (None: none)
 FOLD = "fold"
 
 
@@ -43,19 +44,32 @@ def _blank():
 
 
 class LazyRecord(dict):
-    __slots__ = ("_fetch", "_key", "_raw", "_run")
+    __slots__ = ("_fetch", "_key", "_raw", "_run", "_state")
 
     def __init__(self, key, state, fetch, run):
-        """*state*: the record's run state fields; *fetch(key)*: its stored
-        ``(head JSON, fold JSON)``, or None when no longer stored as read;
-        *run*: whether it was stored as a run (with metadata)."""
-        super().__init__(state)
+        """*state*: the record's run state fields, or None to read them with
+        its head; *fetch(key)*: its stored ``(head JSON, fold JSON, run state
+        JSON or None)``, or None when no longer stored as read; *run*:
+        whether it was stored as a run (with metadata)."""
+        super().__init__(state or ())
         self._key, self._fetch, self._raw, self._run = key, fetch, _PENDING, run
+        self._state = _DECODED if state is not None else _PENDING
+
+    def _decode_state(self):
+        if self._state is _DECODED:
+            return
+        self._head()
+        raw, self._state = self._state, _DECODED
+        dict.update(self, dict.fromkeys(STATE_KEYS))
+        if isinstance(raw, str):
+            dict.update(self, json.loads(raw))
 
     def has_meta(self):
-        """Whether the record has metadata, without reading its head."""
-        if self._raw is _PENDING:
+        """Whether the record has metadata, without reading its head when
+        it was told whether it is a run."""
+        if self._raw is _PENDING and self._run is not None:
             return self._run
+        self._head()
         return dict.get(self, "meta") is not None
 
     def _head(self):
@@ -64,19 +78,25 @@ class LazyRecord(dict):
         parts = self._fetch(self._key)
         if parts is None:
             self._raw = None
+            if self._state is _PENDING:
+                self._state = None
             dict.update(self, _blank())
             return
-        head, data = parts
+        head, data, state = parts
         dict.update(self, json.loads(head))
         self._raw = data
+        if self._state is _PENDING:
+            self._state = state
 
     def _all(self):
+        self._decode_state()
         self._head()
         if isinstance(self._raw, str):
             raw, self._raw = self._raw, None
             dict.__setitem__(self, FOLD, decode_fold(self._key, raw))
 
     def _load(self, key):
+        self._decode_state()
         if key == FOLD:
             self._all()
         elif key not in STATE_KEYS:

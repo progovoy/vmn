@@ -51,42 +51,12 @@ import time
 
 from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
-from vmn_exp.core.index_sweep_state import SweepState
-from vmn_exp.core.status import (
-    RUNNING,
-    derive_status,
-    observed_at_from_mtime,
-)
+from vmn_exp.core.index_sweep_state import SweepState, _settled
 
 DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
 _wall = time.time
-
-
-def _observed_at(rs_sig):
-    """The run state file's storage mtime from its ``[size, mtime, ...]``
-    signature (mirrors :mod:`experiment_index_snapshot`'s own reading of it)
-    — the store-side clock ``derive_status`` wants for clock-skew-proof
-    ``stuck`` detection."""
-    return observed_at_from_mtime(rs_sig[1]) if rs_sig and len(rs_sig) > 1 else None
-
-
-def _settled(record):
-    """False only for ``running``: every other status will not change on its
-    own, so it may drop to the reduced re-listing rate (sig-diff + the
-    touched window) instead of being listed on every fast cycle forever.
-
-    ``stuck`` is included: it is not going to recover by itself, and if it
-    somehow does (a write resuming it), that write bumps the record's
-    directory signature, which the caller's sig-diff check still catches on
-    the very next cycle regardless of status.
-    """
-    try:
-        status = derive_status(record["run_state"], observed_at=_observed_at(record.get("rs_sig")))
-    except (TypeError, ValueError):  # a hand-edited, unparseable exit code
-        return False
-    return status != RUNNING
 
 
 class Sweep(SweepState):
@@ -121,9 +91,14 @@ class Sweep(SweepState):
     def touch(self, key, now):
         self._touched[key] = now
 
-    def track(self, key):
-        """*key*'s record was (re)loaded: judge it again at the next listing."""
-        if self._live is not None:
+    def track(self, key, record=None):
+        """*key*'s record was (re)loaded as *record*: judge it again at the
+        next listing — unless *record* already says it is no live run."""
+        if self._live is None:
+            return
+        if record is not None and (not has_meta(record) or _settled(record)):
+            self._live.discard(key)
+        else:
             self._live.add(key)
 
     def hint(self, key):
@@ -151,8 +126,9 @@ class Sweep(SweepState):
         """``(files of the records to refresh, keys of records gone)``."""
         if self.journaled:
             return self._journaled_listing(records, now)
-        changes = self._name_changes()
-        if changes is None or self._full_due(now):
+        full_due = self._full_due(now)
+        changes = self._name_changes(journal=not full_due)
+        if changes is None or full_due:
             if changes is not None:
                 self._apply_sigs(*changes)
             return self._full_listing(records, now)
@@ -217,13 +193,13 @@ class Sweep(SweepState):
             return False
         return True
 
-    def _name_changes(self):
+    def _name_changes(self, journal=False):
         # Sigs are kept even while every refresh is full, so switching the
         # fast tier on later does not re-list every record once — unless the
         # backend has no sigs to give (S3), where asking is a wasted listing.
         if not self.full_sweep_sec and not self._sigs_known:
             return None
-        changes = self.watch.name_changes()
+        changes = self.watch.name_changes(_wall(), journal)
         if changes is None:
             return None
         changed, gone = changes
@@ -240,7 +216,9 @@ class Sweep(SweepState):
         self._touched = {
             k: t for k, t in self._touched.items() if now - t < self._touch_window()
         }
-        candidates = (set(changed) | self._pending | self._live | set(self._touched)) - gone
+        # A journal names every later write, appends included: no touch window.
+        touched = () if getattr(self.watch, "from_journal", False) else self._touched
+        candidates = (set(changed) | self._pending | self._live | set(touched)) - gone
         keys = []
         for key in candidates:
             if self._judge(records, key, changed.get(key, self._sigs.get(key)), now):

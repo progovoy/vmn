@@ -24,9 +24,11 @@ import zlib
 
 from vmn_exp.core import index_sweep
 
-FORMAT = "listing-baseline-1"
-SHARD_SIZE = 1000
-MAX_SHARDS = 256
+FORMAT = "listing-baseline-2"
+# Small shards: a refresh that moved a few records spread over the app
+# rewrites a few hundred entries, not most of them.
+SHARD_SIZE = 100
+MAX_SHARDS = 4096
 
 
 def _sig(value):
@@ -63,8 +65,7 @@ class ListingBaseline:
         if not head:
             return
         count, shards = head["shards"], []
-        for i in range(count):
-            shard = self._store.kv_get(f"{self._scope}:{i}", _tag(count))
+        for shard in self._shards_stored(count):
             if shard is None:
                 return
             shards.append({key: [_sig(sig), fp] for key, (sig, fp) in shard.items()})
@@ -74,6 +75,14 @@ class ListingBaseline:
         sweep.restore_state(head["sweep"], names, now, index_sweep._wall())
         self._shards, self._head = shards, head
 
+    def _shards_stored(self, count):
+        scopes = [f"{self._scope}:{i}" for i in range(count)]
+        get_many = getattr(self._store, "kv_get_many", None)
+        if get_many is not None:
+            found = get_many(scopes, _tag(count))
+            return [found.get(scope) for scope in scopes]
+        return [self._store.kv_get(scope, _tag(count)) for scope in scopes]
+
     def save(self, sweep, now):
         """Persist *sweep*'s baseline: the shards whose records moved, then the head."""
         names, prints, moved = sweep.watch.baseline()
@@ -82,12 +91,18 @@ class ListingBaseline:
         if rewrite:
             self._shards, moved = [{} for _ in range(count)], names.keys()
         dirty = self._apply(moved, names, prints, count)
-        for i in range(count) if rewrite else sorted(dirty):
-            self._store.kv_put(f"{self._scope}:{i}", _tag(count), self._shards[i])
+        puts = [(f"{self._scope}:{i}", _tag(count), self._shards[i])
+                for i in (range(count) if rewrite else sorted(dirty))]
         head = {"shards": count, "sweep": sweep.export_state(now, index_sweep._wall())}
         if dirty or rewrite or head != self._head:  # an idle refresh writes nothing
-            self._store.kv_put(self._scope, FORMAT, head)
+            puts.append((self._scope, FORMAT, head))  # last: it vouches for the shards
             self._head = head
+        put_many = getattr(self._store, "kv_put_many", None)
+        if put_many is not None:
+            put_many(puts)
+        else:
+            for put in puts:
+                self._store.kv_put(*put)
 
     def _apply(self, moved, names, prints, count):
         """Put the *moved* keys' entries in their shards; the shards changed."""

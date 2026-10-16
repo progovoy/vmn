@@ -20,6 +20,8 @@ stable across processes for that (``hash()`` of a string is not).
 """
 import hashlib
 
+from vmn_exp.core.index_journal_moves import journal_moves
+
 METADATA_FILE = "metadata.yml"
 
 
@@ -45,6 +47,8 @@ class ListingWatch:
     # Whether a sweep should re-list known records a slice per refresh
     # instead of all at once every full_sweep_sec (see Sweep).
     rolling = False
+    names_at = None  # wall time of the last name_changes (None: unknown)
+    from_journal = False  # whether the store's change journal answered it
 
     def __init__(self, storage, app_name, identity=False):
         self._storage = storage
@@ -72,18 +76,35 @@ class ListingWatch:
         if self._moved is not None:
             self._moved.update(*keys)
 
-    def name_changes(self):
+    def name_changes(self, wall=None, journal=False):
         """``(changed {name: sig}, gone names)`` since the last call; None when
-        the backend cannot list names."""
+        the backend cannot list names. At wall time *wall*, with *journal*,
+        the store's change journal may stand in for signing every record
+        (:mod:`~vmn_exp.core.index_journal_moves`)."""
+        moves = journal_moves(
+            self._storage, self._app_name, self._names, self.names_at, wall
+        ) if journal and wall is not None else None
+        self.from_journal = moves is not None
+        if moves is None:
+            moves = self._listed_moves()
+        if moves is None:
+            return None
+        changed, gone = moves
+        for key in gone:
+            del self._names[key]
+        self._names.update(changed)
+        self.names_at = wall
+        self._moved_keys(changed, gone)
+        return changed, gone
+
+    def _listed_moves(self):
         names_of = getattr(self._storage, "list_record_names", None)
         names = as_sigs(names_of(self._app_name)) if names_of else None
         if names is None:
             return None
-        before, self._names = self._names, names
+        before = self._names
         changed = {k: sig for k, sig in names.items() if k not in before or before[k] != sig}
-        gone = set(before).difference(names)
-        self._moved_keys(changed, gone)
-        return changed, gone
+        return changed, set(before).difference(names)
 
     def files(self, keys):
         """``{key: {filename: signature}}`` of *keys* (records gone are left out)."""

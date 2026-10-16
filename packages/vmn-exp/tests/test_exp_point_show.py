@@ -3,6 +3,7 @@ reads — with 2k runs they build no snapshot of the app and print what the
 snapshot path printed."""
 import json
 import os
+import shutil
 
 import pytest
 import yaml
@@ -24,7 +25,7 @@ def _verstr(i):
 def _write(app_layout, verstr, i, parent=None):
     path = os.path.join(app_layout.repo_path, ".vmn", "store", "runs",
                         app_layout.app_name, verstr)
-    os.makedirs(path)
+    os.makedirs(path, exist_ok=True)
     meta = {"format_version": 1, "verstr": verstr, "code_verstr": verstr,
             "note": f"n-{verstr}", "timestamp": f"2026-09-21T{i // 3600:02d}:"
             f"{i // 60 % 60:02d}:{i % 60:02d}Z"}
@@ -103,3 +104,60 @@ def test_get_run_is_a_point_read(many, monkeypatch):
         before.pop(key, None), after.pop(key, None)
     assert after == before
     assert after["children"] == [INNER] and after["idx"] == 1
+
+
+def _record_dir(app_layout, verstr):
+    return os.path.join(app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr)
+
+
+def _settle(app_layout):
+    """Date the app's directory back: no later change shares its mtime."""
+    path = os.path.dirname(_record_dir(app_layout, OUTER))
+    os.utime(path, ns=(os.stat(path).st_atime_ns, os.stat(path).st_mtime_ns - 10**10))
+
+
+def _refusing(monkeypatch, name):
+    from vmn_exp.storage.local import LocalSnapshotStorage
+
+    def refuse(*a, **kw):
+        raise AssertionError(f"called {name}")
+
+    monkeypatch.setattr(LocalSnapshotStorage, name, refuse)
+
+
+def test_a_point_read_signs_no_record_directory(many, capfd, monkeypatch):
+    """Telling new and gone records apart needs their names only: a point
+    read never signs every record directory (a stat each, its cost at 100k)."""
+    _show(capfd, many, OUTER)
+    _refusing(monkeypatch, "list_record_names")
+    _no_snapshots(monkeypatch)
+    late = "0.0.9-dev.late0002"
+    _write(many, late, RUNS + 100, parent=OUTER)
+    shown = json.loads(_show(capfd, many, OUTER, "--json"))
+    assert shown["children"] == [INNER, late]
+    shutil.rmtree(_record_dir(many, late))
+    assert json.loads(_show(capfd, many, OUTER, "--json"))["children"] == [INNER]
+
+
+def test_a_point_read_of_an_unchanged_store_lists_no_record_name(many, capfd, monkeypatch):
+    """No record came or went since the last point read (the app directory
+    kept its settled mtime): nothing is listed at all."""
+    _settle(many)
+    _show(capfd, many, OUTER, "--json")  # builds the index
+    before = _show(capfd, many, OUTER, "--json")  # a point read
+    _refusing(monkeypatch, "list_record_keys")
+    _no_snapshots(monkeypatch)
+    assert _timeless(_show(capfd, many, OUTER, "--json")) == _timeless(before)
+
+
+def test_a_claim_whose_metadata_lands_later_is_still_found(many, capfd, monkeypatch):
+    """Writing a claimed record's metadata leaves the app directory's mtime
+    alone: a point read that saw the claim does not vouch for the names."""
+    claim = "0.0.9-dev.claim001"
+    os.makedirs(_record_dir(many, claim))
+    _settle(many)
+    _show(capfd, many, OUTER)  # builds the index
+    _show(capfd, many, OUTER)  # a point read: the claim is no run yet
+    _write(many, claim, RUNS + 200)  # its metadata, inside its directory
+    _no_snapshots(monkeypatch)
+    assert json.loads(_show(capfd, many, "latest", "--json"))["verstr"] == claim
