@@ -20,8 +20,10 @@ class CacheStore(Protocol):
     def load(self, scope) -> dict:
         """``{key: record}`` persisted for *scope*."""
 
-    def save(self, scope, changed, removed, states=None) -> None:
-        """Persist *changed*/*states*, forget *removed*; bumps the generation."""
+    def save(self, scope, changed, removed, states=None):
+        """Persist *changed*/*states*, forget *removed*; bumps the generation.
+        False when nothing could be persisted: the caller saves it again
+        with its next changes."""
 
     def generation(self, scope) -> int:
         """Monotonically increasing per scope; 0 before the first save."""

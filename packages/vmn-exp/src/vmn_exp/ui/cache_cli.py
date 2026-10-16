@@ -57,10 +57,10 @@ def _offline(manager, ws, full):
     if not full:
         VMN_LOGGER.info(f"{ws.name}: no server running; its next start reconciles fully")
         return
-    from vmn_exp.core.index_store import _remove_database
+    from vmn_exp.core import sqlite_files
 
     for path in _cache_paths(manager, ws):
-        _remove_database(path)
+        sqlite_files.drop(path)
     VMN_LOGGER.info(f"{ws.name}: cache dropped; the next start rebuilds it")
 
 
