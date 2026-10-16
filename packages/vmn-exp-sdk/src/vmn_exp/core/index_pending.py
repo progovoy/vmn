@@ -14,9 +14,14 @@ class PendingSave:
     def __init__(self):
         self._changed, self._removed, self._states = {}, set(), {}
 
+    @property
+    def pending(self):
+        """Whether an earlier save left something unpersisted."""
+        return bool(self._changed or self._removed or self._states)
+
     def save(self, store, scope, changed, removed, states):
         """Save these changes and the pending ones into *store*."""
-        if self._changed or self._removed or self._states:
+        if self.pending:
             changed, removed, states = self._with_pending(changed, set(removed), states)
         if store.save(scope, changed, removed, states) is False:
             self._changed, self._removed, self._states = dict(changed), set(removed), dict(states)

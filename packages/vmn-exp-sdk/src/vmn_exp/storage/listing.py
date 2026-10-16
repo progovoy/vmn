@@ -47,6 +47,7 @@ PARALLEL_MIN_DIRS = 2000
 PROCESS_MIN_DIRS = 10_000
 _THREADS = 16
 _SUBDIRS = (LOG_DIR, METRICS_DIR)
+SIGNED_SUBDIRS = frozenset(_SUBDIRS)  # folders listed as part of a record
 _LOG_AT = _SUBDIRS.index(LOG_DIR)
 _LOG_PREFIX = LOG_DIR + "/"
 

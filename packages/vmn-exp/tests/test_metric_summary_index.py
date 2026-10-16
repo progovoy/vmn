@@ -41,6 +41,7 @@ def _append(app_layout, verstr, losses, start=0):
             f.write(json.dumps({"timestamp": f"2026-09-21T12:05:{i:02d}Z",
                                 "type": "metrics", "step": i,
                                 "values": {"loss": loss}}) + "\n")
+    os.utime(_exp_dir(app_layout, verstr))  # as vmn's own append does
 
 
 def _write_conf(app_layout, metrics):
