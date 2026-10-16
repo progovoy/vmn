@@ -83,6 +83,12 @@ class AdvisoryElection:
         self._held.clear()
         if self._conn is not None:
             try:
+                # Released now, not when the closed backend exits a moment later,
+                # so a waiting replica takes over on its next try.
+                self._conn.execute("SELECT pg_advisory_unlock_all()")
+            except Exception:
+                pass
+            try:
                 self._conn.close()
             except Exception:
                 pass

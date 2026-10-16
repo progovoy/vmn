@@ -161,3 +161,18 @@ def test_concurrent_sleeps_overlap(pg_dsn):
         thread.join(5)
         assert "error" not in out, out
     assert time.monotonic() - start < 0.9
+
+
+def test_migrations_ignore_the_dsn_statement_timeout(pg_dsn, monkeypatch):
+    # A request timeout must never cancel a migration (a long DDL, a wait on the
+    # migrations lock while another replica migrates).
+    slow = "?options=-c%20statement_timeout%3D1"
+    real = migrations.apply_migrations
+
+    def apply_slowly(conn):
+        conn.execute("SELECT pg_sleep(0.05)")
+        real(conn)
+
+    monkeypatch.setattr(migrations, "apply_migrations", apply_slowly)
+    with pg_pool.pool(pg_dsn + slow).connection() as conn:
+        assert conn.execute("SELECT 1").fetchone() == (1,)

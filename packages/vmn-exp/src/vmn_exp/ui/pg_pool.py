@@ -71,6 +71,8 @@ def close_all():
 
 def _migrate(dsn):
     with connect(dsn) as conn:
+        # A request timeout (the defaults, or the DSN's) never cancels a migration.
+        conn.execute("SET statement_timeout = 0")
         migrations.apply_migrations(conn)
 
 

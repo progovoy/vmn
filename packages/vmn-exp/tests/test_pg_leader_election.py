@@ -113,3 +113,17 @@ def test_election_lock_is_exclusive_until_released(pg_dsn):
     finally:
         one.close()
         two.close()
+
+
+def test_close_releases_the_lock_at_once(pg_dsn):
+    import psycopg
+
+    one = AdvisoryElection(pg_dsn)
+    assert one.lead("s")
+    pid = one.backend_pid
+    one.close()
+    with psycopg.connect(pg_dsn, autocommit=True) as probe:
+        (held,) = probe.execute(
+            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = %s", (pid,)
+        ).fetchone()
+    assert held == 0
