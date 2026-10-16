@@ -168,6 +168,7 @@ def _oidc_chain(cfg, control_plane, env):
 def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):
     """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
     from vmn_exp.core.writer import set_default_writer_id
+    from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS
     from vmn_exp.ui.onboarding import SERVER_WRITER_ID
     from vmn_exp.ui.server import create_app
 
@@ -188,6 +189,7 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
         control_plane=control_plane,
         search_dsn=dsn,
         cache_dsn=dsn,
+        audit_retention_days=cfg.audit.retention_days if cfg else DEFAULT_AUDIT_RETENTION_DAYS,
         **kwargs,
     )
     app.state.config = cfg

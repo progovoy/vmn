@@ -59,7 +59,7 @@ class PgIndexes:
         from vmn_exp.ui.pg_election import AdvisoryElection
 
         self._store = PostgresStore(dsn)
-        self._election = AdvisoryElection(dsn)
+        self.election = AdvisoryElection(dsn)
         self._indexes = {}  # (org, workspace name, app) -> ElectedIndex
         self._lock = threading.Lock()
         self._listener = None
@@ -79,7 +79,7 @@ class PgIndexes:
                 ws_id = workspace_id(ws)
                 cache = WorkspaceScopedCache(self._store, ws_id, org_id)
                 self._indexes[key] = ElectedIndex(
-                    storage, app_name, cache, self._election, workspace_id=ws_id, org_id=org_id)
+                    storage, app_name, cache, self.election, workspace_id=ws_id, org_id=org_id)
             return self._indexes[key]
 
     def forget(self, ws_name):
@@ -90,4 +90,4 @@ class PgIndexes:
     def close(self):
         if self._listener is not None:
             self._listener.stop()
-        self._election.close()
+        self.election.close()

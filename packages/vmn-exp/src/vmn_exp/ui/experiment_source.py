@@ -95,6 +95,11 @@ class ExperimentSource:
 
             self._pg = PgIndexes(cache_dsn, self.refresher)
 
+    @property
+    def pg_election(self):
+        """The replicas' leader election over the Postgres cache, or None."""
+        return self._pg.election if self._pg is not None else None
+
     def workspace_index(self, ws):
         """The git workspace's read cache (in memory only with ``--no-index``)."""
         with self._lock:
