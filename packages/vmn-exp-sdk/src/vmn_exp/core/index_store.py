@@ -32,7 +32,6 @@ from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noq
 from vmn_exp.core.similar_filing import file_records as file_similar
 from vmn_exp.core.sqlite_conn import connect, in_chunks, write_tx
 
-_BUSY_TIMEOUT_MS = 5000
 TOMBSTONE_TTL_SEC = 600
 _now = time.time
 
@@ -40,7 +39,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _connect(path):
-    conn = connect(path, busy_timeout_ms=_BUSY_TIMEOUT_MS)
+    conn = connect(path)
     try:
         ensure_schema(conn)
     except BaseException:

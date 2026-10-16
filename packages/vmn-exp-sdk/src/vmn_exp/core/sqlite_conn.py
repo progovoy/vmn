@@ -25,9 +25,12 @@ class _Connection(sqlite3.Connection):
         self.tx_lock = threading.RLock()
 
 
-def connect(path, *, readonly=False, busy_timeout_ms=BUSY_TIMEOUT_MS):
+def connect(path, *, readonly=False, busy_timeout_ms=None):
     """A connection to *path* under the policy; *readonly* opens it
-    ``mode=ro`` (it must exist)."""
+    ``mode=ro`` (it must exist). The busy timeout defaults to
+    :data:`BUSY_TIMEOUT_MS`."""
+    if busy_timeout_ms is None:
+        busy_timeout_ms = BUSY_TIMEOUT_MS
     target, uri = (f"file:{path}?mode=ro", True) if readonly else (path, False)
     conn = sqlite3.connect(
         target, uri=uri, timeout=busy_timeout_ms / 1000,

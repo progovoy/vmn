@@ -135,7 +135,7 @@ def test_backoff_grows_while_failing(tmp_path, monkeypatch):
 
 
 def test_a_failed_save_warns_once_and_reports_failure(tmp_path, monkeypatch, caplog):
-    monkeypatch.setattr("vmn_exp.core.index_store._BUSY_TIMEOUT_MS", 20)
+    monkeypatch.setattr("vmn_exp.core.sqlite_conn.BUSY_TIMEOUT_MS", 20)
     path = str(tmp_path / "idx.sqlite")
     store = SqliteStore(path)
     blocker = sqlite3.connect(path, isolation_level=None)

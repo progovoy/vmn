@@ -3,7 +3,7 @@ writes them."""
 import sqlite3
 
 import pytest
-from vmn_exp.core import index_store
+from vmn_exp.core import sqlite_conn
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.snapshot import open_storage
@@ -13,7 +13,7 @@ APP = "app"
 
 @pytest.fixture(autouse=True)
 def short_busy_timeout(monkeypatch):
-    monkeypatch.setattr(index_store, "_BUSY_TIMEOUT_MS", 20)
+    monkeypatch.setattr(sqlite_conn, "BUSY_TIMEOUT_MS", 20)
 
 
 def _save(storage, i):

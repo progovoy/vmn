@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from vmn_exp.snapshot import open_storage
-from vmn_exp.core import index_store as experiment_index_store
+from vmn_exp.core import sqlite_conn
 from vmn_exp.core.index import ExperimentIndex, direct_rows
 
 APP = "app"
@@ -13,7 +13,7 @@ APP = "app"
 
 @pytest.fixture(autouse=True)
 def short_busy_timeout(monkeypatch):
-    monkeypatch.setattr(experiment_index_store, "_BUSY_TIMEOUT_MS", 50)
+    monkeypatch.setattr(sqlite_conn, "BUSY_TIMEOUT_MS", 50)
 
 
 def _seeded(tmp_path, n=3):
