@@ -11,7 +11,7 @@ and can be read and written without a server through the CLI.
 ```
 reports/<rid>/
   header/                  metadata.yml {type: report_header, created_at, created_by}
-                           log/<writer>.jsonl: title / archived / pinned / published changes
+                           log/<writer>~<owner>.jsonl: title / archived / pinned / published changes
   v<N>/                    revision N (immutable)
     metadata.yml           {type: report_revision, base: N-1, author, created_at, message}
     report.md              the body
@@ -102,7 +102,7 @@ Types (`*` = single-run types, which take pinned `runs` only):
 
 A panel with a bad spec renders as an error box. The rest of the report still
 renders. You don't have to write blocks by hand: the editor's insert-panel
-dialog writes them, and **Add to report** on the run page, the overlay and the
+dialog writes them, and **Add to report** on the run page, Compare's Curves tab and the
 leaderboard charts appends the current view to an existing or new report.
 
 Markdown rendering allows no raw HTML. Links open with

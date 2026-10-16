@@ -115,9 +115,8 @@ row["tree_status"]    # rollup: failed > stuck > running > created > succeeded
 
 Over HTTP, `GET /api/v1/workspaces/{ws}/apps/{app}/experiments` returns the same
 `children`/`child_counts`. The detail endpoint `.../experiments/{verstr}` adds
-`fleet`: `expected`, `counts` (per status, plus `waiting`) and `children` (per
-pod: `status` and `progress`/`progress_total`, read from the pod's metrics or
-params). See [ui.md](ui.md#api).
+`fleet`: `expected` and `counts` (per status, plus `waiting`). See
+[ui.md](ui.md#api).
 
 ## Checklist for an agent
 

@@ -57,7 +57,7 @@ every dependency repository, and leaves publishing to your pipeline.
    [README quick start](https://github.com/progovoy/vmn#quick-start)).
 2. **Start at your current version:** vmn tags are `<app>_<version>` and it
    does not read semantic-release's `v1.2.3` tags. Seed the app once with
-   `vmn init-app -v 1.2.3 my_app`; the next stamp continues from there.
+   `vmn init && vmn init-app -v 1.2.3 my_app`; the next stamp continues from there.
 3. **Commit messages:** Conventional Commits already drive the release mode, so
    `vmn stamp my_app` picks major/minor/patch from commits since the last stamp.
 4. **Files:** configure `version_backends` in `.vmn/my_app/conf.yml` to replace

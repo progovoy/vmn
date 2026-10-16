@@ -17,6 +17,8 @@ Jobs that only record metrics need just `pip install vmn-exp-sdk`
 
 ## Guides
 
+- [Architecture](architecture.md) — diagrams: how vmn, the SDK, the CLI, the
+  dashboard and the store fit together, and how clients use them.
 - [Client guide](client-guide.md) — start here: a project end to end (store,
   submit, SDK in the job, watch, compare, reproduce, resume/rewind/fork, models,
   cleanup).
