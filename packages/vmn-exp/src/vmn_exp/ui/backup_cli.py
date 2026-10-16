@@ -56,7 +56,7 @@ def backup_sqlite(src_path, dest):
             dst.close()
     finally:
         src.close()
-    copy = sqlite3.connect(f"file:{dest}?mode=ro", uri=True)
+    copy = sqlite_conn.connect(dest, readonly=True)
     try:
         return copy.execute("PRAGMA integrity_check").fetchone() == ("ok",)
     finally:
