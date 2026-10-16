@@ -211,6 +211,9 @@ same variables ([Runs without a git checkout](sdk.md#runs-without-a-git-checkout
 Watch the fleet with `vmn-exp ui --store file:///mnt/fsx` (or the bucket URI).
 To reproduce one pod's run later, use
 [`vmn-exp rerun --print`](experiments.md#reruns-on-a-cluster).
+Optuna trials spread over pods that share an Optuna storage attach to the same
+outer run with `start_study_run(study, outer=os.environ["VMN_EXPERIMENT_ID"])`
+([Trials in separate pods](sdk.md#optuna--start_study_run--studytracker)).
 
 ### Nodes without network: record offline, push later
 
@@ -365,6 +368,7 @@ nothing. Each line names who ran it, when, how it did and why it matched:
 vmn-exp similar my_app --all-apps
 vmn-exp similar my_app -v @9 --query 'status = "succeeded"'            # runs like @9
 vmn-exp similar my_app --context "label smoothing" --text-only --json  # did anyone try X?
+vmn-exp list my_app --query 'similar("label smoothing") and status = "succeeded"'  # as a filter
 vmn-exp show my_app -v @4 --patch                                      # read a match's change
 vmn-exp run my_app --intent-file intent.md -- python train.py          # say what this run is for
 ```

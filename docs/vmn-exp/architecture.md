@@ -389,3 +389,32 @@ flowchart LR
   ([server.md](server.md)). Jobs still write only to the store.
 
 See [ui.md](ui.md) for the flags and the HTTP API.
+
+### CLI and SDK reads: the per-host index
+
+`vmn-exp list`, `show`, `compare`, `similar`, ref resolution and the SDK
+readers go through the same kind of cache: one SQLite file per app per store
+on each host, outside the store. A refresh lists record names plus whatever
+changed, and resolving one run is a point read, so thousands of runs stay
+cheap. The file also holds each run's similar-runs document in an FTS5
+table, which `vmn-exp similar` and the query language's `similar("<text>")`
+search.
+
+```mermaid
+flowchart LR
+    S[("🗄️ Store")] -- "names listing +<br/>changed records only" --> IX
+    subgraph host["💻 this host  —  <code>$XDG_CACHE_HOME/vmn-exp/index/&lt;store-id&gt;/</code>"]
+        IX[("experiment index<br/>one SQLite file per app<br/>lean rows · side tables · FTS5")]
+        IX --> L["<code>vmn-exp list · show · compare</code><br/><code>@N</code> / prefix refs"]
+        IX --> SM["<code>vmn-exp similar</code><br/>query <code>similar(…)</code>"]
+        IX --> RD["SDK readers<br/><code>list_runs · get_run</code>"]
+    end
+
+    classDef data fill:#f4f4f4,stroke:#666,color:#222
+    classDef uic fill:#fff3e0,stroke:#e08a1e,color:#663a00
+    class S,IX data
+    class L,SM,RD uic
+```
+
+Deleting the file costs one rebuild, never data
+([The experiment index](experiments.md#the-experiment-index-per-host-cache)).
