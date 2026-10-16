@@ -112,7 +112,8 @@ def test_the_bundle_is_named_by_chunk_not_by_content_hash():
         ("assetFileNames", "assets/[name].[ext]"),
     ):
         assert f'{key}: "{pattern}"' in config, key
-    # ...and the committed bundle was actually built with it.
+    # ...and the built bundle was actually built with it.
+    _bundle_asset()
     with open(os.path.join(STATIC, "index.html")) as fid:
         assert 'src="/assets/index.js"' in fid.read()
 

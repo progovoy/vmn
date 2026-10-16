@@ -121,6 +121,9 @@ def test_each_wheel_ships_its_own_subpackages(wheelhouse):
 
 
 def test_vmn_exp_ships_the_dashboard_assets(wheelhouse):
+    built = Path(_PROJECT_ROOT, "packages", "vmn-exp", "src", "vmn_exp", "ui", "static")
+    if not (built / "index.html").is_file():
+        pytest.skip("web bundle not built")
     static = [n for n in _names(wheelhouse["vmn-exp"]) if "/ui/static/" in n]
     assert any(n.endswith("index.html") for n in static), static
     assert any("/assets/" in n for n in static), static

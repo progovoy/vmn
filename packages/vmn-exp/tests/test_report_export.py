@@ -61,6 +61,7 @@ def test_data_block_hides_html_comment_openers():
     assert json.loads(block) == data
 
 
+@pytest.mark.skipif(not os.path.isdir(rx.BUNDLE_DIR), reason="web bundle not built")
 def test_bundle_ships_with_the_package():
     js, css = rx.load_bundle()
     assert "vmn-report-data" in js and css
@@ -89,6 +90,7 @@ setTimeout(() => {
 
 
 @pytest.mark.skipif(not NODE or not os.path.isdir(JSDOM), reason="needs node + webui/node_modules")
+@pytest.mark.skipif(not os.path.isdir(rx.BUNDLE_DIR), reason="web bundle not built")
 def test_exported_html_renders_offline_in_jsdom(tmp_path):
     detail = {"metadata": {"verstr": "v1"}, "metrics": {"acc_metric": 0.9}, "params": {"lr_param": 0.1},
               "series": {}, "patches": {}, "status": {"status": "succeeded", "exit_code": 0},

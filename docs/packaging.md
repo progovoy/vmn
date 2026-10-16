@@ -140,7 +140,9 @@ tests/           the core vmn suite (vmn alone)
   packages/vmn-exp/tests/: all three), and `helpers._SRC_PATH` /
   `exp_helpers._SRC_PATH` are the matching `PYTHONPATH` for subprocesses, so a
   worktree tests its own tree.
-- `uv build --all-packages` builds the three wheels.
+- `uv build --all-packages` builds the three wheels. The web UI bundle
+  (`vmn_exp/ui/static/`, `export_bundle/`) is git-ignored build output that
+  `uv build` packages as found on disk: run `make _build_ui` first.
 - `setup.py`, `VMN_DIST`, `gen_ver.py` and `MANIFEST.in` are deleted.
 - Runtime dependencies live in each `pyproject.toml`; `tests/requirements.txt`
   and `tests/constraints.txt` are dev-only pins.

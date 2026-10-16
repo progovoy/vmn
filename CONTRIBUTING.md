@@ -69,10 +69,11 @@ vmn-exp ui --no-browser        # leave running
 cd packages/vmn-exp/webui && npm run build
 ```
 
-The built assets under `vmn_exp/ui/static/` are committed, so rebuild and
-include them in any PR that touches `webui/src/`. Chunk filenames are stable
-rather than content-hashed, so that rebuild should only touch the chunks you
-actually changed — a diff spanning the whole bundle means something else moved.
+The built assets under `vmn_exp/ui/static/` and `vmn_exp/ui/export_bundle/`
+are build output and git-ignored: a fresh checkout has no dashboard until you
+run `make _build_ui` (or `npm install && npm run build` in `webui/`). The
+release build (`make _build NAME=vmn_exp`) and the CI `tests_exp` stage build
+them.
 
 ## Submitting Changes
 

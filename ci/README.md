@@ -65,7 +65,7 @@ graph LR
 |-------|-------------|---------|
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
 | `tests_core` | Runs the core vmn suite, `pytest tests -n 29` (parallel, 29 workers; `vmn_exp` is unimportable in it), produces JUnit XML + HTML report | Yes, on `packages/vmn`, `tests`, `pyproject.toml` |
-| `tests_exp` | Runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29 -m "not serial"`, then the `serial`-marked timing benchmarks alone (`tests_exp_serial` reports), produces JUnit XML + HTML reports | Yes, on `packages`, `tests`, `pyproject.toml` |
+| `tests_exp` | Builds the git-ignored web UI bundle (`make _build_ui`), then runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29 -m "not serial"`, then the `serial`-marked timing benchmarks alone (`tests_exp_serial` reports), produces JUnit XML + HTML reports | Yes, on `packages`, `tests`, `pyproject.toml` |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
 | `stamp` | **Optional.** `make _<mode>` (`vmn stamp`) when `--param stamp=<mode>` is set | No |
 | `build` | **Optional.** `make _build` (wheel) when `--param build=1` is set | No |
@@ -108,8 +108,8 @@ $MUSTER run ci/pipeline.py --cache-dir .mtd/cache --param build=1
 | `upload` | `1` / `true` / `yes` / `on` | `make upload` |
 
 muster rejects an unknown `stamp` value against the declared choices before any
-stage runs, so a typo fails fast rather than silently skipping. `build`
-needs `npm` (UI build) and `upload` needs `twine` on `PATH` — `ctx.run` keeps
+stage runs, so a typo fails fast rather than silently skipping. `tests_exp` and `build`
+need `npm` (UI build) and `upload` needs `twine` on `PATH` — `ctx.run` keeps
 the system `PATH`, so tools installed outside the venv still resolve. `make _build`
 builds at the version `vmn show <app>` reports for HEAD (`build_dist.sh`), so
 after `stamp=rc` the wheel embeds `0.10.2-rc.N`, and after a `vmn release` it

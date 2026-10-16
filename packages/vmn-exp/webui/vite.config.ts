@@ -14,10 +14,9 @@ export default defineConfig({
   build: {
     outDir: "../src/vmn_exp/ui/static",
     emptyOutDir: true,
-    // Name chunks after themselves, not their content hash. The bundle is
-    // committed, and a hash cascades: one edit rewrites every chunk importing
-    // the one that changed, so a rebuild churned the whole bundle. The server
-    // revalidates /assets instead of caching it forever (see static_files.py).
+    // Name chunks after themselves, not their content hash: index.html and the
+    // server's routes stay stable across builds. The server revalidates
+    // /assets instead of caching it forever (see static_files.py).
     rollupOptions: {
       output: {
         entryFileNames: "assets/[name].js",

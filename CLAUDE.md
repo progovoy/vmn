@@ -76,11 +76,13 @@ pip install -U pip "setuptools>=64"
 pip install -r ./tests/requirements.txt
 pip install -r ./packages/vmn-exp/tests/test_requirements.txt  # core + vmn-exp test deps
 pip install -e packages/vmn -e packages/vmn-exp-sdk -e "packages/vmn-exp[ui]"
+make _build_ui  # the web UI bundle (vmn_exp/ui/static, export_bundle) is git-ignored build output; needs npm
 vmn --version  # e.g. 0.10.2-rc.11+dev: a source checkout adds +dev
 ```
 
 `uv sync` also works from the repo root. Build the wheels with
-`uv build --all-packages` (or `make _build NAME=vmn|vmn_exp`).
+`uv build --all-packages` (or `make _build NAME=vmn|vmn_exp`, which builds the
+web UI first; a bare `uv build` ships whatever bundle is on disk).
 
 Import rules (packages/vmn-exp/tests/test_packaging_split.py): `version_stamp` never imports
 `vmn_exp`; the vmn-exp-sdk subpackages import neither `version_stamp` nor the

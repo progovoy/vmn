@@ -1,1 +1,0 @@
-function n(t){if(typeof t=="string")return t.trim()||null;const e=t??{};for(const i of["git_user_email","os_user","writer"]){const r=e[i];if(typeof r=="string"&&r.trim())return r.trim()}return null}export{n as i};

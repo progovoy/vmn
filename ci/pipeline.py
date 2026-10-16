@@ -144,6 +144,9 @@ def tests_core(ctx):
     after=["tests_core"],  # one 29-worker suite at a time
 )
 def tests_exp(ctx):
+    # The web bundle is build output, not committed: the dashboard/export tests
+    # and the wheel test need it.
+    ctx.run(["make", "_build_ui"])
     _pytest(ctx, "packages/vmn-exp/tests", "tests_exp", marker="not serial")
     # Timing benchmarks, alone: under 29 busy workers they measure contention.
     _pytest(ctx, "packages/vmn-exp/tests", "tests_exp_serial", workers=(), marker="serial")
