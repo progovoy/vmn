@@ -2,9 +2,10 @@
 """A :class:`~vmn_exp.core.cache_store.CacheStore` on Postgres (plan 11 §4.2).
 
 Same contract as :class:`~vmn_exp.core.index_store.SqliteStore`: it never
-raises — an unreachable database behaves as empty and reconnects on the next
-call. A scope is an app name or ``(workspace_id, app)``; ``org_id`` is the
-store's org (0 in single tenancy), or the request's
+raises — an unreachable database behaves as empty. Each call takes a
+connection from the DSN's pool (:mod:`vmn_exp.ui.pg_pool`), so the next call
+after a lost connection gets a fresh one. A scope is an app name or
+``(workspace_id, app)``; ``org_id`` is the store's org (0 in single tenancy), or the request's
 (:func:`~vmn_exp.ui.tenancy.current_org`), bound per transaction for RLS. Each save
 is one transaction that bumps the scope's generation and
 ``NOTIFY vmn_gen, '<workspace_id>:<app>'`` (delivered on commit). A cache
@@ -12,13 +13,12 @@ schema change TRUNCATEs the cache tables, never the control-plane ones.
 """
 import json
 import logging
-import threading
 
 from vmn_exp.core import index_store
 from vmn_exp.core.cache_store import FULL_LOAD
 from vmn_exp.core.index_store import _state_of, _without_state
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION
-from vmn_exp.ui import migrations
+from vmn_exp.ui import pg_pool
 from vmn_exp.ui.control_plane_pg import PostgresControlPlane  # noqa: F401
 from vmn_exp.ui.tenancy import bind_org, effective_org
 
@@ -66,39 +66,27 @@ class PostgresStore:
     def __init__(self, dsn, org_id=0):
         self._dsn = dsn
         self._default_org = org_id
-        self._lock = threading.Lock()
-        self._conn = None
-
-    def _connection(self):
-        if self._conn is None or self._conn.closed:
-            conn = migrations.connect(self._dsn)
-            _ensure_cache_version(conn)
-            self._conn = conn
-        return self._conn
+        self._version_checked = False
 
     @property
     def _org(self):
         return effective_org(self._default_org)
 
     def _run(self, op, default, what):
-        with self._lock:
-            try:
-                conn = self._connection()
+        try:
+            with pg_pool.pool(self._dsn).connection() as conn:
+                self._check_version(conn)
                 with conn.transaction():
                     bind_org(conn, self._org)
                     return op(conn)
-            except Exception:
-                _LOGGER.debug("Could not %s the Postgres cache", what, exc_info=True)
-                self._drop_connection()
-                return default
+        except Exception:
+            _LOGGER.debug("Could not %s the Postgres cache", what, exc_info=True)
+            return default
 
-    def _drop_connection(self):
-        if self._conn is not None:
-            try:
-                self._conn.close()
-            except Exception:
-                pass
-            self._conn = None
+    def _check_version(self, conn):
+        if not self._version_checked:
+            _ensure_cache_version(conn)
+            self._version_checked = True
 
     def _key(self, scope):
         return scope_key(scope, self._org)
@@ -145,10 +133,9 @@ class PostgresStore:
         return self._run(query, None, "read")
 
     def reset_cache(self):
-        """Reconnect, re-checking the cache schema (a truncated or foreign
-        cache is emptied and re-stamped)."""
-        with self._lock:
-            self._drop_connection()
+        """Re-check the cache schema on the next call (a truncated or
+        foreign cache is emptied and re-stamped)."""
+        self._version_checked = False
 
     def replace_scope(self, scope, records, floor=0):
         """Make *records* the scope's whole content in one transaction, under

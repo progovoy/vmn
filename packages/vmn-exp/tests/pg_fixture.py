@@ -78,6 +78,15 @@ def pg_server_dsn():
         subprocess.run(["docker", "rm", "-f", cid], capture_output=True)
 
 
+def _close_pools():
+    # The process-wide pools would keep reconnecting to the dropped database.
+    try:
+        from vmn_exp.ui import pg_pool
+    except ImportError:
+        return
+    pg_pool.close_all()
+
+
 @pytest.fixture
 def pg_dsn(pg_server_dsn):
     import psycopg
@@ -86,6 +95,7 @@ def pg_dsn(pg_server_dsn):
     with psycopg.connect(pg_server_dsn, autocommit=True) as conn:
         conn.execute(f'CREATE DATABASE "{name}"')
     yield pg_server_dsn.rsplit("/", 1)[0] + "/" + name
+    _close_pools()
     with psycopg.connect(pg_server_dsn, autocommit=True) as conn:
         conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
 
