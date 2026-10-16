@@ -1,7 +1,7 @@
 """Grouping and ordering of similar runs (vmn_exp.core.similar): reruns of one
 config and the trials of one sweep fill one slot, shown by their best run."""
-from similar_fixtures import FakeSnapshot, run, verstrs
-from vmn_exp.core.similar import goal_metric, similar_runs
+from similar_fixtures import FakeSnapshot, run, similar_runs, verstrs
+from vmn_exp.core.similar import goal_metric
 
 PARAMS = {"lr": 0.1}
 

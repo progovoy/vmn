@@ -85,26 +85,17 @@ def file_lean(conn, app):
     similar_fts.file_docs(conn, app, entries, commands)
 
 
-def _states_of(snapshot):
-    return getattr(snapshot, "run_states", None) or {}
-
-
 def _snapshot_command(snapshot, row):
-    return row.get("command") or _command(_states_of(snapshot).get(row["verstr"]))
+    return row.get("command") or _command(snapshot.run_states.get(row["verstr"]))
 
 
 def snapshot_facts(snapshot, row):
     """``(features, intent, hypothesis, command, create note)`` of a run of
-    *snapshot* (a missing accessor reads as None)."""
+    *snapshot*."""
     verstr = row["verstr"]
-
-    def side(name):
-        of = getattr(snapshot, name, None)
-        return of(verstr) if of else None
-    notes = getattr(snapshot, "create_notes", None) or {}
-    command = _snapshot_command(snapshot, row)
-    return (side("features_of"), side("intent_of"), side("hypothesis_of"), command,
-            notes.get(verstr))
+    return (snapshot.features_of(verstr), snapshot.intent_of(verstr),
+            snapshot.hypothesis_of(verstr), _snapshot_command(snapshot, row),
+            snapshot.create_notes.get(verstr))
 
 
 _TOKENS = itertools.count()

@@ -4,8 +4,8 @@ a hand-edited record holds — inputs, params, metrics, tags, commands of other
 types — is read per value, kept when it can be compared and skipped when not
 (vmn_exp.core.similar_profile)."""
 import pytest
-from similar_fixtures import FakeSnapshot, changed, explain, run, verstrs, view_doc
-from vmn_exp.core.similar import similar_runs, target_from_snapshot
+from similar_fixtures import FakeSnapshot, changed, explain, run, similar_runs, verstrs, view_doc
+from vmn_exp.core.similar import target_from_snapshot
 from vmn_exp.core.similar_profile import build_profile
 
 ODD = [None, 0, 12345, 1.5, True, "", [], [1, "a"], {}, {"a": 1}]

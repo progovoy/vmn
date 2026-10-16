@@ -2,8 +2,7 @@
 and inputs. The target's reruns are left out and the reruns of one config fill
 one slot; runs of the same clean code with other params or inputs are
 ordinary candidates, each config its own slot."""
-from similar_fixtures import FakeSnapshot, dataset, run, verstrs
-from vmn_exp.core.similar import similar_runs
+from similar_fixtures import FakeSnapshot, dataset, run, similar_runs, verstrs
 
 CLEAN = "1.0.0-dev.aaaaaaa.0000000"
 

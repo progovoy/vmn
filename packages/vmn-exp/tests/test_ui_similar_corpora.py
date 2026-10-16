@@ -8,10 +8,10 @@ import os
 import threading
 
 import pytest
-from similar_fixtures import FakeSnapshot, run
+from similar_fixtures import FakeSnapshot, run, similar_runs
 from similar_seed import seed, verstr
 from vmn_exp.core.index import ExperimentIndex
-from vmn_exp.core.similar import SimilarDeadlineExceeded, similar_runs
+from vmn_exp.core.similar import SimilarDeadlineExceeded
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui import similar_corpora
 from vmn_exp.ui.similar_corpora import SimilarCorpora

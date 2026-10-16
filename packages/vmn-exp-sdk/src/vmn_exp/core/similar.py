@@ -35,7 +35,6 @@ from collections import Counter, OrderedDict
 
 from vmn_exp.core import similar_fts
 from vmn_exp.core.metric_schema import effective_schema, metric_goal
-from vmn_exp.core.similar_corpus import Scope, as_scope  # noqa: F401  (Scope: re-exported)
 from vmn_exp.core.similar_doc import build_doc
 from vmn_exp.core.similar_filing import snapshot_facts
 from vmn_exp.core.similar_match import (
@@ -77,9 +76,7 @@ def target_from_snapshot(snapshot, verstr, text=None, text_only=False, *, app=No
     """The target dict of the run *verstr* of *snapshot*; KeyError when absent.
     *app* names the snapshot's app, so that over several apps the target's
     exclusions apply in its own only."""
-    lookup = getattr(snapshot, "row", None)
-    row = lookup(verstr) if callable(lookup) else next(
-        (r for r in snapshot.rows if r["verstr"] == verstr), None)
+    row = snapshot.row(verstr)
     if row is None:
         raise KeyError(verstr)
     features, intent, hypothesis, command, note = snapshot_facts(snapshot, row)
@@ -245,7 +242,7 @@ def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None
     """
     query = _Query(target, weights)
     found, searches = [], []
-    for scope in map(as_scope, scopes):
+    for scope in scopes:
         with scope.lock, deadline_guard(scope.conn, deadline):
             search = _Search(scope, query, rows_filter)
             found += search.groups(top)
@@ -262,9 +259,3 @@ def similar_runs_multi(scopes, target, *, top=10, rows_filter=None, weights=None
              "reasons": i["reasons"], "signals": i["signals"], "group_size": i["group_size"],
              "goal": i["goal"], "row": dict(i["row"])} for i in items]
 
-
-def similar_runs(snapshot, target, *, top=10, rows_filter=None, schema=None, weights=None,
-                 app=None, deadline=None):
-    """:func:`similar_runs_multi` over one app's *snapshot* (or :class:`Scope`)."""
-    return similar_runs_multi([(app, snapshot, schema)], target, top=top,
-                              rows_filter=rows_filter, weights=weights, deadline=deadline)

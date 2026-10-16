@@ -5,8 +5,8 @@ are alike in both. Unknown stays unknown — no features entry, an MLflow
 import's, an export's author-only entry or a backfill that found the code
 gone — and those signals are left out (vmn_exp.core.similar_doc)."""
 import pytest
-from similar_fixtures import FakeSnapshot, changed, explain, run
-from vmn_exp.core.similar import similar_runs, target_from_snapshot
+from similar_fixtures import FakeSnapshot, changed, explain, run, similar_runs
+from vmn_exp.core.similar import target_from_snapshot
 
 CMD = ["python", "train.py", "--lr", "0.1"]
 FOCAL = changed(files=["src/loss.py"], symbols=["src/loss.py::focal_loss"])

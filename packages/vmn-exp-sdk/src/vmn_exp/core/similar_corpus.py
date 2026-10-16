@@ -127,13 +127,3 @@ def file_scope(app, path, schema=None, snapshot=None, repair=True):
                 _CHECKED.popitem(last=False)
     rows = SnapshotRows(snapshot) if snapshot is not None else StoreRows(conn, app)
     return Scope(app, conn, rows, schema, lock, cache_key=key)
-
-
-def as_scope(scope):
-    """*scope* — a :class:`Scope`, or ``(app, snapshot or Scope, schema)``."""
-    if isinstance(scope, Scope):
-        return scope
-    label, source, schema = scope
-    if isinstance(source, Scope):
-        return source
-    return snapshot_scope(label, source, schema)

@@ -1,10 +1,15 @@
-"""Hand-built rows and a duck-typed snapshot for the similar-runs core tests.
+"""Hand-built rows, a duck-typed snapshot and the one-app search for the
+similar-runs core tests.
 
-The similar modules read a snapshot through ``.rows``, ``.edges``,
-``.outputs_of``, ``.features_of``, ``.intent_of``, ``.hypothesis_of`` and
-``.declared_schema()`` (plus the optional ``run_states``/``create_notes``
-maps), so a few dicts stand in for an index snapshot here.
+The similar modules read a snapshot through ``.rows``, ``.edges``, ``.row``,
+``.status_of``, ``.outputs_of``, ``.features_of``, ``.intent_of``,
+``.hypothesis_of``, ``.declared_schema()`` and the ``run_states``/
+``run_state_observed_at``/``create_notes`` maps, so a few dicts stand in for
+an index snapshot here.
 """
+from vmn_exp.core import similar
+from vmn_exp.core.similar_corpus import Scope, snapshot_scope
+from vmn_exp.core.status import derive_status
 
 
 def run(verstr, *, commit="aaaaaaa", base="1.0.0", code=None, **fields):
@@ -50,8 +55,16 @@ class FakeSnapshot:
         self._hypotheses = hypotheses or {}
         self._declared = declared or {}
         self.run_states = run_states or {}
+        self.run_state_observed_at = {}
         self.create_notes = create_notes or {}
         self.edges = {row["verstr"]: row.get("parent") for row in self.rows}
+        self._by_verstr = {row["verstr"]: row for row in self.rows}
+
+    def row(self, verstr):
+        return self._by_verstr.get(verstr)
+
+    def status_of(self, verstr):
+        return derive_status(self.run_states.get(verstr))
 
     def outputs_of(self, verstr):
         return {}
@@ -67,6 +80,26 @@ class FakeSnapshot:
 
     def declared_schema(self):
         return self._declared
+
+
+def similar_runs_multi(scopes, target, **kwargs):
+    """:func:`vmn_exp.core.similar.similar_runs_multi` over *scopes*, each a
+    :class:`Scope` or ``(app, snapshot or Scope, schema)``."""
+    return similar.similar_runs_multi([_scope(s) for s in scopes], target, **kwargs)
+
+
+def similar_runs(snapshot, target, *, top=10, rows_filter=None, schema=None, weights=None,
+                 app=None, deadline=None):
+    """:func:`similar_runs_multi` over one app's *snapshot* (or :class:`Scope`)."""
+    return similar_runs_multi([(app, snapshot, schema)], target, top=top,
+                              rows_filter=rows_filter, weights=weights, deadline=deadline)
+
+
+def _scope(scope):
+    if isinstance(scope, Scope):
+        return scope
+    label, source, schema = scope
+    return source if isinstance(source, Scope) else snapshot_scope(label, source, schema)
 
 
 def verstrs(items):

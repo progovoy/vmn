@@ -4,8 +4,8 @@ not a mapping, and a target that names its own app among several."""
 import logging
 
 import pytest
-from similar_fixtures import FakeSnapshot, explain, run
-from vmn_exp.core.similar import similar_runs, similar_runs_multi, target_from_snapshot
+from similar_fixtures import FakeSnapshot, explain, run, similar_runs, similar_runs_multi
+from vmn_exp.core.similar import target_from_snapshot
 from vmn_exp.core.similar_profile import build_profile, document_text, keyword_phrases
 from vmn_exp.core.similar_weights import DEFAULT_WEIGHTS, resolve_weights
 

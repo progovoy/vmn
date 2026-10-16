@@ -1,9 +1,9 @@
 """Similar runs over a snapshot (vmn_exp.core.similar): candidates, exclusions,
 text-only and context queries, apps, filters and the result shape."""
 import pytest
-from similar_fixtures import FakeSnapshot, changed, dataset, run, verstrs
+from similar_fixtures import FakeSnapshot, changed, dataset, run, similar_runs, similar_runs_multi, verstrs
 from vmn_exp.core.index_snapshot import IndexSnapshot
-from vmn_exp.core.similar import similar_runs, similar_runs_multi, target_from_snapshot
+from vmn_exp.core.similar import target_from_snapshot
 
 LOSS = changed(files=["src/loss.py"], symbols=["src/loss.py::focal_loss"])
 

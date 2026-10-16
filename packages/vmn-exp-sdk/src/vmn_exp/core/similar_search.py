@@ -218,8 +218,7 @@ def candidate_filter(scopes, query, include_archived):
 
 def _matching(scope, snap, rows, query):
     """*rows* of *snap* matching *query*, its ``similar()`` searching *scope*."""
-    annotated = annotate_rows(list(rows), getattr(snap, "run_states", None),
-                              getattr(snap, "run_state_observed_at", None))
+    annotated = annotate_rows(list(rows), snap.run_states, snap.run_state_observed_at)
     return filter_rows(annotated, query, extra=snapshot_extra(snap, lambda _: scope))
 
 

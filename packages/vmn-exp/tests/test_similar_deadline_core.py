@@ -3,9 +3,9 @@ stops its work once past it: a SQLite progress handler looks at the clock
 every ``PROGRESS_OPS`` steps and interrupts the query under way, raising
 ``SimilarDeadlineExceeded``; the connection answers as before afterwards."""
 import pytest
-from similar_fixtures import FakeSnapshot, changed, run, verstrs
+from similar_fixtures import FakeSnapshot, changed, run, similar_runs, similar_runs_multi, verstrs
 from vmn_exp.core import similar, similar_match
-from vmn_exp.core.similar import SimilarDeadlineExceeded, similar_runs, similar_runs_multi
+from vmn_exp.core.similar import SimilarDeadlineExceeded
 
 RUNS = 300
 LOSS = changed(files=["src/loss.py"], symbols=["src/loss.py::focal_loss"])

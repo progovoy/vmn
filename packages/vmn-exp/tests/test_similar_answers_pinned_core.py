@@ -6,8 +6,7 @@ bm25 ranking of plan 24; a deliberate ranking change re-pins it."""
 import hashlib
 import json
 
-from similar_fixtures import FakeSnapshot, changed, dataset, run
-from vmn_exp.core.similar import similar_runs, similar_runs_multi
+from similar_fixtures import FakeSnapshot, changed, dataset, run, similar_runs, similar_runs_multi
 
 WORDS = ("focal loss label smoothing mixup cutout warmup cosine schedule adam sgd "
          "dropout weight decay imbalance recall precision augmentation distill").split()

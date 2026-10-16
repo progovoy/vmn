@@ -7,9 +7,9 @@ import pytest
 from similar_seed import seed, verstr
 from vmn_exp.core import similar, sqlite_files
 from vmn_exp.core.index import ExperimentIndex
-from vmn_exp.core.similar import similar_runs
 from vmn_exp.core.similar_corpus import file_scope
 from vmn_exp.snapshot import open_storage
+from similar_fixtures import similar_runs
 
 
 @pytest.fixture

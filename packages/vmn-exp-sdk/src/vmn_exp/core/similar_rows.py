@@ -2,10 +2,7 @@
 """What a similar-runs query reads of the runs besides its FTS table: their
 rows, facts, statuses, trees and declared goals.
 
-:class:`SnapshotRows` reads them off an index snapshot (duck-typed: ``.rows``
-and, when it has them, ``.row``, ``.features_of``/``.intent_of``/
-``.hypothesis_of``, ``.run_states``, ``.run_state_observed_at``,
-``.create_notes``, ``.declared_schema``). :class:`StoreRows` reads the few
+:class:`SnapshotRows` reads them off an index snapshot. :class:`StoreRows` reads the few
 runs a query looks at from the persisted index's lean tables (``exp_rows``,
 ``exp_sides``, ``exp_index_state``), one batched query each (the shown
 runs' facts and states: :meth:`StoreRows.prefetch`), so a fresh process
@@ -20,7 +17,6 @@ from vmn_exp.core.index_lean_store import NOTE, decode_row, run_status
 from vmn_exp.core.index_views import runs_declared_schema
 from vmn_exp.core.similar_filing import snapshot_facts
 from vmn_exp.core.sqlite_conn import in_chunks
-from vmn_exp.core.status import derive_status
 
 # The side tables a run's facts read (constants, inlined in the query).
 _FACT_KINDS = ", ".join(f"'{kind}'" for kind in ("features", "intents", "hypotheses", NOTE))
@@ -29,9 +25,7 @@ _FACT_KINDS = ", ".join(f"'{kind}'" for kind in ("features", "intents", "hypothe
 class SnapshotRows:
     def __init__(self, snapshot):
         self.snapshot = snapshot
-        lookup = getattr(snapshot, "row", None)
-        self._by_verstr = None if callable(lookup) else {r["verstr"]: r for r in snapshot.rows}
-        self._lookup = lookup if callable(lookup) else self._by_verstr.get
+        self._lookup = snapshot.row
         self._parents = None
         self._roots = {}
 
@@ -46,11 +40,7 @@ class SnapshotRows:
         return snapshot_facts(self.snapshot, row)
 
     def status_of(self, verstr):
-        of = getattr(self.snapshot, "status_of", None)
-        if of is not None:
-            return of(verstr)
-        states = getattr(self.snapshot, "run_states", None) or {}
-        return derive_status(states.get(verstr))
+        return self.snapshot.status_of(verstr)
 
     def parents_among(self, verstrs):
         if self._parents is None:
@@ -77,8 +67,7 @@ class SnapshotRows:
         return top or verstr
 
     def declared_schema(self):
-        declared = getattr(self.snapshot, "declared_schema", None)
-        return declared() if declared else {}
+        return self.snapshot.declared_schema()
 
 
 class StoreRows:
