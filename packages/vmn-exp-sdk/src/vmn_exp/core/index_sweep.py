@@ -49,6 +49,7 @@ up by the next full sweep, whichever process runs it.
 import threading
 import time
 
+from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
 from vmn_exp.core.index_sweep_state import SweepState
 from vmn_exp.core.status import (
@@ -211,7 +212,7 @@ class Sweep(SweepState):
         record = records.get(key)
         if record is None:
             return True  # a claim still waiting for its metadata
-        if record["meta"] is None or _settled(record):
+        if not has_meta(record) or _settled(record):
             self._live.discard(key)
             return False
         return True
@@ -250,7 +251,7 @@ class Sweep(SweepState):
     def _judge(self, records, key, sig, now):
         """:meth:`_may_change`, keeping the live set current on the way."""
         record = records.get(key)
-        if record is None or record["meta"] is None:
+        if record is None or not has_meta(record):
             self._live.discard(key)
             return record is None
         settled = _settled(record)
@@ -288,7 +289,7 @@ class Sweep(SweepState):
         listing, present = self.watch.full_changes()
         if self._live is None:
             self._live = {
-                k for k, r in records.items() if r["meta"] is not None and not _settled(r)
+                k for k, r in records.items() if has_meta(r) and not _settled(r)
             }
         self._pending = {k for k in self._sigs if k not in present}
         return listing, [key for key in records if key not in present]
@@ -307,7 +308,7 @@ class Sweep(SweepState):
         record = records.get(key)
         if record is None:
             return True
-        if record["meta"] is None:
+        if not has_meta(record):
             return False  # not an experiment (a legacy verinfo file)
         return self._changed_since(key, sig, now, _settled(record))
 

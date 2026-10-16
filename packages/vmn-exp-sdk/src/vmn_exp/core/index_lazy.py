@@ -17,7 +17,6 @@ dict.
 """
 import json
 
-from vmn_exp.core.index_record import new_record
 
 STATE_KEYS = ("rs_sig", "run_state")
 _PENDING = object()  # nothing read yet; a str: the head read, the fold not decoded
@@ -29,18 +28,35 @@ def decode_fold(key, data):
     return json.loads(data)
 
 
+def has_meta(record):
+    """Whether *record* has metadata (is a run); a :class:`LazyRecord`
+    answers without reading its head."""
+    if isinstance(record, LazyRecord):
+        return record.has_meta()
+    return record["meta"] is not None
+
+
 def _blank():
+    from vmn_exp.core.index_record import new_record  # it imports the sweep, which imports us
+
     return {k: v for k, v in new_record().items() if k not in STATE_KEYS}
 
 
 class LazyRecord(dict):
-    __slots__ = ("_fetch", "_key", "_raw")
+    __slots__ = ("_fetch", "_key", "_raw", "_run")
 
-    def __init__(self, key, state, fetch):
+    def __init__(self, key, state, fetch, run):
         """*state*: the record's run state fields; *fetch(key)*: its stored
-        ``(head JSON, fold JSON)``, or None when no longer stored as read."""
+        ``(head JSON, fold JSON)``, or None when no longer stored as read;
+        *run*: whether it was stored as a run (with metadata)."""
         super().__init__(state)
-        self._key, self._fetch, self._raw = key, fetch, _PENDING
+        self._key, self._fetch, self._raw, self._run = key, fetch, _PENDING, run
+
+    def has_meta(self):
+        """Whether the record has metadata, without reading its head."""
+        if self._raw is _PENDING:
+            return self._run
+        return dict.get(self, "meta") is not None
 
     def _head(self):
         if self._raw is not _PENDING:

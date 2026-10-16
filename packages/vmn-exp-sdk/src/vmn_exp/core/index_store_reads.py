@@ -38,7 +38,8 @@ class LeanReads:
             conn.execute("COMMIT")
         fetch = _Prefetch(self, app_name, seqs)
         records = {
-            key: LazyRecord(key, _state_from(states.get(key)), fetch) for key in seqs
+            key: LazyRecord(key, _state_from(states.get(key)), fetch, key in lean)
+            for key in seqs
         }
         return records, keys, lean, stamps
 

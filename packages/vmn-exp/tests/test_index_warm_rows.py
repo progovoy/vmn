@@ -9,6 +9,7 @@ import pytest
 from test_index_lean_tables import APP, FINISHED, R, _entry, _run, _seed
 from vmn_exp.core import index_lazy, index_store
 from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.snapshot import LocalSnapshotStorage
 
 _RECORD_READ = re.compile(r"\bFROM\s+exp_index\b(?!_)", re.IGNORECASE)
@@ -114,3 +115,20 @@ def test_a_record_rewritten_by_another_process_is_read_again(tmp_path):
     snap = warm.snapshot()
     assert snap.row(R[3])["metrics"]["loss"] == 0.7
     assert [row["verstr"] for row in snap.rows][-1] == R[4]
+
+
+def test_a_refresh_that_finds_nothing_changed_reads_no_record(tmp_path, monkeypatch):
+    _, db, cold = _persisted(tmp_path)
+    st = LocalSnapshotStorage(str(tmp_path / "repo"), area="runs")
+    reads = []
+    parts = SqliteStore.records_parts
+
+    def counting(self, app_name, seqs):
+        reads.extend(seqs)
+        return parts(self, app_name, seqs)
+
+    monkeypatch.setattr(SqliteStore, "records_parts", counting)
+    warm = ExperimentIndex(st, APP, cache_path=db)
+    warm.refresh()
+    assert reads == []
+    assert _view(warm.snapshot()) == _view(cold)

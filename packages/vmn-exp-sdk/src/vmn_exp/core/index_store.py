@@ -69,16 +69,14 @@ class SqliteStore(LeanReads):
 
     def load_raw(self, app_name):
         """:meth:`load`'s rows undecoded, for :func:`decode_records`:
-        ``([(key, record JSON)], [(key, run state JSON)])``."""
+        ``([(key, head JSON, fold JSON)], [(key, run state JSON)])``."""
         return self._read(lambda: self._raw(app_name), ([], []))
 
     def _raw(self, app_name):
-        return (
-            self._conn.execute(
-                "SELECT key, head, data FROM exp_index WHERE app = ?", (app_name,)
-            ).fetchall(),
-            self._select("exp_index_state", app_name),
-        )
+        records = self._conn.execute(
+            "SELECT key, head, data FROM exp_index WHERE app = ?", (app_name,)
+        ).fetchall()
+        return records, self._select("exp_index_state", app_name)
 
     def _records(self, app_name):
         return decode_records(*self._raw(app_name))
@@ -290,14 +288,12 @@ def _without_state(record):
 def _encoded(record):
     """``(head JSON, fold JSON or None)`` of *record* without its run state."""
     head = {k: v for k, v in _without_state(record).items() if k != "fold"}
-    fold = json.dumps(record["fold"], default=str) if "fold" in record else None
-    return json.dumps(head, default=str), fold
+    return json.dumps(head, default=str), (
+        json.dumps(record["fold"], default=str) if "fold" in record else None)
 
 
 def _decoded(head, data):
     record = {**_NO_STATE, **json.loads(head)}
-    if data is not None:
-        record["fold"] = json.loads(data)
-    return record
+    return record if data is None else dict(record, fold=json.loads(data))
 
 
