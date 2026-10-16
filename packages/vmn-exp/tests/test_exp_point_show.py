@@ -103,3 +103,26 @@ def test_get_run_is_a_point_read(many, monkeypatch):
         before.pop(key, None), after.pop(key, None)
     assert after == before
     assert after["children"] == [INNER] and after["idx"] == 1
+
+
+def test_a_point_read_signs_no_record_directory(many, capfd, monkeypatch):
+    """Telling new and gone records apart needs their names only: a point
+    read never signs every record directory (a stat each, its cost at 100k)."""
+    from vmn_exp.storage.local import LocalSnapshotStorage
+
+    _show(capfd, many, OUTER)
+
+    def refuse(*a, **kw):
+        raise AssertionError("signed every record directory")
+
+    monkeypatch.setattr(LocalSnapshotStorage, "list_record_names", refuse)
+    _no_snapshots(monkeypatch)
+    late = "0.0.9-dev.late0002"
+    _write(many, late, RUNS + 100, parent=OUTER)
+    shown = json.loads(_show(capfd, many, OUTER, "--json"))
+    assert shown["children"] == [INNER, late]
+    _write_gone = os.path.join(many.repo_path, ".vmn", "store", "runs", many.app_name, late)
+    import shutil
+
+    shutil.rmtree(_write_gone)
+    assert json.loads(_show(capfd, many, OUTER, "--json"))["children"] == [INNER]

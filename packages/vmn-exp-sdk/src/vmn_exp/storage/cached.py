@@ -140,6 +140,12 @@ class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
         names.update(self._local.list_record_names(app_name))
         return names
 
+    def list_record_keys(self, app_name):
+        """:meth:`list_record_names`' keys alone (no local stat per record)."""
+        keys_of = getattr(self._local, "list_record_keys", None)
+        local = keys_of(app_name) if keys_of else self._local.list_record_names(app_name)
+        return set(self._remote_record_names(app_name)).union(local)
+
     def _remote_record_names(self, app_name):
         if not self._remote:
             return []

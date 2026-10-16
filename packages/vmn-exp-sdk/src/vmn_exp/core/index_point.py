@@ -48,8 +48,7 @@ def point_view(storage, app_name):
 def _sync(storage, app_name, store):
     """Persist the records the storage lists that *store* does not know, and
     forget the ones it no longer lists; False when that cannot be told."""
-    names_of = getattr(storage, "list_record_names", None)
-    names = as_sigs(names_of(app_name)) if names_of else None
+    names = record_keys(storage, app_name)
     known = store.keys(app_name)
     if names is None or known is None:
         return False
@@ -66,6 +65,16 @@ def _sync(storage, app_name, store):
     if not (records or gone):
         return True
     return store.save(app_name, records, gone, records) is not False
+
+
+def record_keys(storage, app_name):
+    """The record names *storage* lists for *app_name* — without signing each
+    record when the backend can say (``list_record_keys``) — or None."""
+    keys_of = getattr(storage, "list_record_keys", None)
+    if keys_of is not None:
+        return keys_of(app_name)
+    names_of = getattr(storage, "list_record_names", None)
+    return as_sigs(names_of(app_name)) if names_of else None
 
 
 def _read(storage, direct, app_name, key, files):

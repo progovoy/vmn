@@ -206,12 +206,19 @@ class LocalSnapshotStorage(LocalStreams, LocalMetrics, SnapshotStorage):
         Every write into a record is atomic (temp file + rename), which bumps
         the record directory's mtime, and ``append_log_entry`` bumps it too.
         """
-        base = self._snapshot_base_dir(app_name)
-        if not os.path.isdir(base):
-            return {}
-        entries = [e for e in os.scandir(base) if e.is_dir() and not e.name.startswith(".")]
+        entries = self._record_entries(app_name)
         sigs = map_dirs(_dir_sig, entries)
         return {unsafe_verstr(entry.name): sig for entry, sig in zip(entries, sigs)}
+
+    def list_record_keys(self, app_name):
+        """:meth:`list_record_names`' keys alone: one directory listing, no stat."""
+        return {unsafe_verstr(entry.name) for entry in self._record_entries(app_name)}
+
+    def _record_entries(self, app_name):
+        base = self._snapshot_base_dir(app_name)
+        if not os.path.isdir(base):
+            return []
+        return [e for e in os.scandir(base) if e.is_dir() and not e.name.startswith(".")]
 
     def list_files(self, app_name, keys=None, identity=False):
         """``{verstr: {filename: (size, mtime_ns)}}``; only *keys* when given
