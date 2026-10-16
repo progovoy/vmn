@@ -71,7 +71,8 @@ def test_the_io_helper_sends_persisted_records_undecoded(tmp_path):
 
     rows, states = helper.load()
 
-    assert rows and all(isinstance(data, str) for _, data in rows)
+    assert rows and all(isinstance(head, str) and isinstance(data, str)
+                        for _, head, data in rows)
     assert states and all(isinstance(data, str) for _, data in states)
 
 

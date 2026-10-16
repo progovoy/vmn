@@ -10,7 +10,10 @@ server) may share one database: the :mod:`vmn_exp.core.sqlite_conn` policy and
 one short ``BEGIN IMMEDIATE`` transaction per refresh.
 
 A record's run state lives in its own table: a heartbeat rewrites one small
-row, never the record's folded log. Each save bumps the scope generation (see
+row, never the record's folded log. Its lean row and side table values are
+written beside it (:mod:`vmn_exp.core.index_lean_store`): warm starts and
+point reads decode no record (:mod:`vmn_exp.core.index_store_reads`).
+Each save bumps the scope generation (see
 :mod:`vmn_exp.core.cache_store`); removals leave tombstones for
 :meth:`SqliteStore.load_since`, trimmed after :data:`TOMBSTONE_TTL_SEC`.
 """
@@ -20,7 +23,10 @@ import sqlite3
 import time
 
 from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
+from vmn_exp.core.index_lazy import STATE_KEYS as _STATE_KEYS
+from vmn_exp.core.index_lean_store import write_lean
 from vmn_exp.core.index_store_conn import StoreConnection
+from vmn_exp.core.index_store_reads import LeanReads
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
 from vmn_exp.core.sqlite_conn import connect, write_tx
 
@@ -42,7 +48,7 @@ def _connect(path):
     return conn
 
 
-class SqliteStore:
+class SqliteStore(LeanReads):
     """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None."""
 
     def __init__(self, path):
@@ -67,7 +73,12 @@ class SqliteStore:
         return self._read(lambda: self._raw(app_name), ([], []))
 
     def _raw(self, app_name):
-        return self._select("exp_index", app_name), self._select("exp_index_state", app_name)
+        return (
+            self._conn.execute(
+                "SELECT key, head, data FROM exp_index WHERE app = ?", (app_name,)
+            ).fetchall(),
+            self._select("exp_index_state", app_name),
+        )
 
     def _records(self, app_name):
         return decode_records(*self._raw(app_name))
@@ -126,18 +137,18 @@ class SqliteStore:
             )
         }
         changed = decode_records(
-            self._keyed("exp_index", app_name, keys),
-            self._keyed("exp_index_state", app_name, keys),
+            self._keyed("exp_index", "head, data", app_name, keys),
+            self._keyed("exp_index_state", "data", app_name, keys),
         ) if keys else {}
         return changed, removed, gen
 
-    def _keyed(self, table, app_name, keys):
-        """``(key, data)`` of *keys*' rows in *table*, a chunk of keys per query."""
+    def _keyed(self, table, columns, app_name, keys):
+        """``(key, *columns)`` of *keys*' rows in *table*, a chunk of keys per query."""
         rows = []
         for i in range(0, len(keys), _KEYS_PER_QUERY):
             chunk = keys[i:i + _KEYS_PER_QUERY]
             rows += self._conn.execute(
-                f"SELECT key, data FROM {table} WHERE app = ?"
+                f"SELECT key, {columns} FROM {table} WHERE app = ?"
                 f" AND key IN ({', '.join('?' * len(chunk))})",
                 (app_name, *chunk),
             ).fetchall()
@@ -163,9 +174,10 @@ class SqliteStore:
         try:
             with write_tx(conn):
                 seq = self._bump_generation(app_name)
-                self._upsert("exp_index", app_name, seq, changed, _without_state)
-                self._upsert("exp_index_state", app_name, seq, states, _state_of)
+                self._upsert_records(app_name, seq, changed)
+                self._upsert_states(app_name, seq, states)
                 self._forget(app_name, seq, removed)
+                write_lean(conn, app_name, seq, changed, removed, states)
                 conn.executemany(
                     "DELETE FROM exp_index_tombstones WHERE app = ? AND key = ?",
                     [(app_name, key) for key in changed],
@@ -185,11 +197,18 @@ class SqliteStore:
         ).fetchone()
         return gen
 
-    def _upsert(self, table, app_name, seq, records, shape):
+    def _upsert_records(self, app_name, seq, records):
         self._conn.executemany(
-            f"INSERT OR REPLACE INTO {table} (app, key, data, seq) VALUES (?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO exp_index (app, key, seq, head, data)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [(app_name, key, seq, *_encoded(record)) for key, record in records.items()],
+        )
+
+    def _upsert_states(self, app_name, seq, records):
+        self._conn.executemany(
+            "INSERT OR REPLACE INTO exp_index_state (app, key, seq, data) VALUES (?, ?, ?, ?)",
             [
-                (app_name, key, json.dumps(shape(record), default=str), seq)
+                (app_name, key, seq, json.dumps(_state_of(record), default=str))
                 for key, record in records.items()
             ],
         )
@@ -250,14 +269,13 @@ IndexStore = SqliteStore
 
 def decode_records(rows, states):
     """``{key: record}`` of :meth:`SqliteStore.load_raw`'s rows."""
-    records = {key: {**_NO_STATE, **json.loads(data)} for key, data in rows}
+    records = {key: _decoded(head, data) for key, head, data in rows}
     for key, data in states:
         if key in records:
             records[key].update(json.loads(data))
     return records
 
 
-_STATE_KEYS = ("rs_sig", "run_state")
 _NO_STATE = dict.fromkeys(_STATE_KEYS)
 
 
@@ -267,3 +285,19 @@ def _state_of(record):
 
 def _without_state(record):
     return {k: v for k, v in record.items() if k not in _STATE_KEYS}
+
+
+def _encoded(record):
+    """``(head JSON, fold JSON or None)`` of *record* without its run state."""
+    head = {k: v for k, v in _without_state(record).items() if k != "fold"}
+    fold = json.dumps(record["fold"], default=str) if "fold" in record else None
+    return json.dumps(head, default=str), fold
+
+
+def _decoded(head, data):
+    record = {**_NO_STATE, **json.loads(head)}
+    if data is not None:
+        record["fold"] = json.loads(data)
+    return record
+
+

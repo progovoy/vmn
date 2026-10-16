@@ -321,7 +321,15 @@ class ExperimentIndex:
             self._snapshot = self._build_snapshot(None if removed else changed)
 
     def _load_records(self):
-        return self._io.load() if self._io else self._store.load(self.app_name)
+        if self._io:
+            return self._io.load()
+        warm = getattr(self._store, "load_warm", None)
+        loaded = warm(self.app_name) if warm else None
+        if loaded is None:
+            return self._store.load(self.app_name)
+        records, self._order, lean, self._stamps = loaded
+        self._rows.seed(lean)
+        return records
 
     def _refresh_and_persist(self, work, removed):
         """``(key, record or None, dirty, moved, state moved)`` per item of
@@ -369,22 +377,22 @@ class ExperimentIndex:
         return update_record(self._storage, direct, self.app_name, key, names, record)
 
     def _sorted_keys(self):
-        """Record keys in storage order (by timestamp, stably). New records
+        """Record keys in storage order (by timestamp, then key — the order
+        the persisted ``exp_rows`` number, see
+        :mod:`vmn_exp.core.index_lean_store`). New records
         are bisected into the current order; a first build, a re-described
         record (its timestamp may have moved) or a removal sorts them all."""
         new, resort = self._reorder
         if self._order is None or resort:
             keys = [k for k, r in self._records.items() if r["meta"] is not None]
-            pairs = sorted(((_timestamp(self._records[k]["meta"]), k) for k in keys),
-                           key=lambda pair: pair[0])
-            self._stamps = [stamp for stamp, _ in pairs]
-            return [key for _, key in pairs]
+            self._stamps = sorted((_timestamp(self._records[k]["meta"]), k) for k in keys)
+            return [key for _, key in self._stamps]
         order = list(self._order)
         for key in new:
             meta = self._records[key]["meta"]
             if meta is None:
                 continue  # not an experiment
-            stamp = _timestamp(meta)
+            stamp = (_timestamp(meta), key)
             at = bisect.bisect_right(self._stamps, stamp)
             self._stamps.insert(at, stamp)
             order.insert(at, key)

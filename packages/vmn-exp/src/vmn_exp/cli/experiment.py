@@ -74,12 +74,13 @@ from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.core.query import QueryError, filter_rows
 from vmn_exp.core.refs import (
-    parent_edges,
     placement_snapshot,
+    point_placement,
     recent_verstrs,
     resolve_experiment,
     resolve_parent,
     storage_index,
+    tree_links,
 )
 from vmn_exp.core.status import (
     CREATED,
@@ -721,18 +722,18 @@ def experiment_list(vcs, params, storage, args):
 
 
 def _subtree(storage, app_name, verstr, metadata, snapshot=None):
-    """``(run_state, tree fields, observed_at)`` of *verstr*: the parent edges
-    come from the experiment index, and run state (with its store write time)
-    is read for the run's subtree only — a handful of rows even when the app
-    has thousands of experiments."""
-    snapshot = placement_snapshot(storage, app_name, snapshot)
-    parent_of = parent_edges(storage, app_name, snapshot)
-    parent_of.setdefault(verstr, metadata.get("parent"))
+    """``(run_state, tree fields, observed_at)`` of *verstr*: the parent/child
+    links come from the experiment index (point reads once it is persisted),
+    and run state (with its store write time) is read for the run's subtree
+    only — a handful of rows even when the app has thousands of experiments."""
+    snapshot = point_placement(storage, app_name, snapshot)
+    parent_of, children_of = tree_links(snapshot, verstr, metadata.get("parent"))
     observed_at = lambda v: run_state_observed_at(storage, app_name, v)  # noqa: E731
     run_state, tree = subtree_status(
         verstr,
         parent_of,
         lambda v: load_run_state(storage, app_name, v),
+        children_of=children_of,
         observed_at=observed_at,
         row_of=snapshot.row,
     )
@@ -777,7 +778,7 @@ def _print_output_log(storage, app_name, verstr):
 
 def experiment_show(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
-    snapshot = placement_snapshot(storage, app_name)
+    snapshot = point_placement(storage, app_name)
     verstr, err = _resolve_experiment_version(
         storage, vcs, args, default_latest=True, snapshot=snapshot
     )
