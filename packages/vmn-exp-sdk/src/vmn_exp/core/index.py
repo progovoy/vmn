@@ -304,8 +304,20 @@ class ExperimentIndex:
             for key, names in listing.items()
             if METADATA_FILE in names
         ]
+        local = self._io is None  # else the helper process persists them
+        results = self._refresh_local(work) if local else self._io.refresh(work, removed)
+        try:
+            self._apply(results, removed, started)
+        except BaseException:
+            if local:
+                self._persist(results, removed)  # no baseline: the sweep missed some
+            raise
+        if local:
+            self._persist(results, removed, started)
+
+    def _apply(self, results, removed, started):
         touched, new, redescribed = set(), [], False
-        for key, record, dirty, moved, state_moved in self._refresh_and_persist(work, removed):
+        for key, record, dirty, moved, state_moved in results:
             old = self._records.get(key)
             if old is not None and (dirty or state_moved):
                 self._sweep.touch(key, started)
@@ -327,8 +339,6 @@ class ExperimentIndex:
             self._sweep.forget(key)
         if not self._lean:
             self._publish(new, removed, redescribed, touched)
-        if self._keeps_baseline() and not self._unsaved.pending:
-            self._baseline.save(self._sweep, started)
 
     def _publish(self, new, removed, redescribed, touched):
         # Only a new, removed or re-described record can move in the order.
@@ -386,21 +396,35 @@ class ExperimentIndex:
         return records
 
     def _refresh_and_persist(self, work, removed):
-        """``(key, record or None, dirty, moved, state moved)`` per item of
-        *work*, persisted with *removed*. The helper process answers None for
-        a record it found unchanged."""
-        if self._io is not None:
-            return self._io.refresh(work, removed)
+        """``(key, record, dirty, moved, state moved)`` per item of *work*,
+        persisted with *removed*: what the helper process's index answers
+        (``None`` records stand for those it found unchanged)."""
+        results = self._refresh_local(work)
+        self._persist(results, removed)
+        return results
+
+    def _refresh_local(self, work):
         direct_files = getattr(self._storage, "direct_files", None)
-        direct = direct_files() if direct_files else self._storage
-        results = self._refresh_records(work, direct)
-        self._unsaved.save(
+        return self._refresh_records(work, direct_files() if direct_files else self._storage)
+
+    def _persist(self, results, removed, started=None):
+        """Save *results* with *removed*, then — given the refresh's
+        *started* — the listing baseline: in the same transaction when the
+        store joins them, else only once nothing is left unsaved."""
+        baseline = started is not None and self._keeps_baseline()
+        joint = baseline and getattr(self._store, "JOINS_KV", False)
+        puts = self._baseline.puts(self._sweep, started) if joint else None
+        saved = self._unsaved.save(
             self._store, self.app_name,
             {key: record for key, record, dirty, _, _ in results if dirty},
             removed,
             {key: record for key, record, _, _, state_moved in results if state_moved},
+            puts,
         )
-        return results
+        if puts and not saved:
+            self._baseline.forget()
+        elif baseline and not joint and saved:
+            self._baseline.save(self._sweep, started)
 
     def _refresh_records(self, work, direct):
         """``(key, record, dirty, moved, state moved)`` per ``(key, names,
@@ -418,6 +442,11 @@ class ExperimentIndex:
     def _refresh_all(self, work, direct):
         is_remote = getattr(self._storage, "is_remote", None)
         if len(work) > 1 and is_remote and is_remote():
+            # A warm start's lazy records read their stored head here, in
+            # order (a chunk per query), never from the pool's threads.
+            for _, _, record in work:
+                if record is not None:
+                    record.get("meta_sig")
             with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
                 return list(pool.map(lambda w: self._refresh_one(*w, direct), work))
         return [self._refresh_one(*w, direct) for w in work]

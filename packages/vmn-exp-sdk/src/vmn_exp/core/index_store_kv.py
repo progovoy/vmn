@@ -2,10 +2,25 @@
 """The key-value table of :class:`vmn_exp.core.index_store.SqliteStore`
 (listing baselines, journal cursors): payloads under a scope, each with the
 fingerprint it is valid for."""
+import contextlib
 import json
 import sqlite3
+import threading
 
 from vmn_exp.core.sqlite_conn import in_chunks, write_tx
+
+_JOINED = threading.local()  # .conn: the connection whose open transaction puts join
+
+
+@contextlib.contextmanager
+def joining(conn):
+    """Within the block, this thread's puts on *conn* join its open
+    transaction (and its fate) instead of committing their own."""
+    _JOINED.conn = conn
+    try:
+        yield
+    finally:
+        _JOINED.conn = None
 
 
 class KeyValues:
@@ -45,12 +60,18 @@ class KeyValues:
         conn = self._db.get()
         if conn is None or not puts:
             return
+        if getattr(_JOINED, "conn", None) is conn:
+            _write(conn, puts)  # an error fails the transaction joined
+            return
         try:
             with write_tx(conn):
-                conn.executemany(
-                    "INSERT OR REPLACE INTO exp_index_kv (scope, fingerprint, payload)"
-                    " VALUES (?, ?, ?)",
-                    [(scope, fp, json.dumps(payload)) for scope, fp, payload in puts],
-                )
+                _write(conn, puts)
         except sqlite3.Error as exc:
             self._db.on_error(exc)  # corrupt: recovers; else debug
+
+
+def _write(conn, puts):
+    conn.executemany(
+        "INSERT OR REPLACE INTO exp_index_kv (scope, fingerprint, payload) VALUES (?, ?, ?)",
+        [(scope, fp, json.dumps(payload)) for scope, fp, payload in puts],
+    )

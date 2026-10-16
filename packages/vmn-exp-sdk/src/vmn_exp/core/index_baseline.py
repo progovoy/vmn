@@ -16,8 +16,9 @@ another count, or a missing one, read as no baseline: the next listing is a
 full one.
 
 Ordering keeps a baseline from vouching for records the store lacks: it is
-read before the records and written after them, and not at all while a failed
-save left records unsaved. A baseline older than the records only costs extra
+read before the records and written after them (in the same transaction
+when the store can, :meth:`ListingBaseline.puts`), and not at all while a
+failed save left records unsaved. A baseline older than the records only costs extra
 re-reads.
 """
 import zlib
@@ -85,6 +86,21 @@ class ListingBaseline:
 
     def save(self, sweep, now):
         """Persist *sweep*'s baseline: the shards whose records moved, then the head."""
+        puts = self.puts(sweep, now)
+        put_many = getattr(self._store, "kv_put_many", None)
+        if put_many is not None:
+            put_many(puts)
+        else:
+            for put in puts:
+                self._store.kv_put(*put)
+
+    def forget(self):
+        """The puts last handed out were not persisted: rewrite it all next time."""
+        self._shards = self._head = None
+
+    def puts(self, sweep, now):
+        """The ``(scope, fingerprint, payload)`` writes that persist *sweep*'s
+        baseline (the head last), as :meth:`save` writes them."""
         names, prints, moved = sweep.watch.baseline()
         count = _shard_count(len(names))
         rewrite = moved is None or self._shards is None or len(self._shards) != count
@@ -97,12 +113,7 @@ class ListingBaseline:
         if dirty or rewrite or head != self._head:  # an idle refresh writes nothing
             puts.append((self._scope, FORMAT, head))  # last: it vouches for the shards
             self._head = head
-        put_many = getattr(self._store, "kv_put_many", None)
-        if put_many is not None:
-            put_many(puts)
-        else:
-            for put in puts:
-                self._store.kv_put(*put)
+        return puts
 
     def _apply(self, moved, names, prints, count):
         """Put the *moved* keys' entries in their shards; the shards changed."""

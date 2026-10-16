@@ -19,14 +19,17 @@ class PendingSave:
         """Whether an earlier save left something unpersisted."""
         return bool(self._changed or self._removed or self._states)
 
-    def save(self, store, scope, changed, removed, states):
-        """Save these changes and the pending ones into *store*."""
+    def save(self, store, scope, changed, removed, states, kv_puts=None):
+        """Save these changes and the pending ones into *store* (with
+        *kv_puts*, for a store that ``JOINS_KV``); whether it saved."""
         if self.pending:
             changed, removed, states = self._with_pending(changed, set(removed), states)
-        if store.save(scope, changed, removed, states) is False:
+        extra = {"kv_puts": kv_puts} if kv_puts else {}
+        if store.save(scope, changed, removed, states, **extra) is False:
             self._changed, self._removed, self._states = dict(changed), set(removed), dict(states)
-        else:
-            self._changed, self._removed, self._states = {}, set(), {}
+            return False
+        self._changed, self._removed, self._states = {}, set(), {}
+        return True
 
     def _with_pending(self, changed, removed, states):
         return (

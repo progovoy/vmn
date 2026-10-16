@@ -38,13 +38,14 @@ def lean_doc(row, note, sides, command):
                      command=row.get("command") or command, create_note=note)
 
 
-def _record_doc(record):
-    row, note, *sides = lean_row(0, record["meta"], record["fold"])
+def _record_doc(record, lean=None):
+    row, note, *sides = lean or lean_row(0, record["meta"], record["fold"])
     return lean_doc(row, note, sides, _command(record.get("run_state")))
 
 
-def file_records(conn, app, changed, removed, states=None):
-    """Bring *app*'s documents in line with a save (see the module)."""
+def file_records(conn, app, changed, removed, states=None, leans=None):
+    """Bring *app*'s documents in line with a save (see the module); *leans*:
+    the changed runs' lean rows, when already derived."""
     if not similar_fts.has_tables(conn):
         return
     runs = {key: r for key, r in changed.items() if is_run(r)}
@@ -53,8 +54,9 @@ def file_records(conn, app, changed, removed, states=None):
                                         if k not in changed})
     runs.update((key, record) for key, record in moved.items() if is_run(record))
     commands = {key: _command(r.get("run_state")) for key, r in runs.items()}
-    similar_fts.file_docs(conn, app, [(key, _record_doc(r)) for key, r in runs.items()],
-                          commands)
+    leans = leans or {}
+    similar_fts.file_docs(conn, app, [(key, _record_doc(r, leans.get(key)))
+                                      for key, r in runs.items()], commands)
 
 
 def _commands_moved(conn, app, states):
@@ -87,6 +89,10 @@ def _states_of(snapshot):
     return getattr(snapshot, "run_states", None) or {}
 
 
+def _snapshot_command(snapshot, row):
+    return row.get("command") or _command(_states_of(snapshot).get(row["verstr"]))
+
+
 def snapshot_facts(snapshot, row):
     """``(features, intent, hypothesis, command, create note)`` of a run of
     *snapshot* (a missing accessor reads as None)."""
@@ -96,7 +102,7 @@ def snapshot_facts(snapshot, row):
         of = getattr(snapshot, name, None)
         return of(verstr) if of else None
     notes = getattr(snapshot, "create_notes", None) or {}
-    command = row.get("command") or _command(_states_of(snapshot).get(verstr))
+    command = _snapshot_command(snapshot, row)
     return (side("features_of"), side("intent_of"), side("hypothesis_of"), command,
             notes.get(verstr))
 
@@ -119,16 +125,22 @@ class SnapshotFiler:
         return self._synced is not None and self._synced() is snapshot
 
     def sync(self, snapshot):
-        """File what changed since the last snapshot synced; one transaction."""
+        """File what changed since the last snapshot synced; one transaction, none
+        when nothing did."""
         if self.synced_to(snapshot):
             return
         entries, commands, seen = [], {}, {}
         for row in snapshot.rows:
             verstr = row["verstr"]
+            old = self._seen.get(verstr)
+            # The same row object: only its run state may have moved (an
+            # index refolds a run whose record changed into a new row).
+            if old is not None and old[0] is row and old[4] == _snapshot_command(snapshot, row):
+                seen[verstr] = old
+                continue
             facts = snapshot_facts(snapshot, row)
             mark = (row, *facts)
             seen[verstr] = mark
-            old = self._seen.get(verstr)
             if old is not None and all(a is b or a == b for a, b in zip(old, mark)):
                 continue
             features, intent, hypothesis, command, note = facts
@@ -139,9 +151,9 @@ class SnapshotFiler:
         if not self._seen:  # a file filed before this process: forget what it no longer has
             gone = [key for (key,) in self.conn.execute(
                 "SELECT key FROM similar_doc WHERE app = ?", (self.app,)) if key not in seen]
-        with write_tx(self.conn):
-            similar_fts.forget(self.conn, self.app, gone)
-            similar_fts.file_docs(self.conn, self.app, entries, commands)
-        self._seen, self._synced = seen, weakref.ref(snapshot)
         if entries or gone:
+            with write_tx(self.conn):
+                similar_fts.forget(self.conn, self.app, gone)
+                similar_fts.file_docs(self.conn, self.app, entries, commands)
             self.syncs += 1
+        self._seen, self._synced = seen, weakref.ref(snapshot)

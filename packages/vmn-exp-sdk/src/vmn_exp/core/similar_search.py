@@ -170,6 +170,10 @@ def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, q
     items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
                                deadline=deadline)
     rows_of = {scope.label: scope.rows for scope in scopes}
+    for label, rows in rows_of.items():
+        prefetch = getattr(rows, "prefetch", None)  # facts read for all shown at once
+        if prefetch is not None:
+            prefetch([item["row"] for item in items if item["app"] == label])
     return [item_payload(item, rows_of[item["app"]], with_features) for item in items]
 
 

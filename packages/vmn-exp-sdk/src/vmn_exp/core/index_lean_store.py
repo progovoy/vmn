@@ -57,15 +57,21 @@ def run_status(record):
         return None
 
 
-def write_lean(conn, app, seq, changed, removed, states):
-    """Bring *app*'s lean tables in line with a save of *changed* records,
-    *removed* keys and the run states of *states* (see
-    :meth:`~vmn_exp.core.index_store.SqliteStore.save`)."""
-    runs = {key: record for key, record in changed.items() if is_run(record)}
+def leans_of(records):
+    """``{key: lean_row tuple}`` of the runs among *records* (``idx`` 0)."""
+    return {key: lean_row(0, record["meta"], record["fold"])
+            for key, record in records.items() if is_run(record)}
+
+
+def write_lean(conn, app, seq, changed, removed, states, leans):
+    """Bring *app*'s lean tables in line with a save of *changed* records
+    (*leans* their runs' :func:`leans_of`), *removed* keys and the run states
+    of *states* (see :meth:`~vmn_exp.core.index_store.SqliteStore.save`)."""
+    runs = {key: changed[key] for key in leans}
     gone = set(removed) | {key for key in changed if key not in runs}
     before = _existing(conn, app, sorted(set(runs) | gone))
     _delete(conn, app, gone)
-    _upsert(conn, app, seq, runs)
+    _upsert(conn, app, seq, runs, leans)
     conn.executemany(
         "UPDATE exp_rows SET status = ? WHERE app = ? AND key = ?",
         [(run_status(r), app, key) for key, r in states.items() if key not in runs],
@@ -95,11 +101,11 @@ def _delete(conn, app, keys):
     conn.executemany("DELETE FROM exp_sides WHERE app = ? AND key = ?", gone)
 
 
-def _upsert(conn, app, seq, runs):
+def _upsert(conn, app, seq, runs, leans):
     rows, sides = [], []
     for key, record in runs.items():
         meta = record["meta"]
-        row, note, *values = lean_row(0, meta, record["fold"])
+        row, note, *values = leans[key]
         rows.append((
             app, key, meta["verstr"], run_status(record), row.get("parent"),
             sort_timestamp(meta), row.get("name"), int(row["archived"]), seq, _dumps(row),
