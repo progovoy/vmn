@@ -212,13 +212,19 @@ class LocalSnapshotStorage(LocalStreams, LocalMetrics, SnapshotStorage):
 
     def list_record_keys(self, app_name):
         """:meth:`list_record_names`' keys alone: one directory listing, no stat."""
-        return {unsafe_verstr(entry.name) for entry in self._record_entries(app_name)}
+        return {unsafe_verstr(entry.name) for entry in self._scan_records(app_name)}
 
     def _record_entries(self, app_name):
+        return list(self._scan_records(app_name))
+
+    def _scan_records(self, app_name):
         base = self._snapshot_base_dir(app_name)
         if not os.path.isdir(base):
-            return []
-        return [e for e in os.scandir(base) if e.is_dir() and not e.name.startswith(".")]
+            return
+        with os.scandir(base) as entries:
+            for e in entries:
+                if e.is_dir() and not e.name.startswith("."):
+                    yield e
 
     def list_files(self, app_name, keys=None, identity=False):
         """``{verstr: {filename: (size, mtime_ns)}}``; only *keys* when given

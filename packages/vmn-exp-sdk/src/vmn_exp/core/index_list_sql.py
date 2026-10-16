@@ -15,6 +15,8 @@ from vmn_exp.core.index_views import SIDE_TABLES
 
 _CHUNK = 500  # keys per query, under SQLite's bound-parameter limit
 _NO_STATE = {"rs_sig": None, "run_state": None}
+# The side tables a row copy and a query read (the rest feed similarity).
+ROW_SIDES = (NOTE, "metric_parts", "outputs")
 
 
 def _chunks(values):
@@ -65,16 +67,19 @@ def children(conn, app, verstrs):
 
 def rows_of(conn, app, keys):
     """``[(row, create note, side values, run state fields)]`` of *keys*'
-    runs in storage order, each row's ``idx`` its column's."""
+    runs in storage order, each row's ``idx`` its column's; of the side
+    tables only what a row copy carries (:data:`ROW_SIDES`)."""
     keys = list(keys)
     found, sides, states = [], {}, {}
+    kinds = ", ".join("?" * len(ROW_SIDES))
     for chunk, marks in _chunks(keys):
         args = (app, *chunk)
         found += conn.execute(
             f"SELECT key, idx, row FROM exp_rows WHERE app = ? AND key IN ({marks})", args
         ).fetchall()
         for key, kind, data in conn.execute(
-            f"SELECT key, kind, data FROM exp_sides WHERE app = ? AND key IN ({marks})", args
+            f"SELECT key, kind, data FROM exp_sides WHERE app = ? AND key IN ({marks})"
+            f" AND kind IN ({kinds})", (*args, *ROW_SIDES)
         ):
             sides.setdefault(key, {})[kind] = json.loads(data)
         states.update(conn.execute(

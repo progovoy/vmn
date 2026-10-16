@@ -46,7 +46,7 @@ class LeanReads:
         return records, keys, lean, stamps
 
     def load_lazy(self, app_name):
-        """``{key: LazyRecord}`` with nothing decoded, run states included —
+        """``{key: LazyRecord}`` with nothing read, run states included —
         what a refresh that builds no snapshot starts from — or None when
         never saved or unavailable."""
         return self._read(lambda: self._lazy(app_name), None)
@@ -57,17 +57,17 @@ class LeanReads:
         conn = self._conn
         conn.execute("BEGIN")
         try:
-            seqs = dict(conn.execute(
-                "SELECT key, seq FROM exp_index WHERE app = ?", (app_name,)
-            ).fetchall())
-            states = dict(self._select("exp_index_state", app_name))
+            # Keys alone come off the primary key's index, never the table's pages.
+            seqs = dict.fromkeys(key for (key,) in conn.execute(
+                "SELECT key FROM exp_index WHERE app = ?", (app_name,)
+            ))
             runs = {key for (key,) in conn.execute(
                 "SELECT key FROM exp_rows WHERE app = ?", (app_name,)
             )}
         finally:
             conn.execute("COMMIT")
         fetch = _Prefetch(self, app_name, seqs)
-        return {key: LazyRecord(key, states.get(key), fetch, key in runs) for key in seqs}
+        return {key: LazyRecord(key, None, fetch, key in runs) for key in seqs}
 
     def listing(self, app_name, read):
         """``read(conn)``'s answer, all of it read at one generation; None
@@ -84,16 +84,37 @@ class LeanReads:
             self._conn.execute("COMMIT")
 
     def records_parts(self, app_name, seqs):
-        """``{key: (head JSON, fold JSON)}`` of the records of *seqs*
-        (``{key: seq}``) still stored at that seq; ``{}`` when unavailable."""
+        """``{key: (head JSON, fold JSON, run state JSON or None)}`` of the
+        records of *seqs* (``{key: seq}``) still stored at that seq (a None
+        seq: as stored now); ``{}`` when unavailable."""
         return self._read(lambda: {
-            key: (head, data)
-            for key, seq, head, data in self._conn.execute(
-                "SELECT key, seq, head, data FROM exp_index WHERE app = ?"
-                f" AND key IN ({', '.join('?' * len(seqs))})", (app_name, *seqs),
+            key: (head, data, state)
+            for key, seq, head, data, state in self._conn.execute(
+                "SELECT i.key, i.seq, i.head, i.data, s.data FROM exp_index i"
+                " LEFT JOIN exp_index_state s ON s.app = i.app AND s.key = i.key"
+                f" WHERE i.app = ? AND i.key IN ({', '.join('?' * len(seqs))})",
+                (app_name, *seqs),
             )
-            if seqs[key] == seq
+            if seqs[key] in (None, seq)
         }, {})
+
+    def diff_keys(self, app_name, names):
+        """``(names not persisted, persisted keys not in names)`` of
+        *app_name* against the set *names*; None when unavailable."""
+        return self._read(lambda: self._diff(app_name, names), None)
+
+    def _diff(self, app_name, names):
+        query = "SELECT key FROM exp_index WHERE app = ?"
+        gone, known = [], 0
+        for (key,) in self._conn.execute(query, (app_name,)):
+            if key in names:
+                known += 1
+            else:
+                gone.append(key)
+        if known == len(names):  # every name is persisted (the usual case)
+            return [], gone
+        persisted = {key for (key,) in self._conn.execute(query, (app_name,))}
+        return [name for name in names if name not in persisted], gone
 
     def keys(self, app_name):
         """Every persisted record key of *app_name*; None when unavailable."""
@@ -142,7 +163,7 @@ class _Prefetch:
         self._lock = threading.Lock()
 
     def __call__(self, key):
-        """*key*'s ``(head JSON, fold JSON)``, or None (see
+        """*key*'s ``(head JSON, fold JSON, run state JSON)``, or None (see
         :class:`~vmn_exp.core.index_lazy.LazyRecord`)."""
         with self._lock:
             if key not in self._asked:

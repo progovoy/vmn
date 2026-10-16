@@ -15,6 +15,8 @@ listing does. So each run it answers is the one a full listing answers.
 A stored ``status`` is the one derived when the record was last saved; only
 the clock moves a run between ``running`` and ``stuck`` since, so a clause
 on either keeps both, and every status is derived again from the run state.
+(A run state no status derives from — a hand-edited exit code — stores
+none: a status clause leaves it out, where a full listing fails on it.)
 """
 from vmn_exp.core import index_list_sql as sql
 from vmn_exp.core import index as experiment_index
@@ -59,8 +61,7 @@ def _narrow(clause, where, params):
     values = set(values)
     if column == "status" and values & _CLOCKED:
         values |= _CLOCKED
-    marks = ", ".join("?" * len(values))
-    where.append(f"{column} IN ({marks})" + (" OR status IS NULL" if column == "status" else ""))
+    where.append(f"{column} IN ({', '.join('?' * len(values))})")
     params += sorted(values)
 
 

@@ -49,11 +49,10 @@ def _sync(storage, app_name, store):
     """Persist the records the storage lists that *store* does not know, and
     forget the ones it no longer lists; False when that cannot be told."""
     names = record_keys(storage, app_name)
-    known = store.keys(app_name)
-    if names is None or known is None:
+    diff = store.diff_keys(app_name, names) if names is not None else None
+    if diff is None:
         return False
-    new = [key for key in names if key not in known]
-    gone = known.difference(names)
+    new, gone = diff
     listed = storage.list_files(app_name, keys=new) if new else {}
     direct_files = getattr(storage, "direct_files", None)
     direct = direct_files() if direct_files else storage
