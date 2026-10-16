@@ -17,9 +17,9 @@ import json
 import sqlite3
 
 from vmn_exp.core.similar_doc import COLUMNS, PROFILE_VERSION, Doc
+from vmn_exp.core.sqlite_conn import in_chunks
 
 TABLES = ("similar_fts", "similar_vocab", "similar_doc")
-_CHUNK = 500  # keys per query, under SQLite's bound-parameter limit
 _FTS5 = []  # [available] once checked
 
 
@@ -78,23 +78,13 @@ def has_tables(conn):
     ).fetchone()[0] == len(TABLES)
 
 
-def chunks(items):
-    items = list(items)
-    for i in range(0, len(items), _CHUNK):
-        yield items[i:i + _CHUNK]
-
-
-def marks(chunk):
-    return ", ".join("?" * len(chunk))
-
-
 def filed(conn, app, keys, columns="id, sig, version"):
     """``{key: (columns...)}`` of *keys*' stored docs."""
     out = {}
-    for chunk in chunks(keys):
+    for chunk, marks in in_chunks(keys):
         for key, *values in conn.execute(
                 f"SELECT key, {columns} FROM similar_doc"
-                f" WHERE app = ? AND key IN ({marks(chunk)})",
+                f" WHERE app = ? AND key IN ({marks})",
                 (app, *chunk)):
             out[key] = values
     return out
@@ -130,7 +120,7 @@ def file_docs(conn, app, entries, commands=None):
              data))
         conn.execute(
             f"INSERT INTO similar_fts (rowid, app, verstr, {', '.join(COLUMNS)})"
-            f" VALUES (?, ?, ?, {marks(COLUMNS)})",
+            f" VALUES (?, ?, ?, {', '.join('?' * len(COLUMNS))})",
             (cur.lastrowid, app, doc.verstr, *doc.fts_values()))
 
 
@@ -142,9 +132,9 @@ def forget_except(conn, app, keep):
 
 def forget(conn, app, keys):
     """Drop *keys*' documents."""
-    for chunk in chunks(keys):
+    for chunk, marks in in_chunks(keys):
         ids = [i for (i,) in conn.execute(
-            f"SELECT id FROM similar_doc WHERE app = ? AND key IN ({marks(chunk)})",
+            f"SELECT id FROM similar_doc WHERE app = ? AND key IN ({marks})",
             (app, *chunk))]
         conn.executemany("DELETE FROM similar_fts WHERE rowid = ?", [(i,) for i in ids])
         conn.executemany("DELETE FROM similar_doc WHERE id = ?", [(i,) for i in ids])
@@ -167,9 +157,9 @@ def document_frequencies(conn, terms):
     left out. Over the whole file: a file shared by apps counts them all."""
     out = {}
     for column, wanted in terms.items():
-        for chunk in chunks(sorted(set(wanted))):
+        for chunk, marks in in_chunks(sorted(set(wanted))):
             out.update(((column, term), doc) for term, doc in conn.execute(
-                f"SELECT term, doc FROM similar_vocab WHERE col = ? AND term IN ({marks(chunk)})",
+                f"SELECT term, doc FROM similar_vocab WHERE col = ? AND term IN ({marks})",
                 (column, *chunk)))
     return out
 
@@ -177,11 +167,11 @@ def document_frequencies(conn, terms):
 def stored_docs(conn, app, verstrs):
     """``{verstr: Doc}`` as filed, with their text."""
     out = {}
-    for chunk in chunks(verstrs):
+    for chunk, marks in in_chunks(verstrs):
         for verstr, rerun, data, text in conn.execute(
                 "SELECT d.verstr, d.rerun, d.data, f.text FROM similar_doc d"
                 " JOIN similar_fts f ON f.rowid = d.id"
-                f" WHERE d.app = ? AND d.verstr IN ({marks(chunk)})", (app, *chunk)):
+                f" WHERE d.app = ? AND d.verstr IN ({marks})", (app, *chunk)):
             out[verstr] = Doc.from_data(verstr, rerun, json.loads(data), text)
     return out
 
@@ -189,9 +179,9 @@ def stored_docs(conn, app, verstrs):
 def reruns_of(conn, app, verstrs):
     """``{verstr: rerun key}`` of *verstrs*' documents."""
     out = {}
-    for chunk in chunks(verstrs):
+    for chunk, marks in in_chunks(verstrs):
         out.update(conn.execute(
-            f"SELECT verstr, rerun FROM similar_doc WHERE app = ? AND verstr IN ({marks(chunk)})",
+            f"SELECT verstr, rerun FROM similar_doc WHERE app = ? AND verstr IN ({marks})",
             (app, *chunk)))
     return out
 

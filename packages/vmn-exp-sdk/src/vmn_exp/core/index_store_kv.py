@@ -3,13 +3,9 @@
 (listing baselines, journal cursors): payloads under a scope, each with the
 fingerprint it is valid for."""
 import json
-import logging
 import sqlite3
 
-from vmn_exp.core.sqlite_conn import write_tx
-
-_LOGGER = logging.getLogger(__name__)
-_CHUNK = 500  # scopes per query, under SQLite's bound-parameter limit
+from vmn_exp.core.sqlite_conn import in_chunks, write_tx
 
 
 class KeyValues:
@@ -27,16 +23,15 @@ class KeyValues:
 
     def kv_get_many(self, scopes, fingerprint):
         """``{scope: payload}`` of those of *scopes* stored with *fingerprint*."""
-        return self._read(lambda: self._kv_payloads(list(scopes), fingerprint), {})
+        return self._read(lambda: self._kv_payloads(scopes, fingerprint), {})
 
     def _kv_payloads(self, scopes, fingerprint):
         found = {}
-        for i in range(0, len(scopes), _CHUNK):
-            chunk = scopes[i:i + _CHUNK]
+        for chunk, marks in in_chunks(scopes):
             found.update(
                 (scope, json.loads(payload)) for scope, fp, payload in self._conn.execute(
-                    "SELECT scope, fingerprint, payload FROM exp_index_kv WHERE scope IN"
-                    f" ({', '.join('?' * len(chunk))})", chunk,
+                    "SELECT scope, fingerprint, payload FROM exp_index_kv"
+                    f" WHERE scope IN ({marks})", chunk,
                 ) if fp == fingerprint
             )
         return found
@@ -57,5 +52,5 @@ class KeyValues:
                     " VALUES (?, ?, ?)",
                     [(scope, fp, json.dumps(payload)) for scope, fp, payload in puts],
                 )
-        except sqlite3.Error:
-            _LOGGER.debug("Could not persist a cache entry", exc_info=True)
+        except sqlite3.Error as exc:
+            self._db.on_error(exc)  # corrupt: recovers; else debug

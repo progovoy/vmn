@@ -30,11 +30,10 @@ from vmn_exp.core.index_store_kv import KeyValues
 from vmn_exp.core.index_store_reads import LeanReads
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
 from vmn_exp.core.similar_filing import file_records as file_similar
-from vmn_exp.core.sqlite_conn import connect, write_tx
+from vmn_exp.core.sqlite_conn import connect, in_chunks, write_tx
 
 _BUSY_TIMEOUT_MS = 5000
 TOMBSTONE_TTL_SEC = 600
-_KEYS_PER_QUERY = 500  # under SQLite's bound-parameter limit, with room to spare
 _now = time.time
 
 _LOGGER = logging.getLogger(__name__)
@@ -145,11 +144,9 @@ class SqliteStore(LeanReads, KeyValues):
     def _keyed(self, table, columns, app_name, keys):
         """``(key, *columns)`` of *keys*' rows in *table*, a chunk of keys per query."""
         rows = []
-        for i in range(0, len(keys), _KEYS_PER_QUERY):
-            chunk = keys[i:i + _KEYS_PER_QUERY]
+        for chunk, marks in in_chunks(keys):
             rows += self._conn.execute(
-                f"SELECT key, {columns} FROM {table} WHERE app = ?"
-                f" AND key IN ({', '.join('?' * len(chunk))})",
+                f"SELECT key, {columns} FROM {table} WHERE app = ? AND key IN ({marks})",
                 (app_name, *chunk),
             ).fetchall()
         return rows

@@ -68,3 +68,29 @@ def test_readonly_connections_cannot_write(tmp_path):
     assert ro.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 0
     with pytest.raises(sqlite3.OperationalError, match="readonly"):
         ro.execute("INSERT INTO t VALUES (1)")
+
+
+def test_in_chunks_yields_chunks_with_their_marks():
+    from vmn_exp.core.sqlite_conn import in_chunks
+
+    assert list(in_chunks(iter("abcde"), size=2)) == [
+        (["a", "b"], "?, ?"), (["c", "d"], "?, ?"), (["e"], "?"),
+    ]
+    assert list(in_chunks([])) == []
+    assert [len(chunk) for chunk, _ in in_chunks(range(1001))] == [500, 500, 1]
+
+
+def test_read_tx_begins_and_commits_even_when_the_block_raises(tmp_path):
+    from vmn_exp.core.sqlite_conn import read_tx
+
+    conn = connect(str(tmp_path / "a.sqlite"))
+    statements = []
+    conn.set_trace_callback(statements.append)
+    with read_tx(conn):
+        conn.execute("SELECT 1")
+    assert statements == ["BEGIN", "SELECT 1", "COMMIT"]
+    with pytest.raises(RuntimeError):
+        with read_tx(conn):
+            raise RuntimeError("boom")
+    assert statements[-1] == "COMMIT"
+    assert not conn.in_transaction
