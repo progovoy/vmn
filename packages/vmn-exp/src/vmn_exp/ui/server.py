@@ -147,8 +147,15 @@ def create_app(
 
     refresher = Refresher() if background_refresh else InlineRefresher()
     app.state.refresher = refresher
+    search_sql = search_rows = None
+    if search_dsn:
+        from vmn_exp.ui.search_pg import PgRowSearch
+        from vmn_exp.ui.search_rows_writer import SearchRowsWriter
+
+        search_sql = PgRowSearch(search_dsn)
+        search_rows = SearchRowsWriter(search_sql)
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
-                              cache_dsn=cache_dsn)
+                              cache_dsn=cache_dsn, search_rows=search_rows)
     leaderboards = LeaderboardCache()
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm
@@ -696,11 +703,6 @@ def create_app(
     def _search_scopes(ws_names):
         return ((ws, name, snap) for ws, name, snap, _ in _app_scopes(ws_names))
 
-    search_sql = None
-    if search_dsn:
-        from vmn_exp.ui.search_pg import PgRowSearch
-
-        search_sql = PgRowSearch(search_dsn, election=source.pg_election)
     routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
     routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment,
                             _similar_weights)

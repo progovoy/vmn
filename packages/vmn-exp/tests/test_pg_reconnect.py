@@ -29,7 +29,7 @@ def control_plane(pg_dsn):
 @pytest.fixture
 def search(pg_dsn):
     rows = PgRowSearch(pg_dsn)
-    rows.sync("ws", "app", 1, lambda: [_ROW])
+    rows.sync("ws", "app", [_ROW])
     return rows
 
 

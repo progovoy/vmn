@@ -2,12 +2,11 @@
 """Cross-workspace search rows in Postgres (``vmn_search_rows``), filtered by
 the query language compiled to SQL (:mod:`vmn_exp.ui.query_sql`).
 
-Rows belong to the request's org (``org_id``, row-level security in multi
-tenancy). An app's rows are rewritten whenever its index snapshot's
-generation moves past the one last synced here, in place: one
+Rows belong to the bound org (``org_id``, row-level security in multi
+tenancy). :meth:`PgRowSearch.sync` rewrites an app's rows in place: one
 ``INSERT … ON CONFLICT`` of the rows and one ``DELETE`` of the rest, under a
-transaction lock per app. With an *election* only the replica leading
-``search:<org>:<workspace>:<app>`` writes; the others read what it wrote.
+transaction lock per app. Only the replica leading the app's index calls it,
+after a refresh (:mod:`vmn_exp.ui.search_rows_writer`); requests only read.
 :meth:`PgRowSearch.search` then answers the whole query in one statement.
 Each call takes a connection from the DSN's pool (:mod:`vmn_exp.ui.pg_pool`).
 """
@@ -31,28 +30,22 @@ _DELETE_REST = (
 
 
 class PgRowSearch:
-    def __init__(self, dsn, election=None):
+    def __init__(self, dsn):
         self._dsn = dsn
-        self._election = election
-        self._synced = {}  # (org, workspace, app) -> generation
 
-    def sync(self, workspace, app, generation, rows_of):
-        """Store *rows_of()* as *workspace*/*app*'s rows unless *generation*
-        is already there (or another replica leads their sync)."""
+    def sync(self, workspace, app, rows):
+        """Store *rows* as *workspace*/*app*'s rows."""
         key = (effective_org(0), workspace, app)
-        name = "search:%s:%s:%s" % key
-        if self._synced.get(key) == generation or not self._leads(name):
-            return
-        rows = rows_of()
+        lock = "search:%s:%s:%s" % key
         verstrs = [row["verstr"] for row in rows]
         with pg_pool.pool(self._dsn).connection() as conn, conn.transaction():
             bind_org(conn, key[0])
-            # Serializes writers across a leader handover (or without an election).
-            conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (name,))
+            # Serializes writers across a leader handover (and git workspaces'
+            # replicas, which each write their own index's rows).
+            conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (lock,))
             conn.execute(_UPSERT, key + (
                 verstrs, list(range(len(rows))), [_jsonable(row) for row in rows]))
             conn.execute(_DELETE_REST, key + (verstrs,))
-        self._synced[key] = generation
 
     def search(self, workspaces, text, limit, archived=False):
         """Up to *limit* ``(workspace, app, row)`` of *workspaces* matching *text*."""
@@ -68,6 +61,3 @@ class PgRowSearch:
         with pg_pool.pool(self._dsn).connection() as conn, conn.transaction():
             bind_org(conn, org)
             return conn.execute(sql, params).fetchall()
-
-    def _leads(self, name):
-        return self._election is None or self._election.lead(name)
