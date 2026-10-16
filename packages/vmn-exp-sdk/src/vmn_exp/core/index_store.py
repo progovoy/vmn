@@ -28,6 +28,7 @@ from vmn_exp.core.index_lean_store import write_lean
 from vmn_exp.core.index_store_conn import StoreConnection
 from vmn_exp.core.index_store_reads import LeanReads
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
+from vmn_exp.core.similar_filing import file_records as file_similar
 from vmn_exp.core.sqlite_conn import connect, write_tx
 
 _BUSY_TIMEOUT_MS = 5000
@@ -176,6 +177,7 @@ class SqliteStore(LeanReads):
                 self._upsert_states(app_name, seq, states)
                 self._forget(app_name, seq, removed)
                 write_lean(conn, app_name, seq, changed, removed, states)
+                file_similar(conn, app_name, changed, removed, states)
                 conn.executemany(
                     "DELETE FROM exp_index_tombstones WHERE app = ? AND key = ?",
                     [(app_name, key) for key in changed],

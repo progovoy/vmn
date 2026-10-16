@@ -4,10 +4,9 @@ a hand-edited record holds — inputs, params, metrics, tags, commands of other
 types — is read per value, kept when it can be compared and skipped when not
 (vmn_exp.core.similar_profile)."""
 import pytest
-from similar_fixtures import FakeSnapshot, changed, run, verstrs
+from similar_fixtures import FakeSnapshot, changed, explain, run, verstrs, view_doc
 from vmn_exp.core.similar import similar_runs, target_from_snapshot
-from vmn_exp.core.similar_profile import build_profile, profile_tokens
-from vmn_exp.core.similar_score import score
+from vmn_exp.core.similar_profile import build_profile
 
 ODD = [None, 0, 12345, 1.5, True, "", [], [1, "a"], {}, {"a": 1}]
 FOCAL = changed(files=["loss.py"], symbols=["loss.py::focal_loss"])
@@ -41,8 +40,8 @@ def test_an_integer_digest_matches_the_same_integer_digest():
     a = {"row": run("a", inputs={"data": _input(digest=12345)})}
     b = {"row": run("b", inputs={"data": _input(digest=12345)})}
     c = {"row": run("c", inputs={"data": _input(digest=54321)})}
-    assert score(a, b)[2]["inputs"] == 1.0
-    assert score(a, c)[2]["inputs"] == pytest.approx(0.6)
+    assert explain(a, b)[1]["inputs"] == 1.0
+    assert explain(a, c)[1]["inputs"] == pytest.approx(1 / 3, abs=1e-4)  # the dataset name alone
 
 
 @pytest.mark.parametrize("name", [2024, 1.5, True, None])
@@ -59,7 +58,8 @@ def test_params_and_metrics_keyed_by_no_string_are_skipped():
               metrics={2: 1.0, "val_loss": 0.3, (1, 2): 2.0})
     profile = build_profile(odd)
     assert set(profile.params) == {"lr"} and profile.objective == {"val_loss"}
-    assert {"pkey:lr", "metric:val_loss"} <= profile_tokens(profile)
+    doc = view_doc({"row": odd})
+    assert "pkey:lr" in doc.cols["params"] and doc.cols["objective"] == ("metric:val_loss",)
     assert set(verstrs(_search(odd))) == {"o", "u"}
 
 
@@ -75,12 +75,11 @@ def test_a_command_of_any_type_never_raises(command):
 
 @pytest.mark.parametrize("entrypoint", ODD)
 def test_a_features_entrypoint_of_any_type_never_raises(entrypoint):
-    profile = build_profile(run("o"), features={"entrypoint": entrypoint})
-    profile_tokens(profile)
-    score({"row": run("t"), "command": ["python", "train.py"]}, profile)
+    candidate = {"row": run("o"), "features": {"entrypoint": entrypoint}}
+    explain({"row": run("t"), "command": ["python", "train.py"]}, candidate)
 
 
 @pytest.mark.parametrize("text", [3, ["focal"], {"a": 1}])
 def test_a_context_text_of_no_string_reads_as_no_text(text):
     profile = build_profile(run("t"), text=text)
-    assert profile.has_intent is False and profile.length == 0
+    assert profile.has_intent is False and profile.text == ""

@@ -11,21 +11,19 @@
 - ``GET /api/v1/similar?text=&top=`` — that text over every app of every
   workspace the caller may view, next to ``/api/v1/search``.
 
-Scoring is :mod:`vmn_exp.core.similar`'s; a run's similar runs are scored
-under its app's conf ``experiment.similar.weights``, as ``vmn-exp similar``
-scores them (a text query scores its text alone). Never the Postgres
-search rows: they carry no features or intent. Archived runs only with
-``archived=1``; ``q`` keeps the runs a query matches (the ``list --query``
-language over status-annotated rows, like ``vmn-exp similar --query``).
+Ranking is :mod:`vmn_exp.core.similar`'s (FTS5 bm25); a run's similar runs
+are ranked under its app's conf ``experiment.similar.weights``, as ``vmn-exp
+similar`` ranks them (a text query matches its text alone). Never the
+Postgres search rows: they carry no features or intent. Archived runs only
+with ``archived=1``; ``q`` keeps the runs a query matches (the ``list
+--query`` language over status-annotated rows, like ``vmn-exp similar
+--query``).
 
-An app's inverted index is built once per snapshot object (the same object
-until the app's index moves to a new generation), off the request thread —
-every app's of a request at once — and from its previous generation's
-(:class:`~vmn_exp.core.similar_cache.IndexLineages`): a heartbeat reuses
-it, other changes cost what changed, concurrent requests share one build,
-and a text query files words only. A request answers within
-:data:`SEARCH_DEADLINE_SEC`, else 503 with ``Retry-After`` while the build
-goes on.
+Each app is searched in its FTS tables (*scope_of*, the server's
+:class:`~vmn_exp.ui.similar_corpora.SimilarCorpora`): the app's index file,
+or a host-local database kept in step with its snapshots. A request answers
+within :data:`SEARCH_DEADLINE_SEC`, else 503 with ``Retry-After`` while the
+documents are still being filed.
 
 Answer: ``{"items": [...], "truncated"}``, each item ``{workspace, app,
 verstr, name, score, reasons, signals, group_size, goal, author, timestamp,
@@ -41,7 +39,7 @@ from vmn_exp.core.similar import (
     similar_runs_multi,
     target_from_snapshot,
 )
-from vmn_exp.core.similar_cache import IndexLineages
+from vmn_exp.core.similar_fts import Fts5Missing
 from vmn_exp.core.similar_search import candidate_filter, text_target
 from vmn_exp.core.similar_search import intent_excerpt as _excerpt
 from vmn_exp.ui.auth.authz import require
@@ -52,7 +50,7 @@ from vmn_exp.ui.routes_search import viewable
 DEFAULT_TOP = 10
 MAX_TOP = 100
 MAX_TEXT_BYTES = 4096
-# What a request may spend on building indexes and scoring before a 503.
+# What a request may spend on filing documents and searching before a 503.
 SEARCH_DEADLINE_SEC = 10.0
 RETRY_AFTER_SEC = 5
 
@@ -67,43 +65,45 @@ def intent_excerpt(intent):
             "truncated": excerpt.get("truncated", False)}
 
 
-def _item(found, snapshot):
+def _item(found, rows):
     (workspace, app), verstr, row = found["app"], found["verstr"], found["row"]
     return {
         "workspace": workspace, "app": app, "verstr": verstr, "name": row.get("name"),
         "score": found["score"], "reasons": found["reasons"], "signals": found["signals"],
         "group_size": found["group_size"], "goal": found["goal"],
         "author": row.get("author"), "timestamp": row.get("timestamp"),
-        "status": snapshot.status_of(verstr),
-        "note": row.get("note"), "intent": intent_excerpt(snapshot.intent_of(verstr)),
+        "status": rows.status_of(verstr),
+        "note": row.get("note"), "intent": intent_excerpt(rows.facts(row)[1]),
     }
 
 
-def _answer(request, lineages, scopes, target, top, archived, query=None, weights=None):
+def _answer(request, scope_of, scopes, target, top, archived, query=None, weights=None):
     """The *top* items most like *target* over *scopes* — ``(workspace, app,
     snapshot, conf schema)`` — keyed by ``(workspace, app)``, so apps of one
     name in two workspaces stay apart; *weights* are the conf's overrides."""
     deadline = time.monotonic() + SEARCH_DEADLINE_SEC
-    keyed = [((ws, app), snap, schema) for ws, app, snap, schema in scopes]
+    built = []
     try:
-        keep = candidate_filter(keyed, query, archived)
-    except QueryError as e:
-        raise HTTPException(400, str(e)) from None
-    structured = not target.get("text_only")
-    for key, snap, _ in keyed:
-        lineages.start(key, snap, structured)
-    try:
-        for key, snap, _ in keyed:
-            lineages.index_for(key, snap, deadline, structured)
-        found = similar_runs_multi(keyed, target, top=top + 1, rows_filter=keep,
+        for ws, app, snap, schema in scopes:
+            built.append(scope_of((ws, app), app, snap, schema, deadline))
+        try:
+            keep = candidate_filter(built, query, archived)
+        except QueryError as e:
+            raise HTTPException(400, str(e)) from None
+        found = similar_runs_multi(built, target, top=top + 1, rows_filter=keep,
                                    weights=weights, deadline=deadline)
+        rows = {scope.label: scope.rows for scope in built}
+        items = [_item(f, rows[f["app"]]) for f in found[:top]]
     except SimilarDeadlineExceeded:
         raise HTTPException(
             503, f"Similar runs took over {SEARCH_DEADLINE_SEC:g}s (the runs may still be "
                  "being indexed); retry shortly",
             headers={"Retry-After": str(RETRY_AFTER_SEC)}) from None
-    snapshots = {key: snap for key, snap, _ in keyed}
-    items = [_item(f, snapshots[f["app"]]) for f in found[:top]]
+    except Fts5Missing as e:
+        raise HTTPException(501, str(e)) from None
+    finally:
+        for scope in built:
+            scope.close()
     return json_response({"items": items, "truncated": len(found) > top}, request=request)
 
 
@@ -119,14 +119,15 @@ def _checked_text(text):
         raise HTTPException(400, f"text is over {MAX_TEXT_BYTES} bytes")
 
 
-def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
+def register(app, prefix, app_inputs, scopes_of, segment, weights_of, scope_of):
     """Add the routes; *app_inputs(ws_name, app_tag)* → ``(app_name,
     snapshot, conf schema)``, *scopes_of(ws_names)* yields ``(ws_name,
     app_name, snapshot, conf schema)`` of every app of those workspaces,
     *segment(verstr)* returns a URL verstr or raises a 400,
-    *weights_of(ws_name, app_name)* the app's conf weight overrides or None."""
-
-    lineages = IndexLineages()
+    *weights_of(ws_name, app_name)* the app's conf weight overrides or None,
+    *scope_of(key, app_name, snapshot, schema, deadline)* the app's search
+    :class:`~vmn_exp.core.similar_corpus.Scope`
+    (:meth:`~vmn_exp.ui.similar_corpora.SimilarCorpora.scope`)."""
 
     def scopes(ws_name, app_name, snapshot, schema, all_apps):
         return list(scopes_of([ws_name])) if all_apps else [(ws_name, app_name, snapshot, schema)]
@@ -142,7 +143,7 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
         if snapshot.row(verstr) is None:
             raise HTTPException(404, f"{verstr} is not a run of {app_name}")
         target = target_from_snapshot(snapshot, verstr, app=(ws_name, app_name))
-        return _answer(request, lineages, scopes(ws_name, app_name, snapshot, schema, all_apps),
+        return _answer(request, scope_of, scopes(ws_name, app_name, snapshot, schema, all_apps),
                        target, top, archived, q, weights_of(ws_name, app_name))
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/similar",
@@ -153,7 +154,7 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
         _checked_top(top)
         _checked_text(text)
         app_name, snapshot, schema = app_inputs(ws_name, app_tag)
-        return _answer(request, lineages, scopes(ws_name, app_name, snapshot, schema, all_apps),
+        return _answer(request, scope_of, scopes(ws_name, app_name, snapshot, schema, all_apps),
                        text_target(text), top, archived, q)
 
     @app.get(f"{prefix}/similar", dependencies=[require(VIEWER)])
@@ -162,5 +163,5 @@ def register(app, prefix, app_inputs, scopes_of, segment, weights_of):
         _checked_top(top)
         _checked_text(text)
         names = sorted(viewable(request, [ws.name for ws in app.state.manager.list()]))
-        return _answer(request, lineages, list(scopes_of(names)), text_target(text), top,
+        return _answer(request, scope_of, list(scopes_of(names)), text_target(text), top,
                        archived, q)

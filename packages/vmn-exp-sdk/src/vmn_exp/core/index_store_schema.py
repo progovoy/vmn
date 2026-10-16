@@ -11,16 +11,18 @@ the signatures a refresh compares) and its ``data`` (the fold). What readers
 read of it is persisted beside it in the same transaction (plan 25 §2): its
 lean row in ``exp_rows`` — the columns ``list`` sorts and filters on as real
 columns — and its side table values in ``exp_sides``, one row per non-empty
-``kind`` (see :mod:`vmn_exp.core.index_lean_store`).
+``kind`` (see :mod:`vmn_exp.core.index_lean_store`), and its similar-runs
+document in the ``similar_*`` tables (:mod:`vmn_exp.core.similar_fts`).
 """
 import sqlite3
 
+from vmn_exp.core import similar_fts
 from vmn_exp.core.sqlite_conn import write_tx
 
 # Bump whenever a record's shape, the fold's semantics or these tables change:
 # records written by an older version are dropped rather than trusted, and a
 # file written by a newer version is left to it.
-SCHEMA_VERSION = "exp-index-15"
+SCHEMA_VERSION = "exp-index-16"
 
 _TABLES = {
     "exp_index": "app TEXT, key TEXT, seq INTEGER, head TEXT, data TEXT,"
@@ -93,6 +95,7 @@ def _create(conn):
         conn.execute(f"CREATE INDEX {table}_seq ON {table} (app, seq)")
     for name, columns in _ROW_INDEXES.items():
         conn.execute(f"CREATE INDEX exp_rows_{name} ON exp_rows (app, {columns})")
+    similar_fts.create_tables(conn)
     conn.execute(
         "INSERT OR REPLACE INTO exp_index_meta (k, v) VALUES ('schema', ?)", (SCHEMA_VERSION,)
     )

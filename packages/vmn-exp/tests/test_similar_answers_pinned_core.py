@@ -1,8 +1,8 @@
 """What similar runs answers — every item's score, reasons, signals, group
 size and goal, and their order — is pinned on a varied synthetic corpus, so
-work on how the answer is computed (weights resolved once per query, reasons
-built for the returned items only, BM25 weights precomputed per query)
-cannot change it. The digest is of the answers before that work."""
+work on how the answer is computed (memoized matches and pages, batched
+stemming, paging) cannot change it unnoticed. The digest is of the FTS5
+bm25 ranking of plan 24; a deliberate ranking change re-pins it."""
 import hashlib
 import json
 
@@ -13,7 +13,7 @@ WORDS = ("focal loss label smoothing mixup cutout warmup cosine schedule adam sg
          "dropout weight decay imbalance recall precision augmentation distill").split()
 COMMANDS = (["python", "train.py", "fit", "--lr", "3"], ["python", "train.py", "eval"],
             ["torchrun", "--nproc", "8", "train.py"], ["bash", "sweep.sh"], None)
-ANSWERS_DIGEST = "abdb06c4ca286af343572fa670beed750e004199e00bfd31ad58cdb2c172b202"
+ANSWERS_DIGEST = "6a24a44e9c634b27d420d0988073060437e1d293eda271c3a2fc6ffb2d2c97c9"
 
 
 def _words(i, n, step):

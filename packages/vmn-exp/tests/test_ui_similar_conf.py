@@ -7,8 +7,8 @@ import pytest
 import yaml
 from similar_ui_fixture import OTHER, TARGET, TWIN, client_for
 from vmn_exp.core.app_conf import read_experiment_conf
-from vmn_exp.core.similar_score import SIGNALS
 from vmn_exp.core.similar_search import find
+from vmn_exp.core.similar_weights import SIGNALS
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
 
@@ -16,7 +16,8 @@ pytest.importorskip("fastapi")
 
 APP1 = "/api/v1/workspaces/ws1/apps/app1"
 # Every signal off but the branch, which the target, its twin and the
-# unrelated run share: they tie, and the newer (unrelated) run goes first.
+# unrelated run share: only they match, and bm25 ranks the unrelated run's
+# shorter document first.
 BRANCH_ONLY = dict(dict.fromkeys(SIGNALS, 0), branch=1)
 
 
@@ -48,12 +49,12 @@ def test_conf_weights_change_the_ranking_of_a_runs_similar_runs(client, tmp_path
 
     items = _items(client.get(f"{APP1}/experiments/{TARGET}/similar"))
     assert [item["verstr"] for item in items] == [OTHER, TWIN]
-    assert {item["score"] for item in items} == {1.0}
+    assert items[0]["score"] == 1.0
 
 
 def test_the_ui_ranks_like_the_cli_and_sdk_under_the_same_conf(client, tmp_path):
     root = str(tmp_path / "ws1")
-    _write_weights(root, {"symbols": 0, "files": 0.5, "params": 4})
+    _write_weights(root, BRANCH_ONLY)
     storage = open_storage(root=local_store_root(root), area="runs")
 
     expected = find(storage, "app1", TARGET, read_experiment_conf("app1", root))

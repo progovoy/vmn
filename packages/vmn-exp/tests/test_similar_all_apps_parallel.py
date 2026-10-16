@@ -29,9 +29,9 @@ def test_other_apps_are_refreshed_side_by_side_in_app_order(storage, monkeypatch
 
     monkeypatch.setattr(similar_search, "app_snapshot", refresh)
 
-    scopes = similar_search._other_scopes(storage, "trainer", None)
+    scopes = similar_search._other_scopes(storage, "trainer", None, True)
 
-    assert [app for app, _, _ in scopes] == [a for a in storage.list_apps() if a != "trainer"]
-    assert [snap.app_name for _, snap, _ in scopes] == [app for app, _, _ in scopes]
+    assert [s.label for s in scopes] == [a for a in storage.list_apps() if a != "trainer"]
+    assert [s.rows.snapshot.app_name for s in scopes] == [s.label for s in scopes]
     found = similar_search.find(storage, "trainer", target, {}, all_apps=True)
     assert {item["app"] for item in found} == {"alpha", "beta"}
