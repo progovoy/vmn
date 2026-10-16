@@ -12,18 +12,19 @@ never the target. The conf's ``experiment.similar`` section holds
 and ``hint`` (``false`` turns the submission hint off).
 
 An app is searched in its persisted index file (:func:`app_scope`): a fresh
-process brings the file up to date with the runs created since (a names-only
-listing, :func:`~vmn_exp.core.index_point.point_view`) and reads the few runs
-a query looks at by verstr — no snapshot of the app. A query (which filters
+process brings the file up to date with storage, edits in place included
+(:meth:`~vmn_exp.core.index.ExperimentIndex.sync`: a journaled store's
+changes since, else a names listing), and reads the few runs a query looks
+at by verstr — no snapshot of the app. A query (which filters
 snapshot rows), a store never indexed yet or no index file at all take the
 refreshed snapshot; without a file the search runs on a ``:memory:``
 database filled from it. A target run is read from its own record, so what
 it just logged counts.
 """
+from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.fold import fold_log
-from vmn_exp.core.index import direct_snapshot, indexed_snapshot, snapshot_of_folds
-from vmn_exp.core.index_point import point_view
+from vmn_exp.core.index import direct_snapshot, indexed_snapshot, shared_index, snapshot_of_folds
 from vmn_exp.core.log import load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.refs import resolve_experiment
@@ -85,13 +86,23 @@ def app_scope(storage, app_name, schema=None, with_snapshot=False):
     in (see the module docstring); *with_snapshot* reads its rows from a
     refreshed snapshot (what a query filters)."""
     path = index_path(storage, app_name)
-    if path and not with_snapshot and point_view(storage, app_name) is not None:
+    if path and not with_snapshot and _synced(storage, app_name):
         scope = file_scope(app_name, path, schema)
         if scope is not None:
             return scope
     snapshot = app_snapshot(storage, app_name, schema)
     scope = file_scope(app_name, path, schema, snapshot) if path else None
     return scope or snapshot_scope(app_name, snapshot, schema)
+
+
+def _synced(storage, app_name):
+    """Whether the persisted index now holds *app_name*'s runs as they are
+    (:meth:`~vmn_exp.core.index.ExperimentIndex.sync`)."""
+    try:
+        return shared_index(storage, app_name).sync()
+    except Exception:
+        VMN_LOGGER.debug("Experiment index sync failed", exc_info=True)
+        return False
 
 
 def record_target(storage, app_name, verstr, context=None, text_only=False, command=None):
