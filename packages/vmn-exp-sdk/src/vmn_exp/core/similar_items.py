@@ -35,13 +35,13 @@ def utf8_safe(value):
     return copy.deepcopy(value)
 
 
-def item_payload(item, rows):
+def item_payload(item, rows, with_features=True):
     """A :func:`~vmn_exp.core.similar.similar_runs_multi` item as its JSON
     item, its facts read from *rows* (:mod:`vmn_exp.core.similar_rows`);
-    copies only."""
+    copies only. Without *with_features* it has no ``features``."""
     verstr, row = item["verstr"], item["row"]
     features, intent, _, _, create_note = rows.facts(row)
-    return utf8_safe({
+    payload = {
         "app": item["app"],
         "verstr": verstr,
         "name": row.get("name"),
@@ -55,8 +55,10 @@ def item_payload(item, rows):
         "goal": item.get("goal"),
         "note": row.get("note") or create_note,
         "intent": intent_excerpt(intent),
-        "features": features,
-    })
+    }
+    if with_features:
+        payload["features"] = features
+    return utf8_safe(payload)
 
 
 def intent_excerpt(intent):

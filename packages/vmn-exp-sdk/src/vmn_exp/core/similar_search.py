@@ -138,17 +138,22 @@ def text_target(context):
 
 
 def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, query=None,
-           all_apps=False, schema_of=None, weights=None, include_archived=False, deadline=None):
+           all_apps=False, schema_of=None, weights=None, include_archived=False, deadline=None,
+           with_features=True):
     """The *top* runs most like *target*: :func:`item_payload` items, best first.
 
     *source* is *app_name*'s :class:`~vmn_exp.core.similar_corpus.Scope`
-    (:func:`app_scope`) or its snapshot under *schema*; with *all_apps* every
+    (:func:`app_scope`), its snapshot under *schema*, or a list of ready
+    scopes (each labelling its results); with *all_apps* every
     other app of *storage* joins under ``schema_of(app)``. Raises
     ``QueryError`` on a bad *query*, ``SimilarDeadlineExceeded`` past a
     *deadline* (:func:`~vmn_exp.core.similar.similar_runs_multi`).
     """
-    scopes = [source if isinstance(source, Scope)
-              else snapshot_scope(app_name, source, schema or {})]
+    if isinstance(source, list):
+        scopes = list(source)
+    else:
+        scopes = [source if isinstance(source, Scope)
+                  else snapshot_scope(app_name, source, schema or {})]
     query = _query(query)
     if all_apps:
         scopes += _other_scopes(storage, app_name, schema_of, bool(query))
@@ -156,7 +161,7 @@ def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, q
     items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
                                deadline=deadline)
     rows_of = {scope.label: scope.rows for scope in scopes}
-    return [item_payload(item, rows_of[item["app"]]) for item in items]
+    return [item_payload(item, rows_of[item["app"]], with_features) for item in items]
 
 
 def _query(query):
