@@ -17,9 +17,10 @@ snapshot's ``outputs`` or ancestry (``under()``).
 from collections import namedtuple
 
 from vmn_exp.core.query import query_roots
+from vmn_exp.core.query_extra import SNAPSHOT_FIELDS
 from vmn_exp.core.tree import OUTER, ancestors, subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
-from vmn_exp.ui.readers.experiments import SNAPSHOT_FIELDS, apply_filters
+from vmn_exp.ui.readers.experiments import apply_filters
 
 JOBS, SINGLES = "jobs", "singles"
 _TOPS = {None: False, "": False, "0": False, "false": False, "1": True, "true": True,

@@ -58,6 +58,15 @@ def test_outputs_query_is_filtered_in_python(client):
     assert sql.searched == []
 
 
+@pytest.mark.parametrize("text", ['intent ~ "x"', 'keywords ~ "x"', 'similar("x")'])
+def test_snapshot_field_queries_are_filtered_in_python(client, text):
+    """Plan 24 F5: intents and similar-runs documents are off the synced rows too."""
+    http, sql = client
+    response = http.get("/api/search", params={"q": text})
+    assert response.status_code == 200, response.text
+    assert response.json()["results"] == [] and sql.searched == []
+
+
 def test_other_queries_push_down(client):
     http, sql = client
     http.get("/api/search", params={"q": "verstr ~ r1"})
@@ -70,5 +79,5 @@ def test_other_queries_push_down(client):
     ("metrics.loss < 1", False),
     ("", False),
 ])
-def test_references_outputs(text, expected):
-    assert routes_search.references_outputs(text) is expected
+def test_reads_snapshot_fields(text, expected):
+    assert routes_search.reads_snapshot_fields(text) is expected

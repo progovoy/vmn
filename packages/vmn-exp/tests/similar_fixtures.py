@@ -1,9 +1,9 @@
 """Hand-built rows and a duck-typed snapshot for the similar-runs core tests.
 
-The similar modules read a snapshot through ``.rows``, ``.features_of``,
-``.intent_of``, ``.hypothesis_of`` and ``.declared_schema()`` (plus the
-optional ``run_states``/``create_notes`` maps), so a few dicts stand in for an
-index snapshot here.
+The similar modules read a snapshot through ``.rows``, ``.edges``,
+``.outputs_of``, ``.features_of``, ``.intent_of``, ``.hypothesis_of`` and
+``.declared_schema()`` (plus the optional ``run_states``/``create_notes``
+maps), so a few dicts stand in for an index snapshot here.
 """
 
 
@@ -51,6 +51,10 @@ class FakeSnapshot:
         self._declared = declared or {}
         self.run_states = run_states or {}
         self.create_notes = create_notes or {}
+        self.edges = {row["verstr"]: row.get("parent") for row in self.rows}
+
+    def outputs_of(self, verstr):
+        return {}
 
     def features_of(self, verstr):
         return self._features.get(verstr)

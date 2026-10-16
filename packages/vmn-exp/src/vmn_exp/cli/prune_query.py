@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """``--query`` selection logic for ``vmn-exp prune``.
 
-:func:`query_candidates` loads the full indexed rows (status, metrics, tags)
+:func:`query_candidates` loads the full indexed rows (status, metrics, tags, and
+the snapshot fields: intents, similar-runs documents)
 so the query language sees the same fields as ``vmn-exp list --query``.
 :func:`print_preview` renders the dry-run summary, capped at 20 entries.
 """
-from vmn_exp.core.index import indexed_status_rows
+from vmn_exp.core.index_list import snapshot_listing
 from vmn_exp.core.query import compile_query
-from vmn_exp.core.tree import annotate_rows
 
 _PREVIEW_CAP = 20
 
@@ -19,10 +19,9 @@ def query_candidates(storage, app_name, metas, query_text, schema=None):
     Raises :class:`~version_stamp.core.experiment_query.QueryError` for an
     empty or syntactically invalid query.  Callers must catch it.
     """
-    predicate = compile_query(query_text)  # raises QueryError on bad input
-    rows, run_states, observed = indexed_status_rows(storage, app_name, schema=schema)
-    tree_rows = annotate_rows(rows, run_states, observed)
-    matching = {row["verstr"] for row in tree_rows if predicate(row)}
+    compile_query(query_text)  # raises QueryError on bad input, an empty one too
+    rows, _, _ = snapshot_listing(storage, app_name, query_text, schema)
+    matching = {row["verstr"] for row in rows}
     return [m for m in metas if m["verstr"] in matching]
 
 

@@ -27,6 +27,7 @@ from vmn_exp.core.index_snapshot import put_side_tables
 from vmn_exp.core.index_views import runs_declared_schema
 from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import filter_rows, parse_query
+from vmn_exp.core.query_extra import store_extra
 from vmn_exp.core.status import RUNNING, STUCK
 from vmn_exp.core.tree import annotate_rows
 
@@ -82,9 +83,27 @@ def list_view(storage, app_name, query=None, archived=False, last=None, schema=N
         return None
     total, keep, found, declared = parts
     snap = _snapshot(app_name, found).summarized(schema)
-    tree = annotate_rows(row_copies(snap, True), snap.run_states, snap.run_state_observed_at)
-    rows = [row for row in filter_rows(tree, query) if row["verstr"] in keep]
+    rows = [row for row in _matching(storage, app_name, snap, query, True)[0]
+            if row["verstr"] in keep]
     return filter_archived(rows, archived), runs_declared_schema(*declared), total > 0
+
+
+def snapshot_listing(storage, app_name, query=None, schema=None, with_create_note=False):
+    """``(rows, declared schema, app has runs)`` — the annotated runs *query*
+    keeps, in storage order — from an up-to-date snapshot of the app: what
+    a listing :func:`list_view` cannot answer, and ``prune --query``, read."""
+    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
+    rows, tree = _matching(storage, app_name, snap, query, with_create_note)
+    return rows, snap.declared_schema(), bool(tree)
+
+
+def _matching(storage, app_name, snap, query, with_create_note):
+    """``(rows *query* keeps, all rows)`` of *snap*, annotated: status and
+    tree fields span every run, so depth, tree_status and the query see the
+    whole tree whatever subset is kept."""
+    tree = annotate_rows(row_copies(snap, with_create_note), snap.run_states,
+                         snap.run_state_observed_at)
+    return filter_rows(tree, query, extra=store_extra(storage, app_name, snap)), tree
 
 
 def _read(conn, app, where, params, last):

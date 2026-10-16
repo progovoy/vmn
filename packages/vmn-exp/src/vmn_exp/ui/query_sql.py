@@ -12,7 +12,8 @@ corpus through both backends.
 """
 import json
 
-from vmn_exp.core.query import QueryError, parse_query
+from vmn_exp.core.query import SIMILAR, QueryError, parse_query
+from vmn_exp.core.query_extra import INTENT, KEYWORDS
 
 # What Python's ``x or y`` treats as false, as jsonb.
 _FALSY = "('null', '{}', '[]', '\"\"', '0', 'false')"
@@ -39,8 +40,8 @@ class _Compiler:
             return "(" + joiner.join(self.node(term) for term in node[1]) + ")"
         if kind == "not":
             return f"(NOT {self.node(node[1])})"
-        if kind == "under":
-            raise QueryError("under() is not supported by the SQL backend")
+        if kind in ("under", SIMILAR):
+            raise QueryError(f"{kind}() is not supported by the SQL backend")
         value = self.field(node[1])
         if kind == "in":
             return "(" + " OR ".join(self.equal(value, v) for v in node[2]) + ")"
@@ -49,6 +50,8 @@ class _Compiler:
     def field(self, field):
         kind, arg = field
         if kind == "path":
+            if arg[0] in (INTENT, KEYWORDS):  # off the synced rows
+                raise QueryError(f"{arg[0]} is not supported by the SQL backend")
             return f"({self.column} #> {self.param(list(arg), '::text[]')})"
         packages = f"({self.column} #> '{{env,packages}}')"
         key_packages = f"({self.column} #> '{{env,key_packages}}')"

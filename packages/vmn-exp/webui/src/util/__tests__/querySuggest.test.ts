@@ -40,6 +40,12 @@ describe("suggest", () => {
     expect(suggest("metrics.loss < 0.5 and ", 23, facets)).toContain("params.lr");
   });
 
+  it("offers the intent fields and similar() at the start", () => {
+    const s = suggest("", 0, facets);
+    expect(s).toEqual(expect.arrayContaining(["intent", "keywords", 'similar("']));
+    expect(suggest("status = \"failed\" and sim", 26, facets)).toEqual(['similar("']);
+  });
+
   it("offers nothing while typing a value", () => {
     expect(suggest("metrics.loss < 0.", 17, facets)).toEqual([]);
   });
@@ -56,6 +62,10 @@ describe("applySuggestion", () => {
     expect(applySuggestion("metrics.loss ", 13, "<")).toEqual({
       text: "metrics.loss < ", caret: 15,
     });
+  });
+
+  it("leaves the caret inside similar()'s quotes", () => {
+    expect(applySuggestion("sim", 3, 'similar("')).toEqual({ text: 'similar("', caret: 9 });
   });
 
   it("keeps the text after the caret", () => {
