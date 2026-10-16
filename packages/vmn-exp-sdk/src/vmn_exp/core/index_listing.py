@@ -48,6 +48,7 @@ class ListingWatch:
     # instead of all at once every full_sweep_sec (see Sweep).
     rolling = False
     names_at = None  # wall time of the last name_changes (None: unknown)
+    from_journal = False  # whether the store's change journal answered it
 
     def __init__(self, storage, app_name, identity=False):
         self._storage = storage
@@ -83,6 +84,7 @@ class ListingWatch:
         moves = journal_moves(
             self._storage, self._app_name, self._names, self.names_at, wall
         ) if journal and wall is not None else None
+        self.from_journal = moves is not None
         if moves is None:
             moves = self._listed_moves()
         if moves is None:

@@ -121,6 +121,17 @@ def test_a_sync_after_a_cold_build_reads_only_the_changed_record(process, seeded
     assert set(read) == set(fetched) == {seeded[3]}
 
 
+def test_a_record_changed_before_the_last_refresh_is_not_read_again(process, seeded):
+    """What it may still log is journaled too: no touch window re-reads it."""
+    process().storage.update_note(APP, seeded[3], "edited")
+    seen = process()
+    seen.rows()
+    assert seen.updated == [seeded[3]]
+    again = process()
+    again.rows()
+    assert again.updated == []
+
+
 def test_a_record_removed_since_is_gone(process, seeded):
     process().storage.delete(APP, seeded[5])
     again = process()
