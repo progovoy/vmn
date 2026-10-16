@@ -1,7 +1,7 @@
 """Where ``vmn-exp ui`` searches similar runs (vmn_exp.ui.similar_corpora): an
 app whose index persists in a SQLite file searches that file; any other (a
 Postgres-cached store, ``--no-index``) a host-local database kept in step
-with its snapshots — on each refresh (the refresher's ``on_index_refresh``)
+with its snapshots — on each refresh (a refresher listener)
 and, when a request finds it behind, in the background while the request
 waits up to its deadline."""
 import os

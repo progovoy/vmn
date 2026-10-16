@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Keeps ``vmn_search_rows`` current from index refreshes (plan 25 F5).
 
-:class:`~vmn_exp.ui.experiment_source.ExperimentSource` hands the refresher
-:meth:`SearchRowsWriter.scoped` for each workspace app, which notes the index
-serving it. After every refresh (the refresher's ``on_index_refresh``) the
+:class:`~vmn_exp.ui.experiment_source.ExperimentSource` notes the index
+serving each workspace app (:meth:`SearchRowsWriter.note`). After every
+refresh (a refresher listener, :meth:`SearchRowsWriter.refreshed`) the
 writer writes that app's rows when its snapshot's generation (or metrics
 schema) moved — only the rows whose stored JSON or position changed since its
-last write, and deletes the removed ones (a first write is a full sync) — on the replica leading the index only (an
+last write, and deletes the removed ones (a first write is a full sync) — on
+the replica leading the index only (an
 :class:`~vmn_exp.ui.elected_index.ElectedIndex`'s ``leading``; any other index
 has no election, so its replica writes). Generations are per process: a
 replica that takes the lead back writes again whatever it wrote before.
@@ -28,24 +29,6 @@ def search_rows(snapshot):
     return annotate_rows(snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at)
 
 
-class _Scoped:
-    """*refresher*, noting each index it is asked about as *scope*'s."""
-
-    def __init__(self, refresher, writer, scope):
-        self._refresher = refresher
-        self._writer = writer
-        self._scope = scope
-
-    def __getattr__(self, name):
-        return getattr(self._refresher, name)
-
-    def snapshot(self, index, journal=None):
-        self._writer.note(index, self._scope)
-        if journal is None:
-            return self._refresher.snapshot(index)
-        return self._refresher.snapshot(index, journal)
-
-
 class SearchRowsWriter:
     def __init__(self, sql):
         self._sql = sql  # a PgRowSearch
@@ -54,14 +37,11 @@ class SearchRowsWriter:
         self._stored = {}  # index -> {verstr: (pos, digest of its JSON)} last written
         self._lock = threading.Lock()
 
-    def scoped(self, refresher, workspace, app, schema_of):
-        """*refresher* for *workspace*/*app*, its rows summarized by
-        ``schema_of()``."""
-        return _Scoped(refresher, self, (current_org(), workspace, app, schema_of))
-
-    def note(self, index, scope):
+    def note(self, index, workspace, app, schema_of):
+        """*index* serves *workspace*/*app* of the request's org, its rows
+        summarized by ``schema_of()``."""
         with self._lock:
-            self._scopes[index] = scope
+            self._scopes[index] = (current_org(), workspace, app, schema_of)
 
     def refreshed(self, index, snapshot):
         """*index* was just refreshed to *snapshot*: write its rows if this

@@ -34,7 +34,7 @@ def _writer():
     sql = _RecordingSql()
     writer = SearchRowsWriter(sql)
     index = _Index()
-    writer.note(index, (0, "ws", "app", lambda: {}))
+    writer.note(index, "ws", "app", dict)
     return writer, sql, index
 
 

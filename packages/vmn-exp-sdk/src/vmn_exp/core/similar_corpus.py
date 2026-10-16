@@ -35,8 +35,8 @@ class Scope:
         self.cache_key = cache_key
 
 
-def memory_conn():
-    conn = connect(":memory:")
+def memory_conn(path=":memory:"):
+    conn = connect(path)
     similar_fts.ensure_tables(conn)
     return conn
 

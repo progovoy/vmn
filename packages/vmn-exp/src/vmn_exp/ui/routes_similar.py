@@ -34,14 +34,9 @@ import time
 
 from fastapi import HTTPException, Request
 from vmn_exp.core.query import QueryError
-from vmn_exp.core.similar import (
-    SimilarDeadlineExceeded,
-    similar_runs_multi,
-    target_from_snapshot,
-)
+from vmn_exp.core.similar import SimilarDeadlineExceeded, target_from_snapshot
 from vmn_exp.core.similar_fts import Fts5Missing
-from vmn_exp.core.similar_search import candidate_filter, text_target
-from vmn_exp.core.similar_items import item_payload
+from vmn_exp.core.similar_search import search, text_target
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.responses import json_response
@@ -64,11 +59,9 @@ def _intent(excerpt):
             "truncated": excerpt.get("truncated", False)}
 
 
-def _item(found, rows):
-    """The CLI's item (:func:`item_payload`) keyed by workspace and app."""
-    payload = item_payload(found, rows)
+def _item(payload):
+    """The CLI's item (without features) keyed by workspace and app."""
     workspace, app = payload.pop("app")
-    del payload["features"]
     return {"workspace": workspace, "app": app, **payload,
             "intent": _intent(payload["intent"])}
 
@@ -78,18 +71,13 @@ def _answer(request, scope_of, scopes, target, top, archived, query=None, weight
     snapshot, conf schema)`` — keyed by ``(workspace, app)``, so apps of one
     name in two workspaces stay apart; *weights* are the conf's overrides."""
     deadline = time.monotonic() + SEARCH_DEADLINE_SEC
-    built = []
     try:
-        for ws, app, snap, schema in scopes:
-            built.append(scope_of((ws, app), app, snap, schema, deadline))
-        try:
-            keep = candidate_filter(built, query, archived)
-        except QueryError as e:
-            raise HTTPException(400, str(e)) from None
-        found = similar_runs_multi(built, target, top=top + 1, rows_filter=keep,
-                                   weights=weights, deadline=deadline)
-        rows = {scope.label: scope.rows for scope in built}
-        items = [_item(f, rows[f["app"]]) for f in found[:top]]
+        built = [scope_of((ws, app), app, snap, schema, deadline)
+                 for ws, app, snap, schema in scopes]
+        found = search(None, None, built, target, top=top + 1, query=query, weights=weights,
+                       include_archived=archived, deadline=deadline, with_features=False)
+    except QueryError as e:
+        raise HTTPException(400, str(e)) from None
     except SimilarDeadlineExceeded:
         raise HTTPException(
             503, f"Similar runs took over {SEARCH_DEADLINE_SEC:g}s (the runs may still be "
@@ -97,6 +85,7 @@ def _answer(request, scope_of, scopes, target, top, archived, query=None, weight
             headers={"Retry-After": str(RETRY_AFTER_SEC)}) from None
     except Fts5Missing as e:
         raise HTTPException(501, str(e)) from None
+    items = [_item(f) for f in found[:top]]
     return json_response({"items": items, "truncated": len(found) > top}, request=request)
 
 

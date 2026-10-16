@@ -109,6 +109,9 @@ def test_stop_ends_every_thread():
 
 
 class StaleIndex(FakeIndex):
+    def reconcile(self):
+        pass
+
     def refresh_if_stale(self, max_age_sec):
         assert max_age_sec == 0
         return self.refresh().snapshot()
