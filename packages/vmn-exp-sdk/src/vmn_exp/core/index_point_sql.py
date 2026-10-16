@@ -96,7 +96,8 @@ def parent_of(conn, app, verstr):
 
 def children_of(conn, app, verstr):
     """The runs whose parent is *verstr* (never itself), in storage order."""
+    # "+idx": sort the parent index's few matches rather than walk the app in idx order.
     return [child for (child,) in conn.execute(
         "SELECT verstr FROM exp_rows WHERE app = ? AND parent = ? AND verstr != parent"
-        " ORDER BY idx", (app, verstr),
+        " ORDER BY +idx", (app, verstr),
     )]

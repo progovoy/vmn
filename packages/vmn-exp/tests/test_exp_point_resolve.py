@@ -87,13 +87,26 @@ def test_each_point_query_uses_an_index(indexed, monkeypatch):
     store = SqliteStore(db)
     for ref in REFS:
         store.resolve_one(APP, ref)
+    for verstr in RUNS:
+        store.lean_row_of(APP, verstr), store.parent_of(APP, verstr)
+        store.children_of(APP, verstr)
     plans = sqlite3.connect(sqlite_files.live_path(db))
     selects = [s for s in statements if s.lstrip().upper().startswith("SELECT")
-               and "exp_rows" in s]
+               and "exp_rows" in s and "COUNT(" not in s]  # COUNT: an out-of-range @N
     assert selects
     for statement in selects:
         plan = [row[-1] for row in plans.execute(f"EXPLAIN QUERY PLAN {statement}")]
-        assert not {"SCAN exp_rows", "SCAN TABLE exp_rows"} & set(plan), (statement, plan)
+        walks = [step for step in plan if _walks_the_app(step, statement)]
+        assert not walks, (statement, plan)
+
+
+def _walks_the_app(step, statement):
+    """Whether a query plan *step* reads every row of the app: a scan, or an
+    index searched on the app alone (but MAX's one seek)."""
+    if step.startswith("SCAN") and "exp_rows" in step:
+        return True
+    seek = "MAX(timestamp)" in statement and "COVERING INDEX exp_rows_timestamp" in step
+    return step.endswith("(app=?)") and not seek
 
 
 def test_the_point_view_places_a_run_without_a_snapshot(indexed, monkeypatch):
