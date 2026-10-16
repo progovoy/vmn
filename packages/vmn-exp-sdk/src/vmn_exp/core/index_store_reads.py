@@ -3,6 +3,7 @@
 record (plan 25 F1): a warm start's lean rows over lazy records, and point
 reads on ``exp_rows`` (:mod:`vmn_exp.core.index_point_sql`)."""
 import itertools
+import threading
 import json
 
 from vmn_exp.core import index_point_sql
@@ -98,13 +99,17 @@ class _Prefetch:
         self._order = list(seqs)
         self._pos = {key: n for n, key in enumerate(self._order)}
         self._asked, self._ready = set(), {}
+        # Refreshes run on a thread pool: a key whose chunk another thread is
+        # reading waits for that read instead of finding nothing ready yet.
+        self._lock = threading.Lock()
 
     def __call__(self, key):
         """*key*'s ``(head JSON, fold JSON)``, or None (see
         :class:`~vmn_exp.core.index_lazy.LazyRecord`)."""
-        if key not in self._asked:
-            self._read_from(self._pos[key])
-        return self._ready.pop(key, None)
+        with self._lock:
+            if key not in self._asked:
+                self._read_from(self._pos[key])
+            return self._ready.pop(key, None)
 
     def _read_from(self, start):
         chunk = []
