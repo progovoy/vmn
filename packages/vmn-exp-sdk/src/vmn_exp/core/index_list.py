@@ -10,7 +10,8 @@ without a query, and a query's top-level ``status``/``parent``/``verstr``/
 their ancestors (``depth``, ``root``, ``under()``) and everything beneath
 them (``children``, ``tree_status``, ``child_counts``, sweep trials) — and
 runs the same snapshot, annotation and query code over them as a full
-listing does. So each run it answers is the one a full listing answers.
+listing does (when SQL keeps most runs, one scan of each table reads them
+all instead). So each run it answers is the one a full listing answers.
 
 A stored ``status`` is the one derived when the record was last saved; only
 the clock moves a run between ``running`` and ``stuck`` since, so a clause
@@ -106,11 +107,13 @@ def _matching(storage, app_name, snap, query, with_create_note):
 
 
 def _read(conn, app, where, params, last):
-    keep = sql.matching(conn, app, where, params, last)
-    tree = _with_trees(conn, app, keep)
-    found = sql.rows_of(conn, app, [key for key, _ in tree.values()])
+    keep, total = sql.matching(conn, app, where, params, last), sql.count(conn, app)
+    if 2 * len(keep) >= total:  # most runs kept: a scan beats walking their trees
+        found = sql.all_rows(conn, app)
+    else:
+        found = sql.rows_of(conn, app, [key for key, _ in _with_trees(conn, app, keep).values()])
     defs, rows = sql.declared(conn, app)
-    return sql.count(conn, app), set(keep), found, (defs, rows.get)
+    return total, set(keep), found, (defs, rows.get)
 
 
 def _with_trees(conn, app, keep):

@@ -59,26 +59,39 @@ def children(conn, app, verstrs):
     return out
 
 
+_KINDS = ", ".join("?" * len(ROW_SIDES))
+
+
 def rows_of(conn, app, keys):
     """``[(row, create note, side values, run state fields)]`` of *keys*'
     runs in storage order, each row's ``idx`` its column's; of the side
     tables only what a row copy carries (:data:`ROW_SIDES`)."""
-    keys = list(keys)
     found, sides, states = [], {}, {}
-    kinds = ", ".join("?" * len(ROW_SIDES))
     for chunk, marks in in_chunks(keys):
-        args = (app, *chunk)
-        found += conn.execute(
-            f"SELECT key, idx, row FROM exp_rows WHERE app = ? AND key IN ({marks})", args
-        ).fetchall()
-        for key, kind, data in conn.execute(
-            f"SELECT key, kind, data FROM exp_sides WHERE app = ? AND key IN ({marks})"
-            f" AND kind IN ({kinds})", (*args, *ROW_SIDES)
-        ):
-            sides.setdefault(key, {})[kind] = json.loads(data)
-        states.update(conn.execute(
-            f"SELECT key, data FROM exp_index_state WHERE app = ? AND key IN ({marks})", args
-        ))
+        _read_rows(conn, f" AND key IN ({marks})", (app, *chunk), found, sides, states)
+    return _rows(found, sides, states)
+
+
+def all_rows(conn, app):
+    """:func:`rows_of` every run of *app*: one scan of each table."""
+    found, sides, states = [], {}, {}
+    _read_rows(conn, "", (app,), found, sides, states)
+    return _rows(found, sides, states)
+
+
+def _read_rows(conn, where, args, found, sides, states):
+    found += conn.execute(f"SELECT key, idx, row FROM exp_rows WHERE app = ?{where}",
+                          args).fetchall()
+    for key, kind, data in conn.execute(
+        f"SELECT key, kind, data FROM exp_sides WHERE app = ?{where} AND kind IN ({_KINDS})",
+        (*args, *ROW_SIDES)
+    ):
+        sides.setdefault(key, {})[kind] = json.loads(data)
+    states.update(conn.execute(f"SELECT key, data FROM exp_index_state WHERE app = ?{where}",
+                               args))
+
+
+def _rows(found, sides, states):
     out = []
     for key, idx, row in sorted(found, key=lambda found_row: found_row[1]):
         row = decode_row(idx, row)

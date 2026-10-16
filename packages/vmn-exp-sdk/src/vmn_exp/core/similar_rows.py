@@ -7,18 +7,24 @@ and, when it has them, ``.row``, ``.features_of``/``.intent_of``/
 ``.hypothesis_of``, ``.run_states``, ``.run_state_observed_at``,
 ``.create_notes``, ``.declared_schema``). :class:`StoreRows` reads the few
 runs a query looks at from the persisted index's lean tables (``exp_rows``,
-``exp_sides``, ``exp_index_state``), one batched query each, so a fresh
-process answers without loading the app. Rows are shared: copy to change.
+``exp_sides``, ``exp_index_state``), one batched query each (the shown
+runs' facts and states: :meth:`StoreRows.prefetch`), so a fresh process
+answers without loading the app. Rows are shared: copy to change.
 A run's tree root is the top of its ``parent`` chain (a parent missing from
 the app ends it), a run with neither parent nor children its own.
 """
 import json
 
+from vmn_exp.core import index_list_sql
 from vmn_exp.core.index_lean_store import NOTE, decode_row, run_status
 from vmn_exp.core.index_views import runs_declared_schema
 from vmn_exp.core.similar_filing import snapshot_facts
 from vmn_exp.core.sqlite_conn import in_chunks
 from vmn_exp.core.status import derive_status
+
+# The side tables a run's facts read (constants, inlined in the query).
+_FACT_KINDS = ", ".join(f"'{kind}'" for kind in ("features", "intents", "hypotheses", NOTE))
+
 
 class SnapshotRows:
     def __init__(self, snapshot):
@@ -80,7 +86,7 @@ class StoreRows:
 
     def __init__(self, conn, app):
         self._conn, self._app = conn, app
-        self._rows, self._keys, self._roots, self._states = {}, {}, {}, {}
+        self._rows, self._keys, self._roots, self._states, self._facts = {}, {}, {}, {}, {}
         self._declared = None
 
     def _select(self, sql, values):
@@ -99,28 +105,45 @@ class StoreRows:
     def row(self, verstr):
         return self.rows_of([verstr]).get(verstr)
 
-    def _sides(self, verstr):
-        out = {}
-        key = self._keys.get(verstr)
-        if key is not None:
-            for kind, data in self._conn.execute(
-                    "SELECT kind, data FROM exp_sides WHERE app = ? AND key = ?",
-                    (self._app, key)):
-                out[kind] = json.loads(data)
-        return out
+    def prefetch(self, rows):
+        """Read the facts and run states of *rows* (about to be shown) in
+        one query each."""
+        verstrs = [row["verstr"] for row in rows]
+        self.rows_of(verstrs)
+        self._read_facts([v for v in dict.fromkeys(verstrs) if v not in self._facts])
+        self._read_states([v for v in dict.fromkeys(verstrs) if v not in self._states])
+
+    def _by_key(self, verstrs):
+        return {self._keys[v]: v for v in verstrs if v in self._keys}
+
+    def _read_facts(self, verstrs):
+        self._facts.update((v, {}) for v in verstrs)
+        by_key = self._by_key(verstrs)
+        for key, kind, data in self._select(
+                "SELECT key, kind, data FROM exp_sides WHERE app = ? AND key IN ({marks})"
+                f" AND kind IN ({_FACT_KINDS})", list(by_key)):
+            self._facts[by_key[key]][kind] = json.loads(data)
+
+    def _read_states(self, verstrs):
+        self._states.update((v, {}) for v in verstrs)
+        by_key = self._by_key(verstrs)
+        for key, data in self._select(
+                "SELECT key, data FROM exp_index_state WHERE app = ? AND key IN ({marks})",
+                list(by_key)):
+            self._states[by_key[key]] = json.loads(data)
 
     def _state(self, verstr):
         if verstr not in self._states:
             self.row(verstr)
-            found = self._conn.execute(
-                "SELECT data FROM exp_index_state WHERE app = ? AND key = ?",
-                (self._app, self._keys.get(verstr))).fetchone()
-            self._states[verstr] = json.loads(found[0]) if found else {}
+            self._read_states([verstr])
         return self._states[verstr]
 
     def facts(self, row):
-        sides = self._sides(row["verstr"])
-        command = row.get("command") or (self._state(row["verstr"]).get("run_state")
+        verstr = row["verstr"]
+        if verstr not in self._facts:
+            self.prefetch([row])
+        sides = self._facts[verstr]
+        command = row.get("command") or (self._state(verstr).get("run_state")
                                          or {}).get("command")
         return (sides.get("features"), sides.get("intents"), sides.get("hypotheses"), command,
                 sides.get(NOTE))
@@ -144,11 +167,6 @@ class StoreRows:
 
     def declared_schema(self):
         if self._declared is None:
-            declared, stamps = {}, {}
-            for verstr, ts, idx, data in self._conn.execute(
-                    "SELECT r.verstr, r.timestamp, r.idx, s.data FROM exp_sides s"
-                    " JOIN exp_rows r ON r.app = s.app AND r.key = s.key"
-                    " WHERE s.app = ? AND s.kind = 'declared_defs'", (self._app,)):
-                declared[verstr], stamps[verstr] = json.loads(data), {"timestamp": ts, "idx": idx}
-            self._declared = runs_declared_schema(declared, stamps.get)
+            defs, rows = index_list_sql.declared(self._conn, self._app)
+            self._declared = runs_declared_schema(defs, rows.get)
         return self._declared

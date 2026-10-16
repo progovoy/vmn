@@ -442,6 +442,11 @@ class ExperimentIndex:
     def _refresh_all(self, work, direct):
         is_remote = getattr(self._storage, "is_remote", None)
         if len(work) > 1 and is_remote and is_remote():
+            # A warm start's lazy records read their stored head here, in
+            # order (a chunk per query), never from the pool's threads.
+            for _, _, record in work:
+                if record is not None:
+                    record.get("meta_sig")
             with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
                 return list(pool.map(lambda w: self._refresh_one(*w, direct), work))
         return [self._refresh_one(*w, direct) for w in work]

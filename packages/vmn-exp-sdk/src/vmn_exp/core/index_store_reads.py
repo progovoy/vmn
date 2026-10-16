@@ -150,8 +150,9 @@ class _Prefetch:
         self._asked, self._ready = set(), {}
         self._first = self._size = first_chunk
         self._next = None  # the position right after the last read
-        # Refreshes run on a thread pool: a key whose chunk another thread is
-        # reading waits for that read instead of finding nothing ready yet.
+        # A refresh reads its records' heads before its thread pool fans out;
+        # should threads still share this, a key whose chunk another thread
+        # is reading waits for that read instead of finding nothing ready yet.
         self._lock = threading.Lock()
 
     def __call__(self, key):
