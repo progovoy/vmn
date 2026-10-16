@@ -21,14 +21,21 @@ import json
 from vmn_exp.core.index_lean_tree import fix_roots
 from vmn_exp.core.index_snapshot import _observed_at
 from vmn_exp.core.index_views import SIDE_TABLES, lean_row
+from vmn_exp.core.sqlite_conn import in_chunks
 from vmn_exp.core.status import derive_status
 
 NOTE = "create_note"
-_KEYS_PER_QUERY = 500
 
 
 def _dumps(value):
     return json.dumps(value, default=str)
+
+
+def decode_row(idx, text):
+    """The lean row stored as *text*, its ``idx`` the column's *idx*."""
+    row = json.loads(text)
+    row["idx"] = idx
+    return row
 
 
 def sort_timestamp(meta):
@@ -74,11 +81,10 @@ def write_lean(conn, app, seq, changed, removed, states):
 def _existing(conn, app, keys):
     """``{key: (timestamp, parent, verstr)}`` of *keys*' current rows."""
     out = {}
-    for i in range(0, len(keys), _KEYS_PER_QUERY):
-        chunk = keys[i:i + _KEYS_PER_QUERY]
+    for chunk, marks in in_chunks(keys):
         out.update((key, (ts, parent, verstr)) for key, ts, parent, verstr in conn.execute(
             "SELECT key, timestamp, parent, verstr FROM exp_rows WHERE app = ?"
-            f" AND key IN ({', '.join('?' * len(chunk))})", (app, *chunk),
+            f" AND key IN ({marks})", (app, *chunk),
         ))
     return out
 
@@ -174,8 +180,7 @@ def read_lean(conn, app):
         "SELECT key, timestamp, row FROM exp_rows WHERE app = ? ORDER BY timestamp, key",
         (app,),
     ), 1):
-        row = json.loads(row)
-        row["idx"] = n
+        row = decode_row(n, row)
         own = sides.get(key, {})
         keys.append(key)
         stamps.append((ts, key))
