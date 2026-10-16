@@ -20,7 +20,7 @@ from vmn_exp.core.index_store import _state_of, _without_state
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION
 from vmn_exp.ui import pg_pool
 from vmn_exp.ui.control_plane_pg import PostgresControlPlane  # noqa: F401
-from vmn_exp.ui.tenancy import bind_org, effective_org
+from vmn_exp.ui.tenancy import DefaultOrg
 
 _LOGGER = logging.getLogger(__name__)
 _CACHE_TABLES = "vmn_records, vmn_run_states, vmn_tombstones, vmn_scope_gen, vmn_kv"
@@ -62,30 +62,25 @@ def _ensure_cache_version(conn):
         )
 
 
-class PostgresStore:
+class PostgresStore(DefaultOrg):
     def __init__(self, dsn, org_id=0):
         self._dsn = dsn
         self._default_org = org_id
         self._version_checked = False
 
-    @property
-    def _org(self):
-        return effective_org(self._default_org)
-
     def _run(self, op, default, what):
         try:
-            with pg_pool.pool(self._dsn).connection() as conn:
-                self._check_version(conn)
-                with conn.transaction():
-                    bind_org(conn, self._org)
-                    return op(conn)
+            self._check_version()
+            with pg_pool.org_tx(self._dsn, self._org) as conn:
+                return op(conn)
         except Exception:
             _LOGGER.debug("Could not %s the Postgres cache", what, exc_info=True)
             return default
 
-    def _check_version(self, conn):
+    def _check_version(self):
         if not self._version_checked:
-            _ensure_cache_version(conn)
+            with pg_pool.pool(self._dsn).connection() as conn:
+                _ensure_cache_version(conn)
             self._version_checked = True
 
     def _key(self, scope):

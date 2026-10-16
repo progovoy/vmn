@@ -12,9 +12,11 @@ restarted database is reconnected without a process restart. The migrations
 run once per DSN per process, before its pool opens, under their advisory
 lock (:mod:`vmn_exp.ui.migrations`).
 """
+import contextlib
 import threading
 
 from vmn_exp.ui import migrations
+from vmn_exp.ui.tenancy import bind_org
 
 CONNECT_TIMEOUT_SEC = 5
 STATEMENT_TIMEOUT = "30s"
@@ -58,6 +60,16 @@ def pool(dsn):
             _migrate(dsn)
             found = _pools[dsn] = _open(dsn)
         return found
+
+
+@contextlib.contextmanager
+def org_tx(dsn, org):
+    """A pooled connection to *dsn* in a transaction bound to *org* (no org
+    bound when it is ``None``)."""
+    with pool(dsn).connection() as conn, conn.transaction():
+        if org is not None:
+            bind_org(conn, org)
+        yield conn
 
 
 def close_all():

@@ -72,6 +72,9 @@ def keyset_scan(fetch, batch):
 class ControlPlaneStore:
     """Key/document storage per kind (``token``, ``session``, ``login``, ``workspace``, ``audit``)."""
 
+    def __init__(self):
+        self._server_keys = {}  # name -> bytes, read once per store
+
     def put(self, kind, key, doc, expires_at=None):
         raise NotImplementedError
 
@@ -111,7 +114,7 @@ class ControlPlaneStore:
     def server_key(self, name):
         """The server's secret *name* (32 bytes), generated on first use and
         read once per store."""
-        keys = self.__dict__.setdefault("_server_keys", {})
+        keys = self._server_keys
         if name not in keys:
             keys[name] = bytes.fromhex(self._load_server_key(name, new_server_key()))
         return keys[name]
@@ -128,6 +131,7 @@ class ControlPlaneStore:
 
 class SQLiteControlPlane(ControlPlaneStore):
     def __init__(self, path):
+        super().__init__()
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self._lock = threading.Lock()
         self._db = sqlite_conn.connect(path)

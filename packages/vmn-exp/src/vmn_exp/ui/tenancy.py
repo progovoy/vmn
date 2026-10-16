@@ -48,6 +48,14 @@ def effective_org(default):
     return default if org is None else org
 
 
+class DefaultOrg:
+    """A store working in the request's org, else its own ``_default_org``."""
+
+    @property
+    def _org(self):
+        return effective_org(self._default_org)
+
+
 @dataclass(frozen=True)
 class Org:
     id: int

@@ -9,16 +9,14 @@ sweeps run in every org (they are server work, not a request's), one org per
 transaction so row-level security holds. Credential lookups and sweeps use the
 0006 indexes; ``vmn_settings`` (the server key) belongs to no org.
 """
-import contextlib
-
 from vmn_exp.ui import pg_pool
 from vmn_exp.ui.control_plane import (
     _NON_EXPIRING, _TABLES, EXPIRING, SCAN_BATCH, ControlPlaneStore, keyset_scan,
 )
-from vmn_exp.ui.tenancy import SINGLE_TENANT_ORG, bind_org, effective_org, enable_rls
+from vmn_exp.ui.tenancy import SINGLE_TENANT_ORG, DefaultOrg, enable_rls
 
 
-class PostgresControlPlane(ControlPlaneStore):
+class PostgresControlPlane(DefaultOrg, ControlPlaneStore):
     # The id is unique across orgs (0006): one index probe.
     CREDENTIAL_SQL = "SELECT org_id FROM {table} WHERE id = %s"
     PAGE_SQL = ("SELECT doc FROM {table} WHERE org_id = %s"
@@ -29,20 +27,15 @@ class PostgresControlPlane(ControlPlaneStore):
     def __init__(self, dsn, org_id=0):
         from psycopg.types.json import Jsonb
 
+        super().__init__()
         self._jsonb = Jsonb
         self._default_org = org_id
         self._dsn = dsn
 
-    @property
-    def _org(self):
-        return effective_org(self._default_org)
-
-    @contextlib.contextmanager
     def _tx(self, org=None, org_bound=True):
-        with pg_pool.pool(self._dsn).connection() as conn, conn.transaction():
-            if org_bound:
-                bind_org(conn, self._org if org is None else org)
-            yield conn
+        if org_bound:
+            return pg_pool.org_tx(self._dsn, self._org if org is None else org)
+        return pg_pool.org_tx(self._dsn, None)
 
     def enable_rls(self):
         """Turn the tenancy row-level security policies on (``tenancy: multi``)."""

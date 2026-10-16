@@ -4,17 +4,20 @@
 :class:`~vmn_exp.ui.experiment_source.ExperimentSource` hands the refresher
 :meth:`SearchRowsWriter.scoped` for each workspace app, which notes the index
 serving it. After every refresh (the refresher's ``on_index_refresh``) the
-writer rewrites that app's rows when its snapshot's generation (or metrics
-schema) moved — on the replica leading the index only (an
+writer writes that app's rows when its snapshot's generation (or metrics
+schema) moved — only the rows whose stored JSON or position changed since its
+last write, and deletes the removed ones (a first write is a full sync) — on the replica leading the index only (an
 :class:`~vmn_exp.ui.elected_index.ElectedIndex`'s ``leading``; any other index
 has no election, so its replica writes). Generations are per process: a
 replica that takes the lead back writes again whatever it wrote before.
 """
+import hashlib
 import logging
 import threading
 
 from vmn_exp.core.index_views import schema_key
 from vmn_exp.core.tree import annotate_rows
+from vmn_exp.ui.search_pg import search_entries
 from vmn_exp.ui.tenancy import current_org, org_context
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,6 +51,7 @@ class SearchRowsWriter:
         self._sql = sql  # a PgRowSearch
         self._scopes = {}  # index -> (org, workspace, app, schema_of)
         self._written = {}  # index -> (generation, schema key)
+        self._stored = {}  # index -> {verstr: (pos, digest of its JSON)} last written
         self._lock = threading.Lock()
 
     def scoped(self, refresher, workspace, app, schema_of):
@@ -68,6 +72,7 @@ class SearchRowsWriter:
             return
         if not getattr(index, "leading", True):
             self._written.pop(index, None)
+            self._stored.pop(index, None)
             return
         try:
             self._write(index, snapshot, *scope)
@@ -79,6 +84,20 @@ class SearchRowsWriter:
         mark = (snapshot.generation, schema_key(schema))
         if self._written.get(index) == mark:
             return
+        entries = search_entries(search_rows(snapshot.summarized(schema)))
+        stored = {verstr: (pos, _digest(data)) for verstr, pos, data in entries}
+        last = self._stored.get(index)
         with org_context(org):
-            self._sql.sync(workspace, app, search_rows(snapshot.summarized(schema)))
+            if last is None:
+                self._sql.write(workspace, app, entries)
+            else:
+                changed = [e for e in entries if last.get(e[0]) != stored[e[0]]]
+                removed = [verstr for verstr in last if verstr not in stored]
+                if changed or removed:
+                    self._sql.write(workspace, app, changed, removed)
         self._written[index] = mark
+        self._stored[index] = stored
+
+
+def _digest(data):
+    return hashlib.blake2b(data.encode(), digest_size=16).digest()
