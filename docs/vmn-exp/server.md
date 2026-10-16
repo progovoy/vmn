@@ -147,7 +147,8 @@ the per-workspace SQLite files, so several replicas can share one cache:
   the timeout while it is down. Migrations run once per process, under an
   advisory lock, with no statement timeout.
 - Leader election (session advisory locks) and `LISTEN` keep their own
-  dedicated connections, reconnected after a drop (a listener then triggers a
+  dedicated connections (`connect_timeout` and keepalives, no request
+  timeouts), reconnected after a drop (a listener then triggers a
   catch-up refresh, so no change is missed). They need direct connections to
   Postgres: put PgBouncer in session mode, or bypass it, never transaction mode.
 - `GET /api/v1/search` runs the query language as SQL over the synced rows.

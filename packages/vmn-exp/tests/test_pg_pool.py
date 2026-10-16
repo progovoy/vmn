@@ -73,13 +73,17 @@ def test_dsn_settings_beat_the_defaults(pg_dsn):
     assert params["connect_timeout"] == "2"
 
 
-def test_dedicated_connections_carry_the_same_settings(pg_dsn):
+def test_dedicated_connections_carry_keepalives_but_no_request_timeouts(pg_dsn):
+    # The election's session locks and LISTEN hold their connection for good.
     with pg_pool.connect(pg_dsn) as conn:
         assert conn.autocommit
         (statement,) = conn.execute("SHOW statement_timeout").fetchone()
+        (idle,) = conn.execute("SHOW idle_in_transaction_session_timeout").fetchone()
         params = conn.info.get_parameters()
-    assert statement == "30s"
+    assert statement == "0"
+    assert idle == "0"
     assert params["keepalives"] == "1"
+    assert params["connect_timeout"] == str(pg_pool.CONNECT_TIMEOUT_SEC)
 
 
 def test_migrations_run_once_across_three_replicas_starting_together(pg_dsn, monkeypatch):
