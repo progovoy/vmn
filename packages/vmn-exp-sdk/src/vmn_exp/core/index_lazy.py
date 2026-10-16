@@ -65,9 +65,11 @@ class LazyRecord(dict):
             dict.update(self, json.loads(raw))
 
     def has_meta(self):
-        """Whether the record has metadata, without reading its head."""
-        if self._raw is _PENDING:
+        """Whether the record has metadata, without reading its head when
+        it was told whether it is a run."""
+        if self._raw is _PENDING and self._run is not None:
             return self._run
+        self._head()
         return dict.get(self, "meta") is not None
 
     def _head(self):

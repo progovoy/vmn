@@ -166,13 +166,14 @@ def _write_marker(store):
     _write(os.path.join(store, MARKER), yaml.safe_dump(new_marker()))
 
 
-def generate(root, n, workers=None, progress=False):
-    """Write *n* runs of ``APP`` into a fresh *root*; returns the expected counts."""
+def generate(root, n, workers=None, progress=False, now=None):
+    """Write *n* runs of ``APP`` into a fresh *root*, as of wall time *now*
+    (default: now); returns the expected counts."""
     store = _store_root(os.path.abspath(root))
     _write_marker(store)
     workers = max(1, min(workers or os.cpu_count() or 1, n // 50 or 1))
     size = max(1, -(-n // (workers * 8)))
-    now = time.time()
+    now = time.time() if now is None else now
     tasks = [(store, a, min(a + size, n), now, n) for a in range(0, n, size)]
     total = collections.Counter()
     shards = map(write_shard, tasks)

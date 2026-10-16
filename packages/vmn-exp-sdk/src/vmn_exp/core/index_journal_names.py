@@ -3,15 +3,16 @@
 a refresh after 100 changed runs within 0.2 s at 100k).
 
 A local store's ``list_record_names`` signs each record with its
-directory's ``(mtime, inode)`` — a stat per record, ~0.3 s at 100k. But a
-journaled local store (:mod:`vmn_exp.storage.journal`: every write that
-changes what a reader sees puts an entry naming its record) already says
-which records changed. So :func:`journal_names` takes the names from one
-directory listing (no stat) and the signatures from the previous listing,
-except for the records the journal named since it — minus a skew window, for
-writers whose clocks lag or whose entry landed late — which are signed with
-their newest journal key: a value they never had, so the sweep lists their
-files again (and re-reads them only if their files moved).
+directory's ``(mtime, inode)`` — a stat per record, ~0.3 s at 100k, and
+listing the names alone still costs ~0.07 s. But a journaled local store
+(:mod:`vmn_exp.storage.journal`: every write that changes what a reader
+sees — a claim and a delete included — puts an entry naming its record)
+already says which records changed. So :func:`journal_names` answers the
+previous listing's names and signatures, updated for the records the journal
+named since it — minus a skew window, for writers whose clocks lag or whose
+entry landed late: one whose directory is gone is dropped, any other is
+signed with its newest journal key, a value it never had, so the sweep lists
+its files again (and re-reads it only if they moved).
 
 It answers None — the caller signs every record — when it cannot vouch or
 need not: fewer than :data:`MIN_RECORDS` records, no previous listing
@@ -33,13 +34,13 @@ MIN_RECORDS = 5000
 
 
 def journal_source(storage):
-    """``(list_fn, area)`` of the journal every writer of *storage*'s local
-    records journals into, or None."""
+    """``(list_fn, area, local store)`` of the journal every writer of
+    *storage*'s local records journals into, or None."""
     local = getattr(storage, "_local", storage)
-    if getattr(storage, "_remote", None) is not None or not hasattr(local, "list_record_keys"):
+    if getattr(storage, "_remote", None) is not None or not hasattr(local, "local_record_dir"):
         return None
     sinks = journal_sinks(local)
-    return (sinks[0].list, local.area) if sinks else None
+    return (sinks[0].list, local.area, local) if sinks else None
 
 
 def journal_names(storage, app_name, before, since, now):
@@ -51,11 +52,24 @@ def journal_names(storage, app_name, before, since, now):
     source = journal_source(storage) if wanted else None
     if source is None:
         return None
-    named = _named_since(*source, app_key(app_name), since, now)
+    list_fn, area, local = source
+    named = _named_since(list_fn, area, app_key(app_name), since, now)
     if named is None:
         return None
-    return {name: named.get(name, before.get(name))
-            for name in storage.list_record_keys(app_name)}
+    names = dict(before)
+    for name, token in named.items():
+        if _has_dir(local, app_name, name):
+            names[name] = token
+        else:
+            names.pop(name, None)
+    return names
+
+
+def _has_dir(local, app_name, name):
+    try:
+        return local.local_record_dir(app_name, name) is not None
+    except ValueError:  # not a record name: no record
+        return False
 
 
 def _named_since(list_fn, area, key, since, now):

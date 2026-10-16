@@ -1,8 +1,8 @@
 """Plan 25 §1 ("refresh after 100 changed runs ≤ 0.2 s"): over a journaled
-local store, a refresh between full sweeps signs no record directory — the
-record names come from one directory listing and what changed in place from
-the store's change journal since the previous listing — and still re-reads
-exactly the records that moved."""
+local store, a refresh between full sweeps neither lists nor signs every
+record directory — what was created, changed or removed since the previous
+listing comes from the store's change journal — and still re-reads exactly
+the records that moved."""
 import pytest
 
 from vmn_exp.core import index as experiment_index
@@ -51,9 +51,10 @@ class Process:
         mono.now += 5000.0
         wall.now += advance
         self.storage = journaled(LocalSnapshotStorage(root, area="runs"), clock=wall)
-        self.updated, self.signed = [], []
+        self.updated, self.signed, self.scanned = [], [], []
         real_update = experiment_index.update_record
         real_names = LocalSnapshotStorage.list_record_names
+        real_keys = LocalSnapshotStorage.list_record_keys
 
         def update_record(storage, direct, app_name, key, names, record):
             self.updated.append(key)
@@ -64,7 +65,12 @@ class Process:
             return real_names(storage, app_name)
 
         monkeypatch.setattr(experiment_index, "update_record", update_record)
+        def list_record_keys(storage, app_name):
+            self.scanned.append(app_name)
+            return real_keys(storage, app_name)
+
         monkeypatch.setattr(LocalSnapshotStorage, "list_record_names", list_record_names)
+        monkeypatch.setattr(LocalSnapshotStorage, "list_record_keys", list_record_keys)
         self.index = ExperimentIndex(self.storage, APP, cache_path=cache)
 
     def rows(self):
@@ -93,15 +99,32 @@ def test_a_refresh_between_sweeps_signs_no_record(process, seeded):
     new = _make(later.storage, 50)
     again = process()
     rows = again.rows()
-    assert again.signed == []
+    assert again.signed == again.scanned == []  # the journal named both
     assert rows[seeded[3]]["note"] == "edited" and new in rows
     assert sorted(again.updated) == sorted([seeded[3], new])
+
+
+def test_a_sync_after_a_cold_build_reads_only_the_changed_record(process, seeded, monkeypatch):
+    """The build judged each record it loaded: the next refresh does not
+    read every persisted record back to judge it again."""
+    from vmn_exp.core.index_lazy import LazyRecord
+    from vmn_exp.core.index_store import SqliteStore
+
+    process().storage.update_note(APP, seeded[3], "edited")
+    read, head = [], LazyRecord._head
+    monkeypatch.setattr(LazyRecord, "_head", lambda self: (read.append(self._key), head(self)))
+    fetched, parts = [], SqliteStore.records_parts
+    monkeypatch.setattr(SqliteStore, "records_parts",
+                        lambda self, app, seqs: (fetched.extend(seqs), parts(self, app, seqs))[1])
+    again = process()
+    assert again.index.sync() and again.signed == []
+    assert set(read) == set(fetched) == {seeded[3]}
 
 
 def test_a_record_removed_since_is_gone(process, seeded):
     process().storage.delete(APP, seeded[5])
     again = process()
-    assert seeded[5] not in again.rows() and again.signed == []
+    assert seeded[5] not in again.rows() and again.signed == again.scanned == []
 
 
 def test_a_change_journaled_late_within_the_skew_window_is_seen(process, seeded, clocks):
@@ -130,3 +153,21 @@ def test_an_unjournaled_store_signs_every_record(tmp_path, clocks, monkeypatch):
     storage.update_note(APP, verstr, "seen by its signature")
     clocks[0].now += 1.0
     assert index.refresh().rows()[0]["note"] == "seen by its signature"
+
+
+def test_a_refresh_rewrites_only_the_baseline_of_the_records_it_moved(process, clocks, monkeypatch):
+    from vmn_exp.core.index_store import SqliteStore
+
+    first = process()
+    first.storage._journal_state.clock = Clock(clocks[1].now - 2 * index_journal_names.SKEW_SEC)
+    runs = [_make(first.storage, i) for i in range(3000)]
+    first.rows()
+    writer = process()
+    for verstr in runs[::300]:
+        writer.storage.update_note(APP, verstr, "moved")
+    written, put_many = [], SqliteStore.kv_put_many
+    monkeypatch.setattr(SqliteStore, "kv_put_many", lambda self, puts: (
+        written.extend(len(p) for scope, _, p in puts if scope.count(":") == 2),
+        put_many(self, puts))[1])
+    process().rows()
+    assert 0 < sum(written) <= 10 * 100  # ten records' shards of at most 100 records each

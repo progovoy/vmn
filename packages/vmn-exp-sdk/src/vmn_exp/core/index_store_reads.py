@@ -54,20 +54,12 @@ class LeanReads:
     def _lazy(self, app_name):
         if not self.generation(app_name):
             return None
-        conn = self._conn
-        conn.execute("BEGIN")
-        try:
-            # Keys alone come off the primary key's index, never the table's pages.
-            seqs = dict.fromkeys(key for (key,) in conn.execute(
-                "SELECT key FROM exp_index WHERE app = ?", (app_name,)
-            ))
-            runs = {key for (key,) in conn.execute(
-                "SELECT key FROM exp_rows WHERE app = ?", (app_name,)
-            )}
-        finally:
-            conn.execute("COMMIT")
-        fetch = _Prefetch(self, app_name, seqs)
-        return {key: LazyRecord(key, None, fetch, key in runs) for key in seqs}
+        # Keys alone come off the primary key's index, never the table's pages.
+        seqs = dict.fromkeys(key for (key,) in self._conn.execute(
+            "SELECT key FROM exp_index WHERE app = ?", (app_name,)
+        ))
+        fetch = _Prefetch(self, app_name, seqs, first_chunk=1)
+        return {key: LazyRecord(key, None, fetch, None) for key in seqs}
 
     def listing(self, app_name, read):
         """``read(conn)``'s answer, all of it read at one generation; None
@@ -153,11 +145,17 @@ class _Prefetch:
     (a full listing walks them all), and one query per record cost more than
     decoding them all."""
 
-    def __init__(self, store, app_name, seqs):
+    def __init__(self, store, app_name, seqs, first_chunk=_CHUNK):
+        """*first_chunk*: how many records a read takes at first; it doubles
+        (up to a full chunk) while the reads go on in order, and falls back
+        when one jumps — a refresh that reads a few scattered records reads
+        just those."""
         self._store, self._app, self._seqs = store, app_name, seqs
         self._order = list(seqs)
         self._pos = {key: n for n, key in enumerate(self._order)}
         self._asked, self._ready = set(), {}
+        self._first = self._size = first_chunk
+        self._next = None  # the position right after the last read
         # Refreshes run on a thread pool: a key whose chunk another thread is
         # reading waits for that read instead of finding nothing ready yet.
         self._lock = threading.Lock()
@@ -171,12 +169,15 @@ class _Prefetch:
             return self._ready.pop(key, None)
 
     def _read_from(self, start):
-        chunk = []
-        for key in itertools.islice(self._order, start, None):
+        in_order = start == self._next
+        self._size = min(self._size * 2, _CHUNK) if in_order else self._first
+        chunk, end = [], start
+        for end, key in enumerate(itertools.islice(self._order, start, None), start + 1):
             if key not in self._asked:
                 chunk.append(key)
-                if len(chunk) == _CHUNK:
+                if len(chunk) == self._size:
                     break
+        self._next = end
         self._asked.update(chunk)
         self._ready.update(
             self._store.records_parts(self._app, {key: self._seqs[key] for key in chunk})

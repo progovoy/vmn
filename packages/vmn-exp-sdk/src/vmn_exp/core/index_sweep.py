@@ -121,9 +121,14 @@ class Sweep(SweepState):
     def touch(self, key, now):
         self._touched[key] = now
 
-    def track(self, key):
-        """*key*'s record was (re)loaded: judge it again at the next listing."""
-        if self._live is not None:
+    def track(self, key, record=None):
+        """*key*'s record was (re)loaded as *record*: judge it again at the
+        next listing — unless *record* already says it is no live run."""
+        if self._live is None:
+            return
+        if record is not None and (not has_meta(record) or _settled(record)):
+            self._live.discard(key)
+        else:
             self._live.add(key)
 
     def hint(self, key):

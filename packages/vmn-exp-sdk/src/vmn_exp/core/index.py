@@ -304,7 +304,7 @@ class ExperimentIndex:
                 redescribed = True
             if old is None or dirty or state_moved:
                 touched.add(key)
-                self._sweep.track(key)
+                self._sweep.track(key, record)
             if dirty:
                 self._rows.pop(key, None)
             self._records[key] = _adopted(old, record, state_moved)

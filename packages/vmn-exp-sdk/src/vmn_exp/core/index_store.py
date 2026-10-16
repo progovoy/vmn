@@ -26,6 +26,7 @@ from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
 from vmn_exp.core.index_lazy import STATE_KEYS as _STATE_KEYS
 from vmn_exp.core.index_lean_store import write_lean
 from vmn_exp.core.index_store_conn import StoreConnection
+from vmn_exp.core.index_store_kv import KeyValues
 from vmn_exp.core.index_store_reads import LeanReads
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
 from vmn_exp.core.sqlite_conn import connect, write_tx
@@ -48,7 +49,7 @@ def _connect(path):
     return conn
 
 
-class SqliteStore(LeanReads):
+class SqliteStore(LeanReads, KeyValues):
     """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None."""
 
     def __init__(self, path):
@@ -235,31 +236,6 @@ class SqliteStore(LeanReads):
             "UPDATE exp_index_gen SET horizon = MAX(horizon, ?) WHERE app = ?",
             (newest, app_name),
         )
-
-    def kv_get(self, scope, fingerprint):
-        """The payload under *scope* when stored with *fingerprint*, else None."""
-        return self._read(lambda: self._kv_payload(scope, fingerprint), None)
-
-    def _kv_payload(self, scope, fingerprint):
-        row = self._conn.execute(
-            "SELECT fingerprint, payload FROM exp_index_kv WHERE scope = ?", (scope,)
-        ).fetchone()
-        return json.loads(row[1]) if row and row[0] == fingerprint else None
-
-    def kv_put(self, scope, fingerprint, payload):
-        """Store *payload* under *scope* — best effort."""
-        conn = self._db.get()
-        if conn is None:
-            return
-        try:
-            with write_tx(conn):
-                conn.execute(
-                    "INSERT OR REPLACE INTO exp_index_kv (scope, fingerprint, payload)"
-                    " VALUES (?, ?, ?)",
-                    (scope, fingerprint, json.dumps(payload)),
-                )
-        except sqlite3.Error:
-            _LOGGER.debug("Could not persist a cache entry", exc_info=True)
 
 
 IndexStore = SqliteStore
