@@ -705,7 +705,7 @@ def create_app(
 
     routes_search.register(app, API_PREFIX, _search_scopes, search_sql)
     routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment,
-                            _similar_weights)
+                            _similar_weights, source.similar.scope)
     startup_warmup.install(app, manager, list_apps, _app_inputs, leaderboards, refresher.background)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app

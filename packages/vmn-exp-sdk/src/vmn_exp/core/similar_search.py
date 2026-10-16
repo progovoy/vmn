@@ -2,39 +2,46 @@
 """Similar runs over a store: what ``vmn-exp similar``, the submission hint and
 the SDK reader (``similar_runs``, ``run.similar()``) share.
 
-:func:`search` scores an app's indexed runs — with *all_apps* every app's of
-the store, each under its own metrics schema — against a target
-(:mod:`vmn_exp.core.similar`) and shapes each result as one JSON item::
+:func:`search` ranks an app's runs — with *all_apps* every app's of the
+store, each under its own metrics schema — against a target
+(:mod:`vmn_exp.core.similar`) and shapes each result as one JSON item
+(:mod:`vmn_exp.core.similar_items`). A query (the ``list --query`` language,
+over status-annotated rows) and the archived flag narrow the candidates,
+never the target. The conf's ``experiment.similar`` section holds
+``weights`` (merged over the default weights; invalid values are ignored)
+and ``hint`` (``false`` turns the submission hint off).
 
-    {"app", "verstr", "name", "score", "reasons", "signals", "group_size",
-     "author", "timestamp", "status", "goal": {"metric", "goal", "value"} | None,
-     "note", "intent": {"text", "keywords"?, "generator"?, "truncated"?} | None,
-     "features"}
-
-``intent.text`` is the run's intent cut to :data:`INTENT_EXCERPT_BYTES`;
-``note`` the record's note, else its create entry's. Every string of an
-item is UTF-8 (:func:`utf8_safe`), whatever a hand-written log holds. A
-query (the ``list --query`` language, over status-annotated rows) and the
-archived flag narrow the candidates, never the target. The conf's ``experiment.similar`` section
-holds ``weights`` (merged over the default weights; invalid values are
-ignored) and ``hint`` (``false`` turns the submission hint off).
+An app is searched in its persisted index file (:func:`app_scope`): a fresh
+process brings the file up to date with the runs created since (a names-only
+listing, :func:`~vmn_exp.core.index_point.point_view`) and reads the few runs
+a query looks at by verstr — no snapshot of the app. A query (which filters
+snapshot rows), a store never indexed yet or no index file at all take the
+refreshed snapshot; without a file the search runs on a ``:memory:``
+database filled from it. A target run is read from its own record, so what
+it just logged counts.
 """
-import copy
-
 from vmn_exp.core.app_conf import read_experiment_conf
-from vmn_exp.core.index import direct_snapshot, indexed_snapshot
-from vmn_exp.core.intent import cap_utf8
+from vmn_exp.core.fold import fold_log
+from vmn_exp.core.index import direct_snapshot, indexed_snapshot, snapshot_of_folds
+from vmn_exp.core.index_point import point_view
+from vmn_exp.core.log import load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.similar import similar_runs_multi, target_from_snapshot
-from vmn_exp.core.similar_index import run_facts
-from vmn_exp.core.similar_text import _dict
-from vmn_exp.core.status import derive_status
+from vmn_exp.core.similar_corpus import Scope, file_scope, snapshot_scope
+from vmn_exp.core.similar_items import (  # noqa: F401  (re-exported)
+    INTENT_EXCERPT_BYTES,
+    intent_excerpt,
+    item_payload,
+    utf8_safe,
+)
+from vmn_exp.core.similar_profile import _dict
+from vmn_exp.core.similar_rows import SnapshotRows
+from vmn_exp.core.status import load_run_state
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.storage.areas import app_key
 
 DEFAULT_TOP = 10
-INTENT_EXCERPT_BYTES = 2048
 
 
 def similar_conf(exp_conf):
@@ -43,7 +50,7 @@ def similar_conf(exp_conf):
 
 
 def conf_weights(exp_conf):
-    """The conf's weight overrides, as given (the scorer ignores invalid ones)."""
+    """The conf's weight overrides, as given (invalid ones are ignored later)."""
     return similar_conf(exp_conf).get("weights")
 
 
@@ -67,15 +74,48 @@ def app_snapshot(storage, app_name, schema=None):
     return indexed_snapshot(storage, app_name, wait=True, fallback=direct_snapshot, schema=schema)
 
 
-def run_target(snapshot, storage, app_name, ref, latest=False, context=None, text_only=False):
+def index_path(storage, app_name):
+    """Where *storage* persists *app_name*'s index, or None."""
+    path_of = getattr(storage, "index_cache_path", None)
+    return path_of(app_name) if path_of else None
+
+
+def app_scope(storage, app_name, schema=None, with_snapshot=False):
+    """The :class:`~vmn_exp.core.similar_corpus.Scope` *app_name* is searched
+    in (see the module docstring); *with_snapshot* reads its rows from a
+    refreshed snapshot (what a query filters)."""
+    path = index_path(storage, app_name)
+    if path and not with_snapshot and point_view(storage, app_name) is not None:
+        scope = file_scope(app_name, path, schema)
+        if scope is not None:
+            return scope
+    snapshot = app_snapshot(storage, app_name, schema)
+    scope = file_scope(app_name, path, schema, snapshot) if path else None
+    return scope or snapshot_scope(app_name, snapshot, schema)
+
+
+def record_target(storage, app_name, verstr, context=None, text_only=False, command=None):
+    """The target of run *verstr*, read from its own record in *storage* (its
+    run state's command unless *command* is given); KeyError when absent."""
+    meta = storage.load_metadata(app_name, verstr)
+    if meta is None:
+        raise KeyError(verstr)
+    fold = fold_log(load_log(storage, app_name, verstr))
+    target = target_from_snapshot(snapshot_of_folds(app_name, [(1, meta, fold)]), verstr,
+                                  text=context, text_only=text_only, app=app_name)
+    state = load_run_state(storage, app_name, verstr) or {}
+    target["command"] = list(command) if command else state.get("command")
+    return target
+
+
+def run_target(storage, app_name, ref, latest=False, context=None, text_only=False):
     """The target of run *ref* (or the latest); *context* replaces its text.
     ValueError when nothing matches."""
-    verstr, err = resolve_experiment(storage, app_name, ref, latest=latest, snapshot=snapshot)
+    verstr, err = resolve_experiment(storage, app_name, ref, latest=latest)
     if err:
         raise ValueError(err)
     try:
-        return target_from_snapshot(snapshot, verstr, text=context, text_only=text_only,
-                                    app=app_name)
+        return record_target(storage, app_name, verstr, context, text_only)
     except KeyError:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}") from None
 
@@ -85,54 +125,64 @@ def text_target(context):
     return {"row": None, "text": context, "text_only": True}
 
 
-def search(storage, app_name, snapshot, target, *, schema=None, top=DEFAULT_TOP, query=None,
+def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, query=None,
            all_apps=False, schema_of=None, weights=None, include_archived=False, deadline=None):
     """The *top* runs most like *target*: :func:`item_payload` items, best first.
 
-    *snapshot* is *app_name*'s (:func:`app_snapshot` under *schema*); with
-    *all_apps* every other app of *storage* joins under ``schema_of(app)``.
-    Raises ``QueryError`` on a bad *query*, ``SimilarDeadlineExceeded`` when
-    the scoring runs past a *deadline* (:func:`~vmn_exp.core.similar.similar_runs_multi`).
+    *source* is *app_name*'s :class:`~vmn_exp.core.similar_corpus.Scope`
+    (:func:`app_scope`) or its snapshot under *schema*; with *all_apps* every
+    other app of *storage* joins under ``schema_of(app)``. Raises
+    ``QueryError`` on a bad *query*, ``SimilarDeadlineExceeded`` past a
+    *deadline* (:func:`~vmn_exp.core.similar.similar_runs_multi`).
     """
-    scopes = [(app_name, snapshot, schema or {})]
+    scopes = [source if isinstance(source, Scope)
+              else snapshot_scope(app_name, source, schema or {})]
+    query = _query(query)
     if all_apps:
-        scopes += _other_scopes(storage, app_name, schema_of)
+        scopes += _other_scopes(storage, app_name, schema_of, bool(query))
     keep = candidate_filter(scopes, query, include_archived)
     items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
                                deadline=deadline)
-    snapshots = {app: snap for app, snap, _ in scopes}
-    return [item_payload(item, snapshots[item["app"]]) for item in items]
+    rows_of = {scope.label: scope.rows for scope in scopes}
+    return [item_payload(item, rows_of[item["app"]]) for item in items]
 
 
-def _other_scopes(storage, app_name, schema_of):
-    """The other apps' ``(app, snapshot, schema)``, in app order; their
-    indexes are brought up to date side by side."""
+def _query(query):
+    """*query* stripped, None when blank."""
+    return (query or "").strip() or None
+
+
+def _other_scopes(storage, app_name, schema_of, with_snapshot):
+    """The other apps' scopes, in app order; their indexes are brought up to
+    date side by side."""
     # Lazily: the thread pool's module stays off the SDK reader's import path.
     from vmn_exp.storage.s3_base import parallel_map
 
     apps = [app for app in storage.list_apps() if app_key(app) != app_key(app_name)]
     schemas = [(schema_of(app) if schema_of else None) or {} for app in apps]
-    snapshots = parallel_map(lambda pair: app_snapshot(storage, *pair), zip(apps, schemas))
-    return list(zip(apps, snapshots, schemas))
+    return parallel_map(lambda pair: app_scope(storage, *pair, with_snapshot=with_snapshot),
+                        list(zip(apps, schemas)))
 
 
 def candidate_filter(scopes, query, include_archived):
-    """A ``rows_filter`` keeping archived rows only with *include_archived*
-    and, with a *query*, the snapshot rows it matches — over status- and
-    tree-annotated rows, like ``list --query``; None when it keeps everything.
-    Matches are told apart by row identity: two apps may hold the same verstr."""
+    """A ``rows_filter(label, row)`` keeping archived rows only with
+    *include_archived* and, with a *query*, the rows it matches — over
+    status- and tree-annotated snapshot rows, like ``list --query`` (each
+    scope's rows then come from a snapshot); None when it keeps everything."""
     matched = None
-    if query and query.strip():
-        matched = set()
-        for _, snap, _ in scopes:
-            rows = {row["verstr"]: row for row in snap.rows}
-            matched.update(id(rows[r["verstr"]]) for r in _matching(snap, rows.values(), query))
+    query = _query(query)
+    if query:
+        matched = {}
+        for scope in scopes:
+            snap = scope.rows.snapshot if isinstance(scope.rows, SnapshotRows) else None
+            rows = snap.rows if snap is not None else ()
+            matched[scope.label] = {r["verstr"] for r in _matching(snap, rows, query)}
     elif include_archived:
         return None
 
-    def keep(row):
+    def keep(label, row):
         return ((include_archived or not row.get("archived"))
-                and (matched is None or id(row) in matched))
+                and (matched is None or row["verstr"] in matched.get(label, ())))
     return keep
 
 
@@ -141,73 +191,6 @@ def _matching(snap, rows, query):
                               getattr(snap, "run_state_observed_at", None))
     outputs_of = getattr(snap, "outputs_of", None)
     return filter_rows(annotated, query, extra={"outputs": outputs_of} if outputs_of else None)
-
-
-def utf8_safe(value):
-    """*value* with ``?`` for each lone surrogate of its strings (dict keys
-    too): no UTF-8 encoder, JSON or stdout, fails on it. Dicts and lists are
-    copied; tuples become lists."""
-    if isinstance(value, str):
-        try:
-            value.encode("utf-8")
-        except UnicodeEncodeError:
-            return value.encode("utf-8", "replace").decode("utf-8")
-        return value
-    if isinstance(value, dict):
-        return {utf8_safe(k): utf8_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [utf8_safe(v) for v in value]
-    return copy.deepcopy(value)
-
-
-def item_payload(item, snapshot):
-    """A :func:`~vmn_exp.core.similar.similar_runs_multi` item as the JSON
-    item the CLI prints (see the module docstring); copies only."""
-    verstr, row = item["verstr"], item["row"]
-    features, intent, _, _, create_note = run_facts(snapshot)(row)
-    states = getattr(snapshot, "run_states", None) or {}
-    observed = getattr(snapshot, "run_state_observed_at", None) or {}
-    return utf8_safe({
-        "app": item["app"],
-        "verstr": verstr,
-        "name": row.get("name"),
-        "score": item["score"],
-        "reasons": item["reasons"],
-        "signals": item["signals"],
-        "group_size": item["group_size"],
-        "author": row.get("author"),
-        "timestamp": row.get("timestamp"),
-        "status": derive_status(states.get(verstr), observed_at=observed.get(verstr)),
-        "goal": item.get("goal"),
-        "note": row.get("note") or create_note,
-        "intent": intent_excerpt(intent),
-        "features": features,
-    })
-
-
-def intent_excerpt(intent):
-    """*intent*'s text cut to :data:`INTENT_EXCERPT_BYTES` of UTF-8 (on a
-    character boundary; ``truncated`` when cut, or cut when written), with
-    its string ``keywords`` and its ``generator``; None without one. A lone
-    surrogate (only a hand-written log holds one) is no UTF-8: it reads ``?``."""
-    if not intent:
-        return None
-    found = {"keywords": _string_keywords(intent.get("keywords")),
-             "generator": utf8_safe(intent.get("generator"))}
-    excerpt = {key: value for key, value in found.items() if value}
-    excerpt["text"], cut = cap_utf8(utf8_safe(str(intent.get("text") or "")),
-                                    INTENT_EXCERPT_BYTES)
-    if cut or intent.get("truncated"):
-        excerpt["truncated"] = True
-    return excerpt
-
-
-def _string_keywords(keywords):
-    """The strings of a folded intent's *keywords*: the fold checks only its
-    text, and readers (the web UI) take each keyword for a string."""
-    if not isinstance(keywords, (list, tuple)):
-        return []
-    return [utf8_safe(k) for k in keywords if isinstance(k, str)]
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,
@@ -221,12 +204,12 @@ def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, que
     if text_only and not (context or "").strip():
         raise ValueError("A text-only search needs a context text")
     schema = conf_schema(exp_conf)
-    snapshot = app_snapshot(storage, app_name, schema)
     if target is None and ref is None and text_only:
         target = text_target(context)
     elif target is None:
-        target = run_target(snapshot, storage, app_name, ref or "latest", context=context,
+        target = run_target(storage, app_name, ref or "latest", context=context,
                             text_only=text_only)
-    return search(storage, app_name, snapshot, target, schema=schema, top=top, query=query,
+    scope = app_scope(storage, app_name, schema, with_snapshot=bool(_query(query)))
+    return search(storage, app_name, scope, target, schema=schema, top=top, query=query,
                   all_apps=all_apps, schema_of=schema_of, weights=conf_weights(exp_conf),
                   include_archived=include_archived)

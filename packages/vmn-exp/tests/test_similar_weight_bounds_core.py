@@ -1,7 +1,7 @@
 """Conf weights (``experiment.similar.weights``) too large for a float are
 ignored like any other invalid weight, never an OverflowError."""
 import pytest
-from vmn_exp.core.similar_score import DEFAULT_WEIGHTS, resolve_weights
+from vmn_exp.core.similar_weights import DEFAULT_WEIGHTS, resolve_weights
 
 
 @pytest.mark.parametrize("huge", [10 ** 400, -(10 ** 400)], ids=["huge", "huge_negative"])

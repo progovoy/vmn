@@ -81,7 +81,7 @@ def test_top_limits_the_results():
 def test_rows_filter_keeps_only_the_rows_it_accepts():
     rows = [run("a", params={"lr": 0.1}), run("b", params={"lr": 0.1})]
     items = similar_runs(FakeSnapshot(rows), _target(run("t", params={"lr": 0.1})),
-                         rows_filter=lambda row: row["verstr"] != "a")
+                         rows_filter=lambda app, row: row["verstr"] != "a")
     assert verstrs(items) == ["b"]
 
 

@@ -4,60 +4,35 @@ not a mapping, and a target that names its own app among several."""
 import logging
 
 import pytest
-from similar_fixtures import FakeSnapshot, run
-from vmn_exp.core.similar import similar_runs_multi, target_from_snapshot
-from vmn_exp.core.similar_profile import build_profile
-from vmn_exp.core.similar_score import (
-    DEFAULT_WEIGHTS,
-    resolve_weights,
-    score,
-    value_closeness,
-)
-from vmn_exp.core.similar_text import document_terms, keyword_phrases
+from similar_fixtures import FakeSnapshot, explain, run
+from vmn_exp.core.similar import similar_runs, similar_runs_multi, target_from_snapshot
+from vmn_exp.core.similar_profile import build_profile, document_text, keyword_phrases
+from vmn_exp.core.similar_weights import DEFAULT_WEIGHTS, resolve_weights
 
 NAN, INF = float("nan"), float("inf")
 
 
-@pytest.mark.parametrize("a, b", [(1e-200, 1e200), (1e200, 1e-200), (1e-308, 1e308),
-                                  (2.2e-308, 1e17), (5e-324, 1.0)])
-def test_positive_params_whose_ratio_underflows_or_overflows_are_not_close(a, b):
-    assert value_closeness(a, b) == 0.0
-
-
-@pytest.mark.parametrize("a, b", [(NAN, NAN), (INF, INF), (-INF, -INF), (NAN, 1.0),
-                                  (1.0, INF), ("inf", "inf"), ("nan", "nan")])
-def test_non_finite_values_are_not_comparable(a, b):
-    assert value_closeness(a, b) == 0.0
-
-
-def test_a_query_with_extreme_params_scores_instead_of_raising():
+def test_a_query_with_extreme_params_explains_instead_of_raising():
     a = {"row": run("a", params={"lr": 1e-200, "seed": 10 ** 400, "x": NAN})}
     b = {"row": run("b", params={"lr": 1e200, "seed": 1, "x": NAN})}
-    total, reasons, signals = score(a, b)
-    assert signals["params"] == 0.0
-    assert 0 < total < 1 and reasons == ["same base commit aaaaaaa"]
-
-
-def test_a_huge_integer_param_reads_as_text_in_a_reason():
-    a = {"row": {"verstr": "a", "params": {"seed": 1, "lr": 0.1}}}
-    b = {"row": {"verstr": "b", "params": {"seed": 10 ** 30, "lr": 0.1}}}
-    assert score(a, b)[1] == ["seed 1e30 vs 1"]
-    huge = {"row": {"verstr": "c", "params": {"seed": 10 ** 400, "lr": 0.1}}}
-    (reason,) = score(a, huge)[1]
-    assert reason.startswith("seed 1000") and reason.endswith("… vs 1")
+    reasons, signals = explain(a, b)
+    assert 0 < signals["params"] < 1
+    assert reasons[0] == "same base commit aaaaaaa"
 
 
 @pytest.mark.parametrize("overrides", [[1, 2], ["code"], 3, "params", 2.5, True,
                                        (("code", 1),)])
 def test_weights_that_are_not_a_mapping_are_ignored(overrides, caplog):
-    with caplog.at_level(logging.DEBUG, logger="vmn_exp.core.similar_score"):
+    with caplog.at_level(logging.DEBUG, logger="vmn_exp.core.similar_weights"):
         assert resolve_weights(overrides) == DEFAULT_WEIGHTS
     assert "experiment.similar.weights" in caplog.text
 
 
-def test_score_takes_weights_of_the_wrong_shape_as_the_defaults():
-    a, b = {"row": run("a", params={"opt": "adam"})}, {"row": run("b", params={"opt": "sgd"})}
-    assert score(a, b, weights=[1, 2]) == score(a, b)
+def test_a_search_takes_weights_of_the_wrong_shape_as_the_defaults():
+    rows = [run("a", params={"opt": "adam"}), run("b", params={"opt": "sgd"})]
+    snap = FakeSnapshot(rows)
+    target = target_from_snapshot(snap, "a")
+    assert similar_runs(snap, target, weights=[1, 2]) == similar_runs(snap, target)
 
 
 def test_non_numeric_negative_and_non_finite_weight_values_are_ignored():
@@ -70,7 +45,7 @@ def test_non_numeric_negative_and_non_finite_weight_values_are_ignored():
 def test_an_intent_that_is_not_a_mapping_reads_as_none(intent):
     row = run("a", name="focal sweep")
     assert keyword_phrases(intent) == []
-    assert document_terms(row, intent=intent) == document_terms(row)
+    assert document_text(row, intent=intent) == document_text(row)
     profile = build_profile(row, intent=intent)
     assert profile.has_intent is False and profile.keywords == ()
 

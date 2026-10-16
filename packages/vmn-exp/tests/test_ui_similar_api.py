@@ -134,3 +134,12 @@ def test_a_missing_or_oversized_text_is_400(client, text):
 
 def test_a_text_of_stopwords_finds_nothing(client):
     assert _verstrs(_text(client, "the and of")) == []
+
+
+def test_without_fts5_the_similar_routes_say_so(client, monkeypatch):
+    from vmn_exp.core import similar_fts
+
+    monkeypatch.setattr(similar_fts, "_FTS5", [False])
+    for response in (_similar(client), _text(client, "focal")):
+        assert response.status_code == 501
+        assert "SQLite with FTS5" in response.json()["detail"]

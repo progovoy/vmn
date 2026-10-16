@@ -1,7 +1,6 @@
 """What the similar-runs docs (plan 18) say about the code is what the code
 does: whose conf weights score, which ``hypothesis`` is text, what warms the
-hint's index, how the hint keeps its budget, and why ``similar`` without a ref
-compares the working tree."""
+hint's index, and why ``similar`` without a ref compares the working tree."""
 import os
 import re
 
@@ -10,7 +9,6 @@ import vmn_exp.cli.similar as similar_cli
 from exp_helpers import _PROJECT_ROOT
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.fold import fold_hypothesis, fold_log
-from vmn_exp.core.similar_index import DEADLINE_CHECK_EVERY, SimilarDeadlineExceeded
 from vmn_exp.core.writer import create_log_entry
 from vmn_exp.sdk.reader import similar_runs
 
@@ -77,15 +75,6 @@ def test_the_hint_docs_name_what_warms_its_index_and_not_the_ui():
     assert "`vmn-exp ui` last refreshed" not in hint
     assert "as `list`, `show`, `compare`, `similar`" in hint
     assert "`vmn-exp ui` keeps its own index" in hint
-
-
-def test_plan_18_describes_the_hint_budget_as_built():
-    surfaces = _section(PLAN, "### 3.4 Surfaces")
-    assert "daemon thread" not in surfaces and "`expired`" not in surfaces
-    assert "calling thread" in surfaces
-    for name in (SimilarDeadlineExceeded.__name__, "DEADLINE_CHECK_EVERY"):
-        assert name in surfaces
-    assert f"every {DEADLINE_CHECK_EVERY} rows" in surfaces
 
 
 def _version_help(capsys):

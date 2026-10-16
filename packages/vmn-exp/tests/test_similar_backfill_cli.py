@@ -19,6 +19,7 @@ from exp_helpers import _bootstrap, _exp, _storage
 from vmn_exp.cli import similar_backfill
 from vmn_exp.core.features import FEATURES_VERSION
 from vmn_exp.core.index import indexed_snapshot
+from vmn_exp.core.similar_search import find
 
 V1 = "0.0.2-dev.abc1234.1234567"
 V2 = V1 + ".r2"
@@ -193,3 +194,14 @@ def test_runs_sharing_a_code_object_read_and_parse_it_once(
     assert len(calls) == 1
     assert features_entries(store, app, V1)[0]["changed"] == \
         features_entries(store, app, V2)[0]["changed"]
+
+
+def test_a_backfill_refiles_the_runs_it_gave_features(app_layout, store, capfd):
+    # Their similar-runs documents are refiled at once: a search right after
+    # finds the run by a function its code changed.
+    app = app_layout.app_name
+    dirty_run(store, app, V1)
+    assert _backfill(app_layout, capfd)[0] == 0
+    target = {"row": {"code_verstr": "0.0.9-dev.fffffff.0000001"},
+              "features": {"changed": {"files": [], "symbols": ["src/loss.py::focal_loss"]}}}
+    assert [item["verstr"] for item in find(store, app, None, {}, target=target)] == [V1]

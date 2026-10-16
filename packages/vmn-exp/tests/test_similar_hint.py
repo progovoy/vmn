@@ -17,6 +17,7 @@ from exp_helpers import (
 )
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli import similar_hint
+from vmn_exp.core.index import ExperimentIndex
 
 TRAIN = "def train_step():\n    a = 1\n    b = 2\n    c = 3\n    d = 4\n    return {}\n"
 HEAD = "1 similar run: best val_loss=0.3 — "
@@ -165,51 +166,42 @@ def test_the_hint_reads_the_index_cache_and_never_lists_the_store(app_layout, ca
 def _record_index_loads(monkeypatch):
     loads = []
 
-    def follower(cls, *args):
+    def loaded(*args, **kwargs):
         loads.append(args)
         raise AssertionError("the hint loaded the index")
 
-    monkeypatch.setattr(similar_hint.ExperimentIndex, "follower", classmethod(follower))
+    monkeypatch.setattr(ExperimentIndex, "snapshot", loaded)
+    monkeypatch.setattr(ExperimentIndex, "refresh", loaded)
     return loads
 
 
-def test_no_hint_and_no_index_load_past_the_runs_it_can_search_in_budget(app_layout, capfd,
-                                                                         monkeypatch):
-    # Waiting at most the budget is not enough: loading a big index past it
-    # would still cost the command its time and memory.
-    _prior_and_dirty_tree(app_layout)
-    seed(_storage(app_layout), app_layout.app_name, verstr(2, commit="0000000"))
-    _warm(app_layout)
-    monkeypatch.setattr(similar_hint, "MAX_INDEXED_RUNS", 1)
-    loads = _record_index_loads(monkeypatch)
-
-    assert _hints(_create(app_layout, capfd).err) == []
-    assert loads == []
-
-
-def test_the_hint_searches_an_index_of_up_to_its_runs_cap(app_layout, capfd, monkeypatch):
+def test_the_hint_reads_the_runs_it_shows_and_never_loads_the_index(app_layout, capfd,
+                                                                    monkeypatch):
+    # No run cap: the search runs in the index file, a fresh process reads
+    # only the few runs it shows (plan 24).
     prior = _prior_and_dirty_tree(app_layout)
     _warm(app_layout)
-    monkeypatch.setattr(similar_hint, "MAX_INDEXED_RUNS", 1)
+    loads = _record_index_loads(monkeypatch)
 
     [line] = _hints(_create(app_layout, capfd).err)
     assert line.startswith(HEAD + prior)
+    assert loads == []
 
 
 def test_a_hint_past_its_budget_stops_before_searching(app_layout, capfd, monkeypatch):
     _prior_and_dirty_tree(app_layout)
     _warm(app_layout)
-    now, loaded, searched = [0.0], [], []
+    now, read, searched = [0.0], [], []
     monkeypatch.setattr(similar_hint, "_clock", lambda: now[0])
-    load = similar_hint._cached_snapshot
+    real = similar_hint.record_target
 
-    def load_spending_the_budget(*args, **kwargs):
-        loaded.append(args)
+    def read_spending_the_budget(*args, **kwargs):
+        read.append(args)
         now[0] += similar_hint.BUDGET_SEC
-        return load(*args, **kwargs)
+        return real(*args, **kwargs)
 
-    monkeypatch.setattr(similar_hint, "_cached_snapshot", load_spending_the_budget)
+    monkeypatch.setattr(similar_hint, "record_target", read_spending_the_budget)
     monkeypatch.setattr(similar_hint, "search", lambda *a, **k: searched.append(a) or [])
 
     assert _hints(_create(app_layout, capfd).err) == []
-    assert len(loaded) == 1 and searched == []
+    assert len(read) == 1 and searched == []
