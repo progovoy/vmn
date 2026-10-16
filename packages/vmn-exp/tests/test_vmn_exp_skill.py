@@ -200,3 +200,9 @@ def test_vmn_exp_skill_puts_the_fleet_counts_on_the_jobs_view_row(capfd):
     assert "Outer runs view" in out and "whole subtree" in out
     assert "?group=parent" not in out
     assert "plus `stuck` ones" not in out
+
+
+def test_vmn_exp_skill_names_the_similar_query_predicate(capfd):
+    section = _similar_section(capfd)
+    assert 'similar("' in section
+    assert "intent ~" in section and "keywords ~" in section

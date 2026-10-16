@@ -166,6 +166,16 @@ entrypoint, metric names and text. You supply the meaning:
    vmn-exp similar <app_name> --context "<X plus synonyms>" --text-only --all-apps --json
    ```
 
+   Any `--query` (`list`, `prune`, `similar`) filters on the same text:
+   `similar("focal loss")` keeps the runs whose intent, keywords, name, note,
+   tags, commit subjects or hypothesis hold every word (stemmed: `losses`
+   finds `loss`); `intent ~ "focal"` and `keywords ~ "long tail"` match the
+   latest intent's text and keywords as substrings:
+
+   ```sh
+   vmn-exp list <app_name> --query 'similar("focal loss") and status = "succeeded"' --json
+   ```
+
 ## Model registry
 
 Link trained models to the experiment runs that produced them:
