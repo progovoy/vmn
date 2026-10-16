@@ -2,17 +2,22 @@
 """Is the server's cache still the one it built? (plan 11 §4.6)
 
 Checked every tick, cheaply: a ``problem()`` of None means healthy, else a
-short reason that starts a background rebuild. SQLite: the file was deleted,
-replaced (another inode), is unreadable, or carries another
-``SCHEMA_VERSION``. Postgres: the cache tables were truncated (a scope's
-generation went backwards, or the ``vmn_cache_meta`` row is gone) or hold
-another schema version. An unreachable database is not a problem: the store
+short reason that starts a background rebuild. SQLite: the live file (the
+one its pointer names, :mod:`vmn_exp.core.sqlite_files`) was deleted,
+replaced (another inode, or another process flipped the pointer), is
+unreadable, or carries an older ``SCHEMA_VERSION`` (a newer one belongs to a
+newer server sharing the file: rebuilding over it would ping-pong).
+Postgres: the cache tables were truncated (a scope's generation went
+backwards, or the ``vmn_cache_meta`` row is gone) or hold another schema
+version. An unreachable database is not a problem: the store
 reconnects on its own.
 """
 import os
 import sqlite3
 
-from vmn_exp.core.index_store_schema import SCHEMA_VERSION
+from vmn_exp.core.index_store_schema import SCHEMA_VERSION, is_newer, schema_of
+from vmn_exp.core.sqlite_conn import connect
+from vmn_exp.core.sqlite_files import live_path
 
 
 def _identity(path):
@@ -37,12 +42,11 @@ def _has_sqlite_header(path):
 
 
 def _schema_of(path):
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn = connect(path, readonly=True)
     try:
-        row = conn.execute("SELECT v FROM exp_index_meta WHERE k = 'schema'").fetchone()
+        return schema_of(conn)
     finally:
         conn.close()
-    return row[0] if row else None
 
 
 class SqliteHealth:
@@ -51,11 +55,12 @@ class SqliteHealth:
         self.rearm()
 
     def rearm(self):
-        """Accept the file now at the path (a rebuild swapped it in)."""
-        self._identity = _identity(self.path)
+        """Accept the file now live (a rebuild swapped it in)."""
+        self._identity = _identity(live_path(self.path))
 
     def problem(self):
-        identity = _identity(self.path)
+        file = live_path(self.path)
+        identity = _identity(file)
         if self._identity is None:  # not created yet when armed: the first one counts
             self._identity = identity
             if identity is None:
@@ -64,15 +69,15 @@ class SqliteHealth:
             return "missing"
         if identity != self._identity:
             return "replaced"
-        if not _has_sqlite_header(self.path):
+        if not _has_sqlite_header(file):
             return "corrupt"
         try:
-            schema = _schema_of(self.path)
+            schema = _schema_of(file)
         except sqlite3.OperationalError as exc:
             return None if "locked" in str(exc) else "corrupt"
         except sqlite3.DatabaseError:
             return "corrupt"
-        return None if schema == SCHEMA_VERSION else "schema"
+        return None if schema == SCHEMA_VERSION or is_newer(schema) else "schema"
 
 
 class PgHealth:
