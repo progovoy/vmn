@@ -21,6 +21,7 @@ from vmn_exp.core.metric_lod import emit, summarize
 from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited
 from vmn_exp.core.metric_time import iso_to_us, us_to_iso
 from vmn_exp.core.rewind import rewind_step
+from vmn_exp.storage.thread_context import in_caller_context
 
 LEGACY_WRITER = ""
 # Segment reads one stream keeps in flight: a stuck run on S3 has one segment
@@ -155,7 +156,7 @@ def _read_all(storage, app_name, verstr, objects):
     if len(objects) < 2:
         return [read(obj) for obj in objects]
     with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects))) as pool:
-        return list(pool.map(read, objects))
+        return list(pool.map(in_caller_context(read), objects))
 
 
 def _stream_blocks(storage, app_name, verstr, objects):
@@ -219,7 +220,7 @@ def metric_sources(storage, app_name, verstr):
     if len(objects) < 2:
         return [source(item) for item in objects]
     with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects))) as pool:
-        return list(pool.map(source, objects))
+        return list(pool.map(in_caller_context(source), objects))
 
 
 class SeriesReader:

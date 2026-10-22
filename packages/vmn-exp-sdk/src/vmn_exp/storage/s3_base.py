@@ -9,6 +9,7 @@ from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import checked_app_path, safe_verstr
 from vmn_exp.storage.registry import missing_extra
 from vmn_exp.storage.s3_stats import instrument
+from vmn_exp.storage.thread_context import in_caller_context
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
 S3_WORKERS = 10
@@ -39,7 +40,7 @@ def parallel_map(fn, items):
     if len(items) < 2:
         return [fn(item) for item in items]
     with ThreadPoolExecutor(max_workers=min(S3_WORKERS, len(items))) as pool:
-        return list(pool.map(fn, items))
+        return list(pool.map(in_caller_context(fn), items))
 
 
 def app_key(app_name):

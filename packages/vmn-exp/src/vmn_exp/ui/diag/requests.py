@@ -6,7 +6,8 @@ HTTP request a :class:`RequestEntry`, reachable from the request's context
 (:func:`current_request`, also on its worker threads: anyio copies the
 context). Code may attach data to ``entry.extra``; :func:`note_worker_start`
 (called where a route's sync code first runs on a pool thread) splits queue
-wait from run time. :meth:`RequestTracker.add_listener` subscribers get
+wait from run time; :mod:`~vmn_exp.ui.diag.s3_attribution` adds the
+request's S3 calls (``entry.extra["s3"]``, shown as ``s3``). :meth:`RequestTracker.add_listener` subscribers get
 ``(event, entry)`` for ``"start"`` and ``"finish"`` (a recorder, say).
 
 Routes are reported by their template (``/experiments/{verstr}``), never the
@@ -56,6 +57,11 @@ class RequestEntry:
 def current_request():
     """The :class:`RequestEntry` of the request this code serves, or None."""
     return _CURRENT.get()
+
+
+def _s3_calls(entry):
+    table = entry.extra.get("s3")
+    return table.snapshot() if table is not None else {}
 
 
 def note_worker_start():
@@ -146,7 +152,7 @@ class RequestTracker:
         return {"method": entry.method, "route": entry.route, "status": entry.status,
                 "duration_sec": _rounded(entry.duration),
                 "queue_wait_sec": _rounded(entry.queue_wait),
-                "ended_at": round(time.time(), 3)}
+                "ended_at": round(time.time(), 3), "s3": _s3_calls(entry)}
 
     def section(self):
         now = time.monotonic()
@@ -167,7 +173,7 @@ class RequestTracker:
         return {"method": entry.method, "route": entry.route,
                 "age_sec": _rounded(now - entry.started),
                 "queue_wait_sec": _rounded(entry.queue_wait), "thread": entry.thread,
-                "response_bytes": entry.response_bytes}
+                "response_bytes": entry.response_bytes, "s3": _s3_calls(entry)}
 
 
 class DiagRequestsMiddleware:

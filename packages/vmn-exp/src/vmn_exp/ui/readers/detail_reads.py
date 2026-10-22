@@ -14,6 +14,8 @@ for a member's state and write time more than once, and each is read once.
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+from vmn_exp.storage.thread_context import in_caller_context
+
 WORKERS = 32
 # Subtree members whose states are prefetched; the rest are read on demand.
 PREFETCH_MAX = 256
@@ -22,7 +24,7 @@ _POOL = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="vmn-ui-detai
 
 
 def submit(fn, *args, **kwargs):
-    return _POOL.submit(fn, *args, **kwargs)
+    return _POOL.submit(in_caller_context(fn), *args, **kwargs)
 
 
 class RunStates:

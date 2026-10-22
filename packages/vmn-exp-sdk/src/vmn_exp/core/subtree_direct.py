@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp.core.fold import new_fold
 from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.status import load_run_state
+from vmn_exp.storage.thread_context import in_caller_context
 
 WORKERS = 32
 MAX_DEPTH = 4
@@ -76,11 +77,14 @@ class _Reader:
         """``[(metadata, run state, child markers)]`` of the *level*'s
         ``(verstr, expected parent)`` that exist, every read in flight at once."""
         submit = self._pool.submit
+        load_metadata = in_caller_context(self._storage.load_metadata)
+        run_state = in_caller_context(load_run_state)
+        list_children = in_caller_context(self._storage.list_children)
         reads = [
             (parent,
-             submit(self._storage.load_metadata, self._app, v),
-             submit(load_run_state, self._storage, self._app, v),
-             submit(self._storage.list_children, self._app, v) if listing else None)
+             submit(load_metadata, self._app, v),
+             submit(run_state, self._storage, self._app, v),
+             submit(list_children, self._app, v) if listing else None)
             for v, parent in level
         ]
         nodes = []

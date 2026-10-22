@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException, Request
 
+from vmn_exp.storage.thread_context import in_caller_context
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.http_params import MAX_PAGE, clamp_page
@@ -110,7 +111,7 @@ def batch_series(storage, app_name, verstrs, keys, max_points, x=None, schema=No
         )
 
     payload = {"series": {}, "series_total": {}, "step_metrics": {}, "missing": []}
-    for verstr, found in zip(verstrs, _POOL.map(one, verstrs)):
+    for verstr, found in zip(verstrs, _POOL.map(in_caller_context(one), verstrs)):
         if found is None:
             payload["missing"].append(verstr)
             continue

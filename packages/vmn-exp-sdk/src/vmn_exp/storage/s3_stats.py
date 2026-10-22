@@ -6,7 +6,10 @@
 builds (S3 and S3-compatible stores; the gs/az backends use their own SDKs
 and are not covered). Per operation: count, errors by code, retries (the
 response's ``RetryAttempts``, so a call's latency includes its retries),
-in-flight now, a fixed-bucket latency histogram and bytes read. Hooks never
+in-flight now, a fixed-bucket latency histogram and bytes read; per
+operation and key kind (:func:`~vmn_exp.storage.s3_kinds.classify`) count,
+errors and latency; the last :data:`FAILURES_SHOWN` failed calls with their
+keys. Hooks never
 raise into the request path; :func:`s3_stats` is the dump section.
 :func:`add_listener` callbacks get an :data:`S3Call` after each call, on the
 calling thread (a recorder can read the request's contextvars); no listener
@@ -19,11 +22,15 @@ import threading
 import time
 import weakref
 
+from vmn_exp.storage.s3_kinds import classify
+
 # Upper bounds (ms) of the latency buckets; one more bucket holds the rest.
 BOUNDS_MS = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000,
              10000, 30000, 60000)
 # Oldest in-flight requests a dump lists.
 IN_FLIGHT_SHOWN = 10
+# Last failed calls a dump lists.
+FAILURES_SHOWN = 50
 _START = "_vmn_s3_stats"
 _KEY = "_vmn_s3_key"
 
@@ -34,6 +41,8 @@ S3Call = collections.namedtuple(
 
 _lock = threading.Lock()
 _ops = {}
+_kinds = {}  # "<operation> <kind>" -> _KindStats
+_failures = collections.deque(maxlen=FAILURES_SHOWN)  # (t, op, key, error, status)
 _in_flight = {}  # id(request context) -> (t0, operation, path, ClientStats)
 _clients = weakref.WeakKeyDictionary()  # client -> ClientStats
 _serials = itertools.count(1)
@@ -83,6 +92,17 @@ class _OpStats:
         return {"count": self.count, "errors": dict(self.errors),
                 "retries": self.retries, "in_flight": self.in_flight,
                 "bytes_read": self.bytes_read, "latency_ms": self.latency.summary()}
+
+
+class _KindStats:
+    def __init__(self):
+        self.count = 0
+        self.errors = {}
+        self.latency = LatencyHistogram()
+
+    def as_dict(self):
+        return {"count": self.count, "errors": dict(self.errors),
+                "latency_ms": self.latency.summary()}
 
 
 def _op(name):
@@ -145,7 +165,10 @@ class ClientStats:
         if start is None:
             return
         t0, op = start
-        ms = (time.monotonic() - t0) * 1000
+        now = time.monotonic()
+        ms = (now - t0) * 1000
+        key = context.get(_KEY, "")
+        by_kind = f"{op} {classify(op, key)}"
         with _lock:
             _in_flight.pop(id(context), None)
             self.in_flight -= 1
@@ -155,10 +178,17 @@ class ClientStats:
             stats.retries += retries
             stats.bytes_read += nbytes
             stats.latency.add(ms)
+            kind = _kinds.get(by_kind)
+            if kind is None:
+                kind = _kinds[by_kind] = _KindStats()
+            kind.count += 1
+            kind.latency.add(ms)
             if error:
                 stats.errors[error] = stats.errors.get(error, 0) + 1
+                kind.errors[error] = kind.errors.get(error, 0) + 1
+                _failures.append((now, op, key, error, status))
         if _listeners:
-            _notify(S3Call(op, context.get(_KEY, ""), ms, status, error, retries, nbytes))
+            _notify(S3Call(op, key, ms, status, error, retries, nbytes))
 
     def as_dict(self):
         return {"client": self.serial, "max_pool_connections": self.max_pool_connections,
@@ -206,10 +236,13 @@ def instrument(client):
 
 
 def s3_stats():
-    """The dump section: per-operation stats, pools, oldest in-flight calls."""
+    """The dump section: per-operation and per-kind stats, pools, oldest
+    in-flight calls, the last failed calls (newest first)."""
     now = time.monotonic()
     with _lock:
         operations = {name: op.as_dict() for name, op in sorted(_ops.items())}
+        by_kind = {name: k.as_dict() for name, k in sorted(_kinds.items())}
+        failures = list(_failures)
         clients = [c.as_dict() for c in _clients.values()]
         oldest = sorted(_in_flight.values(), key=lambda r: r[0])[:IN_FLIGHT_SHOWN]
         created = _created
@@ -217,6 +250,7 @@ def s3_stats():
     clients.sort(key=lambda c: -c["in_flight"])
     return {
         "operations": operations,
+        "by_kind": by_kind,
         "clients_created": created,
         "clients_alive": len(clients),
         "max_pool_connections": pool_sizes,
@@ -224,4 +258,7 @@ def s3_stats():
         "in_flight": [{"operation": op, "key": key, "client": c.serial,
                        "age_ms": round((now - t0) * 1000, 1)}
                       for t0, op, key, c in oldest],
+        "recent_failures": [{"operation": op, "key": key, "error": error, "status": status,
+                             "age_sec": round(now - t, 3)}
+                            for t, op, key, error, status in reversed(failures)],
     }
