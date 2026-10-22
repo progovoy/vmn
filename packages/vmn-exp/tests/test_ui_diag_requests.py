@@ -118,3 +118,36 @@ def test_api_routes_record_their_queue_wait_and_worker_thread(tmp_path):
     entry = [e for event, e in seen if event == "finish"][0]
     assert entry.route == "/api/v1/workspaces"
     assert entry.queue_wait is not None and entry.thread
+
+
+def test_an_in_flight_request_shows_the_response_bytes_sent_so_far():
+    from fastapi.responses import StreamingResponse
+
+    tracker, release, sent = RequestTracker(), threading.Event(), threading.Event()
+    app = FastAPI()
+
+    @app.get("/stream")
+    def stream():
+        def body():
+            yield b"x" * 1234
+            sent.set()
+            release.wait(10)
+            yield b"done"
+        return StreamingResponse(body())
+
+    app.add_middleware(DiagRequestsMiddleware, tracker=tracker)
+    with TestClient(app) as client:
+        t = threading.Thread(target=lambda: client.get("/stream"), daemon=True)
+        t.start()
+        try:
+            assert sent.wait(5)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                flight = tracker.section()["in_flight"]
+                if flight and flight[0].get("response_bytes"):
+                    break
+                time.sleep(0.02)
+        finally:
+            release.set()
+            t.join(5)
+    assert flight[0]["route"] == "/stream" and flight[0]["response_bytes"] == 1234

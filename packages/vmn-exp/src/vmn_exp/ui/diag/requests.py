@@ -166,7 +166,8 @@ class RequestTracker:
     def _flying(entry, now):
         return {"method": entry.method, "route": entry.route,
                 "age_sec": _rounded(now - entry.started),
-                "queue_wait_sec": _rounded(entry.queue_wait), "thread": entry.thread}
+                "queue_wait_sec": _rounded(entry.queue_wait), "thread": entry.thread,
+                "response_bytes": entry.response_bytes}
 
 
 class DiagRequestsMiddleware:
