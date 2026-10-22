@@ -244,6 +244,17 @@ decides. (`vmn_exp.core.status.derive_status(state, observed_at=...)`.)
 A process that is hung but alive keeps heartbeating and reads `running`;
 watch `last_metric_at` (UI/API) for "alive but not making progress".
 
+Two attempts of one SDK run (speculative duplicate pods, a run resumed with
+`start_run(run_id=)` while the old process still lives) share its
+`run_state.yml`. Each SDK attempt records a random `attempt` id, and a
+heartbeat first reads the stored state: once another attempt has written the
+final state, the beat is dropped and this attempt stops heartbeating (one
+warning), so the loser never flips a finished run back to `running`. A start
+is always written, so resuming a finished run still reopens it. Best-effort:
+there is no compare-and-swap, so a final state that lands between a beat's
+read and its write is overwritten once; and the losing attempt's own final
+state (when it finishes later) still replaces the winner's.
+
 ### Preemption and signals
 
 `SIGTERM` (Slurm `scancel`, Kubernetes eviction, spot reclaim), `SIGINT` and

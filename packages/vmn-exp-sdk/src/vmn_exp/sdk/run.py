@@ -19,6 +19,7 @@ import signal
 import socket
 import sys
 import time
+import uuid
 
 from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
@@ -347,6 +348,9 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             "cwd": _checkout_relative_cwd(),
             "pid": os.getpid(),
             "host": socket.gethostname(),
+            # This process's attempt at the run: a duplicate attempt's
+            # heartbeats never reopen a run another attempt finished.
+            "attempt": uuid.uuid4().hex[:12],
             "started_at": started_at,
             "heartbeat": started_at,
             # Bumped every beat: a liveness signal that needs no clock.
@@ -621,7 +625,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
             self._chore_guard(f"heartbeat chore {chore.__name__}", chore)
 
     def _publish_heartbeat(self):
-        self._publish(heartbeat=now_iso(), heartbeat_seq=self._state["heartbeat_seq"] + 1)
+        self._state.update(
+            heartbeat=now_iso(), heartbeat_seq=self._state["heartbeat_seq"] + 1
+        )
+        self._state_publisher.publish(self._state, heartbeat=True)
 
     def _maybe_sync(self):
         if not self._sync_interval_sec:
