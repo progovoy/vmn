@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """A short human summary of a ``vmn-exp ui`` diagnostic dump: top thread
-stacks, the slowest in-flight requests, pool saturation, index loading and
-S3 latency. Every section is optional and may be shaped differently or hold
+stacks, the slowest in-flight requests, pool saturation, index loading,
+S3 latency, and the newer sections' parts (:mod:`diag_summary_more`).
+Every section is optional and may be shaped differently or hold
 an ``error``; a part that cannot be read is skipped, never fatal."""
 from collections import Counter
 
+from vmn_exp.ui import diag_summary_more
+
 TOP_STACKS = 5
 STACK_FRAMES = 4
+THREAD_NAMES = 4
 SLOWEST = 5
 
 
@@ -19,7 +23,7 @@ def summarize(dump):
     for name, value in sections.items():
         if isinstance(value, dict) and value.get("error"):
             lines.append(f"section {name} failed: {value['error']}")
-    for part in (_stacks, _requests, _pools, _index, _s3):
+    for part in (_stacks, _requests, _pools, _index, _s3, *diag_summary_more.PARTS):
         try:
             lines += part(sections)
         except Exception:  # an odd shape skips its part, never the summary
@@ -33,22 +37,49 @@ def _frames(stack):
     return [line for frame in stack for line in str(frame).rstrip("\n").splitlines()]
 
 
+def _is_stdlib(line):
+    return "/lib/python3" in line and "site-packages" not in line
+
+
+def _shown_frames(stack):
+    """The innermost :data:`STACK_FRAMES` frames outside the stdlib (its
+    waits say only that a thread waits), each its ``File`` line + code."""
+    frames = []
+    for line in stack:
+        if line.lstrip().startswith("File ") or not frames:
+            frames.append([line])
+        else:
+            frames[-1].append(line)
+    ours = [f for f in frames if not _is_stdlib(f[0])] or frames
+    return [line for frame in ours[-STACK_FRAMES:] for line in frame]
+
+
+def _names(threads):
+    names = [t.get("name") for t in threads or [] if isinstance(t, dict) and t.get("name")]
+    more = f", +{len(names) - THREAD_NAMES}" if len(names) > THREAD_NAMES else ""
+    return f" ({', '.join(names[:THREAD_NAMES])}{more})" if names else ""
+
+
 def _stacks(sections):
-    counts = Counter()
+    counts, names = Counter(), {}
     threads = sections.get("threads")
     groups = threads.get("groups") if isinstance(threads, dict) else None
     for g in _items(groups):
-        counts[tuple(_frames(g["stack"]))] += int(g.get("count", 1))
+        key = tuple(_frames(g["stack"]))
+        counts[key] += int(g.get("count", 1))
+        names.setdefault(key, []).extend(g.get("threads") or [])
     for t in _items(threads):
-        counts[tuple(_frames(t["stack"]))] += 1
+        key = tuple(_frames(t["stack"]))
+        counts[key] += 1
+        names.setdefault(key, []).append(t)
     for s in _items(sections.get("stacks")):
         counts[tuple(_frames(s["stack"]))] += int(s.get("count", 1))
     if not counts:
         return []
     lines = ["Top stacks:"]
     for stack, n in counts.most_common(TOP_STACKS):
-        lines.append(f"  {n} threads")
-        lines += [f"      {frame}" for frame in stack[-STACK_FRAMES:]]
+        lines.append(f"  {n} threads{_names(names.get(stack))}")
+        lines += [f"      {frame}" for frame in _shown_frames(stack)]
     return lines
 
 

@@ -155,7 +155,8 @@ def _read_all(storage, app_name, verstr, objects):
     read = lambda obj: storage.read_range(app_name, verstr, obj[0], 0, obj[1])  # noqa: E731
     if len(objects) < 2:
         return [read(obj) for obj in objects]
-    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects))) as pool:
+    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects)),
+                            thread_name_prefix="vmn-series-read") as pool:
         return list(pool.map(in_caller_context(read), objects))
 
 
@@ -219,7 +220,8 @@ def metric_sources(storage, app_name, verstr):
     source = lambda item: (item[0], writer_source(storage, app_name, verstr, item[1]))  # noqa: E731
     if len(objects) < 2:
         return [source(item) for item in objects]
-    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects))) as pool:
+    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects)),
+                            thread_name_prefix="vmn-series-read") as pool:
         return list(pool.map(in_caller_context(source), objects))
 
 

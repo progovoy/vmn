@@ -38,7 +38,7 @@ def subtree_rows_direct(storage, app_name, verstr, limit=None, max_depth=MAX_DEP
     """:class:`Subtree` ``(rows, run_states, truncated)`` of *verstr* and up
     to *limit* descendants (*max_depth* levels down); *truncated* when the
     limit cut some off. Rows: *verstr* first, then by timestamp."""
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+    with ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="vmn-subtree-read") as pool:
         reader = _Reader(storage, app_name, pool)
         found, truncated = reader.walk(verstr, limit, max_depth)
     if found:

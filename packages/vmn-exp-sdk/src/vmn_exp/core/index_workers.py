@@ -51,7 +51,7 @@ def in_workers(items, count, run):
     """``run(chunk)`` for *count* strided chunks of *items* (``items[i::count]``),
     each on its own thread — *run* starts a worker process."""
     chunks = [items[i::count] for i in range(count)]
-    with ThreadPoolExecutor(max_workers=count) as pool:
+    with ThreadPoolExecutor(max_workers=count, thread_name_prefix="vmn-index-workers") as pool:
         return list(pool.map(run, chunks))
 
 

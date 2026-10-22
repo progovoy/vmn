@@ -203,8 +203,10 @@ vmn-exp ui diag --summarize dump.json             # what is slow, who waits on w
 
 Start the server with `--diag-every 30` to keep a dump every 30 s (the last
 20, in `<data-dir>/diag/`), so the moment it went wrong is on disk. The dump
-holds in-flight and slow requests, thread stacks, pools, index load state and
-S3 calls by operation; the token and secret-looking env values are scrubbed.
+holds in-flight and slow requests (with the S3 calls each made), thread
+stacks, held locks and their waiters, background work, pools, index load
+state, S3 calls by object kind and caller, recent errors and event-loop/GIL
+lag; the token and secret-looking env values are scrubbed.
 Full reference: `vmn_exp/cli/docs/ui.md` (Diagnostic dumps, Store upkeep).
 
 ## Model registry

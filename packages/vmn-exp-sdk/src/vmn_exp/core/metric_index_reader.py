@@ -129,7 +129,8 @@ class MetricIndexReader:
                       if (w[0][w[2]]["off"], w[1]) not in self._chunks]
         if len(wanted) < 2 or len(wanted) > _CACHED_CHUNKS:
             return
-        with ThreadPoolExecutor(max_workers=len(wanted)) as pool:
+        with ThreadPoolExecutor(max_workers=len(wanted),
+                                thread_name_prefix="vmn-metric-chunks") as pool:
             list(pool.map(lambda w: self._chunk(*w), wanted))
 
     def _columns(self, meta, start, end):

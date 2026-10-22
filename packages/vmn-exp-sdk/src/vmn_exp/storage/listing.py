@@ -59,7 +59,7 @@ def map_dirs(fn, items):
     # By hand: a thread pool's map ignores chunksize (a future per item).
     size = -(-len(items) // (_THREADS * 4))
     chunks = [items[i : i + size] for i in range(0, len(items), size)]
-    with ThreadPoolExecutor(max_workers=_THREADS) as pool:
+    with ThreadPoolExecutor(max_workers=_THREADS, thread_name_prefix="vmn-listing") as pool:
         return [out for part in pool.map(lambda c: list(map(fn, c)), chunks) for out in part]
 
 

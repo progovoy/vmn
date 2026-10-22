@@ -39,7 +39,8 @@ def parallel_map(fn, items):
     items = list(items)
     if len(items) < 2:
         return [fn(item) for item in items]
-    with ThreadPoolExecutor(max_workers=min(S3_WORKERS, len(items))) as pool:
+    with ThreadPoolExecutor(max_workers=min(S3_WORKERS, len(items)),
+                            thread_name_prefix="vmn-s3-parallel") as pool:
         return list(pool.map(in_caller_context(fn), items))
 
 

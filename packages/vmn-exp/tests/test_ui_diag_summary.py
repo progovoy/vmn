@@ -108,3 +108,16 @@ def test_summary_reads_the_dump_sections_as_vmn_exp_ui_writes_them():
     assert "default: 40/40 busy, 17 waiting  SATURATED" in text
     assert "slow_read: 3/24 busy, 0 waiting" in text
     assert "fastglobalmacro: 12500/46000 loaded" in text
+
+
+def test_stack_groups_name_their_threads_and_skip_stdlib_wait_frames():
+    stack = ['  File "/srv/vmn_exp/reports/index.py", line 90, in refresh\n    self._catch_up()',
+             '  File "/srv/vmn_exp/core/journal_reader.py", line 81, in tick\n    keys = x()',
+             '  File "/usr/lib/python3.10/threading.py", line 320, in wait\n    waiter.acquire()',
+             '  File "/usr/lib/python3.10/queue.py", line 171, in get\n    self.not_empty.wait()']
+    threads = {"count": 2, "groups": [{"count": 2, "stack": stack, "threads": [
+        {"name": "vmn-ui-reports"}, {"name": "AnyIO worker thread"}]}]}
+    text = summarize(_dump(threads=threads))
+    assert "2 threads (vmn-ui-reports, AnyIO worker thread)" in text
+    assert "journal_reader.py" in text and "reports/index.py" in text
+    assert "queue.py" not in text
