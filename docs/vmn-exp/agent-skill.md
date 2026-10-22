@@ -167,6 +167,37 @@ entrypoint, metric names and text. You supply the meaning:
    vmn-exp list <app_name> --query 'similar("focal loss") and status = "succeeded"' --json
    ```
 
+## Serving and debugging the UI
+
+```sh
+vmn-exp ui --store s3://<bucket>/<prefix> --host 0.0.0.0 --token <t> --no-browser
+vmn-exp ui --repo <checkout>        # a checkout's local store instead
+```
+
+The server indexes the store in the background (a big store's first load
+shows `indexing N / M runs`; pages answer from the first 500, newest first)
+and, unless `--read-only`, keeps the store tidy itself: it writes the child
+markers older inner runs lack and compacts the metrics of failed/stuck runs.
+Only with `--read-only` (or no server) run those by hand:
+`vmn-exp backfill-children <app_name>` and `vmn-exp watch --compact <app_name>`.
+
+When it is slow or stuck, take a dump (one JSON file, no py-spy or sudo; the
+`diag` command works from any directory, no checkout needed) and send back the
+file plus the summary:
+
+```sh
+vmn-exp ui diag --url http://<host>:8265 --token <t> -o dump.json   # while it answers
+vmn-exp ui diag --pid <server pid> -o dump.json    # SIGUSR1; stacks if no JSON comes
+kill -USR2 <server pid>     # every thread's stack -> <data-dir>/diag/stacks-<pid>.log
+vmn-exp ui diag --summarize dump.json             # what is slow, who waits on what
+```
+
+Start the server with `--diag-every 30` to keep a dump every 30 s (the last
+20, in `<data-dir>/diag/`), so the moment it went wrong is on disk. The dump
+holds in-flight and slow requests, thread stacks, pools, index load state and
+S3 calls by operation; the token and secret-looking env values are scrubbed.
+Full reference: `vmn_exp/cli/docs/ui.md` (Diagnostic dumps, Store upkeep).
+
 ## Model registry
 
 Link trained models to the experiment runs that produced them:

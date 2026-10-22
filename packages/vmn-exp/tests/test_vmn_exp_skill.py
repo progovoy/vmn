@@ -206,3 +206,14 @@ def test_vmn_exp_skill_names_the_similar_query_predicate(capfd):
     section = _similar_section(capfd)
     assert 'similar("' in section
     assert "intent ~" in section and "keywords ~" in section
+
+
+def test_vmn_exp_skill_explains_serving_and_debugging_the_ui(capfd):
+    """An agent operating a server (often on a host we can't reach) needs the
+    serve flags, what the server keeps tidy itself, and how to take a dump."""
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    assert "vmn-exp ui --store" in out and "--read-only" in out
+    assert "backfill-children" in out and "watch --compact" in out
+    assert "vmn-exp ui diag --url" in out and "--summarize" in out
+    assert "kill -USR2" in out and "--diag-every" in out
