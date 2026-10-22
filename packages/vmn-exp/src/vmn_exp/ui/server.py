@@ -304,7 +304,8 @@ def create_app(
         ws = _experiment_workspace(ws_name)
         store_storage = _exp_storage_for(ws)
         if store_storage:
-            compute = lambda: exp_reader.list_apps_from_storage(store_storage)  # noqa: E731
+            compute = lambda: exp_reader.list_apps_from_storage(  # noqa: E731
+                store_storage, lambda name: source.persisted_count(ws, name))
         else:
             compute = lambda: exp_reader.list_apps(ws.path)  # noqa: E731
         return app_lists.get(ws_name, compute)

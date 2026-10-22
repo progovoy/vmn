@@ -283,3 +283,21 @@ def test_latest_is_found_once_per_snapshot(tmp_path, monkeypatch):
         assert source.detail_options(ws, snap)["resolve"]("latest") == ("1.0.0-dev.r4", None)
     assert source.detail_options(ws, snap)["resolve"]("@2") == ("1.0.0-dev.r1", None)
     assert len(scans) == 1
+
+
+def test_a_store_apps_list_counts_runs_from_the_persisted_index(s3_workspace, monkeypatch):
+    new_client, storage, _ = s3_workspace
+    for i in range(3):
+        _run(storage, i, loss=i / 10)
+    assert new_client().get(f"{BASE}/experiments?limit=10").json()["total"] == 3
+
+    # A new server process: listing 45k runs by name costs S3 tens of seconds.
+    monkeypatch.setattr(experiment_index, "_SHARED", {})
+
+    def no_listing(*a, **kw):
+        raise AssertionError("the apps list listed every run")
+
+    monkeypatch.setattr(S3SnapshotStorage, "list_verstrs", no_listing)
+    apps = new_client().get("/api/v1/workspaces/ws/apps").json()
+
+    assert [(a["name"], a["experiments"]) for a in apps] == [(APP, 3)]

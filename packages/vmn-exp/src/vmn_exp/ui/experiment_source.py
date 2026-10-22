@@ -16,6 +16,7 @@ import os
 import threading
 
 import vmn_exp.core.index as experiment_index
+from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.query_extra import bind_similar_scope
 from vmn_exp.core.status import run_state_observed_at
@@ -210,6 +211,13 @@ class ExperimentSource:
             if ws.name not in self._journals:
                 self._journals[ws.name] = _open_journal(ws, storage, cache_path)
             return self._journals[ws.name]
+
+    def persisted_count(self, ws, app_name):
+        """How many of the store workspace *ws*'s *app_name* records its
+        index file holds, without reading storage; 0 when none (or Postgres)."""
+        if self._pg is not None:
+            return 0
+        return shared_store(ui_index.s3_cache_path(self._db_dir, ws)).count(app_name)
 
     def touched(self, ws, app_name, s3_storage):
         """A server edit changed *app_name* in the store workspace *ws*."""
