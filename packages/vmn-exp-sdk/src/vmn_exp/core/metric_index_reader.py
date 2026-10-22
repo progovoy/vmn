@@ -23,7 +23,8 @@ _UNPACK = {"steps": unpack_deltas, "ts": unpack_deltas, "values": unpack_floats}
 class MetricIndexReader:
     def __init__(self, read_range, size):
         self._read = read_range
-        end = read_range(size - min(size, FOOTER_READ_BYTES), min(size, FOOTER_READ_BYTES))
+        n = min(size, FOOTER_READ_BYTES)
+        end = read_range(size - n, n)
         footer_len, crc, magic = TAIL.unpack(end[-TAIL.size:])
         if magic != MAGIC:
             raise ValueError("not an indexed metric file")

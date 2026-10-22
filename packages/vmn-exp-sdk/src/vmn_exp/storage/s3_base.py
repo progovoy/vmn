@@ -12,8 +12,9 @@ from vmn_exp.storage.s3_stats import instrument
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
 S3_WORKERS = 10
-# Connections a client pools, for every thread sharing it (boto3's default: 10).
-MAX_POOL_CONNECTIONS = 64
+# Connections a client pools, for every thread sharing it (boto3's default: 10):
+# the index reads 32 records at a time, each up to S3_WORKERS segments at once.
+MAX_POOL_CONNECTIONS = 32 * S3_WORKERS
 MISSING_CODES = ("404", "NoSuchKey", "NotFound")
 TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
 

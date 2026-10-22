@@ -21,8 +21,7 @@ def first_objects(names):
     later = set()
     for group in group_log_names(names).values():
         later.update(group[1:])
-    metric_groups = group_metric_names(n for n in names if is_metric_file(n)).values()
-    if any(len(group) > 1 for group in metric_groups):
+    if any(len(group) > 1 for group in group_metric_names(names).values()):
         later.update(n for n in names if is_metric_file(n))
     if not later:
         return None

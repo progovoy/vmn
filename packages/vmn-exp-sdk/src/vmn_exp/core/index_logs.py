@@ -26,7 +26,7 @@ from vmn_exp.core.index_metrics import (
 )
 from vmn_exp.core.jsonl_tail import complete_lines
 from vmn_exp.core.logfiles import appended, group_log_names, log_writer_and_seq
-from vmn_exp.core.series_reader import read_concurrently
+from vmn_exp.storage.s3_base import parallel_map
 
 
 def log_signatures(names):
@@ -60,7 +60,7 @@ def _appends_only(old, new):
 def _read_tails(fold, counts, direct, where, items):
     """Fold each ``(name, state)`` of *items*' bytes past ``state["consumed"]``,
     in order, their reads in flight together; False if one vanished."""
-    datas = read_concurrently(
+    datas = parallel_map(
         lambda item: direct.read_file_from(*where, item[0], item[1]["consumed"]), items)
     for (name, state), data in zip(items, datas):
         if data is None:

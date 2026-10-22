@@ -25,7 +25,7 @@ from vmn_exp.core.metric_files import (
     stream_writer_and_seq,
 )
 from vmn_exp.core.metric_index_reader import MetricIndexReader
-from vmn_exp.core.series_reader import read_concurrently
+from vmn_exp.storage.s3_base import parallel_map
 
 
 def metric_signatures(names):
@@ -84,7 +84,7 @@ def _fold_growth(fold, state, storage, where):
         return False
     todo = [(writer, name, size) for writer in sorted(objects)
             for name, size in objects[writer] if state["objects"].get(name, 0) < size]
-    readers = read_concurrently(lambda item: _reader(state, storage, where, *item[1:]), todo)
+    readers = parallel_map(lambda item: _reader(state, storage, where, *item[1:]), todo)
     for (writer, name, size), reader in zip(todo, readers):
         _fold_object(fold, state, writer, name, size, reader)
     return True

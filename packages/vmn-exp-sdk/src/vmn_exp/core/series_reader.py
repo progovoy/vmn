@@ -148,20 +148,14 @@ def hidden(rewinds, ts, step):
     return step is not None and any(r_step < step and ts < r_ts for r_step, r_ts in rewinds)
 
 
-def read_concurrently(read, items):
-    """``[read(item)]`` in order, :data:`SEGMENT_READ_WORKERS` at a time; a
-    failed read raises."""
-    items = list(items)
-    if len(items) < 2:
-        return [read(item) for item in items]
-    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(items))) as pool:
-        return list(pool.map(read, items))
-
-
 def _read_all(storage, app_name, verstr, objects):
-    """Each object's bytes, in order (:func:`read_concurrently`)."""
-    return read_concurrently(
-        lambda obj: storage.read_range(app_name, verstr, obj[0], 0, obj[1]), objects)
+    """Each object's bytes, in order, read :data:`SEGMENT_READ_WORKERS` at a
+    time; a failed read raises."""
+    read = lambda obj: storage.read_range(app_name, verstr, obj[0], 0, obj[1])  # noqa: E731
+    if len(objects) < 2:
+        return [read(obj) for obj in objects]
+    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects))) as pool:
+        return list(pool.map(read, objects))
 
 
 def _stream_blocks(storage, app_name, verstr, objects):
