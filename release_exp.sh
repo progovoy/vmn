@@ -11,6 +11,9 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 git fetch --tags --quiet
+# The wheel ships the web bundle as found on disk: build it before stamping,
+# so a broken UI build stops the release before anything is tagged or pushed.
+make _build_ui
 
 release() {
     local app=$1 mode=patch
