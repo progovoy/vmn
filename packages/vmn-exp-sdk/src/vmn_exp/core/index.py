@@ -76,6 +76,7 @@ from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import load_log
 from vmn_exp.core.status import load_run_state, observed_at_by_verstr
+from vmn_exp.core.traced_lock import TracedLock
 
 _LOGGER = logging.getLogger(__name__)
 # Records a remote backend re-reads at once (each costs a few round trips).
@@ -113,7 +114,7 @@ class ExperimentIndex:
         self._reorder = ((), False)  # (new keys, whether one was re-described)
         self._rows = RowCache()
         self._snapshot = None
-        self._lock = threading.Lock()
+        self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
         self._revalidator = None  # the thread a warm snapshot() started
         self._revalidator_lock = threading.Lock()

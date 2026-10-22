@@ -11,10 +11,10 @@ follower, so the store's journal is listed once per tick, not twice. The
 state (with the journal cursor) persists in a :class:`CacheStore`'s kv, so a
 restart resumes instead of listing again. Rebuildable from storage at any time.
 """
-import threading
 import time
 
 from vmn_exp.core.journal_reader import JournalReader
+from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.reports import comments
 from vmn_exp.reports import store as rstore
 from vmn_exp.reports.panels import panel_refs
@@ -53,13 +53,14 @@ def _list_fn(storage):
 
 
 class ReportIndex:
-    def __init__(self, storage, cache=None, clock=time.time, full_sweep_sec=FULL_SWEEP_SEC):
+    def __init__(self, storage, cache=None, clock=time.time, full_sweep_sec=FULL_SWEEP_SEC,
+                 name=None):
         self._storage = storage
         self._cache = cache
         self._clock = clock
         self._full_sweep_sec = full_sweep_sec
         self._list = _list_fn(storage)
-        self._lock = threading.Lock()
+        self._lock = TracedLock("report index" if name is None else f"report index:{name}")
         self._reader = None
         self._swept_at = None
         self._fed_at = None

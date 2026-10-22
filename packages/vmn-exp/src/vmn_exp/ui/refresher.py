@@ -31,6 +31,8 @@ import logging
 import threading
 import time
 
+from vmn_exp.core.activity import activity
+from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.gil_hint import GilHint
 
 REFRESH_INTERVAL_SEC = 1.0
@@ -110,7 +112,7 @@ class Refresher(_Listeners):
         self._watches = {}  # index -> _Watch
         self._journals = {}  # WorkspaceJournal -> its thread
         self._journal_of = {}  # index -> its WorkspaceJournal
-        self._lock = threading.Lock()
+        self._lock = TracedLock("refresher")
         self._stopped = threading.Event()
         self.gil_hint = GilHint()
 
@@ -180,7 +182,8 @@ class Refresher(_Listeners):
         while not self._stopped.is_set():
             try:
                 if journal.watched:
-                    journal.tick()
+                    with activity("journal tick", key=getattr(journal, "scope", None)):
+                        journal.tick()
             except Exception:
                 log = _LOGGER.debug if failing else _LOGGER.warning
                 log("Reading the change journal failed", exc_info=True)
@@ -227,7 +230,8 @@ class Refresher(_Listeners):
     def _refresh(self, index, watch):
         started = time.monotonic()
         try:
-            index.refresh()
+            with activity("index refresh", key=getattr(index, "app_name", None)):
+                index.refresh()
         except Exception:
             # Once per failure streak: a broken store would log every second.
             log = _LOGGER.debug if watch.failing else _LOGGER.warning

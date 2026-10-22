@@ -15,6 +15,7 @@ import os
 import threading
 import time
 
+from vmn_exp.core.activity import activity
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.reports.index import FULL_SWEEP_SEC, ReportIndex
 
@@ -56,7 +57,8 @@ class ReportIndexes:
 
     def _refresh(self, ws_name, entry):
         try:
-            entry[0].refresh()
+            with activity("report index refresh", key=ws_name):
+                entry[0].refresh()
         except Exception:
             _LOGGER.warning("Refreshing the report index failed", exc_info=True)
         finally:
@@ -70,7 +72,7 @@ class ReportIndexes:
 
     def _new(self, ws, storage):
         sweep = FULL_SWEEP_SEC if self._background else 0
-        return ReportIndex(storage, cache=self._cache(ws), full_sweep_sec=sweep)
+        return ReportIndex(storage, cache=self._cache(ws), full_sweep_sec=sweep, name=ws.name)
 
     def _cache(self, ws):
         if self._db_dir is None:

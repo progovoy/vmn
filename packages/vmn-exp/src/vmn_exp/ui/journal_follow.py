@@ -45,6 +45,10 @@ class WorkspaceJournal:
         self._cache.kv_put(self._scope, _CURSOR_FINGERPRINT, self._reader.cursor)
 
     @property
+    def scope(self):
+        return self._scope
+
+    @property
     def cursor(self):
         return self._reader.cursor
 
