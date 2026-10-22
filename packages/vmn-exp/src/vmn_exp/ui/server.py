@@ -604,9 +604,14 @@ def create_app(
         schema = _app_schema(ws, app_name)
         try:
             if store_storage:
-                result, err = diff_reader.experiment_diff_from_storage(
-                    store_storage, app_name, v, to, schema=schema
-                )
+                # The index has both runs folded: no log read (a long-stuck
+                # run's log is thousands of segments); else read the store.
+                result, err = diff_reader.experiment_diff_from_snapshot(
+                    source.snapshot(ws, app_name, store_storage, schema), v, to, schema), None
+                if result is None:
+                    result, err = diff_reader.experiment_diff_from_storage(
+                        store_storage, app_name, v, to, schema=schema
+                    )
             else:
                 result, err = diff_reader.cached_experiment_diff(
                     ws.path, app_name, v, to, schema=schema

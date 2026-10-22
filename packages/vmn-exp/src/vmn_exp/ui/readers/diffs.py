@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from vmn_exp.core.fold import fold_definitions, fold_log, fold_metrics, fold_values
 from vmn_exp.core.log import load_log
-from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.metric_schema import effective_schema, metric_goal
 from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.ui.memo import LRU
@@ -87,10 +87,15 @@ def _fold_side(log, schema):
     return metrics, params, metric_summary, run_defs
 
 
-def _load_sides(storage, app_name, verstrs, read_log, schema=None):
+def _load_sides(storage, app_name, verstrs, read_log, schema=None, with_code=True):
+    """Each run's ``(meta, patches, metrics, params, metric_summary, run_defs)``;
+    without *with_code* only ``metadata.yml`` is read (patches None)."""
     sides = []
     for verstr in verstrs:
-        meta, patches = storage.load(app_name, verstr)
+        if with_code:
+            meta, patches = storage.load(app_name, verstr)
+        else:
+            meta, patches = storage.load_metadata(app_name, verstr), None
         if meta is None:
             return None, RefError(f"Experiment {verstr} not found")
         log = read_log(storage, app_name, verstr)
@@ -243,13 +248,37 @@ def experiment_diff_from_storage(storage, app_name, ref1, ref2, schema=None):
     verstrs, err = _resolve_pair(storage, app_name, ref1, ref2)
     if err:
         return None, err
-    sides, err = _load_sides(storage, app_name, verstrs, _merged_log, schema)
+    sides, err = _load_sides(storage, app_name, verstrs, _merged_log, schema, with_code=False)
     if err:
         return None, err
+    return _metrics_only(verstrs, _delta_from_sides(sides[0], sides[1], schema)), None
+
+
+def _metrics_only(verstrs, delta):
     return {
         "from_verstr": verstrs[0],
         "to_verstr": verstrs[1],
-        "metrics_delta": _delta_from_sides(sides[0], sides[1], schema),
+        "metrics_delta": delta,
         "diff": None,  # Tree diffs unavailable for S3 workspaces
         "truncated": False,
-    }, None
+    }
+
+
+def experiment_diff_from_snapshot(snap, v1, v2, schema=None):
+    """:func:`experiment_diff_from_storage` of two runs the index *snap*
+    holds, from its rows and side tables (no log, record or code read: a
+    long-stuck run's log is thousands of segments); None when it lacks one.
+    The rows' metrics are already folded per summary policy; the goals come
+    from the declared schema (run definitions, latest run wins) under *schema*."""
+    rows = [snap.row(v) for v in (v1, v2)]
+    if None in rows:
+        return None
+    goals = effective_schema(schema, snap.declared_schema())
+    no_defs = {}
+    delta = _metrics_delta(
+        rows[0]["metrics"], rows[1]["metrics"],
+        (rows[0]["params"], snap.metric_summary(v1), no_defs),
+        (rows[1]["params"], snap.metric_summary(v2), no_defs),
+        goals,
+    )
+    return _metrics_only([v1, v2], delta)
