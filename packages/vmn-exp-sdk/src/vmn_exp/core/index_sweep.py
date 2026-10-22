@@ -32,9 +32,9 @@ every new run, waiting for seconds.
 
 A ``journaled`` sweep (the ui, reading the store's change journal; plan 11
 §5.2) lists the files of the records the journal named (:meth:`Sweep.hint`)
-and of the live ones every ``LIVE_RELIST_SEC`` (for their heartbeats, which
-the journal leaves out), plus the same rolling slice of every known record — the
-consistency check (plan 11 §4.6), so each comes round once per
+and of each live one at its own heartbeat cadence (:func:`live_relist_sec`;
+for its heartbeats, which the journal leaves out), plus the same rolling slice
+of every known record — the consistency check (plan 11 §4.6), so each comes round once per
 ``full_sweep_sec`` (``reconcile_sec``) — and, at the start of each round, the
 record names (for records no journal entry announced). What the check finds
 changed that no hint or live listing explains is counted in :attr:`Sweep.drift`.
@@ -53,15 +53,28 @@ import time
 from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
 from vmn_exp.core.index_sweep_state import SweepState, _settled
+from vmn_exp.core.status import heartbeat_interval_sec, stale_after_sec
 
 DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
-# How often a journaled sweep lists a live record the journal did not name:
-# the journal names every write but a heartbeat-only run_state.yml, and a run
-# turns stuck only after max(3 * interval, 60 s) without one.
+# The shortest period a journaled sweep re-lists a live record the journal
+# did not name at (and a pending claim's): the journal names every write but
+# a heartbeat-only run_state.yml (see live_relist_sec).
 LIVE_RELIST_SEC = 10
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
 _wall = time.time
+
+
+def live_relist_sec(record):
+    """How often a journaled sweep lists live *record* (None: a pending
+    claim) for its heartbeat: once per beat, never more often than
+    LIVE_RELIST_SEC, and within half its stale window, so a beat that landed
+    is seen long before the run would read ``stuck`` without it."""
+    if record is None:
+        return LIVE_RELIST_SEC
+    run_state = record.get("run_state")
+    period = max(heartbeat_interval_sec(run_state), LIVE_RELIST_SEC)
+    return min(period, stale_after_sec(run_state) / 2)
 
 
 class Sweep(SweepState):
@@ -192,13 +205,13 @@ class Sweep(SweepState):
         return [k for k in changes[0] if k not in records and k not in self._pending]
 
     def _live_due(self, records, key, now):
-        """Whether live (or pending) *key* is due its every-LIVE_RELIST_SEC
+        """Whether live (or pending) *key* is due its :func:`live_relist_sec`
         listing, which keeps its heartbeat fresh; its other writes are hinted.
         Its clock starts when first seen live: it was just listed or loaded."""
         if not self._judge_live(records, key):
             self._live_at.pop(key, None)
             return False
-        if now - self._live_at.setdefault(key, now) < LIVE_RELIST_SEC:
+        if now - self._live_at.setdefault(key, now) < live_relist_sec(records.get(key)):
             return False
         self._live_at[key] = now
         return True

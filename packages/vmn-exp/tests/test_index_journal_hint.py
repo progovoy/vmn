@@ -4,7 +4,7 @@ load and on ``reconcile``, never per tick."""
 import pytest
 
 from vmn_exp.core import index as experiment_index
-from vmn_exp.core import index_sweep
+from vmn_exp.core import status
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
 
@@ -189,7 +189,8 @@ def test_a_reconcile_round_finds_an_unhinted_run_without_a_full_listing(st, spy,
 
 def test_running_records_are_relisted_as_often_as_a_heartbeat_can_matter(st, spy, clock):
     # The journal names every write but a heartbeat-only run_state.yml: a
-    # live run is listed for its heartbeat every LIVE_RELIST_SEC, not per tick.
+    # live run is listed for its heartbeat once per beat (the default
+    # interval here), not per tick.
     live = _make(st, 1, "state: running\nheartbeat: '2026-01-01T00:00:00Z'\n")
     _make(st, 2)
     index = _journaled(st).refresh()
@@ -198,7 +199,7 @@ def test_running_records_are_relisted_as_often_as_a_heartbeat_can_matter(st, spy
     index.refresh()
     assert {live} not in spy["list_files"]
 
-    clock.now += index_sweep.LIVE_RELIST_SEC
+    clock.now += status.DEFAULT_HEARTBEAT_INTERVAL_SEC
     index.refresh()
     assert {live} in spy["list_files"]
 
