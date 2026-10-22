@@ -82,7 +82,7 @@ def _open_journal(ws, storage, cache_path):
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None):
+                 search_rows=None, store_upkeep=None):
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -96,6 +96,9 @@ class ExperimentSource:
                                                     path=app_conf_path)
         self._lock = threading.Lock()
         self._search_rows = search_rows
+        self._upkeep = store_upkeep
+        if store_upkeep is not None:
+            self.refresher.add_listener(store_upkeep.refreshed)
         # Where similar runs are searched, kept in step on every refresh.
         self.similar = SimilarCorpora(self._ws_db_dir)
         self.refresher.add_listener(self.similar.refreshed)
@@ -151,6 +154,8 @@ class ExperimentSource:
             self.similar.note(index, (ws.name, app_name), app_name)
             if self._search_rows is not None:
                 self._search_rows.note(index, ws.name, app_name, schema_of)
+            if self._upkeep is not None and s3_storage is not None:
+                self._upkeep.note(index, s3_storage, app_name)
 
         return NotingRefresher(self.refresher, note)
 

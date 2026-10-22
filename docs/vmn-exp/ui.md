@@ -194,10 +194,30 @@ Embedding `create_app()` directly (tests, scripts) leaves the background
 refresher off unless you pass `background_refresh=True`; each request then
 refreshes first and sees every earlier write.
 
+### Store upkeep
+
+Serving a store workspace without `--read-only`, `vmn-exp ui` tidies the store
+itself, off the request path (one background thread, after index refreshes,
+a pass per app at most every 60 seconds, on the replica that leads the index):
+
+- **Child markers.** Inner runs created before markers existed (or whose
+  marker failed to write) get one, so an outer run's page lists its runs with
+  one listing instead of waiting for the index. This is what
+  `vmn-exp backfill-children` does by hand.
+- **Compaction.** A failed or stuck run whose writer died before compacting
+  keeps one metrics segment per 30 s sync, hundreds for a long run; the server
+  compacts each one once (newest first, 30 seconds of work per pass), so its
+  charts and Compare cost two reads. This is what `vmn-exp watch --compact`
+  does by hand.
+
+A run whose compaction fails is logged and retried only after a restart. The
+server needs write access to the store's `runs/` area for both; with
+`--read-only` it does neither, and the two commands remain.
+
 ### Large stores: run the UI on free-threaded Python
 
 With the GIL, every request and the refresher share one core. A free-threaded
-Python (3.14t) uses all of them. The UI only reads the store, so it can run on
+Python (3.14t) uses all of them. The UI needs none of your jobs' packages, so it can run on
 its own interpreter:
 
 ```sh

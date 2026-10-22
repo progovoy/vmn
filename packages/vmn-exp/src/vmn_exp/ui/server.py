@@ -121,6 +121,7 @@ def create_app(
     from vmn_exp.ui.jobs import JobRunner, build_command
     from vmn_exp.ui.jobs_store import build_store_action
     from vmn_exp.ui.storage_access import EDIT, READ
+    from vmn_exp.ui.store_upkeep import StoreUpkeep
 
     from vmn_exp.ui import storage_access
 
@@ -157,8 +158,12 @@ def create_app(
 
         search_sql = PgRowSearch(search_dsn)
         search_rows = SearchRowsWriter(search_sql)
+    # Markers and compaction a store lacks, written by the server itself.
+    upkeep = StoreUpkeep() if background_refresh and not read_only else None
+    app.state.store_upkeep = upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
-                              cache_dsn=cache_dsn, search_rows=search_rows)
+                              cache_dsn=cache_dsn, search_rows=search_rows,
+                              store_upkeep=upkeep)
     leaderboards = LeaderboardCache()
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm

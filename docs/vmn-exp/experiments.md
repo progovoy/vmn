@@ -1261,7 +1261,10 @@ index has loaded the store. The markers only speed reads up: the children's
 `parent` fields stay the truth, and a marker whose run is gone (or was
 renamed) is skipped. `backfill-children` writes the markers a store lacks
 (runs from before markers existed, or a marker that failed to write), from
-one pass over the app's index and one marker listing per parent:
+one listing of the app's runs, each run's `metadata.yml` alone (never the
+index; `read N/M runs` on stderr) and one marker listing per parent. A
+`vmn-exp ui` serving the store does this itself unless `--read-only` (see
+[ui.md](ui.md#store-upkeep)), so the command is only needed without one:
 
 ```sh
 vmn-exp backfill-children my_app --dry-run
@@ -1299,7 +1302,9 @@ repo lock).
 
 `vmn-exp compact my_app -v <ref>... | --all-finished` builds the compacted
 metric index of runs whose writer died before doing it itself (running runs are
-refused); `vmn-exp watch --compact` does the same for failed/stuck runs.
+refused); `vmn-exp watch --compact` does the same for failed/stuck runs. A
+`vmn-exp ui` serving the store compacts failed/stuck runs itself unless
+`--read-only` ([ui.md](ui.md#store-upkeep)).
 
 ### `import-mlflow`
 
