@@ -1,4 +1,5 @@
 """Backends are opened once per repo per command, and `vmn show` changes nothing."""
+import gc
 import os
 
 import git
@@ -63,6 +64,16 @@ def test_get_client_reports_a_non_git_dir(tmp_path):
 
     assert be is None
     assert "is not a functional git" in err
+
+
+def test_a_backend_that_failed_to_open_closes_without_error(tmp_path, monkeypatch):
+    unraisable = []
+    monkeypatch.setattr("sys.unraisablehook", unraisable.append)
+
+    factory.get_client(str(tmp_path), VMN_BE_TYPE_GIT)
+    gc.collect()
+
+    assert unraisable == []
 
 
 def test_read_only_backend_reports_remote_branch_without_creating_one(app_layout):

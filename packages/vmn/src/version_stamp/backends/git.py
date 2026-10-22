@@ -164,7 +164,9 @@ class GitBackend(
         self._fetch("--tags")
 
     def __del__(self):
-        self._be.close()
+        # A constructor that raised before opening the repo leaves no _be.
+        if hasattr(self, "_be"):
+            self._be.close()
 
     @staticmethod
     @measure_runtime_decorator
