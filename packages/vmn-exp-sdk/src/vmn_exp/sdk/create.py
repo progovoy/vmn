@@ -42,9 +42,13 @@ def gitmode():
 
 def create_run(
     app_name=None, *, name=None, params=None, note=None, parent=None, storage=None,
-    capture_env=None,
+    capture_env=None, run_id=None,
 ):
     """Register a run without starting it; returns its verstr.
+
+    *run_id* names it exactly — ``<code_verstr>.<suffix>`` of the code being
+    recorded (ValueError otherwise) — with one exclusive create and no listing
+    of the code version's runs; RunExistsError when the name is taken.
 
     The run reads ``created`` (a fleet's *waiting*) until a process takes it
     with ``start_run(run_id=<verstr>)``. Its parent is *parent*, else the
@@ -55,12 +59,13 @@ def create_run(
     ensure_logger()
     return create_record(
         app_name, note, params, parent, True, storage, name, capture_env=capture_env,
+        run_id=run_id,
     )[2]
 
 
 def create_record(
     app_name, note, params, parent, nested, storage, name=None,
-    capture_env=None, python_exe=None,
+    capture_env=None, python_exe=None, run_id=None,
 ):
     """Create a new run's record; ``(app_name, storage, verstr, exp_conf)``.
 
@@ -75,12 +80,12 @@ def create_record(
     if meta_path:
         app_name, storage, verstr, err = create_from_snapshot_meta(
             app_name, meta_path, note, create_data, parent, nested, storage, name,
-            capture_env=capture_env,
+            capture_env=capture_env, run_id=run_id,
         )
     else:
         app_name, storage, verstr, err, exp_conf = gitmode().create_in_checkout(
             app_name, note, create_data, parent, nested, storage, name,
-            capture_env=capture_env, python_exe=python_exe,
+            capture_env=capture_env, python_exe=python_exe, run_id=run_id,
         )
     if err:
         raise RuntimeError(
@@ -171,7 +176,7 @@ def pick_parent(storage, app_name, parent, nested):
 
 def create_from_snapshot_meta(
     app_name, meta_path, note, create_data, parent, nested, storage, name=None,
-    capture_env=None,
+    capture_env=None, run_id=None,
 ):
     """Container mode: record against an exported snapshot, no git needed."""
     app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
@@ -198,6 +203,7 @@ def create_from_snapshot_meta(
             name=name,
             env=env,
             features=features,
+            run_id=run_id,
         )
     return app_name, storage, verstr, err
 

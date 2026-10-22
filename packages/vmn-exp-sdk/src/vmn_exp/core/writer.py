@@ -19,6 +19,7 @@ import socket
 import yaml
 
 from vmn_exp._base import get_repo_lock, now_iso, sha256_file  # noqa: F401
+from vmn_exp._base import valid_path_component
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.children import mark_parent
 from vmn_exp.core.metric_compact import note_points
@@ -289,6 +290,10 @@ def attach_name(metadata, name):
 _MAX_RUN_CANDIDATES = 100000
 
 
+class RunExistsError(FileExistsError):
+    """A run was asked for under an exact name another record already holds."""
+
+
 def _taken_verstrs(storage, app_name, code_verstr):
     """Names that could collide with a new run of *code_verstr* — names
     only, never a parse of every metadata.yml.
@@ -366,6 +371,25 @@ def claim_record(storage, app_name, verstr, metadata):
     return _claim(storage, app_name, verstr, metadata, {})
 
 
+def check_run_id(code_verstr, run_id):
+    """Refuse a *run_id* that is not ``<code_verstr>.<suffix>`` record name."""
+    suffix = run_id[len(code_verstr) + 1:] if run_id.startswith(code_verstr + ".") else ""
+    if not suffix or not valid_path_component(run_id):
+        raise ValueError(
+            f"run_id {run_id!r} must be a run of the code version it records: "
+            f"'{code_verstr}.<suffix>'"
+        )
+
+
+def claim_exact(storage, app_name, run_id, make_record):
+    """Create the record under exactly *run_id* (no listing); RunExistsError
+    when another record holds the name."""
+    metadata, patches = make_record(run_id)
+    if not _claim(storage, app_name, run_id, metadata, patches):
+        raise RunExistsError(f"Run '{run_id}' already exists for {app_name}")
+    return run_id
+
+
 _DEFAULT_SUFFIX = object()
 
 
@@ -408,8 +432,12 @@ def create_run(
     name=None,
     env=None,
     features=None,
+    run_id=None,
 ):
     """Claim a run verstr for *template* and write the record and its create entry.
+
+    *run_id* names the run exactly (``<code_verstr>.<suffix>``): it is created
+    with one exclusive create and no listing, RunExistsError when taken.
 
     *template* is the record's metadata minus its identity: each claim attempt
     stamps a copy with the candidate verstr, ``code_verstr``, parent and name.
@@ -442,7 +470,11 @@ def create_run(
         attach_name(metadata, name)
         return metadata, patches
 
-    verstr = allocate_run_verstr(storage, app_name, code_verstr, make_record=make_record)
+    if run_id is None:
+        verstr = allocate_run_verstr(storage, app_name, code_verstr, make_record=make_record)
+    else:
+        check_run_id(code_verstr, run_id)
+        verstr = claim_exact(storage, app_name, run_id, make_record)
 
     if env is not None:
         try:

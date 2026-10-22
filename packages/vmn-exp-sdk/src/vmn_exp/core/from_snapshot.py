@@ -80,6 +80,7 @@ def create_from_snapshot(
     name=None,
     env=None,
     features=_READ_FEATURES,
+    run_id=None,
 ):
     """Create an experiment from an exported snapshot directory or metadata file.
 
@@ -88,7 +89,8 @@ def create_from_snapshot(
     *env* is a pre-captured environment dict; when given it is embedded as a
     summary in the metadata and written as ``env.yml`` (best-effort). The
     run's ``features`` entry is *features* when given (:func:`exported_features`,
-    read before a caller's lock), else read here.
+    read before a caller's lock), else read here. *run_id*: the exact name
+    (see :func:`~vmn_exp.core.writer.create_run`).
     """
     meta_file = _meta_file(snapshot_meta_path)
     snap_meta = _load_snapshot_meta(meta_file)
@@ -116,5 +118,6 @@ def create_from_snapshot(
         name=name,
         env=env,
         features=exported_features(meta_file) if features is _READ_FEATURES else features,
+        run_id=run_id,
     )
     return verstr, None

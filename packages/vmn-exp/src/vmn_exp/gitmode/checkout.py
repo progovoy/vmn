@@ -33,7 +33,7 @@ def build_storage(vcs):
 
 def create_in_checkout(
     app_name, note, create_data, parent, nested, storage, name=None,
-    capture_env=None, python_exe=None,
+    capture_env=None, python_exe=None, run_id=None,
 ):
     """The normal mode: cold-start if needed, capture, then claim under the lock."""
     app_name = _resolve_app_name(app_name, stamped_apps)
@@ -59,12 +59,12 @@ def create_in_checkout(
     # being created while another vmn command holds the repo.
     with get_repo_lock(root_path):
         verstr = record_run(vcs, storage, captured, code, note, create_data, parent,
-                            name, env=env, features=features)
+                            name, env=env, features=features, run_id=run_id)
     return app_name, storage, verstr, None, experiment_conf(vcs)
 
 
 def record_run(vcs, storage, captured, code, note, create_data, parent, name=None,
-               env=None, features=None):
+               env=None, features=None, run_id=None):
     """Claim a verstr for *captured* and write the record and its create entry.
 
     *code* is :func:`capture.ensure_code`'s ``(key, summary)``: the record
@@ -97,4 +97,5 @@ def record_run(vcs, storage, captured, code, note, create_data, parent, name=Non
         name=name,
         env=env,
         features=features,
+        run_id=run_id,
     )
