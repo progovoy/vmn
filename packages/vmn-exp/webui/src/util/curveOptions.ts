@@ -152,7 +152,8 @@ export function curveOptions(
         stroke: resolveCssColor(s.color, read),
         width: s.faded ? 1 : 1.75,
         alpha: s.faded ? 0.35 : 1,
-        points: { show: false },
+        // A metric logged once is one point: no line, so draw the dot.
+        points: { show: s.xs.length === 1 },
       })),
     ],
   };

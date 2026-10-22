@@ -130,6 +130,13 @@ describe("the job Charts tab", () => {
     expect(screen.getByRole("button", { name: "Top 20" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("asks the scoped list when the summary ranks nothing (no goal: an empty top)", async () => {
+    vi.mocked(jobTopRuns).mockResolvedValue(["k0", "k1"]);
+    renderCharts("&chart=curves&k=5", jobSummaryFixture({ top: [] }));
+    expect(await screen.findByTestId("overlay")).toHaveTextContent("val_loss: k0,k1");
+    expect(jobTopRuns).toHaveBeenCalledWith("test", "my-app", JOB, "val_loss", 5);
+  });
+
   it("boxes the metric per value of a param, with a table for screen readers", async () => {
     renderCharts("&chart=bypar&x=opt");
     const fig = await screen.findByRole("figure", { name: /val_loss by opt/ });

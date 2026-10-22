@@ -46,6 +46,12 @@ function emitCursor(u: uPlot, cb?: (c: CursorInfo | null) => void) {
 
 /** Thin lifecycle wrapper: create on mount (lazily loading uPlot), resize
  *  with the container, swap data in place, destroy on unmount. */
+/** A faceted (mode 2) plot of no series throws in uPlot's constructor
+ *  (it reads series[1].facets): callers say "nothing to plot" instead. */
+function buildable(options: Props["options"]): boolean {
+  return options.mode !== 2 || (options.series?.length ?? 0) > 1;
+}
+
 function UPlotChart({ options, data, hidden, focus = null, onCursor, keepX }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
@@ -59,7 +65,7 @@ function UPlotChart({ options, data, hidden, focus = null, onCursor, keepX }: Pr
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !canvasSupported()) return;
+    if (!el || !canvasSupported() || !buildable(options)) return;
     let cancelled = false;
     let plot: uPlot | null = null;
     let ro: ResizeObserver | undefined;

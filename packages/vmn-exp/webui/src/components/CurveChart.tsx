@@ -22,7 +22,7 @@ const stepLabel = (x: number) => `step ${x}`;
  *  changes; new values for the same curves are swapped in place. */
 function CurveChart({
   series, xMode, logY = false, height = 280, hidden, focused = null,
-  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, formatX, markX = null, onXRange,
+  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, formatX, markX = null, onXRange, emptyText,
 }: {
   series: CurveSeries[];
   xMode: XMode;
@@ -39,6 +39,8 @@ function CurveChart({
   /** Step axes only: the visible x range after a drag-zoom, null once reset
    *  to the whole data. The zoom then survives new data. */
   onXRange?: (range: StepRange | null) => void;
+  /** Shown instead of a plot when there is no curve. */
+  emptyText?: string;
 }) {
   // Keyed on the curves' identity, not their arrays: fresh values for the
   // same curves (a poll) must not rebuild the plot.
@@ -67,6 +69,9 @@ function CurveChart({
   );
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  if (!series.length) {
+    return <div data-testid="curve-chart" className="empty">{emptyText ?? "No logged points to plot for these runs."}</div>;
+  }
   return (
     <div data-testid="curve-chart" ref={wrapRef} style={{ position: "relative", width: "100%" }}>
       <UPlotChart

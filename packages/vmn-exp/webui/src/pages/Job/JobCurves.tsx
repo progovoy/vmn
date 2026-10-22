@@ -16,8 +16,9 @@ const SUMMARY_TOP = 10;
 const K_OPTIONS = TOP_K.map((k) => [String(k), `Top ${k}`] as const);
 
 function useTopVerstrs({ ws, app, summary, y, state }: JobChartProps) {
-  // The summary ranks on its main metric; another metric needs the list.
-  const fromSummary = y === (summary.metric ?? y)
+  // The summary ranks on its main metric; another metric needs the list,
+  // and so does a summary that ranked nothing (no goal: an empty top).
+  const fromSummary = y === (summary.metric ?? y) && summary.top.length > 0
     && (state.k <= summary.top.length || summary.top.length < SUMMARY_TOP);
   const query = useJobTopRuns(ws, app, summary.verstr, y, state.k, !fromSummary, summary);
   const verstrs = useMemo(

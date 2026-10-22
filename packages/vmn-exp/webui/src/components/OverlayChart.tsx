@@ -113,10 +113,13 @@ const MetricOverlay = memo(function MetricOverlay({
     () => raw.map((r) => ({ ...r, label: r.key, color: colorOf(r.key), ys: emaXY(r.ys, alpha) })),
     [raw, colorOf, alpha],
   );
+  // One point per run is a value, not a curve (curves need two points).
+  const single = !curves.length && runs.some((r) => r.series[metric]?.length === 1);
   return (
     <CurveChart
       series={series} xMode={xMode} logY={logY} height={CHART_H}
       hidden={hidden} focused={focused} formatX={formatX}
+      emptyText={single ? `${metric} has one value per run, not a curve: compare it on a scatter or in a table.` : undefined}
     />
   );
 });

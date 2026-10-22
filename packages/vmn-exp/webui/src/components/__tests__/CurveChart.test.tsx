@@ -94,3 +94,21 @@ describe("CurveChart", () => {
     expect(container.querySelector("[data-testid='curve-chart']")).toBeInTheDocument();
   });
 });
+
+describe("CurveChart with nothing to draw", () => {
+  it("says so instead of building a faceted plot of no series (uPlot throws on 'facets')", async () => {
+    render(<CurveChart series={[]} xMode="step" />);
+    expect(await screen.findByText(/No logged points to plot/)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(instances).toHaveLength(0);
+  });
+
+  it("draws a run's single point as a dot (a metric logged once)", async () => {
+    const one = flat("once", 3, { xs: Float64Array.from([5]), ys: Float64Array.from([3]) });
+    render(<CurveChart series={[one, flat("many", 1)]} xMode="step" />);
+    await waitFor(() => expect(instances).toHaveLength(1));
+    const series = instances[0].opts.series as { points?: { show?: boolean } }[];
+    expect(series[1].points?.show).toBe(true);
+    expect(series[2].points?.show).toBe(false);
+  });
+});

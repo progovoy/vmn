@@ -60,3 +60,15 @@ describe("OverlayChart from props alone", () => {
     await waitFor(() => expect(instances[0].setSeries).toHaveBeenCalledWith(2, { show: false }));
   });
 });
+
+describe("OverlayChart of a metric logged once per run", () => {
+  it("says it is a single value and where to compare it, building no plot", async () => {
+    mockedBatch.mockResolvedValue({
+      series: Object.fromEntries(RUNS.map((v) => [v, { best_value: [{ step: null, value: 0.5, ts: null }] }])),
+      series_total: {}, step_metrics: {}, missing: [],
+    });
+    renderWithClient(<OverlayChart ws="w" app="my-app" verstrs={RUNS} keys={["best_value"]} />);
+    expect(await screen.findByText(/best_value has one value per run, not a curve/)).toBeInTheDocument();
+    expect(instances).toHaveLength(0);
+  });
+});
