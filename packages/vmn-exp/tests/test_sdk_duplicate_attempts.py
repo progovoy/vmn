@@ -67,6 +67,18 @@ def _remote_state():
     return load_run_state(s3_storage(), APP, X)
 
 
+def _wait_until_remote_written_by(run, timeout=10):
+    """Until *run*'s own heartbeat has reached the remote (under load its
+    first upload can take longer than a few beats)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        state = _remote_state() or {}
+        if state.get("attempt") == run._state["attempt"] and state.get("heartbeat_seq", 0) > 1:
+            return
+        time.sleep(BEAT)
+    raise AssertionError("the duplicate's heartbeat never reached the remote")
+
+
 def test_a_duplicate_on_another_host_does_not_reopen_the_finished_run(
     tmp_path, _bucket
 ):
@@ -76,7 +88,7 @@ def test_a_duplicate_on_another_host_does_not_reopen_the_finished_run(
     winner = Run(host_a, APP, X, 3600)
     winner._open()
     try:
-        time.sleep(BEAT * 3)
+        _wait_until_remote_written_by(loser)
         winner.finish(exit_code=0)
 
         state = _wait_for_beats(_remote_state)
