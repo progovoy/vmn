@@ -1,0 +1,564 @@
+{
+ "1.0.0-dev.a": {
+  "artifacts": [],
+  "compacted": null,
+  "env": {
+   "packages": {
+    "a": "1"
+   },
+   "python": "3.11"
+  },
+  "forked_from": null,
+  "hidden_metrics": [],
+  "histograms": {},
+  "histograms_total": {},
+  "idx": null,
+  "imported_from": null,
+  "inputs": null,
+  "log": [
+   {
+    "_writer": "w",
+    "params": {
+     "epochs": 5,
+     "lr": 0.1
+    },
+    "timestamp": "2026-01-01T00:00:00.000000Z",
+    "type": "create"
+   },
+   {
+    "_writer": "w",
+    "step": 1,
+    "timestamp": "2026-01-01T00:00:01.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 1.0
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 2,
+    "timestamp": "2026-01-01T00:00:02.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.5
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 3,
+    "timestamp": "2026-01-01T00:00:03.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.3333333333333333
+    }
+   }
+  ],
+  "log_tail": [
+   {
+    "_writer": "w",
+    "params": {
+     "epochs": 5,
+     "lr": 0.1
+    },
+    "timestamp": "2026-01-01T00:00:00.000000Z",
+    "type": "create"
+   },
+   {
+    "_writer": "w",
+    "step": 1,
+    "timestamp": "2026-01-01T00:00:01.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 1.0
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 2,
+    "timestamp": "2026-01-01T00:00:02.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.5
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 3,
+    "timestamp": "2026-01-01T00:00:03.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.3333333333333333
+    }
+   }
+  ],
+  "log_total": 4,
+  "media": {},
+  "metadata": {
+   "code_verstr": "1.0.0-dev.a",
+   "format_version": 2,
+   "has_local_commits_patch": false,
+   "has_untracked_files": false,
+   "has_working_tree_patch": false,
+   "timestamp": "2026-01-01T00:00:00.000000Z",
+   "verstr": "1.0.0-dev.a"
+  },
+  "metric_summary": {
+   "loss": {
+    "first": 1.0,
+    "last": 0.3333333333333333,
+    "max": 1.0,
+    "mean": 0.611111111111111,
+    "min": 0.3333333333333333
+   }
+  },
+  "metrics": {
+   "epochs": 5.0,
+   "loss": 0.3333333333333333,
+   "lr": 0.1
+  },
+  "name": null,
+  "outputs": null,
+  "params": {
+   "epochs": 5,
+   "lr": 0.1
+  },
+  "patches": {
+   "local_commits": false,
+   "untracked_files": false,
+   "working_tree": false
+  },
+  "rerun_of": null,
+  "rewinds": [],
+  "series": {
+   "loss": [
+    {
+     "step": 1,
+     "ts": "2026-01-01T00:00:01.000000Z",
+     "value": 1.0
+    },
+    {
+     "step": 2,
+     "ts": "2026-01-01T00:00:02.000000Z",
+     "value": 0.5
+    },
+    {
+     "step": 3,
+     "ts": "2026-01-01T00:00:03.000000Z",
+     "value": 0.3333333333333333
+    }
+   ]
+  },
+  "series_total": {
+   "loss": 3
+  },
+  "status": {
+   "children": [
+    "1.0.0-dev.a.r2",
+    "1.0.0-dev.a.r3"
+   ],
+   "command": null,
+   "depth": 0,
+   "duration_sec": null,
+   "end_reason": null,
+   "error": null,
+   "error_summary": null,
+   "exit_code": 0,
+   "finished_at": null,
+   "fleet": {
+    "counts": {
+     "created": 0,
+     "failed": 1,
+     "running": 0,
+     "stuck": 0,
+     "succeeded": 1,
+     "waiting": 0
+    },
+    "expected": 2
+   },
+   "heartbeat": null,
+   "heartbeat_interval_sec": 30,
+   "host": null,
+   "kind": "outer",
+   "last_metric_at": "2026-01-01T00:00:03.000000Z",
+   "parent": null,
+   "pid": null,
+   "signal": null,
+   "started_at": null,
+   "status": "succeeded",
+   "sweep_planned": null,
+   "sweep_trials": null,
+   "tree_status": "failed"
+  },
+  "step_metrics": {},
+  "tables": {}
+ },
+ "1.0.0-dev.a.r2": {
+  "artifacts": [
+   {
+    "name": "outputs/output.log",
+    "size": 14
+   }
+  ],
+  "compacted": null,
+  "env": null,
+  "forked_from": null,
+  "hidden_metrics": [],
+  "histograms": {},
+  "histograms_total": {},
+  "idx": null,
+  "imported_from": null,
+  "inputs": null,
+  "last_good": null,
+  "last_step": {
+   "of": 5,
+   "step": 3
+  },
+  "log": [
+   {
+    "_writer": "w",
+    "params": {
+     "epochs": 5,
+     "lr": 0.1
+    },
+    "timestamp": "2026-01-01T00:00:10.000000Z",
+    "type": "create"
+   },
+   {
+    "_writer": "w",
+    "step": 1,
+    "timestamp": "2026-01-01T00:00:11.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 1.0
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 2,
+    "timestamp": "2026-01-01T00:00:12.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.5
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 3,
+    "timestamp": "2026-01-01T00:00:13.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.3333333333333333
+    }
+   }
+  ],
+  "log_tail": [
+   {
+    "_writer": "w",
+    "params": {
+     "epochs": 5,
+     "lr": 0.1
+    },
+    "timestamp": "2026-01-01T00:00:10.000000Z",
+    "type": "create"
+   },
+   {
+    "_writer": "w",
+    "step": 1,
+    "timestamp": "2026-01-01T00:00:11.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 1.0
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 2,
+    "timestamp": "2026-01-01T00:00:12.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.5
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 3,
+    "timestamp": "2026-01-01T00:00:13.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.3333333333333333
+    }
+   }
+  ],
+  "log_total": 4,
+  "media": {},
+  "metadata": {
+   "code_verstr": "1.0.0-dev.a",
+   "format_version": 2,
+   "has_local_commits_patch": false,
+   "has_untracked_files": false,
+   "has_working_tree_patch": false,
+   "parent": "1.0.0-dev.a",
+   "timestamp": "2026-01-01T00:00:10.000000Z",
+   "verstr": "1.0.0-dev.a.r2"
+  },
+  "metric_summary": {
+   "loss": {
+    "first": 1.0,
+    "last": 0.3333333333333333,
+    "max": 1.0,
+    "mean": 0.611111111111111,
+    "min": 0.3333333333333333
+   }
+  },
+  "metrics": {
+   "epochs": 5.0,
+   "loss": 0.3333333333333333,
+   "lr": 0.1
+  },
+  "name": null,
+  "output_tail": {
+   "lines": [
+    "line one",
+    "boom"
+   ],
+   "truncated": false
+  },
+  "outputs": null,
+  "params": {
+   "epochs": 5,
+   "lr": 0.1
+  },
+  "patches": {
+   "local_commits": false,
+   "untracked_files": false,
+   "working_tree": false
+  },
+  "rerun_of": null,
+  "rewinds": [],
+  "series": {
+   "loss": [
+    {
+     "step": 1,
+     "ts": "2026-01-01T00:00:11.000000Z",
+     "value": 1.0
+    },
+    {
+     "step": 2,
+     "ts": "2026-01-01T00:00:12.000000Z",
+     "value": 0.5
+    },
+    {
+     "step": 3,
+     "ts": "2026-01-01T00:00:13.000000Z",
+     "value": 0.3333333333333333
+    }
+   ]
+  },
+  "series_total": {
+   "loss": 3
+  },
+  "status": {
+   "children": [],
+   "command": null,
+   "depth": 1,
+   "duration_sec": null,
+   "end_reason": null,
+   "error": null,
+   "error_summary": null,
+   "exit_code": 3,
+   "finished_at": null,
+   "fleet": null,
+   "heartbeat": null,
+   "heartbeat_interval_sec": 30,
+   "host": null,
+   "kind": "inner",
+   "last_metric_at": "2026-01-01T00:00:13.000000Z",
+   "parent": "1.0.0-dev.a",
+   "pid": null,
+   "signal": null,
+   "started_at": null,
+   "status": "failed",
+   "sweep_planned": null,
+   "sweep_trials": null,
+   "tree_status": "failed"
+  },
+  "step_metrics": {},
+  "tables": {}
+ },
+ "1.0.0-dev.a.r3": {
+  "artifacts": [],
+  "compacted": null,
+  "env": null,
+  "forked_from": null,
+  "hidden_metrics": [],
+  "histograms": {},
+  "histograms_total": {},
+  "idx": null,
+  "imported_from": null,
+  "inputs": null,
+  "log": [
+   {
+    "_writer": "w",
+    "params": {
+     "epochs": 5,
+     "lr": 0.1
+    },
+    "timestamp": "2026-01-01T00:00:20.000000Z",
+    "type": "create"
+   },
+   {
+    "_writer": "w",
+    "step": 1,
+    "timestamp": "2026-01-01T00:00:21.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 1.0
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 2,
+    "timestamp": "2026-01-01T00:00:22.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.5
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 3,
+    "timestamp": "2026-01-01T00:00:23.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.3333333333333333
+    }
+   }
+  ],
+  "log_tail": [
+   {
+    "_writer": "w",
+    "params": {
+     "epochs": 5,
+     "lr": 0.1
+    },
+    "timestamp": "2026-01-01T00:00:20.000000Z",
+    "type": "create"
+   },
+   {
+    "_writer": "w",
+    "step": 1,
+    "timestamp": "2026-01-01T00:00:21.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 1.0
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 2,
+    "timestamp": "2026-01-01T00:00:22.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.5
+    }
+   },
+   {
+    "_writer": "w",
+    "step": 3,
+    "timestamp": "2026-01-01T00:00:23.000000Z",
+    "type": "metrics",
+    "values": {
+     "loss": 0.3333333333333333
+    }
+   }
+  ],
+  "log_total": 4,
+  "media": {},
+  "metadata": {
+   "code_verstr": "1.0.0-dev.a",
+   "format_version": 2,
+   "has_local_commits_patch": false,
+   "has_untracked_files": false,
+   "has_working_tree_patch": false,
+   "parent": "1.0.0-dev.a",
+   "timestamp": "2026-01-01T00:00:20.000000Z",
+   "verstr": "1.0.0-dev.a.r3"
+  },
+  "metric_summary": {
+   "loss": {
+    "first": 1.0,
+    "last": 0.3333333333333333,
+    "max": 1.0,
+    "mean": 0.611111111111111,
+    "min": 0.3333333333333333
+   }
+  },
+  "metrics": {
+   "epochs": 5.0,
+   "loss": 0.3333333333333333,
+   "lr": 0.1
+  },
+  "name": null,
+  "outputs": null,
+  "params": {
+   "epochs": 5,
+   "lr": 0.1
+  },
+  "patches": {
+   "local_commits": false,
+   "untracked_files": false,
+   "working_tree": false
+  },
+  "rerun_of": null,
+  "rewinds": [],
+  "series": {
+   "loss": [
+    {
+     "step": 1,
+     "ts": "2026-01-01T00:00:21.000000Z",
+     "value": 1.0
+    },
+    {
+     "step": 2,
+     "ts": "2026-01-01T00:00:22.000000Z",
+     "value": 0.5
+    },
+    {
+     "step": 3,
+     "ts": "2026-01-01T00:00:23.000000Z",
+     "value": 0.3333333333333333
+    }
+   ]
+  },
+  "series_total": {
+   "loss": 3
+  },
+  "status": {
+   "children": [],
+   "command": null,
+   "depth": 1,
+   "duration_sec": null,
+   "end_reason": null,
+   "error": null,
+   "error_summary": null,
+   "exit_code": 0,
+   "finished_at": null,
+   "fleet": null,
+   "heartbeat": null,
+   "heartbeat_interval_sec": 30,
+   "host": null,
+   "kind": "inner",
+   "last_metric_at": "2026-01-01T00:00:23.000000Z",
+   "parent": "1.0.0-dev.a",
+   "pid": null,
+   "signal": null,
+   "started_at": null,
+   "status": "succeeded",
+   "sweep_planned": null,
+   "sweep_trials": null,
+   "tree_status": "succeeded"
+  },
+  "step_metrics": {},
+  "tables": {}
+ }
+}
