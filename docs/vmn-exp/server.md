@@ -234,6 +234,13 @@ The journal is only useful for minutes. `vmn-exp prune` deletes journal
 partitions older than 2 days. On object stores, add a lifecycle rule as well
 (see [byo-bucket.md](byo-bucket.md#journal-lifecycle-rule)).
 
+## Diagnostic dumps
+
+A slow or stuck server can dump its threads, in-flight requests, thread
+pools and index state as one redacted JSON file: `GET /api/v1/diag` (admin),
+`kill -USR1 <pid>` (writes `<data-dir>/diag/`) or `--diag-every <sec>`. See
+[ui.md](ui.md#diagnostic-dumps).
+
 ## Self-healing and resync
 
 On every tick the server checks that its cache file is still the one it built:

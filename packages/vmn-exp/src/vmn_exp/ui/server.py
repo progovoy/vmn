@@ -52,6 +52,7 @@ from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
 
 from vmn_exp.ui import (
     api_errors,
+    diag,
     control_plane_sweep,
     routes_admin,
     routes_cache,
@@ -73,6 +74,7 @@ from vmn_exp.ui import (
     routes_tree,
     startup_warmup,
 )
+from vmn_exp.ui.diag import routes as diag_routes
 from vmn_exp.ui.readers import changelog as changelog_reader
 from vmn_exp.ui.readers import config as config_reader
 from vmn_exp.ui.readers import diffs as diff_reader
@@ -177,10 +179,15 @@ def create_app(
     install_audit_middleware(app)
     install_org_middleware(app, getattr(manager, "tenancy", "single"))
 
+    def _principal(request):
+        if diag_routes.is_diag_request(API_PREFIX, request.url.path):
+            return diag_routes.authenticate(chain, request)
+        return run_in_threadpool(chain.authenticate, request)
+
     @app.middleware("http")
     async def _authenticate(request: Request, call_next):
         # Off the event loop: API token and session checks hit the control plane.
-        principal = await run_in_threadpool(chain.authenticate, request) if chain else None
+        principal = await _principal(request) if chain else None
         request.state.principal = principal
         if chain and principal is None and request.url.path.startswith("/api"):
             return JSONResponse({"detail": "Unauthorized", "auth": auth_hints(chain)},
@@ -716,6 +723,7 @@ def create_app(
     routes_similar.register(app, API_PREFIX, _app_inputs, _app_scopes, _segment,
                             _similar_weights, source.similar.scope)
     startup_warmup.install(app, manager, list_apps, _app_inputs, leaderboards, refresher.background)
+    diag.install_app(app, API_PREFIX, refresher)
     mount_static(app, os.path.join(os.path.dirname(__file__), "static"))
     return app
 

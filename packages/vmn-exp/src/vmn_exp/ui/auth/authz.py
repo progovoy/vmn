@@ -13,6 +13,7 @@ from fastapi import Depends, HTTPException, Request
 
 from vmn_exp.ui.auth.oidc import roles_for_groups
 from vmn_exp.ui.auth.principal import ADMIN, ALL_WORKSPACES, EDITOR, ROLES, VIEWER, stronger
+from vmn_exp.ui.diag.requests import note_worker_start
 
 # Job actions that need more than ``editor``.
 ACTION_ROLES = {"prune": ADMIN}
@@ -47,7 +48,12 @@ class RoleCheck:
         self.role = role
 
     def __call__(self, request: Request):
-        self.enforce(request, self.role)
+        # FastAPI runs this sync check on a pool thread: the route's first.
+        note_worker_start()
+        self.enforce(request, self.role_of(request))
+
+    def role_of(self, request):
+        return self.role
 
     @staticmethod
     def enforce(request, role):
@@ -65,13 +71,25 @@ class RoleCheck:
 class ActionRoleCheck(RoleCheck):
     """Job actions: ``editor``, or the stronger role in :data:`ACTION_ROLES`."""
 
-    def __call__(self, request: Request):
-        action = request.path_params.get("action")
-        self.enforce(request, ACTION_ROLES.get(action, self.role))
+    def role_of(self, request):
+        return ACTION_ROLES.get(request.path_params.get("action"), self.role)
+
+
+class AsyncRoleCheck(RoleCheck):
+    """``require_on_loop(role)``: checked on the event loop, needing no pool thread."""
+
+    async def __call__(self, request: Request):
+        self.enforce(request, self.role)
 
 
 def require(role):
     return Depends(RoleCheck(role))
+
+
+def require_on_loop(role):
+    """``require(role)`` for an async route that must answer while every
+    pool thread is busy (``/diag``)."""
+    return Depends(AsyncRoleCheck(role))
 
 
 def require_action():

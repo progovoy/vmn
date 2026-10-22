@@ -117,6 +117,7 @@ class ExperimentIndex:
         self._revalidator_lock = threading.Lock()
         self.generation = 0
         self.last_refresh_at = None  # monotonic start of the last refresh
+        self.published_at = None  # monotonic time the current snapshot was built
         self._cache_gen = None  # a follower's CacheStore generation; None for a leader
         self._lean = False  # see sync()
         self._lean_index = None  # the lean copy sync() refreshes while this one is unloaded
@@ -177,6 +178,20 @@ class ExperimentIndex:
     @property
     def record_count(self):
         return len(self._records or ())
+
+    @property
+    def published(self):
+        """The current snapshot, or None before the first (never waits)."""
+        return self._snapshot
+
+    @property
+    def refreshing(self):
+        """True while a refresh holds the index (diagnostics; never waits)."""
+        return self._lock.locked()
+
+    def full_listing_due(self):
+        """Whether the next refresh lists storage fully (diagnostics)."""
+        return self._sweep._full_due(_monotonic())
 
     def reconcile(self):
         """Make the next refresh a full listing."""
@@ -523,6 +538,7 @@ class ExperimentIndex:
     def _build_snapshot(self, touched=None):
         order = self._order or []
         loading = (len(order), len(order) + self._unread) if self._unread else None
+        self.published_at = _monotonic()
         return self._rows.snapshot(
             self.app_name, self.generation, order, self._records, touched, loading
         )

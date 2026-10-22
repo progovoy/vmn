@@ -273,6 +273,9 @@ def _add_ui_parser(subprasers):  # noqa: N802
                      help="Do not open a browser on start")
     pui.add_argument("--no-index", action="store_true", default=False,
                      help="Keep no on-disk read cache (the index lives in memory only)")
+    pui.add_argument("--diag-every", type=float, default=None, metavar="SEC",
+                     help="Write a diagnostic dump to <data-dir>/diag/ every SEC seconds "
+                          "(keeps the last 20; SIGUSR1 writes one on demand)")
     pui.add_argument("--edits", action="store_true", default=False,
                      help="onboarding: also grant the puts server-side edits need")
     pui.add_argument("--format", dest="onboarding_format", default="json",

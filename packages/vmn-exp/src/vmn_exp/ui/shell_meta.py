@@ -30,6 +30,13 @@ def _vmn_exp_version():
         return None
 
 
+def server_versions():
+    """``(vmn version, vmn-exp version)`` of this server."""
+    from version_stamp.api import version as version_mod
+
+    return version_mod.version, _vmn_exp_version()
+
+
 def workspace_role(app_state, principal, ws_name):
     """*principal*'s role in *ws_name* (``*`` included); None with auth off."""
     if not app_state.auth_enabled or principal is None:
@@ -40,13 +47,12 @@ def workspace_role(app_state, principal, ws_name):
 def meta_payload(app_state, principal, read_only):
     """The ``/meta`` body. *app_state* is read now: ``server_app`` sets
     ``config`` after ``create_app``."""
-    from version_stamp.api import version as version_mod
-
+    vmn_version, vmn_exp_version = server_versions()
     control_plane = app_state.control_plane is not None
     configured = getattr(app_state, "config", None) is not None or control_plane
     return {
-        "version": version_mod.version,
-        "vmn_exp_version": _vmn_exp_version(),
+        "version": vmn_version,
+        "vmn_exp_version": vmn_exp_version,
         "read_only": read_only,
         "mode": "configured" if configured else "standalone",
         "control_plane": control_plane,

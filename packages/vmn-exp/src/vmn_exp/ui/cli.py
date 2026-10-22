@@ -197,6 +197,25 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
     return app
 
 
+def _install_diag(data_dir, args, host, port, token):
+    """Diagnostic dumps on SIGUSR1 and every ``--diag-every`` seconds."""
+    import signal
+
+    from vmn_exp.ui import diag
+
+    every = args.diag_every
+    diag.record_server_options({
+        "host": host, "port": port, "read_only": args.read_only, "no_index": args.no_index,
+        "data_dir": data_dir, "repo": args.repo, "store": args.store,
+        "config": args.config, "db": args.db, "allowed_host": args.allowed_host,
+        "token": token, "diag_every": every,
+    })
+    if hasattr(signal, "SIGUSR1"):
+        diag.install_signal_handler(data_dir)
+    if every:
+        diag.start_periodic_dumps(data_dir, every)
+
+
 def handle_ui(args):
     if getattr(args, "ui_args", None):
         if args.ui_args[0] == "onboarding":
@@ -264,6 +283,8 @@ def handle_ui(args):
         import webbrowser
 
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+
+    _install_diag(manager.data_dir, args, host, port, token)
 
     import uvicorn
 

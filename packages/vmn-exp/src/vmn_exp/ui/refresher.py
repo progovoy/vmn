@@ -94,6 +94,7 @@ class _Watch:
         self.thread = None
         self.failing = False
         self.wake = threading.Event()
+        self.refresh_sec = None  # how long the last refresh took
 
 
 class Refresher(_Listeners):
@@ -120,6 +121,11 @@ class Refresher(_Listeners):
             self._follow(journal, index)
         self._watch(index)
         return index.snapshot()
+
+    def watched(self):
+        """``[(index, watch)]`` of the indexes refreshed now (diagnostics)."""
+        with self._lock:
+            return list(self._watches.items())
 
     def watching(self, index):
         watch = self._watches.get(index)
@@ -219,6 +225,7 @@ class Refresher(_Listeners):
         return True
 
     def _refresh(self, index, watch):
+        started = time.monotonic()
         try:
             index.refresh()
         except Exception:
@@ -228,6 +235,7 @@ class Refresher(_Listeners):
             watch.failing = True
         else:
             watch.failing = False
+            watch.refresh_sec = time.monotonic() - started
             snapshot = index.snapshot()
             self.gil_hint.note(len(getattr(snapshot, "rows", ())))
             self._notify(index, snapshot)

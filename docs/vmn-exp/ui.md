@@ -39,6 +39,7 @@ any directory, inside a git checkout or not.
 | `--store` | — | Attach a read-only experiment store URI as a workspace |
 | `--no-index` | off | Keep no on-disk index; git workspaces index in memory only |
 | `--no-browser` | off | Don't open a browser (one opens only for a loopback `--host`) |
+| `--diag-every` | off | Write a [diagnostic dump](#diagnostic-dumps) every N seconds (keeps the last 20) |
 
 ## Workspaces
 
@@ -218,6 +219,36 @@ The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 
 `orjson` has no free-threaded wheel yet, so 3.14t encodes JSON with the
 standard library (included above). With the GIL on and a watched app of
 10,000+ runs, `vmn-exp ui` prints this hint once.
+
+## Diagnostic dumps
+
+When the UI is slow or stuck, take a dump: one JSON file of what the server is
+doing, to carry off an air-gapped host (no py-spy needed).
+
+- `GET /api/v1/diag` (admin; without a token, loopback only like the rest of
+  `/api`) returns it. The route runs on the event loop with its own auth
+  threads, so it answers while every pool thread is busy.
+- `kill -USR1 <pid>` writes `<data-dir>/diag/diag-<UTC %Y%m%dT%H%M%SZ>-<pid>.json`
+  and prints its path on stderr; it works while the event loop is starved.
+- `--diag-every <sec>` writes the same file every N seconds, keeping the last 20.
+
+`{"format": 1, "taken_at", "pid", "sections": {...}}`; a section that fails
+shows `{"error": ...}` instead of breaking the dump:
+
+| Section | Contents |
+|---|---|
+| `threads` | every thread's name/ident/daemon and Python stack; identical stacks collapse into one group with a count |
+| `requests` | in-flight requests (method, route template, age, queue wait, thread), the last 200 completed in over 1 s, per-route count/p50/p95/max since start |
+| `pools` | anyio's default thread limiter and the slow-read limiter: borrowed/total/waiting |
+| `indexes` | per watched app: rows, records, `loading` progress, generation, seconds since publish/refresh, last refresh duration, refresher thread alive, journaled, full listing due |
+| `process` | Python/implementation/free-threaded, vmn and vmn-exp versions, uptime, CPU, RSS, threads, open fds, gc counts/stats, the server's options |
+| `env` | names of the set `VMN_*`/`AWS_*` variables, never their values |
+
+Redaction: store URIs and DSNs lose their userinfo and every query value but
+`endpoint_url`'s host, the token shows as `set`, and the configured token and
+any secret-looking env value (`*SECRET*`, `*TOKEN*`, `*PASSWORD*`, `*KEY*`)
+are scrubbed from every string of the dump. Other modules add sections with
+`vmn_exp.ui.diag.register_section(name, fn)`.
 
 ## Run status in the dashboard
 
