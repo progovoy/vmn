@@ -78,8 +78,33 @@ export function withSmoothing(s: CurveSeries, alpha: number): CurveSeries[] {
   return [{ ...s, key: `${s.key}__raw`, faded: true }, { ...s, ys: emaXY(s.ys, alpha) }];
 }
 
+/** Below this spread relative to its value a chart is drawn flat. */
+const FLAT_SPREAD = 1e-9;
+
 export function curveData(series: CurveSeries[]): uPlot.AlignedData {
-  return [null, ...series.map((s) => [s.xs, s.ys])] as unknown as uPlot.AlignedData;
+  const flat = flatValue(series.map((s) => s.ys));
+  return [null, ...series.map((s) => [s.xs, flat === null ? s.ys : s.ys.map(() => flat)])] as unknown as uPlot.AlignedData;
+}
+
+/** The mean of a chart's values when they spread less than FLAT_SPREAD of
+ *  it (values ~1 varying by 1e-10), else null. uPlot finds no usable y scale
+ *  for such a chart and draws nothing, but pads a constant one; the wobble
+ *  is invisible at any size, and the series (tooltips) keep their values. */
+export function flatValue(columns: ArrayLike<number>[]): number | null {
+  let min = Infinity, max = -Infinity, sum = 0, n = 0;
+  for (const ys of columns) {
+    for (let i = 0; i < ys.length; i++) {
+      const y = ys[i];
+      if (!Number.isFinite(y)) continue;
+      if (y < min) min = y;
+      if (y > max) max = y;
+      sum += y;
+      n++;
+    }
+  }
+  if (!n || max === min) return null;
+  const mean = sum / n;
+  return max - min <= Math.abs(mean) * FLAT_SPREAD ? mean : null;
 }
 
 /** Narrowest y axis, left of the plot area (a tooltip with no measured plot
@@ -112,6 +137,26 @@ export interface CurveOptionsArgs {
   read?: (name: string) => string;
 }
 
+/** Most ticks one axis gets from :func:`safeSplits`. */
+const MAX_TICKS = 100;
+
+/** A linear axis's ticks: every multiple of *incr* in [min, max], each
+ *  computed as start + i * incr and capped at MAX_TICKS, so it always ends.
+ *  uPlot's own loop (val = roundDec(val + incr)) stops advancing on a
+ *  near-flat axis, e.g. values ~1 varying by 1e-10, and never ends
+ *  (RangeError "Invalid array length"). */
+export function safeSplits(_u: unknown, _axis: number, min: number, max: number, incr: number): number[] {
+  if (!(incr > 0) || !Number.isFinite(min) || !Number.isFinite(max) || max < min) return [min];
+  const start = Math.ceil(min / incr) * incr;
+  const n = Math.min(Math.floor((max - start) / incr + 1e-9), MAX_TICKS);
+  const out: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const v = Number((start + i * incr).toPrecision(12));
+    if (out[out.length - 1] !== v) out.push(Object.is(v, -0) ? 0 : v);
+  }
+  return out.length ? out : [min];
+}
+
 /** An axis in the theme's colours (shared by the line and scatter charts). */
 export function themedAxis(
   theme: ChartTheme, read?: (name: string) => string, extra: Partial<uPlot.Axis> = {}, grid = true,
@@ -122,6 +167,7 @@ export function themedAxis(
     ticks: { stroke: theme.grid, width: 1 },
     font: `${AXIS_FONT_PX}px ${resolveCssColor("var(--mono, monospace)", read)}`,
     values: numAxisValues,
+    splits: safeSplits,
     ...extra,
   } as uPlot.Axis;
 }
@@ -152,7 +198,8 @@ export function curveOptions(
       axis({
         ...(xTick ? { values: (_u: unknown, splits: number[]) => splits.map(xTick) } : {}),
       } as Partial<uPlot.Axis>, false),
-      axis({ size: yAxisSize, ...(logY ? { values: logAxisValues } : {}) } as Partial<uPlot.Axis>),
+      // A log axis keeps uPlot's own (log) ticks.
+      axis({ size: yAxisSize, ...(logY ? { values: logAxisValues, splits: undefined } : {}) } as Partial<uPlot.Axis>),
     ],
     series: [
       {},

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { curveData, curveOptions, type CurveSeries } from "../curveOptions";
+import { curveData, curveOptions, safeSplits, type CurveSeries } from "../curveOptions";
 
 const theme = { axis: "#aaa", grid: "#222", text: "#bbb" };
 const read = (name: string) => (name === "--minor" ? "#4d8df6" : "");
@@ -83,5 +83,46 @@ describe("curveOptions x range", () => {
 
   it("keeps any other x range as it is", () => {
     expect(range()(null, 0, 60)).toEqual([0, 60]);
+  });
+});
+
+describe("safeSplits", () => {
+  // uPlot's own tick loop (val = roundDec(val + incr)) can stop advancing on
+  // a near-flat axis (values ~1 varying by 1e-10): it never ends, RangeError.
+  it("always ends, with at most 101 ticks", () => {
+    const ticks = safeSplits(null, 0, 0.9999999999, 1.0000000001, 1e-11);
+    expect(ticks.length).toBeGreaterThan(1);
+    expect(ticks.length).toBeLessThanOrEqual(101);
+    expect(safeSplits(null, 0, 0, 1, 1e-300).length).toBeLessThanOrEqual(101);
+  });
+
+  it("gives the usual ticks of an ordinary axis", () => {
+    expect(safeSplits(null, 0, -0.05, 1.03, 0.2)).toEqual([0, 0.2, 0.4, 0.6, 0.8, 1]);
+  });
+
+  it("is the linear axes' tick function, never a log axis's", () => {
+    const lin = curveOptions([s("a")], { xMode: "step", height: 100, theme, read });
+    const log = curveOptions([s("a")], { xMode: "step", height: 100, theme, read, logY: true });
+    expect(lin.axes![0].splits).toBe(safeSplits);
+    expect(lin.axes![1].splits).toBe(safeSplits);
+    expect(log.axes![1].splits).toBeUndefined();
+  });
+});
+
+describe("curveData of a near-flat chart", () => {
+  // Values ~1 varying by 1e-10 leave uPlot no usable y scale (an empty
+  // chart); a constant one it pads. The wobble is invisible at any size.
+  it("plots a chart whose spread is below 1e-9 of its value as its mean", () => {
+    const flat = s("a", { xs: Float64Array.from([0, 1, 2]), ys: Float64Array.from([1, 1.0000000001, 0.9999999999]) });
+    const data = curveData([flat]) as unknown as [null, [Float64Array, Float64Array]];
+    expect(new Set(data[1][1]).size).toBe(1);
+    expect(data[1][1][0]).toBeCloseTo(1, 12);
+    expect([...flat.ys]).toEqual([1, 1.0000000001, 0.9999999999]); // the series keeps its values
+  });
+
+  it("leaves a chart with a visible spread as it is", () => {
+    const real = s("a", { xs: Float64Array.from([0, 1]), ys: Float64Array.from([0.7065, 0.7075]) });
+    const data = curveData([real]) as unknown as [null, [Float64Array, Float64Array]];
+    expect([...data[1][1]]).toEqual([0.7065, 0.7075]);
   });
 });

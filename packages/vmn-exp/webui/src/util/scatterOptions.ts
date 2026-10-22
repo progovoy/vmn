@@ -2,7 +2,7 @@
  *  per point group, each with its own x/y arrays (faceted mode). */
 import type uPlot from "uplot";
 import { resolveCssColor, type ChartTheme } from "./cssColor";
-import { themedAxis, xRange, yAxisSize } from "./curveOptions";
+import { flatValue, themedAxis, xRange, yAxisSize } from "./curveOptions";
 import type { PointGroup } from "./scatterData";
 
 /** Past this many points they are drawn smaller, so dense clouds stay legible. */
@@ -43,7 +43,9 @@ function dotsPath(size: number): uPlot.Series.PathBuilder {
 }
 
 export function scatterData(groups: PointGroup[]): uPlot.AlignedData {
-  return [null, ...groups.map((g) => [g.xs, g.ys])] as unknown as uPlot.AlignedData;
+  // A near-flat y draws as a constant (see flatValue); hover reads the groups.
+  const flat = flatValue(groups.map((g) => g.ys));
+  return [null, ...groups.map((g) => [g.xs, flat === null ? g.ys : g.ys.map(() => flat)])] as unknown as uPlot.AlignedData;
 }
 
 /** One point series per colour; *dense* draws smaller points. */

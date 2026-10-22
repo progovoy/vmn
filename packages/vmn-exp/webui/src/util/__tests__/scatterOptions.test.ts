@@ -50,3 +50,22 @@ describe("scatterOptions x range", () => {
     expect(range(null, 0, 1)).toEqual([0, 1]);
   });
 });
+
+describe("scatterOptions ticks", () => {
+  it("uses the bounded tick function on both axes", async () => {
+    const { safeSplits } = await import("../curveOptions");
+    const opts = scatterOptions(["#f00"], { height: 100, theme });
+    expect(opts.axes!.map((a) => a.splits)).toEqual([safeSplits, safeSplits]);
+  });
+});
+
+describe("scatterData of a near-flat metric", () => {
+  it("plots a y spread below 1e-9 of its value as its mean, any other as it is", async () => {
+    const { scatterData } = await import("../scatterOptions");
+    const g = (ys: number[]) => ({ xs: Float64Array.from(ys.map((_, i) => i)), ys: Float64Array.from(ys), verstrs: [], idxs: [] });
+    const flat = scatterData([g([1, 1.0000000001]), g([0.9999999999])]) as unknown as [null, ...[Float64Array, Float64Array][]];
+    expect(new Set([...flat[1][1], ...flat[2][1]]).size).toBe(1);
+    const real = scatterData([g([0.1, 0.2])]) as unknown as [null, [Float64Array, Float64Array]];
+    expect([...real[1][1]]).toEqual([0.1, 0.2]);
+  });
+});
