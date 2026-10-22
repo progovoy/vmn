@@ -230,6 +230,11 @@ doing, to carry off an air-gapped host (no py-spy needed).
   threads, so it answers while every pool thread is busy.
 - `kill -USR1 <pid>` writes `<data-dir>/diag/diag-<UTC %Y%m%dT%H%M%SZ>-<pid>.json`
   and prints its path on stderr; it works while the event loop is starved.
+- `kill -USR2 <pid>` appends every thread's Python stack to
+  `<data-dir>/diag/stacks-<pid>.log`, written from C by `faulthandler`: it
+  answers when the SIGUSR1 handler cannot run (a pegged interpreter, a C call
+  holding the GIL), like py-spy's `dump` without ptrace or sudo.
+  `vmn-exp ui diag --pid` falls back to it when no JSON dump comes within `--wait`.
 - `--diag-every <sec>` writes the same file every N seconds, keeping the last 20.
 
 `{"format": 1, "taken_at", "pid", "sections": {...}}`; a section that fails

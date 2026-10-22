@@ -4,7 +4,9 @@
 * ``--url <base> [--token T] [-o FILE]`` GETs ``<base>/api/v1/diag`` (admin).
 * ``--pid <PID> [--data-dir D] [--wait S] [-o FILE]`` sends SIGUSR1 and waits
   for the server to write ``<data-dir>/diag/diag-<ts>-<pid>.json`` — works
-  when the server is too starved to answer HTTP.
+  when the server is too starved to answer HTTP. When no dump comes (a
+  pegged interpreter never runs the Python handler), it sends SIGUSR2 and
+  takes every thread's stack, written from C to ``stacks-<pid>.log``.
 * ``--summarize FILE`` summarizes a dump carried out of an air-gapped site.
 
 Each prints the dump's path and :func:`vmn_exp.ui.diag_summary.summarize`.
@@ -24,6 +26,7 @@ from vmn_exp.ui.diag_summary import summarize
 DIAG_PATH = "/api/v1/diag"
 POLL_SEC = 0.1
 HTTP_TIMEOUT_SEC = 120
+STACKS_WAIT_SEC = 5
 
 
 def handle_diag(args):
@@ -82,14 +85,52 @@ def _from_pid(args):
         return 1
     path = _wait_for_dump(pattern, before, time.monotonic() + args.diag_wait)
     if path is None:
-        VMN_LOGGER.error(f"No new dump matching {pattern} within {args.diag_wait}s "
-                         "(is --data-dir the server's?)")
-        return 1
+        return _stacks_from_pid(args, pid, pattern)
     if args.diag_output:
         _ensure_parent(args.diag_output)
         shutil.copyfile(path, args.diag_output)
         path = args.diag_output
     return _report(path)
+
+
+def _stacks_from_pid(args, pid, pattern):
+    """No JSON dump came: every thread's stack via SIGUSR2 instead."""
+    from vmn_exp.ui.diag.stacks import stacks_path
+
+    path = stacks_path(_data_dir(args), pid)
+    start = os.path.getsize(path) if os.path.exists(path) else 0
+    try:
+        os.kill(pid, signal.SIGUSR2)
+    except OSError as e:
+        VMN_LOGGER.error(f"Cannot signal pid {pid}: {e}")
+        return 1
+    stacks = _wait_for_growth(path, start, time.monotonic() + STACKS_WAIT_SEC)
+    if not stacks:
+        VMN_LOGGER.error(f"No new dump matching {pattern} within {args.diag_wait}s, nor "
+                         f"stacks in {path} (is --data-dir the server's?)")
+        return 1
+    dest = args.diag_output or time.strftime("vmn-exp-stacks-%Y%m%dT%H%M%SZ.txt", time.gmtime())
+    _ensure_parent(dest)
+    with open(dest, "w") as f:
+        f.write(stacks)
+    print(f"No JSON dump within {args.diag_wait}s (the server's Python handler never ran); "
+          f"every thread's stack instead:")
+    print(dest)
+    return 0
+
+
+def _wait_for_growth(path, start, deadline):
+    """What *path* gained past *start* once it stops growing, or ``""``."""
+    seen = -1
+    while time.monotonic() < deadline:
+        size = os.path.getsize(path) if os.path.exists(path) else 0
+        if size > start and size == seen:
+            with open(path, errors="replace") as f:
+                f.seek(start)
+                return f.read()
+        seen = size
+        time.sleep(POLL_SEC * 2)
+    return ""
 
 
 def _wait_for_dump(pattern, before, deadline):

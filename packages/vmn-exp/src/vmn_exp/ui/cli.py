@@ -198,7 +198,8 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
 
 
 def _install_diag(data_dir, args, host, port, token):
-    """Diagnostic dumps on SIGUSR1 and every ``--diag-every`` seconds."""
+    """Diagnostic dumps on SIGUSR1 and every ``--diag-every`` seconds; every
+    thread's stack on SIGUSR2."""
     import signal
 
     from vmn_exp.ui import diag
@@ -212,6 +213,8 @@ def _install_diag(data_dir, args, host, port, token):
     })
     if hasattr(signal, "SIGUSR1"):
         diag.install_signal_handler(data_dir)
+    if hasattr(signal, "SIGUSR2"):
+        diag.install_stack_dump(data_dir)
     if every:
         diag.start_periodic_dumps(data_dir, every)
 

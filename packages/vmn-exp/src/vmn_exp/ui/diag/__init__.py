@@ -12,11 +12,12 @@ from vmn_exp.ui.diag.pools import pools_section
 from vmn_exp.ui.diag.process import env_section, process_section, record_server_options
 from vmn_exp.ui.diag.registry import add_secret, build_dump, register_section
 from vmn_exp.ui.diag.requests import RequestTracker
+from vmn_exp.ui.diag.stacks import install_stack_dump
 from vmn_exp.ui.diag.threads import threads_section
 
 __all__ = [
     "add_secret", "build_dump", "env_section", "install_app", "install_default_sections",
-    "install_signal_handler", "process_section", "record_server_options",
+    "install_signal_handler", "install_stack_dump", "process_section", "record_server_options",
     "register_section", "start_periodic_dumps", "threads_section", "write_dump",
 ]
 
