@@ -119,7 +119,7 @@ function runItem(r: PaletteRun, ctx: PaletteCtx, base: string, app: string): Pal
 }
 
 const appItem = (ctx: PaletteCtx, ws: string, a: AppRow) => row(`app:${a.name}`, "app", a.name, {
-  mono: true, secondary: plural(a.experiments, "run"), to: appHref(ws, a.name), command: vx(ctx, "list", a.name),
+  mono: true, secondary: a.experiments === null ? "" : plural(a.experiments, "run"), to: appHref(ws, a.name), command: vx(ctx, "list", a.name),
 });
 const wsItem = (w: Workspace) => row(`ws:${w.name}`, "workspace", w.name, {
   mono: true, secondary: wsLocation(w), title: wsLocation(w), to: `/ws/${w.name}`,
@@ -159,7 +159,7 @@ function refError(ref: string, state: RefState, app: string, apps: AppRow[]): st
   if (state.state === "several") return `${ref} matches several runs; type more of it`;
   const n = Number(/^@(\d+)$/.exec(ref)?.[1]);
   const total = apps.find((a) => a.name === app)?.experiments;
-  if (n && total !== undefined && n > total) {
+  if (n && total != null && n > total) {
     return total ? `${app} has ${plural(total, "run")} (@1–@${total})` : `${app} has no runs yet`;
   }
   return `no run matches ${ref}`;

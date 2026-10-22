@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The dashboard shell's routes: ``.../workspaces/{ws}/git`` (branch, HEAD,
 dirty), ``.../apps/{app}/experiments-status`` (an app's status rollup) and
-``.../workspaces/{ws}/apps-status`` (every app's, in one request)."""
+``.../workspaces/{ws}/apps-status`` (every app's, in one request); while an
+app's index still loads, its status carries ``indexing`` ``{loaded, total}``."""
 import hashlib
 import json
 
@@ -37,7 +38,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         hour = int(now.timestamp() // 3600)
         etag = leaderboards.etag(snapshot, {}, kind="status", hour=hour)
         payload = summaries.get(
-            etag, lambda: status_summary(leaderboards.rows(snapshot), now)
+            etag, lambda: _with_indexing(status_summary(leaderboards.rows(snapshot), now), snapshot)
         )
         return payload, etag
 
@@ -69,3 +70,12 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         return json_response(payload, etag=etag, request=request)
 
     return contexts.pop
+
+
+def _with_indexing(payload, snapshot):
+    """*payload* with ``indexing`` ``{loaded, total}`` while *snapshot*'s
+    index is still loading chunk by chunk."""
+    if snapshot.loading is None:
+        return payload
+    loaded, total = snapshot.loading
+    return dict(payload, indexing={"loaded": loaded, "total": total})

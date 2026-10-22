@@ -13,7 +13,8 @@ export interface Workspace {
 
 export interface AppRow {
   name: string;
-  experiments: number;
+  /** null: a store app whose index holds no rows yet (its status counts them). */
+  experiments: number | null;
   versions: number;
 }
 

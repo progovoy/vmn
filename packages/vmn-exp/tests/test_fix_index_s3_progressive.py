@@ -94,3 +94,45 @@ def test_a_cold_load_cut_short_keeps_what_it_read(s3, tmp_path):
 def test_the_s3_client_pools_a_connection_per_index_reader(s3):
     pool = _storage()._s3.meta.config.max_pool_connections
     assert pool >= index_module._REMOTE_WORKERS
+
+
+def _created_in_verstr_order(storage):
+    """List each record's metadata.yml as written at its verstr's last number."""
+    list_files = storage.list_files
+
+    def dated(app_name, keys=None, **kw):
+        listing = list_files(app_name, keys=keys, **kw)
+        for verstr, files in listing.items():
+            size, _, etag = files["metadata.yml"]
+            files["metadata.yml"] = (size, float(verstr.rsplit(".", 1)[1]), etag)
+        return listing
+
+    storage.list_files = dated
+
+
+def test_a_cold_load_reads_the_newest_runs_first(s3, tmp_path):
+    _seed(_storage())
+    storage, release = _storage(), threading.Event()
+    _created_in_verstr_order(storage)
+    _metadata_loads(storage, lambda n: n > CHUNK and release.wait(10))
+    index = ExperimentIndex(storage, APP, str(tmp_path / "i.sqlite"))
+
+    first = index.snapshot()
+    release.set()
+    index.wait_revalidated(10)
+
+    assert {r["verstr"] for r in first.rows} == {f"0.0.{i}" for i in range(N - CHUNK, N)}
+
+
+def test_a_loading_snapshot_says_how_far_the_load_is(s3, tmp_path):
+    _seed(_storage())
+    storage, release = _storage(), threading.Event()
+    _metadata_loads(storage, lambda n: n > CHUNK and release.wait(10))
+    index = ExperimentIndex(storage, APP, str(tmp_path / "i.sqlite"))
+
+    first = index.snapshot()
+    release.set()
+    index.wait_revalidated(10)
+
+    assert first.loading == (CHUNK, N)
+    assert index.snapshot().loading is None

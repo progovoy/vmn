@@ -304,8 +304,11 @@ def create_app(
         ws = _experiment_workspace(ws_name)
         store_storage = _exp_storage_for(ws)
         if store_storage:
+            # A remote store's runs are counted by its index (listing them is
+            # slow); a file:// store lists them at once.
+            counted = store_storage.is_remote()
             compute = lambda: exp_reader.list_apps_from_storage(  # noqa: E731
-                store_storage, lambda name: source.persisted_count(ws, name))
+                store_storage, (lambda name: source.persisted_count(ws, name)) if counted else None)
         else:
             compute = lambda: exp_reader.list_apps(ws.path)  # noqa: E731
         return app_lists.get(ws_name, compute)

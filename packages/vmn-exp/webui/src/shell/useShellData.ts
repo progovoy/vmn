@@ -7,9 +7,11 @@ import type { AppStatus, GitContext } from "./contracts";
 
 const GIT_POLL_MS = 30_000;
 
-/** Status polls fast while something runs (or is stuck), slowly otherwise. */
+/** Status polls fastest while an index loads, fast while something runs (or
+ *  is stuck), slowly otherwise. */
 const pollMs = (statuses: AppStatus[]) =>
-  statuses.some((s) => s.counts.running + s.counts.stuck > 0) ? 15_000 : 60_000;
+  statuses.some((s) => s.indexing) ? 2_000
+    : statuses.some((s) => s.counts.running + s.counts.stuck > 0) ? 15_000 : 60_000;
 export const statusPollMs = (status?: AppStatus) => pollMs(status ? [status] : []);
 
 /** Pass `enabled = isGit`: a store workspace has no checkout to ask about.

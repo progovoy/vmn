@@ -83,6 +83,13 @@ _REMOTE_CHUNK = 500
 _monotonic = time.monotonic
 
 
+def _listed_at(work_item):
+    """When the listing saw *work_item*'s metadata.yml written (a remote
+    backend's ``(size, mtime, etag)`` signature), 0 when it does not say."""
+    sig = work_item[1].get(METADATA_FILE)
+    return sig[1] if isinstance(sig, (list, tuple)) and len(sig) > 1 else 0
+
+
 class ExperimentIndex:
     """Incrementally maintained rows for one app of one storage backend."""
 
@@ -113,6 +120,7 @@ class ExperimentIndex:
         self._cache_gen = None  # a follower's CacheStore generation; None for a leader
         self._lean = False  # see sync()
         self._lean_index = None  # the lean copy sync() refreshes while this one is unloaded
+        self._unread = 0  # new records a chunked refresh has yet to read
 
     @classmethod
     def follower(cls, cache_store, scope):
@@ -309,16 +317,23 @@ class ExperimentIndex:
         if self._io is not None:  # the helper process persists them
             self._apply(self._io.refresh(work, removed), removed, started)
             return
-        *early, last = self._chunks(work)
-        for chunk in early:
-            self._refresh_part(chunk, (), started, None)
-        self._refresh_part(last, removed, started, started)
+        chunks = self._chunks(work)
+        self._unread = sum(record is None for _, _, record in work)
+        try:
+            for chunk in chunks[:-1]:
+                self._unread -= sum(record is None for _, _, record in chunk)
+                self._refresh_part(chunk, (), started, None)
+        finally:
+            self._unread = 0
+        self._refresh_part(chunks[-1], removed, started, started)
 
     def _chunks(self, work):
         """*work* split so a remote cold load serves and keeps its records a
-        chunk at a time, rather than only once every record was read."""
+        chunk at a time, the newest first, rather than only once every
+        record was read."""
         if not work or not self._remote():
             return [work]
+        work = sorted(work, key=_listed_at, reverse=True)
         return [work[i:i + _REMOTE_CHUNK] for i in range(0, len(work), _REMOTE_CHUNK)]
 
     def _refresh_part(self, work, removed, started, baseline_at):
@@ -506,8 +521,10 @@ class ExperimentIndex:
     # -- snapshots -----------------------------------------------------------
 
     def _build_snapshot(self, touched=None):
+        order = self._order or []
+        loading = (len(order), len(order) + self._unread) if self._unread else None
         return self._rows.snapshot(
-            self.app_name, self.generation, self._order or [], self._records, touched
+            self.app_name, self.generation, order, self._records, touched, loading
         )
 
     def snapshot(self):

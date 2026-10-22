@@ -204,16 +204,24 @@ def get_experiment_from_storage(
     )
 
 
-def list_apps_from_storage(storage, persisted_count=lambda name: 0):
+def list_apps_from_storage(storage, persisted_count=None):
     """The apps of a store workspace. Limited: no version counts or conf.
-    An app's run count is *persisted_count(name)* when its index holds any
-    (listing 45k runs by name takes S3 tens of seconds)."""
+    With *persisted_count(name)* (the server's), an app's run count is what
+    its index holds, None before it holds any (its experiments-status fills
+    it in): listing 45k runs by name takes S3 tens of seconds."""
     rows = []
     for name in storage.list_apps():
-        try:
-            # Names only: counting must not fetch every run's metadata.
-            exp_count = persisted_count(name) or len(storage.list_verstrs(name))
-        except Exception:
-            exp_count = 0
+        if persisted_count is not None:
+            exp_count = persisted_count(name) or None
+        else:
+            exp_count = _listed_count(storage, name)
         rows.append({"name": name, "experiments": exp_count, "versions": 0})
     return rows
+
+
+def _listed_count(storage, name):
+    try:
+        # Names only: counting must not fetch every run's metadata.
+        return len(storage.list_verstrs(name))
+    except Exception:
+        return 0

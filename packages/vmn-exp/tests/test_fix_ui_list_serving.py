@@ -301,3 +301,17 @@ def test_a_store_apps_list_counts_runs_from_the_persisted_index(s3_workspace, mo
     apps = new_client().get("/api/v1/workspaces/ws/apps").json()
 
     assert [(a["name"], a["experiments"]) for a in apps] == [(APP, 3)]
+
+
+def test_a_new_servers_store_apps_list_answers_without_counting(s3_workspace, monkeypatch):
+    new_client, storage, _ = s3_workspace
+    _run(storage, 0, loss=0.1)
+
+    def no_listing(*a, **kw):
+        raise AssertionError("the apps list listed every run")
+
+    monkeypatch.setattr(S3SnapshotStorage, "list_verstrs", no_listing)
+    apps = new_client().get("/api/v1/workspaces/ws/apps").json()
+
+    # Unknown until the app's index has rows: experiments-status fills it in.
+    assert [(a["name"], a["experiments"]) for a in apps] == [(APP, None)]

@@ -52,6 +52,9 @@ class IndexSnapshot:
     features: dict = field(default_factory=dict, repr=False)
     intents: dict = field(default_factory=dict, repr=False)
     hypotheses: dict = field(default_factory=dict, repr=False)
+    # (rows loaded, rows expected) while a remote store's load is published
+    # chunk by chunk; None once every record was read.
+    loading: tuple = None
     _declared: list = field(default_factory=list, repr=False)  # memo, shared by views
     _children: list = field(default_factory=list, repr=False)  # children_of memo, ditto
     _by_verstr: dict = field(default_factory=dict, repr=False)
@@ -229,7 +232,7 @@ class RowCache:
             cached = self._observed[key] = (rs_sig, _observed_at(rs_sig))
         return cached[1]
 
-    def snapshot(self, app_name, generation, order, records, touched=None):
+    def snapshot(self, app_name, generation, order, records, touched=None, loading=None):
         """The :class:`IndexSnapshot` of *records* (``{key: record}``) in
         *order*. *touched*: the keys whose record changed since the last
         call; None (unknown) rebuilds every map."""
@@ -244,7 +247,7 @@ class RowCache:
             app_name=app_name, generation=generation, rows=tuple(self._list),
             run_states=dict(m.states), edges=dict(m.edges), create_notes=dict(m.notes),
             run_state_observed_at=dict(m.observed),
-            _by_verstr=dict(m.rows), _schema_rows=self._schema_rows,
+            _by_verstr=dict(m.rows), _schema_rows=self._schema_rows, loading=loading,
             **{name: dict(values) for name, values in m.sides.items()},
         )
 

@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { appTag } from "../api";
 import { useApps } from "../queries";
 import { appHref, plural } from "../util";
+import { appRunsText } from "../util/indexing";
 import { usePageScope } from "../shell/usePageScope";
 import { useAppsStatus } from "../shell/useShellData";
 import { PageHead, Skeleton, wsLocation } from "../components/ui";
@@ -19,7 +20,7 @@ function AppTile({ ws, app, isGit, status }: {
   const href = appHref(ws, app.name);
   // The status counts what the board does (archived runs left out); the
   // listing's count (record names) stands in until it arrives.
-  const runs = plural(status?.total ?? app.experiments, "run");
+  const runs = appRunsText(status, app.experiments);
   return (
     <article className="app-tile">
       <h2><Link className="app-tile-link" to={href}>{app.name}</Link></h2>
