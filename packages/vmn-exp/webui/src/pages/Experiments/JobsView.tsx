@@ -9,6 +9,7 @@ import { appName as toAppName } from "../../api";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
 import NewExperiment from "../../components/NewExperiment";
 import NewRowsBar from "../../components/NewRowsBar";
+import StaleRows from "../../components/StaleRows";
 import { useAddFilterClauses } from "../../hooks/useAddFilterClauses";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { prefetchRun } from "../../queries";
@@ -30,7 +31,7 @@ import { indexingText } from "../../util/indexing";
 /** `20 jobs`, `19,580 single runs`; listing every top-level run, `14 jobs ·
  *  3 single runs` once every row is loaded, else the total. */
 function countText(loading: boolean, rows: { job?: unknown }[], total: number, kind: JobsKind | null): string {
-  if (loading) return "loading outer runs…";
+  if (loading) return `loading ${kindNoun(kind ?? "jobs")}s…`;
   if (kind) return plural(total, kindNoun(kind));
   if (rows.length < total) return `${fmtCount(total)} top-level runs`;
   const jobs = rows.filter((r) => r.job).length;
@@ -109,19 +110,21 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
           />
           <JobsMatchLine matches={data.matches} appBase={base} search={board.search} />
           <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "outer run" : "run"} onShow={data.showNew} />
-          <JobsTable
-            items={data.items} ctx={ctx} sort={board.sort}
-            selected={view.selected} density={view.density}
-            headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll, label: "Select all visible outer runs" }}
-            emptyText={emptyText(kind.kind, board.filtered)}
-            groups={{
-              noun: kind.kind === "jobs" ? "outer run" : "run", asFilter,
-              onFold: view.toggleCollapsed, onMore: data.loadGroup,
-              checkOf: selection.checkOf, onCheck: selection.toggleRows,
-            }}
-            hasMore={data.hasMore} onNearEnd={data.loadMore} visibleRef={data.visibleRef} viewportRef={data.viewportRef}
-            onToggle={selection.toggle} onPrefetch={onPrefetch} onClearAnchor={selection.clearAnchor}
-          />
+          <StaleRows stale={data.stale} error={data.staleError}>
+            <JobsTable
+              items={data.items} ctx={ctx} sort={board.sort}
+              selected={view.selected} density={view.density}
+              headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll, label: "Select all visible outer runs" }}
+              emptyText={emptyText(kind.kind, board.filtered)}
+              groups={{
+                noun: kind.kind === "jobs" ? "outer run" : "run", asFilter,
+                onFold: view.toggleCollapsed, onMore: data.loadGroup,
+                checkOf: selection.checkOf, onCheck: selection.toggleRows,
+              }}
+              hasMore={data.hasMore} onNearEnd={data.loadMore} visibleRef={data.visibleRef} viewportRef={data.viewportRef}
+              onToggle={selection.toggle} onPrefetch={onPrefetch} onClearAnchor={selection.clearAnchor}
+            />
+          </StaleRows>
           <BoardCaption
             sortLabel={null} reversed={false} legend={false}
             live={{ running: live.running, paused: live.paused, updatedAt: data.updatedAt, onPaused: live.setPaused, onRefresh: data.refresh }}

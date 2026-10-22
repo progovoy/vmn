@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type { HttpError } from "../http";
 import { PAGE_SIZE } from "../paging";
@@ -7,7 +7,7 @@ import { isAbortError, withSignal } from "../requestScope";
 import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
 import { stabilizeRows } from "../util/stableRows";
-import { useShownList } from "./useShownList";
+import { listViewOf, useShownList } from "./useShownList";
 import { combineQueries } from "../util/searchQuery";
 import type { ExperimentRow } from "../types";
 
@@ -76,14 +76,13 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
         getCursor: () => client.getQueryData<RowsData>(key)?.next_cursor,
       });
     },
-    // While a new filter loads, keep the previous rows on screen (a hook
-    // instance only ever serves one app: the page is keyed by it).
-    placeholderData: keepPreviousData,
     // refreshRows already keeps unchanged rows' identity, by verstr.
     structuralSharing: false,
   }, client);
 
-  const { data, queryError, pageError } = useShownList(query, enabled);
+  // While a new filter loads, the view's previous rows stay on screen,
+  // marked stale (a hook instance only ever serves one app: the page is keyed by it).
+  const { data, stale, queryError, pageError, staleError } = useShownList(query, enabled, listViewOf(filter));
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const loadingMore = useRef(false);
@@ -132,7 +131,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
     /** A Jobs view search's counts (plan 23 W11), when the server sent them. */
     matches: data?.runs_matched === undefined ? undefined
       : { jobs: data.jobs_matched ?? 0, runs: data.runs_matched },
-    queryError, pageError, moreError,
+    stale, queryError, pageError, staleError, moreError,
     loadMore, refresh, visibleRef, viewportRef, showNew,
     hasMore: data ? hasMoreOf(data) : false,
     /** What a held refresh kept off screen, null when nothing is waiting. */

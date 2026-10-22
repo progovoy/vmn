@@ -43,6 +43,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
     matches: undefined,
     groups: data?.groups,
     aggregate: data?.aggregate, defaultAggregate: groups.defaultAggregate, running: data?.running ?? 0,
+    stale: groups.stale, staleError: groups.staleError,
     queryError: groups.queryError, pageError: groups.pageError, moreError: groups.moreError,
     loadMore: groups.loadMore, loadGroup: groups.loadGroup, refresh: groups.refresh,
     visibleRef: flat.visibleRef, viewportRef: flat.viewportRef, updatedAt: groups.updatedAt,

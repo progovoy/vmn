@@ -2,13 +2,13 @@
  *  the request cache (under the app's rows, so edits and refreshes reach
  *  it), more groups on demand, and the rest of one group (`+N more`). */
 import { useCallback, useRef, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type { GroupAggregate, GroupField } from "../apiGroups";
 import type { HttpError } from "../http";
 import { isAbortError, withSignal } from "../requestScope";
 import { rowsPrefix, type RowsFilter } from "../queries";
-import { useShownList } from "./useShownList";
+import { listViewOf, useShownList } from "./useShownList";
 import { cacheOf, deeperGroups, withGroupRows, withGroups } from "../util/groupedCache";
 import type { GroupedRows, MoreState } from "../util/groupItems";
 
@@ -49,14 +49,13 @@ export function useGroupedRows(
         }))));
       return deeper.reduce(withGroupRows, next);
     },
-    placeholderData: keepPreviousData,
     structuralSharing: false,
   }, client);
 
-  const { data, queryError, pageError } = useShownList(query, group !== null);
+  const { data, stale, queryError, pageError, staleError } = useShownList(query, group !== null, listViewOf(filter));
   // The aggregate an answer to no `agg=` names: the app's default (F3).
   const answeredDefault = useRef<GroupAggregate>();
-  if (!agg && !query.isPlaceholderData && query.data?.aggregate) answeredDefault.current = query.data.aggregate;
+  if (!agg && query.data?.aggregate) answeredDefault.current = query.data.aggregate;
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const [more, setMore] = useState<ReadonlyMap<string, MoreState>>(new Map());
@@ -107,7 +106,7 @@ export function useGroupedRows(
 
   return {
     data,
-    queryError, pageError,
+    stale, queryError, pageError, staleError,
     moreError, more, loadMore, loadGroup, refresh,
     defaultAggregate: answeredDefault.current,
     updatedAt: query.dataUpdatedAt,

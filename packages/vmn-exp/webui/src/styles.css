@@ -820,3 +820,7 @@ td.fleet-cell { font-family: var(--mono); font-size: 12px; }
 .run-error-final { color: var(--bad); font-weight: 600; }
 .run-error-output { margin-top: 10px; }
 .run-error-output summary { cursor: pointer; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+
+/* A board's rows kept while a new filter loads (components/StaleRows.tsx). */
+.board-updating { color: var(--text-3); font-size: 12px; margin: 0 0 4px; }
+.board-rows[aria-busy="true"] { opacity: 0.55; transition: opacity 0.15s; }
