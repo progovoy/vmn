@@ -241,11 +241,13 @@ def _add_ui_parser(subprasers):  # noqa: N802
         "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
     )
     pui.add_argument("ui_args", nargs="*",
-                     metavar="cache resync|rebuild | onboarding | backup <path>",
+                     metavar="cache resync|rebuild | onboarding | backup <path> | diag",
                      help="Maintenance: 'cache resync' re-checks every record of the "
                           "cache, 'cache rebuild' rebuilds it; 'onboarding' prints the "
                           "BYO-bucket IAM policy for --store; 'backup <path>' copies the "
-                          "SQLite control plane (Postgres: prints the pg_dump command)")
+                          "SQLite control plane (Postgres: prints the pg_dump command); "
+                          "'diag' takes a diagnostic dump of a running server "
+                          "(--url, --pid or --summarize FILE)")
     pui.add_argument("--workspace", default=None,
                      help="cache: the workspace to resync (default: every one)")
     pui.add_argument("--config", default=None,
@@ -287,6 +289,18 @@ def _add_ui_parser(subprasers):  # noqa: N802
                      help="onboarding: the org's AssumeRole external id")
     pui.add_argument("--origin", action="append", default=None,
                      help="onboarding: a browser origin allowed by bucket CORS (repeatable)")
+    pui.add_argument("--url", dest="diag_url", default=None,
+                     help="diag: the server's base URL (e.g. http://host:8265)")
+    pui.add_argument("--pid", dest="diag_pid", type=int, default=None,
+                     help="diag: signal this vmn-exp ui process (SIGUSR1) to write a dump "
+                          "into <data-dir>/diag/")
+    pui.add_argument("--wait", dest="diag_wait", type=float, default=30,
+                     help="diag --pid: seconds to wait for the dump (default: 30)")
+    pui.add_argument("--summarize", dest="diag_summarize", default=None, metavar="FILE",
+                     help="diag: print the summary of an existing dump")
+    pui.add_argument("-o", "--output", dest="diag_output", default=None, metavar="FILE",
+                     help="diag: where to write the dump (default: "
+                          "vmn-exp-diag-<ts>.json; --pid: the server's file)")
 
 
 # ---------------------------------------------------------------------------

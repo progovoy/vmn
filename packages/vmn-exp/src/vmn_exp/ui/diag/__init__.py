@@ -5,6 +5,7 @@ carry off an air-gapped host): ``GET /api/v1/diag``, SIGUSR1 and
 
 Other modules add sections with :func:`register_section`.
 """
+from vmn_exp.storage.s3_stats import s3_stats
 from vmn_exp.ui.diag.dump_files import install_signal_handler, start_periodic_dumps, write_dump
 from vmn_exp.ui.diag.indexes import indexes_section
 from vmn_exp.ui.diag.pools import pools_section
@@ -30,7 +31,7 @@ def install_default_sections(refresher=None, tracker=None):
     register_section("indexes", lambda: indexes_section(refresher))
     register_section("process", process_section)
     register_section("env", env_section)
-    # s3 section (being added): register_section("s3", vmn_exp.storage.s3_stats.s3_stats)
+    register_section("s3", s3_stats)
 
 
 def install_app(app, prefix, refresher):

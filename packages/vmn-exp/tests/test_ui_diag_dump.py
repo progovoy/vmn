@@ -123,3 +123,9 @@ def test_process_section_carries_redacted_server_options():
     assert options["host"] == "0.0.0.0" and options["read_only"] is True
     assert options["token"] == "set"
     assert {"python", "rss_bytes", "threads", "gc_counts", "uptime_sec"} <= set(section)
+
+
+def test_the_dump_carries_the_s3_request_stats():
+    diag.install_default_sections()
+    s3 = diag.build_dump()["sections"]["s3"]
+    assert "operations" in s3 and "clients_created" in s3

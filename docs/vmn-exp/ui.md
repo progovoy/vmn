@@ -243,12 +243,34 @@ shows `{"error": ...}` instead of breaking the dump:
 | `indexes` | per watched app: rows, records, `loading` progress, generation, seconds since publish/refresh, last refresh duration, refresher thread alive, journaled, full listing due |
 | `process` | Python/implementation/free-threaded, vmn and vmn-exp versions, uptime, CPU, RSS, threads, open fds, gc counts/stats, the server's options |
 | `env` | names of the set `VMN_*`/`AWS_*` variables, never their values |
+| `s3` | per S3 operation: count, errors by code, retries, in flight, bytes read, latency p50/p95/max; clients and their pool sizes; the 10 oldest calls in flight |
 
 Redaction: store URIs and DSNs lose their userinfo and every query value but
 `endpoint_url`'s host, the token shows as `set`, and the configured token and
 any secret-looking env value (`*SECRET*`, `*TOKEN*`, `*PASSWORD*`, `*KEY*`)
 are scrubbed from every string of the dump. Other modules add sections with
 `vmn_exp.ui.diag.register_section(name, fn)`.
+
+### vmn-exp ui diag
+
+`vmn-exp ui diag` takes a diagnostic dump of a running `vmn-exp ui` (no
+py-spy or network access needed) and prints a short summary: the most common
+thread stacks, the slowest in-flight requests, pool saturation, index loading
+and S3 latency (p50/p95/max, errors, retries) per operation.
+
+```sh
+vmn-exp ui diag --pid 12345                        # SIGUSR1; waits for <data-dir>/diag/diag-<ts>-12345.json
+vmn-exp ui diag --pid 12345 --data-dir /srv/vmn-ui --wait 60 -o dump.json
+vmn-exp ui diag --url http://host:8265 --token T   # GET /api/v1/diag (admin), writes vmn-exp-diag-<ts>.json
+vmn-exp ui diag --summarize dump.json              # summarize a dump carried out of the site
+```
+
+`--pid` works when the server is too starved to answer HTTP: the process
+writes the dump on SIGUSR1 into its data dir (resolved like `vmn-exp ui`'s
+`--data-dir`: flag, `--config`'s `data_dir`, else `~/.vmn-ui`), and
+`diag` waits up to `--wait` seconds (default 30) for the new file, then
+copies it to `-o` if given. `--url` sends `--token` (or `VMN_UI_TOKEN`) as a
+bearer token. The summary skips any section that is missing or failed.
 
 ## Run status in the dashboard
 
