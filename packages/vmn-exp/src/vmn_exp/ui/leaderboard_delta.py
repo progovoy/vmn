@@ -73,18 +73,23 @@ def _static_row(base, verstr, changed):
 
 
 def static_moves(prev, base, candidates):
-    """``(left, joined)``: rows that left *prev*'s static set, and joined *base*'s."""
+    """``(left, joined, settled)``: rows that left *prev*'s static set, rows
+    that joined *base*'s, and those of *joined* that were among *prev*'s
+    changed rows (a live run that went stuck or finished, its ancestors):
+    re-derived anyway, like :func:`row_delta`'s live rows, so outside the limit."""
     was, now = set(prev.patch.changed), set(base.patch.changed)
     candidates = set(candidates)
     candidates.update(prev.rows[i]["verstr"] for i in was)
     candidates.update(base.rows[i]["verstr"] for i in now)
-    left, joined = [], []
+    left, joined, settled = [], [], []
     for verstr in candidates:
         old, new = _static_row(prev, verstr, was), _static_row(base, verstr, now)
         if old is not new:
             left.extend([old] if old is not None else [])
             joined.extend([new] if new is not None else [])
-    return left, joined
+            settled.extend([new] if new is not None and old is None
+                           and prev.position.get(verstr) in was else [])
+    return left, joined, settled
 
 
 def splice(rows, drop, old_key, add, new_key):
@@ -126,7 +131,8 @@ def moved(rows, drop, add, key):
 
 class DeltaLog:
     """The static-set moves of recent generations: ``{token: (previous
-    token, left, joined)}`` for every base derived from another."""
+    token, left, joined, settled)}`` for every base derived from another
+    (see :func:`static_moves`)."""
 
     def __init__(self, size=DELTA_GENERATIONS):
         self._moves = OrderedDict()
@@ -142,7 +148,8 @@ class DeltaLog:
     def since(self, token, base):
         """``(left, joined)`` from generation *token* to *base*, composed;
         None when a generation between is unknown (built from scratch, or
-        too old) or the moves add up to more than a rebuild costs."""
+        too old) or the moves add up to more than a rebuild costs (rows
+        that joined only by leaving the changed rows do not count)."""
         chain, at = [], base.token
         with self._lock:
             while at != token:
@@ -151,12 +158,13 @@ class DeltaLog:
                     return None
                 chain.append(step)
                 at = step[0]
-        left, joined = [], {}
-        for _, gone, came in reversed(chain):
+        left, joined, settled = [], {}, set()
+        for _, gone, came, came_settled in reversed(chain):
             for row in gone:
                 if joined.pop(id(row), None) is None:
                     left.append(row)
             joined.update((id(row), row) for row in came)
-        if len(left) + len(joined) > delta_limit(base.rows):
+            settled.update(map(id, came_settled))
+        if len(left) + len(joined.keys() - settled) > delta_limit(base.rows):
             return None
         return left, list(joined.values())
