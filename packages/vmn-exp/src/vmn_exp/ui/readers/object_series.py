@@ -11,7 +11,8 @@ any v1 ``metrics`` entries. The payload is the parsed log's
 """
 from vmn_exp.core.fold import fold_definitions, fold_log
 from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
-from vmn_exp.ui.readers.range_series import jsonl_log, series_reader
+from vmn_exp.ui.readers.detail_reads import submit
+from vmn_exp.ui.readers.range_series import read_run
 from vmn_exp.ui.readers.series import downsample, points_per_metric
 
 
@@ -30,17 +31,28 @@ def readable(storage):
     return all(hasattr(storage, m) for m in ("metric_objects", "load_logs_by_writer"))
 
 
+def _thin_all(storage, reader, names, per_metric):
+    """``{key: thinned series}``; on a remote store each key's range reads
+    run concurrently with the others'."""
+    if len(names) < 2 or not storage.is_remote():
+        return {k: reader.thinned(k, per_metric) for k in names}
+    futures = {k: submit(reader.thinned, k, per_metric) for k in names}
+    return {k: f.result() for k, f in futures.items()}
+
+
 def object_series(storage, app_name, verstr, keys, max_points, budget=None, x=None, schema=None):
-    """``(series, series_total, step_metrics)`` of a run known to exist."""
-    log = jsonl_log(storage, app_name, verstr)
-    reader = series_reader(storage, app_name, verstr, log)
+    """``(series, series_total, step_metrics)`` of a run, or None when it is gone."""
+    found = read_run(storage, app_name, verstr)
+    if found is None:
+        return None
+    log, reader = found
     counts = reader.keys()
     names = list(counts) if keys is None else [k for k in keys if k in counts]
     if isinstance(x, str):
         names = [k for k in names if k != x]
     joins = x_of(names, x)
     per_metric = points_per_metric(max_points, len(names), budget)
-    series = {k: reader.thinned(k, per_metric) for k in names if k not in joins}
+    series = _thin_all(storage, reader, [k for k in names if k not in joins], per_metric)
     totals = {k: counts[k] for k in series}
     lookups = {m: x_lookup(reader.series(m)) for m in set(joins.values())}
     for k, m in joins.items():

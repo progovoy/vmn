@@ -41,6 +41,7 @@ EXPERIMENT_ACTIONS = [
     "export-metrics",
     "similar",
     "similar-backfill",
+    "backfill-children",
 ]
 
 
@@ -109,7 +110,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="prune: print what would be deleted, delete nothing; "
                            "rerun: print the plan, create nothing; "
                            "push: print what would be pushed, write nothing remote; "
-                           "similar-backfill: print what would be backfilled, write nothing")
+                           "similar-backfill/backfill-children: print what would be "
+                           "backfilled, write nothing")
     pexp.add_argument("--adopt", action="store_true", default=False,
                       help="push: make this checkout the owner of the streams its runs "
                            "inherited from a copied/moved checkout, then push them; only "
@@ -380,6 +382,7 @@ def _exp_run_without_repo(args):
         experiment_show,
         experiment_similar,
         experiment_similar_backfill,
+        experiment_backfill_children,
         experiment_storage_params,
     )
 
@@ -395,6 +398,7 @@ def _exp_run_without_repo(args):
         "push": experiment_push,
         "similar": experiment_similar,
         "similar-backfill": experiment_similar_backfill,
+        "backfill-children": experiment_backfill_children,
     }
 
     handler = dispatch.get(action)

@@ -24,8 +24,9 @@ from vmn_exp.core.status import (
     run_state_observed_at,
     status_fields,
 )
-from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
+from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status, subtree_verstrs
 from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.detail_reads import RunStates, submit
 from vmn_exp.ui.readers.failure_context import failure_fields
 from vmn_exp.ui.readers.histograms import detail_media
 from vmn_exp.ui.readers.object_series import object_series, readable, x_of
@@ -41,15 +42,14 @@ _ENV_SIZE_CAP = 256 * 1024  # 256 KB
 LOG_TAIL = 200
 
 
-def _load_env(storage, app_name, verstr, metadata):
+def _env_payload(raw, metadata):
     """``env`` payload for the detail: full dict when env.yml fits, else summary.
 
-    Returns the full env dict when env.yml is present and at most
-    ``_ENV_SIZE_CAP`` bytes.  When the file is larger, returns the compact
-    summary from *metadata* with ``truncated: True`` added.  Returns ``None``
-    when neither env.yml nor a summary is available.
+    Returns the full env dict when env.yml (*raw*, bytes or None) is present
+    and at most ``_ENV_SIZE_CAP`` bytes.  When the file is larger, returns the
+    compact summary from *metadata* with ``truncated: True`` added.  Returns
+    ``None`` when neither env.yml nor a summary is available.
     """
-    raw = storage.load_file(app_name, verstr, "env.yml")  # bytes or None
     if raw is not None:
         if len(raw) <= _ENV_SIZE_CAP:
             try:
@@ -185,8 +185,8 @@ def _last_metric_at(log):
     return log.last_metric_at if isinstance(log, LogSnapshot) else last_metric_at(log)
 
 
-def _resolve(storage, app_name, verstr_ref, resolve=None):
-    """``(verstr, metadata, error)`` for a ref, loading metadata only.
+def _resolve_name(storage, app_name, verstr_ref, resolve=None):
+    """``(verstr, error)`` for a ref.
 
     *resolve* (``ref -> (verstr, error)``, e.g. an index snapshot's) is tried
     first; storage answers what it cannot, such as a run it has not seen yet.
@@ -195,12 +195,45 @@ def _resolve(storage, app_name, verstr_ref, resolve=None):
         verstr, err = resolve(verstr_ref)
     if not resolve or err:
         verstr, err = _resolve_verstr(storage, app_name, verstr_ref, kind="experiment")
+    return (None, err) if err else (verstr, None)
+
+
+def _found(verstr, metadata):
+    """``(metadata, error)``: a run without metadata is not found."""
+    if metadata is None:
+        return None, RefError(f"Experiment {verstr} not found")
+    return metadata, None
+
+
+def _resolve(storage, app_name, verstr_ref, resolve=None):
+    """``(verstr, metadata, error)`` for a ref, loading metadata only."""
+    verstr, err = _resolve_name(storage, app_name, verstr_ref, resolve)
     if err:
         return None, None, err
-    metadata = storage.load_metadata(app_name, verstr)
-    if metadata is None:
-        return None, None, RefError(f"Experiment {verstr} not found")
-    return verstr, metadata, None
+    metadata, err = _found(verstr, storage.load_metadata(app_name, verstr))
+    return (None, None, err) if err else (verstr, metadata, None)
+
+
+def _status_members(storage, app_name, verstr, edges, job):
+    """The runs whose states the status detail reads: a job's own, else its
+    subtree's (from the index edges)."""
+    if job is not None:
+        return [verstr]
+    return subtree_verstrs(verstr, _children_of(edges(storage, app_name)))
+
+
+def _once(fn):
+    """*fn(verstr)*, its answer kept for the request."""
+    if fn is None:
+        return None
+    answers = {}
+
+    def call(verstr):
+        if verstr not in answers:
+            answers[verstr] = fn(verstr)
+        return answers[verstr]
+
+    return call
 
 
 def experiment_detail(
@@ -244,14 +277,29 @@ def experiment_detail(
     is ``verstr -> {verstr, idx, name} | None``). *job_status*: see
     :func:`status_detail`.
     """
-    verstr, metadata, err = _resolve(storage, app_name, verstr_ref, resolve)
+    verstr, err = _resolve_name(storage, app_name, verstr_ref, resolve)
     if err:
         return None, err
+    edges = edges or _placement_edges
+    job_status = _once(job_status)
+    # Every read below is independent of the others: all in flight at once.
+    metadata_read = submit(storage.load_metadata, app_name, verstr)
+    log_read = submit(_PARSED.get, storage, app_name, verstr, read_log)
+    artifacts_read = submit(list_artifacts, storage, app_name, verstr)
+    env_read = submit(storage.load_file, app_name, verstr, "env.yml")
+    compacted_read = submit(record_compacted, storage, app_name, verstr)
+    states = RunStates(storage, app_name, read_run_state, read_observed_at)
+    states.prefetch(_status_members(
+        storage, app_name, verstr, edges, job_status(verstr) if job_status else None))
 
-    snapshot = _PARSED.get(storage, app_name, verstr, read_log)
+    metadata, err = _found(verstr, metadata_read.result())
+    if err:
+        return None, err
+    snapshot = log_read.result()
     tail = snapshot.tail(LOG_TAIL)
     series, series_total = {}, {}
     if include_series and step_range is not None:
+        # On this thread: range_series waits on the read pool itself.
         series, series_total, _ = range_series(
             storage, app_name, verstr, keys, max_points, None, step_range, schema
         )
@@ -273,7 +321,7 @@ def experiment_detail(
         "series_total": series_total,
         "step_metrics": snapshot.step_metrics(schema),
         "hidden_metrics": snapshot.hidden_metrics(schema),
-        "artifacts": list_artifacts(storage, app_name, verstr),
+        "artifacts": artifacts_read.result(),
         **detail_media(snapshot.media),
         "status": status_detail(
             storage,
@@ -281,21 +329,21 @@ def experiment_detail(
             verstr,
             metadata,
             snapshot,
-            edges or _placement_edges,
-            read_run_state=read_run_state,
-            read_observed_at=read_observed_at,
+            edges,
+            read_run_state=states.read_run_state,
+            read_observed_at=states.read_observed_at,
             read_child_row=read_child_row,
             job_status=job_status,
         ),
         "patches": patch_presence(storage, app_name, verstr, metadata),
-        "env": _load_env(storage, app_name, verstr, metadata),
+        "env": _env_payload(env_read.result(), metadata),
         "inputs": fold_inputs_dict(snapshot._parsed.fold) or None,
         "outputs": fold_outputs_dict(snapshot._parsed.fold) or None,
         "imported_from": metadata.get("imported_from"),
         "forked_from": metadata.get("forked_from"),
         "rerun_of": metadata.get("rerun_of"),
         "rewinds": snapshot.rewinds(),
-        "compacted": record_compacted(storage, app_name, verstr),
+        "compacted": compacted_read.result(),
     }
     detail.update(failure_fields(storage, app_name, verstr, detail, snapshot, last_good))
     return detail, None
@@ -341,10 +389,10 @@ def run_series(
     """``(series, series_total, step_metrics)`` of an existing run, or None
     when it is gone — read from its metric objects when the storage lists
     them, else from its parsed log."""
-    if storage.load_metadata(app_name, verstr) is None:
-        return None
     if readable(storage):
         return object_series(storage, app_name, verstr, keys, max_points, budget, x, schema)
+    if storage.load_metadata(app_name, verstr) is None:
+        return None
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     series, totals = thinned_series(snapshot, keys, max_points, budget, x)
     return series, totals, snapshot.step_metrics(schema)

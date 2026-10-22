@@ -210,6 +210,18 @@ def writer_source(storage, app_name, verstr, objects):
     return sources[0] if len(sources) == 1 else _ChainedSource(sources)
 
 
+def metric_sources(storage, app_name, verstr):
+    """``[(writer, source)]`` of the record's listed metric objects, each
+    writer's opened concurrently (a ``.vmx`` costs its tail read)."""
+    listing = getattr(storage, "metric_objects", None)
+    objects = list((listing(app_name, verstr) if listing else {}).items())
+    source = lambda item: (item[0], writer_source(storage, app_name, verstr, item[1]))  # noqa: E731
+    if len(objects) < 2:
+        return [source(item) for item in objects]
+    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects))) as pool:
+        return list(pool.map(source, objects))
+
+
 class SeriesReader:
     def __init__(self, sources, rewinds=()):
         """*sources*: ``[(writer, source)]``; merged in writer order."""
@@ -221,9 +233,13 @@ class SeriesReader:
     def from_storage(cls, storage, app_name, verstr, log=None, rewinds=None, legacy=None):
         """The record's metric objects; rewinds from *log* unless given.
         *legacy* are v1 ``metrics`` entries to read along."""
-        listing = getattr(storage, "metric_objects", None)
-        objects = listing(app_name, verstr) if listing else {}
-        sources = [(w, writer_source(storage, app_name, verstr, objs)) for w, objs in objects.items()]
+        return cls.of(metric_sources(storage, app_name, verstr), log, rewinds, legacy)
+
+    @classmethod
+    def of(cls, sources, log=None, rewinds=None, legacy=None):
+        """A reader of already opened *sources* (:func:`metric_sources`);
+        the rest as :meth:`from_storage`."""
+        sources = list(sources)
         if legacy:
             sources.append((LEGACY_WRITER, _EntrySource(legacy)))
         return cls(sources, rewind_markers(log) if rewinds is None else rewinds)

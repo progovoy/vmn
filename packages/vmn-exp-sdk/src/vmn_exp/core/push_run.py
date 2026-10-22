@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 
 from vmn_exp._base import now_iso
 from vmn_exp.core.adopt import inherited_note, missing_inherited
+from vmn_exp.core.children import mark_parent
 from vmn_exp.core.push_code import MISSING, CodePusher
 from vmn_exp.core.push_files import merge_fields, push_artifacts, push_files
 from vmn_exp.core.push_identity import record_fingerprint, run_identity
@@ -160,6 +161,7 @@ class _RunPush:
             ):
                 raise _Collision("the remote name is claimed by another run")
             self.claimed = True
+            mark_parent(self._target, self._app, self._meta)
             return NEW, self._meta
         if run_identity(self._app, remote_meta) != self._identity:
             raise _Collision("the remote holds another run of that name")

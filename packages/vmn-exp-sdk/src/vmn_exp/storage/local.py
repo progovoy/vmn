@@ -14,6 +14,7 @@ from vmn_exp.core.record_format import with_format_version
 from vmn_exp.core.record_files import read_file, read_file_from
 from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
 from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.child_markers import LocalChildren
 from vmn_exp.storage import host_dirs
 from vmn_exp.storage.files import (
     METADATA_FILE,
@@ -75,7 +76,7 @@ def _dir_sig(entry):
     return (entry.stat().st_mtime_ns, entry.inode())
 
 
-class LocalSnapshotStorage(LocalStreams, LocalMetrics, SnapshotStorage):
+class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotStorage):
     def __init__(self, root, area=SNAPSHOTS):
         self.root = root
         self.area = area
