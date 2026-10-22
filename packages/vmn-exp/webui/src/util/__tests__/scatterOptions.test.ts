@@ -39,3 +39,14 @@ describe("scatterOptions", () => {
     }
   });
 });
+
+describe("scatterOptions x range", () => {
+  it("widens a zero-wide x range (every run has the same x value)", () => {
+    const opts = scatterOptions(["#f00"], { height: 100, theme: { axis: "#aaa", grid: "#222", text: "#bbb" } });
+    const range = opts.scales!.x.range as (u: unknown, min: number, max: number) => [number, number];
+    const [lo, hi] = range(null, 0.3, 0.3);
+    expect(lo).toBeLessThan(0.3);
+    expect(hi).toBeGreaterThan(0.3);
+    expect(range(null, 0, 1)).toEqual([0, 1]);
+  });
+});

@@ -126,6 +126,15 @@ export function themedAxis(
   } as uPlot.Axis;
 }
 
+/** The x scale's range: uPlot's own, but a zero-wide one (every point at
+ *  one x, or a single point) is widened, since uPlot's tick loop never ends
+ *  on it (RangeError "Invalid array length"). */
+export function xRange(_u: unknown, min: number, max: number): uPlot.Range.MinMax {
+  if (min !== max) return [min, max];
+  const pad = Math.abs(min) * 0.1 || 1;
+  return [min - pad, max + pad];
+}
+
 export function curveOptions(
   series: CurveSeries[], { xMode, height, theme, logY = false, read }: CurveOptionsArgs,
 ): Omit<uPlot.Options, "width"> {
@@ -137,7 +146,7 @@ export function curveOptions(
     legend: { show: false },
     focus: { alpha: 0.15 },
     cursor: { drag: { x: true, y: false, setScale: true }, points: { show: false } },
-    scales: { x: { time: false }, y: { distr: logY ? 3 : 1 } },
+    scales: { x: { time: false, range: xRange }, y: { distr: logY ? 3 : 1 } },
     axes: [
       // Horizontal grid lines only, as the charts always had.
       axis({

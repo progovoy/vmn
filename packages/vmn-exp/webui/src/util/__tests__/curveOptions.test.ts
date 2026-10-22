@@ -67,3 +67,21 @@ describe("curveOptions", () => {
     expect(values(null, [30, 120])).toEqual(["30s", "2m"]);
   });
 });
+
+describe("curveOptions x range", () => {
+  // uPlot's tick loop never ends on a zero-wide x range (all points at one
+  // step, or one point): RangeError "Invalid array length" from its splits.
+  type Range = (u: unknown, min: number, max: number) => [number, number];
+  const range = () => curveOptions([s("a")], { xMode: "step", height: 100, theme, read }).scales!.x.range as Range;
+
+  it("widens a zero-wide x range around its value", () => {
+    const [lo, hi] = range()(null, 5, 5);
+    expect(lo).toBeLessThan(5);
+    expect(hi).toBeGreaterThan(5);
+    expect(range()(null, 0, 0)).toEqual([-1, 1]);
+  });
+
+  it("keeps any other x range as it is", () => {
+    expect(range()(null, 0, 60)).toEqual([0, 60]);
+  });
+});
