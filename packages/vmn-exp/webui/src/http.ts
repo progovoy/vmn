@@ -1,6 +1,7 @@
 /** The one place requests learn the ui token and turn failures into errors.
  *  Kept apart from api.ts so modules whose tests mock `../api` still share it. */
 import { reportUnauthorized } from "./auth/authState";
+import { gated, isSlow } from "./requestGate";
 import { currentSignal } from "./requestScope";
 import { TOKEN_KEY } from "./shell/contracts";
 
@@ -38,7 +39,12 @@ export function patch<T>(path: string, body: unknown): Promise<T> {
 /** Every request. A 401 is reported to the auth state (the shell then asks
  *  for a sign-in) and thrown like any error: nothing is retried behind the
  *  caller's back, so a mutation is never sent twice. */
-async function send<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+function send<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const go = () => sendNow<T>(method, path, body, signal);
+  return isSlow(method, path) ? gated(signal, go) : go();
+}
+
+async function sendNow<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const json = method === "POST" || method === "PATCH";
   const sentToken = sessionStorage.getItem(TOKEN_KEY);
   const res = await fetch(`${BASE}${path}`, {

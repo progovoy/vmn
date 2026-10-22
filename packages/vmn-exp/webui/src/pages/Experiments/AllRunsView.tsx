@@ -17,7 +17,6 @@ import { isGroupCountId } from "../../util/groupCountSort";
 import LeaderboardToolbar from "../LeaderboardToolbar";
 import BoardHead, { runCountText } from "../BoardHead";
 import RunsBoardGrid from "../RunsBoardGrid";
-import StaleRows from "../../components/StaleRows";
 import { useRunsBoard } from "../../hooks/useRunsBoard";
 import { useCanCreateRun } from "../../shell/useAppExists";
 import { useAppStatus } from "../../shell/useShellData";
@@ -181,9 +180,7 @@ export function AllRunsView({ ws, app, views, onJobs }: {
                   />
                 )}
 
-                <StaleRows stale={data.stale} error={data.staleError}>
-                  <RunsBoardGrid board={board} view={view} flash={flash} paused={paused} onPaused={setPaused} />
-                </StaleRows>
+                <RunsBoardGrid board={board} view={view} flash={flash} paused={paused} onPaused={setPaused} />
               </div>
             </>
           )}

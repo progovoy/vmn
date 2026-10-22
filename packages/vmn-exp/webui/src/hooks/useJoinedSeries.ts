@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { hashKey, useQuery } from "@tanstack/react-query";
+import { withSignal } from "../requestScope";
 import type { XMap } from "../util/xMetric";
 
 /** Bumped whenever a caller's plain series (or fetcher) changes, so every
@@ -23,7 +24,7 @@ export function useJoinedSeries<T extends object>(
   const mapHash = hashKey([xMap]);
   const query = useQuery({
     queryKey: ["joined-series", xMap, refresh],
-    queryFn: () => fetchJoined!(xMap),
+    queryFn: ({ signal }) => withSignal(signal, () => fetchJoined!(xMap)),
     enabled: Boolean(fetchJoined) && Object.keys(xMap).length > 0,
     placeholderData: (prev, prevQuery) =>
       prevQuery && hashKey([prevQuery.queryKey[1]]) === mapHash ? prev : undefined,

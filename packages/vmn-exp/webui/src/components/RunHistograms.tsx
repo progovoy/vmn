@@ -15,7 +15,7 @@ function FetchedHistogram({ ws, app, verstr, name, total, inline }: {
   const url = histogramUrl(ws, app, verstr, name);
   // Refetched only when the key gains steps (the detail's poll moves `total`).
   const query = useQuery({
-    queryKey: ["histogram", url, total], queryFn: () => get<HistogramPage>(url),
+    queryKey: ["histogram", url, total], queryFn: ({ signal }) => get<HistogramPage>(url, signal),
     staleTime: Infinity, placeholderData: keepPreviousData,
     // A small run's detail inlines the steps: nothing to fetch.
     initialData: inline && { name, steps: inline, total },

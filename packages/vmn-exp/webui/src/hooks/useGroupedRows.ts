@@ -8,7 +8,7 @@ import type { GroupAggregate, GroupField } from "../apiGroups";
 import type { HttpError } from "../http";
 import { isAbortError, withSignal } from "../requestScope";
 import { rowsPrefix, type RowsFilter } from "../queries";
-import { listViewOf, useShownList } from "./useShownList";
+import { useShownList } from "./useShownList";
 import { cacheOf, deeperGroups, withGroupRows, withGroups } from "../util/groupedCache";
 import type { GroupedRows, MoreState } from "../util/groupItems";
 
@@ -52,7 +52,7 @@ export function useGroupedRows(
     structuralSharing: false,
   }, client);
 
-  const { data, stale, queryError, pageError, staleError } = useShownList(query, group !== null, listViewOf(filter));
+  const { data, stale, queryError, pageError, staleError } = useShownList(query, group !== null, client, key);
   // The aggregate an answer to no `agg=` names: the app's default (F3).
   const answeredDefault = useRef<GroupAggregate>();
   if (!agg && query.data?.aggregate) answeredDefault.current = query.data.aggregate;

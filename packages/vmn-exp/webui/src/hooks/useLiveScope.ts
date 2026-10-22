@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { authHeaders, BASE } from "../http";
 import { TOKEN_KEY } from "../shell/contracts";
-import { FetchEventSource } from "../util/fetchEventSource";
+import { subscribeLive, type LiveChange } from "./liveHub";
 import { isThenable } from "./usePolling";
 import { useTabVisible } from "./useTabVisible";
 
-/** One `change` event of `GET .../apps/{app}/events` (plan 23 S5). */
-export type LiveChange = {
-  generation: string;
-  changed: { rows: number; jobs?: string[] };
-};
-
-/** Errors in a row (without an open in between) before polling takes over. */
-const MAX_ERRORS = 3;
+export type { LiveChange } from "./liveHub";
 
 export type LiveScope = {
   /** The stream is open: the page needs no polling of its own. */
@@ -24,12 +16,13 @@ export type LiveScope = {
  *  page revalidates what it shows (with its ETags). Once a dropped stream is
  *  back, *onChange* runs once (changes may have been missed meanwhile).
  *
- *  A bearer-token session reads the stream over fetch (EventSource sends no
- *  Authorization header, `FetchEventSource`). Closed while disabled
- *  (paused) or the tab is hidden. Never connected — the caller keeps
- *  polling — where EventSource is missing, once the server refuses the
- *  stream (no background refresher, too many streams) or after repeated
- *  errors; a new app or scope tries again. */
+ *  Every page of the tab shares one stream (liveHub). A bearer-token
+ *  session reads it over fetch (EventSource sends no Authorization header,
+ *  `FetchEventSource`). Closed while disabled (paused) or the tab is
+ *  hidden. Never connected — the caller keeps polling — where EventSource
+ *  is missing, once the server refuses the stream (no background
+ *  refresher, too many streams) or after repeated errors; a new app or
+ *  scope tries again. */
 export function useLiveScope({ ws, app, scope, enabled, onChange }: {
   ws: string;
   /** The app in URL tag form. */
@@ -44,41 +37,24 @@ export function useLiveScope({ ws, app, scope, enabled, onChange }: {
   const fire = useSerialized(saved);
   const visible = useTabVisible();
   const [connected, setConnected] = useState(false);
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const opened = useRef<string | null>(null);
 
-  const query = scope ? `?scope=${encodeURIComponent(scope)}` : "";
-  const url = `${BASE}/workspaces/${ws}/apps/${app}/events${query}`;
   const token = Boolean(sessionStorage.getItem(TOKEN_KEY));
   const supported = token ? typeof fetch !== "undefined" : typeof EventSource !== "undefined";
-  const active = supported && enabled && visible && failedUrl !== url;
+  const active = supported && enabled && visible;
 
   useEffect(() => {
     if (!active) return;
-    const source = token ? new FetchEventSource(url, authHeaders()) : new EventSource(url);
-    let errors = 0;
-    source.onopen = () => {
-      errors = 0;
-      setConnected(true);
-      if (opened.current === url) fire();
-      opened.current = url;
-    };
-    source.onerror = () => {
-      setConnected(false);
-      errors += 1;
-      if (source.readyState === FetchEventSource.CLOSED || errors >= MAX_ERRORS) {
-        source.close();
-        setFailedUrl(url);
-      }
-    };
-    source.addEventListener("change", (e) => {
-      fire(parseChange((e as MessageEvent).data));
+    return subscribeLive({
+      ws, app, scope,
+      onChange: fire,
+      onConnected: setConnected,
+      onOpen: (url) => {
+        if (opened.current === url) fire();
+        opened.current = url;
+      },
     });
-    return () => {
-      source.close();
-      setConnected(false);
-    };
-  }, [active, url, fire, token]);
+  }, [active, ws, app, scope, fire]);
 
   return { connected: active && connected };
 }
@@ -113,12 +89,4 @@ function useSerialized(callback: { current: OnChange }) {
     result.then(done, done);
   });
   return fire.current;
-}
-
-function parseChange(data: unknown): LiveChange | undefined {
-  try {
-    return JSON.parse(String(data)) as LiveChange;
-  } catch {
-    return undefined;
-  }
 }

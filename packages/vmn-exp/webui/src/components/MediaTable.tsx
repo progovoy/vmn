@@ -43,7 +43,7 @@ function TableView({ ws, app, verstr, item }: {
   });
   // A logged table never changes: fetched once per page and order.
   const query = useQuery({
-    queryKey: ["table", url], queryFn: () => get<TablePage>(url),
+    queryKey: ["table", url], queryFn: ({ signal }) => get<TablePage>(url, signal),
     staleTime: Infinity, placeholderData: keepPreviousData,
   });
   if (query.error) return <div className="error">{String(query.error)}</div>;

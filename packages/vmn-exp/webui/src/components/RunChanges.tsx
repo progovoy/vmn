@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchRunBaselines } from "../apiRunCode";
+import { withSignal } from "../requestScope";
 import { compareSearch } from "../pages/Compare/selection";
 import { appName as toAppName } from "../api";
 import Segmented from "./Segmented";
@@ -31,7 +32,7 @@ export default function RunChanges({ ws, app, verstr, baseline, onBaseline }: {
   }, [hash]);
   const found = useQuery({
     queryKey: ["run-baselines", ws, app, verstr],
-    queryFn: () => fetchRunBaselines(ws, app, verstr),
+    queryFn: ({ signal }) => withSignal(signal, () => fetchRunBaselines(ws, app, verstr)),
   }, client);
   const b = found.data;
   const choices = b ? baselineChoices(b, baseline) : [];

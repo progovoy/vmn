@@ -7,7 +7,7 @@ import { isAbortError, withSignal } from "../requestScope";
 import { rowsKey, type RowsData, type RowsFilter } from "../queries";
 import { refreshRows } from "../pages/leaderboardRefresh";
 import { stabilizeRows } from "../util/stableRows";
-import { listViewOf, useShownList } from "./useShownList";
+import { useShownList } from "./useShownList";
 import { combineQueries } from "../util/searchQuery";
 import type { ExperimentRow } from "../types";
 
@@ -82,7 +82,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
 
   // While a new filter loads, the view's previous rows stay on screen,
   // marked stale (a hook instance only ever serves one app: the page is keyed by it).
-  const { data, stale, queryError, pageError, staleError, missing } = useShownList(query, enabled, listViewOf(filter));
+  const { data, stale, queryError, pageError, staleError, missing } = useShownList(query, enabled, client, key);
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const loadingMore = useRef(false);

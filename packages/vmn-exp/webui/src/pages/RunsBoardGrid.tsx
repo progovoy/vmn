@@ -6,6 +6,7 @@ import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
 import BoardGridTools from "./BoardGridTools";
 import LeaderboardTable from "./LeaderboardTable";
 import NewRowsBar from "../components/NewRowsBar";
+import StaleRows from "../components/StaleRows";
 
 export default function RunsBoardGrid({ board, view, flash = null, paused, onPaused }: {
   board: RunsBoard;
@@ -17,7 +18,7 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
 }) {
   const { data, selection, sortState } = board;
   return (
-    <>
+    <StaleRows stale={data.stale} error={data.staleError}>
       <NewRowsBar pending={data.pending} onShow={data.showNew} />
       <LeaderboardTable
         rows={board.tableItems}
@@ -50,6 +51,6 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
           {data.moreError && <span className="error">{data.moreError}</span>}
         </div>
       )}
-    </>
+    </StaleRows>
   );
 }

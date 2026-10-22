@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { fetchRunPatch } from "../apiRunCode";
 import type { HttpError } from "../http";
+import { withSignal } from "../requestScope";
 import { diffFiles } from "./diffFiles";
 import { DiffToggle, FilesList, MetricDelta } from "./RunChangesParts";
 import ParamDeltaBlock from "./ParamDeltaBlock";
@@ -26,7 +27,7 @@ export function PatchChanges({ ws, app, verstr }: { ws: string; app: string; ver
   const client = useQueryClient();
   const patch = useQuery({
     queryKey: ["run-patch", ws, app, verstr],
-    queryFn: () => fetchRunPatch(ws, app, verstr),
+    queryFn: ({ signal }) => withSignal(signal, () => fetchRunPatch(ws, app, verstr)),
   }, client);
   if (patch.error) return <Reason text={String(patch.error)} />;
   const p = patch.data;
