@@ -151,3 +151,22 @@ def test_an_in_flight_request_shows_the_response_bytes_sent_so_far():
             release.set()
             t.join(5)
     assert flight[0]["route"] == "/stream" and flight[0]["response_bytes"] == 1234
+
+
+def test_requests_show_their_query_parameter_names_never_values():
+    tracker, release, entered = RequestTracker(slow_sec=0.05), threading.Event(), threading.Event()
+    with TestClient(_app(tracker, release, entered)) as client:
+        t = threading.Thread(target=lambda: client.get("/items/a?top=hidden&scope=x&top=y"),
+                             daemon=True)
+        t.start()
+        try:
+            assert entered.wait(5)
+            time.sleep(0.1)  # past slow_sec: it lands in the slow ring too
+            flight = tracker.section()["in_flight"]
+        finally:
+            release.set()
+            t.join(5)
+    slow = tracker.section()["slow"]
+    assert flight[0]["query_keys"] == ["scope", "top"]
+    assert slow[-1]["query_keys"] == ["scope", "top"]
+    assert "hidden" not in str(flight) + str(slow)

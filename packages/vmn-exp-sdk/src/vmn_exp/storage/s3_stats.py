@@ -31,6 +31,7 @@ BOUNDS_MS = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000,
 IN_FLIGHT_SHOWN = 10
 # Last failed calls a dump lists.
 FAILURES_SHOWN = 50
+MISSING = "NoSuchKey"
 _START = "_vmn_s3_stats"
 _KEY = "_vmn_s3_key"
 
@@ -43,6 +44,8 @@ _lock = threading.Lock()
 _ops = {}
 _kinds = {}  # "<operation> <kind>" -> _KindStats
 _failures = collections.deque(maxlen=FAILURES_SHOWN)  # (t, op, key, error, status)
+# The same, NoSuchKey left out: a flood of misses never hides a 403 or a 503.
+_other_failures = collections.deque(maxlen=FAILURES_SHOWN)
 _in_flight = {}  # id(request context) -> (t0, operation, path, ClientStats)
 _clients = weakref.WeakKeyDictionary()  # client -> ClientStats
 _serials = itertools.count(1)
@@ -187,6 +190,8 @@ class ClientStats:
                 stats.errors[error] = stats.errors.get(error, 0) + 1
                 kind.errors[error] = kind.errors.get(error, 0) + 1
                 _failures.append((now, op, key, error, status))
+                if error != MISSING:
+                    _other_failures.append((now, op, key, error, status))
         if _listeners:
             _notify(S3Call(op, key, ms, status, error, retries, nbytes))
 
@@ -243,6 +248,7 @@ def s3_stats():
         operations = {name: op.as_dict() for name, op in sorted(_ops.items())}
         by_kind = {name: k.as_dict() for name, k in sorted(_kinds.items())}
         failures = list(_failures)
+        other_failures = list(_other_failures)
         clients = [c.as_dict() for c in _clients.values()]
         oldest = sorted(_in_flight.values(), key=lambda r: r[0])[:IN_FLIGHT_SHOWN]
         created = _created
@@ -258,7 +264,12 @@ def s3_stats():
         "in_flight": [{"operation": op, "key": key, "client": c.serial,
                        "age_ms": round((now - t0) * 1000, 1)}
                       for t0, op, key, c in oldest],
-        "recent_failures": [{"operation": op, "key": key, "error": error, "status": status,
-                             "age_sec": round(now - t, 3)}
-                            for t, op, key, error, status in reversed(failures)],
+        "recent_failures": _failure_rows(failures, now),
+        "recent_other_failures": _failure_rows(other_failures, now),
     }
+
+
+def _failure_rows(failures, now):
+    return [{"operation": op, "key": key, "error": error, "status": status,
+             "age_sec": round(now - t, 3)}
+            for t, op, key, error, status in reversed(failures)]

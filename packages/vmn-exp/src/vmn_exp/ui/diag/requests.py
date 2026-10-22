@@ -10,18 +10,21 @@ wait from run time; :mod:`~vmn_exp.ui.diag.s3_attribution` adds the
 request's S3 calls (``entry.extra["s3"]``, shown as ``s3``). :meth:`RequestTracker.add_listener` subscribers get
 ``(event, entry)`` for ``"start"`` and ``"finish"`` (a recorder, say).
 
-Routes are reported by their template (``/experiments/{verstr}``), never the
-query string; an unrouted request by its path.
+Routes are reported by their template (``/experiments/{verstr}``) and the
+query's parameter names (``query_keys``), never their values; an unrouted
+request by its path.
 """
 import contextvars
 import threading
 import time
 from collections import deque
+from urllib.parse import unquote_plus
 
 from vmn_exp.ui.diag.registry import rounded as _rounded
 from vmn_exp.ui.quantile_sketch import QuantileSketch
 
 SLOW_SEC = 1.0
+MAX_QUERY_KEYS = 20
 SLOW_RING = 200
 MAX_ROUTES = 500
 OTHER_ROUTES = "(other routes)"
@@ -43,6 +46,13 @@ class RequestEntry:
         self.duration = None
         self.response_bytes = 0
         self.extra = {}
+
+    @property
+    def query_keys(self):
+        """The query's parameter names, sorted; never their values."""
+        query = self.scope.get("query_string") or b""
+        return sorted({unquote_plus(part.split("=", 1)[0])
+                       for part in query.decode("latin-1").split("&") if part})[:MAX_QUERY_KEYS]
 
     @property
     def route(self):
@@ -152,7 +162,8 @@ class RequestTracker:
         return {"method": entry.method, "route": entry.route, "status": entry.status,
                 "duration_sec": _rounded(entry.duration),
                 "queue_wait_sec": _rounded(entry.queue_wait),
-                "ended_at": round(time.time(), 3), "s3": _s3_calls(entry)}
+                "ended_at": round(time.time(), 3), "s3": _s3_calls(entry),
+                "query_keys": entry.query_keys}
 
     def section(self):
         now = time.monotonic()
@@ -173,7 +184,8 @@ class RequestTracker:
         return {"method": entry.method, "route": entry.route,
                 "age_sec": _rounded(now - entry.started),
                 "queue_wait_sec": _rounded(entry.queue_wait), "thread": entry.thread,
-                "response_bytes": entry.response_bytes, "s3": _s3_calls(entry)}
+                "response_bytes": entry.response_bytes, "s3": _s3_calls(entry),
+                "query_keys": entry.query_keys}
 
 
 class DiagRequestsMiddleware:

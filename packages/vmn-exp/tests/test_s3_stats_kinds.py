@@ -102,3 +102,24 @@ def test_the_failure_ring_is_bounded():
     failures = s3_stats.s3_stats()["recent_failures"]
     assert len(failures) == s3_stats.FAILURES_SHOWN
     assert failures[0]["key"] == f"vmn/runs/a/v{s3_stats.FAILURES_SHOWN * 3 - 1}/run_state.yml"
+
+
+def test_other_errors_keep_their_own_ring_past_a_flood_of_missing_keys():
+    """A store answering tens of thousands of NoSuchKey would push the one
+    AccessDenied or SlowDown out of a shared ring."""
+    hooks = s3_stats.ClientStats(max_pool_connections=1)
+    model = type("Model", (), {"name": "GetObject"})()
+
+    def call(key, code, status):
+        context = {"_vmn_s3_key": key}
+        hooks.before_call(model=model, context=context)
+        hooks.after_call(context=context, parsed={"Error": {"Code": code}},
+                         http_response=type("R", (), {"status_code": status})())
+
+    call("vmn/runs/a/v/metadata.yml", "AccessDenied", 403)
+    for i in range(s3_stats.FAILURES_SHOWN * 2):
+        call(f"vmn/runs/a/v{i}/run_state.yml", "NoSuchKey", 404)
+
+    other = s3_stats.s3_stats()["recent_other_failures"]
+    assert other[0]["error"] == "AccessDenied"
+    assert other[0]["key"] == "vmn/runs/a/v/metadata.yml"
