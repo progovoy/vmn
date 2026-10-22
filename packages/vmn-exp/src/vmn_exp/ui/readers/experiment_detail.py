@@ -28,6 +28,7 @@ from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.failure_context import failure_fields
 from vmn_exp.ui.readers.histograms import detail_media
+from vmn_exp.ui.readers.object_series import object_series, readable, x_of
 from vmn_exp.ui.readers.parsed_logs import LogSnapshot, ParsedLogs
 from vmn_exp.ui.readers.patches import patch_presence
 from vmn_exp.ui.readers.range_series import range_series
@@ -303,31 +304,22 @@ def experiment_detail(
 _THINNED_PER_SNAPSHOT = 4
 
 
-def _x_of(names, x):
-    """``{metric: x metric}`` for the *names* to join: *x* is a metric name
-    (every other metric) or such a map; None joins nothing."""
-    if x is None:
-        return {}
-    if isinstance(x, str):
-        return {k: x for k in names if k != x}
-    return {k: x[k] for k in names if k in x and x[k] != k}
-
-
 def thinned_series(snapshot, keys, max_points, budget=None, x=None):
     """``(series, series_total)`` of *keys* (None: all), thinned so they stay
     within *budget* points in all (default: the per-response cap). With *x*
-    (see :func:`_x_of`) those metrics are joined on their x metric first.
+    (see :func:`~vmn_exp.ui.readers.object_series.x_of`) those metrics are
+    joined on their x metric first.
     Memoized on the snapshot, so an unchanged run's poll does not thin again."""
     known = snapshot.series_keys()
     names = list(known) if keys is None else [k for k in keys if k in known]
     if isinstance(x, str):
         names = [k for k in names if k != x]
-    x_of = _x_of(names, x)
+    joins = x_of(names, x)
     per_metric = points_per_metric(max_points, len(names), budget)
-    memo_key = (tuple(names), per_metric, tuple(sorted(x_of.items())))
+    memo_key = (tuple(names), per_metric, tuple(sorted(joins.items())))
     hit = snapshot.memo.get(memo_key)
     if hit is None:
-        hit = _thin(snapshot, names, x_of, per_metric)
+        hit = _thin(snapshot, names, joins, per_metric)
         if len(snapshot.memo) >= _THINNED_PER_SNAPSHOT:
             snapshot.memo.clear()
         snapshot.memo[memo_key] = hit
@@ -347,9 +339,12 @@ def run_series(
     x=None, schema=None,
 ):
     """``(series, series_total, step_metrics)`` of an existing run, or None
-    when it is gone."""
+    when it is gone — read from its metric objects when the storage lists
+    them, else from its parsed log."""
     if storage.load_metadata(app_name, verstr) is None:
         return None
+    if readable(storage):
+        return object_series(storage, app_name, verstr, keys, max_points, budget, x, schema)
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     series, totals = thinned_series(snapshot, keys, max_points, budget, x)
     return series, totals, snapshot.step_metrics(schema)

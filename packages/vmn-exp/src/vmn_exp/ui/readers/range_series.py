@@ -17,12 +17,12 @@ from vmn_exp.storage.files import flatten_logs
 from vmn_exp.ui.readers.series import points_per_metric
 
 
-def _jsonl_log(storage, app_name, verstr):
+def jsonl_log(storage, app_name, verstr):
     load = getattr(storage, "load_logs_by_writer", None)
     return flatten_logs(load(app_name, verstr) if load else {})
 
 
-def _reader(storage, app_name, verstr, log):
+def series_reader(storage, app_name, verstr, log):
     legacy = [e for e in log if is_metric_entry(e)]
     return SeriesReader.from_storage(storage, app_name, verstr, log=log, legacy=legacy)
 
@@ -33,8 +33,8 @@ def range_series(storage, app_name, verstr, keys, max_points, budget, step_range
     gone. ``series_total`` counts each metric's whole series."""
     if storage.load_metadata(app_name, verstr) is None:
         return None
-    log = _jsonl_log(storage, app_name, verstr)
-    reader = _reader(storage, app_name, verstr, log)
+    log = jsonl_log(storage, app_name, verstr)
+    reader = series_reader(storage, app_name, verstr, log)
     counts = reader.keys()
     names = sorted(counts) if keys is None else [k for k in keys if k in counts]
     per_metric = points_per_metric(max_points, len(names), budget)
@@ -49,7 +49,7 @@ def metric_keys(storage, app_name, verstr, prefix="", offset=0, limit=None):
     them; None when the run is gone."""
     if storage.load_metadata(app_name, verstr) is None:
         return None
-    reader = _reader(storage, app_name, verstr, _jsonl_log(storage, app_name, verstr))
+    reader = series_reader(storage, app_name, verstr, jsonl_log(storage, app_name, verstr))
     counts = reader.keys()
     names = sorted(k for k in counts if k.startswith(prefix or ""))
     page = names[offset:] if limit is None else names[offset : offset + limit]
