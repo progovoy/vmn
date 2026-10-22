@@ -54,6 +54,7 @@ from vmn_exp.core.similar_search import find as _find_similar
 from vmn_exp.core.status import (
     load_run_state,
     run_state_observed_at,
+    status_fields,
 )
 from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.lineage import app_indexes, run_lineage
@@ -232,8 +233,9 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     metric's value at the same step, and points without one are dropped.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    snapshot = point_placement(storage, app_name)
-    verstr, err = resolve_experiment(
+    exact = _exact_verstr(storage, app_name, ref)
+    snapshot = point_placement(storage, app_name, verstr=exact)
+    verstr, err = (exact, None) if exact else resolve_experiment(
         storage, app_name, ref or "latest", snapshot=snapshot
     )
     if err:
@@ -256,6 +258,29 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     row["artifacts"] = list_artifacts(storage, app_name, verstr)
     row.update(media_index(log))
     return row
+
+
+def _exact_verstr(storage, app_name, ref):
+    """*ref* when it names an existing run of a remote store exactly (one
+    HEAD), else None: there the run is read without listing the app (its row
+    then has no ``idx``); a local listing is cheap and gives the ``idx``."""
+    remote = getattr(storage, "is_remote", lambda: False)()
+    if remote and ref and "-dev." in ref and storage.exists(app_name, ref):
+        return ref
+    return None
+
+
+def get_run_state(app_name=None, verstr=None, *, storage=None):
+    """Run *verstr*'s ``run_state.yml`` plus its derived ``status``
+    (``created`` before the run started) — one run's reads, no index, no
+    listing. *verstr* must be the exact name. Raises ValueError when no such
+    run exists."""
+    app_name, storage, _ = _resolve(app_name, storage)
+    state = load_run_state(storage, app_name, verstr) if verstr else None
+    if state is None and not (verstr and storage.exists(app_name, verstr)):
+        raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
+    observed = run_state_observed_at(storage, app_name, verstr) if state else None
+    return dict(state or {}, **status_fields(state, observed_at=observed))
 
 
 def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEFAULT_LIMIT):
