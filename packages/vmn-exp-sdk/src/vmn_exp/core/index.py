@@ -53,6 +53,7 @@ from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
 from vmn_exp.core.index_load_queue import LoadQueue
+from vmn_exp.core.index_rows_first import first_objects
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_point import index_path, shared_store
@@ -336,15 +337,30 @@ class ExperimentIndex:
         queue = self._load_queue(work)
         self._unread = sum(record is None for _, _, record in work)
         try:
-            chunk = queue.take()
+            chunk = self._take(queue)
             while queue:
                 self._unread -= sum(record is None for _, _, record in chunk)
                 results = self._refresh_part(chunk, (), started, None)
                 queue.want(self._unloaded_parents(results))
-                chunk = queue.take()
+                chunk = self._take(queue)
         finally:
             self._unread = 0
         self._refresh_part(chunk, removed, started, started)
+
+    def _take(self, queue):
+        """The queue's next chunk, a remote record not read yet cut to its
+        row's files (:func:`first_objects`), its rest queued for later."""
+        chunk = [(key, names, self._records.get(key)) for key, names, _ in queue.take()]
+        if not self._remote():
+            return chunk
+        cut, rest = [], []
+        for key, names, record in chunk:
+            first = first_objects(names) if record is None else None
+            cut.append((key, names if first is None else first, record))
+            if first is not None:
+                rest.append((key, names, None))
+        queue.later(rest)
+        return cut
 
     def _load_queue(self, work):
         """*work* queued so a remote cold load serves and keeps its records a
