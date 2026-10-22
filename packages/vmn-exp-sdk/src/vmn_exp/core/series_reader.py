@@ -10,6 +10,7 @@ logged before them (§5.2). A stream key's step-less twin is merged back into
 its key. Pure apart from the duck-typed storage reads of :meth:`from_storage`.
 """
 import heapq
+from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
@@ -22,6 +23,9 @@ from vmn_exp.core.metric_time import iso_to_us, us_to_iso
 from vmn_exp.core.rewind import rewind_step
 
 LEGACY_WRITER = ""
+# Segment reads one stream keeps in flight: a stuck run on S3 has one segment
+# per sync, each a ranged GET.
+SEGMENT_READ_WORKERS = 10
 
 
 class _StreamSource:
@@ -144,10 +148,19 @@ def hidden(rewinds, ts, step):
     return step is not None and any(r_step < step and ts < r_ts for r_step, r_ts in rewinds)
 
 
+def _read_all(storage, app_name, verstr, objects):
+    """Each object's bytes, in order, read :data:`SEGMENT_READ_WORKERS` at a
+    time; a failed read raises."""
+    read = lambda obj: storage.read_range(app_name, verstr, obj[0], 0, obj[1])  # noqa: E731
+    if len(objects) < 2:
+        return [read(obj) for obj in objects]
+    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects))) as pool:
+        return list(pool.map(read, objects))
+
+
 def _stream_blocks(storage, app_name, verstr, objects):
     blocks = []
-    for name, size in objects:
-        data = storage.read_range(app_name, verstr, name, 0, size)
+    for data in _read_all(storage, app_name, verstr, objects):
         blocks.extend(decode_blocks(data or b""))
     return blocks
 
