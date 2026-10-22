@@ -29,6 +29,7 @@ from vmn_exp.core.metric_entries import (
     split_metric_entries,
 )
 from vmn_exp.core.metric_stream import MetricWriter
+from vmn_exp.core import run_hint
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.streams import clean_writer_id, process_owner, stream_key
@@ -294,17 +295,19 @@ class RunExistsError(FileExistsError):
     """A run was asked for under an exact name another record already holds."""
 
 
-def _taken_verstrs(storage, app_name, code_verstr):
+def _taken_verstrs(storage, app_name, code_verstr, suffix=None):
     """Names that could collide with a new run of *code_verstr* — names
     only, never a parse of every metadata.yml.
 
     Scoped to *code_verstr*'s own runs when the backend can list those
-    alone: an app that has stamped many code versions, each with many runs,
-    would otherwise list every run of every one of them just to allocate
-    one more run of this one.
+    alone (an app that stamped many code versions would otherwise list every
+    run of every one of them), and with a *suffix* to the names under
+    ``<code_verstr>.<suffix>`` alone: a writer's runs never collide with the
+    code version's other runs, however many it has.
     """
     if hasattr(storage, "list_run_verstrs"):
-        return set(storage.list_run_verstrs(app_name, code_verstr))
+        scope = f"{code_verstr}.{suffix}" if suffix else code_verstr
+        return set(storage.list_run_verstrs(app_name, scope))
     if hasattr(storage, "list_verstrs"):
         return set(storage.list_verstrs(app_name))
     return {m.get("verstr", "") for m in storage.list_snapshots(app_name)}
@@ -333,14 +336,10 @@ def _run_verstr_candidates(code_verstr, taken, suffix):
             base if i == 1 else f"{base}.{i}" for i in range(1, _MAX_RUN_CANDIDATES)
         )
     else:
-        runs = [1] if code_verstr in taken else []
-        for v in taken:
-            rest = v[len(code_verstr) + 2 :]
-            if v.startswith(code_verstr + ".r") and rest.isdigit():
-                runs.append(int(rest))
-        first = max(runs) + 1 if runs else 1
+        runs = [run_hint.run_number(code_verstr, v) for v in taken]
+        first = max((n for n in runs if n), default=0) + 1
         names = (
-            code_verstr if n == 1 else f"{code_verstr}.r{n}"
+            run_hint.run_name(code_verstr, n)
             for n in range(first, first + _MAX_RUN_CANDIDATES)
         )
     return (name for name in names if name not in taken)
@@ -384,8 +383,7 @@ def check_run_id(code_verstr, run_id):
 def claim_exact(storage, app_name, run_id, make_record):
     """Create the record under exactly *run_id* (no listing); RunExistsError
     when another record holds the name."""
-    metadata, patches = make_record(run_id)
-    if not _claim(storage, app_name, run_id, metadata, patches):
+    if not _claim_made(storage, app_name, run_id, make_record):
         raise RunExistsError(f"Run '{run_id}' already exists for {app_name}")
     return run_id
 
@@ -397,27 +395,61 @@ def allocate_run_verstr(storage, app_name, code_verstr, make_record=None,
                         suffix=_DEFAULT_SUFFIX):
     """Return the verstr for a new experiment run.
 
-    *suffix*: ``<code_verstr>.<suffix>[.N]`` names; None for plain ``.rN``
-    names whatever the environment says; by default
-    :func:`default_run_suffix`.
+    *suffix*: ``<code_verstr>.<suffix>[.N]`` names, listing only the names
+    under ``<code_verstr>.<suffix>``; None for plain ``.rN`` names whatever
+    the environment says; by default :func:`default_run_suffix`.
 
     With *make_record* — ``verstr -> (metadata, patches)`` — the name is also
     claimed: the record is created atomically under it, and a name another
     host claimed first (a shared bucket or directory) is skipped. Without it
     the first free-looking name is returned unclaimed.
+
+    A ``.rN`` claim lists the code version's runs once per process: later
+    ones claim upward from the highest this process claimed
+    (:mod:`vmn_exp.core.run_hint`) while that run still exists, and list
+    again after :data:`_HINT_MISSES` names in a row were taken.
     """
     if suffix is _DEFAULT_SUFFIX:
         suffix = default_run_suffix()
-    taken = _taken_verstrs(storage, app_name, code_verstr)
+    hint = None if suffix or make_record is None else run_hint.hint_key(
+        storage, app_name, code_verstr)
+    if hint is not None:
+        claimed = _claim_from_hint(storage, app_name, code_verstr, make_record, hint)
+        if claimed:
+            return claimed
+    taken = _taken_verstrs(storage, app_name, code_verstr, suffix)
     for candidate in _run_verstr_candidates(code_verstr, taken, suffix):
         if make_record is None:
             if not storage.exists(app_name, candidate):
                 return candidate
             continue
-        metadata, patches = make_record(candidate)
-        if _claim(storage, app_name, candidate, metadata, patches):
+        if _claim_made(storage, app_name, candidate, make_record):
+            if hint is not None:
+                run_hint.note(hint, run_hint.run_number(code_verstr, candidate))
             return candidate
     raise RuntimeError("Could not allocate experiment verstr")
+
+
+_HINT_MISSES = 3
+
+
+def _claim_made(storage, app_name, verstr, make_record):
+    metadata, patches = make_record(verstr)
+    return _claim(storage, app_name, verstr, metadata, patches)
+
+
+def _claim_from_hint(storage, app_name, code_verstr, make_record, hint):
+    """The ``.rN`` claimed upward from *hint*'s run, else None (no hint, its
+    run is gone, or the next names were all taken)."""
+    last = run_hint.get(hint)
+    if last is None or not storage.exists(app_name, run_hint.run_name(code_verstr, last)):
+        return None
+    for n in range(last + 1, last + 1 + _HINT_MISSES):
+        candidate = run_hint.run_name(code_verstr, n)
+        if _claim_made(storage, app_name, candidate, make_record):
+            run_hint.note(hint, n)
+            return candidate
+    return None
 
 
 def create_run(
