@@ -77,7 +77,9 @@ def left_filtered(order, left, f):
 
 
 def check_scope(base, scope):
-    if scope is not None and scope not in base.position:
+    """Known: a run of *base*, or a parent its runs name (a loading index can
+    hold an outer run's inner runs before the outer run itself)."""
+    if scope is not None and scope not in base.position and not base.children_of.get(scope):
         raise UnknownScope(f"no run {scope!r}")
 
 

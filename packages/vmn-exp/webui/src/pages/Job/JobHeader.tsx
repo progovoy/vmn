@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import type { JobPageSummary } from "../../apiJob";
 import { appName as toAppName } from "../../api";
+import type { JobProgressFields } from "../../types";
 import OuterBadge from "../../components/OuterBadge";
 import StatusPill from "../../components/StatusPill";
 import Tabs from "../../components/Tabs";
@@ -42,7 +43,15 @@ export function JobTabs({ tab, onTab }: { tab: JobTab; onTab: (tab: JobTab) => v
   );
 }
 
-export default function JobHeader({ summary, actions }: { summary: JobPageSummary; actions: ReactNode }) {
+/** What the header shows: the summary, or before it lands the index's row
+ *  of the job (no progress until a rollup is known). */
+export type JobHeadSummary = Pick<JobPageSummary, "verstr" | "name" | "idx" | "status" | "tree_status" | "sweep">
+  & { total: number | null } & Partial<Omit<JobProgressFields, "total">>;
+
+const hasProgress = (s: JobHeadSummary): s is JobHeadSummary & JobProgressFields =>
+  s.total != null && s.counts !== undefined;
+
+export default function JobHeader({ summary, actions }: { summary: JobHeadSummary; actions: ReactNode }) {
   const status = summary.tree_status ?? summary.status;
   return (
     <header className="job-header">
@@ -55,7 +64,7 @@ export default function JobHeader({ summary, actions }: { summary: JobPageSummar
         {summary.sweep && <span className="badge">sweep</span>}
       </div>
       <div className="job-actions" role="group" aria-label="Outer run actions">{actions}</div>
-      <JobHeaderProgress summary={summary} />
+      {hasProgress(summary) && <JobHeaderProgress summary={summary} />}
     </header>
   );
 }

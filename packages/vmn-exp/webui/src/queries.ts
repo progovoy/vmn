@@ -2,6 +2,7 @@
 import { useQuery, type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { api, type FacetOpts, type SubtreeMatches } from "./api";
 import { withSignal } from "./requestScope";
+import { fetchRunStatuses } from "./apiSeries";
 import type { HeldChange } from "./pages/leaderboardRefresh";
 import { SHARED_STALE_MS } from "./queryClient";
 import type {
@@ -126,4 +127,23 @@ export function findCachedRow(
     if (row) return row;
   }
   return undefined;
+}
+
+/** A run's row from the index (an index read, milliseconds: what a page
+ *  paints before the run detail's per-run store reads), null when none. */
+export const runRowQuery = (ws: string, app: string, verstr: string) => ({
+  queryKey: ["run-row", ws, app, verstr] as const,
+  queryFn: ({ signal }: { signal: AbortSignal }) => withSignal(signal, () => fetchRunStatuses(ws, app, [verstr]))
+    .then((rows) => (rows[verstr] as ExperimentRow | undefined) ?? null),
+  staleTime: RUN_STALE_MS,
+});
+
+/** *verstr*'s row: a board's cached one (read once, when the query starts),
+ *  else looked up in the index; *settled* once either is known (or failed). */
+export function useRunRow(ws: string, app: string, verstr: string) {
+  const client = useQueryClient();
+  const looked = useQuery({
+    ...runRowQuery(ws, app, verstr), initialData: () => findCachedRow(client, ws, app, verstr),
+  }, client);
+  return { row: looked.data ?? undefined, settled: !looked.isPending };
 }

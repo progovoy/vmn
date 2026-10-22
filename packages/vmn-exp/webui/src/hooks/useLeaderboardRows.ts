@@ -82,7 +82,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
 
   // While a new filter loads, the view's previous rows stay on screen,
   // marked stale (a hook instance only ever serves one app: the page is keyed by it).
-  const { data, stale, queryError, pageError, staleError } = useShownList(query, enabled, listViewOf(filter));
+  const { data, stale, queryError, pageError, staleError, missing } = useShownList(query, enabled, listViewOf(filter));
 
   const [moreError, setMoreError] = useState<string | null>(null);
   const loadingMore = useRef(false);
@@ -131,7 +131,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
     /** A Jobs view search's counts (plan 23 W11), when the server sent them. */
     matches: data?.runs_matched === undefined ? undefined
       : { jobs: data.jobs_matched ?? 0, runs: data.runs_matched },
-    stale, queryError, pageError, staleError, moreError,
+    stale, queryError, pageError, staleError, missing, moreError,
     loadMore, refresh, visibleRef, viewportRef, showNew,
     hasMore: data ? hasMoreOf(data) : false,
     /** What a held refresh kept off screen, null when nothing is waiting. */
