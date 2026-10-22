@@ -1,6 +1,6 @@
 -r ../../../tests/test_requirements.txt
 boto3
-moto[s3]
+moto[s3,server]
 fastapi
 httpx
 uvicorn

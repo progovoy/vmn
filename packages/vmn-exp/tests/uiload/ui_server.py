@@ -31,12 +31,17 @@ class UIServer:
         self.min_stale_sec = min_stale_sec
         self.proc = None
 
+    def _env(self):
+        return with_src_pythonpath(dict(os.environ, VMN_EXP_MIN_STALE_SEC=str(self.min_stale_sec)))
+
+    def _source_args(self):
+        return ["--repo", self.root]
+
     def start(self):
-        env = with_src_pythonpath(dict(os.environ, VMN_EXP_MIN_STALE_SEC=str(self.min_stale_sec)))
-        cmd = [sys.executable, "-m", "vmn_exp.cli", "ui", "--repo", self.root, "--no-browser",
+        cmd = [sys.executable, "-m", "vmn_exp.cli", "ui", *self._source_args(), "--no-browser",
                "--port", str(self.port), "--data-dir", os.path.join(self.run_dir, "uidata")]
         log = open(os.path.join(self.run_dir, "ui.log"), "ab")
-        self.proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT,
+        self.proc = subprocess.Popen(cmd, env=self._env(), stdout=log, stderr=subprocess.STDOUT,
                                      start_new_session=True)
         self._wait_ready()
         return self

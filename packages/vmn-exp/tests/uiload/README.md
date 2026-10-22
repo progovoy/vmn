@@ -45,7 +45,25 @@ dir): `uiload/` (the data root, re-servable with `vmn-exp ui --repo`),
 `events/` (the manifest the oracle reads), `ui.log`, `workers.log`,
 `report.json`.
 
+`s3bench` times a real `vmn-exp ui --store s3://...` (run from `--src`'s
+package sources, so a baseline and a fix checkout compare) over a
+production-shaped store: app `fastglobalmacro`, three outer runs (15, ~half,
+the rest) plus single runs, and `--stuck` runs left `running` with stale
+heartbeats and `--segments` uncompacted `.vms` + log segments each. The S3 is
+a moto server (`moto[server]`) adding `--latency-ms` to every request
+(`s3bench_moto`); the store is seeded once into `--data` (`s3bench_seed`:
+pickled shards loaded straight into moto's backend) and reused while the
+sizes match. It reports the cold index load, the Compare / outer-run Curves
+`POST .../series` (cold, warm), the Single runs board's filtered rows under
+`--clients` SSE tabs with hover prefetches (`s3bench_load`), SSE change
+events, the 304 rate and the S3 requests of each phase.
+
+```sh
+python packages/vmn-exp/tests/uiload/s3bench.py --src . --runs 2000 --stuck 50 --segments 50 \
+    --duration 20 --data /tmp/s3bench-smoke --out report.json
+```
+
 Modules: `scenario` (profiles, job planning) · `oracle` (events → expected
-status) · `seeder`/`seed_records` (bulk history) · `seed_series`/`probe_series` (bigseries) · `worker`/`child` (live
+status) · `seeder`/`seed_records` (bulk history) · `seed_series`/`probe_series` (bigseries) · `s3bench*` (S3 store bench) · `worker`/`child` (live
 jobs) · `spawner` (population, signals) · `ui_server` · `probe*`/`slo` (API
 load + budgets) · `browser*` (Playwright) · `live_view` · `driver` · `run`.

@@ -30,7 +30,14 @@ import traceback
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
 CHILD = os.path.join(HERE, "child.py")
-SRC_DIRS = [os.path.join(REPO, "packages", d, "src") for d in ("vmn", "vmn-exp-sdk", "vmn-exp")]
+
+
+def src_dirs(repo):
+    """The package source dirs of the checkout at *repo*."""
+    return [os.path.join(repo, "packages", d, "src") for d in ("vmn", "vmn-exp-sdk", "vmn-exp")]
+
+
+SRC_DIRS = src_dirs(REPO)
 CODE_VERSTR = "0.0.1-dev.10ad7e5.0ad0ad0"
 OWNED_ENV = ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_RESUME_RUN_ID", "VMN_WORKING_DIR")
 STOP_BEHAVIORS = ("stuck", "recovers")
@@ -63,10 +70,10 @@ def snapshot_env_vars(root, app, run_dir):
     }
 
 
-def with_src_pythonpath(env):
-    """Put the checkout's package sources first on *env*'s ``PYTHONPATH``, so
-    child processes run the tree under test."""
-    env["PYTHONPATH"] = os.pathsep.join(SRC_DIRS + [p for p in [env.get("PYTHONPATH")] if p])
+def with_src_pythonpath(env, repo=REPO):
+    """Put *repo*'s (default: this checkout's) package sources first on
+    *env*'s ``PYTHONPATH``, so child processes run the tree under test."""
+    env["PYTHONPATH"] = os.pathsep.join(src_dirs(repo) + [p for p in [env.get("PYTHONPATH")] if p])
     return env
 
 
