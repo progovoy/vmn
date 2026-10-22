@@ -8,7 +8,7 @@ import git
 import yaml
 
 from version_stamp.api import app_name_to_tag_name, deserialize_tag_name
-from vmn_exp._base import yaml_safe_load
+from vmn_exp._base import redact_changesets, yaml_safe_load
 
 _FIELD_SEP = "\x00"
 _RECORD_SEP = "\x1e"
@@ -121,7 +121,7 @@ def list_versions(root_path, app_name):
                     "previous_version": app.get("previous_version"),
                     "branch": app.get("stamped_on_branch"),
                     "commit": (changesets.get(".") or {}).get("hash"),
-                    "changesets": changesets,
+                    "changesets": redact_changesets(changesets),
                     "timestamp": timestamp,
                 }
             )

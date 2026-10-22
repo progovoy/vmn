@@ -8,7 +8,7 @@ Public:
     -> dict`` — adds ``code_verstr`` (the 7-char dev verstr the code object is
     named by) and, with *code* ``(key, summary)``, the ``code:`` reference.
 """
-from version_stamp.core.utils import now_iso
+from version_stamp.core.utils import now_iso, redact_record_remotes
 from version_stamp.snapshot import identity
 
 METADATA_FILE = "metadata.yml"
@@ -82,4 +82,4 @@ def build_record_metadata(
         metadata["dep_base_commits"] = patches["dep_base_commits"]
     if code and code[0]:
         metadata["code"] = code[0]
-    return metadata
+    return redact_record_remotes(metadata)

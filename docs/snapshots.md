@@ -33,6 +33,13 @@ A tree with unpushed commits is based on its upstream commit: the dev verstr
 names the upstream, and the local commits are carried as a patch replayed on
 top, so the snapshot restores in any clone of the remote.
 
+The record keeps the remote URL of the app and of each dep without
+credentials (`https://user:token@host/…` is stored as `https://host/…`; an
+`ssh://` URL keeps only its username), and an older record that still has
+them is redacted when read, so `show`, `list --json` and `export`'s
+`vmn_metadata.yml` never print a token. Fetching from such a remote relies
+on your git credential helper.
+
 ## Actions
 
 `vmn snapshot [action] <app>`; `create` is the default.
