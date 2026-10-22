@@ -146,7 +146,7 @@ second, one-process pass, since under 29 busy workers they measure contention.
 
 ### Data Flow
 
-1. Version info stored in git annotated tag messages as YAML (`vmn_info` + `stamping` sections with changesets)
+1. Version info stored in git annotated tag messages as YAML (`vmn_info` + `stamping` sections with changesets). Changeset `remote`s carry no credentials (`core/utils.py:redact_changesets`: `https://user:token@host/x` → `https://host/x`, ssh keeps its user); `vmn goto` cloning a dep from such a URL borrows the checkout's own remote's credentials on the same scheme+host (`borrow_credentials`).
 2. Local state tracked in `.vmn/{app_name}/last_known_app_version.yml`
 3. `stamp` command: increments version → writes to backends → commits → tags → pushes
 

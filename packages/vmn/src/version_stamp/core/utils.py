@@ -53,6 +53,22 @@ def strip_url_credentials(url):
     return f"{scheme}://{host}{rest}"
 
 
+def borrow_credentials(url, donor):
+    """*url* with *donor*'s userinfo when *url* has none and both are URLs of
+    the same scheme and host (a dependency on the checkout's own server);
+    else *url* unchanged."""
+    match, donor_match = (isinstance(u, str) and _URL_RE.match(u) for u in (url, donor))
+    if not match or not donor_match or "@" in match.group(2):
+        return url
+    scheme, host, rest = match.groups()
+    donor_scheme, donor_authority, _ = donor_match.groups()
+    userinfo, at, donor_host = donor_authority.rpartition("@")
+    if not at or not userinfo or scheme.lower() != donor_scheme.lower() \
+            or scheme.lower() in _SSH_SCHEMES or host.lower() != donor_host.lower():
+        return url
+    return f"{scheme}://{userinfo}@{host}{rest}"
+
+
 def _redact_remote(entry):
     if isinstance(entry, dict) and "remote" in entry:
         return dict(entry, remote=strip_url_credentials(entry["remote"]))

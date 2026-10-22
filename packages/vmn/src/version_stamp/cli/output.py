@@ -22,7 +22,7 @@ from version_stamp.core.logging import (
     init_stamp_logger,
     measure_runtime_decorator,
 )
-from version_stamp.core.utils import one_line_reason, resolve_root_path
+from version_stamp.core.utils import borrow_credentials, one_line_reason, resolve_root_path
 from version_stamp.core.version_math import (
     deserialize_vmn_tag_name,
     gen_unique_id,
@@ -531,7 +531,7 @@ def goto_version(vcs, params, version, pull):
                     v["tag"] = None
                     v["hash"] = vcs.configured_deps[rel_path]["hash"]
         try:
-            _goto_version(deps, vcs.vmn_root_path, pull)
+            _goto_version(deps, vcs.vmn_root_path, pull, vcs.backend.remote())
         except Exception as exc:
             VMN_LOGGER.error(f"goto failed: {exc}")
             VMN_LOGGER.debug("", exc_info=True)
@@ -680,8 +680,10 @@ def _clone_repo(args):
     return {"repo": rel_path, "status": 0, "description": None}
 
 
-@measure_runtime_decorator
-def _goto_version(deps, vmn_root_path, pull):
+def _clone_args(deps, vmn_root_path, checkout_remote=None):
+    """``(path, rel_path, remote, vcs_type)`` per dep to clone. A remote
+    recorded without credentials (``vmn stamp`` strips them) borrows the
+    checkout's own remote's when it is on the same host."""
     args = []
     for rel_path, v in deps.items():
         if "remote" not in v or not v["remote"]:
@@ -699,10 +701,16 @@ def _goto_version(deps, vmn_root_path, pull):
             (
                 os.path.join(vmn_root_path, rel_path),
                 rel_path,
-                v["remote"],
+                borrow_credentials(v["remote"], checkout_remote),
                 v["vcs_type"],
             )
         )
+    return args
+
+
+@measure_runtime_decorator
+def _goto_version(deps, vmn_root_path, pull, checkout_remote=None):
+    args = _clone_args(deps, vmn_root_path, checkout_remote)
     with Pool(min(len(args), POOL_SIZE_CLONES)) as p:
         results = p.map(_clone_repo, args)
 

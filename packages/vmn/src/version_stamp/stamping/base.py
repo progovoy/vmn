@@ -33,6 +33,7 @@ from version_stamp.core.utils import (
     WrongTagFormatException,
     comment_out_jinja,
     conf_mapping,
+    redact_changesets,
     resolve_branch_conf_path,
     yaml_safe_load,
 )
@@ -459,8 +460,9 @@ class IVersionsStamper:
             self.configured_deps,
         )
         self.actual_deps_state["."]["hash"] = self.last_user_changeset
-        self.current_version_info["stamping"]["app"]["changesets"] = copy.deepcopy(
-            self.actual_deps_state
+        # The tag message is pushed: no remote URL's credentials in it.
+        self.current_version_info["stamping"]["app"]["changesets"] = redact_changesets(
+            copy.deepcopy(self.actual_deps_state)
         )
 
         self.ver_infos_from_repo = {}
