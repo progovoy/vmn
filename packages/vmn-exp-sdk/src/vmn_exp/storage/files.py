@@ -20,6 +20,8 @@ from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.streams import display_writer
 
 METADATA_FILE = "metadata.yml"
+# A parent record's child markers (:mod:`vmn_exp.storage.child_markers`).
+CHILDREN_DIR = "children"
 # The derived experiment-index cache, beside the records it summarizes.
 INDEX_CACHE_FILE = ".index.sqlite"
 # (patches key, file name, binary?)

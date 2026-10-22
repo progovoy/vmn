@@ -17,6 +17,7 @@ import tempfile
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.child_markers import S3Children
 from vmn_exp.storage.files import (
     METADATA_FILE,
     PATCH_FILES,
@@ -42,7 +43,7 @@ _ARTIFACT_CHUNK = 1 << 20
 
 
 class S3SnapshotStorage(
-    S3Listing, S3Records, S3Logs, S3Metrics, S3Base, SnapshotStorage
+    S3Children, S3Listing, S3Records, S3Logs, S3Metrics, S3Base, SnapshotStorage
 ):
     def exists(self, app_name, verstr):
         try:

@@ -401,6 +401,8 @@ def handle_experiment(vmn_ctx):
         return experiment_similar(vcs, params, storage, args)
     elif action == "similar-backfill":
         return experiment_similar_backfill(vcs, params, storage, args)
+    elif action == "backfill-children":
+        return experiment_backfill_children(vcs, params, storage, args)
     else:
         VMN_LOGGER.error(f"Unknown experiment action: {action}")
         return 1
@@ -607,6 +609,12 @@ def experiment_similar(vcs, params, storage, args):
 
 def experiment_similar_backfill(vcs, params, storage, args):
     from vmn_exp.cli.similar_backfill import experiment_similar_backfill as backfill
+
+    return backfill(storage, _app_name(vcs, args), args)
+
+
+def experiment_backfill_children(vcs, params, storage, args):
+    from vmn_exp.cli.backfill_children import experiment_backfill_children as backfill
 
     return backfill(storage, _app_name(vcs, args), args)
 

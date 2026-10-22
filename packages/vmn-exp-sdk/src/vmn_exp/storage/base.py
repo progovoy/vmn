@@ -103,6 +103,21 @@ class SnapshotStorage(ABC):
         self.save(app_name, verstr, metadata, patches)
         return True
 
+    # -- child markers (:mod:`vmn_exp.storage.child_markers`) ------------------
+
+    def mark_child(self, app_name, parent, child):
+        """Mark *child* in *parent*'s record; False when nothing was written
+        (a backend without markers)."""
+        return False
+
+    def unmark_child(self, app_name, parent, child):
+        """Drop *parent*'s marker of *child*, if any."""
+
+    def list_children(self, app_name, parent):
+        """The verstrs *parent*'s child markers name (markers may be missing
+        or stale: the children's ``parent`` fields are the truth)."""
+        return []
+
     def list_files(self, app_name):
         """``{verstr: {filename: (size, mtime[, etag])}}`` for cheap staleness
         checks; S3 adds the ETag, since LastModified only has 1s resolution."""

@@ -20,6 +20,7 @@ import yaml
 
 from vmn_exp._base import get_repo_lock, now_iso, sha256_file  # noqa: F401
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.children import mark_parent
 from vmn_exp.core.metric_compact import note_points
 from vmn_exp.core.metric_entries import (
     is_metric_entry,
@@ -341,12 +342,17 @@ def _run_verstr_candidates(code_verstr, taken, suffix):
 
 
 def _claim(storage, app_name, verstr, metadata, patches):
+    """Create the record unless *verstr* is taken; a child's own claim also
+    marks it in its parent's record (best-effort)."""
     metadata = stamped(metadata)
     if hasattr(storage, "create_exclusive"):
-        return storage.create_exclusive(app_name, verstr, metadata, patches)
-    if storage.exists(app_name, verstr):
+        if not storage.create_exclusive(app_name, verstr, metadata, patches):
+            return False
+    elif storage.exists(app_name, verstr):
         return False
-    storage.save(app_name, verstr, metadata, patches)
+    else:
+        storage.save(app_name, verstr, metadata, patches)
+    mark_parent(storage, app_name, metadata)
     return True
 
 

@@ -14,6 +14,7 @@ index would forget them, prune would miscount what it keeps.
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.streams import new_owner
 from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.child_markers import CachedChildren
 from vmn_exp.storage.cached_metrics import CachedMetrics
 from vmn_exp.storage.cached_logs import CachedLogs
 from vmn_exp.storage.files import (
@@ -24,7 +25,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.remote_presence import RemotePresence
 
 
-class CachedSnapshotStorage(CachedMetrics, CachedLogs, SnapshotStorage):
+class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotStorage):
     """Local-first storage with optional S3 sync. All ops hit local disk;
     S3 provides durability and distribution."""
 
