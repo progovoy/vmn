@@ -10,6 +10,8 @@ bases; the refresher keeps them warm from then on (``on_refresh``).
 import logging
 import threading
 
+from vmn_exp.core.activity import activity
+
 log = logging.getLogger(__name__)
 
 
@@ -23,8 +25,9 @@ def install(app, manager, list_apps, app_inputs, leaderboards, background):
 
     def warm_all():
         try:
-            for ws in manager.list():
-                _warm_workspace(ws.name, list_apps, app_inputs, leaderboards)
+            with activity("startup warmup"):
+                for ws in manager.list():
+                    _warm_workspace(ws.name, list_apps, app_inputs, leaderboards)
         finally:
             app.state.warmed.set()
 

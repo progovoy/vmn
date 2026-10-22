@@ -26,9 +26,11 @@ import threading
 import time
 from collections import defaultdict
 
+from vmn_exp.core.activity import activity
 from vmn_exp.core.log_compact import compact_record_logs
 from vmn_exp.core.metric_compact import compact_record
 from vmn_exp.core.status import FAILED, STUCK, derive_status
+from vmn_exp.core.traced_lock import TracedLock
 
 UPKEEP_INTERVAL_SEC = 60
 PASS_BUDGET_SEC = 30
@@ -120,7 +122,7 @@ class StoreUpkeep:
         self._apps = {}  # index -> AppUpkeep
         self._pending = {}  # index -> the newest snapshot not passed over yet
         self._last_pass = {}  # index -> monotonic time of its last pass
-        self._lock = threading.Condition()
+        self._lock = threading.Condition(TracedLock("store upkeep", reentrant=True))
         self._busy = False
         self._stopped = False
         self._thread = None
@@ -185,7 +187,8 @@ class StoreUpkeep:
         if not getattr(index, "leading", True):
             return
         try:
-            counts = self._apps[index].run(snapshot, self.budget_sec)
+            with activity("store upkeep", key=snapshot.app_name):
+                counts = self._apps[index].run(snapshot, self.budget_sec)
         except Exception:
             _LOGGER.warning("Store upkeep failed", exc_info=True)
             return

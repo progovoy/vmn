@@ -35,13 +35,13 @@ import hashlib
 import itertools
 import json
 import os
-import threading
 
 import vmn_exp.core.status as experiment_status
 from vmn_exp.core.gc_pause import freeze_long_lived, gc_paused
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.query import parse_query
 from vmn_exp.core.status import status_fields
+from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.http_params import MAX_PAGE
@@ -112,7 +112,7 @@ class _Base:
         self.delta = None
         self._at = (bucket, [rows[i] for i in patch.changed])
         self._patched = (None, None)  # (changed_at's rows, patched() of them)
-        self._lock = threading.Lock()
+        self._lock = TracedLock(f"leaderboard base:{getattr(snapshot, 'app_name', None)}")
 
     @classmethod
     def build(cls, snapshot, token, bucket):

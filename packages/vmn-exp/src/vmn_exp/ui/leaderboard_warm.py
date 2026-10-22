@@ -16,6 +16,7 @@ Failures are logged, never raised.
 import logging
 import threading
 
+from vmn_exp.core.activity import activity
 from vmn_exp.core.metric_schema import effective_schema
 
 # webui's firstPage: IDX_SORT, PAGE_SIZE (src/paging.ts).
@@ -58,10 +59,11 @@ class BoardWarmer:
         if not self._note(snapshot):
             return
         try:
-            for step in self._steps(snapshot):
-                if self.superseded(snapshot):
-                    return
-                step()
+            with activity("board warm", key=snapshot.app_name):
+                for step in self._steps(snapshot):
+                    if self.superseded(snapshot):
+                        return
+                    step()
         except Exception:
             _LOGGER.debug("Warming the board failed", exc_info=True)
 
