@@ -8,6 +8,8 @@ Other modules add sections with :func:`register_section`.
 from vmn_exp.storage.s3_stats import s3_stats
 from vmn_exp.ui.diag.dump_files import install_signal_handler, start_periodic_dumps, write_dump
 from vmn_exp.ui.diag.indexes import indexes_section
+from vmn_exp.ui.diag.latency import install_loop_probe, latency_section, start_thread_probe
+from vmn_exp.ui.diag.logs import install_log_capture, logs_section
 from vmn_exp.ui.diag.pools import pools_section
 from vmn_exp.ui.diag.process import env_section, process_section, record_server_options
 from vmn_exp.ui.diag.registry import add_secret, build_dump, register_section
@@ -33,16 +35,22 @@ def install_default_sections(refresher=None, tracker=None):
     register_section("process", process_section)
     register_section("env", env_section)
     register_section("s3", s3_stats)
+    register_section("logs", logs_section)
+    register_section("latency", latency_section)
 
 
 def install_app(app, prefix, refresher):
-    """Wire the dump into a ``create_app`` app: its sections, the requests
-    middleware (outermost: added last) and ``GET {prefix}/diag``."""
+    """Wire the dump into a ``create_app`` app: its sections, the log
+    capture, the latency probes, the requests middleware (outermost: added
+    last) and ``GET {prefix}/diag``."""
     from vmn_exp.ui.diag import routes
     from vmn_exp.ui.diag.requests import DiagRequestsMiddleware
 
     tracker = RequestTracker()
     app.state.diag_requests = tracker
     install_default_sections(refresher, tracker)
+    install_log_capture()
+    start_thread_probe()
+    install_loop_probe(app)
     routes.register(app, prefix)
     app.add_middleware(DiagRequestsMiddleware, tracker=tracker)
