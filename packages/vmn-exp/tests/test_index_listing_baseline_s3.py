@@ -54,7 +54,8 @@ def test_a_new_record_on_s3_costs_its_own_listing_only(tmp_path):
 
     storage = s3_storage()
     index, counts = _cold_refresh(storage, storage._s3, cache)
-    assert counts["ListObjectsV2"] == 1 + 2  # the names, then the new record's own files
+    # The names, then the new record's own files, log/ and metrics/.
+    assert counts["ListObjectsV2"] == 1 + 3
     assert index.rows()[-1]["verstr"] == new
 
 

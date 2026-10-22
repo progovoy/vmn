@@ -51,7 +51,9 @@ def test_list_files_for_keys_lists_only_those_records(tmp_path):
     prefixes = sorted(p["Prefix"] for op, p in calls if op == "ListObjectsV2")
     assert prefixes == [
         f"{PREFIX}/runs/app/v1/", f"{PREFIX}/runs/app/v1/log/",
+        f"{PREFIX}/runs/app/v1/metrics/",
         f"{PREFIX}/runs/app/v3/", f"{PREFIX}/runs/app/v3/log/",
+        f"{PREFIX}/runs/app/v3/metrics/",
     ]
     assert all(p.get("Delimiter") == "/" for op, p in calls if op == "ListObjectsV2")
 

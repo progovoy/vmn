@@ -5,13 +5,15 @@
   1000 runs, never a record's files.
 * :meth:`list_files` with *keys* lists just those records, delimited, so the
   ``artifacts/``, ``outputs/`` and ``deps/`` subtrees are never paged through.
-  The ``log/`` folder is part of a record's files (``log/<name>``): it costs a
-  second, prefixed listing.
+  The ``log/`` and ``metrics/`` folders are part of a record's files
+  (``log/<name>``, ``metrics/<name>``), as in a local listing: each costs a
+  prefixed listing of its own.
 
 """
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.metric_files import METRICS_DIR, is_metric_file
 from vmn_exp.storage.files import (
     LOG_DIR,
     METADATA_FILE,
@@ -32,7 +34,10 @@ def _is_record_file(name):
     """A record's own file or log — not a subtree's, not a marker like ``.claim``."""
     if not name or name.startswith("."):
         return False
-    return "/" not in name or is_log_file(name)
+    return "/" not in name or is_log_file(name) or is_metric_file(name)
+
+
+_RECORD_DIRS = (LOG_DIR, METRICS_DIR)
 
 
 def _record_relpath(base, key):
@@ -41,7 +46,7 @@ def _record_relpath(base, key):
     ``artifacts/``, ``deps/``, or any other one) — else None."""
     verstr, _, name = key[len(base) :].partition("/")
     subdir, nested, _ = name.partition("/")
-    skip = nested and subdir != LOG_DIR
+    skip = nested and subdir not in _RECORD_DIRS
     return verstr, name, (f"{base}{verstr}/{subdir}0" if skip else None)
 
 
@@ -169,8 +174,7 @@ class S3Listing:
         files = {}
         listings = (
             {"Prefix": record_prefix, "Delimiter": "/"},
-            {"Prefix": f"{record_prefix}{LOG_DIR}/", "Delimiter": "/"},
-        )
+        ) + tuple({"Prefix": f"{record_prefix}{d}/", "Delimiter": "/"} for d in _RECORD_DIRS)
         for params in listings:
             for page in self._pages(**params):
                 for obj in page.get("Contents", []):
