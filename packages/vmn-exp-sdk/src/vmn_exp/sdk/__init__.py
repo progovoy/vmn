@@ -47,6 +47,7 @@ from vmn_exp.sdk.models import (  # noqa: E402
     remove_alias,
     set_alias,
 )
+from vmn_exp.core.writer import RunExistsError  # noqa: E402
 from vmn_exp.sdk.create import create_run  # noqa: E402
 from vmn_exp.sdk.datasets import get_dataset_version, register_dataset  # noqa: E402
 from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
@@ -62,6 +63,7 @@ from vmn_exp.sdk.usage import use_dataset, use_model  # noqa: E402
 __all__ = [
     "NoOpRun",
     "Run",
+    "RunExistsError",
     "autolog",
     "autolog_disable",
     "background_paused",

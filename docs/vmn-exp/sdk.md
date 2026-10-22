@@ -630,6 +630,14 @@ with start_run("my_app", name="sweep") as outer:
     submit_pods(pod_ids)                 # each pod: start_run("my_app", run_id=...)
 ```
 
+A launcher that names its runs itself passes `run_id=<code_verstr>.<suffix>`
+(the code being recorded, else `ValueError`): one exclusive create under exactly
+that name, no listing of the code version's runs, and `RunExistsError`
+(`from vmn_exp.sdk import RunExistsError`) when the name is taken. Without it,
+a `.rN` name lists the code version's runs once per process and then claims
+upward from the highest this process claimed; a writer-suffixed name
+(`VMN_WRITER_ID`, offline) lists only the names under its suffix.
+
 Either way you get the [outer/inner structure](experiments.md#outer--inner-jobs-sweeps)
 (`kind`, `tree_status`) a CLI sweep produces.
 
@@ -718,6 +726,7 @@ only when a checkout is found and `app_name`/`storage` are not both given.
 |---|---|
 | `list_runs(app_name=None, *, storage=None, sort=None, last=None, status=None, query=None, use_index=True, include_archived=False)` | rows, oldest first. `status`: a status or list/comma-separated statuses; `query`: [the query language](#the-query-language) (`QueryError` on a bad one); `last` keeps the last N (before sorting); `sort` orders by a metric (default the configured [primary metric](experiments.md#metrics-schema-sorting--goals)); archived runs only with `include_archived=True` |
 | `get_run(app_name=None, ref="latest", *, storage=None, x=None)` | one row plus `log`, `series` (metric → `[{"step", "ts", "value"}]` in log order), `step_metrics`, `artifacts`, `format_version` and the media indexes. `x=` joins series on a metric ([x axis](#custom-x-axis-step_metric)). `ValueError` for an unknown ref |
+| `get_run_state(app_name=None, verstr=None, *, storage=None)` | run `verstr`'s `run_state.yml` fields plus the derived status fields (`status`: `created` before it started): reads of that one run only, no index or listing. Exact verstr only; `ValueError` when no such run exists |
 | `get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=100)` | see [Lineage](#lineage) |
 | `similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=None, context=None, text_only=False, all_apps=False)` | the past runs most like run `ref`, most similar first; see [Similar runs](#similar-runs) |
 | `param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None, include_archived=False)` | `[{"param", "importance", "correlation", "spearman", "kind", "n"}]`, most important first, over the runs `list_runs` would return. `importance` is a random-forest share (sums to 1); correlations are `None` for categorical params ([details](experiments.md#importance)). `ValueError` when no run carries `metric` |
@@ -735,7 +744,10 @@ a per-host cache outside the store, under `$VMN_EXP_CACHE_DIR` (default
 `$XDG_CACHE_HOME/vmn-exp`, `~/Library/Caches/vmn-exp` on macOS, else
 `~/.cache/vmn-exp`; `VMN_INDEX_CACHE_DIR=none` disables). Each call re-reads only what changed. It is a
 disposable cache; `use_index=False` reads storage directly and writes no index.
-`get_run` uses the index to resolve refs, then reads just that run.
+`get_run` uses the index to resolve refs, then reads just that run. On a
+remote store with no persisted index on this host, an exact verstr is read
+without listing the app: its tree comes from child markers and the row has no
+`idx`.
 
 ### As pandas DataFrames
 

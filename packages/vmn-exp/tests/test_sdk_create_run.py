@@ -92,3 +92,14 @@ def test_a_retried_pod_reopens_its_failed_run(app_layout):
     row = _row(app_layout, verstr)
     assert row["status"] == "succeeded"
     assert row["tags"]["attempt"] == "2"
+
+
+def test_create_run_with_run_id_names_the_checkout_run_exactly(app_layout):
+    _bootstrap(app_layout)
+    code = _storage(app_layout).load_metadata(
+        app_layout.app_name, create_run(app_layout.app_name))["code_verstr"]
+
+    verstr = create_run(app_layout.app_name, run_id=f"{code}.job-1", name="pod0")
+
+    assert verstr == f"{code}.job-1"
+    assert _row(app_layout, verstr)["name"] == "pod0"

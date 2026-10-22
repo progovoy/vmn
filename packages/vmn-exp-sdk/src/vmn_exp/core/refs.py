@@ -17,6 +17,7 @@ Storage is duck-typed; like the rest of ``core`` this imports nothing from
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.direct_placement import direct_placement
 from vmn_exp.core.index_point import point_view
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.resolve_ref import LATEST_WORDS
@@ -47,11 +48,14 @@ def placement_snapshot(storage, app_name, snapshot=None):
     )
 
 
-def point_placement(storage, app_name, snapshot=None):
+def point_placement(storage, app_name, snapshot=None, verstr=None):
     """*snapshot*, else a point view of the persisted index
-    (:func:`~vmn_exp.core.index_point.point_view`), else
-    :func:`placement_snapshot`'s. What it answers resolves a ref (``resolve``),
-    gives a run's row (``row``) and its links (:func:`tree_links`)."""
+    (:func:`~vmn_exp.core.index_point.point_view`), else, for an existing
+    exact *verstr*, its own tree read from storage
+    (:func:`~vmn_exp.core.direct_placement.direct_placement`), else
+    :func:`placement_snapshot`'s. What it answers resolves a ref (``resolve``,
+    not the direct one), gives a run's row (``row``) and its links
+    (:func:`tree_links`)."""
     if snapshot is not None:
         return snapshot
     try:
@@ -59,6 +63,8 @@ def point_placement(storage, app_name, snapshot=None):
     except Exception:
         VMN_LOGGER.debug("Experiment index point read unavailable", exc_info=True)
         view = None
+    if view is None and verstr is not None:
+        view = direct_placement(storage, app_name, verstr)
     return view or placement_snapshot(storage, app_name)
 
 
