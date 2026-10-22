@@ -1,11 +1,13 @@
 /** An app's experiments page (plan 23 W1, §3.1): the Jobs view (one row
- *  per top-level run, the jobs or the single runs) or All runs (plan 22's
- *  board), switched by one control in the board's head: `Jobs (20) ·
+ *  per outer run, or per top-level run for an app without them), the Single
+ *  runs view (the runs board's columns) or All runs (plan 22's board), switched by one control in the board's head: `Jobs (20) ·
  *  Single runs (19,580) · All runs`, or `Runs · All runs` for an app
- *  without jobs. Switching app starts from a clean slate. */
+ *  without jobs. Switching app starts from a clean slate; the views not
+ *  shown have their first page prefetched (useViewPrefetch). */
 import { useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Segmented from "../../components/Segmented";
+import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { fmtCount } from "../../util";
 import { AllRunsView } from "./AllRunsView";
 import JobsView from "./JobsView";
@@ -13,7 +15,6 @@ import SinglesView from "./SinglesView";
 import { useExperimentsView } from "./experimentsView";
 import { useJobsKind, type JobsKind, type JobsKindState } from "./jobsKind";
 import { useViewPrefetch } from "./useViewPrefetch";
-import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 
 type ViewOption = JobsKind | "all";
 

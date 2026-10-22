@@ -64,6 +64,7 @@ from vmn_exp.ui.leaderboard_scope import (
 from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
 from vmn_exp.ui.leaderboard_top_counts import TopCounts
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
+from vmn_exp.ui.leaderboard_warm import BoardWarmer
 from vmn_exp.ui.memo import LRU, Generations
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import sort_rows
@@ -290,6 +291,7 @@ class LeaderboardCache(SetAnswers):
         self._subtree = SubtreeMatch(self, size)
         self._filtered_facets = track(LRU(size))
         self._top_counts = TopCounts(self)
+        self._warmer = BoardWarmer(self)
 
     schema_key = staticmethod(_schema_key)
 
@@ -376,10 +378,10 @@ class LeaderboardCache(SetAnswers):
         return {"results": results(snapshot, index.ranked(text, limit, archived))}
 
     def warm(self, snapshot):
-        """Build or move *snapshot*'s board base and search index now (the
-        refresher and the startup warm-up, off the request path)."""
-        self._base(snapshot)
-        self.warm_search(snapshot)
+        """Build or move *snapshot*'s board base, search index, facets and
+        default first pages now (the refresher and the startup warm-up, off
+        the request path; see :mod:`~vmn_exp.ui.leaderboard_warm`)."""
+        self._warmer.warm(snapshot)
 
     def warm_search(self, snapshot):
         """Build or move *snapshot*'s search index now."""
