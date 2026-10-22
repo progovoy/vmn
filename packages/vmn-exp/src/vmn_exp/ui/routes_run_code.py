@@ -20,6 +20,7 @@ from vmn_exp.ui.readers.baselines import baselines
 from vmn_exp.ui.readers.patch_files import patch_files
 from vmn_exp.ui.readers.patches import patch_presence
 from vmn_exp.ui.responses import json_response, not_modified
+from vmn_exp.ui.slow_reads import slow_read
 
 # The most patch text one response carries, whatever ``max_bytes`` asks.
 MAX_PATCH_BYTES = 10 * 1024 * 1024
@@ -50,6 +51,7 @@ def register(app, prefix, run_storage, leaderboard_inputs, leaderboards, segment
     base = f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}"
 
     @app.get(f"{base}/patch", dependencies=[require(VIEWER)])
+    @slow_read
     def run_patch(
         request: Request, ws_name: str, app_tag: str, verstr: str,
         max_bytes: int = PATCH_MAX_BYTES,
@@ -71,6 +73,7 @@ def register(app, prefix, run_storage, leaderboard_inputs, leaderboards, segment
         return json_response(payload, etag=None if missing else etag, request=request)
 
     @app.get(f"{base}/baselines", dependencies=[require(VIEWER)])
+    @slow_read
     def run_baselines(request: Request, ws_name: str, app_tag: str, verstr: str):
         segment(verstr)
         storage, app_name, _ = run_storage(ws_name, app_tag)

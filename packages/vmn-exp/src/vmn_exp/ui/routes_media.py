@@ -36,6 +36,7 @@ from vmn_exp.ui.http_params import attachment, clamp_page, media_type
 from vmn_exp.ui.readers.experiment_detail import run_media
 from vmn_exp.ui.readers.histograms import histogram_of
 from vmn_exp.ui.responses import json_response
+from vmn_exp.ui.slow_reads import slow_read
 
 DEFAULT_TABLE_PAGE = 100
 SIGNED_URL_SEC = 300
@@ -80,6 +81,7 @@ def register(app, prefix, storage_for, segment):
     @app.get(
         f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
         "/experiments/{verstr}/table/{path:path}", dependencies=[require(VIEWER)])
+    @slow_read
     def experiment_table(
         request: Request,
         ws_name: str,
@@ -106,6 +108,7 @@ def register(app, prefix, storage_for, segment):
     @app.get(
         f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
         "/experiments/{verstr}/histograms/{name:path}", dependencies=[require(VIEWER)])
+    @slow_read
     def experiment_histogram(request: Request, ws_name: str, app_tag: str, verstr: str, name: str):
         storage, app_name = storage_for(ws_name, app_tag)[:2]
         segment(verstr)

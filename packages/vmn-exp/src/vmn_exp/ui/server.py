@@ -45,6 +45,7 @@ from vmn_exp.ui.responses import (
 )
 from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
 from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
+from vmn_exp.ui.slow_reads import slow_read
 from vmn_exp.ui.static_files import mount_static
 from vmn_exp.ui.tenancy import install_org_middleware
 from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
@@ -363,6 +364,7 @@ def create_app(
 
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}" "/experiments/{verstr}", dependencies=[require(VIEWER)])
+    @slow_read
     def get_experiment(
         request: Request,
         ws_name: str,
@@ -401,6 +403,7 @@ def create_app(
     @app.get(
         f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}"
         "/experiments/{verstr}/log", dependencies=[require(VIEWER)])
+    @slow_read
     def experiment_log(
         request: Request,
         ws_name: str,
@@ -475,7 +478,7 @@ def create_app(
             f"/experiments/{{verstr}}/{tree}/{{path:path}}",
             name=f"download_{tree}",
             dependencies=[require(VIEWER)],
-        )(download_from)
+        )(slow_read(download_from))
 
     for tree in FILE_TREES:
         _download_route(tree)
@@ -579,6 +582,7 @@ def create_app(
         return job
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff", dependencies=[require(VIEWER)])
+    @slow_read
     def experiments_diff(ws_name: str, app_tag: str, v: str, to: str):
         ws = _experiment_workspace(ws_name)
         app_name = _app_name(app_tag)

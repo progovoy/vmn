@@ -32,6 +32,7 @@ from vmn_exp.ui.readers import range_series
 from vmn_exp.ui.readers import series as series_reader
 from vmn_exp.ui.responses import json_response
 from vmn_exp.ui.security import safe_segment
+from vmn_exp.ui.slow_reads import slow_read
 
 MAX_RUNS = 200
 WORKERS = 8
@@ -124,6 +125,7 @@ def register(app, prefix, storage_for, max_series_points):
     metrics schema)``."""
 
     @app.post(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/series", dependencies=[require(VIEWER)])
+    @slow_read
     def experiment_series(ws_name: str, app_tag: str, body: dict, request: Request):
         storage, app_name, schema = storage_for(ws_name, app_tag)
         verstrs, keys, max_points, x, bounds = parse_body(body, max_series_points)
@@ -132,6 +134,7 @@ def register(app, prefix, storage_for, max_series_points):
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/metric-keys",
              dependencies=[require(VIEWER)])
+    @slow_read
     def experiment_metric_keys(ws_name: str, app_tag: str, verstr: str, request: Request,
                                prefix: str = "", offset: int = 0, limit: int = MAX_PAGE):
         if not safe_segment(verstr):
