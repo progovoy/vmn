@@ -17,7 +17,7 @@ vi.mock("../api", () => ({
 import { api } from "../api";
 import { createQueryClient } from "../queryClient";
 import {
-  findCachedRow, prefetchRun, rowsKey, useApps, useFacets, useMetricsSchema,
+  findCachedRow, rowsKey, useApps, useFacets, useMetricsSchema,
 } from "../queries";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -78,14 +78,5 @@ describe("run cache helpers", () => {
     expect(findCachedRow(client, "w", "app", "v1")).toMatchObject({ note: "hi" });
     expect(findCachedRow(client, "w", "app", "nope")).toBeUndefined();
     expect(findCachedRow(client, "w", "other", "v1")).toBeUndefined();
-  });
-
-  it("prefetchRun loads the detail once while it is fresh", async () => {
-    m.experiment.mockResolvedValue({ metadata: { verstr: "v1" } });
-    const { client } = wrap();
-    await prefetchRun(client, "w", "app", "v1");
-    await prefetchRun(client, "w", "app", "v1");
-    expect(m.experiment).toHaveBeenCalledTimes(1);
-    expect(m.experiment).toHaveBeenCalledWith("w", "app", "v1");
   });
 });

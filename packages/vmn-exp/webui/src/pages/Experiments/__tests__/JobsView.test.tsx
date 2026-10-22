@@ -52,6 +52,16 @@ describe("a job's row", () => {
     expect(within(cellOf("lr_layers_grid", "status") as HTMLElement).getByText(/running/i)).toBeInTheDocument();
   });
 
+  it("hovering or focusing its name fetches nothing", async () => {
+    renderExperiments();
+    const link = await screen.findByRole("link", { name: "lr_layers_grid" });
+    fireEvent.mouseEnter(rowOf("lr_layers_grid"));
+    fireEvent.mouseEnter(link);
+    fireEvent.focus(link);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(m.experiment).not.toHaveBeenCalled();
+  });
+
   it("shows the job's progress under its name", async () => {
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });

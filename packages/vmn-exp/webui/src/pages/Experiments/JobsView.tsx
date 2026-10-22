@@ -3,8 +3,7 @@
  *  single run — the jobs or the single runs (*kind*, the page's switch), filtered
  *  by the board's filter bar, sorted by the job sort keys and grouped into
  *  groups of jobs, a group over 50 opening as a filter (§3.4). */
-import { useCallback, useMemo, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, type ReactNode } from "react";
 import { appName as toAppName } from "../../api";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
 import NewExperiment from "../../components/NewExperiment";
@@ -12,7 +11,6 @@ import NewRowsBar from "../../components/NewRowsBar";
 import StaleRows from "../../components/StaleRows";
 import { useAddFilterClauses } from "../../hooks/useAddFilterClauses";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
-import { prefetchRun } from "../../queries";
 import { fmtCount, plural } from "../../util";
 import type { BoardGroup } from "../../util/groupItems";
 import BoardGridTools from "../BoardGridTools";
@@ -49,7 +47,6 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
   onAll: () => void;
 }) {
   const appName = toAppName(app);
-  const client = useQueryClient();
   const view = useLeaderboardView();
   const board = useJobsBoard(ws, app, view, kind.top);
   const { data, rows, selection, live } = board;
@@ -63,7 +60,6 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
   const asFilter = useMemo(() => data.grouped ? {
     clauseOf: (g: BoardGroup) => g.clause, onFilter: openGroup,
   } : undefined, [data.grouped, openGroup]);
-  const onPrefetch = useCallback((v: string) => { prefetchRun(client, ws, app, v); }, [client, ws, app]);
   useTrayBoard({
     total: data.total, showUnarchive: view.archived, onSelectAll: () => void selection.selectAll(),
     onArchived: data.refresh,
@@ -122,7 +118,7 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
                 checkOf: selection.checkOf, onCheck: selection.toggleRows,
               }}
               hasMore={data.hasMore} onNearEnd={data.loadMore} visibleRef={data.visibleRef} viewportRef={data.viewportRef}
-              onToggle={selection.toggle} onPrefetch={onPrefetch} onClearAnchor={selection.clearAnchor}
+              onToggle={selection.toggle} onClearAnchor={selection.clearAnchor}
             />
           </StaleRows>
           <BoardCaption

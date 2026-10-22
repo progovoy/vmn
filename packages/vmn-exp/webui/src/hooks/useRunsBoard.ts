@@ -2,9 +2,8 @@
  *  job's Runs tab (plan 23 W3): the URL's filters as one server filter, the
  *  rows (flat or grouped), their freshness, columns, selection and group
  *  actions. *scope* (a job's verstr) narrows every request to its subtree. */
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
-import { prefetchRun, useFacets, useMetricsSchema } from "../queries";
+import { useMemo, useState } from "react";
+import { useFacets, useMetricsSchema } from "../queries";
 import type { ExperimentRow } from "../types";
 import { boardRows } from "../util/groupItems";
 import { NO_GROUP } from "../util/groupBy";
@@ -43,7 +42,6 @@ export interface RunsBoardOptions {
 
 export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoardOptions) {
   const { scope, keep, paused } = opts;
-  const client = useQueryClient();
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app, scope ? { scope } : undefined);
   const groupBy = useBoardGrouping(ws, app, view, opts.onParent, scope);
@@ -95,16 +93,12 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
     data, grouping, view.toggleCollapsed, selection, opts.openGroup?.onOpen,
   );
 
-  const onPrefetch = useCallback(
-    (verstr: string) => { prefetchRun(client, ws, app, verstr); },
-    [client, ws, app],
-  );
   const sortState = boardSortState(sort, view.order, schema, view.clickSort);
 
   return {
     schema, facets, sort, filter, serverQuery, data, grouping, rows, all, refresh, anyRunning,
     base, colPrefs, setTableWidth, cols, layout, columnEdits, queryHelp, filtered,
-    tableItems, tableRows, selection, groupActions, chartGrouping, onPrefetch, sortState,
+    tableItems, tableRows, selection, groupActions, chartGrouping, sortState,
     sortLabel: sort ?? cols.primary,
   };
 }

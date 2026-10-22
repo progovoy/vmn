@@ -28,7 +28,6 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
         flash={flash}
         onToggle={selection.toggle}
         headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll }}
-        onPrefetch={board.onPrefetch}
         groups={board.groupActions}
         hasMore={data.hasMore}
         onNearEnd={data.loadMore}

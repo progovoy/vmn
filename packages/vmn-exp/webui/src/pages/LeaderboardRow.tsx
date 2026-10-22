@@ -1,4 +1,4 @@
-import { memo, useRef, type CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import type { Density } from "../util/density";
@@ -17,7 +17,6 @@ import {
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
-export const HOVER_INTENT_MS = 120;
 export const ROW_HEIGHT = 48;
 /** A compact board's one-line rows (plan 23 W8). */
 export const COMPACT_ROW_HEIGHT = 32;
@@ -127,8 +126,8 @@ function treeRoll(r: ExperimentRow): string {
 const subLineTitle = (r: ExperimentRow) =>
   [r.verstr, r.branch, r.status === "failed" ? r.error_summary : null].filter(Boolean).join(" · ");
 
-function ExperimentCell({ r, href, style, onPrefetch, member, compact }: {
-  r: ExperimentRow; href: string; style: CSSProperties; onPrefetch: (verstr: string) => void; member: boolean;
+function ExperimentCell({ r, href, style, member, compact }: {
+  r: ExperimentRow; href: string; style: CSSProperties; member: boolean;
   compact: boolean;
 }) {
   const roll = treeRoll(r);
@@ -138,7 +137,6 @@ function ExperimentCell({ r, href, style, onPrefetch, member, compact }: {
         <Link
           className={`run-link${r.name ? " run-name" : " mono"}`} to={href}
           title={compact ? subLineTitle(r) : r.verstr}
-          onFocus={() => onPrefetch(r.verstr)}
         >
           {r.name || r.verstr}
         </Link>
@@ -173,7 +171,7 @@ export function TagChips({ tags }: { tags: Record<string, string> | undefined })
 }
 
 function Row({
-  row: r, index, isSelected, isFlash, isActive, layout, onToggle, onPrefetch, member,
+  row: r, index, isSelected, isFlash, isActive, layout, onToggle, member,
 }: {
   row: ExperimentRow;
   index: number;
@@ -184,14 +182,9 @@ function Row({
   layout: RowLayout;
   /** *range*: extend the selection from the last toggled row (shift-click). */
   onToggle: (verstr: string, range: boolean) => void;
-  onPrefetch: (verstr: string) => void;
   /** Its place under a group header, when it is a group's member. */
   member?: MemberPlace;
 }) {
-  // Prefetch on a resting pointer, not on every row a scroll slides under it.
-  const hover = useRef<ReturnType<typeof setTimeout>>();
-  const onEnter = () => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); };
-  const onLeave = () => clearTimeout(hover.current);
   const { styles, colMeta } = layout;
   const href = runHref(layout.runBase, r.verstr) + (member ? "" : layout.runSearch?.(index) ?? "");
   const ids = layoutIds(layout);
@@ -226,7 +219,7 @@ function Row({
       case "experiment":
         return (
           <ExperimentCell
-            key={id} r={r} href={href} style={style} onPrefetch={onPrefetch} member={!!member}
+            key={id} r={r} href={href} style={style} member={!!member}
             compact={layout.density === "compact"}
           />
         );
@@ -268,8 +261,6 @@ function Row({
       data-href={href}
       tabIndex={isActive ? 0 : -1}
       onClick={onClick}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
     >
       {ids.map((id, i) => cell(id, styles[i]))}
     </tr>

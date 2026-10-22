@@ -63,7 +63,6 @@ export interface JobsTableProps {
   /** Told whether the reader is scrolled down or selecting (plan 23 W6). */
   viewportRef?: MutableRefObject<BoardViewport>;
   onToggle: (verstr: string, range: boolean) => void;
-  onPrefetch: (verstr: string) => void;
   onClearAnchor: () => void;
   /** Said in place of the rows when there are none. */
   emptyText: string;
@@ -110,7 +109,7 @@ function Head({ sort, check }: { sort: JobsSort; check: HeaderCheckProps }) {
 
 function JobsGrid({
   items, ctx, sort, selected, density, headerCheck, groups, hasMore, onNearEnd, visibleRef,
-  onToggle, onPrefetch, onClearAnchor, emptyText, viewportRef,
+  onToggle, onClearAnchor, emptyText, viewportRef,
 }: JobsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   useFillHeight(parentRef);
@@ -184,7 +183,7 @@ function JobsGrid({
                 <JobRow
                   key={it.verstr} r={it} index={v.index} isActive={active}
                   isSelected={selected.has(it.verstr)}
-                  density={density} ctx={ctx} onToggle={onToggle} onPrefetch={onPrefetch}
+                  density={density} ctx={ctx} onToggle={onToggle}
                 />
               );
             })}

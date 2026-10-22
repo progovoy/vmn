@@ -49,7 +49,6 @@ type TableProps = {
   onToggle: (verstr: string, range: boolean) => void;
   /** The header checkbox over the rows on screen; none when omitted. */
   headerCheck?: HeaderCheckProps;
-  onPrefetch: (verstr: string) => void;
   /** Set while the board is grouped (plan 22 G4): the aggregate its header
    *  rows show, folding a group, and loading a group's other rows. */
   groups?: GroupActions;
@@ -113,7 +112,7 @@ function columnsAt(full: RowLayout, el: HTMLElement | null): ColRange | null {
 }
 
 function GridTable({
-  rows, layout: full, sort, selected, flash, onToggle, headerCheck, onPrefetch, hasMore, onNearEnd, visibleRef,
+  rows, layout: full, sort, selected, flash, onToggle, headerCheck, hasMore, onNearEnd, visibleRef,
   groups, edits, onFit, describedBy, density, onClearAnchor, viewportRef,
 }: TableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -231,7 +230,6 @@ function GridTable({
                     member={places.get(it.index)}
                     layout={layout}
                     onToggle={onToggle}
-                    onPrefetch={onPrefetch}
                   />
                 );
               })}

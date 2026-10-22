@@ -1,6 +1,6 @@
 /** One Jobs-view row (plan 23 W1, §3.1): a job, or a single run, across the
  *  JOB_COLUMNS. A click outside its links and checkbox opens the run. */
-import { memo, useRef } from "react";
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import MatchingRunsChip from "../../components/MatchingRunsChip";
 import RowCheckbox from "../../components/RowCheckbox";
@@ -9,7 +9,7 @@ import type { ExperimentRow } from "../../types";
 import type { Density } from "../../util/density";
 import { useRowNavigate } from "../../hooks/useRowNavigate";
 import { relTime, runHref } from "../../util";
-import { HOVER_INTENT_MS, densityRowHeight, headStatus } from "../LeaderboardRow";
+import { densityRowHeight, headStatus } from "../LeaderboardRow";
 import type { JobCell } from "../../util/jobProgress";
 import { BestValue, JobSubLine, SpreadCell, jobNumbers, type JobContext, type JobNumber } from "./JobCells";
 import { CELL_CLASSES, COLUMN_STYLES, JOB_COLUMNS } from "./jobColumns";
@@ -22,16 +22,13 @@ function titleOf(id: string, r: ExperimentRow, numbers: Record<JobNumber, JobCel
   return numbers[id as JobNumber]?.title;
 }
 
-function NameCell({ r, href, compact, ctx, onPrefetch }: {
-  r: ExperimentRow; href: string; compact: boolean; ctx: JobContext; onPrefetch: (verstr: string) => void;
+function NameCell({ r, href, compact, ctx }: {
+  r: ExperimentRow; href: string; compact: boolean; ctx: JobContext;
 }) {
   return (
     <>
       <div className="nest">
-        <Link
-          className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
-          onFocus={() => onPrefetch(r.verstr)}
-        >
+        <Link className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}>
           {r.name || r.verstr}
         </Link>
         <MatchingRunsChip r={r} runBase={ctx.runBase} search={ctx.search} />
@@ -42,15 +39,13 @@ function NameCell({ r, href, compact, ctx, onPrefetch }: {
   );
 }
 
-function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, onPrefetch }: {
+function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle }: {
   r: ExperimentRow; index: number;
   /** The table's one tab stop (roving tabindex). */
   isActive: boolean; isSelected: boolean;
   density?: Density; ctx: JobContext;
   onToggle: (verstr: string, range: boolean) => void;
-  onPrefetch: (verstr: string) => void;
 }) {
-  const hover = useRef<ReturnType<typeof setTimeout>>();
   const href = runHref(ctx.runBase, r.verstr);
   const numbers = jobNumbers(r);
   const status = headStatus(r);
@@ -70,7 +65,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, onPref
             staleSec={r.stale_sec} errorSummary={r.error_summary}
           />
         );
-      case "name": return <NameCell r={r} href={href} compact={density === "compact"} ctx={ctx} onPrefetch={onPrefetch} />;
+      case "name": return <NameCell r={r} href={href} compact={density === "compact"} ctx={ctx} />;
       case "best": return <BestValue r={r} ctx={ctx} />;
       case "spread": return <SpreadCell r={r} />;
       case "runs": case "failed": case "throughput": case "eta": return numbers[id].text;
@@ -86,8 +81,6 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, onPref
       className={`row job-row${isSelected ? " checked" : ""}${r.archived ? " archived" : ""}`}
       data-row-index={index} data-href={href} tabIndex={isActive ? 0 : -1}
       onClick={onClick}
-      onMouseEnter={() => { hover.current = setTimeout(() => onPrefetch(r.verstr), HOVER_INTENT_MS); }}
-      onMouseLeave={() => clearTimeout(hover.current)}
     >
       {JOB_COLUMNS.map((c, i) => (
         <td

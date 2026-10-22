@@ -42,11 +42,10 @@ function MetricLine({ r, metric, layout }: { r: ExperimentRow; metric: string; l
 }
 
 const MCard = memo(function MCard({
-  r, layout, metric, selected, flash, onToggle, onPrefetch,
+  r, layout, metric, selected, flash, onToggle,
 }: {
   r: ExperimentRow; layout: RowLayout; metric: string | null; selected: boolean; flash: boolean;
   onToggle: (verstr: string, range: boolean) => void;
-  onPrefetch: (verstr: string) => void;
 }) {
   const href = runHref(layout.runBase, r.verstr);
   const status = headStatus(r);
@@ -60,10 +59,7 @@ const MCard = memo(function MCard({
       <RowCheckbox verstr={r.verstr} checked={selected} onToggle={onToggle} />
       <div className="lb-mcard-body">
         <div className="lb-mcard-head">
-          <Link
-            className={`lb-mcard-name run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
-            onFocus={() => onPrefetch(r.verstr)}
-          >
+          <Link className={`lb-mcard-name run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}>
             {r.name || r.verstr}
           </Link>
           {status && (
@@ -107,7 +103,7 @@ function sectionsOf(items: readonly BoardItem[]): Section[] {
 }
 
 export default function LeaderboardCards({
-  rows, layout, sort, selected, flash, onToggle, headerCheck, onPrefetch, groups, describedBy,
+  rows, layout, sort, selected, flash, onToggle, headerCheck, groups, describedBy,
 }: {
   rows: BoardItem[] | undefined;
   layout: RowLayout;
@@ -116,7 +112,6 @@ export default function LeaderboardCards({
   flash: string | null;
   onToggle: (verstr: string, range: boolean) => void;
   headerCheck?: HeaderCheckProps;
-  onPrefetch: (verstr: string) => void;
   /** Set while the board is grouped: each group becomes a section (plan 22 G9). */
   groups?: GroupActions;
   describedBy?: string;
@@ -126,7 +121,7 @@ export default function LeaderboardCards({
     <MCard
       key={r.verstr} r={r} layout={layout} metric={metric}
       selected={selected.has(r.verstr)} flash={flash === r.verstr}
-      onToggle={onToggle} onPrefetch={onPrefetch}
+      onToggle={onToggle}
     />
   ));
   const sections = rows && sectionsOf(rows);

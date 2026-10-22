@@ -6,11 +6,10 @@ import { fetchRunStatuses } from "./apiSeries";
 import type { HeldChange } from "./pages/leaderboardRefresh";
 import { SHARED_STALE_MS } from "./queryClient";
 import type {
-  AppRow, ExperimentDetail, ExperimentFacets, ExperimentRow, Meta, MetricsSchema, TopRuns, Workspace,
+  AppRow, ExperimentFacets, ExperimentRow, Meta, MetricsSchema, TopRuns, Workspace,
 } from "./types";
 
-/** Run detail served from cache for this long before a mount refetches it —
- *  long enough that a hover prefetch is what the Run page paints. */
+/** Run detail served from cache for this long before a mount refetches it. */
 export const RUN_STALE_MS = 5_000;
 
 export interface RowsFilter {
@@ -101,11 +100,6 @@ export const runQuery = (ws: string, app: string, verstr: string) => ({
     withSignal(signal, () => api.experiment(ws, app, verstr)),
   staleTime: RUN_STALE_MS,
 });
-
-/** Warm the Run page's cache (on hover/focus of a row) — a no-op while fresh. */
-export function prefetchRun(client: QueryClient, ws: string, app: string, verstr: string) {
-  return client.prefetchQuery<ExperimentDetail>(runQuery(ws, app, verstr));
-}
 
 /** The longest list of the app's rows any leaderboard query has cached
  *  (empty when none has), e.g. to tell which params vary across its runs. */

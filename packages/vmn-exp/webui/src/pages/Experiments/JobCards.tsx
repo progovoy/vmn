@@ -16,10 +16,9 @@ import { BestValue, JobSubLine, type JobContext } from "./JobCells";
 import type { JobsTableProps } from "./JobsTable";
 import "../leaderboardCards.css";
 
-const JobCard = memo(function JobCard({ r, ctx, selected, onToggle, onPrefetch }: {
+const JobCard = memo(function JobCard({ r, ctx, selected, onToggle }: {
   r: ExperimentRow; ctx: JobContext; selected: boolean;
   onToggle: (verstr: string, range: boolean) => void;
-  onPrefetch: (verstr: string) => void;
 }) {
   const href = runHref(ctx.runBase, r.verstr);
   const status = headStatus(r);
@@ -29,10 +28,7 @@ const JobCard = memo(function JobCard({ r, ctx, selected, onToggle, onPrefetch }
       <RowCheckbox verstr={r.verstr} checked={selected} onToggle={onToggle} />
       <div className="lb-mcard-body">
         <div className="lb-mcard-head">
-          <Link
-            className={`lb-mcard-name run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}
-            onFocus={() => onPrefetch(r.verstr)}
-          >
+          <Link className={`lb-mcard-name run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}>
             {r.name || r.verstr}
           </Link>
           {status && <StatusPill status={status} exitCode={r.exit_code} durationSec={r.duration_sec} staleSec={r.stale_sec} errorSummary={r.error_summary} />}
@@ -63,7 +59,7 @@ function CardGroupLabel({ item, groups }: { item: GroupHeaderItem; groups: JobsT
   );
 }
 
-export default function JobCards({ items, ctx, selected, headerCheck, groups, onToggle, onPrefetch, emptyText }: JobsTableProps) {
+export default function JobCards({ items, ctx, selected, headerCheck, groups, onToggle, emptyText }: JobsTableProps) {
   return (
     <div className="lb-mcards-wrap">
       <div className="lb-mcards-head">
@@ -78,7 +74,7 @@ export default function JobCards({ items, ctx, selected, headerCheck, groups, on
         <ul className="lb-mcards" role="list" aria-label="outer runs">
           {items.map((it) => {
             if (!isGroupItem(it)) {
-              return <JobCard key={it.verstr} r={it} ctx={ctx} selected={selected.has(it.verstr)} onToggle={onToggle} onPrefetch={onPrefetch} />;
+              return <JobCard key={it.verstr} r={it} ctx={ctx} selected={selected.has(it.verstr)} onToggle={onToggle} />;
             }
             if (it.item === "more") return <CardGroupMore key={`more:${it.key}`} item={it} onMore={groups.onMore} />;
             return (

@@ -44,13 +44,15 @@ describe("rows are links", () => {
     expect(link).toHaveAttribute("href", "/ws/test/app/my-app/run/0.0.1-dev.x");
   });
 
-  it("prefetches the run detail on hover and on focus", async () => {
+  it("hovering or focusing a run link fetches nothing", async () => {
     m.experiments.mockResolvedValue(page([row(1), row(2)]));
     renderBoard();
-    fireEvent.mouseEnter(await screen.findByRole("link", { name: "0.0.1-dev.x" }));
-    await waitFor(() => expect(m.experiment).toHaveBeenCalledWith("test", "my-app", "0.0.1-dev.x"));
+    const link = await screen.findByRole("link", { name: "0.0.1-dev.x" });
+    fireEvent.mouseEnter(link.closest("tr")!);
+    fireEvent.mouseEnter(link);
     fireEvent.focus(screen.getByRole("link", { name: "0.0.2-dev.x" }));
-    await waitFor(() => expect(m.experiment).toHaveBeenCalledWith("test", "my-app", "0.0.2-dev.x"));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(m.experiment).not.toHaveBeenCalled();
   });
 });
 
