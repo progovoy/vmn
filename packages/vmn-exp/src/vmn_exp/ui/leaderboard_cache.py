@@ -53,7 +53,7 @@ from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, static_move
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
 from vmn_exp.ui.leaderboard_jobs import JobsView
-from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, order_key
+from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, is_live, order_key
 from vmn_exp.ui.leaderboard_scope import (
     Filters,
     check_scope,
@@ -81,10 +81,6 @@ LATEST_ORDERS = 64
 GENERATIONS_KEPT = 3
 # Tokens are per process, so an ETag from before a restart never matches.
 _NONCE = os.urandom(8).hex()
-
-
-def _is_live(run_state):
-    return bool(run_state) and run_state.get("exit_code") is None
 
 
 def _status(snapshot, verstr):
@@ -123,8 +119,7 @@ class _Base:
         paused (see :mod:`~vmn_exp.core.gc_pause`)."""
         states = snapshot.run_states
         with gc_paused():
-            live = [i for i, row in enumerate(snapshot.rows)
-                    if _is_live(states.get(row["verstr"]))]
+            live = [i for i, row in enumerate(snapshot.rows) if is_live(snapshot, row["verstr"])]
             rows = [signed(row) for row in
                     annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)]
             position = {row["verstr"]: i for i, row in enumerate(rows)}
@@ -151,7 +146,7 @@ class _Base:
         if tree is None:
             return None
         rows, children_of, counts, rebuilt = tree
-        live = sorted(position[v] for v in fresh if _is_live(snapshot.run_states.get(v)))
+        live = sorted(position[v] for v in fresh if is_live(snapshot, v))
         patch = LivePatch.from_counts(rows, live, position, snapshot.edges, counts)
         base = cls(snapshot, token, bucket, rows, position, patch, (children_of, counts))
         base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone)

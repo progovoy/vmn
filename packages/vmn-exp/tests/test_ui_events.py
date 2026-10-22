@@ -2,6 +2,7 @@
 (plan 23 S5) — the snapshot diff, scope, coalescing, heartbeat, live ticks
 and the stream cap, on a fake clock."""
 import asyncio
+import datetime
 import json
 
 from vmn_exp.core.index_snapshot import IndexSnapshot
@@ -12,6 +13,12 @@ from vmn_exp.ui import live_events
 
 def _row(verstr, parent=None):
     return {"verstr": verstr, "parent": parent}
+
+
+def _running():
+    """A run state beating now: live until it goes stale."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return {"state": "running", "exit_code": None, "heartbeat": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
 def _snap(rows, states=None, generation=1):
@@ -178,7 +185,7 @@ def test_a_quiet_stream_heartbeats_every_25_seconds():
 
 def test_live_runs_tick_without_new_generations():
     clock = _Clock()
-    live = _snap([_row("a"), _row("a1", "a")], {"a1": {"exit_code": None}})
+    live = _snap([_row("a"), _row("a1", "a")], {"a1": _running()})
 
     events = _collect([(0, live)], clock, max_sec=35)
 

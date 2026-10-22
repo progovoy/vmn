@@ -26,6 +26,7 @@ from operator import is_not
 
 from vmn_exp.core.tree import ancestors
 from vmn_exp.ui.leaderboard_delta import changed_slots, left_rows
+from vmn_exp.ui.leaderboard_live import is_live
 from vmn_exp.ui.memo import LRU
 
 COALESCE_SEC = 1.0
@@ -39,7 +40,7 @@ RETRY_MS = 3000
 TOP = (None, "top")
 
 _DIFFS = LRU(2)  # (old id, new id) -> (old, new, changed verstrs)
-_LIVE = LRU(2)  # (snapshot id,) -> (snapshot, live verstrs)
+_LIVE = LRU(2)  # (snapshot id,) -> (snapshot, running verstrs)
 
 
 class StreamSlots:
@@ -129,14 +130,12 @@ def snapshot_change(old, new, scope=None):
     return _payload(rows, new, old)
 
 
-def _is_live(run_state):
-    return bool(run_state) and run_state.get("exit_code") is None
-
-
 def live_change(snapshot, scope=None):
-    """``{rows, jobs?}`` of the live runs in *scope*; None without any."""
-    live = _LIVE.per_snapshot(snapshot, lambda: [
-        v for v, state in snapshot.run_states.items() if _is_live(state)])
+    """``{rows, jobs?}`` of the live runs in *scope*; None without any.
+    The snapshot's running runs are re-judged now: one may have gone stuck."""
+    running = _LIVE.per_snapshot(snapshot, lambda: [
+        v for v in snapshot.run_states if is_live(snapshot, v)])
+    live = [v for v in running if is_live(snapshot, v)]
     live = _in_scope(live, scope, snapshot)
     return _payload(live, snapshot) if live else None
 

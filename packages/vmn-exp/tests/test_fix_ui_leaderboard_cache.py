@@ -207,3 +207,18 @@ def test_facets_are_computed_once_per_generation():
         "total": 9,
     }
     assert cache.facets(snap) is facets
+
+
+def test_a_stuck_run_does_not_move_the_etag_with_time(monkeypatch):
+    cache = lb.LeaderboardCache(bucket_sec=2)
+    snap = _snapshot(n=10, live={1})
+    verstr = "1.0.0-dev.r0001"
+    stale = NOW - datetime.timedelta(hours=1)
+    snap.run_states[verstr]["heartbeat"] = _iso(stale)
+    snap.run_state_observed_at[verstr] = stale
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
+    tag = cache.etag(snap, {}, limit=10)
+
+    later = NOW + datetime.timedelta(seconds=30)
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
+    assert cache.etag(snap, {}, limit=10) == tag
