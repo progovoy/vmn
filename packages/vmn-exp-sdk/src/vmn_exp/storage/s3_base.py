@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import checked_app_path, safe_verstr
 from vmn_exp.storage.registry import missing_extra
+from vmn_exp.storage.s3_stats import instrument
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
 S3_WORKERS = 10
@@ -61,7 +62,7 @@ def _client(endpoint_url, **config):
     # boto3's default of 10 queues the rest.
     config = Config(max_pool_connections=MAX_POOL_CONNECTIONS, **config)
     kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
-    return boto3_client_module().client("s3", config=config, **kwargs)
+    return instrument(boto3_client_module().client("s3", config=config, **kwargs))
 
 
 def boto3_client_module():

@@ -219,6 +219,27 @@ The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 
 standard library (included above). With the GIL on and a watched app of
 10,000+ runs, `vmn-exp ui` prints this hint once.
 
+## vmn-exp ui diag
+
+`vmn-exp ui diag` takes a diagnostic dump of a running `vmn-exp ui` (no
+py-spy or network access needed) and prints a short summary: the most common
+thread stacks, the slowest in-flight requests, pool saturation, index loading
+and S3 latency (p50/p95/max, errors, retries) per operation.
+
+```sh
+vmn-exp ui diag --pid 12345                        # SIGUSR1; waits for <data-dir>/diag/diag-<ts>-12345.json
+vmn-exp ui diag --pid 12345 --data-dir /srv/vmn-ui --wait 60 -o dump.json
+vmn-exp ui diag --url http://host:8265 --token T   # GET /api/v1/diag (admin), writes vmn-exp-diag-<ts>.json
+vmn-exp ui diag --summarize dump.json              # summarize a dump carried out of the site
+```
+
+`--pid` works when the server is too starved to answer HTTP: the process
+writes the dump on SIGUSR1 into its data dir (resolved like `vmn-exp ui`'s
+`--data-dir`: flag, `--config`'s `data_dir`, else `~/.vmn-ui`), and
+`diag` waits up to `--wait` seconds (default 30) for the new file, then
+copies it to `-o` if given. `--url` sends `--token` (or `VMN_UI_TOKEN`) as a
+bearer token. The summary skips any section that is missing or failed.
+
 ## Run status in the dashboard
 
 Every run row has a status pill (`created`, `running` (pulsing), `stuck`,
