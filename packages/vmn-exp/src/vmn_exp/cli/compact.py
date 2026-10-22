@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """``vmn-exp compact <app> [-v <ref>...] [--all-finished]``: build the
-``metrics/<w>.vmx`` of writers that died before compacting (plan 12 §6).
+``metrics/<w>.vmx`` of writers that died before compacting (plan 12 §6), and
+merge their remote log segments into one object per stream.
 
 Running runs are never compacted: their writer still appends to the stream.
 ``vmn-exp watch --compact`` calls :func:`compact_runs` on failed/stuck runs.
@@ -9,6 +10,7 @@ from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.metric_compact import compact_record
+from vmn_exp.core.log_compact import compact_record_logs
 from vmn_exp.core.status import FAILED, RUNNING, STUCK, SUCCEEDED, derive_status
 
 FINISHED = (SUCCEEDED, FAILED)
@@ -29,14 +31,15 @@ def compact_runs(storage, app_name, verstrs):
     failed = 0
     for verstr in verstrs:
         try:
-            writers = compact_record(storage, app_name, verstr)
+            writers = len(compact_record(storage, app_name, verstr))
+            logs = len(compact_record_logs(storage, app_name, verstr))
         except Exception as exc:
             VMN_LOGGER.error(f"{verstr}: compaction failed: {exc}")
             failed += 1
             continue
-        n = len(writers)
-        print(f"{verstr} compacted ({n} writer{'' if n == 1 else 's'})" if n
-              else f"{verstr} up-to-date")
+        done = [f"{n} {what}{'' if n == 1 else 's'}"
+                for n, what in ((writers, "writer"), (logs, "log")) if n]
+        print(f"{verstr} compacted ({', '.join(done)})" if done else f"{verstr} up-to-date")
     return failed
 
 
