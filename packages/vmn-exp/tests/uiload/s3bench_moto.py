@@ -110,6 +110,15 @@ def install():
 WSGI_THREADS = 128
 
 
+def object_kind(path):
+    """A GET's object kind, to see which reads a phase spends its requests on."""
+    name = path.rsplit("/", 1)[-1]
+    for suffix in (".vmx", ".vms", ".jsonl"):
+        if name.endswith(suffix):
+            return suffix
+    return name if name.endswith((".yml", ".yaml", ".json")) else "other"
+
+
 class Latency:
     """WSGI middleware: *latency_sec* before each request, and per-method counts."""
 
@@ -129,6 +138,8 @@ class Latency:
             kind = "LIST"
         with self.lock:
             self.counts[kind] += 1
+            if kind == "GET":
+                self.counts[f"GET {object_kind(environ.get('PATH_INFO', ''))}"] += 1
         time.sleep(self.latency_sec)
         return self.app(environ, start_response)
 
