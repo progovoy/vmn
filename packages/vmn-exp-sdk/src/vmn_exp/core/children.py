@@ -4,13 +4,13 @@ in step with its children: best-effort, never failing the write that called."""
 from vmn_exp._base import VMN_LOGGER
 
 
-def _parent_of(metadata):
+def parent_of(metadata):
     parent = (metadata or {}).get("parent")
     return parent if parent and parent != metadata.get("verstr") else None
 
 
 def _best_effort(storage, method, app_name, metadata):
-    parent = _parent_of(metadata)
+    parent = parent_of(metadata)
     call = getattr(storage, method, None)
     if not parent or call is None:
         return False

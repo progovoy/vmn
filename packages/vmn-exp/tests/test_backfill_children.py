@@ -113,3 +113,29 @@ def test_backfill_children_is_a_writing_action():
 
     assert "backfill-children" in EXPERIMENT_ACTIONS
     assert "backfill-children" not in READ_ONLY_ACTIONS
+
+
+def test_backfill_reads_metadata_only_never_the_index(tree, monkeypatch):
+    """A cold index load reads every run's state and logs (tens of minutes
+    at 50k runs); a parent link is in ``metadata.yml`` alone."""
+    from vmn_exp.core import index
+
+    def no_index(*a, **k):
+        raise AssertionError("backfill must not load the index")
+
+    monkeypatch.setattr(index, "indexed_snapshot", no_index)
+    monkeypatch.setattr(index, "shared_index", no_index)
+    storage = tree[0]
+    monkeypatch.setattr(storage, "load_file", lambda app, v, name: pytest.fail(name)
+                        if name != "metadata.yml" else type(storage).load_file(storage, app, v, name))
+
+    assert backfill_children.backfill_app(storage, APP)["wrote"] == 3
+
+
+def test_backfill_reports_progress_on_stderr(tree, monkeypatch, capsys):
+    monkeypatch.setattr(backfill_children, "PROGRESS_EVERY", 2)
+
+    backfill_children.backfill_app(tree[0], APP)
+
+    err = capsys.readouterr().err
+    assert "read 2/6 runs" in err and "read 6/6 runs" in err
