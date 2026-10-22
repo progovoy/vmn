@@ -74,15 +74,16 @@ class FdCapture:
 class RunOutput:
     """A run's captured console: the fd tee plus its off-thread uploads."""
 
-    def __init__(self, storage, app_name, verstr):
+    def __init__(self, storage, app_name, verstr, gate=None):
         self._artifact = OutputArtifact(
             storage, app_name, verstr, output_cap_bytes(None)
         )
         self._capture = FdCapture(self._artifact.write)
         # Off the heartbeat thread: a slow upload must not delay a beat.
-        self._uploader = Coalescing(
-            lambda _: self._artifact.upload(), "vmn-exp-output-upload"
-        )
+        upload = lambda _: self._artifact.upload()  # noqa: E731
+        if gate is not None:
+            upload = gate.wrap(upload)
+        self._uploader = Coalescing(upload, "vmn-exp-output-upload")
 
     def start(self):
         self._capture.start()

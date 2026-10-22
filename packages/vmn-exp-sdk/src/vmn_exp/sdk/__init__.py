@@ -52,6 +52,11 @@ from vmn_exp.sdk.datasets import get_dataset_version, register_dataset  # noqa: 
 from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
 from vmn_exp.sdk.run import Run, install_signal_handlers, start_run  # noqa: E402  (needs the helper above)
 from vmn_exp.sdk.sweep import sweep_params  # noqa: E402
+from vmn_exp.sdk.fork_safety import (  # noqa: E402
+    background_paused,
+    pause_background,
+    resume_background,
+)
 from vmn_exp.sdk.usage import use_dataset, use_model  # noqa: E402
 
 __all__ = [
@@ -59,6 +64,7 @@ __all__ = [
     "Run",
     "autolog",
     "autolog_disable",
+    "background_paused",
     "create_run",
     "current_run",
     "download_model",
@@ -66,9 +72,11 @@ __all__ = [
     "get_model_version",
     "install_signal_handlers",
     "list_models",
+    "pause_background",
     "register_dataset",
     "register_model",
     "remove_alias",
+    "resume_background",
     "set_alias",
     "start_run",
     "sweep_params",

@@ -655,6 +655,39 @@ run, else `None`.
   `Run` objects but not the runs: `current_run()` is `None` there and the
   child's exit never finalizes the parent's run. A child calling `start_run()`
   becomes an inner run via the inherited `VMN_EXPERIMENT_ID`.
+- **Fork safety**: a run's background threads (heartbeat, periodic log flush,
+  remote log sync, run-state/output/media uploads) make storage calls; a fork
+  that catches one mid call (a boto3 connection-pool, logging or SDK lock held)
+  could deadlock the child. The SDK registers `os.register_at_fork` handlers:
+  before every `os.fork()` (also `multiprocessing`'s `fork` start method) it
+  pauses every open run's background threads, waiting for the calls in flight
+  at most `vmn_exp.sdk.fork_safety.FORK_PAUSE_TIMEOUT_SEC` (10 s, in total
+  across runs) — a hung call delays the fork by that much and is then forked
+  through; after the fork the parent resumes them and the child starts with
+  fresh SDK locks and none of the parent's threads. `subprocess` without
+  `preexec_fn` execs at once and runs no fork handlers.
+
+### Pausing background threads
+
+To quiesce a run by hand (a fork-pool you manage, a checkpoint you snapshot):
+
+```python
+with run.background_paused() as quiesced:  # or run.pause_background(timeout=None)
+    fork_my_workers()                       # ... run.resume_background()
+
+from vmn_exp.sdk import background_paused, pause_background, resume_background
+with background_paused(timeout=5):          # every open run of this process
+    ...
+```
+
+Pausing waits up to `timeout` seconds (`None`: until done) for a heartbeat,
+flush or sync call in flight and starts no other until resumed; it returns
+(or yields) `True` if none was left in flight. Logging keeps working — entries
+queue in memory and are written once resumed. Pauses nest (each needs its
+resume); `finish()` ends them, so a paused run still finalizes completely. A
+run paused past its stuck window (`max(3 * heartbeat interval, 60s)`) reads
+`stuck` until it resumes. `NoOpRun` has the same methods as no-ops. Alert
+sends (`run.alert`) and the one-off system-metrics setup thread are not paused.
 
 ---
 

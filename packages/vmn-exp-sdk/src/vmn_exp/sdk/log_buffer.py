@@ -18,6 +18,7 @@ import logging
 import os
 import threading
 
+from vmn_exp.sdk.background_gate import BackgroundGate
 from vmn_exp.sdk.heartbeat import Heartbeat
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,16 +30,17 @@ MAX_PENDING_ENTRIES = 1000
 class LogBuffer:
     """Queue entries for ``write(entries)`` and hand them over in order."""
 
-    def __init__(self, write):
+    def __init__(self, write, gate=None):
         self._write = write
+        # The run's background gate: a paused run neither flushes periodically
+        # nor eagerly (entries keep queueing until it resumes).
+        self._gate = gate or BackgroundGate()
         self._pid = os.getpid()
         # A deque, not a locked list: appends and pops are atomic, so a
         # SIGTERM handler that flushes from the middle of an append (the
         # main thread interrupted) never waits on a lock that thread holds.
         self._pending = collections.deque()
-        # Reentrant for the same reason; keeps batches in order.
-        self._write_lock = threading.RLock()
-        self._start_lock = threading.Lock()
+        self._reset_locks()
         self._closed = False
         self._flusher = None
 
@@ -55,7 +57,17 @@ class LogBuffer:
             # (_flush_quietly) already swallows failures and keeps the batch
             # queued for the next attempt; reuse it here instead of the raising
             # self.flush().
-            self._flush_quietly()
+            self._gate.attempt(self._flush_quietly)
+
+    def _reset_locks(self):
+        # Reentrant (a SIGTERM flush may interrupt one on its own thread);
+        # keeps batches in order.
+        self._write_lock = threading.RLock()
+        self._start_lock = threading.Lock()
+
+    def after_fork_in_child(self):
+        """A forked child's copy: a lock the parent's flusher held stays held."""
+        self._reset_locks()
 
     def flush(self):
         """Write what is queued. On failure the batch is kept for the next try."""
@@ -88,7 +100,7 @@ class LogBuffer:
             if self._flusher is not None or self._closed:
                 return
             self._flusher = Heartbeat(
-                self._flush_quietly, FLUSH_INTERVAL_SEC, name="vmn-log-flush"
+                self._gate.wrap(self._flush_quietly), FLUSH_INTERVAL_SEC, name="vmn-log-flush"
             )
             self._flusher.start()
 

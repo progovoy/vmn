@@ -45,14 +45,15 @@ def _upload_if_held(storage, app_name, verstr, data):
 class RunStatePublisher:
     """Writes one run's state: inline locally, latest-wins in order remotely."""
 
-    def __init__(self, storage, app_name, verstr):
+    def __init__(self, storage, app_name, verstr, gate=None):
         self._storage = storage
         self._inline, upload = split_storage(storage, app_name, verstr)
         self._split = self._inline is not storage
         self._where = (app_name, verstr, RUN_STATE_FILE)
         self._remote = None
         if upload is not None:
-            self._remote = Coalescing(upload, "vmn-run-state")
+            gated = gate.wrap(upload) if gate is not None else upload
+            self._remote = Coalescing(gated, "vmn-run-state")
 
     def publish(self, state):
         """Write *state* now locally; queue it for the remote. Raises on a
