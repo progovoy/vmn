@@ -55,7 +55,7 @@ def finished_by_another(stored, attempt):
 class RunStatePublisher:
     """Writes one run's state: inline locally, latest-wins in order remotely."""
 
-    def __init__(self, storage, app_name, verstr):
+    def __init__(self, storage, app_name, verstr, gate=None):
         self._storage = storage
         self._inline, self._remote_target = split_storage(storage, app_name, verstr)
         self._split = self._inline is not storage
@@ -66,7 +66,8 @@ class RunStatePublisher:
         self.superseded = False
         self._remote = None
         if self._remote_target is not None:
-            self._remote = Coalescing(self._upload, "vmn-run-state")
+            upload = gate.wrap(self._upload) if gate is not None else self._upload
+            self._remote = Coalescing(upload, "vmn-run-state")
 
     def publish(self, state, heartbeat=False):
         """Write *state* now locally; queue it for the remote. Raises on a

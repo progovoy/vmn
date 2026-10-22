@@ -56,6 +56,8 @@ from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
     current_run,
 )
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
+from vmn_exp.sdk import fork_safety  # noqa: F401  (registers the fork handlers)
+from vmn_exp.sdk.background_gate import BackgroundGate, RunBackground
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
 from vmn_exp.sdk.metric_defs import MetricDefinitions
@@ -263,7 +265,7 @@ def _checkout_relative_cwd():
     return repo_relative_cwd(os.getcwd(), _try_repo_root())
 
 
-class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
+class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunBackground):
     """One open experiment run: a metrics sink plus a liveness publisher."""
 
     disabled = False
@@ -306,26 +308,30 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         self._elapsed_before = (
             resume.elapsed_before(self._state) if prior_state is not None else 0.0
         )
-        self._state_publisher = RunStatePublisher(storage, app_name, verstr)
+        # Every background storage call goes through it: pause_background()
+        # and the fork handlers (fork_safety) hold them all.
+        self._gate = BackgroundGate()
+        self._state_publisher = RunStatePublisher(storage, app_name, verstr, self._gate)
         self._log_buffer = LogBuffer(
-            functools.partial(append_entries_to_log, storage, app_name, verstr)
+            functools.partial(append_entries_to_log, storage, app_name, verstr),
+            self._gate,
         )
         self._chore_guard = quiet(_LOGGER)
         self._log_sync = Coalescing(
-            functools.partial(
+            self._gate.wrap(functools.partial(
                 self._chore_guard,
                 "experiment log sync",
                 sync_to_remote,
                 storage,
                 app_name,
                 verstr,
-            ),
+            )),
             "vmn-exp-sync",
         )
-        self._heartbeat = Heartbeat(self._beat, heartbeat_interval_sec)
-        self._media_uploads = MediaUploads(self._save_artifact_file)
+        self._heartbeat = Heartbeat(self._gate.wrap(self._beat), heartbeat_interval_sec)
+        self._media_uploads = MediaUploads(self._gate.wrap(self._save_artifact_file))
         self._output = (
-            RunOutput(storage, app_name, verstr) if capture_output else None
+            RunOutput(storage, app_name, verstr, self._gate) if capture_output else None
         )
         # No pid: this process *is* the workload.
         self._sampler = sysmetrics.Sampler(self._log_unstepped, system_metrics)
@@ -417,6 +423,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         if self._finished:
             return False
         self._finished = True
+        # A paused run still drains: its last uploads must not wait for a resume.
+        self._gate.release()
 
         try:
             # Before the heartbeat stops: a long final upload is not a stuck run.
@@ -602,6 +610,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts):
         return find(self._storage, self.app_name, self.id, self._exp_conf, top=top)
 
     # -- internals ---------------------------------------------------------
+
+    def _after_fork_in_child(self):
+        # The child has none of this run's threads (and is not its writer).
+        self._gate.after_fork_in_child()
+        self._log_buffer.after_fork_in_child()
 
     def _append(self, entry):
         entry = sanitize_entry(entry)

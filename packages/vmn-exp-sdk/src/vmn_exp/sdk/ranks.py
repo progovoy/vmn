@@ -7,6 +7,7 @@ Recording from each would snapshot the repo N times and produce N runs for one
 job. A non-zero rank gets a :class:`NoOpRun` instead: the same interface,
 recording nothing, with no heartbeat thread and no git or storage access.
 """
+import contextlib
 import os
 
 from vmn_exp.sdk.steps import StepCounter
@@ -68,6 +69,16 @@ class NoOpRun:
 
     def finish(self, exit_code=0, error=None):
         return None
+
+    def pause_background(self, timeout=None):
+        return True  # no background threads
+
+    def resume_background(self):
+        return None
+
+    @contextlib.contextmanager
+    def background_paused(self, timeout=None):
+        yield True
 
     def log_metric(self, key, value, step=None, commit=True):
         self._steps.take(step, commit)
