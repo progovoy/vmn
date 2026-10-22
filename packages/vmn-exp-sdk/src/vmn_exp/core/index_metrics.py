@@ -18,8 +18,14 @@ from vmn_exp.core.fold_blocks import (
 )
 from vmn_exp.core.metric_block import Block, decode_blocks, header_at
 from vmn_exp.core.metric_columns import Columns
-from vmn_exp.core.metric_files import is_indexed_file, is_metric_file, metric_writer
+from vmn_exp.core.metric_files import (
+    is_indexed_file,
+    is_metric_file,
+    metric_writer,
+    stream_writer_and_seq,
+)
 from vmn_exp.core.metric_index_reader import MetricIndexReader
+from vmn_exp.storage.s3_base import parallel_map
 
 
 def metric_signatures(names):
@@ -76,29 +82,42 @@ def _fold_growth(fold, state, storage, where):
     objects = _objects(storage, where)
     if not _grew_only(state, objects):
         return False
-    for writer in sorted(objects):
-        for name, size in objects[writer]:
-            _fold_object(fold, state, storage, where, writer, name, size)
+    todo = [(writer, name, size) for writer in sorted(objects)
+            for name, size in objects[writer] if state["objects"].get(name, 0) < size]
+    readers = parallel_map(lambda item: _reader(state, storage, where, *item[1:]), todo)
+    for (writer, name, size), reader in zip(todo, readers):
+        _fold_object(fold, state, writer, name, size, reader)
     return True
 
 
-def _fold_object(fold, state, storage, where, writer, name, size):
-    consumed = state["objects"].get(name, 0)
-    if consumed >= size:
-        return
+def _reader(state, storage, where, name, size):
+    """What folds *name*'s unread part: its :class:`MetricIndexReader`, else
+    ``read(offset, length)`` — over a synced segment's bytes read whole (one
+    GET instead of two per block; a live stream grows, its body unread)."""
     read = lambda off, n: storage.read_range(*where, name, off, n)  # noqa: E731
     if is_indexed_file(name):
-        _fold_indexed(fold, state, writer, MetricIndexReader(read, size))
+        return MetricIndexReader(read, size)
+    consumed = state["objects"].get(name, 0)
+    if not stream_writer_and_seq(name)[1]:
+        return read
+    data = read(consumed, size - consumed) or b""
+    return lambda off, n: data[off - consumed:off - consumed + n]
+
+
+def _fold_object(fold, state, writer, name, size, reader):
+    if is_indexed_file(name):
+        _fold_indexed(fold, state, writer, reader)
         state["objects"][name] = size
         return
+    consumed = state["objects"].get(name, 0)
     while True:
-        found = header_at(read, consumed, size)
+        found = header_at(reader, consumed, size)
         if found is None:
             break
         header, length = found
         start = consumed
         _fold_block(fold, state, writer, header,
-                    lambda: decode_blocks(read(start, length) or b""))
+                    lambda: decode_blocks(reader(start, length) or b""))
         consumed += length
     state["objects"][name] = consumed
 

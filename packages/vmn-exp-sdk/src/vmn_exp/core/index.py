@@ -52,6 +52,8 @@ from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
+from vmn_exp.core.index_load_queue import LoadQueue
+from vmn_exp.core.index_rows_first import first_objects
 from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_point import index_path, shared_store
@@ -332,24 +334,46 @@ class ExperimentIndex:
         if self._io is not None:  # the helper process persists them
             self._apply(self._io.refresh(work, removed), removed, started)
             return
-        chunks = self._chunks(work)
+        queue = self._load_queue(work)
         self._unread = sum(record is None for _, _, record in work)
         try:
-            for chunk in chunks[:-1]:
+            chunk = self._take(queue)
+            while queue:
                 self._unread -= sum(record is None for _, _, record in chunk)
-                self._refresh_part(chunk, (), started, None)
+                results = self._refresh_part(chunk, (), started, None)
+                queue.want(self._unloaded_parents(results))
+                chunk = self._take(queue)
         finally:
             self._unread = 0
-        self._refresh_part(chunks[-1], removed, started, started)
+        self._refresh_part(chunk, removed, started, started)
 
-    def _chunks(self, work):
-        """*work* split so a remote cold load serves and keeps its records a
-        chunk at a time, the newest first, rather than only once every
-        record was read."""
+    def _take(self, queue):
+        """The queue's next chunk, a remote record not read yet cut to its
+        row's files (:func:`first_objects`), its rest queued for later."""
+        chunk = [(key, names, self._records.get(key)) for key, names, _ in queue.take()]
+        if not self._remote():
+            return chunk
+        cut, rest = [], []
+        for key, names, record in chunk:
+            first = first_objects(names) if record is None else None
+            cut.append((key, names if first is None else first, record))
+            if first is not None:
+                rest.append((key, names, None))
+        queue.later(rest)
+        return cut
+
+    def _load_queue(self, work):
+        """*work* queued so a remote cold load serves and keeps its records a
+        chunk at a time, the newest first (their ancestors next), rather than
+        only once every record was read."""
         if not work or not self._remote():
-            return [work]
-        work = sorted(work, key=_listed_at, reverse=True)
-        return [work[i:i + _REMOTE_CHUNK] for i in range(0, len(work), _REMOTE_CHUNK)]
+            return LoadQueue(work, len(work))
+        return LoadQueue(sorted(work, key=_listed_at, reverse=True), _REMOTE_CHUNK)
+
+    def _unloaded_parents(self, results):
+        parents = ((record.get("meta") or {}).get("parent")
+                   for _, record, _, _, _ in results if record is not None)
+        return [p for p in parents if p and self._records.get(p) is None]
 
     def _refresh_part(self, work, removed, started, baseline_at):
         """Read, apply and persist *work*, with the listing baseline as of
@@ -363,6 +387,7 @@ class ExperimentIndex:
         self._persist(results, removed, baseline_at)
         if self._snapshot is not None:
             self._published.set()
+        return results
 
     def _apply(self, results, removed, started):
         touched, new, redescribed = set(), [], False

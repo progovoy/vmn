@@ -24,8 +24,9 @@ from vmn_exp.core.index_metrics import (
     refold_metrics,
     update_metrics,
 )
-from vmn_exp.core.jsonl_tail import read_complete_lines
+from vmn_exp.core.jsonl_tail import complete_lines
 from vmn_exp.core.logfiles import appended, group_log_names, log_writer_and_seq
+from vmn_exp.storage.s3_base import parallel_map
 
 
 def log_signatures(names):
@@ -56,16 +57,19 @@ def _appends_only(old, new):
     return True
 
 
-def _read_tail(fold, counts, direct, where, name, state):
-    """Fold the bytes of *name* past ``state["consumed"]``; False if it vanished."""
-    writer, _ = log_writer_and_seq(name)
-    read = read_complete_lines(direct, *where, name, state["consumed"])
-    if read is None:
-        return False
-    entries, used = read
-    apply_entries(fold, writer, counts.get(writer, 0), entries)
-    counts[writer] = counts.get(writer, 0) + len(entries)
-    state["consumed"] += used
+def _read_tails(fold, counts, direct, where, items):
+    """Fold each ``(name, state)`` of *items*' bytes past ``state["consumed"]``,
+    in order, their reads in flight together; False if one vanished."""
+    datas = parallel_map(
+        lambda item: direct.read_file_from(*where, item[0], item[1]["consumed"]), items)
+    for (name, state), data in zip(items, datas):
+        if data is None:
+            return False
+        writer, _ = log_writer_and_seq(name)
+        entries, used = complete_lines(data)
+        apply_entries(fold, writer, counts.get(writer, 0), entries)
+        counts[writer] = counts.get(writer, 0) + len(entries)
+        state["consumed"] += used
     return True
 
 
@@ -74,8 +78,8 @@ def _refold_direct(record, storage, direct, where, sigs, rewinds=()):
     for names in group_log_names(sigs).values():
         for name in names:
             logs[name] = {"sig": sigs[name], "consumed": 0}
-            if not _read_tail(fold, counts, direct, where, name, logs[name]):
-                return False
+    if not _read_tails(fold, counts, direct, where, list(logs.items())):
+        return False
     record.update(fold=fold, counts=counts, logs=logs)
     return True
 
@@ -134,8 +138,7 @@ def _update_logs(record, storage, direct, where, sigs):
     if {name: state["sig"] for name, state in old.items()} == sigs:
         return False
     if _appends_only(old, sigs):
-        fold, counts = record["fold"], record["counts"]
-        ok = True
+        grown = []
         for names in group_log_names(sigs).values():
             for name in names:
                 state = old.get(name)
@@ -143,9 +146,9 @@ def _update_logs(record, storage, direct, where, sigs):
                     continue
                 if state is None:
                     state = old[name] = {"sig": None, "consumed": 0}
-                ok = ok and _read_tail(fold, counts, direct, where, name, state)
+                grown.append((name, state))
                 state["sig"] = sigs[name]
-        if ok:
+        if _read_tails(record["fold"], record["counts"], direct, where, grown):
             return True
     _refold(record, storage, direct, where, sigs)
     return True
