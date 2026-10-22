@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type Query, type QueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import type { HttpError } from "../http";
 import { PAGE_SIZE } from "../paging";
@@ -21,6 +21,27 @@ function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
   return req.then((r) => ({
     rows: [...r], total: r.total ?? r.length, next_cursor: r.next_cursor,
   }));
+}
+
+/** A prefetched first page counts as fresh this long: a view switched to
+ *  paints it with no request of its own. Any other answer is stale at once. */
+export const PREFETCH_FRESH_MS = 30_000;
+const prefetched = new WeakSet<object>();
+
+const rowsStaleTime = (q: Query<RowsData, HttpError>) =>
+  (q.state.data && prefetched.has(q.state.data) ? PREFETCH_FRESH_MS : 0);
+
+/** Fetch the first page of the board *filter* asks for into the cache (a
+ *  no-op while a fresh one is there), as its board would. */
+export function prefetchRows(client: QueryClient, ws: string, app: string, filter: RowsFilter) {
+  return client.prefetchQuery<RowsData, HttpError>({
+    queryKey: rowsKey(ws, app, filter),
+    queryFn: ({ signal }) => withSignal(signal, () => firstPage(ws, app, filter)).then((page) => {
+      prefetched.add(page);
+      return page;
+    }),
+    staleTime: PREFETCH_FRESH_MS,
+  });
 }
 
 /** What the table tells the rows (plan 23 W6): whether a refresh must hold
@@ -60,6 +81,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
   const query = useQuery<RowsData, HttpError>({
     queryKey: key,
     enabled,
+    staleTime: rowsStaleTime,
     // react-query aborts *signal* once this fetch is superseded or unwatched.
     queryFn: ({ signal }) => {
       const scoped = <T,>(fn: () => Promise<T>) => withSignal(signal, fn);

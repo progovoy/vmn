@@ -9,8 +9,11 @@ import Segmented from "../../components/Segmented";
 import { fmtCount } from "../../util";
 import { AllRunsView } from "./AllRunsView";
 import JobsView from "./JobsView";
+import SinglesView from "./SinglesView";
 import { useExperimentsView } from "./experimentsView";
 import { useJobsKind, type JobsKind, type JobsKindState } from "./jobsKind";
+import { useViewPrefetch } from "./useViewPrefetch";
+import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 
 type ViewOption = JobsKind | "all";
 
@@ -33,6 +36,7 @@ export default function ExperimentsPage() {
 function AppExperiments({ ws, app }: { ws: string; app: string }) {
   const { view, setView } = useExperimentsView(ws, app);
   const kind = useJobsKind(ws, app);
+  useViewPrefetch(ws, app, useLeaderboardView(), view === "all" ? "all" : kind.kind ?? "top", kind);
   const onJobs = useCallback(() => setView("jobs"), [setView]);
   const onAll = useCallback(() => setView("all"), [setView]);
   const onPick = useCallback((v: ViewOption) => (v === "all" ? setView("all") : setView("jobs", v)), [setView]);
@@ -44,7 +48,8 @@ function AppExperiments({ ws, app }: { ws: string; app: string }) {
       />
     </span>
   );
-  return view === "jobs"
-    ? <JobsView ws={ws} app={app} views={views} kind={kind} onAll={onAll} />
-    : <AllRunsView ws={ws} app={app} views={views} onJobs={onJobs} />;
+  if (view === "all") return <AllRunsView ws={ws} app={app} views={views} onJobs={onJobs} />;
+  return kind.kind === "singles"
+    ? <SinglesView ws={ws} app={app} views={views} onJobs={onJobs} />
+    : <JobsView ws={ws} app={app} views={views} kind={kind} onAll={onAll} />;
 }
