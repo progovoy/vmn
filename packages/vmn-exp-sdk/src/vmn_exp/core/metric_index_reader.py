@@ -15,17 +15,21 @@ from vmn_exp.core.metric_index_layout import CHUNK_POINTS, MAGIC, TAIL
 from vmn_exp.core.metric_lod import decode_buckets, emit, merge, summarize
 
 _CACHED_CHUNKS = 16
+# Bytes read from a file's end to open it: its footer too, unless that is bigger.
+FOOTER_READ_BYTES = 64 * 1024
 _UNPACK = {"steps": unpack_deltas, "ts": unpack_deltas, "values": unpack_floats}
 
 
 class MetricIndexReader:
     def __init__(self, read_range, size):
         self._read = read_range
-        footer_len, crc, magic = TAIL.unpack(read_range(size - TAIL.size, TAIL.size))
+        end = read_range(size - min(size, FOOTER_READ_BYTES), min(size, FOOTER_READ_BYTES))
+        footer_len, crc, magic = TAIL.unpack(end[-TAIL.size:])
         if magic != MAGIC:
             raise ValueError("not an indexed metric file")
-        start = size - TAIL.size - footer_len
-        packed = read_range(start, footer_len + TAIL.size)[:footer_len]
+        if footer_len + TAIL.size > len(end):
+            end = read_range(size - TAIL.size - footer_len, footer_len + TAIL.size)
+        packed = end[-TAIL.size - footer_len:-TAIL.size]
         if zlib.crc32(packed) != crc:
             raise ValueError("indexed metric file footer is corrupt")
         self.footer = json.loads(zlib.decompress(packed))

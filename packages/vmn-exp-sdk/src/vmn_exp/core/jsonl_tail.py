@@ -28,8 +28,11 @@ def read_complete_lines(
     with the *errors* handler.
     """
     data = files.read_file_from(app_name, verstr, name, offset)
-    if data is None:
-        return None
+    return None if data is None else complete_lines(data, take_unterminated, errors)
+
+
+def complete_lines(data, take_unterminated=True, errors="replace"):
+    """:func:`read_complete_lines` of bytes already read."""
     cut = data.rfind(b"\n") + 1
     tail = data[cut:]
     last = parse_json_line(tail.decode("utf-8", "replace"))
