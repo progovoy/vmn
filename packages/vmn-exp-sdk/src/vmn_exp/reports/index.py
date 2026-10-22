@@ -128,6 +128,8 @@ class ReportIndex:
             return False
         self._state = cached["state"]
         self._swept_at = cached["swept_at"]
+        if self._sweep_due():  # replaying the journal since then costs more than a rebuild
+            return False
         self._reader = JournalReader(self._list, self._clock, last_seen_ms=last_seen_ms)
         self._follow()
         return True

@@ -160,3 +160,26 @@ def test_comments_unresolved_query():
     extra = {"comments": lambda v: {"total": 1, "unresolved": 1} if v == "c" else None}
     lean = [{"verstr": "b"}, {"verstr": "c"}]
     assert [r["verstr"] for r in filter_rows(lean, "comments.total >= 1", extra=extra)] == ["c"]
+
+
+def test_a_persisted_state_older_than_a_sweep_rebuilds_instead_of_replaying(
+        storage, clock, tmp_path, monkeypatch):
+    """Replaying the shared journal from an hours-old cursor pages through
+    every minute's entries of every run (54k LISTs on a busy store); the
+    reports and comments areas are small, so rebuilding is cheap."""
+    from vmn_exp.reports import index as report_index
+
+    cache = SqliteStore(str(tmp_path / "cache.sqlite"))
+    rid = rstore.create(storage, "T", PINNED)
+    _index(storage, clock, cache, full_sweep_sec=300).refresh()
+    clock.now += 3600
+    listed = []
+    real = report_index._list_fn
+    monkeypatch.setattr(report_index, "_list_fn", lambda s: (
+        lambda prefix, start_after=None: listed.append(prefix) or real(s)(prefix, start_after)))
+
+    again = _index(storage, clock, cache, full_sweep_sec=300)
+    again.refresh()
+
+    assert listed == []
+    assert [r["rid"] for r in again.reports()] == [rid]

@@ -331,8 +331,10 @@ def _handle_ui(vmn_ctx):
 
 def _ui_run_without_repo(args):
     """An explicit source (--repo, --store, --config) needs no enclosing
-    checkout; a bare `vmn-exp ui` falls through to serve that checkout."""
-    if not (args.repo or args.store or args.config):
+    checkout, nor does `ui diag` (a dump of a running server); a bare
+    `vmn-exp ui` falls through to serve that checkout."""
+    diag = (getattr(args, "ui_args", None) or [None])[0] == "diag"
+    if not (diag or args.repo or args.store or args.config):
         return None
     from vmn_exp.ui.cli import handle_ui
     return handle_ui(args)
