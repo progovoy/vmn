@@ -30,6 +30,7 @@ sys.path[1:1] = [d for d in SRC_DIRS if d not in sys.path]
 import httpx  # noqa: E402
 
 from uiload import s3bench_load, s3bench_seed  # noqa: E402
+from uiload.s3bench_coldload import ColdLoadProbe  # noqa: E402
 from uiload.probe import API, app_path  # noqa: E402
 from uiload.ui_server import UIServer, free_port  # noqa: E402
 
@@ -123,8 +124,13 @@ def measure(args, manifest, ui, endpoint):
     app = manifest["app"]
     report = {}
     marks = [("start", s3_requests(endpoint))]
+    cold = ColdLoadProbe(ui.base_url, ws, app, manifest["stuck"][:3]).start()
     report["index_load_sec"], report["status"] = wait_indexed(ui.base_url, ws, app, args.runs)
+    report["cold_jobs"] = cold.stop()
     marks.append(("index", s3_requests(endpoint)))
+    if args.cold_only:
+        report["s3_requests"] = _deltas(marks)
+        return report
     outer = max(manifest["outers"], key=lambda o: o["runs"])["verstr"]
     report["series"] = s3bench_load.cold_series(ui.base_url, ws, app, manifest["stuck"], outer,
                                                 manifest["goal"][0])
@@ -140,8 +146,18 @@ def _ms(v):
     return "-" if v is None else f"{v:.0f}"
 
 
+def print_cold(cold):
+    print(f"cold load: first outer-runs answer at {cold['first_jobs_answer_sec']}s "
+          f"(indexed {cold['first_answer_indexed']}), slowest {_ms(cold['max_ms'])} ms")
+    for s in cold["samples"]:
+        print(f"  t={s['at_sec']:>7}s {s['ms']:>7} ms  rows={s['rows']}  compare={s['compare_ms']} ms  indexed={s['indexed']}")
+
+
 def print_table(report):
     print(f"index load: {report['index_load_sec']}s   status: {report['status'].get('counts')}")
+    print_cold(report["cold_jobs"])
+    if "series" not in report:
+        return
     for name, s in report["series"].items():
         extra = f" runs={s.get('runs')} points={s.get('points', '-')}"
         print(f"  {name:22s} {s['ms']:>9.0f} ms {extra}")
@@ -170,6 +186,8 @@ def main(argv=None):
     p.add_argument("--data", help="seed dir (reused when it matches the sizes)")
     p.add_argument("--run-dir", help="logs + the UI's data/cache (default: a new temp dir)")
     p.add_argument("--out", required=True)
+    p.add_argument("--cold-only", action="store_true",
+                   help="stop once the index is loaded: only the cold-load probe")
     args = p.parse_args(argv)
     run_dir = args.run_dir or tempfile.mkdtemp(prefix="s3bench-run-")
     os.makedirs(run_dir, exist_ok=True)

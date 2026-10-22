@@ -30,7 +30,8 @@ if __package__ in (None, ""):
 from moto.core import DEFAULT_ACCOUNT_ID
 from moto.moto_server.werkzeug_app import DomainDispatcherApplication, create_backend_app
 from moto.s3.models import FakeDeleteMarker, S3Backend, s3_backends
-from werkzeug.serving import WSGIRequestHandler, make_server
+import uvicorn
+from uvicorn.middleware.wsgi import WSGIMiddleware
 
 from uiload.s3bench_seed import iter_objects
 
@@ -104,9 +105,9 @@ def install():
     return undo
 
 
-class _QuietHandler(WSGIRequestHandler):
-    def log_request(self, *args, **kwargs):
-        pass
+# Concurrent requests served at once: above the 64 pooled connections of
+# vmn's S3 client, so the latency overlaps as on real S3.
+WSGI_THREADS = 128
 
 
 class Latency:
@@ -155,9 +156,19 @@ def main(argv=None):
     t0 = time.monotonic()
     n = load(a.data, a.bucket, a.root)
     app = Latency(DomainDispatcherApplication(create_backend_app), a.latency_ms / 1000)
-    server = make_server("127.0.0.1", a.port, app, threaded=True, request_handler=_QuietHandler)
+    # uvicorn, not werkzeug's dev server: that one closes every connection,
+    # and a benchmark's worth of TIME_WAIT sockets exhausts the ephemeral ports.
+    config = uvicorn.Config(WSGIMiddleware(app, workers=WSGI_THREADS), host="127.0.0.1",
+                            port=a.port, log_level="warning", access_log=False)
+    server = uvicorn.Server(config)
+    serving = threading.Thread(target=server.run, daemon=True)
+    serving.start()
+    while not server.started:
+        if not serving.is_alive():
+            raise SystemExit(f"S3 server failed to start on port {a.port}")
+        time.sleep(0.05)
     print(f"READY {a.port} {n} {time.monotonic() - t0:.1f}", flush=True)
-    server.serve_forever()
+    serving.join()
 
 
 if __name__ == "__main__":
