@@ -92,28 +92,47 @@ def test_the_s3_import_error_names_the_extra_to_install():
     assert "pip install 'vmn-exp-sdk[s3]'" in str(missing_extra("boto3", "s3"))
 
 
-def _selectors(app):
+def _selector_groups(app):
     import yaml
 
     conf = yaml.safe_load((ROOT / ".vmn" / app / "conf.yml").read_text())["conf"]
-    [backend] = conf["version_backends"]["generic_selectors"]
-    return backend
+    return conf["version_backends"]["generic_selectors"]
+
+
+def _template_values(verstr):
+    """The ``stamping.app`` fields a selector's ``regex_sub`` renders with."""
+    base, _, pre = verstr.partition("-")
+    name, _, count = pre.partition(".")
+    return {
+        "version": verstr,
+        "base_version": base,
+        "prerelease": name or "release",
+        "prerelease_count": {name: int(count)} if name else {},
+    }
 
 
 def _stamp_with(app, verstr):
     """``{path: text}`` after applying *app*'s selectors as `vmn stamp` does."""
     import re
 
-    backend = _selectors(app)
+    import jinja2
+
+    values = _template_values(verstr)
     out = {}
-    for paths in backend["paths_section"]:
-        assert paths["input_file_path"] == paths["output_file_path"]
-        path = paths["input_file_path"]
-        text = (ROOT / path).read_text()
-        for sel in backend["selectors_section"]:
-            text = re.sub(sel["regex_selector"], sel["regex_sub"].replace("{{version}}", verstr), text)
-        out[path] = text
+    for backend in _selector_groups(app):
+        for paths in backend["paths_section"]:
+            assert paths["input_file_path"] == paths["output_file_path"]
+            path = paths["input_file_path"]
+            text = (ROOT / path).read_text()
+            for sel in backend["selectors_section"]:
+                sub = jinja2.Template(sel["regex_sub"]).render(values)
+                text = re.sub(sel["regex_selector"], sub, text)
+            out[path] = text
     return out
+
+
+def _locked_versions(lock_text):
+    return {p["name"]: p["version"] for p in toml.loads(lock_text)["package"] if "version" in p}
 
 
 def test_stamping_vmn_writes_its_version_into_the_package():
@@ -135,6 +154,22 @@ def test_stamping_vmn_exp_writes_one_version_into_both_packages():
     assert "vmn>0.10.2rc9,<1" in full["dependencies"]  # vmn's own pin is left alone
 
 
+@pytest.mark.parametrize("app, dists", [
+    ("vmn", ["vmn"]),
+    ("vmn_exp", ["vmn-exp", "vmn-exp-sdk"]),
+])
+@pytest.mark.parametrize("verstr, locked", [("9.8.7-rc.6", "9.8.7rc6"), ("9.8.7", "9.8.7")])
+def test_stamping_an_app_writes_its_version_into_the_workspace_lock(app, dists, verstr, locked):
+    # The lock is shared by the workspace; a stamp must leave it current, in
+    # the PEP 440 form uv itself writes.
+    before = _locked_versions((ROOT / "uv.lock").read_text())
+    after = _locked_versions(_stamp_with(app, verstr)["uv.lock"])
+    assert {d: after[d] for d in dists} == {d: locked for d in dists}
+    assert {k: v for k, v in after.items() if k not in dists} == {
+        k: v for k, v in before.items() if k not in dists
+    }
+
+
 def test_vmn_stamp_applies_the_release_selectors(app_layout):
     """The selectors above, run through a real `vmn stamp`, not a simulation."""
     import yaml
@@ -143,11 +178,8 @@ def test_vmn_stamp_applies_the_release_selectors(app_layout):
     _run_vmn_init()
     _, _, params = _init_app(app_layout.app_name)
     assert _stamp_app(app_layout.app_name, "patch")[0] == 0
-    for dist in ("vmn-exp-sdk", "vmn-exp"):
-        source = (ROOT / "packages" / dist / "pyproject.toml").read_text()
-        app_layout.write_file_commit_and_push(
-            "test_repo_0", f"packages/{dist}/pyproject.toml", source
-        )
+    for path in ("packages/vmn-exp-sdk/pyproject.toml", "packages/vmn-exp/pyproject.toml", "uv.lock"):
+        app_layout.write_file_commit_and_push("test_repo_0", path, (ROOT / path).read_text())
     app_layout.write_conf(params["app_conf_path"], version_backends=yaml.safe_load(
         (ROOT / ".vmn" / "vmn_exp" / "conf.yml").read_text()
     )["conf"]["version_backends"])
@@ -159,6 +191,13 @@ def test_vmn_stamp_applies_the_release_selectors(app_layout):
     full = toml.load(repo / "packages/vmn-exp/pyproject.toml")["project"]
     assert sdk["version"] == full["version"] == "0.1.0"
     assert "vmn-exp-sdk==0.1.0" in full["dependencies"]
+    locked = _locked_versions((repo / "uv.lock").read_text())
+    assert locked["vmn-exp"] == locked["vmn-exp-sdk"] == "0.1.0"
+
+    app_layout.write_file_commit_and_push("test_repo_0", "change.txt", "a change to stamp")
+    assert _stamp_app(app_layout.app_name, "patch", prerelease="rc")[0] == 0
+    locked = _locked_versions((repo / "uv.lock").read_text())
+    assert locked["vmn-exp"] == locked["vmn-exp-sdk"] == "0.1.1rc1"
 
 
 def test_vmn_exp_needs_a_vmn_with_the_split():

@@ -13,3 +13,9 @@ conf:
       selectors_section:
       - regex_selector: (version = ")[^"]*(")
         regex_sub: \g<1>{{version}}\g<2>
+    - paths_section:
+      - input_file_path: uv.lock
+        output_file_path: uv.lock
+      selectors_section:
+      - regex_selector: '(?m)^(name = "vmn"\nversion = ")[^"]*(")'
+        regex_sub: '\g<1>{{base_version}}{% if prerelease != "release" %}{{prerelease}}{{prerelease_count[prerelease]}}{% endif %}\g<2>'

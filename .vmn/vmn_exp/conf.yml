@@ -15,3 +15,9 @@ conf:
         regex_sub: \g<1>{{version}}\g<2>
       - regex_selector: ("vmn-exp-sdk==)[^"]*(")
         regex_sub: \g<1>{{version}}\g<2>
+    - paths_section:
+      - input_file_path: uv.lock
+        output_file_path: uv.lock
+      selectors_section:
+      - regex_selector: '(?m)^(name = "vmn-exp(?:-sdk)?"\nversion = ")[^"]*(")'
+        regex_sub: '\g<1>{{base_version}}{% if prerelease != "release" %}{{prerelease}}{{prerelease_count[prerelease]}}{% endif %}\g<2>'
