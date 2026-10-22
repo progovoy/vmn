@@ -1,10 +1,12 @@
 """Plan 13 §8.3: ``vmn-exp report`` / ``comment`` / ``comments`` (git-free)."""
 import json
+import os
 
 import pytest
 
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.reports import comments, published, store
+from vmn_exp.cli import report_export as rx
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 
@@ -66,6 +68,7 @@ def test_list_and_show(store_dir, tmp_path, capsys):
     assert _run("report", "show", "rmissing", "--dir", store_dir) == 1
 
 
+@pytest.mark.skipif(not os.path.isdir(rx.BUNDLE_DIR), reason="web bundle not built")
 def test_export_writes_one_html_file(store_dir, tmp_path, capsys):
     rid = _put_new(store_dir, tmp_path)["rid"]
     out = tmp_path / "report.html"
@@ -75,6 +78,7 @@ def test_export_writes_one_html_file(store_dir, tmp_path, capsys):
     assert "not published" in capsys.readouterr().err
 
 
+@pytest.mark.skipif(not os.path.isdir(rx.BUNDLE_DIR), reason="web bundle not built")
 def test_export_published_revision_and_unknowns(store_dir, tmp_path, capsys):
     rid = _put_new(store_dir, tmp_path)["rid"]
     published.publish(_storage(store_dir), rid, 1, {"p1": {"app": "a", "verstrs": [], "media": [], "queries": []}})
