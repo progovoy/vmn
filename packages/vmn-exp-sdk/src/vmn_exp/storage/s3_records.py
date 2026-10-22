@@ -42,7 +42,7 @@ class S3Records:
     def _put_metadata(self, prefix, metadata, **condition):
         self._put(
             f"{prefix}/{METADATA_FILE}",
-            yaml.dump(with_format_version(metadata), sort_keys=True),
+            yaml.dump(with_format_version(_base.redact_record_remotes(metadata)), sort_keys=True),
             **condition,
         )
 

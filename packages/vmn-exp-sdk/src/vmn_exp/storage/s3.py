@@ -65,7 +65,7 @@ class S3SnapshotStorage(
         raw = self._get(f"{prefix}/{METADATA_FILE}")
         if raw is None:
             return None, None
-        metadata = _base.yaml_safe_load(raw)
+        metadata = _base.redact_record_remotes(_base.yaml_safe_load(raw))
         if metadata.get("code"):
             return metadata, {}  # a run's code lives in its code object
         patches = self._get_patches(prefix)

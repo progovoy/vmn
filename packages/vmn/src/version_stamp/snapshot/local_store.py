@@ -32,6 +32,7 @@ import yaml
 from version_stamp.core.utils import (
     atomic_write,
     parse_record_metadata,
+    redact_record_remotes,
     valid_app_path,
     yaml_safe_load,
 )
@@ -65,7 +66,7 @@ RECORD_FORMAT_VERSION = 1
 
 
 def _write_metadata(record_dir, metadata):
-    metadata = {"format_version": RECORD_FORMAT_VERSION, **metadata}
+    metadata = {"format_version": RECORD_FORMAT_VERSION, **redact_record_remotes(metadata)}
     atomic_write(os.path.join(record_dir, METADATA_FILE), yaml.dump(metadata, sort_keys=True))
 
 
@@ -198,7 +199,7 @@ class LocalRecordStore:
         deps = _read_dep_patches(record_dir)
         if deps:
             patches["deps"] = deps
-        return yaml_safe_load(raw), patches
+        return redact_record_remotes(yaml_safe_load(raw)), patches
 
     def load(self, app_name, verstr):
         metadata, patches = self.load_record(app_name, verstr)

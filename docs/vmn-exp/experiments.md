@@ -88,6 +88,14 @@ All four snapshot the tree (dirty or clean) and produce the same kind of run,
 so they mix freely: `exp run` a benchmark, then `exp add` a hand-measured
 number to it.
 
+A run records the git remote URL of the app and of each dep (`remote`,
+`changesets.<path>.remote`) without credentials: an `https://user:token@host/…`
+remote is stored as `https://host/…`, and an `ssh://` remote keeps only its
+username (`ssh://git@host/…`). Records written before this that still carry a
+token are redacted whenever they are read, so `show`, the UI, `export`,
+`rerun` and `push` never pass it on; a record is rewritten clean the next time
+its metadata changes (a note or `archive`).
+
 ### Record measurements by hand
 
 A config sweep without any script:

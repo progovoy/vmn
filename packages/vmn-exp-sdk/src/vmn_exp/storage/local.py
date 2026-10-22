@@ -140,12 +140,12 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
         # Last: metadata.yml is what makes the record visible.
         atomic_write(
             os.path.join(snap_dir, METADATA_FILE),
-            yaml.dump(with_format_version(metadata), sort_keys=True),
+            yaml.dump(with_format_version(_base.redact_record_remotes(metadata)), sort_keys=True),
         )
 
     def _load_metadata(self, meta_path):
         with open(meta_path, "rb") as f:
-            return _base.yaml_safe_load(f)
+            return _base.redact_record_remotes(_base.yaml_safe_load(f))
 
     def load_record(self, app_name, verstr):
         snap_dir = self._snapshot_dir(app_name, verstr)

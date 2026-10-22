@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import logging
 import os
+import re
 
 import yaml
 from filelock import FileLock
@@ -27,8 +28,53 @@ def yaml_safe_load(stream_or_text):
     return yaml.load(stream_or_text, Loader=_FAST_SAFE_LOADER)
 
 
+_URL_RE = re.compile(r"\A([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)(.*)\Z", re.S)
+_SSH_SCHEMES = frozenset({"ssh", "git+ssh", "ssh+git"})
+
+
+def strip_url_credentials(url):
+    """*url* without its secret userinfo: an ``ssh://`` URL keeps a bare
+    username (``ssh://git@host/x``), any other URL loses the whole
+    ``user[:password]@`` (a username alone can be a token). scp-like
+    ``git@host:path``, paths and non-strings come back unchanged."""
+    match = isinstance(url, str) and _URL_RE.match(url)
+    if not match or "@" not in match.group(2):
+        return url
+    scheme, authority, rest = match.groups()
+    userinfo, _, host = authority.rpartition("@")
+    user = userinfo.partition(":")[0]
+    if user and scheme.lower() in _SSH_SCHEMES:
+        host = f"{user}@{host}"
+    return f"{scheme}://{host}{rest}"
+
+
+def _redact_remote(entry):
+    if isinstance(entry, dict) and "remote" in entry:
+        return dict(entry, remote=strip_url_credentials(entry["remote"]))
+    return entry
+
+
+def redact_changesets(changesets):
+    """A copy of *changesets* whose repos' ``remote`` carry no credentials."""
+    return {path: _redact_remote(info) for path, info in changesets.items()}
+
+
+def redact_record_remotes(metadata):
+    """A copy of record *metadata* whose ``remote`` and ``changesets[*].remote``
+    carry no credentials; anything but a dict comes back unchanged."""
+    if not isinstance(metadata, dict):
+        return metadata
+    redacted = _redact_remote(metadata)
+    changesets = metadata.get("changesets")
+    if isinstance(changesets, dict):
+        redacted = dict(redacted, changesets=redact_changesets(changesets))
+    return redacted
+
+
 def parse_record_metadata(raw):
-    """A snapshot/experiment record's ``metadata.yml`` dict, or None.
+    """A snapshot/experiment record's ``metadata.yml`` dict, or None; its
+    remotes are redacted (:func:`redact_record_remotes`), as older records may
+    still carry credentials.
 
     None for a missing or unparsable file and for legacy ``create_snapshots``
     verinfo files, which share the tree but carry no ``verstr``.
@@ -39,7 +85,9 @@ def parse_record_metadata(raw):
         meta = yaml_safe_load(raw)
     except yaml.YAMLError:
         return None
-    return meta if isinstance(meta, dict) and "verstr" in meta else None
+    if not (isinstance(meta, dict) and "verstr" in meta):
+        return None
+    return redact_record_remotes(meta)
 
 
 def valid_path_component(name):

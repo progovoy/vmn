@@ -22,7 +22,7 @@ from vmn_exp.core.sqlite_conn import write_tx
 # Bump whenever a record's shape, the fold's semantics or these tables change:
 # records written by an older version are dropped rather than trusted, and a
 # file written by a newer version is left to it.
-SCHEMA_VERSION = "exp-index-17"
+SCHEMA_VERSION = "exp-index-18"
 
 _TABLES = {
     "exp_index": "app TEXT, key TEXT, seq INTEGER, head TEXT, data TEXT,"
