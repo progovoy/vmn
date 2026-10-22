@@ -17,21 +17,24 @@ class SweepState:
         """The sweep's state for a later process, in wall time *wall* (a
         monotonic clock does not cross processes; ms keep it from drifting
         between refreshes); see :meth:`restore_state`."""
+        last_full = self._last_full
         return {
-            "last_full": round(wall - (now - self._last_full), 3),
+            "last_full": None if last_full is None else round(wall - (now - last_full), 3),
             "touched": {k: round(wall - (now - t), 3) for k, t in self._touched.items()},
-            "live": sorted(self._live), "pending": sorted(self._pending),
+            "live": None if self._live is None else sorted(self._live), "pending": sorted(self._pending),
             "sigs_known": self._sigs_known, "names_at": self.watch.names_at,
         }
 
     def restore_state(self, state, sigs, now, wall):
         """Carry on from *state* (:meth:`export_state`) and the name *sigs*
         the watch was restored to; a clock gone backwards makes a full
-        listing due."""
-        age = wall - state["last_full"]
+        listing due, as does a state exported while one was."""
+        last_full = state["last_full"]
+        age = -1 if last_full is None else wall - last_full
         self._last_full = now - age if age >= 0 else None
         self._touched = {k: now - (wall - t) for k, t in state["touched"].items()}
-        self._live, self._pending = set(state["live"]), set(state["pending"])
+        live = state["live"]
+        self._live, self._pending = None if live is None else set(live), set(state["pending"])
         self._sigs_known, self._sigs, self._restored = state["sigs_known"], dict(sigs), True
         self.watch.names_at = state.get("names_at") if age >= 0 else None
 
