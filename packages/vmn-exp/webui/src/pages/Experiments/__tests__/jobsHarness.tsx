@@ -25,8 +25,7 @@ export const urlParams = () => new URLSearchParams(location.search);
 /** The app's run selection (the tray's picks), which replaced the URL's `sel`. */
 export const selection = (ws = "test", app = "my-app") => readPicks(ws, app).map((p) => p.verstr);
 
-export function renderExperiments(path = "/ws/test/app/my-app") {
-  const client = createQueryClient();
+export function renderExperiments(path = "/ws/test/app/my-app", client = createQueryClient()) {
   const utils = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>

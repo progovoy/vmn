@@ -4,7 +4,7 @@
  *  actions. *scope* (a job's verstr) narrows every request to its subtree. */
 import { useMemo, useState } from "react";
 import { useFacets, useMetricsSchema } from "../queries";
-import type { ExperimentRow } from "../types";
+import type { ExperimentRow, TopRuns } from "../types";
 import { boardRows } from "../util/groupItems";
 import { NO_GROUP } from "../util/groupBy";
 import { runContextSearch } from "../util/runContext";
@@ -28,6 +28,8 @@ export interface RunsBoardOptions {
   paused: boolean;
   /** A job's verstr: the board is its subtree. */
   scope?: string;
+  /** Top-level runs only (the Single runs view). */
+  top?: TopRuns;
   /** The job's name, naming its selected queries in the tray. */
   scopeLabel?: string;
   /** Picking "parent run" calls it instead (the Jobs view, §3.4). */
@@ -46,7 +48,7 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
   const facets = useFacets(ws, app, scope ? { scope } : undefined);
   const groupBy = useBoardGrouping(ws, app, view, opts.onParent, scope);
 
-  const { sort, serverQuery, filter, filtered } = useBoardFilter(view, groupBy.group, { scope });
+  const { sort, serverQuery, filter, filtered } = useBoardFilter(view, groupBy.group, { scope, top: opts.top });
   // Every run is a row (plan 22 G1); grouped, under its group's header row.
   const data = useBoardRows(ws, app, filter, {
     group: groupBy.group, aggregateInUrl: groupBy.aggregateInUrl, collapsed: view.collapsed, keep,
