@@ -77,7 +77,9 @@ from vmn_exp.core.status import load_run_state, observed_at_by_verstr
 
 _LOGGER = logging.getLogger(__name__)
 # Records a remote backend re-reads at once (each costs a few round trips).
-_REMOTE_WORKERS = 16
+_REMOTE_WORKERS = 32
+# Records a remote backend reads between publishing and persisting what it has.
+_REMOTE_CHUNK = 500
 _monotonic = time.monotonic
 
 
@@ -304,16 +306,33 @@ class ExperimentIndex:
             for key, names in listing.items()
             if METADATA_FILE in names
         ]
-        local = self._io is None  # else the helper process persists them
-        results = self._refresh_local(work) if local else self._io.refresh(work, removed)
+        if self._io is not None:  # the helper process persists them
+            self._apply(self._io.refresh(work, removed), removed, started)
+            return
+        *early, last = self._chunks(work)
+        for chunk in early:
+            self._refresh_part(chunk, (), started, None)
+        self._refresh_part(last, removed, started, started)
+
+    def _chunks(self, work):
+        """*work* split so a remote cold load serves and keeps its records a
+        chunk at a time, rather than only once every record was read."""
+        if not work or not self._remote():
+            return [work]
+        return [work[i:i + _REMOTE_CHUNK] for i in range(0, len(work), _REMOTE_CHUNK)]
+
+    def _refresh_part(self, work, removed, started, baseline_at):
+        """Read, apply and persist *work*, with the listing baseline as of
+        *baseline_at* (None: not the refresh's last part)."""
+        results = self._refresh_local(work)
         try:
             self._apply(results, removed, started)
         except BaseException:
-            if local:
-                self._persist(results, removed)  # no baseline: the sweep missed some
+            self._persist(results, removed)  # no baseline: the sweep missed some
             raise
-        if local:
-            self._persist(results, removed, started)
+        self._persist(results, removed, baseline_at)
+        if self._snapshot is not None:
+            self._published.set()
 
     def _apply(self, results, removed, started):
         touched, new, redescribed = set(), [], False
@@ -440,8 +459,7 @@ class ExperimentIndex:
         return [(key, *done[key]) for key, _, _ in work]
 
     def _refresh_all(self, work, direct):
-        is_remote = getattr(self._storage, "is_remote", None)
-        if len(work) > 1 and is_remote and is_remote():
+        if len(work) > 1 and self._remote():
             # A warm start's lazy records read their stored head here, in
             # order (a chunk per query), never from the pool's threads.
             for _, _, record in work:
@@ -450,6 +468,10 @@ class ExperimentIndex:
             with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
                 return list(pool.map(lambda w: self._refresh_one(*w, direct), work))
         return [self._refresh_one(*w, direct) for w in work]
+
+    def _remote(self):
+        is_remote = getattr(self._storage, "is_remote", None)
+        return bool(is_remote and is_remote())
 
     def _refresh_one(self, key, names, record, direct):
         return refresh_record(key, names, record, lambda *a: self._update(*a, direct))

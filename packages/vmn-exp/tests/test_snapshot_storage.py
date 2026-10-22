@@ -1,6 +1,6 @@
 """Snapshot storage backends: S3 round-trips, cached-storage error
 propagation and the collision-free dev verstr a new record claims."""
-from unittest.mock import MagicMock, patch as mock_patch
+from unittest.mock import ANY, MagicMock, patch as mock_patch
 
 import boto3
 import pytest
@@ -105,7 +105,7 @@ def test_s3_snapshot_endpoint_url():
     """Test S3 backend passes endpoint_url to boto3."""
     with mock_patch("boto3.client") as mock_boto:
         S3SnapshotStorage("test-bucket", endpoint_url="http://localhost:9000")
-        mock_boto.assert_called_once_with("s3", endpoint_url="http://localhost:9000")
+        mock_boto.assert_called_once_with("s3", config=ANY, endpoint_url="http://localhost:9000")
 
 
 @pytest.fixture

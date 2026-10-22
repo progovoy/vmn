@@ -9,9 +9,10 @@ from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import checked_app_path, safe_verstr
 from vmn_exp.storage.registry import missing_extra
 
-# Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs,
-# few enough to fit boto3's default connection pool (10 per client).
+# Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
 S3_WORKERS = 10
+# Connections a client pools, for every thread sharing it (boto3's default: 10).
+MAX_POOL_CONNECTIONS = 64
 MISSING_CODES = ("404", "NoSuchKey", "NotFound")
 TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
 
@@ -45,15 +46,22 @@ def app_key(app_name):
 
 
 def boto3_client(endpoint_url=None):
-    return boto3_client_module().client("s3", **({"endpoint_url": endpoint_url} if endpoint_url else {}))
+    return _client(endpoint_url)
 
 
 def sigv4_client(endpoint_url=None):
     """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs)."""
+    return _client(endpoint_url, signature_version="s3v4")
+
+
+def _client(endpoint_url, **config):
     from botocore.config import Config
 
+    # A pooled connection per concurrent reader (the index's and parallel_map's);
+    # boto3's default of 10 queues the rest.
+    config = Config(max_pool_connections=MAX_POOL_CONNECTIONS, **config)
     kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
-    return boto3_client_module().client("s3", config=Config(signature_version="s3v4"), **kwargs)
+    return boto3_client_module().client("s3", config=config, **kwargs)
 
 
 def boto3_client_module():
