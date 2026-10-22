@@ -36,12 +36,13 @@ function toGroup(points: ScatterPoint[]): PointGroup {
  *  When goal is null no point is marked as best. */
 export function scatterGroups(
   rows: ExperimentRow[], xCol: string, yCol: string, paramCols: string[], goal: "min" | "max" | null,
+  yParamCols: string[] = paramCols,
 ): { rest: PointGroup; best: PointGroup } {
   const points: ScatterPoint[] = [];
   let bestY = goal === "min" ? Infinity : goal === "max" ? -Infinity : null;
   for (const r of rows) {
     const x = numericValue(r, xCol, paramCols);
-    const y = numericValue(r, yCol, paramCols);
+    const y = numericValue(r, yCol, yParamCols);
     if (x === null || y === null) continue;
     points.push({ x, y, verstr: r.verstr, idx: r.idx });
     if (bestY !== null && (goal === "min" ? y < bestY : y > bestY)) bestY = y;
@@ -56,12 +57,12 @@ export function scatterGroups(
  *  first-seen order of *colors*, and *fallback* for a run without one. */
 export function colorGroups(
   rows: ExperimentRow[], xCol: string, yCol: string, paramCols: string[],
-  colorOf: ReadonlyMap<string, string>, fallback: string,
+  colorOf: ReadonlyMap<string, string>, fallback: string, yParamCols: string[] = paramCols,
 ): { colors: string[]; groups: PointGroup[] } {
   const byColor = new Map<string, ScatterPoint[]>();
   for (const r of rows) {
     const x = numericValue(r, xCol, paramCols);
-    const y = numericValue(r, yCol, paramCols);
+    const y = numericValue(r, yCol, yParamCols);
     if (x === null || y === null) continue;
     const color = colorOf.get(r.verstr) ?? fallback;
     const points = byColor.get(color);

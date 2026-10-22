@@ -28,7 +28,8 @@ interface Props {
   x?: string;
   y?: string;
   onAxes?: (x: string, y: string) => void;
-  /** The Y picker's choices (default: every column). */
+  /** The Y picker's choices, read as metrics even where a param shares a
+   *  name (default: every column, a param's read from params). */
   yCols?: string[];
 }
 
@@ -36,6 +37,7 @@ const HEIGHT = 320;
 /** How near (as a fraction of each axis span) the cursor must be to a point. */
 const HIT_RADIUS = 0.03;
 const COLORS = ["var(--accent)", "var(--good)"];
+const NO_PARAMS: string[] = [];
 
 function AxisSelect({ label, value, cols, onChange }: {
   label: string; value: string; cols: string[]; onChange: (v: string) => void;
@@ -56,7 +58,9 @@ function AxisSelect({ label, value, cols, onChange }: {
 function MetricScatter({
   rows, metricCols, paramCols, schema, onSelect, initialX, initialY, groups: byGroup, x, y, onAxes, yCols,
 }: Props) {
-  const allCols = useMemo(() => [...metricCols, ...paramCols], [metricCols, paramCols]);
+  // A numeric param folds into metrics too: one entry per name.
+  const allCols = useMemo(() => [...new Set([...metricCols, ...paramCols])], [metricCols, paramCols]);
+  const yParamCols = yCols ? NO_PARAMS : paramCols;
   const [ownX, setOwnX] = useState(initialX ?? metricCols[0] ?? paramCols[0] ?? "");
   const [ownY, setOwnY] = useState(initialY ?? metricCols[1] ?? paramCols[0] ?? metricCols[0] ?? "");
   const xCol = x ?? ownX, yCol = y ?? ownY;
@@ -67,12 +71,13 @@ function MetricScatter({
 
   const colorOf = byGroup?.colorOf;
   const { colors, groups } = useMemo(() => {
-    if (colorOf) return colorGroups(rows, xCol, yCol, paramCols, colorOf, NO_GROUP_COLOR);
-    const { rest, best } = scatterGroups(rows, xCol, yCol, paramCols, yGoal);
+    if (colorOf) return colorGroups(rows, xCol, yCol, paramCols, colorOf, NO_GROUP_COLOR, yParamCols);
+    const { rest, best } = scatterGroups(rows, xCol, yCol, paramCols, yGoal, yParamCols);
     return { colors: COLORS, groups: [rest, best] };
-  }, [rows, xCol, yCol, paramCols, yGoal, colorOf]);
+  }, [rows, xCol, yCol, paramCols, yParamCols, yGoal, colorOf]);
   const colorsKey = colors.join("|");
-  const dense = groups.reduce((n, g) => n + g.xs.length, 0) > DENSE_POINTS;
+  const shown = groups.reduce((n, g) => n + g.xs.length, 0);
+  const dense = shown > DENSE_POINTS;
   // Fresh rows (a poll) swap data in place; only the point-size tier rebuilds.
   const themeVersion = useThemeVersion();
   const options = useMemo(
@@ -96,7 +101,9 @@ function MetricScatter({
         style={{ position: "relative", width: "100%", cursor: hovered ? "pointer" : undefined }}
         onClick={() => hovered && select(hovered.verstr)}
       >
-        <UPlotChart options={options} data={data} onCursor={setCursor} />
+        {/* uPlot cannot build a scatter of no series: say so instead. */}
+        {shown ? <UPlotChart options={options} data={data} onCursor={setCursor} />
+          : <div className="empty">No run has both {xCol} and {yCol}.</div>}
         {cursor && hovered && (
           <div
             data-testid="scatter-tooltip"
