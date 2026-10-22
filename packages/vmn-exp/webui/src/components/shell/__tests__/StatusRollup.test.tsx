@@ -46,10 +46,10 @@ describe("StatusRollup", () => {
 
   it("links every part to the leaderboard query behind its number", () => {
     renderRollup(status({ stuck: 2, failed: 5, running: 3 }, 1, "stuck"));
-    expect(screen.getByRole("link", { name: "2 stuck" })).toHaveAttribute("href", `${BASE}?status=stuck`);
-    expect(screen.getByRole("link", { name: "3 running" })).toHaveAttribute("href", `${BASE}?status=running`);
+    expect(screen.getByRole("link", { name: "2 stuck" })).toHaveAttribute("href", `${BASE}?view=all&status=stuck`);
+    expect(screen.getByRole("link", { name: "3 running" })).toHaveAttribute("href", `${BASE}?view=all&status=running`);
     const failed = screen.getByRole("link", { name: "1 failed (24h)" });
-    expect(failed).toHaveAttribute("href", `${BASE}?status=failed&sort=finished_at&order=desc`);
+    expect(failed).toHaveAttribute("href", `${BASE}?view=all&status=failed&sort=finished_at&order=desc`);
     expect(failed).toHaveAttribute("title", "failed in the last 24 h, newest first");
   });
 

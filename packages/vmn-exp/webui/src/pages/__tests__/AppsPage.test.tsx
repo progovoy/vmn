@@ -117,7 +117,7 @@ describe("AppsPage", () => {
     httpGet.mockResolvedValue({ clf: status({ stuck: 2, running: 3 }), "root-svc": status() });
     renderAt("ml-repo");
     const stuck = await screen.findByRole("link", { name: "2 stuck" });
-    expect(stuck.getAttribute("href")).toBe("/ws/ml-repo/app/clf?status=stuck");
+    expect(stuck.getAttribute("href")).toBe("/ws/ml-repo/app/clf?view=all&status=stuck");
     expect(stuck.closest("article")!.querySelector(".ws-tile-link, .app-tile-link")!.textContent)
       .toBe("clf");
     expect(document.querySelector(".status-dot")).toBeNull();

@@ -176,8 +176,8 @@ describe("Sidebar", () => {
   it("shows the app's compact status rollup in the App group", async () => {
     renderAt("/ws/ml-repo/app/ml_app");
     const rollup = await screen.findByRole("link", { name: "2 stuck" });
-    expect(rollup).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?status=stuck");
-    expect(screen.getByRole("link", { name: "1 running" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?status=running");
+    expect(rollup).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?view=all&status=stuck");
+    expect(screen.getByRole("link", { name: "1 running" })).toHaveAttribute("href", "/ws/ml-repo/app/ml_app?view=all&status=running");
     expect(appStatus).toHaveBeenCalledWith("ml-repo", "ml_app");
   });
 

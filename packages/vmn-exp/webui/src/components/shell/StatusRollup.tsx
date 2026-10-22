@@ -1,23 +1,27 @@
 /** What needs attention in an app now: stuck runs, recent failures, running
- *  runs. Each number links to the leaderboard query that lists those runs. */
+ *  runs. Each number links to the leaderboard query that lists those runs —
+ *  on All runs, as the counts are of every run (inner ones too), which the
+ *  Outer runs view would not list. */
 import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import type { AppStatus } from "../../shell/contracts";
 import "./StatusRollup.css";
 
+const RUNS = "?view=all";
+
 interface Part { text: string; search: string; title?: string }
 
 function partsOf({ counts, failed_recent }: AppStatus): Part[] {
   const parts: Part[] = [];
-  if (counts.stuck) parts.push({ text: `${counts.stuck} stuck`, search: "?status=stuck" });
+  if (counts.stuck) parts.push({ text: `${counts.stuck} stuck`, search: `${RUNS}&status=stuck` });
   if (failed_recent) {
     parts.push({
       text: `${failed_recent} failed (24h)`,
-      search: "?status=failed&sort=finished_at&order=desc",
+      search: `${RUNS}&status=failed&sort=finished_at&order=desc`,
       title: "failed in the last 24 h, newest first",
     });
   }
-  if (counts.running) parts.push({ text: `${counts.running} running`, search: "?status=running" });
+  if (counts.running) parts.push({ text: `${counts.running} running`, search: `${RUNS}&status=running` });
   return parts;
 }
 
