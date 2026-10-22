@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { TOKEN_KEY, type AuthHints } from "../shell/contracts";
 import type { Meta } from "../types";
+import { clearPersistedQueries } from "../queryPersist";
 
 export interface AuthState {
   required: boolean;
@@ -50,5 +51,6 @@ export async function signOut(client: QueryClient, meta?: Meta): Promise<void> {
     await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   }
   client.clear();
+  clearPersistedQueries();
   setState({ required: true, hints: meta?.auth ?? null, method: "GET" });
 }

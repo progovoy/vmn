@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import { clearUnauthorized, reportUnauthorized, signOut, useAuthState } from "../authState";
 import { TOKEN_KEY } from "../../shell/contracts";
+import { PERSIST_KEY } from "../../queryPersist";
 import type { Meta } from "../../types";
 
 const TOKEN_HINTS = { token: true, oidc: false, login_url: null };
@@ -69,6 +70,12 @@ describe("signOut", () => {
     // The hints are meta's own auth block: it carries every hint field.
     expect(result.current).toEqual({ required: true, hints: m.auth, method: "GET" });
     expect(result.current.hints).toMatchObject(TOKEN_HINTS);
+  });
+
+  it("drops the persisted request cache: the next user never paints this one's rows", async () => {
+    localStorage.setItem(PERSIST_KEY, "[]");
+    await signOut(new QueryClient(), meta(false));
+    expect(localStorage.getItem(PERSIST_KEY)).toBeNull();
   });
 
   it("posts a raw /auth/logout only with OIDC", async () => {
