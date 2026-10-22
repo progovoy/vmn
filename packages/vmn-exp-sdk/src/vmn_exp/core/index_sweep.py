@@ -32,7 +32,8 @@ every new run, waiting for seconds.
 
 A ``journaled`` sweep (the ui, reading the store's change journal; plan 11
 §5.2) lists the files of the records the journal named (:meth:`Sweep.hint`)
-and of the live ones, plus the same rolling slice of every known record — the
+and of the live ones every ``LIVE_RELIST_SEC`` (for their heartbeats, which
+the journal leaves out), plus the same rolling slice of every known record — the
 consistency check (plan 11 §4.6), so each comes round once per
 ``full_sweep_sec`` (``reconcile_sec``) — and, at the start of each round, the
 record names (for records no journal entry announced). What the check finds
@@ -54,6 +55,10 @@ from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # n
 from vmn_exp.core.index_sweep_state import SweepState, _settled
 
 DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
+# How often a journaled sweep lists a live record the journal did not name:
+# the journal names every write but a heartbeat-only run_state.yml, and a run
+# turns stuck only after max(3 * interval, 60 s) without one.
+LIVE_RELIST_SEC = 10
 # How long a changed record keeps being listed (capped by full_sweep_sec).
 TOUCH_WINDOW_SEC = 300
 _wall = time.time
@@ -70,6 +75,7 @@ class Sweep(SweepState):
         self._sigs = {}  # key -> its sig at the last listing
         self._sigs_known = True  # False once the backend answered only None sigs
         self._live = None  # keys that may change on their own; None: not judged yet
+        self._live_at = {}  # key -> when a journaled listing last listed it as live
         self._pending = set()  # names listed without metadata yet (claims)
         self._ring, self._cursor, self._credit, self._rolled_at = [], 0, 0.0, None
         self.journaled = False
@@ -85,6 +91,7 @@ class Sweep(SweepState):
         """Forget every baseline: the next listing is full and compares all."""
         self.watch.reset()
         self._last_full, self._sigs, self._live, self._pending = None, {}, None, set()
+        self._live_at = {}
         self._restored = False
         self._ring, self._cursor, self._credit, self._rolled_at = [], 0, 0.0, None
 
@@ -119,6 +126,7 @@ class Sweep(SweepState):
         self._touched.pop(key, None)
         self._sigs.pop(key, None)
         self._pending.discard(key)
+        self._live_at.pop(key, None)
         if self._live is not None:
             self._live.discard(key)
 
@@ -150,7 +158,7 @@ class Sweep(SweepState):
         if self._full_due(now):
             return self._full_listing(records, now)
         candidates = hinted | self._pending | self._live
-        keys = [key for key in candidates if key in hinted or self._judge_live(records, key)]
+        keys = [key for key in candidates if key in hinted or self._live_due(records, key, now)]
         self._explained.update(keys)
         listing = self.watch.files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
@@ -182,6 +190,18 @@ class Sweep(SweepState):
         if changes is None:
             return []
         return [k for k in changes[0] if k not in records and k not in self._pending]
+
+    def _live_due(self, records, key, now):
+        """Whether live (or pending) *key* is due its every-LIVE_RELIST_SEC
+        listing, which keeps its heartbeat fresh; its other writes are hinted.
+        Its clock starts when first seen live: it was just listed or loaded."""
+        if not self._judge_live(records, key):
+            self._live_at.pop(key, None)
+            return False
+        if now - self._live_at.setdefault(key, now) < LIVE_RELIST_SEC:
+            return False
+        self._live_at[key] = now
+        return True
 
     def _judge_live(self, records, key):
         """Whether *key* — pending or live — is still worth listing."""

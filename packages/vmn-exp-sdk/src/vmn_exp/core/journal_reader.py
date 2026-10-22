@@ -1,7 +1,9 @@
 """Pure change-journal listing logic (plan 11 §5.2, phase 2b).
 
 Each ``tick()`` lists the minute partitions from ``cursor - skew_window`` to
-now, returns keys not seen before grouped by ``(area, app_key)`` scope, and
+now — every ``rescan_sec``; in between only the current and previous minute,
+so an idle store costs two listings a tick, and an entry a lagging writer put
+in an older minute is read by the next rescan — returns keys not seen before grouped by ``(area, app_key)`` scope, and
 reports scopes with more than ``max_per_scope`` new entries (the caller does a
 full listing for those). Storage-agnostic: ``list_fn(prefix, start_after)``
 yields full keys; backends that ignore ``start_after`` are filtered here.
@@ -30,11 +32,14 @@ class TickResult:
 class JournalReader:
     def __init__(self, list_fn: ListFn, clock: Callable[[], float],
                  skew_window_sec: float = 300, max_per_scope: int = 10_000,
-                 last_seen_ms: Optional[int] = None, boundary: Iterable[str] = ()):
+                 last_seen_ms: Optional[int] = None, boundary: Iterable[str] = (),
+                 rescan_sec: float = 30):
         self._list = list_fn
         self._clock = clock
         self._skew_ms = int(skew_window_sec * 1000)
         self._max = max_per_scope
+        self._rescan_ms = int(rescan_sec * 1000)
+        self._rescanned_ms = None  # when a tick last listed the whole skew window
         self._last_seen_ms = last_seen_ms
         # Keys at exactly last_seen_ms survive a resume: the next window
         # starts at that ms, so they would be read again.
@@ -55,9 +60,18 @@ class JournalReader:
         now_ms = int(self._clock() * 1000)
         start_ms = min(self._last_seen_ms or now_ms, now_ms) - self._skew_ms
         self._forget_before(start_ms)
-        result = self._group(self._new_keys(start_ms, now_ms))
+        result = self._group(self._new_keys(self._listed_from(start_ms, now_ms), now_ms))
         self._last_seen_ms = max(self._last_seen_ms or now_ms, now_ms)
         return result
+
+    def _listed_from(self, start_ms: int, now_ms: int) -> int:
+        """*start_ms* when a rescan of the skew window is due, else the start
+        of the previous minute."""
+        rescanned = self._rescanned_ms
+        if rescanned is not None and 0 <= now_ms - rescanned < self._rescan_ms:
+            return max(start_ms, now_ms - 60_000)
+        self._rescanned_ms = now_ms
+        return start_ms
 
     def _new_keys(self, start_ms: int, now_ms: int) -> List[JournalKey]:
         floor = time_floor_key(start_ms)

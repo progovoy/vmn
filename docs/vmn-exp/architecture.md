@@ -381,8 +381,10 @@ flowchart LR
     class S,JR,IX data
 ```
 
-- **Store workspaces** (`--store`) follow the change journal: one listing for
-  the whole store per tick, then only the named records are re-read.
+- **Store workspaces** (`--store`) follow the change journal: each tick lists
+  the journal's last two minutes (its whole 5-minute skew window every 30 s),
+  then only the named records are re-read; a live run is re-listed for its
+  heartbeat every 10 s, since heartbeats are not journaled.
 - **Git workspaces** (`--repo`) have no journal and are refreshed by listing.
 - **As a team server** (`--config server.yml`), the same process adds sign-in,
   API tokens, roles and an optional Postgres cache shared by replicas

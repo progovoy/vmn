@@ -72,7 +72,7 @@ def test_writer_four_minutes_behind_is_read_six_is_not():
     s, c = FakeStore(), Clock(T0)
     r = _reader(s, c)
     r.tick()
-    c.t = T0 + 10
+    c.t = T0 + 30  # the skew window's next rescan
     s.put((c.t - 240) * 1000, name="four")
     s.put((c.t - 360) * 1000, name="six")
     assert _names(r.tick()) == ["four"]
@@ -144,3 +144,33 @@ def test_filters_client_side_and_skips_garbage_keys():
         return [k for k in s.keys if k.startswith(prefix)]
 
     assert _names(JournalReader(no_start_after, c).tick()) == ["ok"]
+
+
+def _listed(store):
+    prefixes = [prefix for prefix, _ in store.calls]
+    store.calls.clear()
+    return prefixes
+
+
+def test_a_tick_lists_the_last_two_minutes_and_the_skew_window_now_and_then():
+    s, c = FakeStore(), Clock(T0)
+    r = _reader(s, c, skew_window_sec=300, rescan_sec=30)
+    r.tick()
+    assert len(_listed(s)) >= 6  # the first tick reads the whole window
+    c.t += 1
+    r.tick()
+    assert len(_listed(s)) <= 2
+    c.t += 30
+    r.tick()
+    assert len(_listed(s)) >= 6
+
+
+def test_a_late_entry_in_an_old_minute_is_read_by_the_next_rescan():
+    s, c = FakeStore(), Clock(T0)
+    r = _reader(s, c, skew_window_sec=300, rescan_sec=30)
+    r.tick()
+    s.put(T0 * 1000 - 200_000, name="late")  # a writer 200 s behind
+    c.t += 1
+    assert _names(r.tick()) == []
+    c.t += 30
+    assert _names(r.tick()) == ["late"]
