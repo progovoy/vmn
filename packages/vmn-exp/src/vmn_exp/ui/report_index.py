@@ -3,7 +3,9 @@
 Each persists in its own SQLite kv under the server's index dir. Refreshed on
 the request path: with background refresh at most once a second from the
 journal (a full listing every few minutes), else fully on every request, so a
-request sees every write before it — like the experiment indexes.
+request sees every write before it — like the experiment indexes. A store
+workspace whose journal follower runs (*journal_of*) feeds its index instead:
+the request path then reads no journal.
 """
 import hashlib
 import os
@@ -17,9 +19,10 @@ FOLLOW_INTERVAL_SEC = 1.0
 
 
 class ReportIndexes:
-    def __init__(self, db_dir=None, background=False):
+    def __init__(self, db_dir=None, background=False, journal_of=lambda ws_name: None):
         self._db_dir = db_dir
         self._background = background
+        self._journal_of = journal_of
         self._indexes = {}  # ws name -> (index, last refresh time)
         self._lock = threading.Lock()
 
@@ -29,6 +32,9 @@ class ReportIndexes:
             if ws.name not in self._indexes:
                 self._indexes[ws.name] = [self._new(ws, storage), None]
             entry = self._indexes[ws.name]
+        journal = self._journal_of(ws.name)
+        if journal is not None:
+            journal.feed_reports(entry[0])
         now = time.monotonic()
         if not self._background or entry[1] is None or now - entry[1] >= FOLLOW_INTERVAL_SEC:
             entry[0].refresh()

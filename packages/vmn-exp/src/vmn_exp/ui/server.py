@@ -161,7 +161,8 @@ def create_app(
         refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
-        os.path.join(manager.data_dir, "index") if use_index else None, background_refresh
+        os.path.join(manager.data_dir, "index") if use_index else None, background_refresh,
+        journal_of=source.journal_of,
     )
     app_lists = TTLCache(APPS_TTL_SEC)
     # One client per store workspace: building one resolves credentials, and its

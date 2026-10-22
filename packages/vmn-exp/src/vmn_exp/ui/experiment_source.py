@@ -212,6 +212,10 @@ class ExperimentSource:
                 self._journals[ws.name] = _open_journal(ws, storage, cache_path)
             return self._journals[ws.name]
 
+    def journal_of(self, ws_name):
+        """The store workspace's journal reader, once a snapshot opened it."""
+        return self._journals.get(ws_name)
+
     def persisted_count(self, ws, app_name):
         """How many of the store workspace *ws*'s *app_name* records its
         index file holds, without reading storage; 0 when none (or Postgres)."""

@@ -4,8 +4,11 @@ Header folds and latest revision numbers of every report, the panels each
 report's latest revision points at (pinned verstrs; a query panel points at
 its whole app) and per-run comment counts ``{total, unresolved}``. Built by
 one full listing, then kept current from the change journal: a ``reports``
-entry re-reads that report, a ``comments`` entry that run's thread. The state
-(with the journal cursor) persists in a :class:`CacheStore`'s kv, so a
+entry re-reads that report, a ``comments`` entry that run's thread. The
+entries come from the index's own journal reader, or — while a workspace's
+journal follower calls :meth:`ReportIndex.feed` every tick — from that
+follower, so the store's journal is listed once per tick, not twice. The
+state (with the journal cursor) persists in a :class:`CacheStore`'s kv, so a
 restart resumes instead of listing again. Rebuildable from storage at any time.
 """
 import threading
@@ -22,6 +25,8 @@ from vmn_exp.storage.journal_sinks import journal_list_fn
 KV_SCOPE = "reports-index"
 KV_FORMAT = "1"
 FULL_SWEEP_SEC = 300
+# A feeder silent this long has stopped: the index reads the journal again.
+FEED_STALE_SEC = 10
 
 
 def thread_counts(folded):
@@ -57,6 +62,7 @@ class ReportIndex:
         self._lock = threading.Lock()
         self._reader = None
         self._swept_at = None
+        self._fed_at = None
         self._state = {"reports": {}, "refs": {}, "comments": {}}
         self.generation = 0
 
@@ -78,13 +84,36 @@ class ReportIndex:
     # -- refresh -------------------------------------------------------------
 
     def refresh(self):
+        """Catch up; a fed index lists no journal, only rebuilds when due."""
         with self._lock:
-            if self._reader is None and not self._load_cached():
-                self._rebuild()
+            if not self._fed():
+                self._catch_up()
             elif self._sweep_due():
                 self._rebuild()
-            else:
-                self._follow()
+
+    def feed(self, entries, overflow, cursor):
+        """Apply a journal follower's tick: ``{(area, key): names}`` and the
+        *overflow* scopes, read up to *cursor* (None: keep this index's). A
+        first feed catches up through the index's own reader first, for what
+        the follower read before it fed this index."""
+        with self._lock:
+            if not self._fed():
+                self._catch_up()
+            self._fed_at = self._clock()
+            if cursor is not None:
+                self._reader = JournalReader.from_cursor(cursor, self._list, self._clock)
+            self._apply(entries, set(overflow))
+
+    def _fed(self):
+        return self._fed_at is not None and self._clock() - self._fed_at < FEED_STALE_SEC
+
+    def _catch_up(self):
+        if self._reader is None and not self._load_cached():
+            self._rebuild()
+        elif self._sweep_due():
+            self._rebuild()
+        else:
+            self._follow()
 
     def _sweep_due(self):
         return (self._full_sweep_sec is not None
@@ -117,14 +146,18 @@ class ReportIndex:
 
     def _follow(self):
         tick = self._reader.tick()
+        names = {scope: {k.name for k in keys} for scope, keys in tick.entries.items()}
+        self._apply(names, tick.overflow)
+
+    def _apply(self, entries, overflow):
         state = _copy(self._state)
-        for area, key in set(tick.entries) | tick.overflow:
+        for area, key in set(entries) | overflow:
             if area == REPORTS:
                 self._reload_report(state, key)
-            elif area == COMMENTS and (area, key) in tick.overflow:
+            elif area == COMMENTS and (area, key) in overflow:
                 state["comments"][app_name_of(key)] = self._app_counts(app_name_of(key))
             elif area == COMMENTS:
-                for name in {k.name for k in tick.entries[(area, key)]}:
+                for name in entries[(area, key)]:
                     self._reload_thread(state, app_name_of(key), name)
         self._replace(_jsonable(state))
 

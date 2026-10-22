@@ -171,3 +171,59 @@ def test_a_tick_with_no_new_entries_does_not_rewrite_the_cursor(store, lists):
     journal.tick()
     assert written >= 1
     assert len(puts) == written
+
+
+class FakeReports:
+    def __init__(self):
+        self.feeds = []
+
+    def feed(self, entries, overflow, cursor):
+        self.feeds.append((entries, set(overflow), cursor))
+
+
+class NotLeading:
+    def lead(self, scope):
+        return False
+
+
+def test_reports_and_comments_scopes_feed_the_reports_index(store, lists):
+    from vmn_exp.reports import comments
+    from vmn_exp.reports import store as rstore
+
+    _, list_fn = lists
+    journal = _journal(list_fn)
+    journal.watch(FakeIndex("app"))
+    reports = FakeReports()
+    journal.feed_reports(reports)
+    rid = rstore.create(store, "T", "")
+    comments.add(store, ("run", "trainer", "0.1.0-dev.a"), "hi")
+    _write(store, "app", "1.0.0-dev.a")
+    journal.tick()
+    [(entries, overflow, cursor)] = reports.feeds
+    assert set(entries) == {("reports", rid), ("comments", "trainer")}
+    assert entries[("comments", "trainer")] == {"0.1.0-dev.a"}
+    assert overflow == set() and cursor == journal.cursor
+
+
+def test_an_idle_tick_still_feeds_the_reports_index(store, lists):
+    _, list_fn = lists
+    journal = _journal(list_fn)
+    reports = FakeReports()
+    journal.feed_reports(reports)
+    journal.tick()
+    journal.tick()
+    assert [f[0] for f in reports.feeds] == [{}, {}]
+
+
+def test_a_replica_not_leading_feeds_relayed_report_hints(store, lists):
+    calls, list_fn = lists
+    journal = _journal(list_fn, election=NotLeading())
+    reports = FakeReports()
+    journal.feed_reports(reports)
+    journal.tick()
+    journal.receive("journal:ws/comments/trainer|0.1.0-dev.a")
+    journal.receive("journal:ws/reports/r1|")
+    assert calls == []
+    assert reports.feeds == [({}, set(), None),
+                             ({("comments", "trainer"): {"0.1.0-dev.a"}}, set(), None),
+                             ({}, {("reports", "r1")}, None)]

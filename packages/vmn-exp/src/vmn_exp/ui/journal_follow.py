@@ -5,22 +5,26 @@ Each :meth:`WorkspaceJournal.tick` lists the store's journal once (whatever
 the number of apps) and routes every new entry by ``(area, app)`` to the
 watched index of that scope as a ``hint``; entries for scopes nobody watches
 are dropped (a later watch starts with a reconcile listing), and a scope that
-overflows reconciles instead. The cursor persists in the workspace's
-``CacheStore`` kv, so a restart resumes where it stopped.
+overflows reconciles instead. ``reports``/``comments`` entries go to the
+workspace's report index (:meth:`WorkspaceJournal.feed_reports`), fed every
+tick, idle ones too, so it reads no journal of its own while this one runs.
+The cursor persists in the workspace's ``CacheStore`` kv, so a restart
+resumes where it stopped.
 
 With an *election* (Postgres mode, plan 11 §4.3) only the replica leading
 the workspace's journal ticks; it passes every entry to *relay* as
 ``<scope>|<name>`` (``NOTIFY vmn_hint``; an empty name asks to reconcile),
-and every replica routes those to its own watched indexes with
-:meth:`WorkspaceJournal.receive`. A new leader resumes from the shared cursor.
+and every replica routes those to its own watched indexes and report index
+with :meth:`WorkspaceJournal.receive`. A new leader resumes from the shared cursor.
 """
 import threading
 import time
 
 from vmn_exp.core.journal_reader import JournalReader
-from vmn_exp.storage.areas import RUNS, app_key
+from vmn_exp.storage.areas import COMMENTS, REPORTS, RUNS, app_key
 
 _CURSOR_FINGERPRINT = "journal-cursor"
+_REPORT_AREAS = (REPORTS, COMMENTS)
 
 
 class WorkspaceJournal:
@@ -32,6 +36,7 @@ class WorkspaceJournal:
             cursor, list_fn, clock, **reader_kw)
         self._reader = self._new_reader(self._saved_cursor())
         self._indexes = {}  # (area, app key) -> index
+        self._reports = None  # the workspace's ReportIndex, once it asks
         self._lock = threading.Lock()
 
     def use_cache(self, cache):
@@ -63,11 +68,19 @@ class WorkspaceJournal:
             if self._indexes.get(scope) is index:
                 del self._indexes[scope]
 
+    def feed_reports(self, reports):
+        """Feed *reports* (``feed(entries, overflow, cursor)``) every tick."""
+        self._reports = reports
+
     def receive(self, payload):
         """Route a relayed ``<scope>|<name>`` hint to the watched index."""
         where, name = payload.rsplit("|", 1)
         journal_scope, area, key = where.rsplit("/", 2)
         if journal_scope != self._scope:
+            return
+        if area in _REPORT_AREAS:
+            scope = (area, key)
+            self._feed({scope: {name}}, set()) if name else self._feed({}, {scope})
             return
         with self._lock:
             index = self._indexes.get((area, key))
@@ -76,6 +89,7 @@ class WorkspaceJournal:
 
     def tick(self):
         if not self._lead():
+            self._feed({}, set())  # relayed entries arrive through receive()
             return
         first = self._reader.cursor["last_seen_ms"] is None
         result = self._reader.tick()
@@ -93,6 +107,17 @@ class WorkspaceJournal:
             self._send(scope, "")
         if first or result.entries or result.overflow:
             self._cache.kv_put(self._scope, _CURSOR_FINGERPRINT, self._reader.cursor)
+        self._feed_tick(result)
+
+    def _feed_tick(self, result):
+        entries = {scope: {key.name for key in keys}
+                   for scope, keys in result.entries.items() if scope[0] in _REPORT_AREAS}
+        overflow = {scope for scope in result.overflow if scope[0] in _REPORT_AREAS}
+        self._feed(entries, overflow, self._reader.cursor)
+
+    def _feed(self, entries, overflow, cursor=None):
+        if self._reports is not None:
+            self._reports.feed(entries, overflow, cursor)
 
     def _lead(self):
         if self._election is None:
