@@ -90,6 +90,11 @@ def server(tmp_path_factory):
 @pytest.fixture(scope="module")
 def checks(server):
     from playwright.sync_api import Error
+    from vmn_exp.ui import server as server_mod
+
+    static_index = os.path.join(os.path.dirname(server_mod.__file__), "static", "index.html")
+    if not os.path.isfile(static_index):  # build output: make _build_ui
+        pytest.skip("web bundle not built")
 
     try:
         bc = BrowserChecks(server, WS, APP).__enter__()

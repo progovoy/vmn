@@ -135,6 +135,9 @@ def test_only_live_rows_are_rederived_as_time_passes(monkeypatch):
     _counting(monkeypatch, "status_fields", module=tree_mod, calls=status_calls)
     cache = lb.LeaderboardCache(bucket_sec=2)
     snap = _snapshot(n=50, live={7})
+    # Pin the first page to NOW: on the real clock a run reaching here ~10s
+    # after import would share `later`'s bucket and re-derive nothing.
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
 
     cache.page(snap, {}, limit=10)
     assert len(status_calls) == 50
@@ -172,6 +175,7 @@ def test_etag_tracks_generation_params_and_live_time(monkeypatch):
     assert tag != cache.etag(_snapshot(n=10, generation=2), {}, sort="loss", limit=10)
 
     live = _snapshot(n=10, generation=3, live={1})
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
     live_tag = cache.etag(live, {}, limit=10)
     later = NOW + datetime.timedelta(seconds=30)
     monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
