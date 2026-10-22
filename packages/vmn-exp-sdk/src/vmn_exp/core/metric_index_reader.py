@@ -2,34 +2,49 @@
 """Range reads of an indexed metric file (plan 12 §3.2).
 
 The reader only needs ``read_range(offset, length)`` — a local ``pread`` or
-an object-store range GET. It reads the footer from the end once, then for a
-query the raw chunks or the one LOD slice the answer needs.
+an object-store range GET. It reads the last :data:`TAIL_READ_BYTES` of the
+file once — the footer, and the whole of a file that small, which then needs
+no other read — then for a query the raw chunks or the one LOD slice the
+answer needs, the chunks one query lacks read concurrently. Queries may run
+on several threads at once.
 """
 import bisect
 import json
+import threading
 import zlib
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.metric_columns import Columns, unpack_deltas, unpack_floats
 from vmn_exp.core.metric_index_layout import CHUNK_POINTS, MAGIC, TAIL
 from vmn_exp.core.metric_lod import decode_buckets, emit, merge, summarize
 
 _CACHED_CHUNKS = 16
+# What the first read takes from the end of the file: on an object store one
+# round trip holds the footer, or the whole file.
+TAIL_READ_BYTES = 64 * 1024
 _UNPACK = {"steps": unpack_deltas, "ts": unpack_deltas, "values": unpack_floats}
 
 
 class MetricIndexReader:
     def __init__(self, read_range, size):
-        self._read = read_range
-        footer_len, crc, magic = TAIL.unpack(read_range(size - TAIL.size, TAIL.size))
+        tail_at = max(size - TAIL_READ_BYTES, 0)
+        tail = read_range(tail_at, size - tail_at)
+        self._read = _in_memory(tail) if tail_at == 0 else read_range
+        self._buffered = tail_at == 0
+        footer_len, crc, magic = TAIL.unpack(tail[-TAIL.size:])
         if magic != MAGIC:
             raise ValueError("not an indexed metric file")
         start = size - TAIL.size - footer_len
-        packed = read_range(start, footer_len + TAIL.size)[:footer_len]
+        if start >= tail_at:
+            packed = tail[start - tail_at:start - tail_at + footer_len]
+        else:
+            packed = read_range(start, footer_len)
         if zlib.crc32(packed) != crc:
             raise ValueError("indexed metric file footer is corrupt")
         self.footer = json.loads(zlib.decompress(packed))
         self._chunks = OrderedDict()
+        self._lock = threading.Lock()
 
     def keys(self):
         return list(self.footer["keys"])
@@ -81,27 +96,47 @@ class MetricIndexReader:
     def _chunk(self, chunks, column, index):
         entry = chunks[index]
         cache_key = (entry["off"], column)
-        if cache_key not in self._chunks:
-            data = zlib.decompress(self._read(entry["off"], entry["len"]))
-            self._chunks[cache_key] = _UNPACK[column](data)
+        with self._lock:
+            cached = self._chunks.get(cache_key)
+            if cached is not None:
+                self._chunks.move_to_end(cache_key)
+                return cached
+        values = _UNPACK[column](zlib.decompress(self._read(entry["off"], entry["len"])))
+        with self._lock:
+            self._chunks[cache_key] = values
             if len(self._chunks) > _CACHED_CHUNKS:
                 self._chunks.popitem(last=False)
-        self._chunks.move_to_end(cache_key)
-        return self._chunks[cache_key]
+        return values
 
     def _column(self, meta, column, start, end):
         if column not in meta["raw"]:
             return None
         chunks, out = meta["raw"][column], []
-        for index in range(start // CHUNK_POINTS, -(-end // CHUNK_POINTS)):
+        for index in _chunk_span(start, end):
             base = index * CHUNK_POINTS
             out.extend(self._chunk(chunks, column, index)[max(start - base, 0) : end - base])
         return out
+
+    def _prefetch(self, meta, start, end):
+        """Read the chunks of ``[start, end)`` not cached yet, concurrently."""
+        if self._buffered:
+            return
+        wanted = [(meta["raw"][column], column, index)
+                  for column in _UNPACK if column in meta["raw"]
+                  for index in _chunk_span(start, end)]
+        with self._lock:
+            wanted = [w for w in wanted
+                      if (w[0][w[2]]["off"], w[1]) not in self._chunks]
+        if len(wanted) < 2 or len(wanted) > _CACHED_CHUNKS:
+            return
+        with ThreadPoolExecutor(max_workers=len(wanted)) as pool:
+            list(pool.map(lambda w: self._chunk(*w), wanted))
 
     def _columns(self, meta, start, end):
         """Positions ``[start, end)`` of *meta*'s key as :class:`Columns`."""
         if end <= start:
             return Columns(None if not meta["has_step"] else [], [], [])
+        self._prefetch(meta, start, end)
         read = lambda column: self._column(meta, column, start, end)  # noqa: E731
         return Columns(read("steps"), read("ts"), read("values"))
 
@@ -136,6 +171,14 @@ class MetricIndexReader:
         for start in range(1, len(cols) - 1, size) if n_buckets else ():
             kept += emit(summarize(cols, start, min(start + size, len(cols) - 1)))
         return kept + [_point(cols, len(cols) - 1)]
+
+
+def _in_memory(data):
+    return lambda offset, length: data[offset:offset + length]
+
+
+def _chunk_span(start, end):
+    return range(start // CHUNK_POINTS, -(-end // CHUNK_POINTS))
 
 
 def _bucket_span(size, p0, p1):

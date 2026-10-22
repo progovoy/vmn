@@ -148,8 +148,19 @@ runs/<app-key>/<verstr>/
   outputs/media/<name>/<step>.png
   outputs/tables/<name>/<step>.json
   artifacts/<user paths>      user artifacts only
+  children/<child verstr>     empty child markers (see below)
   .claim                      object stores only (unchanged)
 ```
+
+- **Child markers** (`storage/child_markers.py`): a run created with a parent writes an empty
+  `children/<child>` into the parent's record (best-effort, from `core/writer.py:_claim` and
+  `push`), so `list_children(app, verstr)` is one LIST. Deliberately not record files:
+  `children/` is neither a signed local folder (`storage/listing.py`) nor an S3 record folder
+  (`s3_listing._RECORD_DIRS`; the full listing jumps past the subtree), and marker writes are
+  not journaled, so a new child never makes its parent look changed to an index (locally the
+  first marker moves the record dir's mtime once, creating `children/`). `vmn-exp
+  backfill-children` writes missing ones; `core/subtree_direct.py` reads an outer run's
+  subtree through them while the index is cold.
 
 - **System outputs move to `outputs/`**, so user artifacts can be named anything (fixes §1.3).
   Lineage keeps one path namespace for `vmn://<app>/<verstr>/<path>` URIs and `outputs`

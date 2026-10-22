@@ -405,7 +405,7 @@ leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
 `add`, `list`, `show`, `compare`, `diff`, `restore`, `export`, `prune`,
 `tag`, `archive`, `unarchive`, `rewind`, `rerun`, `push`, `watch`,
 `compact`, `importance`, `lineage`, `similar`, `similar-backfill`,
-`export-metrics`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
+`backfill-children`, `export-metrics`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
 ([sweeps.md](sweeps.md)), `vmn-exp model` ([models.md](models.md)),
 `vmn-exp ui` ([ui.md](ui.md)).
 
@@ -1248,6 +1248,34 @@ backfilled 2, partial 1, skipped 1, failed 0
   that created the run (for a run `migrate` converted from v1, its run state's
   host).
 - The entry (`source: backfill`) is appended under this host's writer id.
+
+### `backfill-children`
+
+Every run created with a parent (`create`/`run --parent`, nested runs under
+`VMN_EXPERIMENT_ID`, sweep trials, reruns, SDK runs, imports, `push`) also
+writes an empty child marker `children/<child verstr>` into its parent's
+record, best-effort (a failed marker never fails the child; `prune` drops a
+pruned child's marker). An outer run's children are then one listing of its
+own record away, which is how `vmn-exp ui` can show an outer run before its
+index has loaded the store. The markers only speed reads up: the children's
+`parent` fields stay the truth, and a marker whose run is gone (or was
+renamed) is skipped. `backfill-children` writes the markers a store lacks
+(runs from before markers existed, or a marker that failed to write), from
+one pass over the app's index and one marker listing per parent:
+
+```sh
+vmn-exp backfill-children my_app --dry-run
+vmn-exp backfill-children my_app --store s3://bucket/prefix
+```
+
+```
+wrote 1840, present 12
+```
+
+It takes the repo lock like other writing actions, also runs without a
+checkout (`--from-snapshot`), and exits 1 (adding `failed F`) when a marker
+could not be written; run it again to retry. Markers are not record files:
+listings, index signatures and the change journal ignore `children/`.
 - Prints `<verstr>  backfilled|partial|skipped|failed[ (detail)]` per run
   (`<app>:` header lines under `--all-apps`), then `backfilled N, partial P,
   skipped S, failed F` (plus ` (dry run: nothing written)` with `--dry-run`).
@@ -1478,7 +1506,7 @@ vmn-exp run my_app --from-snapshot /mnt/code --experiment-dir /mnt/runs -- pytho
 
 `--from-snapshot` (or `$VMN_SNAPSHOT_METADATA`) accepts the file or its
 directory. In this mode `create`, `run`, `add`, `list`, `show`, `compare`,
-`prune`, `rewind`, `push`, `similar-backfill` and `similar` (with `-v`/`--latest`
+`prune`, `rewind`, `push`, `similar-backfill`, `backfill-children` and `similar` (with `-v`/`--latest`
 or `--text-only`) work; other actions need a checkout. A run recorded this way
 copies the exported run's [features](#what-a-run-records-for-similar) from
 `vmn_features.yml`.

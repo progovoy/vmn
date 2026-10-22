@@ -288,10 +288,6 @@ def experiment_detail(
     artifacts_read = submit(list_artifacts, storage, app_name, verstr)
     env_read = submit(storage.load_file, app_name, verstr, "env.yml")
     compacted_read = submit(record_compacted, storage, app_name, verstr)
-    ranged_read = None
-    if include_series and step_range is not None:
-        ranged_read = submit(range_series, storage, app_name, verstr, keys, max_points,
-                             None, step_range, schema)
     states = RunStates(storage, app_name, read_run_state, read_observed_at)
     states.prefetch(_status_members(
         storage, app_name, verstr, edges, job_status(verstr) if job_status else None))
@@ -302,8 +298,11 @@ def experiment_detail(
     snapshot = log_read.result()
     tail = snapshot.tail(LOG_TAIL)
     series, series_total = {}, {}
-    if ranged_read is not None:
-        series, series_total, _ = ranged_read.result()
+    if include_series and step_range is not None:
+        # On this thread: range_series waits on the read pool itself.
+        series, series_total, _ = range_series(
+            storage, app_name, verstr, keys, max_points, None, step_range, schema
+        )
     elif include_series:
         series, series_total = thinned_series(snapshot, keys, max_points, x=x)
     metrics, metric_summary = snapshot.summarized_metrics(schema)
@@ -390,10 +389,10 @@ def run_series(
     """``(series, series_total, step_metrics)`` of an existing run, or None
     when it is gone — read from its metric objects when the storage lists
     them, else from its parsed log."""
-    if storage.load_metadata(app_name, verstr) is None:
-        return None
     if readable(storage):
         return object_series(storage, app_name, verstr, keys, max_points, budget, x, schema)
+    if storage.load_metadata(app_name, verstr) is None:
+        return None
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     series, totals = thinned_series(snapshot, keys, max_points, budget, x)
     return series, totals, snapshot.step_metrics(schema)
