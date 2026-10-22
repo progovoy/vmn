@@ -25,6 +25,8 @@ export function useShownList<T>(query: UseQueryResult<T, HttpError>, enabled: bo
     stale: data !== undefined && query.data === undefined,
     queryError: err?.status === 400 ? err.message : null,
     pageError: data ? null : failed,
+    /** The page failed as not found (404): e.g. a scope a loading index does not hold yet. */
+    missing: !data && err?.status === 404,
     staleError: data ? failed : null,
   };
 }
