@@ -240,7 +240,48 @@ The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 
 `orjson` has no free-threaded wheel yet, so the `ui` extra leaves it out and
 3.14t encodes JSON with the standard library (included above). On a regular
 CPython, `pip install "vmn-exp[ui,orjson]"` renders large pages faster. With the GIL on and a watched app of
-10,000+ runs, `vmn-exp ui` prints this hint once.
+10,000 to 199,999 runs, `vmn-exp ui` prints this hint once.
+
+**Past ~200k runs, use a GIL build** (3.12, 3.14). A 486k-run server on S3 grew
+from 28 GiB to 250 GiB on 3.14t with a constant row count, and stalled for about
+two minutes at a time. On 3.14t with that many runs, `vmn-exp ui` warns once.
+Two things cause this, and both grow with the heap:
+
+- **The allocator keeps every thread's peak.** A free-threaded build always
+  allocates with mimalloc, which gives each thread its own heap. Memory that a
+  live worker thread allocated and another thread freed can only be reused by
+  that worker. The ui keeps ~100 long-lived threads (request pools, S3 readers,
+  refreshers), so its RSS tends toward the sum of each thread's peak. Measured
+  on 3.14.10, macOS arm64: rebuilding 300k rows that another thread had freed
+  took RSS from 940 MB to 1849 MB on 3.14t. On the GIL build (pymalloc) RSS
+  stayed at 810 MB. With 16 to 40 concurrent requests copying rows, RSS settled
+  at 3 to 5 times the live table on 3.14t, against 1.5 to 2 times on the GIL
+  build. The same retention shows with `PYTHON_GIL=1` on 3.14t and with
+  `PYTHONMALLOC=mimalloc` on a GIL build. `MIMALLOC_PURGE_DELAY=0`,
+  `MIMALLOC_ARENA_PURGE_MULT=1` and `MIMALLOC_ABANDONED_RECLAIM_ON_FREE=1`
+  changed nothing, and 3.14t refuses `PYTHONMALLOC=malloc`. Memory held by a
+  thread that exits is reclaimed. These numbers come from macOS; Linux was not
+  measured.
+- **Every collection stops the whole process.** The free-threaded collector is
+  not generational. A collection runs when objects grew by 25% of the unfrozen
+  survivors and RSS grew by 10% since the last collection (CPython 3.14
+  `gc_should_collect`). Each one stops every thread and scans the whole heap,
+  whatever generation `gc.callbacks` reports. Measured: 0.47 to 0.66 s for 8M
+  tracked objects (4 GB), against 1.5 s on the GIL build. The GIL build,
+  though, runs a full collection only rarely; its frequent young collections
+  take under 1 ms. Freed memory the allocator still holds makes a scan up to
+  8 times slower for the same live objects. A swapped heap made a scan take
+  16 to 32 s on both builds. Objects frozen with `gc.freeze()` (the ui freezes
+  everything after it builds a board from scratch) are skipped but still
+  walked: 50 ms per 8M objects on 3.14t, about 18 ms per GB of heap. Freezing
+  did not make collections more frequent. Under steady churn (as many frees as
+  allocations), 3.14t did not collect at all.
+
+As RSS grows 10%, a collection runs and takes longer than the last one, so
+stalls and growth arrive together. The dump's `gc` section and
+`vmn-exp ui diag --summarize` show it: count, total and worst pause, recent
+pauses, frozen objects, the allocator and its block count next to RSS, and
+whether the event loop's worst lag overlaps a GC pause.
 
 ## Diagnostic dumps
 
@@ -274,6 +315,7 @@ shows `{"error": ...}` instead of breaking the dump:
 | `locks` | the server's key locks (report index, index refresh per app, refresher, store upkeep, leaderboard base per app) held or waited on now — holder thread, held for, each waiter and its wait — and per lock acquires, contended, max wait, max held |
 | `background` | per background activity (index refresh per app, journal tick, report index refresh, store upkeep, board warm, startup warmup): runs, running now (thread, for how long), last/max duration, last ok, last error |
 | `logs` | the last 200 warnings/errors (logger, message, exception type/message, thread), counts per logger and level, the last 50 vmn-exp info lines |
+| `gc` | the cyclic collector: enabled, `gil_enabled`, threshold, `freeze_count`; collections, total/max pause (when, which generation), collected/uncollectable, the same per generation, the last 32 pauses (`at`, `ms`, generation, collected, uncollectable), timed by a `gc.callbacks` hook from start to stop; `allocator`: `mimalloc` (every free-threaded build) or `PYTHONMALLOC`'s (default `pymalloc`), `sys.getallocatedblocks()`, the set `PYTHONMALLOC`/`MIMALLOC_*` values |
 | `latency` | event-loop lag (a 0.25 s sleep's overshoot) and thread-scheduling lag (a 0.05 s sleep's; the GIL shows here) over the last 5 minutes: p50/p95/max, when the worst was |
 
 Redaction: store URIs and DSNs lose their userinfo and every query value but
@@ -287,7 +329,9 @@ are scrubbed from every string of the dump. Other modules add sections with
 `vmn-exp ui diag` takes a diagnostic dump of a running `vmn-exp ui` (no
 py-spy or network access needed) and prints a short summary: the most common
 thread stacks, the slowest in-flight requests, pool saturation, index loading
-and S3 latency (p50/p95/max, errors, retries) per operation.
+and S3 latency (p50/p95/max, errors, retries) per operation, and the
+collector's pauses (whether the worst event-loop lag was one), the
+allocator's block count and RSS per block.
 
 ```sh
 vmn-exp ui diag --pid 12345                        # SIGUSR1; waits for <data-dir>/diag/diag-<ts>-12345.json
