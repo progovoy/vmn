@@ -53,15 +53,21 @@ def app_key(app_name):
 
 
 def boto3_client(endpoint_url=None):
-    return _client(endpoint_url)
+    """A client of a session of its own that parses timestamps with
+    :func:`parse_timestamp` (the default session's clients keep botocore's)."""
+    session = boto3_client_module().session.Session()
+    session._session.get_component("response_parser_factory").set_parser_defaults(
+        timestamp_parser=parse_timestamp)
+    return _client(session, endpoint_url)
 
 
 def sigv4_client(endpoint_url=None):
-    """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs)."""
-    return _client(endpoint_url, signature_version="s3v4")
+    """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs):
+    one per presigned URL, so the default session's (no session to build)."""
+    return _client(boto3_client_module(), endpoint_url, signature_version="s3v4")
 
 
-def _client(endpoint_url, **config):
+def _client(session, endpoint_url, **config):
     from botocore.config import Config
 
     # A pooled connection per concurrent reader (the index's and parallel_map's);
@@ -69,9 +75,6 @@ def _client(endpoint_url, **config):
     config = Config(max_pool_connections=MAX_POOL_CONNECTIONS, connect_timeout=CONNECT_TIMEOUT_SEC,
                     read_timeout=READ_TIMEOUT_SEC, retries=dict(RETRIES), **config)
     kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
-    session = boto3_client_module().session.Session()
-    session._session.get_component("response_parser_factory").set_parser_defaults(
-        timestamp_parser=lambda value: parse_timestamp(value))
     return instrument(session.client("s3", config=config, **kwargs))
 
 

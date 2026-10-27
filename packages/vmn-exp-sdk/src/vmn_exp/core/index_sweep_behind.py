@@ -155,11 +155,10 @@ class SweepBehind:
 
     def wait_relisted(self, timeout):
         """Until a files relisting under way has records to take (or ends),
-        at most *timeout* seconds; whether it has."""
+        at most *timeout* seconds."""
         relisting = self._relisting
-        if relisting is None or not relisting.files:
-            return False
-        return relisting.wait_ready(timeout) and not self._hinted
+        if relisting is not None and relisting.files:
+            relisting.wait_ready(timeout)
 
     def _hinted_files(self, keys):
         files = self.watch.files

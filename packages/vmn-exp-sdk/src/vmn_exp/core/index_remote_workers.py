@@ -20,48 +20,28 @@ effort: whatever a worker cannot load the caller loads in-process.
 import importlib
 import os
 import pickle
-import struct
-import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp._base import ensure_logger
 from vmn_exp.core.index_record import refresh_record, update_record
-from vmn_exp.core.index_workers import _can_spawn, _cpus, worker_command
+from vmn_exp.core.index_io_process import _read, _read_raw as _receive_raw
+from vmn_exp.core.index_io_process import _write as _send
+from vmn_exp.core.index_workers import _can_spawn, _cpus, _spawn, worker_command
 
 WORKERS = 4  # at most, and at most a CPU each but one
 THREADS = 16  # requests a worker keeps in flight
 MIN_RECORDS = 64  # a batch worth handing out
-_HEADER = struct.Struct("!Q")
 
 
 def worker_count():
     return max(0, min(WORKERS, _cpus() - 1)) if _can_spawn() else 0
 
 
-def _send(stream, payload):
-    data = pickle.dumps(payload, pickle.HIGHEST_PROTOCOL)
-    stream.write(_HEADER.pack(len(data)) + data)
-    stream.flush()
-
-
-def _receive_raw(stream):
-    head = stream.read(_HEADER.size)
-    if len(head) < _HEADER.size:
-        raise EOFError
-    size = _HEADER.unpack(head)[0]
-    data = stream.read(size)
-    if len(data) < size:
-        raise EOFError
-    return data
-
-
 class _Worker:
     def __init__(self, spec):
-        self._proc = subprocess.Popen(
-            worker_command(__name__), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, env=dict(os.environ))
+        self._proc = _spawn(worker_command(__name__), dict(os.environ))
         _send(self._proc.stdin, spec)
 
     def ask(self, request):
@@ -132,16 +112,6 @@ class RemoteLoaders:
             worker.close()
 
 
-class NoLoaders:
-    """What a backend without ``worker_spec()`` gets: nothing loaded elsewhere."""
-
-    def load(self, app_name, work):
-        return {}
-
-    def close(self):
-        pass
-
-
 def _open(spec):
     module, name, args, kwargs = spec
     return getattr(importlib.import_module(module), name)(*args, **kwargs)
@@ -168,10 +138,10 @@ def main():
     each answered with ``[(key, result or None)]`` (length-prefixed pickles)."""
     ensure_logger()
     stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
-    storage = _open(pickle.loads(_receive_raw(stdin)))
+    storage = _open(_read(stdin))
     while True:
         try:
-            app_name, items = pickle.loads(_receive_raw(stdin))
+            app_name, items = _read(stdin)
         except EOFError:
             return
         _send(stdout, _load(storage, app_name, items))

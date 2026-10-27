@@ -80,15 +80,12 @@ class Relisting:
         self._changed = threading.Condition(self._lock)  # notified as records are listed
         self._seen = set()
         self._ready = {}  # key -> its files ({} when it has none), listed, not taken yet
+        self._newest = []  # heap of (-metadata write time, key) of the keys in _ready
         self._names = []  # a names-only relisting's keys, not taken yet
         self._total, self._listed, self._new, self._taken_new = None, 0, 0, 0
         self._done, self._error = False, None
         self._thread = threading.Thread(target=self._run, daemon=True, name="vmn-index-relist")
         self._thread.start()
-
-    def wait(self):
-        """Until everything is listed."""
-        self._thread.join()
 
     def saw(self, keys):
         """A refresh listed *keys* itself: leave them out of what it takes."""
@@ -117,10 +114,9 @@ class Relisting:
 
     def wait_ready(self, timeout):
         """Until records wait to be taken or the listing ended, at most
-        *timeout* seconds; whether some do."""
+        *timeout* seconds."""
         with self._changed:
             self._changed.wait_for(lambda: self._ready or self._names or self._done, timeout)
-            return bool(self._ready or self._names)
 
     def take(self, limit=None):
         """``(keys, {key: files}, done)`` of up to *limit* (None: all) listed
@@ -134,9 +130,9 @@ class Relisting:
                 return [k for k in keys if k not in self._seen], {}, self._done
             ready = self._ready
             if limit is None or len(ready) <= limit:
-                keys = list(ready)
+                keys, self._newest = list(ready), []
             else:
-                keys = heapq.nlargest(limit, ready, key=lambda k: _written_at(ready[k]))
+                keys = [heapq.heappop(self._newest)[1] for _ in range(limit)]
             files = {key: ready.pop(key) for key in keys}
             self._taken_new += sum(key not in self._known for key in keys)
             done, seen = self._done and not ready, set(self._seen)
@@ -155,7 +151,7 @@ class Relisting:
             with self._lock:
                 self._new = len(unknown)
             if not self.files:
-                self._put(unknown + gone, {}, len(unknown) + len(gone))
+                self._put(unknown + gone, {})
             else:
                 self._list_files(unknown + gone, _store_order(names & self._known))
         except Exception as exc:  # handed to the next take()
@@ -185,7 +181,7 @@ class Relisting:
             self._total = self._total or 0
 
     def _list_between(self, chunk):
-        self._put(chunk, self._watch.files_between(chunk), len(chunk))
+        self._put(chunk, self._watch.files_between(chunk))
 
     def _list_files(self, keyed, between):
         """*keyed* listed record by record, then *between* (in store order)
@@ -198,14 +194,16 @@ class Relisting:
                                 thread_name_prefix="vmn-index-relist") as pool:
             futures = {pool.submit(list_of, chunk): chunk for list_of, chunk in jobs}
             for future in as_completed(futures):
-                self._put(futures[future], future.result(), len(futures[future]))
+                self._put(futures[future], future.result())
 
-    def _put(self, keys, listing, count):
+    def _put(self, keys, listing):
         with self._lock:
             if self.files:
-                self._ready.update((key, listing.get(key) or {}) for key in keys)
+                for key in keys:
+                    files = self._ready[key] = listing.get(key) or {}
+                    heapq.heappush(self._newest, (-_written_at(files), key))
             else:
                 self._names += keys
-            self._total = self._total if self._total is not None else count
-            self._listed += count
+            self._total = self._total if self._total is not None else len(keys)
+            self._listed += len(keys)
             self._changed.notify_all()

@@ -136,7 +136,7 @@ def _upsert(conn, app, seq, runs, leans):
     )
 
 
-def _renumber(conn, app, runs, gone, before, defer=False):
+def _renumber(conn, app, runs, gone, before, defer):
     """Keep ``idx`` the rank by ``(timestamp, key)``: new runs sorting after
     every other row are numbered on; any other move renumbers the app — or,
     with *defer*, leaves it to a later :func:`renumbered` (False)."""
@@ -179,11 +179,8 @@ def _number_on(conn, app, new):
         "SELECT timestamp, key, idx FROM exp_rows WHERE app = ? AND idx IS NOT NULL"
         " ORDER BY timestamp DESC, key DESC LIMIT 1", (app,)
     ).fetchone()
-    (numbered,) = conn.execute(
-        "SELECT COUNT(*) FROM exp_rows WHERE app = ? AND idx IS NOT NULL", (app,)
-    ).fetchone()
-    (unnumbered,) = conn.execute(
-        "SELECT COUNT(*) FROM exp_rows WHERE app = ? AND idx IS NULL", (app,)
+    numbered, unnumbered = conn.execute(
+        "SELECT COUNT(idx), COUNT(*) - COUNT(idx) FROM exp_rows WHERE app = ?", (app,)
     ).fetchone()
     if unnumbered != len(new):
         return False

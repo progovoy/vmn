@@ -69,7 +69,7 @@ from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_record import refresh_record, update_record
-from vmn_exp.core.index_remote_workers import NoLoaders, RemoteLoaders, worker_count
+from vmn_exp.core.index_remote_workers import RemoteLoaders, worker_count
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
 from vmn_exp.core.index_snapshot import (
@@ -749,8 +749,7 @@ class ExperimentIndex:
         if self._loaders is None:
             spec_of = getattr(self._storage, "worker_spec", None)
             spec = spec_of() if spec_of and self._remote() else None
-            count = worker_count() if spec else 0
-            self._loaders = RemoteLoaders(spec, count) if count else NoLoaders()
+            self._loaders = RemoteLoaders(spec, worker_count() if spec else 0)
         return self._loaders
 
     def _close_loaders(self):

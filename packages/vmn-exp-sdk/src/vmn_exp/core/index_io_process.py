@@ -73,6 +73,11 @@ def _write(stream, obj):
 
 
 def _read(stream):
+    return pickle.loads(_read_raw(stream))
+
+
+def _read_raw(stream):
+    """The next pickled object's bytes."""
     header = stream.read(_HEADER.size)
     if len(header) < _HEADER.size:
         raise EOFError
@@ -80,7 +85,7 @@ def _read(stream):
     data = stream.read(size)
     if len(data) < size:
         raise EOFError
-    return pickle.loads(data)
+    return data
 
 
 class _Watch:
