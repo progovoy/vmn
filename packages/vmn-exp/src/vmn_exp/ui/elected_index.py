@@ -96,5 +96,8 @@ class ElectedIndex:
     def snapshot(self):
         return self._current().snapshot()
 
+    def snapshot_now(self):
+        return self._current().snapshot_now()
+
     def _current(self):
         return self._leader if self.leading else self._follower
