@@ -24,7 +24,7 @@ import JobsToolbar from "./JobsToolbar";
 import { kindNoun, kindQuery, type JobsKind, type JobsKindState } from "./jobsKind";
 import { useJobsBoard } from "./useJobsBoard";
 import { useAppStatus } from "../../shell/useShellData";
-import { indexingText } from "../../util/indexing";
+import { indexingText, staleText } from "../../util/indexing";
 
 /** `20 jobs`, `19,580 single runs`; listing every top-level run, `14 jobs ·
  *  3 single runs` once every row is loaded, else the total. */
@@ -51,7 +51,8 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
   const board = useJobsBoard(ws, app, view, kind.top);
   const { data, rows, selection, live } = board;
   // A store's index still loading: the rows so far are the newest runs.
-  const indexing = useAppStatus(ws, app).data?.indexing;
+  const status = useAppStatus(ws, app).data;
+  const indexing = status?.indexing;
   const base = `/ws/${ws}/app/${app}`;
   const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal, search: board.search }),
     [base, board.metric, board.goal, board.search]);
@@ -75,7 +76,8 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
     <>
       <BoardHead
         title={appName}
-        count={[countText(loading, rows, data.total, kind.kind), indexingText(indexing)].filter(Boolean).join(" · ")}
+        count={[countText(loading, rows, data.total, kind.kind), indexingText(indexing), staleText(status)]
+          .filter(Boolean).join(" · ")}
         views={views}
         actions={!empty && <JobsToolbar ws={ws} app={app} view={view} board={board} onViewApplied={resetFilter} onAll={onAll} />}
       />

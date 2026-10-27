@@ -90,6 +90,7 @@ class ExperimentSource:
         self._indexes = {}  # workspace name -> WorkspaceIndex
         self._journals = {}  # store workspace name -> WorkspaceJournal
         self._caches = {}  # workspace name -> WorkspaceCache
+        self._served_by = {}  # (workspace name, app name) -> the index serving it
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
         self._group_aggregates = MetricsSchemaCache(read=exp_reader.group_aggregate,
@@ -151,6 +152,7 @@ class ExperimentSource:
                      else (lambda: self.metrics_schema(ws, app_name)))
 
         def note(index):
+            self._served_by[(ws.name, app_name)] = index
             self.similar.note(index, (ws.name, app_name), app_name)
             if self._search_rows is not None:
                 self._search_rows.note(index, ws.name, app_name, schema_of)
@@ -261,9 +263,17 @@ class ExperimentSource:
             options["read_observed_at"] = _observed_at_reader(snap.run_state_observed_at)
         return options
 
+    def refresher_health(self, ws_name, app_name):
+        """The refresh health of the index a snapshot of the app was last
+        served from (:meth:`Refresher.health`); None before one, or inline."""
+        index = self._served_by.get((ws_name, app_name))
+        return None if index is None else self.refresher.health(index)
+
     def forget(self, ws_name):
         """Drop a removed workspace's caches: a later one may point elsewhere."""
         with self._lock:
+            for key in [k for k in self._served_by if k[0] == ws_name]:
+                del self._served_by[key]
             self._indexes.pop(ws_name, None)
             self._journals.pop(ws_name, None)
             self._caches.pop(ws_name, None)

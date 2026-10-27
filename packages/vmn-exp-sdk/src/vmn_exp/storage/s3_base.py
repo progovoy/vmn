@@ -16,6 +16,12 @@ S3_WORKERS = 10
 # Connections a client pools, for every thread sharing it (boto3's default: 10):
 # the index reads 32 records at a time, each up to S3_WORKERS segments at once.
 MAX_POOL_CONNECTIONS = 32 * S3_WORKERS
+# Every call is bounded: a stalled connection fails and is retried (standard
+# mode: backoff with jitter, a retry quota during outages) instead of holding
+# an index refresh; read_timeout is per socket read, not per transfer.
+CONNECT_TIMEOUT_SEC = 10
+READ_TIMEOUT_SEC = 30
+RETRIES = {"mode": "standard", "total_max_attempts": 5}
 MISSING_CODES = ("404", "NoSuchKey", "NotFound")
 TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
 
@@ -63,7 +69,8 @@ def _client(endpoint_url, **config):
 
     # A pooled connection per concurrent reader (the index's and parallel_map's);
     # boto3's default of 10 queues the rest.
-    config = Config(max_pool_connections=MAX_POOL_CONNECTIONS, **config)
+    config = Config(max_pool_connections=MAX_POOL_CONNECTIONS, connect_timeout=CONNECT_TIMEOUT_SEC,
+                    read_timeout=READ_TIMEOUT_SEC, retries=dict(RETRIES), **config)
     kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
     return instrument(boto3_client_module().client("s3", config=config, **kwargs))
 
