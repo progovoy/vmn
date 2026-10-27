@@ -20,7 +20,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ui = ["fastapi>=0.110", "uvicorn>=0.29", "orjson>=3.9"]
+# No orjson: it has no free-threaded wheels, and building it needs Rust. The ui
+# renders JSON with it when installed (the `orjson` extra), else the stdlib.
+ui = ["fastapi>=0.110", "uvicorn>=0.29"]
+orjson = ["orjson>=3.9"]
 s3 = ["vmn-exp-sdk[s3]"]
 gcs = ["vmn-exp-sdk[gcs]"]
 azure = ["vmn-exp-sdk[azure]"]

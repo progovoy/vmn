@@ -237,8 +237,9 @@ The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 
 | new run visible (p95) | 3.7 s | 3.1 s | 1.5 s |
 | first load | 37 s | 27 s | 21 s |
 
-`orjson` has no free-threaded wheel yet, so 3.14t encodes JSON with the
-standard library (included above). With the GIL on and a watched app of
+`orjson` has no free-threaded wheel yet, so the `ui` extra leaves it out and
+3.14t encodes JSON with the standard library (included above). On a regular
+CPython, `pip install "vmn-exp[ui,orjson]"` renders large pages faster. With the GIL on and a watched app of
 10,000+ runs, `vmn-exp ui` prints this hint once.
 
 ## Diagnostic dumps
@@ -1269,7 +1270,8 @@ Registry writes run in-process (no job, no repo lock) and are 403 with
 
 ### Caching and compression
 
-JSON is rendered with `orjson` (in the `ui` extra; NaN/inf become `null`) and
+JSON is rendered with `orjson` when installed (the `orjson` extra; else the
+standard library; NaN/inf become `null` either way) and
 gzipped when the client accepts it. The web bundle (`/assets/*`, `index.html`
 and client routes) is served `Cache-Control: no-cache` with ETags, so an
 upgrade never serves a stale chunk and a reload revalidates to a bodiless 304.
