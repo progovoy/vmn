@@ -168,6 +168,14 @@ class ProcessIO:
     def kv_put(self, scope, fingerprint, payload):
         self.call("kv_put", scope, fingerprint, payload)
 
+    def deriving(self):
+        """How many records an upgrade left this app to re-derive, or None."""
+        return self.call("deriving")
+
+    def derive(self):
+        """Re-derive them (:mod:`~vmn_exp.core.index_derive`) in the helper."""
+        return self.call("derive")
+
     def refresh(self, work, removed):
         """Like the in-process refresh, but a record the listing shows
         unchanged is neither sent nor returned (None)."""
@@ -235,6 +243,13 @@ class _Helper:
     def kv_put(self, scope, fingerprint, payload):
         self.index._store.kv_put(scope, fingerprint, payload)
 
+    def deriving(self):
+        store, app = self.index._store, self.index.app_name
+        return store.count(app) if store.deriving(app) else None
+
+    def derive(self):
+        return self.index._derive_first()
+
 
 def _answer(out, result):
     if isinstance(result, list):
@@ -270,6 +285,6 @@ def main():
 def _handle(helper, op, args):
     """*helper*'s answer to *op*: bulk work, done with collection paused."""
     with gc_paused():
-        if op in ("load", "refresh", "kv_get", "kv_put"):
+        if op in ("load", "refresh", "kv_get", "kv_put", "deriving", "derive"):
             return getattr(helper, op)(*args)
         return getattr(helper.watch, op)(*args)

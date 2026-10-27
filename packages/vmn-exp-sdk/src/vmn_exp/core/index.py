@@ -427,6 +427,13 @@ class ExperimentIndex:
         (:mod:`~vmn_exp.core.index_derive`, no storage read), before they
         load; meanwhile an empty snapshot ``loading`` the share done serves
         (republished at most every MIGRATING_PUBLISH_SEC). Whether any were."""
+        if self._io is not None:  # the helper owns the files; no progress crosses
+            total = self._io.deriving()
+            if total is None:
+                return False
+            self._derived(0, total)
+            self._io.derive()
+            return True
         deriving = getattr(self._store, "deriving", None)
         if deriving is None or not deriving(self.app_name):
             return False

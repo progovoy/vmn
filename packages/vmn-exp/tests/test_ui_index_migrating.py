@@ -91,6 +91,8 @@ def test_apps_and_status_answer_while_the_index_rederives(tmp_path, held_derive,
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     monkeypatch.setattr(server, "app_exists", _slow_app_listing)
+    # held_derive holds this process's re-derive, not an I/O helper's.
+    monkeypatch.setattr(ExperimentIndex, "use_io_process", lambda self: False)
 
     uri, st = _seed(tmp_path)
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
