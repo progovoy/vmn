@@ -69,6 +69,7 @@ from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_record import refresh_record, update_record
+from vmn_exp.core.index_unreadable import Unreadable, store_failed
 from vmn_exp.core.index_remote_workers import RemoteLoaders, worker_count
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
@@ -106,6 +107,8 @@ FIRST_SNAPSHOT_WAIT_SEC = 0.5
 _BISECT_NEW = 64  # new records past which the order is merged, not inserted into
 # Seconds between the empty snapshots a re-derive publishes its progress in.
 MIGRATING_PUBLISH_SEC = 1.0
+# A record a refresh could not read is read again this long after (doubling).
+RETRY_UNREADABLE_SEC = 60.0
 _monotonic = time.monotonic
 
 
@@ -143,6 +146,7 @@ class ExperimentIndex:
         self._placeholder = None  # (expected, the empty snapshot saying so)
         self._loaders = None  # a bulk load's worker processes (index_remote_workers)
         self._rests = set()  # records a bulk load read rows-first, the rest to read
+        self._unreadable = Unreadable(app_name, lambda: _monotonic())
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
         self._revalidator = None  # the thread a warm snapshot() started
@@ -389,6 +393,8 @@ class ExperimentIndex:
             self._freshness.reload()  # its leader's
             self.last_refresh_at = started
             return
+        for key in self._unreadable.due(RETRY_UNREADABLE_SEC):
+            self._sweep.hint(key)
         try:
             with self._paused_unless_remote():
                 self._refresh_from_storage(started)
@@ -788,7 +794,21 @@ class ExperimentIndex:
         return bool(is_remote and is_remote())
 
     def _refresh_one(self, key, names, record, direct):
-        return refresh_record(key, names, record, lambda *a: self._update(*a, direct))
+        """:func:`refresh_record` of one record; one that fails is set aside
+        (:mod:`~vmn_exp.core.index_unreadable`), never the refresh, and read
+        afresh when retried (a failure may have left it half updated)."""
+        retried = key in self._unreadable
+        try:
+            result = refresh_record(key, names, None if retried else record,
+                                    lambda *a: self._update(*a, direct))
+        except Exception as exc:
+            if store_failed(exc):
+                raise
+            self._unreadable.failed(key, exc)
+            return record, False, False, False
+        if retried:
+            self._unreadable.read(key)
+        return result
 
     def _update(self, key, names, record, direct):
         """Refresh one record in place; ``(folded content changed, metadata

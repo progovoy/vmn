@@ -19,6 +19,7 @@ A file that vanishes mid-read refolds the record through the storage's
 stale listing's other files.
 """
 from vmn_exp.core.fold import apply_entries, fold_rewinds, needs_refold, new_fold
+from vmn_exp.core.index_metric_reads import MetricObjectGone
 from vmn_exp.core.index_metrics import (
     metric_signatures,
     metric_state_sigs,
@@ -119,6 +120,14 @@ def update_logs(record, storage, direct, app_name, key, sigs):
     """
     where = (app_name, key)
     sigs, metric_sigs = split_signatures(sigs)
+    try:
+        return _update_folds(record, storage, direct, where, sigs, metric_sigs)
+    except MetricObjectGone:
+        _refold_relisted(record, storage, where, sigs, metrics_gone=True)
+        return True
+
+
+def _update_folds(record, storage, direct, where, sigs, metric_sigs):
     changed = _update_logs(record, storage, direct, where, sigs)
     grown = update_metrics(record, storage, where, metric_sigs)
     if grown is False:
@@ -148,13 +157,14 @@ def _refold(record, storage, direct, where, sigs, rewinds=()):
     refold_metrics(record, storage, where)
 
 
-def _refold_relisted(record, storage, where, sigs):
+def _refold_relisted(record, storage, where, sigs, metrics_gone=False):
     """Refold *record* after a file *sigs* list vanished: they are stale, so
-    reading them again would miss again; the storage lists the record afresh."""
+    reading them again would miss again; the storage lists the record afresh
+    (its metric objects too when one of those was gone)."""
     _refold_merged(record, storage, where, sigs)
     if needs_refold(record["fold"]):
         _refold_merged(record, storage, where, sigs, fold_rewinds(record["fold"]))
-    refold_metrics(record, storage, where)
+    refold_metrics(record, storage, where, relisted=metrics_gone)
 
 
 def _update_logs(record, storage, direct, where, sigs):

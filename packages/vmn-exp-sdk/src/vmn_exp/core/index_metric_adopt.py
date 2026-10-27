@@ -11,6 +11,7 @@ in the record state next to the sums. Then the ``.vmx`` replaces those
 objects in the state for one footer read and nothing is folded; else the
 caller refolds the record.
 """
+from vmn_exp.core.index_metric_reads import object_read
 from vmn_exp.core.fold_blocks import footer_entries
 from vmn_exp.core.fold_sums import counts
 from vmn_exp.core.metric_files import (
@@ -56,8 +57,7 @@ def adopted(state, storage, where, writer, vmx):
     for n in after:
         for key, points in tail[n].items():
             expected[key] -= points
-    read = lambda off, n: storage.read_range(*where, name, off, n)  # noqa: E731
-    footer = MetricIndexReader(read, size).footer
+    footer = MetricIndexReader(object_read(storage, where, name), size).footer
     if {e["k"]: e["n"] for e in footer_entries(footer)} != {k: n for k, n in expected.items() if n}:
         return False
     for n in covered:

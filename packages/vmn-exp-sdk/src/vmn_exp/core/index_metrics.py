@@ -28,6 +28,7 @@ from vmn_exp.core.fold_blocks import (
 )
 from vmn_exp.core.fold_sums import add_block
 from vmn_exp.core.index_metric_adopt import adopted, note_tail
+from vmn_exp.core.index_metric_reads import object_read
 from vmn_exp.core.metric_block import Block, decode_blocks, header_at
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import (
@@ -66,23 +67,25 @@ def update_metrics(record, storage, where, sigs):
     return _fold_growth(record["fold"], state, storage, where)
 
 
-def refold_metrics(record, storage, where):
+def refold_metrics(record, storage, where, relisted=False):
     """Fold every metric object into *record*'s (fresh) fold: a writer's
-    sums when its objects only grew since, then what is not folded yet."""
+    sums when its objects only grew since, then what is not folded yet —
+    the objects of the record's listing, or with *relisted* (one it named
+    was gone) of a listing made now."""
     old = record.get("metrics") or {}
     record["metrics"] = state = _new_state(metric_state_sigs(record))
-    objects = _objects(storage, where, state["sig"])
+    objects = _objects(storage, where, state["sig"], relisted)
     for writer in sorted(objects):
         _replay(record["fold"], state, old, writer, objects[writer])
     _fold_unread(record["fold"], state, storage, where, objects)
 
 
-def _objects(storage, where, sigs):
+def _objects(storage, where, sigs, relisted=False):
     """The record's metric objects: as its listing's *sigs* found them where
     the storage tells them from those (``metric_objects_listed``: S3, saving
-    a LIST per record), else listed again."""
+    a LIST per record), else (or *relisted*) listed again."""
     listed = getattr(storage, "metric_objects_listed", None)
-    if listed is not None:
+    if listed is not None and not relisted:
         return listed(sigs)
     listing = getattr(storage, "metric_objects", None)
     return listing(*where) if listing else {}
@@ -154,14 +157,14 @@ def _reader(state, storage, where, name, size):
     ``read(offset, length)`` — over the part's bytes read whole when the
     object never grows (a synced segment, any remote object; one GET instead
     of two per block), not too big; a local live stream's body stays unread."""
-    read = lambda off, n: storage.read_range(*where, name, off, n)  # noqa: E731
+    read = object_read(storage, where, name)
     if is_indexed_file(name):
         return MetricIndexReader(read, size)
     consumed = state["objects"].get(name, 0)
     fixed = stream_writer_and_seq(name)[1] or getattr(storage, "is_remote", lambda: False)()
     if not fixed or size - consumed > WHOLE_READ_MAX:
         return read
-    data = read(consumed, size - consumed) or b""
+    data = read(consumed, size - consumed)
     return lambda off, n: data[off - consumed:off - consumed + n]
 
 

@@ -167,19 +167,24 @@ class Sweep(SweepBehind, SweepState):
             self._live.discard(key)
 
     def listing(self, records, now):
-        """``(files of the records to refresh, keys of records gone)``."""
+        """``(files of the records to refresh, keys of records gone)``; a
+        hinted key is listed either way (its listing may not have changed:
+        a record set aside unread, :mod:`~vmn_exp.core.index_unreadable`)."""
         if self.journaled:
             return self._journaled_listing(records, now)
+        hinted = self._take_hints()
         full_due = self._full_due(now)
         changes = self._name_changes(journal=not full_due)
         if changes is None or full_due:
             if changes is not None:
                 self._apply_sigs(*changes)
-            return self._full_listing(records, now)
+            listing, gone = self._full_listing(records, now)
+            missing = [key for key in hinted if key not in listing]
+            return {**self.watch.files(missing), **listing}, gone
         changed, gone_names = changes
         if self._restored:
             changed, gone_names = self._against_records(records, changed, gone_names)
-        keys = self._to_list(records, changed, gone_names, now)
+        keys = sorted(set(self._to_list(records, changed, gone_names, now)) | hinted)
         listing = self.watch.files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
         if self.watch.rolling and self.full_sweep_sec:
