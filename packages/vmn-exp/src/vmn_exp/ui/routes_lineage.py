@@ -5,10 +5,13 @@
 Answered from the apps' index snapshots: the digest/URI maps of
 :class:`~vmn_exp.core.lineage.LineageIndex` are built once per snapshot and
 shared by every request against it, so a lookup costs the linked runs, not
-the workspace. The payloads are :func:`vmn_exp.sdk.reader.get_lineage`'s and
+the workspace. A new generation's maps are moved along from the previous
+one's by its row delta (rows compared by identity, see
+:mod:`vmn_exp.ui.leaderboard_delta`), rebuilt when the delta is large; racing
+requests share one build. The payloads are :func:`vmn_exp.sdk.reader.get_lineage`'s and
 :func:`vmn_exp.registry.lineage.version_lineage`'s.
 """
-import weakref
+import threading
 
 from fastapi import HTTPException, Request
 
@@ -18,19 +21,66 @@ from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex
 from vmn_exp.core.status import derive_status
 from vmn_exp.registry.lineage import run_lineage, version_lineage
 from vmn_exp.registry.names import valid_model_name
+from vmn_exp.ui.leaderboard_delta import changed_slots, delta_limit, left_rows
+from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.responses import json_response
 
 MAX_DEPTH = 10
 MAX_LIMIT = 1000
-_INDEXES = weakref.WeakKeyDictionary()  # IndexSnapshot -> LineageIndex
+PER_APP = 2  # the indexes kept per app: its newest snapshots'
+
+
+class _LineageIndexes:
+    """A :class:`LineageIndex` per snapshot, each moved on from the app's
+    latest (like :class:`~vmn_exp.ui.search_index.SearchIndexes`); the last
+    :data:`PER_APP` of each app kept, so apps never evict each other."""
+
+    def __init__(self):
+        self._indexes = {}  # app -> LRU of its snapshots' indexes
+        self._latest = {}  # app -> the LineageIndex built last
+        self._lock = threading.Lock()
+
+    def get(self, snapshot):
+        """*snapshot*'s index; a schema view shares its base snapshot's."""
+        snapshot = getattr(snapshot, "_base", None) or snapshot
+        with self._lock:
+            indexes = self._indexes.setdefault(snapshot.app_name, LRU(PER_APP))
+        return indexes.per_snapshot(snapshot, lambda: self._built(snapshot))
+
+    def _built(self, snapshot):
+        with self._lock:
+            prev = self._latest.get(snapshot.app_name)
+        outputs_of = _outputs_reader(snapshot.outputs)  # never the snapshot: held weakly
+        index = (prev and _moved(prev, snapshot, outputs_of)) or LineageIndex(snapshot.rows, outputs_of)
+        with self._lock:
+            self._latest[snapshot.app_name] = index
+        return index
+
+
+_INDEXES = _LineageIndexes()
 
 
 def lineage_index(snapshot):
     """The :class:`LineageIndex` of *snapshot*, built on first use."""
-    index = _INDEXES.get(snapshot)
-    if index is None:
-        index = _INDEXES[snapshot] = LineageIndex(snapshot.rows, snapshot.outputs_of)
-    return index
+    return _INDEXES.get(snapshot)
+
+
+def _outputs_reader(outputs):
+    """``IndexSnapshot.outputs_of`` over its *outputs* table alone."""
+    return lambda verstr: outputs.get(verstr) or {}
+
+
+def _moved(prev, snapshot, outputs_of):
+    """*prev* moved to *snapshot*'s rows, or None when a verstr repeats or
+    the delta is large."""
+    rows, old = snapshot.rows, prev.row_list
+    if len(snapshot.edges) != len(rows) or len(prev.rows) != len(old):
+        return None
+    slots = changed_slots(rows, old, delta_limit(rows))
+    if slots is None:
+        return None
+    joined = [rows[i] for i in slots]
+    return LineageIndex.moved(prev, rows, outputs_of, joined, left_rows(rows, old, slots))
 
 
 class _Apps:
