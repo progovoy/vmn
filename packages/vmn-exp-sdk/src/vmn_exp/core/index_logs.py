@@ -15,7 +15,8 @@ Local-first storage with a remote reads per file too: its listing takes each
 writer's files from one copy (local or remote) and its ``read_file_from``
 reads that same copy, so only new local bytes and new remote segments are read.
 A file that vanishes mid-read refolds the record through the storage's
-``load_logs_by_writer``.
+``load_logs_by_writer`` (which lists it afresh), without first reading the
+stale listing's other files.
 """
 from vmn_exp.core.fold import apply_entries, fold_rewinds, needs_refold, new_fold
 from vmn_exp.core.index_metrics import (
@@ -27,6 +28,11 @@ from vmn_exp.core.index_metrics import (
 from vmn_exp.core.jsonl_tail import complete_lines
 from vmn_exp.core.logfiles import appended, group_log_names, log_writer_and_seq
 from vmn_exp.storage.s3_base import parallel_map
+
+# Grown files past which one is read alone first (a stale listing's rest):
+# a vanish then wastes one read, while a live run's few new files cost no
+# extra round trip.
+PROBE_OVER = 4
 
 
 def log_signatures(names):
@@ -57,11 +63,20 @@ def _appends_only(old, new):
     return True
 
 
-def _read_tails(fold, counts, direct, where, items):
+def _read_tails(fold, counts, direct, where, items, probe=False):
     """Fold each ``(name, state)`` of *items*' bytes past ``state["consumed"]``,
-    in order, their reads in flight together; False if one vanished."""
-    datas = parallel_map(
-        lambda item: direct.read_file_from(*where, item[0], item[1]["consumed"]), items)
+    in order, their reads in flight together; False if one vanished. With
+    *probe* the first is read alone first: files listed long ago (a cold
+    load's rest) may have been merged since, and then one read misses, not
+    every one of them."""
+    read = lambda item: direct.read_file_from(*where, item[0], item[1]["consumed"])  # noqa: E731
+    if probe and items:
+        first = read(items[0])
+        if first is None:
+            return False
+        datas = [first] + parallel_map(read, items[1:])
+    else:
+        datas = parallel_map(read, items)
     for (name, state), data in zip(items, datas):
         if data is None:
             return False
@@ -133,6 +148,15 @@ def _refold(record, storage, direct, where, sigs, rewinds=()):
     refold_metrics(record, storage, where)
 
 
+def _refold_relisted(record, storage, where, sigs):
+    """Refold *record* after a file *sigs* list vanished: they are stale, so
+    reading them again would miss again; the storage lists the record afresh."""
+    _refold_merged(record, storage, where, sigs)
+    if needs_refold(record["fold"]):
+        _refold_merged(record, storage, where, sigs, fold_rewinds(record["fold"]))
+    refold_metrics(record, storage, where)
+
+
 def _update_logs(record, storage, direct, where, sigs):
     old = record["logs"]
     if {name: state["sig"] for name, state in old.items()} == sigs:
@@ -148,7 +172,10 @@ def _update_logs(record, storage, direct, where, sigs):
                     state = old[name] = {"sig": None, "consumed": 0}
                 grown.append((name, state))
                 state["sig"] = sigs[name]
-        if _read_tails(record["fold"], record["counts"], direct, where, grown):
+        probe = len(grown) > PROBE_OVER
+        if _read_tails(record["fold"], record["counts"], direct, where, grown, probe=probe):
             return True
+        _refold_relisted(record, storage, where, sigs)
+        return True
     _refold(record, storage, direct, where, sigs)
     return True

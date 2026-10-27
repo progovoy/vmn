@@ -18,8 +18,9 @@ from vmn_exp.core.lineage import DEFAULT_LIMIT, LineageIndex, resolve_lineage, r
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries, read_uses
-from vmn_exp.registry.store import get_version, model_kind, run_of
-from vmn_exp.registry.view import models_for_run, run_models
+from vmn_exp.registry.names import version_record_name
+from vmn_exp.registry.store import get_version, model_kind, model_records, run_of
+from vmn_exp.registry.view import run_models
 
 
 class RegistryLinks:
@@ -29,6 +30,8 @@ class RegistryLinks:
     def __init__(self, storage):
         self.storage = storage
         self._run_models = None
+        self._records = {}  # model -> its listed records
+        self._status = {}  # model -> {version: status}
 
     def models_of(self, app, verstr):
         if self._run_models is None:
@@ -36,8 +39,16 @@ class RegistryLinks:
         return self._run_models.get((app, verstr), ())
 
     def version_live(self, name, n):
-        status = _version_status(self.storage, name, n)
-        return status != "deleted" and get_version(self.storage, name, n) is not None
+        """Whether version *n* of *name* is listed and not deleted: a version
+        the model's listing lacks costs no read."""
+        if name not in self._records:
+            self._records[name] = model_records(self.storage, name)
+        if version_record_name(n) not in self._records[name]:
+            return False
+        if name not in self._status:
+            self._status[name] = fold_registry(read_entries(self.storage, name))["status"]
+        return (self._status[name].get(n) != "deleted"
+                and get_version(self.storage, name, n) is not None)
 
 
 def _version_status(storage, name, n):
@@ -63,11 +74,13 @@ def run_lineage(
 ):
     """``{"app", "verstr", "upstream", "downstream", "datasets", "models",
     "truncated"}`` of run *verstr*. Raises KeyError when the run is unknown."""
+    links = RegistryLinks(storage)
     found = resolve_lineage(
         app_name, verstr, index_for, depth=depth, limit=limit, status_of=status_of,
-        registry=RegistryLinks(storage),
+        registry=links,
     )
-    found.update(app=app_name, verstr=verstr, models=models_for_run(storage, app_name, verstr))
+    models = [dict(m) for m in links.models_of(app_name, verstr)]
+    found.update(app=app_name, verstr=verstr, models=models)
     return found
 
 

@@ -40,7 +40,7 @@ from vmn_exp.registry.store import (
     load_header,
     list_versions,
     model_kind,
-    registry_storage,
+    registry_listing,
     run_of,
 )
 
@@ -164,31 +164,31 @@ _RUN_MODELS_LOCK = threading.Lock()
 
 
 def _run_models(storage):
-    """``{(app, verstr): [version entry]}``, cached on the registry listing.
+    """``{(app, verstr): [version entry]}``, cached on the registry listing
+    (an empty registry's too).
 
     The key holds only the records the scan reads (model headers and
     versions): a write to any other record, like a usage log, is no rescan."""
-    reg = registry_storage(storage)
-    listing = {
+    listing = registry_listing(storage)
+    key = {
         (model, name): files
-        for model in reg.list_apps()
-        for name, files in reg.list_files(model).items()
+        for model, records in listing.items()
+        for name, files in records.items()
         if name == HEADER_RECORD or parse_version_record(name)
     }
     with _RUN_MODELS_LOCK:
         cached = _RUN_MODELS.get(storage)
-    if listing and cached is not None and cached[0] == listing:
+    if cached is not None and cached[0] == key:
         return cached[1]
-    run_models = _scan_run_models(storage)
-    if listing:
-        with _RUN_MODELS_LOCK:
-            _RUN_MODELS[storage] = (listing, run_models)
+    run_models = _scan_run_models(storage, listing)
+    with _RUN_MODELS_LOCK:
+        _RUN_MODELS[storage] = (key, run_models)
     return run_models
 
 
-def _scan_run_models(storage):
+def _scan_run_models(storage, listing):
     run_models = {}
-    for model, kind, n, meta, fold in _live_versions(storage):
+    for model, kind, n, meta, fold in _live_versions(storage, listing):
         run = run_of(meta)
         if run is None:
             continue
@@ -203,12 +203,13 @@ def _scan_run_models(storage):
     return run_models
 
 
-def _live_versions(storage):
-    """``(model, kind, n, version metadata, registry fold)`` of every non-deleted version."""
-    for model in list_models(storage):
+def _live_versions(storage, listing):
+    """``(model, kind, n, version metadata, registry fold)`` of every
+    non-deleted version *listing* (:func:`registry_listing`) holds."""
+    for model in list_models(storage, listing=listing):
         kind = model_kind(storage, model)
         fold = fold_registry(read_entries(storage, model))
-        for n in list_versions(storage, model):
+        for n in list_versions(storage, model, listing[model]):
             if fold["status"].get(n) == "deleted":
                 continue
             meta = get_version(storage, model, n)

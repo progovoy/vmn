@@ -111,7 +111,10 @@ def compact_record(storage, app_name, verstr, rebuild=False):
     """Compact every stream of the record with segments past its ``.vmx``
     (every stream with *rebuild*); the streams whose ``.vmx`` was stored, sorted."""
     listing = getattr(storage, "metric_objects", None)
-    writers = sorted(listing(app_name, verstr) if listing else {})
+    objects = listing(app_name, verstr) if listing else {}
+    writers = sorted(w for w, objs in objects.items() if rebuild or not is_compacted(objs))
+    if not writers:
+        return []  # the listing shows nothing to compact: no log is read
     rewinds = record_rewinds(storage, app_name, verstr)
     return [w for w in writers
             if compact_writer(storage, app_name, verstr, w, rewinds, rebuild=rebuild)]
