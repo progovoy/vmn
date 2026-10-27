@@ -12,7 +12,8 @@ import { useRunsBoard } from "../../hooks/useRunsBoard";
 import { useAppStatus } from "../../shell/useShellData";
 import { plural } from "../../util";
 import { BIG_GROUP } from "../../util/groupClause";
-import { indexingText, staleText } from "../../util/indexing";
+import { freshnessShort } from "../../util/freshness";
+import { indexingText } from "../../util/indexing";
 import BoardHead from "../BoardHead";
 import LeaderboardToolbar from "../LeaderboardToolbar";
 import RunsBoardGrid from "../RunsBoardGrid";
@@ -49,7 +50,7 @@ export default function SinglesView({ ws, app, views, onJobs }: {
     <>
       <BoardHead
         title={appName}
-        count={[count, indexingText(indexing), staleText(status)].filter(Boolean).join(" · ")}
+        count={[count, indexingText(indexing), freshnessShort(status?.freshness)].filter(Boolean).join(" · ")}
         views={views}
         actions={(
           <LeaderboardToolbar

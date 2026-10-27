@@ -697,9 +697,12 @@ def create_app(
         return lambda: source.snapshot(ws, app_name, store_storage)
 
     routes_events.register(app, API_PREFIX, _events_reader, refresher.background, _segment)
+    def _freshness(ws_name, app_tag):
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return source.freshness(ws_name, app_name, source.stale_after_min(ws, app_name))
+
     forget_git = routes_shell.register(
-        app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards,
-        lambda ws_name, app_tag: source.refresher_health(ws_name, _app_name(app_tag)))
+        app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness)
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
