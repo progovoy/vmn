@@ -1,8 +1,6 @@
 """Plan 23 S8b: the background refresher warms the search index after a new
 generation, so the first search after a restart does not pay the build; a
 schema view of a snapshot shares its search index."""
-import dataclasses
-
 import pytest
 from leaderboard_fleet import T0
 from search_fleet import TextFleet
@@ -29,9 +27,7 @@ def _no_build(monkeypatch):
 
 def _view(snapshot):
     """A schema view of *snapshot* (what ``IndexSnapshot.summarized`` makes)."""
-    rows = tuple(dict(row) for row in snapshot.rows)
-    return dataclasses.replace(snapshot, rows=rows, _by_verstr={r["verstr"]: r for r in rows},
-                               _views={}, _base=snapshot)
+    return snapshot._view([dict(row) for row in snapshot.rows])
 
 
 def test_a_warmed_snapshot_searches_without_a_build(snap, monkeypatch):
