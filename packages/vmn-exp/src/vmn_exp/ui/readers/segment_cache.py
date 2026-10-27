@@ -21,7 +21,7 @@ from vmn_exp.core.metric_files import (
     is_stream_file,
 )
 from vmn_exp.storage.files import parse_jsonl
-from vmn_exp.ui.readers.listed_reads import ListedReads, read_each
+from vmn_exp.ui.readers.listed_reads import ListedReads, read_each, store_identity
 
 DEFAULT_MAX_BYTES = 32 * 1024 * 1024
 
@@ -37,16 +37,16 @@ class SegmentCache:
         with self._lock:
             return key in self._bytes
 
-    def read(self, key, fetch):
-        """The bytes kept under *key* (its last item the listing signature),
-        else ``fetch()``'s, kept when they are the listed size."""
+    def read(self, key, size, fetch):
+        """The bytes kept under *key*, else ``fetch()``'s, kept when they are
+        the *size* listed."""
         with self._lock:
             data = self._bytes.get(key)
             if data is not None:
                 self._bytes.move_to_end(key)
                 return data
         data = fetch()
-        if len(data) == key[-1][0]:
+        if len(data) == size:
             self._keep(key, data)
         return data
 
@@ -81,7 +81,14 @@ class SegmentReads:
 
     def _key(self, app_name, verstr, name):
         sig = self._listed(app_name, verstr)[name]
-        return self._storage.cache_identity(), app_name, verstr, name, sig
+        return store_identity(self._storage), app_name, verstr, name, sig
+
+    def _whole(self, app_name, verstr, name):
+        """The listed object *name*'s bytes, from the cache unless new."""
+        key = self._key(app_name, verstr, name)
+        size = key[-1][0]
+        return self._cache.read(
+            key, size, lambda: self._reads.read_range(app_name, verstr, name, 0, size))
 
     def metric_objects(self, app_name, verstr):
         files = self._listed(app_name, verstr)
@@ -89,24 +96,18 @@ class SegmentReads:
 
     def read_range(self, app_name, verstr, name, offset, length):
         sig = self._listed(app_name, verstr).get(name)
-        fetch = lambda: self._reads.read_range(app_name, verstr, name, offset, length)  # noqa: E731
         if offset or sig is None or sig[0] != length or not is_stream_file(name):
-            return fetch()
-        return self._cache.read(self._key(app_name, verstr, name), fetch)
+            return self._reads.read_range(app_name, verstr, name, offset, length)
+        return self._whole(app_name, verstr, name)
 
     def load_logs_by_writer(self, app_name, verstr):
         """``{stream: entries}`` like the store's own, its objects from the cache."""
         files = self._listed(app_name, verstr)
         groups = group_log_names(files)
-
-        def read(name):
-            fetch = lambda: self._reads.read_range(app_name, verstr, name, 0, files[name][0])  # noqa: E731
-            return self._cache.read(self._key(app_name, verstr, name), fetch)
-
         # The ones to GET first, so a stale listing is found by one of them.
         names = sorted((n for group in groups.values() for n in group),
                        key=lambda n: self._cache.holds(self._key(app_name, verstr, n)))
-        bodies = dict(zip(names, read_each(read, names, "vmn-ui-segment-read")))
+        bodies = dict(zip(names, read_each(lambda n: self._whole(app_name, verstr, n), names)))
         return {w: [e for n in group for e in parse_jsonl(bodies[n].decode("utf-8"), w)]
                 for w, group in groups.items()}
 

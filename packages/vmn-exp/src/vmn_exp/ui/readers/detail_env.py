@@ -5,7 +5,7 @@ import time
 import yaml
 
 from vmn_exp.ui.memo import LRU
-from vmn_exp.ui.readers.parsed_logs import _identity
+from vmn_exp.ui.readers.listed_reads import store_identity
 
 _ENV_SIZE_CAP = 256 * 1024  # 256 KB
 ENV_MISS_TTL_SEC = 300
@@ -39,7 +39,7 @@ def env_file(storage, app_name, verstr):
         return time.monotonic(), storage.load_file(app_name, verstr, "env.yml")
 
     return _ENV_MISSES.get(
-        (_identity(storage), app_name, verstr), read,
+        (store_identity(storage), app_name, verstr), read,
         valid=lambda hit: time.monotonic() - hit[0] < ENV_MISS_TTL_SEC,
         store=lambda hit: hit[1] is None,
     )[1]

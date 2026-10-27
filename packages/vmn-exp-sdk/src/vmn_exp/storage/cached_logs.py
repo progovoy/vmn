@@ -202,14 +202,12 @@ class CachedLogs:
             return
         with self._ship_state(app_name, verstr, "log") as state:
             listing = _Listing(self._remote, app_name, verstr)
-            shipped = {stream: self._ship_stream(state, listing, app_name, verstr, stream, size)
-                       for stream, size in sorted(local_sizes.items())}
-            if self._run_finished(app_name, verstr):
-                for stream in sorted(local_sizes):
+            finished = self._run_finished(app_name, verstr)
+            for stream, size in sorted(local_sizes.items()):
+                seq = self._ship_stream(state, listing, app_name, verstr, stream, size)
+                if finished:
                     self._compact_once(app_name, verstr, stream)
-                return
-            for stream, seq in sorted(shipped.items()):
-                if seq and seq % LIVE_ROLLUP_SEGMENTS == 0:
+                elif seq and seq % LIVE_ROLLUP_SEGMENTS == 0:
                     self._compact(app_name, verstr, stream)
 
     def _ship_stream(self, state, listing, app_name, verstr, stream, size):

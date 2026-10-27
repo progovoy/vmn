@@ -107,6 +107,23 @@ def test_a_compaction_between_reads_gives_the_full_result(s3):
     _assert_full(snap, s3)
 
 
+def test_a_live_rollup_of_segments_read_already_costs_no_read(s3):
+    for seq in range(20):
+        _segment(s3, S, seq, seq)
+    cache = ParsedLogs()
+    cache.get(s3, APP, V, load_log)
+
+    assert s3.compact_log_segments(APP, V, S)  # their bytes, concatenated
+    _segment(s3, S, 20, 20)
+    snap, ops = _gets(s3, lambda: cache.get(s3, APP, V, load_log))
+
+    assert ops["GetObject"] == 1  # the new segment only
+    assert snap.total == 21
+    _assert_full(snap, s3)
+    _segment(s3, S, 21, 21)
+    _assert_full(cache.get(s3, APP, V, load_log), s3)
+
+
 def test_a_compaction_listed_before_its_deletes_counts_each_entry_once(s3, monkeypatch):
     for seq in range(6):
         _segment(s3, S, seq, seq)

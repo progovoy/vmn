@@ -34,9 +34,15 @@ from vmn_exp.core.series_reader import indexed_entries, stream_entries
 from vmn_exp.core.streams import display_writer
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.files import flatten_logs
-from vmn_exp.ui.readers.listed_reads import ListedReads, StaleListing, read_each
+from vmn_exp.ui.readers.listed_reads import (
+    ListedReads,
+    StaleListing,
+    read_each,
+    store_identity,
+)
 from vmn_exp.ui.readers.log_snapshot import LogSnapshot
 from vmn_exp.ui.readers.parsed_log_files import (
+    adopt_merges,
     appends_in_order,
     by_writer,
     merges,
@@ -149,44 +155,46 @@ def _read_all(files_of, app_name, verstr, items):
     read = lambda item: _read_file(files_of, app_name, verstr, item)  # noqa: E731
     if not files_of.is_remote():
         return [read(item) for item in items]
-    return read_each(read, items, "vmn-ui-log-read")
+    return read_each(read, items)
 
 
-def _read_growth(files_of, app_name, verstr, files, offsets):
-    """``({file: new entries}, new offsets, visible groups)``, or None when
-    not pure growth."""
+def _read_growth(files_of, app_name, verstr, files, groups, offsets):
+    """``({file: new entries}, new offsets)`` of the *groups* of *files*
+    listed, or None when not pure growth."""
     if any(name not in files or files[name][0] < end for name, end in offsets.items()):
         return None
-    groups = visible(files)
     listed = [(w, n) for w, names in groups.items() for n in names]
     if offsets and any(merges(n) for _, n in listed if n not in offsets):
         return None  # compacted or sealed since: what it replaced restarts from 0
     items = [(w, n, offsets.get(n, 0), files[n][0])
              for w, n in listed if files[n][0] > offsets.get(n, 0)]
-    reads = _read_all(files_of, app_name, verstr, items)
-    new_offsets = dict(offsets)
-    new_offsets.update((item[1], end) for item, (_, end) in zip(items, reads))
-    return {item[1]: entries for item, (entries, _) in zip(items, reads)}, new_offsets, groups
+    new, new_offsets = {}, dict(offsets)
+    for item, (entries, end) in zip(items, _read_all(files_of, app_name, verstr, items)):
+        new[item[1]], new_offsets[item[1]] = entries, end
+    return new, new_offsets
 
 
 def _grow(parsed, files_of, app_name, verstr, files):
     """*parsed* extended by the files' new bytes, or None to read afresh. New
-    entries sorting before parsed ones make a new merge of the entries kept."""
+    entries sorting before parsed ones make a new merge of the entries kept;
+    a compacted log of parts read in full takes their entries."""
     if replaced(parsed.sig, files, in_place=not files_of.is_remote()):
         return None
-    found = _read_growth(files_of, app_name, verstr, files, parsed.offsets)
+    offsets, read = adopt_merges(files, parsed.offsets, parsed.read)
+    groups = visible(files)
+    found = _read_growth(files_of, app_name, verstr, files, groups, offsets)
     if found is None:
         return None
-    new, offsets, groups = found
+    new, offsets = found
     for name, entries in new.items():
-        parsed.read.setdefault(name, []).extend(entries)
+        read.setdefault(name, []).extend(entries)
     new_entries = flatten_logs(by_writer(groups, new))
     if appends_in_order(parsed.entries, new_entries):
-        parsed.offsets = offsets
+        parsed.offsets, parsed.read = offsets, read
         return parsed.extend(new_entries)
     merged = _Parsed()
-    merged.offsets, merged.read = offsets, parsed.read
-    return merged.extend(flatten_logs(by_writer(groups, merged.read)))
+    merged.offsets, merged.read = offsets, read
+    return merged.extend(flatten_logs(by_writer(groups, read)))
 
 
 def _parse_local(files_of, app_name, verstr, files):
@@ -203,8 +211,8 @@ class ParsedLogs:
     """Parsed logs per record, reused while unchanged and grown when appended.
 
     Bounded by *max_bytes* of log files and *max_entries* records (least
-    recently used first out). A backend without cheap ``record_files`` (reads
-    that merge a remote into a local copy) is never cached.
+    recently used first out). A backend without cheap ``stream_files`` or
+    ``record_files`` (reads that merge a remote into a local copy) is never cached.
     """
 
     def __init__(self, max_bytes=DEFAULT_MAX_BYTES, max_entries=DEFAULT_MAX_ENTRIES):
@@ -223,18 +231,15 @@ class ParsedLogs:
         files = _log_files(storage, app_name, verstr)
         if files is None:
             return _parse_with(read_log, storage, app_name, verstr).snapshot
-        key = (_identity(storage), app_name, verstr)
+        key = (store_identity(storage), app_name, verstr)
         with self._key_lock(key):
             parsed = self._lookup(key)
-            try:
-                return self._current(key, parsed, storage, app_name, verstr, read_log, files)
-            except StaleListing:  # merged since listed: list the record once more
-                pass
-            try:
-                files = _log_files(storage, app_name, verstr)
-                return self._current(key, parsed, storage, app_name, verstr, read_log, files)
-            except StaleListing:
-                return (parsed or _parse_with(read_log, storage, app_name, verstr)).snapshot
+            for _ in range(2):
+                try:
+                    return self._current(key, parsed, storage, app_name, verstr, read_log, files)
+                except StaleListing:  # merged since listed: list the record once more
+                    files = _log_files(storage, app_name, verstr)
+            return (parsed or _parse_with(read_log, storage, app_name, verstr)).snapshot
 
     def _current(self, key, parsed, storage, app_name, verstr, read_log, files):
         """The snapshot of the record listed as *files*, kept for the next poll."""
@@ -258,9 +263,7 @@ class ParsedLogs:
                 grown = _grow(parsed, files_of, app_name, verstr, files)
                 if grown is not None:
                     return grown
-            return _parse_local(files_of, app_name, verstr, files) or _parse_with(
-                read_log, storage, app_name, verstr
-            )
+            return _parse_local(files_of, app_name, verstr, files)
         except _Pending:
             return None
 
@@ -290,7 +293,3 @@ class ParsedLogs:
                 self.bytes -= old_weight
                 self._key_locks.pop(old_key, None)
 
-
-def _identity(storage):
-    identity_of = getattr(storage, "cache_identity", None)
-    return (identity_of() if identity_of else None) or id(storage)

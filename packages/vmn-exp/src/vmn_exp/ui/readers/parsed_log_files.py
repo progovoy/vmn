@@ -32,12 +32,46 @@ def by_writer(groups, entries_of):
             for w, names in groups.items()}
 
 
+def _merged_log(name):
+    return is_log_file(name) and _span(name)[0] < _span(name)[1]
+
+
+def _span(name):
+    return writer_and_span(name)[1]
+
+
 def merges(name):
     """Whether *name* replaces other files: a compacted log or a ``.vmx``."""
-    if is_indexed_file(name):
-        return True
-    first, last = writer_and_span(name)[1]
-    return is_log_file(name) and first < last
+    return is_indexed_file(name) or _merged_log(name)
+
+
+def adopt_merges(files, offsets, read):
+    """``(offsets, read)`` with each newly listed compacted log in *files*
+    standing for the parts of it read in full — it is their bytes
+    concatenated, so the entries read are its entries, and nothing is read."""
+    offsets, read = dict(offsets), dict(read)
+    for name in [n for n in files if n not in offsets and _merged_log(n)]:
+        writer, (first, last) = writer_and_span(name)
+        parts = sorted((m for m in offsets if is_log_file(m) and writer_and_span(m)[0] == writer
+                        and first <= _span(m)[0] <= last), key=_span)
+        if not _tiles(parts, first, last) or sum(offsets[m] for m in parts) != files[name][0]:
+            continue
+        read[name] = [e for m in parts for e in read.pop(m, ())]
+        offsets[name] = files[name][0]
+        for m in parts:
+            del offsets[m]
+    return offsets, read
+
+
+def _tiles(parts, first, last):
+    """Whether the spans of *parts* (in order) cover ``first..last`` exactly."""
+    expected = first
+    for part in parts:
+        start, end = _span(part)
+        if start != expected:
+            return False
+        expected = end + 1
+    return expected == last + 1
 
 
 def appends_in_order(entries, new_entries):

@@ -6,17 +6,11 @@ The first object found missing makes the listing stale: :class:`ListedReads`
 raises :class:`StaleListing` for it and for every read after it, without a
 request, and :func:`read_each` reads a long list's first object alone first —
 so a stale listing costs one miss (a few at most), not a 404 per segment, and
-the reader lists the record once more (``core/index_logs.py`` does the same
-for the experiment index).
+the reader lists the record once more, as the experiment index does
+(:mod:`vmn_exp.core.index_logs`).
 """
-from concurrent.futures import ThreadPoolExecutor
-
-from vmn_exp.storage.thread_context import in_caller_context
-
-# Reads past which the first is made alone first: a live run's few new
-# segments cost no extra round trip.
-PROBE_OVER = 4
-READ_WORKERS = 16
+from vmn_exp.core.index_logs import PROBE_OVER
+from vmn_exp.storage.s3_base import parallel_map
 
 
 class StaleListing(Exception):
@@ -28,7 +22,7 @@ class ListedReads:
 
     def __init__(self, storage):
         self._storage = storage
-        self.stale = False
+        self._stale = False
 
     def is_remote(self):
         return self._storage.is_remote()
@@ -40,27 +34,25 @@ class ListedReads:
         return self._checked(self._storage.read_file_from, app_name, verstr, name, offset)
 
     def _checked(self, read, *args):
-        if not self.stale:
+        if not self._stale:
             data = read(*args)
             if data is not None:
                 return data
-            self.stale = True
+            self._stale = True
         raise StaleListing()
 
 
-def read_each(read, items, thread_name):
+def read_each(read, items):
     """``[read(item)]`` in order, concurrently; of more than
     :data:`PROBE_OVER` items the first is read before the others."""
     items = list(items)
     if len(items) > PROBE_OVER:
         first = read(items[0])
-        return [first] + _concurrently(read, items[1:], thread_name)
-    return _concurrently(read, items, thread_name)
+        return [first] + parallel_map(read, items[1:])
+    return parallel_map(read, items)
 
 
-def _concurrently(read, items, thread_name):
-    if len(items) < 2:
-        return [read(item) for item in items]
-    with ThreadPoolExecutor(max_workers=min(READ_WORKERS, len(items)),
-                            thread_name_prefix=thread_name) as pool:
-        return list(pool.map(in_caller_context(read), items))
+def store_identity(storage):
+    """What tells *storage*'s records from another store's in a cache key."""
+    identity_of = getattr(storage, "cache_identity", None)
+    return (identity_of() if identity_of else None) or id(storage)
