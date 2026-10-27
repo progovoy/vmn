@@ -20,6 +20,7 @@ import time
 from collections import deque
 from urllib.parse import unquote_plus
 
+from vmn_exp.storage.fanout import serving_request
 from vmn_exp.ui.diag.registry import rounded as _rounded
 from vmn_exp.ui.quantile_sketch import QuantileSketch
 
@@ -189,7 +190,8 @@ class RequestTracker:
 
 
 class DiagRequestsMiddleware:
-    """Pure ASGI: tracks every HTTP request in *tracker*."""
+    """Pure ASGI: tracks every HTTP request in *tracker*, and serves it in the
+    fan-outs' request lane (:func:`~vmn_exp.storage.fanout.serving_request`)."""
 
     def __init__(self, app, tracker):
         self.app = app
@@ -211,7 +213,8 @@ class DiagRequestsMiddleware:
             await send(message)
 
         try:
-            await self.app(scope, receive, tracked_send)
+            with serving_request():
+                await self.app(scope, receive, tracked_send)
         finally:
             _CURRENT.reset(token)
             self.tracker.finished(entry, entry.status)
