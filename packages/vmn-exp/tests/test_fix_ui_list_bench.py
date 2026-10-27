@@ -4,6 +4,7 @@ runs at most once per index generation. Counts calls instead of timing, so it
 cannot flake on a loaded box."""
 import json
 import os
+import time
 
 import pytest
 import yaml
@@ -81,8 +82,11 @@ def test_warm_list_polls_do_no_per_record_work(tmp_path, listed, pipeline):
     app = create_app(manager, background_refresh=True)
     client = TestClient(app)
     try:
-        warm = client.get(f"{BASE}?sort=loss&limit=50")
-        assert warm.json()["total"] == RUNS
+        # A cold index answers at once ("indexing"); wait for it like the web does.
+        deadline = time.monotonic() + 60
+        while client.get(f"{BASE}?sort=loss&limit=50").json()["total"] != RUNS:
+            assert time.monotonic() < deadline, "the index never loaded"
+            time.sleep(0.05)
         listed.update(full=0, records=0)
         pipeline.update(annotate=0, sort=0)
 
