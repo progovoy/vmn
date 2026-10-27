@@ -174,6 +174,48 @@ class S3Listing:
                 else {"Prefix": base, "ContinuationToken": page["NextContinuationToken"]}
             )
 
+    def record_name_pages(self, app_name):
+        """:meth:`list_record_names`' names a LIST page at a time, in the
+        store's order, so a caller can start on the first page."""
+        base = self._app_prefix(app_name) + "/"
+        for page in self._pages(Prefix=base, Delimiter="/"):
+            names = [unsafe_verstr(cp["Prefix"][len(base):].rstrip("/"))
+                     for cp in page.get("CommonPrefixes", [])]
+            if names:
+                yield names
+
+    def list_files_between(self, app_name, names):
+        """``list_files(app_name, keys=names)`` of *names* that lie next to
+        each other in the store (a page of :meth:`record_name_pages`), in one
+        walk of their key range: about a LIST per 1000 objects, not three per
+        record. None when the store cannot start a listing past a key."""
+        if not getattr(self._s3, "server_side_start_after", True):
+            return None
+        base = self._app_prefix(app_name) + "/"
+        wanted = {safe_verstr(n): n for n in names if _base.valid_path_component(n)}
+        if not wanted:
+            return {}
+        heads = sorted(f"{name}/" for name in wanted)
+        return self._walk_between(base, heads[0], heads[-1], wanted)
+
+    def _walk_between(self, base, first, last, wanted):
+        files = {}
+        params = {"Prefix": base, "StartAfter": base + first[:-1]}
+        while True:
+            page = self._s3.list_objects_v2(Bucket=self.bucket, **params)
+            skip_to = None
+            for obj in page.get("Contents", []):
+                rel = obj["Key"][len(base):]
+                if rel > last and not rel.startswith(last):
+                    return files
+                verstr, name, skip_to = _record_relpath(base, obj["Key"])
+                if rel >= first and not skip_to and verstr in wanted and _is_record_file(name):
+                    files.setdefault(wanted[verstr], {})[name] = _signature(obj)
+            if not page.get("IsTruncated"):
+                return files
+            params = ({"Prefix": base, "StartAfter": skip_to} if skip_to
+                      else {"Prefix": base, "ContinuationToken": page["NextContinuationToken"]})
+
     def _list_files_of(self, app_name, keys):
         prefix = self._app_prefix(app_name)
         wanted = [key for key in keys if _base.valid_path_component(key)]

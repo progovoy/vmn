@@ -137,7 +137,10 @@ class Refresher(_Listeners):
         if journal is not None:
             self._follow(journal, index)
         self._watch(index)
-        return index.snapshot()
+        # Never wait for a cold index's first load: it answers an empty
+        # snapshot saying it is loading meanwhile.
+        snapshot_now = getattr(index, "snapshot_now", None)
+        return snapshot_now() if snapshot_now is not None else index.snapshot()
 
     def watched(self):
         """``[(index, watch)]`` of the indexes refreshed now (diagnostics)."""

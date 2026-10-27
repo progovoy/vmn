@@ -59,6 +59,7 @@ from vmn_exp.core.gc_pause import gc_paused
 from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
+from vmn_exp.core.index_bulk import BulkPublish, loading_snapshot
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_journal_mark import JournalMark
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
@@ -91,8 +92,17 @@ from vmn_exp.core.traced_lock import TracedLock
 _LOGGER = logging.getLogger(__name__)
 # Records a remote backend re-reads at once (each costs a few round trips).
 _REMOTE_WORKERS = 32
-# Records a remote backend reads between publishing and persisting what it has.
+# Records a remote backend reads between persisting what it has (and, while
+# the index is small, publishing it: see index_bulk).
 _REMOTE_CHUNK = 500
+# How long a refresh of a cold remote index keeps loading what its listing
+# behind serving hands over before letting the next refresh serve the
+# journal's hints (and the ui see the refresh end, not a stuck one).
+BEHIND_REFRESH_SEC = 30.0
+# How long a request on an index that published nothing yet waits for its
+# first snapshot before it gets an empty one saying it is loading.
+FIRST_SNAPSHOT_WAIT_SEC = 0.5
+_BISECT_NEW = 64  # new records past which the order is merged, not inserted into
 _monotonic = time.monotonic
 
 
@@ -125,7 +135,9 @@ class ExperimentIndex:
         self._stamps = None  # their timestamps, for bisecting new keys in
         self._reorder = ((), False)  # (new keys, whether one was re-described)
         self._rows = RowCache()
+        self._bulk = BulkPublish()
         self._snapshot = None
+        self._placeholder = None  # (expected, the empty snapshot saying so)
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
         self._revalidator = None  # the thread a warm snapshot() started
@@ -237,6 +249,11 @@ class ExperimentIndex:
         if behind is not None and (
                 behind[0] == index_freshness.FULL_LISTING or state["phase"] == index_freshness.IDLE):
             state["phase"], state["progress"] = behind
+        new = self._sweep.relisted_new()
+        loading = self._loading(len(self._order or ()))
+        if loading is not None and (new is None or (new and new[1] > _REMOTE_CHUNK)):
+            rows, expected = loading  # a cold index's load behind serving: the share served
+            state["progress"] = round(rows / expected, 3) if expected else None
         return state
 
     def full_listing_due(self):
@@ -339,7 +356,7 @@ class ExperimentIndex:
             for key in self._sweep._take_hints():
                 other._sweep.hint(key)
             self._records, self._order, self._stamps = other._records, other._order, other._stamps
-            self._rows, self._sweep = other._rows, other._sweep
+            self._rows, self._sweep, self._bulk = other._rows, other._sweep, other._bulk
             self._store, self._unsaved = store or other._store, other._unsaved
             if self._store is not other._store:
                 self._baseline = ListingBaseline(self._store, self.app_name)
@@ -389,7 +406,34 @@ class ExperimentIndex:
         self._freshness.listing(self._listing_phase(started), self._records,
                                 self._listing_position())
         listing, removed = self._sweep.listing(self._records, started)
+        self._load_listed(listing, removed, started)
+        while self._more_relisted(started):
+            self._load_listed(*self._sweep.next_relisted(self._records, _monotonic()), started)
+        if self._snapshot is None and not self._lean:  # a refresh ends with one
+            self._publish_pending()
 
+    def _more_relisted(self, started):
+        """Whether to load more of what a listing behind serving hands over
+        in this refresh: during a bulk load (a cold index's) the next batch
+        is waited for, up to BEHIND_REFRESH_SEC into the refresh — unless a
+        journal hint waits for the next refresh."""
+        while True:
+            left = BEHIND_REFRESH_SEC - (_monotonic() - started)
+            if left <= 0 or self._sweep.hints_waiting():
+                return False
+            if self._sweep.relisted_ready():
+                return True
+            if not self._bulk_listing():
+                return False
+            self._sweep.wait_relisted(min(left, 1.0))
+
+    def _bulk_listing(self):
+        """Whether a listing behind serving brings many new records (a cold
+        index's), not all handed over yet."""
+        new = self._sweep.relisted_new()
+        return new is None or bool(new and new[1] > _REMOTE_CHUNK and new[2])
+
+    def _load_listed(self, listing, removed, started):
         # Unfinished claims and deleted records' leftovers have no metadata.
         work = [
             (key, names, self._records.get(key))
@@ -499,13 +543,57 @@ class ExperimentIndex:
             self._publish(new, removed, redescribed, touched)
 
     def _publish(self, new, removed, redescribed, touched):
+        """Publish what changed — while a bulk load has many records to go,
+        only once due (:mod:`~vmn_exp.core.index_bulk`)."""
+        bulk, backlog = self._bulk, self._backlog()
+        self._number_later(backlog)
+        bulk.add(new, removed, redescribed, touched)
+        snap = self._snapshot
+        if snap is None and not bulk.pending() and self._bulk_listing():
+            return  # nothing loaded yet: requests get loading_snapshot meanwhile
+        if snap is not None and backlog and not bulk.due(len(snap.rows), _REMOTE_CHUNK):
+            return
+        self._publish_pending()
+
+    def _publish_pending(self):
+        bulk, snap, started = self._bulk, self._snapshot, _monotonic()
+        new, resort, touched = bulk.take()
         # Only a new, removed or re-described record can move in the order.
-        if new or removed or redescribed or self._order is None:
-            self._reorder = (new, redescribed or bool(removed))
+        if new or resort or self._order is None:
+            self._reorder = (new, resort)
             self._order = self._sorted_keys()
-        if touched or removed or self._snapshot is None:
+        if touched is None or touched or snap is None:
             self.generation += 1
-            self._snapshot = self._build_snapshot(None if removed else touched)
+            self._snapshot = self._build_snapshot(touched)
+            bulk.published(started)
+
+    def _backlog(self):
+        """Whether a load has many records yet to read: more than a chunk of
+        this refresh's past the current one, or of the new names a listing
+        behind serving found and has not handed over."""
+        new = self._sweep.relisted_new()
+        return max(self._unread, new[2] if new else 0) > _REMOTE_CHUNK
+
+    def _loading(self, rows):
+        """``(rows loaded, rows expected)`` while a load reads many new
+        records (expected None while a cold index's listing named none
+        yet), else None."""
+        new = self._sweep.relisted_new()
+        if new is None:
+            return (rows, None) if not self._records else None
+        known, seen, left = new or (0, 0, 0)
+        if self._unread or (seen > _REMOTE_CHUNK and left):
+            return rows, max(known + seen, len(self._records) + self._unread)
+        return None
+
+    def _number_later(self, later):
+        """While *later* (a bulk load prepending records, which would
+        renumber every persisted row per chunk), let the store leave its
+        rows' ``idx`` stale; once not, it numbers them (see
+        :meth:`~vmn_exp.core.index_store.SqliteStore.number_later`)."""
+        number_later = getattr(self._store, "number_later", None)
+        if number_later is not None:
+            number_later(self.app_name, later)
 
     def _keeps_baseline(self):
         """Whether listing baselines persist: not for a journaled sweep, one
@@ -645,26 +733,46 @@ class ExperimentIndex:
             keys = [k for k, r in self._records.items() if r["meta"] is not None]
             self._stamps = sorted((_timestamp(self._records[k]["meta"]), k) for k in keys)
             return [key for _, key in self._stamps]
+        stamps = [(_timestamp(meta), key) for key in new
+                  for meta in (self._records[key]["meta"],) if meta is not None]
+        if len(stamps) > _BISECT_NEW:  # one merge of two sorted runs beats that many inserts
+            self._stamps = sorted(self._stamps + stamps)
+            return [key for _, key in self._stamps]
         order = list(self._order)
-        for key in new:
-            meta = self._records[key]["meta"]
-            if meta is None:
-                continue  # not an experiment
-            stamp = (_timestamp(meta), key)
+        for stamp in stamps:
             at = bisect.bisect_right(self._stamps, stamp)
             self._stamps.insert(at, stamp)
-            order.insert(at, key)
+            order.insert(at, stamp[1])
         return order
 
     # -- snapshots -----------------------------------------------------------
 
     def _build_snapshot(self, touched=None):
         order = self._order or []
-        loading = (len(order), len(order) + self._unread) if self._unread else None
         self.published_at = _monotonic()
         return self._rows.snapshot(
-            self.app_name, self.generation, order, self._records, touched, loading
+            self.app_name, self.generation, order, self._records, touched,
+            self._loading(len(order)),
         )
+
+    def snapshot_now(self, wait_sec=FIRST_SNAPSHOT_WAIT_SEC):
+        """The current :class:`IndexSnapshot`, never waiting for a first load
+        longer than *wait_sec* (what a background-refreshed server serves):
+        until one is published, an empty snapshot whose ``loading`` is ``(0,
+        records expected)`` — None while not even their names are listed."""
+        snap = self._snapshot
+        if snap is not None or self._cache_gen is not None:
+            return snap or self._first_load()
+        self._revalidate_in_background()
+        self._published.wait(wait_sec)
+        snap = self._snapshot
+        if snap is not None:
+            return snap
+        new = self._sweep.relisted_new()
+        expected = new[0] + new[1] if new else None
+        if self._placeholder is None or self._placeholder[0] != expected:
+            self._placeholder = (expected, loading_snapshot(self.app_name, expected))
+        return self._placeholder[1]
 
     def snapshot(self):
         """The current :class:`IndexSnapshot`. The first call of an index
