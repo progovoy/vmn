@@ -5323,7 +5323,7 @@ requires-dist = [
 
 [[package]]
 name = "vmn-exp"
-version = "0.1.21"
+version = "0.1.22"
 source = { editable = "packages/vmn-exp" }
 dependencies = [
     { name = "vmn" },
@@ -5388,7 +5388,7 @@ provides-extras = ["ui", "s3", "gcs", "azure", "mlflow", "postgres", "parquet"]
 
 [[package]]
 name = "vmn-exp-sdk"
-version = "0.1.21"
+version = "0.1.22"
 source = { editable = "packages/vmn-exp-sdk" }
 dependencies = [
     { name = "filelock", version = "3.16.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
