@@ -87,8 +87,10 @@ def _write_key(out, name, cols):
     }
 
 
-def build_index(writer, keys, rewinds_applied=False):
-    """The bytes of an indexed file of *keys* (``{name: Columns}``, non-empty)."""
+def build_index(writer, keys, rewinds_applied=False, stream_bytes=None):
+    """The bytes of an indexed file of *keys* (``{name: Columns}``, non-empty);
+    *stream_bytes*: the stream prefix a live rollup built it from, which the
+    footer records so its owner resumes shipping past it."""
     out = _Writer()
     footer = {
         "writer": writer,
@@ -97,6 +99,8 @@ def build_index(writer, keys, rewinds_applied=False):
         "keys": {name: _write_key(out, name, cols) for name, cols in keys.items()},
         "rewinds_applied": bool(rewinds_applied),
     }
+    if stream_bytes is not None:
+        footer["stream_bytes"] = stream_bytes
     packed = zlib.compress(json.dumps(footer, separators=(",", ":")).encode())
     out.parts.append(packed + TAIL.pack(len(packed), zlib.crc32(packed), MAGIC))
     return b"".join(out.parts)

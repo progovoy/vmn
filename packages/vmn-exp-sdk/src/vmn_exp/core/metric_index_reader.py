@@ -4,20 +4,21 @@
 The reader only needs ``read_range(offset, length)`` — a local ``pread`` or
 an object-store range GET. It reads the last :data:`TAIL_READ_BYTES` of the
 file once — the footer, and the whole of a file that small, which then needs
-no other read — then for a query the raw chunks or the one LOD slice the
-answer needs, the chunks one query lacks read concurrently. Queries may run
-on several threads at once.
+no other read; a later read inside it costs none either — then for a query
+the raw chunks or the one LOD slice the answer needs, the chunks one query
+lacks read concurrently, adjacent ones (a key's steps, timestamps and values)
+in one read. Queries may run on several threads at once.
 """
 import bisect
 import json
 import threading
 import zlib
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.metric_columns import Columns, unpack_deltas, unpack_floats
 from vmn_exp.core.metric_index_layout import CHUNK_POINTS, MAGIC, TAIL
 from vmn_exp.core.metric_lod import decode_buckets, emit, merge, summarize
+from vmn_exp.storage.fanout import fan_out
 
 _CACHED_CHUNKS = 16
 # What the first read takes from the end of the file: on an object store one
@@ -30,7 +31,7 @@ class MetricIndexReader:
     def __init__(self, read_range, size):
         tail_at = max(size - TAIL_READ_BYTES, 0)
         tail = read_range(tail_at, size - tail_at)
-        self._read = _in_memory(tail) if tail_at == 0 else read_range
+        self._read = _in_memory(tail) if tail_at == 0 else _tail_first(read_range, tail, tail_at)
         self._buffered = tail_at == 0
         footer_len, crc, magic = TAIL.unpack(tail[-TAIL.size:])
         if magic != MAGIC:
@@ -93,7 +94,9 @@ class MetricIndexReader:
             return meta["n"]
         return index * CHUNK_POINTS + search(self._chunk(chunks, axis, index), bound)
 
-    def _chunk(self, chunks, column, index):
+    def _chunk(self, chunks, column, index, data=None):
+        """Chunk *index* of a key's *column*, unpacked from *data* when read
+        already."""
         entry = chunks[index]
         cache_key = (entry["off"], column)
         with self._lock:
@@ -101,7 +104,9 @@ class MetricIndexReader:
             if cached is not None:
                 self._chunks.move_to_end(cache_key)
                 return cached
-        values = _UNPACK[column](zlib.decompress(self._read(entry["off"], entry["len"])))
+        if data is None:
+            data = self._read(entry["off"], entry["len"])
+        values = _UNPACK[column](zlib.decompress(data))
         with self._lock:
             self._chunks[cache_key] = values
             if len(self._chunks) > _CACHED_CHUNKS:
@@ -129,9 +134,16 @@ class MetricIndexReader:
                       if (w[0][w[2]]["off"], w[1]) not in self._chunks]
         if len(wanted) < 2 or len(wanted) > _CACHED_CHUNKS:
             return
-        with ThreadPoolExecutor(max_workers=len(wanted),
-                                thread_name_prefix="vmn-metric-chunks") as pool:
-            list(pool.map(lambda w: self._chunk(*w), wanted))
+        runs = _adjacent(wanted)
+        fan_out(self._read_run, runs, len(runs), "vmn-metric-chunks")
+
+    def _read_run(self, run):
+        """Read a run of adjacent chunks (``[(offset, wanted)]``) at once."""
+        start = run[0][0]
+        last_chunks, _, last_index = run[-1][1]
+        data = self._read(start, run[-1][0] + last_chunks[last_index]["len"] - start)
+        for off, (chunks, column, index) in run:
+            self._chunk(chunks, column, index, data[off - start:off - start + chunks[index]["len"]])
 
     def _columns(self, meta, start, end):
         """Positions ``[start, end)`` of *meta*'s key as :class:`Columns`."""
@@ -176,6 +188,28 @@ class MetricIndexReader:
 
 def _in_memory(data):
     return lambda offset, length: data[offset:offset + length]
+
+
+def _tail_first(read_range, tail, tail_at):
+    """*read_range*, but a read inside the *tail* read at *tail_at* is a slice."""
+    def read(offset, length):
+        if offset >= tail_at:
+            return tail[offset - tail_at:offset - tail_at + length]
+        return read_range(offset, length)
+    return read
+
+
+def _adjacent(wanted):
+    """*wanted* chunks (``(chunks, column, index)``) as runs of adjacent
+    ones, ``[(offset, wanted)]`` each, in file order."""
+    runs, end = [], None
+    for item in sorted(wanted, key=lambda w: w[0][w[2]]["off"]):
+        entry = item[0][item[2]]
+        if entry["off"] != end:
+            runs.append([])
+        runs[-1].append((entry["off"], item))
+        end = entry["off"] + entry["len"]
+    return runs
 
 
 def _chunk_span(start, end):

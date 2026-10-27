@@ -10,7 +10,6 @@ logged before them (§5.2). A stream key's step-less twin is merged back into
 its key. Pure apart from the duck-typed storage reads of :meth:`from_storage`.
 """
 import heapq
-from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
@@ -21,7 +20,7 @@ from vmn_exp.core.metric_lod import emit, summarize
 from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited
 from vmn_exp.core.metric_time import iso_to_us, us_to_iso
 from vmn_exp.core.rewind import rewind_step
-from vmn_exp.storage.thread_context import in_caller_context
+from vmn_exp.storage.fanout import fan_out
 
 LEGACY_WRITER = ""
 # Segment reads one stream keeps in flight: a stuck run on S3 has one segment
@@ -153,11 +152,12 @@ def _read_all(storage, app_name, verstr, objects):
     """Each object's bytes, in order, read :data:`SEGMENT_READ_WORKERS` at a
     time; a failed read raises."""
     read = lambda obj: storage.read_range(app_name, verstr, obj[0], 0, obj[1])  # noqa: E731
-    if len(objects) < 2:
-        return [read(obj) for obj in objects]
-    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects)),
-                            thread_name_prefix="vmn-series-read") as pool:
-        return list(pool.map(in_caller_context(read), objects))
+    return fan_out(read, objects, SEGMENT_READ_WORKERS, "vmn-series-read")
+
+
+def blocks_source(blocks):
+    """The source of a stream's decoded *blocks* (:class:`Block` s)."""
+    return _StreamSource(blocks)
 
 
 def _stream_blocks(storage, app_name, verstr, objects):
@@ -218,11 +218,7 @@ def metric_sources(storage, app_name, verstr):
     listing = getattr(storage, "metric_objects", None)
     objects = list((listing(app_name, verstr) if listing else {}).items())
     source = lambda item: (item[0], writer_source(storage, app_name, verstr, item[1]))  # noqa: E731
-    if len(objects) < 2:
-        return [source(item) for item in objects]
-    with ThreadPoolExecutor(max_workers=min(SEGMENT_READ_WORKERS, len(objects)),
-                            thread_name_prefix="vmn-series-read") as pool:
-        return list(pool.map(in_caller_context(source), objects))
+    return fan_out(source, objects, SEGMENT_READ_WORKERS, "vmn-series-read")
 
 
 class SeriesReader:

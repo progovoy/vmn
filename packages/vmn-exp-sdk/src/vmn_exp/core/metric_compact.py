@@ -36,8 +36,12 @@ def _objects(storage, app_name, verstr, writer):
 
 def writer_columns(storage, app_name, verstr, objects, rewinds=()):
     """``{stream key: Columns}`` of one writer's *objects*, less what *rewinds* hide."""
+    return source_columns(writer_source(storage, app_name, verstr, objects), rewinds)
+
+
+def source_columns(source, rewinds=()):
+    """``{stream key: Columns}`` of a series *source*, less what *rewinds* hide."""
     points = {}
-    source = writer_source(storage, app_name, verstr, objects)
     for name, ts, step, value in source.named_points():
         if not hidden(rewinds, ts, step):
             points.setdefault(name, []).append((ts, step, value))
@@ -65,7 +69,8 @@ def _split_twins(points):
     return out
 
 
-def _put(storage, app_name, verstr, writer, data, **kwargs):
+def put_index(storage, app_name, verstr, writer, data, **kwargs):
+    """Store the ``.vmx`` bytes *data* of stream *writer* (``put_indexed``)."""
     fd, path = tempfile.mkstemp(suffix=".vmx")
     try:
         with os.fdopen(fd, "wb") as f:
@@ -98,7 +103,7 @@ def compact_writer(storage, app_name, verstr, writer, rewinds=(), rebuild=False)
             return False
         data = build_index(writer, keys, rewinds_applied=bool(rewinds))
         covers = max(last_seq(n for n, _ in objects), 0)
-        return _put(storage, app_name, verstr, writer, data, replace=rebuild, covers=covers)
+        return put_index(storage, app_name, verstr, writer, data, replace=rebuild, covers=covers)
 
 
 def record_rewinds(storage, app_name, verstr):

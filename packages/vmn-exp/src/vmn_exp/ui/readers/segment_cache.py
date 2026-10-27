@@ -7,8 +7,10 @@ re-asked on every poll of a live run — whose object store holds a segment per
 sync. A listed object's bytes are kept here under its listing signature (size,
 LastModified, ETag), so a poll costs the record's ``log/`` and ``metrics/``
 listings plus the objects that changed or appeared since; bounded by bytes,
-least recently used first out. Ranged ``.vmx`` reads go to the store. An
-object merged away since the listing raises
+least recently used first out. A ``.vmx`` never changes under its
+signature either, so its ranged reads (footer, LOD slices, raw chunks) are
+kept the same way, each under its range. An object merged away since the
+listing raises
 :class:`~vmn_exp.ui.readers.listed_reads.StaleListing`.
 """
 import threading
@@ -17,6 +19,7 @@ from collections import OrderedDict
 from vmn_exp.core.logfiles import group_log_names
 from vmn_exp.core.metric_files import (
     group_metric_objects,
+    is_indexed_file,
     is_metric_file,
     is_stream_file,
 )
@@ -96,8 +99,11 @@ class SegmentReads:
 
     def read_range(self, app_name, verstr, name, offset, length):
         sig = self._listed(app_name, verstr).get(name)
+        fetch = lambda: self._reads.read_range(app_name, verstr, name, offset, length)  # noqa: E731
+        if sig is not None and is_indexed_file(name):
+            return self._cache.read(self._key(app_name, verstr, name) + (offset, length), length, fetch)
         if offset or sig is None or sig[0] != length or not is_stream_file(name):
-            return self._reads.read_range(app_name, verstr, name, offset, length)
+            return fetch()
         return self._whole(app_name, verstr, name)
 
     def load_logs_by_writer(self, app_name, verstr):

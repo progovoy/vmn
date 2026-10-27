@@ -3,18 +3,17 @@
 log halves (:mod:`snapshot_storage_s3`)."""
 
 import copy
-from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import checked_app_path, safe_verstr
 from vmn_exp.storage.registry import missing_extra
 from vmn_exp.storage.s3_stats import instrument
-from vmn_exp.storage.thread_context import in_caller_context
+from vmn_exp.storage.fanout import fan_out
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
 S3_WORKERS = 10
 # Connections a client pools, for every thread sharing it (boto3's default: 10):
-# the index reads 32 records at a time, each up to S3_WORKERS segments at once.
+# the threads starting fan-outs plus the workers fan-outs share (fanout).
 MAX_POOL_CONNECTIONS = 32 * S3_WORKERS
 # Every call is bounded: a stalled connection fails and is retried (standard
 # mode: backoff with jitter, a retry quota during outages) instead of holding
@@ -41,13 +40,9 @@ def is_taken(exc):
 
 
 def parallel_map(fn, items):
-    """``[fn(item)]`` in order, at most :data:`S3_WORKERS` at a time."""
-    items = list(items)
-    if len(items) < 2:
-        return [fn(item) for item in items]
-    with ThreadPoolExecutor(max_workers=min(S3_WORKERS, len(items)),
-                            thread_name_prefix="vmn-s3-parallel") as pool:
-        return list(pool.map(in_caller_context(fn), items))
+    """``[fn(item)]`` in order, at most :data:`S3_WORKERS` at a time, within
+    the workers all fan-outs share (:mod:`~vmn_exp.storage.fanout`)."""
+    return fan_out(fn, items, S3_WORKERS, "vmn-s3-parallel")
 
 
 def app_key(app_name):

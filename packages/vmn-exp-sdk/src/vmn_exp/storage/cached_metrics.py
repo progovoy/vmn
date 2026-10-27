@@ -25,10 +25,18 @@ copy's ship lock, covering every segment the remote holds then, and retires
 the stream first (:mod:`local_streams`): blocks appended meanwhile go to the
 copy's next stream. A stream another copy compacted while this one still had
 blocks to ship is compacted again from the local file at its next ship.
+
+While a stream lives, its owner rolls what it shipped up every
+``LIVE_ROLLUP_SEGMENTS`` segments (:mod:`metric_rollup`): all but the last
+``LIVE_ROLLUP_LAG`` (a reader folding them meanwhile then swaps them for the
+``.vmx`` for its footer read), built outside the ship lock and put under it;
+never past ``LIVE_ROLLUP_MAX_BYTES`` shipped, nor in a finalizer or an exit
+flush, which wait on that lock briefly.
 """
 import os
 from contextlib import contextmanager
 
+from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.adopt import note_missing_inherited
 from vmn_exp.core.metric_block import intact_length
 from vmn_exp.core.metric_files import (
@@ -40,9 +48,12 @@ from vmn_exp.core.metric_files import (
     stream_name,
 )
 from vmn_exp.core.streams import display_writer, owned_by, owner_of, stream_key
-from vmn_exp.storage import ship_state
+from vmn_exp.storage import metric_rollup, ship_state
 
 LOCAL, REMOTE = "local", "remote"
+LIVE_ROLLUP_SEGMENTS = 32
+LIVE_ROLLUP_LAG = 4
+LIVE_ROLLUP_MAX_BYTES = 8 * 1024 * 1024
 _SHIP_ATTEMPTS = 5
 _INDEXED = (-1, -1)  # ship state: the remote holds the stream's local .vmx
 
@@ -173,18 +184,54 @@ the copy's ship lock."""
         if not local:
             return
         note_missing_inherited(self._local, remote, app_name, verstr)
-        owns = self._stream_owned(app_name, verstr)
+        owns, rollups = self._stream_owned(app_name, verstr), []
         with self._ship_state(app_name, verstr, "metrics") as state:
             listing = _Listing(remote, app_name, verstr)
             for stream, objects in sorted(local.items()):
                 if owns(stream):
-                    self._ship_own(state, listing, remote, app_name, verstr, stream, objects)
+                    shipped = self._ship_own(state, listing, remote, app_name, verstr, stream,
+                                             objects)
+                    if shipped and self._rolls_up_metrics(*shipped):
+                        rollups.append((stream, shipped))
+        for stream, shipped in rollups:
+            self._roll_up_metrics(remote, app_name, verstr, stream, *shipped)
 
     def _ship_own(self, state, listing, remote, app_name, verstr, stream, objects):
         if _has_stream(objects):
-            self._ship_blocks(state, listing, remote, app_name, verstr, stream)
-        else:
-            self._ship_indexed(state, listing, remote, app_name, verstr, stream, objects)
+            return self._ship_blocks(state, listing, remote, app_name, verstr, stream)
+        self._ship_indexed(state, listing, remote, app_name, verstr, stream, objects)
+        return None
+
+    def _rolls_up_metrics(self, seq, shipped_bytes):
+        """Whether the live stream that shipped segment *seq* (the remote then
+        holding its first *shipped_bytes*) is rolled up now — on a periodic
+        sync only."""
+        covers = seq - LIVE_ROLLUP_LAG
+        return (covers > 0 and covers % LIVE_ROLLUP_SEGMENTS == 0
+                and shipped_bytes <= LIVE_ROLLUP_MAX_BYTES
+                and not getattr(self, "_final_flush", False) and not ship_state.is_finalizing())
+
+    def _roll_up_metrics(self, remote, app_name, verstr, stream, seq, shipped):
+        """Roll the stream's shipped segments up to ``seq - LIVE_ROLLUP_LAG``:
+        built from the local file outside the ship lock, put under it unless
+        the stream was compacted (or its ship state lost) meanwhile.
+        Best-effort: the segments stay readable as they are."""
+        try:
+            planned = metric_rollup.plan(remote.metric_objects(app_name, verstr).get(stream, []),
+                                         stream, seq, shipped, LIVE_ROLLUP_LAG)
+            if planned is None:
+                return
+            covers, upto = planned
+            prefix = self._local.read_range(app_name, verstr, stream_name(stream), 0, upto)
+            data = metric_rollup.build(prefix, stream)
+            if data is None:
+                return
+            with self._ship_state(app_name, verstr, "metrics") as state:
+                held = state.get(stream)
+                if held not in (None, _INDEXED) and held[0] >= upto and not ship_state.is_finalizing():
+                    metric_rollup.put(remote, app_name, verstr, stream, data, covers)
+        except Exception:
+            VMN_LOGGER.debug("Live metric rollup failed; the segments stay", exc_info=True)
 
     def _ship_indexed(self, state, listing, remote, app_name, verstr, stream, objects):
         """A ``.vmx`` the copy built while the remote was out of reach goes up
@@ -199,24 +246,28 @@ the copy's ship lock."""
         state.put(stream, _INDEXED)
 
     def _ship_blocks(self, state, listing, remote, app_name, verstr, stream):
+        """Ship the stream's intact unshipped blocks: ``(segment seq they went
+        to, bytes the remote then holds)``, None when there were none."""
         for _ in range(_SHIP_ATTEMPTS):
             held = state.get(stream)
             if held in (None, _INDEXED):
-                held = _remote_state(listing.objects(stream))
+                objects = listing.objects(stream)
+                held = _remote_state(objects) or metric_rollup.resumed_state(
+                    remote, app_name, verstr, objects)
             if held is None:  # another copy compacted it: compact it again
                 self._recompact(app_name, verstr, stream)
                 state.forget(stream)
-                return
+                return None
             offset, seq = held
             data = self._local.read_file_from(app_name, verstr, stream_name(stream), offset) or b""
             chunk = data[: intact_length(data)]
             if not chunk:
                 state.put(stream, held)
-                return
+                return None
             state.forget(stream)  # until the upload is known to have landed
             if remote.create_metric_segment(app_name, verstr, stream, seq, chunk):
                 state.put(stream, (offset + len(chunk), seq + 1))
-                return
+                return seq, offset + len(chunk)
             listing.refresh()  # another process of the copy shipped it
         raise RuntimeError(f"{verstr}: could not ship the metrics of {stream!r}")
 
