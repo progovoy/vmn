@@ -17,6 +17,8 @@ from vmn_exp.core.series_reader import SeriesReader, metric_sources
 from vmn_exp.core.step_metric import step_metrics
 from vmn_exp.storage.files import flatten_logs
 from vmn_exp.ui.readers.detail_reads import submit
+from vmn_exp.ui.readers.listed_reads import StaleListing
+from vmn_exp.ui.readers.segment_cache import segment_reads
 from vmn_exp.ui.readers.series import points_per_metric
 
 
@@ -27,15 +29,20 @@ def jsonl_log(storage, app_name, verstr):
 
 def read_run(storage, app_name, verstr):
     """``(JSONL log, SeriesReader)`` of an existing run, None when it is gone;
-    its metadata, logs and metric objects are read concurrently."""
+    its metadata, logs and metric objects are read concurrently, a remote
+    run's segments once (:mod:`~vmn_exp.ui.readers.segment_cache`)."""
+    reads = segment_reads(storage)
     metadata = submit(storage.load_metadata, app_name, verstr)
-    log = submit(jsonl_log, storage, app_name, verstr)
-    sources = submit(metric_sources, storage, app_name, verstr)
+    log = submit(jsonl_log, reads, app_name, verstr)
+    sources = submit(metric_sources, reads, app_name, verstr)
     if metadata.result() is None:
         return None
-    log = log.result()
+    try:
+        log, sources = log.result(), sources.result()
+    except StaleListing:  # merged since listed: the store's own reads list it afresh
+        log, sources = jsonl_log(storage, app_name, verstr), metric_sources(storage, app_name, verstr)
     legacy = [e for e in log if is_metric_entry(e)]
-    return log, SeriesReader.of(sources.result(), log=log, legacy=legacy)
+    return log, SeriesReader.of(sources, log=log, legacy=legacy)
 
 
 def range_series(storage, app_name, verstr, keys, max_points, budget, step_range, schema=None):

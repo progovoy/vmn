@@ -34,6 +34,12 @@ from vmn_exp.storage.files import (
 
 LOCAL, REMOTE = "local", "remote"
 _SHIP_ATTEMPTS = 5
+# A live stream's shipped segments are merged into one object this often, so
+# a reader of a run alive for hours lists (and GETs) a bounded number of them.
+LIVE_ROLLUP_SEGMENTS = 64
+# A rollup rewrites the stream under its ship lock (which the SDK's SIGTERM
+# finalizer waits on briefly): past this many shipped bytes it is skipped.
+LIVE_ROLLUP_MAX_BYTES = 8 * 1024 * 1024
 
 
 def is_any_log(name):
@@ -71,6 +77,8 @@ class CachedLogs:
     # Whether local log files are complete copies of their streams' logs
     # (False for a buffer that only holds what this process appended).
     _local_is_replica = True
+    # True while a final flush ships (an exit's): it never rolls segments up.
+    _final_flush = False
 
     def _init_logs(self):
         # (app, verstr, stream) -> LOCAL | REMOTE, as the last listing chose
@@ -185,7 +193,8 @@ class CachedLogs:
     def sync_log_to_remote(self, app_name, verstr, writer_id):
         """Ship the complete lines appended to each of the copy's own streams
         since the remote's copy ends (*writer_id*'s among them); once the run
-        has finished, compact what the remote holds of them. Streams the copy
+        has finished, compact what the remote holds of them — while it runs,
+        each time a stream ships its ``LIVE_ROLLUP_SEGMENTS``-th segment. Streams the copy
         inherited are never shipped: only their owner does
         (:mod:`vmn_exp.core.adopt` notes what the remote lacks of them)."""
         if not self.remote_for(app_name, verstr):
@@ -198,24 +207,37 @@ class CachedLogs:
             return
         with self._ship_state(app_name, verstr, "log") as state:
             listing = _Listing(self._remote, app_name, verstr)
+            finished = self._run_finished(app_name, verstr)
             for stream, size in sorted(local_sizes.items()):
-                self._ship_stream(state, listing, app_name, verstr, stream, size)
-            if self._run_finished(app_name, verstr):
-                for stream in sorted(local_sizes):
+                shipped = self._ship_stream(state, listing, app_name, verstr, stream, size)
+                if finished:
                     self._compact_once(app_name, verstr, stream)
+                elif shipped and self._rolls_up(*shipped):
+                    self._compact(app_name, verstr, stream)
+
+    def _rolls_up(self, seq, shipped_bytes):
+        """Whether a live stream that shipped segment *seq* (its first
+        *shipped_bytes* on the remote) is rolled up now: every
+        ``LIVE_ROLLUP_SEGMENTS``-th segment of a small stream, on a periodic
+        sync — never while a finalizer or a final flush ships."""
+        return (seq % LIVE_ROLLUP_SEGMENTS == 0 and 0 < seq
+                and shipped_bytes <= LIVE_ROLLUP_MAX_BYTES
+                and not self._final_flush and not ship_state.is_finalizing())
 
     def _ship_stream(self, state, listing, app_name, verstr, stream, size):
+        """Ship *stream*'s unshipped complete lines: ``(segment seq they went
+        to, bytes the remote then holds)``, None when there were none."""
         for _ in range(_SHIP_ATTEMPTS):
             held = state.get(stream) or _state_of(listing.objects(stream))
             offset, seq = held
             chunk = self._complete_lines(app_name, verstr, log_object_name(stream), offset)
             if size <= offset or not chunk:
                 state.put(stream, held)
-                return
+                return None
             state.forget(stream)  # until the upload is known to have landed
             if self._ship(app_name, verstr, stream, seq, chunk):
                 state.put(stream, (offset + len(chunk), seq + 1))
-                return
+                return seq, offset + len(chunk)
             listing.refresh()  # another process of the copy shipped it
         raise RuntimeError(f"{verstr}: could not ship the log of {stream!r}")
 
@@ -237,8 +259,12 @@ class CachedLogs:
 
     def _compact_once(self, app_name, verstr, stream):
         key = (app_name, verstr, stream)
-        if key in self._compacted:
-            return
+        if key not in self._compacted and self._compact(app_name, verstr, stream):
+            self._compacted.add(key)
+
+    def _compact(self, app_name, verstr, stream):
+        """Merge what the remote holds of *stream* (one we own, under its ship
+        lock: nothing appends to the objects merged); False when it failed."""
         compact = getattr(self._remote, "compact_log_segments", None)
         if compact is not None:
             try:
@@ -246,8 +272,8 @@ class CachedLogs:
             except Exception:
                 # Nothing is lost: the segments stay readable as they are.
                 VMN_LOGGER.debug("Log compaction failed", exc_info=True)
-                return
-        self._compacted.add(key)
+                return False
+        return True
 
 
 class _Listing:

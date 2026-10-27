@@ -186,17 +186,27 @@ class S3Listing:
         """One record's own files and logs, delimited: its other subtrees
         are never listed."""
         files = {}
-        listings = (
-            {"Prefix": record_prefix, "Delimiter": "/"},
-        ) + tuple({"Prefix": f"{record_prefix}{d}/", "Delimiter": "/"} for d in _RECORD_DIRS)
-        for params in listings:
-            for page in self._pages(**params):
-                for obj in page.get("Contents", []):
-                    name = obj["Key"][len(record_prefix) :]
-                    if _is_record_file(name):
-                        files[name] = _signature(obj)
+        for d in ("",) + _RECORD_DIRS:
+            files.update(self._files_in(record_prefix, f"{d}/" if d else ""))
+        return files
+
+    def _files_in(self, record_prefix, folder):
+        """The record files directly in *folder* (``""``: the record's own)."""
+        files = {}
+        for page in self._pages(Prefix=record_prefix + folder, Delimiter="/"):
+            for obj in page.get("Contents", []):
+                name = obj["Key"][len(record_prefix) :]
+                if _is_record_file(name):
+                    files[name] = _signature(obj)
         return files
 
     def record_files(self, app_name, verstr):
         """``{filename: (size, mtime, etag)}`` for one record's files — one LIST."""
         return self._files_at(f"{self._record_prefix(app_name, verstr)}/")
+
+    def stream_files(self, app_name, verstr):
+        """``{filename: (size, mtime, etag)}`` of one record's log and metric
+        objects — its ``log/`` and ``metrics/`` listings, made at once."""
+        record_prefix = f"{self._record_prefix(app_name, verstr)}/"
+        listed = parallel_map(lambda d: self._files_in(record_prefix, f"{d}/"), _RECORD_DIRS)
+        return {name: sig for files in listed for name, sig in files.items()}

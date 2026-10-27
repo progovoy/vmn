@@ -184,6 +184,13 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
 
     def close(self):
         """Ship whatever is still buffered and drop the buffer."""
+        self._final_flush = True
+        try:
+            self._close()
+        finally:
+            self._final_flush = False
+
+    def _close(self):
         for app_name, verstr, writer_id in list(self._flushed_at):
             try:
                 self.sync_log_to_remote(app_name, verstr, writer_id)
