@@ -16,11 +16,18 @@ watched indexes, which then list only hinted and live records; their full
 (reconcile) listing runs every ``full_sweep_sec`` (``reconcile_sec``).
 
 Each refreshed snapshot is handed to ``on_refresh`` (the server warms its
-search index with it, plan 23 S8b); a failure there is logged at debug.
-Each listener of :meth:`add_listener` is called with ``(index, snapshot)``
-after every refresh, inline ones too (the server files similar-runs
-documents and writes its Postgres search rows with them); a
-:class:`NotingRefresher` tells a listener which app an index serves.
+search index with it, plan 23 S8b). Each listener of :meth:`add_listener` is
+called with ``(index, snapshot)`` after every refresh, inline ones too (the
+server files similar-runs documents and writes its Postgres search rows with
+them); a :class:`NotingRefresher` tells a listener which app an index serves.
+
+The refresher heals itself: an error in any step of a background refresh
+(the refresh, the snapshot, each listener, the warming) is logged as a
+:class:`~vmn_exp.ui.failure_streak.FailureStreak` and never ends the loop; a
+refresh or journal thread that ended anyway (``SystemExit`` & co, logged) is
+restarted by the next request. :meth:`Refresher.health` reports each watched
+index's state for the status route, and a refresh running past
+``SLOW_REFRESH_SEC`` is warned about once.
 
 A watched index does its filesystem work in an I/O helper process
 (``use_io_process``): each stat/open on this process's threads would wait for
@@ -33,13 +40,17 @@ import time
 
 from vmn_exp.core.activity import activity
 from vmn_exp.core.traced_lock import TracedLock
+from vmn_exp.ui.failure_streak import FailureStreak
 from vmn_exp.ui.gil_hint import GilHint
+from vmn_exp.ui.refresh_watch import Watch
 
 REFRESH_INTERVAL_SEC = 1.0
 IDLE_SEC = 60.0
 # Background refreshes list hinted (or new, by name) and live records, and
 # everything this often: the reconcile listing (plan 11 §5.2).
 RECONCILE_SEC = 3600
+# A refresh running this long is warned about once (and reported by health()).
+SLOW_REFRESH_SEC = 600
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,14 +100,9 @@ class InlineRefresher(_Listeners):
         self._notify(index, snapshot)
         return snapshot
 
-
-class _Watch:
-    def __init__(self):
-        self.touched_at = time.monotonic()
-        self.thread = None
-        self.failing = False
-        self.wake = threading.Event()
-        self.refresh_sec = None  # how long the last refresh took
+    def health(self, index):
+        """None: nothing refreshes in the background."""
+        return None
 
 
 class Refresher(_Listeners):
@@ -104,14 +110,17 @@ class Refresher(_Listeners):
     background = True
     full_sweep_sec = RECONCILE_SEC
 
-    def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC, on_refresh=None):
+    def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC, on_refresh=None,
+                 clock=time.monotonic):
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec
         self.on_refresh = on_refresh  # called with each refreshed snapshot
+        self._clock = clock
         self._listeners = []
-        self._watches = {}  # index -> _Watch
+        self._watches = {}  # index -> Watch
         self._journals = {}  # WorkspaceJournal -> its thread
         self._journal_of = {}  # index -> its WorkspaceJournal
+        self._step_streaks = {}  # (index, post-refresh step) -> FailureStreak
         self._lock = TracedLock("refresher")
         self._stopped = threading.Event()
         self.gil_hint = GilHint()
@@ -131,7 +140,13 @@ class Refresher(_Listeners):
 
     def watching(self, index):
         watch = self._watches.get(index)
-        return bool(watch and watch.thread and watch.thread.is_alive())
+        return bool(watch and watch.alive())
+
+    def health(self, index):
+        """*index*'s refresh health, read without I/O (None when unwatched):
+        ``{alive, failing, failures, since_refresh_sec, refreshing_sec, last_error}``."""
+        watch = self._watches.get(index)
+        return None if watch is None else watch.health(self._clock())
 
     def wake_scope(self, payload):
         """Refresh at once the watched indexes of ``vmn_gen``'s
@@ -165,33 +180,40 @@ class Refresher(_Listeners):
             if close:
                 close()
 
+    def _start(self, target, args, name):
+        thread = threading.Thread(target=target, args=args, daemon=True, name=name)
+        thread.start()
+        return thread
+
     def _follow(self, journal, index):
         journal.watch(index)
         with self._lock:
             self._journal_of[index] = journal
-            if journal not in self._journals and not self._stopped.is_set():
-                thread = threading.Thread(
-                    target=self._read_journal, args=(journal,), daemon=True,
-                    name="vmn-ui-journal",
-                )
-                self._journals[journal] = thread
-                thread.start()
+            thread = self._journals.get(journal)
+            if (thread is None or not thread.is_alive()) and not self._stopped.is_set():
+                if thread is not None:
+                    _LOGGER.error("The change journal reader of %s had stopped; restarted it",
+                                  getattr(journal, "scope", None))
+                self._journals[journal] = self._start(self._read_journal, (journal,),
+                                                      "vmn-ui-journal")
 
     def _read_journal(self, journal):
-        failing = False
-        while not self._stopped.is_set():
-            try:
-                if journal.watched:
-                    with activity("journal tick", key=getattr(journal, "scope", None)):
-                        journal.tick()
-            except Exception:
-                log = _LOGGER.debug if failing else _LOGGER.warning
-                log("Reading the change journal failed", exc_info=True)
-                failing = True
-            else:
-                failing = False
-            if self._stopped.wait(self.interval_sec):
-                return
+        scope = getattr(journal, "scope", None)
+        streak = FailureStreak("Reading the change journal", _LOGGER, self._clock, subject=scope)
+        try:
+            while not self._stopped.is_set():
+                try:
+                    if journal.watched:
+                        with activity("journal tick", key=scope):
+                            journal.tick()
+                except Exception as exc:
+                    streak.failed(exc)
+                else:
+                    streak.succeeded()
+                if self._stopped.wait(self.interval_sec):
+                    return
+        except BaseException:  # SystemExit & co: end visibly; the next request restarts it
+            _LOGGER.error("The change journal reader of %s stopped", scope, exc_info=True)
 
     def _watch(self, index):
         if index not in self._watches:
@@ -199,27 +221,41 @@ class Refresher(_Listeners):
             if use_io_process:
                 use_io_process()
         with self._lock:
-            watch = self._watches.setdefault(index, _Watch())
-            watch.touched_at = time.monotonic()
-            if watch.thread is None and not self._stopped.is_set():
-                watch.thread = threading.Thread(
-                    target=self._run, args=(index, watch), daemon=True,
-                    name="vmn-ui-refresh",
-                )
-                watch.thread.start()
+            watch = self._watches.get(index)
+            if watch is None:
+                watch = self._watches[index] = Watch(getattr(index, "app_name", None),
+                                                     self._clock, _LOGGER)
+            watch.touched_at = self._clock()
+            self._warn_if_slow(watch)
+            if not watch.alive() and not self._stopped.is_set():
+                if watch.thread is not None:
+                    _LOGGER.error("The index refresher of %s had stopped; restarted it", watch.app)
+                watch.thread = self._start(self._run, (index, watch), "vmn-ui-refresh")
+
+    def _warn_if_slow(self, watch):
+        started = watch.refresh_started
+        if started is None or watch.slow_warned:
+            return
+        running_sec = self._clock() - started
+        if running_sec >= SLOW_REFRESH_SEC:
+            watch.slow_warned = True
+            _LOGGER.warning("Index refresh of %s running for %.0f min", watch.app, running_sec / 60)
 
     def _run(self, index, watch):
-        # Refresh at once: a restart after idling catches up before it waits.
-        while not self._idle(index, watch):
-            self._refresh(index, watch)
-            watch.wake.wait(self.interval_sec)
-            watch.wake.clear()
-            if self._stopped.is_set():
-                return
+        try:
+            # Refresh at once: a restart after idling catches up before it waits.
+            while not self._idle(index, watch):
+                self._refresh(index, watch)
+                watch.wake.wait(self.interval_sec)
+                watch.wake.clear()
+                if self._stopped.is_set():
+                    return
+        except BaseException:  # SystemExit & co: end visibly; the next request restarts it
+            _LOGGER.error("The index refresher of %s stopped", watch.app, exc_info=True)
 
     def _idle(self, index, watch):
         with self._lock:
-            if time.monotonic() - watch.touched_at < self.idle_sec:
+            if self._clock() - watch.touched_at < self.idle_sec:
                 return False
             watch.thread = None
             journal = self._journal_of.pop(index, None)
@@ -228,27 +264,46 @@ class Refresher(_Listeners):
         return True
 
     def _refresh(self, index, watch):
-        started = time.monotonic()
+        started = self._clock()
+        watch.refresh_started, watch.slow_warned = started, False
         try:
             with activity("index refresh", key=getattr(index, "app_name", None)):
                 index.refresh()
-        except Exception:
-            # Once per failure streak: a broken store would log every second.
-            log = _LOGGER.debug if watch.failing else _LOGGER.warning
-            log("Background index refresh failed; serving the last snapshot", exc_info=True)
-            watch.failing = True
-        else:
-            watch.failing = False
-            watch.refresh_sec = time.monotonic() - started
             snapshot = index.snapshot()
-            self.gil_hint.note(len(getattr(snapshot, "rows", ())))
-            self._notify(index, snapshot)
-            self._hand_on(snapshot)
-
-    def _hand_on(self, snapshot):
-        if self.on_refresh is None:
+        except Exception as exc:  # serve the last snapshot meanwhile
+            watch.streak.failed(exc)
             return
+        finally:
+            watch.refresh_started = None
+        if watch.failing:
+            watch.streak.succeeded()
+        watch.refreshed_at, watch.refresh_sec = started, self._clock() - started
+        self._after_refresh(index, snapshot)
+
+    def _after_refresh(self, index, snapshot):
+        """Each step after a refresh, none keeping the others from running."""
+        self._step(index, "The GIL hint", self.gil_hint.note, len(getattr(snapshot, "rows", ())))
+        for listener in list(self._listeners):
+            self._step(index, f"The refresh listener {_name(listener)}", listener, index, snapshot)
+        if self.on_refresh is not None:
+            self._step(index, "Warming", self.on_refresh, snapshot)
+
+    def _step(self, index, what, fn, *args):
+        key = (index, fn)
         try:
-            self.on_refresh(snapshot)
-        except Exception:
-            _LOGGER.debug("Warming after a refresh failed", exc_info=True)
+            fn(*args)
+        except Exception as exc:
+            streak = self._step_streaks.get(key)
+            if streak is None:
+                streak = self._step_streaks.setdefault(key, FailureStreak(
+                    f"{what} after an index refresh", _LOGGER, self._clock,
+                    subject=getattr(index, "app_name", None)))
+            streak.failed(exc)
+        else:
+            streak = self._step_streaks.get(key)
+            if streak is not None:
+                streak.succeeded()
+
+
+def _name(listener):
+    return getattr(listener, "__qualname__", None) or repr(listener)

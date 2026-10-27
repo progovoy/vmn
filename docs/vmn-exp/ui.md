@@ -774,6 +774,27 @@ unknown app is a 404 `{"detail", "code": "app_not_found"}`, checked against the
 checkout (`.vmn/<app>/conf.yml`) and the store (any run or snapshot record),
 not the cached app list. ETag/304, accurate to the hour for `failed_recent`.
 
+With background refresh (`vmn-exp ui`), the summary also carries the app
+index's refresher health, read without I/O, so a dashboard or a load balancer
+sees an index that stopped keeping up:
+
+```json
+"refresher": {"alive": true, "failing": false, "failures": 0,
+              "since_refresh_sec": 0.8, "refreshing_sec": null, "last_error": null}
+```
+
+`since_refresh_sec` is the age of the last refresh that succeeded (`null`
+before one), `refreshing_sec` how long the refresh in progress has run,
+`failures`/`last_error` the current failure streak. Its ages count by the
+minute in the ETag. The board's count line says `index N min behind` once an
+index is 5 minutes behind (or `index refresh failing`). The refresher heals
+itself: an error in any refresh step is logged (a WARNING with the traceback
+when a failure streak starts, every 10 minutes while it lasts, and when it
+recovers) and never ends its thread; a refresh or journal thread that ended
+anyway is restarted by the next request (an ERROR); a refresh running past
+10 minutes is warned about once. S3 calls time out (10 s connect, 30 s per
+read) and retry in botocore's standard mode.
+
 `GET ws/{ws}/apps-status` answers `{"<app tag>": <the same summary>, ...}` for
 every app of the workspace in one request (tags use `-` for `/`), memoized
 like the per-app route; ETag/304.

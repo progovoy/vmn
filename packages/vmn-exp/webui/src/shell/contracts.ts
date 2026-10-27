@@ -1,7 +1,7 @@
 /** The shell's shared contracts (plan 19 §2.2): types, storage keys and the RunLabel helper,
  *  so every shell unit and page builds against the same shapes. */
 import type { Meta, Role, Workspace } from "../types";
-import type { Indexing } from "../util/indexing";
+import type { Indexing, RefresherHealth } from "../util/indexing";
 
 export type RouteId =
   | "home" | "tokens" | "apps" | "experiments" | "run" | "compare-runs"
@@ -21,6 +21,8 @@ export interface AppStatus {
   rollup: "stuck" | "failed" | "running" | null;
   /** While a store's index still loads (routes_shell.py). */
   indexing?: Indexing;
+  /** The background refresher's health (routes_shell.py); absent inline. */
+  refresher?: RefresherHealth;
 }
 export interface AuthHints { token: boolean; oidc: boolean; login_url: string | null }
 
