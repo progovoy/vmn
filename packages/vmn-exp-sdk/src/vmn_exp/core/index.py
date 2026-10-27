@@ -45,6 +45,7 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 
 from vmn_exp.core.fold import fold_log, fold_row
 from vmn_exp.core.gc_pause import gc_paused
@@ -307,7 +308,7 @@ class ExperimentIndex:
             self.last_refresh_at = started
             return
         try:
-            with gc_paused():
+            with self._paused_unless_remote():
                 self._refresh_from_storage(started)
         except Exception:
             # A listing's changes may have been taken but not applied.
@@ -317,13 +318,21 @@ class ExperimentIndex:
             self._published.set()
         self.last_refresh_at = started
 
+    def _paused_unless_remote(self):
+        """A local refresh is bulk work throughout, so collection pauses for
+        all of it (see :mod:`~vmn_exp.core.gc_pause`). A remote one pauses it
+        only to decode and fold, never across its listing and reads: at 486k
+        records on S3 those take hours, and the process's garbage piled up."""
+        return nullcontext() if self._remote() else gc_paused()
+
     def _refresh_from_storage(self, started):
         if self._records is None:
             if self._keeps_baseline():  # read before the records it vouches for
                 self._baseline.load(self._sweep, started)
-            self._records = self._load_records()
-            if self._records and self._snapshot is None and not self._lean:
-                self._publish_persisted()
+            with gc_paused():
+                self._records = self._load_records()
+                if self._records and self._snapshot is None and not self._lean:
+                    self._publish_persisted()
         listing, removed = self._sweep.listing(self._records, started)
 
         # Unfinished claims and deleted records' leftovers have no metadata.
@@ -380,12 +389,13 @@ class ExperimentIndex:
         """Read, apply and persist *work*, with the listing baseline as of
         *baseline_at* (None: not the refresh's last part)."""
         results = self._refresh_local(work)
-        try:
-            self._apply(results, removed, started)
-        except BaseException:
-            self._persist(results, removed)  # no baseline: the sweep missed some
-            raise
-        self._persist(results, removed, baseline_at)
+        with gc_paused():
+            try:
+                self._apply(results, removed, started)
+            except BaseException:
+                self._persist(results, removed)  # no baseline: the sweep missed some
+                raise
+            self._persist(results, removed, baseline_at)
         if self._snapshot is not None:
             self._published.set()
         return results

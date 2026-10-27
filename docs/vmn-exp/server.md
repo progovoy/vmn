@@ -224,8 +224,13 @@ its data write and its journal put, a clock far behind, a hand-edited file):
 - **Full listing** at startup and on a rebuild.
 - **Rolling consistency check:** each tick, a slice of the known records'
   file signatures is compared with the cache, sized so that every record is
-  covered once per `reconcile_sec` (default 3600). Changed records are re-read.
-  Each one is counted as drift (`vmn_cache_drift_total`).
+  covered once per `reconcile_sec` (default 3600), but never more than 500
+  records a tick nor 50 records a second (~150 S3 LISTs a second), so its cost
+  does not grow with the store. Past 50 × `reconcile_sec` records (180k) a
+  round takes longer than `reconcile_sec` (N / 50 seconds: ~2.7 h at 486k);
+  journaled changes, live runs and new runs are still listed at once.
+  Changed records are re-read. Each one is counted as drift
+  (`vmn_cache_drift_total`).
 
 **Git workspaces** have no journal. They are refreshed by listing the
 checkout's records, as before.

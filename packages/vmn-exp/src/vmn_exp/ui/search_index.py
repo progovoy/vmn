@@ -22,6 +22,7 @@ import threading
 from itertools import compress, islice
 from operator import is_not
 
+from vmn_exp.core.index_snapshot import schema_less
 from vmn_exp.core.run_error import state_error_summary
 from vmn_exp.ui.leaderboard_delta import changed_slots, delta_limit
 from vmn_exp.ui.memo import LRU
@@ -257,7 +258,7 @@ class SearchIndexes:
     def get(self, snapshot):
         """*snapshot*'s index; a schema view (``IndexSnapshot.summarized``)
         shares its base snapshot's: its rows differ in metrics only, slot for slot."""
-        snapshot = getattr(snapshot, "_base", None) or snapshot
+        snapshot = schema_less(snapshot)
         with self._lock:
             indexes = self._indexes.setdefault(snapshot.app_name, LRU(self._size))
         return indexes.per_snapshot(snapshot, lambda: self._moved(snapshot))

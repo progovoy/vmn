@@ -96,8 +96,9 @@ class S3Logs:
             self.put_log_segment(app_name, verstr, writer_id, seq, lines)
             return True
         key = f"{self._record_prefix(app_name, verstr)}/{log_object_name(writer_id)}"
-        for _ in range(_APPEND_ATTEMPTS):
-            body, etag = self._get_with_etag(key)
+        for attempt in range(_APPEND_ATTEMPTS):
+            # None listed: create it, nothing to read (until a create fails).
+            body, etag = self._get_with_etag(key) if objects or attempt else (None, None)
             condition = {"IfMatch": etag} if etag else {"IfNoneMatch": "*"}
             try:
                 self._put(key, (body or b"") + lines, **condition)

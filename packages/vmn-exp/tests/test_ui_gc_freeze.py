@@ -1,8 +1,9 @@
 """A board's base keeps 100k rows alive for its whole generation; the cyclic
 collector re-scanning them made full collections pause any request by
-60-140 ms. A built or derived base is moved out of the collected generations
-(``gc.freeze``), and since the rows hold no cycles an old base is still freed
-by reference counting once the caches drop it."""
+60-140 ms. A base built from scratch is moved out of the collected
+generations (``gc.freeze``; a derived one is not, see
+test_ui_generation_memory.py), and since the rows hold no cycles an old base
+is still freed by reference counting once the caches drop it."""
 import gc
 import weakref
 
@@ -36,17 +37,6 @@ def test_a_built_base_leaves_the_collected_generations():
     cache.page(snap, SCHEMA, sort="loss", limit=50)
 
     assert gc.get_freeze_count() >= len(snap.rows)
-
-
-def test_a_derived_base_leaves_the_collected_generations_too():
-    fleet, cache = _fleet(), LeaderboardCache()
-    cache.page(fleet.snapshot(), SCHEMA, sort="loss", limit=50)
-    gc.unfreeze()
-    fleet.mutate(T0, 20, reparent=False)
-
-    cache.page(fleet.snapshot(), SCHEMA, sort="loss", limit=50)
-
-    assert gc.get_freeze_count() > 0
 
 
 def test_an_old_base_is_still_freed_once_the_caches_drop_it():

@@ -21,107 +21,58 @@ made) is no edge: it is listed in ``datasets`` instead.
 Downstream is searched within the run's own app; upstream follows ``vmn://``
 URIs into other apps too.
 
+A digest shared by thousands of runs (a dataset every trial of a sweep
+consumes) still links them all, but a walk keeps its first *limit* runs in
+row order and says ``truncated``: its cost is the limit, never the fan-out.
+
 Pure: no storage, no clock.
 """
-from collections import deque
-
+from vmn_exp.core.lineage_index import (  # noqa: F401 (re-exported)
+    LineageIndex,
+    artifact_ref_uri,
+    normalize_digest,
+    parse_artifact_uri,
+)
 from vmn_exp.registry.names import parse_registry_uri
 
-SCHEME = "vmn://"
 DEFAULT_LIMIT = 100
 
 
-def artifact_ref_uri(app_name, verstr, path):
-    """``vmn://<app tag>/<verstr>/<path>`` naming artifact *path* of a run."""
-    return f"{SCHEME}{app_name.replace('/', '-')}/{verstr}/{path}"
-
-
-def parse_artifact_uri(uri):
-    """``(app_name, verstr, path)`` of a ``vmn://`` artifact URI, else None."""
-    if not isinstance(uri, str) or not uri.startswith(SCHEME):
-        return None
-    parts = uri[len(SCHEME):].split("/", 2)
-    if len(parts) != 3 or not all(parts):
-        return None
-    app_tag, verstr, path = parts
-    return app_tag.replace("-", "/"), verstr, path
-
-
-def normalize_digest(digest):
-    """A digest compared case- and ``sha256:``-prefix-insensitively; None if empty."""
-    if not isinstance(digest, str) or not digest.strip():
-        return None
-    value = digest.strip().lower()
-    return value[len("sha256:"):] if value.startswith("sha256:") else value
-
-
-class LineageIndex:
-    """The digest and URI maps of one app's rows. Build once per index snapshot.
-
-    *outputs_of(verstr)* gives a row's outputs when its rows are an index
-    snapshot's lean ones (``IndexSnapshot.outputs_of``); else they are read
-    off the rows.
-    """
-
-    def __init__(self, rows, outputs_of=None):
-        self.rows = {}
-        self.outputs_of = outputs_of or (lambda verstr: self.rows[verstr].get("outputs") or {})
-        self.producers = {}  # digest -> [(verstr, artifact path)]
-        self.digest_consumers = {}  # digest -> [(verstr, input name, input)]
-        self.uri_consumers = {}  # (app, verstr) -> [(verstr, input name, input, path)]
-        for row in rows:
-            self._add(row)
-
-    def _add(self, row):
-        verstr = row["verstr"]
-        self.rows[verstr] = row
-        for path, out in self.outputs_of(verstr).items():
-            digest = normalize_digest((out or {}).get("digest"))
-            if digest:
-                self.producers.setdefault(digest, []).append((verstr, path))
-        for name, inp in (row.get("inputs") or {}).items():
-            inp = inp or {}
-            ref = parse_artifact_uri(inp.get("uri"))
-            if ref:
-                entry = (verstr, name, inp, ref[2])
-                self.uri_consumers.setdefault(ref[:2], []).append(entry)
-                continue
-            digest = normalize_digest(inp.get("digest"))
-            if digest and not parse_registry_uri(inp.get("uri")):
-                self.digest_consumers.setdefault(digest, []).append((verstr, name, inp))
-
-
-def _link(name, path, digest, via):
-    return {"input": name, "artifact": path, "digest": digest, "via": via}
-
-
-def _upstream_edges(app_name, row, index):
-    """``[((app, verstr), link)]`` of the runs *row* consumed from."""
-    edges = []
+def _upstream_groups(app_name, row, index):
+    """``(group, context, edges)`` of the runs *row* consumed from; *edges*
+    yields ``((app, verstr), link)`` lazily. *group* (None: never repeats)
+    and *context* determine the links, see :meth:`_Walk._walked`."""
     for name, inp in sorted((row.get("inputs") or {}).items()):
         inp = inp or {}
         ref = parse_artifact_uri(inp.get("uri"))
         if ref:
-            edges.append((ref[:2], _link(name, ref[2], inp.get("digest"), "uri")))
-            continue
-        if parse_registry_uri(inp.get("uri")):
-            continue
-        for verstr, path in index.producers.get(normalize_digest(inp.get("digest")), ()):
-            edges.append(((app_name, verstr), _link(name, path, inp.get("digest"), "digest")))
-    return edges
+            yield None, None, [(ref[:2], (name, ref[2], inp.get("digest"), "uri"))]
+        elif not parse_registry_uri(inp.get("uri")):
+            digest = normalize_digest(inp.get("digest"))
+            producers = index.producers.get(digest, ())
+            yield ("producers", digest), (name, inp.get("digest")), (
+                ((app_name, verstr), (name, path, inp.get("digest"), "digest"))
+                for verstr, path in producers
+            )
 
 
-def _downstream_edges(app_name, row, index):
-    """``[((app, verstr), link)]`` of the runs that consumed *row*'s outputs."""
-    edges = [
-        ((app_name, verstr), _link(name, path, inp.get("digest"), "uri"))
-        for verstr, name, inp, path in index.uri_consumers.get((app_name, row["verstr"]), ())
-    ]
+def _downstream_groups(app_name, row, index):
+    """``(group, context, edges)`` of the runs that consumed *row*'s outputs."""
+    yield None, None, (
+        ((app_name, verstr), (name, path, digest, "uri"))
+        for verstr, name, digest, path in index.uri_consumers.get((app_name, row["verstr"]), ())
+    )
     for path, out in sorted(index.outputs_of(row["verstr"]).items()):
         digest = normalize_digest((out or {}).get("digest"))
-        for verstr, name, inp in index.digest_consumers.get(digest, ()) if digest else ():
-            edges.append(((app_name, verstr), _link(name, path, inp.get("digest"), "digest")))
-    return edges
+        consumers = index.digest_consumers.get(digest, ()) if digest else ()
+        yield ("consumers", digest), path, (
+            ((app_name, verstr), (name, path, logged, "digest"))
+            for verstr, name, logged in consumers
+        )
+
+
+def _link(name, path, digest, via):
+    return {"input": name, "artifact": path, "digest": digest, "via": via}
 
 
 def _node(key, row, depth, status_of):
@@ -148,42 +99,75 @@ def run_node(key, index_for, depth=1, status_of=None):
 
 
 class _Walk:
-    """One direction's breadth-first walk, capped at *limit* nodes."""
+    """One direction's breadth-first walk, capped at *limit* nodes.
+
+    It costs about its node limit, however many runs share a digest: edges
+    are consumed lazily and the walk ends (``truncated``) at the first run
+    past the limit, so a dataset 300k trials consumed contributes its first
+    *limit* consumers; a digest group walked at an earlier level is not
+    walked again (all its runs are nodes by then, at no deeper level)."""
 
     def __init__(self, start, index_for, edges_of, status_of, limit):
         self.start, self.index_for, self.edges_of = start, index_for, edges_of
         self.status_of, self.limit = status_of, limit
         self.nodes, self.truncated = {}, False
+        self._links = {}  # node key -> its links as tuples
+        self._groups = {}  # group -> (level first walked, contexts walked at it)
 
     def _row(self, key):
         index = self.index_for(key[0])
         return (index, index.rows.get(key[1])) if index else (None, None)
 
     def run(self, depth):
-        frontier = deque([self.start])
+        frontier = [self.start]
         for level in range(1, depth + 1):
-            frontier = deque(self._expand(frontier, level))
-            if not frontier:
+            frontier = self._expand(frontier, level)
+            if not frontier or self.truncated:
                 break
         return list(self.nodes.values())
 
     def _expand(self, frontier, level):
+        """The nodes *frontier* reaches first; stops at the first past the limit."""
+        found = []
         for key in frontier:
             index, row = self._row(key)
             if row is None:
                 continue
-            for other, link in self.edges_of(key[0], row, index):
-                if other == self.start:
+            for group, context, edges in self.edges_of(key[0], row, index):
+                if self._walked(group, context, level):
                     continue
-                node = self.nodes.get(other)
-                if node is None:
-                    if len(self.nodes) >= self.limit:
-                        self.truncated = True
+                for other, link in edges:
+                    if other == self.start:
                         continue
-                    node = self.nodes[other] = _node(other, self._row(other)[1], level, self.status_of)
-                    yield other
-                if node["depth"] == level and link not in node["links"]:
-                    node["links"].append(link)
+                    if other not in self.nodes:
+                        if len(self.nodes) >= self.limit:
+                            self.truncated = True
+                            return found
+                        self._add(other, level)
+                        found.append(other)
+                    self._attach(other, link, level)
+        return found
+
+    def _walked(self, group, context, level):
+        """Whether *group*'s edges add nothing new: it was walked at an
+        earlier level, or at this one with the same *context* (same links)."""
+        if group is None:
+            return False
+        first, contexts = self._groups.setdefault(group, (level, set()))
+        if first < level or context in contexts:
+            return True
+        contexts.add(context)
+        return False
+
+    def _add(self, key, level):
+        self.nodes[key] = _node(key, self._row(key)[1], level, self.status_of)
+        self._links[key] = set()
+
+    def _attach(self, key, link, level):
+        node, seen = self.nodes[key], self._links[key]
+        if node["depth"] == level and link not in seen:
+            seen.add(link)
+            node["links"].append(_link(*link))
 
 
 def resolve_lineage(
@@ -210,7 +194,7 @@ def resolve_lineage(
     start = (app_name, verstr)
     walks = [
         _Walk(start, index_for, edges, status_of, limit)
-        for edges in (_upstream_edges, _downstream_edges)
+        for edges in (_upstream_groups, _downstream_groups)
     ]
     upstream, downstream = (w.run(max(int(depth), 1)) for w in walks)
     if registry is not None:

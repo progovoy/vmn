@@ -10,6 +10,7 @@ dicts here) as read-only and copy before changing anything.
 A snapshot's rows follow no metrics schema; :meth:`IndexSnapshot.summarized`
 is the view a schema gives (see :mod:`vmn_exp.core.index_views`).
 """
+import weakref
 from dataclasses import dataclass, field, replace
 
 from vmn_exp.core.index_views import (
@@ -60,7 +61,11 @@ class IndexSnapshot:
     _by_verstr: dict = field(default_factory=dict, repr=False)
     _schema_rows: SchemaRows = field(default_factory=SchemaRows, repr=False)
     _views: dict = field(default_factory=dict, repr=False)  # schema key -> view
-    _base: object = field(default=None, repr=False)  # a view's schema-less snapshot
+    # A view's schema-less snapshot, held weakly (that one holds the view in
+    # _views: a cycle outlives its generation once frozen, see gc_pause), and
+    # its rows, to summarize again once nothing else holds that snapshot.
+    _base: object = field(default=None, repr=False)
+    _raw_rows: tuple = field(default=None, repr=False)
 
     @classmethod
     def build(
@@ -132,7 +137,7 @@ class IndexSnapshot:
         """This snapshot with its rows' metrics under the metrics *schema* —
         the same object for the same schema, and this very snapshot when the
         schema changes no row. The shared rows are never touched."""
-        base = self._base or self
+        base = self.schema_less()
         if not schema or not base.metric_parts:
             return base
         key = schema_key(schema)
@@ -149,7 +154,18 @@ class IndexSnapshot:
             return self
         return replace(
             self, rows=tuple(rows), _by_verstr={r["verstr"]: r for r in rows},
-            _views={}, _base=self,
+            _views={}, _base=weakref.ref(self), _raw_rows=self.rows,
+        )
+
+    def schema_less(self):
+        """The snapshot this schema view summarizes (this one when it is no
+        view), made again from the view's raw rows once nothing else holds
+        it — then a new object each call."""
+        if self._base is None:
+            return self
+        return self._base() or replace(
+            self, rows=self._raw_rows, _by_verstr={r["verstr"]: r for r in self._raw_rows},
+            _views={}, _base=None, _raw_rows=None,
         )
 
     @property
@@ -186,6 +202,13 @@ class IndexSnapshot:
             return None, no_runs_error(kind, self.app_name)
         newest = max(self.rows, key=lambda r: r.get("timestamp") or "")
         return newest["verstr"], None
+
+
+def schema_less(snapshot):
+    """*snapshot*'s :meth:`IndexSnapshot.schema_less`; anything else (a
+    point view, a test double) as it is."""
+    of = getattr(snapshot, "schema_less", None)
+    return of() if of else snapshot
 
 
 class RowCache:
