@@ -5,6 +5,7 @@ The server never takes the repo lock — reads are lock-free and mutations run
 as `vmn` CLI subprocesses that acquire it themselves.
 """
 import dataclasses
+import logging
 import os
 import re
 
@@ -219,6 +220,14 @@ def _install_diag(data_dir, args, host, port, token):
         diag.start_periodic_dumps(data_dir, every)
 
 
+def _server_log_level(debug):
+    """vmn's logger setup leaves the root logger at DEBUG, so every library
+    logger (botocore's: dozens per S3 call) builds records no handler keeps;
+    the server's root logger stays at DEBUG only with --debug."""
+    if not debug:
+        logging.getLogger().setLevel(logging.INFO)
+
+
 def handle_ui(args):
     if getattr(args, "ui_args", None):
         if args.ui_args[0] == "onboarding":
@@ -292,6 +301,7 @@ def handle_ui(args):
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
 
     _install_diag(manager.data_dir, args, host, port, token)
+    _server_log_level(args.debug)
 
     import uvicorn
 
