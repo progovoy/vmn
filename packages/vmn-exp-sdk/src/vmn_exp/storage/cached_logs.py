@@ -220,9 +220,8 @@ class CachedLogs:
         *shipped_bytes* on the remote) is rolled up now: every
         ``LIVE_ROLLUP_SEGMENTS``-th segment of a small stream, on a periodic
         sync — never while a finalizer or a final flush ships."""
-        return (seq % LIVE_ROLLUP_SEGMENTS == 0 and 0 < seq
-                and shipped_bytes <= LIVE_ROLLUP_MAX_BYTES
-                and not self._final_flush and not ship_state.is_finalizing())
+        return ship_state.live_rollup_due(seq, shipped_bytes, LIVE_ROLLUP_SEGMENTS,
+                                          LIVE_ROLLUP_MAX_BYTES, self._final_flush)
 
     def _ship_stream(self, state, listing, app_name, verstr, stream, size):
         """Ship *stream*'s unshipped complete lines: ``(segment seq they went

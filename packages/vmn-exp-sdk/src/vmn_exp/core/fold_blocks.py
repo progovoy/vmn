@@ -45,7 +45,15 @@ def may_be_rewound(fold, header):
 def apply_header(fold, writer, base, header):
     """Fold one block header (or footer, see :func:`footer_entries`)."""
     for entry in header["keys"]:
-        _apply_key(fold, base_key(entry["k"]), entry, writer, base)
+        _apply_key(fold, base_key(entry["k"]), entry, writer, base, base + entry["n"] - 1)
+    return fold
+
+
+def apply_sums(fold, writer, sums):
+    """Fold a writer's :mod:`~vmn_exp.core.fold_sums` (``{stream key: entry}``),
+    each entry at the positions of its first and last points."""
+    for name, entry in sums.items():
+        _apply_key(fold, base_key(name), entry, writer, *entry["p"])
     return fold
 
 
@@ -64,13 +72,12 @@ def _points(cols):
         yield cols.ts[i], cols.steps[i] if cols.has_step else None, cols.values[i]
 
 
-def _apply_key(fold, name, entry, writer, base):
-    n = entry["n"]
+def _apply_key(fold, name, entry, writer, first_at, last_at):
     first_value, _, first_ts = entry["first"]
     last_value, _, last_ts = entry["last"]
-    first_key = (us_to_iso(first_ts), writer, base)
-    last_key = (us_to_iso(last_ts), writer, base + n - 1)
-    if n == 1:
+    first_key = (us_to_iso(first_ts), writer, first_at)
+    last_key = (us_to_iso(last_ts), writer, last_at)
+    if entry["n"] == 1:
         track_extrema(fold, name, first_value, first_key)
     else:
         track_block(fold, name, first_value, first_key, entry["sum"])
