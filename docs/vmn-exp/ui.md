@@ -796,7 +796,11 @@ an index that serves old data or stopped keeping up:
   (a checkout's names-only listing), `loading_new` (reading the new or changed
   records it found), else `idle`. `progress` (0..1, else `null`): how far an
   S3 full listing's walk is among the index's known keys, or the share of new
-  records read.
+  records read. A store app's full listing runs behind serving (see
+  [server.md](server.md#how-the-cache-stays-fresh)): between its refreshes
+  `phase` stays `full_listing` with the share of records listed as
+  `progress`, and `journal` while the app catches up on the change journal
+  (a replay after a restart, an overflow, re-reads queued).
 - `refresh_failing`: the refresh is failing (`last_error` is its streak's
   last error), its thread is gone, or it has run past 10 minutes (stuck).
 - `stale_after_sec`: the age past which the dashboard warns — conf

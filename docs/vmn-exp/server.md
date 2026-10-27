@@ -122,7 +122,9 @@ runs without a cache and warns once. A cache directory on a network filesystem
 (NFS, SMB, sshfs) is replaced by a local one under `$TMPDIR` with a warning,
 because SQLite's WAL locking is unreliable there. Set `VMN_EXP_CACHE_DIR` to keep
 your own choice. It holds the folded run rows (params, metric summaries,
-tags, notes, status), the per-app listing state and the journal cursor. Logs,
+tags, notes, status), the per-app listing state, the journal cursor and each
+app's journal mark (`journal-mark:<app>`, how far into the journal its rows
+are). Logs,
 series, artifacts, media and code are not cached. Run pages read them from
 storage on demand. `--no-index` keeps the cache in memory only.
 
@@ -223,13 +225,32 @@ still picked up. That is one listing for the whole store, however many apps
 it holds. Each new entry tells the matching watched app to re-read that one
 record. Entries never carry data into the cache: they only name records to
 re-read from storage. A scope with more than 10,000 new entries in one tick
-does a full listing instead. The cursor is saved in the cache, so a restart
-resumes where it stopped.
+(an orchestrator registering 33k trials at once) re-reads the records those
+entries name and lists the app's record names (one call per 1000 runs) for
+any it missed, never every record's files; a burst of re-reads is spread over
+ticks, 2000 records each, listed 8 × 250 at a time. The cursor is saved in the
+cache, so a restart resumes where it stopped, listing at most the 2 days the
+journal keeps, 16 partitions at a time.
+
+Each app's rows are saved with their **journal mark**: the journal position
+every entry up to which they reflect. A restart (or an app watched again after
+a pause) replays the journal from that mark instead of listing the store, so
+runs created while the server was down show within the first ticks. Only a
+mark older than the journal keeps (2 days, less an hour of margin) falls back
+to a full listing.
 
 Two more checks catch what the journal can miss (a writer that crashed between
 its data write and its journal put, a clock far behind, a hand-edited file):
 
-- **Full listing** at startup and on a rebuild.
+- **Full listing** on the first start, after a downtime longer than the
+  journal keeps, on a leader change, on a resync and on a rebuild. On an
+  object store it runs behind serving: a background thread lists the record
+  names, then their files, 250 records a call and 8 calls at a time (names
+  new to the cache first), and each tick applies what it has listed so far,
+  so the cached rows keep being served and journaled runs keep appearing
+  meanwhile. A cold cache (nothing to serve yet) waits for that listing, then
+  loads its records 500 at a time as before. The status API reports it as the
+  `full_listing` phase with the share listed as `progress`.
 - **Rolling consistency check:** each tick, a slice of the known records'
   file signatures is compared with the cache, sized so that every record is
   covered once per `reconcile_sec` (default 3600), but never more than 500
@@ -284,7 +305,7 @@ The CLI takes the server address from `--config` (`server.host`/`port`, and
 its token), or else from `--host`/`--port`/`--token`/`VMN_UI_TOKEN`. Without
 `--workspace` it acts on every workspace. When no server answers, `rebuild`
 deletes the workspace's cache file so that the next start rebuilds it, and
-`resync` does nothing, because every start reconciles fully anyway.
+`resync` does nothing.
 
 ## Authentication
 

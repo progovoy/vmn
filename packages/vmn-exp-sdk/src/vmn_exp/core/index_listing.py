@@ -106,6 +106,13 @@ class ListingWatch:
         changed = {k: sig for k, sig in names.items() if k not in before or before[k] != sig}
         return changed, set(before).difference(names)
 
+    def record_names(self):
+        """The names of every record (claims included), or None when the
+        backend cannot list them; no baseline moves (any thread may ask)."""
+        names_of = getattr(self._storage, "list_record_names", None)
+        names = as_sigs(names_of(self._app_name)) if names_of else None
+        return None if names is None else set(names)
+
     def files(self, keys):
         """``{key: {filename: signature}}`` of *keys* (records gone are left out)."""
         if not keys:
@@ -125,7 +132,10 @@ class ListingWatch:
     def slice_changes(self, keys):
         """``(files of those of *keys* that changed since last listed, keys
         of *keys* gone)`` — a full listing spread over many calls."""
-        listing = self.files(keys)
+        return self.listed_changes(keys, self.files(keys))
+
+    def listed_changes(self, keys, listing):
+        """:meth:`slice_changes` of *keys* listed elsewhere as *listing*."""
         changed = {}
         for key, files in listing.items():
             fingerprint = _fingerprint(files)

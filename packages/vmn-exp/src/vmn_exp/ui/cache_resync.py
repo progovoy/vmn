@@ -26,10 +26,12 @@ CHECK_SEC = 1.0
 
 
 def _build(storage, app, store, like):
-    """*app* loaded afresh into *store*, swept like the live index *like*."""
+    """*app* loaded afresh into *store*, swept like the live index *like*
+    (journaled only once loaded: a journaled sweep lists behind serving)."""
     fresh = ExperimentIndex(storage, app, cache_store=store)
-    fresh.full_sweep_sec, fresh.journaled = like.full_sweep_sec, like.journaled
-    return fresh.refresh()
+    fresh.full_sweep_sec = like.full_sweep_sec
+    fresh.refresh().journaled = like.journaled
+    return fresh
 
 
 class WorkspaceCache:
