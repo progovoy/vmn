@@ -30,8 +30,9 @@ next slice of the known records, sized so every one comes round within
 ``full_sweep_sec`` — at 100k records one full listing kept a refresh, and so
 every new run, waiting for seconds. A slice never exceeds
 :data:`SLICE_BUDGET` records, however big the store or long the last
-refresh: a bigger store's round takes about N / SLICE_BUDGET refreshes
-instead (at 486k S3 records an unbounded slice was 48k records, and one
+refresh, and slices add up to at most :data:`MAX_RECHECK_PER_SEC` records a
+second: a bigger store's round just takes longer (N / MAX_RECHECK_PER_SEC
+seconds; at 486k S3 records an unbounded slice was 48k records, and one
 refresh 97 minutes).
 
 A ``journaled`` sweep (the ui, reading the store's change journal; plan 11
@@ -39,8 +40,8 @@ A ``journaled`` sweep (the ui, reading the store's change journal; plan 11
 and of each live one at its own heartbeat cadence (:func:`live_relist_sec`;
 for its heartbeats, which the journal leaves out), plus the same rolling slice
 of every known record — the consistency check (plan 11 §4.6), so each comes
-round once per ``full_sweep_sec`` (``reconcile_sec``), or per N /
-SLICE_BUDGET refreshes when that is longer — and, at the start of each round,
+round once per ``full_sweep_sec`` (``reconcile_sec``), or per the two
+bounds above when that is longer — and, at the start of each round,
 the record names (for records no journal entry announced). Only the check is
 budgeted: hinted, live and new records are listed at once. What the check finds
 changed that no hint or live listing explains is counted in :attr:`Sweep.drift`.
@@ -67,10 +68,14 @@ DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
 # length. On S3 a record's files are three delimited LISTs (the record, log/,
 # metrics/), so 500 are ~1500 requests: a few seconds at S3_WORKERS in
 # parallel, which the refresh, and so every new run, waits for; a local store
-# lists them in milliseconds. It binds only past full_sweep_sec / refresh
-# period * 500 records (the ui: 3600 s at ~1 s, ~1.8M; a 300 s sweep: 150k);
-# a bigger store's round then takes about N / 500 refreshes.
+# lists them in milliseconds.
 SLICE_BUDGET = 500
+# The most records a second the consistency check re-lists, sustained: it is
+# a safety net beside the journal and the signatures, so ~150 S3 LISTs a
+# second is plenty (486k records every 3600 s would be 135 records, ~400
+# LISTs, a second forever). Stores up to 50 * full_sweep_sec records (the
+# ui: 180k) still come round every full_sweep_sec; a 486k one takes ~2.7 h.
+MAX_RECHECK_PER_SEC = 50
 # The shortest period a journaled sweep re-lists a live record the journal
 # did not name at (and a pending claim's): the journal names every write but
 # a heartbeat-only run_state.yml (see live_relist_sec).
@@ -288,12 +293,14 @@ class Sweep(SweepState):
         """The keys of *population* due for their periodic re-listing. A
         refresh lists at most a tenth of them, and never more than
         SLICE_BUDGET, however long the last one took (a cold load can outlast
-        full_sweep_sec): a round of a big store takes more refreshes instead."""
+        full_sweep_sec); credit accrues at most MAX_RECHECK_PER_SEC a second:
+        a big store's round just takes longer."""
         elapsed = now - (self._rolled_at if self._rolled_at is not None else now)
         elapsed = min(elapsed, self.full_sweep_sec / 10)
         self._rolled_at = now
         size = max(len(population), 1)  # an empty one still starts rounds
-        accrued = self._credit + size * elapsed / self.full_sweep_sec
+        rate = min(size / self.full_sweep_sec, MAX_RECHECK_PER_SEC)
+        accrued = self._credit + rate * elapsed
         self._credit = min(accrued, size, SLICE_BUDGET)
         self._wrapped = False
         due = []

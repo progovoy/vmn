@@ -14,6 +14,7 @@ from vmn_exp.core.index_sweep import Sweep
 APP = "app"
 N = 40_000
 BUDGET = index_sweep.SLICE_BUDGET
+RATE = index_sweep.MAX_RECHECK_PER_SEC
 FINISHED = {"state": "finished", "exit_code": 0}
 
 
@@ -26,11 +27,15 @@ class Watch:
     def __init__(self, names, rolling=True):
         self.rolling = rolling
         self.names = set(names)
-        self._told = set()
+        self._fresh = set(names)  # names not reported by name_changes yet
         self.sliced, self.listed = [], []
 
+    def add(self, name):
+        self.names.add(name)
+        self._fresh.add(name)
+
     def name_changes(self, wall=None, journal=False):
-        new, self._told = self.names - self._told, set(self.names)
+        new, self._fresh = self._fresh, set()
         return dict.fromkeys(new, 1), set()
 
     def files(self, keys):
@@ -45,7 +50,7 @@ class Watch:
         return {}, set()
 
     def reset(self):
-        self._told = set()
+        self._fresh = set(self.names)
 
 
 def _finished():
@@ -150,7 +155,49 @@ def test_a_new_name_is_listed_at_once(setup):
     if sweep.journaled:
         pytest.skip("a journaled sweep learns new names from hints")
     new = _key(N + 1)
-    watch.names.add(new)
+    watch.add(new)
     watch.listed.clear()
     sweep.listing(records, now + 10_000)
     assert new in set().union(*watch.listed)
+
+
+def _sweep(size, full_sweep_sec, journaled):
+    """``(sweep, watch, records, now)`` over *size* finished records, listed once."""
+    records = dict.fromkeys(map(_key, range(size)), _finished())
+    watch = Watch(records)
+    sweep = Sweep(None, APP, full_sweep_sec=full_sweep_sec, watch=watch)
+    sweep.journaled = journaled
+    now = 1000.0
+    sweep.listing(records, now)
+    watch.sliced.clear()
+    return sweep, watch, records, now
+
+
+def test_the_recheck_rate_is_a_few_dozen_records_a_second():
+    assert 10 <= RATE <= 200
+
+
+@pytest.mark.parametrize("journaled", [True, False])
+def test_an_hour_of_refreshes_rechecks_at_most_the_rate(journaled):
+    # 40k records every 300 s would be 133 a second, forever.
+    sweep, watch, records, now = _sweep(N, 300, journaled)
+    hour = 3600
+    for _ in range(hour):
+        now += 1
+        sweep.listing(records, now)
+    assert sum(_slice_sizes(watch, records)) <= RATE * hour + BUDGET
+
+
+@pytest.mark.parametrize("journaled", [True, False])
+def test_a_store_below_the_rate_completes_a_round_within_full_sweep_sec(journaled):
+    size, full_sweep_sec = 100_000, 3600  # 28 a second
+    assert size / full_sweep_sec < RATE
+    sweep, watch, records, now = _sweep(size, full_sweep_sec, journaled)
+    seen = set()
+    for _ in range(full_sweep_sec + 5):
+        now += 1
+        sweep.listing(records, now)
+        for keys in watch.sliced:
+            seen.update(keys)
+        watch.sliced.clear()
+    assert seen == records.keys()
