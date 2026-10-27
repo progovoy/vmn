@@ -7,7 +7,9 @@ as missing for now (retried later, :mod:`vmn_exp.core.index_store_conn`); a
 corrupt one is rebuilt beside it; a failed save answers False so the caller
 keeps its records dirty. Several processes (the CLI, the SDK, a ``vmn-exp ui``
 server) may share one database: the :mod:`vmn_exp.core.sqlite_conn` policy and
-one short ``BEGIN IMMEDIATE`` transaction per refresh.
+one short ``BEGIN IMMEDIATE`` transaction per save (a refresh saves a chunk of
+records at a time, :mod:`vmn_exp.core.index_pending`); a save that grew the
+WAL past its limit checkpoints it.
 
 A record's run state lives in its own table: a heartbeat rewrites one small
 row, never the record's folded log. Its lean row and side table values are
@@ -190,6 +192,7 @@ class SqliteStore(LeanReads, KeyValues):
             self._db.on_error(exc, "Could not persist the experiment index {file}"
                                    " ({exc}); the next refresh retries")
             return False
+        self._db.tidy_wal()
         return True
 
     def _save_records(self, conn, app_name, changed, removed, states):
