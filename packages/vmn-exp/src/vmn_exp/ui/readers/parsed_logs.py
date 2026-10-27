@@ -2,13 +2,20 @@
 """Parsed experiment logs, kept across run-page polls.
 
 A live run's page polls while its log grows. Re-reading the whole log each time
-made a poll cost O(log); here a local record's JSONL logs are read from the
-offset the last poll stopped at, and only the new entries are parsed, appended
-to the series and folded into the params/metrics. The result is always what a
-full parse would give — growth that could reorder the merged log (an entry
-older than the newest one seen, a shrunk file, one rewritten even into a bigger
-file: a local root lists its log files with their identity) is simply parsed
-again from scratch.
+made a poll cost O(log); here a record's JSONL logs and metric streams are read
+from the offset the last poll stopped at, and only the new entries are parsed,
+appended to the series and folded into the params/metrics. A local root's files
+grow in place; an object store's (S3, GCS, Azure) grow by new segment objects,
+each written once, so a poll of a run alive for hours costs its listing plus the
+segments shipped since the last poll — not a GET per segment it ever shipped.
+
+The result is always what a full read gives. Each file's entries are kept, so
+growth that reorders the merged log (an entry older than the newest one seen)
+merges them again without reading anything; a shrunk or vanished file, one
+rewritten other than by an append (a local root lists its log files with their
+identity), a compaction or a seal is read again from scratch. A listed file
+found missing (merged since the listing) costs one listing more
+(:mod:`~vmn_exp.ui.readers.listed_reads`).
 
 Entries are appended in place and each poll gets a :class:`LogSnapshot` that
 sees a fixed prefix, so a slow response never observes a later poll's growth.
@@ -16,142 +23,33 @@ The cache is bounded by the log bytes it holds, not by a count of records.
 """
 import threading
 from collections import OrderedDict
-from itertools import islice
 
-from vmn_exp.core.fold import (
-    fold_definitions,
-    fold_last_metric_at,
-    fold_log,
-    fold_metrics,
-    fold_rewinds,
-    fold_values,
-)
+from vmn_exp.core.fold import fold_log
 from vmn_exp.core.jsonl_tail import UnterminatedEntry, read_complete_lines
 from vmn_exp.core.log import load_log, metric_series
-from vmn_exp.core.logfiles import appended, group_log_names, is_log_file
+from vmn_exp.core.logfiles import is_log_file
 from vmn_exp.core.media import MediaIndex
-from vmn_exp.core.metric_files import (
-    INDEXED_SUFFIX,
-    covered_seq,
-    is_indexed_file,
-    is_metric_file,
-    is_stream_file,
-    metric_writer,
-    superseded,
-)
-from vmn_exp.core.metric_schema import hidden_metrics
-from vmn_exp.core.rewind import REWIND
+from vmn_exp.core.metric_files import is_indexed_file, is_metric_file
 from vmn_exp.core.series_reader import indexed_entries, stream_entries
-from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
 from vmn_exp.core.streams import display_writer
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.files import flatten_logs
-from vmn_exp.ui.readers.series import SeriesThinner, downsample
+from vmn_exp.ui.readers.listed_reads import ListedReads, StaleListing, read_each
+from vmn_exp.ui.readers.log_snapshot import LogSnapshot
+from vmn_exp.ui.readers.parsed_log_files import (
+    appends_in_order,
+    by_writer,
+    merges,
+    replaced,
+    visible,
+)
+from vmn_exp.ui.readers.series import SeriesThinner
 
 DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 DEFAULT_MAX_ENTRIES = 1024  # a busy leaderboard reads hundreds of runs; the byte bound decides
 MAX_THINNERS = 256
 
-
-def _metric_parts(fold):
-    """What :func:`fold_metrics` reads, copied at this poll: the fold itself
-    keeps growing under a snapshot."""
-    return {
-        "metrics": dict(fold["metrics"]),
-        "extrema": dict(fold.get("extrema") or {}),
-        "firsts": dict(fold.get("firsts") or {}),
-        "metric_defs": {n: dict(f) for n, f in (fold.get("metric_defs") or {}).items()},
-    }
-
-
-class LogSnapshot:
-    """One poll's view of a parsed log: the first ``total`` entries."""
-
-    def __init__(self, parsed):
-        self._parsed = parsed
-        self._entries = parsed.entries
-        self.total = len(parsed.entries)
-        self._series = parsed.series
-        self._counts = dict(parsed.counts)
-        self.params = fold_values(parsed.fold, "params")
-        self.metrics = fold_values(parsed.fold, "metrics")
-        self._metric_fold = _metric_parts(parsed.fold)
-        self.last_metric_at = fold_last_metric_at(parsed.fold)
-        self.media = parsed.media_view
-        # The fold keys a rewind by its log position (see fold_log).
-        self._rewinds = [(r[0], r[1]) for r in fold_rewinds(parsed.fold)]
-        self.memo = {}  # derived views (thinned series) of this exact snapshot
-
-    def summarized_metrics(self, schema=None):
-        """``(metrics, metric_summary)`` under the metrics *schema* — see
-        :func:`~vmn_exp.core.fold.fold_metrics`."""
-        return fold_metrics(self._metric_fold, schema)
-
-    def step_metrics(self, schema=None):
-        """``{metric: x metric}`` the run's definitions and *schema* declare."""
-        return step_metrics(self._counts, fold_definitions(self._metric_fold), schema)
-
-    def hidden_metrics(self, schema=None):
-        """The run's metrics its definitions, else *schema*, mark hidden."""
-        names = {*self.metrics, *self._counts}
-        return hidden_metrics(names, fold_definitions(self._metric_fold), schema)
-
-    def log(self):
-        return self._entries[: self.total]
-
-    def rewinds(self):
-        """``[{"step", "timestamp"}]`` of the log's rewinds, in log order."""
-        return [
-            {"step": step, "timestamp": self._entries[pos].get("timestamp")}
-            for step, pos in self._rewinds
-        ]
-
-    def tail(self, n):
-        return self._entries[max(self.total - n, 0) : self.total]
-
-    def page(self, offset, limit):
-        offset = max(offset, 0)
-        return self._entries[offset : min(offset + max(limit, 0), self.total)]
-
-    def series_keys(self):
-        return self._counts.keys()
-
-    def last_step(self):
-        """The highest step among the metrics' newest points, or None."""
-        steps = (self._series[k][n - 1].get("step") for k, n in self._counts.items() if n)
-        return max((s for s in steps if isinstance(s, (int, float))), default=None)
-
-    def series(self, keys=None):
-        """``{metric: [points]}`` — every metric, or those of *keys* it has."""
-        names = self._counts if keys is None else [k for k in keys if k in self._counts]
-        return {k: self._series[k][: self._counts[k]] for k in names}
-
-    def thinned(self, keys, max_points):
-        """``(series, series_total)`` of *keys* it has, each thinned to
-        *max_points* — extending the record's thinners, so a grown series
-        costs its new points."""
-        names = [k for k in keys if k in self._counts]
-        with self._parsed.thin_lock:
-            series = {
-                k: self._parsed.thinner(k, max_points).thin(self._series[k], self._counts[k])
-                for k in names
-            }
-        return series, {k: self._counts[k] for k in names}
-
-    def _points(self, key):
-        """*key*'s points this snapshot sees, without copying them."""
-        return islice(self._series[key], self._counts[key]) if key in self._counts else ()
-
-    def joined(self, x_of, max_points):
-        """``(series, series_total)`` of each metric of *x_of* joined on its x
-        metric (see :func:`~vmn_exp.core.step_metric.join_series`), then
-        thinned to *max_points*."""
-        lookups = {x: x_lookup(self._points(x)) for x in set(x_of.values())}
-        joined = {k: join_on(self._points(k), lookups[x]) for k, x in x_of.items()}
-        return (
-            {k: downsample(v, max_points) for k, v in joined.items()},
-            {k: len(v) for k, v in joined.items()},
-        )
+__all__ = ["LogSnapshot", "ParsedLogs"]
 
 
 class _Parsed:
@@ -163,6 +61,7 @@ class _Parsed:
         self.media = MediaIndex()
         self.media_view = self.media.view()
         self.offsets = None  # {log file: bytes consumed} when incremental
+        self.read = {}  # {log file: its entries read so far} when incremental
         self.sig = None
         self.snapshot = None
         self.thinners = {}  # (metric, max_points) -> SeriesThinner
@@ -189,127 +88,111 @@ class _Pending(Exception):
     """A log ends in a complete line with no newline yet — read it fully."""
 
 
-def _local(storage):
+def _direct_files(storage):
+    """Where *storage*'s per-file reads go: a local root or an object store;
+    None for anything else (a plugin root may rewrite its files in place)."""
     direct = getattr(storage, "direct_files", None)
-    local = direct() if direct else None
-    return local if isinstance(local, LocalSnapshotStorage) else None
+    files = direct() if direct else None
+    if isinstance(files, LocalSnapshotStorage) or (files is not None and files.is_remote()):
+        return files
+    return None
 
 
 def _log_files(storage, app_name, verstr):
-    """``{log file: signature}`` of the record, or None when unknown."""
-    record_files = getattr(storage, "record_files", None)
-    files = record_files(app_name, verstr) if record_files else None
+    """``{log file: signature}`` of the record, or None when unknown — on an
+    object store, from its log and metric listings alone."""
+    list_files = getattr(storage, "stream_files", None) or getattr(storage, "record_files", None)
+    files = list_files(app_name, verstr) if list_files else None
     if files is None:
         return None
     return {n: tuple(sig) for n, sig in files.items()
             if is_log_file(n) or is_metric_file(n)}
 
 
-def _read_complete_lines(local, app_name, verstr, name, offset, writer):
+def _read_complete_lines(files_of, app_name, verstr, name, offset, writer):
     """``(entries, new offset)`` from *offset* up to the last newline."""
     try:
         read = read_complete_lines(
-            local, app_name, verstr, name, offset, take_unterminated=False,
+            files_of, app_name, verstr, name, offset, take_unterminated=False,
             errors="strict",
         )
     except UnterminatedEntry:
         raise _Pending() from None
-    if read is None:
-        raise _Pending()  # vanished since listed: parse again
     entries, used = read
     for entry in entries:
         entry["_writer"] = display_writer(writer)
     return entries, offset + used
 
 
-def _read_stream(local, app_name, verstr, name, start, size):
+def _read_stream(files_of, app_name, verstr, name, start, size):
     """``(metrics entries, new offset)`` of a stream's intact new blocks."""
-    data = local.read_range(app_name, verstr, name, start, size - start)
-    entries, used = stream_entries(data or b"")
+    data = files_of.read_range(app_name, verstr, name, start, size - start)
+    entries, used = stream_entries(data)
     return entries, start + used
 
 
-def _read_growth(local, app_name, verstr, files, offsets):
-    """``{writer: new entries}`` and the new offsets, or None when not pure growth."""
+def _read_file(files_of, app_name, verstr, item):
+    """``(entries, new offset)`` of a listed file ``(stream, name, start,
+    size)`` past *start*."""
+    writer, name, start, size = item
+    if is_log_file(name):
+        return _read_complete_lines(files_of, app_name, verstr, name, start, writer)
+    if is_indexed_file(name):
+        entries, end = indexed_entries(files_of, app_name, verstr, name, size), size
+    else:
+        entries, end = _read_stream(files_of, app_name, verstr, name, start, size)
+    return [dict(e, _writer=display_writer(writer)) for e in entries], end
+
+
+def _read_all(files_of, app_name, verstr, items):
+    """:func:`_read_file` of each item, in order; concurrent on a remote store."""
+    read = lambda item: _read_file(files_of, app_name, verstr, item)  # noqa: E731
+    if not files_of.is_remote():
+        return [read(item) for item in items]
+    return read_each(read, items, "vmn-ui-log-read")
+
+
+def _read_growth(files_of, app_name, verstr, files, offsets):
+    """``({file: new entries}, new offsets, visible groups)``, or None when
+    not pure growth."""
     if any(name not in files or files[name][0] < end for name, end in offsets.items()):
         return None
-    indexed = [n for n in files if n.endswith(INDEXED_SUFFIX) and n not in offsets]
-    if offsets and indexed:
-        return None  # sealed since: the streams it replaced restart from 0
-    if _superseded_listed(files):
-        return None  # mid-compaction: let the grouped full read pick
-    grown = [n for n in files if files[n][0] > offsets.get(n, 0) and n not in indexed]
-    new_offsets, by_writer = dict(offsets), {}
-    for writer, names in group_log_names(grown).items():
-        for name in names:
-            entries, new_offsets[name] = _read_complete_lines(
-                local, app_name, verstr, name, offsets.get(name, 0), writer
-            )
-            by_writer.setdefault(writer, []).extend(entries)
-    for name in sorted(indexed):  # after the logs, as load_log
-        writer = metric_writer(name)
-        entries = indexed_entries(local, app_name, verstr, name, files[name][0])
-        by_writer.setdefault(writer, []).extend(dict(e, _writer=display_writer(writer)) for e in entries)
-        new_offsets[name] = files[name][0]
-    for name in (n for n in grown if is_stream_file(n)):
-        writer = metric_writer(name)
-        entries, new_offsets[name] = _read_stream(local, app_name, verstr, name,
-                                                  offsets.get(name, 0), files[name][0])
-        by_writer.setdefault(writer, []).extend(dict(e, _writer=display_writer(writer)) for e in entries)
-    return by_writer, new_offsets
+    groups = visible(files)
+    listed = [(w, n) for w, names in groups.items() for n in names]
+    if offsets and any(merges(n) for _, n in listed if n not in offsets):
+        return None  # compacted or sealed since: what it replaced restarts from 0
+    items = [(w, n, offsets.get(n, 0), files[n][0])
+             for w, n in listed if files[n][0] > offsets.get(n, 0)]
+    reads = _read_all(files_of, app_name, verstr, items)
+    new_offsets = dict(offsets)
+    new_offsets.update((item[1], end) for item, (_, end) in zip(items, reads))
+    return {item[1]: entries for item, (entries, _) in zip(items, reads)}, new_offsets, groups
 
 
-def _superseded_listed(files):
-    """Whether *files* list an object a ``.vmx`` among them covers."""
-    return any(superseded(files, metric_writer(n), covered_seq(n))
-               for n in files if is_indexed_file(n))
-
-
-def _appends_in_order(entries, new_entries):
-    """Whether *new_entries* all sort after *entries* in the merged log — and
-    carry no rewind, which may hide some of *entries*."""
-    if entries and any(e.get("type") == REWIND for e in new_entries):
-        return False
-    stamps = [e.get("timestamp", "") for e in new_entries]
-    if not all(isinstance(ts, str) for ts in stamps):
-        return False
-    if not entries or not stamps:
-        return True
-    last = entries[-1].get("timestamp", "")
-    return isinstance(last, str) and min(stamps) > last
-
-
-def _replaced(sig, files):
-    """Whether a file of listing *sig* (the last parse's) changed since other
-    than by an append (:func:`~vmn_exp.core.logfiles.appended`) — like a log a
-    local-first cache merged — so its bytes past the offset parsed need not
-    follow the ones parsed."""
-    before = dict(sig or ())
-    return any(
-        name in before and before[name] != listed and not appended(before[name], listed)
-        for name, listed in files.items()
-    )
-
-
-def _grow(parsed, local, app_name, verstr, files):
-    """*parsed* extended by the logs' new bytes, or None to parse afresh."""
-    if _replaced(parsed.sig, files):
+def _grow(parsed, files_of, app_name, verstr, files):
+    """*parsed* extended by the files' new bytes, or None to read afresh. New
+    entries sorting before parsed ones make a new merge of the entries kept."""
+    if replaced(parsed.sig, files, in_place=not files_of.is_remote()):
         return None
-    found = _read_growth(local, app_name, verstr, files, parsed.offsets)
+    found = _read_growth(files_of, app_name, verstr, files, parsed.offsets)
     if found is None:
         return None
-    by_writer, offsets = found
-    new_entries = flatten_logs(by_writer)
-    if not _appends_in_order(parsed.entries, new_entries):
-        return None
-    parsed.offsets = offsets
-    return parsed.extend(new_entries)
+    new, offsets, groups = found
+    for name, entries in new.items():
+        parsed.read.setdefault(name, []).extend(entries)
+    new_entries = flatten_logs(by_writer(groups, new))
+    if appends_in_order(parsed.entries, new_entries):
+        parsed.offsets = offsets
+        return parsed.extend(new_entries)
+    merged = _Parsed()
+    merged.offsets, merged.read = offsets, parsed.read
+    return merged.extend(flatten_logs(by_writer(groups, merged.read)))
 
 
-def _parse_local(local, app_name, verstr, files):
+def _parse_local(files_of, app_name, verstr, files):
     fresh = _Parsed()
     fresh.offsets = {}
-    return _grow(fresh, local, app_name, verstr, files)
+    return _grow(fresh, files_of, app_name, verstr, files)
 
 
 def _parse_with(read_log, storage, app_name, verstr):
@@ -321,7 +204,7 @@ class ParsedLogs:
 
     Bounded by *max_bytes* of log files and *max_entries* records (least
     recently used first out). A backend without cheap ``record_files`` (reads
-    that merge a remote) is never cached.
+    that merge a remote into a local copy) is never cached.
     """
 
     def __init__(self, max_bytes=DEFAULT_MAX_BYTES, max_entries=DEFAULT_MAX_ENTRIES):
@@ -343,26 +226,39 @@ class ParsedLogs:
         key = (_identity(storage), app_name, verstr)
         with self._key_lock(key):
             parsed = self._lookup(key)
-            sig = tuple(sorted(files.items()))
-            if parsed is not None and parsed.sig == sig:
-                return parsed.snapshot
-            parsed = self._refresh(parsed, storage, app_name, verstr, read_log, files)
-            if parsed is None:  # a half-written line: answer, don't keep
-                return _parse_with(read_log, storage, app_name, verstr).snapshot
-            parsed.sig = sig
-            self._store(key, parsed, sum(s[0] for s in files.values()))
+            try:
+                return self._current(key, parsed, storage, app_name, verstr, read_log, files)
+            except StaleListing:  # merged since listed: list the record once more
+                pass
+            try:
+                files = _log_files(storage, app_name, verstr)
+                return self._current(key, parsed, storage, app_name, verstr, read_log, files)
+            except StaleListing:
+                return (parsed or _parse_with(read_log, storage, app_name, verstr)).snapshot
+
+    def _current(self, key, parsed, storage, app_name, verstr, read_log, files):
+        """The snapshot of the record listed as *files*, kept for the next poll."""
+        sig = tuple(sorted(files.items()))
+        if parsed is not None and parsed.sig == sig:
             return parsed.snapshot
+        parsed = self._refresh(parsed, storage, app_name, verstr, read_log, files)
+        if parsed is None:  # a half-written line: answer, don't keep
+            return _parse_with(read_log, storage, app_name, verstr).snapshot
+        parsed.sig = sig
+        self._store(key, parsed, sum(s[0] for s in files.values()))
+        return parsed.snapshot
 
     def _refresh(self, parsed, storage, app_name, verstr, read_log, files):
-        local = _local(storage)
-        if read_log is not load_log or local is None:
+        direct = _direct_files(storage)
+        if read_log is not load_log or direct is None:
             return _parse_with(read_log, storage, app_name, verstr)
+        files_of = ListedReads(direct)
         try:
             if parsed is not None and parsed.offsets is not None:
-                grown = _grow(parsed, local, app_name, verstr, files)
+                grown = _grow(parsed, files_of, app_name, verstr, files)
                 if grown is not None:
                     return grown
-            return _parse_local(local, app_name, verstr, files) or _parse_with(
+            return _parse_local(files_of, app_name, verstr, files) or _parse_with(
                 read_log, storage, app_name, verstr
             )
         except _Pending:

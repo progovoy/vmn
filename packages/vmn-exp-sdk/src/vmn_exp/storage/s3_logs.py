@@ -4,7 +4,8 @@
 A writer's log is ``log.<w>.jsonl`` plus segments ``log.<w>@<seq>.jsonl``: a
 local-first host ships each sync's new lines as a new segment (re-uploading a
 growing log every sync is quadratic). :meth:`compact_log_segments` merges a
-finished writer's objects into one, so reading a finished run costs one GET;
+finished writer's objects into one, so reading a finished run costs one GET
+(and a live one's owner rolls them up every ``LIVE_ROLLUP_SEGMENTS``);
 the merged object supersedes what it covers (``group_log_names``), so readers
 listing it next to not-yet-deleted segments never count an entry twice.
 """
@@ -149,7 +150,9 @@ class S3Logs:
         with them a syncing host's offsets) are unchanged. It is written under
         ``If-None-Match`` — a second compactor of the same objects backs off —
         and only then are the merged objects deleted. Call it once the writer
-        is done: an append racing the merge could otherwise be deleted with it.
+        is done, or as the stream's owner under its ship lock (which rolls a
+        live stream's shipped segments up: nothing appends to them): an append
+        racing the merge could otherwise be deleted with it.
         """
         objects = self.log_objects(app_name, verstr, writer_id)
         if len(objects) < 2:
