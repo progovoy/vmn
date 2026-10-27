@@ -37,6 +37,9 @@ _SHIP_ATTEMPTS = 5
 # A live stream's shipped segments are merged into one object this often, so
 # a reader of a run alive for hours lists (and GETs) a bounded number of them.
 LIVE_ROLLUP_SEGMENTS = 64
+# A rollup rewrites the stream under its ship lock (which the SDK's SIGTERM
+# finalizer waits on briefly): past this many shipped bytes it is skipped.
+LIVE_ROLLUP_MAX_BYTES = 8 * 1024 * 1024
 
 
 def is_any_log(name):
@@ -74,6 +77,8 @@ class CachedLogs:
     # Whether local log files are complete copies of their streams' logs
     # (False for a buffer that only holds what this process appended).
     _local_is_replica = True
+    # True while a final flush ships (an exit's): it never rolls segments up.
+    _final_flush = False
 
     def _init_logs(self):
         # (app, verstr, stream) -> LOCAL | REMOTE, as the last listing chose
@@ -204,15 +209,24 @@ class CachedLogs:
             listing = _Listing(self._remote, app_name, verstr)
             finished = self._run_finished(app_name, verstr)
             for stream, size in sorted(local_sizes.items()):
-                seq = self._ship_stream(state, listing, app_name, verstr, stream, size)
+                shipped = self._ship_stream(state, listing, app_name, verstr, stream, size)
                 if finished:
                     self._compact_once(app_name, verstr, stream)
-                elif seq and seq % LIVE_ROLLUP_SEGMENTS == 0:
+                elif shipped and self._rolls_up(*shipped):
                     self._compact(app_name, verstr, stream)
 
+    def _rolls_up(self, seq, shipped_bytes):
+        """Whether a live stream that shipped segment *seq* (its first
+        *shipped_bytes* on the remote) is rolled up now: every
+        ``LIVE_ROLLUP_SEGMENTS``-th segment of a small stream, on a periodic
+        sync — never while a finalizer or a final flush ships."""
+        return (seq % LIVE_ROLLUP_SEGMENTS == 0 and 0 < seq
+                and shipped_bytes <= LIVE_ROLLUP_MAX_BYTES
+                and not self._final_flush and not ship_state.is_finalizing())
+
     def _ship_stream(self, state, listing, app_name, verstr, stream, size):
-        """Ship *stream*'s unshipped complete lines: the segment seq they
-        went to, None when there were none."""
+        """Ship *stream*'s unshipped complete lines: ``(segment seq they went
+        to, bytes the remote then holds)``, None when there were none."""
         for _ in range(_SHIP_ATTEMPTS):
             held = state.get(stream) or _state_of(listing.objects(stream))
             offset, seq = held
@@ -223,7 +237,7 @@ class CachedLogs:
             state.forget(stream)  # until the upload is known to have landed
             if self._ship(app_name, verstr, stream, seq, chunk):
                 state.put(stream, (offset + len(chunk), seq + 1))
-                return seq
+                return seq, offset + len(chunk)
             listing.refresh()  # another process of the copy shipped it
         raise RuntimeError(f"{verstr}: could not ship the log of {stream!r}")
 

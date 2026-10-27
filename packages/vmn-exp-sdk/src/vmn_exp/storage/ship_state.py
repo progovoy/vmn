@@ -100,6 +100,11 @@ def finalizing():
         _FINALIZING.clear()
 
 
+def is_finalizing():
+    """Whether the SDK's SIGTERM finalizer is running (:func:`finalizing`)."""
+    return _FINALIZING.is_set()
+
+
 def _wait_sec():
     return FINALIZING_WAIT_SEC if _FINALIZING.is_set() else LOCK_WAIT_SEC
 
