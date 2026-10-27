@@ -65,10 +65,11 @@ def leans_of(records):
             for key, record in records.items() if is_run(record)}
 
 
-def write_lean(conn, app, seq, changed, removed, states, leans):
+def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True):
     """Bring *app*'s lean tables in line with a save of *changed* records
     (*leans* their runs' :func:`leans_of`), *removed* keys and the run states
-    of *states* (see :meth:`~vmn_exp.core.index_store.SqliteStore.save`)."""
+    of *states* (see :meth:`~vmn_exp.core.index_store.SqliteStore.save`);
+    *renumber* False leaves ``idx`` to a later :func:`renumbered`."""
     runs = {key: changed[key] for key in leans}
     gone = set(removed) | {key for key in changed if key not in runs}
     before = _existing(conn, app, sorted(set(runs) | gone))
@@ -78,7 +79,8 @@ def write_lean(conn, app, seq, changed, removed, states, leans):
         "UPDATE exp_rows SET status = ? WHERE app = ? AND key = ?",
         [(run_status(r), app, key) for key, r in states.items() if key not in runs],
     )
-    _renumber(conn, app, runs, gone, before)
+    if renumber:
+        _renumber(conn, app, runs, gone, before)
     moved = [key for key, record in runs.items()
              if before.get(key, (None, None, None))[1:] != (
                  record["meta"].get("parent"), record["meta"]["verstr"])]
@@ -146,13 +148,21 @@ def _renumber(conn, app, runs, gone, before):
         conn, app, sorted((sort_timestamp(runs[k]["meta"]), k) for k in new)
     ):
         return
+    apply_numbers(conn, renumbered(conn, app))
+
+
+def apply_numbers(conn, moves):
+    """Set each ``(idx, app, key)`` of *moves*."""
+    conn.executemany("UPDATE exp_rows SET idx = ? WHERE app = ? AND key = ?", moves)
+
+
+def renumbered(conn, app):
+    """``[(idx, app, key)]`` of the rows whose ``idx`` is not their rank by
+    ``(timestamp, key)``."""
     ranked = conn.execute(
         "SELECT key, idx FROM exp_rows WHERE app = ? ORDER BY timestamp, key", (app,)
     ).fetchall()
-    conn.executemany(
-        "UPDATE exp_rows SET idx = ? WHERE app = ? AND key = ?",
-        [(n, app, key) for n, (key, idx) in enumerate(ranked, 1) if idx != n],
-    )
+    return [(n, app, key) for n, (key, idx) in enumerate(ranked, 1) if idx != n]
 
 
 def _number_on(conn, app, new):

@@ -6,6 +6,8 @@ opened lazily, retried, recovered, never fatal (plan 25 §2).
   use, with a backoff doubling up to :data:`MAX_BACKOFF_SEC`.
 - A file written by a newer schema is left alone: the store stays off for
   this process.
+- A file of older records is left untouched too: the store continues in a
+  new generation file (:mod:`vmn_exp.core.index_store_upgrade`).
 - A corrupt file is rebuilt beside it: a new generation file, flipped live
   through the pointer (:mod:`vmn_exp.core.sqlite_files`); the corrupt one is
   removed once no connection holds it.
@@ -25,7 +27,8 @@ import time
 
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.best_effort import warn_once
-from vmn_exp.core.index_store_schema import SchemaTooNew
+from vmn_exp.core.index_store_schema import RecordsOutdated, SchemaTooNew
+from vmn_exp.core.index_store_upgrade import regenerate
 from vmn_exp.core.sqlite_conn import checkpoint, wal_oversized
 
 FIRST_BACKOFF_SEC = 1.0
@@ -67,6 +70,8 @@ class StoreConnection:
             self._retry_at = math.inf
             warn_once((file, "schema"), f"Experiment index {file} was written by a newer "
                       f"vmn-exp (schema {exc}); this process runs without it")
+        except RecordsOutdated as exc:
+            self._regenerate(file, exc)
         except (sqlite3.Error, OSError) as exc:
             if type(exc) is sqlite3.DatabaseError:
                 self.recover(exc)
@@ -79,6 +84,21 @@ class StoreConnection:
     def _opened(self, conn, file, stamp):
         self.conn, self.file, self._stamp = conn, file, stamp
         self._retry_at, self._backoff = None, FIRST_BACKOFF_SEC
+
+    def _regenerate(self, file, outdated):
+        """*file* holds older records: continue in a new generation beside it."""
+        if not sqlite_files.is_file_path(self.path):
+            self._failed(file, outdated)
+            return
+        try:
+            conn, fresh = regenerate(self.path, file, outdated.found, self._connect)
+        except (sqlite3.Error, OSError, SchemaTooNew, RecordsOutdated) as exc:
+            self._failed(file, exc)
+            return
+        warn_once((file, "records"), f"Experiment index {file} holds records of an older "
+                  f"vmn-exp ({outdated}); continuing in {fresh}")
+        self._opened(conn, fresh, sqlite_files.pointer_stamp(self.path))
+        sqlite_files.sweep(self.path)
 
     def _failed(self, file, exc):
         self.conn = None
@@ -110,7 +130,7 @@ class StoreConnection:
             fresh = sqlite_files.new_generation(self.path)
             conn = self._connect(fresh)
             sqlite_files.flip(self.path, fresh)
-        except (sqlite3.Error, OSError, SchemaTooNew) as exc:
+        except (sqlite3.Error, OSError, SchemaTooNew, RecordsOutdated) as exc:
             self._failed(bad, exc)
             return
         warn_once((bad, "corrupt"), f"Experiment index {bad} is unreadable ({reason}); "

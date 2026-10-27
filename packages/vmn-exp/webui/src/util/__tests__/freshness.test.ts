@@ -39,6 +39,13 @@ describe("freshnessBanner", () => {
       .toContain("Syncing with the store — reading the change journal.");
   });
 
+  it("says an upgrade re-derives the index from its saved records, not the store", () => {
+    const migrating = { ...syncing, phase: "migrating" as const, progress: 0.25 };
+    expect(freshnessBanner(migrating, AS_OF_MS + 10 * MIN)?.text).toBe(
+      "⚠ Showing data as of Oct 22 19:44 UTC (10m old). Upgrading the index from its saved "
+      + "records (no store reads), ~25%. Runs will appear when it finishes.");
+  });
+
   it("says old data while no refresh runs", () => {
     expect(freshnessBanner(fresh, AS_OF_MS + 10 * MIN)?.text).toBe(
       "⚠ Showing data as of Oct 22 19:44 UTC (10m old).");

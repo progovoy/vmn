@@ -9,7 +9,8 @@ after a lost connection gets a fresh one. A scope is an app name or
 (:func:`~vmn_exp.ui.tenancy.current_org`), bound per transaction for RLS. Each save
 is one transaction that bumps the scope's generation and
 ``NOTIFY vmn_gen, '<workspace_id>:<app>'`` (delivered on commit). A cache
-schema change TRUNCATEs the cache tables, never the control-plane ones.
+records version change (``RECORDS_VERSION``: it caches no derived table)
+TRUNCATEs the cache tables, never the control-plane ones.
 """
 import json
 import logging
@@ -17,7 +18,12 @@ import logging
 from vmn_exp.core import index_store
 from vmn_exp.core.cache_store import FULL_LOAD
 from vmn_exp.core.index_store import _state_of, _without_state
-from vmn_exp.core.index_store_schema import SCHEMA_VERSION
+from vmn_exp.core.index_store_schema import (
+    RECORDS_VERSION,
+    SCHEMA_VERSION,
+    records_mark,
+    records_version,
+)
 from vmn_exp.ui import pg_pool
 from vmn_exp.ui.control_plane_pg import PostgresControlPlane  # noqa: F401
 from vmn_exp.ui.tenancy import DefaultOrg
@@ -46,20 +52,26 @@ def _jsonable(value):
     return json.dumps(json.loads(text, parse_constant=lambda _: None))
 
 
+def _cache_meta(conn):
+    return dict(conn.execute(
+        "SELECT k, v FROM vmn_cache_meta WHERE k IN ('schema_version', 'records')"
+    ).fetchall())
+
+
 def _ensure_cache_version(conn):
     with conn.transaction():
         conn.execute("LOCK TABLE vmn_cache_meta")
-        row = conn.execute(
-            "SELECT v FROM vmn_cache_meta WHERE k = 'schema_version'"
-        ).fetchone()
-        if row and row[0] == SCHEMA_VERSION:
+        meta = _cache_meta(conn)
+        if meta and records_version(meta.get("schema_version"),
+                                    meta.get("records")) == RECORDS_VERSION:
             return
         conn.execute(f"TRUNCATE {_CACHE_TABLES}")
-        conn.execute(
-            "INSERT INTO vmn_cache_meta (k, v) VALUES ('schema_version', %s)"
-            " ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v",
-            (SCHEMA_VERSION,),
-        )
+        for key, value in (("schema_version", SCHEMA_VERSION), ("records", records_mark())):
+            conn.execute(
+                "INSERT INTO vmn_cache_meta (k, v) VALUES (%s, %s)"
+                " ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v",
+                (key, value),
+            )
 
 
 class PostgresStore(DefaultOrg):
@@ -116,16 +128,10 @@ class PostgresStore(DefaultOrg):
             return
         self._run(lambda c: _save(c, self._key(scope), changed, removed, states), None, "write")
 
-    def cache_version(self):
-        """The ``vmn_cache_meta`` schema version; ``""`` when the row is gone,
-        None when the database is unreachable."""
-
-        def query(conn):
-            row = conn.execute(
-                "SELECT v FROM vmn_cache_meta WHERE k = 'schema_version'").fetchone()
-            return row[0] if row else ""
-
-        return self._run(query, None, "read")
+    def cache_meta(self):
+        """The ``vmn_cache_meta`` ``schema_version`` and ``records`` values
+        (``{}`` when the rows are gone), None when the database is unreachable."""
+        return self._run(lambda c: _cache_meta(c), None, "read")
 
     def reset_cache(self):
         """Re-check the cache schema on the next call (a truncated or

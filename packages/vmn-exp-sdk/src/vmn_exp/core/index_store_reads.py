@@ -13,6 +13,11 @@ from vmn_exp.core.index_lean_store import read_lean
 from vmn_exp.core.sqlite_conn import in_chunks, read_tx
 
 _CHUNK = 256  # records read per query, under SQLite's bound-parameter limit
+# ``(key, seq, head, fold, run state)`` of an app's records; a WHERE on ``i.key`` follows.
+RECORD_PARTS_SQL = (
+    "SELECT i.key, i.seq, i.head, i.data, s.data FROM exp_index i"
+    " LEFT JOIN exp_index_state s ON s.app = i.app AND s.key = i.key WHERE i.app = ?"
+)
 
 
 class LeanReads:
@@ -64,8 +69,8 @@ class LeanReads:
         return self._read(lambda: self._at_one_generation(app_name, read), None)
 
     def _at_one_generation(self, app_name, read):
-        if not self.generation(app_name):
-            return None
+        if not self.generation(app_name) or self.deriving(app_name):
+            return None  # never saved, or its rows are left to re-derive
         with read_tx(self._conn) as conn:
             return read(conn)
 
@@ -77,9 +82,7 @@ class LeanReads:
             key: (head, data, state)
             for chunk, marks in in_chunks(seqs)
             for key, seq, head, data, state in self._conn.execute(
-                "SELECT i.key, i.seq, i.head, i.data, s.data FROM exp_index i"
-                " LEFT JOIN exp_index_state s ON s.app = i.app AND s.key = i.key"
-                f" WHERE i.app = ? AND i.key IN ({marks})",
+                f"{RECORD_PARTS_SQL} AND i.key IN ({marks})",
                 (app_name, *chunk),
             )
             if seqs[key] in (None, seq)
