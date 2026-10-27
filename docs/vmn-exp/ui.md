@@ -181,8 +181,8 @@ restart.
   and dependency graphs are recomputed only after a stamp.
 - **Background refresh**: requests never refresh the index. Each app requested
   within the last minute gets a thread that refreshes it about once a second,
-  with every record re-listed at least once an hour (at most 500 a refresh and 50 a
-  second, so past 180k runs a round takes longer); requests read the latest snapshot, so
+  with every record re-listed at least once an hour (at most 500 a refresh; on a store
+  also 50 a second, so past 180k runs a round takes longer); requests read the latest snapshot, so
   the dashboard lags the files by about a second. Only an app's first request
   waits for the initial load. A failed refresh (say, the bucket is
   unreachable) is logged and the last snapshot keeps being served.

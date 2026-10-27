@@ -177,10 +177,9 @@ def test_the_recheck_rate_is_a_few_dozen_records_a_second():
     assert 10 <= RATE <= 200
 
 
-@pytest.mark.parametrize("journaled", [True, False])
-def test_an_hour_of_refreshes_rechecks_at_most_the_rate(journaled):
-    # 40k records every 300 s would be 133 a second, forever.
-    sweep, watch, records, now = _sweep(N, 300, journaled)
+def test_an_hour_of_journaled_refreshes_rechecks_at_most_the_rate():
+    # 40k store records every 300 s would be 133 a second (S3 LISTs), forever.
+    sweep, watch, records, now = _sweep(N, 300, journaled=True)
     hour = 3600
     for _ in range(hour):
         now += 1
@@ -193,6 +192,21 @@ def test_a_store_below_the_rate_completes_a_round_within_full_sweep_sec(journale
     size, full_sweep_sec = 100_000, 3600  # 28 a second
     assert size / full_sweep_sec < RATE
     sweep, watch, records, now = _sweep(size, full_sweep_sec, journaled)
+    seen = set()
+    for _ in range(full_sweep_sec + 5):
+        now += 1
+        sweep.listing(records, now)
+        for keys in watch.sliced:
+            seen.update(keys)
+        watch.sliced.clear()
+    assert seen == records.keys()
+
+
+def test_a_local_rolling_sweep_is_not_rate_capped():
+    # Local stat()s are cheap: 40k records still come round every 300 s.
+    size, full_sweep_sec = N, 300
+    assert size / full_sweep_sec > RATE
+    sweep, watch, records, now = _sweep(size, full_sweep_sec, journaled=False)
     seen = set()
     for _ in range(full_sweep_sec + 5):
         now += 1
