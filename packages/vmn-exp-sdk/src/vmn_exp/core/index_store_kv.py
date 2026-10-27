@@ -61,16 +61,18 @@ class KeyValues:
         if conn is None or not puts:
             return
         if getattr(_JOINED, "conn", None) is conn:
-            _write(conn, puts)  # an error fails the transaction joined
+            write_puts(conn, puts)  # an error fails the transaction joined
             return
         try:
             with write_tx(conn):
-                _write(conn, puts)
+                write_puts(conn, puts)
         except sqlite3.Error as exc:
             self._db.on_error(exc)  # corrupt: recovers; else debug
 
 
-def _write(conn, puts):
+def write_puts(conn, puts):
+    """Store each ``(scope, fingerprint, payload)`` of *puts* on *conn*, in
+    its open transaction."""
     conn.executemany(
         "INSERT OR REPLACE INTO exp_index_kv (scope, fingerprint, payload) VALUES (?, ?, ?)",
         [(scope, fp, json.dumps(payload)) for scope, fp, payload in puts],

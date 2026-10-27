@@ -57,13 +57,10 @@ def _create(conn):
 
 
 def create_tables(conn):
-    """(Re)create the tables, empty — part of an index schema change; a
-    no-op without FTS5."""
-    if not fts5_available():
-        return
-    for table in TABLES:
-        conn.execute(f"DROP TABLE IF EXISTS {table}")
-    _create(conn)
+    """Create the tables a file lacks — part of an index schema change,
+    which never drops them; a no-op without FTS5."""
+    if fts5_available():
+        _create(conn)
 
 
 def ensure_tables(conn):

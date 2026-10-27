@@ -9,7 +9,8 @@ export interface Freshness {
   as_of: string | null;
   refreshing: boolean;
   refresh_running_sec: number | null;
-  phase: "full_listing" | "journal" | "listing" | "loading_new" | "idle";
+  /** `migrating`: an upgrade re-derives the index from its saved records (no store reads). */
+  phase: "full_listing" | "journal" | "listing" | "loading_new" | "migrating" | "idle";
   progress: number | null;
   /** Failing, gone, or running past the server's timeout. */
   refresh_failing: boolean;
@@ -24,7 +25,8 @@ export interface FreshnessBanner { kind: "stale" | "error"; text: string }
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const PHASES: Record<Freshness["phase"], string> = {
   full_listing: "listing runs", listing: "listing runs",
-  journal: "reading the change journal", loading_new: "loading new runs", idle: "",
+  journal: "reading the change journal", loading_new: "loading new runs",
+  migrating: "upgrading the index", idle: "",
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -67,9 +69,14 @@ export function freshnessBanner(f: Freshness | undefined, now = Date.now()): Fre
   }
   const shown = `⚠ Showing data as of ${asOfText(Date.parse(f.as_of!))} (${ageText(age)} old).`;
   if (!f.refreshing) return { kind: "stale", text: shown };
+  const progress = f.progress === null ? "" : `, ${percent(f.progress)}`;
+  if (f.phase === "migrating") {
+    return { kind: "stale", text: `${shown} Upgrading the index from its saved records `
+      + `(no store reads)${progress}. Runs will appear when it finishes.` };
+  }
   const doing = PHASES[f.phase] || "refreshing";
   return { kind: "stale", text: `${shown} Syncing with the store — ${doing}`
-    + `${f.progress === null ? "" : `, ${percent(f.progress)}`}. New runs will appear when it finishes.` };
+    + `${progress}. New runs will appear when it finishes.` };
 }
 
 /** The boards' count-line form: `data 4 d old · syncing ~45%`; "" while fresh. */

@@ -5,17 +5,27 @@ Checked every tick, cheaply: a ``problem()`` of None means healthy, else a
 short reason that starts a background rebuild. SQLite: the live file (the
 one its pointer names, :mod:`vmn_exp.core.sqlite_files`) was deleted,
 replaced (another inode, or another process flipped the pointer), is
-unreadable, or carries an older ``SCHEMA_VERSION`` (a newer one belongs to a
-newer server sharing the file: rebuilding over it would ping-pong).
+unreadable, or holds older records (``RECORDS_VERSION``; a newer version
+belongs to a newer server sharing the file: rebuilding over it would
+ping-pong). Older derived tables (``DERIVED_VERSION``) are ``derived``: no
+rebuild, a re-derive from the file's own records (see
+:mod:`vmn_exp.core.index_store_schema`).
 Postgres: the cache tables were truncated (a scope's generation went
-backwards, or the ``vmn_cache_meta`` row is gone) or hold another schema
-version. An unreachable database is not a problem: the store
+backwards, or the ``vmn_cache_meta`` row is gone) or hold another records
+version (it caches records only: a derived-only upgrade leaves it be). An unreachable database is not a problem: the store
 reconnects on its own.
 """
 import os
 import sqlite3
 
-from vmn_exp.core.index_store_schema import SCHEMA_VERSION, is_newer, schema_of
+from vmn_exp.core.index_store_schema import (
+    DERIVED,
+    RECORDS_VERSION,
+    RecordsOutdated,
+    SchemaTooNew,
+    records_version,
+    upgrade_of,
+)
 from vmn_exp.core.sqlite_conn import connect
 from vmn_exp.core.sqlite_files import live_path
 
@@ -41,10 +51,10 @@ def _has_sqlite_header(path):
         return False
 
 
-def _schema_of(path):
+def _upgrade_of(path):
     conn = connect(path, readonly=True)
     try:
-        return schema_of(conn)
+        return upgrade_of(conn)
     finally:
         conn.close()
 
@@ -72,12 +82,18 @@ class SqliteHealth:
         if not _has_sqlite_header(file):
             return "corrupt"
         try:
-            schema = _schema_of(file)
+            upgrade = _upgrade_of(file)
+        except SchemaTooNew:
+            return None
+        except RecordsOutdated:
+            return "schema"
         except sqlite3.OperationalError as exc:
             return None if "locked" in str(exc) else "corrupt"
         except sqlite3.DatabaseError:
             return "corrupt"
-        return None if schema == SCHEMA_VERSION or is_newer(schema) else "schema"
+        if upgrade is None or upgrade == DERIVED:
+            return upgrade
+        return "schema"  # a new file: no tables
 
 
 class PgHealth:
@@ -95,12 +111,12 @@ class PgHealth:
             self.observe(scope)
 
     def problem(self):
-        version = self._store.cache_version()
-        if version is None:
+        meta = self._store.cache_meta()
+        if meta is None:
             return None  # unreachable: nothing to judge
-        if version == "":
+        if "schema_version" not in meta:
             return "truncated"
-        if version != SCHEMA_VERSION:
+        if records_version(meta["schema_version"], meta.get("records")) != RECORDS_VERSION:
             return "schema"
         for scope, seen in self._seen.items():
             if self._store.generation(scope) < seen:

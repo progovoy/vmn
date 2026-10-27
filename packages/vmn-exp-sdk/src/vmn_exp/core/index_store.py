@@ -14,7 +14,8 @@ WAL past its limit checkpoints it.
 A record's run state lives in its own table: a heartbeat rewrites one small
 row, never the record's folded log. Its lean row and side table values are
 written beside it (:mod:`vmn_exp.core.index_lean_store`): warm starts and
-point reads decode no record (:mod:`vmn_exp.core.index_store_reads`).
+point reads decode no record (:mod:`vmn_exp.core.index_store_reads`); an
+upgrade re-derives them from the records (:mod:`vmn_exp.core.index_derive`).
 Each save bumps the scope generation (see
 :mod:`vmn_exp.core.cache_store`); removals leave tombstones for
 :meth:`SqliteStore.load_since`, trimmed after :data:`TOMBSTONE_TTL_SEC`.
@@ -25,8 +26,9 @@ import sqlite3
 import time
 
 from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
+from vmn_exp.core.index_derive import Rederive
 from vmn_exp.core.index_lazy import STATE_KEYS as _STATE_KEYS
-from vmn_exp.core.index_lean_store import leans_of, renumber_all, write_lean
+from vmn_exp.core.index_lean_store import apply_numbers, leans_of, renumbered, write_lean
 from vmn_exp.core.index_store_conn import StoreConnection
 from vmn_exp.core.index_store_kv import KeyValues, joining
 from vmn_exp.core.index_store_reads import LeanReads
@@ -50,7 +52,7 @@ def _connect(path):
     return conn
 
 
-class SqliteStore(LeanReads, KeyValues):
+class SqliteStore(LeanReads, KeyValues, Rederive):
     """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None."""
 
     def __init__(self, path):
@@ -73,7 +75,7 @@ class SqliteStore(LeanReads, KeyValues):
                 return  # the next save renumbers (its rows are unnumbered)
             try:
                 with write_tx(conn):
-                    renumber_all(conn, app_name)
+                    apply_numbers(conn, renumbered(conn, app_name))
             except sqlite3.Error as exc:
                 self._db.on_error(exc, "Could not number the experiment index {file} ({exc})")
                 return
@@ -224,7 +226,7 @@ class SqliteStore(LeanReads, KeyValues):
         self._forget(app_name, seq, removed)
         leans = leans_of(changed)
         if not write_lean(conn, app_name, seq, changed, removed, states, leans,
-                          renumber=app_name not in self._later):
+                          defer=app_name in self._later):
             self._unnumbered.add(app_name)
         file_similar(conn, app_name, changed, removed, states, leans)
         conn.executemany(

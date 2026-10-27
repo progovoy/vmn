@@ -65,13 +65,13 @@ def leans_of(records):
             for key, record in records.items() if is_run(record)}
 
 
-def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True):
+def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True, defer=False):
     """Bring *app*'s lean tables in line with a save of *changed* records
     (*leans* their runs' :func:`leans_of`), *removed* keys and the run states
     of *states* (see :meth:`~vmn_exp.core.index_store.SqliteStore.save`);
-    whether every row's ``idx`` is its rank now. Without *renumber* a save
-    that would renumber the app leaves its new rows' ``idx`` unset instead
-    (:func:`renumber_all` later)."""
+    whether every row's ``idx`` is its rank now. *renumber* False leaves
+    ``idx`` to a later :func:`renumbered`; with *defer* only a renumbering of
+    the app is left (new rows sorting after every other are numbered on)."""
     runs = {key: changed[key] for key in leans}
     gone = set(removed) | {key for key in changed if key not in runs}
     before = _existing(conn, app, sorted(set(runs) | gone))
@@ -81,7 +81,7 @@ def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True):
         "UPDATE exp_rows SET status = ? WHERE app = ? AND key = ?",
         [(run_status(r), app, key) for key, r in states.items() if key not in runs],
     )
-    numbered = _renumber(conn, app, runs, gone, before, renumber)
+    numbered = renumber and _renumber(conn, app, runs, gone, before, defer)
     moved = [key for key, record in runs.items()
              if before.get(key, (None, None, None))[1:] != (
                  record["meta"].get("parent"), record["meta"]["verstr"])]
@@ -136,10 +136,10 @@ def _upsert(conn, app, seq, runs, leans):
     )
 
 
-def _renumber(conn, app, runs, gone, before, renumber=True):
+def _renumber(conn, app, runs, gone, before, defer=False):
     """Keep ``idx`` the rank by ``(timestamp, key)``: new runs sorting after
     every other row are numbered on; any other move renumbers the app — or,
-    without *renumber*, leaves it to :func:`renumber_all` (False)."""
+    with *defer*, leaves it to a later :func:`renumbered` (False)."""
     new = [key for key in runs if key not in before]
     redescribed = any(
         before[key][0] != sort_timestamp(runs[key]["meta"]) for key in runs if key in before
@@ -151,27 +151,30 @@ def _renumber(conn, app, runs, gone, before, renumber=True):
         conn, app, sorted((sort_timestamp(runs[k]["meta"]), k) for k in new)
     ):
         return True
-    if not renumber:
+    if defer:
         return False
-    renumber_all(conn, app)
+    apply_numbers(conn, renumbered(conn, app))
     return True
 
 
-def renumber_all(conn, app):
-    """Make every row's ``idx`` its rank by ``(timestamp, key)``."""
+def apply_numbers(conn, moves):
+    """Set each ``(idx, app, key)`` of *moves*."""
+    conn.executemany("UPDATE exp_rows SET idx = ? WHERE app = ? AND key = ?", moves)
+
+
+def renumbered(conn, app):
+    """``[(idx, app, key)]`` of the rows whose ``idx`` is not their rank by
+    ``(timestamp, key)``."""
     ranked = conn.execute(
         "SELECT key, idx FROM exp_rows WHERE app = ? ORDER BY timestamp, key", (app,)
     ).fetchall()
-    conn.executemany(
-        "UPDATE exp_rows SET idx = ? WHERE app = ? AND key = ?",
-        [(n, app, key) for n, (key, idx) in enumerate(ranked, 1) if idx != n],
-    )
+    return [(n, app, key) for n, (key, idx) in enumerate(ranked, 1) if idx != n]
 
 
 def _number_on(conn, app, new):
     """Number *new* (``[(timestamp, key)]``, sorted) after the numbered rows
     when they all sort after them; False when one does not, or when other
-    rows are unnumbered (a save that left them to :func:`renumber_all`)."""
+    rows are unnumbered (a save that left them to :func:`renumbered`)."""
     last = conn.execute(
         "SELECT timestamp, key, idx FROM exp_rows WHERE app = ? AND idx IS NOT NULL"
         " ORDER BY timestamp DESC, key DESC LIMIT 1", (app,)

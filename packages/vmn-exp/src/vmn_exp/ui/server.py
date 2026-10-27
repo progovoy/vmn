@@ -335,10 +335,12 @@ def create_app(
         return app_name, source.snapshot(ws, app_name, _exp_storage_for(ws), schema), schema
 
     def _status_snapshot(ws_name, app_tag):
-        """The app's snapshot; 404 ``app_not_found`` when there is no such app."""
+        """The app's snapshot; 404 ``app_not_found`` when there is no such app
+        (an index still loading or re-deriving its records has one)."""
         app_name, snapshot, _ = _app_inputs(ws_name, app_tag)
         ws = _experiment_workspace(ws_name)
-        if not snapshot.rows and not app_exists(ws, app_name, _any_exp_storage(ws)):
+        if not snapshot.rows and snapshot.loading is None and not app_exists(
+                ws, app_name, _any_exp_storage(ws)):
             raise CodedError(404, f"App '{app_name}' not found", APP_NOT_FOUND)
         return snapshot
 
