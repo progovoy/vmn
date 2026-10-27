@@ -128,6 +128,12 @@ class S3Listing:
             return self._list_files_of(app_name, keys)
         return self._all_record_files(self._app_prefix(app_name) + "/")
 
+    def listing_position(self, app_name):
+        """The verstr a full :meth:`list_files` of *app_name* under way has
+        walked up to (keys come in order), else None — how far it is."""
+        at = self.__dict__.get("_walks", {}).get(self._app_prefix(app_name) + "/")
+        return None if at is None else unsafe_verstr(at)
+
     def _all_record_files(self, base):
         """*base*'s record files, keyed by verstr.
 
@@ -139,6 +145,13 @@ class S3Listing:
         one per 1000. A subtree that ends within a page (the common, small
         case) costs nothing extra: it pages exactly as a plain walk would.
         """
+        walks = self.__dict__.setdefault("_walks", {})  # base -> the verstr walked to
+        try:
+            return self._walk_record_files(base, walks)
+        finally:
+            walks.pop(base, None)
+
+    def _walk_record_files(self, base, walks):
         files = {}
         params = {"Prefix": base}
         # Without server-side StartAfter a jump re-reads everything before it.
@@ -148,6 +161,7 @@ class S3Listing:
             skip_to = None
             for obj in page.get("Contents", []):
                 verstr, name, skip_to = _record_relpath(base, obj["Key"])
+                walks[base] = verstr
                 if skip_to:
                     continue
                 if _is_record_file(name):

@@ -775,20 +775,42 @@ unknown app is a 404 `{"detail", "code": "app_not_found"}`, checked against the
 checkout (`.vmn/<app>/conf.yml`) and the store (any run or snapshot record),
 not the cached app list. ETag/304, accurate to the hour for `failed_recent`.
 
-With background refresh (`vmn-exp ui`), the summary also carries the app
-index's refresher health, read without I/O, so a dashboard or a load balancer
-sees an index that stopped keeping up:
+With background refresh (`vmn-exp ui`), the summary also carries how fresh
+the app's index is, read without I/O, so a dashboard or a load balancer sees
+an index that serves old data or stopped keeping up:
 
 ```json
-"refresher": {"alive": true, "failing": false, "failures": 0,
-              "since_refresh_sec": 0.8, "refreshing_sec": null, "last_error": null}
+"freshness": {"as_of": "2026-10-22T19:44:00.120000+00:00", "refreshing": true,
+              "refresh_running_sec": 125, "phase": "full_listing", "progress": 0.45,
+              "refresh_failing": false, "last_error": null, "stale_after_sec": 300}
 ```
 
-`since_refresh_sec` is the age of the last refresh that succeeded (`null`
-before one), `refreshing_sec` how long the refresh in progress has run,
-`failures`/`last_error` the current failure streak. Its ages count by the
-minute in the ETag. The board's count line says `index N min behind` once an
-index is 5 minutes behind (or `index refresh failing`). The refresher heals
+- `as_of`: the wall time the last completed refresh started (`null` before
+  one). It persists in the index file (at most once a minute), so a restarted
+  server serving its persisted rows says they date from its last refresh.
+- `refreshing` / `refresh_running_sec`: a refresh is running, for how long
+  (`null` when none).
+- `phase`: what that refresh does — `full_listing` (every record's files),
+  `journal` (a store's journaled sweep: hinted and live records), `listing`
+  (a checkout's names-only listing), `loading_new` (reading the new or changed
+  records it found), else `idle`. `progress` (0..1, else `null`): how far an
+  S3 full listing's walk is among the index's known keys, or the share of new
+  records read.
+- `refresh_failing`: the refresh is failing (`last_error` is its streak's
+  last error), its thread is gone, or it has run past 10 minutes (stuck).
+- `stale_after_sec`: the age past which the dashboard warns — conf
+  `experiment.ui.stale_after_min` of a checkout's app (default 5).
+
+Its times count by the minute in the ETag, and what a refresh does only while
+the data is stale or the refresh failing (a fresh index's once-a-second
+refreshes leave the ETag alone). The dashboard shows a banner under
+the topbar, and the boards' count line a short form, when the data is older
+than `stale_after_sec` or a refresh runs on data older than that ("Showing
+data as of Oct 22 19:44 UTC (4d old). Syncing with the store — listing runs,
+~45%. New runs will appear when it finishes."), or when the refresh is failing
+("Data is 4d old and the background refresh has not completed for 25m
+(last error: …)"); none once a refresh published fresh data. It polls the
+status every 2 s while a refresh runs on stale data. The refresher heals
 itself: an error in any refresh step is logged (a WARNING with the traceback
 when a failure streak starts, every 10 minutes while it lasts, and when it
 recovers) and never ends its thread; a refresh or journal thread that ended

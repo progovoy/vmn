@@ -161,6 +161,13 @@ class ProcessIO:
     def load(self):
         return decode_records(*self.call("load"))
 
+    def kv_get(self, scope, fingerprint):
+        """The index store's (see :class:`~vmn_exp.core.index_store_kv.KeyValues`)."""
+        return self.call("kv_get", scope, fingerprint)
+
+    def kv_put(self, scope, fingerprint, payload):
+        self.call("kv_put", scope, fingerprint, payload)
+
     def refresh(self, work, removed):
         """Like the in-process refresh, but a record the listing shows
         unchanged is neither sent nor returned (None)."""
@@ -222,6 +229,12 @@ class _Helper:
         sent = {key: pickle.dumps(record) for key, _, record in work if record is not None}
         return _changed_results(self.index._refresh_and_persist(work, removed), sent)
 
+    def kv_get(self, scope, fingerprint):
+        return self.index._store.kv_get(scope, fingerprint)
+
+    def kv_put(self, scope, fingerprint, payload):
+        self.index._store.kv_put(scope, fingerprint, payload)
+
 
 def _answer(out, result):
     if isinstance(result, list):
@@ -257,6 +270,6 @@ def main():
 def _handle(helper, op, args):
     """*helper*'s answer to *op*: bulk work, done with collection paused."""
     with gc_paused():
-        if op in ("load", "refresh"):
+        if op in ("load", "refresh", "kv_get", "kv_put"):
             return getattr(helper, op)(*args)
         return getattr(helper.watch, op)(*args)
