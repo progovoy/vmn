@@ -13,6 +13,7 @@ is the view a schema gives (see :mod:`vmn_exp.core.index_views`).
 import weakref
 from dataclasses import dataclass, field, replace
 
+from vmn_exp.core.index_snapshot_maps import SnapshotMaps
 from vmn_exp.core.index_views import (
     SIDE_TABLES,
     SchemaRows,
@@ -240,9 +241,11 @@ class RowCache:
     A row is re-folded only when its record changed and re-numbered (a
     shallow copy) when it moved, so a heartbeat-only generation reuses every
     row object. The per-verstr maps a snapshot carries are patched for the
-    keys that changed and copied (C-level) into each snapshot, so while the
-    order only grows at its end a generation costs O(changed) — at 100k
-    records re-deriving every row's maps took ~0.4s per generation. Any other
+    keys that changed and shared with the last snapshot
+    (:mod:`~vmn_exp.core.index_snapshot_maps`), as is its rows tuple while
+    no row changed, so while the order only grows at its end a generation
+    costs O(changed) — at 100k records re-deriving every row's maps took
+    ~0.4s per generation, and copying them ~100 MB at 486k. Any other
     reorder rebuilds them from the cached rows.
     """
 
@@ -252,7 +255,8 @@ class RowCache:
         self._order = []  # the keys of the last snapshot, in order
         self._pos = {}  # key -> its position in _order
         self._list = []  # their rows
-        self._maps = _Maps()
+        self._tuple, self._list_moved = (), False  # the last snapshot's rows; _list since?
+        self._maps = SnapshotMaps()
         self._schema_rows = SchemaRows()  # shared by its snapshots' views
 
     def pop(self, key, default=None):
@@ -288,13 +292,11 @@ class RowCache:
         for key in order[len(self._list):]:
             self._put(key, len(self._list), records[key])
         self._order = list(order)
-        m = self._maps
+        if self._list_moved:
+            self._tuple, self._list_moved = tuple(self._list), False
         return IndexSnapshot(
-            app_name=app_name, generation=generation, rows=tuple(self._list),
-            run_states=dict(m.states), edges=dict(m.edges), create_notes=dict(m.notes),
-            run_state_observed_at=dict(m.observed),
-            _by_verstr=dict(m.rows), _schema_rows=self._schema_rows, loading=loading,
-            **{name: dict(values) for name, values in m.sides.items()},
+            app_name=app_name, generation=generation, rows=self._tuple,
+            _schema_rows=self._schema_rows, loading=loading, **self._maps.shared(),
         )
 
     def _patch(self, touched, records):
@@ -310,7 +312,8 @@ class RowCache:
         return True
 
     def _rebuild(self, order, records):
-        self._pos, self._list, self._maps = {}, [], _Maps()
+        self._pos, self._list, self._maps = {}, [], SnapshotMaps()
+        self._list_moved = True
         live = set(order)
         self._observed = {k: v for k, v in self._observed.items() if k in live}
         for pos, key in enumerate(order):
@@ -320,8 +323,10 @@ class RowCache:
         row, note, *sides = self._row(key, pos + 1, record)
         if pos == len(self._list):
             self._list.append(row)
-        else:
+            self._list_moved = True
+        elif self._list[pos] is not row:
             self._list[pos] = row
+            self._list_moved = True
         self._pos[key] = pos
         observed = self._observed_of(key, record["rs_sig"])
         self._maps.put(row, note, sides, record["run_state"], observed)
@@ -345,23 +350,6 @@ def put_side_tables(tables, verstr, values):
     snapshot keeps them (:func:`~vmn_exp.core.index_views.kept_side`)."""
     for name, value in zip(SIDE_TABLES, values):
         _put_sparse(tables[name], verstr, kept_side(name, value))
-
-
-class _Maps:
-    """What a snapshot keys by verstr, kept current between snapshots."""
-
-    def __init__(self):
-        self.rows, self.notes, self.states, self.observed, self.edges = {}, {}, {}, {}, {}
-        self.sides = new_side_tables()
-
-    def put(self, row, note, sides, state, observed):
-        verstr = row["verstr"]
-        self.rows[verstr] = row
-        self.notes[verstr] = note
-        put_side_tables(self.sides, verstr, sides)
-        self.states[verstr] = state
-        self.observed[verstr] = observed
-        self.edges[verstr] = row.get("parent")
 
 
 def _observed_at(rs_sig):
