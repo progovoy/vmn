@@ -10,7 +10,7 @@ import os
 from vmn_exp.core.log import filter_by_status, sort_by_metric
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
-from vmn_exp.core.query_extra import snapshot_extra
+from vmn_exp.core.query_extra import lean_extra
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.tree import annotate_rows
@@ -111,9 +111,9 @@ def apply_filters(rows, status=None, query=None, snapshot=None):
     :class:`~version_stamp.core.experiment_query.QueryError` on a bad *query*;
     the API turns that into a 400. *snapshot*: the index snapshot the lean
     *rows* came from, whose ``outputs``, run tree, intents and similar-runs
-    documents a query may read (:func:`~vmn_exp.core.query_extra.snapshot_extra`).
+    documents a query may read (:func:`~vmn_exp.core.query_extra.lean_extra`).
     """
-    return filter_rows(filter_by_status(rows, status), query, extra=snapshot_extra(snapshot))
+    return filter_rows(filter_by_status(rows, status), query, extra=lean_extra(snapshot))
 
 
 ORDERS = ("asc", "desc")

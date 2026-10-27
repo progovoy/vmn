@@ -190,6 +190,19 @@ def summarize(last_values, extrema, run_defs, schema, firsts=None):
     return with_policies(last_values, summary, run_defs, schema), summary
 
 
+def same_value(a, b):
+    """Whether *a* and *b* are the same metric value — equal, of one type,
+    one sign of zero, or both NaN — not merely the same object (a packed
+    summary hands out new ones)."""
+    if a is b:
+        return True
+    if type(a) is not type(b):
+        return False
+    if a == b:
+        return type(a) is not float or math.copysign(1, a) == math.copysign(1, b)
+    return a != a and b != b
+
+
 def with_policies(metrics, summary, run_defs, schema):
     """*metrics* with each metric of *summary* at its policy's value — the
     run's definitions first, then *schema*. Only a metric logged more than
@@ -204,6 +217,6 @@ def with_policies(metrics, summary, run_defs, schema):
         )
         best = seen[policy] if policy in _BEST else None
         value = seen["last"] if best is None else best
-        if value is not metrics.get(name):
+        if not same_value(value, metrics.get(name)):
             picked[name] = value
     return {**metrics, **picked} if picked else metrics

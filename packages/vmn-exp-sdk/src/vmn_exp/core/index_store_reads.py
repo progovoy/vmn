@@ -7,6 +7,7 @@ import threading
 import json
 
 from vmn_exp.core import index_point_sql
+from vmn_exp.core.index_intern import compact_state
 from vmn_exp.core.index_lazy import STATE_KEYS, LazyRecord, LazyRecords
 from vmn_exp.core.index_lean_store import read_lean
 from vmn_exp.core.sqlite_conn import in_chunks, read_tx
@@ -183,4 +184,5 @@ def _state_from(data):
     state = dict.fromkeys(STATE_KEYS)
     if data is not None:
         state.update(json.loads(data))
+        state["run_state"] = compact_state(state["run_state"])
     return state

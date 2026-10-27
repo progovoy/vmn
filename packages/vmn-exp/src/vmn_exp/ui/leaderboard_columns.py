@@ -3,8 +3,10 @@
 
 A chart of every filtered run needs a few values per run, not whole rows, so
 ``.../experiments-columns`` answers ``{verstrs, idx, columns, total}`` with
-each column aligned to ``verstrs``.
+each column aligned to ``verstrs``. A ``metrics.sys_*`` column reads the
+``sys_*`` metrics the snapshot keeps off its rows (*system_of*).
 """
+from vmn_exp.core.system_metrics import is_system_metric
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_group_fields import check_group, key_of
 
@@ -21,9 +23,10 @@ def clamp_columns_limit(limit):
     return max(0, min(int(limit), MAX_COLUMNS_LIMIT))
 
 
-def _metric(name):
+def _metric(name, system_of):
     def get(row):
-        value = row["metrics"].get(name)
+        metrics = system_of(row["verstr"]) if is_system_metric(name) else row["metrics"]
+        value = metrics.get(name)
         return value if is_finite_number(value) else None
 
     return get
@@ -37,13 +40,14 @@ def _name(row):
     return row.get("name") or row.get("note")
 
 
-def column_getter(key):
-    """The value reader of *key*; ValueError for a key no row can answer."""
+def column_getter(key, system_of=None):
+    """The value reader of *key*; ValueError for a key no row can answer.
+    *system_of(verstr)*: a run's ``sys_*`` metrics (none by default)."""
     if key.startswith(GROUP_PREFIX):
         return key_of(check_group(key[len(GROUP_PREFIX):]))
     group, _, name = key.partition(".")
     if group == "metrics" and name:
-        return _metric(name)
+        return _metric(name, system_of or (lambda verstr: {}))
     if group == "params" and name:
         return _param(name)
     if key == "name":
@@ -56,8 +60,8 @@ def column_getter(key):
     )
 
 
-def columns_payload(rows, keys, total):
-    getters = {key: column_getter(key) for key in keys}
+def columns_payload(rows, keys, total, system_of=None):
+    getters = {key: column_getter(key, system_of) for key in keys}
     return {
         "verstrs": [row["verstr"] for row in rows],
         "idx": [row["idx"] for row in rows],
