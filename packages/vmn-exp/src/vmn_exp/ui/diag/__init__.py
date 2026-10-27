@@ -7,7 +7,7 @@ Other modules add sections with :func:`register_section`.
 """
 from vmn_exp.core.activity import background_section
 from vmn_exp.core.traced_lock import locks_section
-from vmn_exp.ui.diag import s3_attribution
+from vmn_exp.ui.diag import gc_pauses, s3_attribution
 from vmn_exp.ui.diag.dump_files import install_signal_handler, start_periodic_dumps, write_dump
 from vmn_exp.ui.diag.indexes import indexes_section
 from vmn_exp.ui.diag.latency import install_loop_probe, latency_section, start_thread_probe
@@ -42,6 +42,8 @@ def install_default_sections(refresher=None, tracker=None):
     s3_attribution.install()
     register_section("logs", logs_section)
     register_section("latency", latency_section)
+    register_section("gc", gc_pauses.gc_section)
+    gc_pauses.install()
 
 
 def install_app(app, prefix, refresher):

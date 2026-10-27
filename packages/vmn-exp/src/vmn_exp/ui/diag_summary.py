@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """A short human summary of a ``vmn-exp ui`` diagnostic dump: top thread
 stacks, the slowest in-flight requests, pool saturation, index loading,
-S3 latency, and the newer sections' parts (:mod:`diag_summary_more`).
+S3 latency, and the newer sections' parts (:mod:`diag_summary_more`,
+:mod:`diag_summary_gc`).
 Every section is optional and may be shaped differently or hold
 an ``error``; a part that cannot be read is skipped, never fatal."""
 from collections import Counter
 
-from vmn_exp.ui import diag_summary_more
+from vmn_exp.ui import diag_summary_gc, diag_summary_more
 
 TOP_STACKS = 5
 STACK_FRAMES = 4
@@ -23,7 +24,8 @@ def summarize(dump):
     for name, value in sections.items():
         if isinstance(value, dict) and value.get("error"):
             lines.append(f"section {name} failed: {value['error']}")
-    for part in (_stacks, _requests, _pools, _index, _s3, *diag_summary_more.PARTS):
+    for part in (_stacks, _requests, _pools, _index, _s3, *diag_summary_more.PARTS,
+                 diag_summary_gc.gc_part):
         try:
             lines += part(sections)
         except Exception:  # an odd shape skips its part, never the summary
