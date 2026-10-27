@@ -82,7 +82,8 @@ def test_apps_status_has_every_app(tmp_path):
     assert body["app_a"] == _get(client, "apps/app_a/experiments-status")
     assert body["root_app-svc"]["total"] == 1
     assert body["app_a"] == {
-        "total": 2, "counts": dict(ZERO, created=2), "failed_recent": 0, "rollup": None,
+        "total": 2, "counts": dict(ZERO, created=2), "never_started": 0, "lost": 0,
+        "failed_recent": 0, "rollup": None,
     }
 
 
@@ -102,7 +103,8 @@ def test_apps_status_of_an_unknown_workspace_is_404(tmp_path):
 def test_git_app_with_conf_and_no_runs_is_zero_counts(tmp_path):
     client = _git_client(tmp_path, ["my_app"], {})
     body = _get(client, "apps/my_app/experiments-status")
-    assert body == {"total": 0, "counts": ZERO, "failed_recent": 0, "rollup": None}
+    assert body == {"total": 0, "counts": ZERO, "never_started": 0, "lost": 0,
+                    "failed_recent": 0, "rollup": None}
     assert _get(client, "apps-status") == {"my_app": body}
 
 

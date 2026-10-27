@@ -88,7 +88,7 @@ def test_counts_over_non_archived_rows(tmp_path, clock):
     assert body == {
         "total": 6,
         "counts": {"created": 1, "running": 1, "stuck": 0, "succeeded": 2, "failed": 2},
-        "failed_recent": 1, "rollup": "failed",
+        "never_started": 0, "lost": 0, "failed_recent": 1, "rollup": "failed",
     }
 
 
@@ -169,4 +169,4 @@ def test_summary_always_has_every_status():
     now = datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)
     body = status_summary([], now)
     assert body == {"total": 0, "counts": dict.fromkeys(STATUSES, 0),
-                    "failed_recent": 0, "rollup": None}
+                    "never_started": 0, "lost": 0, "failed_recent": 0, "rollup": None}

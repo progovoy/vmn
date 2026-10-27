@@ -10,9 +10,10 @@ import { ImportedBadge } from "./RunProvenance";
 import type { RunSummary } from "./runSummary";
 import "./runHead.css";
 
-/** "16/16 inner": an outer run's finished children of the ones expected. */
-function innerCount(fleet: Fleet): string {
-  const done = (fleet.counts.succeeded ?? 0) + (fleet.counts.failed ?? 0);
+/** "16/16 inner": an outer run's finished children of the ones expected
+ *  (lost ones, stuck when it ended, finished failed). */
+export function innerCount(fleet: Fleet): string {
+  const done = (fleet.counts.succeeded ?? 0) + (fleet.counts.failed ?? 0) + (fleet.lost ?? 0);
   return `${done}/${fleet.expected} inner`;
 }
 

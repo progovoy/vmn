@@ -20,6 +20,7 @@ EDITS = 10  # metric edits, new children, finishes, starts, archive toggles
 CHANGED = LIVE + EDITS  # every live run heartbeats each generation
 BOUND = 10 * (CHANGED + SWEEPS)
 GENERATIONS = 3
+ORDERS_SERVED = 7  # the distinct orderings _serve asks for (six pages, one columns)
 
 
 class _Row(dict):
@@ -159,6 +160,7 @@ def test_live_rows_advancing_in_time_still_cost_only_the_live_rows(monkeypatch, 
     counts = {}
     _count_everywhere(monkeypatch, "status_fields", counts)
     _count_everywhere(monkeypatch, "apply_filters", counts, lambda args: len(args[0]))
+    rebuilds, ended = [], False
     for step in range(1, GENERATIONS + 1):
         now = T0 + datetime.timedelta(seconds=30 * step)
         monkeypatch.setattr(status_mod, "_now", lambda now=None, _at=now: now or _at)
@@ -166,7 +168,16 @@ def test_live_rows_advancing_in_time_still_cost_only_the_live_rows(monkeypatch, 
         counts.clear()
         _serve(cache, snap)
         assert counts.get("status_fields", 0) <= BOUND
-        assert counts.get("apply_filters", 0) <= 2 * BOUND
+        # The sweep roots never heartbeat again: once they go stuck they settle
+        # their never-started children (core/settle.py), a subtree past the
+        # delta limit, so each order is rebuilt once — at that generation only.
+        newly_ended = not ended and any(snap.status_of(r) != "running" for r in roots)
+        ended = ended or newly_ended
+        if counts.get("apply_filters", 0) > 2 * BOUND:
+            rebuilds.append(step)
+            assert newly_ended, step
+            assert counts["apply_filters"] <= 2 * BOUND + ORDERS_SERVED * N
+    assert len(rebuilds) <= 1
 
 
 def test_an_order_not_asked_for_a_few_generations_is_moved_on_not_rebuilt(monkeypatch, fleet):

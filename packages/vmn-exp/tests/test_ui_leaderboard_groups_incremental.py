@@ -5,6 +5,7 @@ import datetime
 import random
 
 import pytest
+from job_rollup_reference import annotated, closes_children
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
@@ -85,19 +86,47 @@ def test_moved_groupings_equal_a_fresh_cache(monkeypatch, seed, clock):
     fleet.seed(rng.randrange(150, 300), now)
     builds = _Builds(monkeypatch)
     cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    closing, steady, full = None, 0, None
+
+    def check():
+        # An outer run that ends (its stale heartbeat makes it stuck) settles
+        # its never-started children (core/settle.py); in a fleet this small
+        # that subtree is past the delta limit, so that one answer may rebuild
+        # every grouping once (as many builds as the first answer took).
+        # Every other answer must move its groupings on.
+        nonlocal closing, steady, full
+        snap = fleet.snapshot()
+        before = builds.calls
+        _assert_same(cache, snap, builds)
+        now_closing, built = _closing_outers(snap), builds.calls - before
+        if full is None:
+            full = built
+        if closing is not None and now_closing - closing:
+            assert built <= full
+        else:
+            steady += built
+        closing = now_closing
+
     for _ in range(8):
         if clock == "moving":
             now += datetime.timedelta(seconds=rng.choice([1, 7, 25, 61]))
             _at(monkeypatch, now)
         fleet.mutate(now, rng.randrange(1, 5))
-        _assert_same(cache, fleet.snapshot(), builds)
+        check()
         if clock == "moving":
             now += datetime.timedelta(seconds=rng.choice([3, 45]))
             _at(monkeypatch, now)
-            _assert_same(cache, fleet.snapshot(), builds)
+            check()
     # About once per case; every later generation and bucket moved it on
     # (16 answers per case: rebuilding each would count 160).
-    assert builds.calls <= 2 * len(CASES)
+    assert steady <= 2 * len(CASES)
+
+
+def _closing_outers(snap):
+    """The outer runs that close their children now (brute force)."""
+    rows = annotated(snap)
+    by_verstr = {row["verstr"]: row for row in rows}
+    return {r["verstr"] for r in rows if r["children"] and closes_children(r, by_verstr)}
 
 
 def test_live_runs_under_one_sweep_move_between_status_groups(monkeypatch):

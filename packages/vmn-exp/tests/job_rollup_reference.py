@@ -99,14 +99,46 @@ def _expected(job, total):
     return total
 
 
+ENDED = ("succeeded", "failed", "stuck")
+
+
+def closes_children(row, by_verstr):
+    """Brute force: the nearest started run at or above *row* has ended (a
+    never-started run passes its parent's verdict on; a loop stays open)."""
+    seen = set()
+    while row is not None and row["verstr"] not in seen:
+        seen.add(row["verstr"])
+        if row["status"] != "created":
+            return row["status"] in ENDED
+        parent = row.get("parent")
+        row = by_verstr.get(parent) if parent != row["verstr"] else None
+    return False
+
+
+def settled_of(row, by_verstr):
+    """``never_started``/``lost`` for a created/stuck run under a parent that
+    closes its children, else None."""
+    parent = by_verstr.get(row.get("parent")) if row.get("parent") != row["verstr"] else None
+    if row["status"] not in ("created", "stuck") or parent is None:
+        return None
+    if not closes_children(parent, by_verstr):
+        return None
+    return "never_started" if row["status"] == "created" else "lost"
+
+
 def rollup(rows, verstr, schema):
     by_verstr = {row["verstr"]: row for row in rows}
     members = [by_verstr[v] for v in subtree(verstr, children_by_parent(rows))
                if v in by_verstr and not by_verstr[v].get("archived")]
     counts = {state: 0 for state in STATES.values()}
+    settled = {"never_started": 0, "lost": 0}
     for row in members:
-        counts[STATES[row["status"]]] += 1
-    done = counts["succeeded"] + counts["failed"]
+        kind = settled_of(row, by_verstr)
+        if kind:
+            settled[kind] += 1
+        else:
+            counts[STATES[row["status"]]] += 1
+    done = counts["succeeded"] + counts["failed"] + settled["lost"]
     now_minute = int(status_mod._now().timestamp() // 60)
     recent = sum(1 for row in members if row["status"] in ("succeeded", "failed")
                  and row.get("finished_at")
@@ -127,7 +159,8 @@ def rollup(rows, verstr, schema):
     metrics, main, ranked = tracked_metrics(schema, rows)
     return {
         "metric": main, "ranked": ranked,
-        "total": len(members), "counts": counts, "done": done,
+        "total": len(members), "counts": counts, "done": done, **settled,
+        "ended": closes_children(by_verstr[verstr], by_verstr),
         "expected": _expected(by_verstr[verstr], len(members)),
         "throughput_per_min": recent / 10,
         "started_at": min(started, default=None), "finished_at": max(finished, default=None),

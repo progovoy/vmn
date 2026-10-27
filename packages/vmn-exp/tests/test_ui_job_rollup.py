@@ -38,8 +38,8 @@ def _check_metric(got, want):
 
 
 def _check(got, want):
-    for key in ("metric", "ranked", "total", "counts", "done", "expected",
-                "throughput_per_min", "started_at", "finished_at"):
+    for key in ("metric", "ranked", "total", "counts", "done", "never_started", "lost",
+                "ended", "expected", "throughput_per_min", "started_at", "finished_at"):
         assert got[key] == want[key], key
     assert got["failures"] == [{"sig": s, "label": got["failures"][i]["label"], "count": n}
                                for i, (s, n) in enumerate(want["failures"])]

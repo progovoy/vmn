@@ -154,7 +154,10 @@ def test_the_detail_fleet_reads_counts_and_expected_from_the_rollup():
     assert status["fleet"] == {"expected": rollup["expected"], "counts": {
         "running": counts["running"], "succeeded": counts["succeeded"],
         "failed": counts["failed"], "stuck": counts["stuck"], "created": counts["waiting"],
-        "waiting": max(0, rollup["expected"] - rollup["total"])}}
+        "waiting": max(0, rollup["expected"] - rollup["total"])},
+        # The job still runs: nothing is settled (see test_settled_rollup.py).
+        "never_started": rollup["never_started"], "lost": rollup["lost"]}
+    assert rollup["ended"] is False
     assert status["kind"] == "outer" and len(status["children"]) == 30
     assert status["tree_status"] == views.summary(snap, SCHEMA, jobs[0])["tree_status"]
     assert views.detail_status(snap, SCHEMA, fleet.specs[1]["verstr"]) is None
