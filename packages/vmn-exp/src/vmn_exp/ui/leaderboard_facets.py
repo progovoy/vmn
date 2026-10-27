@@ -8,8 +8,8 @@ snapshot's answer is kept as per-key row counts, so the next generation's
 is the last one's counts minus the rows that left plus the rows that joined
 (found by identity, :func:`~vmn_exp.ui.leaderboard_delta.changed_slots`).
 """
-import threading
 
+from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.facet_values import DISTINCT_CAP, ParamValues
 from vmn_exp.ui.leaderboard_delta import changed_slots, delta_limit, left_rows
 from vmn_exp.ui.memo import LRU
@@ -93,7 +93,7 @@ class Facets:
         self._payloads = LRU(size)
         self._counted_memo = LRU(size)
         self._counts = {}  # {(app, archived): (snapshot, FacetCounts)}, the latest
-        self._lock = threading.Lock()
+        self._lock = TracedLock("leaderboard facets")
 
     def get(self, snapshot, archived=False):
         archived = bool(archived)

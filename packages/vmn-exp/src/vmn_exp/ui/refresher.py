@@ -16,10 +16,14 @@ watched indexes, which then list only hinted and live records; their full
 (reconcile) listing runs every ``full_sweep_sec`` (``reconcile_sec``).
 
 Each refreshed snapshot is handed to ``on_refresh`` (the server warms its
-search index with it, plan 23 S8b). Each listener of :meth:`add_listener` is
-called with ``(index, snapshot)`` after every refresh, inline ones too (the
-server files similar-runs documents and writes its Postgres search rows with
-them); a :class:`NotingRefresher` tells a listener which app an index serves.
+board and search index with it, plan 23 S8b) on the ``vmn-ui-warm`` worker,
+never the refresh thread: a slow warm must not hold back the next snapshot,
+and a busy warmer skips to each index's newest snapshot
+(:class:`~vmn_exp.ui.latest_worker.LatestWorker`). Each listener of
+:meth:`add_listener` is called with ``(index, snapshot)`` after every
+refresh, inline ones too (the server files similar-runs documents and writes
+its Postgres search rows with them); a :class:`NotingRefresher` tells a
+listener which app an index serves.
 
 The refresher heals itself: an error in any step of a background refresh
 (the refresh, the snapshot, each listener, the warming) is logged as a
@@ -42,6 +46,7 @@ from vmn_exp.core.activity import activity
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.failure_streak import FailureStreak
 from vmn_exp.ui.gil_hint import GilHint
+from vmn_exp.ui.latest_worker import LatestWorker
 from vmn_exp.ui.refresh_watch import Watch
 
 REFRESH_INTERVAL_SEC = 1.0
@@ -123,6 +128,7 @@ class Refresher(_Listeners):
         self._step_streaks = {}  # (index, post-refresh step) -> FailureStreak
         self._lock = TracedLock("refresher")
         self._stopped = threading.Event()
+        self._warmer = LatestWorker(self._warm, name="vmn-ui-warm")
         self.gil_hint = GilHint()
 
     def snapshot(self, index, journal=None):
@@ -175,6 +181,7 @@ class Refresher(_Listeners):
             indexes = list(self._watches)
         for thread in threads:
             thread.join()
+        self._warmer.stop()
         for index in indexes:
             close = getattr(index, "close", None)
             if close:
@@ -286,7 +293,11 @@ class Refresher(_Listeners):
         for listener in list(self._listeners):
             self._step(index, f"The refresh listener {_name(listener)}", listener, index, snapshot)
         if self.on_refresh is not None:
-            self._step(index, "Warming", self.on_refresh, snapshot)
+            self._warmer.submit(index, (index, snapshot))
+
+    def _warm(self, item):
+        index, snapshot = item
+        self._step(index, "Warming", self.on_refresh, snapshot)
 
     def _step(self, index, what, fn, *args):
         key = (index, fn)

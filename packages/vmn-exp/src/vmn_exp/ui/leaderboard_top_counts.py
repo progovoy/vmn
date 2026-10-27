@@ -3,8 +3,8 @@
 for the facets' ``jobs``/``singles``: per base, the static rows' counts
 moved on from the app's last ones by the cache's deltas (the rows a time
 bucket changes keep their tree fields, so they are counted from the base)."""
-import threading
 
+from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.leaderboard_scope import JOBS, is_top
 from vmn_exp.ui.memo import LRU
@@ -31,7 +31,7 @@ class TopCounts:
         self._cache = cache
         self._answers = cache.generations.track(LRU(size))
         self._latest = {}  # {(app, archived): (base token, static counts)}
-        self._lock = threading.Lock()
+        self._lock = TracedLock("leaderboard top counts")
 
     def get(self, snapshot, archived):
         base = self._cache._base(snapshot)[0]

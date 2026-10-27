@@ -49,7 +49,7 @@ from vmn_exp.ui.job_rollup_cache import JobRollupCache
 from vmn_exp.ui.leaderboard_answers import IMPORTANCE_RESULTS, SetAnswers
 from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from vmn_exp.ui.leaderboard_cursor import Pager, fingerprint, keyed
-from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, static_moves
+from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, same_index, static_moves
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
 from vmn_exp.ui.leaderboard_jobs import JobsView
@@ -81,6 +81,9 @@ LATEST_ORDERS = 64
 # Index generations each app keeps in the per-generation caches: the newest
 # serves, the one before it covers a refresh's old/new snapshot handoff.
 GENERATIONS_KEPT = 3
+# Seconds a request waits on another thread's build of a generation's base
+# before it answers from the app's previous generation instead.
+BASE_WAIT_SEC = 2.0
 # Tokens are per process, so an ETag from before a restart never matches.
 _NONCE = os.urandom(8).hex()
 
@@ -267,9 +270,11 @@ def _schema_key(schema):
 
 
 class LeaderboardCache(SetAnswers):
-    def __init__(self, max_page=MAX_PAGE, bucket_sec=BUCKET_SEC, size=32):
+    def __init__(self, max_page=MAX_PAGE, bucket_sec=BUCKET_SEC, size=32,
+                 base_wait_sec=BASE_WAIT_SEC):
         self.max_page = max_page
         self.bucket_sec = bucket_sec
+        self.base_wait_sec = base_wait_sec
         self._tokens = itertools.count(1)
         # A snapshot's token identifies it across every app/workspace sharing
         # this cache, so it must never repeat (hence the counter above, not
@@ -278,11 +283,11 @@ class LeaderboardCache(SetAnswers):
         # snapshot recomputed after its _Base was evicted still gets back the
         # token it had before, so its etag stays stable; entries here are a
         # few bytes each, so a larger bound than _bases costs nothing.
-        self._base_tokens = LRU(size)
+        self._base_tokens = LRU(size, name="leaderboard base tokens")
         # Each generation's _Base is a full copy of annotated rows (heavy at
         # 100k+ runs); keep just enough to survive a refresh's old/new
         # snapshot handoff, and to derive the next generation from.
-        self._bases = LRU(2)
+        self._bases = LRU(2, name="leaderboard bases")
         # Caches keyed by a base token first keep each app's newest generations.
         self.generations = Generations(GENERATIONS_KEPT)
         track = self.generations.track
@@ -308,12 +313,30 @@ class LeaderboardCache(SetAnswers):
         return int(experiment_status._now().timestamp() // self.bucket_sec)
 
     def _base(self, snapshot):
-        """``(base, bucket)``; the bucket is None while nothing is live."""
+        """``(base, bucket)``; the bucket is None while nothing is live.
+
+        Waiting on another thread's build of *snapshot*'s base for over
+        ``base_wait_sec``, the previous generation of its index answers
+        instead (when one is kept)."""
         bucket = self._bucket()
         token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens))
-        base = self._bases.per_snapshot(snapshot, lambda: self._new_base(snapshot, token, bucket))
+        base = self._bases.per_snapshot(
+            snapshot, lambda: self._new_base(snapshot, token, bucket),
+            stale=lambda: self._previous_base(snapshot),
+            wait_sec=self.base_wait_sec,
+        )
         base = current(base, bucket, self._follow)
         return base, (bucket if base.patch.live else None)
+
+    def _latest_base(self, app_name, accept=lambda base: True):
+        kept = [base for _, base in self._bases.values()
+                if base.snapshot.app_name == app_name and accept(base)]
+        return max(kept, key=lambda base: base.token, default=None)
+
+    def _previous_base(self, snapshot):
+        """The newest kept base of *snapshot*'s own index, else None."""
+        return self._latest_base(snapshot.app_name,
+                                 lambda base: same_index(base.snapshot, snapshot))
 
     def _follow(self, prev):
         """*prev*'s successor for its own snapshot (a live outer run went
@@ -330,9 +353,7 @@ class LeaderboardCache(SetAnswers):
     def _new_base(self, snapshot, token, bucket):
         """Derived from the app's latest kept base, else built. Any base is a
         valid start (even another workspace's): the delta is found by identity."""
-        kept = [base for _, base in self._bases.values()
-                if base.snapshot.app_name == snapshot.app_name]
-        prev = max(kept, key=lambda base: base.token, default=None)
+        prev = self._latest_base(snapshot.app_name)
         prev = prev and latest(prev, bucket)
         base = prev and _Base.derived(prev, snapshot, token, bucket)
         if base:

@@ -14,37 +14,32 @@ index's generations do; another workspace's same-named app never does).
 Failures are logged, never raised.
 """
 import logging
-import threading
 
 from vmn_exp.core.activity import activity
 from vmn_exp.core.metric_schema import effective_schema
+from vmn_exp.core.traced_lock import TracedLock
+from vmn_exp.ui.leaderboard_delta import same_index
 
 # webui's firstPage: IDX_SORT, PAGE_SIZE (src/paging.ts).
 DEFAULT_SORT = "idx"
 DEFAULT_LIMIT = 200
 # Outer runs, Single runs, Runs (an app without outer runs), All runs.
 TOP_VIEWS = ("jobs", "singles", True, False)
-# Leading rows compared to tell one index's generations apart from another's.
-_LINEAGE_ROWS = 8
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _same_index(a, b):
-    return any(x is y for x, y in zip(a.rows[:_LINEAGE_ROWS], b.rows[:_LINEAGE_ROWS]))
 
 
 class BoardWarmer:
     def __init__(self, cache):
         self._cache = cache
         self._newest = {}  # app name -> the newest snapshot warmed
-        self._lock = threading.Lock()
+        self._lock = TracedLock("board warmer")
 
     def superseded(self, snapshot):
         """Whether a newer generation of *snapshot*'s index was warmed."""
         newest = self._newest.get(snapshot.app_name)
         return (newest is not None and newest is not snapshot
-                and newest.generation > snapshot.generation and _same_index(newest, snapshot))
+                and newest.generation > snapshot.generation and same_index(newest, snapshot))
 
     def _note(self, snapshot):
         with self._lock:

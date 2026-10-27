@@ -5,6 +5,8 @@ import time
 import weakref
 from collections import OrderedDict
 
+from vmn_exp.core.traced_lock import TracedLock
+
 
 class _InFlight:
     """One key's in-progress ``compute()``; late callers wait on it instead of
@@ -14,6 +16,15 @@ class _InFlight:
         self._done = threading.Event()
         self._value = None
         self._exc = None
+        self.overdue = False  # a bounded wait on it ran out
+
+    def done(self, timeout):
+        """Whether it finished within *timeout* seconds (once a bounded wait
+        ran out, at once: one request per build pays the bound, not each)."""
+        if self.overdue:
+            return self._done.is_set()
+        self.overdue = not self._done.wait(timeout)
+        return not self.overdue
 
     def finish(self, value, exc):
         self._value, self._exc = value, exc
@@ -34,6 +45,16 @@ def _claim(in_flight_map, key):
         return in_flight, False
     in_flight = in_flight_map[key] = _InFlight()
     return in_flight, True
+
+
+def _await(in_flight, wait_sec, stale):
+    """*in_flight*'s value; past *wait_sec* ``stale()`` instead, unless it
+    is None (nothing to answer from: wait on)."""
+    if stale is not None and not in_flight.done(wait_sec):
+        value = stale()
+        if value is not None:
+            return value
+    return in_flight.wait()
 
 
 def _single_flight(lock, in_flight_map, key, in_flight, compute, keep):
@@ -61,10 +82,10 @@ class LRU:
     Misses on different keys never block each other.
     """
 
-    def __init__(self, size):
+    def __init__(self, size, name="memo"):
         self._size = size
         self._entries = OrderedDict()
-        self._lock = threading.Lock()
+        self._lock = TracedLock(name)
         self._in_flight = {}  # key -> _InFlight, only while a compute runs
 
     def clear(self):
@@ -95,12 +116,15 @@ class LRU:
         with self._lock:
             return list(self._entries.values())
 
-    def get(self, key, compute, valid=lambda value: True, store=lambda value: True):
+    def get(self, key, compute, valid=lambda value: True, store=lambda value: True,
+            stale=None, wait_sec=None):
         """*key*'s value; *compute* runs on a miss or when *valid* rejects the
         hit, and its value is kept only when *store* accepts it.
 
         Concurrent misses on the same key single-flight onto one ``compute``
-        call; other keys' misses are unaffected."""
+        call; other keys' misses are unaffected. A caller waiting on another's
+        ``compute`` for over *wait_sec* gets ``stale()`` instead, when that is
+        not None."""
         with self._lock:
             hit = self._entries.get(key)
             if hit is not None and valid(hit):
@@ -108,19 +132,27 @@ class LRU:
                 return hit
             in_flight, owner = _claim(self._in_flight, key)
         if not owner:
-            return in_flight.wait()
+            return _await(in_flight, wait_sec, stale)
         return _single_flight(self._lock, self._in_flight, key, in_flight, compute,
                               lambda value: store(value) and self.put(key, value))
 
-    def per_snapshot(self, snapshot, compute, key=()):
+    def per_snapshot(self, snapshot, compute, key=(), stale=None, wait_sec=None):
         """``compute()`` once per *snapshot* object (keyed by identity) and
         *key*. The entry holds an index snapshot weakly, so it never keeps an
-        old generation alive; a dead or reused id fails the identity check."""
+        old generation alive; a dead or reused id fails the identity check.
+        *stale*, *wait_sec*: as :meth:`get`'s."""
         return self.get(
             (id(snapshot),) + tuple(key),
             lambda: (_ref(snapshot), compute()),
             valid=lambda hit: hit[0]() is snapshot,
+            stale=stale and (lambda: _stale_entry(stale)),
+            wait_sec=wait_sec,
         )[1]
+
+
+def _stale_entry(stale):
+    value = stale()
+    return None if value is None else (None, value)
 
 
 def _ref(obj):
@@ -140,7 +172,7 @@ class Generations:
         self._keep = keep
         self._newest = {}  # app -> its newest tokens, oldest first
         self._caches = []
-        self._lock = threading.Lock()
+        self._lock = TracedLock("memo generations")
 
     def track(self, lru):
         self._caches.append(lru)
@@ -172,7 +204,7 @@ class TTLCache:
     def __init__(self, ttl_sec):
         self.ttl_sec = ttl_sec
         self._entries = {}  # key -> (computed at, value)
-        self._lock = threading.Lock()
+        self._lock = TracedLock("memo ttl")
         self._in_flight = {}  # key -> _InFlight, only while a compute runs
 
     def get(self, key, compute):
