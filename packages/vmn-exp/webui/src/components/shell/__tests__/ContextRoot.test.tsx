@@ -24,6 +24,8 @@ describe("ContextRoot", () => {
     gitContext.mockResolvedValue(GIT);
     const c = renderGit();
     expect(screen.getByRole("link", { name: "ml-repo" })).toHaveAttribute("href", "/ws/ml-repo");
+    // A long name is cut with an ellipsis (Topbar.css); the full one shows on hover.
+    expect(screen.getByRole("link", { name: "ml-repo" })).toHaveAttribute("title", "ml-repo");
     await screen.findByText("main @ e71c74d");
     expect(flat(c)).toBe("ml-repo main @ e71c74d");
     expect(screen.queryByText(/\.vmn\/store/)).toBeNull();

@@ -14,7 +14,10 @@
 
 /* ContextRoot: the workspace, then `main @ e71c74d  [dirty]` and the Data source button. */
 .ctx-root { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
-.ctx-ws { color: var(--text); font-weight: 500; }
+.ctx-ws {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text); font-weight: 500;
+}
 .ctx-git, .ctx-kind { font-size: 12px; color: var(--text-2); }
 .ctx-dirty {
   align-self: center; padding: 0 6px; font-size: 11px; line-height: 17px;

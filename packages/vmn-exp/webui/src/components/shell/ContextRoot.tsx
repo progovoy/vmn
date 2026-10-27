@@ -47,7 +47,7 @@ export default function ContextRoot({ ctx }: { ctx: ShellContext }) {
   const shownGit = git && !git.error ? git : undefined;
   return (
     <span className="ctx-root">
-      <Link to={`/ws/${ws}`} className="ctx-ws">{ws}</Link>
+      <Link to={`/ws/${ws}`} className="ctx-ws" title={ws}>{ws}</Link>
       {isStore ? (
         <>{" "}<span className="ctx-kind">store</span></>
       ) : (
