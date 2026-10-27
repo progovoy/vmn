@@ -5,6 +5,10 @@ describe("indexingText", () => {
   it("says how far a loading index is", () => {
     expect(indexingText({ loaded: 12000, total: 45386 })).toBe("indexing 12,000 / 45,386 runs");
   });
+  it("copes with a total not known yet (the store still naming its runs)", () => {
+    expect(indexingText({ loaded: 0, total: null })).toBe("indexing…");
+    expect(indexingText({ loaded: 1500, total: null })).toBe("indexing 1,500 runs…");
+  });
   it("says nothing once loaded", () => {
     expect(indexingText(undefined)).toBe("");
   });

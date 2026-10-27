@@ -28,7 +28,7 @@ import time
 from vmn_exp.core.cache_store import FULL_LOAD, CacheStore  # noqa: F401
 from vmn_exp.core.index_derive import Rederive
 from vmn_exp.core.index_lazy import STATE_KEYS as _STATE_KEYS
-from vmn_exp.core.index_lean_store import leans_of, write_lean
+from vmn_exp.core.index_lean_store import apply_numbers, leans_of, renumbered, write_lean
 from vmn_exp.core.index_store_conn import StoreConnection
 from vmn_exp.core.index_store_kv import KeyValues, joining
 from vmn_exp.core.index_store_reads import LeanReads
@@ -58,6 +58,28 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
     def __init__(self, path):
         self._db = StoreConnection(path or None, _connect)
         self._db.get()
+        self._later, self._unnumbered = set(), set()  # apps (see number_later)
+
+    def number_later(self, app_name, later):
+        """While *later*, a save that would renumber *app_name*'s rows (one
+        sorting before the others: a cold load reads newest first) leaves
+        them unnumbered instead — renumbering every row per chunk made a
+        cold load quadratic; once not, numbers them now if one did."""
+        if later:
+            self._later.add(app_name)
+            return
+        self._later.discard(app_name)
+        if app_name in self._unnumbered and self._db.path is not None:
+            conn = self._db.get()
+            if conn is None:
+                return  # the next save renumbers (its rows are unnumbered)
+            try:
+                with write_tx(conn):
+                    apply_numbers(conn, renumbered(conn, app_name))
+            except sqlite3.Error as exc:
+                self._db.on_error(exc, "Could not number the experiment index {file} ({exc})")
+                return
+            self._unnumbered.discard(app_name)
 
     @property
     def path(self):
@@ -203,7 +225,9 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
         self._upsert_states(app_name, seq, states)
         self._forget(app_name, seq, removed)
         leans = leans_of(changed)
-        write_lean(conn, app_name, seq, changed, removed, states, leans)
+        if not write_lean(conn, app_name, seq, changed, removed, states, leans,
+                          defer=app_name in self._later):
+            self._unnumbered.add(app_name)
         file_similar(conn, app_name, changed, removed, states, leans)
         conn.executemany(
             "DELETE FROM exp_index_tombstones WHERE app = ? AND key = ?",

@@ -153,7 +153,18 @@ class S3Listing:
 
     def _walk_record_files(self, base, walks):
         files = {}
+        for obj, verstr, name, skipped in self._walk(base, walks=walks):
+            if not skipped and _is_record_file(name):
+                files.setdefault(unsafe_verstr(verstr), {})[name] = _signature(obj)
+        return files
+
+    def _walk(self, base, start_after=None, walks=None):
+        """``(object, verstr, name, in a skipped subtree)`` of every object
+        under *base* past *start_after*, in key order, a page ending inside a
+        subtree jumping past it (noting the verstr walked to in *walks*)."""
         params = {"Prefix": base}
+        if start_after:
+            params["StartAfter"] = start_after
         # Without server-side StartAfter a jump re-reads everything before it.
         can_jump = getattr(self._s3, "server_side_start_after", True)
         while True:
@@ -161,18 +172,50 @@ class S3Listing:
             skip_to = None
             for obj in page.get("Contents", []):
                 verstr, name, skip_to = _record_relpath(base, obj["Key"])
-                walks[base] = verstr
-                if skip_to:
-                    continue
-                if _is_record_file(name):
-                    files.setdefault(unsafe_verstr(verstr), {})[name] = _signature(obj)
+                if walks is not None:
+                    walks[base] = verstr
+                yield obj, verstr, name, bool(skip_to)
             if not page.get("IsTruncated"):
-                return files
+                return
             params = (
                 {"Prefix": base, "StartAfter": skip_to}
                 if skip_to and can_jump
                 else {"Prefix": base, "ContinuationToken": page["NextContinuationToken"]}
             )
+
+    def record_name_pages(self, app_name):
+        """:meth:`list_record_names`' names a LIST page at a time, in the
+        store's order, so a caller can start on the first page."""
+        base = self._app_prefix(app_name) + "/"
+        for page in self._pages(Prefix=base, Delimiter="/"):
+            names = [unsafe_verstr(cp["Prefix"][len(base):].rstrip("/"))
+                     for cp in page.get("CommonPrefixes", [])]
+            if names:
+                yield names
+
+    def list_files_between(self, app_name, names):
+        """``list_files(app_name, keys=names)`` of *names* that lie next to
+        each other in the store (a page of :meth:`record_name_pages`), in one
+        walk of their key range: about a LIST per 1000 objects, not three per
+        record. None when the store cannot start a listing past a key."""
+        if not getattr(self._s3, "server_side_start_after", True):
+            return None
+        base = self._app_prefix(app_name) + "/"
+        wanted = {safe_verstr(n): n for n in names if _base.valid_path_component(n)}
+        if not wanted:
+            return {}
+        heads = sorted(f"{name}/" for name in wanted)
+        return self._walk_between(base, heads[0], heads[-1], wanted)
+
+    def _walk_between(self, base, first, last, wanted):
+        files = {}
+        for obj, verstr, name, skipped in self._walk(base, start_after=base + first[:-1]):
+            rel = obj["Key"][len(base):]
+            if rel > last and not rel.startswith(last):
+                break
+            if rel >= first and not skipped and verstr in wanted and _is_record_file(name):
+                files.setdefault(wanted[verstr], {})[name] = _signature(obj)
+        return files
 
     def _list_files_of(self, app_name, keys):
         prefix = self._app_prefix(app_name)

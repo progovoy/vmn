@@ -113,11 +113,29 @@ class ListingWatch:
         names = as_sigs(names_of(self._app_name)) if names_of else None
         return None if names is None else set(names)
 
+    def name_pages(self):
+        """The record names a listing page at a time (the backend's
+        ``record_name_pages``), else all at once as one page; None when the
+        backend cannot list names."""
+        pages_of = getattr(self._storage, "record_name_pages", None)
+        if pages_of is not None:
+            return pages_of(self._app_name)
+        names = self.record_names()
+        return None if names is None else iter([sorted(names)])
+
     def files(self, keys):
         """``{key: {filename: signature}}`` of *keys* (records gone are left out)."""
         if not keys:
             return {}
         return self._storage.list_files(self._app_name, keys=list(keys), **self._listing)
+
+    def files_between(self, keys):
+        """:meth:`files` of *keys* that lie next to each other in the store's
+        name order, in one walk of their range when the backend can
+        (``list_files_between``: a LIST per ~1000 objects, not per record)."""
+        between = getattr(self._storage, "list_files_between", None)
+        listing = between(self._app_name, list(keys)) if between and keys else None
+        return self.files(keys) if listing is None else listing
 
     def full_changes(self):
         """``(files of the records that changed since the last full listing,

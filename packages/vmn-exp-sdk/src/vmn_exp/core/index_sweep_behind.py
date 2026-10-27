@@ -10,9 +10,12 @@ without listing every record under the index lock.
   journal replays the entries since the mark as hints.
 * **Behind serving.** With ``behind`` (a remote store, listed in-process) a
   due full listing is a :class:`~vmn_exp.core.index_relist.Relisting`: each
-  refresh applies what it listed so far, its hints and live records too. A
-  cold index (no records to serve) waits for it and takes it all at once,
-  then loads its records a chunk at a time as before.
+  refresh applies what it listed so far, its hints and live records too,
+  ``RELIST_PER_REFRESH`` records at a time, the newest first. A cold index
+  (no records to serve) does not wait for it either: it loads what is listed
+  as it comes (:meth:`relisted_ready`, :meth:`next_relisted`), while a
+  request gets its empty snapshot that says how many records it expects
+  (:meth:`relisted_new`).
 * **Overflow.** A journal tick with too many entries for the app hints the
   names it saw and lists the record names (:meth:`overflowed`), never every
   record's files.
@@ -123,8 +126,39 @@ class SweepBehind:
         self._relisting = index_relist.Relisting(self.watch, records.keys(), files)
         if files:
             self.last_reconcile_at = self._relisting.started_at
-            if not records:
-                self._relisting.wait()
+
+    def relisted_ready(self):
+        """Whether a files relisting under way has listed records not taken
+        yet (no journal hint waiting: the next refresh serves those first)."""
+        relisting = self._relisting
+        return (relisting is not None and relisting.files and relisting.ready()
+                and not self._hinted)
+
+    def next_relisted(self, records, now):
+        """``(files to refresh, keys gone)`` of the next relisted records."""
+        checked, gone = self._relisted(records, now)
+        self._pending |= {k for k, files in checked.items() if METADATA_FILE not in files}
+        return checked, [key for key in gone if key in records]
+
+    def relisted_new(self):
+        """While a files relisting runs behind serving, ``(records known,
+        new names listed, of those not handed over yet)`` — None while a
+        cold one named none yet; False when none runs."""
+        relisting = self._relisting
+        if relisting is None or not relisting.files:
+            return False
+        return relisting.new_names()
+
+    def hints_waiting(self):
+        """Whether journal hints wait for the next listing."""
+        return bool(self._hinted)
+
+    def wait_relisted(self, timeout):
+        """Until a files relisting under way has records to take (or ends),
+        at most *timeout* seconds."""
+        relisting = self._relisting
+        if relisting is not None and relisting.files:
+            relisting.wait_ready(timeout)
 
     def _hinted_files(self, keys):
         files = self.watch.files
@@ -137,7 +171,7 @@ class SweepBehind:
         """``(files of the relisted records that changed, keys gone)`` of
         what the relisting under way listed since the last refresh."""
         relisting = self._relisting
-        keys, files, done = relisting.take(RELIST_PER_REFRESH if records else None)
+        keys, files, done = relisting.take(RELIST_PER_REFRESH)
         if done:
             self._relisting = None
         if not relisting.files:

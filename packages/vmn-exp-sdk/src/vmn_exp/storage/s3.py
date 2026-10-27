@@ -112,6 +112,15 @@ class S3SnapshotStorage(
     def cache_identity(self):
         return (self.scheme, self.endpoint_url, self.bucket, self.prefix)
 
+    def worker_spec(self):
+        """How another process opens this store again (``(module, class,
+        args, kwargs)``, see :mod:`~vmn_exp.core.index_remote_workers`);
+        None over another object store's client adapter."""
+        if not getattr(self, "_own_client", False) or type(self) is not S3SnapshotStorage:
+            return None
+        return (__name__, "S3SnapshotStorage", (self.bucket,),
+                {"prefix": self.prefix, "endpoint_url": self.endpoint_url})
+
     def index_cache_path(self, app_name):
         return host_dirs.index_cache_path(self.cache_identity(), app_name)
 

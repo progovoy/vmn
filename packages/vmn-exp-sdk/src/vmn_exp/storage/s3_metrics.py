@@ -29,6 +29,11 @@ class S3Metrics:
     def metric_objects(self, app_name, verstr):
         return group_metric_objects(self._metric_sizes(app_name, verstr))
 
+    def metric_objects_listed(self, sigs):
+        """:meth:`metric_objects` as a listing found them: *sigs*
+        ``{name: (size, mtime, etag)}`` (:meth:`list_files`)."""
+        return group_metric_objects({name: sig[0] for name, sig in sigs.items()})
+
     def create_metric_segment(self, app_name, verstr, stream, seq, data):
         """Store *data* as the stream's segment *seq* unless that exists:
         whether it was created."""

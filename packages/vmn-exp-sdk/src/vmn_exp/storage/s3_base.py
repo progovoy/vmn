@@ -3,6 +3,8 @@
 log halves (:mod:`snapshot_storage_s3`)."""
 
 import copy
+import datetime
+import email.utils
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import checked_app_path, safe_verstr
@@ -51,15 +53,21 @@ def app_key(app_name):
 
 
 def boto3_client(endpoint_url=None):
-    return _client(endpoint_url)
+    """A client of a session of its own that parses timestamps with
+    :func:`parse_timestamp` (the default session's clients keep botocore's)."""
+    session = boto3_client_module().session.Session()
+    session._session.get_component("response_parser_factory").set_parser_defaults(
+        timestamp_parser=parse_timestamp)
+    return _client(session, endpoint_url)
 
 
 def sigv4_client(endpoint_url=None):
-    """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs)."""
-    return _client(endpoint_url, signature_version="s3v4")
+    """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs):
+    one per presigned URL, so the default session's (no session to build)."""
+    return _client(boto3_client_module(), endpoint_url, signature_version="s3v4")
 
 
-def _client(endpoint_url, **config):
+def _client(session, endpoint_url, **config):
     from botocore.config import Config
 
     # A pooled connection per concurrent reader (the index's and parallel_map's);
@@ -67,7 +75,31 @@ def _client(endpoint_url, **config):
     config = Config(max_pool_connections=MAX_POOL_CONNECTIONS, connect_timeout=CONNECT_TIMEOUT_SEC,
                     read_timeout=READ_TIMEOUT_SEC, retries=dict(RETRIES), **config)
     kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
-    return instrument(boto3_client_module().client("s3", config=config, **kwargs))
+    return instrument(session.client("s3", config=config, **kwargs))
+
+
+def parse_timestamp(value):
+    """botocore's ``parse_timestamp`` without dateutil for what S3 sends
+    (ISO 8601 UTC in listings, RFC 1123 in headers): dateutil took ~25 µs a
+    timestamp, a 1000-object LIST ~25 ms of CPU under the GIL."""
+    if isinstance(value, str):
+        try:
+            if value.endswith("Z") and "T" in value:
+                return datetime.datetime.fromisoformat(_six_digits(value[:-1]) + "+00:00")
+            if value.endswith(" GMT"):
+                return email.utils.parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            pass
+    from botocore.utils import parse_timestamp as botocore_parse
+
+    return botocore_parse(value)
+
+
+def _six_digits(text):
+    """*text*'s fraction of a second padded to the six digits fromisoformat
+    (3.9) takes."""
+    head, dot, fraction = text.partition(".")
+    return f"{head}.{fraction[:6].ljust(6, '0')}" if dot else head
 
 
 def boto3_client_module():
@@ -89,6 +121,7 @@ class S3Base:
         self.prefix = prefix
         self.endpoint_url = endpoint_url
         self._s3 = client or boto3_client(endpoint_url)
+        self._own_client = client is None  # not another object store's adapter
 
     @property
     def area(self):
