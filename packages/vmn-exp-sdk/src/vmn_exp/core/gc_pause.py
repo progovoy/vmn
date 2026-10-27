@@ -38,9 +38,11 @@ def gc_paused():
 
 def freeze_long_lived():
     """Move every object alive now out of the collected generations, after a
-    young collection reclaims the recent cycles. For a long-lived server
-    whose bulk data (a board's 100k rows) would otherwise be traversed by
-    each full collection; frozen objects are still freed by reference
-    counting, only cycles among them would outlive their use."""
-    gc.collect(1)
+    full collection reclaims every unreachable cycle (it traverses only what
+    is not frozen yet). For a long-lived server whose bulk data (a board's
+    100k rows) would otherwise be traversed by each full collection; frozen
+    objects are still freed by reference counting, but any cycle alive now
+    outlives its use for good — so call it rarely (a board built from
+    scratch), never per index generation."""
+    gc.collect()
     gc.freeze()
