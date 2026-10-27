@@ -16,6 +16,8 @@ from dataclasses import dataclass, field, replace
 from vmn_exp.core.index_views import (
     SIDE_TABLES,
     SchemaRows,
+    kept_lean,
+    kept_side,
     lean_row,
     runs_declared_schema,
     schema_key,
@@ -53,6 +55,9 @@ class IndexSnapshot:
     features: dict = field(default_factory=dict, repr=False)
     intents: dict = field(default_factory=dict, repr=False)
     hypotheses: dict = field(default_factory=dict, repr=False)
+    # {verstr: ({sys metric: value}, packed summary or None, run definitions)}
+    # of rows with sys_* metrics, which their rows leave out (see metrics_of).
+    system_metrics: dict = field(default_factory=dict, repr=False)
     # (rows loaded, rows expected) while a remote store's load is published
     # chunk by chunk; None once every record was read.
     loading: tuple = None
@@ -71,7 +76,7 @@ class IndexSnapshot:
     def build(
         cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None,
         metric_parts=None, outputs=None, declared_defs=None,
-        features=None, intents=None, hypotheses=None,
+        features=None, intents=None, hypotheses=None, system_metrics=None,
     ):
         rows = tuple(rows)
         return cls(
@@ -88,6 +93,7 @@ class IndexSnapshot:
             features=features or {},
             intents=intents or {},
             hypotheses=hypotheses or {},
+            system_metrics=system_metrics or {},
             _by_verstr={row["verstr"]: row for row in rows},
         )
 
@@ -96,9 +102,26 @@ class IndexSnapshot:
         return self._by_verstr.get(verstr)
 
     def metric_summary(self, verstr):
-        """``{metric: {"last", "min", "max"}}`` of *verstr*'s repeated metrics."""
-        parts = self.metric_parts.get(verstr)
-        return dict(parts[0]) if parts else {}
+        """``{metric: {"last", "min", "max", "first", "mean"}}`` of
+        *verstr*'s repeated metrics, its ``sys_*`` ones included."""
+        parts, system = self.metric_parts.get(verstr), self.system_metrics.get(verstr)
+        summary = parts[0].to_dict() if parts else {}
+        if system and system[1]:
+            summary.update(system[1].to_dict())
+        return summary
+
+    def system_metrics_of(self, verstr):
+        """``{sys metric: value}`` of *verstr*, which its row leaves out.
+        Shared: copy before changing."""
+        system = self.system_metrics.get(verstr)
+        return system[0] if system else {}
+
+    def metrics_of(self, verstr):
+        """*verstr*'s row's metrics with its ``sys_*`` ones (each at the
+        summary its run defines)."""
+        metrics = self.row(verstr)["metrics"]
+        system = self.system_metrics_of(verstr)
+        return {**metrics, **system} if system else metrics
 
     def outputs_of(self, verstr):
         """``{path: {path, digest, size}}`` of the files *verstr* stored.
@@ -244,7 +267,7 @@ class RowCache:
     def _row(self, key, idx, record):
         cached = self._rows.get(key)
         if cached is None:
-            cached = self._rows[key] = lean_row(idx, record["meta"], record["fold"])
+            cached = self._rows[key] = kept_lean(lean_row(idx, record["meta"], record["fold"]))
         elif cached[0]["idx"] != idx:
             cached = self._rows[key] = (dict(cached[0], idx=idx),) + cached[1:]
         return cached
@@ -318,9 +341,10 @@ def new_side_tables():
 
 
 def put_side_tables(tables, verstr, values):
-    """Keep *verstr*'s :func:`lean_row` side table *values* in *tables*."""
+    """Keep *verstr*'s :func:`lean_row` side table *values* in *tables*, as a
+    snapshot keeps them (:func:`~vmn_exp.core.index_views.kept_side`)."""
     for name, value in zip(SIDE_TABLES, values):
-        _put_sparse(tables[name], verstr, value)
+        _put_sparse(tables[name], verstr, kept_side(name, value))
 
 
 class _Maps:

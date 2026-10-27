@@ -276,7 +276,7 @@ def experiment_diff_from_snapshot(snap, v1, v2, schema=None):
     goals = effective_schema(schema, snap.declared_schema())
     no_defs = {}
     delta = _metrics_delta(
-        rows[0]["metrics"], rows[1]["metrics"],
+        snap.metrics_of(v1), snap.metrics_of(v2),
         (rows[0]["params"], snap.metric_summary(v1), no_defs),
         (rows[1]["params"], snap.metric_summary(v2), no_defs),
         goals,

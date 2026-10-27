@@ -12,13 +12,22 @@ filters snapshot rows takes its extra from here.
 to the snapshot (:func:`bind_similar_scope`: ``vmn-exp ui`` binds each
 snapshot it serves to its app's search scope), else a ``:memory:`` database
 filled from the snapshot (:func:`~vmn_exp.core.similar_corpus.snapshot_scope`).
-:func:`store_extra` passes the app's persisted index file first.
+:func:`store_extra` passes the app's persisted index file first. Lean rows
+leave a run's ``sys_*`` metrics out (row copies carry them): filtering the
+snapshot's own rows takes :func:`lean_extra`, which reads them back for a
+``metrics.sys_*`` field (:func:`reads_off_row`).
 """
 import weakref
 
 from vmn_exp.core.index_point import index_path
 from vmn_exp.core.index_snapshot import schema_less
-from vmn_exp.core.query import ANCESTORS, SIMILAR
+from vmn_exp.core.query import (
+    ANCESTORS,
+    SIMILAR,
+    SYSTEM_METRICS,
+    query_roots,
+    reads_system_metrics,
+)
 from vmn_exp.core.query_similar import scope_matcher
 from vmn_exp.core.tree import ancestors
 
@@ -72,6 +81,21 @@ def snapshot_extra(snapshot, scope_of=None):
         KEYWORDS: lambda verstr: intent_keywords(intent_of(verstr)),
         SIMILAR: scope_matcher(lambda: scope_of(snapshot)),
     }
+
+
+def lean_extra(snapshot, scope_of=None):
+    """:func:`snapshot_extra` for *snapshot*'s own (lean) rows, with the
+    ``sys_*`` metrics they leave out (:data:`~vmn_exp.core.query.SYSTEM_METRICS`)."""
+    extra = snapshot_extra(snapshot, scope_of)
+    if extra is not None:
+        extra[SYSTEM_METRICS] = lambda verstr: snapshot.system_metrics_of(verstr)
+    return extra
+
+
+def reads_off_row(text):
+    """Whether query *text* reads what a lean row lacks: a snapshot field
+    (:data:`SNAPSHOT_FIELDS`) or a ``sys_*`` metric."""
+    return bool(SNAPSHOT_FIELDS & query_roots(text)) or reads_system_metrics(text)
 
 
 def store_extra(storage, app_name, snapshot):

@@ -16,8 +16,7 @@ snapshot's ``outputs`` or ancestry (``under()``).
 """
 from collections import namedtuple
 
-from vmn_exp.core.query import query_roots
-from vmn_exp.core.query_extra import SNAPSHOT_FIELDS
+from vmn_exp.core.query_extra import reads_off_row
 from vmn_exp.core.tree import OUTER, ancestors, subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.readers.experiments import apply_filters
@@ -63,8 +62,7 @@ def filtered(snapshot, rows, f):
 
 def _rejudgeable(f):
     query = f.query
-    reads = query_roots(query) if query and query.strip() else ()
-    return f.scope is None and not SNAPSHOT_FIELDS.intersection(reads)
+    return f.scope is None and not (query and query.strip() and reads_off_row(query))
 
 
 def left_filtered(order, left, f):

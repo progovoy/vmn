@@ -20,7 +20,8 @@ import json
 
 from vmn_exp.core.index_lean_tree import fix_roots
 from vmn_exp.core.index_snapshot import _observed_at
-from vmn_exp.core.index_views import SIDE_TABLES, lean_row
+from vmn_exp.core.index_intern import compact_row
+from vmn_exp.core.index_views import SIDE_TABLES, kept_side, lean_row
 from vmn_exp.core.sqlite_conn import in_chunks
 from vmn_exp.core.status import derive_status
 
@@ -32,8 +33,9 @@ def _dumps(value):
 
 
 def decode_row(idx, text):
-    """The lean row stored as *text*, its ``idx`` the column's *idx*."""
-    row = json.loads(text)
+    """The lean row stored as *text*, its ``idx`` the column's *idx*, made
+    of shared keys and values (:func:`~vmn_exp.core.index_intern.compact_row`)."""
+    row = compact_row(json.loads(text))
     row["idx"] = idx
     return row
 
@@ -180,7 +182,7 @@ def read_lean(conn, app):
     for key, kind, data in conn.execute(
         "SELECT key, kind, data FROM exp_sides WHERE app = ?", (app,)
     ):
-        sides.setdefault(key, {})[kind] = json.loads(data)
+        sides.setdefault(key, {})[kind] = kept_side(kind, json.loads(data))
     keys, lean, stamps = [], {}, []
     for n, (key, ts, row) in enumerate(conn.execute(
         "SELECT key, timestamp, row FROM exp_rows WHERE app = ? ORDER BY timestamp, key",

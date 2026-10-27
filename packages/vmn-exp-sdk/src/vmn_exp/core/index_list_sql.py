@@ -11,13 +11,13 @@ its ``idx``, create note, side table values
 import json
 
 from vmn_exp.core.index_lean_store import NOTE, decode_row
-from vmn_exp.core.index_views import SIDE_TABLES
+from vmn_exp.core.index_views import SIDE_TABLES, kept_side
 from vmn_exp.core.sqlite_conn import in_chunks
 
 _NO_STATE = {"rs_sig": None, "run_state": None}
 # The side tables a row copy and a query read (the rest feed similarity):
 # intents for `intent`/`keywords` (plan 24 F5).
-ROW_SIDES = (NOTE, "metric_parts", "outputs", "intents")
+ROW_SIDES = (NOTE, "metric_parts", "outputs", "intents", "system_metrics")
 
 
 def count(conn, app):
@@ -86,7 +86,7 @@ def _read_rows(conn, where, args, found, sides, states):
         f"SELECT key, kind, data FROM exp_sides WHERE app = ?{where} AND kind IN ({_KINDS})",
         (*args, *ROW_SIDES)
     ):
-        sides.setdefault(key, {})[kind] = json.loads(data)
+        sides.setdefault(key, {})[kind] = kept_side(kind, json.loads(data))
     states.update(conn.execute(f"SELECT key, data FROM exp_index_state WHERE app = ?{where}",
                                args))
 

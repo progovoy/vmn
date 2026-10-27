@@ -537,7 +537,7 @@ class LeaderboardCache(SetAnswers):
 
     def _columns_payload(self, snapshot, schema, f, keys, limit):
         rows = self._job_view.ordered(snapshot, schema, None, f)
-        return columns_payload(rows[:limit], keys, len(rows))
+        return columns_payload(rows[:limit], keys, len(rows), snapshot.system_metrics_of)
 
     def etag(self, snapshot, schema, **params):
         """Changes whenever :meth:`page` could answer differently."""

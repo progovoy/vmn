@@ -8,15 +8,15 @@ Postgres ``search_dsn`` the query runs as SQL over ``vmn_search_rows``
 writes on its refreshes (:mod:`vmn_exp.ui.search_rows_writer`) — a request
 only reads them. Archived runs are left
 out unless ``archived=1``. Synced rows carry no ``outputs``, ancestry, intent
-or similar-runs document (the index keeps them off its lean rows), so a query
-reading one (:data:`~vmn_exp.core.query_extra.SNAPSHOT_FIELDS`) is answered
-in Python. One more row than *limit* is looked for, so ``truncated`` says
+or similar-runs document, nor ``sys_*`` metrics (the index keeps them off its
+lean rows), so a query reading one
+(:func:`~vmn_exp.core.query_extra.reads_off_row`) is answered in Python. One more row than *limit* is looked for, so ``truncated`` says
 whether more matched.
 """
 from fastapi import HTTPException, Request
 from vmn_exp.core.log import filter_archived
-from vmn_exp.core.query import QueryError, query_roots
-from vmn_exp.core.query_extra import SNAPSHOT_FIELDS
+from vmn_exp.core.query import QueryError
+from vmn_exp.core.query_extra import reads_off_row
 from vmn_exp.ui.auth.authz import allowed, require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import experiments as exp_reader
@@ -49,9 +49,10 @@ def _python_search(scopes, text, limit, archived):
 
 def reads_snapshot_fields(text):
     """Whether query *text* reads what synced rows lack — a run's ``outputs``,
-    intent or similar-runs document (False when it doesn't parse)."""
+    intent, similar-runs document or ``sys_*`` metrics (False when it doesn't
+    parse)."""
     try:
-        return bool(text and text.strip()) and bool(SNAPSHOT_FIELDS & query_roots(text))
+        return bool(text and text.strip()) and reads_off_row(text)
     except QueryError:
         return False
 

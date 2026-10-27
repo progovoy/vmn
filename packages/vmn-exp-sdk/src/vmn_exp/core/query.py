@@ -62,6 +62,7 @@ the runs whose similar-runs text document holds every word of the text
 
 import functools
 
+from vmn_exp.core.system_metrics import is_system_metric
 from vmn_exp.core.tree import ancestry_of
 
 # Every non-metric field a row can carry, from ``experiment_row`` +
@@ -96,6 +97,8 @@ NESTED_SUBFIELDS = {
 UNDER, ANCESTORS = "under", "ancestors"
 # ``similar("text")`` reads a resolver ``text -> verstrs`` given as this extra.
 SIMILAR = "similar"
+# The ``sys_*`` metrics kept off lean rows, ``verstr -> {metric: value}``, as this extra.
+SYSTEM_METRICS = "system_metrics"
 _CALLS = {UNDER: "under() takes one quoted verstr", SIMILAR: "similar() takes one quoted text"}
 _CALL_FIELDS = {UNDER: ANCESTORS, SIMILAR: SIMILAR}  # what a call's predicate reads
 
@@ -540,15 +543,36 @@ def query_roots(text):
     return frozenset(ANCESTORS if root == UNDER else root for root in roots)
 
 
+@functools.lru_cache(maxsize=256)
+def reads_system_metrics(text):
+    """Whether *text* reads a ``metrics.sys_*`` field."""
+    return any(kind == "name" and is_system_metric(_metric_of(value))
+               for kind, value, _ in tokenize(text))
+
+
+def _metric_of(name):
+    """The metric a ``metrics.<k>`` field name reads, else ``""``."""
+    if isinstance(name, tuple):
+        return name[1] if name[0] == "metrics" and len(name) == 2 else ""
+    root, _, key = name.partition(".")
+    return key if root == "metrics" else ""
+
+
 def _completing(text, extra):
     """``row -> row`` giving a row the *extra* fields ``{key: of(verstr)}``
-    *text* reads but the row lacks — a copy, only for evaluating."""
+    *text* reads but the row lacks — a copy, only for evaluating — and, when
+    it reads a ``sys_*`` metric, the metrics ``extra["system_metrics"]``
+    keeps off the row."""
     wanted = {key: of for key, of in (extra or {}).items() if key in query_roots(text)}
-    if not wanted:
+    system_of = (extra or {}).get(SYSTEM_METRICS) if reads_system_metrics(text) else None
+    if not wanted and system_of is None:
         return lambda row: row
 
     def complete(row):
         missing = {k: of(row["verstr"]) for k, of in wanted.items() if k not in row}
+        system = system_of(row["verstr"]) if system_of else None
+        if system:
+            missing["metrics"] = {**row.get("metrics", {}), **system}
         return dict(row, **missing) if missing else row
 
     return complete
