@@ -173,7 +173,9 @@
      "succeeded": 1,
      "waiting": 0
     },
-    "expected": 2
+    "expected": 2,
+    "lost": 0,
+    "never_started": 0
    },
    "heartbeat": null,
    "heartbeat_interval_sec": 30,
@@ -182,6 +184,7 @@
    "last_metric_at": "2026-01-01T00:00:03.000000Z",
    "parent": null,
    "pid": null,
+   "settled": null,
    "signal": null,
    "started_at": null,
    "status": "succeeded",
@@ -375,6 +378,7 @@
    "last_metric_at": "2026-01-01T00:00:13.000000Z",
    "parent": "1.0.0-dev.a",
    "pid": null,
+   "settled": null,
    "signal": null,
    "started_at": null,
    "status": "failed",
@@ -551,6 +555,7 @@
    "last_metric_at": "2026-01-01T00:00:23.000000Z",
    "parent": "1.0.0-dev.a",
    "pid": null,
+   "settled": null,
    "signal": null,
    "started_at": null,
    "status": "succeeded",
