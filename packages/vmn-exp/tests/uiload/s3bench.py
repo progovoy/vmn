@@ -66,10 +66,13 @@ class StoreUIServer(UIServer):
         return ["--store", self.store_uri]
 
 
-def start_moto(data, latency_ms, run_dir):
+def start_moto(data, latency_ms, run_dir, fast=False):
+    """The fake S3 serving *data*: moto, or with *fast* :mod:`uiload.s3bench_fast`
+    (for throughput: moto saturates at ~800 requests a second)."""
     port = free_port()
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([os.path.dirname(HERE)] + SRC_DIRS))
-    cmd = [sys.executable, os.path.join(HERE, "s3bench_moto.py"), "--port", str(port),
+    script = "s3bench_fast.py" if fast else "s3bench_moto.py"
+    cmd = [sys.executable, os.path.join(HERE, script), "--port", str(port),
            "--latency-ms", str(latency_ms), "--data", data, "--bucket", BUCKET, "--root", ROOT]
     proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE,
                             stderr=open(os.path.join(run_dir, "moto.log"), "ab"), text=True)
