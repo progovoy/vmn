@@ -71,6 +71,7 @@ from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import sort_rows
 from vmn_exp.ui.search_index import SearchIndexes
 from vmn_exp.ui.search_rank import results
+from vmn_exp.ui.status_counts import StatusCounts
 
 from vmn_exp.ui import search_prefilter
 
@@ -305,6 +306,7 @@ class LeaderboardCache(SetAnswers):
         self._subtree = SubtreeMatch(self, size)
         self._filtered_facets = track(LRU(size))
         self._top_counts = TopCounts(self)
+        self._status_counts = StatusCounts(self)
         self._warmer = BoardWarmer(self)
 
     schema_key = staticmethod(_schema_key)

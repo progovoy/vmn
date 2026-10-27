@@ -36,8 +36,13 @@ def status_summary(rows, now, recent_sec=RECENT_SEC):
         finished = status == FAILED and parse_iso(row.get("finished_at"))
         if finished and finished >= since:
             failed_recent += 1
+    return summary_payload(len(rows), counts, settled, failed_recent)
+
+
+def summary_payload(total, counts, settled, failed_recent):
+    """What :func:`status_summary` answers for these tallies."""
     return {
-        "total": len(rows),
+        "total": total,
         "counts": counts,
         **settled,
         "failed_recent": failed_recent,
