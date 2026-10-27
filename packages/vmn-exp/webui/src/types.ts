@@ -144,6 +144,9 @@ export interface FleetChild {
 export interface Fleet {
   expected: number;
   counts: Record<string, number>;
+  /** An ended outer run's never-started runs and slots, and its lost runs. */
+  never_started?: number;
+  lost?: number;
   /** Older servers only: a job's runs are its Runs tab now (plan 23 S3). */
   children?: FleetChild[];
 }
@@ -197,8 +200,13 @@ export interface JobCounts {
 export interface JobProgressFields {
   total: number;
   counts: JobCounts;
-  /** Finished runs: succeeded + failed. */
+  /** Finished runs: succeeded + failed + lost. */
   done: number;
+  /** Once an outer run ended (job_rollup_payload.py), beside `counts`: its
+   *  runs that never started, and its stuck runs (lost, a failure). */
+  never_started?: number;
+  lost?: number;
+  ended?: boolean;
   /** `sweep_planned`, else `expected_pods`, else the runs so far. */
   expected: number;
   progress: number | null;

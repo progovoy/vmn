@@ -13,6 +13,7 @@ import bisect
 import math
 
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.settle import counted_status
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_group_fields import COUNT_KEYS, COUNT_OF
 
@@ -73,7 +74,7 @@ class Summary:
 
     def _tally(self, row, by):
         self.size += by
-        status = row.get("status")
+        status = counted_status(row)
         self.statuses[status] = self.statuses.get(status, 0) + by
         for metric in row["metrics"]:
             self.carriers[metric] = self.carriers.get(metric, 0) + by

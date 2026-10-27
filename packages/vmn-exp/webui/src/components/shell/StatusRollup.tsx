@@ -5,15 +5,19 @@
 import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import type { AppStatus } from "../../shell/contracts";
+import { stuckFilter } from "../../util/attention";
 import "./StatusRollup.css";
 
 const RUNS = "?view=all";
 
 interface Part { text: string; search: string; title?: string }
 
-function partsOf({ counts, failed_recent }: AppStatus): Part[] {
+function partsOf(status: AppStatus): Part[] {
+  const { counts, failed_recent } = status;
   const parts: Part[] = [];
-  if (counts.stuck) parts.push({ text: `${counts.stuck} stuck`, search: `${RUNS}&status=stuck` });
+  if (counts.stuck) {
+    parts.push({ text: `${counts.stuck} stuck`, search: `${RUNS}&${new URLSearchParams(stuckFilter(status))}` });
+  }
   if (failed_recent) {
     parts.push({
       text: `${failed_recent} failed (24h)`,

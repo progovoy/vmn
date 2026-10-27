@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The additive parts a job rollup is made of (plan 23 S1).
 
-A :class:`Tally` sums what a set of rows contributes: status counts, first
+A :class:`Tally` sums what a set of rows contributes: status counts (a
+settled row's under its ``settled`` value), first
 start and last end, completions per minute, per tracked metric its count,
 sum, extremes and a :class:`~vmn_exp.ui.quantile_sketch.QuantileSketch`, a
 duration sketch and failure-signature counts. ``add(row, spec, by=-1)``
@@ -15,6 +16,7 @@ import operator
 
 from vmn_exp.core.log import primary_metric, sort_descending
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.settle import counted_status
 from vmn_exp.core.status import (
     CREATED,
     FAILED,
@@ -194,7 +196,7 @@ class Tally:
     def add(self, row, spec, by=1):
         """Adds *row* (``by=-1``: removes it); whether an extreme is now unknown."""
         status = row.get("status")
-        _move(self.counts, status, by)
+        _move(self.counts, counted_status(row), by)
         self.started, gone = _extreme(self.started, row.get("started_at"), by, operator.lt)
         self.finished, ended = _extreme(self.finished, row.get("finished_at"), by, operator.gt)
         unknown = gone or ended

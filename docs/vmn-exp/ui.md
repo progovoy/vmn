@@ -334,7 +334,7 @@ the URL still say *job*: `view=jobs`, `kind=jobs`, the `job` row field and the
 to the app name has `Outer runs (N)`, `Single runs (N)` and `All runs`. The
 last view is remembered per app, and `view=`/`kind=` in the URL win.
 - **Outer runs** has one row per top-level outer run. Each row shows:
-  - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`.
+  - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, drawn as failures (see [settled runs](experiments.md#nesting)).
   - the best run on the main metric, linked (`—` when no goal is declared), and a sparkline of the metric's spread.
   - runs, failed %, rate, ETA, branch and start.
 
@@ -668,7 +668,9 @@ message.
   selects exactly it. With `top=`, groups add `job_counts`, `runs`, `failed`
   and `job_aggregates` (over the outer runs' best values).
 - **`experiments/{v}/summary`** is the outer run's rollup: counts, `expected`,
-  progress, throughput, ETA, `metric`, `ranked`, per-metric
+  `ended` (its own status succeeded/failed/stuck), `never_started` and `lost`
+  (its settled runs, never in `counts`; `done` takes the lost ones, an ended
+  run's ETA only its running and waiting ones), progress, throughput, ETA, `metric`, `ranked`, per-metric
   `{n,min,max,mean,best,best_verstr,p10,p50,p90,hist}`, duration p50/p90,
   failure signatures, `top` (10 best) and a `timeline` (epoch-second buckets
   of `started`/`succeeded`/`failed`, sparse).
@@ -703,7 +705,8 @@ Every row of `.../experiments` and the run detail carry:
 | `parent` / `children` | verstrs linking outer and inner jobs |
 | `kind` | `outer`, `inner` or `single` |
 | `depth` | nesting depth, for indenting the list |
-| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created` is left out, an incomplete sweep adds `created` |
+| `settled` | `never_started` (created) or `lost` (stuck) for a run under an outer run that ended, else `null`: derived, the run's own `status` stays |
+| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created` and a `never_started` run are left out, a `lost` run adds `failed`, an incomplete sweep that has not ended adds `created` |
 | `sweep_planned` / `sweep_trials` | a sweep outer's planned trials (grid size, else `run_cap`) and the trial slots its inner runs fill; absent for other runs and uncapped random/bayes sweeps. While `sweep_trials < sweep_planned` the UI reads `16/20 · incomplete`, and the detail's `status.fleet.expected` is the planned size |
 | `signal` / `end_reason` | the signal that ended the run (`SIGTERM`), `stopped` for an early-stopped sweep trial |
 | `error_summary` | `Type: message` of a failed run's recorded `error`, else `null` |
@@ -763,10 +766,12 @@ trail leaves the app crumb out.
 ```json
 {"total": 53,
  "counts": {"created": 0, "running": 2, "stuck": 1, "succeeded": 41, "failed": 9},
- "failed_recent": 1, "rollup": "stuck"}
+ "never_started": 0, "lost": 0, "failed_recent": 1, "rollup": "stuck"}
 ```
 
 Counts the non-archived runs by derived status (all five keys always present).
+A run an ended outer run settled counts as `never_started` or `lost` instead,
+never in `counts` (`total` holds every run), so a lost run raises no `stuck`.
 `failed_recent` counts failures that finished within the last 24 hours. `rollup` is
 `stuck` if any run is stuck, else `failed` if `failed_recent > 0`, else
 `running` if any runs, else `null`. A known app with no runs answers zeros; an

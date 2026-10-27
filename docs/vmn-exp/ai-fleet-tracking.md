@@ -113,9 +113,17 @@ row["child_counts"]   # e.g. {"created": 1, "running": 1, "succeeded": 1}
 row["tree_status"]    # rollup: failed > stuck > running > created > succeeded
 ```
 
+Once the outer run has ended (succeeded, failed, or stuck because the
+orchestrator died), the pods it registered but never started are settled
+`never_started` and its stuck pods `lost` (a row's `settled` field; their own
+`status` and `child_counts` stay): `tree_status` leaves the never-started ones
+out and counts a lost one as `failed`, and the waiting/stuck counts drop them.
+No terminal state needs writing for pods the orchestrator deleted.
+
 Over HTTP, `GET /api/v1/workspaces/{ws}/apps/{app}/experiments` returns the same
 `children`/`child_counts`. The detail endpoint `.../experiments/{verstr}` adds
-`fleet`: `expected` and `counts` (per status, plus `waiting`). See
+`fleet`: `expected`, `counts` (per status, plus `waiting`) and, once the outer
+run ended, `never_started` (its never-started pods and slots) and `lost`. See
 [ui.md](ui.md#api).
 
 ## Checklist for an agent

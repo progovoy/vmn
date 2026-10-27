@@ -17,7 +17,7 @@ export const throughputText = (j: Pick<JobProgressFields, "throughput_per_min">)
 /** The time left, null when done or unknown. */
 export const etaText = (j: Pick<JobProgressFields, "eta_sec">) => (j.eta_sec ? humanizeSeconds(j.eta_sec) : null);
 
-type Progress = Pick<JobProgressFields, "counts" | "done" | "expected" | "throughput_per_min" | "eta_sec" | "finished_at">;
+type Progress = Pick<JobProgressFields, "counts" | "done" | "expected" | "throughput_per_min" | "eta_sec" | "finished_at" | "lost">;
 
 export interface ProgressPart {
   text: string;
@@ -68,8 +68,11 @@ function timeParts(j: Progress, eta: (left: string) => string): string[] {
 function parts(j: Progress, done: string, eta: (left: string) => string): ProgressPart[] {
   const troubles = (["failed", "stuck"] as const)
     .filter((t) => j.counts[t] > 0).map((t): ProgressPart => ({ text: `${fmtCount(j.counts[t])} ${t}`, tone: t }));
+  // Stuck under an outer run that ended: they never report, a failure.
+  const lost: ProgressPart[] = j.lost ? [{ text: `${fmtCount(j.lost)} lost`, tone: "failed" }] : [];
   const rate = throughputText(j);
-  return [{ text: done }, ...troubles, ...(rate ? [{ text: rate }] : []), ...timeParts(j, eta).map((text) => ({ text }))];
+  return [{ text: done }, ...troubles, ...lost, ...(rate ? [{ text: rate }] : []),
+    ...timeParts(j, eta).map((text) => ({ text }))];
 }
 
 /** The progress line's parts, failed and stuck toned (the job header's). */
@@ -84,11 +87,14 @@ export const jobSpoken = (j: Progress) =>
 
 /** Each state's share (percent) of the expected runs (of the runs so far,
  *  once more ran than expected), like a group header's bar; the rest is
- *  the empty track. Null for a job of one run or none. */
-export function jobBarSegments(j: Pick<JobProgressFields, "counts" | "expected">) {
+ *  the empty track — waiting, or never started once the outer run ended,
+ *  whose lost runs fill the failed share. Null for a job of one run or none. */
+export function jobBarSegments(j: Pick<JobProgressFields, "counts" | "expected" | "never_started" | "lost">) {
   const c = j.counts;
-  const of = Math.max(j.expected, c.running + c.waiting + c.succeeded + c.failed + c.stuck);
-  return barSegments({ total: of, done: c.succeeded, failed: c.failed, stuck: c.stuck, running: c.running });
+  const lost = j.lost ?? 0;
+  const runs = c.running + c.waiting + c.succeeded + c.failed + c.stuck + lost + (j.never_started ?? 0);
+  const of = Math.max(j.expected, runs);
+  return barSegments({ total: of, done: c.succeeded, failed: c.failed + lost, stuck: c.stuck, running: c.running });
 }
 
 /** What a Jobs-view cell shows, and its tooltip. */

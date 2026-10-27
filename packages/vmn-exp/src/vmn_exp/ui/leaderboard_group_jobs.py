@@ -2,8 +2,8 @@
 """What a group of the grouped Jobs view (``top=1|jobs|singles``, plan 23
 S7) adds: its jobs' rollups summed. ``job_counts``: the group's jobs, per
 tree status (the count names of plan 22); ``runs``: every job's ``total``
-(its subtree) plus the group's single runs; ``failed``: failed or stuck runs
-among those; ``job_aggregates``: ``{metric: stats}`` over the group's jobs'
+(its subtree) plus the group's single runs; ``failed``: failed, stuck or
+lost runs among those; ``job_aggregates``: ``{metric: stats}`` over the group's jobs'
 ``best`` of the rollups' main metric (mean/best/median/min/max of the
 bests, ``best`` by the metric's goal).
 
@@ -11,6 +11,7 @@ Built once per grouping and job summaries (which follow the live bucket and the 
 O(jobs), not O(rows).
 """
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.settle import LOST
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_group_fields import COUNT_KEYS, COUNT_OF
 from vmn_exp.ui.leaderboard_group_summary import stats
@@ -48,7 +49,8 @@ class JobGroups:
         return {
             "job_counts": counts,
             "runs": sum(s["total"] for _, s in jobs) + self._grouping.size(key) - len(jobs),
-            "failed": singles_failed + sum(s["counts"][f] for _, s in jobs for f in FAILED),
+            "failed": singles_failed + sum(
+                sum(s["counts"][f] for f in FAILED) + s[LOST] for _, s in jobs),
             "job_aggregates": self._aggregates([s for _, s in jobs]),
         }
 

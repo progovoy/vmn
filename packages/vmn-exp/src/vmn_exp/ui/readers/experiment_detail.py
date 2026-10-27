@@ -19,6 +19,7 @@ from vmn_exp.core.metric_compact import record_compacted
 from vmn_exp.core.refs import placement_snapshot
 from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.core.run_error import ERROR_SUMMARY
+from vmn_exp.core.settle import row_closes
 from vmn_exp.core.status import (
     load_run_state,
     run_state_observed_at,
@@ -66,6 +67,7 @@ _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
     "children",
     "kind",
     "depth",
+    "settled",
     "tree_status",
     "sweep_planned",
     "sweep_trials",
@@ -163,6 +165,7 @@ def status_detail(
         fleet = fleet_summary(
             verstr, children_of, read_state_fn,
             observed_at=observed_at_fn, expected=expected,
+            closed=row_closes(detail),
         )
         detail["fleet"] = fleet and {k: v for k, v in fleet.items() if k != "children"}
     else:
