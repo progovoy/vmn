@@ -46,7 +46,10 @@ start of each round, the record names (for records no journal entry
 announced). Only the check is
 budgeted: hinted, live and new records are listed at once. What the check finds
 changed that no hint or live listing explains is counted in :attr:`Sweep.drift`.
-Its only full listings are the first one and :meth:`Sweep.request_full`.
+Its only full listings are the first one and :meth:`Sweep.request_full`
+— and not even the first after a restart the journal can replay, nor one
+after a journal overflow; on a remote store they run behind serving
+(:mod:`~vmn_exp.core.index_sweep_behind`).
 
 ``full_sweep_sec`` (default 300; 0 lists fully every time) holds across
 processes: the baselines persist (:mod:`~vmn_exp.core.index_baseline`), so a
@@ -60,6 +63,7 @@ import time
 
 from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
+from vmn_exp.core.index_sweep_behind import SweepBehind
 from vmn_exp.core.index_sweep_state import SweepState, _settled
 from vmn_exp.core.status import heartbeat_interval_sec, stale_after_sec
 
@@ -100,7 +104,7 @@ def live_relist_sec(record):
     return min(period, stale_after_sec(run_state) / 2)
 
 
-class Sweep(SweepState):
+class Sweep(SweepBehind, SweepState):
     """The listing policy of one index; times are the caller's monotonic clock."""
 
     def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC, watch=None):
@@ -122,13 +126,14 @@ class Sweep(SweepState):
         self.drift = 0  # records the consistency check found changed unannounced
         self.last_reconcile_at = None  # wall time a full listing or round last began
         self._restored = False  # baselines restored: check the records against them
+        self._unprinted = set()  # records no listing of this process fingerprinted yet
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""
         self.watch.reset()
         self._last_full, self._sigs, self._live, self._pending = None, {}, None, set()
         self._live_at = {}
-        self._restored = False
+        self._restored, self._relisting, self._unprinted = False, None, set()
         self._ring, self._cursor, self._credit, self._rolled_at = [], 0, 0.0, None
 
     def touch(self, key, now):
@@ -151,12 +156,7 @@ class Sweep(SweepState):
 
     def request_full(self):
         """Make the next listing a full (reconcile) one."""
-        self._last_full = None
-
-    def _take_hints(self):
-        with self._hint_lock:
-            hinted, self._hinted = self._hinted, set()
-        return hinted
+        self._last_full, self._resume_pending = None, False
 
     def forget(self, key):
         self._touched.pop(key, None)
@@ -190,15 +190,23 @@ class Sweep(SweepState):
         return listing, [key for key in gone | gone_names if key in records]
 
     def _journaled_listing(self, records, now):
-        hinted = self._take_hints()
+        hinted = self._take_hint_batch()
+        self._begin_journaled(records, now)
         if self._full_due(now):
-            return self._full_listing(records, now)
+            if not self.behind:
+                return self._full_listing(records, now)
+            self._relist(records, files=True)
         candidates = hinted | self._pending | self._live
         keys = [key for key in candidates if key in hinted or self._live_due(records, key, now)]
         self._explained.update(keys)
-        listing = self.watch.files(keys)
+        listing = self._hinted_files(keys)
         gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
-        checked, checked_gone = self._consistency_check(records, now)
+        if self._relisting is not None and self._relisting.files:
+            checked, checked_gone = self._relisted(records, now)
+        else:
+            checked, checked_gone = self._consistency_check(records, now)
+            if self._relisting is not None:
+                self._relisted(records, now)
         self._pending = {key for key in gone if key in hinted | self._pending
                          and key not in records}
         self._pending |= {k for k, files in checked.items() if METADATA_FILE not in files}
@@ -214,10 +222,11 @@ class Sweep(SweepState):
             changed = {**new, **changed}
         unexplained = [
             k for k, files in changed.items()
-            if k not in self._explained and METADATA_FILE in files
+            if k not in self._explained and k not in self._unprinted and METADATA_FILE in files
         ]
         self.drift += len(unexplained) + sum(key in records for key in gone)
         self._explained.difference_update(due)
+        self._unprinted.difference_update(due)
         return changed, gone
 
     def _unseen_names(self, records):

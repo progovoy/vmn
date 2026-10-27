@@ -72,6 +72,12 @@ class ElectedIndex:
     def reconcile(self):
         self._leader.reconcile()
 
+    def journal_at(self, ms):
+        self._leader.journal_at(ms)
+
+    def overflowed(self, names):
+        self._leader.overflowed(names)
+
     def refresh(self):
         leading = self._election.lead(self.scope)
         if leading and not self.leading:

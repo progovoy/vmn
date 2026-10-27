@@ -35,6 +35,13 @@ each filesystem call hands the GIL to a busy request thread and waits up to a
 switch interval to get it back, which at 100k records made one refresh take
 minutes. A refresh then costs O(what changed) in the index's process.
 
+A journaled index (the ui's, hinted by a store's change journal) persists its
+journal mark with its records (:mod:`experiment_index_journal_mark`), so a
+restart replays the journal from there instead of listing every record; on a
+remote store its full listings run behind serving, a chunk applied per
+refresh (:mod:`experiment_index_sweep_behind`). :meth:`freshness` says
+which of these it is busy with, between refreshes too.
+
 Storage is duck-typed (``list_files``, ``load_file``, and optionally
 ``list_record_names``/``list_files(keys=)``/``direct_files``/``read_file_from``/
 ``plain_record_dir``/``index_cache_path``/``cache_identity``); like the rest of
@@ -53,6 +60,7 @@ from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
+from vmn_exp.core.index_journal_mark import JournalMark
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
 from vmn_exp.core.index_load_queue import LoadQueue
 from vmn_exp.core.index_rows_first import first_objects
@@ -110,6 +118,7 @@ class ExperimentIndex:
         self._freshness = index_freshness.Freshness(lambda: self._io or self._store, app_name)
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
         self._baseline = ListingBaseline(self._store, app_name)
+        self._mark = JournalMark(self._store, app_name)
         self._io = None  # the I/O helper process, once use_io_process() started it
         self._records = None
         self._order = None  # record keys in storage order
@@ -166,6 +175,28 @@ class ExperimentIndex:
         loads it, if new) without listing anything else."""
         self._sweep.hint(name)
 
+    def journal_at(self, ms):
+        """The journal hinted every entry up to *ms* (its reader's cursor):
+        once refreshed, the records stand at that mark (persisted with them)."""
+        self._sweep.journal_at(ms)
+
+    def resume_journal(self, oldest_ms):
+        """Carry on from the persisted records when their journal mark is
+        no older than *oldest_ms* (the oldest entry the journal still holds):
+        no full listing, the caller replays the journal from the mark it
+        returns. None: no such mark — the index needs :meth:`reconcile`."""
+        mark = self._mark.load()
+        if mark is None or mark < oldest_ms:
+            return None
+        self._sweep.resume()
+        return mark
+
+    def overflowed(self, names):
+        """The journal named too many of the app's records in one tick:
+        re-read *names* and list the record names (not their files) for
+        anything else it missed."""
+        self._sweep.overflowed(names)
+
     @property
     def drift(self):
         """Records the consistency check found changed with no journal entry."""
@@ -197,8 +228,16 @@ class ExperimentIndex:
 
     def freshness(self):
         """``{as_of, refreshing, phase, progress}`` of the current snapshot
-        (:mod:`~vmn_exp.core.index_freshness`); never waits."""
-        return self._freshness.state(self._lock.locked())
+        (:mod:`~vmn_exp.core.index_freshness`); never waits. A journaled
+        index's full listing behind serving (progress: the share of records
+        listed) or catch-up on the journal (a replay, an overflow, hints
+        queued) shows as ``full_listing``/``journal`` between refreshes too."""
+        state = self._freshness.state(self._lock.locked())
+        behind = self._sweep.listing_phase()
+        if behind is not None and (
+                behind[0] == index_freshness.FULL_LISTING or state["phase"] == index_freshness.IDLE):
+            state["phase"], state["progress"] = behind
+        return state
 
     def full_listing_due(self):
         """Whether the next refresh lists storage fully (diagnostics)."""
@@ -304,8 +343,9 @@ class ExperimentIndex:
             self._store, self._unsaved = store or other._store, other._unsaved
             if self._store is not other._store:
                 self._baseline = ListingBaseline(self._store, self.app_name)
+                self._mark = JournalMark(self._store, self.app_name)
             else:
-                self._baseline = other._baseline
+                self._baseline, self._mark = other._baseline, other._mark
             self.generation += 1
             self._snapshot = self._build_snapshot()
 
@@ -345,6 +385,7 @@ class ExperimentIndex:
                 self._records = self._load_records()
                 if self._records and self._snapshot is None and not self._lean:
                     self._publish_persisted()
+        self._sweep.behind = self._io is None and self._remote()
         self._freshness.listing(self._listing_phase(started), self._records,
                                 self._listing_position())
         listing, removed = self._sweep.listing(self._records, started)
@@ -358,7 +399,9 @@ class ExperimentIndex:
         unread = sum(record is None for _, _, record in work)
         self._freshness.loading(unread)
         if self._io is not None:  # the helper process persists them
-            self._apply(self._io.refresh(work, removed), removed, started)
+            results = self._io.refresh(work, removed)
+            self._apply(results, removed, started)
+            self._save_mark(self._mark_puts(results, removed))
             return
         queue = self._load_queue(work)
         self._unread = unread
@@ -376,7 +419,8 @@ class ExperimentIndex:
         self._refresh_part(chunk, removed, started, started)
 
     def _listing_phase(self, now):
-        if self._sweep._full_due(now):
+        sweep = self._sweep
+        if sweep._full_due(now) and not (sweep.journaled and sweep.behind):  # see freshness()
             return index_freshness.FULL_LISTING
         return index_freshness.JOURNAL if self._sweep.journaled else index_freshness.LISTING
 
@@ -526,19 +570,32 @@ class ExperimentIndex:
         *started* — the listing baseline: in the same transaction when the
         store joins them, else only once nothing is left unsaved."""
         baseline = started is not None and self._keeps_baseline()
-        joint = baseline and getattr(self._store, "JOINS_KV", False)
+        joins = getattr(self._store, "JOINS_KV", False)
+        joint = baseline and joins
         puts = self._baseline.puts(self._sweep, started) if joint else None
+        marks = self._mark_puts(results, removed) if started is not None else []
         saved = self._unsaved.save(
             self._store, self.app_name,
             {key: record for key, record, dirty, _, _ in results if dirty},
             removed,
             {key: record for key, record, _, _, state_moved in results if state_moved},
-            puts,
+            (puts or []) + marks if joins else puts,
         )
         if puts and not saved:
             self._baseline.forget()
         elif baseline and not joint and saved:
             self._baseline.save(self._sweep, started)
+        if saved:
+            self._mark.saved(marks) if joins else self._save_mark(marks)
+
+    def _mark_puts(self, results, removed):
+        changed = bool(removed) or any(dirty or state_moved for _, _, dirty, _, state_moved in results)
+        return self._mark.puts(self._sweep.persistable_mark(), changed)
+
+    def _save_mark(self, puts):
+        for put in puts:
+            self._store.kv_put(*put)
+        self._mark.saved(puts)
 
     def _refresh_records(self, work, direct):
         """``(key, record, dirty, moved, state moved)`` per ``(key, names,
