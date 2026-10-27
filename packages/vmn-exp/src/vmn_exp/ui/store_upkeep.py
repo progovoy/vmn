@@ -15,7 +15,9 @@ an :class:`AppUpkeep` pass over it at most every ``interval_sec`` per index:
   of each failed or stuck run, once per server process, newest first, until
   the pass's ``budget_sec`` is spent (the next pass goes on): a dead writer's
   hundreds of 30 s segments become one indexed object, so its charts cost
-  two round trips.
+  two round trips. A run whose listings already show its metrics on ``.vmx``
+  files alone and one log object per stream (compacted before a restart)
+  costs those two listings, never a read of its log.
 
 Only the replica leading an index (an elected index's ``leading``) works on
 it. Failures are logged, never raised, and a run whose compaction failed is
@@ -96,13 +98,13 @@ class AppUpkeep:
                 return
             self._compacted.add(verstr)
             try:
-                compact_record(self._storage, self._app, verstr)
-                compact_record_logs(self._storage, self._app, verstr)
+                merged = compact_record(self._storage, self._app, verstr)
+                merged += compact_record_logs(self._storage, self._app, verstr)
             except Exception:
                 _LOGGER.warning(f"Compacting {verstr} failed", exc_info=True)
                 counts["failed"] += 1
             else:
-                counts["compacted"] += 1
+                counts["compacted"] += bool(merged)
 
     def _dead(self, snapshot):
         """The failed/stuck runs not compacted yet, newest first."""

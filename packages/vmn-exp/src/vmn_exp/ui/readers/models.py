@@ -8,7 +8,7 @@ from __future__ import annotations
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
 from vmn_exp.registry.store import (
-    get_version, header_kind, list_models, list_versions, load_header,
+    get_version, header_kind, list_models, list_versions, load_header, registry_listing,
 )
 
 
@@ -116,13 +116,13 @@ def model_detail_response(storage, model_name: str) -> tuple:
 def list_models_response(storage, kind=None) -> dict:
     """Return ``{"models": [ModelRow ...]}`` for the list endpoint, only
     *kind* (``model``/``dataset``) entries when given."""
-    model_names = list_models(storage)
+    listing = registry_listing(storage)
     rows = []
-    for name in model_names:
+    for name in list_models(storage, listing=listing):
         header = load_header(storage, name)
         if header is None or kind not in (None, header_kind(header)):
             continue
-        ns = list_versions(storage, name)
+        ns = list_versions(storage, name, listing[name])
         entries = read_entries(storage, name)
         fold = fold_registry(entries)
 

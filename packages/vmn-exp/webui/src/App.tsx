@@ -1,5 +1,6 @@
 /** The dashboard shell (plan 19 §1.1): skip link, the sidebar (a drawer below
- *  900px), the topbar with crumbs, the page outlet behind the sign-in gate,
+ *  900px), the topbar with crumbs, an app's stale-data banner, the page
+ *  outlet behind the sign-in gate,
  *  ⌘K, and a live region that reads each new page's title. */
 import { useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import ThemeToggle from "./components/ThemeToggle";
 import SelectionTrayHost from "./pages/SelectionTrayHost";
 import ContextRoot from "./components/shell/ContextRoot";
 import Crumbs from "./components/shell/Crumbs";
+import FreshnessBanner from "./components/shell/FreshnessBanner";
 import Sidebar from "./components/shell/Sidebar";
 import Topbar from "./components/shell/Topbar";
 import { setInert, useDrawer } from "./hooks/useDrawer";
@@ -36,7 +38,7 @@ function Shell() {
   const announced = useRouteAnnouncer(title, subject, ctx.override ?? ctx.routeId, useShellDeadEnd());
   usePaletteHotkey(setPaletteOpen);
   useHomeRevalidation();
-  useAppStatusPoll(ctx.ws, ctx.appTag);
+  const status = useAppStatusPoll(ctx.ws, ctx.appTag);
   // A layout effect: the shell must be focusable again before the closing
   // palette hands focus back to its opener.
   useLayoutEffect(() => setInert(shellRef.current, paletteOpen), [paletteOpen]);
@@ -67,6 +69,7 @@ function Shell() {
           <main id="main" className="content" tabIndex={-1}>
             <div className={`content-inner${ctx.wide ? " wide" : ""}`}>
               <AuthGate>
+                <FreshnessBanner freshness={isAppRoute(ctx.routeId) ? status?.freshness : undefined} />
                 <SelectionTrayHost {...trayApp}>
                   {/* Pages stay mounted across param changes (their caches paint
                       at once); only a render error is reset by navigating. */}

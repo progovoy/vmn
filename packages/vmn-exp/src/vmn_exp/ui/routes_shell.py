@@ -2,7 +2,10 @@
 """The dashboard shell's routes: ``.../workspaces/{ws}/git`` (branch, HEAD,
 dirty), ``.../apps/{app}/experiments-status`` (an app's status rollup) and
 ``.../workspaces/{ws}/apps-status`` (every app's, in one request); while an
-app's index still loads, its status carries ``indexing`` ``{loaded, total}``."""
+app's index still loads, its status carries ``indexing`` ``{loaded, total}``,
+and a background-refreshed one how fresh its data is (``freshness``, see
+:mod:`vmn_exp.ui.freshness`), so the dashboard (and a load balancer) see an
+index that serves old data or stopped refreshing."""
 import hashlib
 import json
 
@@ -12,6 +15,7 @@ import vmn_exp.core.status as experiment_status
 from vmn_exp.ui.api_errors import CodedError
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
+from vmn_exp.ui.freshness import freshness_key
 from vmn_exp.ui.git_context import git_context
 from vmn_exp.ui.memo import LRU, TTLCache
 from vmn_exp.ui.responses import json_response
@@ -21,26 +25,31 @@ GIT_TTL_SEC = 5
 STATUS_BODIES = 256
 
 
-def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards):
+def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards,
+             freshness_of):
     """Add the routes; *git_workspace(ws_name)* raises the route's 400/404,
     *status_snapshot(ws_name, app_tag)* -> the app's snapshot (raising its
     404 when there is no such app), *app_tags(ws_name)* -> the workspace's
-    apps in tag form. Returns ``forget(ws_name)``, which drops a removed
-    workspace's git context."""
+    apps in tag form, *freshness_of(ws_name, app_tag)* -> its index's
+    ``freshness`` or None (after the snapshot was asked for). Returns
+    ``forget(ws_name)``, which drops a removed workspace's git context."""
     contexts = TTLCache(GIT_TTL_SEC)
     summaries = LRU(STATUS_BODIES)
 
     def summary(ws_name, app_tag, now):
-        """``(summary, etag)`` of an app, memoized per etag."""
+        """``(summary, etag)`` of an app, its rollup memoized per snapshot."""
         snapshot = status_snapshot(ws_name, app_tag)
+        fresh = freshness_of(ws_name, app_tag)
         # failed_recent ages with the clock even while nothing is live (when
         # the etag has no time bucket): the window is accurate to an hour.
         hour = int(now.timestamp() // 3600)
         etag = leaderboards.etag(snapshot, {}, kind="status", hour=hour)
-        payload = summaries.get(
-            etag, lambda: _with_indexing(status_summary(leaderboards.rows(snapshot), now), snapshot)
-        )
-        return payload, etag
+        payload = summaries.get(etag, lambda: _with_indexing(
+            status_summary(leaderboards.rows(snapshot), now), snapshot))
+        if fresh is None:
+            return payload, etag
+        key = json.dumps([etag, freshness_key(fresh, now.timestamp())], default=str)
+        return dict(payload, freshness=fresh), _digest(key)
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/git", dependencies=[require(VIEWER)])
     def workspace_git(ws_name: str):  # sync: git runs in the threadpool
@@ -66,8 +75,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
                 continue
         payload = {tag: body for tag, (body, _) in answers.items()}
         etags = json.dumps([[tag, etag] for tag, (_, etag) in answers.items()])
-        etag = hashlib.blake2b(etags.encode(), digest_size=16).hexdigest()
-        return json_response(payload, etag=etag, request=request)
+        return json_response(payload, etag=_digest(etags), request=request)
 
     return contexts.pop
 
@@ -79,3 +87,7 @@ def _with_indexing(payload, snapshot):
         return payload
     loaded, total = snapshot.loading
     return dict(payload, indexing={"loaded": loaded, "total": total})
+
+
+def _digest(text):
+    return hashlib.blake2b(text.encode(), digest_size=16).hexdigest()

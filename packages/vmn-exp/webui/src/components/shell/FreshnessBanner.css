@@ -1,0 +1,12 @@
+.freshness-banner {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--freshness-tone);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--freshness-tone) 12%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.freshness-banner.stale { --freshness-tone: var(--st-stuck); }
+.freshness-banner.error { --freshness-tone: var(--st-bad); }

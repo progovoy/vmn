@@ -12,11 +12,13 @@ from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import snapshot_extra
 from vmn_exp.core.status import load_run_state
+from vmn_exp.core.values import is_finite_number
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.storage.areas import RUNS, SNAPSHOTS, local_store_root
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.facet_values import distinct_count, value_key
 from vmn_exp.ui.failure_signature import signed
+from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN
 from vmn_exp.ui.leaderboard_group_fields import conf_aggregate
 from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
@@ -43,6 +45,16 @@ def group_aggregate(root_path, app_name):
     of the conf the app reads on the checkout's branch (its branch conf, if any)."""
     conf = read_conf_file(app_conf_path(root_path, app_name))
     return conf_aggregate(conf.get("experiment"))
+
+
+def stale_after_min(root_path, app_name):
+    """Minutes past which the dashboard says the app's data is stale: conf
+    ``experiment.ui.stale_after_min`` (on the checkout's branch) when a
+    positive number, else :data:`~vmn_exp.ui.freshness.DEFAULT_STALE_AFTER_MIN`."""
+    conf = read_conf_file(app_conf_path(root_path, app_name))
+    ui = (conf.get("experiment") or {}).get("ui")
+    value = ui.get("stale_after_min") if isinstance(ui, dict) else None
+    return value if is_finite_number(value) and value > 0 else DEFAULT_STALE_AFTER_MIN
 
 
 def list_apps(root_path):

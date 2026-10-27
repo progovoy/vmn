@@ -107,9 +107,17 @@ The cache is SQLite, one database file per workspace under
 `<data_dir>/index/`. Every vmn SQLite file runs in WAL mode with
 `synchronous=NORMAL`, and its writes take the write lock up front (`BEGIN
 IMMEDIATE`). A rebuild (resync, a corrupt file, an older schema) writes a new file
-beside the old one and switches a small `<file>.current` pointer to it. The old
-file is deleted only once no process has it open, so a reader never loses its
-database mid-read. A file written by a *newer* vmn is left alone: that process
+beside the old one (`<name>.<n>.sqlite`) and switches a small `<file>.current`
+pointer to it. The old file and its `-wal`/`-shm` are deleted only once no
+process has it open, so a reader never loses its database mid-read. vmn-exp
+retries that deletion itself whenever a store opens or a connection moves to
+the new file, and the server retries it every minute. A file newer than the
+live one (a rebuild still being written) is never touched. You never delete
+cache files by hand. The WAL stays bounded too: refreshes save 500 runs per
+transaction, a checkpoint cuts the `-wal` back to 64 MB, and a write that grows
+it past that (or the server's minute tick) empties it with a short
+`wal_checkpoint(TRUNCATE)`. If readers keep it busy, the checkpoint is retried
+later. A file written by a *newer* vmn is left alone: that process
 runs without a cache and warns once. A cache directory on a network filesystem
 (NFS, SMB, sshfs) is replaced by a local one under `$TMPDIR` with a warning,
 because SQLite's WAL locking is unreliable there. Set `VMN_EXP_CACHE_DIR` to keep
@@ -224,8 +232,13 @@ its data write and its journal put, a clock far behind, a hand-edited file):
 - **Full listing** at startup and on a rebuild.
 - **Rolling consistency check:** each tick, a slice of the known records'
   file signatures is compared with the cache, sized so that every record is
-  covered once per `reconcile_sec` (default 3600). Changed records are re-read.
-  Each one is counted as drift (`vmn_cache_drift_total`).
+  covered once per `reconcile_sec` (default 3600), but never more than 500
+  records a tick nor 50 records a second (~150 S3 LISTs a second), so its cost
+  does not grow with the store. Past 50 × `reconcile_sec` records (180k) a
+  round takes longer than `reconcile_sec` (N / 50 seconds: ~2.7 h at 486k);
+  journaled changes, live runs and new runs are still listed at once.
+  Changed records are re-read. Each one is counted as drift
+  (`vmn_cache_drift_total`).
 
 **Git workspaces** have no journal. They are refreshed by listing the
 checkout's records, as before.

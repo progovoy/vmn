@@ -334,12 +334,15 @@ class LeaderboardCache(SetAnswers):
                 if base.snapshot.app_name == snapshot.app_name]
         prev = max(kept, key=lambda base: base.token, default=None)
         prev = prev and latest(prev, bucket)
-        derived = prev and _Base.derived(prev, snapshot, token, bucket)
-        if derived:
-            self._deltas.add(derived)
-        base = derived or _Base.build(snapshot, token, bucket)
+        base = prev and _Base.derived(prev, snapshot, token, bucket)
+        if base:
+            self._deltas.add(base)
+        else:
+            base = _Base.build(snapshot, token, bucket)
+            # A whole board's new rows; a derived base's few are not worth a
+            # freeze, which keeps every cycle alive now for good.
+            freeze_long_lived()
         self.generations.advance(snapshot.app_name, token)
-        freeze_long_lived()  # the base lives for its generation (no cycles)
         return base
 
     def _ordered(self, snapshot, schema, last, f):

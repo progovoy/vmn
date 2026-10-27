@@ -45,9 +45,11 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 
 from vmn_exp.core.fold import fold_log, fold_row
 from vmn_exp.core.gc_pause import gc_paused
+from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
@@ -105,6 +107,7 @@ class ExperimentIndex:
         self._cache_path = cache_path
         self._store = cache_store or IndexStore(cache_path)
         self._unsaved = PendingSave()  # what a failed save left to persist
+        self._freshness = index_freshness.Freshness(lambda: self._io or self._store, app_name)
         self._sweep = Sweep(storage, app_name, full_sweep_sec)
         self._baseline = ListingBaseline(self._store, app_name)
         self._io = None  # the I/O helper process, once use_io_process() started it
@@ -192,6 +195,11 @@ class ExperimentIndex:
         """True while a refresh holds the index (diagnostics; never waits)."""
         return self._lock.locked()
 
+    def freshness(self):
+        """``{as_of, refreshing, phase, progress}`` of the current snapshot
+        (:mod:`~vmn_exp.core.index_freshness`); never waits."""
+        return self._freshness.state(self._lock.locked())
+
     def full_listing_due(self):
         """Whether the next refresh lists storage fully (diagnostics)."""
         return self._sweep._full_due(_monotonic())
@@ -268,6 +276,7 @@ class ExperimentIndex:
                 self._io = start_io_process(self._storage, self.app_name, self._cache_path)
                 if self._io is not None:
                     self._sweep.watch = self._io.watch
+                    self._freshness.load()  # now: the pipe is the refresh's
             return self._io is not None
 
     def close(self):
@@ -302,12 +311,14 @@ class ExperimentIndex:
 
     def _refresh_locked(self):
         started = _monotonic()
+        self._freshness.started()
         if self._cache_gen is not None:
             self._refresh_from_cache()
+            self._freshness.reload()  # its leader's
             self.last_refresh_at = started
             return
         try:
-            with gc_paused():
+            with self._paused_unless_remote():
                 self._refresh_from_storage(started)
         except Exception:
             # A listing's changes may have been taken but not applied.
@@ -315,15 +326,27 @@ class ExperimentIndex:
             raise
         finally:
             self._published.set()
+            self._freshness.idle()
         self.last_refresh_at = started
+        self._freshness.refreshed()
+
+    def _paused_unless_remote(self):
+        """A local refresh is bulk work throughout, so collection pauses for
+        all of it (see :mod:`~vmn_exp.core.gc_pause`). A remote one pauses it
+        only to decode and fold, never across its listing and reads: at 486k
+        records on S3 those take hours, and the process's garbage piled up."""
+        return nullcontext() if self._remote() else gc_paused()
 
     def _refresh_from_storage(self, started):
         if self._records is None:
             if self._keeps_baseline():  # read before the records it vouches for
                 self._baseline.load(self._sweep, started)
-            self._records = self._load_records()
-            if self._records and self._snapshot is None and not self._lean:
-                self._publish_persisted()
+            with gc_paused():
+                self._records = self._load_records()
+                if self._records and self._snapshot is None and not self._lean:
+                    self._publish_persisted()
+        self._freshness.listing(self._listing_phase(started), self._records,
+                                self._listing_position())
         listing, removed = self._sweep.listing(self._records, started)
 
         # Unfinished claims and deleted records' leftovers have no metadata.
@@ -332,21 +355,36 @@ class ExperimentIndex:
             for key, names in listing.items()
             if METADATA_FILE in names
         ]
+        unread = sum(record is None for _, _, record in work)
+        self._freshness.loading(unread)
         if self._io is not None:  # the helper process persists them
             self._apply(self._io.refresh(work, removed), removed, started)
             return
         queue = self._load_queue(work)
-        self._unread = sum(record is None for _, _, record in work)
+        self._unread = unread
         try:
             chunk = self._take(queue)
             while queue:
-                self._unread -= sum(record is None for _, _, record in chunk)
+                new = sum(record is None for _, _, record in chunk)
+                self._unread -= new
                 results = self._refresh_part(chunk, (), started, None)
+                self._freshness.loaded(new)
                 queue.want(self._unloaded_parents(results))
                 chunk = self._take(queue)
         finally:
             self._unread = 0
         self._refresh_part(chunk, removed, started, started)
+
+    def _listing_phase(self, now):
+        if self._sweep._full_due(now):
+            return index_freshness.FULL_LISTING
+        return index_freshness.JOURNAL if self._sweep.journaled else index_freshness.LISTING
+
+    def _listing_position(self):
+        """``position()`` -> the key a full listing's walk is at, when the
+        storage tells (:meth:`~vmn_exp.storage.s3_listing.S3Listing.listing_position`)."""
+        position_of = getattr(self._storage, "listing_position", None)
+        return (lambda: position_of(self.app_name)) if position_of else None
 
     def _take(self, queue):
         """The queue's next chunk, a remote record not read yet cut to its
@@ -380,12 +418,13 @@ class ExperimentIndex:
         """Read, apply and persist *work*, with the listing baseline as of
         *baseline_at* (None: not the refresh's last part)."""
         results = self._refresh_local(work)
-        try:
-            self._apply(results, removed, started)
-        except BaseException:
-            self._persist(results, removed)  # no baseline: the sweep missed some
-            raise
-        self._persist(results, removed, baseline_at)
+        with gc_paused():
+            try:
+                self._apply(results, removed, started)
+            except BaseException:
+                self._persist(results, removed)  # no baseline: the sweep missed some
+                raise
+            self._persist(results, removed, baseline_at)
         if self._snapshot is not None:
             self._published.set()
         return results

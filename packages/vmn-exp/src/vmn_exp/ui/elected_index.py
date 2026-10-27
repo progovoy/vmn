@@ -84,6 +84,9 @@ class ElectedIndex:
         self.refresh()
         return self.snapshot()
 
+    def freshness(self):
+        return self._current().freshness()
+
     def snapshot(self):
         return self._current().snapshot()
 

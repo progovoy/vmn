@@ -181,7 +181,8 @@ restart.
   and dependency graphs are recomputed only after a stamp.
 - **Background refresh**: requests never refresh the index. Each app requested
   within the last minute gets a thread that refreshes it about once a second,
-  with every record re-listed at least once an hour; requests read the latest snapshot, so
+  with every record re-listed at least once an hour (at most 500 a refresh; on a store
+  also 50 a second, so past 180k runs a round takes longer); requests read the latest snapshot, so
   the dashboard lags the files by about a second. Only an app's first request
   waits for the initial load. A failed refresh (say, the bucket is
   unreachable) is logged and the last snapshot keeps being served.
@@ -236,8 +237,9 @@ The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 
 | new run visible (p95) | 3.7 s | 3.1 s | 1.5 s |
 | first load | 37 s | 27 s | 21 s |
 
-`orjson` has no free-threaded wheel yet, so 3.14t encodes JSON with the
-standard library (included above). With the GIL on and a watched app of
+`orjson` has no free-threaded wheel yet, so the `ui` extra leaves it out and
+3.14t encodes JSON with the standard library (included above). On a regular
+CPython, `pip install "vmn-exp[ui,orjson]"` renders large pages faster. With the GIL on and a watched app of
 10,000+ runs, `vmn-exp ui` prints this hint once.
 
 ## Diagnostic dumps
@@ -779,6 +781,49 @@ unknown app is a 404 `{"detail", "code": "app_not_found"}`, checked against the
 checkout (`.vmn/<app>/conf.yml`) and the store (any run or snapshot record),
 not the cached app list. ETag/304, accurate to the hour for `failed_recent`.
 
+With background refresh (`vmn-exp ui`), the summary also carries how fresh
+the app's index is, read without I/O, so a dashboard or a load balancer sees
+an index that serves old data or stopped keeping up:
+
+```json
+"freshness": {"as_of": "2026-10-22T19:44:00.120000+00:00", "refreshing": true,
+              "refresh_running_sec": 125, "phase": "full_listing", "progress": 0.45,
+              "refresh_failing": false, "last_error": null, "stale_after_sec": 300}
+```
+
+- `as_of`: the wall time the last completed refresh started (`null` before
+  one). It persists in the index file (at most once a minute), so a restarted
+  server serving its persisted rows says they date from its last refresh.
+- `refreshing` / `refresh_running_sec`: a refresh is running, for how long
+  (`null` when none).
+- `phase`: what that refresh does — `full_listing` (every record's files),
+  `journal` (a store's journaled sweep: hinted and live records), `listing`
+  (a checkout's names-only listing), `loading_new` (reading the new or changed
+  records it found), else `idle`. `progress` (0..1, else `null`): how far an
+  S3 full listing's walk is among the index's known keys, or the share of new
+  records read.
+- `refresh_failing`: the refresh is failing (`last_error` is its streak's
+  last error), its thread is gone, or it has run past 10 minutes (stuck).
+- `stale_after_sec`: the age past which the dashboard warns — conf
+  `experiment.ui.stale_after_min` of a checkout's app (default 5).
+
+Its times count by the minute in the ETag, and what a refresh does only while
+the data is stale or the refresh failing (a fresh index's once-a-second
+refreshes leave the ETag alone). The dashboard shows a banner under
+the topbar, and the boards' count line a short form, when the data is older
+than `stale_after_sec` or a refresh runs on data older than that ("Showing
+data as of Oct 22 19:44 UTC (4d old). Syncing with the store — listing runs,
+~45%. New runs will appear when it finishes."), or when the refresh is failing
+("Data is 4d old and the background refresh has not completed for 25m
+(last error: …)"); none once a refresh published fresh data. It polls the
+status every 2 s while a refresh runs on stale data. The refresher heals
+itself: an error in any refresh step is logged (a WARNING with the traceback
+when a failure streak starts, every 10 minutes while it lasts, and when it
+recovers) and never ends its thread; a refresh or journal thread that ended
+anyway is restarted by the next request (an ERROR); a refresh running past
+10 minutes is warned about once. S3 calls time out (10 s connect, 30 s per
+read) and retry in botocore's standard mode.
+
 `GET ws/{ws}/apps-status` answers `{"<app tag>": <the same summary>, ...}` for
 every app of the workspace in one request (tags use `-` for `/`), memoized
 like the per-app route; ETag/304.
@@ -1252,7 +1297,8 @@ Registry writes run in-process (no job, no repo lock) and are 403 with
 
 ### Caching and compression
 
-JSON is rendered with `orjson` (in the `ui` extra; NaN/inf become `null`) and
+JSON is rendered with `orjson` when installed (the `orjson` extra; else the
+standard library; NaN/inf become `null` either way) and
 gzipped when the client accepts it. The web bundle (`/assets/*`, `index.html`
 and client routes) is served `Cache-Control: no-cache` with ETags, so an
 upgrade never serves a stale chunk and a reload revalidates to a bodiless 304.

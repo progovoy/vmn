@@ -28,15 +28,23 @@ A watch that says it is ``rolling`` (the server's I/O helper) never lists
 everything at once after the first listing: each refresh also re-lists the
 next slice of the known records, sized so every one comes round within
 ``full_sweep_sec`` — at 100k records one full listing kept a refresh, and so
-every new run, waiting for seconds.
+every new run, waiting for seconds. A slice never exceeds
+:data:`SLICE_BUDGET` records, however big the store or long the last
+refresh (at 486k S3 records an unbounded slice was 48k records, and one
+refresh 97 minutes): a bigger store's round takes about N / SLICE_BUDGET
+refreshes instead.
 
 A ``journaled`` sweep (the ui, reading the store's change journal; plan 11
 §5.2) lists the files of the records the journal named (:meth:`Sweep.hint`)
 and of each live one at its own heartbeat cadence (:func:`live_relist_sec`;
 for its heartbeats, which the journal leaves out), plus the same rolling slice
-of every known record — the consistency check (plan 11 §4.6), so each comes round once per
-``full_sweep_sec`` (``reconcile_sec``) — and, at the start of each round, the
-record names (for records no journal entry announced). What the check finds
+of every known record — the consistency check (plan 11 §4.6), so each comes
+round once per ``full_sweep_sec`` (``reconcile_sec``), but at most
+:data:`MAX_RECHECK_PER_SEC` a second (re-listing remote records costs money;
+N / MAX_RECHECK_PER_SEC seconds a round when that is longer) — and, at the
+start of each round, the record names (for records no journal entry
+announced). Only the check is
+budgeted: hinted, live and new records are listed at once. What the check finds
 changed that no hint or live listing explains is counted in :attr:`Sweep.drift`.
 Its only full listings are the first one and :meth:`Sweep.request_full`.
 
@@ -56,6 +64,21 @@ from vmn_exp.core.index_sweep_state import SweepState, _settled
 from vmn_exp.core.status import heartbeat_interval_sec, stale_after_sec
 
 DEFAULT_FULL_SWEEP_SEC = 300  # 0: every refresh is a full listing
+# The most records one refresh re-lists for the consistency check (and the
+# most credit it keeps), whatever the store's size or the last refresh's
+# length. On S3 a record's files are three delimited LISTs (the record, log/,
+# metrics/), so 500 are ~1500 requests: a few seconds at S3_WORKERS in
+# parallel, which the refresh, and so every new run, waits for; a local store
+# lists them in milliseconds; at a ~1 s refresh, its 300 s rounds stay
+# within 300 s up to 150k records.
+SLICE_BUDGET = 500
+# The most records a second a journaled sweep's consistency check (the ui on
+# a store) re-lists, sustained: a safety net beside the journal, ~150 S3 LISTs
+# a second is plenty (486k records every 3600 s would be 135 records, ~400
+# LISTs, a second forever). Stores up to 50 * full_sweep_sec records (the
+# ui: 180k) still come round every full_sweep_sec; a 486k one takes ~2.7 h.
+# A rolling (local) sweep's stat()s are cheap: it keeps its 300 s rounds.
+MAX_RECHECK_PER_SEC = 50
 # The shortest period a journaled sweep re-lists a live record the journal
 # did not name at (and a pending claim's): the journal names every write but
 # a heartbeat-only run_state.yml (see live_relist_sec).
@@ -193,7 +216,7 @@ class Sweep(SweepState):
             k for k, files in changed.items()
             if k not in self._explained and METADATA_FILE in files
         ]
-        self.drift += len(unexplained) + len(gone & set(records))
+        self.drift += len(unexplained) + sum(key in records for key in gone)
         self._explained.difference_update(due)
         return changed, gone
 
@@ -271,13 +294,19 @@ class Sweep(SweepState):
 
     def _next_slice(self, now, population):
         """The keys of *population* due for their periodic re-listing. A
-        refresh lists at most a tenth of them, however long the last one took
-        (a cold load can outlast full_sweep_sec)."""
+        refresh lists at most a tenth of them, and never more than
+        SLICE_BUDGET, however long the last one took (a cold load can outlast
+        full_sweep_sec); a journaled sweep's credit accrues at most
+        MAX_RECHECK_PER_SEC a second: a big store's round just takes longer."""
         elapsed = now - (self._rolled_at if self._rolled_at is not None else now)
         elapsed = min(elapsed, self.full_sweep_sec / 10)
         self._rolled_at = now
         size = max(len(population), 1)  # an empty one still starts rounds
-        self._credit = min(self._credit + size * elapsed / self.full_sweep_sec, size)
+        rate = size / self.full_sweep_sec
+        if self.journaled:
+            rate = min(rate, MAX_RECHECK_PER_SEC)
+        accrued = self._credit + rate * elapsed
+        self._credit = min(accrued, size, SLICE_BUDGET)
         self._wrapped = False
         due = []
         while len(due) < int(self._credit):

@@ -9,14 +9,21 @@ write runs in an explicit :func:`write_tx`, which takes the write lock up
 front (``BEGIN IMMEDIATE``), so a read-then-write inside it is never raced.
 A connection may be shared by a process's threads: its transactions take
 turns under the connection's own lock.
+
+A WAL never keeps its peak size: a checkpoint cuts it back to
+:data:`JOURNAL_SIZE_LIMIT`, and :func:`checkpoint` empties it (a server's
+connections stay open for its whole life, so no last close ever does).
 """
 import contextlib
+import os
 import sqlite3
 import threading
 
 BUSY_TIMEOUT_MS = 5000
 CACHE_SIZE = -16384  # KiB (16 MiB), negative as SQLite counts it
 MMAP_SIZE = 256 << 20
+JOURNAL_SIZE_LIMIT = 64 << 20  # bytes a WAL is cut back to once checkpointed
+CHECKPOINT_BUSY_MS = 100  # how long a checkpoint waits for other connections
 
 
 class _Connection(sqlite3.Connection):
@@ -36,7 +43,9 @@ def connect(path, *, readonly=False, busy_timeout_ms=None):
         target, uri=uri, timeout=busy_timeout_ms / 1000,
         isolation_level=None, check_same_thread=False, factory=_Connection,
     )
-    conn.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
+    conn.busy_timeout_ms = int(busy_timeout_ms)
+    conn.execute(f"PRAGMA busy_timeout={conn.busy_timeout_ms}")
+    conn.execute(f"PRAGMA journal_size_limit={JOURNAL_SIZE_LIMIT}")
     if not readonly:
         try:
             conn.execute("PRAGMA journal_mode=WAL")
@@ -47,6 +56,30 @@ def connect(path, *, readonly=False, busy_timeout_ms=None):
     conn.execute(f"PRAGMA mmap_size={MMAP_SIZE}")
     conn.execute("PRAGMA temp_store=MEMORY")
     return conn
+
+
+def checkpoint(conn):
+    """Copy *conn*'s WAL into its database and truncate it, outside any
+    transaction, waiting at most :data:`CHECKPOINT_BUSY_MS` for other
+    connections; True when done, False when they kept it busy (try later)."""
+    with conn.tx_lock:
+        try:
+            conn.execute(f"PRAGMA busy_timeout={CHECKPOINT_BUSY_MS}")
+            try:
+                (busy, _, _) = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            finally:
+                conn.execute(f"PRAGMA busy_timeout={conn.busy_timeout_ms}")
+        except sqlite3.Error:
+            return False
+        return not busy
+
+
+def wal_oversized(file):
+    """Whether *file*'s WAL grew past :data:`JOURNAL_SIZE_LIMIT`."""
+    try:
+        return os.path.getsize(file + "-wal") > JOURNAL_SIZE_LIMIT
+    except OSError:
+        return False
 
 
 def in_chunks(values, size=500):

@@ -11,7 +11,6 @@ new bytes (:mod:`~vmn_exp.ui.readers.parsed_logs`).
 """
 from collections import ChainMap
 
-import yaml
 from vmn_exp.core.fold import fold_inputs_dict, fold_outputs_dict
 from vmn_exp.core.log import last_metric_at, list_artifacts
 from vmn_exp.core.log import load_log as _load_log
@@ -27,6 +26,7 @@ from vmn_exp.core.status import (
 )
 from vmn_exp.core.tree import children_by_parent, fleet_summary, run_status, subtree_verstrs
 from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.detail_env import detail_env, env_file
 from vmn_exp.ui.readers.detail_reads import RunStates, submit
 from vmn_exp.ui.readers.failure_context import failure_fields
 from vmn_exp.ui.readers.histograms import detail_media
@@ -38,28 +38,7 @@ from vmn_exp.ui.readers.series import DEFAULT_MAX_POINTS, points_per_metric
 
 from vmn_exp.snapshot import _resolve_verstr
 
-_ENV_SIZE_CAP = 256 * 1024  # 256 KB
-
 LOG_TAIL = 200
-
-
-def _env_payload(raw, metadata):
-    """``env`` payload for the detail: full dict when env.yml fits, else summary.
-
-    Returns the full env dict when env.yml (*raw*, bytes or None) is present
-    and at most ``_ENV_SIZE_CAP`` bytes.  When the file is larger, returns the
-    compact summary from *metadata* with ``truncated: True`` added.  Returns
-    ``None`` when neither env.yml nor a summary is available.
-    """
-    if raw is not None:
-        if len(raw) <= _ENV_SIZE_CAP:
-            try:
-                return yaml.safe_load(raw)
-            except Exception:
-                pass
-        summary = metadata.get("env")
-        return dict(summary, truncated=True) if summary else None
-    return metadata.get("env") or None
 
 
 _DETAIL_STATUS_KEYS = tuple(status_fields(None)) + (
@@ -289,7 +268,7 @@ def experiment_detail(
     metadata_read = submit(storage.load_metadata, app_name, verstr)
     log_read = submit(_PARSED.get, storage, app_name, verstr, read_log)
     artifacts_read = submit(list_artifacts, storage, app_name, verstr)
-    env_read = submit(storage.load_file, app_name, verstr, "env.yml")
+    env_read = submit(env_file, storage, app_name, verstr)
     compacted_read = submit(record_compacted, storage, app_name, verstr)
     states = RunStates(storage, app_name, read_run_state, read_observed_at)
     states.prefetch(_status_members(
@@ -339,7 +318,7 @@ def experiment_detail(
             job_status=job_status,
         ),
         "patches": patch_presence(storage, app_name, verstr, metadata),
-        "env": _env_payload(env_read.result(), metadata),
+        "env": detail_env(storage, app_name, verstr, env_read.result(), metadata),
         "inputs": fold_inputs_dict(snapshot._parsed.fold) or None,
         "outputs": fold_outputs_dict(snapshot._parsed.fold) or None,
         "imported_from": metadata.get("imported_from"),

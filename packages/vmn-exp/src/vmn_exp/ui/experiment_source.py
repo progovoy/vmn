@@ -23,6 +23,7 @@ from vmn_exp.core.status import run_state_observed_at
 from vmn_exp.ui import index as ui_index
 from vmn_exp.ui.cache_health import SqliteHealth
 from vmn_exp.ui.cache_resync import WorkspaceCache
+from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN, freshness
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.readers.baselines import last_good
@@ -90,10 +91,13 @@ class ExperimentSource:
         self._indexes = {}  # workspace name -> WorkspaceIndex
         self._journals = {}  # store workspace name -> WorkspaceJournal
         self._caches = {}  # workspace name -> WorkspaceCache
+        self._served_by = {}  # (workspace name, app name) -> the index serving it
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
         self._group_aggregates = MetricsSchemaCache(read=exp_reader.group_aggregate,
                                                     path=app_conf_path)
+        self._stale_afters = MetricsSchemaCache(read=exp_reader.stale_after_min,
+                                                path=app_conf_path)
         self._lock = threading.Lock()
         self._search_rows = search_rows
         self._upkeep = store_upkeep
@@ -151,6 +155,7 @@ class ExperimentSource:
                      else (lambda: self.metrics_schema(ws, app_name)))
 
         def note(index):
+            self._served_by[(ws.name, app_name)] = index
             self.similar.note(index, (ws.name, app_name), app_name)
             if self._search_rows is not None:
                 self._search_rows.note(index, ws.name, app_name, schema_of)
@@ -243,6 +248,13 @@ class ExperimentSource:
         """The git workspace app's default group aggregate (plan 22 G10)."""
         return self._group_aggregates.get(ws.path, app_name)
 
+    def stale_after_min(self, ws, app_name):
+        """The git workspace app's ``experiment.ui.stale_after_min``; the
+        default in a store workspace."""
+        if ws.kind != "git":
+            return DEFAULT_STALE_AFTER_MIN
+        return self._stale_afters.get(ws.path, app_name)
+
     def detail_options(self, ws, snap):
         """``edges``/``resolve``/``read_child_row``/``last_good`` (and with a background
         refresher ``read_run_state``/``read_observed_at``) for a
@@ -261,9 +273,20 @@ class ExperimentSource:
             options["read_observed_at"] = _observed_at_reader(snap.run_state_observed_at)
         return options
 
+    def freshness(self, ws_name, app_name, stale_after_min=DEFAULT_STALE_AFTER_MIN):
+        """How fresh the index a snapshot of the app was last served from is
+        (:mod:`vmn_exp.ui.freshness`); None before one, or inline."""
+        index = self._served_by.get((ws_name, app_name))
+        health = None if index is None else self.refresher.health(index)
+        if health is None:
+            return None
+        return freshness(health, index.freshness(), stale_after_min)
+
     def forget(self, ws_name):
         """Drop a removed workspace's caches: a later one may point elsewhere."""
         with self._lock:
+            for key in [k for k in self._served_by if k[0] == ws_name]:
+                del self._served_by[key]
             self._indexes.pop(ws_name, None)
             self._journals.pop(ws_name, None)
             self._caches.pop(ws_name, None)

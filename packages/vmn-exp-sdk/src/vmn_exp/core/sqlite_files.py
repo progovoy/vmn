@@ -6,10 +6,13 @@ A cache database has a *logical* path ``<dir>/<name><ext>``. Until its
 first rebuild the file at that path is the database. A rebuild (or a
 corruption recovery) writes a new generation ``<dir>/<name>.<n><ext>`` and
 atomically replaces the pointer file ``<dir>/<name><ext>.current``, which
-names the live one; every open reads the pointer. Files no longer live are
-removed by :func:`sweep` only when no connection holds them: SQLite keeps a
-shared lock on a database file for as long as a connection has it open, so
-an exclusive lock that succeeds proves nobody does.
+names the live one; every open reads the pointer. Files older than the live
+one are removed (with their ``-wal``/``-shm``) by :func:`sweep` only when no
+connection holds them: SQLite keeps a shared lock on a database file for as
+long as a connection has it open, so an exclusive lock that succeeds proves
+nobody does. A sweep runs on every store open (so when a connection follows a
+flip) and on the server's cache tick, so a superseded file goes as soon as its
+last reader moved on.
 """
 import os
 import re
@@ -89,10 +92,16 @@ def _all_files(path):
 
 
 def sweep(path):
-    """Remove every file of *path*'s database but the live one, when unused."""
+    """Remove the files of *path*'s database older than the live one, when
+    unused. A newer generation is a rebuild under way (unheld between its
+    writes and its flip): never touched."""
+    generations = {0: path, **_generations(path)}
     live = live_path(path)
-    for file in _all_files(path):
-        if file != live:
+    live_n = next((n for n, file in generations.items() if file == live), None)
+    if live_n is None:
+        return  # the pointer names no file on disk: nothing is known superseded
+    for n, file in generations.items():
+        if n < live_n:
             remove_if_unused(file)
 
 

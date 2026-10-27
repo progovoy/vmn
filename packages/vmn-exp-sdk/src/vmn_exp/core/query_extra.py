@@ -17,6 +17,7 @@ filled from the snapshot (:func:`~vmn_exp.core.similar_corpus.snapshot_scope`).
 import weakref
 
 from vmn_exp.core.index_point import index_path
+from vmn_exp.core.index_snapshot import schema_less
 from vmn_exp.core.query import ANCESTORS, SIMILAR
 from vmn_exp.core.query_similar import scope_matcher
 from vmn_exp.core.tree import ancestors
@@ -35,7 +36,7 @@ def bind_similar_scope(snapshot, scope_of):
 
 
 def _bound(snapshot):
-    for snap in (snapshot, getattr(snapshot, "_base", None)):
+    for snap in (snapshot, schema_less(snapshot)):
         found = _BOUND.get(snap) if snap is not None else None
         if found is not None:
             return found
@@ -45,7 +46,7 @@ def _bound(snapshot):
 def _memory_scope(snapshot):
     from vmn_exp.core.similar_corpus import snapshot_scope
 
-    base = getattr(snapshot, "_base", None) or snapshot  # one database for its views
+    base = schema_less(snapshot)  # one database for its views
     return snapshot_scope(base.app_name, base)
 
 

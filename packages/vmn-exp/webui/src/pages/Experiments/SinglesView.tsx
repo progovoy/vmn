@@ -12,6 +12,7 @@ import { useRunsBoard } from "../../hooks/useRunsBoard";
 import { useAppStatus } from "../../shell/useShellData";
 import { plural } from "../../util";
 import { BIG_GROUP } from "../../util/groupClause";
+import { freshnessShort } from "../../util/freshness";
 import { indexingText } from "../../util/indexing";
 import BoardHead from "../BoardHead";
 import LeaderboardToolbar from "../LeaderboardToolbar";
@@ -28,7 +29,8 @@ export default function SinglesView({ ws, app, views, onJobs }: {
 }) {
   const appName = toAppName(app);
   const view = useLeaderboardView();
-  const indexing = useAppStatus(ws, app).data?.indexing;
+  const status = useAppStatus(ws, app).data;
+  const indexing = status?.indexing;
   const [paused, setPaused] = useState(false);
   const { gen: filterGen, resetFilter, openGroup } = useAddFilterClauses(view);
   const board = useRunsBoard(ws, app, view, {
@@ -48,7 +50,7 @@ export default function SinglesView({ ws, app, views, onJobs }: {
     <>
       <BoardHead
         title={appName}
-        count={[count, indexingText(indexing)].filter(Boolean).join(" · ")}
+        count={[count, indexingText(indexing), freshnessShort(status?.freshness)].filter(Boolean).join(" · ")}
         views={views}
         actions={(
           <LeaderboardToolbar
