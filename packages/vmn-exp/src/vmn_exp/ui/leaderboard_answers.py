@@ -21,7 +21,8 @@ def _importance_step(base, scope):
 
 class SetAnswers:
     """Mixed into the cache: needs its ``_base``, ``schema_key`` and the
-    ``_importance``/``_facets``/``_filtered_facets``/``_top_counts`` memos."""
+    ``_importance``/``_facets``/``_filtered_facets``/``_top_counts``/
+    ``_status_counts`` memos."""
 
     def importance(self, snapshot, schema, metric, status=None, query=None, archived=False,
                    scope=None):
@@ -68,6 +69,12 @@ class SetAnswers:
         if scope is None and not query and not status:
             return self._top_counts.get(snapshot, bool(archived))
         return self._filtered(snapshot, archived, scope, query, status)[1]
+
+    def status_summary(self, snapshot, now):
+        """:func:`~vmn_exp.ui.status_summary.status_summary` of the visible
+        rows as of *now*, carried across generations
+        (:mod:`~vmn_exp.ui.status_counts`)."""
+        return self._status_counts.summary(snapshot, now)
 
     def facets_payload(self, snapshot, **where):
         """What ``experiments-facets`` answers: :meth:`facets` with

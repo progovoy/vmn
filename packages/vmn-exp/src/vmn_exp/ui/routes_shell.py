@@ -19,7 +19,6 @@ from vmn_exp.ui.freshness import freshness_key
 from vmn_exp.ui.git_context import git_context
 from vmn_exp.ui.memo import LRU, TTLCache
 from vmn_exp.ui.responses import json_response
-from vmn_exp.ui.status_summary import status_summary
 
 GIT_TTL_SEC = 5
 STATUS_BODIES = 256
@@ -45,7 +44,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         hour = int(now.timestamp() // 3600)
         etag = leaderboards.etag(snapshot, {}, kind="status", hour=hour)
         payload = summaries.get(etag, lambda: _with_indexing(
-            status_summary(leaderboards.rows(snapshot), now), snapshot))
+            leaderboards.status_summary(snapshot, now), snapshot))
         if fresh is None:
             return payload, etag
         key = json.dumps([etag, freshness_key(fresh, now.timestamp())], default=str)
