@@ -14,8 +14,9 @@ ensure_model(storage, model, description=None, actor=None, kind="model")
 model_kind(storage, model) -> "model" | "dataset" | None
 register_version(storage, model, run_ref=None, artifact_path=None, description=None,
                  actor=None, uri=None, digest=None, size=None, files=None) -> int
-list_versions(storage, model) -> [int]
-list_models(storage, kind=None) -> [str]
+list_versions(storage, model, records=None) -> [int]
+list_models(storage, kind=None, listing=None) -> [str]
+model_records(storage, model) / registry_listing(storage) -> the listings they read
 get_version(storage, model, n) -> metadata dict | None
 
 Timestamps come from ``vmn_exp.registry.fold.now_iso``; vmn_exp modules may
@@ -23,9 +24,12 @@ not import ``version_stamp.*`` except ``version_stamp.api`` (rule 11).
 """
 from __future__ import annotations
 
+from vmn_exp._base import yaml_safe_load
 from vmn_exp.core.record_format import readable, stamped
 from vmn_exp.registry.fold import now_iso
 from vmn_exp.storage.areas import REGISTRY
+from vmn_exp.storage.files import METADATA_FILE
+from vmn_exp.storage.s3_base import parallel_map
 from vmn_exp.registry.names import (
     HEADER_RECORD,
     KINDS,
@@ -71,7 +75,7 @@ def model_kind(storage, model) -> str | None:
 
 def load_header(storage, model):
     """*model*'s header metadata, or None."""
-    return registry_storage(storage).load(model, HEADER_RECORD)[0]
+    return _read_metadata(registry_storage(storage), model, HEADER_RECORD)
 
 
 def header_kind(header) -> str | None:
@@ -143,35 +147,55 @@ def register_version(
     )
 
 
-def list_versions(storage, model) -> list:
-    """Sorted list of version numbers for *model* that have complete records."""
-    reg = registry_storage(storage)
-    return sorted(
-        n for n in _taken_version_numbers(reg, model)
-        if reg.exists(model, version_record_name(n))
-    )
+def model_records(storage, model) -> dict:
+    """``{record: files}`` of *model*'s complete records (those holding their
+    metadata) — one listing."""
+    return {name: files for name, files in registry_storage(storage).list_files(model).items()
+            if METADATA_FILE in files}
 
 
-def list_models(storage, kind=None) -> list:
+def registry_listing(storage) -> dict:
+    """``{model: model_records(...)}`` of every model name in the registry."""
+    names = [name for name in registry_storage(storage).list_apps() if valid_model_name(name)]
+    return dict(zip(names, parallel_map(lambda name: model_records(storage, name), names)))
+
+
+def list_versions(storage, model, records=None) -> list:
+    """Sorted list of version numbers for *model* that have complete records,
+    from *records* (:func:`model_records`) when given."""
+    records = model_records(storage, model) if records is None else records
+    return sorted(n for n in map(parse_version_record, records) if n is not None)
+
+
+def list_models(storage, kind=None, listing=None) -> list:
     """Sorted list of model names that have complete header records, only
-    those of *kind* (``model``/``dataset``) when given."""
-    reg = registry_storage(storage)
-    candidates = [name for name in reg.list_apps() if valid_model_name(name)]
+    those of *kind* (``model``/``dataset``) when given; from *listing*
+    (:func:`registry_listing`) when given."""
+    listing = registry_listing(storage) if listing is None else listing
+    names = sorted(name for name, records in listing.items() if HEADER_RECORD in records)
     if kind is None:
-        return [name for name in candidates if reg.exists(name, HEADER_RECORD)]
-    return [name for name in candidates if model_kind(storage, name) == kind]
+        return names
+    return [name for name in names if model_kind(storage, name) == kind]
 
 
 def get_version(storage, model, n) -> dict | None:
     """Return the metadata dict for version *n* of *model*, or None."""
     record_name = version_record_name(n)
-    metadata, _ = registry_storage(storage).load(model, record_name)
+    metadata = _read_metadata(registry_storage(storage), model, record_name)
     return readable(metadata, f"{REGISTRY}/{model}/{record_name}", owner=storage)
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _read_metadata(reg, model, record):
+    """*record*'s metadata dict, or None: its ``metadata.yml`` alone, as a
+    registry record holds no patches."""
+    raw = reg.load_file(model, record, METADATA_FILE)
+    metadata = yaml_safe_load(raw) if raw else None
+    return metadata if isinstance(metadata, dict) else None
 
 
 def _version_metadata(model, **fields):
