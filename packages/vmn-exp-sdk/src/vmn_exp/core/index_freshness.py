@@ -13,13 +13,15 @@ record's files), ``journal`` (a journaled sweep's hinted and live records),
 the records the listing found new or changed) — else ``idle``; ``progress``
 (0..1, else None) is how far a full listing's walk is among the index's known
 keys (where the storage tells its walk's place, ``listing_position``: S3) or
-the share of new records read.
+the share of new records read — or ``migrating``: re-deriving the persisted
+rows from the persisted records after an upgrade (:mod:`index_derive`),
+``progress`` the share re-derived.
 """
 import bisect
 import time
 
-FULL_LISTING, JOURNAL, LISTING, LOADING_NEW, IDLE = (
-    "full_listing", "journal", "listing", "loading_new", "idle")
+FULL_LISTING, JOURNAL, LISTING, LOADING_NEW, MIGRATING, IDLE = (
+    "full_listing", "journal", "listing", "loading_new", "migrating", "idle")
 PERSIST_EVERY_SEC = 60
 _FORMAT = "1"
 _wall = time.time
@@ -85,6 +87,10 @@ class Freshness:
         """The refresh reads its *new* records."""
         self._new, self._read, self.phase = new, 0, LOADING_NEW
 
+    def migrating(self, done, total):
+        """The refresh re-derives the persisted rows: *done* of *total* records."""
+        self._new, self._read, self.phase = total, done, MIGRATING
+
     def loaded(self, count):
         self._read += count
 
@@ -93,7 +99,7 @@ class Freshness:
         self.phase = IDLE
 
     def progress(self):
-        if self.phase == LOADING_NEW and self._new:
+        if self.phase in (LOADING_NEW, MIGRATING) and self._new:
             return round(min(self._read / self._new, 1.0), 3)
         keys, position = self._keys, self._position
         if keys is None or position is None:

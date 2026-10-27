@@ -14,8 +14,8 @@ The records' names are listed (no stat per record) unless the storage's
 ``record_names_sig`` — a local app directory's settled mtime — held still
 since a point read that found every name persisted: then none came or went.
 
-An app the index never saved, a storage that cannot list record names or an
-unavailable database answer None: the caller builds the index instead (which
+An app the index never saved (or whose rows an upgrade left to re-derive), a
+storage that cannot list record names or an unavailable database answer None: the caller builds the index instead (which
 persists it, so the next call is a point read).
 """
 import os
@@ -45,14 +45,30 @@ def shared_store(path):
     no file (None, ``:memory:``) gets a store of its own."""
     if not sqlite_files.is_file_path(path):
         return IndexStore(path)
+    known = _current(path)
+    if known is not None:
+        return known
+    store = IndexStore(path)  # opened outside the lock: other files' callers never wait
+    with _STORES_LOCK:
+        known, inode = _STORES.get(path, (None, None))
+        if known is not None and _inode(path) == inode:
+            store.close()  # another thread opened it meanwhile
+            return known
+        _STORES[path] = (store, _inode(path))
+        return store
+
+
+def _current(path):
+    """*path*'s store when still the live file's, else None — a replaced one
+    closed first (a holder still using it reconnects to the live file), so
+    the next open sweeps its file."""
     with _STORES_LOCK:
         store, inode = _STORES.get(path, (None, None))
-        if store is None or _inode(path) != inode:
-            if store is not None:
-                store.close()  # a holder still using it reconnects to the live file
-            store = IndexStore(path)
-            _STORES[path] = (store, _inode(path))
-        return store
+        if store is None or _inode(path) == inode:
+            return store
+        store.close()
+        del _STORES[path]
+        return None
 
 
 def _inode(path):
@@ -69,7 +85,8 @@ def point_view(storage, app_name, sync=True):
     if not path:
         return None
     store = shared_store(path)
-    if not store.generation(app_name) or (sync and not _sync(storage, app_name, store)):
+    if not store.generation(app_name) or store.deriving(app_name) or (
+            sync and not _sync(storage, app_name, store)):
         return None
     return PointView(store, app_name, fallback=lambda: _snapshot_of(storage, app_name))
 

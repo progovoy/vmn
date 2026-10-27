@@ -93,6 +93,8 @@ _LOGGER = logging.getLogger(__name__)
 _REMOTE_WORKERS = 32
 # Records a remote backend reads between publishing and persisting what it has.
 _REMOTE_CHUNK = 500
+# Seconds between the empty snapshots a re-derive publishes its progress in.
+MIGRATING_PUBLISH_SEC = 1.0
 _monotonic = time.monotonic
 
 
@@ -234,7 +236,7 @@ class ExperimentIndex:
         queued) shows as ``full_listing``/``journal`` between refreshes too."""
         state = self._freshness.state(self._lock.locked())
         behind = self._sweep.listing_phase()
-        if behind is not None and (
+        if behind is not None and state["phase"] != index_freshness.MIGRATING and (
                 behind[0] == index_freshness.FULL_LISTING or state["phase"] == index_freshness.IDLE):
             state["phase"], state["progress"] = behind
         return state
@@ -379,11 +381,13 @@ class ExperimentIndex:
 
     def _refresh_from_storage(self, started):
         if self._records is None:
+            placeholder = self._derive_first()
             if self._keeps_baseline():  # read before the records it vouches for
                 self._baseline.load(self._sweep, started)
             with gc_paused():
                 self._records = self._load_records()
-                if self._records and self._snapshot is None and not self._lean:
+                if not self._lean and (placeholder or (
+                        self._records and self._snapshot is None)):
                     self._publish_persisted()
         self._sweep.behind = self._io is None and self._remote()
         self._freshness.listing(self._listing_phase(started), self._records,
@@ -417,6 +421,28 @@ class ExperimentIndex:
         finally:
             self._unread = 0
         self._refresh_part(chunk, removed, started, started)
+
+    def _derive_first(self):
+        """Rows an upgrade left to re-derive are, from the persisted records
+        (:mod:`~vmn_exp.core.index_derive`, no storage read), before they
+        load; meanwhile an empty snapshot ``loading`` the share done serves
+        (republished at most every MIGRATING_PUBLISH_SEC). Whether any were."""
+        deriving = getattr(self._store, "deriving", None)
+        if deriving is None or not deriving(self.app_name):
+            return False
+        self._store.derive(self.app_name, self._derived)
+        return True
+
+    def _derived(self, done, total):
+        self._freshness.migrating(done, total)
+        if self._lean or (self._snapshot is not None
+                          and _monotonic() - self.published_at < MIGRATING_PUBLISH_SEC):
+            return
+        self.generation += 1
+        self._snapshot = self._rows.snapshot(
+            self.app_name, self.generation, [], {}, loading=(done, total))
+        self.published_at = _monotonic()
+        self._published.set()
 
     def _listing_phase(self, now):
         sweep = self._sweep

@@ -5,10 +5,12 @@ import sqlite3
 import subprocess
 import sys
 
+import pytest
+
 from exp_helpers import _SRC_PATH
 from vmn_exp.core import index_store_schema
 from vmn_exp.core.index_store import SqliteStore
-from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema
+from vmn_exp.core.index_store_schema import SCHEMA_VERSION, RecordsOutdated, ensure_schema
 from vmn_exp.core.sqlite_conn import connect
 
 APP = "app"
@@ -129,20 +131,21 @@ def test_a_newer_schema_is_left_alone_and_warned_about_once(tmp_path, caplog):
     assert conn.execute("SELECT key FROM exp_index").fetchall() == [("a",)]
 
 
-def test_an_older_schema_is_rebuilt_in_one_transaction(tmp_path):
+def test_an_older_schema_is_left_untouched_for_a_new_generation(tmp_path):
+    # A file of older records is never dropped in place (a 13 GB DROP held the
+    # write lock for minutes and wiped a multi-hour index): ensure_schema
+    # refuses it, writing nothing, and the upgrade builds a new generation.
     path = str(tmp_path / "idx.sqlite")
     SqliteStore(path).save(APP, {"a": _rec("1")}, set())
     _set_schema(path, "exp-index-1")
     conn = connect(path)
     statements = []
     conn.set_trace_callback(statements.append)
-    ensure_schema(conn)
-    ddl = [i for i, s in enumerate(statements) if s.startswith(("DROP", "CREATE"))]
-    begin = statements.index("BEGIN IMMEDIATE")
-    commit = statements.index("COMMIT")
-    assert ddl and begin < min(ddl) and max(ddl) < commit
-    assert conn.execute("SELECT v FROM exp_index_meta").fetchone()[0] == SCHEMA_VERSION
-    assert conn.execute("SELECT COUNT(*) FROM exp_index").fetchone()[0] == 0
+    with pytest.raises(RecordsOutdated):
+        ensure_schema(conn)
+    assert not [s for s in statements if not s.lstrip().upper().startswith("SELECT")]
+    assert conn.execute("SELECT v FROM exp_index_meta WHERE k = 'schema'").fetchone()[0] == "exp-index-1"
+    assert conn.execute("SELECT COUNT(*) FROM exp_index").fetchone()[0] == 1
 
 
 def test_a_current_schema_opens_without_writing(tmp_path):

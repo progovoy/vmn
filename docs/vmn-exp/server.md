@@ -106,7 +106,7 @@ The server refuses to bind beyond localhost without a token unless
 The cache is SQLite, one database file per workspace under
 `<data_dir>/index/`. Every vmn SQLite file runs in WAL mode with
 `synchronous=NORMAL`, and its writes take the write lock up front (`BEGIN
-IMMEDIATE`). A rebuild (resync, a corrupt file, an older schema) writes a new file
+IMMEDIATE`). A rebuild (resync, a corrupt file, older records) writes a new file
 beside the old one (`<name>.<n>.sqlite`) and switches a small `<file>.current`
 pointer to it. The old file and its `-wal`/`-shm` are deleted only once no
 process has it open, so a reader never loses its database mid-read. vmn-exp
@@ -127,6 +127,35 @@ app's journal mark (`journal-mark:<app>`, how far into the journal its rows
 are). Logs,
 series, artifacts, media and code are not cached. Run pages read them from
 storage on demand. `--no-index` keeps the cache in memory only.
+
+### Upgrades
+
+An upgrade of `vmn-exp ui` never empties the cache it can keep, and never holds
+a write lock on it for longer than a chunk of 500 runs. The cache has two
+versions:
+
+- The **records** version covers what was read from storage: the folded runs,
+  their run states, the listing baselines and journal marks. Only a change to
+  those bumps it. The live file is then left untouched: a new generation file
+  is built beside it and the pointer flipped to it, as a rebuild does. Records
+  still readable by the new version are copied over locally, so the store is
+  not read again. Otherwise the new file loads from storage like a first start.
+- The **derived** version covers the tables computed from those records: the
+  board rows, side values (system metrics, outputs, features) and the
+  similar-runs documents. A change there (most upgrades) is applied in place:
+  opening the file creates any missing table and marks each app to re-derive,
+  in one short transaction, and drops nothing. Each app's index then rebuilds
+  its rows from the persisted records, 500 per transaction, before it serves
+  them. Nothing is read from storage, and the journal mark and listing
+  baselines are kept, so once it finishes the server picks up from the journal
+  as usual. Decoding the records is the cost: about a minute per 100k runs.
+
+While an app re-derives, its board is empty and `experiments-status` reports
+`indexing {loaded, total}` and freshness phase `migrating` with its
+`progress`. `/apps` and the status routes answer right away. Point reads and
+`vmn-exp list` read the records instead of the persisted rows until the
+re-derive is done. A Postgres cache holds records only, so a derived-only
+upgrade leaves it as it is.
 
 Whatever holds the cache (memory, SQLite or Postgres), the board's list
 endpoint, grouped (`group=`, `agg=`) or not, is answered in memory from the
@@ -278,8 +307,11 @@ pools and index state as one redacted JSON file: `GET /api/v1/diag` (admin),
 ## Self-healing and resync
 
 On every tick the server checks that its cache file is still the one it built:
-not deleted, replaced, unreadable or of another schema version. If any of
-these fails, it rebuilds that workspace's cache in the background. The rebuild
+not deleted, replaced, unreadable, or holding records of an older version. If any
+of these fails, it rebuilds that workspace's cache in the background. Board
+rows of an older derived version are not a reason to rebuild: the server
+re-derives them in the background from the file's own records (see
+[Upgrades](#upgrades)). The rebuild
 writes a new file and renames it into place, and requests keep being served
 from the current snapshot until the switch.
 
