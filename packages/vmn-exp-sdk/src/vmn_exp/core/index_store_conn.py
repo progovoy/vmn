@@ -11,6 +11,9 @@ opened lazily, retried, recovered, never fatal (plan 25 §2).
   removed once no connection holds it.
 - Each use first checks the pointer, so a store follows another process's
   rebuild.
+- Each open removes the files a flip left behind that nothing holds any
+  more (:func:`vmn_exp.core.sqlite_files.sweep`), and a WAL grown past its
+  limit is checkpointed after the write that grew it (:meth:`tidy_wal`).
 
 Each kind of trouble with a file is a warning once per process (it names the
 file and the reason), then debug.
@@ -23,6 +26,7 @@ import time
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.best_effort import warn_once
 from vmn_exp.core.index_store_schema import SchemaTooNew
+from vmn_exp.core.sqlite_conn import checkpoint, wal_oversized
 
 FIRST_BACKOFF_SEC = 1.0
 MAX_BACKOFF_SEC = 60.0
@@ -58,7 +62,7 @@ class StoreConnection:
         stamp = sqlite_files.pointer_stamp(self.path)
         file = sqlite_files.live_path(self.path)
         try:
-            self._opened(self._connect(file), file, stamp)
+            conn = self._connect(file)
         except SchemaTooNew as exc:
             self._retry_at = math.inf
             warn_once((file, "schema"), f"Experiment index {file} was written by a newer "
@@ -68,6 +72,9 @@ class StoreConnection:
                 self.recover(exc)
             else:
                 self._failed(file, exc)
+        else:
+            self._opened(conn, file, stamp)
+            sqlite_files.sweep(self.path)
 
     def _opened(self, conn, file, stamp):
         self.conn, self.file, self._stamp = conn, file, stamp
@@ -110,6 +117,12 @@ class StoreConnection:
                   f"rebuilding it as {fresh}")
         self._opened(conn, fresh, sqlite_files.pointer_stamp(self.path))
         sqlite_files.sweep(self.path)
+
+    def tidy_wal(self):
+        """Checkpoint the WAL when it grew past its limit; best-effort: a
+        busy one stays oversized, so the next write tries again."""
+        if self.conn is not None and wal_oversized(self.file):
+            checkpoint(self.conn)
 
     def close(self):
         if self.conn is not None:

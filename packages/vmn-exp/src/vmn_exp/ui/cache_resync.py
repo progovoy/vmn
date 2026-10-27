@@ -3,9 +3,11 @@
 
 :meth:`WorkspaceCache.tick` (every refresh tick, throttled to ``check_sec``)
 asks the cache's health probe (:mod:`vmn_exp.ui.cache_health`) and starts a
-background rebuild on any problem. :meth:`WorkspaceCache.resync` is the
-manual side: a plain one makes every watched index re-check all its
-records' signatures at its next refresh; ``full=True`` rebuilds.
+background rebuild on any problem; it also tidies the cache file now and
+then (:mod:`vmn_exp.ui.cache_tidy`: superseded files, an oversized WAL).
+:meth:`WorkspaceCache.resync` is the manual side: a plain one makes every
+watched index re-check all its records' signatures at its next refresh;
+``full=True`` rebuilds.
 
 A rebuild loads every noted app afresh into a :mod:`vmn_exp.ui.cache_rebuild`
 target while the live indexes keep serving their snapshots, switches the
@@ -17,6 +19,7 @@ import time
 
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.ui.cache_rebuild import MemoryTarget, SqliteSwap
+from vmn_exp.ui.cache_tidy import CacheTidy
 
 _LOGGER = logging.getLogger(__name__)
 CHECK_SEC = 1.0
@@ -38,6 +41,7 @@ class WorkspaceCache:
         self._target_of = target_of or (
             lambda: SqliteSwap(cache_path) if cache_path else MemoryTarget())
         self._check_sec, self._clock, self._checked_at = check_sec, clock, None
+        self.tidy = CacheTidy(cache_path, clock) if cache_path else None
         self._apps = {}  # app -> (storage, index_of)
         self._swapped = []
         self._lock = threading.Lock()
@@ -56,6 +60,8 @@ class WorkspaceCache:
 
     def tick(self):
         """Start a rebuild when the probe finds a problem; the problem, or None."""
+        if self.tidy is not None:
+            self.tidy.tick()
         now = self._clock()
         if self._checked_at is not None and now - self._checked_at < self._check_sec:
             return None

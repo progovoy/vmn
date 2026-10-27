@@ -40,13 +40,16 @@ def index_path(storage, app_name):
 def shared_store(path):
     """The process's store of the index file at *path* (what the process
     index, point reads, listings and similar searches all read through); a
-    file removed and created again gets a new one. A path that names no file
-    (None, ``:memory:``) gets a store of its own."""
+    file removed and created again (or flipped to a new generation) gets a new
+    one, closing the old one's connection so its file can go. A path that names
+    no file (None, ``:memory:``) gets a store of its own."""
     if not sqlite_files.is_file_path(path):
         return IndexStore(path)
     with _STORES_LOCK:
         store, inode = _STORES.get(path, (None, None))
         if store is None or _inode(path) != inode:
+            if store is not None:
+                store.close()  # a holder still using it reconnects to the live file
             store = IndexStore(path)
             _STORES[path] = (store, _inode(path))
         return store
