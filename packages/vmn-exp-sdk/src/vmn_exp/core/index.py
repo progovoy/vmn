@@ -69,6 +69,7 @@ from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_record import refresh_record, update_record
+from vmn_exp.core.index_remote_workers import NoLoaders, RemoteLoaders, worker_count
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
 from vmn_exp.core.index_snapshot import (
@@ -138,6 +139,8 @@ class ExperimentIndex:
         self._bulk = BulkPublish()
         self._snapshot = None
         self._placeholder = None  # (expected, the empty snapshot saying so)
+        self._loaders = None  # a bulk load's worker processes (index_remote_workers)
+        self._rests = set()  # records a bulk load read rows-first, the rest to read
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
         self._revalidator = None  # the thread a warm snapshot() started
@@ -339,6 +342,7 @@ class ExperimentIndex:
         """Stop the I/O helper process, if any; later refreshes run in-process
         from a full listing."""
         with self._lock:
+            self._close_loaders()
             if self._io is not None:
                 self._io.close()
                 self._io = None
@@ -411,6 +415,10 @@ class ExperimentIndex:
             self._load_listed(*self._sweep.next_relisted(self._records, _monotonic()), started)
         if self._snapshot is None and not self._lean:  # a refresh ends with one
             self._publish_pending()
+        if self._rests and self._sweep.relisted_new() is False:
+            for key in self._rests:  # what rows-first left unread: listed afresh
+                self._sweep.hint(key)
+            self._rests = set()
 
     def _more_relisted(self, started):
         """Whether to load more of what a listing behind serving hands over
@@ -476,7 +484,8 @@ class ExperimentIndex:
 
     def _take(self, queue):
         """The queue's next chunk, a remote record not read yet cut to its
-        row's files (:func:`first_objects`), its rest queued for later."""
+        row's files (:func:`first_objects`), its rest queued for later — during
+        a bulk load behind serving, until its listing is over (then hinted)."""
         chunk = [(key, names, self._records.get(key)) for key, names, _ in queue.take()]
         if not self._remote():
             return chunk
@@ -486,7 +495,10 @@ class ExperimentIndex:
             cut.append((key, names if first is None else first, record))
             if first is not None:
                 rest.append((key, names, None))
-        queue.later(rest)
+        if rest and self._bulk_listing():
+            self._rests.update(key for key, _, _ in rest)
+        else:
+            queue.later(rest)
         return cut
 
     def _load_queue(self, work):
@@ -547,6 +559,8 @@ class ExperimentIndex:
         only once due (:mod:`~vmn_exp.core.index_bulk`)."""
         bulk, backlog = self._bulk, self._backlog()
         self._number_later(backlog)
+        if not backlog and self._sweep.relisted_new() is False:  # the bulk load is over
+            self._close_loaders()
         bulk.add(new, removed, redescribed, touched)
         snap = self._snapshot
         if snap is None and not bulk.pending() and self._bulk_listing():
@@ -694,9 +708,27 @@ class ExperimentIndex:
         round trips, and a cold index on S3 would otherwise pay them serially.
         """
         done = load_new_records(self._storage, direct, self.app_name, work)
+        if not done and self._backlog():
+            done = self._remote_loaders().load(self.app_name, work)
         todo = [w for w in work if w[0] not in done]
         done.update(zip((w[0] for w in todo), self._refresh_all(todo, direct)))
         return [(key, *done[key]) for key, _, _ in work]
+
+    def _remote_loaders(self):
+        """The worker processes a bulk load of a remote backend reads its new
+        records in (:mod:`~vmn_exp.core.index_remote_workers`): started once,
+        none when the backend cannot be opened again elsewhere."""
+        if self._loaders is None:
+            spec_of = getattr(self._storage, "worker_spec", None)
+            spec = spec_of() if spec_of and self._remote() else None
+            count = worker_count() if spec else 0
+            self._loaders = RemoteLoaders(spec, count) if count else NoLoaders()
+        return self._loaders
+
+    def _close_loaders(self):
+        loaders, self._loaders = self._loaders, None
+        if loaders is not None:
+            loaders.close()
 
     def _refresh_all(self, work, direct):
         if len(work) > 1 and self._remote():

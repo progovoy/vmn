@@ -71,13 +71,19 @@ def refold_metrics(record, storage, where):
     sums when its objects only grew since, then what is not folded yet."""
     old = record.get("metrics") or {}
     record["metrics"] = state = _new_state(metric_state_sigs(record))
-    objects = _objects(storage, where)
+    objects = _objects(storage, where, state["sig"])
     for writer in sorted(objects):
         _replay(record["fold"], state, old, writer, objects[writer])
     _fold_unread(record["fold"], state, storage, where, objects)
 
 
-def _objects(storage, where):
+def _objects(storage, where, sigs):
+    """The record's metric objects: as its listing's *sigs* found them where
+    the storage tells them from those (``metric_objects_listed``: S3, saving
+    a LIST per record), else listed again."""
+    listed = getattr(storage, "metric_objects_listed", None)
+    if listed is not None:
+        return listed(sigs)
     listing = getattr(storage, "metric_objects", None)
     return listing(*where) if listing else {}
 
@@ -99,7 +105,7 @@ def _newly_indexed(state, objects, writer):
 
 
 def _fold_growth(fold, state, storage, where):
-    objects = _objects(storage, where)
+    objects = _objects(storage, where, state["sig"])
     for writer in sorted(objects):
         folded = any(metric_writer(n) == writer for n in state["objects"])
         if folded and _newly_indexed(state, objects, writer) and not adopted(
