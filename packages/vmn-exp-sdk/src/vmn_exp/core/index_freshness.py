@@ -15,7 +15,9 @@ the records the listing found new or changed) — else ``idle``; ``progress``
 keys (where the storage tells its walk's place, ``listing_position``: S3) or
 the share of new records read — or ``migrating``: re-deriving the persisted
 rows from the persisted records after an upgrade (:mod:`index_derive`),
-``progress`` the share re-derived.
+``progress`` the share re-derived. ``stalled_sec`` is how long the refresh's
+reported phase and progress have not changed (None between refreshes): a
+long refresh that keeps moving is not stuck.
 """
 import bisect
 import time
@@ -44,6 +46,7 @@ class Freshness:
         self.phase = IDLE
         self._keys, self._position, self._sorted = None, None, False  # a full listing's
         self._new, self._read = 0, 0  # new records to read, read
+        self._moved = (None, None)  # ((phase, progress) last reported, wall time it changed)
 
     @property
     def as_of(self):
@@ -66,6 +69,14 @@ class Freshness:
     def started(self):
         """A refresh starts now."""
         self._started = _wall()
+        self._moved = (None, self._started)
+
+    def stalled_sec(self, phase, progress):
+        """Seconds the refresh has reported this *phase* and *progress*."""
+        now, (seen, since) = _wall(), self._moved
+        if (phase, progress) != seen or since is None:
+            self._moved, since = ((phase, progress), now), now
+        return now - since
 
     def refreshed(self):
         """The refresh :meth:`started` last completed."""

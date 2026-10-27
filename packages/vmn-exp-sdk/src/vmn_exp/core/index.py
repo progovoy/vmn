@@ -245,10 +245,17 @@ class ExperimentIndex:
 
     def freshness(self):
         """``{as_of, refreshing, phase, progress}`` of the current snapshot
-        (:mod:`~vmn_exp.core.index_freshness`); never waits. A journaled
-        index's full listing behind serving (progress: the share of records
-        listed) or catch-up on the journal (a replay, an overflow, hints
-        queued) shows as ``full_listing``/``journal`` between refreshes too."""
+        (:mod:`~vmn_exp.core.index_freshness`), plus ``stalled_sec`` while a
+        refresh runs; never waits. A journaled index's full listing behind
+        serving (progress: the share of records listed) or catch-up on the
+        journal (a replay, an overflow, hints queued) shows as
+        ``full_listing``/``journal`` between refreshes too."""
+        state = self._reported_freshness()
+        if state["refreshing"]:
+            state["stalled_sec"] = self._freshness.stalled_sec(state["phase"], state["progress"])
+        return state
+
+    def _reported_freshness(self):
         state = self._freshness.state(self._lock.locked())
         behind = self._sweep.listing_phase()
         if state["phase"] == index_freshness.MIGRATING:

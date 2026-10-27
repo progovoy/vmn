@@ -7,8 +7,9 @@ dashboard can say it shows stale data.
 last_error, stale_after_sec}`` from the index's own state
 (:meth:`ExperimentIndex.freshness`: ``as_of`` survives restarts, ``phase``,
 ``progress``) and its refresher's health (:meth:`Refresher.health`). A
-refresh running past :data:`STUCK_REFRESH_SEC` counts as failing (stuck),
-like a failure streak or a refresh thread that is gone. ``stale_after_sec``
+refresh running past :data:`STUCK_REFRESH_SEC` whose phase and progress have
+not moved for as long (the index's ``stalled_sec``) counts as failing
+(stuck), like a failure streak or a refresh thread that is gone. ``stale_after_sec``
 is the age past which the dashboard warns (conf
 ``experiment.ui.stale_after_min`` of a checkout's app, else
 :data:`DEFAULT_STALE_AFTER_MIN`).
@@ -23,8 +24,9 @@ DEFAULT_STALE_AFTER_MIN = 5
 
 def freshness(health, state, stale_after_min=DEFAULT_STALE_AFTER_MIN):
     """The payload of a refresher's *health* and an index's *state*."""
-    running = health["refreshing_sec"]
-    stuck = running is not None and running >= STUCK_REFRESH_SEC
+    running, stalled = health["refreshing_sec"], state.get("stalled_sec")
+    stuck = running is not None and running >= STUCK_REFRESH_SEC and (
+        stalled is None or stalled >= STUCK_REFRESH_SEC)
     return {
         "as_of": _iso(state["as_of"]),
         "refreshing": running is not None or state["refreshing"],
