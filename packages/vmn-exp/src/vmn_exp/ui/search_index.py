@@ -18,12 +18,12 @@ A new generation is moved on like the facets
 whose intent changed get their text again, and only the chunks whose text
 differs are rebuilt; the rest are shared with the previous index.
 """
-import threading
 from itertools import compress, islice
 from operator import is_not
 
 from vmn_exp.core.index_snapshot import schema_less
 from vmn_exp.core.run_error import state_error_summary
+from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.leaderboard_delta import changed_slots, delta_limit
 from vmn_exp.ui.memo import LRU
 
@@ -253,14 +253,16 @@ class SearchIndexes:
         self._size = size
         self._indexes = {}  # app -> LRU of its snapshots' indexes
         self._latest = {}  # app -> SearchIndex
-        self._lock = threading.Lock()
+        self._lock = TracedLock("search indexes")
 
     def get(self, snapshot):
         """*snapshot*'s index; a schema view (``IndexSnapshot.summarized``)
         shares its base snapshot's: its rows differ in metrics only, slot for slot."""
         snapshot = schema_less(snapshot)
         with self._lock:
-            indexes = self._indexes.setdefault(snapshot.app_name, LRU(self._size))
+            indexes = self._indexes.get(snapshot.app_name)
+            if indexes is None:
+                indexes = self._indexes[snapshot.app_name] = LRU(self._size, name="search index")
         return indexes.per_snapshot(snapshot, lambda: self._moved(snapshot))
 
     def _moved(self, snapshot):

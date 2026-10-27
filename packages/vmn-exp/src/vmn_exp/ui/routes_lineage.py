@@ -44,7 +44,9 @@ class _LineageIndexes:
         """*snapshot*'s index; a schema view shares its base snapshot's."""
         snapshot = getattr(snapshot, "_base", None) or snapshot
         with self._lock:
-            indexes = self._indexes.setdefault(snapshot.app_name, LRU(PER_APP))
+            indexes = self._indexes.get(snapshot.app_name)
+            if indexes is None:
+                indexes = self._indexes[snapshot.app_name] = LRU(PER_APP)
         return indexes.per_snapshot(snapshot, lambda: self._built(snapshot))
 
     def _built(self, snapshot):

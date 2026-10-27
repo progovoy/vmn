@@ -8,17 +8,25 @@ C-speed maps). A cached ordering then drops the rows that left and bisects
 the new ones in (:func:`moved`) — from the generation it was last served in:
 :class:`DeltaLog` composes the moves of the generations since.
 """
-import threading
 from collections import OrderedDict
 from itertools import compress
 from operator import is_not, ne, or_
 
+from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.leaderboard_live import bisect_key
 
 # A delta above this share of the rows is cheaper to rebuild from scratch.
 MAX_DELTA_SHARE = 0.1
 # Generations an order can be moved on across (about a minute of refreshes).
 DELTA_GENERATIONS = 64
+# Leading rows compared to tell one index's generations apart from another's.
+_LINEAGE_ROWS = 8
+
+
+def same_index(a, b):
+    """Whether snapshots *a* and *b* are generations of one index: they
+    share leading rows by identity (another workspace's same-named app never does)."""
+    return any(x is y for x, y in zip(a.rows[:_LINEAGE_ROWS], b.rows[:_LINEAGE_ROWS]))
 
 
 def delta_limit(rows):
@@ -132,15 +140,21 @@ def moved(rows, drop, add, key):
 class DeltaLog:
     """The static-set moves of recent generations: ``{token: (previous
     token, left, joined, settled)}`` for every base derived from another
-    (see :func:`static_moves`)."""
+    (see :func:`static_moves`). A move always points back to an older
+    token, so a chain only counts down and every walk ends."""
 
     def __init__(self, size=DELTA_GENERATIONS):
         self._moves = OrderedDict()
         self._size = size
-        self._lock = threading.Lock()
+        self._lock = TracedLock("leaderboard deltas")
 
     def add(self, base):
+        """Record *base*'s move; a base derived from a newer one (an evicted
+        base rebuilt for a held snapshot) forgets its token's move instead."""
         with self._lock:
+            if base.delta[0] >= base.token:
+                self._moves.pop(base.token, None)
+                return
             self._moves[base.token] = base.delta
             while len(self._moves) > self._size:
                 self._moves.popitem(last=False)
@@ -150,14 +164,11 @@ class DeltaLog:
         None when a generation between is unknown (built from scratch, or
         too old) or the moves add up to more than a rebuild costs (rows
         that joined only by leaving the changed rows do not count)."""
-        chain, at = [], base.token
         with self._lock:
-            while at != token:
-                step = self._moves.get(at)
-                if step is None:
-                    return None
-                chain.append(step)
-                at = step[0]
+            moves = dict(self._moves)
+        chain = _chain(moves, token, base.token)
+        if chain is None:
+            return None
         left, joined, settled = [], {}, set()
         for _, gone, came, came_settled in reversed(chain):
             for row in gone:
@@ -168,3 +179,16 @@ class DeltaLog:
         if len(left) + len(joined.keys() - settled) > delta_limit(base.rows):
             return None
         return left, list(joined.values())
+
+
+def _chain(moves, token, at):
+    """The *moves* from *at* back to *token*, newest first; None when the
+    chain breaks (it counts down, see :meth:`DeltaLog.add`, so it ends)."""
+    chain = []
+    while at != token:
+        step = moves.get(at)
+        if step is None:
+            return None
+        chain.append(step)
+        at = step[0]
+    return chain
