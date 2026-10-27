@@ -31,7 +31,7 @@ class MetricIndexReader:
     def __init__(self, read_range, size):
         tail_at = max(size - TAIL_READ_BYTES, 0)
         tail = read_range(tail_at, size - tail_at)
-        self._read = _in_memory(tail) if tail_at == 0 else _tail_first(read_range, tail, tail_at)
+        self._read = _tail_first(read_range, tail, tail_at)
         self._buffered = tail_at == 0
         footer_len, crc, magic = TAIL.unpack(tail[-TAIL.size:])
         if magic != MAGIC:
@@ -138,11 +138,10 @@ class MetricIndexReader:
         fan_out(self._read_run, runs, len(runs), "vmn-metric-chunks")
 
     def _read_run(self, run):
-        """Read a run of adjacent chunks (``[(offset, wanted)]``) at once."""
-        start = run[0][0]
-        last_chunks, _, last_index = run[-1][1]
-        data = self._read(start, run[-1][0] + last_chunks[last_index]["len"] - start)
-        for off, (chunks, column, index) in run:
+        """Read a run of adjacent chunks (``(start, end, [(offset, wanted)])``) at once."""
+        start, end, items = run
+        data = self._read(start, end - start)
+        for off, (chunks, column, index) in items:
             self._chunk(chunks, column, index, data[off - start:off - start + chunks[index]["len"]])
 
     def _columns(self, meta, start, end):
@@ -186,10 +185,6 @@ class MetricIndexReader:
         return kept + [_point(cols, len(cols) - 1)]
 
 
-def _in_memory(data):
-    return lambda offset, length: data[offset:offset + length]
-
-
 def _tail_first(read_range, tail, tail_at):
     """*read_range*, but a read inside the *tail* read at *tail_at* is a slice."""
     def read(offset, length):
@@ -201,14 +196,14 @@ def _tail_first(read_range, tail, tail_at):
 
 def _adjacent(wanted):
     """*wanted* chunks (``(chunks, column, index)``) as runs of adjacent
-    ones, ``[(offset, wanted)]`` each, in file order."""
-    runs, end = [], None
+    ones, ``(start, end, [(offset, wanted)])`` each, in file order."""
+    runs = []
     for item in sorted(wanted, key=lambda w: w[0][w[2]]["off"]):
         entry = item[0][item[2]]
-        if entry["off"] != end:
-            runs.append([])
-        runs[-1].append((entry["off"], item))
-        end = entry["off"] + entry["len"]
+        if not runs or runs[-1][1] != entry["off"]:
+            runs.append([entry["off"], entry["off"], []])
+        runs[-1][1] = entry["off"] + entry["len"]
+        runs[-1][2].append((entry["off"], item))
     return runs
 
 

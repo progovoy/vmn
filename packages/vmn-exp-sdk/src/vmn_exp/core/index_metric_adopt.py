@@ -18,9 +18,11 @@ from vmn_exp.core.metric_files import (
     is_indexed_file,
     metric_writer,
     stream_writer_and_seq,
+    superseded,
 )
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 
+# At least the segments a live rollup leaves after it (cached_metrics' LIVE_ROLLUP_LAG).
 TAIL_SEGMENTS = 8
 
 
@@ -44,10 +46,10 @@ def adopted(state, storage, where, writer, vmx):
     name, size = vmx
     sums = state.get("sums", {}).get(writer)
     last = covered_seq(name)
-    folded = [n for n in state["objects"] if metric_writer(n) == writer]
-    covered = [n for n in folded if is_indexed_file(n) or _seq(n) <= last]
+    covered = superseded(state["objects"], writer, last)
     tail = state.get("tails", {}).get(writer, {})
-    after = [n for n in folded if n not in covered]
+    after = [n for n in state["objects"]
+             if metric_writer(n) == writer and n not in covered]
     if sums is None or _seqs(covered) != set(range(last + 1)) or any(n not in tail for n in after):
         return False
     expected = counts(sums)

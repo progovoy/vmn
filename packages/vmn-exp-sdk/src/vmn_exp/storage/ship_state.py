@@ -105,6 +105,16 @@ def is_finalizing():
     return _FINALIZING.is_set()
 
 
+def live_rollup_due(seq, shipped_bytes, every, max_bytes, final_flush):
+    """Whether a live stream rolls up what it shipped once segment *seq*
+    (counted from its rollup's start) went, the remote then holding
+    *shipped_bytes*: every *every*-th segment of a stream within *max_bytes*,
+    on a periodic sync only — never in a finalizer or a final flush, which
+    wait on the ship lock briefly."""
+    return (0 < seq and seq % every == 0 and shipped_bytes <= max_bytes
+            and not final_flush and not is_finalizing())
+
+
 def _wait_sec():
     return FINALIZING_WAIT_SEC if _FINALIZING.is_set() else LOCK_WAIT_SEC
 

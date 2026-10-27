@@ -11,7 +11,7 @@ the finite ``sum`` summary, ``s``/``t`` as the step and timestamp bounds (so
 (:func:`~vmn_exp.core.fold_blocks.apply_sums`) gives what the blocks gave, as
 a block's header gives what its points do. Pure: no I/O.
 """
-from vmn_exp.core.metric_columns import add_exact
+from vmn_exp.core.metric_columns import exact_parts
 from vmn_exp.core.metric_time import us_to_iso
 
 
@@ -65,11 +65,9 @@ def _finite(a, b):
         return a
     if not a.get("n"):
         return b
-    parts = tuple(a.get("parts") or [a["sum"]])
-    for part in b.get("parts") or [b["sum"]]:
-        parts = add_exact(parts, part)
+    parts = exact_parts([*(a.get("parts") or [a["sum"]]), *(b.get("parts") or [b["sum"]])])
     return {
-        "n": a["n"] + b["n"], "sum": a["sum"] + b["sum"], "parts": list(parts),
+        "n": a["n"] + b["n"], "sum": a["sum"] + b["sum"], "parts": parts,
         "min": a["min"] if a["min"][0] <= b["min"][0] else b["min"],
         "max": a["max"] if a["max"][0] >= b["max"][0] else b["max"],
     }

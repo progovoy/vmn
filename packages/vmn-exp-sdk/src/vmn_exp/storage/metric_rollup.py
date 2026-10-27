@@ -14,7 +14,7 @@ state is lost. The rollup is never applied to rewinds: readers apply them,
 as to a stream.
 """
 from vmn_exp.core.metric_block import decode_blocks, intact_length
-from vmn_exp.core.metric_compact import put_index, source_columns
+from vmn_exp.core.metric_compact import source_columns
 from vmn_exp.core.metric_files import is_indexed_file, last_seq, stream_name
 from vmn_exp.core.metric_index_file import build_index
 from vmn_exp.core.metric_index_reader import MetricIndexReader
@@ -40,11 +40,6 @@ def build(data, stream):
         return None
     keys = source_columns(blocks_source(list(decode_blocks(data))))
     return build_index(stream, keys, stream_bytes=len(data)) if keys else None
-
-
-def put(remote, app_name, verstr, stream, data, covers):
-    """Put the rollup *data* covering the segments up to *covers*."""
-    return put_index(remote, app_name, verstr, stream, data, replace=False, covers=covers)
 
 
 def resumed_state(remote, app_name, verstr, objects):

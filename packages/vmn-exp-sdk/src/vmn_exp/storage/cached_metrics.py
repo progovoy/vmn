@@ -39,6 +39,7 @@ from contextlib import contextmanager
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.adopt import note_missing_inherited
 from vmn_exp.core.metric_block import intact_length
+from vmn_exp.core.metric_compact import put_index
 from vmn_exp.core.metric_files import (
     covered_seq,
     is_indexed_file,
@@ -80,6 +81,8 @@ def _remote_state(objects):
 
 
 class CachedMetrics:
+    _final_flush = False  # a buffered storage's exit flush (see CachedLogs)
+
     def _metric_state(self):
         # (app, verstr, stream) -> the copy last picked
         return self.__dict__.setdefault("_metrics", {"sources": {}})
@@ -206,10 +209,9 @@ the copy's ship lock."""
         """Whether the live stream that shipped segment *seq* (the remote then
         holding its first *shipped_bytes*) is rolled up now — on a periodic
         sync only."""
-        covers = seq - LIVE_ROLLUP_LAG
-        return (covers > 0 and covers % LIVE_ROLLUP_SEGMENTS == 0
-                and shipped_bytes <= LIVE_ROLLUP_MAX_BYTES
-                and not getattr(self, "_final_flush", False) and not ship_state.is_finalizing())
+        return ship_state.live_rollup_due(seq - LIVE_ROLLUP_LAG, shipped_bytes,
+                                          LIVE_ROLLUP_SEGMENTS, LIVE_ROLLUP_MAX_BYTES,
+                                          self._final_flush)
 
     def _roll_up_metrics(self, remote, app_name, verstr, stream, seq, shipped):
         """Roll the stream's shipped segments up to ``seq - LIVE_ROLLUP_LAG``:
@@ -228,8 +230,10 @@ the copy's ship lock."""
                 return
             with self._ship_state(app_name, verstr, "metrics") as state:
                 held = state.get(stream)
-                if held not in (None, _INDEXED) and held[0] >= upto and not ship_state.is_finalizing():
-                    metric_rollup.put(remote, app_name, verstr, stream, data, covers)
+                live = held not in (None, _INDEXED) and held[0] >= upto
+                if live and not ship_state.is_finalizing():
+                    put_index(remote, app_name, verstr, stream, data, replace=False,
+                              covers=covers)
         except Exception:
             VMN_LOGGER.debug("Live metric rollup failed; the segments stay", exc_info=True)
 

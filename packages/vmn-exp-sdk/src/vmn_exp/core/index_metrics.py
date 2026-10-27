@@ -13,9 +13,9 @@ points add up to (:mod:`~vmn_exp.core.fold_sums`): a ``.vmx`` replacing
 segments already folded takes their place for its footer read
 (:mod:`~vmn_exp.core.index_metric_adopt`), and a refold of the record (its
 log rolled up or compacted) folds those sums again instead of reading the
-writer's objects, unless a rewind may hide some of their points. Anything else — an object gone or shrunk, a ``.vmx``
-holding points not folded, one rewritten at another size — asks the caller
-to refold the record. A writer down to its ``.vmx`` alone keeps no sums (its
+writer's objects, unless a rewind may hide some of their points. Anything
+else — an object gone or shrunk, a ``.vmx`` holding points not folded, one
+rewritten at another size — asks the caller to refold the record. A writer down to its ``.vmx`` alone keeps no sums (its
 refold is a footer read).
 """
 from vmn_exp.core.fold_blocks import (
