@@ -165,7 +165,8 @@ def test_successive_buckets_do_not_sort_or_annotate_every_row(monkeypatch):
     assert calls == {}
 
     root = cache.page(snap, {}, query='verstr = "1.0.0-dev.r00000"', limit=1)["rows"][0]
-    assert root["tree_status"] == "stuck"
+    # The root has finished: its children that went stuck are lost (failed).
+    assert root["tree_status"] == "failed"
     _same(cache.page(snap, {}, **params), _reference(snap, {}, **params))
 
 

@@ -23,7 +23,9 @@ def _sweep(parent, first, states, losses=None):
 
 # Sweep 1: 1 run; sweep 2: 3 runs; sweep 3: 2 runs; runs 1-3 and 4 have no
 # parent, 4 is a loose row (1-3 head the sweeps).
-FLEET = ([run(1), run(2), run(3), run(4)] + _sweep(1, 10, ["ok"])
+# Sweep 3's head still runs: an ended head would settle its never-started run
+# (core/settle.py), which then waits no more.
+FLEET = ([run(1), run(2), run(3, state="running"), run(4)] + _sweep(1, 10, ["ok"])
          + _sweep(2, 20, ["ok", "fail", "stuck"]) + _sweep(3, 30, ["running", None]))
 
 

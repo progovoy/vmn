@@ -161,7 +161,10 @@ def test_a_stale_heartbeat_turns_stuck_within_a_bucket(monkeypatch):
     monkeypatch.setattr(status_mod, "_now", lambda now=None: now or later)
     by_verstr = {r["verstr"]: r for r in cache.page(snap, {}, limit=10)["rows"]}
     assert by_verstr["1.0.0-dev.r0002"]["status"] == "stuck"
-    assert by_verstr["1.0.0-dev.r0001"]["tree_status"] == "stuck"
+    # Its parent has finished: a stuck child of an ended outer run is lost,
+    # which its parent's tree rolls up as failed.
+    assert by_verstr["1.0.0-dev.r0002"]["settled"] == "lost"
+    assert by_verstr["1.0.0-dev.r0001"]["tree_status"] == "failed"
     assert cache.page(snap, {}, status="stuck", limit=10)["total"] == 1
 
 

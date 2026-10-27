@@ -92,10 +92,15 @@ def test_field_group_labels_name_the_field():
 
 
 def test_counts_tally_the_groups_rows_by_status():
-    specs = [run(1), run(2, parent=1), run(3, parent=1, state="fail"),
+    specs = [run(1, state="running"), run(2, parent=1), run(3, parent=1, state="fail"),
              run(4, parent=1, state="running"), run(5, parent=1, state=None)]
     group = group_of(_groups(specs, "parent"), v(1))
     assert group["counts"] == {"total": 4, "running": 1, "waiting": 1, "done": 1,
+                               "failed": 1, "stuck": 0}
+    # Once the head has ended, its never-started run is in the total only.
+    specs[0] = run(1)
+    group = group_of(_groups(specs, "parent"), v(1))
+    assert group["counts"] == {"total": 4, "running": 1, "waiting": 0, "done": 1,
                                "failed": 1, "stuck": 0}
     assert group["rows_total"] == 4
 

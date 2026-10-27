@@ -13,6 +13,15 @@ states only through the reader its caller passes in.
 from collections import Counter
 
 import vmn_exp.core.status as experiment_status
+from vmn_exp.core.settle import (
+    ENDED,
+    LOST,
+    NEVER_STARTED,
+    settled_as,
+    settled_runs,
+    split_slots,
+    subtree_settled,
+)
 from vmn_exp.core.status import (
     CREATED,
     FAILED,
@@ -78,12 +87,24 @@ def ancestry_of(rows):
     return lambda verstr: ancestors(verstr, parent_of)
 
 
-def own_rollup_status(status, has_children, incomplete=False):
+def own_rollup_status(status, has_children, incomplete=False, settled=None):
     """What a run's own *status* adds to its tree's rollup: nothing (None)
-    for a container — an outer run that never ran itself — and ``created``
-    on top for an *incomplete* sweep (see :func:`sweep_incomplete`)."""
+    for a container — an outer run that never ran itself — or a run that
+    never started under an ended outer, ``failed`` for one lost under it
+    (see :mod:`~vmn_exp.core.settle`), and ``created`` on top for an
+    *incomplete* sweep that has not ended (see :func:`sweep_incomplete`)."""
+    if settled == LOST:
+        return FAILED
+    if settled == NEVER_STARTED:
+        return None
     own = None if has_children and status == CREATED else status
-    return rollup_status((own, CREATED)) if incomplete else own
+    return rollup_status((own, CREATED)) if _unclaimed(incomplete, status, settled) else own
+
+
+def _unclaimed(incomplete, status, settled):
+    """Whether an *incomplete* sweep's missing trials may still run: it has
+    neither ended nor been settled."""
+    return incomplete and status not in ENDED and not settled
 
 
 def sweep_trial_count(children):
@@ -98,11 +119,16 @@ def sweep_incomplete(row):
     return planned is not None and row.get("sweep_trials", 0) < planned
 
 
+def sweep_unfinished(row):
+    """Whether *row* is an incomplete sweep that may still run its missing
+    trials: it has neither ended nor been settled."""
+    return _unclaimed(sweep_incomplete(row), row.get("status"), row.get("settled"))
+
+
 def _own(verstr, children_of, by_verstr):
     row = by_verstr.get(verstr) or {}
-    return own_rollup_status(
-        row.get("status"), bool(children_of.get(verstr)), sweep_incomplete(row)
-    )
+    return own_rollup_status(row.get("status"), bool(children_of.get(verstr)),
+                             sweep_incomplete(row), row.get("settled"))
 
 
 def _subtree_statuses(verstr, children_of, by_verstr):
@@ -154,7 +180,8 @@ def _tree_statuses(verstrs, children_of, by_verstr, parent_of):
 
 def annotate_tree(rows):
     """Add ``children``, ``kind``, ``depth``, ``root`` (the top-level
-    ancestor, None for a top-level run) and ``tree_status`` to each row.
+    ancestor, None for a top-level run), ``settled`` (see
+    :mod:`~vmn_exp.core.settle`) and ``tree_status`` to each row.
 
     ``status`` is left as the row's own status; ``tree_status`` is the rollup
     over the row and everything beneath it.
@@ -185,7 +212,9 @@ def _annotate_tree_in_place(rows):
     parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
 
     children_of = children_by_parent(rows)
+    settled = settled_runs({v: r.get("status") for v, r in by_verstr.items()}, parent_of)
     for row in rows:
+        row["settled"] = settled.get(row["verstr"])
         if row.get("sweep_planned") is not None:
             kids = children_of.get(row["verstr"], [])
             row["sweep_trials"] = sweep_trial_count(by_verstr[c] for c in kids)
@@ -216,7 +245,7 @@ def count_statuses(statuses):
     return dict(Counter(statuses))
 
 
-TREE_FIELDS = ("children", "kind", "depth", "tree_status", "child_counts")
+TREE_FIELDS = ("children", "kind", "depth", "settled", "tree_status", "child_counts")
 
 
 def subtree_status(
@@ -228,8 +257,10 @@ def subtree_status(
     used when *children_of* — ``{parent: [child]}``, as
     :func:`children_by_parent` builds it — is passed in); *read_state(verstr)*
     returns a raw run state and is called once per subtree member. Ancestors
-    are walked for ``depth`` but never read. *observed_at(verstr)*, when
-    given, returns the store's write time of a member's run state (see
+    are walked for ``depth``, and read only while the run never started or
+    is stuck (up to the nearest started one: whether it is ``settled``).
+    *observed_at(verstr)*, when given, returns the store's write time of a
+    member's run state (see
     :func:`~version_stamp.core.experiment_status.derive_status`).
     *row_of(verstr)*, when given, returns a run's index row (or None): a sweep
     row's ``sweep_planned`` and its trials' tags make an incomplete sweep
@@ -240,22 +271,29 @@ def subtree_status(
         children_of = children_by_parent(
             [{"verstr": v, "parent": p} for v, p in parent_of.items()]
         )
-    states = {v: read_state(v) for v in subtree_verstrs(verstr, children_of)}
+    order = subtree_verstrs(verstr, children_of)
+    states = {v: read_state(v) for v in order}
     children = list(children_of.get(verstr, []))
     parent = parent_of.get(verstr)
 
-    def status_of(v):
-        return derive_status(states[v], observed_at=observed_at(v) if observed_at else None)
+    def status_of(v, state):
+        return derive_status(state, observed_at=observed_at(v) if observed_at else None)
 
+    statuses = {v: status_of(v, state) for v, state in states.items()}
+    chain = ancestors(verstr, parent_of)
+    settled = subtree_settled(order, statuses, parent_of, chain,
+                              lambda v: status_of(v, read_state(v)))
     sweep = _sweep_fields(verstr, children, row_of)
-    own = own_rollup_status(status_of(verstr), bool(children), sweep_incomplete(sweep))
-    below = (status_of(v) for v in states if v != verstr)
+    own = own_rollup_status(statuses[verstr], bool(children), sweep_incomplete(sweep),
+                            settled[verstr])
+    below = (own_rollup_status(statuses[v], False, settled=settled[v]) for v in order[1:])
     tree = {
         "children": children,
         "kind": OUTER if children else (INNER if parent else SINGLE),
-        "depth": len(ancestors(verstr, parent_of)),
+        "depth": len(chain),
+        "settled": settled[verstr],
         "tree_status": rollup_status([own, *below]),
-        "child_counts": count_statuses(status_of(c) for c in children),
+        "child_counts": count_statuses(statuses[c] for c in children),
         **sweep,
     }
     return states[verstr], tree
@@ -309,14 +347,18 @@ def _child_row_fields(row):
     }
 
 
-def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=None, read_child_row=None):
+def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=None,
+                  read_child_row=None, closed=False):
     """Fleet status for an outer run: per-child status counts and progress.
 
     Returns None when *verstr* has no children. *expected* is the declared
     pod count (from the parent's ``expected_pods`` param); defaults to the
     number of children. *read_child_row(verstr)* returns an indexed row
     dict for a child (its ``idx``/``name``/``params``/``metrics`` and
-    progress), or None.
+    progress), or None. When the outer run is *closed* (see
+    :func:`~vmn_exp.core.settle.closes`) its never-started children and
+    slots count as ``never_started``, its stuck children as ``lost``,
+    beside ``counts`` (never in it).
     """
     children = children_of.get(verstr, [])
     if not children:
@@ -339,9 +381,9 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
     else:
         expected = max(expected, len(children))
 
-    counts = count_statuses(statuses)
+    counts = count_statuses(settled_as(s, closed) or s for s in statuses)
     known = sum(counts.values())
-    waiting = max(0, expected - known)
+    waiting, slots_never = split_slots(max(0, expected - known), closed)
 
     return {
         "expected": expected,
@@ -353,5 +395,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
             CREATED: counts.get(CREATED, 0),
             "waiting": waiting,
         },
+        NEVER_STARTED: counts.get(NEVER_STARTED, 0) + slots_never,
+        LOST: counts.get(LOST, 0),
         "children": child_details,
     }

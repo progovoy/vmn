@@ -62,6 +62,7 @@ from vmn_exp.ui.leaderboard_scope import (
     scope_positions,
 )
 from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
+from vmn_exp.ui.leaderboard_successor import current, latest, live_outers
 from vmn_exp.ui.leaderboard_top_counts import TopCounts
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.leaderboard_warm import BoardWarmer
@@ -113,6 +114,12 @@ class _Base:
         self._at = (bucket, [rows[i] for i in patch.changed])
         self._patched = (None, None)  # (changed_at's rows, patched() of them)
         self._lock = TracedLock(f"leaderboard base:{getattr(snapshot, 'app_name', None)}")
+        # The base that follows once a live outer run went stuck (leaderboard_successor).
+        self.live_outers = live_outers(patch, rows)
+        self.successor = self.outers_checked = None
+        self.successor_lock = TracedLock(
+            f"leaderboard successor:{getattr(snapshot, 'app_name', None)}")
+        self.built_bucket = bucket
 
     @classmethod
     def build(cls, snapshot, token, bucket):
@@ -128,14 +135,16 @@ class _Base:
             return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows))
 
     @classmethod
-    def derived(cls, prev, snapshot, token, bucket):
-        """From *prev*'s base, re-deriving only what changed; None when the
+    def derived(cls, prev, snapshot, token, bucket, delta=None):
+        """From *prev*'s base, re-deriving only what changed (*delta*:
+        ``(storage indexes, verstrs gone)``, else found); None when the
         delta is large, a verstr repeats or a parent chain loops."""
-        delta = row_delta(prev, snapshot)
+        delta = delta or row_delta(prev, snapshot)
         if delta is None:
             return None
         fresh_at, gone = delta
-        position = dict(prev.position)
+        # The same snapshot keeps every slot: its positions are shared.
+        position = prev.position if snapshot is prev.snapshot else dict(prev.position)
         for verstr in gone:
             del position[verstr]
         fresh = {}
@@ -303,7 +312,20 @@ class LeaderboardCache(SetAnswers):
         bucket = self._bucket()
         token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens))
         base = self._bases.per_snapshot(snapshot, lambda: self._new_base(snapshot, token, bucket))
+        base = current(base, bucket, self._follow)
         return base, (bucket if base.patch.live else None)
+
+    def _follow(self, prev):
+        """*prev*'s successor for its own snapshot (a live outer run went
+        stuck): derived like a new generation, else built."""
+        token, bucket = next(self._tokens), self._bucket()
+        live = (sorted(prev.patch.live), set())  # nothing else changed
+        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live)
+        if base:
+            self._deltas.add(base)
+        base = base or _Base.build(prev.snapshot, token, bucket)
+        self.generations.advance(prev.snapshot.app_name, token)
+        return base
 
     def _new_base(self, snapshot, token, bucket):
         """Derived from the app's latest kept base, else built. Any base is a
@@ -311,6 +333,7 @@ class LeaderboardCache(SetAnswers):
         kept = [base for _, base in self._bases.values()
                 if base.snapshot.app_name == snapshot.app_name]
         prev = max(kept, key=lambda base: base.token, default=None)
+        prev = prev and latest(prev, bucket)
         base = prev and _Base.derived(prev, snapshot, token, bucket)
         if base:
             self._deltas.add(base)

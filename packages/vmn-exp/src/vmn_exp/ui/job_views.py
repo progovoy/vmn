@@ -12,6 +12,7 @@ import heapq
 from operator import itemgetter
 
 from vmn_exp.core.log import primary_metric
+from vmn_exp.core.settle import LOST, NEVER_STARTED, split_slots
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.job_failures import failure_clusters
 from vmn_exp.ui.job_rollup_cache import minute
@@ -19,7 +20,7 @@ from vmn_exp.ui.leaderboard_facets import visible
 from vmn_exp.ui.leaderboard_scope import Filters, scope_positions
 
 TOP = 10
-TREE_FIELDS = ("children", "kind", "depth", "tree_status", "child_counts",
+TREE_FIELDS = ("children", "kind", "depth", "settled", "tree_status", "child_counts",
                "sweep_planned", "sweep_trials")
 
 
@@ -40,13 +41,17 @@ def top_rows(rows, metric, descending, count=TOP):
 
 def fleet_counts(rollup):
     """The run detail's ``fleet`` from a job's rollup (``created`` = never
-    ran, ``waiting`` = not created yet)."""
+    ran, ``waiting`` = not created yet), as
+    :func:`~vmn_exp.core.tree.fleet_summary` counts it: an ended job's
+    never-started runs and slots are ``never_started``, its stuck runs
+    ``lost``, beside the counts."""
     counts, expected = rollup["counts"], rollup["expected"]
+    waiting, slots_never = split_slots(max(0, expected - rollup["total"]), rollup["ended"])
     return {"expected": expected, "counts": {
         "running": counts["running"], "succeeded": counts["succeeded"],
         "failed": counts["failed"], "stuck": counts["stuck"], "created": counts["waiting"],
-        "waiting": max(0, expected - rollup["total"]),
-    }}
+        "waiting": waiting,
+    }, NEVER_STARTED: rollup[NEVER_STARTED] + slots_never, LOST: rollup[LOST]}
 
 
 def _is_sweep(row, first_child):

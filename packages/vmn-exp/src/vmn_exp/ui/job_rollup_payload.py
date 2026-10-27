@@ -4,6 +4,7 @@ parts its subtree is split into (static rows and live overlay, per nested
 job): read side by side, never merged into one tally."""
 from collections import Counter
 
+from vmn_exp.core.settle import LOST, NEVER_STARTED, SETTLED, row_closes
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.failure_signature import label
 from vmn_exp.ui.job_tally import DONE, STATES, higher_first
@@ -25,12 +26,15 @@ def _expected(job, total):
 
 
 def _counts(parts):
-    counts = dict.fromkeys(STATES.values(), 0)
+    """``(counts, {settled: n})``: the job states, and the settled runs apart."""
+    counts, settled = dict.fromkeys(STATES.values(), 0), dict.fromkeys(SETTLED, 0)
     for part in parts:
         for status, count in part.counts.items():
             if status in STATES:
                 counts[STATES[status]] += count
-    return counts
+            elif status in settled:
+                settled[status] += count
+    return counts, settled
 
 
 def _edge(parts, field, pick):
@@ -39,21 +43,27 @@ def _edge(parts, field, pick):
 
 
 def progress_fields(job, parts, now):
-    """Counts, size, progress, throughput, ETA and time span."""
-    counts = _counts(parts)
-    total = sum(counts.values())
-    done = sum(counts[STATES[s]] for s in DONE)
+    """Counts, size, progress, throughput, ETA and time span. Once the job
+    has ``ended`` (:func:`~vmn_exp.core.settle.closes`) its settled runs
+    count beside ``counts``: ``never_started`` ones never run, ``lost`` ones
+    finished failed; only its running and waiting runs are left."""
+    counts, settled = _counts(parts)
+    lost = settled[LOST]
+    total = sum(counts.values()) + sum(settled.values())
+    done = sum(counts[STATES[s]] for s in DONE) + lost
     expected = _expected(job, total)
+    ended = row_closes(job)
     now_minute = int(now.timestamp() // 60)
     recent = sum(p.completions.recent(now_minute, THROUGHPUT_WINDOW_MIN) for p in parts)
     throughput = recent / THROUGHPUT_WINDOW_MIN
-    left = max(expected - done, 0)
+    left = counts["running"] + counts["waiting"] if ended else max(expected - done, 0)
     eta = 0 if not left else (round(left / throughput * 60) if throughput else None)
     return {
         "verstr": job["verstr"], "total": total, "counts": counts, "done": done,
+        NEVER_STARTED: settled[NEVER_STARTED], LOST: lost, "ended": ended,
         "expected": expected,
         "progress": round(min(done / expected, 1.0), 4) if expected else None,
-        "failed_pct": round(100 * counts["failed"] / total, 2) if total else 0.0,
+        "failed_pct": round(100 * (counts["failed"] + lost) / total, 2) if total else 0.0,
         "throughput_per_min": throughput, "eta_sec": eta,
         "started_at": _edge(parts, "started", min),
         "finished_at": _edge(parts, "finished", max),

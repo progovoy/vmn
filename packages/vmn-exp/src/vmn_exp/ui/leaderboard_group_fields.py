@@ -21,9 +21,11 @@ DEFAULT_AGGREGATE = "mean"
 # text starts with it is keyed with it doubled (:func:`escaped_key`).
 NONE = "\u2205"
 NONE_LABEL = "(none)"
-# A run's status as a group's counts name it.
+# A run's status as a group's counts name it; a settled run (core/settle.py)
+# counts by its ``settled``: a lost one failed, a never-started one in the
+# total only.
 COUNT_OF = {"running": "running", "created": "waiting", "succeeded": "done",
-            "failed": "failed", "stuck": "stuck"}
+            "failed": "failed", "stuck": "stuck", "lost": "failed"}
 COUNT_KEYS = ("total", "running", "waiting", "done", "failed", "stuck")
 # ``sort=`` values that order groups by a count, and the counts each sums
 # (the board's inner-run count columns: ``failed`` takes stuck runs too).

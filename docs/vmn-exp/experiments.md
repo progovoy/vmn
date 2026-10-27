@@ -387,6 +387,24 @@ finished out of 20 planned reads `created`, and `exp list` says so:
 Rows of such a sweep carry `sweep_planned` and `sweep_trials`; the UI shows
 `16/20 · incomplete`.
 
+**An ended outer run settles what it left behind.** Once an outer run has
+ended — its own status is `succeeded`, `failed` or `stuck` (its orchestrator
+died) — nothing will start its waiting children any more, so each descendant
+gets a derived `settled` field (never stored; a run's own `status` stays): a
+`created` one is `never_started`, a `stuck` one `lost`. The nearest started
+ancestor decides: a container that never ran passes its parent's verdict on,
+a still-running sub-outer keeps its own children open. Rollups then count
+them apart: a never-started run adds nothing to `tree_status` and a lost one
+adds `failed`, so an orchestrator whose pending trials were deleted reads its
+own final status instead of `created`/`stuck` forever; the job rollups, fleet
+counts and the app's status counts carry them as `never_started`/`lost` next
+to the status counts (see [ui.md](ui.md#status-counts-and-rollup)). An ended
+sweep short of its plan reads its own final status (its unclaimed slots never
+start, the UI says `ended · 4 never started`); `created (16/20 incomplete)` is
+for a sweep that has not ended. A settled run that starts after all (writes a
+run state) leaves the settlement by itself. Query them with `settled =
+"never_started"`, `settled = "lost"` or `settled = null`.
+
 `exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
 it differs) on the outer run.
 
@@ -642,7 +660,7 @@ alphabetically. Without `--sort`, the schema's `primary` metric orders rows.
 `--query` takes [the query language](sdk.md#the-query-language) and applies
 before `--last`, `--sort` and `--top`; a bad query exits 1 with the offset.
 Besides `metrics.*`, `params.*` and `tags.*` it sees every row field
-(`status`, `kind`, `depth`, `tree_status`, `name`, `archived`, `rerun_of`,
+(`status`, `kind`, `depth`, `tree_status`, `settled`, `name`, `archived`, `rerun_of`,
 `forked_from`, `imported_from`, `end_reason`, `author`, `has_intent`, …),
 `inputs.*`, `outputs.*` and `env.*`. `author` is who ran it (the
 [`features`](#what-a-run-records-for-similar) author's git email, else OS
@@ -656,7 +674,7 @@ SDK [`list_runs`](sdk.md#reading-runs-back) row: `idx`, `verstr`,
 `has_intent`, `tags`, `archived`, `params`, `metrics`, `metric_summary`,
 `inputs`, `outputs`, `parent`, the status fields (`status`, `exit_code`, `started_at`,
 `finished_at`, `heartbeat`, `duration_sec`, `pid`, `host`, …) and the tree
-fields (`children`, `kind`, `depth`, `tree_status`).
+fields (`children`, `kind`, `depth`, `settled`, `tree_status`).
 
 ### `show`
 

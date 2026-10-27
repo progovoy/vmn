@@ -21,6 +21,11 @@ function withFilter(current: string, set: Record<string, string>): string {
   return `?${p.toString()}`;
 }
 
+/** The board filter listing the runs `counts.stuck` counts: it leaves out
+ *  the ones an ended outer run lost (status_summary.py). */
+export const stuckFilter = (status: Pick<AppStatus, "lost">): Record<string, string> =>
+  ({ status: "stuck", ...(status.lost ? { q: "settled = null" } : {}) });
+
 /** Nothing when no run is stuck and none failed in the last 24h: running
  *  runs alone need no attention. *current* is the board's search. */
 export function attentionParts(status: AppStatus, current: string, now: number): AttentionPart[] {
@@ -28,7 +33,7 @@ export function attentionParts(status: AppStatus, current: string, now: number):
   if (!counts.stuck && !failed_recent) return [];
   const parts: AttentionPart[] = [];
   if (counts.stuck) {
-    parts.push({ key: "stuck", text: `${counts.stuck} stuck`, search: withFilter(current, { status: "stuck" }) });
+    parts.push({ key: "stuck", text: `${counts.stuck} stuck`, search: withFilter(current, stuckFilter(status)) });
   }
   if (failed_recent) {
     parts.push({

@@ -18,6 +18,9 @@ export interface GitContext {
 export interface AppStatus {
   total: number;
   counts: Record<"created" | "running" | "stuck" | "succeeded" | "failed", number>;
+  /** Runs an ended outer run settled, never in `counts` (status_summary.py). */
+  never_started?: number;
+  lost?: number;
   failed_recent: number;
   rollup: "stuck" | "failed" | "running" | null;
   /** While a store's index still loads (routes_shell.py). */

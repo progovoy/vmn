@@ -71,8 +71,9 @@ export function timelineSeries(timeline: JobTimeline): TimelineSeries {
   return out;
 }
 
-/** The runs the failure clusters cover: failed and stuck. */
-export const failedCount = (s: Pick<JobPageSummary, "counts">) => s.counts.failed + s.counts.stuck;
+/** The runs the failure clusters cover: failed, stuck and lost. */
+export const failedCount = (s: Pick<JobPageSummary, "counts" | "lost">) =>
+  s.counts.failed + s.counts.stuck + (s.lost ?? 0);
 
 /** The main metric: the server's, else the first tracked one with values. */
 export function mainMetric(s: JobPageSummary): string | null {
@@ -94,7 +95,7 @@ export function jobKpis(s: JobPageSummary): KpiTile[] {
     { label: "done", value: fmtCount(s.done), sub: `of ${fmtCount(s.expected)}`, tone: "done" },
     {
       label: "failed", value: fmtPct(s.failed_pct), tone: "failed",
-      sub: plural(s.counts.failed, "run"),
+      sub: plural(s.counts.failed + (s.lost ?? 0), "run"),
     },
     { label: "running", value: fmtCount(s.counts.running), tone: "running" },
     { label: "waiting", value: fmtCount(s.counts.waiting), tone: "waiting" },

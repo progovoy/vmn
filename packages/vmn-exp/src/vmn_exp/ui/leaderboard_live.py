@@ -25,13 +25,14 @@ from vmn_exp.core.log import (
     primary_metric,
     sort_descending,
 )
+from vmn_exp.core.settle import row_closes, settled_as
 from vmn_exp.core.status import CREATED, RUNNING
 from vmn_exp.core.tree import (
     children_by_parent,
     own_rollup_status,
     rollup_status,
     subtree_verstrs,
-    sweep_incomplete,
+    sweep_unfinished,
 )
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_tree import parent_in
@@ -69,12 +70,18 @@ class LivePatch:
     statuses, live children)}`` for each changed row *i*: the statuses no time
     bucket changes in its subtree (only their rollup matters), the live rows
     beneath it, and the same split for its direct children's ``child_counts``.
+    ``_parent_closed`` says per live row whether its parent closes its
+    children (:mod:`~vmn_exp.core.settle`), as of the snapshot: a live run
+    that goes stuck under an ended outer is ``lost``. (A live outer that goes
+    stuck settles its own subtree through a successor base:
+    :mod:`~vmn_exp.ui.leaderboard_successor`.)
     """
 
-    def __init__(self, live, changed, rollups):
+    def __init__(self, live, changed, rollups, parent_closed):
         self.live = tuple(live)
         self.changed = tuple(changed)
         self._rollups = rollups
+        self._parent_closed = parent_closed
 
     @classmethod
     def of_rows(cls, rows, live, position):
@@ -88,7 +95,8 @@ class LivePatch:
             if v in position
         }
         rollups = cls._terminal_parts(rows, affected, live_set, position)
-        return cls(live, sorted(affected | live_set), rollups)
+        parent_closed = _closed(rows, live, lambda v: position.get(parent_of.get(v)))
+        return cls(live, sorted(affected | live_set), rollups, parent_closed)
 
     @classmethod
     def from_counts(cls, rows, live, position, edges, child_statuses):
@@ -105,7 +113,8 @@ class LivePatch:
         for i in sorted(affected, key=lambda i: rows[i]["depth"], reverse=True):
             row = rows[i]
             tally = dict(child_statuses.get(row["verstr"], {}))
-            own = own_rollup_status(row["status"], bool(row["children"]))
+            own = own_rollup_status(row["status"], bool(row["children"]),
+                                    settled=row.get("settled"))
             terminal, under = set(), [i] if i in live_set and own else []
             for kid in kids.get(i, ()):
                 tally[rows[kid]["tree_status"]] -= 1
@@ -114,7 +123,7 @@ class LivePatch:
             terminal.update(s for s, n in tally.items() if n)
             if i not in live_set and own:
                 terminal.add(own)
-            if sweep_incomplete(row):
+            if sweep_unfinished(row):
                 terminal.add(CREATED)
             summary = rollup_status(terminal)
             kids_live = tuple(k for k in kids.get(i, ()) if k in live_set)
@@ -127,22 +136,27 @@ class LivePatch:
             parent = position.get(parent_in(edges, row["verstr"]))
             if parent is not None:
                 kids.setdefault(parent, []).append(i)
-        return cls(live, sorted(affected), rollups)
+        parent_closed = _closed(rows, live, lambda v: position.get(parent_in(edges, v)))
+        return cls(live, sorted(affected), rollups, parent_closed)
 
     @staticmethod
     def _terminal_parts(rows, affected, live, position):
         """``{i: (terminal statuses of i's subtree, live rows in it)}``."""
         children_of = children_by_parent(rows)
-        parts = {}
+        parts, own = {}, {}
         for i in affected:
             subtree = [position[v] for v in subtree_verstrs(rows[i]["verstr"], children_of)
                        if v in position]
-            members = [m for m in subtree if own_rollup_status(
-                rows[m]["status"], bool(children_of.get(rows[m]["verstr"])))]
-            incomplete = {CREATED} if any(sweep_incomplete(rows[m]) for m in subtree) else set()
+            for m in subtree:
+                if m not in own:
+                    own[m] = own_rollup_status(
+                        rows[m]["status"], bool(children_of.get(rows[m]["verstr"])),
+                        settled=rows[m].get("settled"))
+            members = [m for m in subtree if own[m]]
+            incomplete = {CREATED} if any(sweep_unfinished(rows[m]) for m in subtree) else set()
             kids = [position[v] for v in children_of.get(rows[i]["verstr"], []) if v in position]
             parts[i] = (
-                frozenset(rows[m]["status"] for m in members if m not in live) | incomplete,
+                frozenset(own[m] for m in members if m not in live) | incomplete,
                 tuple(m for m in members if m in live),
                 Counter(rows[k]["status"] for k in kids if k not in live),
                 tuple(k for k in kids if k in live),
@@ -152,17 +166,29 @@ class LivePatch:
     def rolled_up(self, rows, fresh):
         """The changed rows (storage order) with *fresh* ``{i: live row}``
         swapped in and their ancestors' ``tree_status`` and ``child_counts``
-        rolled up again."""
+        rolled up again; each live row's ``settled`` is set on it (*fresh*
+        rows are the caller's private copies)."""
+        own = {}
+        for i, row in fresh.items():
+            row["settled"] = settled_as(row["status"], self._parent_closed.get(i, False))
+            own[i] = own_rollup_status(row["status"], False, settled=row["settled"])
         out = []
         for i in self.changed:
             row = fresh.get(i, rows[i])
             terminal, under, kids_done, kids_live = self._rollups[i]
-            status = rollup_status(terminal | {fresh[j]["status"] for j in under})
+            status = rollup_status(terminal | {own[j] for j in under})
             counts = dict(kids_done + Counter(fresh[k]["status"] for k in kids_live))
             if row["tree_status"] != status or row["child_counts"] != counts:
                 row = {**row, "tree_status": status, "child_counts": counts}
             out.append(row)
         return out
+
+
+def _closed(rows, live, parent_at):
+    """``{i: whether live row i's parent closes its children}``;
+    *parent_at(verstr)* is the parent's storage index or None."""
+    parents = {i: parent_at(rows[i]["verstr"]) for i in live}
+    return {i: p is not None and row_closes(rows[p]) for i, p in parents.items()}
 
 
 class Desc:

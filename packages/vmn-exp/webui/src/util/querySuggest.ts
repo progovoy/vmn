@@ -4,7 +4,7 @@
 /** Non-metric row fields the query language knows (its ROW_FIELDS). */
 export const ROW_FIELDS = [
   "status", "note", "branch", "verstr", "code_verstr", "timestamp", "idx",
-  "base_version", "kind", "depth", "tree_status", "parent", "children",
+  "base_version", "kind", "depth", "tree_status", "settled", "parent", "children",
   "exit_code", "duration_sec", "started_at", "finished_at", "heartbeat",
   "last_metric_at", "host", "pid", "command", "stale_sec",
   "heartbeat_interval_sec", "forked_from", "rerun_of", "author", "has_intent",
