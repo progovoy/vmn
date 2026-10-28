@@ -69,7 +69,10 @@ Methods:
   direction as their metric goal.
 
 `create` validates and normalizes the spec and stores it in the sweep run's
-metadata (`sweep:`), where agents read it.
+metadata (`sweep:`), where agents read it. The sweep run and every trial also
+declare the metric's goal (`define_metric(<metric>, goal=min|max)`), so the
+board, `vmn-exp list` and job rollups rank it the right way round with no
+conf.yml (a store workspace too); conf.yml or the store settings still win.
 
 ## The trial command
 

@@ -19,8 +19,9 @@ from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
 from vmn_exp.core.sweep.command import require_command, trial_command
 from vmn_exp.core.sweep.early_stop import MedianStopper
 from vmn_exp.core.sweep.peer_points import PeerPoints
+from vmn_exp.core.sweep.spec import metric_definition
 from vmn_exp.core.sweep.summary import history, retry_slots, trial_rows
-from vmn_exp.core.writer import get_writer_id
+from vmn_exp.core.writer import append_to_log, get_writer_id
 from vmn_exp.sdk.sweep import SWEEP_PARAMS_ENV
 from version_stamp.api import VMN_LOGGER
 
@@ -89,6 +90,7 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
     if err is not None:
         return None
     attach_run(storage, claim, verstr)
+    append_to_log(storage, vcs.name, verstr, metric_definition(spec))
 
     env = {"VMN_SWEEP_ID": sweep, "VMN_SWEEP_TRIAL": str(trial),
            SWEEP_PARAMS_ENV: json.dumps(params)}

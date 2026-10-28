@@ -9,6 +9,8 @@ import math
 
 import yaml
 
+from vmn_exp.core.step_metric import create_define_metric_entry
+
 METHODS = ("grid", "random", "bayes")
 DISTRIBUTIONS = ("uniform", "log_uniform", "int_uniform", "normal", "categorical")
 _GOALS = {"min": "min", "minimize": "min", "max": "max", "maximize": "max"}
@@ -89,6 +91,13 @@ def _metric(metric):
     if goal is None:
         raise SpecError(f"metric.goal must be minimize or maximize, got {metric.get('goal')!r}")
     return {"name": str(metric["name"]), "goal": goal}
+
+
+def metric_definition(spec):
+    """The ``define_metric`` entry declaring *spec*'s metric goal, which the
+    sweep's outer run and every trial carry (rankings follow it)."""
+    metric = spec["metric"]
+    return create_define_metric_entry(metric["name"], goal=metric["goal"])
 
 
 def _parameters(parameters, method):

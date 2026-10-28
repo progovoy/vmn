@@ -9,9 +9,9 @@ from vmn_exp.cli.views import dumps
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.storage_resolve import _get_experiment_storage
 from vmn_exp.core.sweep.claims import claimed_trials
-from vmn_exp.core.sweep.spec import SpecError, load_spec, parse_spec
+from vmn_exp.core.sweep.spec import SpecError, load_spec, metric_definition, parse_spec
 from vmn_exp.core.sweep.summary import summarize, trial_rows
-from vmn_exp.core.writer import flush_log
+from vmn_exp.core.writer import append_to_log, flush_log
 from version_stamp.api import VMN_LOGGER
 
 
@@ -56,6 +56,7 @@ def sweep_create(vcs, storage, args):
     if err is not None:
         return err
     storage.update_metadata(vcs.name, verstr, {"sweep": spec})
+    append_to_log(storage, vcs.name, verstr, metric_definition(spec))
     flush_log(storage, vcs.name, verstr)
     print(verstr)
     return 0
