@@ -58,7 +58,7 @@ class TestAnnotate:
 
     def test_a_running_child_of_an_ended_outer_keeps_running(self):
         rows = _tree(*_kids(SUCCEEDED, RUNNING, CREATED))
-        assert rows["k0"]["settled"] is None
+        assert rows["k0"]["settled"] == "outlived"
         assert rows["o"]["tree_status"] == RUNNING
 
     def test_a_never_started_container_passes_the_verdict_down(self):

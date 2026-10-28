@@ -128,7 +128,7 @@ def test_an_outer_that_ends_settles_its_children_once(monkeypatch):
     rollup = cache.job_rollup(snap, {}, outer)
     assert builds == [1]  # the fresh build above only
     assert (rollup[NEVER], rollup["counts"]["running"]) == (2, 1)
-    assert _rows(cache, snap)[kids[0]][1] is None
+    assert _rows(cache, snap)[kids[0]][1] == "outlived"
     _same_as_a_fresh_build(cache, snap, [outer])
 
 
