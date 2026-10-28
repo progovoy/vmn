@@ -193,3 +193,10 @@ def test_a_store_workspace_takes_the_default_split_from_its_settings(store):
     body = client_of().get(f"{BASE}/experiments/{outer}/summary").json()
     assert body["split"] == "tags.kind"
     assert [(e["key"], e["total"]) for e in body["by"]] == [("trial", 2), ("refit", 1)]
+
+
+def test_an_attention_query_that_does_not_compile_is_a_400(store):
+    client = store[0]()
+    r = client.put(f"{BASE}/settings", json={"text": "ui: {attention: [{key: w, query: 'statuz = 1'}]}\n"})
+    assert r.status_code == 400 and "ui.attention[0].query" in r.json()["detail"]
+    assert client.get(f"{BASE}/settings").json()["text"] == ""

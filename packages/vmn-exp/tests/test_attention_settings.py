@@ -76,3 +76,12 @@ def test_eight_entries_are_allowed():
 def test_a_conf_with_bad_attention_reads_as_none():
     assert attention_entries({"attention": [{"key": "stuck", "query": "idx > 1"}]}) == []
     assert attention_entries({"attention": "nope"}) == []
+
+
+def test_saving_refuses_a_query_that_does_not_compile():
+    from vmn_exp.core.app_settings import check_settings
+
+    text = "ui:\n  attention:\n    - {key: ok, query: 'idx > 1'}\n    - {key: typo, query: 'status = created and'}\n"
+    with pytest.raises(SettingsError, match=r"ui\.attention\[1\]\.query.*offset"):
+        check_settings(text)
+    assert check_settings(GOOD) == parse_settings(GOOD)

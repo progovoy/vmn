@@ -88,3 +88,10 @@ def test_vmn_exp_list_sorts_by_the_checkouts_store_settings(app_layout, capfd):
     assert _experiment(app_layout.app_name, action="list") == 0
     lines = [ln for ln in capfd.readouterr().out.strip().split("\n") if ln.startswith("[")]
     assert "loss=0.3" in lines[0] and "loss=0.5" in lines[-1]
+
+
+def test_set_refuses_an_attention_query_that_does_not_compile(store_dir, tmp_path, capsys):
+    bad = _file(tmp_path, "ui: {attention: [{key: waiting, query: 'status = created and'}]}\n")
+    assert _run("settings", APP, "set", "-f", bad, "--dir", store_dir) == 1
+    assert "ui.attention[0].query" in capsys.readouterr().err
+    assert read_settings_text(LocalSnapshotStorage(store_dir, "runs"), APP) is None

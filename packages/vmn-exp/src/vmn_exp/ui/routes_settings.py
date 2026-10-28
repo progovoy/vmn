@@ -7,7 +7,7 @@ parses to and who wrote it last. Reads need ``viewer``, writes ``editor``
 """
 from fastapi import HTTPException, Request
 
-from vmn_exp.core.app_settings import SettingsError, parse_settings
+from vmn_exp.core.app_settings import SettingsError, check_settings, parse_settings
 from vmn_exp.core.app_settings_store import (
     read_settings_text,
     settings_metadata,
@@ -47,6 +47,7 @@ def register(app, api_prefix, settings_target):
             raise HTTPException(400, "text must be a string")
         storage, app_name, changed = settings_target(ws_name, app_tag)
         try:
+            check_settings(text)
             write_settings(storage, app_name, text, actor=author_of(request))
         except SettingsError as exc:
             raise HTTPException(400, str(exc))

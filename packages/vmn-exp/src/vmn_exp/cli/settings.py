@@ -3,7 +3,7 @@ store settings (:mod:`vmn_exp.core.app_settings`). Git-free, like
 ``vmn-exp model``."""
 import sys
 
-from vmn_exp.core.app_settings import SettingsError
+from vmn_exp.core.app_settings import SettingsError, check_settings
 from vmn_exp.core.app_settings_store import read_settings_text, write_settings
 from vmn_exp.cli.intent_arg import read_file_arg
 from vmn_exp.registry.cli import _get_storage
@@ -38,7 +38,9 @@ def _set(storage, args):
         print("settings set needs -f <file>", file=sys.stderr)
         return 1
     try:
-        write_settings(storage, args.name, read_file_arg(args.file, "-f"))
+        text = read_file_arg(args.file, "-f")
+        check_settings(text)
+        write_settings(storage, args.name, text)
     except SettingsError as exc:
         print(f"Invalid settings: {exc}", file=sys.stderr)
         return 1

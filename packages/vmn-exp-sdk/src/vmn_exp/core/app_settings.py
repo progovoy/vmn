@@ -12,6 +12,7 @@ import re
 import yaml
 
 from vmn_exp.core.metric_summary import GOALS, SUMMARIES
+from vmn_exp.core.query import QueryError, compile_query
 from vmn_exp.core.values import is_finite_number
 
 GROUP_AGGREGATES = ("mean", "best", "median", "min", "max")
@@ -74,6 +75,18 @@ def parse_settings(text):
             raise SettingsError(f"unknown key {key!r}: settings hold {' and '.join(_TOP_KEYS)}")
     _check_metrics(settings.get("metrics", {}))
     _check_ui(settings.get("ui", {}))
+    return settings
+
+
+def check_settings(text):
+    """:func:`parse_settings` for a save: also SettingsError on an attention
+    query that does not compile (read from a conf, it is reported on its part)."""
+    settings = parse_settings(text)
+    for i, entry in enumerate((settings.get("ui") or {}).get("attention") or []):
+        try:
+            compile_query(entry["query"])
+        except QueryError as error:
+            raise SettingsError(f"invalid ui.attention[{i}].query: {error}") from None
     return settings
 
 

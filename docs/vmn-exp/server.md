@@ -435,9 +435,10 @@ ui:
   `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
   `key` letters, digits, `_`, `-` (unique, not the built-in
   `stuck`/`failed`/`running`/`outlived`),
-  `label` defaulting to the key, `level` `warn` (default) or `error`. A
-  query that does not compile is not refused here; the server reports it on
-  its part (`error`). A checkout's conf.yml `experiment.ui.attention` beats
+  `label` defaulting to the key, `level` `warn` (default) or `error`. Saving
+  (`vmn-exp settings set`, the PUT) refuses a query that does not compile,
+  naming it and the offset; one read from a conf.yml or a file written behind
+  vmn's back is reported on its part (`error`). A checkout's conf.yml `experiment.ui.attention` beats
   it as a whole (a bad list there reads as none).
   Anything else, or a bad value, is refused on write; a file broken behind
   vmn's back reads as no settings, with a warning.
