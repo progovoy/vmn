@@ -328,6 +328,9 @@ def experiment_detail(
         "compacted": compacted_read.result(),
     }
     detail.update(failure_fields(storage, app_name, verstr, detail, snapshot, last_good))
+    charts = snapshot.metric_charts(schema)
+    if charts:  # absent without a bars/table hint (plan 28 N8)
+        detail["metric_charts"] = charts
     return detail, None
 
 

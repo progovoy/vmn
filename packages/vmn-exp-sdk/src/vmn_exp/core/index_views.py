@@ -61,7 +61,7 @@ def lean_row(idx, meta, fold):
     ``metric_summary``, its ``outputs`` or its ``sys_*`` metrics; *parts*
     ``(metric_summary, run definitions)``, None when no other metric
     repeats, *outputs* None when the run stored none, *declared* the run's
-    ``goal``/``hidden`` declarations (see
+    ``goal``/``hidden``/``chart`` declarations (see
     :func:`~vmn_exp.core.metric_schema.declared_fields`) or None, the run's
     folded features/intent/hypothesis or None, and *system* ``({sys metric:
     value}, their summary or None, run definitions)``, None without any
@@ -113,7 +113,7 @@ def _definitions(fold):
 
 
 def run_declared(fold):
-    """The run's ``goal``/``hidden`` declarations, or None."""
+    """The run's ``goal``/``hidden``/``chart`` declarations, or None."""
     return declared_fields(_definitions(fold)) or None
 
 

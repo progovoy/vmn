@@ -476,7 +476,7 @@ ui:
     refit: [t:health, c:ratio]
 ```
 
-- Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric}`
+- Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric, chart}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
   `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention`,
   `baseline`, `views`, `tree_columns` checked; other `ui` keys kept).

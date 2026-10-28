@@ -32,7 +32,13 @@ export interface MetricSpec {
   /** Kept out of default columns and chart grids (conf.yml or a run's
    *  `define_metric(hidden=True)`); still sortable and queryable. */
   hidden?: boolean;
+  /** How the run page draws it (plan 28 N8): a curve (the default), the
+   *  last value per step as bars sorted by value, or a step -> value table. */
+  chart?: "line" | MetricChart;
 }
+
+/** A metric display other than a curve (`define_metric(chart=...)`). */
+export type MetricChart = "bars" | "table";
 
 /** A metric logged more than once: its last and first value, finite
  *  min/max and the mean of its finite values (`null` when it never had a
@@ -371,6 +377,8 @@ export interface ExperimentDetail {
   step_metrics?: Record<string, string>;
   /** Metrics the run's `define_metric` or conf.yml marks hidden. */
   hidden_metrics?: string[];
+  /** Metrics the run's `define_metric` or conf.yml draws as bars or a table. */
+  metric_charts?: Record<string, MetricChart>;
   /** Params as logged, verbatim — strings and booleans included. */
   params?: Record<string, unknown>;
   /** Each metric's summary value (best, per its policy — see MetricSpec). */

@@ -10,7 +10,7 @@ from vmn_exp.core.fold import (
     fold_rewinds,
     fold_values,
 )
-from vmn_exp.core.metric_schema import hidden_metrics
+from vmn_exp.core.metric_schema import hidden_metrics, metric_charts
 from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
 from vmn_exp.ui.readers.series import downsample
 
@@ -57,6 +57,11 @@ class LogSnapshot:
         """The run's metrics its definitions, else *schema*, mark hidden."""
         names = {*self.metrics, *self._counts}
         return hidden_metrics(names, fold_definitions(self._metric_fold), schema)
+
+    def metric_charts(self, schema=None):
+        """``{metric: chart}`` of the run's metrics not drawn as a line."""
+        names = {*self.metrics, *self._counts}
+        return metric_charts(names, fold_definitions(self._metric_fold), schema)
 
     def log(self):
         return self._entries[: self.total]

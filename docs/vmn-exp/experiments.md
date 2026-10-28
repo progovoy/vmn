@@ -644,7 +644,8 @@ vmn-exp add my_app -v @7 --finish 1 --error "OOMKilled" --note "closed by orches
 Flags: `--metrics`, `--note`, `--attach <file>` (an artifact), `-f <yaml>`,
 `--input`, `--intent`/`--intent-file` ([Intent](#intent-what-a-run-is-for)),
 `--define-metric NAME [--goal min|max] [--summary
-min|max|last|first|mean] [--step-metric M] [--hidden]` (the CLI's
+min|max|last|first|mean] [--step-metric M] [--hidden] [--chart
+line|bars|table]` (the CLI's
 `run.define_metric`; see [summaries](#best-value-summaries-summary)), and
 `--finish <code> [--error <text>] [--end-reason <text>] [--force]`: write the
 run's final state from outside it, after the other entries, without
@@ -1431,6 +1432,7 @@ conf:
       acc:        {goal: max}
       "val_*":    {goal: min}                  # glob; an exact name beats it
       "grad_*":   {hidden: true}
+      "health.*": {chart: bars}                # per-member values: bars, not a curve
       val_acc:    {step_metric: epoch}
 ```
 
@@ -1441,9 +1443,10 @@ conf:
 | `summary` | which value a repeated metric folds to (below) |
 | `hidden: true` | out of the UI's default leaderboard columns and chart grid (still sorts, queries, summarizes) |
 | `step_metric: <name>` | chart against that metric instead of the step ([sdk.md](sdk.md#custom-x-axis-step_metric)) |
+| `chart: line\|bars\|table` | how the run page draws it: a curve (default), the last value per step as bars sorted by value (with the max and the share over a threshold), or a step → value table ([sdk.md](sdk.md#display-hint-chart)) |
 
 Schema columns come first in `list`/`compare`, the rest alphabetically. Runs
-can declare `goal`/`hidden` themselves (`run.define_metric`, `add
+can declare `goal`/`hidden`/`chart` themselves (`run.define_metric`, `add
 --define-metric`): for names conf.yml lacks, the latest run's declaration
 sets the sort direction of `list --sort`, `list_runs()` and the UI
 leaderboard (conf.yml always wins) — so a store-only UI workspace without a
@@ -1493,7 +1496,7 @@ value.
   run's summary.
 - **After the fact**: `vmn-exp add my_app -v <ref> --define-metric val_loss
   --goal min` (needs at least one of `--goal`/`--summary`/`--step-metric`/
-  `--hidden`) — handy for a `vmn-exp run` whose child only wrote `key=value`
+  `--hidden`/`--chart`) — handy for a `vmn-exp run` whose child only wrote `key=value`
   lines.
 - **Live**: conf.yml policies apply at read time, so editing them re-ranks
   existing runs. A store workspace in `vmn-exp ui` has no conf.yml; the

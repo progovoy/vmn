@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """The *effective* metrics schema: the app's conf.yml plus what runs declare.
 
-A run's ``define_metric(name, goal=..., hidden=...)`` travels in its log, so a
-store workspace without any conf.yml still knows which way a metric sorts and
-which metrics to keep out of default views. The effective schema is the conf
-schema plus, for every name the conf does not declare, the ``goal``/``hidden``
-the latest run declares (runs ordered by creation time).
+A run's ``define_metric(name, goal=..., hidden=..., chart=...)`` travels in
+its log, so a store workspace without any conf.yml still knows which way a
+metric sorts, which metrics to keep out of default views and how to draw them.
+The effective schema is the conf schema plus, for every name the conf does not
+declare, the ``goal``/``hidden``/``chart`` the latest run declares (runs
+ordered by creation time).
 
-It drives sort direction and hidden columns only — never a summary: run A
-declaring ``goal: min`` must not change which value run B ranks on (see
-:func:`~vmn_exp.core.metric_summary.with_policies`, which takes the conf
-schema and the run's own definitions).
+It drives sort direction, hidden columns and chart kinds only — never a
+summary: run A declaring ``goal: min`` must not change which value run B
+ranks on (see :func:`~vmn_exp.core.metric_summary.with_policies`, which takes
+the conf schema and the run's own definitions).
 
 Names are exact metric names or ``fnmatch`` globs; an exact name beats a glob
 (:func:`~vmn_exp.core.step_metric.lookup`). Pure: no storage.
@@ -28,17 +29,35 @@ def hidden_fields(hidden=None):
     return {"hidden": hidden}
 
 
+# How the ui draws a metric (plan 28 N8): a curve over the steps, the last
+# value per step as bars sorted by value, or a step -> value table.
+CHARTS = ("line", "bars", "table")
+
+
+def chart_fields(chart=None):
+    """``{"chart"?}`` for a ``define_metric`` entry; ValueError unless one of
+    :data:`CHARTS`."""
+    if chart is None:
+        return {}
+    if chart not in CHARTS:
+        raise ValueError(f"chart must be one of {', '.join(CHARTS)}, got {chart!r}")
+    return {"chart": chart}
+
+
 def _schema_fields(definition):
-    """The ``goal``/``hidden`` of one declaration that the schema can carry."""
-    goal, hidden = _goal_of(definition), _hidden_of(definition)
+    """The ``goal``/``hidden``/``chart`` of one declaration that the schema
+    can carry."""
+    goal, hidden, chart = _goal_of(definition), _hidden_of(definition), _chart_of(definition)
     fields = {"goal": goal} if goal else {}
     if hidden:
         fields["hidden"] = hidden[0]
+    if chart:
+        fields["chart"] = chart
     return fields
 
 
 def declared_fields(definitions):
-    """``{name: {"goal"?, "hidden"?}}`` of one run's folded definitions
+    """``{name: {"goal"?, "hidden"?, "chart"?}}`` of one run's folded definitions
     (:func:`~vmn_exp.core.fold.fold_definitions`); ``{}`` when none."""
     declared = {}
     for name, definition in (definitions or {}).items():
@@ -93,3 +112,19 @@ def is_hidden(metric, run_defs=None, schema=None):
 def hidden_metrics(names, run_defs=None, schema=None):
     """The sorted *names* that are hidden (see :func:`is_hidden`)."""
     return sorted(n for n in set(names) if is_hidden(n, run_defs, schema))
+
+
+def _chart_of(definition):
+    chart = (definition or {}).get("chart")
+    return chart if chart in CHARTS else None
+
+
+def metric_charts(names, run_defs=None, schema=None):
+    """``{name: chart}`` of the *names* not drawn as a line: the run's own
+    declaration, else *schema*'s (exact name beats a glob)."""
+    charts = {}
+    for name in sorted(set(names)):
+        chart = lookup(name, run_defs or {}, _chart_of) or lookup(name, schema or {}, _chart_of)
+        if chart and chart != "line":
+            charts[name] = chart
+    return charts
