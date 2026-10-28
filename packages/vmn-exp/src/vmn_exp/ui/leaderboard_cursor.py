@@ -134,7 +134,7 @@ def keyed(cache, snapshot, schema, last, f, projs, attention=()):
     key = RowKey(schema, plain.sort, plain.order, present, base, projs)
     if f.sort not in JOB_SORTS:
         return key
-    summaries = cache._job_view.summaries(snapshot, schema, f.sort, attention)
+    summaries = cache._job_view.summaries(snapshot, schema, f.sort, attention, f.children_of)
     field = JOB_SORTS[f.sort]
     return JobKey(key, summaries, field, job_descending(field, f.order, summaries, schema))
 

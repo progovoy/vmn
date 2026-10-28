@@ -9,7 +9,8 @@ base, time bucket and minute (the summaries' throughput and ETA follow
 :func:`~vmn_exp.ui.job_rollup_cache.minute`). Rows without the value (single runs, a job without the metric)
 come last, ties keep the default order. ``job:attention`` ranks by the
 summaries' ``attention_rank`` (:mod:`~vmn_exp.ui.attention`), the app's
-attention queries given.
+attention queries given. A tree page (``children_of``, plan 28 N6) sorts
+its children by theirs (:mod:`~vmn_exp.ui.leaderboard_children`).
 """
 from operator import itemgetter
 
@@ -35,7 +36,7 @@ ATTENTION_SORT = "job:attention"
 
 def check_job_sort(sort, top):
     if sort in JOB_SORTS and not top:
-        raise ValueError(f"sort {sort} needs top=1")
+        raise ValueError(f"sort {sort} needs top=1 or children_of")
 
 
 def sortable(value):
@@ -86,18 +87,22 @@ class JobsView:
         *f* in order, a ``job:*`` sort included (by the *attention* queries'
         counts for ``job:attention``)."""
         cache = self._cache
-        check_job_sort(f.sort, f.top)
+        check_job_sort(f.sort, f.top or f.children_of is not None)
         if f.sort not in JOB_SORTS:
             return cache._ordered(snapshot, schema, last, f)
         base, bucket = cache._base(snapshot)
         key = (base.token, bucket, minute(), cache.schema_key(schema), last, attention) + f
         return self._orders.get(key, lambda: job_sorted(
             cache._ordered(snapshot, schema, last, f._replace(sort=None, order=None)),
-            self.summaries(snapshot, schema, f.sort, attention), f.sort, f.order, schema))
+            self.summaries(snapshot, schema, f.sort, attention, f.children_of),
+            f.sort, f.order, schema))
 
-    def summaries(self, snapshot, schema, sort=None, attention=()):
+    def summaries(self, snapshot, schema, sort=None, attention=(), children_of=None):
         """``{job: summary}``, with attention counts given *attention*
-        queries or a ``job:attention`` *sort*."""
+        queries or a ``job:attention`` *sort*; with *children_of*, its
+        children's, each counted over its own subtree."""
+        if children_of is not None:
+            return self._cache.tree_nodes.summaries(snapshot, schema, children_of, attention)
         if attention or sort == ATTENTION_SORT:
             return self._cache.attention.summaries(snapshot, schema, attention)
         return self._cache.job_rollups(snapshot, schema)

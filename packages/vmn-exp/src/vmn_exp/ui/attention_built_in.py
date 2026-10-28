@@ -7,8 +7,6 @@ runs an ended outer run left still running (plan 28 T2b,
 An outlived run is running, so it is one of the base's live rows: counting
 reads those as of the time bucket, O(live), and never sorts the board.
 """
-from collections import Counter
-
 from vmn_exp.core.settle import OUTLIVED
 from vmn_exp.ui.leaderboard_scope import Filters, filtered
 
@@ -34,17 +32,12 @@ def shown(key, count):
 
 def built_in_count(cache, snapshot, key, scope=None):
     """How many non-archived runs (of *scope*'s subtree) built-in part *key* counts."""
-    return len(_ROWS[key](cache, snapshot, scope))
+    return len(built_in_rows(cache, snapshot, key, scope))
 
 
-def built_in_by_root(cache, snapshot, keys):
-    """``{top-level verstr: {key: n}}`` of the built-in parts *keys*, per tree."""
-    out = {}
-    for key in keys:
-        rows = _ROWS[key](cache, snapshot, None)
-        for root, n in Counter(row["root"] or row["verstr"] for row in rows).items():
-            out.setdefault(root, {})[key] = n
-    return out
+def built_in_rows(cache, snapshot, key, scope=None):
+    """The non-archived runs (of *scope*'s subtree) built-in part *key* counts."""
+    return _ROWS[key](cache, snapshot, scope)
 
 
 def _outlived(cache, snapshot, scope):

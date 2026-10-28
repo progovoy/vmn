@@ -393,6 +393,11 @@ def create_app(
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         return source.split_by(ws, app_name, _settings(ws, app_name))
 
+    def _experiment_ui(ws_name, app_tag):
+        """The app's ``experiment.ui``: conf.yml over the store settings."""
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return source.experiment_ui(ws, app_name, _settings(ws, app_name))
+
     def _attention_entries(ws_name, app_tag):
         """The built-in attention parts, then the app's queries: conf.yml
         over the store settings."""
@@ -731,7 +736,8 @@ def create_app(
         return index.comment_counts(_app_name(app_tag)), index.generation
 
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
-                                _comment_counts, _group_aggregate, _attention_entries)
+                                _comment_counts, _group_aggregate, _attention_entries,
+                                _experiment_ui)
     routes_pivot.register(app, API_PREFIX, _leaderboard_inputs, leaderboards, _group_aggregate)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
 

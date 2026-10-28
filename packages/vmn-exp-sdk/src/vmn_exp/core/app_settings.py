@@ -4,7 +4,7 @@ The reader-facing subset of conf's ``experiment:`` block, kept in the store
 (:mod:`vmn_exp.core.app_settings_store`) so a store workspace, which has no
 checkout, reads it too: ``metrics.<name|glob>.{goal,summary,hidden,primary,
 step_metric}`` and ``ui.*`` (``group_aggregate``, ``stale_after_min``,
-``progress``, ``attention``, ``baseline`` and ``views`` checked, other ``ui``
+``progress``, ``attention``, ``baseline``, ``views`` and ``tree_columns`` checked, other ``ui``
 keys kept as they are). A checkout's conf beats them, per metric name and per
 ``ui`` key; they beat what runs declare. Pure.
 """
@@ -36,10 +36,23 @@ def _progress_mapping(value):
         key in PROGRESS_KEYS and isinstance(name, str) and name for key, name in value.items())
 
 
+# A board column's show key (``m:``/``p:``/``c:``/``t:<name>``).
+_SHOW_KEY = re.compile(r"[mpct]:.+")
+
+
+def _tree_columns(value):
+    """``{<tags.kind value>: [show key]}`` (plan 28 N6)."""
+    return isinstance(value, dict) and all(
+        isinstance(kind, str) and kind and isinstance(keys, list)
+        and all(isinstance(key, str) and _SHOW_KEY.fullmatch(key) for key in keys)
+        for kind, keys in value.items())
+
+
 _UI_FIELDS = {
     "group_aggregate": lambda v: v in GROUP_AGGREGATES,
     "stale_after_min": lambda v: is_finite_number(v) and v > 0,
     "progress": _progress_mapping,
+    "tree_columns": _tree_columns,
 }
 
 
@@ -269,6 +282,12 @@ def views_entries(ui):
 def _search(text):
     query = text.strip().lstrip("?")
     return f"?{query}" if query else ""
+
+
+def tree_columns_of(ui):
+    """*ui*'s ``tree_columns``, ``{}`` when it has none or they are invalid."""
+    value = (ui or {}).get("tree_columns")
+    return value if value and _tree_columns(value) else {}
 
 
 def metrics_overlay(settings, conf_metrics):

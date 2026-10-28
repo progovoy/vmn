@@ -35,6 +35,7 @@ import hashlib
 import itertools
 import json
 import os
+from collections import namedtuple
 
 import vmn_exp.core.status as experiment_status
 from vmn_exp.core.gc_pause import freeze_long_lived, gc_paused
@@ -50,6 +51,7 @@ from vmn_exp.ui.http_params import MAX_PAGE
 from vmn_exp.ui.job_rollup_cache import JobRollupCache
 from vmn_exp.ui.leaderboard_answers import IMPORTANCE_RESULTS, SetAnswers
 from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
+from vmn_exp.ui.leaderboard_children import TreeNodes
 from vmn_exp.ui.leaderboard_cursor import Pager, fingerprint, keyed
 from vmn_exp.ui.leaderboard_delta import (
     DeltaLog,
@@ -64,10 +66,10 @@ from vmn_exp.ui.leaderboard_jobs import JobsView
 from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, is_live, order_key
 from vmn_exp.ui.leaderboard_scope import (
     Filters,
-    check_scope,
+    check_filters,
     filtered,
     left_filtered,
-    scope_positions,
+    narrowed_slots,
 )
 from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
 from vmn_exp.ui.leaderboard_successor import current, latest, live_outers
@@ -208,7 +210,8 @@ class _Base:
         when *count* < 1) in storage order, as of *bucket*: scans back only
         as needed, within the scope's subtree when *f* has one."""
         patched = self.patched(bucket)
-        at = scope_positions(self, f.scope) if f.scope else range(len(self.rows))
+        at = narrowed_slots(self, f)
+        at = range(len(self.rows)) if at is None else at
         out, stop, chunk = [], len(at), max(count, 64)
         while stop and (count < 1 or len(out) < count):
             start = max(0, stop - chunk)
@@ -248,9 +251,11 @@ class _Static:
         N the scope's subtree when *f* has one. *slots*: the storage slots
         that may pass *f*'s query (None: every one)."""
         changed = set(base.patch.changed)
-        at = scope_positions(base, f.scope) if f.scope else range(len(base.rows))
+        at = narrowed_slots(base, f)
         if slots is not None:
-            at = sorted(set(at) & slots) if f.scope else sorted(slots)
+            at = sorted(slots) if at is None else sorted(set(at) & slots)
+        elif at is None:
+            at = range(len(base.rows))
         rows = [base.rows[i] for i in at if i not in changed]
         kept = filtered(base.snapshot, rows, f)
         ordered = sort_rows(kept, schema, sort=f.sort, order=f.order)
@@ -286,6 +291,11 @@ class _Static:
         # Ranked by a metric no static row has: they all sort last, in storage order.
         static = self.filtered if ranked and not self.has_metric else self.sorted
         return MergedRows(static, sorted(live, key=key), key)
+
+
+# One family of orders: by (base, schema, filters); (schema, filters) ->
+# the newest _Static; merged with the live rows.
+_Orders = namedtuple("_Orders", "static latest merged")
 
 
 def _schema_key(schema):
@@ -326,10 +336,11 @@ class LeaderboardCache(SetAnswers):
         self.generations = Generations(GENERATIONS_KEPT)
         track = self.generations.track
         self._facets = Facets()
-        self._static = track(LRU(size))
-        self._latest = LRU(LATEST_ORDERS)  # (schema, filters) -> newest _Static
+        # The board's orders, and the tree's children orders (plan 28 N6) in
+        # LRUs of their own, so expanding nodes never evicts the board's.
+        self._orders = {tree: _Orders(track(LRU(size)), LRU(LATEST_ORDERS), track(LRU(size)))
+                        for tree in (False, True)}
         self._deltas = DeltaLog()
-        self._sorted = track(LRU(size))
         self._columns = track(LRU(size))
         self._importance = LRU(IMPORTANCE_RESULTS)
         self._groups = GroupCache(self, size)
@@ -341,6 +352,7 @@ class LeaderboardCache(SetAnswers):
         self._top_counts = TopCounts(self)
         self._status_counts = StatusCounts(self)
         self.attention = AttentionCounts(self)
+        self.tree_nodes = TreeNodes(self, size)
         self._warmer = BoardWarmer(self)
 
     schema_key = staticmethod(_schema_key)
@@ -408,10 +420,11 @@ class LeaderboardCache(SetAnswers):
     def _ordered(self, snapshot, schema, last, f):
         """The rows passing the :class:`Filters` *f* in order (no ``job:*`` sort)."""
         base, bucket = self._base(snapshot)
-        check_scope(base, f.scope)
+        check_filters(base, f)
         schema_key = _schema_key(schema)
+        merged = self._orders_for(f).merged
         if last:
-            return self._sorted.get(
+            return merged.get(
                 (base.token, bucket, schema_key, last) + f,
                 lambda: sort_rows(base.tail(bucket, int(last), f), schema,
                                   sort=f.sort, last=last, order=f.order),
@@ -419,17 +432,20 @@ class LeaderboardCache(SetAnswers):
         static = self.static_order(base, schema, f)
         if not base.patch.changed:
             return static.sorted
-        return self._sorted.get(
+        return merged.get(
             (base.token, bucket, schema_key, None) + f,
             lambda: static.merged(
                 base, filtered(base.snapshot, base.changed_at(bucket), f), schema, f.sort, f.order,
             ),
         )
 
+    def _orders_for(self, f):
+        return self._orders[f.children_of is not None]
+
     def static_order(self, base, schema, filters):
         """*base*'s :class:`_Static` order for the :class:`Filters` *filters*."""
         schema_key = _schema_key(schema)
-        return self._static.get(
+        return self._orders_for(filters).static.get(
             (base.token, schema_key) + filters,
             lambda: self._static_of(base, schema_key, schema, filters),
         )
@@ -439,13 +455,14 @@ class LeaderboardCache(SetAnswers):
         the deltas since (the dashboard asks for many orders, each only now
         and then); built when that is too far back or too much changed."""
         key = (schema_key,) + filters
-        last = self._latest.peek(key)
+        latest = self._orders_for(filters).latest
+        last = latest.peek(key)
         moves = last and self._deltas.since(last.token, base, query_reads_up(filters.query))
         static = moves and last.advanced(base, *moves, schema, filters)
         static = static or _Static.build(base, schema, filters,
                                          slots=self._candidates(base.snapshot, filters.query,
                                                                 base.position))
-        self._latest.put(key, static)
+        latest.put(key, static)
         return static
 
     def _candidates(self, snapshot, query, position=None):
@@ -483,7 +500,7 @@ class LeaderboardCache(SetAnswers):
     def page(
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,
         status=None, query=None, order=None, archived=False, scope=None, top=False,
-        match_subtree=False, cursor=None, attention=(),
+        match_subtree=False, cursor=None, attention=(), children_of=None, split=None,
     ):
         """What ``leaderboard`` answers for the same arguments, from the memo.
 
@@ -495,13 +512,18 @@ class LeaderboardCache(SetAnswers):
         each then carrying ``job`` (plan 23 S2), and with *match_subtree*
         the query matches their subtrees (:mod:`~vmn_exp.ui.leaderboard_subtree_match`);
         their ``job`` carries the *attention* queries' counts (:mod:`~vmn_exp.ui.attention`).
+        *children_of* keeps a run's direct children, always paged, as the
+        tree serves them (split by the *split* field, plan 28 N6,
+        :mod:`~vmn_exp.ui.leaderboard_children`).
         Raises ``QueryError`` on a
         bad *query*, :class:`~vmn_exp.ui.leaderboard_scope.UnknownScope` on an
         unknown *scope*.
         """
-        f = Filters(sort, status, query, order, archived, scope, top)
+        f = Filters(sort, status, query, order, archived, scope, top, children_of)
         if match_subtree and not top:
             raise ValueError("match_subtree needs top=1")
+        if top and children_of is not None:
+            raise ValueError("children_of cannot be combined with top")
         subtree = bool(match_subtree and query and query.strip())
         pager = self.pager(snapshot, schema, last, f, cursor, match_subtree,
                            ordered=(last, f._replace(query=None)) if subtree else None,
@@ -509,6 +531,10 @@ class LeaderboardCache(SetAnswers):
         if subtree:
             return self._subtree.page(snapshot, schema, last, offset, limit, f, pager, attention)
         rows = self._job_view.ordered(snapshot, schema, last, f, attention)
+        if children_of is not None:
+            cut, after = pager.cut(rows, offset or 0, self.max_page if limit is None else limit)
+            cut = self.tree_nodes.rows(snapshot, schema, cut, children_of, attention, split)
+            return {"rows": cut, "total": len(rows), "next_cursor": after}
         return self.paged(snapshot, schema, rows, offset, limit, top, pager, attention)
 
     def pager(self, snapshot, schema, last, f, cursor, match_subtree=False, ordered=None,

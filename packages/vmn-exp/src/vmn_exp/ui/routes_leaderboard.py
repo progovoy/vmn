@@ -26,10 +26,15 @@ the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
 A ``q`` with ``ago()`` is pinned to the minute first (plan 28 P1,
 :func:`~vmn_exp.ui.attention.pinned`), so its ETag and orders follow the
 clock; a Jobs view page's ``job`` carries the app's attention counts.
+``children_of=<verstr>`` pages that run's direct children for the tree
+(plan 28 N6, :mod:`~vmn_exp.ui.leaderboard_children`): each with children
+carrying its ``job`` (attention over its own subtree, the app's split),
+every row an ``open`` hint, the page the app's ``tree_columns``.
 """
 from functools import partial
 
 from fastapi import HTTPException, Request
+from vmn_exp.core.app_settings import tree_columns_of
 from vmn_exp.core.query import QueryError
 from vmn_exp.ui.attention import pinned, queries_of
 from vmn_exp.ui.auth.authz import require
@@ -46,7 +51,7 @@ from vmn_exp.ui.leaderboard_comments import (
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE, UnknownGroup
 from vmn_exp.ui.leaderboard_scope import UnknownScope, top_filter
 from vmn_exp.ui.memo import LRU
-from vmn_exp.ui.readers.experiments import ORDERS
+from vmn_exp.ui.readers.experiments import ORDERS, split_by_of
 from vmn_exp.ui.responses import memoized_json_response
 from vmn_exp.ui.security import safe_segment
 
@@ -59,13 +64,15 @@ MAX_GROUPED_ROWS = 5000
 
 
 def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None,
-             attention_of=None):
+             attention_of=None, ui_of=None):
     """*inputs(ws_name, app_tag)* -> ``(snapshot, metrics schema)``, raising
     the route's HTTP errors for a bad workspace or app; *comments_of(ws_name,
     app_tag)* -> ``({verstr: {total, unresolved}}, generation)``; without it
     rows carry no comment counts. *aggregate_of(ws_name, app_tag)* -> the
     app's default group aggregate (conf ``experiment.ui.group_aggregate``);
-    *attention_of(ws_name, app_tag)* -> its attention entries."""
+    *attention_of(ws_name, app_tag)* -> its attention entries; *ui_of(ws_name,
+    app_tag)* -> its ``experiment.ui`` (a tree page's split and columns)."""
+    ui_of = ui_of or (lambda ws_name, app_tag: {})
     comments_of = comments_of or (lambda ws_name, app_tag: ({}, 0))
     aggregate_of = aggregate_of or (lambda ws_name, app_tag: DEFAULT_AGGREGATE)
     attention_of = attention_of or (lambda ws_name, app_tag: [])
@@ -93,22 +100,30 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         top: str = None,
         match_subtree: bool = False,
         cursor: str = None,
+        children_of: str = None,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
         top, q = _top(top), _pinned(q)
-        attention = queries_of(attention_of(ws_name, app_tag)) if top else ()
+        tree = children_of is not None
+        attention = queries_of(attention_of(ws_name, app_tag)) if top or tree else ()
         offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
                       order=order, archived=archived, scope=_scope(scope), top=top)
         # A Jobs view's summaries (throughput, ETA) follow the minute; the
         # etag carries the live bucket already.
-        clock = dict(minute=minute()) if top else {}
+        clock = dict(minute=minute()) if top or tree else {}
         counts, generation = comments_of(ws_name, app_tag)
         try:
             by_comments = reads_comments(q)
         except QueryError as e:
             raise HTTPException(400, str(e))
+        if tree:
+            _scope(children_of)
+            _check_tree(group, by_comments)
+            return _tree_page(request, ws_name, app_tag, snapshot, schema, counts,
+                              dict(params, last=last, cursor=cursor, children_of=children_of),
+                              attention, comments=generation, **clock)
         if group is not None:
             if last or cursor is not None:
                 raise HTTPException(400, "last and cursor cannot be combined with group")
@@ -186,6 +201,19 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         except QueryError as e:
             raise HTTPException(400, str(e))
 
+    def _tree_page(request, ws_name, app_tag, snapshot, schema, counts, params, attention,
+                   **tag_extra):
+        """A tree page: *params*' children, with the app's split and ``tree_columns``."""
+        ui = ui_of(ws_name, app_tag)
+        split, columns = split_by_of(ui), tree_columns_of(ui)
+
+        def compute(*args, **page):
+            body = cache.page(*args, **page, attention=attention, split=split)
+            return dict(joined(body, counts), tree_columns=columns)
+
+        return _answer(request, compute, snapshot, schema, params, attention=attention,
+                       split=split, tree_columns=columns, **tag_extra)
+
     def _top(top):
         try:
             return top_filter(top)
@@ -228,6 +256,13 @@ def grouped_page(limit, rows_per_group):
     groups = MAX_GROUPS if limit is None else max(1, min(int(limit), MAX_GROUPS))
     rows = max(1, min(int(rows_per_group), MAX_ROWS_PER_GROUP, MAX_GROUPED_ROWS // groups))
     return groups, rows
+
+
+def _check_tree(group, by_comments):
+    if group is not None:
+        raise HTTPException(400, "children_of cannot be combined with group")
+    if by_comments:
+        raise HTTPException(400, "children_of cannot be combined with a comments query")
 
 
 def _check_order(order):

@@ -19,7 +19,7 @@ from collections import Counter, namedtuple
 
 import vmn_exp.core.status as experiment_status
 from vmn_exp.core.query import QueryError, pin_ago
-from vmn_exp.ui.attention_built_in import built_in_by_root, built_in_count, is_built_in, shown
+from vmn_exp.ui.attention_built_in import built_in_count, built_in_rows, is_built_in, shown
 from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.memo import LRU
 
@@ -84,6 +84,21 @@ def severity(summary, counts, queries):
     return errors + warns / (warns + 1)
 
 
+def with_attention(summary, counts, queries):
+    """A copy of the job *summary* with ``attention_rank`` and, when any part
+    is shown, ``attention`` (*counts*: ``{key: n}`` of its tree)."""
+    extra = {"attention_rank": severity(summary, counts, queries)}
+    parts = {q.key: counts.get(q.key, 0) for q in queries if shown(q.key, counts.get(q.key, 0))}
+    if parts:
+        extra["attention"] = parts
+    return dict(summary, **extra)
+
+
+def pinned_texts(queries):
+    """Each of *queries*' text pinned (as given when it does not compile)."""
+    return tuple(_pinned_or_raw(q.query) for q in queries)
+
+
 class AttentionCounts:
     """Per base, time bucket and minute: the Jobs view's summaries with
     their attention counts."""
@@ -92,6 +107,7 @@ class AttentionCounts:
         self._cache = cache
         self._summaries = cache.generations.track(LRU(size))
         self._by_root = cache.generations.track(LRU(size))
+        self._matches = cache.generations.track(LRU(size))
 
     def summaries(self, snapshot, schema, queries):
         """``{job: summary}``, each with ``attention`` (``{key: n}``, the runs
@@ -107,35 +123,42 @@ class AttentionCounts:
     def _merged(self, snapshot, schema, queries):
         """The job summaries (they follow the minute) with :meth:`by_root`'s
         counts, which move only with the board or an ``ago()`` query's pin."""
-        by_root, out = self.by_root(snapshot, schema, queries), {}
-        for job, summary in self._cache.job_rollups(snapshot, schema).items():
-            counts = by_root.get(job, {})
-            extra = {"attention_rank": severity(summary, counts, queries)}
-            parts = {q.key: counts.get(q.key, 0) for q in queries
-                     if shown(q.key, counts.get(q.key, 0))}
-            if parts:
-                extra["attention"] = parts
-            out[job] = dict(summary, **extra)
-        return out
+        by_root = self.by_root(snapshot, schema, queries)
+        return {job: with_attention(summary, by_root.get(job, {}), queries)
+                for job, summary in self._cache.job_rollups(snapshot, schema).items()}
 
     def by_root(self, snapshot, schema, queries):
         """``{top-level verstr: {key: n}}``: each query's matching runs per tree."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        texts = tuple(_pinned_or_raw(q.query) for q in queries)
+        texts = pinned_texts(queries)
         key = (base.token, bucket, cache.schema_key(schema), texts)
-        return self._by_root.get(key, lambda: self._count(snapshot, schema, queries, texts))
+        return self._by_root.get(key, lambda: {
+            root: dict(Counter(k for k, _ in pairs))
+            for root, pairs in self.matches(snapshot, schema, queries).items()})
 
-    def _count(self, snapshot, schema, queries, texts):
-        out = built_in_by_root(self._cache, snapshot, [q.key for q in queries
-                                                       if is_built_in(q.key)])
+    def matches(self, snapshot, schema, queries):
+        """``{top-level verstr: [(key, matching verstr)]}``, once per base,
+        time bucket and pinned query texts (the tree counts nodes from it too)."""
+        cache = self._cache
+        base, bucket = cache._base(snapshot)
+        texts = pinned_texts(queries)
+        key = (base.token, bucket, cache.schema_key(schema), texts)
+        return self._matches.get(key, lambda: self._grouped(snapshot, schema, queries, texts))
+
+    def _grouped(self, snapshot, schema, queries, texts):
+        out = {}
         for q, text in zip(queries, texts):
-            if is_built_in(q.key):
-                continue
-            try:
-                rows = self._cache.ordered(snapshot, schema, query=text)
-            except QueryError:
-                continue
-            for root, n in Counter(row["root"] or row["verstr"] for row in rows).items():
-                out.setdefault(root, {})[q.key] = n
+            for row in self._matching(snapshot, schema, q, text):
+                out.setdefault(row["root"] or row["verstr"], []).append((q.key, row["verstr"]))
         return out
+
+    def _matching(self, snapshot, schema, q, text):
+        """The runs *q* matches: a built-in part's, else its query's (none
+        when it does not compile)."""
+        if is_built_in(q.key):
+            return built_in_rows(self._cache, snapshot, q.key)
+        try:
+            return self._cache.ordered(snapshot, schema, query=text)
+        except QueryError:
+            return ()
