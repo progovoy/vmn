@@ -93,6 +93,36 @@ def series_evaluate(result, profile_name):
     return series_violations(result, SERIES_BUDGETS[profile_name])
 
 
+# plan 28 B0 (uiload.probe_fgm): p95 ceilings per route, ms; the first
+# request after a refresh (which builds what the rest reuse) gets a factor more.
+FGM_BUDGETS = {
+    "fgm": {"status": 250, "summary": 300, "summary_split": 300, "board_kind": 500,
+            "board_dates": 500, "board_app": 1000, "waiting": 1000},
+}
+FGM_FIRST_FACTOR = 5
+FGM_BUDGETS["fgm-small"] = FGM_BUDGETS["fgm"]
+# Tiny data, but a shared CI machine running tests in parallel: loose latencies.
+FGM_BUDGETS["fgm-tiny"] = dict.fromkeys(FGM_BUDGETS["fgm"], 2000)
+
+
+def fgm_violations(result, budget):
+    """Breaches of a :mod:`uiload.probe_fgm` *result* under *budget*."""
+    out = []
+    for route, limit in budget.items():
+        stats = result["routes"][route]
+        if stats["p95"] is None or stats["p95"] > limit:
+            out.append(f"{route} p95 {stats['p95']}ms > {limit}ms")
+        if stats["first_ms"] > FGM_FIRST_FACTOR * limit:
+            out.append(f"{route} first {stats['first_ms']:.0f}ms > {FGM_FIRST_FACTOR * limit}ms")
+    if result["errors"]:
+        out.append(f"{result['errors']} failed requests")
+    return out
+
+
+def fgm_evaluate(result, profile_name):
+    return fgm_violations(result, FGM_BUDGETS[profile_name])
+
+
 def correctness(api_counts, expected_counts, ambiguous_n, tolerance=0):
     """Statuses whose API count differs from the oracle's by more than the
     *ambiguous_n* jobs it could not decide (plus *tolerance*)."""
