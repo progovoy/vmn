@@ -633,6 +633,12 @@ the most frequent stay and the newest always enters. They stay off the rows
 (a side table, like the intent), within plan 27's per-run budget (at most
 1 KB a run).
 
+Signatures came without an index rebuild: an index persisted by an older
+vmn-exp keeps its folds, so its runs have no signatures (`notes = null`)
+until they are folded again. A run that logs more afterwards gets
+signatures for the notes logged from then on; an old finished run shows
+none unless its index is rebuilt.
+
 - `notes ~ "sigterm"` matches a run whose signatures hold the text
   (`list_runs(query=)`, `vmn-exp list --query`, the UI; not the Postgres
   search backend).
