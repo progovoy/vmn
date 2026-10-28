@@ -40,7 +40,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     apps in tag form, *freshness_of(ws_name, app_tag)* -> its index's
     ``freshness`` or None (after the snapshot was asked for),
     *attention_of(ws_name, app_tag)* -> its attention entries,
-    *schema_of(ws_name, app_tag)* -> the board's metrics schema,
+    *schema_of(ws_name, app_tag, snapshot)* -> the board's metrics schema,
     *views_of(ws_name, app_tag)* -> its team views. Returns
     ``forget(ws_name)``, which drops a removed workspace's git context."""
     contexts = TTLCache(GIT_TTL_SEC)
@@ -48,10 +48,11 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     attention_of = attention_of or (lambda ws_name, app_tag: [])
     views_of = views_of or (lambda ws_name, app_tag: [])
 
-    def summary(ws_name, app_tag, now, scope=None, schema=None, entries=()):
+    def summary(ws_name, app_tag, now, scope=None, entries=()):
         """``(summary, etag)`` of an app (*scope*'s subtree when given) with
         the *entries*' attention counts, memoized per snapshot."""
         snapshot = status_snapshot(ws_name, app_tag)
+        schema = schema_of(ws_name, app_tag, snapshot) if entries or scope else None
         fresh = freshness_of(ws_name, app_tag)
         # failed_recent ages with the clock even while nothing is live (when
         # the etag has no time bucket): the window is accurate to an hour.
@@ -91,10 +92,8 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         if not safe_segment(scope):
             raise HTTPException(400, f"Invalid scope '{scope}'")
         entries = attention_of(ws_name, app_tag)
-        schema = schema_of(ws_name, app_tag) if entries or scope else None
         try:
-            payload, etag = summary(ws_name, app_tag, experiment_status._now(), scope, schema,
-                                    entries)
+            payload, etag = summary(ws_name, app_tag, experiment_status._now(), scope, entries)
         except UnknownScope as e:
             raise HTTPException(404, str(e))
         views = [] if scope else views_of(ws_name, app_tag)

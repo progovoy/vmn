@@ -365,6 +365,11 @@ def create_app(
             raise CodedError(404, f"App '{app_name}' not found", APP_NOT_FOUND)
         return snapshot
 
+    def _status_schema(ws_name, app_tag, snapshot):
+        """The board's schema over the *snapshot* a status request already took."""
+        schema = _app_schema(_experiment_workspace(ws_name), _app_name(app_tag))
+        return effective_schema(schema, snapshot.declared_schema())
+
     def _app_tags(ws_name):
         return [app_key(row["name"]) for row in list_apps(ws_name)]
 
@@ -754,8 +759,7 @@ def create_app(
 
     forget_git = routes_shell.register(
         app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness,
-        _attention_entries, lambda ws_name, app_tag: _leaderboard_inputs(ws_name, app_tag)[1],
-        _views)
+        _attention_entries, _status_schema, _views)
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
