@@ -219,3 +219,22 @@ def test_a_checkout_conf_names_attention_queries_too(tmp_path, clock):
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
     assert _counts(_status(TestClient(create_app(manager)))) == {"failing": 1}
+
+
+
+def test_an_ago_pivot_of_a_settled_outer_run_follows_the_clock(store, clock):
+    """Outer r6's runs r7 (minute 4) and r8 (5) ended: its pivot is kept
+    across generations, never its clock."""
+    client = _client(store)
+    params = {"rows": "status", "cols": "parent", "scope": _v(6),
+              "q": 'timestamp < ago("1h")'}
+
+    def total():
+        r = client.get(f"{BASE}/experiments-pivot", params=params)
+        assert r.status_code == 200, r.text
+        return r.json()["total"]
+
+    clock.now = T0 + datetime.timedelta(minutes=65, seconds=30)
+    assert total() == 1
+    clock.now += datetime.timedelta(minutes=1)
+    assert total() == 2

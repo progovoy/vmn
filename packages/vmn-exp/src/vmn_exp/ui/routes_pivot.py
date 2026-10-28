@@ -5,12 +5,14 @@
 share of its runs matching a query (``cell=share&match=<query>``) or an
 aggregate of a metric (``cell=agg&metric=<m>&agg=mean|best|median|min|max``,
 default the app's group aggregate); ``q``, ``status`` and ``archived``
-filter the runs as on the board. See :mod:`~vmn_exp.ui.pivot` for the body
+filter the runs as on the board (an ``ago()`` in ``q`` or ``match`` pinned
+to the minute, :func:`~vmn_exp.ui.attention.pinned`). See :mod:`~vmn_exp.ui.pivot` for the body
 and :mod:`~vmn_exp.ui.pivot_cache` for what is kept. The ETag is known
 before anything is built; encoded bodies are kept per ETag.
 """
 from fastapi import HTTPException, Request
 from vmn_exp.core.query import QueryError
+from vmn_exp.ui.attention import pinned
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.leaderboard_scope import UnknownScope
@@ -41,8 +43,9 @@ def register(app, api_prefix, inputs, cache, aggregate_of):
             raise HTTPException(400, f"Invalid scope '{scope}'")
         snapshot, schema = inputs(ws_name, app_tag)
         try:
-            spec = pivot_spec(rows, cols, cell, match, metric,
-                              agg or aggregate_of(ws_name, app_tag), status, q, archived, scope)
+            spec = pivot_spec(rows, cols, cell, pinned(match), metric,
+                              agg or aggregate_of(ws_name, app_tag), status, pinned(q), archived,
+                              scope)
             etag = pivots.etag(snapshot, schema, spec)
             return memoized_json_response(
                 request, etag, lambda: pivots.pivot(snapshot, schema, spec), bodies)
