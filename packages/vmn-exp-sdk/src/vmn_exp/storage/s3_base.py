@@ -181,7 +181,7 @@ class S3Base:
 
     def _put(self, key, data, **kwargs):
         body = data.encode("utf-8") if isinstance(data, str) else data
-        self._s3.put_object(Bucket=self.bucket, Key=key, Body=body, **kwargs)
+        return self._s3.put_object(Bucket=self.bucket, Key=key, Body=body, **kwargs)
 
     def _create(self, key, data):
         """Create *key* unless it exists (``If-None-Match``); whether it did."""

@@ -76,7 +76,7 @@ sdk`. So [`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out
 start_run(
     app_name=None, note=None, params=None, parent=None, nested=False,
     heartbeat_interval_sec=None, storage=None, system_metrics=None,
-    sync_interval_sec=30, run_id=None, all_ranks=False, name=None, tags=None,
+    sync_interval_sec=<env/conf/30>, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
     capture_output=False, mode=None, intent=None, intent_keywords=None,
     on_sigterm="fail",
@@ -90,10 +90,10 @@ start_run(
 | `params` | the run's inputs (like `-f params.yml`'s `params:`) |
 | `parent` | parent run, in any [addressing form](experiments.md#addressing-experiments) (verstr, unique prefix, `@N`, `latest`); an unknown one raises `ValueError` |
 | `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
-| `heartbeat_interval_sec` | beat cadence, default 30 s; also the `sys_*` sampling interval |
+| `heartbeat_interval_sec` | beat cadence; also the `sys_*` sampling interval. Not given: `$VMN_EXP_HEARTBEAT_SEC`, else conf `experiment.heartbeat_interval_sec`, else 30 s. On S3/GCS/Azure a beat after this attempt's own write is one conditional PUT, with no read first ([status](experiments.md#run-status-did-my-job-die)) |
 | `storage` | a storage backend; default the app's configured one. Build one with `vmn_exp.core.storage_resolve.resolve_experiment_storage(store="s3://…")` (also takes `dir=`, `bucket=`, `prefix=`, `endpoint_url=`) |
 | `system_metrics` | `None`: sample `sys_*` unless opted out (below); `False`: off; `True`: on despite conf.yml, still off under `VMN_SYSTEM_METRICS=0` |
-| `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Failed syncs are retried on a later beat |
+| `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Not given: `$VMN_EXP_SYNC_SEC`, else conf `experiment.sync_interval_sec`, else 30 s. Failed syncs are retried on a later beat |
 | `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
 | `on_sigterm` | what SIGTERM does with the run: `"fail"` (default) finishes it with exit 143; `"release"` hands it back unfinished. See [Handing a run back](#handing-a-run-back-release) |
 | `rewind_to_step` | with `run_id` (required): hide the run's history past this step. See [Rewinding](#rewinding-a-run) |
@@ -1288,6 +1288,8 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) |
 | `VMN_INDEX_CACHE_DIR` | index cache root only; `none` disables |
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window when readers derive status (default 60) |
+| `VMN_EXP_HEARTBEAT_SEC` | heartbeat cadence when `start_run(heartbeat_interval_sec=)` is not given (beats conf `experiment.heartbeat_interval_sec`; default 30; non-positive/invalid skipped) |
+| `VMN_EXP_SYNC_SEC` | remote sync cadence when `start_run(sync_interval_sec=)` is not given (beats conf `experiment.sync_interval_sec`; default 30; non-positive/invalid skipped) |
 
 ---
 

@@ -29,7 +29,8 @@ from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.metric_compact import compact_by
 from vmn_exp.core.rerun import RUNNER_CLI, repo_relative_cwd
 from vmn_exp.core.run_error import error_from_output
-from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, STOPPED
+from vmn_exp.core.run_intervals import resolve_heartbeat_sec, resolve_sync_sec
+from vmn_exp.core.status import STOPPED
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
     append_entries_to_log,
@@ -337,9 +338,8 @@ class _Supervision:
         return proc
 
     def _supervise(self, proc, run_cmd):
-        heartbeat_interval = (
-            getattr(self.args, "heartbeat_interval", None)
-            or DEFAULT_HEARTBEAT_INTERVAL_SEC
+        heartbeat_interval = resolve_heartbeat_sec(
+            getattr(self.args, "heartbeat_interval", None), self.exp_conf
         )
         started_at = now_iso()
         self.run_state = {
@@ -370,7 +370,9 @@ class _Supervision:
             pid=proc.pid,
         )
 
-        sync_interval = getattr(self.args, "sync_interval", 30)
+        sync_interval = resolve_sync_sec(
+            getattr(self.args, "sync_interval", None), self.exp_conf
+        )
         last_sync = last_heartbeat = time.monotonic()
         while proc.poll() is None:
             self.guard("metrics ingestion", self._ingest_new)

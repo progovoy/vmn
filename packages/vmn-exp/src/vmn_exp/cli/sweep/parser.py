@@ -44,10 +44,12 @@ def _add_supervision_flags(p):
     """The ``vmn-exp run`` flags that shape how an agent supervises a trial."""
     p.add_argument("--no-env", dest="capture_env", action="store_false", default=None,
                    help="skip environment capture on trial runs")
-    p.add_argument("--sync-interval", type=int, default=30,
-                   help="agent: seconds between remote metric syncs (default: 30)")
-    p.add_argument("--heartbeat-interval", type=int, default=30,
-                   help="agent: seconds between run-state heartbeats (default: 30)")
+    p.add_argument("--sync-interval", type=int, default=None,
+                   help="agent: seconds between remote metric syncs "
+                        "(default: VMN_EXP_SYNC_SEC, conf, 30)")
+    p.add_argument("--heartbeat-interval", type=int, default=None,
+                   help="agent: seconds between run-state heartbeats "
+                        "(default: VMN_EXP_HEARTBEAT_SEC, conf, 30)")
     p.add_argument("--kill-grace-sec", type=float, default=None,
                    help="agent: seconds a stopped trial gets before SIGKILL")
     p.add_argument("--no-capture-output", dest="capture_output", action="store_false",

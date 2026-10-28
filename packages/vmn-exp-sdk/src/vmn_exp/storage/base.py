@@ -170,6 +170,16 @@ class SnapshotStorage(ABC):
         """Save an auxiliary file into a snapshot directory. data is bytes or str."""
         ...
 
+    def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
+        """:meth:`save_file`, returning ``(written, token)``: the stored
+        version's token, which a later call passes as *etag* to write only
+        while nobody else wrote the file since (else ``(False, None)``).
+
+        A backend without version tokens writes unconditionally and returns
+        no token, so its caller has none to pass and reads first instead.
+        """
+        return self.save_file(app_name, verstr, filename, data) is not False, None
+
     @abstractmethod
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         """Copy a file into the record as *name* — its record-relative path,

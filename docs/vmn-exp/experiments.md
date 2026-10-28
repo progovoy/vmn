@@ -225,8 +225,24 @@ finished_at: null
 duration_sec: null
 ```
 
-`--heartbeat-interval <sec>` (default 30) sets the beat. SDK runs beat from a
-daemon thread (`start_run(heartbeat_interval_sec=)`) and behave identically.
+`--heartbeat-interval <sec>` sets the beat. SDK runs beat from a daemon thread
+(`start_run(heartbeat_interval_sec=)`) and behave identically. Without the
+flag/kwarg the beat comes from `$VMN_EXP_HEARTBEAT_SEC`, else conf
+`experiment.heartbeat_interval_sec`, else 30; the remote sync period
+(`--sync-interval`, `start_run(sync_interval_sec=)`) likewise from
+`$VMN_EXP_SYNC_SEC`, else conf `experiment.sync_interval_sec`, else 30. An env
+or conf value that is not a positive number is skipped. So an image can stretch
+both for runs that last hours (e.g. `VMN_EXP_HEARTBEAT_SEC=120`: stuck after
+6 min) without code changes. The interval is stored per run, so readers always
+use the run's own window.
+
+Each beat rewrites `run_state.yml`. Before writing, a beat makes sure another
+attempt of the same run has not finished it (a duplicate pod's beats must not
+reopen it). On S3, GCS and Azure that costs no read while this attempt was the
+last writer: the beat is a conditional PUT on the ETag (GCS generation) of its
+own previous write, and only a refused PUT falls back to reading the stored
+state, which stops the beaten attempt's heartbeat. One request per beat
+instead of a GET and a PUT.
 
 ### Derived statuses
 
@@ -510,9 +526,9 @@ Takes every `create` flag except `--metrics`, plus:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--heartbeat-interval <sec>` | `30` | heartbeat period ([status](#run-status-did-my-job-die)) |
+| `--heartbeat-interval <sec>` | `$VMN_EXP_HEARTBEAT_SEC`, conf `heartbeat_interval_sec`, `30` | heartbeat period ([status](#run-status-did-my-job-die)) |
 | `--kill-grace-sec <sec>` | `$VMN_EXP_KILL_GRACE_SEC` or `30` | time a [signalled](#preemption-and-signals) command gets before SIGKILL |
-| `--sync-interval <sec>` | `30` | remote sync period for the log and `output.log` (`0` disables periodic sync) |
+| `--sync-interval <sec>` | `$VMN_EXP_SYNC_SEC`, conf `sync_interval_sec`, `30` | remote sync period for the log and `output.log` (`0` disables periodic sync) |
 | `--output-cap-mb <mb>` | `$VMN_EXP_OUTPUT_CAP_MB` or `10` | [`output.log`](#console-output-outputlog) cap |
 | `--no-capture-output` | capture on | don't keep `output.log`; the command inherits the terminal |
 | `--no-system-metrics` | sampling on | don't record `sys_*` metrics |
@@ -1929,6 +1945,8 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_EXP_OUTPUT_CAP_MB` | `output.log` cap (`--output-cap-mb`) |
 | `VMN_EXP_KILL_GRACE_SEC` | signal grace (`--kill-grace-sec`) |
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window (default 60) |
+| `VMN_EXP_HEARTBEAT_SEC` | heartbeat period when `--heartbeat-interval` / `start_run(heartbeat_interval_sec=)` is not given (beats conf `experiment.heartbeat_interval_sec`; default 30) |
+| `VMN_EXP_SYNC_SEC` | remote sync period when `--sync-interval` / `start_run(sync_interval_sec=)` is not given (beats conf `experiment.sync_interval_sec`; default 30) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | [alert](#alerts) sinks and triggers |
 | `VMN_SNAPSHOT_MAX_FILE_MB` / `_TOTAL_MB` | untracked-file capture caps (50 / 200) |
 | `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) instead of the XDG cache/state dirs |

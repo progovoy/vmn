@@ -46,7 +46,9 @@ class GCSObjectClient(ObjectClient):
     def _put(self, key, body, if_none_match, if_match):
         data = body.encode("utf-8") if isinstance(body, str) else body
         condition = 0 if if_none_match else (int(if_match) if if_match else None)
-        self._bucket.blob(key).upload_from_string(data, if_generation_match=condition)
+        blob = self._bucket.blob(key)
+        blob.upload_from_string(data, if_generation_match=condition)
+        return str(blob.generation) if blob.generation is not None else None
 
     def _iter(self, prefix, delimiter, start_after):
         listing = self._client.list_blobs(
