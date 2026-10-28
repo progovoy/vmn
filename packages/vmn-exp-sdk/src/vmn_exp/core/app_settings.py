@@ -3,7 +3,7 @@
 The reader-facing subset of conf's ``experiment:`` block, kept in the store
 (:mod:`vmn_exp.core.app_settings_store`) so a store workspace, which has no
 checkout, reads it too: ``metrics.<name|glob>.{goal,summary,hidden,primary,
-step_metric}`` and ``ui.*`` (``group_aggregate``, ``stale_after_min``,
+step_metric,chart}`` and ``ui.*`` (``group_aggregate``, ``stale_after_min``,
 ``progress``, ``attention``, ``baseline``, ``views`` and ``tree_columns`` checked, other ``ui``
 keys kept as they are). A checkout's conf beats them, per metric name and per
 ``ui`` key; they beat what runs declare. Pure.
@@ -12,6 +12,7 @@ import re
 
 import yaml
 
+from vmn_exp.core.metric_schema import CHARTS
 from vmn_exp.core.metric_summary import GOALS, SUMMARIES
 from vmn_exp.core.query import QueryError, compile_query
 from vmn_exp.core.values import is_finite_number
@@ -24,6 +25,7 @@ _METRIC_FIELDS = {
     "hidden": lambda v: isinstance(v, bool),
     "primary": lambda v: isinstance(v, bool),
     "step_metric": lambda v: isinstance(v, str) and bool(v),
+    "chart": lambda v: v in CHARTS,
 }
 
 

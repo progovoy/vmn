@@ -48,7 +48,7 @@ class IndexSnapshot:
     # {verstr: {path: {path, digest, size}}} of rows with outputs — off the
     # rows, which list pages serve (see outputs_of).
     outputs: dict = field(default_factory=dict, repr=False)
-    # {verstr: {metric: {"goal"?, "hidden"?}}} of rows whose run declares
+    # {verstr: {metric: {"goal"?, "hidden"?, "chart"?}}} of rows whose run declares
     # any — what declared_schema() merges.
     declared_defs: dict = field(default_factory=dict, repr=False)
     # {verstr: value} of rows with a folded features entry / intent /
@@ -151,7 +151,7 @@ class IndexSnapshot:
                              observed_at=self.run_state_observed_at.get(verstr))
 
     def declared_schema(self):
-        """``{metric: {"goal"?, "hidden"?}}`` the runs declare, the latest
+        """``{metric: {"goal"?, "hidden"?, "chart"?}}`` the runs declare, the latest
         run winning — computed once per snapshot. Shared: copy before
         changing."""
         if not self._declared:

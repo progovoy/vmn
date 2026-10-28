@@ -203,7 +203,7 @@ Every call appends to the run's log; nothing is rewritten.
 | `log_figure(fig, name, **savefig_kwargs)` | anything with `savefig` (format from `name`); matplotlib is not imported |
 | `log_table` / `log_image` / `log_histogram` | see [Tables, images and histograms](#tables-images-and-histograms) |
 | `set_tag(key, value)` / `set_tags({...})` / `remove_tag(key)` | mutable [tags](#tags) |
-| `define_metric(name, step_metric=None, summary=None, goal=None, hidden=None)` | how a metric (or `fnmatch` glob) is charted, ranked and shown: [x axis](#custom-x-axis-step_metric), [goals and summaries](#metric-goals-and-summaries) |
+| `define_metric(name, step_metric=None, summary=None, goal=None, hidden=None, chart=None)` | how a metric (or `fnmatch` glob) is charted, ranked and shown: [x axis](#custom-x-axis-step_metric), [goals and summaries](#metric-goals-and-summaries), [display hint](#display-hint-chart) |
 | `alert(title, text="", level="info", wait_sec=None)` | an [alert](#alerts) |
 | `register_model(...)`, `use_model(ref)`, `use_dataset(ref)` | [registry](#model-registry) shortcuts bound to this run |
 | `set_intent(text, keywords=None, generator=None)` | what the run is for ([similar runs](#similar-runs)); the latest intent wins. Also on a finished run, synced to the remote at once |
@@ -322,7 +322,7 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
 - The declaration is a `define_metric` log entry, so it travels with the run
   and needs no conf.yml; later declarations override per field.
   `vmn-exp add <app> -v <ref> --define-metric NAME [--goal] [--summary]
-  [--step-metric] [--hidden]` appends the same entry.
+  [--step-metric] [--hidden] [--chart]` appends the same entry.
 - Precedence: run declaration (exact name, then glob) > the app's [conf.yml
   schema](experiments.md#best-value-summaries-summary) > `last`.
 - `row["metrics"][name]` is that value everywhere (`list_runs(sort=, query=)`,
@@ -330,9 +330,31 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
   `row["metric_summary"][name]` holds `{"last", "min", "max", "first",
   "mean"}` for metrics logged more than once (non-finite values never count;
   `mean` is `None` without a finite value).
-- A run's `goal` and `hidden` also count across runs for names conf.yml does
-  not declare (the latest run wins): they set sort direction and the UI's
-  hidden columns, never which value another run ranks on.
+- A run's `goal`, `hidden` and `chart` also count across runs for names
+  conf.yml does not declare (the latest run wins): they set sort direction,
+  the UI's hidden columns and chart kinds, never which value another run
+  ranks on.
+
+### Display hint (`chart`)
+
+Some metrics use the step as an index, not as time: a per-member health value
+logged at step = member number reads as noise when drawn as a curve.
+`chart=` says how the run page draws a metric:
+
+```python
+run.define_metric("health.*", chart="bars")          # last value per step, as bars
+run.define_metric("nn.g_out_member", chart="table")  # step -> value
+```
+
+- `"line"` (default): the training curve.
+- `"bars"`: the last value logged at each step, as bars sorted by value,
+  largest first. The step is each bar's label, not an axis, because member
+  order is not stable between steps. The max and the share of steps over a
+  threshold sit beside the bars. The threshold is the mean until you type one.
+- `"table"`: step → last value, steps ascending.
+- Anything else raises `ValueError`. Conf.yml and the [store
+  settings](server.md#app-settings) take `metrics.<name|glob>.chart` too.
+  The run's own declaration beats them, and an exact name beats a glob.
 
 ### Tags
 

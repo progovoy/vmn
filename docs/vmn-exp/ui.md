@@ -1156,7 +1156,7 @@ message and offset (`unknown field 'statuz' at offset 0`).
 
 The goal comes from the app's effective metrics schema,
 `GET .../metrics-schema`: conf.yml's `experiment.metrics` over the app's
-[store settings](server.md#app-settings), plus the `goal`/`hidden` runs
+[store settings](server.md#app-settings), plus the `goal`/`hidden`/`chart` runs
 declare for names neither has (see
 [Metrics schema](experiments.md#metrics-schema-sorting--goals)); a store
 workspace has no conf.yml, only the settings and the runs' declarations. It also decides which metrics the
@@ -1439,6 +1439,7 @@ Query params: `max_points` (default 2000, at most 20000), `keys=loss,acc`
 | `series_total` | `{metric: points before thinning}` |
 | `step_metrics` | `{metric: x metric}` for every metric that declares a `step_metric` |
 | `hidden_metrics` | the run's metrics marked hidden, sorted |
+| `metric_charts` | `{metric: "bars"\|"table"}` for the run's metrics whose `chart` hint is not a line (the run's `define_metric`, else the schema), absent when none; the run page draws them that way |
 | `metric_summary` | `{metric: {last, min, max, first, mean}}` for metrics logged more than once |
 | `outputs` | the run's outputs (see [Lineage](#lineage)) |
 | `rerun_of` | the run this one reruns, if any |
