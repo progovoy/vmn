@@ -217,3 +217,15 @@ def test_vmn_exp_skill_explains_serving_and_debugging_the_ui(capfd):
     assert "backfill-children" in out and "watch --compact" in out
     assert "vmn-exp ui diag --url" in out and "--summarize" in out
     assert "kill -USR2" in out and "--diag-every" in out
+
+
+def test_vmn_exp_skill_covers_the_fleet_health_apis(capfd):
+    """Plan 28: evictions, finishing from outside a pod, shared app settings,
+    attention queries, the settled states and the Prometheus feed."""
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    for text in ('on_sigterm="release"', "run.release(", "manage.finish_run(", "--finish",
+                 "vmn-exp settings <app_name> set -f", "ui.attention", 'ago("1h")', "up.params.",
+                 "never_started", "outlived", "/metrics", 'chart="bars"',
+                 "VMN_EXP_HEARTBEAT_SEC"):
+        assert text in out, text

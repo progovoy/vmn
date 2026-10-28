@@ -67,6 +67,33 @@ declare the real one on the outer run, `outer.set_progress(41, 60, unit="dates")
 (metrics `progress`/`progress_total`); its bar, `done/expected`, rate and ETA then
 read it (`41/60 dates · 1,415 runs · ...`), the run counts unchanged.
 
+Pods that get evicted or preempted: hand the run back instead of failing it,
+so it reads waiting again and the next pod reopens it (`run_id=`, which bumps
+`resume_count`):
+
+```python
+pod = start_run("<app_name>", run_id=pod_id, on_sigterm="release")  # SIGTERM -> released
+# by hand, any run: run.release(reason="preempted") (flush, stop, state `released`)
+```
+
+A pod that died without finishing can be finished from outside (a controller,
+a cleanup job); refused while the run still beats unless forced:
+
+```python
+from vmn_exp.sdk import manage
+manage.finish_run("<app_name>", "<verstr>", 137, error="OOMKilled")
+# shell: vmn-exp add <app_name> -v <verstr> --finish 137 --error OOMKilled [--force]
+```
+
+Once an outer run has ended, what is left under it settles (derived, never
+written): `never_started` (waiting; adds nothing to the counts), `lost`
+(stuck; counted as failed) or `outlived` (still beating; counted as running
+and flagged). For runs lasting hours, slow the beat with
+`VMN_EXP_HEARTBEAT_SEC=120` (stuck after 6 min) and the log sync with
+`VMN_EXP_SYNC_SEC`; a heartbeat that changes nothing skips its write.
+`run.define_metric("health.*", chart="bars")` (or `chart="table"`) draws a
+metric as bars or a table on the run page instead of a line.
+
 Optuna trials in separate pods (shared Optuna storage): attach each pod to the
 one outer run instead of opening one per pod, and finish it once:
 
@@ -185,6 +212,33 @@ and, unless `--read-only`, keeps the store tidy itself: it writes the child
 markers older inner runs lack and compacts the metrics of failed/stuck runs.
 Only with `--read-only` (or no server) run those by hand:
 `vmn-exp backfill-children <app_name>` and `vmn-exp watch --compact <app_name>`.
+
+What the UI shows for an app is shared app settings in the store (no checkout
+needed; a checkout's conf.yml `experiment:` block wins over them):
+
+```sh
+vmn-exp settings <app_name> show
+vmn-exp settings <app_name> set -f experiment.yml   # refused if invalid
+```
+
+```yaml
+ui:
+  progress: {done: dates_done, total: dates_total, unit: dates}  # your metric names
+  split_by: tags.kind              # per-kind counts/durations on an outer run's page
+  attention:                       # <= 8 named queries, counted on every outer run
+    - {key: unstable, query: 'tags.health = "unstable"', level: error}
+    - {key: slow_start, query: 'status = "created" and timestamp < ago("1h")', level: warn}
+  baseline: {match: [tags.target], children_by: tags.trade_date}  # compare with the last launch
+  views: [{name: Live, page: jobs, search: "view=live", default: true}]
+```
+
+A save checks `ui.progress`/`ui.attention`/`ui.baseline`/`ui.views` (an
+attention query must compile). Queries (`vmn-exp list --query`, the UI's
+filter, `ui.attention`) can read an
+ancestor's fields: `up.params.<k>`, `up(tags.kind = "study").params.<k>`.
+`GET /metrics` serves Prometheus gauges per app and outer run (status counts,
+attention counts, progress, ETA, index freshness) for alerting.
+Full reference: `vmn_exp/cli/docs/server.md` (App settings).
 
 When it is slow or stuck, take a dump (one JSON file, no py-spy or sudo; the
 `diag` command works from any directory, no checkout needed) and send back the
