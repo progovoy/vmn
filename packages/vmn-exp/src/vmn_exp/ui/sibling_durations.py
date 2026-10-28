@@ -20,7 +20,6 @@ bucket's value 1 % apart (:func:`~vmn_exp.ui.quantile_sketch.bucketed`), so
 a large group's median, and its members' rows, rarely change.
 """
 import bisect
-import weakref
 
 from vmn_exp.core.status import RUNNING
 from vmn_exp.core.values import is_finite_number
@@ -162,21 +161,3 @@ def restamped(base_parts, siblings, changed, fresh, rebuilt):
                 copied.add(kid)
     rebuilt |= copied
     return copied
-
-
-class SplitBindings:
-    """The split field each snapshot's ratios use: the one bound to it
-    (a request's app settings, :meth:`bind`), else the last one bound for
-    its app (a snapshot the refresher warms), else none."""
-
-    def __init__(self):
-        self._bound = weakref.WeakKeyDictionary()
-        self._last = {}
-
-    def bind(self, snapshot, split):
-        self._bound[snapshot] = split
-        self._last[snapshot.app_name] = split
-
-    def of(self, snapshot):
-        found = self._bound.get(snapshot, self)
-        return self._last.get(snapshot.app_name) if found is self else found

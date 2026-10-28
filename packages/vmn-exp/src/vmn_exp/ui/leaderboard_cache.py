@@ -70,9 +70,9 @@ from vmn_exp.ui.leaderboard_up import ancestors_changed, query_reads_up
 from vmn_exp.ui.leaderboard_warm import BoardWarmer
 from vmn_exp.ui.memo import LRU, Generations
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
-from vmn_exp.ui.readers.experiments import sort_rows
+from vmn_exp.ui.readers.experiments import sort_rows, split_by_of
 from vmn_exp.ui.search_index import SearchIndexes
-from vmn_exp.ui.sibling_durations import SiblingDurations, SplitBindings, restamped, stamped
+from vmn_exp.ui.sibling_durations import SiblingDurations, restamped, stamped
 from vmn_exp.ui.search_rank import results
 from vmn_exp.ui.status_counts import StatusCounts
 
@@ -296,8 +296,8 @@ class LeaderboardCache(SetAnswers):
                  base_wait_sec=BASE_WAIT_SEC, conf_of=_no_conf):
         """*conf_of(snapshot)* -> ``(metrics schema, experiment.ui)`` of the
         app whose index published *snapshot* (its conf over its store
-        settings): what the board warm-up sorts by and job rollups read
-        their progress names from."""
+        settings): what the board warm-up sorts by, job rollups read
+        their progress names from and ``duration_ratio`` its split by."""
         self.conf_of = conf_of
         self.max_page = max_page
         self.bucket_sec = bucket_sec
@@ -335,17 +335,11 @@ class LeaderboardCache(SetAnswers):
         self._status_counts = StatusCounts(self)
         self.attention = AttentionCounts(self)
         self._warmer = BoardWarmer(self)
-        self._splits = SplitBindings()
 
     schema_key = staticmethod(_schema_key)
 
     def _bucket(self):
         return int(experiment_status._now().timestamp() // self.bucket_sec)
-
-    def bind_split(self, snapshot, split):
-        """Siblings of *snapshot*'s rows (``duration_ratio``) share a parent
-        and a value of *split* (the app's ``experiment.ui.split_by``)."""
-        self._splits.bind(snapshot, split)
 
     def _base(self, snapshot):
         """``(base, bucket)``; the bucket is None while nothing is live.
@@ -354,7 +348,8 @@ class LeaderboardCache(SetAnswers):
         ``base_wait_sec``, the previous generation of its index answers
         instead (when one is kept)."""
         bucket = self._bucket()
-        split = self._splits.of(snapshot)
+        # Siblings (duration_ratio) share a parent and a value of the app's split.
+        split = split_by_of(self.conf_of(snapshot)[1] or {})
         token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens), key=(split,))
         base = self._bases.per_snapshot(
             snapshot, lambda: self._new_base(snapshot, token, bucket, split), key=(split,),

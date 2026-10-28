@@ -363,10 +363,8 @@ def create_app(
 
     def _leaderboard_inputs(ws_name, app_tag):
         """``(snapshot, effective metrics schema)`` of an app: sorted by the
-        conf schema plus what the runs declare (see :mod:`vmn_exp.core.metric_schema`);
-        its ``duration_ratio`` siblings share a value of the app's split (plan 28 N4)."""
+        conf schema plus what the runs declare (see :mod:`vmn_exp.core.metric_schema`)."""
         _, snapshot, schema = _app_inputs(ws_name, app_tag)
-        leaderboards.bind_split(snapshot, _split_by(ws_name, app_tag))
         return snapshot, effective_schema(schema, snapshot.declared_schema())
 
     def _settings(ws, app_name):

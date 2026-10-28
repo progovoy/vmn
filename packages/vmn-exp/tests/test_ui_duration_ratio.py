@@ -23,9 +23,13 @@ def clock(monkeypatch):
     return at
 
 
-def _ratios(cache, snap, split=None, **params):
-    if split is not None:
-        cache.bind_split(snap, split)
+def _cache(split=None, **kwargs):
+    """A cache whose app's ``experiment.ui.split_by`` is *split*."""
+    ui = {"split_by": split} if split else {}
+    return lb.LeaderboardCache(conf_of=lambda snapshot: ({}, ui), **kwargs)
+
+
+def _ratios(cache, snap, **params):
     rows = cache.page(snap, {}, limit=10**6, archived=True, **params)["rows"]
     return {row["verstr"]: row.get("duration_ratio") for row in rows}
 
@@ -79,7 +83,7 @@ def test_the_split_field_compares_refits_with_refits(clock):
     refits = [fleet.add(root, "refit", ended_after(T0, d)) for d in (1000, 1000, 3000)]
     snap = fleet.snapshot()
     by_parent = _ratios(lb.LeaderboardCache(), snap)
-    by_kind = _ratios(lb.LeaderboardCache(), snap, split="tags.kind")
+    by_kind = _ratios(_cache("tags.kind"), snap)
     assert _close(by_parent[refits[2]], 30) and _close(by_kind[refits[2]], 3)
     assert _close(by_kind[trials[0]], 1)
 
@@ -97,8 +101,8 @@ def test_a_sibling_finishing_moves_the_ratio_of_the_others(clock):
 
 
 def _check_same(cache, snap, split):
-    fresh = lb.LeaderboardCache()
-    assert _ratios(cache, snap, split) == _ratios(fresh, snap, split)
+    fresh = _cache(split)
+    assert _ratios(cache, snap) == _ratios(fresh, snap)
     for params in (dict(sort="duration_ratio", order="desc"), dict(sort="duration_ratio"),
                    dict(query="duration_ratio > 1.2"), dict(query="duration_ratio <= 1")):
         assert _verstrs(cache, snap, **params) == _verstrs(fresh, snap, **params), params
@@ -109,7 +113,7 @@ def _check_same(cache, snap, split):
 def test_ratios_carried_across_generations_equal_a_fresh_cache(clock, seed, split):
     fleet = DurationFleet(seed)
     fleet.seed_tree(T0)
-    cache = lb.LeaderboardCache(size=512)
+    cache = _cache(split, size=512)
     rng = random.Random(seed)
     for _ in range(10):
         _check_same(cache, fleet.snapshot(), split)
@@ -122,11 +126,13 @@ def test_a_new_split_rebuilds_the_ratios(clock):
     refit = fleet.add(root, "refit", ended_after(T0, 300))
     for _ in range(2):
         fleet.add(root, "refit", ended_after(T0, 300))
-    snap, cache = fleet.snapshot(), lb.LeaderboardCache()
+    ui = {}
+    cache = lb.LeaderboardCache(conf_of=lambda snapshot: ({}, ui))
+    snap = fleet.snapshot()
     assert _close(_ratios(cache, snap)[refit], 3)
-    assert _close(_ratios(cache, snap, split="tags.kind")[refit], 1)
+    ui["split_by"] = "tags.kind"  # the app's settings change
+    assert _close(_ratios(cache, snap)[refit], 1)
     fleet.add(root, "trial", ended_after(T0, 100))
-    # A later generation of the app keeps the split its last request bound.
     assert _close(_ratios(cache, fleet.snapshot())[refit], 1)
 
 
