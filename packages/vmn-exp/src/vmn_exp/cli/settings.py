@@ -5,6 +5,7 @@ import sys
 
 from vmn_exp.core.app_settings import SettingsError
 from vmn_exp.core.app_settings_store import read_settings_text, write_settings
+from vmn_exp.cli.intent_arg import read_file_arg
 from vmn_exp.registry.cli import _get_storage
 from vmn_exp.registry.cli_parser import _add_storage_args
 
@@ -32,24 +33,17 @@ def settings_run_without_repo(args):
     return 0
 
 
-def _read(path):
-    if path == "-":
-        return sys.stdin.read()
-    with open(path) as f:
-        return f.read()
-
-
 def _set(storage, args):
     if not args.file:
         print("settings set needs -f <file>", file=sys.stderr)
         return 1
     try:
-        write_settings(storage, args.name, _read(args.file))
-    except OSError as exc:
-        print(f"Cannot read {args.file}: {exc}", file=sys.stderr)
-        return 1
+        write_settings(storage, args.name, read_file_arg(args.file, "-f"))
     except SettingsError as exc:
         print(f"Invalid settings: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:  # the file could not be read
+        print(exc, file=sys.stderr)
         return 1
     print(f"Set the store settings of {args.name}")
     return 0

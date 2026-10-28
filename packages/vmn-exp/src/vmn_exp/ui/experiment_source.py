@@ -17,7 +17,6 @@ import threading
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.app_settings import metrics_overlay, ui_overlay
-from vmn_exp.core.app_settings_store import SettingsCache
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.query_extra import bind_similar_scope
@@ -34,6 +33,7 @@ from vmn_exp.ui.readers.baselines import last_good
 from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.refresher import InlineRefresher, NotingRefresher
 from vmn_exp.ui.schema_cache import MetricsSchemaCache
+from vmn_exp.ui.settings_cache import SettingsCache
 from vmn_exp.ui.similar_corpora import SimilarCorpora
 
 # A background server re-reads an app's store settings this often at most;
@@ -253,7 +253,7 @@ class ExperimentSource:
 
     def app_settings(self, ws, app_name, storage):
         """The app's store settings in *storage* (:mod:`vmn_exp.core.app_settings`)."""
-        return self._settings.get((ws.name, app_name), storage, app_name)
+        return self._settings.get(ws.name, storage, app_name)
 
     def settings_changed(self, ws, app_name):
         """This server wrote the app's settings: read them again."""
@@ -272,7 +272,7 @@ class ExperimentSource:
 
     def group_aggregate(self, ws, app_name, settings=None):
         """The app's default group aggregate (plan 22 G10)."""
-        return conf_aggregate({"ui": self.experiment_ui(ws, app_name, settings)})
+        return conf_aggregate(self.experiment_ui(ws, app_name, settings))
 
     def stale_after_min(self, ws, app_name, settings=None):
         """The app's ``experiment.ui.stale_after_min``, else the default."""

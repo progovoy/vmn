@@ -731,8 +731,9 @@ def create_app(
     routes_comments.register(app, API_PREFIX, _ws_storage)
 
     def _settings_target(ws_name, app_tag):
-        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return _any_exp_storage(ws), app_name, lambda: source.settings_changed(ws, app_name)
+        app_name = _app_name(app_tag)
+        changed = lambda: source.settings_changed(_workspace(ws_name), app_name)  # noqa: E731
+        return _ws_storage(ws_name), app_name, changed
 
     routes_settings.register(app, API_PREFIX, _settings_target)
 

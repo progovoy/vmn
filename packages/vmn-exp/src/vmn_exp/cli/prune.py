@@ -319,7 +319,7 @@ def experiment_prune(vcs, params, storage, args, app_name):
         return 0
 
     candidates, rc = _select_candidates(
-        storage, app_name, metas, snapshot, args, metrics_schema(vcs)
+        storage, app_name, metas, snapshot, args, metrics_schema(vcs, storage, app_name)
     )
     if rc is not None:
         return rc

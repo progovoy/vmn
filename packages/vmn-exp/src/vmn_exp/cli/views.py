@@ -16,6 +16,7 @@ import zlib
 
 from version_stamp.api import _list_tarball_members
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.app_settings_store import app_metrics_schema
 from vmn_exp.core.code_store import CODE_MISSING
 from vmn_exp.core.fold import fold_features, fold_log, fold_row
 from vmn_exp.core.intent import cap_utf8
@@ -39,10 +40,11 @@ def plural(n, word):
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
-def metrics_schema(vcs):
-    """``experiment.metrics`` from the app's conf.yml, if any: sort direction
-    and summary policies (see :mod:`vmn_exp.core.metric_summary`)."""
-    return experiment_conf(vcs).get("metrics") or {}
+def metrics_schema(vcs, storage, app_name):
+    """``experiment.metrics`` from the app's conf.yml over its store settings
+    (:mod:`vmn_exp.core.app_settings`): sort direction and summary policies
+    (see :mod:`vmn_exp.core.metric_summary`)."""
+    return app_metrics_schema(storage, app_name, experiment_conf(vcs).get("metrics"))
 
 
 def patch_lines(patches):

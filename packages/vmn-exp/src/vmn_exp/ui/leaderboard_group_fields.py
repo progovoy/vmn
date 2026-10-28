@@ -53,10 +53,9 @@ def check_aggregate(agg):
     return agg
 
 
-def conf_aggregate(experiment_conf):
-    """The app conf's ``experiment.ui.group_aggregate`` when valid, else the mean."""
-    ui = (experiment_conf or {}).get("ui") or {}
-    agg = ui.get("group_aggregate") if isinstance(ui, dict) else None
+def conf_aggregate(ui):
+    """The app's ``experiment.ui`` block's ``group_aggregate`` when valid, else the mean."""
+    agg = ui.get("group_aggregate")
     return agg if agg in AGGREGATES else DEFAULT_AGGREGATE
 
 

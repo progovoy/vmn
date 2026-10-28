@@ -9,12 +9,7 @@ from vmn_exp.core.app_settings import (
     parse_settings,
     ui_overlay,
 )
-from vmn_exp.core.app_settings_store import (
-    SettingsCache,
-    read_settings,
-    read_settings_text,
-    write_settings,
-)
+from vmn_exp.core.app_settings_store import read_settings, read_settings_text, write_settings
 from vmn_exp.core.journal_keys import decode_key
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.journal import journaled
@@ -140,31 +135,9 @@ def test_a_local_first_storage_reads_and_writes_the_remote(tmp_path):
     assert read_settings(cached, APP) == {"ui": {"stale_after_min": 9}}
 
 
-def test_the_cache_rereads_after_its_window_or_when_told(tmp_path):
-    storage, now = _store(tmp_path), [0.0]
-    cache = SettingsCache(recheck_sec=60, clock=lambda: now[0])
-    write_settings(storage, APP, "ui: {stale_after_min: 1}\n")
-    assert cache.get(("ws", APP), storage, APP) == {"ui": {"stale_after_min": 1}}
-    write_settings(storage, APP, "ui: {stale_after_min: 2}\n")
-    assert cache.get(("ws", APP), storage, APP)["ui"]["stale_after_min"] == 1
-    cache.forget("ws", "root_app-svc")
-    assert cache.get(("ws", APP), storage, APP)["ui"]["stale_after_min"] == 2
-    write_settings(storage, APP, "ui: {stale_after_min: 3}\n")
-    now[0] = 61.0
-    assert cache.get(("ws", APP), storage, APP)["ui"]["stale_after_min"] == 3
-
-
 def test_a_root_holding_settings_is_not_taken_for_a_v1_store(tmp_path):
     from vmn_exp.storage.store_marker import forget_checked, require_store
 
     write_settings(_store(tmp_path), APP, TEXT)
     forget_checked()
     require_store(_store(tmp_path))
-
-
-def test_a_zero_window_cache_reads_every_time(tmp_path):
-    storage = _store(tmp_path)
-    cache = SettingsCache(recheck_sec=0)
-    assert cache.get(("ws", APP), storage, APP) == {}
-    write_settings(storage, APP, TEXT)
-    assert cache.get(("ws", APP), storage, APP) == parse_settings(TEXT)

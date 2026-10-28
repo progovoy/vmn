@@ -7,11 +7,10 @@ step_metric}`` and ``ui.*`` (``group_aggregate`` and ``stale_after_min``
 checked, other ``ui`` keys kept as they are). A checkout's conf beats them,
 per metric name and per ``ui`` key; they beat what runs declare. Pure.
 """
-import math
-
 import yaml
 
 from vmn_exp.core.metric_summary import GOALS, SUMMARIES
+from vmn_exp.core.values import is_finite_number
 
 GROUP_AGGREGATES = ("mean", "best", "median", "min", "max")
 _TOP_KEYS = ("metrics", "ui")
@@ -24,14 +23,9 @@ _METRIC_FIELDS = {
 }
 
 
-def _positive_number(value):
-    return (isinstance(value, (int, float)) and not isinstance(value, bool)
-            and math.isfinite(value) and value > 0)
-
-
 _UI_FIELDS = {
     "group_aggregate": lambda v: v in GROUP_AGGREGATES,
-    "stale_after_min": _positive_number,
+    "stale_after_min": lambda v: is_finite_number(v) and v > 0,
 }
 
 
