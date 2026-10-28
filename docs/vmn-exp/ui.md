@@ -296,6 +296,12 @@ whether the event loop's worst lag overlaps a GC pause.
 
 ## Diagnostic dumps
 
+Every line the server logs starts with a UTC timestamp, its level and its
+logger (`2026-10-28T13:47:25.830Z [WARNING] vmn_exp.core.index: Index of
+my_app: could not read 1.0.0-dev.a…`), uvicorn's and a thread's uncaught
+exception included; WARNING and up go to stderr. A warning about one run
+names its app and verstr.
+
 When the UI is slow or stuck, take a dump: one JSON file of what the server is
 doing, to carry off an air-gapped host (no py-spy needed).
 

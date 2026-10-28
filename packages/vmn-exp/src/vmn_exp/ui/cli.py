@@ -262,8 +262,10 @@ def handle_ui(args):
         )
         return 1
 
+    from vmn_exp.ui import server_logging
     from vmn_exp.ui.config import ConfigError
 
+    server_logging.install()
     try:
         manager, cfg, control_plane = build_server(args)
     except ConfigError as e:
@@ -307,5 +309,7 @@ def handle_ui(args):
 
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # log_config=None: uvicorn's records go through the root logger's
+    # timestamped handler (server_logging) instead of its own.
+    uvicorn.run(app, host=host, port=port, log_level="warning", log_config=None)
     return 0

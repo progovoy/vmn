@@ -12,6 +12,7 @@ import time
 from vmn_exp.core.best_effort import warn_once
 from vmn_exp.storage.files import atomic_write
 from vmn_exp.ui.diag.registry import build_dump
+from vmn_exp.ui.server_logging import utc_stamp
 
 KEEP = 20
 DIR = "diag"
@@ -36,9 +37,11 @@ def _write_and_log(data_dir):
     try:
         path = write_dump(data_dir)
     except Exception as exc:
-        print(f"vmn-exp ui: diagnostic dump failed: {exc!r}", file=sys.stderr, flush=True)
+        print(f"{utc_stamp()} vmn-exp ui: diagnostic dump failed: {exc!r}", file=sys.stderr,
+              flush=True)
         return
-    print(f"vmn-exp ui: diagnostic dump written to {path}", file=sys.stderr, flush=True)
+    print(f"{utc_stamp()} vmn-exp ui: diagnostic dump written to {path}", file=sys.stderr,
+          flush=True)
 
 
 def install_signal_handler(data_dir):
