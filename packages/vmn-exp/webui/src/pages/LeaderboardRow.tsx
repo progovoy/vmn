@@ -97,14 +97,15 @@ function DateCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProp
 
 /** A run's queue time, duration or duration against its siblings' median
  *  (`c:queue`/`c:duration`/`c:ratio`, plan 28 N4). */
-function DurationCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProperties }) {
-  const field = DURATION_SORT_OF[`c:${c}`];
+function DurationCell({ r, id, style }: { r: ExperimentRow; id: string; style: CSSProperties }) {
+  const field = DURATION_SORT_OF[id];
   const value = r[field];
-  const text = value == null ? "—" : field === "duration_ratio" ? `${value.toFixed(1)}× siblings` : fmtDuration(value);
-  const title = value == null ? undefined
-    : field === "duration_ratio" ? `${value}× the median duration of its siblings` : `${value} s`;
+  const [text, title] = value == null ? ["—", undefined]
+    : field === "duration_ratio" ? [`${value.toFixed(1)}× siblings`, `${value}× the median duration of its siblings`]
+      : [fmtDuration(value), `${value} s`];
+  const c = id.slice(2);
   return (
-    <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={title}>
+    <td data-col={c} data-col-id={id} className={`num fleet-cell fleet-${c}`} style={style} title={title}>
       {text}
     </td>
   );
@@ -252,7 +253,7 @@ function Row({
         );
     }
     if (isGapId(id)) return <td key={id} aria-hidden style={style} />;
-    if (id in DURATION_SORT_OF) return <DurationCell key={id} r={r} c={name} style={style} />;
+    if (id in DURATION_SORT_OF) return <DurationCell key={id} r={r} id={id} style={style} />;
     if (id.startsWith("c:")) return <DateCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (

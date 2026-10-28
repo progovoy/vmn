@@ -43,6 +43,7 @@ from vmn_exp.core.query import parse_query
 from vmn_exp.core.status import status_fields, with_queue_sec
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.core.tree import annotate_rows
+from vmn_exp.ui import search_prefilter
 from vmn_exp.ui.attention import AttentionCounts
 from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.http_params import MAX_PAGE
@@ -50,7 +51,13 @@ from vmn_exp.ui.job_rollup_cache import JobRollupCache
 from vmn_exp.ui.leaderboard_answers import IMPORTANCE_RESULTS, SetAnswers
 from vmn_exp.ui.leaderboard_columns import clamp_columns_limit, columns_payload
 from vmn_exp.ui.leaderboard_cursor import Pager, fingerprint, keyed
-from vmn_exp.ui.leaderboard_delta import DeltaLog, moved, row_delta, same_index, static_moves
+from vmn_exp.ui.leaderboard_delta import (
+    DeltaLog,
+    moved,
+    row_delta,
+    same_index,
+    static_moves,
+)
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
 from vmn_exp.ui.leaderboard_jobs import JobsView
@@ -72,11 +79,9 @@ from vmn_exp.ui.memo import LRU, Generations
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import sort_rows, split_by_of
 from vmn_exp.ui.search_index import SearchIndexes
-from vmn_exp.ui.sibling_durations import SiblingDurations, restamped, stamped
 from vmn_exp.ui.search_rank import results
+from vmn_exp.ui.sibling_durations import SiblingDurations, restamped, stamped
 from vmn_exp.ui.status_counts import StatusCounts
-
-from vmn_exp.ui import search_prefilter
 
 BUCKET_SEC = 2
 # Orders moved on across generations: the dashboard's mix of sorts and
@@ -147,13 +152,11 @@ class _Base:
             return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows), siblings)
 
     @classmethod
-    def derived(cls, prev, snapshot, token, bucket, delta=None, split=None):
+    def derived(cls, prev, snapshot, token, bucket, delta=None):
         """From *prev*'s base, re-deriving only what changed (*delta*:
-        ``(storage indexes, verstrs gone)``, else found); None when the
-        delta is large, a verstr repeats, a parent chain loops or *split*
-        is not *prev*'s."""
-        if split != prev.siblings.split:
-            return None
+        ``(storage indexes, verstrs gone)``, else found), its ratios against
+        siblings by *prev*'s split; None when the delta is large, a verstr
+        repeats or a parent chain loops."""
         delta = delta or row_delta(prev, snapshot)
         if delta is None:
             return None
@@ -173,12 +176,12 @@ class _Base:
         rows, children_of, counts, rebuilt = tree
         was = [prev.rows[prev.position[v]] for v in (*fresh, *gone) if v in prev.position]
         siblings, regrouped = prev.siblings.advanced(was, fresh.values())
-        copied = restamped((rows, position, children_of), siblings, regrouped, fresh, rebuilt)
+        copied = restamped(rows, position, children_of, siblings, regrouped, fresh, rebuilt)
         live = sorted(position[v] for v in fresh if is_live(snapshot, v))
         patch = LivePatch.from_counts(rows, live, position, snapshot.edges, counts)
         base = cls(snapshot, token, bucket, rows, position, patch, (children_of, counts),
                    siblings)
-        base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone, copied)
+        base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone | copied, copied)
         base.up_moved = ancestors_changed(prev, fresh, gone, children_of)
         return base
 
@@ -374,11 +377,10 @@ class LeaderboardCache(SetAnswers):
         stuck): derived like a new generation, else built."""
         token, bucket = next(self._tokens), self._bucket()
         live = (sorted(prev.patch.live), set())  # nothing else changed
-        split = prev.siblings.split
-        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live, split=split)
+        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live)
         if base:
             self._deltas.add(base)
-        base = base or _Base.build(prev.snapshot, token, bucket, split)
+        base = base or _Base.build(prev.snapshot, token, bucket, prev.siblings.split)
         self.generations.advance(prev.snapshot.app_name, token)
         return base
 
@@ -387,7 +389,8 @@ class LeaderboardCache(SetAnswers):
         valid start (even another workspace's): the delta is found by identity."""
         prev = self._latest_base(snapshot.app_name)
         prev = prev and latest(prev, bucket)
-        base = prev and _Base.derived(prev, snapshot, token, bucket, split=split)
+        same_split = prev and prev.siblings.split == split
+        base = same_split and _Base.derived(prev, snapshot, token, bucket)
         if base:
             self._deltas.add(base)
         else:

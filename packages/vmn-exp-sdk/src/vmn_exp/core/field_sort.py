@@ -11,9 +11,10 @@ and what a lean row lacks (``intent``, ``keywords``).
 import functools
 
 from vmn_exp.core.query import ROW_FIELDS
+from vmn_exp.core.query_up import UP_PREFIXES as PREFIXES
+from vmn_exp.core.query_up import dig
 from vmn_exp.core.values import is_finite_number
 
-PREFIXES = ("tags", "params")
 SORT_FIELDS = ROW_FIELDS - {"timestamp", "started_at", "finished_at", "idx",
                             "intent", "keywords"}
 
@@ -37,14 +38,12 @@ class FieldSort:
 
     def raw(self, row):
         """The row's value at the path when it is sortable, else None."""
-        value = row.get(self.path[0])
-        if len(self.path) == 2:
-            value = value.get(self.path[1]) if isinstance(value, dict) else None
+        value = dig(row, self.path)
         return value if ranked_value(value) is not None else None
 
     def value(self, row):
         """:func:`ranked_value` of the row's value (None: ranks last)."""
-        return ranked_value(self.raw(row))
+        return ranked_value(dig(row, self.path))
 
     def placed(self, value):
         """A row holding *value* at the path (a cursor's sort target)."""
@@ -68,6 +67,7 @@ def field_sort(sort):
 
 def sort_by_field(rows, field, descending=False):
     """*rows* ordered by the :class:`FieldSort` *field* (stable), unranked last."""
-    ranked = [r for r in rows if field.value(r) is not None]
-    ranked.sort(key=field.value, reverse=bool(descending))
-    return ranked + [r for r in rows if field.value(r) is None]
+    keyed = [(field.value(r), r) for r in rows]
+    ranked = [pair for pair in keyed if pair[0] is not None]
+    ranked.sort(key=lambda pair: pair[0], reverse=bool(descending))
+    return [r for _, r in ranked] + [r for value, r in keyed if value is None]

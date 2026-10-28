@@ -80,13 +80,13 @@ def _static_row(base, verstr, changed):
     return None if i is None or i in changed else base.rows[i]
 
 
-def static_moves(prev, base, candidates, restamped=()):
+def static_moves(prev, base, candidates, exempt=()):
     """``(left, joined, settled)``: rows that left *prev*'s static set, rows
     that joined *base*'s, and the moved rows outside the delta limit: those
     of *joined* that were among *prev*'s changed rows (a live run that went
     stuck or finished, its ancestors), re-derived anyway like
-    :func:`row_delta`'s live rows, and both copies of a *restamped* row (a
-    new ``duration_ratio`` only, :mod:`~vmn_exp.ui.sibling_durations`)."""
+    :func:`row_delta`'s live rows, and both copies of an *exempt* row (one
+    the caller re-derived and bounded itself)."""
     was, now = set(prev.patch.changed), set(base.patch.changed)
     candidates = set(candidates)
     candidates.update(prev.rows[i]["verstr"] for i in was)
@@ -99,7 +99,7 @@ def static_moves(prev, base, candidates, restamped=()):
             joined.extend([new] if new is not None else [])
             settled.extend([new] if new is not None and old is None
                            and prev.position.get(verstr) in was else [])
-            if verstr in restamped:
+            if verstr in exempt:
                 settled.extend(row for row in (old, new) if row is not None)
     return left, joined, settled
 
@@ -170,8 +170,8 @@ class DeltaLog:
         """``(left, joined)`` from generation *token* to *base*, composed;
         None when a generation between is unknown (built from scratch, or
         too old), the moves add up to more than a rebuild costs (rows
-        that joined only by leaving the changed rows, and rows moved for
-        a new ``duration_ratio`` alone, do not count) or, for
+        that joined only by leaving the changed rows, and exempt ones,
+        do not count) or, for
         an order that *reads_up* fields, one of them changed an ancestor's
         (see :mod:`~vmn_exp.ui.leaderboard_up`)."""
         with self._lock:

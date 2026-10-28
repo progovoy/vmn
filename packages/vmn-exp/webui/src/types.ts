@@ -93,9 +93,6 @@ export interface RunStatus {
   stale_sec: number | null;
   /** Seconds from creation to start (plan 28 N4); null until started. */
   queue_sec?: number | null;
-  /** The duration over its finished siblings' median (same parent and split
-   *  value; plan 28 N4); null without enough of them. Board rows only. */
-  duration_ratio?: number | null;
   /** How often the runner beats — the cadence status can change at. */
   heartbeat_interval_sec?: number | null;
   /** Verstr of the outer run that launched this one. */
@@ -162,6 +159,9 @@ export interface Fleet {
 
 /** Status fields are optional: older servers omit them entirely. */
 export interface ExperimentRow extends Partial<RunStatus> {
+  /** The duration over its finished siblings' median (same parent and split
+   *  value; plan 28 N4); null without enough of them. Board rows only. */
+  duration_ratio?: number | null;
   /** 1-based storage-order index — what `vmn-exp show <app> -v @N` resolves. */
   idx: number;
   verstr: string;
