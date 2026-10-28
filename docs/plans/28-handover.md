@@ -20,22 +20,13 @@ Fixes from the end of this session:
   - the fakes in the diag board-warm test gain `conf_of` and `summarized`;
   - the S3 warm-restart test ignores GETs under `settings/`.
 
-## Still running
+## Stopped unfinished
 
-The GC-pauses investigation agent `a1cb514a4c2a561f4` runs on worktree
-`.claude/worktrees/agent-a1cb514a4c2a561f4`. It covers appendix A row 6 (GC
-pauses on 3.15.2t) and was last seen writing a `curve.py` heap-size sweep.
-
-If it finishes:
-1. Read its report.
-2. Cherry-pick its commits.
-3. Run its tests.
-4. Run `git worktree remove --force --force` on the worktree, then
-   `git branch -D` on its branch.
-5. Mark row 6 Fixed or Explained in appendix A.
-
-If the session ended first, look at that worktree's commits and redo what is
-missing.
+The GC-pauses investigation (appendix A row 6, GC pauses on 3.15.2t) was
+stopped before it reported. Its heap-size bench, a script and not a pytest
+test, is committed as `packages/vmn-exp/tests/gc_pause_bench.py`, with no
+results. Next steps: run it on 3.15.2t, then mark row 6 Fixed or Explained
+in appendix A.
 
 ## Not done
 
