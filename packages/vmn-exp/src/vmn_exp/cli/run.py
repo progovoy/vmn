@@ -12,6 +12,7 @@ import socket
 import subprocess
 import tempfile
 import time
+import uuid
 
 from vmn_exp.cli import fork
 from vmn_exp.cli.intent_arg import append_intent, read_intent
@@ -349,6 +350,8 @@ class _Supervision:
             "cwd": repo_relative_cwd(self.cwd, self.root),
             "pid": proc.pid,
             "host": socket.gethostname(),
+            # This supervisor's attempt at the run, as an SDK attempt records.
+            "attempt": uuid.uuid4().hex[:12],
             "started_at": started_at,
             "heartbeat": started_at,
             # Bumped every beat: a liveness signal that needs no clock.
