@@ -24,6 +24,7 @@ from vmn_exp.cli.run import (  # noqa: F401
     experiment_run,
 )
 from vmn_exp.cli.define_metric_args import define_metric_entry
+from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
@@ -550,6 +551,10 @@ def experiment_add(vcs, params, storage, args):
     except ValueError as e:
         VMN_LOGGER.error(str(e))
         return 1
+    err = finish_flags_error(args)
+    if err:
+        VMN_LOGGER.error(err)
+        return 1
     intent, err = read_intent(args)
     if err is not None:
         return err
@@ -592,7 +597,7 @@ def experiment_add(vcs, params, storage, args):
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)
 
-    return 0
+    return apply_finish(storage, app_name, verstr, args)
 
 
 def experiment_rewind(vcs, params, storage, args):

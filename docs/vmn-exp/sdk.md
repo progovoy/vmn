@@ -381,6 +381,37 @@ raise `ValueError` for an unknown ref. Archiving sets `archived: true` in
 `metadata.yml`; nothing is deleted, and only listings treat archived runs
 differently (`vmn-exp prune` counts them like any finished run).
 
+### Finishing a run from outside it
+
+An orchestrator or poller that gives up on a pod, or closes a study's leftover
+trials, finishes the run without reopening it (`start_run(run_id=)` would mark
+it running and heartbeat first):
+
+```python
+manage.log_note("my_app", run_id, "closed by orchestrator at study end")
+manage.log_metrics("my_app", run_id, {"retries": 3})          # step= optional
+manage.finish_run("my_app", run_id, 1, error="OOMKilled", end_reason="closed")
+```
+
+- `finish_run(app_name, ref, exit_code, *, error=None, end_reason=None,
+  force=False, storage=None)` writes the final `run_state.yml` directly: the
+  run's `started_at`, host and heartbeat cadence stay; `exit_code`,
+  `finished_at`, `duration_sec` (from the first start), `end_reason` and
+  `error` (a message or an exception, also appended as an `error` log entry,
+  like `run.finish(error=)`) replace an earlier ending's. Works on a waiting,
+  released or stuck run.
+- It raises `manage.FinishRefusedError` (a `ValueError`) while another attempt
+  still heartbeats the run — fresh by the writer's clock or the store's write
+  time, the rule that tells running from stuck — and once the run has finished.
+  `force=True` finishes it anyway; the final state carries a new `attempt`, so
+  the live attempt's next heartbeats are dropped instead of reopening it.
+- `log_note(app_name, ref, text)` and `log_metrics(app_name, ref, values,
+  step=None)` append under the caller's own stream, on a run in any state.
+- All three flush to the remote store at once: no heartbeat is around to ship
+  them later.
+- CLI: `vmn-exp add <app> -v <ref> --finish <code> [--error <text>]
+  [--end-reason <text>] [--force]` (after the add's `--note`/`--metrics`).
+
 ---
 
 ## Autologging
@@ -1042,6 +1073,10 @@ tracker.finish()
   is re-raised; any other exception finishes it failed and is re-raised.
 - `tracker.finish()` logs `best_value` and `best_<param>` on the outer run
   (multi-objective: `best_n_pareto_trials`) and closes it.
+- `objective` (`objective_<i>`: its own direction) and `best_value` are
+  metrics declared with the study's direction as their goal
+  (`define_metric(goal="min"|"max")`), so they rank the right way round
+  without any conf.yml (a store workspace too).
 
 **Trials in separate pods.** When trials run in separate processes that share
 an Optuna storage (RDB or journal), every pod calling `start_study_run(study)`

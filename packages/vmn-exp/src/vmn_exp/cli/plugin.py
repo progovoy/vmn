@@ -48,6 +48,7 @@ EXPERIMENT_ACTIONS = [
 def _add_experiment_parser(subprasers, name):  # noqa: N802
     from vmn_exp.cli import views
     from vmn_exp.cli.define_metric_args import add_define_metric_flags
+    from vmn_exp.cli.finish_args import add_finish_flags
     from vmn_exp.cli.intent_arg import add_intent_flags
     from vmn_exp.cli.similar_args import add_similar_flags
     from vmn_exp.cli.sweep.parser import add_experiment_storage_flags
@@ -130,7 +131,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--force", action="store_true", default=False,
                       help="prune: also delete runs that are still running; restore: "
                            "even if untracked files over the snapshot size caps would "
-                           "be deleted without being saved")
+                           "be deleted without being saved; add --finish: even a run "
+                           "that heartbeats elsewhere or has finished")
     pexp.add_argument("--local-only", action="store_true", default=False,
                       help="prune: delete local copies only, keep the remote (S3) ones")
     pexp.add_argument("--protect-tag", dest="protect_tag", action="append", default=None,
@@ -212,6 +214,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="rewind: hide the run's history past step N")
     add_experiment_storage_flags(pexp)
     add_define_metric_flags(pexp)
+    add_finish_flags(pexp)
     add_intent_flags(pexp)
     add_similar_flags(pexp)
     # import-mlflow flags

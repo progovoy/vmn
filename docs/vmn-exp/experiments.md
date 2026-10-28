@@ -629,13 +629,19 @@ vmn-exp add my_app --metrics val_loss=0.29 val_acc=0.93
 vmn-exp add my_app -v @2 --attach checkpoint.pt --note "after warmup"
 vmn-exp add my_app -f extra_notes.yml            # the whole file as a structured entry
 vmn-exp add my_app -v @2 --define-metric val_loss --goal min
+vmn-exp add my_app -v @7 --finish 1 --error "OOMKilled" --note "closed by orchestrator"
 ```
 
 Flags: `--metrics`, `--note`, `--attach <file>` (an artifact), `-f <yaml>`,
 `--input`, `--intent`/`--intent-file` ([Intent](#intent-what-a-run-is-for)),
-and `--define-metric NAME [--goal min|max] [--summary
+`--define-metric NAME [--goal min|max] [--summary
 min|max|last|first|mean] [--step-metric M] [--hidden]` (the CLI's
-`run.define_metric`; see [summaries](#best-value-summaries-summary)).
+`run.define_metric`; see [summaries](#best-value-summaries-summary)), and
+`--finish <code> [--error <text>] [--end-reason <text>] [--force]`: write the
+run's final state from outside it, after the other entries, without
+reopening it (refused while another attempt heartbeats it or once it
+finished, unless `--force`; the CLI's
+[`manage.finish_run`](sdk.md#finishing-a-run-from-outside-it)).
 
 ### `list`
 
