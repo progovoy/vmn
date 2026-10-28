@@ -66,6 +66,7 @@ const MCard = memo(function MCard({
             <StatusPill
               status={status} exitCode={r.exit_code} durationSec={r.duration_sec}
               staleSec={r.stale_sec} errorSummary={r.error_summary}
+              settled={r.kind === "outer" ? null : r.settled}
             />
           )}
         </div>

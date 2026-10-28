@@ -11,11 +11,15 @@ pinned text keys every cache, so an ``ago()`` order is built again at most
 once a minute. Per outer run (the Jobs view's ``job.attention``) a query's
 matching rows are counted by their top-level run, once per base, time
 bucket and minute.
+
+Built-in parts (:mod:`~vmn_exp.ui.attention_built_in`) come first, counted
+from the live rows instead, and are shown only while they count any.
 """
 from collections import Counter, namedtuple
 
 import vmn_exp.core.status as experiment_status
 from vmn_exp.core.query import QueryError, pin_ago
+from vmn_exp.ui.attention_built_in import built_in_by_root, built_in_count, is_built_in, shown
 from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.memo import LRU
 
@@ -57,12 +61,18 @@ def attention_payload(cache, snapshot, schema, entries, scope=None):
         part = {"key": entry["key"], "label": entry["label"], "level": entry["level"],
                 "count": None, "q": entry["query"]}
         try:
-            part["count"] = len(cache.ordered(snapshot, schema, query=pinned(entry["query"]),
-                                              scope=scope))
+            part["count"] = _count(cache, snapshot, schema, entry, scope)
         except QueryError as e:
             part["error"] = str(e)
-        parts.append(part)
+        if shown(part["key"], part["count"]):
+            parts.append(part)
     return parts
+
+
+def _count(cache, snapshot, schema, entry, scope):
+    if is_built_in(entry["key"]):
+        return built_in_count(cache, snapshot, entry["key"], scope)
+    return len(cache.ordered(snapshot, schema, query=pinned(entry["query"]), scope=scope))
 
 
 def severity(summary, counts, queries):
@@ -86,7 +96,8 @@ class AttentionCounts:
     def summaries(self, snapshot, schema, queries):
         """``{job: summary}``, each with ``attention`` (``{key: n}``, the runs
         of its tree each of *queries* matches, itself included; only given
-        *queries*) and ``attention_rank`` (:func:`severity`)."""
+        *queries*, a built-in one only while it counts any) and
+        ``attention_rank`` (:func:`severity`)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
         key = (base.token, bucket, minute(), cache.schema_key(schema), queries)
@@ -99,8 +110,10 @@ class AttentionCounts:
         for job, summary in self._cache.job_rollups(snapshot, schema).items():
             counts = by_root.get(job, {})
             extra = {"attention_rank": severity(summary, counts, queries)}
-            if queries:
-                extra["attention"] = {q.key: counts.get(q.key, 0) for q in queries}
+            parts = {q.key: counts.get(q.key, 0) for q in queries
+                     if shown(q.key, counts.get(q.key, 0))}
+            if parts:
+                extra["attention"] = parts
             out[job] = dict(summary, **extra)
         return out
 
@@ -113,8 +126,11 @@ class AttentionCounts:
         return self._by_root.get(key, lambda: self._count(snapshot, schema, queries, texts))
 
     def _count(self, snapshot, schema, queries, texts):
-        out = {}
+        out = built_in_by_root(self._cache, snapshot, [q.key for q in queries
+                                                       if is_built_in(q.key)])
         for q, text in zip(queries, texts):
+            if is_built_in(q.key):
+                continue
             try:
                 rows = self._cache.ordered(snapshot, schema, query=text)
             except QueryError:

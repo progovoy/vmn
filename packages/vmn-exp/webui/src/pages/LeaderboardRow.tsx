@@ -227,6 +227,7 @@ function Row({
                 status={displayStatus} exitCode={r.exit_code}
                 durationSec={r.duration_sec} staleSec={r.stale_sec}
                 errorSummary={r.error_summary} releasedAt={r.released_at}
+                settled={r.kind === "outer" ? null : r.settled}
               />
             )}
           </td>

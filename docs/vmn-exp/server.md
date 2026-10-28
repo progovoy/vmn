@@ -433,7 +433,8 @@ ui:
   `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention` checked;
   other `ui` keys kept). `ui.attention` lists at most 8 attention queries
   `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
-  `key` letters, digits, `_`, `-` (unique, not `stuck`/`failed`/`running`),
+  `key` letters, digits, `_`, `-` (unique, not the built-in
+  `stuck`/`failed`/`running`/`outlived`),
   `label` defaulting to the key, `level` `warn` (default) or `error`. A
   query that does not compile is not refused here; the server reports it on
   its part (`error`). A checkout's conf.yml `experiment.ui.attention` beats

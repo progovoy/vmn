@@ -65,13 +65,14 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         return dict(payload, freshness=fresh), _digest(key)
 
     def with_attention(snapshot, schema, scope, entries, payload, etag):
-        """*payload* and *etag* with the *entries*' counts, keyed by their
-        pinned queries (an ``ago()`` one moves with the minute)."""
+        """*payload* and *etag* with the *entries*' counts (no ``attention``
+        when no part is shown), keyed by their pinned queries (an ``ago()``
+        one moves with the minute)."""
         key = leaderboards.etag(snapshot, schema, kind="attention", scope=scope,
                                 entries=attention_key(entries))
         parts = summaries.get(key, lambda: attention_payload(
             leaderboards, snapshot, schema, entries, scope))
-        return dict(payload, attention=parts), _digest(etag + key)
+        return (dict(payload, attention=parts) if parts else payload), _digest(etag + key)
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/git", dependencies=[require(VIEWER)])
     def workspace_git(ws_name: str):  # sync: git runs in the threadpool

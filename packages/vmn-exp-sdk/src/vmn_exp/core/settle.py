@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """What an ended outer run makes of the runs it left behind (derived, never
 stored): a descendant that never started is ``never_started``, a stuck or
-released one (it ran and never finished) ``lost``. A run's own status stays what
+released one (it ran and never finished) ``lost``, a running one (still
+beating) ``outlived`` — counted as running still. A run's own status stays what
 :func:`~vmn_exp.core.status.derive_status` says; only its ``settled`` field
 and the rollups over it change.
 
@@ -14,20 +15,30 @@ or when it never started (or was released) under a closed parent — a container
 its parent's verdict on. A running run keeps its children open: it may
 still start them. Pure.
 """
-from vmn_exp.core.status import CREATED, FAILED, RELEASED, STUCK, SUCCEEDED, settle_status
+from vmn_exp.core.status import (
+    CREATED,
+    FAILED,
+    RELEASED,
+    RUNNING,
+    STUCK,
+    SUCCEEDED,
+    settle_status,
+)
 
 NEVER_STARTED = "never_started"
 LOST = "lost"
+OUTLIVED = "outlived"
+# What a rollup counts apart from the statuses, and what closes like an end.
 SETTLED = (NEVER_STARTED, LOST)
 ENDED = frozenset((SUCCEEDED, FAILED, STUCK))
-_SETTLED_AS = {CREATED: NEVER_STARTED, STUCK: LOST, RELEASED: LOST}
+_SETTLED_AS = {CREATED: NEVER_STARTED, STUCK: LOST, RELEASED: LOST, RUNNING: OUTLIVED}
 # Runs that pass their parent's verdict on to their own children.
 _WAITING = (CREATED, RELEASED)
 
 
 def settled_as(status, parent_closed):
-    """``never_started``/``lost`` for a run of *status* under a closed
-    parent, else None."""
+    """``never_started``/``lost``/``outlived`` for a run of *status* under a
+    closed parent, else None."""
     return _SETTLED_AS.get(status) if parent_closed else None
 
 
@@ -47,8 +58,14 @@ def row_closes(row):
 
 
 def counted_status(row):
-    """What a rollup counts *row* as: its ``settled``, else its status."""
-    return row.get("settled") or row.get("status")
+    """What a rollup counts *row* as: see :func:`counted_as`."""
+    return counted_as(row.get("status"), row.get("settled"))
+
+
+def counted_as(status, settled):
+    """*settled* when a rollup counts it apart (:data:`SETTLED`), else
+    *status*: an outlived run counts as running."""
+    return settled if settled in SETTLED else status
 
 
 def split_slots(slots, closed):

@@ -49,7 +49,7 @@ class SettingsError(ValueError):
 # built-in parts, whose keys they may not take.
 MAX_ATTENTION = 8
 ATTENTION_LEVELS = ("warn", "error")
-BUILTIN_PARTS = ("stuck", "failed", "running")
+BUILTIN_PARTS = ("stuck", "failed", "running", "outlived")
 _ATTENTION_KEY = re.compile(r"[A-Za-z0-9_-]+")
 _ATTENTION_FIELDS = {
     "key": lambda v: isinstance(v, str) and bool(_ATTENTION_KEY.fullmatch(v)),

@@ -21,6 +21,7 @@ from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.ui.api_errors import APP_NOT_FOUND, CodedError, raise_read_error
 from vmn_exp.ui.app_presence import app_exists
+from vmn_exp.ui.attention_built_in import with_built_in
 from vmn_exp.ui.audit import AuditLog, install_audit_middleware
 from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.auth.authz import require, require_action
@@ -387,9 +388,10 @@ def create_app(
         return source.split_by(ws, app_name, _settings(ws, app_name))
 
     def _attention_entries(ws_name, app_tag):
-        """The app's attention queries: conf.yml over the store settings."""
+        """The built-in attention parts, then the app's queries: conf.yml
+        over the store settings."""
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return source.attention(ws, app_name, _settings(ws, app_name))
+        return with_built_in(source.attention(ws, app_name, _settings(ws, app_name)))
 
     def _similar_weights(ws_name, app_name):
         """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp

@@ -101,6 +101,8 @@ export interface RunStatus {
   kind: "outer" | "inner" | "single";
   /** 0 for a top-level run. */
   depth: number;
+  /** What an ended outer run made of this run (core/settle.py), else null. */
+  settled?: "never_started" | "lost" | "outlived" | null;
   /** Rollup over this run and its whole subtree. */
   tree_status: string | null;
   /** Direct inner runs per own status. */

@@ -31,8 +31,10 @@ function describe(
 
 /** Colored pill for a run's job status. `running` pulses; `stuck` carries a
  *  warning glyph so a dead runner never reads as a live one; a waiting run
- *  its process handed back (`released_at`, plan 28 API2) says so. */
-export default function StatusPill({ status, exitCode, durationSec, staleSec, errorSummary, releasedAt }: {
+ *  its process handed back (`released_at`, plan 28 API2) says so, and so
+ *  does a running one its ended outer run left behind (`settled =
+ *  "outlived"`, plan 28 T2b). */
+export default function StatusPill({ status, exitCode, durationSec, staleSec, errorSummary, releasedAt, settled }: {
   status: RunState;
   exitCode?: number | null;
   durationSec?: number | null;
@@ -41,11 +43,16 @@ export default function StatusPill({ status, exitCode, durationSec, staleSec, er
   errorSummary?: string | null;
   /** The run's last release; shown only while it waits. */
   releasedAt?: string | null;
+  /** What an ended outer run made of the run (core/settle.py); only
+   *  `outlived` is shown, while it runs. */
+  settled?: string | null;
 }) {
   const released = status === "created" && !!releasedAt;
-  const base = released
+  const outlived = status === "running" && settled === "outlived";
+  const described = released
     ? `waiting — released ${relTime(releasedAt)}`
     : describe(status, exitCode, durationSec, staleSec);
+  const base = outlived ? `${described} · outlived its outer run` : described;
   const label = status === "failed" && errorSummary ? `${base} — ${errorSummary}` : base;
   return (
     <span className={`status-pill ${status}`} title={label} aria-label={label}>
@@ -53,6 +60,7 @@ export default function StatusPill({ status, exitCode, durationSec, staleSec, er
       {status === "stuck" && <span className="warn">⚠</span>}
       {status}
       {released && " · released"}
+      {outlived && " · outlived"}
     </span>
   );
 }

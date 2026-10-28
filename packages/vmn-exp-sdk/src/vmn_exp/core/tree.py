@@ -17,6 +17,8 @@ from vmn_exp.core.settle import (
     ENDED,
     LOST,
     NEVER_STARTED,
+    SETTLED,
+    counted_as,
     settled_as,
     settled_runs,
     split_slots,
@@ -110,8 +112,8 @@ def own_rollup_status(status, has_children, incomplete=False, settled=None):
 
 def _unclaimed(incomplete, status, settled):
     """Whether an *incomplete* sweep's missing trials may still run: it has
-    neither ended nor been settled."""
-    return incomplete and status not in ENDED and not settled
+    neither ended nor been settled (an outlived one may still)."""
+    return incomplete and status not in ENDED and settled not in SETTLED
 
 
 def sweep_trial_count(children):
@@ -383,7 +385,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
         state = read_state(child)
         obs = observed_at(child) if observed_at else None
         status = derive_status(state, observed_at=obs)
-        counted.append(settled_as(_settle_key(status, state), closed) or status)
+        counted.append(counted_as(status, settled_as(_settle_key(status, state), closed)))
 
         if len(child_details) < FLEET_MAX_CHILDREN_DETAIL:
             row = (read_child_row(child) if read_child_row else None) or {}

@@ -405,8 +405,13 @@ to the status counts (see [ui.md](ui.md#status-counts-and-rollup)). An ended
 sweep short of its plan reads its own final status (its unclaimed slots never
 start, the UI says `ended · 4 never started`); `created (16/20 incomplete)` is
 for a sweep that has not ended. A settled run that starts after all (writes a
-run state) leaves the settlement by itself. Query them with `settled =
-"never_started"`, `settled = "lost"` or `settled = null`.
+run state) leaves the settlement by itself. A run still running (its
+heartbeat fresh) under an ended outer run is `outlived` — an orphan the
+orchestrator never stopped: it still counts as running everywhere and keeps
+its own children open, and the UI flags it (a built-in `outlived` attention
+part, `running · outlived` on its pill); it turns `lost` once it goes stuck.
+Query them with `settled = "never_started"`, `settled = "lost"`, `settled =
+"outlived"` or `settled = null`.
 
 `exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
 it differs) on the outer run.

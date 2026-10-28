@@ -140,6 +140,8 @@ orchestrator died), the pods it registered but never started are settled
 `never_started` and its stuck pods `lost` (a row's `settled` field; their own
 `status` and `child_counts` stay): `tree_status` leaves the never-started ones
 out and counts a lost one as `failed`, and the waiting/stuck counts drop them.
+A pod still heart-beating then is `outlived`: it counts as running, and the
+UI's attention strip flags it (`settled = "outlived"`).
 No terminal state needs writing for pods the orchestrator deleted.
 
 Over HTTP, `GET /api/v1/workspaces/{ws}/apps/{app}/experiments` returns the same

@@ -30,7 +30,7 @@ function StatusParts({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => str
   return (
     <>
       <StatusPill status={primary} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec}
-        releasedAt={isOuter ? null : st.released_at} />
+        releasedAt={isOuter ? null : st.released_at} settled={isOuter ? null : st.settled} />
       {roll && <span className="tree-roll">{roll}</span>}
       {showOwn && <span className="tree-roll">own {st.status}</span>}
       {st.status === "stuck" && st.stale_sec != null && (

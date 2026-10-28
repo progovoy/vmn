@@ -380,7 +380,8 @@ and the sort; below 640px, where the caption follows every card, the page head
 also shows `live · updated Ns ago` (or `paused`) as plain text after the run
 count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
 · 4 unstable · 4 running`, from `experiments-status`) appears while a run is
-stuck, one failed in the last 24 hours or one of the app's attention queries
+stuck, one failed in the last 24 hours, one still runs under an outer run
+that ended (`2 outlived their outer run`, built in) or one of the app's attention queries
 (conf/[settings](server.md#app-settings) `experiment.ui.attention`, e.g.
 `tags.health = "unstable"` or `status = "created" and timestamp <
 ago("1h")`) matches a run; each part links to the board filtered to exactly
@@ -817,7 +818,7 @@ Every row of `.../experiments` and the run detail carry:
 | `parent` / `children` | verstrs linking outer and inner jobs |
 | `kind` | `outer`, `inner` or `single` |
 | `depth` | nesting depth, for indenting the list |
-| `settled` | `never_started` (created) or `lost` (stuck, or released) for a run under an outer run that ended, else `null`: derived, the run's own `status` stays |
+| `settled` | `never_started` (created), `lost` (stuck, or released) or `outlived` (running, counted as running) for a run under an outer run that ended, else `null`: derived, the run's own `status` stays |
 | `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created` and a `never_started` run are left out, a `lost` run adds `failed`, an incomplete sweep that has not ended adds `created` |
 | `sweep_planned` / `sweep_trials` | a sweep outer's planned trials (grid size, else `run_cap`) and the trial slots its inner runs fill; absent for other runs and uncapped random/bayes sweeps. While `sweep_trials < sweep_planned` the UI reads `16/20 · incomplete`, and the detail's `status.fleet.expected` is the planned size |
 | `signal` / `end_reason` | the signal that ended (or released) the run (`SIGTERM`); `stopped` for an early-stopped sweep trial, `released` for a run handed back unfinished (`run.release()`, status `created`) |
@@ -884,7 +885,8 @@ trail leaves the app crumb out.
 
 Counts the non-archived runs by derived status (all five keys always present).
 A run an ended outer run settled counts as `never_started` or `lost` instead,
-never in `counts` (`total` holds every run), so a lost run raises no `stuck`.
+never in `counts` (`total` holds every run), so a lost run raises no `stuck`;
+an `outlived` one (still running) stays in `counts.running`.
 `failed_recent` counts failures that finished within the last 24 hours. `rollup` is
 `stuck` if any run is stuck, else `failed` if `failed_recent > 0`, else
 `running` if any runs, else `null`. A known app with no runs answers zeros; an
@@ -909,7 +911,14 @@ whole summary over that run's subtree, without the run (an outer run's page;
 counts and recent failures from its rollup; 404 for no such run). On the
 Outer runs view (`experiments?top=...`) each row's `job` carries `attention:
 {key: n}` (the runs of its tree, itself included, each query matches) and
-`attention_rank`, which `sort=job:attention` orders by. A list `q` with
+`attention_rank`, which `sort=job:attention` orders by.
+
+One part is built in, configured queries or not, and comes before them:
+`{"key": "outlived", "label": "outlived their outer run", "level": "warn",
+"q": "settled = \"outlived\""}`, the runs still running under an outer run
+that ended. It is counted from the live rows (never a board order) and, in
+the summary and in a row's `job.attention` alike, present only while it
+counts any, so an app with none and no queries has no `attention`. A list `q` with
 `ago()` is pinned to the minute, so its ETag moves with the clock.
 
 With background refresh (`vmn-exp ui`), the summary also carries how fresh
