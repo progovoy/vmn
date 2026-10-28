@@ -26,7 +26,7 @@ from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.memo import LRU
 
 
-def _root(base, verstr):
+def tree_root(base, verstr):
     """The top-level run of *verstr*'s tree (itself for one the snapshot lacks)."""
     at = base.position.get(verstr)
     return (base.rows[at]["root"] if at is not None else None) or verstr
@@ -92,7 +92,7 @@ class TreeNodes:
         if not queries:
             return {}
         base, bucket = self._cache._base(snapshot)
-        texts, root = pinned_texts(queries), _root(base, parent)
+        texts, root = pinned_texts(queries), tree_root(base, parent)
         return self._counts.get(
             (base.token, bucket, texts, root),
             lambda: _counted(self._cache.attention.matches(snapshot, schema, queries).get(root, ()),

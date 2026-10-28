@@ -19,6 +19,8 @@ export interface TreeRow extends ExperimentRow {
   open?: boolean;
   /** A run without children: the attention queries it matches itself. */
   attention?: Record<string, number>;
+  /** Under a filter: the runs of its subtree (itself included) passing it. */
+  matched?: number;
 }
 
 export interface TreePage {
@@ -29,9 +31,31 @@ export interface TreePage {
   tree_columns?: Record<string, string[]>;
 }
 
+/** The Runs tab's filters a tree is asked under: its status and query
+ *  keep the children whose subtree holds a passing run (`match_subtree`). */
+export interface TreeFilter {
+  status?: string;
+  query?: string;
+  sort?: string;
+  order?: "asc" | "desc";
+  archived?: boolean;
+}
+
 const TREE_PAGE = 100;
 
-export function fetchChildren(ws: string, app: string, parent: string, opts: { offset?: number } = {}): Promise<TreePage> {
+function setTreeFilter(p: URLSearchParams, f: TreeFilter) {
+  if (f.status) p.set("status", f.status);
+  if (f.query) p.set("q", f.query);
+  if (f.sort) p.set("sort", f.sort);
+  if (f.order) p.set("order", f.order);
+  if (f.archived) p.set("archived", "1");
+  if (f.status || f.query) p.set("match_subtree", "1");
+}
+
+export function fetchChildren(
+  ws: string, app: string, parent: string, opts: { offset?: number; filter?: TreeFilter } = {},
+): Promise<TreePage> {
   const p = new URLSearchParams({ children_of: parent, offset: String(opts.offset ?? 0), limit: String(TREE_PAGE) });
+  setTreeFilter(p, opts.filter ?? {});
   return get<TreePage>(`/workspaces/${ws}/apps/${appTag(app)}/experiments?${p}`);
 }
