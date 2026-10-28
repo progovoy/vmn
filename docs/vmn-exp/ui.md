@@ -995,7 +995,8 @@ curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
 `GET .../experiments?group=<field>` answers groups instead of a page. The
 field is a link between runs, `parent`, `forked_from`, `rerun_of` (the run
 pointed at heads the group and is not one of its rows) or `code_verstr` (the
-code state), a row field: `branch`, `status`, `tags.<key>`, `params.<key>`,
+code state), a row field: `branch`, `status`, `root` (the top-level outer run), `tags.<key>`,
+`params.<key>`,
 or an ancestor's field, as the [query language](sdk.md#the-query-language) reads
 it: `up.params.<key>`, `up.tags.<key>`, `up.name`,
 `up(tags.kind = "study").params.<key>` (the clause is `<field> = <value>`,
