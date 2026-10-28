@@ -190,6 +190,7 @@ Every call appends to the run's log; nothing is rewritten.
 |---|---|
 | `log_metric(key, value, step=None, commit=True)` | one metric at `step` (default `run.step`; see [Steps](#steps)) |
 | `log_metrics({...}, step=None, commit=True)` | several metrics sharing one step |
+| `set_progress(done, total=None, unit=None)` | how far the run is: metrics `progress` (and `progress_total`) without a step, `unit` (e.g. `"dates"`) as the `progress_unit` param when it changes. An outer run's bar, `done/expected`, rate and ETA read them before its run counts ([ai-fleet-tracking.md](ai-fleet-tracking.md#declaring-the-outer-runs-own-progress)) |
 | `log_params({...})` | more inputs, merged into the run's params |
 | `log_input(uri, name=None, digest=None, kind=None)` | a dataset/artifact the run consumed; `name` defaults to the URI basename without extension; folded last-write-wins by name |
 | `use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run and return a local path to it (downloaded when remote). Records an input `vmn://<app>/<verstr>/<path>` with the artifact's digest and `kind="artifact"` ([Lineage](#lineage)). `ValueError` if that run logged no such artifact |

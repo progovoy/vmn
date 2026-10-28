@@ -303,6 +303,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self.start_step = None
         # The step a log_metrics() without step= records; start_run() seeds it.
         self._steps = StepCounter()
+        self._progress_unit = None  # the last set_progress() unit logged
         # The process that owns the run. A forked child inherits this object but
         # not the run: `current_run()` there is None and atexit leaves it alone.
         self.pid = os.getpid()

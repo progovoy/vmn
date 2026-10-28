@@ -16,6 +16,7 @@ import operator
 
 from vmn_exp.core.log import primary_metric, sort_descending
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.progress import DEFAULT_NAMES
 from vmn_exp.core.settle import counted_status
 from vmn_exp.core.status import (
     CREATED,
@@ -53,10 +54,13 @@ class RollupSpec:
     and primary metric, each with its direction; ``main`` names the one a
     compact summary shows. A schema without any tracks the app's
     :data:`FALLBACK_METRICS` most *common()* metrics instead, goal-less
-    (``ranked`` False: no best, nothing to rank — plan 20)."""
+    (``ranked`` False: no best, nothing to rank — plan 20). ``progress``
+    names the metrics a job's declared progress is read from
+    (:mod:`~vmn_exp.core.progress`)."""
 
-    def __init__(self, schema, common=tuple):
+    def __init__(self, schema, common=tuple, progress=DEFAULT_NAMES):
         schema = schema or {}
+        self.progress = progress
         names = {m for m in schema if not _is_glob(m) and metric_goal(schema, m)}
         primary = primary_metric(schema)
         names.update([primary] if primary else [])

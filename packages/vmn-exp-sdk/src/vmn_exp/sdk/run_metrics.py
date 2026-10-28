@@ -4,6 +4,7 @@
 Mixed into :class:`~vmn_exp.sdk.run.Run`, which provides ``_steps`` (a
 :class:`~vmn_exp.sdk.steps.StepCounter`), ``_log_buffer`` and ``_append``.
 """
+from vmn_exp.core.progress import DONE, TOTAL, UNIT
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import create_log_entry
 
@@ -31,6 +32,16 @@ class RunMetrics:
         entry["step"] = self._steps.take(step, commit)
         self._log_buffer.append(entry)
 
+    def set_progress(self, done, total=None, unit=None):
+        """How far the run is: ``progress`` (and ``progress_total``) logged
+        without a step, *unit* (``"dates"``) as the ``progress_unit`` param
+        when it changes. An outer run's bar, rate and ETA read them before
+        its run counts (plan 28 P2)."""
+        self._log_unstepped({DONE: done} if total is None else {DONE: done, TOTAL: total})
+        if unit is not None and unit != self._progress_unit:
+            self._progress_unit = unit
+            self.log_params({UNIT: unit})
+
     def _log_unstepped(self, mapping):
-        """System metrics: sampled on the clock, not on the training step."""
+        """Metrics on the clock, not on the training step (system metrics, progress)."""
         self._append(create_log_entry("metrics", values=dict(mapping)))

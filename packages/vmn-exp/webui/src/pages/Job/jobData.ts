@@ -5,6 +5,7 @@ import type { FailureCluster, JobMetric, JobPageSummary, JobTimeline, TimelineBu
 import { vmnExpCommand } from "../../shell/cliCommands";
 import { fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal, plural } from "../../util";
 import { eqClause } from "../../util/searchQuery";
+import { progressLead, unitSuffix } from "../../util/jobProgress";
 
 const toMs = (t: number | string) => (typeof t === "number" ? t * 1000 : Date.parse(t));
 
@@ -98,9 +99,19 @@ export interface KpiTile {
   tone?: "running" | "waiting" | "stuck" | "failed" | "done";
 }
 
+/** The done tile: a declared progress in its unit with the runs done a
+ *  tile of their own (plan 28 P2), else the runs done. */
+function doneTiles(s: JobPageSummary): KpiTile[] {
+  const runs = { value: fmtCount(s.done), sub: `of ${fmtCount(s.expected)}`, tone: "done" as const };
+  const l = progressLead(s);
+  if (!l.declared) return [{ label: "done", ...runs }];
+  const sub = `of ${fmtCount(l.total)}${unitSuffix(l.unit)}`;
+  return [{ label: "done", value: fmtCount(l.done), sub, tone: "done" }, { label: "runs done", ...runs }];
+}
+
 export function jobKpis(s: JobPageSummary): KpiTile[] {
   const tiles: KpiTile[] = [
-    { label: "done", value: fmtCount(s.done), sub: `of ${fmtCount(s.expected)}`, tone: "done" },
+    ...doneTiles(s),
     {
       label: "failed", value: fmtPct(s.failed_pct), tone: "failed",
       sub: plural(s.counts.failed + (s.lost ?? 0), "run"),

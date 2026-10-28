@@ -8,9 +8,10 @@ counts cover the outer run's whole subtree (nested outer runs included).
 This page tells an agent which call moves each count.
 `vmn-exp skill` prints a short version of it.
 
-There is no API that sets these numbers. Each is counted from the inner runs'
+There is no API that sets these counts. Each is counted from the inner runs'
 states on every refresh, so you change a count by moving an inner run through
-its lifecycle.
+its lifecycle. The one exception is the bar's lead number: an outer run can
+[declare its own progress](#declaring-the-outer-runs-own-progress).
 
 ## What each count covers
 
@@ -99,6 +100,25 @@ vmn-exp run my_app --parent <outer verstr> -- python train.py
 Any experiment created while `VMN_EXPERIMENT_ID` is set is parented to that run
 automatically. That includes every `start_run()` and `vmn-exp` call inside
 `vmn-exp run my_app -- ./sweep.sh`.
+
+## Declaring the outer run's own progress
+
+When inner runs are created as work gets planned (a walk-forward that plans
+each date's studies when it reaches the date), the run count is no
+denominator: `1,412/2,000` says nothing about how many dates are left. Declare
+the real one on the outer run:
+
+```python
+outer.set_progress(41, 60, unit="dates")   # metrics progress / progress_total, param progress_unit
+```
+
+The bar then fills 41/60, the line reads `41/60 dates · 1,415 runs · 3 failed ·
+20 dates/h · ETA 14m`, and the rate and ETA are the declared progress since the
+outer run started. The Overview's done tile reads `41 of 60 dates`, with a
+`runs done` tile beside it. Logging the metrics `progress` and `progress_total`
+yourself (`log_metrics`, or a numeric `progress_total` param) does the same; both
+must be finite and the total positive. A nested outer run (a study) can declare
+its own the same way. The waiting/running/done/failed/stuck counts are unchanged.
 
 ## Reading the numbers back
 

@@ -222,6 +222,17 @@ export interface JobProgressFields {
   eta_sec: number | null;
   started_at?: string | null;
   finished_at?: string | null;
+  /** What the outer run declares on itself (`progress`/`progress_total`,
+   *  plan 28 P2); `progress` and `eta_sec` are then its, the counts stay runs. */
+  declared_progress?: DeclaredProgress | null;
+}
+
+/** An outer run's own progress metrics; the rate is since it started. */
+export interface DeclaredProgress {
+  done: number;
+  total: number;
+  unit: string | null;
+  rate_per_min: number | null;
 }
 
 /** A job's compact rollup on its Jobs-view row (plan 23 §10). */

@@ -8,6 +8,7 @@ rollups and :class:`~vmn_exp.ui.job_views.JobViews`') in one memo per
 (base, live bucket, :func:`minute`, schema) — a request is a memo hit.
 """
 import vmn_exp.core.status as experiment_status
+from vmn_exp.core.progress import progress_names
 from vmn_exp.ui.job_rollup import JobTree, StaticRollups, overlay
 from vmn_exp.ui.job_rollup_payload import failure_counts, job_payload, job_summary
 from vmn_exp.ui.job_tally import RollupSpec
@@ -22,6 +23,13 @@ def minute():
     """The clock job answers follow besides the live bucket: throughput and
     ETA count completions per minute back from now."""
     return int(experiment_status._now().timestamp() // 60)
+
+
+def progress_names_of(snapshot):
+    """The metric names *snapshot*'s app declares progress by: the
+    defaults until app settings (plan 28 A0) reach the rollups with
+    ``experiment.ui.progress`` (then part of the spec's memo key too)."""
+    return progress_names(None)
 
 
 def _payload(job, parts, spec, now, idx_of):
@@ -62,7 +70,8 @@ class JobRollupCache:
         cache = self._cache
         base, _ = cache._base(snapshot)
         return self._specs.get((base.token, cache.schema_key(schema)), lambda: RollupSpec(
-            schema, lambda: cache._facets.common_metrics(snapshot)))
+            schema, lambda: cache._facets.common_metrics(snapshot),
+            progress=progress_names_of(snapshot)))
 
     def tree(self, base):
         """*base*'s :class:`~vmn_exp.ui.job_rollup.JobTree`."""

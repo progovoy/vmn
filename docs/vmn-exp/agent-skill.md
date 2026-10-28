@@ -62,6 +62,11 @@ pod.finish()               # running -> done    (exit_code=0)
 `vmn-exp run <app_name> --parent <ref> -- <cmd>`) starts a pod straight in
 `running`. Use `with start_run(...) as pod:` so a crash records `failed`.
 
+When pods are created as the work gets planned, their count is no denominator:
+declare the real one on the outer run, `outer.set_progress(41, 60, unit="dates")`
+(metrics `progress`/`progress_total`); its bar, `done/expected`, rate and ETA then
+read it (`41/60 dates · 1,415 runs · ...`), the run counts unchanged.
+
 Optuna trials in separate pods (shared Optuna storage): attach each pod to the
 one outer run instead of opening one per pod, and finish it once:
 

@@ -398,6 +398,7 @@ to the app name has `Outer runs (N)`, `Single runs (N)` and `All runs`. The
 last view is remembered per app, and `view=`/`kind=` in the URL win.
 - **Outer runs** has one row per top-level outer run. Each row shows:
   - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, drawn as failures (see [settled runs](experiments.md#nesting)).
+  - An outer run whose own row carries finite metrics `progress` and `progress_total` (`run.set_progress(done, total, unit)`; the unit is the `progress_unit` param) declares its progress: the bar fills that share, the line leads with it and the runs follow (`41/60 dates · 1,415 runs · 3 failed · 20 dates/h · ETA 14m`), and the rate and ETA are the declared progress since the outer run started. Use it when the inner-run count grows as work gets planned.
   - the best run on the main metric, linked (`—` when no goal is declared), and a sparkline of the metric's spread.
   - runs, failed %, rate, ETA, branch and start.
 
@@ -463,7 +464,7 @@ clause as a filter.
   badge, the actions and the live indicator, then the full-width run bar and
   its counts.
 - **The tabs** (each a URL value of `tab=`):
-  - `overview` (the default): KPI tiles (done of expected, failed, running, waiting, stuck, median and p90 duration, best), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
+  - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
   - `runs`: the board scoped to the outer run's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
   - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
   - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
@@ -717,8 +718,13 @@ message.
   run's subtree).
 - **`experiments?top=1|jobs|singles`** lists top-level runs only (all, those
   with children, those without). An outer run's row carries `job`: `{total, counts,
-  done, expected, progress, failed_pct, throughput_per_min, eta_sec, metric,
-  best, best_verstr, best_idx, spread}`. It takes the `job:*` sorts.
+  done, expected, progress, failed_pct, throughput_per_min, eta_sec,
+  declared_progress, metric, best, best_verstr, best_idx, spread}`. It takes
+  the `job:*` sorts. `declared_progress` is `{done, total, unit,
+  rate_per_min}` when the outer run declares one (else null); `progress`
+  and `eta_sec` are then its, while `done`/`expected`/`counts`/
+  `throughput_per_min` stay run counts. The outer run's `summary` carries
+  the same.
   - With `match_subtree=1` and a `q`, an outer run matches when it or any run of its
     subtree does. Each row then gets `matched`, and the page gets
     `jobs_matched`/`runs_matched`.

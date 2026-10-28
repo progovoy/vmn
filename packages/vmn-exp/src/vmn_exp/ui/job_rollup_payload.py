@@ -4,7 +4,9 @@ parts its subtree is split into (static rows and live overlay, per nested
 job): read side by side, never merged into one tally."""
 from collections import Counter
 
+from vmn_exp.core.progress import DEFAULT_NAMES, declared_progress
 from vmn_exp.core.settle import LOST, NEVER_STARTED, SETTLED, row_closes
+from vmn_exp.core.status import _age_sec
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.failure_signature import label
 from vmn_exp.ui.job_tally import DONE, STATES, higher_first
@@ -42,11 +44,40 @@ def _edge(parts, field, pick):
     return pick(stamps) if stamps else None
 
 
-def progress_fields(job, parts, now):
+def _share(done, of):
+    return round(min(done / of, 1.0), 4) if of else None
+
+
+def _eta(left, per_min):
+    """Seconds for *left* at *per_min*: 0 when none is left, None without a rate."""
+    return 0 if not left else (round(left / per_min * 60) if per_min else None)
+
+
+def _per_min_since(done, start, now):
+    age = _age_sec(start, now) if start else None
+    return done / (age / 60) if age and age > 0 else None
+
+
+def declared_fields(declared, start, now, ended):
+    """``declared_progress`` (``{done, total, unit, rate_per_min}``, the rate
+    since *start*) and the ``progress`` and ``eta_sec`` it gives (plan 28 P2)."""
+    done, total, unit = declared
+    rate = _per_min_since(done, start, now)
+    return {
+        "declared_progress": {"done": done, "total": total, "unit": unit,
+                              "rate_per_min": None if rate is None else round(rate, 4)},
+        "progress": _share(done, total),
+        "eta_sec": _eta(0 if ended else max(total - done, 0), rate),
+    }
+
+
+def progress_fields(job, parts, now, names=DEFAULT_NAMES):
     """Counts, size, progress, throughput, ETA and time span. Once the job
     has ``ended`` (:func:`~vmn_exp.core.settle.closes`) its settled runs
     count beside ``counts``: ``never_started`` ones never run, ``lost`` ones
-    finished failed; only its running and waiting runs are left."""
+    finished failed; only its running and waiting runs are left. A progress
+    the job's own row declares (:func:`declared_fields`) replaces the
+    run-count progress and ETA; the run counts stay."""
     counts, settled = _counts(parts)
     lost = settled[LOST]
     total = sum(counts.values()) + sum(settled.values())
@@ -57,17 +88,20 @@ def progress_fields(job, parts, now):
     recent = sum(p.completions.recent(now_minute, THROUGHPUT_WINDOW_MIN) for p in parts)
     throughput = recent / THROUGHPUT_WINDOW_MIN
     left = counts["running"] + counts["waiting"] if ended else max(expected - done, 0)
-    eta = 0 if not left else (round(left / throughput * 60) if throughput else None)
-    return {
+    started = _edge(parts, "started", min)
+    fields = {
         "verstr": job["verstr"], "total": total, "counts": counts, "done": done,
         NEVER_STARTED: settled[NEVER_STARTED], LOST: lost, "ended": ended,
-        "expected": expected,
-        "progress": round(min(done / expected, 1.0), 4) if expected else None,
+        "expected": expected, "progress": _share(done, expected),
         "failed_pct": round(100 * (counts["failed"] + lost) / total, 2) if total else 0.0,
-        "throughput_per_min": throughput, "eta_sec": eta,
-        "started_at": _edge(parts, "started", min),
-        "finished_at": _edge(parts, "finished", max),
+        "throughput_per_min": throughput, "eta_sec": _eta(left, throughput),
+        "started_at": started, "finished_at": _edge(parts, "finished", max),
+        "declared_progress": None,
     }
+    declared = declared_progress(job, names)
+    if declared:
+        fields.update(declared_fields(declared, job.get("started_at") or started, now, ended))
+    return fields
 
 
 def _merged(sketches):
@@ -136,7 +170,7 @@ def job_payload(job, parts, spec, now):
     duration = _merged([p.duration for p in parts]) if parts else QuantileSketch()
     p50, p90 = duration.quantiles([0.5, 0.9])
     return {
-        **progress_fields(job, parts, now),
+        **progress_fields(job, parts, now, spec.progress),
         "metric": spec.main, "ranked": spec.ranked,
         "metrics": {m: metric_fields(parts, m, spec.descending[m], ranked=spec.ranked)
                     for m in spec.metrics},
@@ -154,7 +188,7 @@ def job_summary(job, parts, spec, now, idx_of=None):
                                        bins=SPREAD_BINS, quantiles=False, ranked=spec.ranked)
     main = main or {}
     return {
-        **progress_fields(job, parts, now),
+        **progress_fields(job, parts, now, spec.progress),
         "metric": spec.main,
         "best": main.get("best"),
         "best_verstr": main.get("best_verstr"),
