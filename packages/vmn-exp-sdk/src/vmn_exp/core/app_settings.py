@@ -171,14 +171,12 @@ _BASELINE_KEYS = ("match", "children_by")
 _FIELD_PREFIXES = ("params", "tags")
 
 
-def _is_field(value):
+def check_field(value, where):
+    """*value* when it is a ``params.<k>``/``tags.<k>``, else SettingsError."""
     prefix, dot, name = value.partition(".") if isinstance(value, str) else ("", "", "")
-    return bool(dot and name.strip()) and prefix in _FIELD_PREFIXES
-
-
-def _check_field(value, where):
-    if not _is_field(value):
+    if not (dot and name.strip() and prefix in _FIELD_PREFIXES):
         raise SettingsError(f"invalid {where}: {value!r} (params.<key> or tags.<key>)")
+    return value
 
 
 def _check_match(fields, where):
@@ -187,7 +185,7 @@ def _check_match(fields, where):
     if len(fields) > MAX_BASELINE_MATCH:
         raise SettingsError(f"{where} holds at most {MAX_BASELINE_MATCH} fields")
     for i, field in enumerate(fields):
-        _check_field(field, f"{where}[{i}]")
+        check_field(field, f"{where}[{i}]")
     if len(set(fields)) < len(fields):
         raise SettingsError(f"{where} names a field twice")
 
@@ -199,7 +197,7 @@ def _check_baseline(baseline):
             raise SettingsError(f"unknown field ui.baseline.{key}; one of {', '.join(_BASELINE_KEYS)}")
     _check_match(baseline.get("match", []), "ui.baseline.match")
     if baseline.get("children_by") is not None:
-        _check_field(baseline["children_by"], "ui.baseline.children_by")
+        check_field(baseline["children_by"], "ui.baseline.children_by")
 
 
 def baseline_conf(ui):
@@ -218,12 +216,6 @@ def baseline_fields(text):
     fields = [f.strip() for f in text.split(",")] if text.strip() else []
     _check_match(fields, "match")
     return fields
-
-
-def check_baseline_field(field, where="by"):
-    """*field* when it is a ``params.<k>``/``tags.<k>``, else SettingsError."""
-    _check_field(field, where)
-    return field
 
 
 def metrics_overlay(settings, conf_metrics):

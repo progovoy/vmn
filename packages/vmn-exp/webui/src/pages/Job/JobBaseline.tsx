@@ -7,8 +7,10 @@
  *  while matched children are still finishing. */
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { jobBaseline, type BaselineCompare, type BaselineDelta, type BaselineSource } from "../../apiBaseline";
-import BaselineChip, { baselineLabel } from "../../components/BaselineChip";
+import { jobBaseline, type BaselineCompare, type BaselineDelta } from "../../apiBaseline";
+import BaselineChip, { pickedText } from "../../components/BaselineChip";
+import { fmtDelta } from "../../components/diffDeltaTone";
+import { fleetLabel } from "../../components/fleetRows";
 import { Skeleton } from "../../components/ui";
 import { withSignal } from "../../requestScope";
 import { appHref, fmtDuration, fmtPct, fmtVal, runHref } from "../../util";
@@ -91,7 +93,7 @@ function PairTable({ data, appBase }: { data: BaselineCompare; appBase: string }
                 <td><Link to={runHref(appBase, p.verstr)}>{p.label}</Link></td>
                 <td className="num">{fmtVal(p.value)}</td>
                 <td className="num">{fmtVal(p.baseline)}</td>
-                <td className="num">{p.delta == null ? "–" : signed(p.delta, fmtVal)}</td>
+                <td className="num">{fmtDelta(p.delta)}</td>
                 <td className="muted">{!p.done ? "not finished" : p.worse && data.chip?.quantile ? `past the baseline's ${data.chip.quantile}` : ""}</td>
               </tr>
             ))}
@@ -101,14 +103,6 @@ function PairTable({ data, appBase }: { data: BaselineCompare; appBase: string }
     </>
   );
 }
-
-const PICKED: Record<BaselineSource, (match: string[]) => string> = {
-  latest: (match) => match.length
-    ? `the latest ended outer run with the same ${match.join(", ")}`
-    : "the latest ended outer run beside it",
-  pinned: () => "pinned with the tag baseline=true",
-  to: () => "chosen with to=",
-};
 
 const noBaseline = (match: string[]) => (match.length
   ? `No ended outer run with the same ${match.join(", ")} yet (tag one baseline=true to pin it).`
@@ -124,8 +118,8 @@ export default function JobBaseline({ ws, app, verstr, done }: Props) {
   return (
     <div className="job-baseline">
       <p>
-        vs <Link to={runHref(appBase, data.baseline.verstr)}>{baselineLabel(data.baseline)}</Link>{" "}
-        <span className="muted">{PICKED[data.baseline.source](data.match)}</span>
+        vs <Link to={runHref(appBase, data.baseline.verstr)}>{fleetLabel(data.baseline)}</Link>{" "}
+        <span className="muted">{pickedText(data.baseline.source, data.match)}</span>
       </p>
       {data.chip && <p><BaselineChip chip={data.chip} /></p>}
       <DeltaTable data={data} />

@@ -4,19 +4,17 @@
  *  compares against; a link when given *href*. */
 import { Link } from "react-router-dom";
 import type { BaselineChipData, BaselineRef, BaselineSource } from "../apiBaseline";
+import { fleetLabel } from "./fleetRows";
 
-const PICKED: Record<BaselineSource, string> = {
-  latest: "the latest ended outer run alike",
-  pinned: "pinned with the tag baseline=true",
-  to: "chosen",
-};
+/** How the baseline was picked; *match* the fields it shares (unknown: "alike"). */
+export function pickedText(source: BaselineSource, match?: readonly string[]): string {
+  if (source === "pinned") return "pinned with the tag baseline=true";
+  if (source === "to") return "chosen with to=";
+  if (!match) return "the latest ended outer run alike";
+  return match.length ? `the latest ended outer run with the same ${match.join(", ")}` : "the latest ended outer run beside it";
+}
 
-/** `@12 wf_41aa`: a run's index and name (its verstr without a name). */
-export const baselineLabel = (ref: BaselineRef) =>
-  [ref.idx != null ? `@${ref.idx}` : null, ref.name ?? (ref.idx == null ? ref.verstr : null)]
-    .filter(Boolean).join(" ");
-
-export const baselineTitle = (ref: BaselineRef) => `vs ${baselineLabel(ref)}, ${PICKED[ref.source]}`;
+export const baselineTitle = (ref: BaselineRef) => `vs ${fleetLabel(ref)}, ${pickedText(ref.source)}`;
 
 export default function BaselineChip({ chip, baseline, href }: {
   chip: BaselineChipData; baseline?: BaselineRef | null; href?: string;

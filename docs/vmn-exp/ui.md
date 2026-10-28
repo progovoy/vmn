@@ -1239,7 +1239,8 @@ header and its Outer runs row.
   following the goal (failures, durations and attention shares: lower).
 - **Children.** With `children_by`, the two outer runs' direct children
   pair by that field's value (a retried value: its latest run), in key
-  order (`pairs`, of `pairs_total` values the outer run holds): per pair the
+  order (`pairs`, the first 200 listed, of `pairs_total` values the outer
+  run holds; the chip counts them all): per pair the
   main metric (a child's own, else its subtree's best) on both sides, the
   delta, and `done`.
 - **The chip** counts the finished pairs worse than the baseline's worst
@@ -1281,8 +1282,8 @@ header and its Outer runs row.
 - Kept per index generation and time bucket; a pair with nothing live in
   either subtree is kept until a run of either changes, with its own ETag (a
   304 across generations), so a finished launch and its baseline are
-  compared once per process (`ui/baseline_views.py`). Otherwise ETag/304
-  like the list.
+  compared once per process (`ui/baseline_views.py`); attention shares are
+  kept per generation beside it. Otherwise ETag/304 like the list.
 
 ### Facets
 

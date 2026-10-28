@@ -7,12 +7,13 @@ a Jobs view page shows: one request per page, computed for its rows only).
 ``match`` (comma-separated ``params.<k>``/``tags.<k>``) and ``by`` (one
 field, empty: no pairing) override the app's ``experiment.ui.baseline``;
 ``to`` overrides the choice. See :mod:`~vmn_exp.ui.baseline_views`. A run
-without children is a 404; the ETag is known before anything is built.
+without children is a 404; the comparison is memoized, its encoded body kept
+per ETag.
 """
 from typing import List
 
 from fastapi import HTTPException, Query, Request
-from vmn_exp.core.app_settings import SettingsError, baseline_fields, check_baseline_field
+from vmn_exp.core.app_settings import SettingsError, baseline_fields, check_field
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.baseline_views import UnknownBaseline
@@ -28,7 +29,7 @@ def _rule_args(match, by):
     try:
         fields = None if match is None else baseline_fields(match)
         if by:
-            check_baseline_field(by)
+            check_field(by, "by")
     except SettingsError as exc:
         raise HTTPException(400, str(exc)) from exc
     return fields, by
@@ -54,13 +55,12 @@ def register(app, prefix, leaderboard_inputs, baselines, segment, attention_of):
             raise HTTPException(404, f"{verstr} is not an outer run (it has no runs under it)")
         args = dict(to=to or None, match=fields, by=by, attention=attention_of(ws_name, app_tag))
         try:
-            etag = baselines.etag(snapshot, schema, verstr, **args)
+            body, etag = baselines.answer(snapshot, schema, verstr, **args)
         except UnknownBaseline as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        return memoized_json_response(
-            request, etag, lambda: baselines.baseline(snapshot, schema, verstr, **args), bodies)
+        return memoized_json_response(request, etag, lambda: body, bodies)
 
     @app.get(f"{base}/experiments-baselines", dependencies=[require(VIEWER)])
     def experiment_baselines(request: Request, ws_name: str, app_tag: str,

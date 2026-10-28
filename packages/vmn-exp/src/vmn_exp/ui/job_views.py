@@ -96,7 +96,8 @@ class JobViews:
         bucket, and the minute (throughput and ETA count back from now)."""
         return self.cache.etag(snapshot, schema, job=verstr, minute=minute(), **params)
 
-    def _row(self, snapshot, verstr):
+    def row(self, snapshot, verstr):
+        """*verstr*'s row as of now."""
         base, patched = self._view(snapshot)
         at = base.position[verstr]
         return patched.get(at, base.rows[at])
@@ -107,11 +108,15 @@ class JobViews:
         return visible([patched.get(i, base.rows[i]) for i in scope_positions(base, verstr)],
                        False)
 
+    def rows_of(self, snapshot, verstrs):
+        """The visible rows of the present *verstrs*, as of now."""
+        base, patched = self._view(snapshot)
+        at = (base.position[v] for v in verstrs if v in base.position)
+        return visible([patched.get(i, base.rows[i]) for i in at], False)
+
     def children(self, snapshot, verstr):
         """The visible rows right under *verstr*, as of now."""
-        base, patched = self._view(snapshot)
-        at = (base.position[k] for k in base.children_of.get(verstr, ()) if k in base.position)
-        return visible([patched.get(i, base.rows[i]) for i in at], False)
+        return self.rows_of(snapshot, self.cache._base(snapshot)[0].children_of.get(verstr, ()))
 
     def summary(self, snapshot, schema, verstr, split=None):
         """The job's rollup with its row fields and ``top``, or None; with
@@ -121,7 +126,7 @@ class JobViews:
                                    lambda: self._summary(snapshot, schema, verstr, split))
 
     def _summary(self, snapshot, schema, verstr, split):
-        row = self._row(snapshot, verstr)
+        row = self.row(snapshot, verstr)
         first = self._first_child(snapshot, verstr)
         return {
             **self.rollups.job_rollup(snapshot, schema, verstr),
@@ -151,7 +156,7 @@ class JobViews:
     def _first_child(self, snapshot, verstr):
         base, _ = self.cache._base(snapshot)
         kids = [k for k in base.children_of.get(verstr, ()) if k in base.position]
-        return self._row(snapshot, kids[0]) if kids else None
+        return self.row(snapshot, kids[0]) if kids else None
 
     def failures(self, snapshot, schema, verstr, limit=20):
         """``{total_failed, clusters}`` of the job, or None."""
@@ -166,7 +171,7 @@ class JobViews:
                                    lambda: self._detail_status(snapshot, schema, verstr))
 
     def _detail_status(self, snapshot, schema, verstr):
-        row = self._row(snapshot, verstr)
+        row = self.row(snapshot, verstr)
         fields = {k: row[k] for k in TREE_FIELDS if k in row}
         rollup = self.rollups.job_rollup(snapshot, schema, verstr)
         return dict(fields, fleet=fleet_counts(rollup))

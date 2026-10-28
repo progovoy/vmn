@@ -102,12 +102,20 @@ def overlay(base, bucket, spec):
 
 
 class JobTree:
-    """One base's jobs (present runs with children) and the jobs right under each."""
+    """One base's jobs (present runs with children), the jobs right under
+    each, and the top-level ones (under no job)."""
 
     def __init__(self, base):
         self.jobs = {v for v, kids in base.children_of.items() if kids and v in base.position}
         self.nested = {job: [kid for kid in base.children_of[job] if kid in self.jobs]
                        for job in self.jobs}
+        self._parent = {kid: job for job, kids in self.nested.items() for kid in kids}
+        self.top = [job for job in self.jobs if job not in self._parent]
+
+    def peers(self, job):
+        """The jobs beside *job*: under its parent job, else the top-level ones."""
+        parent = self._parent.get(job)
+        return self.top if parent is None else self.nested[parent]
 
     def subtree_jobs(self, job):
         """*job* and every job below it (cycle-safe)."""

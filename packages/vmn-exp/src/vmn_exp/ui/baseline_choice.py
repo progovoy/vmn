@@ -11,7 +11,8 @@ from vmn_exp.ui.leaderboard_group_fields import value_of
 PINNED, LATEST = "pinned", "latest"
 
 
-def _order(row):
+def recency(row):
+    """A row's place by creation (ties: its verstr)."""
     return (row.get("timestamp") or "", row["verstr"])
 
 
@@ -32,7 +33,7 @@ def choose_baseline(target, candidates, fields):
     rows = [r for r in candidates if r["verstr"] != target["verstr"] and alike(r)]
     pinned = [r for r in rows if is_pinned(r)]
     if pinned:
-        return max(pinned, key=_order), PINNED
-    before = _order(target)
-    ended = [r for r in rows if row_closes(r) and _order(r) < before]
-    return (max(ended, key=_order), LATEST) if ended else (None, None)
+        return max(pinned, key=recency), PINNED
+    before = recency(target)
+    ended = [r for r in rows if row_closes(r) and recency(r) < before]
+    return (max(ended, key=recency), LATEST) if ended else (None, None)

@@ -8,10 +8,14 @@ one) — so a regression shows as soon as the first matched children end.
 """
 from vmn_exp.core.settle import row_closes
 from vmn_exp.core.values import is_finite_number
-from vmn_exp.ui.leaderboard_group_fields import NONE, NONE_LABEL, key_of, key_text, value_of
+from vmn_exp.ui.baseline_choice import recency
+from vmn_exp.ui.leaderboard_group_fields import NONE, key_of, key_text, value_of
 from vmn_exp.ui.pivot import value_order
 
 WORSE, BETTER, SAME, PENDING = "worse", "better", "same", "pending"
+MARKS = {WORSE: "▼", BETTER: "▲", SAME: "="}
+# A delta's ``better`` as a chip state.
+STATES = {True: BETTER, False: WORSE, None: SAME}
 
 
 def _rounded(value):
@@ -56,14 +60,13 @@ def _keyed(rows, field):
         if key == NONE:
             continue
         kept = out.get(key)
-        if kept is None or (row.get("timestamp") or "", row["verstr"]) > (
-                kept[1].get("timestamp") or "", kept[1]["verstr"]):
+        if kept is None or recency(row) > recency(kept[1]):
             out[key] = (value_in(row), row)
     return out
 
 
 def pair_children(target, baseline, field, value, higher_better):
-    """``(pairs, keyed)``: the rows of *target* and *baseline* sharing a value
+    """``(pairs, keys)``: the rows of *target* and *baseline* sharing a value
     of *field*, in key order, each ``{key, label, verstr, idx,
     baseline_verstr, value, baseline, delta, better, done}`` (*value(row)*
     its main metric), and how many keys *target* holds."""
@@ -72,7 +75,7 @@ def pair_children(target, baseline, field, value, higher_better):
     pairs = []
     for key in keys:
         row, base = ours[key][1], theirs[key][1]
-        pairs.append({"key": key, "label": NONE_LABEL if key == NONE else key_text(key),
+        pairs.append({"key": key, "label": key_text(key),
                       "verstr": row["verstr"], "idx": row.get("idx"),
                       "baseline_verstr": base["verstr"],
                       **delta(value(row), value(base), higher_better), "done": row_closes(row)})
@@ -122,11 +125,11 @@ def _state(out, finished, higher_better, field):
     tail = f"{noun} worse than the baseline's {out['quantile']})"
     if out["worse"]:
         return {"state": WORSE,
-                "text": f"▼ {metric} from {out['from']} ({out['worse']} of {out['of']} {tail}"}
+                "text": f"{MARKS[WORSE]} {metric} from {out['from']} ({out['worse']} of {out['of']} {tail}"}
     middle = _median([p["delta"] for p in finished if p["delta"] is not None])
     improved = middle is not None and (middle > 0 if higher_better else middle < 0)
-    state, mark = (BETTER, "▲") if improved else (SAME, "=")
-    return {"state": state, "text": f"{mark} {metric} (none of {out['of']} {tail}"}
+    state = BETTER if improved else SAME
+    return {"state": state, "text": f"{MARKS[state]} {metric} (none of {out['of']} {tail}"}
 
 
 def best_chip(rollup_delta, metric):
@@ -134,7 +137,7 @@ def best_chip(rollup_delta, metric):
     best = rollup_delta["metrics"].get(metric, {}).get("best") if metric else None
     if not best or best["delta"] is None:
         return None
-    state, mark = {True: (BETTER, "▲"), False: (WORSE, "▼")}.get(best["better"], (SAME, "="))
-    return {"state": state, "metric": metric, "from": None, "worse": None, "of": None,
-            "quantile": None, "threshold": None,
-            "text": f"{mark} {metric} {best['value']:.4g} (baseline {best['baseline']:.4g})"}
+    state = STATES[best["better"]]
+    return dict(dict.fromkeys(("from", "worse", "of", "quantile", "threshold")),
+                state=state, metric=metric,
+                text=f"{MARKS[state]} {metric} {best['value']:.4g} (baseline {best['baseline']:.4g})")
