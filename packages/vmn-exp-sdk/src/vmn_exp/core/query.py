@@ -67,7 +67,8 @@ the nearest ancestor whose ``tags.kind`` is ``"study"``
 
 import functools
 
-from vmn_exp.core.query_up import UP, readable, rows_ancestor_fields
+from vmn_exp.core.query_up import UP, dig, readable, rows_ancestor_fields
+from vmn_exp.core.query_up import equal as _equal
 from vmn_exp.core.system_metrics import is_system_metric
 from vmn_exp.core.tree import ancestry_of
 
@@ -291,13 +292,19 @@ def _without_up(name):
     return (rest,) + name[1:] if isinstance(name, tuple) else rest
 
 
+def _readable_keys(name, pos, message):
+    """The keys of *name*, a field an ``up`` field may read, else *message*."""
+    field = _field(name, pos)
+    if field[0] != "path" or not readable(field[1]):
+        _fail(message, pos)
+    return field[1]
+
+
 def up_field(selector, name, pos):
     """The ``up`` field node reading *name* of the nearest ancestor holding
     it (*selector* None) or matching *selector* ``(keys, literal)``."""
-    field = _field(name, pos)
-    if field[0] != "path" or not readable(field[1]):
-        _fail("an up field reads params.<key>, tags.<key> or name", pos)
-    return (UP, selector, field[1])
+    keys = _readable_keys(name, pos, "an up field reads params.<key>, tags.<key> or name")
+    return (UP, selector, keys)
 
 
 def _nested_field(prefix, key, sub, pos):
@@ -316,36 +323,20 @@ def _env_packages(row):
     return env.get("packages") or env.get("key_packages") or {}
 
 
-def _no_ancestors(node):
-    return None
-
-
 def _getter(field):
     if field[0] == UP:  # the row's ``up`` reader (filter_rows supplies it)
-        return lambda row: (row.get(UP) or _no_ancestors)(field)
+        def ancestor(row):
+            reader = row.get(UP)
+            return reader(field) if reader else None
+        return ancestor
     kind, arg = field
     if kind == "env_packages":
         return lambda row: _env_packages(row).get(arg)
-
-    def get(row):
-        value = row
-        for key in arg:
-            value = (value or {}).get(key)
-        return value
-
-    return get
+    return lambda row: dig(row, arg)
 
 
 def _is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def _equal(left, right):
-    if right is None:
-        return left is None
-    if left is None or isinstance(left, bool) != isinstance(right, bool):
-        return False
-    return left == right
 
 
 def _ordered(left, right, compare):
@@ -528,9 +519,10 @@ class _Parser:
         ancestor whose first field equals the literal."""
         self.next()
         token = self.next()
-        selector = _field(token[1], token[2]) if token[0] == "name" else None
-        if selector is None or selector[0] != "path" or not readable(selector[1]):
+        if token[0] != "name":
             _fail("up() selects on params.<key>, tags.<key> or name", token[2])
+        selector = _readable_keys(token[1], token[2],
+                                  "up() selects on params.<key>, tags.<key> or name")
         operator = self.next()
         if operator[0] != "op" or operator[1] not in ("=", "=="):
             _fail("up() takes one '<field> = <value>'", operator[2])
@@ -541,7 +533,7 @@ class _Parser:
         dot = self.next()
         if dot[0] != "dot":
             _fail("expected '.<field>' after up(...)", dot[2])
-        return up_field((selector[1], literal), dot[1], dot[2])
+        return up_field((selector, literal), dot[1], dot[2])
 
     def parse_literal(self):
         token = self.next()

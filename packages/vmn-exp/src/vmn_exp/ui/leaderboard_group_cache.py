@@ -12,7 +12,6 @@ from vmn_exp.ui.leaderboard_group_spec import GroupSpec
 from vmn_exp.ui.leaderboard_groups import Grouping, groups_payload
 from vmn_exp.ui.leaderboard_jobs import check_job_sort
 from vmn_exp.ui.leaderboard_scope import check_scope
-from vmn_exp.ui.leaderboard_up import movable, stamped
 from vmn_exp.ui.memo import LRU
 
 # Groupings moved on across generations, like the cache's latest orders.
@@ -73,13 +72,11 @@ class GroupCache:
 
     def _static_of(self, base, key, schema, spec):
         last = self._latest.peek(key)
-        moves = last and movable(last, base.snapshot) and self._cache._deltas.since(
-            last.token, base)
+        moves = last and self._cache._deltas.since(last.token, base, spec.reads_up)
         grouping = moves and last.advanced(base, *moves)
         if not grouping:
             order = self._cache.static_order(base, schema, spec.flat)
             grouping = Grouping.build(base, spec, order)
-        stamped(grouping, base.snapshot, spec.reads_up)
         self._latest.put(key, grouping)
         return grouping
 

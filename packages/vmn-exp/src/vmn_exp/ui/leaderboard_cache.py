@@ -65,7 +65,7 @@ from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
 from vmn_exp.ui.leaderboard_successor import current, latest, live_outers
 from vmn_exp.ui.leaderboard_top_counts import TopCounts
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
-from vmn_exp.ui.leaderboard_up import movable, query_reads_up, stamped
+from vmn_exp.ui.leaderboard_up import ancestors_changed, query_reads_up
 from vmn_exp.ui.leaderboard_warm import BoardWarmer
 from vmn_exp.ui.memo import LRU, Generations
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
@@ -116,6 +116,7 @@ class _Base:
         self.scopes = {}  # {scope: storage indexes of its subtree}
         # (previous base's token, static rows that left, static rows that joined)
         self.delta = None
+        self.up_moved = False  # whether the delta changed what an up field reads
         self._at = (bucket, [rows[i] for i in patch.changed])
         self._patched = (None, None)  # (changed_at's rows, patched() of them)
         self._lock = TracedLock(f"leaderboard base:{getattr(snapshot, 'app_name', None)}")
@@ -165,6 +166,7 @@ class _Base:
         patch = LivePatch.from_counts(rows, live, position, snapshot.edges, counts)
         base = cls(snapshot, token, bucket, rows, position, patch, (children_of, counts))
         base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone)
+        base.up_moved = ancestors_changed(prev, fresh, gone, children_of)
         return base
 
     def changed_at(self, bucket):
@@ -220,7 +222,6 @@ class _Static:
         self.has_metric = bool(with_metric)
         # Storage order, needed only when live rows alone carry the metric.
         self.filtered = None if with_metric else filtered
-        self.parents = None  # what its up fields read (leaderboard_up.stamped)
 
     @classmethod
     def build(cls, base, schema, f, slots=None):
@@ -405,12 +406,11 @@ class LeaderboardCache(SetAnswers):
         and then); built when that is too far back or too much changed."""
         key = (schema_key,) + filters
         last = self._latest.peek(key)
-        moves = last and movable(last, base.snapshot) and self._deltas.since(last.token, base)
+        moves = last and self._deltas.since(last.token, base, query_reads_up(filters.query))
         static = moves and last.advanced(base, *moves, schema, filters)
         static = static or _Static.build(base, schema, filters,
                                          slots=self._candidates(base.snapshot, filters.query,
                                                                 base.position))
-        stamped(static, base.snapshot, query_reads_up(filters.query))
         self._latest.put(key, static)
         return static
 

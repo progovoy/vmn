@@ -46,7 +46,7 @@ from vmn_exp.core.media import media_index
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.query import filter_rows
-from vmn_exp.core.query_extra import ancestor_extra, snapshot_extra, store_extra
+from vmn_exp.core.query_extra import rows_extra, store_extra
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_storage
 from vmn_exp.core.step_metric import join_all, step_metrics
@@ -121,7 +121,7 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None):
     else:
         snap = experiment_index.direct_snapshot(
             storage, app_name, schema, read_log=_load_log, read_run_state=load_run_state)
-        extra = {**snapshot_extra(snap), **ancestor_extra(snap)}
+        extra = rows_extra(snap)
     rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at)
     return rows, snap.declared_schema(), extra
 

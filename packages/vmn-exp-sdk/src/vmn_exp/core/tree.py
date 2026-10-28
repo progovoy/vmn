@@ -82,9 +82,14 @@ def ancestors(verstr, parent_of):
     return chain
 
 
+def parent_map(rows):
+    """``{verstr: parent}`` of *rows*' own ``parent`` links."""
+    return {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
+
+
 def ancestry_of(rows):
     """``verstr -> ancestors`` over *rows*' own ``parent`` links."""
-    parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
+    parent_of = parent_map(rows)
     return lambda verstr: ancestors(verstr, parent_of)
 
 

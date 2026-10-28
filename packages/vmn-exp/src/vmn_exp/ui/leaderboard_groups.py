@@ -61,7 +61,6 @@ class Grouping:
         self._aggregates = {}  # memo: {group: aggregates payload}
         self._loose_rows = None  # memo: a link grouping's Loose
         self._job_groups = None  # memo: (job summaries, JobGroups) of a Jobs view
-        self.parents = None  # what its up fields read (leaderboard_up.stamped)
 
     @classmethod
     def build(cls, base, spec, static):

@@ -33,10 +33,8 @@ class GroupSpec:
             self._count_sign = 1 if order == "asc" else -1
             sort = order = None
         self.agg = check_aggregate(agg)
-        self._up = bool(up_node(group))
-        self._key_of = None if self._up else key_of(group)
         # Whether its groups or filters read ancestors (leaderboard_up).
-        self.reads_up = self._up or query_reads_up(query)
+        self.reads_up = bool(up_node(group)) or query_reads_up(query)
         self.schema, self.sort, self.descending = schema, sort, DESCENDING.get(order)
         # The flat board's filters.
         self.flat = Filters(sort, status, query, order, archived, scope, top)
@@ -49,7 +47,7 @@ class GroupSpec:
 
     def key_of(self, snapshot):
         """``row -> group key`` for the rows of *snapshot*."""
-        return key_of(self.group, snapshot) if self._up else self._key_of
+        return key_of(self.group, snapshot)
 
     def filtered(self, snapshot, rows):
         return filtered(snapshot, rows, self.flat)

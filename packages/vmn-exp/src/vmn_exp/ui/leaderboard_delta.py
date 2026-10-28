@@ -145,6 +145,7 @@ class DeltaLog:
 
     def __init__(self, size=DELTA_GENERATIONS):
         self._moves = OrderedDict()
+        self._up_moved = set()  # tokens whose move changed what an up field reads
         self._size = size
         self._lock = TracedLock("leaderboard deltas")
 
@@ -156,18 +157,25 @@ class DeltaLog:
                 self._moves.pop(base.token, None)
                 return
             self._moves[base.token] = base.delta
+            if getattr(base, "up_moved", False):
+                self._up_moved.add(base.token)
             while len(self._moves) > self._size:
-                self._moves.popitem(last=False)
+                self._up_moved.discard(self._moves.popitem(last=False)[0])
 
-    def since(self, token, base):
+    def since(self, token, base, reads_up=False):
         """``(left, joined)`` from generation *token* to *base*, composed;
         None when a generation between is unknown (built from scratch, or
-        too old) or the moves add up to more than a rebuild costs (rows
-        that joined only by leaving the changed rows do not count)."""
+        too old), the moves add up to more than a rebuild costs (rows
+        that joined only by leaving the changed rows do not count) or, for
+        an order that *reads_up* fields, one of them changed an ancestor's
+        (see :mod:`~vmn_exp.ui.leaderboard_up`)."""
         with self._lock:
             moves = dict(self._moves)
+            up_moved = set(self._up_moved) if reads_up else ()
         chain = _chain(moves, token, base.token)
         if chain is None:
+            return None
+        if up_moved and up_moved & {base.token, *(step[0] for step in chain[:-1])}:
             return None
         left, joined, settled = [], {}, set()
         for _, gone, came, came_settled in reversed(chain):

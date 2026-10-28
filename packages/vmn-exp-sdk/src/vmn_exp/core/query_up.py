@@ -18,13 +18,15 @@ snapshot; the next generation starts afresh.
 import functools
 import weakref
 
+from vmn_exp.core.tree import parent_map
+
 UP = "up"
 # What an ``up.`` field and a selector may read: fields every run's stored
 # row carries, whatever view of a snapshot it came from.
 UP_PREFIXES = ("params", "tags")
 UP_FIELDS = ("name",)
 # Fields memoized per snapshot before the memo starts over.
-MAX_FIELDS = 64
+MAX_FIELDS = 16
 
 
 def readable(keys):
@@ -34,18 +36,27 @@ def readable(keys):
     return len(keys) == 1 and keys[0] in UP_FIELDS
 
 
-def _dig(row, keys):
+def dig(row, keys):
+    """The value at path *keys* in the nested dicts of *row*, or None."""
     for key in keys:
         row = (row or {}).get(key)
     return row
 
 
+def equal(left, right):
+    """The query language's ``=``: None only equals None, a bool only a bool."""
+    if right is None:
+        return left is None
+    if left is None or isinstance(left, bool) != isinstance(right, bool):
+        return False
+    return left == right
+
+
 def _holds(row, selector, keys):
     if selector is None:
-        return _dig(row, keys) is not None
+        return dig(row, keys) is not None
     sel_keys, literal = selector
-    value = _dig(row, sel_keys)
-    return isinstance(value, bool) == isinstance(literal, bool) and value == literal
+    return equal(dig(row, sel_keys), literal)
 
 
 def up_view(row):
@@ -60,7 +71,6 @@ class AncestorFields:
     def __init__(self, parent_of, row_of):
         self._parent_of, self._row_of = parent_of, row_of
         self._memo = {}  # {(selector, keys): {verstr: (holder, value) at or above it}}
-        self.parents = None  # parent_rows() memo
 
     def value(self, verstr, node):
         """*verstr*'s value of the ``up`` field *node*, or None."""
@@ -68,15 +78,17 @@ class AncestorFields:
         parent = self._parent_of.get(verstr)
         if not parent or parent == verstr:
             return None
-        holder, value = self._at_or_above(parent, selector, keys)
+        memo = self._field_memo((selector, keys))
+        holder, value = memo.get(parent) or self._at_or_above(memo, parent, selector, keys)
         return None if holder == verstr else value
 
     def of(self, verstr):
         """``node -> value`` for *verstr* (what a query row reads as ``up``)."""
         return functools.partial(self.value, verstr)
 
-    def _at_or_above(self, verstr, selector, keys):
-        memo = self._field_memo((selector, keys))
+    def _at_or_above(self, memo, verstr, selector, keys):
+        """``(holder, value)`` at or above *verstr*, filling *memo* on the way
+        (the walk of :func:`~vmn_exp.core.tree.ancestors`, *verstr* first)."""
         path, seen, cursor, found = [], set(), verstr, (None, None)
         while cursor and cursor not in seen:
             if cursor in memo:
@@ -86,7 +98,7 @@ class AncestorFields:
             path.append(cursor)
             row = self._row_of(cursor)
             if row is not None and _holds(row, selector, keys):
-                found = (cursor, _dig(row, keys))
+                found = (cursor, dig(row, keys))
                 break
             cursor = self._parent_of.get(cursor)
         for walked in path:
@@ -104,9 +116,7 @@ class AncestorFields:
 
 def rows_ancestor_fields(rows):
     """:class:`AncestorFields` over *rows* and their own ``parent`` links."""
-    by_verstr = {row["verstr"]: row for row in rows}
-    parent_of = {v: row.get("parent") for v, row in by_verstr.items() if row.get("parent")}
-    return AncestorFields(parent_of, by_verstr.get)
+    return AncestorFields(parent_map(rows), {row["verstr"]: row for row in rows}.get)
 
 
 def ancestor_fields(snapshot):
@@ -121,18 +131,3 @@ def ancestor_fields(snapshot):
         memo.append(AncestorFields(snapshot.parent_of, lambda verstr: ref().row(verstr)))
     return memo[0]
 
-
-def parent_rows(snapshot):
-    """``{parent: its up_view}`` of *snapshot*: what its ``up`` fields read
-    (computed once per snapshot)."""
-    fields = ancestor_fields(snapshot)
-    if fields.parents is None:
-        fields.parents = {p: up_view(snapshot.row(p)) for p in snapshot.children_of}
-    return fields.parents
-
-
-def ancestors_moved(parents, snapshot):
-    """Whether a parent of :func:`parent_rows` *parents* reads otherwise in
-    *snapshot* — the runs below it may answer an ``up`` field anew."""
-    row = snapshot.row
-    return any(up_view(row(p)) != seen for p, seen in parents.items())
