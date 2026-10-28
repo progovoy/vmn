@@ -1625,8 +1625,10 @@ mem = "my_pkg.store:open_store"
 `open_store(uri, area=...)` receives a `vmn_exp.storage.uri.StoreURI` (`scheme`,
 `location` = bucket/container, `path` = root, `options` = the query string)
 and an area (`runs`, `snapshots`, `code`, `sweeps`, `registry`, `reports`,
-`comments`; see `vmn_exp.storage.areas`), and returns a
-`vmn_exp.storage.base.SnapshotStorage`. `vmn_exp.storage.registry.register_store(scheme,
+`comments`, `settings`; see `vmn_exp.storage.areas`), and returns a
+`vmn_exp.storage.base.SnapshotStorage`. A backend reaches its root's other
+areas by overriding `_open_area(name)` (behind `in_area`); one that does not
+reads as having no app settings (`vmn-exp settings set` needs it). `vmn_exp.storage.registry.register_store(scheme,
 factory)` does the same at runtime. The contract:
 
 - **Records**: `<root>/<area>/<scope>/<name>/` (scope = app key, model name,
