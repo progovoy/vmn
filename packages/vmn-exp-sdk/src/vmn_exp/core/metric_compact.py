@@ -150,7 +150,8 @@ def _compact_quietly(storage, app_name, verstr, writer):
         compact_writer(storage, app_name, verstr, writer,
                        record_rewinds(storage, app_name, verstr))
     except Exception:
-        VMN_LOGGER.debug("Metric compaction failed; the stream stays", exc_info=True)
+        VMN_LOGGER.debug(f"Metric compaction of {app_name} run {verstr} (stream {writer}) "
+                         "failed; the stream stays", exc_info=True)
 
 
 def compact_by(storage, app_name, verstr, writer, deadline):
@@ -164,7 +165,8 @@ def compact_by(storage, app_name, verstr, writer, deadline):
     worker.start()
     worker.join(remaining)
     if worker.is_alive():
-        VMN_LOGGER.warning(f"vmn: run {verstr}'s metrics stay uncompacted (vmn-exp compact)")
+        VMN_LOGGER.warning(f"vmn: {app_name} run {verstr}'s metrics stay uncompacted"
+                           " (vmn-exp compact)")
         return False
     return True
 

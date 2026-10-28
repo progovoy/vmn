@@ -86,7 +86,8 @@ class AppUpkeep:
         try:
             self._storage.mark_child(self._app, parent, kid)
         except Exception:
-            _LOGGER.warning(f"Marking {kid} in {parent} failed", exc_info=True)
+            _LOGGER.warning("Store upkeep of %s: marking %s in %s failed", self._app, kid,
+                            parent, exc_info=True)
             counts["failed"] += 1
             return False
         counts["marked"] += 1
@@ -101,7 +102,8 @@ class AppUpkeep:
                 merged = compact_record(self._storage, self._app, verstr)
                 merged += compact_record_logs(self._storage, self._app, verstr)
             except Exception:
-                _LOGGER.warning(f"Compacting {verstr} failed", exc_info=True)
+                _LOGGER.warning("Store upkeep of %s: compacting %s failed", self._app, verstr,
+                                exc_info=True)
                 counts["failed"] += 1
             else:
                 counts["compacted"] += bool(merged)
@@ -192,7 +194,7 @@ class StoreUpkeep:
             with activity("store upkeep", key=snapshot.app_name):
                 counts = self._apps[index].run(snapshot, self.budget_sec)
         except Exception:
-            _LOGGER.warning("Store upkeep failed", exc_info=True)
+            _LOGGER.warning("Store upkeep of %s failed", snapshot.app_name, exc_info=True)
             return
         if any(counts.values()):
             _LOGGER.info(f"Store upkeep of {snapshot.app_name}: marked {counts['marked']} "
