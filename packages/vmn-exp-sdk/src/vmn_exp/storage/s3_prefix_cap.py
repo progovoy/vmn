@@ -47,9 +47,12 @@ def limit():
 def prefix_of(key):
     """*key*'s throttling prefix: the root through the area and its scope
     (``<root>/runs/<app>``), the area for a listing of it, else the first
-    segment."""
+    segment. The journal is scoped by minute partition, so its keys share the
+    area's cap: a cap per partition would only pile up."""
     parts = [p for p in key.split("/") if p]
     for i, part in enumerate(parts[:-1]):
+        if part == areas.JOURNAL:
+            return "/".join(parts[:i + 1])
         if part in _AREAS:
             return "/".join(parts[:i + 2])
     if parts and parts[-1] in _AREAS:

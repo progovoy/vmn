@@ -75,13 +75,23 @@ def _dumped(bucket, prefix):
     ("exps/runs/my_app/0.0.1-dev.abc/metadata.yml", "exps/runs/my_app"),
     ("exps/runs/my_app/", "exps/runs/my_app"),
     ("exps/runs/", "exps/runs"),
-    ("vmn/journal/2026-10-28T10-01/x.yml", "vmn/journal/2026-10-28T10-01"),
+    ("vmn/journal/202610281001/x.yml", "vmn/journal"),
+    ("vmn/journal/202610281001/", "vmn/journal"),
+    ("vmn/journal/", "vmn/journal"),
     ("vmn/store.yml", "vmn"),
     ("a/b.yml", "a"),
     ("", ""),
 ])
 def test_the_prefix_is_the_area_and_its_scope(key, prefix):
     assert s3_prefix_cap.prefix_of(key) == prefix
+
+
+def test_journal_partitions_share_one_cap(client):
+    bucket, s3 = client
+    for minute in range(30):
+        s3.list_objects_v2(Bucket=bucket, Prefix=f"vmn/journal/2026102810{minute:02d}/")
+        _head(s3, bucket, f"vmn/journal/2026102810{minute:02d}/x")
+    assert [p for b, p in s3_prefix_cap._caps if b == bucket] == ["vmn/journal"]
 
 
 def test_calls_under_one_prefix_wait_for_a_slot(client, monkeypatch):
