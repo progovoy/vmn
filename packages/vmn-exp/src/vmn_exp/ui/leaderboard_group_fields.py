@@ -3,7 +3,7 @@
 
 A group field is a link between runs (``parent``, ``forked_from``,
 ``rerun_of``: the run pointed at heads the group; ``code_verstr``: the code
-state), a row field (``branch``, ``status``, ``tags.<k>``, ``params.<k>``)
+state), a row field (``branch``, ``status``, ``root``, ``tags.<k>``, ``params.<k>``)
 or an ancestor's (``up.params.<k>``, ``up(tags.kind = "study").params.<k>``,
 plan 28 N1, :mod:`vmn_exp.core.query_up`). :func:`key_of` gives a row's
 group key, a function of the row (and, for an ``up`` field, of the snapshot
@@ -20,7 +20,7 @@ PARENT = "parent"
 RERUN_OF = "rerun_of"
 TARGET_LINKS = (PARENT, "forked_from", RERUN_OF)
 LINKS = TARGET_LINKS + ("code_verstr",)
-FIELDS = ("branch", "status", "failure_sig")
+FIELDS = ("branch", "status", "failure_sig", "root")
 DICT_FIELDS = ("tags", "params")
 DEFAULT_AGGREGATE = "mean"
 # The no-value group's key: no value's key equals it, since a value whose

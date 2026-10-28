@@ -1,5 +1,6 @@
 /** The pivot heatmap's endpoint (plan 28 N2): an app's runs, or an outer
  *  run's subtree (`scope`), crossed by two group fields. */
+import type { GroupAggregate } from "./apiGroups";
 import { appTag, get } from "./http";
 
 export type PivotKind = "count" | "share" | "agg";
@@ -34,7 +35,7 @@ export interface Pivot {
   cell: PivotKind;
   match: string | null;
   metric: string | null;
-  agg: string | null;
+  agg: GroupAggregate | null;
 }
 
 export interface PivotParams {
@@ -43,7 +44,7 @@ export interface PivotParams {
   cell?: PivotKind;
   match?: string;
   metric?: string;
-  agg?: string;
+  agg?: GroupAggregate;
   q?: string;
   status?: string;
   scope?: string;

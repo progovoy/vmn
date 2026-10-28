@@ -1157,7 +1157,8 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 - Kept per index generation; within a `scope` with nothing live under it (a
   settled launch) the pivot is kept until a run of its subtree (or an
   ancestor an `up` field reads) changes, so a finished launch's heatmap is
-  built once per process (`ui/pivot_cache.py`). ETag/304.
+  built once per process and keeps its ETag (a 304) across generations
+  (`ui/pivot_cache.py`). Otherwise ETag/304 like the list.
 
 ### Facets
 

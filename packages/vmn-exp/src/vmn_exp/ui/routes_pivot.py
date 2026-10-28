@@ -43,7 +43,7 @@ def register(app, api_prefix, inputs, cache, aggregate_of):
         try:
             spec = pivot_spec(rows, cols, cell, match, metric,
                               agg or aggregate_of(ws_name, app_tag), status, q, archived, scope)
-            etag = cache.etag(snapshot, schema, route="pivot", spec=spec)
+            etag = pivots.etag(snapshot, schema, spec)
             return memoized_json_response(
                 request, etag, lambda: pivots.pivot(snapshot, schema, spec), bodies)
         except UnknownScope as e:

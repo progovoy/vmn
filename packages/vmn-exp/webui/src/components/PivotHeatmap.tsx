@@ -2,8 +2,9 @@
  *  each cell's value written in it and filled on one sequential hue (with a
  *  scale legend), each header and cell a link to the board filtered to its
  *  runs (*hrefOf* a board query; *baseQuery* the runs' own filter). */
+import { memo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { Pivot, PivotCell, PivotHeader } from "../apiPivot";
+import type { Pivot, PivotCell } from "../apiPivot";
 import {
   cellFill, cellLabel, cellQuery, cellText, pivotRange, scaleText, withQuery,
 } from "../util/pivotCells";
@@ -22,24 +23,27 @@ function title(pivot: Pivot): string {
   return "runs";
 }
 
-function HeaderLink({ head, href }: { head: PivotHeader; href: (q: string) => string }) {
-  return head.clause ? <Link to={href(head.clause)}>{head.label}</Link> : <>{head.label}</>;
+type Href = (query: string) => string;
+
+/** A link to *query*'s runs, plain text without one. */
+function MaybeLink({ query, href, label, style, children }: {
+  query: string | null; href: Href; label?: string; style?: object; children: ReactNode;
+}) {
+  if (!query) return label || style ? <span aria-label={label} title={label} style={style}>{children}</span> : <>{children}</>;
+  return <Link to={href(query)} aria-label={label} title={label} style={style}>{children}</Link>;
 }
 
-function Cell({ props, i, j, cell, range }: {
-  props: Props; i: number; j: number; cell: PivotCell | null; range: [number | null, number | null];
+function Cell({ props, href, i, j, cell, range }: {
+  props: Props; href: Href; i: number; j: number; cell: PivotCell | null; range: [number | null, number | null];
 }) {
   const { pivot } = props;
   if (!cell) return <td className="pivot-empty" />;
   const label = cellLabel(pivot, props.rowsField, props.colsField, i, j, cell);
-  const style = cellFill(pivot.cell === "count" ? cell.n : cell.value, range);
-  const query = cellQuery(pivot, cell);
-  const text = cellText(cell, pivot.cell);
   return (
     <td className="pivot-cell">
-      {query
-        ? <Link to={props.hrefOf(withQuery(props.baseQuery, query))} aria-label={label} title={label} style={style}>{text}</Link>
-        : <span aria-label={label} title={label} style={style}>{text}</span>}
+      <MaybeLink query={cellQuery(pivot, cell)} href={href} label={label} style={cellFill(cell.value, range)}>
+        {cellText(cell, pivot.cell)}
+      </MaybeLink>
     </td>
   );
 }
@@ -67,7 +71,7 @@ function CutNote({ pivot, rowsField, colsField }: Pick<Props, "pivot" | "rowsFie
   );
 }
 
-export default function PivotHeatmap(props: Props) {
+function PivotHeatmap(props: Props) {
   const { pivot, rowsField, colsField, hrefOf, baseQuery } = props;
   if (!pivot.total) return <p className="muted">No runs to pivot.</p>;
   const range = pivotRange(pivot);
@@ -79,14 +83,14 @@ export default function PivotHeatmap(props: Props) {
           <thead>
             <tr>
               <th scope="col" className="mono pivot-corner">{rowsField} \ {colsField}</th>
-              {pivot.cols.map((c) => <th key={c.key} scope="col" className="mono"><HeaderLink head={c} href={href} /></th>)}
+              {pivot.cols.map((c) => <th key={c.key} scope="col" className="mono"><MaybeLink query={c.clause} href={href}>{c.label}</MaybeLink></th>)}
             </tr>
           </thead>
           <tbody>
             {pivot.rows.map((r, i) => (
               <tr key={r.key}>
-                <th scope="row" className="mono"><HeaderLink head={r} href={href} /></th>
-                {pivot.cells[i].map((cell, j) => <Cell key={pivot.cols[j].key} props={props} i={i} j={j} cell={cell} range={range} />)}
+                <th scope="row" className="mono"><MaybeLink query={r.clause} href={href}>{r.label}</MaybeLink></th>
+                {pivot.cells[i].map((cell, j) => <Cell key={pivot.cols[j].key} props={props} href={href} i={i} j={j} cell={cell} range={range} />)}
               </tr>
             ))}
           </tbody>
@@ -97,3 +101,6 @@ export default function PivotHeatmap(props: Props) {
     </div>
   );
 }
+
+/** Memoized: an outer run's Overview re-renders on every summary poll. */
+export default memo(PivotHeatmap);

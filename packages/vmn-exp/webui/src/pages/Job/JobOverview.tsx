@@ -2,7 +2,7 @@
  *  — KPI tiles (and, with a split, per value: plan 28 P3), progress over time, the main metric's distribution, the top
  *  runs, the top failure clusters, a pivot heatmap of two fields (plan 28 N2) and, for a sweep, the params that matter.
  *  (Best-so-far by completion order is not in the §10 contract: left out.) */
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { JobPageSummary } from "../../apiJob";
 import { runHref } from "../../util";
 import { failedCount, mainMetric } from "./jobData";
@@ -28,6 +28,7 @@ export default function JobOverview({ ws, app, summary }: { ws: string; app: str
   const appBase = `/ws/${ws}/app/${app}`;
   const runBase = runHref(appBase, summary.verstr);
   const metric = mainMetric(summary);
+  const metricNames = useMemo(() => Object.keys(summary.metrics), [summary.metrics]);
   return (
     <div className="job-overview">
       <JobKpiTiles summary={summary} runBase={appBase} />
@@ -42,7 +43,7 @@ export default function JobOverview({ ws, app, summary }: { ws: string; app: str
           <JobFailureTop ws={ws} app={app} verstr={summary.verstr} failed={failedCount(summary)} failuresHref={jobTabHref(runBase, "failures")} />
         </Card>
         <Card title="Pivot" wide>
-          <JobPivot ws={ws} app={app} verstr={summary.verstr} metrics={Object.keys(summary.metrics)} done={summary.done} />
+          <JobPivot ws={ws} app={app} verstr={summary.verstr} metrics={metricNames} done={summary.done} expected={summary.expected} />
         </Card>
         {summary.sweep && (
           <Card title="Params that matter" wide>

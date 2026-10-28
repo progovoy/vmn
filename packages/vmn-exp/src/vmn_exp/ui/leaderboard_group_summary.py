@@ -23,7 +23,8 @@ def _median(ordered):
     return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
 
 
-def _of_sorted(ordered, agg, goal):
+def of_sorted(ordered, agg, goal):
+    """*agg* of sorted finite *ordered* (None when empty); ``best`` follows *goal*."""
     if not ordered:
         return None
     if agg == "best":
@@ -39,10 +40,10 @@ def _of_sorted(ordered, agg, goal):
 
 def stats(ordered, goal):
     """Every aggregate of sorted finite *ordered*; ``best`` follows *goal*."""
-    best = _of_sorted(ordered, goal, goal) if goal in ("min", "max") else None
-    return {"mean": _of_sorted(ordered, "mean", goal), "best": best,
-            "median": _of_sorted(ordered, "median", goal), "min": _of_sorted(ordered, "min", goal),
-            "max": _of_sorted(ordered, "max", goal), "n": len(ordered)}
+    best = of_sorted(ordered, goal, goal) if goal in ("min", "max") else None
+    return {"mean": of_sorted(ordered, "mean", goal), "best": best,
+            "median": of_sorted(ordered, "median", goal), "min": of_sorted(ordered, "min", goal),
+            "max": of_sorted(ordered, "max", goal), "n": len(ordered)}
 
 
 class Summary:
@@ -115,7 +116,7 @@ class Summary:
         return out
 
     def value(self, metric, agg, goal):
-        return _of_sorted(self.values.get(metric) or [], agg, goal)
+        return of_sorted(self.values.get(metric) or [], agg, goal)
 
     def aggregates(self, schema):
         """``{metric: stats}`` for every metric a row of the group carries."""

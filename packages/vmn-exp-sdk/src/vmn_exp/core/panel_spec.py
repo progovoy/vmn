@@ -88,7 +88,7 @@ class _Invalid(Exception):
 def _is_kind(value, kind):
     if kind in ("str", "query"):
         return isinstance(value, str)
-    if kind in ("cell", "agg"):
+    if "enum" in _KIND_SCHEMAS[kind]:
         return value in _KIND_SCHEMAS[kind]["enum"]
     if kind == "bool":
         return isinstance(value, bool)
@@ -124,6 +124,8 @@ def _check_fields(mapping, kinds, where):
         kind = kinds[name]
         if kind and not _is_kind(value, kind):
             raise _Invalid(f"field {where}{name!r} must be {kind}")
+        if kind == "query":
+            _check_query(value, f"{where}{name}")
 
 
 def _check_query(text, where="runs.query"):
@@ -138,9 +140,6 @@ def _check_needs(spec, kind):
     for (name, value), needed in _NEEDS.get(kind, {}).items():
         if spec.get(name) == value and needed not in spec:
             raise _Invalid(f"{kind} panel with {name} {value} needs field {needed!r}")
-    for name, field_kind in PANEL_TYPES[kind][0].items():
-        if field_kind == "query" and name in spec:
-            _check_query(spec[name], name)
 
 
 def _check_runs(runs, single):

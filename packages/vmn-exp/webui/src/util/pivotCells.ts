@@ -5,6 +5,7 @@
 import type { Pivot, PivotCell, PivotKind } from "../apiPivot";
 import type { ExperimentFacets } from "../types";
 import { fmtCount, fmtVal, plural } from "../util";
+import { maxOf, minOf } from "./stats";
 
 /** The fill's share of the accent at the low and high ends. */
 const LOW_MIX = 12;
@@ -14,20 +15,20 @@ const DARK_MIX = 50;
 
 const pct = (share: number) => `${Math.round(share * 100)}%`;
 
+/** A value as a cell and the legend say it. */
+export const scaleText = (value: number, kind: PivotKind) => (kind === "share" ? pct(value) : fmtVal(value));
+
 export function cellText(cell: PivotCell, kind: PivotKind): string {
   if (kind === "count") return fmtCount(cell.n);
-  if (cell.value === null) return "–";
-  return kind === "share" ? pct(cell.value) : fmtVal(cell.value);
+  return cell.value === null ? "–" : scaleText(cell.value, kind);
 }
-
-/** A value as the legend says it. */
-export const scaleText = (value: number, kind: PivotKind) => (kind === "share" ? pct(value) : fmtVal(value));
 
 /** `[low, high]` the fills span: a share's 0..1, else its cells' values. */
 export function pivotRange(pivot: Pivot): [number | null, number | null] {
   if (pivot.cell === "share") return [0, 1];
-  const values = pivot.cells.flat().flatMap((c) => (c && c.value !== null ? [c.value] : []));
-  return values.length ? [Math.min(...values), Math.max(...values)] : [null, null];
+  const values = pivot.cells.flat().map((c) => c?.value);
+  const lo = minOf(values), hi = maxOf(values);
+  return Number.isNaN(lo) ? [null, null] : [lo, hi];
 }
 
 export function cellFill(value: number | null, [lo, hi]: [number | null, number | null]) {

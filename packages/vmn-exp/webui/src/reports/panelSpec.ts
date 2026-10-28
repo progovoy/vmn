@@ -1,3 +1,6 @@
+import type { GroupAggregate } from "../apiGroups";
+import type { PivotKind } from "../apiPivot";
+
 // Types for `vmn-panel` report blocks. The canonical validator is
 // vmn_exp/core/panel_spec.py; panelSpec.schema.json is generated from it.
 // validate() mirrors only the required fields so a panel can show an error box.
@@ -43,10 +46,10 @@ export type PanelSpec =
   | (Common<"pivot"> & {
       rows: string;
       cols: string;
-      cell?: "count" | "share" | "agg";
+      cell?: PivotKind;
       match?: string;
       metric?: string;
-      agg?: "mean" | "best" | "median" | "min" | "max";
+      agg?: GroupAggregate;
       scope?: string;
     })
   | (Common<"media", PinnedRuns> & { key: string; step?: number | "last" })

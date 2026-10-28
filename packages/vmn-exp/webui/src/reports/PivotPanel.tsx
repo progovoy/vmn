@@ -7,15 +7,13 @@ import { pivot, type PivotParams } from "../apiPivot";
 import PivotHeatmap from "../components/PivotHeatmap";
 import { jobTabHref } from "../pages/Job/jobQueries";
 import { appHref, runHref } from "../util";
+import { verstrInQuery } from "../util/searchQuery";
 import type { PanelSpec } from "./panelSpec";
 
 export type PivotSpec = Extract<PanelSpec, { type: "pivot" }>;
 
 /** The board query of the panel's runs. */
-function runsQuery(runs: PivotSpec["runs"]): string {
-  if ("verstrs" in runs) return `verstr in (${runs.verstrs.map((v) => JSON.stringify(v)).join(", ")})`;
-  return runs.query;
-}
+const runsQuery = (runs: PivotSpec["runs"]) => ("verstrs" in runs ? verstrInQuery(runs.verstrs) : runs.query);
 
 export function pivotParams(spec: PivotSpec): PivotParams {
   const cell = spec.cell ?? "count";
@@ -32,7 +30,7 @@ export function pivotParams(spec: PivotSpec): PivotParams {
 export default function PivotPanel({ ws, spec }: { ws: string; spec: PivotSpec }) {
   const params = pivotParams(spec);
   const q = useQuery({ queryKey: ["panel-pivot", ws, spec.app, params], queryFn: () => pivot(ws, spec.app, params) });
-  if (q.error) return <p className="error" role="alert">{(q.error as Error).message}</p>;
+  if (q.error) return <p className="error" role="alert">{q.error.message}</p>;
   if (!q.data) return <div className="muted">Loading…</div>;
   const board = appHref(ws, spec.app);
   const hrefOf = (query: string) => (spec.scope
