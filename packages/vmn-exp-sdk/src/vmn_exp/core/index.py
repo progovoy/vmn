@@ -553,6 +553,8 @@ class ExperimentIndex:
             return chunk
         cut, rest = [], []
         for key, names, record in chunk:
+            if record is None and queue.put_off(key):
+                continue  # its row's part was set aside unread: read when due
             first = first_objects(names) if record is None else None
             cut.append((key, names if first is None else first, record))
             if first is not None:

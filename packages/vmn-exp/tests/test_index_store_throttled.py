@@ -105,3 +105,24 @@ def test_a_set_aside_record_is_not_read_before_its_retry_is_due(s3, tmp_path, mo
 
     monkeypatch.setattr(index_module, "RETRY_UNREADABLE_SEC", 0)
     assert _statuses(index) == {V: "succeeded"}
+
+
+def test_a_cold_load_ends_when_a_cut_record_is_set_aside(s3, tmp_path, throttled):
+    """A remote cold load reads a new record's row files first and puts the
+    rest of its log off (index_rows_first); a record whose first part was
+    set aside was cut and put off again, forever."""
+    import threading
+
+    from test_index_metric_reads_s3 import _log_segment
+
+    for seq in range(3):
+        _log_segment(s3, seq)
+    throttled.add(V)
+    index = _index(tmp_path)
+    loaded = threading.Thread(target=index.refresh, daemon=True)
+
+    loaded.start()
+    loaded.join(20)
+
+    assert not loaded.is_alive()
+    assert index.snapshot().rows == ()

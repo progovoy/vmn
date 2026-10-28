@@ -6,7 +6,8 @@ inner runs, so newest first alone would read it last and leave the Outer runs
 board empty until the whole index had loaded. A loaded record's parent not
 yet read is therefore read next (:meth:`LoadQueue.want`), ahead of the rest,
 which pulls in the whole ancestor chain one small chunk per generation.
-Work put off for :meth:`LoadQueue.later` comes after all the rest.
+Work put off for :meth:`LoadQueue.later` comes after all the rest
+(:meth:`LoadQueue.put_off` tells it apart).
 """
 from itertools import islice
 
@@ -16,6 +17,7 @@ class LoadQueue:
         self._pending = {item[0]: item for item in work}  # in load order
         self._wanted = {}
         self._later = []
+        self._put_off = set()
         self._size = size
 
     def __bool__(self):
@@ -35,6 +37,11 @@ class LoadQueue:
     def later(self, items):
         """Queue *items* after everything else."""
         self._later.extend(items)
+        self._put_off.update(item[0] for item in items)
+
+    def put_off(self, key):
+        """Whether *key* came back from :meth:`later`."""
+        return key in self._put_off
 
     def want(self, keys):
         """Read the pending ones of *keys* in the next chunk."""
