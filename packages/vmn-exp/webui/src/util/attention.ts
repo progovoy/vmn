@@ -37,7 +37,7 @@ const configuredPart = (e: AttentionEntry, current: string): AttentionPart =>
  *  *current* is the search the links start from (the board's). */
 export function attentionParts(status: AppStatus, current: string, now: number): AttentionPart[] {
   const { counts, failed_recent } = status;
-  const configured = (status.attention ?? []).filter((e) => e.count > 0);
+  const configured = (status.attention ?? []).filter((e) => (e.count ?? 0) > 0);
   if (!counts.stuck && !failed_recent && !configured.length) return [];
   const parts: AttentionPart[] = [];
   if (counts.stuck) {

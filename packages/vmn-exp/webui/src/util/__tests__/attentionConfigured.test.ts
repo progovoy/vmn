@@ -52,3 +52,10 @@ describe("configured attention parts", () => {
     expect(parts(s).map((p) => p.text)).toEqual(["1 stuck"]);
   });
 });
+
+describe("a query the server could not count", () => {
+  it("is left out of the strip", () => {
+    const broken: AttentionEntry = { ...entry("typo", 0), count: null, error: "unknown field 'statuz' at offset 0" };
+    expect(parts(status([broken, entry("unstable", 1)])).map((p) => p.text)).toEqual(["1 unstable"]);
+  });
+});

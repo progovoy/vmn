@@ -31,9 +31,10 @@ export interface AppStatus {
   attention?: AttentionEntry[];
 }
 /** One `experiment.ui.attention` query and the runs it matches now; *q* is
- *  the query text the board filters by. */
+ *  the query text the board filters by. A query that does not compile
+ *  counts null, with its *error*. */
 export interface AttentionEntry {
-  key: string; label: string; level: AttentionLevel; count: number; q: string;
+  key: string; label: string; level: AttentionLevel; count: number | null; q: string; error?: string;
 }
 export type AttentionLevel = "warn" | "error";
 export interface AuthHints { token: boolean; oidc: boolean; login_url: string | null }
