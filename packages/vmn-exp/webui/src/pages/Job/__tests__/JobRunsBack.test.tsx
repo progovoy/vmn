@@ -91,7 +91,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("back to an outer run's Runs tab", () => {
   it("paints the cached rows at once while the list request never answers", async () => {
-    renderAt(`/ws/test/app/my-app/run/${JOB}?tab=runs`);
+    renderAt(`/ws/test/app/my-app/run/${JOB}?tab=runs&layout=flat`);
     const panel = await screen.findByRole("tabpanel");
     expect(await within(panel).findByText("trial-1")).toBeInTheDocument();
 
@@ -107,10 +107,10 @@ describe("back to an outer run's Runs tab", () => {
   });
 
   it("a filter whose answer never came paints the tab's last rows on Back, marked as updating", async () => {
-    renderAt(`/ws/test/app/my-app/run/${JOB}?tab=runs`);
+    renderAt(`/ws/test/app/my-app/run/${JOB}?tab=runs&layout=flat`);
     expect(await screen.findByText("trial-1")).toBeInTheDocument();
     m.experimentsPaged.mockImplementation(never);
-    await act(async () => { nav(`/ws/test/app/my-app/run/${JOB}?tab=runs&status=succeeded`); });
+    await act(async () => { nav(`/ws/test/app/my-app/run/${JOB}?tab=runs&layout=flat&status=succeeded`); });
     await act(async () => { nav("/ws/test/app/my-app/run/0.0.2-dev.t1"); });
     expect(screen.queryByText("trial-2")).toBeNull();
     await act(async () => { nav(-1); });
@@ -131,7 +131,7 @@ describe("back to an outer run's Runs tab", () => {
 
     m.experiment.mockImplementation(never);
     m.experimentsPaged.mockImplementation(never);
-    await act(async () => { nav(`/ws/test/app/my-app/run/${JOB}?tab=runs`); });
+    await act(async () => { nav(`/ws/test/app/my-app/run/${JOB}?tab=runs&layout=flat`); });
     expect(screen.queryByText("changes stub")).toBeNull();
     await act(async () => { nav(-1); });
     expect(screen.getByText("changes stub")).toBeInTheDocument();

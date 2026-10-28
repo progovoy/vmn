@@ -117,7 +117,7 @@ describe("an outer run's first paint", () => {
   });
 
   it("lists the inner runs on the Runs tab while the summary is pending", async () => {
-    renderRun("?tab=runs");
+    renderRun("?tab=runs&layout=flat");
     const panel = await screen.findByRole("tabpanel");
     expect(await within(panel).findByText("trial-1")).toBeInTheDocument();
     expect(within(panel).getByText("trial-2")).toBeInTheDocument();
@@ -129,7 +129,7 @@ describe("an outer run's first paint", () => {
       total: 12000, counts: { created: 0, running: 0, stuck: 0, succeeded: 12000, failed: 0 },
       failed_recent: 0, rollup: null, indexing: { loaded: 12000, total: 45386 },
     });
-    renderRun("?tab=runs");
+    renderRun("?tab=runs&layout=flat");
     expect(await screen.findByText(/indexing 12,000 \/ 45,386 runs/)).toBeInTheDocument();
   });
 
@@ -141,7 +141,7 @@ describe("an outer run's first paint", () => {
     m.experimentsPaged.mockImplementation((_ws: string, _app: string, opts: { scope?: string }) => (opts.scope
       ? Promise.reject(Object.assign(new Error(`no run '${JOB}'`), { status: 404 }))
       : Promise.resolve({ rows: [], total: 0 })));
-    renderRun("?tab=runs");
+    renderRun("?tab=runs&layout=flat");
     expect(await screen.findByText(/indexing 500 \/ 45,386 runs/)).toBeInTheDocument();
     expect(screen.queryByText(/no run/)).toBeNull();
   });

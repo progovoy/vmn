@@ -32,32 +32,32 @@ const choose = (name: string) => fireEvent.click(screen.getByRole("button", { na
 beforeEach(() => localStorage.clear());
 
 describe("the Runs tab's layout", () => {
-  it("is the flat board until the tree is chosen", () => {
+  it("is the tree until the flat board is chosen", () => {
     renderTab();
-    expect(screen.getByText("flat board")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Flat" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(`tree of ${JOB}`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tree" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("switches to the tree, keeping the choice in the URL", () => {
+  it("switches to the flat board, keeping the choice in the URL", () => {
     renderTab();
-    choose("Tree");
-    expect(screen.getByText(`tree of ${JOB}`)).toBeInTheDocument();
-    expect(new URLSearchParams(screen.getByTestId("where").textContent!).get("layout")).toBe("tree");
+    choose("Flat");
+    expect(screen.getByText("flat board")).toBeInTheDocument();
+    expect(new URLSearchParams(screen.getByTestId("where").textContent!).get("layout")).toBe("flat");
   });
 
   it("remembers the app's last layout", () => {
     const first = renderTab();
-    choose("Tree");
+    choose("Flat");
     first.unmount();
     renderTab();
-    expect(screen.getByText(`tree of ${JOB}`)).toBeInTheDocument();
+    expect(screen.getByText("flat board")).toBeInTheDocument();
   });
 
   it("follows the URL over the remembered layout", () => {
     const first = renderTab();
-    choose("Tree");
+    choose("Flat");
     first.unmount();
-    renderTab("?tab=runs&layout=flat");
-    expect(screen.getByText("flat board")).toBeInTheDocument();
+    renderTab("?tab=runs&layout=tree");
+    expect(screen.getByText(`tree of ${JOB}`)).toBeInTheDocument();
   });
 });

@@ -13,7 +13,7 @@ import JobTreeRuns from "./JobTreeRuns";
 type RunsLayout = "flat" | "tree";
 
 /** The layout before a reader picks one. */
-export const DEFAULT_LAYOUT: RunsLayout = "flat";
+export const DEFAULT_LAYOUT: RunsLayout = "tree";
 const LAYOUT_KEY = "vmn_job_runs_layout";
 
 const LAYOUTS: readonly (readonly [RunsLayout, string])[] = [["flat", "Flat"], ["tree", "Tree"]];

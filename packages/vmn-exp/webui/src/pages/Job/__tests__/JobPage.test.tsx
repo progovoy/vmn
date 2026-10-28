@@ -120,9 +120,8 @@ describe("the job page", () => {
     expect(await screen.findByText("CUDA out of memory")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
     expect(screen.getByTestId("where").textContent).toBe("?tab=runs");
-    // The Runs tab is the job's own board (plan 23 W3).
-    expect(within(screen.getByRole("tabpanel")).getByRole("complementary", { name: "Facets" })).toBeInTheDocument();
-    expect(await within(screen.getByRole("tabpanel")).findByRole("grid", { name: "experiments" })).toBeInTheDocument();
+    // The Runs tab opens on the job's tree (plan 28 N6).
+    expect(within(screen.getByRole("tabpanel")).getByRole("button", { name: "Tree" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.keyDown(screen.getByRole("tab", { name: "Runs" }), { key: "ArrowRight" });
     expect(screen.getByTestId("where").textContent).toBe("?tab=charts");
     expect(await within(screen.getByRole("tabpanel")).findByRole("group", { name: "Chart" })).toBeInTheDocument();
