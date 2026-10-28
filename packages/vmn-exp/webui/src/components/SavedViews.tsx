@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useDismiss } from "../hooks/useDismiss";
 import { deleteView, listViews, saveView, type SavedView } from "../util/savedViews";
+import { TeamSave, TeamViewList, type TeamViewItem } from "./TeamViews";
 
 function ViewList({ views, onApply, onDelete }: {
   views: SavedView[];
@@ -27,13 +28,19 @@ function ViewList({ views, onApply, onDelete }: {
 }
 
 /** Name and save the leaderboard's current URL state; list, apply and delete
- *  saved views. Views live in localStorage per workspace/app. */
-export default function SavedViews({ ws, app, search, onApply }: {
+ *  saved views. Views live in localStorage per workspace/app. The app's
+ *  *team* views (plan 28 P4) are listed above them, read-only; with
+ *  *onSaveTeam* (an editor) the current view can be saved for the team. */
+export default function SavedViews({ ws, app, search, onApply, team = [], onApplyTeam, onSaveTeam }: {
   ws: string;
   app: string;
   /** The current `location.search`. */
   search: string;
   onApply: (search: string) => void;
+  team?: readonly TeamViewItem[];
+  /** Apply a team view (else *onApply*). */
+  onApplyTeam?: (search: string) => void;
+  onSaveTeam?: (name: string, isDefault: boolean) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -56,6 +63,10 @@ export default function SavedViews({ ws, app, search, onApply }: {
     setOpen(false);
     onApply(v.search);
   };
+  const applyTeam = (v: TeamViewItem) => {
+    setOpen(false);
+    (onApplyTeam ?? onApply)(v.search);
+  };
   const remove = (viewName: string) => {
     deleteView(ws, app, viewName);
     setViews(listViews(ws, app));
@@ -73,6 +84,12 @@ export default function SavedViews({ ws, app, search, onApply }: {
       </button>
       {open && (
         <div className="col-picker saved-views-menu" role="menu">
+          {team.length > 0 && (
+            <>
+              <TeamViewList views={team} onApply={applyTeam} />
+              <div className="col-picker-title">My views</div>
+            </>
+          )}
           <ViewList views={views} onApply={apply} onDelete={remove} />
           <div className="col-picker-title">Save current view…</div>
           <div className="saved-views-save">
@@ -87,6 +104,7 @@ export default function SavedViews({ ws, app, search, onApply }: {
             />
             <button className="primary" onClick={save}>Save</button>
           </div>
+          {onSaveTeam && <TeamSave name={name} onSave={onSaveTeam} onSaved={() => setName("")} />}
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@ export interface SavedView {
   search: string;
 }
 
-const EPHEMERAL_PARAMS = ["sel", "new"];
+export const EPHEMERAL_PARAMS = ["sel", "new"];
 
 const storageKey = (ws: string, app: string) => `vmn_views:${ws}/${app}`;
 

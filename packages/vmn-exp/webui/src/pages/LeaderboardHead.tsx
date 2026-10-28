@@ -60,6 +60,7 @@ function headInfo(id: string, layout: RowLayout, aggregate?: GroupAggregate): { 
   if (id === "when") return { label: "when", sort: TIMESTAMP_SORT, title: "sort by time (newest first)" };
   if (id in DATE_SORT_OF) return { label: name, sort: DATE_SORT_OF[id], title: `sort by ${name} time (newest first)` };
   if (id in DURATION_SORT_OF) return { label: name, sort: DURATION_SORT_OF[id], title: `sort by ${name} (high first)` };
+  if (id.startsWith("t:")) return { label: name, sort: `tags.${name}`, title: `sort by tags.${name} (a to z)` };
   if (id.startsWith("m:")) {
     const meta = layout.colMeta[name];
     const hasGoal = meta && meta.goal !== null;
@@ -85,7 +86,7 @@ const HEAD_CLASS: Record<string, string> = {
   "c:tags": "", "c:comments": "",
 };
 const plainName = (id: string) => (id === "idx" ? "#" : id.includes(":") ? id.slice(2) : id);
-const hideable = (id: string) => /^[mpc]:/.test(id);
+const hideable = (id: string) => /^[mpct]:/.test(id);
 const pinnable = (id: string) => /^[mp]:/.test(id);
 
 /** The column menu's entries for *id* (sort key *sort*). */
@@ -110,7 +111,7 @@ function menuActions(
 }
 
 const headClass = (id: string) =>
-  HEAD_CLASS[id] ?? (id.startsWith("c:") ? "num fleet-head" : id.startsWith("p:") ? "param-head" : "");
+  HEAD_CLASS[id] ?? (id.startsWith("c:") ? "num fleet-head" : /^[pt]:/.test(id) ? "param-head" : "");
 
 export default function Head({ layout, sort: s, edits, check, aggregate }: {
   layout: RowLayout;

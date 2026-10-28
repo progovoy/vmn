@@ -16,7 +16,7 @@ import os
 import threading
 
 import vmn_exp.core.index as experiment_index
-from vmn_exp.core.app_settings import attention_entries, metrics_overlay, ui_overlay
+from vmn_exp.core.app_settings import attention_entries, metrics_overlay, ui_overlay, views_entries
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.query_extra import bind_similar_scope
@@ -310,6 +310,10 @@ class ExperimentSource:
     def attention(self, ws, app_name, settings=None):
         """The app's ``experiment.ui.attention`` queries (plan 28 P1)."""
         return attention_entries(self.experiment_ui(ws, app_name, settings))
+
+    def views(self, ws, app_name, settings=None):
+        """The app's ``experiment.ui.views`` team views (plan 28 P4)."""
+        return views_entries(self.experiment_ui(ws, app_name, settings))
 
     def split_by(self, ws, app_name, settings=None):
         """The app's ``experiment.ui.split_by`` (plan 28 P3), else None."""

@@ -8,10 +8,11 @@ import { DATE_SORT_OF } from "./leaderboardColumns";
 const NEWEST_FIRST = new Set([TIMESTAMP_SORT, IDX_SORT, ...Object.values(DATE_SORT_OF)]);
 type Schema = Parameters<typeof metricGoal>[0];
 
-/** A column's best-first direction: newest first for time, else its goal's.
- *  When the goal is unknown (null), default to desc (high first). */
+/** A column's best-first direction: newest first for time, a to z for a
+ *  tag (plan 28 P4), else its goal's. When the goal is unknown (null),
+ *  default to desc (high first). */
 const bestOrder = (schema: Schema, col: string): Order =>
-  !NEWEST_FIRST.has(col) && metricGoal(schema, col) === "min" ? "asc" : "desc";
+  col.startsWith("tags.") || (!NEWEST_FIRST.has(col) && metricGoal(schema, col) === "min") ? "asc" : "desc";
 
 /** *bestOf* overrides a column's best-first direction where it knows one
  *  (the Jobs view's `job:best` follows its metric's goal). */

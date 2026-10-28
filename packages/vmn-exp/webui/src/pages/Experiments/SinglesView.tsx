@@ -57,6 +57,7 @@ export default function SinglesView({ ws, app, views, onJobs }: {
             ws={ws} app={app} view={view} cols={cols} grouping={board.grouping}
             onViewApplied={resetFilter}
             onResetColumns={colPrefs.customized ? colPrefs.reset : undefined}
+            page="jobs"
           />
         )}
       />

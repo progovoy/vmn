@@ -536,6 +536,26 @@ with the reason (shown under the text, the edit kept); a stored file that
 does not parse is flagged as ignored. Viewers, read-only servers and stores
 without edit access see it read-only, with the reason.
 
+## Saved and team views
+
+A board's **Views ▾** menu saves its URL (filters, sort, columns, grouping;
+not the selection) under a name in the browser (localStorage, per app; an
+outer run's Runs tab keeps its own). Above them it lists the app's **team
+views** (plan 28 P4): conf.yml/[settings](server.md#app-settings)
+`experiment.ui.views`, each `{name, page, search, default}` for one page —
+`jobs` (the Outer runs view, Single runs too), `runs` (All runs) or `job` (an
+outer run's Runs tab) — read-only there. Applying one keeps the page's own
+`view=`/`kind=`/`tab=` when its search leaves them out. A page's `default:
+true` view is applied when you land on it with no view params in the URL
+(only `view`/`kind`/`tab`/`sel`), once per page per browser tab (per outer
+run for `job`), so it never undoes what you changed since; the URL then
+shows its params. An editor gets **Save for team** (optionally as the page's
+default, which takes it from the page's other views): the web reads the
+settings, adds or replaces the view by page and name, and writes the file
+back through the settings `PUT` — rewritten from its parsed form, so YAML
+comments do not survive it. A view in conf.yml's `ui.views` hides the
+settings' whole list in that checkout.
+
 ## Leaderboard columns
 
 By default the leaderboard shows `#`, status, experiment, the metrics whose
@@ -546,8 +566,11 @@ adds `tree <status>` when its subtree differs and an incomplete sweep's
 `16/20 · incomplete`. Note, tags, the run's
 `started`/`ended` dates, its `queue` time, `duration` and `ratio` (its
 [`duration_ratio`](#experiment-status-fields), `3.1× siblings`; `show=c:queue`,
-`c:duration`, `c:ratio`, plan 28 N4) and the rest come from the Columns picker.
-Clicking a date or duration header sorts the board by it server-side. The choices
+`c:duration`, `c:ratio`, plan 28 N4), a column per tag key (the picker's
+**tags** section, from the [facets](#facets)' `tag_keys`: `show=t:health`,
+`—` for a run without the tag; plan 28 P4) and the rest come from the Columns picker.
+Clicking a date, duration or tag header sorts the board by it server-side
+(a tag by `sort=tags.<key>`, a to z first). The choices
 live in the URL (`show=`/`hide=`, e.g. `show=m:train_loss`, `hide=p:seed`;
 `hide=` always hides, except that it still shows a schema-hidden metric, as
 before; `pin=`; `pin=-` pins nothing), and dragged
@@ -927,6 +950,15 @@ that ended. It is counted from the live rows (never a board order) and, in
 the summary and in a row's `job.attention` alike, present only while it
 counts any, so an app with none and no queries has no `attention`. A list `q` with
 `ago()` is pinned to the minute, so its ETag moves with the clock.
+
+The unscoped summary also lists the app's [team views](#saved-and-team-views)
+(`experiment.ui.views`, conf.yml over the settings), present only when it has
+some; every app page already reads this status (and the browser keeps it
+across reloads), so a page knows its default view at first paint:
+
+```json
+"views": [{"name": "health", "page": "runs", "search": "?show=t%3Ahealth", "default": true}]
+```
 
 With background refresh (`vmn-exp ui`), the summary also carries how fresh
 the app's index is, read without I/O, so a dashboard or a load balancer sees

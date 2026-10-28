@@ -1,8 +1,7 @@
 import { useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import ColumnPicker from "../components/ColumnPicker";
 import GroupByMenu from "../components/GroupByMenu";
-import SavedViews from "../components/SavedViews";
+import BoardViews from "../components/BoardViews";
 import { useCanCreateRun } from "../shell/useAppExists";
 import { hideColumn } from "../hooks/useColumnEdits";
 import type { useLeaderboardColumns } from "../hooks/useLeaderboardColumns";
@@ -10,13 +9,14 @@ import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import type { BoardGrouping } from "../hooks/useBoardAggregate";
 import { NO_GROUP } from "../util/groupBy";
 import { groupSortOf } from "../util/groupCountSort";
+import type { ViewPage } from "../util/teamViews";
 import "./leaderboardToolbar.css";
 
 /** The board's actions, in its page head: the create button (primary, only
  *  where a run can be created), saved views, Group by and the columns (the live status
  *  is the table's caption; the selection's actions float at the bottom). */
 export default function LeaderboardToolbar({
-  ws, app, view, cols, grouping, onViewApplied, onResetColumns, job,
+  ws, app, view, cols, grouping, onViewApplied, onResetColumns, job, page,
 }: {
   ws: string;
   app: string;
@@ -29,9 +29,9 @@ export default function LeaderboardToolbar({
   onResetColumns?: () => void;
   /** A job's Runs tab (its verstr): no New run, and saved views of its own. */
   job?: string;
+  /** Whose team views it lists (plan 28 P4); default an outer run's page with *job*, else All runs. */
+  page?: ViewPage;
 }) {
-  const location = useLocation();
-  const navigate = useNavigate();
   const canCreate = useCanCreateRun(ws, app);
   const onMoveColumn = useCallback(
     (key: string, delta: number) => view.moveColumn(key, delta, cols.defaultKeys, cols.pinned),
@@ -43,10 +43,7 @@ export default function LeaderboardToolbar({
       {canCreate && !job && !view.creating && (
         <button className="primary" onClick={() => view.openCreate(true)}>New run</button>
       )}
-      <SavedViews
-        ws={ws} app={job ? `${app}/run/${job}` : app} search={location.search}
-        onApply={(search) => { navigate({ search }, { replace: true }); onViewApplied(); }}
-      />
+      <BoardViews ws={ws} app={app} page={page ?? (job ? "job" : "runs")} job={job} onViewApplied={onViewApplied} />
       {onResetColumns && (
         <button onClick={onResetColumns} title="restore the default column widths and order">
           Reset columns
@@ -73,6 +70,8 @@ export default function LeaderboardToolbar({
           if (c === "comments") view.toggleHidden(id);
           else view.setColumnShown(id, !cols.visibleOther.includes(c));
         }}
+        tagColumns={cols.tagCols} visibleTags={cols.visibleTags}
+        onToggleTag={(k) => view.setColumnShown(`t:${k}`, !cols.visibleTags.includes(k))}
         orderedCells={cols.cells}
         pinnedCols={cols.pinned}
         onMoveColumn={onMoveColumn}

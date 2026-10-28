@@ -468,12 +468,15 @@ ui:
   baseline:
     match: [params.table_name, params.model_type]
     children_by: params.trade_date
+  views:
+    - {name: health, page: runs, search: '?show=t:health&show=t:state', default: true}
+    - {name: by kind, page: job, search: '?tab=runs&group=tags.kind', default: true}
 ```
 
 - Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
   `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention`,
-  `baseline` checked; other `ui` keys kept). `ui.attention` lists at most 8
+  `baseline`, `views` checked; other `ui` keys kept). `ui.attention` lists at most 8
   attention queries `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
   `key` letters, digits, `_`, `-` (unique, not the built-in
   `stuck`/`failed`/`running`/`outlived`),
@@ -488,6 +491,12 @@ ui:
   `children_by` (one such field the two outer runs' direct children pair
   by; none: no pairing). A checkout's conf.yml `experiment.ui.baseline`
   beats it as a whole (a bad one there reads as none).
+  `ui.views` lists at most 20 team views `{name, page, search, default}`
+  ([ui.md](ui.md#saved-and-team-views)): `page` `jobs`, `runs` or `job`, a
+  `name` used once per page, `search` the URL query string the view carries
+  (`?` optional, `''` for the bare page), at most one `default: true` per
+  page; conf.yml's `experiment.ui.views` beats it as a whole (a bad list
+  there reads as none).
   Anything else, or a bad value, is refused on write; a file broken behind
   vmn's back reads as no settings, with a warning.
 - Precedence: a git workspace's conf.yml (per metric name, per `ui` key) >

@@ -2,7 +2,7 @@ import { useMemo, useRef } from "react";
 import type { ExperimentFacets, ExperimentRow, MetricsSchema } from "../types";
 import {
   FLEET_COLS, PINNED_COLS, anyComments, anyTags, columnIds, columnStyles, computeColMeta, defaultWidth, idLayout,
-  metricColumns, orderColumns, paramKey,
+  metricColumns, orderColumns, paramKey, tagKey,
 } from "../pages/leaderboardColumns";
 import { goalMetrics, paramBudget, variedParams } from "../pages/defaultColumns";
 import type { ColumnCell } from "../pages/leaderboardColumns";
@@ -44,7 +44,8 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
  *  Defaults (plan 20 D11): the declared-goal metrics (every metric when no
  *  goal is declared; `show=`/`hide=` override), up to six
  *  params whose values vary across the rows (as many as fit *fill*; `show=`/
- *  `hide=` override), then `when`. Note, tags and the start/end dates need `show=`.
+ *  `hide=` override), then `when`. Note, tags, a tag key's column (`t:<key>`)
+ *  and the start/end dates need `show=`.
  *
  *  `order` and `pinned` come from URL params `col=` and `pin=` (as stable
  *  arrays from `useLeaderboardView`). Columns in `order` appear first;
@@ -101,6 +102,11 @@ export function useLeaderboardColumns(
   ));
 
   const visibleFleet = useMemo(() => FLEET_COLS.filter((c) => shown.has(`c:${c}`)), [shown]);
+  // A column per tag key (plan 28 P4), off until `show=t:<key>`.
+  const tagNames = useMemo(() => tagKey(rows, facets?.tag_keys), [rows, facets]);
+  const tagCols = useMemo(() => splitKey(tagNames), [tagNames]);
+  const visibleTags = useMemo(() => tagCols.filter((k) => shown.has(`t:${k}`)), [tagCols, shown]);
+  const tagIds = useMemo(() => visibleTags.map((k) => `t:${k}`), [visibleTags]);
   const hasTags = useMemo(() => anyTags(rows), [rows]);
   const showTags = hasTags && shown.has(TAGS_COLUMN);
   const hasComments = useMemo(() => anyComments(rows), [rows]);
@@ -113,14 +119,14 @@ export function useLeaderboardColumns(
   const visibleParams = useMemo(() => {
     const picked = new Set(paramCols.filter((c) => shown.has(`p:${c}`)));
     const others = columnIds(
-      visibleFleet, [...visibleMetrics.map((m) => `m:${m}`), ...[...picked].map((p) => `p:${p}`)],
+      visibleFleet, [...visibleMetrics.map((m) => `m:${m}`), ...[...picked].map((p) => `p:${p}`), ...tagIds],
       showTags, showComments, showNote,
     );
     const taken = others.reduce((sum, id) => sum + (widths[id] ?? defaultWidth(id)), 0);
     varied.filter((c) => !hidden.has(`p:${c}`) && !picked.has(c))
       .slice(0, paramBudget(fill, taken)).forEach((c) => picked.add(c));
     return paramCols.filter((c) => picked.has(c));
-  }, [paramCols, shown, hidden, varied, visibleFleet, visibleMetrics, showTags, showComments, showNote, widths, fill]);
+  }, [paramCols, shown, hidden, varied, visibleFleet, visibleMetrics, tagIds, showTags, showComments, showNote, widths, fill]);
 
   // The visible goal metrics stick by default, until `pin=` says otherwise.
   const defaultPins = useMemo(
@@ -173,7 +179,9 @@ export function useLeaderboardColumns(
     // URL-pinned cells stick right after the experiment column, so they lead
     // the movable columns whatever the saved drag order says.
     const pinnedIds = orderedCellKeys.slice(0, pinnedCount);
-    const movable = columnIds(visibleFleet, orderedCellKeys.slice(pinnedCount), showTags, showComments, showNote);
+    const movable = columnIds(
+      visibleFleet, [...orderedCellKeys.slice(pinnedCount), ...tagIds], showTags, showComments, showNote,
+    );
     const moved = orderColumns(movable, savedOrder);
     const ids = [...PINNED_COLS, ...pinnedIds, ...moved.slice(PINNED_COLS.length)];
     const cl = idLayout(ids, widths, fill);
@@ -184,8 +192,8 @@ export function useLeaderboardColumns(
       colMeta, showBest, runBase,
     };
   }, [
-    orderedCellKeys, pinnedCount, cells, visibleFleet, visibleMetrics, visibleParams, showTags, showComments, showNote,
-    colMeta, showBest, runBase, widths, savedOrder, fill,
+    orderedCellKeys, pinnedCount, cells, visibleFleet, visibleMetrics, visibleParams, tagIds, showTags, showComments,
+    showNote, colMeta, showBest, runBase, widths, savedOrder, fill,
   ]);
 
   const suggestFacets = useMemo((): SuggestFacets => ({
@@ -199,6 +207,6 @@ export function useLeaderboardColumns(
   ];
   return {
     primary, metricCols, paramCols, schemaHidden, visibleMetrics, visibleParams, cells, defaultKeys, layout, pinned: pins, defaultPins,
-    suggestFacets, otherCols, visibleOther,
+    suggestFacets, otherCols, visibleOther, tagCols, visibleTags,
   };
 }

@@ -79,6 +79,7 @@ function Section({ title, columns, visible, onToggle }: {
 export default function ColumnPicker({
   columns, visible, onToggle, metricColumns = [], visibleMetrics = [], onToggleMetric,
   otherColumns = [], visibleOther = [], onToggleOther,
+  tagColumns = [], visibleTags = [], onToggleTag,
   orderedCells, pinnedCols = [], onMoveColumn, onTogglePin,
 }: {
   columns: string[];
@@ -90,6 +91,10 @@ export default function ColumnPicker({
   otherColumns?: string[];
   visibleOther?: string[];
   onToggleOther?: (col: string) => void;
+  /** Tag keys, a column each (plan 28 P4). */
+  tagColumns?: string[];
+  visibleTags?: string[];
+  onToggleTag?: (key: string) => void;
   /** When provided, renders the column order/pin section. */
   orderedCells?: readonly ColumnCell[];
   pinnedCols?: readonly string[];
@@ -104,7 +109,8 @@ export default function ColumnPicker({
   useDismiss(open, close, box, button);
 
   const hasOrderSection = orderedCells && orderedCells.length > 0 && onMoveColumn && onTogglePin;
-  if (columns.length + metricColumns.length + otherColumns.length === 0 && !hasOrderSection) return null;
+  const tagCount = onToggleTag ? tagColumns.length : 0;
+  if (columns.length + metricColumns.length + otherColumns.length + tagCount === 0 && !hasOrderSection) return null;
 
   const needle = filter.trim().toLowerCase();
   const match = (cols: string[]) =>
@@ -151,6 +157,9 @@ export default function ColumnPicker({
             visible={visible}
             onToggle={onToggle}
           />
+          {onToggleTag && (
+            <Section title="tags" columns={match(tagColumns)} visible={visibleTags} onToggle={onToggleTag} />
+          )}
           {onToggleOther && (
             <Section title="other" columns={match(otherColumns)} visible={visibleOther} onToggle={onToggleOther} />
           )}

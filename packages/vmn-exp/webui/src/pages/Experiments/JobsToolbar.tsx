@@ -4,9 +4,8 @@
  *  Ungrouped, the view is grouped by parent run, so the menu checks that;
  *  "none" opens All runs flat. */
 import { useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import GroupByMenu from "../../components/GroupByMenu";
-import SavedViews from "../../components/SavedViews";
+import BoardViews from "../../components/BoardViews";
 import type { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { useCanCreateRun } from "../../shell/useAppExists";
 import { LINK_GROUPS, NO_GROUP, groupFields } from "../../util/groupBy";
@@ -26,8 +25,6 @@ export default function JobsToolbar({ ws, app, view, board, onViewApplied, onAll
   view: ReturnType<typeof useLeaderboardView>;
   board: ReturnType<typeof useJobsBoard>;
 }) {
-  const location = useLocation();
-  const navigate = useNavigate();
   const canCreate = useCanCreateRun(ws, app);
   const { data } = board;
   const fields = useMemo(() => groupFields(board.facets), [board.facets]);
@@ -36,10 +33,7 @@ export default function JobsToolbar({ ws, app, view, board, onViewApplied, onAll
       {canCreate && !view.creating && (
         <button className="primary" onClick={() => view.openCreate(true)}>New run</button>
       )}
-      <SavedViews
-        ws={ws} app={app} search={location.search}
-        onApply={(search) => { navigate({ search }, { replace: true }); onViewApplied(); }}
-      />
+      <BoardViews ws={ws} app={app} page="jobs" onViewApplied={onViewApplied} />
       <GroupByMenu
         value={board.group} viewGroup={PARENT} links={JOB_LINKS} fields={fields}
         onChange={(g) => (g === NO_GROUP ? onAll() : view.setGroup(g === PARENT ? NO_GROUP : g, NO_GROUP))}

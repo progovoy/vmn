@@ -3,6 +3,7 @@
 import type { Meta, Role, Workspace } from "../types";
 import type { Freshness } from "../util/freshness";
 import type { Indexing } from "../util/indexing";
+import type { TeamView } from "../util/teamViews";
 
 export type RouteId =
   | "home" | "tokens" | "apps" | "experiments" | "run" | "compare-runs"
@@ -29,6 +30,8 @@ export interface AppStatus {
   freshness?: Freshness;
   /** The app's configured attention queries (plan 28 P1), in config order. */
   attention?: AttentionEntry[];
+  /** The app's team views (plan 28 P4), in config order; absent when none. */
+  views?: TeamView[];
 }
 /** One `experiment.ui.attention` query and the runs it matches now; *q* is
  *  the query text the board filters by. A query that does not compile

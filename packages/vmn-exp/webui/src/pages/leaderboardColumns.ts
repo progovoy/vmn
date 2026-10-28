@@ -92,7 +92,7 @@ export function defaultWidth(id: string): number {
   const prefix = id.slice(0, 2);
   if (prefix === "c:") return W.fleet;
   if (prefix === "m:") return W.metric;
-  if (prefix === "p:") return W.param;
+  if (prefix === "p:" || prefix === "t:") return W.param;
   return W[id as keyof typeof W] ?? W.metric;
 }
 
@@ -192,8 +192,20 @@ export function paramKey(
   rows: readonly ExperimentRow[] | null | undefined,
   facetKeys?: readonly string[],
 ): string {
+  return keySet(rows, facetKeys, rowParams);
+}
+
+/** Tag keys, one `t:<key>` column each (plan 28 P4): the facets' `tag_keys`
+ *  plus any the rows carry, as a stable identity like paramKey's. */
+export const tagKey = (rows: readonly ExperimentRow[] | undefined, facetKeys?: readonly string[]) =>
+  keySet(rows, facetKeys, (r) => r.tags);
+
+function keySet(
+  rows: readonly ExperimentRow[] | null | undefined, facetKeys: readonly string[] | undefined,
+  of: (r: ExperimentRow) => object | undefined,
+): string {
   const keys = new Set<string>(facetKeys ?? []);
-  rows?.forEach((r) => Object.keys(rowParams(r)).forEach((k) => keys.add(k)));
+  rows?.forEach((r) => Object.keys(of(r) ?? {}).forEach((k) => keys.add(k)));
   return [...keys].sort().join("\u0000");
 }
 

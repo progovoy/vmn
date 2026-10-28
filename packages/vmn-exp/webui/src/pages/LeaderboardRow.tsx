@@ -255,6 +255,10 @@ function Row({
     }
     if (isGapId(id)) return <td key={id} aria-hidden style={style} />;
     if (id in DURATION_SORT_OF) return <DurationCell key={id} r={r} id={id} style={style} />;
+    if (id.startsWith("t:")) {
+      const tag = r.tags?.[name];
+      return <td key={id} data-col-id={id} className="tag-cell" style={style} title={tag}>{tag ?? "—"}</td>;
+    }
     if (id.startsWith("c:")) return <DateCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (

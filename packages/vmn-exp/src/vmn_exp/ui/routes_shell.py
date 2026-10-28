@@ -7,8 +7,10 @@ and a background-refreshed one how fresh its data is (``freshness``, see
 :mod:`vmn_exp.ui.freshness`), so the dashboard (and a load balancer) see an
 index that serves old data or stopped refreshing. An app's status also
 counts its attention queries (``attention``, plan 28 P1,
-:mod:`vmn_exp.ui.attention`), and ``?scope=<verstr>`` answers it all over
-that run's subtree (an outer run's page)."""
+:mod:`vmn_exp.ui.attention`) and lists its team views (``views``, plan 28
+P4: every app page reads this status, so a page knows its default view at
+first paint), and ``?scope=<verstr>`` answers the counts over that run's
+subtree (an outer run's page)."""
 import hashlib
 import json
 
@@ -31,18 +33,20 @@ STATUS_BODIES = 256
 
 
 def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards,
-             freshness_of, attention_of=None, schema_of=None):
+             freshness_of, attention_of=None, schema_of=None, views_of=None):
     """Add the routes; *git_workspace(ws_name)* raises the route's 400/404,
     *status_snapshot(ws_name, app_tag)* -> the app's snapshot (raising its
     404 when there is no such app), *app_tags(ws_name)* -> the workspace's
     apps in tag form, *freshness_of(ws_name, app_tag)* -> its index's
     ``freshness`` or None (after the snapshot was asked for),
     *attention_of(ws_name, app_tag)* -> its attention entries,
-    *schema_of(ws_name, app_tag)* -> the board's metrics schema. Returns
+    *schema_of(ws_name, app_tag)* -> the board's metrics schema,
+    *views_of(ws_name, app_tag)* -> its team views. Returns
     ``forget(ws_name)``, which drops a removed workspace's git context."""
     contexts = TTLCache(GIT_TTL_SEC)
     summaries = LRU(STATUS_BODIES)
     attention_of = attention_of or (lambda ws_name, app_tag: [])
+    views_of = views_of or (lambda ws_name, app_tag: [])
 
     def summary(ws_name, app_tag, now, scope=None, schema=None, entries=()):
         """``(summary, etag)`` of an app (*scope*'s subtree when given) with
@@ -93,6 +97,9 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
                                     entries)
         except UnknownScope as e:
             raise HTTPException(404, str(e))
+        views = [] if scope else views_of(ws_name, app_tag)
+        if views:
+            payload, etag = dict(payload, views=views), _digest(etag + json.dumps(views))
         return json_response(payload, etag=etag, request=request)
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps-status", dependencies=[require(VIEWER)])

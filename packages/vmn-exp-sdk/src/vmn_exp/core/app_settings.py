@@ -4,8 +4,9 @@ The reader-facing subset of conf's ``experiment:`` block, kept in the store
 (:mod:`vmn_exp.core.app_settings_store`) so a store workspace, which has no
 checkout, reads it too: ``metrics.<name|glob>.{goal,summary,hidden,primary,
 step_metric}`` and ``ui.*`` (``group_aggregate``, ``stale_after_min``,
-``progress``, ``attention`` and ``baseline`` checked, other ``ui`` keys kept as they are). A
-checkout's conf beats them, per metric name and per ``ui`` key; they beat what runs declare. Pure.
+``progress``, ``attention``, ``baseline`` and ``views`` checked, other ``ui``
+keys kept as they are). A checkout's conf beats them, per metric name and per
+``ui`` key; they beat what runs declare. Pure.
 """
 import re
 
@@ -119,28 +120,37 @@ def _check_ui(ui):
         _check_attention(ui["attention"])
     if "baseline" in ui:
         _check_baseline(ui["baseline"])
+    if "views" in ui:
+        _check_views(ui["views"])
 
 
 def _check_attention(entries):
-    if not isinstance(entries, list):
-        raise SettingsError("ui.attention must be a list")
-    if len(entries) > MAX_ATTENTION:
-        raise SettingsError(f"ui.attention holds at most {MAX_ATTENTION} queries")
+    _check_entries(entries, "ui.attention", MAX_ATTENTION, "queries", _ATTENTION_FIELDS,
+                   ("key", "query"))
     keys = set()
     for i, entry in enumerate(entries):
-        where = f"ui.attention[{i}]"
-        _check_mapping(entry, where)
-        for field in ("key", "query"):
+        _check_attention_key(entry["key"], keys, f"ui.attention[{i}]")
+
+
+def _check_entries(entries, where, cap, noun, fields, required):
+    """*entries* as a list of at most *cap* mappings holding the *required*
+    fields and only valid *fields*."""
+    if not isinstance(entries, list):
+        raise SettingsError(f"{where} must be a list")
+    if len(entries) > cap:
+        raise SettingsError(f"{where} holds at most {cap} {noun}")
+    for i, entry in enumerate(entries):
+        at = f"{where}[{i}]"
+        _check_mapping(entry, at)
+        for field in required:
             if field not in entry:
-                raise SettingsError(f"{where} needs a {field}")
+                raise SettingsError(f"{at} needs a {field}")
         for field, value in entry.items():
-            valid = _ATTENTION_FIELDS.get(field)
+            valid = fields.get(field)
             if valid is None:
-                raise SettingsError(f"unknown field {where}.{field}; "
-                                    f"one of {', '.join(_ATTENTION_FIELDS)}")
+                raise SettingsError(f"unknown field {at}.{field}; one of {', '.join(fields)}")
             if not valid(value):
-                raise SettingsError(f"invalid {where}.{field}: {value!r}")
-        _check_attention_key(entry["key"], keys, where)
+                raise SettingsError(f"invalid {at}.{field}: {value!r}")
 
 
 def _check_attention_key(key, keys, where):
@@ -216,6 +226,49 @@ def baseline_fields(text):
     fields = [f.strip() for f in text.split(",")] if text.strip() else []
     _check_match(fields, "match")
     return fields
+
+
+# ``ui.views`` (plan 28 P4): team views, each the URL query string a saved
+# view of the page carries; one name per page, at most one default per page.
+MAX_VIEWS = 20
+VIEW_PAGES = ("jobs", "runs", "job")
+_VIEW_FIELDS = {
+    "name": lambda v: isinstance(v, str) and bool(v.strip()),
+    "page": lambda v: v in VIEW_PAGES,
+    "search": lambda v: isinstance(v, str),
+    "default": lambda v: isinstance(v, bool),
+}
+
+
+def _check_views(views):
+    _check_entries(views, "ui.views", MAX_VIEWS, "views", _VIEW_FIELDS, ("name", "page", "search"))
+    names, defaults = set(), set()
+    for i, view in enumerate(views):
+        where, page, name = f"ui.views[{i}]", view["page"], view["name"]
+        if (page, name) in names:
+            raise SettingsError(f"{where}.name {name!r} is used twice on page {page}")
+        names.add((page, name))
+        if view.get("default"):
+            if page in defaults:
+                raise SettingsError(f"{where}: page {page} has more than one default view")
+            defaults.add(page)
+
+
+def views_entries(ui):
+    """*ui*'s ``views`` as ``{name, page, search, default}`` (``search``
+    with its ``?``, ``default`` false unless set); none when one is invalid."""
+    views = (ui or {}).get("views") or []
+    try:
+        _check_views(views)
+    except SettingsError:
+        return []
+    return [{"name": v["name"], "page": v["page"], "search": _search(v["search"]),
+             "default": v.get("default", False)} for v in views]
+
+
+def _search(text):
+    query = text.strip().lstrip("?")
+    return f"?{query}" if query else ""
 
 
 def metrics_overlay(settings, conf_metrics):

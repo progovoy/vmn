@@ -399,6 +399,11 @@ def create_app(
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         return with_built_in(source.attention(ws, app_name, _settings(ws, app_name)))
 
+    def _views(ws_name, app_tag):
+        """The app's team views: conf.yml over the store settings."""
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return source.views(ws, app_name, _settings(ws, app_name))
+
     def _similar_weights(ws_name, app_name):
         """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp
         similar`` and the SDK reader read them; none in a store."""
@@ -743,7 +748,8 @@ def create_app(
 
     forget_git = routes_shell.register(
         app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness,
-        _attention_entries, lambda ws_name, app_tag: _leaderboard_inputs(ws_name, app_tag)[1])
+        _attention_entries, lambda ws_name, app_tag: _leaderboard_inputs(ws_name, app_tag)[1],
+        _views)
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
