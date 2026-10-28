@@ -1932,6 +1932,7 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | [alert](#alerts) sinks and triggers |
 | `VMN_SNAPSHOT_MAX_FILE_MB` / `_TOTAL_MB` | untracked-file capture caps (50 / 200) |
 | `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) instead of the XDG cache/state dirs |
+| `VMN_EXP_S3_PREFIX_CONCURRENCY` | S3 calls in flight per key prefix (`<root>/<area>/<scope>`), process-wide (default 64; 0/invalid = default) |
 | `VMN_INDEX_CACHE_DIR` | index cache root only (`none` disables) |
 | `VMN_IMAGE_DIGEST` | container image digest recorded by environment capture |
 | `VMN_LOCK_FILE_PATH` | repo lock path (default `.vmn/vmn.lock`) |

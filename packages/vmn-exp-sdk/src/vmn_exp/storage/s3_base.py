@@ -9,6 +9,7 @@ import email.utils
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.files import checked_app_path, safe_verstr
 from vmn_exp.storage.registry import missing_extra
+from vmn_exp.storage.s3_prefix_cap import cap_prefixes
 from vmn_exp.storage.s3_stats import instrument
 from vmn_exp.storage.fanout import fan_out
 
@@ -76,7 +77,8 @@ def _client(session, endpoint_url, **config):
     config = Config(max_pool_connections=MAX_POOL_CONNECTIONS, connect_timeout=CONNECT_TIMEOUT_SEC,
                     read_timeout=READ_TIMEOUT_SEC, retries=dict(RETRIES), **config)
     kwargs = {"endpoint_url": endpoint_url} if endpoint_url else {}
-    return instrument(session.client("s3", config=config, **kwargs))
+    # Capped first: a call's wait for its prefix's slot is not its latency.
+    return instrument(cap_prefixes(session.client("s3", config=config, **kwargs)))
 
 
 def parse_timestamp(value):

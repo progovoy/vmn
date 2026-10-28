@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """The summary parts of the dump's newer sections (:mod:`diag_summary` calls
 them): held locks and their waiters, long or failing background work, S3 by
-object kind and by caller, request S3 cost, recent errors and lag. Same rules:
-a part that cannot read its section is skipped."""
+object kind and by caller, S3 prefixes that waited for a slot, request S3
+cost, recent errors and lag. Same rules: a part that cannot read its section
+is skipped."""
 SHOWN = 8
 # Background work running longer than this is worth a line.
 LONG_RUNNING_SEC = 5
@@ -64,6 +65,16 @@ def s3_kinds(sections):
     return ["S3 by object kind and caller:"] + lines if lines else []
 
 
+def s3_prefix_caps(sections):
+    caps = _dict(_dict(sections.get("s3")).get("prefix_caps"))
+    lines = [f"  {p.get('bucket')}/{p.get('prefix')}: {p.get('in_flight', 0)} in flight, "
+             f"{p.get('waiting', 0)} waiting; {p.get('waits', 0)} waits, "
+             f"max {(p.get('wait_ms_max') or 0) / 1000:.1f}s"
+             for p in _list(caps.get("prefixes"))[:SHOWN] if p.get("waiting") or p.get("waits")]
+    head = f"S3 prefix caps ({caps.get('limit', '?')} calls in flight a prefix):"
+    return [head] + lines if lines else []
+
+
 def _calls(ops):
     return sum(_dict(op).get("n", 0) for op in _dict(ops).values())
 
@@ -106,4 +117,4 @@ def latency(sections):
     return ["Responsiveness:"] + lines if lines else []
 
 
-PARTS = (locks, background, request_s3, s3_kinds, logs, latency)
+PARTS = (locks, background, request_s3, s3_kinds, s3_prefix_caps, logs, latency)
