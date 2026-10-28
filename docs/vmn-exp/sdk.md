@@ -994,7 +994,13 @@ keywords ~ "long tail"
 | `and` `or` `not`, `(…)` | the usual, `not` binding tightest |
 
 Literals: numbers (including `1e-4`, `2.5E+3`), quoted strings (either quote),
-`true`, `false`, `null`. Keywords are case-insensitive; **field names are
+`true`, `false`, `null`. Relative time: `ago("30m")`, `ago("1h")`, `ago("2d")`
+(whole minutes, hours or days) is the UTC ISO time that long before now,
+second precision, so `status = "created" and timestamp < ago("1h")` lists the
+runs waiting for over an hour. It stands only right of `<` `<=` `>` `>=` and
+compares as the stored stamps do (as strings). It is pinned when a query is
+compiled, so a cached query never keeps its clock; the server pins it to the
+minute. The Postgres backend compares the pinned time too. Keywords are case-insensitive; **field names are
 case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
 `not`/parentheses nest at most 100 deep.
 

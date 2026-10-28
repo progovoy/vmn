@@ -379,10 +379,16 @@ sits in the table's caption, under the board, with the "best in column" legend
 and the sort; below 640px, where the caption follows every card, the page head
 also shows `live · updated Ns ago` (or `paused`) as plain text after the run
 count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
-· 4 running`, from `experiments-status`) appears while a run is stuck or one
-failed in the last 24 hours; each part links to the board filtered to exactly
+· 4 unstable · 4 running`, from `experiments-status`) appears while a run is
+stuck, one failed in the last 24 hours or one of the app's attention queries
+(conf/[settings](server.md#app-settings) `experiment.ui.attention`, e.g.
+`tags.health = "unstable"` or `status = "created" and timestamp <
+ago("1h")`) matches a run; each part links to the board filtered to exactly
 those runs (`status=stuck`; the failures also get a `finished_at >= "<24h
-ago>"` token, newest first), replacing the other filters. A filter lists exactly the
+ago>"` token, newest first; a configured part its query, coloured by its
+`warn`/`error` level), replacing the other filters. The same strip sits on
+the Outer runs view (its parts open All runs) and on an outer run's page,
+counting that run's subtree (its parts open the Runs tab). A filter lists exactly the
 runs that match, so the rows behind a link are as many as it counts. App tiles count runs the same way
 (archived runs left out). See [Run status](experiments.md#run-status-did-my-job-die) for
 how statuses are derived.
@@ -405,7 +411,9 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - the best run on the main metric, linked (`—` when no goal is declared), and a sparkline of the metric's spread.
   - runs, failed %, rate, ETA, branch and start.
 
-  Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the name column is headed `outer run · progress`.
+  - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
+
+  Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
 - **Single runs** lists the top-level runs without children.
 - **All runs** is the flat board with Group by ([below](#grouped-board)).
 
@@ -878,6 +886,26 @@ never in `counts` (`total` holds every run), so a lost run raises no `stuck`.
 unknown app is a 404 `{"detail", "code": "app_not_found"}`, checked against the
 checkout (`.vmn/<app>/conf.yml`) and the store (any run or snapshot record),
 not the cached app list. ETag/304, accurate to the hour for `failed_recent`.
+
+With attention queries configured (`experiment.ui.attention`, at most 8, see
+[server.md](server.md#app-settings)), the summary carries a count for each,
+after the built-in stuck and failed-in-24h parts the strip shows first:
+
+```json
+"attention": [{"key": "unstable", "label": "unstable", "level": "error", "count": 4,
+               "q": "tags.health = \"unstable\""}]
+```
+
+A count is the length of the board's own cached order for `q` (non-archived
+runs), so a time-free query moves with the index deltas and an `ago()` one is
+rebuilt at most once a minute (about 0.2 s at 100k runs). A query that does
+not compile counts `null` and carries `error`. `?scope=<verstr>` answers the
+whole summary over that run's subtree, without the run (an outer run's page;
+counts and recent failures from its rollup; 404 for no such run). On the
+Outer runs view (`experiments?top=...`) each row's `job` carries `attention:
+{key: n}` (the runs of its tree, itself included, each query matches) and
+`attention_rank`, which `sort=job:attention` orders by. A list `q` with
+`ago()` is pinned to the minute, so its ETag moves with the clock.
 
 With background refresh (`vmn-exp ui`), the summary also carries how fresh
 the app's index is, read without I/O, so a dashboard or a load balancer sees

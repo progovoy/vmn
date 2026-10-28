@@ -422,12 +422,22 @@ ui:
   group_aggregate: best
   stale_after_min: 30
   progress: {done: dates_done, total: dates_total, unit: dates}
+  attention:
+    - {key: unstable, query: 'tags.health = "unstable"', level: error}
+    - {key: waiting, label: waiting over 1h,
+       query: 'status = "created" and timestamp < ago("1h")'}
 ```
 
 - Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
-  `ui.*` (`group_aggregate`, `stale_after_min`, `progress` checked; other
-  `ui` keys kept).
+  `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention` checked;
+  other `ui` keys kept). `ui.attention` lists at most 8 attention queries
+  `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
+  `key` letters, digits, `_`, `-` (unique, not `stuck`/`failed`/`running`),
+  `label` defaulting to the key, `level` `warn` (default) or `error`. A
+  query that does not compile is not refused here; the server reports it on
+  its part (`error`). A checkout's conf.yml `experiment.ui.attention` beats
+  it as a whole (a bad list there reads as none).
   Anything else, or a bad value, is refused on write; a file broken behind
   vmn's back reads as no settings, with a warning.
 - Precedence: a git workspace's conf.yml (per metric name, per `ui` key) >
