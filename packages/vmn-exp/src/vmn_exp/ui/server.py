@@ -102,6 +102,7 @@ def create_app(
     search_dsn=None,
     cache_dsn=None,
     audit_retention_days=DEFAULT_AUDIT_RETENTION_DAYS,
+    keep_warm=None,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -114,7 +115,9 @@ def create_app(
     ``/api/v1/tokens``) and the audit log, kept *audit_retention_days* by its
     hourly sweep (:mod:`~vmn_exp.ui.control_plane_sweep`). A Postgres *search_dsn* answers
     ``/api/v1/search`` in SQL; a Postgres *cache_dsn* caches store
-    workspaces' indexes there, refreshed by one elected replica."""
+    workspaces' indexes there, refreshed by one elected replica. *keep_warm*
+    keeps a background-refreshed index refreshing with nobody watching (None:
+    store workspaces' indexes only; see :mod:`~vmn_exp.ui.refresher`)."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
@@ -149,7 +152,7 @@ def create_app(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(chain)
     )
 
-    refresher = Refresher() if background_refresh else InlineRefresher()
+    refresher = Refresher(keep_warm=keep_warm) if background_refresh else InlineRefresher()
     app.state.refresher = refresher
     search_sql = search_rows = None
     if search_dsn:

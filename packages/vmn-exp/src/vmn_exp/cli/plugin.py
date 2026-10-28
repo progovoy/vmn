@@ -277,6 +277,13 @@ def _add_ui_parser(subprasers):  # noqa: N802
                      help="Do not open a browser on start")
     pui.add_argument("--no-index", action="store_true", default=False,
                      help="Keep no on-disk read cache (the index lives in memory only)")
+    pui.add_argument("--keep-warm", dest="keep_warm", action="store_const", const=True,
+                     default=None,
+                     help="Keep refreshing every index once loaded, with nobody watching "
+                          "(default: on for store workspaces, off for checkouts; or "
+                          "server.keep_warm)")
+    pui.add_argument("--no-keep-warm", dest="keep_warm", action="store_const", const=False,
+                     help="Let an index nobody asked for in 60 s stop refreshing")
     pui.add_argument("--diag-every", type=float, default=None, metavar="SEC",
                      help="Write a diagnostic dump to <data-dir>/diag/ every SEC seconds "
                           "(keeps the last 20; SIGUSR1 writes one on demand)")

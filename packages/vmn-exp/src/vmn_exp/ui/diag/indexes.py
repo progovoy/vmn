@@ -28,6 +28,7 @@ def _index_entry(index, watch, alive, now):
         "refresh_failing": watch.failing,
         "since_watched_sec": _since(now, watch.touched_at),
         "refresher_alive": alive,
+        "keep_warm": watch.keep_warm,
         "journaled": getattr(index, "journaled", None),
         "full_listing_due": due() if due else None,
         "drift": getattr(index, "drift", None),

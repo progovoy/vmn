@@ -35,6 +35,8 @@ class ServerSection:
     public_url: Optional[str] = None
     tenancy: str = "single"
     endpoint_allowlist: Tuple[str, ...] = ()  # store endpoint_urls allowed in multi tenancy
+    # Refresh watched indexes while the server runs; None: store workspaces' only.
+    keep_warm: Optional[bool] = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,11 @@ def _int(value, where):
         raise ConfigError(f"{where}: expected an integer, got {value!r}")
 
 
+def _bool(value, where):
+    if value is not None and not isinstance(value, bool):
+        raise ConfigError(f"{where}: expected true or false, got {value!r}")
+
+
 def _choice(value, choices, where):
     if value not in choices:
         raise ConfigError(f"{where}: expected one of {', '.join(choices)}, got {value!r}")
@@ -124,6 +131,7 @@ def _server(data):
     s = _build(ServerSection, data, "server")
     _int(s.port, "server.port")
     _choice(s.tenancy, TENANCIES, "server.tenancy")
+    _bool(s.keep_warm, "server.keep_warm")
     return s
 
 
@@ -190,6 +198,10 @@ def _flag(args, name, default=None):
     return None if value == default else value
 
 
+def _or(value, fallback):
+    return fallback if value is None else value
+
+
 def resolve_config(args, env=None):
     """The effective config for a ``vmn-exp ui`` invocation, or ``None``
     when neither ``--config`` nor a DB (flag or env) is given — today's
@@ -205,6 +217,7 @@ def resolve_config(args, env=None):
         host=_flag(args, "host", DEFAULT_HOST) or cfg.server.host,
         port=_flag(args, "port", DEFAULT_PORT) or cfg.server.port,
         public_url=env.get(ENV_PUBLIC_URL) or cfg.server.public_url,
+        keep_warm=_or(getattr(args, "keep_warm", None), cfg.server.keep_warm),
     )
     return dataclasses.replace(
         cfg,

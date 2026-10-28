@@ -5,7 +5,12 @@ request path.
 A request asks :meth:`Refresher.snapshot` for an index's current snapshot:
 that marks the index watched and makes sure a daemon thread is refreshing it
 every ``interval_sec``. The thread exits once nobody asked for ``idle_sec``,
-so an app no one looks at costs nothing; the next request starts it again.
+so an app no one looks at costs nothing; the next request starts it again;
+unless the index is kept warm (``keep_warm``): refreshed while the server
+runs, so its rows, store upkeep and ``/metrics`` stay current with nobody
+watching. By default a store workspace's indexes are (they come with a
+journal, so an idle refresh lists only hinted and live records) and a
+checkout's are not; ``keep_warm=True``/``False`` forces either way.
 Only the very first request of an index waits (for its initial load, which
 the persisted SQLite store makes fast). A refresh that fails is logged and
 the last snapshot keeps being served; the next one (like a journal tick
@@ -121,9 +126,10 @@ class Refresher(_Listeners):
     full_sweep_sec = RECONCILE_SEC
 
     def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC, on_refresh=None,
-                 clock=time.monotonic):
+                 clock=time.monotonic, keep_warm=None):
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec
+        self.keep_warm = keep_warm  # None: the indexes of a journal (a store's)
         self.on_refresh = on_refresh  # called with each refreshed snapshot
         self._clock = clock
         self._listeners = []
@@ -141,7 +147,7 @@ class Refresher(_Listeners):
         (hinted by *journal*, when given)."""
         if journal is not None:
             self._follow(journal, index)
-        self._watch(index)
+        self._watch(index, self._keeps_warm(journal))
         # Never wait for a cold index's first load: it answers an empty
         # snapshot saying it is loading meanwhile.
         snapshot_now = getattr(index, "snapshot_now", None)
@@ -230,7 +236,10 @@ class Refresher(_Listeners):
         except BaseException:  # SystemExit & co: end visibly; the next request restarts it
             _LOGGER.error("The change journal reader of %s stopped", scope, exc_info=True)
 
-    def _watch(self, index):
+    def _keeps_warm(self, journal):
+        return journal is not None if self.keep_warm is None else self.keep_warm
+
+    def _watch(self, index, keep_warm=False):
         if index not in self._watches:
             use_io_process = getattr(index, "use_io_process", None)
             if use_io_process:
@@ -240,7 +249,7 @@ class Refresher(_Listeners):
             if watch is None:
                 watch = self._watches[index] = Watch(getattr(index, "app_name", None),
                                                      self._clock, _LOGGER)
-            watch.touched_at = self._clock()
+            watch.touched_at, watch.keep_warm = self._clock(), keep_warm
             self._warn_if_slow(watch)
             if not watch.alive() and not self._stopped.is_set():
                 if watch.thread is not None:
@@ -278,7 +287,7 @@ class Refresher(_Listeners):
 
     def _idle(self, index, watch):
         with self._lock:
-            if self._clock() - watch.touched_at < self.idle_sec:
+            if watch.keep_warm or self._clock() - watch.touched_at < self.idle_sec:
                 return False
             watch.thread = None
             journal = self._journal_of.pop(index, None)

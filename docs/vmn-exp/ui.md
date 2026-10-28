@@ -38,6 +38,7 @@ any directory, inside a git checkout or not.
 | `--repo` | — | Attach a local checkout as a workspace (repeatable) |
 | `--store` | — | Attach a read-only experiment store URI as a workspace |
 | `--no-index` | off | Keep no on-disk index; git workspaces index in memory only |
+| `--keep-warm` / `--no-keep-warm` | store workspaces on, checkouts off | Keep refreshing every index once loaded, with nobody watching (see [the index](#the-index)) |
 | `--no-browser` | off | Don't open a browser (one opens only for a loopback `--host`) |
 | `--diag-every` | off | Write a [diagnostic dump](#diagnostic-dumps) every N seconds (keeps the last 20) |
 
@@ -180,12 +181,22 @@ restart.
   LIST plus the changed objects (ranged GETs for grown logs). The version tree
   and dependency graphs are recomputed only after a stamp.
 - **Background refresh**: requests never refresh the index. Each app requested
-  within the last minute gets a thread that refreshes it about once a second,
+  within the last minute (or kept warm, below) gets a thread that refreshes it about once a second,
   with every record re-listed at least once an hour (at most 500 a refresh; on a store
   also 50 a second, so past 180k runs a round takes longer); requests read the latest snapshot, so
   the dashboard lags the files by about a second. Only an app's first request
   waits for the initial load. A failed refresh (say, the bucket is
   unreachable) is logged and the last snapshot keeps being served.
+- **Keep-warm**: the server loads every app at startup, and a store
+  workspace's apps then keep refreshing while the server runs, watched or
+  not, so a cold load runs to the end, store upkeep keeps going and
+  `/metrics` scrapes see current numbers with no browser open. That costs
+  little: a store's refreshes follow its change journal, so an idle one lists
+  only the hinted and live records. A checkout's apps stop refreshing a minute
+  after their last request. `--keep-warm` keeps checkouts warm too,
+  `--no-keep-warm` lets store apps idle as well (or `server.keep_warm` in
+  [server.yml](server.md#serveryml)); the diag dump's `indexes` entries carry
+  `keep_warm`.
 - **Per-snapshot work**: status, the run tree, filtering and sorting are
   computed once per index generation and paging is a slice. Live runs'
   status is re-derived per 2-second bucket, so `stuck` shows within seconds.

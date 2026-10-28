@@ -12,6 +12,7 @@ class Watch:
     def __init__(self, app, clock, logger):
         self.app = app
         self.touched_at = clock()
+        self.keep_warm = False  # refreshed while the server runs, idle or not
         self.thread = None
         self.wake = threading.Event()
         self.refresh_sec = None  # how long the last refresh took

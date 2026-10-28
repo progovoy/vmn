@@ -179,6 +179,7 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
     dsn = postgres_dsn(cfg)
     auth = _oidc_chain(cfg, control_plane, env) if cfg else None
     host = cfg.server.host if cfg else args.host
+    keep_warm = cfg.server.keep_warm if cfg else getattr(args, "keep_warm", None)
     app = create_app(
         manager,
         token=token,
@@ -191,6 +192,7 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
         search_dsn=dsn,
         cache_dsn=dsn,
         audit_retention_days=cfg.audit.retention_days if cfg else DEFAULT_AUDIT_RETENTION_DAYS,
+        keep_warm=keep_warm,
         **kwargs,
     )
     app.state.config = cfg

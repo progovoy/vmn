@@ -56,6 +56,7 @@ server:
   public_url: https://vmn.example.com   # needed for OIDC (redirect URI)
   tenancy: single                       # single | multi (Postgres, SaaS)
   endpoint_allowlist: []                # store endpoint_urls allowed in multi tenancy
+  keep_warm: true                       # refresh every loaded index while serving; default: store workspaces only
 data_dir: /var/lib/vmn-exp              # default ~/.vmn-ui
 db: sqlite:////var/lib/vmn-exp/control.db   # or postgresql://vmn@db/vmn; default: SQLite in data_dir
 audit:
@@ -87,6 +88,12 @@ variable > file > default:
 | `db` | `--db` | `VMN_UI_DB` |
 | `data_dir` | `--data-dir` | `VMN_UI_DATA_DIR` |
 | static token | `--token` | the variable named by `auth.static_token_env` (default `VMN_UI_TOKEN`) |
+| `server.keep_warm` | `--keep-warm` / `--no-keep-warm` | none |
+
+`server.keep_warm` unset keeps a store workspace's indexes refreshing while
+the server runs, nobody watching (its journal makes an idle refresh cheap),
+and lets a checkout's stop a minute after their last request; `true` keeps
+both warm, `false` neither (see [ui.md](ui.md#the-index)).
 
 Workspaces in `workspaces:` are only added when no workspace has that name
 yet, so changes made in the UI survive a restart. `--repo` and `--store` still
