@@ -11,8 +11,11 @@ request timed apart (``first_ms``: the first after a refresh).
 * ``board_kind``: the live launch's runs grouped by ``tags.kind``;
 * ``board_dates``: the ended launch's unstable runs grouped by trade date;
 * ``board_app``: the app's board grouped by parent, on ``value``;
-* ``waiting``: ``status = "created" and timestamp < "<an hour ago>"``, the
-  literal a minute later each time (what P1's ``ago("1h")`` rebuilds).
+* ``waiting``: P1's ``status = "created" and timestamp < ago("1h")``.
+
+The result also carries the status's ``attention`` counts and the summary's
+default ``split``: the seeded store settings (:data:`uiload.seed_fgm.SETTINGS`)
+read back through A0.
 
     python packages/vmn-exp/tests/uiload/probe_fgm.py /tmp/fgm   # serves it in-process
 """
@@ -26,7 +29,7 @@ from urllib.parse import quote
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from uiload import fgm_records, fgm_tree, seed_fgm, slo
+from uiload import fgm_tree, seed_fgm, slo
 from uiload.inproc_server import serve_root
 from uiload.probe import _client, _ms_since, app_path, wait_indexed
 from uiload.probe_stats import _summary
@@ -34,15 +37,12 @@ from uiload.probe_stats import _summary
 ROUTES = ("status", "summary", "summary_split", "board_kind", "board_dates", "board_app",
           "waiting")
 INDEX_TIMEOUT_SEC = 6 * 3600
+WAITING = seed_fgm.WAITING
 
 
-def _requests(ws_app, live, ended, now):
+def _requests(ws_app, live, ended):
     def run(verstr, tail=""):
         return f"{ws_app}/experiments/{quote(verstr, safe='')}{tail}"
-
-    def waiting(i):
-        since = fgm_records.iso(now - 3600 + 60 * i)
-        return {"q": f'status = "created" and timestamp < "{since}"', "limit": 1}
 
     board = f"{ws_app}/experiments"
     return {
@@ -53,7 +53,7 @@ def _requests(ws_app, live, ended, now):
         "board_dates": lambda i: (board, {"group": "tags.trade_date", "scope": ended,
                                           "q": 'tags.health = "unstable"', "limit": 50}),
         "board_app": lambda i: (board, {"group": "parent", "sort": "value", "limit": 50}),
-        "waiting": lambda i: (board, waiting(i)),
+        "waiting": lambda i: (board, {"q": WAITING, "limit": 1}),
     }
 
 
@@ -72,13 +72,18 @@ def _timed(client, path, params):
     return _ms_since(started), resp
 
 
-def measure(base_url, ws, app, profile, expected, token=None, now=None):
+def _get(client, request):
+    path, params = request
+    return client.get(path, params=params).raise_for_status().json()
+
+
+def measure(base_url, ws, app, profile, expected, token=None):
     """The result dict :func:`uiload.slo.fgm_violations` reads."""
-    ws_app, now = app_path(ws, app), time.time() if now is None else now
+    ws_app = app_path(ws, app)
     index_sec, indexed = wait_indexed(base_url, ws, app, expected, token, INDEX_TIMEOUT_SEC)
     with _client(base_url, token) as client:
         live, ended = _launches(client, ws_app)
-        requests = _requests(ws_app, live, ended, now)
+        requests = _requests(ws_app, live, ended)
         routes, errors = {}, 0
         for route, request in requests.items():
             times = []
@@ -87,10 +92,13 @@ def measure(base_url, ws, app, profile, expected, token=None, now=None):
                 times.append(ms)
                 errors += resp.status_code != 200
             routes[route] = dict(_summary(times), first_ms=times[0])
-        path, params = requests["summary_split"](0)
-        split = client.get(path, params=params).raise_for_status().json()
+        split = _get(client, requests["summary_split"](0))
+        default_split = _get(client, requests["summary"](0)).get("split")
+        status = _get(client, requests["status"](0))
     return {"routes": routes, "errors": errors, "status_total": indexed["total"],
-            "index_sec": index_sec, "live": live, "ended": ended, "kinds": len(split["by"])}
+            "index_sec": index_sec, "live": live, "ended": ended, "kinds": len(split["by"]),
+            "attention": {e["key"]: e["count"] for e in status.get("attention", [])},
+            "default_split": default_split}
 
 
 def main(argv=None):
@@ -106,8 +114,7 @@ def main(argv=None):
     data_dir = a.data_dir or tempfile.mkdtemp(prefix="uiload-ui-")
     started = time.monotonic()
     with serve_root(a.root, data_dir, "ws") as (url, ws):
-        result = measure(url, ws, manifest["app"], profile, manifest["total"],
-                         now=manifest["now"])
+        result = measure(url, ws, manifest["app"], profile, manifest["total"])
     result["seconds"] = round(time.monotonic() - started, 1)
     breaches = slo.fgm_evaluate(result, profile.name)
     print(json.dumps(dict(result, violations=breaches), indent=2))

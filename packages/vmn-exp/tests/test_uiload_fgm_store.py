@@ -12,6 +12,7 @@ import os
 import pytest
 from uiload import fgm_records, fgm_tree, probe_fgm, seed_fgm, slo
 from uiload.inproc_server import serve_root
+from vmn_exp.core.app_settings_store import read_settings
 from vmn_exp.core.status import derive_status
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import open_storage
@@ -85,3 +86,29 @@ def test_the_tiny_store_meets_its_fgm_budgets(seeded, tmp_path):
     under = {s["tags"]["kind"] for s in specs if s["code_verstr"] == live}  # its first run
     assert result["kinds"] == len(under - {"launch"})  # the split's values
     assert slo.fgm_evaluate(result, profile.name) == []
+
+
+def test_the_seed_writes_fgm_like_store_settings(seeded):
+    """P1's attention queries and P3's split reach the server through A0."""
+    root, _, _ = seeded
+    ui = read_settings(open_storage(root=local_store_root(root), area="runs"), APP)["ui"]
+    assert ui["split_by"] == "tags.kind"
+    queries = {entry["key"]: entry["query"] for entry in ui["attention"]}
+    assert queries["waiting"] == probe_fgm.WAITING
+
+
+def test_the_probe_counts_waiting_runs_with_ago():
+    _, params = probe_fgm._requests("/ws", "live", "ended")["waiting"](0)
+    assert params["q"] == 'status = "created" and timestamp < ago("1h")'
+
+
+@pytest.mark.serial
+def test_the_probe_reads_the_seeded_settings_back(seeded, tmp_path):
+    root, profile, manifest = seeded
+    with serve_root(root, tmp_path / "data", "ws") as (base_url, ws):
+        result = probe_fgm.measure(base_url, ws, APP, profile, expected=manifest["total"])
+    keys = [entry["key"] for entry in seed_fgm.SETTINGS["ui"]["attention"]]
+    assert sorted(result["attention"]) == sorted(keys)
+    assert all(isinstance(n, int) for n in result["attention"].values()), result["attention"]
+    assert result["attention"]["waiting"] > 0
+    assert result["default_split"] == "tags.kind"

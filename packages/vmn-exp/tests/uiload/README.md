@@ -60,10 +60,11 @@ released, never-started and orphaned (stuck) runs that settle.
 
 `fgm_tree` plans the specs (stdlib only), `fgm_records` turns them into the
 SDK's records or an in-memory index snapshot, `seed_fgm` writes a layout-2
-store (a slice of a launch per worker), `probe_fgm` serves it in-process and
-times `experiments-status`, the live launch's summary with and without
-`?split=tags.kind`, three grouped boards and a minute-keyed waiting count
-against `slo.FGM_BUDGETS`. Seeded live runs declare a heartbeat interval of
+store (a slice of a launch per worker) with fgm-like store settings
+(`ui.attention` queries, `ui.split_by: tags.kind`), `probe_fgm` serves it
+in-process and times `experiments-status` (with those attention counts), the
+live launch's summary with and without `?split=tags.kind`, three grouped boards
+and P1's `ago("1h")` waiting count against `slo.FGM_BUDGETS`. Seeded live runs declare a heartbeat interval of
 months, so they read `running` long after seeding while the orphans read
 `stuck`:
 
