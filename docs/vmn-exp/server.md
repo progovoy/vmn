@@ -522,7 +522,8 @@ ui:
   `{"text": "..."}` (`GET` returns `{text, settings, error, updated_at,
   updated_by}`); read-only servers refuse writes. Writes are journaled: a
   background server re-reads an app's settings on its journal entry (within
-  seconds), else at most every 60 s.
+  seconds), else at most every 60 s; without background refresh the server
+  reads them once per request.
 
 ## Edits on store workspaces
 
