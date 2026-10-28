@@ -14,6 +14,9 @@ from vmn_exp.core.metric_schema import hidden_metrics, metric_charts
 from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
 from vmn_exp.ui.readers.series import downsample
 
+# The most steps run detail lists of one bars/table metric (the latest kept).
+MAX_HINTED_STEPS = 5000
+
 
 def _metric_parts(fold):
     """What :func:`fold_metrics` reads, copied at this poll: the fold itself
@@ -62,6 +65,16 @@ class LogSnapshot:
         """``{metric: chart}`` of the run's metrics not drawn as a line."""
         names = {*self.metrics, *self._counts}
         return metric_charts(names, fold_definitions(self._metric_fold), schema)
+
+    def metric_steps(self, charts):
+        """``{metric: {"rows": [{step, value}], "total"}}`` of the *charts*
+        metrics: the last value logged at each step, steps ascending
+        (step-less last), from every point (never thinned); the latest
+        :data:`MAX_HINTED_STEPS` steps of ``total``."""
+        key = ("metric_steps", tuple(sorted(charts)), MAX_HINTED_STEPS)
+        if key not in self.memo:
+            self.memo[key] = {m: _last_per_step(self._points(m)) for m in sorted(charts)}
+        return self.memo[key]
 
     def log(self):
         return self._entries[: self.total]
@@ -119,3 +132,18 @@ class LogSnapshot:
             {k: downsample(v, max_points) for k, v in joined.items()},
             {k: len(v) for k, v in joined.items()},
         )
+
+
+def _step_order(step):
+    return (1, 0) if step is None else (0, step)
+
+
+def _last_per_step(points):
+    last = {}
+    for point in points:
+        last[point.get("step")] = point.get("value")
+    steps = sorted(last, key=_step_order)
+    return {
+        "rows": [{"step": s, "value": last[s]} for s in steps[-MAX_HINTED_STEPS:]],
+        "total": len(steps),
+    }

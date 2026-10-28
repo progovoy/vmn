@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from "react";
-import type { SeriesPoint } from "../types";
 import { fmtVal } from "../util";
-import { barStats, byValue, lastPerStep, type StepValue } from "../util/metricDisplay";
+import { barStats, byValue, type StepValue } from "../util/metricDisplay";
+import StepsShown from "./StepsShown";
 
 /** Tall enough for a dozen bars; more scroll. */
 const MAX_HEIGHT = 260;
@@ -11,13 +11,14 @@ function mean(rows: StepValue[]): number {
   return finite.length ? finite.reduce((a, b) => a + b, 0) / finite.length : 0;
 }
 
-/** A `chart: bars` metric (plan 28 N8): the last value per step as bars,
- *  largest first — the step is each bar's label, not an axis — with the
- *  max and the share over a threshold (the mean until one is typed). */
-function MetricBars({ name, points, color }: {
-  name: string; points: SeriesPoint[]; color: string;
+/** A `chart: bars` metric (plan 28 N8): the last value per step (*steps*,
+ *  the latest of *total*) as bars, largest first — the step is each bar's
+ *  label, not an axis — with the max and the share over a threshold (the
+ *  mean until one is typed). */
+function MetricBars({ name, rows: steps, total, color }: {
+  name: string; rows: StepValue[]; total: number; color: string;
 }) {
-  const rows = useMemo(() => byValue(lastPerStep(points)), [points]);
+  const rows = useMemo(() => byValue(steps), [steps]);
   const [typed, setTyped] = useState("");
   const threshold = typed.trim() !== "" && Number.isFinite(Number(typed)) ? Number(typed) : mean(rows);
   const stats = barStats(rows, threshold);
@@ -35,6 +36,7 @@ function MetricBars({ name, points, color }: {
           aria-label="threshold" type="number" step="any" value={typed} placeholder="threshold"
           onChange={(e) => setTyped(e.target.value)} style={{ width: 90, fontSize: 11 }}
         />
+        <StepsShown shown={rows.length} total={total} />
       </div>
       <div style={{ maxHeight: MAX_HEIGHT, overflowY: "auto" }}>
         {rows.map((r) => (

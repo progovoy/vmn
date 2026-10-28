@@ -55,4 +55,25 @@ describe("TrainingCurves chart hints (plan 28 N8)", () => {
     fireEvent.click(screen.getByText(/show hidden metrics \(1\)/));
     expect(screen.getByTestId("metric-table").getAttribute("data-metric")).toBe("lr");
   });
+
+  it("draws bars and tables from the server's unthinned steps, not the thinned series", () => {
+    // Thinned: only the bucket extremes survived, out of step order.
+    const thinned = { "health.mem": pts([5, 0, 9]), lr: pts([7, 3]) };
+    const steps = {
+      "health.mem": { rows: [0, 1, 2, 3].map((step) => ({ step, value: step / 10 })), total: 4 },
+      lr: { rows: [{ step: 8, value: 0.8 }, { step: 9, value: 0.9 }], total: 10 },
+    };
+    renderWithClient(
+      <TrainingCurves series={thinned} metricCharts={{ "health.mem": "bars", lr: "table" }}
+        metricSteps={steps} />,
+    );
+    const bars = screen.getByTestId("metric-bars");
+    expect(within(bars).getAllByTestId("bar-step").map((el) => el.textContent))
+      .toEqual(["3", "2", "1", "0"]);
+    expect(within(bars).getByText(/max 0\.3/)).toBeTruthy();
+    const table = screen.getByTestId("metric-table");
+    expect(within(table).getAllByRole("row").slice(1).map((r) => r.textContent))
+      .toEqual(["80.8", "90.9"]);
+    expect(within(table).getByText(/latest 2 of 10 steps/)).toBeTruthy();
+  });
 });

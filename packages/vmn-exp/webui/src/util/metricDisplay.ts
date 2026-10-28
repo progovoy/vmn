@@ -2,7 +2,7 @@
  *  shows the last value per step sorted by value (the step is a label, not
  *  an axis: per-member metrics log members in no stable order), `table`
  *  lists step -> value. */
-import type { MetricChart, SeriesPoint } from "../types";
+import type { MetricChart, MetricSteps, SeriesPoint } from "../types";
 
 export interface StepValue {
   step: number | null;
@@ -15,6 +15,13 @@ export function lastPerStep(points: SeriesPoint[]): StepValue[] {
   for (const p of points) last.set(p.step, p.value);
   return [...last].map(([step, value]) => ({ step, value }))
     .sort((a, b) => (a.step ?? Infinity) - (b.step ?? Infinity));
+}
+
+/** The server's unthinned *steps* of a metric when it sent them, else the
+ *  last value per step of its (possibly thinned) *points*. */
+export function stepRows(steps: MetricSteps | undefined, points: SeriesPoint[]): StepValue[] {
+  if (!steps) return lastPerStep(points);
+  return steps.rows.map((r) => ({ step: r.step, value: r.value ?? NaN }));
 }
 
 /** *rows* largest value first, non-finite values last. */

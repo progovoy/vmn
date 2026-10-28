@@ -331,6 +331,7 @@ def experiment_detail(
     charts = snapshot.metric_charts(schema)
     if charts:  # absent without a bars/table hint (plan 28 N8)
         detail["metric_charts"] = charts
+        detail["metric_steps"] = snapshot.metric_steps(charts)
     return detail, None
 
 
