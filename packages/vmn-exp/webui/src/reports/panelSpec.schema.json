@@ -677,6 +677,155 @@
           "const": 1
         },
         "type": {
+          "const": "pivot"
+        },
+        "runs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "verstrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "verstrs"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "sort": {
+                  "type": "string"
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "order": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "rows": {
+          "type": "string"
+        },
+        "cols": {
+          "type": "string"
+        },
+        "cell": {
+          "enum": [
+            "count",
+            "share",
+            "agg"
+          ]
+        },
+        "match": {
+          "type": "string"
+        },
+        "metric": {
+          "type": "string"
+        },
+        "agg": {
+          "enum": [
+            "mean",
+            "best",
+            "median",
+            "min",
+            "max"
+          ]
+        },
+        "scope": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "app",
+        "runs",
+        "rows",
+        "cols"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "cell": {
+                "const": "share"
+              }
+            },
+            "required": [
+              "cell"
+            ]
+          },
+          "then": {
+            "required": [
+              "match"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "cell": {
+                "const": "agg"
+              }
+            },
+            "required": [
+              "cell"
+            ]
+          },
+          "then": {
+            "required": [
+              "metric"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "v": {
+          "const": 1
+        },
+        "type": {
           "const": "media"
         },
         "runs": {

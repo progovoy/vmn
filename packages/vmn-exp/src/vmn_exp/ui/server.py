@@ -62,6 +62,7 @@ from vmn_exp.ui import (
     routes_lineage,
     routes_media,
     routes_models,
+    routes_pivot,
     routes_reports,
     routes_run_code,
     routes_run_search,
@@ -712,6 +713,7 @@ def create_app(
 
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
                                 _comment_counts, _group_aggregate)
+    routes_pivot.register(app, API_PREFIX, _leaderboard_inputs, leaderboards, _group_aggregate)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
 
     def _events_reader(ws_name, app_tag):

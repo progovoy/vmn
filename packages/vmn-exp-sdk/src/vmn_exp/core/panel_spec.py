@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import yaml
 
+from vmn_exp.core.app_settings import GROUP_AGGREGATES
 from vmn_exp.core.query import QueryError, compile_query
 
 SPEC_VERSION = 1
@@ -22,6 +23,9 @@ _KIND_SCHEMAS = {
     "posint": {"type": "integer", "minimum": 1},
     "strlist": {"type": "array", "items": {"type": "string"}},
     "step": {"oneOf": [{"type": "integer", "minimum": 0}, {"const": "last"}]},
+    "cell": {"enum": ["count", "share", "agg"]},
+    "agg": {"enum": list(GROUP_AGGREGATES)},
+    "query": {"type": "string"},
     "x": {
         "type": "object",
         "properties": {
@@ -45,12 +49,17 @@ PANEL_TYPES = {
     "parallel": ({"columns": "strlist"}, ("columns",), False),
     "importance": ({"metric": "str"}, ("metric",), False),
     "grouped": ({"group_by": "str", "metric": "str"}, ("group_by", "metric"), False),
+    "pivot": ({"rows": "str", "cols": "str", "cell": "cell", "match": "query", "metric": "str",
+               "agg": "agg", "scope": "str"}, ("rows", "cols"), False),
     "media": ({"key": "str", "step": "step"}, ("key",), True),
     "table": ({"path": "str"}, ("path",), True),
     "histogram": ({"key": "str"}, ("key",), True),
     "lineage": ({"depth": "posint"}, (), True),
     "run": ({}, (), True),
 }
+
+# type -> {(field, value): the field that value needs}
+_NEEDS = {"pivot": {("cell", "share"): "match", ("cell", "agg"): "metric"}}
 
 _COMMON = {"v": None, "id": "str", "type": None, "app": "str", "runs": None,
            "title": "str", "height": "posint"}
@@ -77,8 +86,10 @@ class _Invalid(Exception):
 
 
 def _is_kind(value, kind):
-    if kind == "str":
+    if kind in ("str", "query"):
         return isinstance(value, str)
+    if kind in ("cell", "agg"):
+        return value in _KIND_SCHEMAS[kind]["enum"]
     if kind == "bool":
         return isinstance(value, bool)
     if isinstance(value, bool):
@@ -115,12 +126,21 @@ def _check_fields(mapping, kinds, where):
             raise _Invalid(f"field {where}{name!r} must be {kind}")
 
 
-def _check_query(text):
+def _check_query(text, where="runs.query"):
     try:
         compile_query(text)
     except QueryError as exc:
         match = re.search(r"at offset (\d+)", str(exc))
-        raise _Invalid(f"runs.query: {exc}", int(match.group(1)) if match else None)
+        raise _Invalid(f"{where}: {exc}", int(match.group(1)) if match else None)
+
+
+def _check_needs(spec, kind):
+    for (name, value), needed in _NEEDS.get(kind, {}).items():
+        if spec.get(name) == value and needed not in spec:
+            raise _Invalid(f"{kind} panel with {name} {value} needs field {needed!r}")
+    for name, field_kind in PANEL_TYPES[kind][0].items():
+        if field_kind == "query" and name in spec:
+            _check_query(spec[name], name)
 
 
 def _check_runs(runs, single):
@@ -161,6 +181,7 @@ def _check(spec):
     absent = [name for name in required if name not in spec]
     if absent:
         raise _Invalid(f"{kind} panel needs field(s): {', '.join(absent)}")
+    _check_needs(spec, kind)
     _check_runs(spec["runs"], single)
 
 
@@ -214,12 +235,16 @@ def _type_schema(kind):
         "runs": _runs_schema(single),
         **_props(fields),
     }
-    return {
+    schema = {
         "type": "object",
         "properties": props,
         "required": [*_REQUIRED, *required],
         "additionalProperties": False,
     }
+    needs = [{"if": {"properties": {name: {"const": value}}, "required": [name]},
+              "then": {"required": [needed]}}
+             for (name, value), needed in _NEEDS.get(kind, {}).items()]
+    return {**schema, "allOf": needs} if needs else schema
 
 
 def json_schema():
