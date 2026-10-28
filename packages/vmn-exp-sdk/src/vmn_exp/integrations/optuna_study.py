@@ -140,7 +140,7 @@ class StudyTracker:
                 raise
             else:
                 _log_trial_params(trial, run)
-                _log_trial_result(result, run)
+                _log_trial_result(result, run, self._study)
                 run.finish(exit_code=0)
                 return result
 
@@ -201,18 +201,29 @@ def _log_trial_params(trial, run) -> None:
         run.log_params(trial.params)
 
 
-def _log_trial_result(result, run) -> None:
+def _goals(study) -> list:
+    """The ``define_metric`` goal of each of *study*'s objectives (None: unset)."""
+    names = [d.name for d in getattr(study, "directions", None) or []]
+    return [{"MINIMIZE": "min", "MAXIMIZE": "max"}.get(n) for n in names]
+
+
+def _declare(run, name, goal) -> None:
+    if goal is not None:
+        run.define_metric(name, goal=goal)
+
+
+def _log_trial_result(result, run, study) -> None:
+    goals = _goals(study)
     if isinstance(result, (list, tuple)):
-        for i, v in enumerate(result):
-            try:
-                run.log_metric(f"objective_{i}", float(v))
-            except (TypeError, ValueError):
-                pass
+        named = [(f"objective_{i}", v) for i, v in enumerate(result)]
     else:
+        named = [("objective", result)]
+    for i, (name, value) in enumerate(named):
         try:
-            run.log_metric("objective", float(result))
+            run.log_metric(name, float(value))
         except (TypeError, ValueError):
-            pass
+            continue
+        _declare(run, name, goals[i] if i < len(goals) else None)
 
 
 def _log_best(outer_run, study) -> None:
@@ -233,6 +244,7 @@ def _log_best(outer_run, study) -> None:
     try:
         if best.value is not None:
             outer_run.log_metric("best_value", float(best.value))
+            _declare(outer_run, "best_value", _goals(study)[0])
         if best.params:
             outer_run.log_params({f"best_{k}": v for k, v in best.params.items()})
     except Exception as exc:

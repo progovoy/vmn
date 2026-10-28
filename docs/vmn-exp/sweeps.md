@@ -63,6 +63,10 @@ Methods:
   point, given every succeeded trial's params and metric. The study is rebuilt
   in memory from storage for each suggestion, so there is no shared Optuna DB.
   `normal` is not supported; without Optuna the agent exits with an error.
+  To track an Optuna study you drive yourself, use
+  [`start_study_run`](sdk.md#optuna--start_study_run--studytracker): its
+  trials' `objective` and the outer run's `best_value` carry the study's
+  direction as their metric goal.
 
 `create` validates and normalizes the spec and stores it in the sweep run's
 metadata (`sweep:`), where agents read it.
