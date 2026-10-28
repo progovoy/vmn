@@ -11,7 +11,16 @@ request timed apart (``first_ms``: the first after a refresh).
 * ``board_kind``: the live launch's runs grouped by ``tags.kind``;
 * ``board_dates``: the ended launch's unstable runs grouped by trade date;
 * ``board_app``: the app's board grouped by parent, on ``value``;
-* ``waiting``: P1's ``status = "created" and timestamp < ago("1h")``.
+* ``waiting``: P1's ``status = "created" and timestamp < ago(...)``, each
+  request a minute further back (``ago("61m")``, ``ago("62m")``, ...): the
+  server pins ``ago()`` to the minute and keys its caches on the pinned text,
+  and ``status`` already built the 1 h order (the seeded ``waiting`` attention
+  query), so every timed request pays the rebuild a minute rollover causes.
+
+``waiting_cold_ms`` times one ``ago("59m")`` count first, right after the
+index is ready: the first ``ago()`` order the server builds. Not the seeded
+``ago("1h")`` itself: waiting for the index polls ``experiments-status``,
+whose attention count already built that order.
 
 The result also carries the status's ``attention`` counts and the summary's
 default ``split``: the seeded store settings (:data:`uiload.seed_fgm.SETTINGS`)
@@ -40,6 +49,15 @@ INDEX_TIMEOUT_SEC = 6 * 3600
 WAITING = seed_fgm.WAITING
 
 
+def cold_waiting(ws_app):
+    """The first ``ago()`` board request, a minute no status poll pinned."""
+    return f"{ws_app}/experiments", _waiting(-2)
+
+
+def _waiting(i):
+    return {"q": f'status = "created" and timestamp < ago("{61 + i}m")', "limit": 1}
+
+
 def _requests(ws_app, live, ended):
     def run(verstr, tail=""):
         return f"{ws_app}/experiments/{quote(verstr, safe='')}{tail}"
@@ -53,7 +71,7 @@ def _requests(ws_app, live, ended):
         "board_dates": lambda i: (board, {"group": "tags.trade_date", "scope": ended,
                                           "q": 'tags.health = "unstable"', "limit": 50}),
         "board_app": lambda i: (board, {"group": "parent", "sort": "value", "limit": 50}),
-        "waiting": lambda i: (board, {"q": WAITING, "limit": 1}),
+        "waiting": lambda i: (board, _waiting(i)),
     }
 
 
@@ -82,9 +100,10 @@ def measure(base_url, ws, app, profile, expected, token=None):
     ws_app = app_path(ws, app)
     index_sec, indexed = wait_indexed(base_url, ws, app, expected, token, INDEX_TIMEOUT_SEC)
     with _client(base_url, token) as client:
+        cold_ms, resp = _timed(client, *cold_waiting(ws_app))
         live, ended = _launches(client, ws_app)
         requests = _requests(ws_app, live, ended)
-        routes, errors = {}, 0
+        routes, errors = {}, int(resp.status_code != 200)
         for route, request in requests.items():
             times = []
             for i in range(profile.probe_requests):
@@ -98,7 +117,7 @@ def measure(base_url, ws, app, profile, expected, token=None):
     return {"routes": routes, "errors": errors, "status_total": indexed["total"],
             "index_sec": index_sec, "live": live, "ended": ended, "kinds": len(split["by"]),
             "attention": {e["key"]: e["count"] for e in status.get("attention", [])},
-            "default_split": default_split}
+            "default_split": default_split, "waiting_cold_ms": cold_ms}
 
 
 def main(argv=None):

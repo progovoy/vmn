@@ -97,9 +97,22 @@ def test_the_seed_writes_fgm_like_store_settings(seeded):
     assert queries["waiting"] == probe_fgm.WAITING
 
 
-def test_the_probe_counts_waiting_runs_with_ago():
-    _, params = probe_fgm._requests("/ws", "live", "ended")["waiting"](0)
-    assert params["q"] == 'status = "created" and timestamp < ago("1h")'
+def test_the_cold_waiting_count_asks_a_minute_no_status_poll_pinned():
+    """Waiting for the index polls ``experiments-status``, whose seeded
+    attention query already built the ``ago("1h")`` order."""
+    _, params = probe_fgm.cold_waiting("/ws")
+    assert params["q"] == 'status = "created" and timestamp < ago("59m")'
+    assert 'ago("1h")' in probe_fgm.WAITING
+
+
+def test_each_waiting_request_pins_to_its_own_minute():
+    """The status route warms the 1 h order (the seeded attention query), so
+    each timed request asks for another minute: every one rebuilds."""
+    waiting = probe_fgm._requests("/ws", "live", "ended")["waiting"]
+    queries = [waiting(i)[1]["q"] for i in range(20)]
+    assert len(set(queries)) == 20
+    assert all('ago("' in q and q.startswith('status = "created"') for q in queries)
+    assert 'ago("1h")' not in "".join(queries) and 'ago("60m")' not in "".join(queries)
 
 
 @pytest.mark.serial
@@ -112,3 +125,11 @@ def test_the_probe_reads_the_seeded_settings_back(seeded, tmp_path):
     assert all(isinstance(n, int) for n in result["attention"].values()), result["attention"]
     assert result["attention"]["waiting"] > 0
     assert result["default_split"] == "tags.kind"
+
+
+@pytest.mark.serial
+def test_the_probe_times_a_cold_waiting_count_before_status(seeded, tmp_path):
+    root, profile, manifest = seeded
+    with serve_root(root, tmp_path / "data", "ws") as (base_url, ws):
+        result = probe_fgm.measure(base_url, ws, APP, profile, expected=manifest["total"])
+    assert result["waiting_cold_ms"] > 0

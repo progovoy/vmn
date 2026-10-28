@@ -64,7 +64,8 @@ store (a slice of a launch per worker) with fgm-like store settings
 (`ui.attention` queries, `ui.split_by: tags.kind`), `probe_fgm` serves it
 in-process and times `experiments-status` (with those attention counts), the
 live launch's summary with and without `?split=tags.kind`, three grouped boards
-and P1's `ago("1h")` waiting count against `slo.FGM_BUDGETS`. Seeded live runs declare a heartbeat interval of
+and P1's waiting count (`ago()`, a fresh minute per request so each rebuilds,
+plus one cold count first) against `slo.FGM_BUDGETS`. Seeded live runs declare a heartbeat interval of
 months, so they read `running` long after seeding while the orphans read
 `stuck`:
 

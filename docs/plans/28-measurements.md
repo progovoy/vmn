@@ -79,7 +79,8 @@ idle live threads: 67-110 ms on both 3.15 builds, no version difference.
    multi-threaded interpreter on this workload. A pure-Python YAML parse
    (the cold path's main work: neither venv has libyaml) ran 1,150/875
    records/s on one 3.15.2t thread against 1,714/410 on 3.15.1t, at load 500:
-   too noisy to conclude more. This is CPython's side, not vmn's.
+   too noisy to conclude more. Whether this is CPython's side is open (see
+   the verdict).
 3. **On free-threaded builds `gc.freeze()` does not shorten a collection.**
    A full collection still walks every frozen object: 58 ms per 4M frozen
    items (micro), 0.2-1.4 s after `freeze_long_lived()` at 100k cold, against
@@ -99,16 +100,22 @@ idle live threads: 67-110 ms on both 3.15 builds, no version difference.
 
 ### Verdict proposal for appendix A row 6
 
-**Explained.** Pauses on free-threaded builds scale with the whole live heap
-(freezing does not exempt objects), and 3.15.2t spends ~3.5x longer per
-collection than 3.15.1t inside vmn's multi-threaded cold load, though the
-collector is no slower in isolation: a CPython 3.15.2t regression to report
-upstream, not a vmn bug. vmn-side mitigation (not done): after a cold load has
-published and persisted its rows, drop the per-run full-fold objects and serve
-from the lean rows a warm start reads, so the resident heap is the warm one
-(~2.6M instead of 5.6M objects at 100k, about half of each later pause). Until
-then, restarting a server after its first cold load gives the smaller heap, and
-3.15.1t is the better free-threaded build for `vmn-exp ui`.
+**Investigating: partly explained.** Established: on free-threaded builds a
+pause scales with the whole live heap, and `gc.freeze()` does not exempt
+frozen objects (point 3), so vmn's resident heap after a cold load sets the
+pause length (point 4). Open: why 3.15.2t pauses ~3.5x longer than 3.15.1t
+inside vmn's multi-threaded cold load while the collector alone is no slower
+(points 1-2). The stop-the-world wait and a slower interpreter are guesses;
+the bench's `callback` and `threshold` policies, or timing the stop-the-world
+phase apart from the collection, are needed to tell the collector's work from
+the wait before calling it a CPython regression. vmn-side mitigation (not
+done): after a cold load has published and persisted its rows, drop the
+per-run full-fold objects and serve from the lean rows a warm start reads, so
+the resident heap is the warm one (~2.6M instead of 5.6M objects at 100k,
+about half of each later pause). Interim note while the gap is open, not a
+recommendation against 3.15.2t (the target build): restarting a server after
+its first cold load gives the smaller heap, and on these measurements 3.15.1t
+paused less.
 
 Not run: the bench's `GC_BENCH_POLICY` experiments (`callback`, `index`,
 `threshold`).
@@ -133,6 +140,14 @@ p50 / p95 / first request, ms. Budgets are `slo.FGM_BUDGETS["fgm-small"]`.
 | waiting, `ago("1h")` (1000) | 3 / 5 / 5 | 33 / 108 / 86 | 2 / 2 / 4 | 2 / 4 / 4 |
 | index ready | 84 s | 177 s | 148 s | 110 s |
 | budget breaches | none | none | none | summary p95, first |
+
+The `waiting` column above measures cache hits: the probe sent the seeded
+`ago("1h")` text every time, and the `status` route (whose attention count
+pins the same query to the same minute) had already built that order. The
+probe now asks a minute further back on each request (`ago("61m")`,
+`ago("62m")`, ...) so each one rebuilds, and reports `waiting_cold_ms`, the
+first `ago()` order built after the index is ready; those numbers are not
+measured yet.
 
 Every run read the seeded settings back: attention `waiting 372,
 handed_back 103, unstable 761, failed_trials 834`, the summary's default split
