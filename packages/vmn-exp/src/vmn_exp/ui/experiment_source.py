@@ -16,14 +16,18 @@ import os
 import threading
 
 import vmn_exp.core.index as experiment_index
+from vmn_exp.core.app_settings import metrics_overlay, ui_overlay
+from vmn_exp.core.app_settings_store import SettingsCache
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.query_extra import bind_similar_scope
 from vmn_exp.core.status import run_state_observed_at
+from vmn_exp.storage.areas import app_key
 from vmn_exp.ui import index as ui_index
 from vmn_exp.ui.cache_health import SqliteHealth
 from vmn_exp.ui.cache_resync import WorkspaceCache
 from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN, freshness
+from vmn_exp.ui.leaderboard_group_fields import conf_aggregate
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.ui.readers.baselines import last_good
@@ -31,6 +35,10 @@ from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.refresher import InlineRefresher, NotingRefresher
 from vmn_exp.ui.schema_cache import MetricsSchemaCache
 from vmn_exp.ui.similar_corpora import SimilarCorpora
+
+# A background server re-reads an app's store settings this often at most;
+# a journal entry for them drops them at once.
+SETTINGS_RECHECK_SEC = 60
 
 
 def _state_reader(run_states):
@@ -94,10 +102,9 @@ class ExperimentSource:
         self._served_by = {}  # (workspace name, app name) -> the index serving it
         self._resolvers = LRU(8)
         self._schemas = MetricsSchemaCache()
-        self._group_aggregates = MetricsSchemaCache(read=exp_reader.group_aggregate,
-                                                    path=app_conf_path)
-        self._stale_afters = MetricsSchemaCache(read=exp_reader.stale_after_min,
-                                                path=app_conf_path)
+        self._conf_uis = MetricsSchemaCache(read=exp_reader.conf_ui, path=app_conf_path)
+        # Inline refreshes see every write made before the request.
+        self._settings = SettingsCache(SETTINGS_RECHECK_SEC if self.refresher.background else 0)
         self._lock = threading.Lock()
         self._search_rows = search_rows
         self._upkeep = store_upkeep
@@ -151,8 +158,9 @@ class ExperimentSource:
     def _refresher_of(self, ws, app_name, s3_storage):
         """The refresher of *app_name*'s index, noting it for similar runs and
         the search rows."""
-        schema_of = (dict if s3_storage is not None
-                     else (lambda: self.metrics_schema(ws, app_name)))
+        def schema_of():
+            storage = s3_storage if s3_storage is not None else self.workspace_index(ws).storage
+            return self.metrics_schema(ws, app_name, self.app_settings(ws, app_name, storage))
 
         def note(index):
             self._served_by[(ws.name, app_name)] = index
@@ -219,7 +227,10 @@ class ExperimentSource:
             return None
         with self._lock:
             if ws.name not in self._journals:
-                self._journals[ws.name] = _open_journal(ws, storage, cache_path)
+                journal = _open_journal(ws, storage, cache_path)
+                if journal is not None:
+                    journal.on_settings(lambda key: self._settings.forget(ws.name, key))
+                self._journals[ws.name] = journal
             return self._journals[ws.name]
 
     def journal_of(self, ws_name):
@@ -240,20 +251,32 @@ class ExperimentSource:
             return
         ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws))
 
-    def metrics_schema(self, ws, app_name):
-        """The git workspace app's metrics schema, parsed once per conf change."""
-        return self._schemas.get(ws.path, app_name)
+    def app_settings(self, ws, app_name, storage):
+        """The app's store settings in *storage* (:mod:`vmn_exp.core.app_settings`)."""
+        return self._settings.get((ws.name, app_name), storage, app_name)
 
-    def group_aggregate(self, ws, app_name):
-        """The git workspace app's default group aggregate (plan 22 G10)."""
-        return self._group_aggregates.get(ws.path, app_name)
+    def settings_changed(self, ws, app_name):
+        """This server wrote the app's settings: read them again."""
+        self._settings.forget(ws.name, app_key(app_name))
 
-    def stale_after_min(self, ws, app_name):
-        """The git workspace app's ``experiment.ui.stale_after_min``; the
-        default in a store workspace."""
-        if ws.kind != "git":
-            return DEFAULT_STALE_AFTER_MIN
-        return self._stale_afters.get(ws.path, app_name)
+    def metrics_schema(self, ws, app_name, settings=None):
+        """The app's metrics schema: a git workspace's conf (parsed once per
+        conf change) over its *settings*."""
+        conf = self._schemas.get(ws.path, app_name) if ws.kind == "git" else {}
+        return metrics_overlay(settings, conf)
+
+    def experiment_ui(self, ws, app_name, settings=None):
+        """The app's ``experiment.ui``: a git workspace's branch conf over *settings*."""
+        conf = self._conf_uis.get(ws.path, app_name) if ws.kind == "git" else {}
+        return ui_overlay(settings, conf)
+
+    def group_aggregate(self, ws, app_name, settings=None):
+        """The app's default group aggregate (plan 22 G10)."""
+        return conf_aggregate({"ui": self.experiment_ui(ws, app_name, settings)})
+
+    def stale_after_min(self, ws, app_name, settings=None):
+        """The app's ``experiment.ui.stale_after_min``, else the default."""
+        return exp_reader.stale_after_of(self.experiment_ui(ws, app_name, settings))
 
     def detail_options(self, ws, snap):
         """``edges``/``resolve``/``read_child_row``/``last_good`` (and with a background
@@ -290,5 +313,6 @@ class ExperimentSource:
             self._indexes.pop(ws_name, None)
             self._journals.pop(ws_name, None)
             self._caches.pop(ws_name, None)
+        self._settings.forget(ws_name)
         if self._pg is not None:
             self._pg.forget(ws_name)

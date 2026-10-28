@@ -19,7 +19,7 @@ from vmn_exp.storage.store_marker import MARKER
 METADATA = "metadata.yml"
 _CONTAINERS = {"experiments": areas.RUNS, "snapshots": areas.SNAPSHOTS}
 _V2_TOP = {areas.RUNS, areas.SNAPSHOTS, areas.CODE, areas.SWEEPS, areas.REGISTRY,
-           areas.REPORTS, areas.COMMENTS, areas.JOURNAL, MARKER}
+           areas.REPORTS, areas.COMMENTS, areas.SETTINGS, areas.JOURNAL, MARKER}
 
 
 @dataclass

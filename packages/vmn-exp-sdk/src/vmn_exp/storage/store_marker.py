@@ -19,7 +19,7 @@ from vmn_exp.storage import areas
 MARKER = "store.yml"
 LAYOUT = 2
 _AREAS = {areas.RUNS, areas.SNAPSHOTS, areas.CODE, areas.SWEEPS, areas.REGISTRY,
-          areas.REPORTS, areas.COMMENTS, areas.JOURNAL}
+          areas.REPORTS, areas.COMMENTS, areas.SETTINGS, areas.JOURNAL}
 
 _V1_CONTAINERS = ("experiments", "snapshots")
 _V1_PREFIXES = ("vmn-experiments", "vmn-snapshots")
@@ -260,7 +260,7 @@ def require_store(storage, uri=None):
     """The reader's check of *storage*'s root: StoreLayoutError when it is
     unusable and, given its *uri*, MissingStoreError when it holds no vmn
     store at all."""
-    backend = _backend(storage)
+    backend = authoritative(storage)
     where = root_of(backend)
     if where is None:
         return
@@ -270,6 +270,6 @@ def require_store(storage, uri=None):
     check_store(backend, writer=False)
 
 
-def _backend(storage):
+def authoritative(storage):
     """The storage that holds the authoritative records (the remote, if any)."""
     return getattr(storage, "_remote", None) or getattr(storage, "_local", None) or storage

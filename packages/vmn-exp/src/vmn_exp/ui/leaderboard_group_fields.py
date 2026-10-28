@@ -9,13 +9,14 @@ group's counts and aggregates live in :mod:`~vmn_exp.ui.leaderboard_group_summar
 """
 import json
 
+from vmn_exp.core.app_settings import GROUP_AGGREGATES as AGGREGATES
+
 PARENT = "parent"
 RERUN_OF = "rerun_of"
 TARGET_LINKS = (PARENT, "forked_from", RERUN_OF)
 LINKS = TARGET_LINKS + ("code_verstr",)
 FIELDS = ("branch", "status", "failure_sig")
 DICT_FIELDS = ("tags", "params")
-AGGREGATES = ("mean", "best", "median", "min", "max")
 DEFAULT_AGGREGATE = "mean"
 # The no-value group's key: no value's key equals it, since a value whose
 # text starts with it is keyed with it doubled (:func:`escaped_key`).

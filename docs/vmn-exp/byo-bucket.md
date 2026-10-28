@@ -34,6 +34,7 @@ Every store root (`s3://bucket/prefix`; a URI without a path uses the root
 | `registry/<model>/<record>/` | model and dataset registry | CLI/SDK, server edits |
 | `reports/<rid>/...` | reports and their comment threads ([reports.md](reports.md)) | server, `vmn-exp report put` |
 | `comments/<app-key>/<verstr>/` | run comment threads | server, `vmn-exp comment` |
+| `settings/<app-key>/app/` | the app's settings, `experiment.yml` ([server.md](server.md#app-settings)) | server editors, `vmn-exp settings set` |
 | `journal/<YYYYMMDDHHMM>/...` | change journal: empty objects naming changed records | every writer, including the server |
 | `server/` | the server's probe key | server (read + edits only) |
 
@@ -49,7 +50,7 @@ your own access.
 | Set | Grants | The UI can |
 |---|---|---|
 | **Read-only** | list and get under `<prefix>/` | browse, compare, charts, search, comment counts. Edit requests get `403` |
-| **Read + edits** | the above, plus put on: `runs/*/*/metadata.yml`, `runs/*/*/log/vmn-server*`, `registry/*`, `reports/*`, `comments/*`, `journal/*`, `server/*` | also tag, note, archive, rewind, model register/alias/deprecate, reports and comments |
+| **Read + edits** | the above, plus put on: `runs/*/*/metadata.yml`, `runs/*/*/log/vmn-server*`, `registry/*`, `reports/*`, `comments/*`, `settings/*`, `journal/*`, `server/*` | also tag, note, archive, rewind, model register/alias/deprecate, reports, comments and app settings |
 
 - `runs/*/*/log/<writer>*` is the server's own per-writer log, which rewind
   markers go to (its streams, `log/<writer>~<owner>[@<n>].jsonl`).
@@ -92,6 +93,7 @@ read-only set.
         "arn:aws:s3:::acme-ml/vmn/registry/*",
         "arn:aws:s3:::acme-ml/vmn/reports/*",
         "arn:aws:s3:::acme-ml/vmn/comments/*",
+        "arn:aws:s3:::acme-ml/vmn/settings/*",
         "arn:aws:s3:::acme-ml/vmn/runs/*/*/log/vmn-server*",
         "arn:aws:s3:::acme-ml/vmn/journal/*",
         "arn:aws:s3:::acme-ml/vmn/server/*"

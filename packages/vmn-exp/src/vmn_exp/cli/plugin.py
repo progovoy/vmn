@@ -512,9 +512,11 @@ def register_all() -> None:
 
 
 def _register_reports():
-    from vmn_exp.cli import comment, report
+    from vmn_exp.cli import comment, report, settings
 
     for names, add_parser, run, read_only in (
+        (("settings",), settings.add_settings_parser, settings.settings_run_without_repo,
+         {"show"}),
         (("report",), report.add_report_parser, report.report_run_without_repo,
          {"list", "show", "export"}),
         (("comment",), comment.add_comment_parser, comment.comment_run_without_repo, set()),

@@ -539,8 +539,8 @@ what a group header shows per metric: `mean`, `best`, `median`, `min` or
 `none`) and `?agg=`, so saved views keep it. Without `?group=` the board is
 grouped by parent run when some run has a parent, else not grouped. Without
 `?agg=` it shows the aggregate the server applied — conf.yml's
-`experiment.ui.group_aggregate` (branch conf respected), else the mean (store
-workspaces have no conf, so the mean). Grouped, the board stays live while
+`experiment.ui.group_aggregate` (branch conf respected), else the app's
+[store settings](server.md#app-settings), else the mean. Grouped, the board stays live while
 any run in any group is running, loaded or not. Ungrouped, every run is one
 row, sorted and paged as a flat list.
 
@@ -692,6 +692,7 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `POST` | `ws/{ws}/apps/{app}/series` | [Series of many runs](#series-for-many-runs) |
 | `GET` | `.../experiments/{verstr}/metric-keys?prefix=&offset=&limit=` | [A run's metric names, paged](#zoom-and-many-keys) |
 | `GET` | `ws/{ws}/apps/{app}/metrics-schema` | The [effective metrics schema](#paging-sorting-and-order) |
+| `GET` / `PUT` | `ws/{ws}/apps/{app}/settings` | The app's [store settings](server.md#app-settings) (`PUT {"text"}`: editor) |
 | `POST` | `ws/{ws}/apps/{app}/actions/{action}` | Start a [job](#actions) |
 | `GET` | `/jobs/{id}` | A job's status and log |
 | `GET` | `ws/{ws}/apps/{app}/versions` | Stamped versions (git workspaces) |
@@ -878,7 +879,8 @@ an index that serves old data or stopped keeping up:
 - `refresh_failing`: the refresh is failing (`last_error` is its streak's
   last error), its thread is gone, or it has run past 10 minutes (stuck).
 - `stale_after_sec`: the age past which the dashboard warns — conf
-  `experiment.ui.stale_after_min` of a checkout's app (default 5).
+  `experiment.ui.stale_after_min` of a checkout's app, else the app's
+  [store settings](server.md#app-settings) (default 5).
 - `unreadable` (absent when none): `{"count": 12, "store_errors": 12,
   "last_error": "ClientError('An error occurred (SlowDown) ...')"}` — the
   records the index set aside unread, retried 60 s later doubling to 10 min:
@@ -947,10 +949,11 @@ message and offset (`unknown field 'statuz' at offset 0`).
   unchanged poll is an empty `304`.
 
 The goal comes from the app's effective metrics schema,
-`GET .../metrics-schema`: conf.yml's `experiment.metrics` plus the
-`goal`/`hidden` runs declare for names conf.yml lacks (see
+`GET .../metrics-schema`: conf.yml's `experiment.metrics` over the app's
+[store settings](server.md#app-settings), plus the `goal`/`hidden` runs
+declare for names neither has (see
 [Metrics schema](experiments.md#metrics-schema-sorting--goals)); a store
-workspace has only the runs' declarations. It also decides which metrics the
+workspace has no conf.yml, only the settings and the runs' declarations. It also decides which metrics the
 dashboard hides by default (the column picker and a collapsed "hidden metrics"
 section on the run page show them).
 
@@ -1015,7 +1018,8 @@ code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
   checkout's branch (its branch conf when there is one, as `vmn` resolves
   it; a detached HEAD, as in CI, counts as the branch `vmn stamp` resolves
   it to: the CI env's branch, else the branch last checked out, else the one
-  branch at or containing it; no branch reads the app's conf.yml), else `mean` (store workspaces: `mean`); `aggregate` names what it
+  branch at or containing it; no branch reads the app's conf.yml), else the
+  app's store settings, else `mean`; `aggregate` names what it
   resolved to, and every aggregate is in the payload either way.
 - `offset`/`limit` page groups (default and at most 50); `rows_per_group`
   (default 10, 1..100) caps each group's `rows`, lowered so a page holds at

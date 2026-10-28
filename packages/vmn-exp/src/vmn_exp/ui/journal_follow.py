@@ -9,6 +9,8 @@ gets the names it overflowed with and a listing of its record names
 (``overflowed``; an index without it reconciles). ``reports``/``comments`` entries go to the
 workspace's report index (:meth:`WorkspaceJournal.feed_reports`), fed every
 tick, idle ones too, so it reads no journal of its own while this one runs.
+A ``settings`` entry (or overflow) names its app key to the listener
+:meth:`WorkspaceJournal.on_settings` registered (plan 28 A0).
 The cursor persists in the workspace's ``CacheStore`` kv, so a restart
 resumes where it stopped — never further back than the journal keeps
 (``retain_sec``), many partitions listed at once.
@@ -29,7 +31,7 @@ import threading
 import time
 
 from vmn_exp.core.journal_reader import JournalReader
-from vmn_exp.storage.areas import COMMENTS, REPORTS, RUNS, app_key
+from vmn_exp.storage.areas import COMMENTS, REPORTS, RUNS, SETTINGS, app_key
 from vmn_exp.storage.journal import JOURNAL_MAX_AGE_SEC
 
 _CURSOR_FINGERPRINT = "journal-cursor"
@@ -55,6 +57,7 @@ class WorkspaceJournal:
         self._indexes = {}  # (area, app key) -> index
         self._replays = {}  # (area, app key) -> the journal mark to replay it from
         self._reports = None  # the workspace's ReportIndex, once it asks
+        self._on_settings = None  # called with the app key of a settings change
         self._lock = threading.Lock()
 
     def use_cache(self, cache):
@@ -109,11 +112,18 @@ class WorkspaceJournal:
         """Feed *reports* (``feed(entries, overflow, cursor)``) every tick."""
         self._reports = reports
 
+    def on_settings(self, listener):
+        """Call *listener(app key)* for every app whose settings changed."""
+        self._on_settings = listener
+
     def receive(self, payload):
         """Route a relayed ``<scope>|<name>`` hint to the watched index."""
         where, name = payload.rsplit("|", 1)
         journal_scope, area, key = where.rsplit("/", 2)
         if journal_scope != self._scope:
+            return
+        if area == SETTINGS:
+            self._settings_changed({key})
             return
         if area in _REPORT_AREAS:
             scope = (area, key)
@@ -145,6 +155,8 @@ class WorkspaceJournal:
         if first or result.entries or result.overflow:
             self._cache.kv_put(self._scope, _CURSOR_FINGERPRINT, self._reader.cursor)
         self._feed_tick(result)
+        self._settings_changed({scope[1] for scope in [*result.entries, *result.overflow]
+                                if scope[0] == SETTINGS})
 
     def _replay(self, replays):
         """Hint each replayed scope's index with the journal since its mark."""
@@ -170,6 +182,11 @@ class WorkspaceJournal:
     def _feed(self, entries, overflow, cursor=None):
         if self._reports is not None:
             self._reports.feed(entries, overflow, cursor)
+
+    def _settings_changed(self, keys):
+        if self._on_settings is not None:
+            for key in keys:
+                self._on_settings(key)
 
     def _lead(self):
         if self._election is None:

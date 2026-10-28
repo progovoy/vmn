@@ -12,6 +12,7 @@ SWEEPS = "sweeps"
 REGISTRY = "registry"
 REPORTS = "reports"
 COMMENTS = "comments"
+SETTINGS = "settings"
 JOURNAL = "journal"
 
 # An object store URI without a path keeps its areas under this root.

@@ -447,6 +447,7 @@ leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
 `compact`, `importance`, `lineage`, `similar`, `similar-backfill`,
 `backfill-children`, `export-metrics`, `import-mlflow`, `migrate`. Separate commands: `vmn-exp sweep`
 ([sweeps.md](sweeps.md)), `vmn-exp model` ([models.md](models.md)),
+`vmn-exp settings` ([store settings](#store-settings-vmn-exp-settings)),
 `vmn-exp ui` ([ui.md](ui.md)).
 
 Read-only actions — `list`, `show`, `compare`, `diff`, `export`, `watch`,
@@ -1441,6 +1442,24 @@ sets the sort direction of `list --sort`, `list_runs()` and the UI
 leaderboard (conf.yml always wins) — so a store-only UI workspace without a
 conf.yml still sorts best-first.
 
+### Store settings (`vmn-exp settings`)
+
+The same `metrics:` keys (and `ui:` ones) can live in the store, for readers
+without the checkout — a store workspace in `vmn-exp ui`, `list_runs()` or
+`vmn-exp list` over a shared store:
+
+```sh
+vmn-exp settings my_app set -f settings.yml --store s3://bucket/prefix
+vmn-exp settings my_app [show] --store s3://bucket/prefix   # prints the file
+```
+
+The file holds the inside of conf's `experiment:` block (`metrics`, `ui`);
+`set` refuses unknown keys and bad values (exit 1). It is stored at
+`settings/<app-key>/app/experiment.yml` and needs no git checkout
+(`--dir`/`--store`/`--bucket` or the env, like `vmn-exp model`).
+Precedence: conf.yml > store settings > run declarations, per metric name.
+See [server.md](server.md#app-settings) for the UI side.
+
 ### Best-value summaries (`summary`)
 
 A metric logged many times folds to one number per run:
@@ -1470,8 +1489,9 @@ value.
   `--hidden`) — handy for a `vmn-exp run` whose child only wrote `key=value`
   lines.
 - **Live**: conf.yml policies apply at read time, so editing them re-ranks
-  existing runs. An S3 workspace in `vmn-exp ui` has no conf.yml; only the
-  runs' own definitions apply there.
+  existing runs. A store workspace in `vmn-exp ui` has no conf.yml; the
+  app's [store settings](#store-settings-vmn-exp-settings) and the runs' own
+  definitions apply there.
 - NaN/inf may be a `last`/`first` but never a `min`/`max` or part of a `mean`;
   a metric with no finite value sorts last.
 
@@ -1515,6 +1535,7 @@ under its root:
   sweeps/<app-key>~<sweep>/<slot>/           sweep trial claims
   registry/<model>/<record>/                 model/dataset registry
   reports/  comments/  journal/
+  settings/<app-key>/app/                    app settings (experiment.yml)
 ```
 
 `<app-key>` is the app in tag form (`root_app/service` → `root_app-service`).

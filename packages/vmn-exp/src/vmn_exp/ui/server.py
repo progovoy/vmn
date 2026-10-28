@@ -31,7 +31,6 @@ from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
-from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
 from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
@@ -68,6 +67,7 @@ from vmn_exp.ui import (
     routes_run_search,
     routes_search,
     routes_series,
+    routes_settings,
     routes_shell,
     routes_similar,
     routes_sweep,
@@ -356,16 +356,19 @@ def create_app(
         _, snapshot, schema = _app_inputs(ws_name, app_tag)
         return snapshot, effective_schema(schema, snapshot.declared_schema())
 
+    def _settings(ws, app_name):
+        """The app's store settings (plan 28 A0), below a git workspace's conf."""
+        return source.app_settings(ws, app_name, _any_exp_storage(ws))
+
     def _app_schema(ws, app_name):
-        """The app's conf.yml metrics schema; none in a store."""
-        return {} if _exp_storage_for(ws) else source.metrics_schema(ws, app_name)
+        """The app's metrics schema: conf.yml over the store settings."""
+        return source.metrics_schema(ws, app_name, _settings(ws, app_name))
 
     def _group_aggregate(ws_name, app_tag):
-        """The app's conf.yml ``experiment.ui.group_aggregate``; the mean in a store."""
-        ws = _experiment_workspace(ws_name)
-        if _exp_storage_for(ws):
-            return DEFAULT_AGGREGATE
-        return source.group_aggregate(ws, _app_name(app_tag))
+        """The app's ``experiment.ui.group_aggregate``: conf.yml, else the store
+        settings, else the mean."""
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return source.group_aggregate(ws, app_name, _settings(ws, app_name))
 
     def _similar_weights(ws_name, app_name):
         """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp
@@ -704,7 +707,8 @@ def create_app(
     routes_events.register(app, API_PREFIX, _events_reader, refresher.background, _segment)
     def _freshness(ws_name, app_tag):
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        return source.freshness(ws_name, app_name, source.stale_after_min(ws, app_name))
+        return source.freshness(ws_name, app_name,
+                                source.stale_after_min(ws, app_name, _settings(ws, app_name)))
 
     forget_git = routes_shell.register(
         app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness)
@@ -725,6 +729,12 @@ def create_app(
     routes_models.register(app, API_PREFIX, _ws_storage)
     routes_reports.register(app, API_PREFIX, _ws_storage, _report_index)
     routes_comments.register(app, API_PREFIX, _ws_storage)
+
+    def _settings_target(ws_name, app_tag):
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return _any_exp_storage(ws), app_name, lambda: source.settings_changed(ws, app_name)
+
+    routes_settings.register(app, API_PREFIX, _settings_target)
 
     def _app_scopes(ws_names):
         """``(ws_name, app_name, snapshot, conf schema)`` of every app of *ws_names*."""

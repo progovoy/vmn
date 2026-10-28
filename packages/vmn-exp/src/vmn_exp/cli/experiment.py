@@ -40,6 +40,7 @@ from vmn_exp.cli.views import (
     show_payload,
 )
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.app_settings_store import app_metrics_schema
 from vmn_exp.core.identity import known_identity
 from vmn_exp.core.snapshot_features import EXPERIMENT_FILE, write_features_file
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
@@ -707,7 +708,7 @@ def _listed(storage, app_name, args, schema):
 @measure_runtime_decorator
 def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
-    schema = metrics_schema(vcs)
+    schema = app_metrics_schema(storage, app_name, metrics_schema(vcs))
     try:
         matching, declared, any_runs = _listed(storage, app_name, args, schema)
     except QueryError as e:

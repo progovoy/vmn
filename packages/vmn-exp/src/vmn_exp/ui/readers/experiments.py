@@ -19,7 +19,6 @@ from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.facet_values import distinct_count, value_key
 from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN
-from vmn_exp.ui.leaderboard_group_fields import conf_aggregate
 from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
 from vmn_exp.ui.readers.config import read_conf_file
@@ -40,20 +39,24 @@ def metrics_schema(root_path, app_name):
     return experiment_conf(root_path, app_name).get("metrics", {}) or {}
 
 
-def group_aggregate(root_path, app_name):
-    """The board's default group aggregate: conf ``experiment.ui.group_aggregate``
-    of the conf the app reads on the checkout's branch (its branch conf, if any)."""
+def conf_ui(root_path, app_name):
+    """``experiment.ui`` of the conf the app reads on the checkout's branch
+    (its branch conf, if any), or ``{}``."""
     conf = read_conf_file(app_conf_path(root_path, app_name))
-    return conf_aggregate(conf.get("experiment"))
+    ui = (conf.get("experiment") or {}).get("ui")
+    return ui if isinstance(ui, dict) else {}
 
 
 def stale_after_min(root_path, app_name):
-    """Minutes past which the dashboard says the app's data is stale: conf
-    ``experiment.ui.stale_after_min`` (on the checkout's branch) when a
-    positive number, else :data:`~vmn_exp.ui.freshness.DEFAULT_STALE_AFTER_MIN`."""
-    conf = read_conf_file(app_conf_path(root_path, app_name))
-    ui = (conf.get("experiment") or {}).get("ui")
-    value = ui.get("stale_after_min") if isinstance(ui, dict) else None
+    """Minutes past which the dashboard says the app's data is stale (see
+    :func:`stale_after_of`)."""
+    return stale_after_of(conf_ui(root_path, app_name))
+
+
+def stale_after_of(ui):
+    """*ui*'s ``stale_after_min`` when a positive number, else
+    :data:`~vmn_exp.ui.freshness.DEFAULT_STALE_AFTER_MIN`."""
+    value = ui.get("stale_after_min")
     return value if is_finite_number(value) and value > 0 else DEFAULT_STALE_AFTER_MIN
 
 

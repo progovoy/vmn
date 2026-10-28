@@ -393,8 +393,8 @@ None of these grant storage access.
 There are three roles per workspace, `viewer < editor < admin`:
 
 - `viewer`: all reads.
-- `editor`: tag, note, archive, rewind, model register/alias/deprecate, and
-  creating, saving and publishing reports and comments.
+- `editor`: tag, note, archive, rewind, model register/alias/deprecate,
+  creating, saving and publishing reports and comments, and app settings.
 - `admin`: prune, deleting reports, cache resync/rebuild, API tokens and the
   audit log.
 
@@ -407,12 +407,47 @@ The audit log records mutations and logins. Admins page it with
 as JSONL from `GET /api/v1/audit/export`. Entries older than
 `audit.retention_days` (default 365) are deleted by the hourly sweep.
 
+## App settings
+
+A store workspace has no checkout, so no `conf.yml`. What a reader needs of
+an app's `experiment:` block lives in the store instead, in
+`settings/<app-key>/app/experiment.yml` (the file as written, comments kept;
+the record's `metadata.yml` holds `updated_at`/`updated_by`):
+
+```yaml
+metrics:
+  loss: {goal: min, primary: true}
+  "grad_*": {hidden: true}
+ui:
+  group_aggregate: best
+  stale_after_min: 30
+```
+
+- Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric}`
+  (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
+  `ui.*` (`group_aggregate`, `stale_after_min` checked; other `ui` keys kept).
+  Anything else, or a bad value, is refused on write; a file broken behind
+  vmn's back reads as no settings, with a warning.
+- Precedence: a git workspace's conf.yml (per metric name, per `ui` key) >
+  store settings > what runs declare (`define_metric`). A git workspace reads
+  the settings of its checkout's store below its conf.
+- They drive the metrics schema (sort direction, summaries, primary, hidden),
+  the default group aggregate and the stale window — in the server and in
+  `vmn-exp list` / `list_runs()` over the same store.
+- Write them with `vmn-exp settings <app> set -f <file> [--store <uri>]`
+  ([experiments.md](experiments.md#store-settings-vmn-exp-settings)), or as an
+  editor with `PUT /api/v1/workspaces/{ws}/apps/{app}/settings`
+  `{"text": "..."}` (`GET` returns `{text, settings, error, updated_at,
+  updated_by}`); read-only servers refuse writes. Writes are journaled: a
+  background server re-reads an app's settings on its journal entry (within
+  seconds), else at most every 60 s.
+
 ## Edits on store workspaces
 
 A store workspace has no checkout to run `vmn` in, so the server performs its
 metadata edits in-process against the store, with its own access: tag, note,
 archive/unarchive, rewind, model register/alias/deprecate (plus reports and
-comments, see [reports.md](reports.md)). Prune, delete, push and git actions
+comments, see [reports.md](reports.md), and [app settings](#app-settings)). Prune, delete, push and git actions
 (stamp, goto, restore, rerun) are never offered from a store workspace. Run
 them with the CLI under your own access.
 

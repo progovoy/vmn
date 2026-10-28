@@ -29,6 +29,7 @@ import os
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.app_conf import read_experiment_conf
+from vmn_exp.core.app_settings_store import app_metrics_schema
 from vmn_exp.core.fold import fold_definitions, fold_log, fold_row
 from vmn_exp.core.log import (
     filter_archived,
@@ -88,15 +89,14 @@ def _resolve(app_name, storage):
     return app_name, storage, root_path
 
 
-def _metrics_schema(root_path, app_name):
-    """``experiment.metrics`` from the app's conf.yml — sort direction and
-    summary policies.
+def _metrics_schema(storage, root_path, app_name):
+    """``experiment.metrics`` from the app's conf.yml over the store settings
+    (:mod:`vmn_exp.core.app_settings`) — sort direction and summary policies.
 
     The app conf only, like the ui reads it; branch confs are not consulted.
     """
-    if root_path is None:
-        return {}
-    return read_experiment_conf(app_name, root_path).get("metrics") or {}
+    conf = read_experiment_conf(app_name, root_path).get("metrics") if root_path else None
+    return app_metrics_schema(storage, app_name, conf)
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +165,7 @@ def list_runs(
             :mod:`vmn_exp.sdk.manage`).
     """
     app_name, storage, root_path = _resolve(app_name, storage)
-    schema = _metrics_schema(root_path, app_name)
+    schema = _metrics_schema(storage, root_path, app_name)
     rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema)
     rows = filter_archived(rows, include_archived)
     rows = filter_rows(filter_by_status(rows, status), query, extra=extra)
@@ -246,7 +246,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
 
     log = _load_log(storage, app_name, verstr)
-    schema = _metrics_schema(root_path, app_name)
+    schema = _metrics_schema(storage, root_path, app_name)
     fold = fold_log(log)
     row = fold_row(target["idx"], target["meta"], fold, schema=schema)
     row.update(status)
@@ -330,7 +330,7 @@ def similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=Non
     return _find_similar(
         storage, app_name, ref, exp_conf, top=top, query=query, context=context,
         text_only=text_only, all_apps=all_apps,
-        schema_of=lambda app: _metrics_schema(root_path, app),
+        schema_of=lambda app: _metrics_schema(storage, root_path, app),
     )
 
 
