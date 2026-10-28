@@ -182,3 +182,14 @@ def test_a_read_only_server_refuses_settings_writes(store):
     client = store[0](read_only=True)
     r = client.put(f"{BASE}/settings", json={"text": "ui: {stale_after_min: 9}\n"})
     assert r.status_code == 403
+
+
+def test_a_store_workspace_takes_the_default_split_from_its_settings(store):
+    client_of, storage = store
+    outer = _run(storage, 1, [])
+    for n, kind in [(2, "trial"), (3, "trial"), (4, "refit")]:
+        _run(storage, n, [{"type": "tags", "set": {"kind": kind}}], parent=1)
+    write_settings(storage, APP, "ui: {split_by: tags.kind}\n")
+    body = client_of().get(f"{BASE}/experiments/{outer}/summary").json()
+    assert body["split"] == "tags.kind"
+    assert [(e["key"], e["total"]) for e in body["by"]] == [("trial", 2), ("refit", 1)]
