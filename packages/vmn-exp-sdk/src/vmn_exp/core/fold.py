@@ -13,7 +13,8 @@ line, not a re-read of the whole log.
 A fold is plain JSON-able data, so the experiment index can persist it as is.
 The run's ``features``, ``intent`` and hypothesis fold too (see
 :mod:`vmn_exp.core.fold_facts`); rows carry only who ran it (``author``) and
-whether it has an intent (``has_intent``).
+whether it has an intent (``has_intent``). Its notes fold into signatures
+(:mod:`vmn_exp.core.note_sigs`), which rows never carry.
 Pure: no storage, no clock.
 """
 import math
@@ -28,6 +29,7 @@ from vmn_exp.core.fold_facts import (  # noqa: F401  (fold_hypothesis: re-export
     intent_value,
 )
 from vmn_exp.core.metric_summary import note_param, summarize, track_extrema
+from vmn_exp.core.note_sigs import apply_note
 from vmn_exp.core.rewind import is_rewound, rewind_step
 from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
 from vmn_exp.core.sweep.spec import planned_trials
@@ -230,6 +232,8 @@ def _apply(fold, entry, key):
         _apply_features(fold, entry, key)
     elif etype == "intent":
         _apply_intent(fold, entry, key)
+    elif etype == "note":
+        apply_note(fold, entry, key)
     for name, value in entry_params(entry).items():
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)

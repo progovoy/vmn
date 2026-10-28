@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """A job's timeline (plan 23 S3): runs started, succeeded, failed and
-released per minute, read off its subtree's
+released, and note signatures (plan 28 N7), per minute, read off its subtree's
 :class:`~vmn_exp.ui.job_tally.Tally` parts.
 
 Per minute while every run of the job falls in the day before its newest
@@ -10,10 +10,11 @@ sparse: only the ones something happened in, oldest first; how many runs
 were running at a time is for the client to derive.
 """
 from vmn_exp.core.status import RELEASED
-from vmn_exp.ui.job_tally import COARSE_MINUTES, MINUTES_KEPT, TIMELINE
+from vmn_exp.ui.job_tally import COARSE_MINUTES, MINUTES_KEPT, NOTES, TIMELINE
 
-# Every bucket names these; ``released`` only where a run was released.
-ALWAYS = tuple(name for name in TIMELINE if name != RELEASED)
+# Every bucket names these; ``released``/``notes`` only where a run was
+# released or noted something.
+ALWAYS = tuple(name for name in TIMELINE if name not in (RELEASED, NOTES))
 
 
 def _complete(series, floor):
@@ -30,7 +31,7 @@ def _per_minute(all_series):
 
 def timeline(parts):
     """``{bucket_sec, start, buckets: [{t, started, succeeded, failed[,
-    released]}]}``; ``t`` is a bucket's start in epoch seconds."""
+    released][, notes]}]}``; ``t`` is a bucket's start in epoch seconds."""
     named = [(name, part.timeline[name]) for part in parts for name in TIMELINE]
     fine = _per_minute([series for _, series in named])
     bucket_sec = 60 if fine else 60 * COARSE_MINUTES

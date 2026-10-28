@@ -15,9 +15,11 @@ has one per step — which the snapshot keeps per verstr for the lineage index
 and ``outputs.*`` queries (:func:`~vmn_exp.core.query.filter_rows` ``extra``).
 A run's ``features``, ``intent`` and hypothesis are kept the same way, for
 similarity; row copies leave them out (only the row's ``author`` and
-``has_intent`` come from them). Its ``sys_*`` metrics and their summaries go
-to a side table too (:mod:`vmn_exp.core.system_metrics`), which row copies,
-queries and chart columns read back.
+``has_intent`` come from them). So are its note signatures
+(:mod:`vmn_exp.core.note_sigs`), for ``notes`` queries and facets. Its
+``sys_*`` metrics and their summaries go to a side table too
+(:mod:`vmn_exp.core.system_metrics`), which row copies, queries and chart
+columns read back.
 
 What the index keeps is compact: rows of shared keys and values
 (:func:`~vmn_exp.core.index_intern.compact_row`), summaries packed once
@@ -39,6 +41,7 @@ from vmn_exp.core.index_intern import compact_row, keyed
 from vmn_exp.core.metric_pack import PackedSummary
 from vmn_exp.core.metric_schema import declared_fields, declared_schema
 from vmn_exp.core.metric_summary import with_policies
+from vmn_exp.core.note_sigs import fold_note_sigs
 from vmn_exp.core.system_metrics import split_system
 
 _SCHEMAS_KEPT = 4
@@ -46,7 +49,7 @@ _SCHEMAS_KEPT = 4
 # The IndexSnapshot side tables (``{verstr: value}``, empty values left out)
 # that lean_row's values after the row and create note fill, in order.
 SIDE_TABLES = ("metric_parts", "outputs", "declared_defs", "features", "intents", "hypotheses",
-               "system_metrics")
+               "system_metrics", "note_sigs")
 _PACKED_SIDES = ("metric_parts", "system_metrics")
 
 
@@ -57,15 +60,16 @@ def schema_key(schema):
 
 def lean_row(idx, meta, fold):
     """``(row, create note, parts, outputs, declared, features, intent,
-    hypothesis, system)`` of a folded record: the row without the schema, its
+    hypothesis, system, note sigs)`` of a folded record: the row without the schema, its
     ``metric_summary``, its ``outputs`` or its ``sys_*`` metrics; *parts*
     ``(metric_summary, run definitions)``, None when no other metric
     repeats, *outputs* None when the run stored none, *declared* the run's
     ``goal``/``hidden``/``chart`` declarations (see
     :func:`~vmn_exp.core.metric_schema.declared_fields`) or None, the run's
     folded features/intent/hypothesis or None, and *system* ``({sys metric:
-    value}, their summary or None, run definitions)``, None without any
-    (see :data:`SIDE_TABLES`)."""
+    value}, their summary or None, run definitions)``, None without any,
+    and *note sigs* the run's note signatures or None (see
+    :func:`~vmn_exp.core.note_sigs.fold_note_sigs`, :data:`SIDE_TABLES`)."""
     row = fold_row(idx, meta, fold, with_create_note=True)
     note, summary = row.pop("create_note"), row.pop("metric_summary")
     outputs = row.pop("outputs") or None
@@ -75,7 +79,7 @@ def lean_row(idx, meta, fold):
     return (
         compact_row(row), note, _parts(summary, defs), outputs,
         declared_fields(defs) or None, fold_features(fold), fold_intent(fold),
-        fold_hypothesis(fold), _system(system, system_summary, defs),
+        fold_hypothesis(fold), _system(system, system_summary, defs), fold_note_sigs(fold),
     )
 
 

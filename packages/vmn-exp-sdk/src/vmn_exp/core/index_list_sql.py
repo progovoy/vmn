@@ -16,8 +16,8 @@ from vmn_exp.core.sqlite_conn import in_chunks
 
 _NO_STATE = {"rs_sig": None, "run_state": None}
 # The side tables a row copy and a query read (the rest feed similarity):
-# intents for `intent`/`keywords` (plan 24 F5).
-ROW_SIDES = (NOTE, "metric_parts", "outputs", "intents", "system_metrics")
+# intents for `intent`/`keywords` (plan 24 F5), note_sigs for `notes` (plan 28 N7).
+ROW_SIDES = (NOTE, "metric_parts", "outputs", "intents", "system_metrics", "note_sigs")
 
 
 def count(conn, app):

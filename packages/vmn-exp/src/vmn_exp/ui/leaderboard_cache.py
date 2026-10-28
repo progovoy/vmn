@@ -114,7 +114,7 @@ def _status(snapshot, row):
 
 def _restated(snapshot, row):
     """A copy of *row* with its status fields as of now."""
-    return signed({**row, **_status(snapshot, row)})
+    return signed({**row, **_status(snapshot, row)}, snapshot.notes_of(row["verstr"]))
 
 
 class _Base:
@@ -150,7 +150,7 @@ class _Base:
         states = snapshot.run_states
         with gc_paused():
             live = [i for i, row in enumerate(snapshot.rows) if is_live(snapshot, row["verstr"])]
-            rows = [signed(row) for row in
+            rows = [signed(row, snapshot.notes_of(row["verstr"])) for row in
                     annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)]
             siblings = SiblingDurations.stamping(rows, split)
             position = {row["verstr"]: i for i, row in enumerate(rows)}

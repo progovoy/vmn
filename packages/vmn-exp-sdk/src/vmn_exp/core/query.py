@@ -57,7 +57,8 @@ or never-set tag is missing. ``name ~ "sweep"`` matches the run name and
 ``archived = true`` the archived runs. ``author ~ "alice"`` matches who ran it
 (git email, else OS user, else writer) and ``has_intent = false`` the runs
 nobody described yet; ``intent ~ "focal"`` reads the latest intent's text
-and ``keywords ~ "imbalance"`` its keywords. ``under("<verstr>")`` matches
+and ``keywords ~ "imbalance"`` its keywords; ``notes ~ "sigterm"`` matches
+the run's note signatures (:mod:`vmn_exp.core.note_sigs`). ``under("<verstr>")`` matches
 the runs in that run's subtree (not the run itself) and ``similar("<text>")``
 the runs whose similar-runs text document holds every word of the text
 (:mod:`vmn_exp.core.query_similar`). ``up.params.trade_date`` reads the
@@ -88,7 +89,7 @@ ROW_FIELDS = frozenset(
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status settled imported_from forked_from forked_from_step rerun_of
-    author has_intent intent keywords
+    author has_intent intent keywords notes
     end_reason error_summary signal root failure_sig released_at resume_count
     queue_sec duration_ratio live_below
     """.split()

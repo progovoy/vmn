@@ -59,6 +59,9 @@ class IndexSnapshot:
     # {verstr: ({sys metric: value}, packed summary or None, run definitions)}
     # of rows with sys_* metrics, which their rows leave out (see metrics_of).
     system_metrics: dict = field(default_factory=dict, repr=False)
+    # {verstr: {sig: {count, last_at}}} of rows whose run logged notes (see
+    # vmn_exp.core.note_sigs) — off the rows like intents.
+    note_sigs: dict = field(default_factory=dict, repr=False)
     # (rows loaded, rows expected) while a remote store's load is published
     # chunk by chunk; None once every record was read.
     loading: tuple = None
@@ -78,7 +81,7 @@ class IndexSnapshot:
     def build(
         cls, app_name, generation, rows, run_states, create_notes=None, observed_at=None,
         metric_parts=None, outputs=None, declared_defs=None,
-        features=None, intents=None, hypotheses=None, system_metrics=None,
+        features=None, intents=None, hypotheses=None, system_metrics=None, note_sigs=None,
     ):
         rows = tuple(rows)
         return cls(
@@ -96,6 +99,7 @@ class IndexSnapshot:
             intents=intents or {},
             hypotheses=hypotheses or {},
             system_metrics=system_metrics or {},
+            note_sigs=note_sigs or {},
             _by_verstr={row["verstr"]: row for row in rows},
         )
 
@@ -143,6 +147,11 @@ class IndexSnapshot:
     def hypothesis_of(self, verstr):
         """*verstr*'s hypothesis (its first ``create`` entry's), or None."""
         return self.hypotheses.get(verstr)
+
+    def notes_of(self, verstr):
+        """*verstr*'s note signatures ``{sig: {count, last_at}}``, the latest
+        seen last, or None. Shared: copy before changing."""
+        return self.note_sigs.get(verstr)
 
     def status_of(self, verstr):
         """*verstr*'s derived status, its run state's store write time

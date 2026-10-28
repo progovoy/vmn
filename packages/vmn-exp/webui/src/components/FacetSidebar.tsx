@@ -1,17 +1,19 @@
 /** A job's facet sidebar (plan 23 W3): its runs per status and, per param,
  *  per value (a mini histogram for a many-valued numeric param), counted
- *  over the job's subtree after the other filters. A click adds the value's
+ *  over the job's subtree after the other filters, and its runs' most common
+ *  note signatures (plan 28 N7). A click adds the value's
  *  clause as a filter token. On a phone it is a drawer behind a button. */
 import { useId, useMemo, useRef, useState } from "react";
 import type { FacetOpts } from "../api";
 import { NONE_GROUP } from "../apiGroups";
-import { useFacetParams, useParamCounts, useStatusCounts, type FacetParam, type ValueCount } from "../hooks/useFacetCounts";
+import { useFacetParams, useNoteSigs, useParamCounts, useStatusCounts, type FacetParam, type ValueCount } from "../hooks/useFacetCounts";
 import { useFillHeight } from "../hooks/useFillHeight";
 import { NARROW_QUERY, useMediaQuery } from "../hooks/useMediaQuery";
 import { fmtCount, plural } from "../util";
 import { binClauses, numericBins, numericKeys } from "../util/facetBins";
 import { STATUS_ORDER, statusText } from "../util/filterTokens";
 import { groupClause } from "../util/groupClause";
+import { quoteLiteral } from "../util/searchQuery";
 import "./FacetSidebar.css";
 
 /** Params listed before "More params". */
@@ -117,6 +119,23 @@ function StatusFacet({ ws, app, opts, onAdd }: { ws: string; app: string; opts: 
   );
 }
 
+/** `notes ~ "<sig>"`; null for a signature no literal can hold. */
+function notesClause(sig: string): string | null {
+  const lit = quoteLiteral(sig);
+  return lit && `notes ~ ${lit}`;
+}
+
+function NotesFacet({ ws, app, opts, onAdd }: { ws: string; app: string; opts: FacetOpts; onAdd: Add }) {
+  const sigs = useNoteSigs(ws, app, opts);
+  if (!sigs.length) return null;
+  return (
+    <section className="facet" aria-label="notes">
+      <h3 className="facet-title">Notes</h3>
+      <Values title="notes values" values={sigs} clauseOf={notesClause} onAdd={onAdd} />
+    </section>
+  );
+}
+
 function Facets({ ws, app, opts, onAdd }: { ws: string; app: string; opts: FacetOpts; onAdd: Add }) {
   const params = useFacetParams(ws, app, opts);
   const [all, setAll] = useState(false);
@@ -124,6 +143,7 @@ function Facets({ ws, app, opts, onAdd }: { ws: string; app: string; opts: Facet
   return (
     <>
       <StatusFacet ws={ws} app={app} opts={opts} onAdd={onAdd} />
+      <NotesFacet ws={ws} app={app} opts={opts} onAdd={onAdd} />
       {shown.map((p) => <ParamFacet key={p.key} ws={ws} app={app} param={p} opts={opts} onAdd={onAdd} />)}
       {params.length > shown.length && (
         <button type="button" className="link facet-all" onClick={() => setAll(true)}>
