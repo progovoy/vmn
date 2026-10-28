@@ -232,3 +232,27 @@ def test_the_metrics_route_keeps_its_auth(server):
     assert client.get("/metrics").status_code == 401
     r = client.get("/metrics", headers={"Authorization": "Bearer sekret"})
     assert r.status_code == 200
+
+
+def _server_with(tmp_path, extra):
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
+
+    uri = f"file://{tmp_path}/store"
+    storage = open_storage(uri, area=RUNS)
+    _fleet(storage)
+    extra(storage)
+    write_settings(storage, APP, SETTINGS)
+    manager = WorkspaceManager(str(tmp_path / "data"))
+    manager.add_store("ws", uri)
+    return TestClient(create_app(manager))
+
+
+def test_the_built_in_outlived_part_is_a_gauge_zero_included(server, tmp_path, clock):
+    client = server()
+    _status(client)
+    assert value(_scrape(client), "vmn_attention", **LABELS, key="outlived") == 0
+    # r10 still beats under outer r5, which ended 3 h ago.
+    client = _server_with(tmp_path / "b", lambda s: _run(s, 10, 170, parent=5, state="live"))
+    (part,) = [p for p in _status(client)["attention"] if p["key"] == "outlived"]
+    assert value(_scrape(client), "vmn_attention", **LABELS, key="outlived") == part["count"] == 1

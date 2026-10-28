@@ -3,8 +3,8 @@
 board's caches as ``experiments-status`` and an outer run's ``summary``
 read them: the status counts (:mod:`~vmn_exp.ui.status_counts`), the
 attention strip's parts (the built-in ``stuck``/``failed`` in 24 h/
-``running``, then the app's queries, :mod:`~vmn_exp.ui.attention`), and per
-top-level outer run that is live, or ended within the window, its compact
+``running``/``outlived``, then the app's queries,
+:mod:`~vmn_exp.ui.attention`), and per top-level outer run that is live, or ended within the window, its compact
 rollup (:meth:`~vmn_exp.ui.job_rollup_cache.JobRollupCache.job_rollups`;
 the Outer runs view's order). An outer run is live while it is running or
 a run under it is running, waiting or stuck; an ended one's end is its own
@@ -16,6 +16,7 @@ import datetime
 from vmn_exp.core.settle import SETTLED
 from vmn_exp.core.status import RUNNING, STUCK, parse_iso
 from vmn_exp.ui.attention import attention_payload
+from vmn_exp.ui.attention_built_in import BUILT_IN, built_in_count
 from vmn_exp.ui.leaderboard_scope import JOBS
 from vmn_exp.ui.leaderboard_warm import DEFAULT_SORT
 from vmn_exp.ui.prometheus import Family
@@ -27,7 +28,7 @@ _ACTIVE = ("running", "waiting", "stuck")
 FAMILIES = (
     ("vmn_runs", "Runs per status (archived runs left out), as experiments-status counts them."),
     ("vmn_attention", "Runs in each part of the attention strip: stuck, failed in 24 h,"
-                      " running, then the app's attention queries."),
+                      " running, outlived, then the app's attention queries."),
     ("vmn_job_runs", "Runs per status under a live or recently ended top-level outer run."),
     ("vmn_job_progress", "A live or recently ended top-level outer run's progress, 0 to 1."),
     ("vmn_job_eta_seconds", "Seconds a live top-level outer run has left at its current rate."),
@@ -52,6 +53,9 @@ def app_samples(labels, cache, board, schema, entries, now, ended_sec):
     for key, n in ((STUCK, summary["counts"][STUCK]), ("failed", summary["failed_recent"]),
                    (RUNNING, summary["counts"][RUNNING])):
         samples.append(("vmn_attention", dict(labels, key=key), n))
+    for part in BUILT_IN:  # zero included, unlike the strip: a gauge's series stays
+        key = part["key"]
+        samples.append(("vmn_attention", dict(labels, key=key), built_in_count(cache, board, key)))
     for part in attention_payload(cache, board, schema, entries):
         samples.append(("vmn_attention", dict(labels, key=part["key"]), part["count"]))
     rows = cache.ordered(board, schema, sort=DEFAULT_SORT, top=JOBS)
