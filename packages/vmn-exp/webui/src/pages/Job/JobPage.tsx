@@ -6,7 +6,9 @@
  *  tab in `?tab=`. */
 import { useState } from "react";
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import type { JobPageSummary } from "../../apiJob";
+import AttentionStrip from "../../components/AttentionStrip";
 import LiveStatus from "../../components/LiveStatus";
 import RunHeaderActions from "../../components/RunHeaderActions";
 import RunLog from "../../components/RunLog";
@@ -24,7 +26,8 @@ import { failedCount } from "./jobData";
 import { jobHead } from "./jobHead";
 import JobOverview from "./JobOverview";
 import JobRuns from "./JobRuns";
-import { jobSummaryKey, useJobTab, type JobTab } from "./jobQueries";
+import { jobSummaryKey, onTabSearch, useJobTab, type JobTab } from "./jobQueries";
+import { useScopedStatus } from "../../shell/useShellData";
 import "./job.css";
 
 function Panel({ tab, ws, app, v, name, detail, summary, live }: {
@@ -61,6 +64,9 @@ export default function JobPage({ ws, app, runRef, verstr: v, row, summary }: {
   const client = useQueryClient();
   const [tab, setTab] = useJobTab();
   const [paused, setPaused] = useState(false);
+  const [followed, setFollowed] = useState(0);
+  const { search } = useLocation();
+  const scopedStatus = useScopedStatus(ws, app, v).data;
   const data = summary.data;
   // The detail is the job's own run (log, heartbeat): per-run store reads,
   // asked for by the Log tab only; a detail already cached is used anyway.
@@ -98,9 +104,12 @@ export default function JobPage({ ws, app, runRef, verstr: v, row, summary }: {
           </RunHeaderActions>
         )}
       />
+      <AttentionStrip status={scopedStatus} from={onTabSearch(search, "runs")} onFollow={() => setFollowed((n) => n + 1)} />
       <JobTabs tab={tab} onTab={setTab} />
       <div role="tabpanel" id={JOB_PANEL_ID} aria-labelledby={jobTabId(tab)} className="job-panel">
+        {/* A followed part rewrites the Runs tab's filters: it re-reads the URL. */}
         <Panel
+          key={followed}
           tab={tab} ws={ws} app={app} v={v} name={head.name ?? undefined} detail={detail} summary={data}
           live={{ paused, onPaused: setPaused, refresh }}
         />

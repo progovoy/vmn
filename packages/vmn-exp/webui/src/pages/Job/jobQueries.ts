@@ -53,6 +53,13 @@ export function useJobTab(): [JobTab, (tab: JobTab) => void] {
   return [isTab(raw) ? raw : "overview", (tab) => setParam("tab", tab)];
 }
 
+/** The page's *search* on tab *tab*, its other params kept. */
+export function onTabSearch(search: string, tab: JobTab) {
+  const p = new URLSearchParams(search);
+  p.set("tab", tab);
+  return `?${p}`;
+}
+
 /** A link to tab *tab* of job *v* (with extra query params). */
 export function jobTabHref(runBase: string, tab: JobTab, extra: Record<string, string> = {}) {
   return `${runBase}?${new URLSearchParams({ tab, ...extra })}`;

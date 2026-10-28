@@ -11,7 +11,7 @@ import { useRowNavigate } from "../../hooks/useRowNavigate";
 import { relTime, runHref } from "../../util";
 import { densityRowHeight, headStatus } from "../LeaderboardRow";
 import type { JobCell } from "../../util/jobProgress";
-import { BestValue, JobSubLine, SpreadCell, jobNumbers, type JobContext, type JobNumber } from "./JobCells";
+import { AttentionChips, BestValue, JobSubLine, SpreadCell, jobNumbers, type JobContext, type JobNumber } from "./JobCells";
 import { CELL_CLASSES, COLUMN_STYLES, JOB_COLUMNS } from "./jobColumns";
 
 /** When a top-level run started: its subtree's first start, else its own. */
@@ -32,6 +32,7 @@ function NameCell({ r, href, compact, ctx }: {
           {r.name || r.verstr}
         </Link>
         <MatchingRunsChip r={r} runBase={ctx.runBase} search={ctx.search} />
+        <AttentionChips r={r} ctx={ctx} />
         {compact && <span className="job-inline"><JobSubLine r={r} inline /></span>}
       </div>
       {!compact && <div className="exp-branch job-line"><JobSubLine r={r} /></div>}

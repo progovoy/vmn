@@ -53,6 +53,18 @@ export function useAppStatusPoll(ws: string | undefined, tag: string | undefined
   }).data;
 }
 
+/** Outer run *scope*'s subtree status (its page's attention strip),
+ *  polled on the status cadence. */
+export function useScopedStatus(ws: string | undefined, tag: string | undefined, scope: string | undefined) {
+  return useQuery<AppStatus>({
+    queryKey: ["app-status", ws, tag, scope],
+    queryFn: () => apiShell.appStatus(ws!, tag!, scope),
+    enabled: Boolean(ws && tag && scope),
+    staleTime: STATUS_STALE_MS,
+    refetchInterval: (query) => statusPollMs(query.state.data),
+  });
+}
+
 /** Every app's status in a workspace, keyed by tag: one request for the
  *  apps page, polled fast while any app has something running or stuck. */
 export function useAppsStatus(ws: string) {

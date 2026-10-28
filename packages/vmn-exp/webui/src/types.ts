@@ -244,6 +244,8 @@ export interface JobRollup extends JobProgressFields {
   best_idx?: number | null;
   /** The main metric's histogram over the job's runs (12 bins). */
   spread: number[];
+  /** Its runs per configured attention query key (plan 28 P1). */
+  attention?: Record<string, number>;
 }
 
 /** Chosen columns over a whole filtered set (`/experiments-columns`):

@@ -4,6 +4,7 @@
 import { Link } from "react-router-dom";
 import JobProgress from "../../components/JobProgress";
 import Sparkline from "../../components/Sparkline";
+import type { AttentionEntry } from "../../shell/contracts";
 import type { ExperimentRow } from "../../types";
 import { fmtCount, fmtPct, fmtVal, runHref } from "../../util";
 import type { SearchFilter } from "../../util/searchScope";
@@ -16,6 +17,24 @@ export interface JobContext {
   goal: "min" | "max" | null;
   /** The search every run is matched by (plan 23 W11), for the job chips. */
   search?: SearchFilter | null;
+  /** The app's attention queries (plan 28 P1): labels and levels of `job.attention`. */
+  attention?: readonly AttentionEntry[];
+}
+
+/** An outer run's non-zero attention counts, `2 unstable`, in config order. */
+export function AttentionChips({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
+  const counts = r.job?.attention;
+  const shown = counts ? (ctx.attention ?? []).filter((e) => (counts[e.key] ?? 0) > 0) : [];
+  if (!shown.length) return null;
+  return (
+    <span className="job-attention">
+      {shown.map((e) => (
+        <span key={e.key} className={`job-attention-chip attention-${e.level}`} title={e.q}>
+          {`${fmtCount(counts![e.key])} ${e.label}`}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 /** Under the name: a job's progress, a single run's base (its branch is the

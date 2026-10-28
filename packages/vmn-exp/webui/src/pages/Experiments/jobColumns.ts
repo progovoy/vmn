@@ -21,13 +21,13 @@ export interface JobColumn {
 
 export const JOB_SORTS = {
   progress: "job:progress", failed: "job:failed_pct", throughput: "job:throughput",
-  best: "job:best", total: "job:total", started: "job:started",
+  best: "job:best", total: "job:total", started: "job:started", attention: "job:attention",
 } as const;
 
 export const JOB_COLUMNS: readonly JobColumn[] = [
   { id: "check", label: "", width: 36 },
   { id: "idx", label: "#", width: 72, sort: IDX_SORT, title: "sort by run number (newest first)", numeric: true },
-  { id: "status", label: "status", width: 124 },
+  { id: "status", label: "status", width: 124, sort: JOB_SORTS.attention, title: "sort by needs attention (worst first)" },
   { id: "name", label: "outer run · progress", width: 440, sort: JOB_SORTS.progress, title: "sort by progress (furthest first)" },
   { id: "best", label: "best", width: 120, sort: JOB_SORTS.best, title: "sort by best (best first)", numeric: true },
   { id: "spread", label: "spread", width: 84 },

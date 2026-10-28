@@ -34,18 +34,26 @@ function urlView(p: URLSearchParams): ExperimentsView | null {
   return charts ? "all" : null;
 }
 
+/** *p* switched to view *next*: the filters and `density` stay, what only
+ *  one view's board reads goes. */
+export function switchView(p: URLSearchParams, next: ExperimentsView, kind?: string): URLSearchParams {
+  for (const k of BOARD_ONLY_PARAMS) p.delete(k);
+  p.set("view", next);
+  if (kind) p.set("kind", kind);
+  return p;
+}
+
+/** *search* as the All runs view's (the attention strip's links from Jobs). */
+export const allRunsSearch = (search: string) => `?${switchView(new URLSearchParams(search), "all")}`;
+
 export function useExperimentsView(ws: string, app: string) {
   const { params, update } = useUrlState();
   const view = urlView(params) ?? stored(ws, app) ?? "jobs";
   useEffect(() => { remember(ws, app, view); }, [ws, app, view]);
 
   /** *kind* (`jobs`/`singles`) picks the Jobs view's side. */
-  const setView = useCallback((next: ExperimentsView, kind?: string) => update((p) => {
-    // The filters and `density` stay; what only one view's board reads goes.
-    for (const k of BOARD_ONLY_PARAMS) p.delete(k);
-    p.set("view", next);
-    if (kind) p.set("kind", kind);
-  }), [update]);
+  const setView = useCallback((next: ExperimentsView, kind?: string) =>
+    update((p) => { switchView(p, next, kind); }), [update]);
 
   return { view, setView };
 }

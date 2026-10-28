@@ -23,5 +23,12 @@
   margin-left: 8px; padding: 0 6px; border-radius: 9px; font-size: 11px; white-space: nowrap;
   color: var(--accent); border: 1px solid currentColor;
 }
+/* An outer run's configured attention counts (plan 28 P1), by level. */
+.job-attention { display: inline-flex; gap: 4px; margin-left: 8px; }
+.job-attention-chip {
+  padding: 0 6px; border-radius: 9px; font-size: 11px; white-space: nowrap; border: 1px solid currentColor;
+}
+.job-attention-chip.attention-warn { color: var(--st-stuck, var(--hotfix)); }
+.job-attention-chip.attention-error { color: var(--st-bad, var(--bad)); }
 .job-mcard-best { font-size: 16px; }
 .lb-mcard-group .fold-toggle { font-weight: 600; background: none; border: none; padding: 6px 0; }

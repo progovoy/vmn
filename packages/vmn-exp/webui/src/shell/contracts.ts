@@ -27,7 +27,15 @@ export interface AppStatus {
   indexing?: Indexing;
   /** How fresh the served index is (routes_shell.py); absent inline. */
   freshness?: Freshness;
+  /** The app's configured attention queries (plan 28 P1), in config order. */
+  attention?: AttentionEntry[];
 }
+/** One `experiment.ui.attention` query and the runs it matches now; *q* is
+ *  the query text the board filters by. */
+export interface AttentionEntry {
+  key: string; label: string; level: AttentionLevel; count: number; q: string;
+}
+export type AttentionLevel = "warn" | "error";
 export interface AuthHints { token: boolean; oidc: boolean; login_url: string | null }
 
 /** What pages may read (usePageScope): meta + workspaces only, no router

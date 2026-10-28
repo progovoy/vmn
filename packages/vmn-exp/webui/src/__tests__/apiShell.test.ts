@@ -26,4 +26,16 @@ describe("apiShell", () => {
     expect(urlOf(fetchMock.mock.calls[0]).pathname)
       .toBe("/api/v1/workspaces/w/apps/root-svc/experiments-status");
   });
+
+  it("reads an outer run's subtree status with scope", async () => {
+    await apiShell.appStatus("w", "root-svc", "0.0.1-dev.a+b");
+    const url = urlOf(fetchMock.mock.calls[0]);
+    expect(url.pathname).toBe("/api/v1/workspaces/w/apps/root-svc/experiments-status");
+    expect(url.searchParams.get("scope")).toBe("0.0.1-dev.a+b");
+  });
+
+  it("asks for no scope without one", async () => {
+    await apiShell.appStatus("w", "root-svc");
+    expect(urlOf(fetchMock.mock.calls[0]).search).toBe("");
+  });
 });

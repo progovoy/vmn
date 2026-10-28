@@ -4,7 +4,9 @@
  *  by the board's filter bar, sorted by the job sort keys and grouped into
  *  groups of jobs, a group over 50 opening as a filter (§3.4). */
 import { useMemo, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 import { appName as toAppName } from "../../api";
+import AttentionStrip from "../../components/AttentionStrip";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
 import NewExperiment from "../../components/NewExperiment";
 import NewRowsBar from "../../components/NewRowsBar";
@@ -18,6 +20,7 @@ import BoardCaption from "../BoardCaption";
 import BoardHead from "../BoardHead";
 import { useTrayBoard } from "../SelectionTrayHost";
 import { EmptyBoard } from "./AllRunsView";
+import { allRunsSearch } from "./experimentsView";
 import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
 import JobsToolbar from "./JobsToolbar";
@@ -55,8 +58,11 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
   const status = useAppStatus(ws, app).data;
   const indexing = status?.indexing;
   const base = `/ws/${ws}/app/${app}`;
-  const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal, search: board.search }),
-    [base, board.metric, board.goal, board.search]);
+  const attention = status?.attention;
+  const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal, search: board.search, attention }),
+    [base, board.metric, board.goal, board.search, attention]);
+  // The strip counts runs, not outer runs: its parts open All runs filtered.
+  const { search: here } = useLocation();
   // A saved view or a big group replaces the URL: the filter bar re-reads it.
   const { gen: filterGen, resetFilter, openGroup } = useAddFilterClauses(view);
   const asFilter = useMemo(() => data.grouped ? {
@@ -93,6 +99,7 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
         !view.creating && <EmptyBoard ws={ws} app={app} appName={appName} onCreate={() => view.openCreate(true)} />
       ) : (
         <>
+          <AttentionStrip status={status} from={allRunsSearch(here)} />
           <LeaderboardFilter
             key={filterGen}
             branches={board.facets?.branches ?? null}

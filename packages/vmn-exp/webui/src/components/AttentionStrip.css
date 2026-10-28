@@ -25,6 +25,8 @@
 }
 .attention-strip a.attention-stuck { color: var(--st-stuck, var(--hotfix)); }
 .attention-strip a.attention-failed { color: var(--st-bad, var(--bad)); }
+.attention-strip a.attention-warn { color: var(--st-stuck, var(--hotfix)); }
+.attention-strip a.attention-error { color: var(--st-bad, var(--bad)); }
 .attention-strip a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
