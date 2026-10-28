@@ -3,8 +3,9 @@
 refresher's ``on_refresh`` and the startup warm-up): its base, search index,
 the app's facets and each top view's first page as the web client asks for
 it (``sort=idx`` newest first, offset 0, its page size; ``top=jobs``,
-``top=singles``, ``top=1`` and All runs), so the first browser request after
-a refresh is a memo hit.
+``top=singles``, ``top=1`` and All runs; never grouped, so no group
+aggregate), under the app's conf / store settings, so the first browser
+request after a refresh is a memo hit.
 
 A generation superseded meanwhile (the startup warm-up still on generation N
 while the refresher published N+1) is left alone, between steps too: its
@@ -49,8 +50,9 @@ class BoardWarmer:
             return True
 
     def warm(self, snapshot):
-        """Warm *snapshot*'s board in the cache, its rows sorted by what they
-        declare (a store workspace's schema: it has no conf)."""
+        """Warm *snapshot*'s board in the cache as a request reads it: rows
+        summarized by the app's conf / store settings schema
+        (``cache.conf_of``) and sorted by it plus what they declare."""
         if not self._note(snapshot):
             return
         try:
@@ -64,10 +66,12 @@ class BoardWarmer:
 
     def _steps(self, snapshot):
         cache = self._cache
-        yield lambda: cache._base(snapshot)
-        yield lambda: cache.warm_search(snapshot)
-        yield lambda: cache.facets_payload(snapshot)
-        schema = effective_schema({}, snapshot.declared_schema())
+        conf_schema, _ = cache.conf_of(snapshot)
+        board = snapshot.summarized(conf_schema)
+        yield lambda: cache._base(board)
+        yield lambda: cache.warm_search(board)
+        yield lambda: cache.facets_payload(board)
+        schema = effective_schema(conf_schema, board.declared_schema())
         for top in TOP_VIEWS:
-            yield lambda top=top: cache.page(snapshot, schema, sort=DEFAULT_SORT, offset=0,
+            yield lambda top=top: cache.page(board, schema, sort=DEFAULT_SORT, offset=0,
                                              limit=DEFAULT_LIMIT, top=top)

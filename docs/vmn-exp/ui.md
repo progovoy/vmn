@@ -200,6 +200,9 @@ restart.
 - **Per-snapshot work**: status, the run tree, filtering and sorting are
   computed once per index generation and paging is a slice. Live runs'
   status is re-derived per 2-second bucket, so `stuck` shows within seconds.
+  After each refresh (and at startup) the server builds the app's facets and
+  each view's first page ahead of the browser, under the app's conf.yml /
+  store settings, so the first request after a refresh is a cache hit.
   The app list is cached per workspace for 5 seconds.
 
 Embedding `create_app()` directly (tests, scripts) leaves the background
