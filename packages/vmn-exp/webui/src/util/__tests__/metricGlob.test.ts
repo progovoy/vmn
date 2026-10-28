@@ -20,6 +20,11 @@ describe("metric globs (fnmatch, as define_metric matches)", () => {
     expect(matchKeys("nothing*", NAMES)).toEqual([]);
   });
 
+  it("matches nothing for a reversed range, as fnmatch does", () => {
+    expect(matchKeys("cv[z-a]", NAMES)).toEqual([]);
+    expect(expandKeys(["val_[z-a]"], NAMES)).toEqual([]);
+  });
+
   it("keeps a dot literal", () => {
     expect(matchKeys("cv1.*", ["cv1.loss", "cv1xloss"])).toEqual(["cv1.loss"]);
   });

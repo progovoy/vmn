@@ -4,6 +4,18 @@
 
 const globCache = new Map<string, RegExp>();
 
+const MATCHES_NOTHING = /(?!)/;
+
+/** A bracket body JS rejects (a reversed range like `[z-a]`) matches
+ *  nothing, as in fnmatch. */
+function compileOrNever(src: string): RegExp {
+  try {
+    return new RegExp(src, "s");
+  } catch {
+    return MATCHES_NOTHING;
+  }
+}
+
 export function globRegExp(pattern: string): RegExp {
   let re = globCache.get(pattern);
   if (re) return re;
@@ -19,7 +31,7 @@ export function globRegExp(pattern: string): RegExp {
       i = close;
     } else src += c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
-  re = new RegExp(`^${src}$`, "s");
+  re = compileOrNever(`^${src}$`);
   globCache.set(pattern, re);
   return re;
 }

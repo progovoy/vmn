@@ -64,4 +64,10 @@ describe("the Run page overlay", () => {
     expect(await screen.findByText(/No metric matches the overlay/)).toBeInTheDocument();
     expect(screen.queryByTestId("overlay-chart")).toBeNull();
   });
+
+  it("survives a pattern that is no valid range", async () => {
+    renderWithClient(<TrainingCurves series={folds(2)} />);
+    fireEvent.change(overlayInput(), { target: { value: "cv[z-a]" } });
+    expect(await screen.findByText(/No metric matches the overlay/)).toBeInTheDocument();
+  });
 });
