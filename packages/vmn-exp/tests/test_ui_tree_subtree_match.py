@@ -81,3 +81,13 @@ def test_a_new_generation_moves_the_matches(tree):  # noqa: F811
     fleet.append(parent=n["d1"], state=running(T0))
     rows = _by_verstr(_children(cache, fleet.snapshot(), n["launch"], status="running"))
     assert set(rows) == {n["d1"], n["d2"]}
+
+
+def test_a_child_matching_only_itself_stays_folded_over_live_runs(tree):  # noqa: F811
+    fleet, n, cache = tree
+    snap = fleet.snapshot()
+    plain = _by_verstr(cache.page(snap, SCHEMA, children_of=n["launch"], limit=100))
+    assert plain[n["d2"]]["open"]  # a running run below it
+    rows = _by_verstr(_children(cache, snap, n["launch"], query=f'verstr = "{n["d2"]}"'))
+    assert set(rows) == {n["d2"]} and rows[n["d2"]]["matched"] == 1
+    assert not rows[n["d2"]]["open"]

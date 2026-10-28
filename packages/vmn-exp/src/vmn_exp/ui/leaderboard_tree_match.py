@@ -51,7 +51,7 @@ class TreeMatch:
         cut = cache.tree_nodes.rows(snapshot, schema, cut, f.children_of, attention, split)
         for row in cut:
             n = row["matched"] = counts[row["verstr"]]
-            row["open"] = row["open"] or n > (row["verstr"] in passing)
+            row["open"] = n > (row["verstr"] in passing)
         return {"rows": cut, "total": len(kept), "next_cursor": after}
 
 
