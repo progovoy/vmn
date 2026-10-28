@@ -176,3 +176,17 @@ def test_a_live_launch_is_built_per_generation(builds):
     snap = _next(snap, {v(40): dict(snap.row(v(40)), note="edited")})
     views.baseline(snap, SCHEMA, v(3))
     assert len(builds) == 2
+
+
+def test_attention_parts_pair_by_key_when_a_built_in_shows_on_one_side():
+    """Target run 33 still runs under its ended launch (outlived); the
+    baseline has none, so the built-in part shows on our side only."""
+    from vmn_exp.ui.attention_built_in import with_built_in
+
+    specs = _specs()
+    specs[next(i for i, s in enumerate(specs) if s["n"] == 33)]["state"] = "running"
+    entries = with_built_in([{"key": "weak", "label": "weak", "level": "warn",
+                              "query": "metrics.best_value < 0.5"}])
+    body = _views().baseline(snapshot(specs), SCHEMA, v(3), attention=entries)
+    parts = {p["key"]: (p["count"], p["baseline_count"]) for p in body["attention"]}
+    assert parts == {"outlived": (1, 0), "weak": (2, 0)}

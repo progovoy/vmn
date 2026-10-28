@@ -65,10 +65,20 @@ def _share(count, total):
 
 
 def _share_parts(ours, theirs, total, base_total):
-    """Attention parts of both subtrees as shares of their runs."""
-    return [dict(a, baseline_count=b["count"],
-                 **delta(_share(a["count"], total), _share(b["count"], base_total), False))
-            for a, b in zip(ours, theirs)]
+    """Attention parts of both subtrees as shares of their runs, paired by
+    key: a built-in part shown on one side only (it hides at 0) counts 0 on
+    the other."""
+    mine = {part["key"]: part for part in ours}
+    base = {part["key"]: part for part in theirs}
+    parts = [*ours, *(dict(part, count=0) for part in theirs if part["key"] not in mine)]
+    return [dict(a, baseline_count=_count_of(base.get(a["key"])),
+                 **delta(_share(a["count"], total),
+                         _share(_count_of(base.get(a["key"])), base_total), False))
+            for a in parts]
+
+
+def _count_of(part):
+    return 0 if part is None else part["count"]
 
 
 def _tag(*parts):
