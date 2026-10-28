@@ -12,9 +12,11 @@ from vmn_exp.ui.leaderboard_group_fields import (
     check_aggregate,
     check_group,
     key_of,
+    up_node,
 )
 from vmn_exp.ui.leaderboard_live import order_key
 from vmn_exp.ui.leaderboard_scope import Filters, filtered
+from vmn_exp.ui.leaderboard_up import query_reads_up
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 
 
@@ -31,7 +33,10 @@ class GroupSpec:
             self._count_sign = 1 if order == "asc" else -1
             sort = order = None
         self.agg = check_aggregate(agg)
-        self.key_of = key_of(group)
+        self._up = bool(up_node(group))
+        self._key_of = None if self._up else key_of(group)
+        # Whether its groups or filters read ancestors (leaderboard_up).
+        self.reads_up = self._up or query_reads_up(query)
         self.schema, self.sort, self.descending = schema, sort, DESCENDING.get(order)
         # The flat board's filters.
         self.flat = Filters(sort, status, query, order, archived, scope, top)
@@ -41,6 +46,10 @@ class GroupSpec:
         if descending is None and self.metric:
             descending = sort_descending(schema, self.metric)
         self._sign = -1 if descending else 1
+
+    def key_of(self, snapshot):
+        """``row -> group key`` for the rows of *snapshot*."""
+        return key_of(self.group, snapshot) if self._up else self._key_of
 
     def filtered(self, snapshot, rows):
         return filtered(snapshot, rows, self.flat)

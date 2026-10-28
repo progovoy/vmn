@@ -5,17 +5,21 @@ import { ROW_FIELDS, type SuggestFacets } from "./querySuggest";
 
 const BARE = new Set([...ROW_FIELDS, "text"]);
 const PREFIXES = new Set(["metrics", "params", "tags", "env", "comments", "inputs", "outputs"]);
+/** What an `up.` field reads (vmn_exp/core/query_up.py). */
+const UP_TARGET = /^((params|tags)\..+|name)$/;
 const TOKEN = /"[^"]*"|'[^']*'|[()]|[<>!=~]+|[\w.+-]+/g;
 
 const isOperator = (t: string) => /^[<>!=~]+$/.test(t) || ["in", "contains", "not"].includes(t.toLowerCase());
 const KEYWORDS = new Set(["and", "or", "not", "in", "contains", "true", "false", "null"]);
 const isWord = (t: string) => /^[A-Za-z_][\w.]*$/.test(t) && !KEYWORDS.has(t.toLowerCase());
 
-/** Whether *name* reads a field: a row field or `<prefix>.<key>…`; a word
- *  starting with "." continues a quoted key (`outputs."m.pkl".digest`). */
+/** Whether *name* reads a field: a row field, `<prefix>.<key>…` or an
+ *  ancestor's (`up.params.<key>`); a word starting with "." continues a
+ *  quoted key (`outputs."m.pkl".digest`) or follows `up(...)`. */
 function knownField(name: string): boolean {
   if (name.startsWith(".")) return true;
   const [head, ...rest] = name.split(".");
+  if (head === "up") return UP_TARGET.test(rest.join("."));
   return rest.length ? PREFIXES.has(head) : BARE.has(name);
 }
 

@@ -536,7 +536,9 @@ distinct values (from the [facets](#facets)). Its **Aggregate** section picks
 what a group header shows per metric: `mean`, `best`, `median`, `min` or
 `max`. The choice lives in the URL as `?group=` (`parent`, `forked_from`,
 `rerun_of`, `code_verstr`, `branch`, `status`, `tags.<k>`, `params.<k>`,
-`none`) and `?agg=`, so saved views keep it. Without `?group=` the board is
+an ancestor's field such as `up.params.trade_date` or
+`up(tags.kind = "study").params.group` (URL only, not in the menu), `none`)
+and `?agg=`, so saved views keep it. Without `?group=` the board is
 grouped by parent run when some run has a parent, else not grouped. Without
 `?agg=` it shows the aggregate the server applied — conf.yml's
 `experiment.ui.group_aggregate` (branch conf respected), else the app's
@@ -980,7 +982,12 @@ curl -H "Authorization: Bearer $VMN_UI_TOKEN" \
 `GET .../experiments?group=<field>` answers groups instead of a page. The
 field is a link between runs, `parent`, `forked_from`, `rerun_of` (the run
 pointed at heads the group and is not one of its rows) or `code_verstr` (the
-code state), or a row field: `branch`, `status`, `tags.<key>`, `params.<key>`.
+code state), a row field: `branch`, `status`, `tags.<key>`, `params.<key>`,
+or an ancestor's field, as the [query language](sdk.md#the-query-language) reads
+it: `up.params.<key>`, `up.tags.<key>`, `up.name`,
+`up(tags.kind = "study").params.<key>` (the clause is `<field> = <value>`,
+`<field> = null` for the `(none)` group). A change to an ancestor's params,
+tags or name regroups the runs below it.
 
 ```
 {"groups": [{"key", "label",
@@ -1066,7 +1073,8 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
  "total": 2}
 ```
 
-- `keys`: comma list of `metrics.<k>`, `params.<k>`, `timestamp`, `status`,
+- `keys`: comma list of `metrics.<k>`, `params.<k>`, `up.<field>` (an
+  ancestor's value, as in a query: `up.params.trade_date`), `timestamp`, `status`,
   `branch`, `name` (the run's name, else its note) and `group:<field>` (the
   run's group key on the board grouped by `<field>`, as the list's `group=`
   takes it, `∅` for no value); anything else is a 400.

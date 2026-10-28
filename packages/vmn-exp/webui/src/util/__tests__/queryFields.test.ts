@@ -18,6 +18,12 @@ describe("unknownFields", () => {
     expect(unknownFields('metrics.loss < 1 and not status = "failed" or (x.y = 1)')).toEqual(["x.y"]);
   });
 
+  it("knows ancestor fields, with and without a selector (plan 28 N1)", () => {
+    expect(unknownFields('up.params.trade_date = "d1" and up.tags.kind = "study"')).toEqual([]);
+    expect(unknownFields('up(tags.kind = "study").params.group = "fx"')).toEqual([]);
+    expect(unknownFields('up.params."odd/key" = 1')).toEqual([]);
+  });
+
   it("ignores operators inside quoted values", () => {
     expect(unknownFields('note ~ "lr=0.1"')).toEqual([]);
   });

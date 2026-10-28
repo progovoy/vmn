@@ -3,7 +3,8 @@
 import { GROUP_AGGREGATES, type GroupAggregate } from "../apiGroups";
 import type { ExperimentFacets } from "../types";
 
-/** `none`, a link, `branch`/`status`, or `tags.<key>`/`params.<key>`. */
+/** `none`, a link, `branch`/`status`, `tags.<key>`/`params.<key>`, or an
+ *  ancestor's field (`up.params.<key>`). */
 export type GroupBy = string;
 export type Aggregate = GroupAggregate;
 
@@ -24,6 +25,9 @@ export const LINK_GROUPS: readonly GroupOption[] = [
 
 const PLAIN_FIELDS = ["branch", "status"];
 const KEYED_FIELD = /^(tags|params)\.(.+)$/;
+/** An ancestor's field (plan 28 N1): `up.params.<k>`, `up.tags.<k>`, `up.name`,
+ *  or the same after a selector, `up(tags.kind = "study").params.<k>`. */
+const UP_FIELD = /^up(\(.+\))?\.((tags|params)\..+|name)$/;
 
 /** A param is offered only with at most this many distinct values. */
 export const MAX_PARAM_VALUES = 20;
@@ -55,7 +59,7 @@ export const defaultGroup = (facets: Pick<ExperimentFacets, "parented"> | null |
 /** A URL `group=` value the board knows, else null. */
 export function parseGroup(raw: string | null): GroupBy | null {
   if (!raw) return null;
-  if (raw === NO_GROUP || [...PLAIN_FIELDS, ...SCOPED_FIELDS].includes(raw) || KEYED_FIELD.test(raw)) return raw;
+  if (raw === NO_GROUP || [...PLAIN_FIELDS, ...SCOPED_FIELDS].includes(raw) || KEYED_FIELD.test(raw) || UP_FIELD.test(raw)) return raw;
   return LINK_GROUPS.some((l) => l.value === raw) ? raw : null;
 }
 

@@ -25,8 +25,10 @@ class JobGroups:
         spec = grouping.spec
         rows = [row for row in map(grouping.row_of, summaries) if row is not None]
         self._jobs = {}  # {group key: [(job row, summary)]}
-        for row in spec.filtered(grouping.base.snapshot, rows):
-            self._jobs.setdefault(spec.key_of(row), []).append((row, summaries[row["verstr"]]))
+        snapshot = grouping.base.snapshot
+        key_of = spec.key_of(snapshot)
+        for row in spec.filtered(snapshot, rows):
+            self._jobs.setdefault(key_of(row), []).append((row, summaries[row["verstr"]]))
         self._fields = {}
 
     def fields(self, key):

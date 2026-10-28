@@ -1024,6 +1024,17 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   ([lineage](#lineage)).
 - Quote a key containing `/`, `.` or `-`: `metrics."train/loss"`,
   `params.'val-acc'`, `outputs."model.pkl".digest`, `inputs."resnet50@3".kind`.
+- Ancestor fields read the run's parent chain, nearest first (never the run
+  itself): `up.params.<k>`, `up.tags.<k>` and `up.name` are the nearest
+  ancestor's non-null value, so `up.params.trade_date = "2026-01-02"` finds a
+  trial whose date is a param of its study or date run. `up(<field> =
+  <value>).<field>` reads the nearest ancestor matching one equality on
+  `params.<k>`, `tags.<k>` or `name`: `up(tags.kind = "study").params.group`
+  (missing when that ancestor lacks the key). The built-in `kind`
+  (`outer`/`inner`/`single`) is no selector; tag your levels and select on
+  `tags.<k>`. A parent missing from the index ends the chain; `= null` matches
+  runs with no such ancestor. Not supported by the server's Postgres query
+  backend.
 
 **Predicates**
 

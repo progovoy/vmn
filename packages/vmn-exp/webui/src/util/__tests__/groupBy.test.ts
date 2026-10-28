@@ -49,6 +49,16 @@ describe("the Group by vocabulary (plan 22 G2)", () => {
     expect(parseGroup(null)).toBeNull();
   });
 
+  it("reads an ancestor field as a URL group (plan 28 N1)", () => {
+    for (const g of ["up.params.trade_date", "up.tags.kind", "up.name",
+      'up(tags.kind = "study").params.group']) {
+      expect(parseGroup(g)).toBe(g);
+    }
+    for (const g of ["up.", "up.params.", "up.metrics.loss", "up(tags.kind = 'x')"]) {
+      expect(parseGroup(g)).toBeNull();
+    }
+  });
+
   it("knows the five aggregates, mean first", () => {
     expect(AGGREGATES).toEqual(["mean", "best", "median", "min", "max"]);
     expect(parseAggregate("best")).toBe("best");

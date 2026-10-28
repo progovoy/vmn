@@ -13,7 +13,7 @@ row's value.
 """
 import math
 
-from vmn_exp.ui.leaderboard_group_fields import DICT_FIELDS, NONE
+from vmn_exp.ui.leaderboard_group_fields import DICT_FIELDS, NONE, up_node, value_of
 
 
 def _quoted(text):
@@ -39,20 +39,12 @@ def literal(value):
 def field(group):
     """*group*'s field as the query spells it, or None."""
     prefix, dot, name = group.partition(".")
-    if not dot or prefix not in DICT_FIELDS:
+    if not dot or prefix not in DICT_FIELDS:  # an ``up`` field is spelled as the query does
         return group
     if all(c.isalnum() or c == "_" for c in name):
         return group
     key = _quoted(name)
     return key and f"{prefix}.{key}"
-
-
-def value_of(group, row):
-    """*row*'s value of the row field or ``tags.<k>``/``params.<k>`` *group*."""
-    prefix, dot, name = group.partition(".")
-    if dot and prefix in DICT_FIELDS:
-        return (row.get(prefix) or {}).get(name)
-    return row.get(group)
 
 
 def value_clause(group, key, value):
@@ -61,13 +53,14 @@ def value_clause(group, key, value):
     if name is None:
         return None
     if key == NONE:
-        if group.partition(".")[0] in DICT_FIELDS:
+        if group.partition(".")[0] in DICT_FIELDS or up_node(group):
             return f"{name} = null"
         return f'({name} = null or {name} = "")'  # key_of: no value or ""
     text = literal(value)
     return text and f"{name} = {text}"
 
 
-def clause(group, key, row, loose):
-    """The clause of *group*'s group *key*, *row* one of its rows."""
-    return None if loose else value_clause(group, key, value_of(group, row))
+def clause(group, key, row, loose, snapshot=None):
+    """The clause of *group*'s group *key*, *row* one of its rows (of
+    *snapshot*, whose ancestors an ``up`` field reads)."""
+    return None if loose else value_clause(group, key, value_of(group, snapshot)(row))

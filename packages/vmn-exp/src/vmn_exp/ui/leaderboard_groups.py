@@ -61,6 +61,7 @@ class Grouping:
         self._aggregates = {}  # memo: {group: aggregates payload}
         self._loose_rows = None  # memo: a link grouping's Loose
         self._job_groups = None  # memo: (job summaries, JobGroups) of a Jobs view
+        self.parents = None  # what its up fields read (leaderboard_up.stamped)
 
     @classmethod
     def build(cls, base, spec, static):
@@ -78,7 +79,7 @@ class Grouping:
 
     @classmethod
     def _of_sorted(cls, base, spec, rows, key, ranked, with_metric, live):
-        members = _partition(rows, spec.key_of)
+        members = _partition(rows, spec.key_of(base.snapshot))
         summaries = {group: Summary.of(kept) for group, kept in members.items()}
         grouping = cls(base, spec, members, summaries, key, ranked, with_metric, live)
         return grouping._ordered(members, None)
@@ -98,7 +99,7 @@ class Grouping:
         if bool(with_metric) != self.has_metric:
             return None
         key, ranked = spec.row_key(base.position, self.has_metric)
-        for group, rows in _partition(joined_rows, spec.key_of).items():
+        for group, rows in _partition(joined_rows, spec.key_of(base.snapshot)).items():
             members[group] = splice(members.get(group, []), [], key, rows, key)
             summaries[group] = self._owned(summaries, group, dirty).add(rows)
             dirty.add(group)
@@ -118,9 +119,9 @@ class Grouping:
     def _dropped(self, members, summaries, left):
         """``(groups, rows)``: the groups *left* rows were in, and those rows,
         taken out of *members* and *summaries*."""
-        by_group = {}
+        by_group, key_of = {}, self.spec.key_of(self.base.snapshot)  # where they were placed
         for row in left:
-            by_group.setdefault(self.spec.key_of(row), set()).add(id(row))
+            by_group.setdefault(key_of(row), set()).add(id(row))
         dirty, every = set(), []
         for group, ids in by_group.items():
             kept, dropped = [], []
@@ -145,7 +146,7 @@ class Grouping:
             return Grouping.of_rows(base, spec, every + rows, live)
         members, summaries = dict(self.members), dict(self.summaries)
         dirty = set()
-        for group, add in _partition(sorted(rows, key=key), spec.key_of).items():
+        for group, add in _partition(sorted(rows, key=key), spec.key_of(base.snapshot)).items():
             members[group] = MergedRows(self.members.get(group, []), add, key)
             summaries[group] = self._owned(summaries, group, ()).add(add)
             dirty.add(group)
@@ -271,7 +272,7 @@ class Grouping:
                 "rows": self._rows(key, offset, limit), "rows_total": self.size(key),
                 "rows_unfiltered": (unfiltered or self).size(key),
                 "clause": clause(self.spec.group, key, first[0] if first else {},
-                                 self._is_loose(key))}
+                                 self._is_loose(key), self.base.snapshot)}
 
 
 def groups_payload(grouping, offset=0, limit=None, rows_per_group=10, group_key=None,

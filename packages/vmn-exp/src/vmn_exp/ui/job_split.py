@@ -14,8 +14,7 @@ a :class:`~vmn_exp.ui.job_tally.Tally`'s lost extreme.
 """
 from vmn_exp.core.settle import counted_status
 from vmn_exp.ui.job_tally import DONE, _move
-from vmn_exp.ui.leaderboard_group_clause import value_of
-from vmn_exp.ui.leaderboard_group_fields import is_dict_field, key_of
+from vmn_exp.ui.leaderboard_group_fields import is_dict_field, key_of, value_of
 from vmn_exp.ui.quantile_sketch import QuantileSketch
 
 MAX_VALUES = 12
@@ -96,7 +95,7 @@ class SplitTallies:
         key = spec.key_of(row)
         tally = self.named.get(key)
         if tally is None and by > 0:
-            tally = self._admit(key, value_of(spec.field, row))
+            tally = self._admit(key, value_of(spec.field)(row))
         if tally is None:
             tally = self.other
         tally.add(row, by)

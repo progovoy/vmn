@@ -3,13 +3,18 @@
 
 A group field is a link between runs (``parent``, ``forked_from``,
 ``rerun_of``: the run pointed at heads the group; ``code_verstr``: the code
-state) or a row field (``branch``, ``status``, ``tags.<k>``, ``params.<k>``).
-:func:`key_of` gives a row's group key, a pure function of the row; a
-group's counts and aggregates live in :mod:`~vmn_exp.ui.leaderboard_group_summary`.
+state), a row field (``branch``, ``status``, ``tags.<k>``, ``params.<k>``)
+or an ancestor's (``up.params.<k>``, ``up(tags.kind = "study").params.<k>``,
+plan 28 N1, :mod:`vmn_exp.core.query_up`). :func:`key_of` gives a row's
+group key, a function of the row (and, for an ``up`` field, of the snapshot
+it is in); a group's counts and aggregates live in
+:mod:`~vmn_exp.ui.leaderboard_group_summary`.
 """
 import json
 
 from vmn_exp.core.app_settings import GROUP_AGGREGATES as AGGREGATES
+from vmn_exp.core.query import QueryError, parse_field
+from vmn_exp.core.query_up import ancestor_fields
 
 PARENT = "parent"
 RERUN_OF = "rerun_of"
@@ -44,12 +49,25 @@ def is_dict_field(field):
     return bool(dot and name and prefix in DICT_FIELDS)
 
 
+def up_node(group):
+    """The ``up`` field node *group* names, None for any other group;
+    ValueError when it is no ``up`` field the query language reads."""
+    if not (group or "").startswith(("up.", "up(")):
+        return None
+    try:
+        return parse_field(group)
+    except QueryError as error:
+        raise ValueError(f"group {group!r}: {error}") from None
+
+
 def check_group(group):
     """*group* when it is a field the board groups by, else ValueError."""
     if group in LINKS or group in FIELDS or is_dict_field(group):
         return group
+    if up_node(group) is not None:
+        return group
     choices = ", ".join(LINKS + FIELDS + tuple(f"{p}.<key>" for p in DICT_FIELDS))
-    raise ValueError(f"group must be one of {choices}, not {group!r}")
+    raise ValueError(f"group must be one of {choices}, up.<field>, not {group!r}")
 
 
 def check_aggregate(agg):
@@ -82,8 +100,22 @@ def key_text(key):
     return key[len(NONE):] if key.startswith(NONE) else key
 
 
-def key_of(group):
-    """``row -> group key`` for *group* (a checked field)."""
+def value_of(group, snapshot=None):
+    """``row -> value`` *group* (a checked field, not a link) reads; an
+    ``up`` field reads the ancestors in *snapshot*."""
+    node = up_node(group)
+    if node is not None:
+        value = ancestor_fields(snapshot).value
+        return lambda row: value(row["verstr"], node)
+    prefix, dot, name = group.partition(".")
+    if dot and prefix in DICT_FIELDS:
+        return lambda row: (row.get(prefix) or {}).get(name)
+    return lambda row: row.get(group)
+
+
+def key_of(group, snapshot=None):
+    """``row -> group key`` for *group* (a checked field); an ``up`` field
+    reads the ancestors in *snapshot*."""
     if group in TARGET_LINKS:
         def link(row):
             target = row.get(group)
@@ -91,10 +123,10 @@ def key_of(group):
         return link
     if group in LINKS or group in FIELDS:
         return lambda row: NONE if _absent(row.get(group)) else escaped_key(_text(row[group]))
-    prefix, _, name = group.partition(".")
+    value_in = value_of(group, snapshot)
 
     def entry(row):
-        value = (row.get(prefix) or {}).get(name)
+        value = value_in(row)
         return NONE if value is None else escaped_key(_text(value))
 
     return entry

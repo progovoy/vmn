@@ -4,11 +4,12 @@
 A chart of every filtered run needs a few values per run, not whole rows, so
 ``.../experiments-columns`` answers ``{verstrs, idx, columns, total}`` with
 each column aligned to ``verstrs``. A ``metrics.sys_*`` column reads the
-``sys_*`` metrics the snapshot keeps off its rows (*system_of*).
+``sys_*`` metrics the snapshot keeps off its rows (*system_of*), an
+``up.<field>`` column the rows' ancestors in the snapshot (plan 28 N1).
 """
 from vmn_exp.core.system_metrics import is_system_metric
 from vmn_exp.core.values import is_finite_number
-from vmn_exp.ui.leaderboard_group_fields import check_group, key_of
+from vmn_exp.ui.leaderboard_group_fields import check_group, key_of, up_node, value_of
 
 COLUMNS_LIMIT = 20000
 MAX_COLUMNS_LIMIT = 50000
@@ -40,11 +41,14 @@ def _name(row):
     return row.get("name") or row.get("note")
 
 
-def column_getter(key, system_of=None):
+def column_getter(key, system_of=None, snapshot=None):
     """The value reader of *key*; ValueError for a key no row can answer.
-    *system_of(verstr)*: a run's ``sys_*`` metrics (none by default)."""
+    *system_of(verstr)*: a run's ``sys_*`` metrics (none by default);
+    *snapshot*: whose ancestors an ``up`` key reads."""
     if key.startswith(GROUP_PREFIX):
-        return key_of(check_group(key[len(GROUP_PREFIX):]))
+        return key_of(check_group(key[len(GROUP_PREFIX):]), snapshot)
+    if up_node(key):
+        return value_of(key, snapshot)
     group, _, name = key.partition(".")
     if group == "metrics" and name:
         return _metric(name, system_of or (lambda verstr: {}))
@@ -55,13 +59,13 @@ def column_getter(key, system_of=None):
     if key in _FIELDS:
         return lambda row: row.get(key)
     raise ValueError(
-        f"Unknown column '{key}' (use metrics.<k>, params.<k>, group:<field>, timestamp, "
-        "status, branch or name)"
+        f"Unknown column '{key}' (use metrics.<k>, params.<k>, up.<field>, group:<field>, "
+        "timestamp, status, branch or name)"
     )
 
 
-def columns_payload(rows, keys, total, system_of=None):
-    getters = {key: column_getter(key, system_of) for key in keys}
+def columns_payload(rows, keys, total, system_of=None, snapshot=None):
+    getters = {key: column_getter(key, system_of, snapshot) for key in keys}
     return {
         "verstrs": [row["verstr"] for row in rows],
         "idx": [row["idx"] for row in rows],
