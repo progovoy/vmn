@@ -5,7 +5,7 @@ import { Icon, ICON_NAMES } from "../icons";
 const NAMES = [
   "experiments", "tree", "actions", "apps", "models", "reports", "key", "menu", "search",
   "copy", "check", "chevron-down", "chevron-right", "chevron-left", "external", "close",
-  "theme-system", "sun", "moon", "run", "app", "workspace", "store", "page", "command",
+  "theme-system", "sun", "moon", "run", "app", "workspace", "store", "page", "command", "settings",
 ] as const;
 
 const svgOf = (name: (typeof NAMES)[number], size?: number) =>

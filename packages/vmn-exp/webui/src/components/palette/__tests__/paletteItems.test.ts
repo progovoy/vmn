@@ -76,7 +76,7 @@ describe("Go to", () => {
   it("lists every destination of an app in a git workspace", () => {
     const s = build({ ctx: fakeCtx({ app: "ml_app", meta: { version: "1", control_plane: true } }) });
     expect(labels(s, "goto")).toEqual([
-      "Experiments", "Stamp tree", "Actions", "Compare runs…", "Overlay curves…", "Code diff…",
+      "Experiments", "Stamp tree", "Actions", "Settings", "Compare runs…", "Overlay curves…", "Code diff…",
       "Apps", "Models", "Reports", "API tokens", "Docs: vmn-exp ui", "New run",
     ]);
     const items = section(s, "goto").items;
@@ -98,6 +98,7 @@ describe("Go to", () => {
     expect(store).not.toContain("Stamp tree");
     expect(store).not.toContain("Actions");
     expect(store).toContain("Experiments");
+    expect(store).toContain("Settings");
   });
 
   it("gates API tokens like the sidebar: a control plane, and admin", () => {

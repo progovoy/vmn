@@ -44,7 +44,7 @@ export const SECTION_CAP = 5;
 const TYPED_RUNS = 8;
 const RECENT_ICONS: Record<string, IconName> = {
   run: "run", app: "app", ws: "workspace", workspace: "workspace", experiments: "experiments",
-  tree: "tree", actions: "actions", models: "models", reports: "reports", key: "key", settings: "page",
+  tree: "tree", actions: "actions", models: "models", reports: "reports", key: "key", settings: "settings",
 };
 
 /** A command as the row's right column shows it: without `vmn-exp `. */
@@ -71,7 +71,7 @@ interface PageScope { ctx: PaletteCtx; ws: string; app?: string; base?: string }
 const PAGES: Record<SharedPage, (s: PageScope) => [IconName, string, Partial<PaletteItem>]> = {
   experiments: ({ ctx, app, base }) => ["experiments", "Experiments", { secondary: app, to: base, command: vx(ctx, "list", app!) }],
   actions: ({ app, base }) => ["actions", "Actions", { secondary: app, to: `${base}/actions` }],
-  settings: ({ ctx, app, base }) => ["page", "Settings", {
+  settings: ({ ctx, app, base }) => ["settings", "Settings", {
     secondary: app, to: `${base}/settings`, command: vx(ctx, "settings", app!, "show"),
   }],
   apps: ({ ws }) => ["apps", "Apps", { secondary: ws, to: `/ws/${ws}` }],
@@ -96,6 +96,7 @@ function gotoItems(ctx: PaletteCtx): PaletteItem[] {
       out.push(row("go:tree", "tree", "Stamp tree", { secondary: app, to: `${base}/tree`, command: vmn("show", app) }));
       out.push(pageRow("go", "actions", scope));
     }
+    out.push(pageRow("go", "settings", scope));
     out.push(row("go:compare", "command", "Compare runs…", { fill: "compare " }));
     out.push(row("go:overlay", "command", "Overlay curves…", { fill: "overlay " }));
     out.push(row("go:diff", "command", "Code diff…", { fill: "diff " }));

@@ -29,7 +29,8 @@ const items = (groups: NavGroup[]): NavItem[] => groups.flatMap((g) => g.items);
 const item = (groups: NavGroup[], id: string) => items(groups).find((i) => i.id === id)!;
 const ALL_ROUTES: RouteId[] = [
   "home", "tokens", "apps", "experiments", "run", "compare-runs",
-  "tree", "actions", "models", "model", "reports", "report", "report-edit", "not-found", "sign-in",
+  "tree", "actions", "app-settings", "models", "model", "reports", "report", "report-edit", "not-found",
+  "sign-in",
 ];
 
 describe("navModel", () => {
@@ -38,7 +39,7 @@ describe("navModel", () => {
       const groups = navModel(ctx({ routeId }));
       expect(groups.map((g) => g.label)).toEqual(["App", "Workspace"]);
       expect(items(groups).map((i) => i.label)).toEqual(
-        ["Experiments", "Stamp tree", "Actions", "Apps", "Models", "Reports"],
+        ["Experiments", "Stamp tree", "Actions", "Settings", "Apps", "Models", "Reports"],
       );
     }
   });
@@ -47,6 +48,7 @@ describe("navModel", () => {
     const g = navModel(ctx());
     expect(items(g).map((i) => i.to)).toEqual([
       "/ws/ml-repo/app/ml_app", "/ws/ml-repo/app/ml_app/tree", "/ws/ml-repo/app/ml_app/actions",
+      "/ws/ml-repo/app/ml_app/settings",
       "/ws/ml-repo", "/ws/ml-repo/models", "/ws/ml-repo/reports",
     ]);
     expect(items(g).every((i) => i.disabled === undefined)).toBe(true);
@@ -55,13 +57,13 @@ describe("navModel", () => {
   it("gives each item a distinct icon", () => {
     const g = navModel(ctx({ meta: { version: "1", control_plane: true } }));
     const icons = items(g).map((i) => i.icon);
-    expect(icons).toEqual(["experiments", "tree", "actions", "apps", "models", "reports", "key"]);
+    expect(icons).toEqual(["experiments", "tree", "actions", "settings", "apps", "models", "reports", "key"]);
   });
 
   it.each<[RouteId, string]>([
     ["experiments", "experiments"], ["run", "experiments"],
     ["compare-runs", "experiments"], ["tree", "tree"],
-    ["actions", "actions"], ["apps", "apps"], ["models", "models"], ["model", "models"],
+    ["actions", "actions"], ["app-settings", "settings"], ["apps", "apps"], ["models", "models"], ["model", "models"],
     ["reports", "reports"], ["report", "reports"], ["report-edit", "reports"],
   ])("marks %s as the %s item", (routeId, active) => {
     const g = navModel(ctx({ routeId }));
@@ -74,7 +76,7 @@ describe("navModel", () => {
 
   it("disables the app items with no app in context, keeping the workspace items", () => {
     const g = navModel(ctx({ appTag: undefined, routeId: "apps" }));
-    for (const id of ["experiments", "tree", "actions"]) {
+    for (const id of ["experiments", "tree", "actions", "settings"]) {
       expect(item(g, id).disabled).toBe("choose an app first");
       expect(item(g, id).to).toBeUndefined();
     }
@@ -147,5 +149,13 @@ describe("navModel", () => {
   it("marks API tokens active on /tokens", () => {
     const g = navModel(ctx({ routeId: "tokens", meta: { version: "1", control_plane: true } }));
     expect(items(g).filter((i) => i.active).map((i) => i.id)).toEqual(["tokens"]);
+  });
+});
+
+describe("navModel Settings", () => {
+  it("links Settings in a store workspace and for a viewer: reading is open to all", () => {
+    expect(item(navModel(ctx({ workspace: STORE })), "settings").to).toBe("/ws/team/app/ml_app/settings");
+    const viewer = navModel(ctx({ authEnabled: true, role: "viewer", readOnly: true, readOnlyReason: "viewer" }));
+    expect(item(viewer, "settings").disabled).toBeUndefined();
   });
 });

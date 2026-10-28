@@ -138,12 +138,12 @@ describe("Sidebar", () => {
     expect(screen.queryByText(/^vmn-exp /)).toBeNull();
   });
 
-  it("draws 7 distinct nav icons", async () => {
+  it("draws 8 distinct nav icons", async () => {
     renderAt("/ws/ml-repo/app/ml_app");
     await screen.findByRole("navigation", { name: "Server" });
     const icons = Array.from(document.querySelectorAll(".nav-item svg")).map((s) => s.innerHTML);
-    expect(icons).toHaveLength(7);
-    expect(new Set(icons).size).toBe(7);
+    expect(icons).toHaveLength(8);
+    expect(new Set(icons).size).toBe(8);
   });
 
   it("marks the active item and keeps disabled items as non-links with a reason", async () => {

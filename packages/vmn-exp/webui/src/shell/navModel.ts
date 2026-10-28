@@ -3,7 +3,8 @@
 import type { IconName } from "../components/shell/icons";
 import type { RouteId, ShellContext } from "./contracts";
 
-export type NavId = "experiments" | "tree" | "actions" | "apps" | "models" | "reports" | "tokens";
+export type NavId =
+  "experiments" | "tree" | "actions" | "settings" | "apps" | "models" | "reports" | "tokens";
 
 export interface NavItem {
   id: NavId; label: string; icon: IconName;
@@ -17,7 +18,7 @@ export interface NavGroup { id: "app" | "workspace" | "server"; label: string; i
 
 const ACTIVE: Partial<Record<RouteId, NavId>> = {
   experiments: "experiments", run: "experiments", "compare-runs": "experiments",
-  tree: "tree", actions: "actions", apps: "apps",
+  tree: "tree", actions: "actions", "app-settings": "settings", apps: "apps",
   models: "models", model: "models",
   reports: "reports", report: "reports", "report-edit": "reports",
   tokens: "tokens",
@@ -50,6 +51,7 @@ export function navModel(ctx: ShellContext): NavGroup[] {
         item("experiments", "Experiments", "experiments", app, NO_APP),
         item("tree", "Stamp tree", "tree", app && `${app}/tree`, NO_APP, ctx.isGit ? undefined : STORE),
         item("actions", "Actions", "actions", app && `${app}/actions`, NO_APP, actionsBlocked(ctx)),
+        item("settings", "Settings", "settings", app && `${app}/settings`, NO_APP),
       ],
     },
     {

@@ -41,6 +41,9 @@ const PATHS = {
     "M5.5 5.5v-1.5a1.5 1.5 0 1 0-1.5 1.5h1.5", "M9.5 5.5v-1.5a1.5 1.5 0 1 1 1.5 1.5h-1.5",
     "M5.5 9.5v1.5a1.5 1.5 0 1 1-1.5-1.5h1.5", "M9.5 9.5v1.5a1.5 1.5 0 1 0 1.5-1.5h-1.5",
   ],
+  settings: [
+    "M2 4h4.5", "M10.5 4h2.5", ring(8.5, 4, 1.5), "M2 11h1.5", "M7.5 11h5.5", ring(5.5, 11, 1.5),
+  ],
 } satisfies Record<string, string[]>;
 
 export type IconName = keyof typeof PATHS;
