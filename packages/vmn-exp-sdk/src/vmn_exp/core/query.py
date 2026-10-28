@@ -14,8 +14,10 @@ Grammar::
     and_expr   = not_expr { "and" not_expr }
     not_expr   = "not" not_expr | primary
     primary    = "(" or_expr ")" | ( "under" | "similar" ) "(" string ")" | comparison
-    comparison = field cmp_op literal
-               | field [ "not" ] "in" "(" literal { "," literal } ")"
+    comparison = any_field cmp_op literal
+               | any_field [ "not" ] "in" "(" literal { "," literal } ")"
+    any_field  = field | "up." up_field | "up" "(" up_field ( "=" | "==" ) literal ")" "." up_field
+    up_field   = ( "params" | "tags" ) "." ( name | string ) | "name"
     cmp_op     = "=" | "==" | "!=" | "<" | "<=" | ">" | ">="
                | "~" | "!~" | "contains"
     field      = name | ( "metrics" | "params" | "tags" ) "." ( name | string )
@@ -57,11 +59,15 @@ nobody described yet; ``intent ~ "focal"`` reads the latest intent's text
 and ``keywords ~ "imbalance"`` its keywords. ``under("<verstr>")`` matches
 the runs in that run's subtree (not the run itself) and ``similar("<text>")``
 the runs whose similar-runs text document holds every word of the text
-(:mod:`vmn_exp.core.query_similar`).
+(:mod:`vmn_exp.core.query_similar`). ``up.params.trade_date`` reads the
+nearest ancestor holding that param and ``up(tags.kind = "study").params.group``
+the nearest ancestor whose ``tags.kind`` is ``"study"``
+(:mod:`vmn_exp.core.query_up`; the built-in ``kind`` is no selector).
 """
 
 import functools
 
+from vmn_exp.core.query_up import UP, readable, rows_ancestor_fields
 from vmn_exp.core.system_metrics import is_system_metric
 from vmn_exp.core.tree import ancestry_of
 
@@ -137,11 +143,12 @@ def _describe(token):
     kind, value, _ = token
     if kind == "end":
         return "end of query"
-    if kind == "name" and isinstance(value, tuple):
+    dot = "." if kind == "dot" else ""
+    if kind in ("name", "dot") and isinstance(value, tuple):
         prefix, key = value[:2]
         sub = f".{value[2]}" if len(value) == 3 else ""
-        return f"'{prefix}.\"{key}\"{sub}'"
-    return f"'{value}'"
+        return f"'{dot}{prefix}.\"{key}\"{sub}'"
+    return f"'{dot}{value}'"
 
 
 def _lex_string(text, pos):
@@ -229,6 +236,9 @@ def tokenize(text):
         elif char.isalpha() or char == "_":
             token, pos = _lex_name(text, pos)
             tokens.append(token)
+        elif char == "." and (text[pos + 1 : pos + 2].isalpha() or text.startswith("._", pos)):
+            (_, value, _), pos = _lex_name(text, pos + 1)  # ``up(...).params.k``
+            tokens.append(("dot", value, pos))
         else:
             operator = next((o for o in _OPERATORS if text.startswith(o, pos)), None)
             if operator is None:
@@ -245,8 +255,11 @@ def tokenize(text):
 
 
 def _field(name, pos):
-    """The AST field node *name* reads: ``("path", keys)`` or
-    ``("env_packages", package)``."""
+    """The AST field node *name* reads: ``("path", keys)``,
+    ``("env_packages", package)`` or ``("up", None, keys)``."""
+    inner = _without_up(name)
+    if inner is not None:
+        return up_field(None, inner, pos)
     if isinstance(name, tuple) and len(name) == 3:
         return _nested_field(*name, pos)
     if isinstance(name, tuple):
@@ -270,6 +283,23 @@ def _field(name, pos):
     _fail(f"unknown field '{name}'", pos)
 
 
+def _without_up(name):
+    """*name* past its ``up.`` prefix, or None when it has none."""
+    head, dot, rest = (name[0] if isinstance(name, tuple) else name).partition(".")
+    if head != UP or not dot or not rest:
+        return None
+    return (rest,) + name[1:] if isinstance(name, tuple) else rest
+
+
+def up_field(selector, name, pos):
+    """The ``up`` field node reading *name* of the nearest ancestor holding
+    it (*selector* None) or matching *selector* ``(keys, literal)``."""
+    field = _field(name, pos)
+    if field[0] != "path" or not readable(field[1]):
+        _fail("an up field reads params.<key>, tags.<key> or name", pos)
+    return (UP, selector, field[1])
+
+
 def _nested_field(prefix, key, sub, pos):
     """``inputs.<name>.<sub>`` / ``outputs.<artifact path>.<sub>``."""
     allowed = NESTED_SUBFIELDS.get(prefix)
@@ -286,7 +316,13 @@ def _env_packages(row):
     return env.get("packages") or env.get("key_packages") or {}
 
 
+def _no_ancestors(node):
+    return None
+
+
 def _getter(field):
+    if field[0] == UP:  # the row's ``up`` reader (filter_rows supplies it)
+        return lambda row: (row.get(UP) or _no_ancestors)(field)
     kind, arg = field
     if kind == "env_packages":
         return lambda row: _env_packages(row).get(arg)
@@ -451,7 +487,7 @@ class _Parser:
         self.next()
         if token[1] in _CALLS and self.peek()[0] == "(":
             return self.parse_call(token[1])
-        field = _field(token[1], token[2])
+        field = self.field_of(token)
 
         negate = bool(self.accept("kw", "not"))
         if self.accept("kw", "in"):
@@ -481,6 +517,32 @@ class _Parser:
         self.expect(")", ")", "')'")
         return (name, token[1])
 
+    def field_of(self, token):
+        """The field node the name *token*, just read, starts."""
+        if token[1] == UP and self.peek()[0] == "(":
+            return self.parse_up()
+        return _field(token[1], token[2])
+
+    def parse_up(self):
+        """``up(<field> = <literal>).<field>``: the field of the nearest
+        ancestor whose first field equals the literal."""
+        self.next()
+        token = self.next()
+        selector = _field(token[1], token[2]) if token[0] == "name" else None
+        if selector is None or selector[0] != "path" or not readable(selector[1]):
+            _fail("up() selects on params.<key>, tags.<key> or name", token[2])
+        operator = self.next()
+        if operator[0] != "op" or operator[1] not in ("=", "=="):
+            _fail("up() takes one '<field> = <value>'", operator[2])
+        literal = self.parse_literal()
+        if literal is None:
+            _fail("up() matches a value, not null", operator[2])
+        self.expect(")", ")", "')'")
+        dot = self.next()
+        if dot[0] != "dot":
+            _fail("expected '.<field>' after up(...)", dot[2])
+        return up_field((selector[1], literal), dot[1], dot[2])
+
     def parse_literal(self):
         token = self.next()
         if token[0] == "lit":
@@ -509,12 +571,27 @@ def parse_query(text):
     ``("in", field, [literals])`` or ``("cmp", field, op, literal)``, with
     ``op`` one of ``= != < <= > >= ~ !~`` and ``field`` either
     ``("path", keys)`` (nested dict keys from the row) or
-    ``("env_packages", package)``; ``under("v")`` is ``("under", v)``, ``similar("t")``
+    ``("env_packages", package)`` or ``("up", selector, keys)``
+    (:mod:`vmn_exp.core.query_up`); ``under("v")`` is ``("under", v)``, ``similar("t")``
     ``("similar", t)``. Raises :class:`QueryError` like
     :func:`compile_query`; the SQL backend compiles the same tree."""
     if not text or not text.strip():
         raise QueryError("empty query")
     return _Parser(text).parse()
+
+
+@functools.lru_cache(maxsize=256)
+def parse_field(text):
+    """The field node of *text*, one field alone (``params.lr``,
+    ``up(tags.kind = "study").params.group``); :class:`QueryError` otherwise."""
+    parser = _Parser(text or "")
+    token = parser.next()
+    if token[0] != "name":
+        _fail(f"expected a field name, found {_describe(token)}", token[2])
+    field = parser.field_of(token)
+    if parser.peek()[0] != "end":
+        _fail(f"unexpected {_describe(parser.peek())}", parser.peek()[2])
+    return field
 
 
 @functools.lru_cache(maxsize=256)
@@ -536,7 +613,7 @@ def query_roots(text):
     """The top-level row keys *text* reads (``outputs`` for
     ``outputs."a.png".size``, ``status`` for ``status = "failed"``)."""
     roots = (
-        (value[0] if isinstance(value, tuple) else value.split(".")[0])
+        (value[0] if isinstance(value, tuple) else value).split(".")[0]
         for kind, value, _ in tokenize(text)
         if kind == "name"
     )
@@ -586,7 +663,9 @@ def filter_rows(rows, text, extra=None):
     reading one sees it, the rows returned are the ones given. ``under()``
     reads ``ancestors``, by default from the *rows*' own ``parent`` links;
     ``similar()`` asks ``extra["similar"](text)`` for its verstrs, once per
-    distinct text (:func:`~vmn_exp.core.query_similar.similar_hits`).
+    distinct text (:func:`~vmn_exp.core.query_similar.similar_hits`); an
+    ``up`` field reads ``extra["up"](verstr)(node)``, by default over the
+    *rows* (:mod:`vmn_exp.core.query_up`).
     """
     if not text or not text.strip():
         return rows
@@ -594,6 +673,8 @@ def filter_rows(rows, text, extra=None):
     roots = query_roots(text)
     if ANCESTORS in roots and ANCESTORS not in (extra or {}):
         extra = dict(extra or {}, ancestors=ancestry_of(rows))
+    if UP in roots and UP not in (extra or {}):
+        extra = dict(extra or {}, up=rows_ancestor_fields(rows).of)
     if SIMILAR in roots:
         from vmn_exp.core.query_similar import similar_hits  # it imports this module
 

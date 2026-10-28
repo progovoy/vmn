@@ -14,6 +14,7 @@ import json
 
 from vmn_exp.core.query import SIMILAR, QueryError, parse_query
 from vmn_exp.core.query_extra import INTENT, KEYWORDS
+from vmn_exp.core.query_up import UP
 
 # What Python's ``x or y`` treats as false, as jsonb.
 _FALSY = "('null', '{}', '[]', '\"\"', '0', 'false')"
@@ -48,6 +49,8 @@ class _Compiler:
         return self.compare(value, node[2], node[3])
 
     def field(self, field):
+        if field[0] == UP:  # reads other rows
+            raise QueryError("up fields are not supported by the SQL backend")
         kind, arg = field
         if kind == "path":
             if arg[0] in (INTENT, KEYWORDS):  # off the synced rows

@@ -5,7 +5,10 @@
 for the rows of a snapshot: ``outputs`` (``outputs_of``), ``ancestors``
 (``under()``, from its ``edges``), ``intent``/``keywords`` (the latest
 intent's text and keyword list, from ``intent_of``) and ``similar``
-(``similar()``, :mod:`vmn_exp.core.query_similar`). Every entry point that
+(``similar()``, :mod:`vmn_exp.core.query_similar`). :func:`ancestor_extra`
+adds the reader of ``up`` fields (other rows of the snapshot, memoized per
+snapshot, :func:`~vmn_exp.core.query_up.ancestor_fields`); :func:`lean_extra`
+and :func:`store_extra` carry it. Every entry point that
 filters snapshot rows takes its extra from here.
 
 ``similar()`` searches, in order: the scope a caller passes, the scope bound
@@ -29,6 +32,7 @@ from vmn_exp.core.query import (
     reads_system_metrics,
 )
 from vmn_exp.core.query_similar import scope_matcher
+from vmn_exp.core.query_up import UP, ancestor_fields
 from vmn_exp.core.tree import ancestors
 
 INTENT, KEYWORDS = "intent", "keywords"
@@ -83,24 +87,39 @@ def snapshot_extra(snapshot, scope_of=None):
     }
 
 
+def ancestor_extra(snapshot):
+    """``{"up": verstr -> up reader}`` over *snapshot*, its memo looked up once."""
+    found = []
+
+    def of(verstr):
+        if not found:
+            found.append(ancestor_fields(snapshot))
+        return found[0].of(verstr)
+
+    return {UP: of}
+
+
 def lean_extra(snapshot, scope_of=None):
     """:func:`snapshot_extra` for *snapshot*'s own (lean) rows, with the
     ``sys_*`` metrics they leave out (:data:`~vmn_exp.core.query.SYSTEM_METRICS`)."""
     extra = snapshot_extra(snapshot, scope_of)
     if extra is not None:
         extra[SYSTEM_METRICS] = lambda verstr: snapshot.system_metrics_of(verstr)
+        extra.update(ancestor_extra(snapshot))
     return extra
 
 
 def reads_off_row(text):
     """Whether query *text* reads what a lean row lacks: a snapshot field
-    (:data:`SNAPSHOT_FIELDS`) or a ``sys_*`` metric."""
-    return bool(SNAPSHOT_FIELDS & query_roots(text)) or reads_system_metrics(text)
+    (:data:`SNAPSHOT_FIELDS`), an ``up`` field or a ``sys_*`` metric."""
+    roots = query_roots(text)
+    return bool(SNAPSHOT_FIELDS & roots) or UP in roots or reads_system_metrics(text)
 
 
 def store_extra(storage, app_name, snapshot):
-    """:func:`snapshot_extra` searching *app_name*'s persisted index file in
-    *storage* when it has one, else the snapshot's ``:memory:`` database."""
+    """:func:`snapshot_extra` and :func:`ancestor_extra`, ``similar()``
+    searching *app_name*'s persisted index file in *storage* when it has
+    one, else the snapshot's ``:memory:`` database."""
 
     def scope_of(snap):
         from vmn_exp.core.similar_corpus import file_scope
@@ -108,4 +127,5 @@ def store_extra(storage, app_name, snapshot):
         path = index_path(storage, app_name)
         return (file_scope(app_name, path, snapshot=snap) if path else None) or _memory_scope(snap)
 
-    return snapshot_extra(snapshot, scope_of)
+    extra = snapshot_extra(snapshot, scope_of)
+    return extra and {**extra, **ancestor_extra(snapshot)}

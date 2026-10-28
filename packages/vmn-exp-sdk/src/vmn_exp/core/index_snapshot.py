@@ -64,6 +64,7 @@ class IndexSnapshot:
     loading: tuple = None
     _declared: list = field(default_factory=list, repr=False)  # memo, shared by views
     _children: list = field(default_factory=list, repr=False)  # children_of memo, ditto
+    _up: list = field(default_factory=list, repr=False)  # ancestor fields (core/query_up.py), ditto
     _by_verstr: dict = field(default_factory=dict, repr=False)
     _schema_rows: SchemaRows = field(default_factory=SchemaRows, repr=False)
     _views: dict = field(default_factory=dict, repr=False)  # schema key -> view
