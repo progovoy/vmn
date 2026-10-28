@@ -25,7 +25,7 @@ export default function AttentionStrip({ status, now = Date.now(), from, onFollo
     <div className="attention-strip" role="status">
       <span className="attention-icon" aria-hidden="true">⚠</span>
       {parts.map((p, i) => (
-        <Fragment key={p.level ? `q:${p.key}` : p.key}>
+        <Fragment key={p.key}>
           {i > 0 && <span className="attention-sep" aria-hidden="true"> · </span>}
           <Link className={partClass(p)} to={{ search: p.search }} title={p.title} onClick={onFollow}>
             {p.text}

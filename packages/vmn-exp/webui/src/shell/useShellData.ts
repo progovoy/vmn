@@ -31,9 +31,9 @@ export function useGitContext(ws: string | undefined, enabled: boolean) {
 /** A status this fresh is served from cache to a newly mounted reader. */
 const STATUS_STALE_MS = 10_000;
 
-const appStatusQuery = (ws: string | undefined, tag: string | undefined) => ({
-  queryKey: ["app-status", ws, tag],
-  queryFn: () => apiShell.appStatus(ws!, tag!),
+const appStatusQuery = (ws: string | undefined, tag: string | undefined, scope?: string) => ({
+  queryKey: scope ? ["app-status", ws, tag, scope] : ["app-status", ws, tag],
+  queryFn: () => apiShell.appStatus(ws!, tag!, scope),
   enabled: Boolean(ws && tag),
   staleTime: STATUS_STALE_MS,
 });
@@ -57,10 +57,8 @@ export function useAppStatusPoll(ws: string | undefined, tag: string | undefined
  *  polled on the status cadence. */
 export function useScopedStatus(ws: string | undefined, tag: string | undefined, scope: string | undefined) {
   return useQuery<AppStatus>({
-    queryKey: ["app-status", ws, tag, scope],
-    queryFn: () => apiShell.appStatus(ws!, tag!, scope),
+    ...appStatusQuery(ws, tag, scope),
     enabled: Boolean(ws && tag && scope),
-    staleTime: STATUS_STALE_MS,
     refetchInterval: (query) => statusPollMs(query.state.data),
   });
 }

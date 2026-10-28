@@ -16,7 +16,7 @@ from fastapi import HTTPException, Request
 
 import vmn_exp.core.status as experiment_status
 from vmn_exp.ui.api_errors import CodedError
-from vmn_exp.ui.attention import attention_payload, uses_ago
+from vmn_exp.ui.attention import attention_key, attention_payload
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.freshness import freshness_key
@@ -31,45 +31,44 @@ STATUS_BODIES = 256
 
 
 def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards,
-             freshness_of, attention_inputs=None):
+             freshness_of, attention_of=None, schema_of=None):
     """Add the routes; *git_workspace(ws_name)* raises the route's 400/404,
     *status_snapshot(ws_name, app_tag)* -> the app's snapshot (raising its
     404 when there is no such app), *app_tags(ws_name)* -> the workspace's
     apps in tag form, *freshness_of(ws_name, app_tag)* -> its index's
     ``freshness`` or None (after the snapshot was asked for),
-    *attention_inputs(ws_name, app_tag)* -> ``(the board's metrics schema,
-    attention entries)``. Returns ``forget(ws_name)``, which drops a removed
-    workspace's git context."""
+    *attention_of(ws_name, app_tag)* -> its attention entries,
+    *schema_of(ws_name, app_tag)* -> the board's metrics schema. Returns
+    ``forget(ws_name)``, which drops a removed workspace's git context."""
     contexts = TTLCache(GIT_TTL_SEC)
     summaries = LRU(STATUS_BODIES)
-    attention_inputs = attention_inputs or (lambda ws_name, app_tag: ({}, []))
+    attention_of = attention_of or (lambda ws_name, app_tag: [])
 
-    def summary(ws_name, app_tag, now, scope=None, schema=None):
-        """``(summary, etag)`` of an app (*scope*'s subtree when given), its
-        rollup memoized per snapshot."""
+    def summary(ws_name, app_tag, now, scope=None, schema=None, entries=()):
+        """``(summary, etag)`` of an app (*scope*'s subtree when given) with
+        the *entries*' attention counts, memoized per snapshot."""
         snapshot = status_snapshot(ws_name, app_tag)
         fresh = freshness_of(ws_name, app_tag)
         # failed_recent ages with the clock even while nothing is live (when
         # the etag has no time bucket): the window is accurate to an hour.
         hour = int(now.timestamp() // 3600)
-        etag = leaderboards.etag(snapshot, schema, kind="status", hour=hour, scope=scope)
+        etag = leaderboards.etag(snapshot, schema if scope else None, kind="status",
+                                 hour=hour, scope=scope)
         payload = summaries.get(etag, lambda: _with_indexing(
             leaderboards.status_summary(snapshot, now) if scope is None
             else leaderboards.jobs.status_summary(snapshot, schema, scope), snapshot))
+        if entries:
+            payload, etag = with_attention(snapshot, schema, scope, entries, payload, etag)
         if fresh is None:
             return payload, etag
         key = json.dumps([etag, freshness_key(fresh, now.timestamp())], default=str)
         return dict(payload, freshness=fresh), _digest(key)
 
-    def with_attention(ws_name, app_tag, now, scope, schema, entries, answer):
-        """*answer* ``(payload, etag)`` with the app's attention counts."""
-        payload, etag = answer
-        if not entries:
-            return answer
-        snapshot = status_snapshot(ws_name, app_tag)
-        minute = int(now.timestamp() // 60) if uses_ago(entries) else None
+    def with_attention(snapshot, schema, scope, entries, payload, etag):
+        """*payload* and *etag* with the *entries*' counts, keyed by their
+        pinned queries (an ``ago()`` one moves with the minute)."""
         key = leaderboards.etag(snapshot, schema, kind="attention", scope=scope,
-                                entries=entries, minute=minute)
+                                entries=attention_key(entries))
         parts = summaries.get(key, lambda: attention_payload(
             leaderboards, snapshot, schema, entries, scope))
         return dict(payload, attention=parts), _digest(etag + key)
@@ -86,11 +85,11 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     def experiments_status(request: Request, ws_name: str, app_tag: str, scope: str = None):
         if not safe_segment(scope):
             raise HTTPException(400, f"Invalid scope '{scope}'")
-        now = experiment_status._now()
-        schema, entries = attention_inputs(ws_name, app_tag)
+        entries = attention_of(ws_name, app_tag)
+        schema = schema_of(ws_name, app_tag) if entries or scope else None
         try:
-            answer = summary(ws_name, app_tag, now, scope, schema if scope else None)
-            payload, etag = with_attention(ws_name, app_tag, now, scope, schema, entries, answer)
+            payload, etag = summary(ws_name, app_tag, experiment_status._now(), scope, schema,
+                                    entries)
         except UnknownScope as e:
             raise HTTPException(404, str(e))
         return json_response(payload, etag=etag, request=request)

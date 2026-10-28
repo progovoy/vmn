@@ -15,7 +15,8 @@ bucket and minute.
 from collections import Counter, namedtuple
 
 import vmn_exp.core.status as experiment_status
-from vmn_exp.core.query import AGO, QueryError, pin_ago
+from vmn_exp.core.query import QueryError, pin_ago
+from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.memo import LRU
 
 # One configured query as the caches key it (labels are display only).
@@ -34,9 +35,17 @@ def pinned(query):
     return pin_ago(query, now=now)
 
 
-def uses_ago(entries):
-    """Whether one of *entries* may read the clock."""
-    return any(AGO in e["query"] for e in entries)
+def attention_key(entries):
+    """*entries* as the caches key them: each query pinned (as given when it
+    does not compile), so an ``ago()`` one moves with the minute."""
+    return [(e["key"], e["label"], e["level"], _pinned_or_raw(e["query"])) for e in entries]
+
+
+def _pinned_or_raw(query):
+    try:
+        return pinned(query)
+    except QueryError:
+        return query
 
 
 def attention_payload(cache, snapshot, schema, entries, scope=None):
@@ -72,6 +81,7 @@ class AttentionCounts:
     def __init__(self, cache, size=16):
         self._cache = cache
         self._summaries = cache.generations.track(LRU(size))
+        self._by_root = cache.generations.track(LRU(size))
 
     def summaries(self, snapshot, schema, queries):
         """``{job: summary}``, each with ``attention`` (``{key: n}``, the runs
@@ -79,12 +89,13 @@ class AttentionCounts:
         *queries*) and ``attention_rank`` (:func:`severity`)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        minute = int(experiment_status._now().timestamp() // 60)
-        key = (base.token, bucket, minute, cache.schema_key(schema), queries)
+        key = (base.token, bucket, minute(), cache.schema_key(schema), queries)
         return self._summaries.get(key, lambda: self._merged(snapshot, schema, queries))
 
     def _merged(self, snapshot, schema, queries):
-        by_root, out = self._count(snapshot, schema, queries), {}
+        """The job summaries (they follow the minute) with :meth:`by_root`'s
+        counts, which move only with the board or an ``ago()`` query's pin."""
+        by_root, out = self.by_root(snapshot, schema, queries), {}
         for job, summary in self._cache.job_rollups(snapshot, schema).items():
             counts = by_root.get(job, {})
             extra = {"attention_rank": severity(summary, counts, queries)}
@@ -93,11 +104,19 @@ class AttentionCounts:
             out[job] = dict(summary, **extra)
         return out
 
-    def _count(self, snapshot, schema, queries):
+    def by_root(self, snapshot, schema, queries):
+        """``{top-level verstr: {key: n}}``: each query's matching runs per tree."""
+        cache = self._cache
+        base, bucket = cache._base(snapshot)
+        texts = tuple(_pinned_or_raw(q.query) for q in queries)
+        key = (base.token, bucket, cache.schema_key(schema), texts)
+        return self._by_root.get(key, lambda: self._count(snapshot, schema, queries, texts))
+
+    def _count(self, snapshot, schema, queries, texts):
         out = {}
-        for q in queries:
+        for q, text in zip(queries, texts):
             try:
-                rows = self._cache.ordered(snapshot, schema, query=pinned(q.query))
+                rows = self._cache.ordered(snapshot, schema, query=text)
             except QueryError:
                 continue
             for root, n in Counter(row["root"] or row["verstr"] for row in rows).items():

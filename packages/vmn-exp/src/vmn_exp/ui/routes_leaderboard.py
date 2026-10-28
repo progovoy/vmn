@@ -31,7 +31,7 @@ from functools import partial
 
 from fastapi import HTTPException, Request
 from vmn_exp.core.query import QueryError
-from vmn_exp.ui.attention import pinned
+from vmn_exp.ui.attention import pinned, queries_of
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.http_params import clamp_page, key_list
@@ -65,11 +65,10 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
     app_tag)* -> ``({verstr: {total, unresolved}}, generation)``; without it
     rows carry no comment counts. *aggregate_of(ws_name, app_tag)* -> the
     app's default group aggregate (conf ``experiment.ui.group_aggregate``);
-    *attention_of(ws_name, app_tag)* -> its attention queries
-    (:func:`~vmn_exp.ui.attention.queries_of`)."""
+    *attention_of(ws_name, app_tag)* -> its attention entries."""
     comments_of = comments_of or (lambda ws_name, app_tag: ({}, 0))
     aggregate_of = aggregate_of or (lambda ws_name, app_tag: DEFAULT_AGGREGATE)
-    attention_of = attention_of or (lambda ws_name, app_tag: ())
+    attention_of = attention_of or (lambda ws_name, app_tag: [])
     base = f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
     bodies = LRU(ENCODED_BODIES)
 
@@ -98,7 +97,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
         top, q = _top(top), _pinned(q)
-        attention = attention_of(ws_name, app_tag) if top else ()
+        attention = queries_of(attention_of(ws_name, app_tag)) if top else ()
         offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
                       order=order, archived=archived, scope=_scope(scope), top=top)

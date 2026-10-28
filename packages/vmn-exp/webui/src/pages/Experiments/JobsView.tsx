@@ -58,7 +58,10 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
   const status = useAppStatus(ws, app).data;
   const indexing = status?.indexing;
   const base = `/ws/${ws}/app/${app}`;
-  const attention = status?.attention;
+  // The rows read the entries' labels and levels, not their counts: a poll
+  // that only moves a count keeps every row's context.
+  const entriesSig = JSON.stringify((status?.attention ?? []).map((e) => [e.key, e.label, e.level, e.q]));
+  const attention = useMemo(() => status?.attention, [entriesSig]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal, search: board.search, attention }),
     [base, board.metric, board.goal, board.search, attention]);
   // The strip counts runs, not outer runs: its parts open All runs filtered.
