@@ -1,27 +1,30 @@
 /** The tree's state (plan 28 N6): which nodes the reader folded or opened,
  *  how many pages of each parent's children are asked for, and those
- *  pages, fetched lazily as nodes open (`experiments?children_of=`). A page
- *  starts where the loaded ones end; pages showing live runs refresh. */
+ *  pages, fetched lazily as nodes open (`experiments?children_of=`), under
+ *  the *filter* given (keyed by it). A page starts where the loaded ones
+ *  end; pages showing live runs refresh. */
 import { useCallback, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { fetchChildren, type TreePage } from "../apiTree";
+import { fetchChildren, type TreeFilter, type TreePage } from "../apiTree";
 import { itemKey, treeItems, type TreeItem, type TreePages } from "../util/treeItems";
 
 const LIVE_REFRESH_MS = 15_000;
 
-const childrenKey = (ws: string, app: string, parent: string, offset: number) =>
-  ["tree-children", ws, app, parent, offset] as const;
+const NO_FILTER: TreeFilter = {};
+
+const childrenKey = (ws: string, app: string, filter: TreeFilter, parent: string, offset: number) =>
+  ["tree-children", ws, app, filter, parent, offset] as const;
 
 const live = (page: TreePage | undefined) => Boolean(page?.rows.some((r) =>
   r.status === "running" || (r.job?.counts.running ?? 0) > 0));
 
-export function useTreeChildren(ws: string, app: string, root: string) {
+export function useTreeChildren(ws: string, app: string, root: string, filter: TreeFilter = NO_FILTER) {
   const client = useQueryClient();
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [pageCounts, setPageCounts] = useState<ReadonlyMap<string, number>>(new Map());
 
   const cached = (parent: string, offset: number) =>
-    client.getQueryData<TreePage>(childrenKey(ws, app, parent, offset));
+    client.getQueryData<TreePage>(childrenKey(ws, app, filter, parent, offset));
   /** The offsets of *parent*'s pages that can be asked for (each after a
    *  loaded one), found once per parent a render. */
   const offsetsOf = new Map<string, number[]>();
@@ -50,8 +53,8 @@ export function useTreeChildren(ws: string, app: string, root: string) {
 
   const results = useQueries({
     queries: wanted.flatMap((parent) => offsets(parent).map((offset) => ({
-      queryKey: childrenKey(ws, app, parent, offset),
-      queryFn: () => fetchChildren(ws, app, parent, { offset }),
+      queryKey: childrenKey(ws, app, filter, parent, offset),
+      queryFn: () => fetchChildren(ws, app, parent, { offset, filter }),
       refetchInterval: (q: { state: { data?: TreePage } }) => (live(q.state.data) ? LIVE_REFRESH_MS : false),
     }))),
   });

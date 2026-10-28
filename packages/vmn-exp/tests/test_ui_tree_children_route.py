@@ -154,3 +154,16 @@ def test_an_unknown_run_is_404(client):
 ])
 def test_malformed_or_combined_children_of_is_400(client, params):
     assert client.get(f"{BASE}/experiments", params=params).status_code == 400
+
+
+def test_match_subtree_keeps_the_children_whose_subtree_matches(client):
+    unstable = 'tags.health = "unstable"'
+    assert _children(client, _v(1), q=unstable)["total"] == 0
+    body = _children(client, _v(1), q=unstable, match_subtree=1)
+    rows = _rows(body)
+    assert set(rows) == {_v(5)} and rows[_v(5)]["matched"] == 1 and rows[_v(5)]["open"]
+    assert body["tree_columns"] == {"date": ["c:duration", "m:loss"]}
+    params = {"children_of": _v(1), "q": unstable}
+    plain = client.get(f"{BASE}/experiments", params=params)
+    matched = client.get(f"{BASE}/experiments", params=dict(params, match_subtree=1))
+    assert plain.headers["etag"] != matched.headers["etag"]

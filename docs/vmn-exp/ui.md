@@ -414,7 +414,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
-  - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row, about ten rows tall.
+  - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row (on a phone, under its card), about ten rows tall.
   - its [baseline chip](#baseline-compare) (`▼ best_value from 2024-12 (5 of 41 trade_date values worse than the baseline's p10)`), opening its Overview; the page's outer runs' chips come in one `experiments-baselines` request.
 
   Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
@@ -535,6 +535,13 @@ tree grid (`aria-level`, `aria-expanded`, `aria-posinset`/`aria-setsize`):
 Up/Down move between rows, Right opens a node (or steps into it), Left folds
 it (or steps to its parent), Enter toggles it, Home/End jump. It is
 virtualized like the board.
+
+In the Runs tab the tree keeps the tab's filter bar and URL filters
+(`status`, `q`, `search`, `branch`, `archived`, `sort`/`order`), so switching
+layouts keeps them. A filter matches subtrees: each level keeps the runs that
+pass it or have a passing run below, and a node with a passing run below
+starts open, so a filter such as `status=failed` leads from the outer run
+down to the failed runs.
 
 ## The run page
 
@@ -831,12 +838,16 @@ message.
     has attention, or running or stuck runs.
   - `tree_columns` is the app's `experiment.ui.tree_columns`
     (`{<tags.kind value>: [show keys]}`, `{}` when unset).
+  - With `match_subtree=1`, `status` and `q` match subtrees: a child is
+    kept when it or any run below it passes both, in the children's order
+    without them, and carries `matched` (its subtree's passing runs, itself
+    included); a child with a passing run below is also `open`. The web
+    tree asks this way under the Runs tab's filters.
   - Children orders are cached and moved across index generations like the
     board's, in caches of their own, so opening nodes never evicts the
     board's orders; attention per node is counted once per generation over
     the tree a request reads. An unknown run is a 404, a malformed one a 400,
-    as is `children_of` with `group`, `top`, `match_subtree` or a query
-    reading `comments`.
+    as is `children_of` with `group`, `top` or a query reading `comments`.
 - **`scope=<verstr>`** keeps that run's subtree, without the run itself. It
   works on `experiments` (flat and grouped), `experiments-columns`,
   `experiments-facets` (which also takes `q`/`status`), `experiments-importance`

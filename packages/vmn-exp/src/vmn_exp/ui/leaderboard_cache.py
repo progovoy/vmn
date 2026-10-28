@@ -74,6 +74,7 @@ from vmn_exp.ui.leaderboard_scope import (
 from vmn_exp.ui.leaderboard_subtree_match import SubtreeMatch
 from vmn_exp.ui.leaderboard_successor import current, latest, live_outers
 from vmn_exp.ui.leaderboard_top_counts import TopCounts
+from vmn_exp.ui.leaderboard_tree_match import TreeMatch, filters_subtrees
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.leaderboard_up import ancestors_changed, query_reads_up
 from vmn_exp.ui.leaderboard_warm import BoardWarmer
@@ -353,6 +354,7 @@ class LeaderboardCache(SetAnswers):
         self._status_counts = StatusCounts(self)
         self.attention = AttentionCounts(self)
         self.tree_nodes = TreeNodes(self, size)
+        self._tree_match = TreeMatch(self, size)
         self._warmer = BoardWarmer(self)
 
     schema_key = staticmethod(_schema_key)
@@ -514,16 +516,21 @@ class LeaderboardCache(SetAnswers):
         their ``job`` carries the *attention* queries' counts (:mod:`~vmn_exp.ui.attention`).
         *children_of* keeps a run's direct children, always paged, as the
         tree serves them (split by the *split* field, plan 28 N6,
-        :mod:`~vmn_exp.ui.leaderboard_children`).
+        :mod:`~vmn_exp.ui.leaderboard_children`); with *match_subtree* the
+        status and query match their subtrees
+        (:mod:`~vmn_exp.ui.leaderboard_tree_match`).
         Raises ``QueryError`` on a
         bad *query*, :class:`~vmn_exp.ui.leaderboard_scope.UnknownScope` on an
         unknown *scope*.
         """
         f = Filters(sort, status, query, order, archived, scope, top, children_of)
-        if match_subtree and not top:
-            raise ValueError("match_subtree needs top=1")
+        if match_subtree and not (top or children_of is not None):
+            raise ValueError("match_subtree needs top=1 or children_of")
         if top and children_of is not None:
             raise ValueError("children_of cannot be combined with top")
+        if children_of is not None and match_subtree and filters_subtrees(f):
+            return self._tree_match.page(snapshot, schema, last, offset, limit, f, cursor,
+                                         attention, split)
         subtree = bool(match_subtree and query and query.strip())
         pager = self.pager(snapshot, schema, last, f, cursor, match_subtree,
                            ordered=(last, f._replace(query=None)) if subtree else None,

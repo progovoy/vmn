@@ -1,13 +1,14 @@
 /** An outer run's Runs tab (plan 28 N6): its runs flat (the scoped board,
- *  JobRuns) or as a tree (JobTree), switched by `layout=flat|tree`; without
- *  it the app's last choice (localStorage), else DEFAULT_LAYOUT. */
+ *  JobRuns) or as a tree under the same filters (JobTreeRuns), switched by
+ *  `layout=flat|tree`; without it the app's last choice (localStorage),
+ *  else DEFAULT_LAYOUT. */
 import { useEffect } from "react";
 import Segmented from "../../components/Segmented";
 import { useUrlState } from "../../hooks/useUrlState";
 import { useScopedStatus } from "../../shell/useShellData";
 import { rememberChoice, storedChoice } from "../../util/appChoice";
 import JobRuns from "./JobRuns";
-import JobTree from "./JobTree";
+import JobTreeRuns from "./JobTreeRuns";
 
 type RunsLayout = "flat" | "tree";
 
@@ -35,7 +36,7 @@ export default function JobRunsTab(props: Props) {
           onChange={(next) => update((p) => { p.set("layout", next); })} />
       </div>
       {layout === "tree"
-        ? <JobTree ws={ws} app={app} verstr={verstr} name={name} attention={attention} />
+        ? <JobTreeRuns ws={ws} app={app} verstr={verstr} name={name} attention={attention} />
         : <JobRuns {...props} />}
     </div>
   );

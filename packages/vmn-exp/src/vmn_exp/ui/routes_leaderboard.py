@@ -29,7 +29,9 @@ clock; a Jobs view page's ``job`` carries the app's attention counts.
 ``children_of=<verstr>`` pages that run's direct children for the tree
 (plan 28 N6, :mod:`~vmn_exp.ui.leaderboard_children`): each with children
 carrying its ``job`` (attention over its own subtree, the app's split),
-every row an ``open`` hint, the page the app's ``tree_columns``.
+every row an ``open`` hint, the page the app's ``tree_columns``; with
+``match_subtree=1`` the status and ``q`` keep the children whose subtree holds
+a passing run, each carrying ``matched`` (:mod:`~vmn_exp.ui.leaderboard_tree_match`).
 """
 from functools import partial
 
@@ -122,7 +124,8 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
             _scope(children_of)
             _check_tree(group, by_comments)
             return _tree_page(request, ws_name, app_tag, snapshot, schema, counts,
-                              dict(params, last=last, cursor=cursor, children_of=children_of),
+                              dict(params, last=last, cursor=cursor, children_of=children_of,
+                                   match_subtree=match_subtree),
                               attention, comments=generation, **clock)
         if group is not None:
             if last or cursor is not None:

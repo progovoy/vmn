@@ -3,11 +3,14 @@
  *  against its siblings and the columns the app's `tree_columns` name for
  *  its `tags.kind`. Children load as a node opens; the nodes the server
  *  marks `open` (attention or live runs below) start open, healthy ones
- *  folded, so a 10k-run launch opens as a handful of rows. Virtualized like
+ *  folded, so a 10k-run launch opens as a handful of rows; under a filter,
+ *  each level keeps the nodes whose subtree passes it and those with a
+ *  passing run below start open. Virtualized like
  *  the board; a WAI-ARIA tree grid: Up/Down move, Right opens (or steps
  *  into), Left folds (or steps out), Enter toggles. */
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { TreeFilter } from "../../apiTree";
 import { appTag } from "../../http";
 import { useFillHeight } from "../../hooks/useFillHeight";
 import { useTreeChildren } from "../../hooks/useTreeChildren";
@@ -25,7 +28,7 @@ import "./jobTree.css";
 /** The tree's height inside an Outer runs row (Jobs view): about ten rows. */
 export const EMBEDDED_HEIGHT = TREE_ROW_HEIGHT * 10 + 36;
 
-export default function JobTree({ ws, app, verstr, name, attention, embedded = false }: {
+export default function JobTree({ ws, app, verstr, name, attention, embedded = false, filter }: {
   ws: string; app: string; verstr: string;
   /** The outer run's name, naming the tree. */
   name?: string;
@@ -33,8 +36,10 @@ export default function JobTree({ ws, app, verstr, name, attention, embedded = f
   attention?: readonly AttentionEntry[];
   /** Inside an Outer runs row: a fixed height instead of the page's. */
   embedded?: boolean;
+  /** The Runs tab's filters: each level keeps the nodes whose subtree passes. */
+  filter?: TreeFilter;
 }) {
-  const tree = useTreeChildren(ws, app, verstr);
+  const tree = useTreeChildren(ws, app, verstr, filter);
   const schema = useMetricsSchema(ws, app);
   const metric = mainMetric(tree.rows, schema);
   const ctx: JobContext = useMemo(() => ({
