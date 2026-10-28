@@ -8,6 +8,7 @@ carrying the tags is not tagged again), so a bulk action is idempotent.
 :class:`BulkSpec` resolves them, previews them (``dry_run``) and acts on a
 batch, in a store (in-process) or a checkout (``vmn-exp`` argv).
 """
+from vmn_exp.ui.attention import pinned
 from vmn_exp.ui.jobs_exp_meta import _tag_args, exp_archive_command, exp_tag_command
 from vmn_exp.ui.jobs_store import build_store_action
 
@@ -46,7 +47,7 @@ class BulkSpec:
     def filters(self):
         """The list's filters; archive/unarchive see every run and pick by state."""
         archived = self.action != "exp_tag" or bool(self.body.get("archived"))
-        return dict(scope=self.body.get("scope"), query=self.body.get("q"),
+        return dict(scope=self.body.get("scope"), query=pinned(self.body.get("q")),
                     status=self.body.get("status"), archived=archived)
 
     def pending(self, row):

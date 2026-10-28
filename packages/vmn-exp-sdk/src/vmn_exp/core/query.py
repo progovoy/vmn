@@ -15,6 +15,7 @@ Grammar::
     not_expr   = "not" not_expr | primary
     primary    = "(" or_expr ")" | ( "under" | "similar" ) "(" string ")" | comparison
     comparison = any_field cmp_op literal
+               | any_field ( "<" | "<=" | ">" | ">=" ) "ago" "(" string ")"
                | any_field [ "not" ] "in" "(" literal { "," literal } ")"
     any_field  = field | "up." up_field | "up" "(" up_field ( "=" | "==" ) literal ")" "." up_field
     up_field   = ( "params" | "tags" ) "." ( name | string ) | "name"
@@ -63,10 +64,15 @@ the runs whose similar-runs text document holds every word of the text
 nearest ancestor holding that param and ``up(tags.kind = "study").params.group``
 the nearest ancestor whose ``tags.kind`` is ``"study"``
 (:mod:`vmn_exp.core.query_up`; the built-in ``kind`` is no selector).
+``timestamp < ago("1h")`` compares with the UTC ISO time that long before
+now (``30m``, ``1h``, ``2d``; :mod:`vmn_exp.core.query_ago`): every entry
+point pins it to that time when it compiles a query (:func:`pin_ago`), so no
+cache keeps a query's clock.
 """
 
 import functools
 
+from vmn_exp.core.query_ago import ORDERED, duration_sec, iso_before
 from vmn_exp.core.query_up import UP, dig, readable, rows_ancestor_fields
 from vmn_exp.core.query_up import equal as _equal
 from vmn_exp.core.system_metrics import is_system_metric
@@ -106,6 +112,7 @@ UNDER, ANCESTORS = "under", "ancestors"
 SIMILAR = "similar"
 # The ``sys_*`` metrics kept off lean rows, ``verstr -> {metric: value}``, as this extra.
 SYSTEM_METRICS = "system_metrics"
+AGO = "ago"
 _CALLS = {UNDER: "under() takes one quoted verstr", SIMILAR: "similar() takes one quoted text"}
 _CALL_FIELDS = {UNDER: ANCESTORS, SIMILAR: SIMILAR}  # what a call's predicate reads
 
@@ -410,6 +417,7 @@ class _Parser:
         self.tokens = tokenize(text)
         self.pos = 0
         self.depth = 0
+        self.agos = []  # (start, end, seconds) of each ``ago(...)``
 
     def peek(self):
         return self.tokens[self.pos]
@@ -491,6 +499,8 @@ class _Parser:
         if operator[0] not in ("op", "kw") or operator[1] not in _COMPARISONS:
             _fail(f"expected an operator, found {_describe(operator)}", operator[2])
         self.next()
+        if self.peek()[:2] == ("name", AGO):
+            return ("cmp", field, operator[1], self.parse_ago(operator))
         literal = self.parse_literal()
         if operator[1] in ("~", "!~", "contains") and not isinstance(literal, str):
             _fail(f"'{operator[1]}' needs a string on the right", operator[2])
@@ -507,6 +517,21 @@ class _Parser:
             _fail("similar() needs a word to match", token[2])
         self.expect(")", ")", "')'")
         return (name, token[1])
+
+    def parse_ago(self, operator):
+        """``ago("<duration>")`` right of an ordering *operator*: its seconds,
+        its span recorded for :func:`pin_ago`."""
+        start = self.next()[2]
+        if operator[1] not in ORDERED:
+            _fail("ago() compares with <, <=, > or >=", start)
+        self.expect("(", "(", "'(' after 'ago'")
+        token = self.next()
+        seconds = duration_sec(token[1]) if token[0] == "lit" else None
+        if seconds is None:
+            _fail('ago() takes a duration like "30m", "1h" or "2d"', token[2])
+        end = self.expect(")", ")", "')'")[2] + 1
+        self.agos.append((start, end, seconds))
+        return seconds
 
     def field_of(self, token):
         """The field node the name *token*, just read, starts."""
@@ -558,6 +583,26 @@ class _Parser:
 
 
 @functools.lru_cache(maxsize=256)
+def _parsed(text):
+    """``(tree, ago spans)`` of *text*, its ``ago()`` calls unpinned."""
+    parser = _Parser(text)
+    return parser.parse(), tuple(parser.agos)
+
+
+def pin_ago(text, now=None):
+    """*text* with each ``ago("<duration>")`` replaced by the quoted UTC ISO
+    time that long before *now* (default the clock); *text* itself when it
+    has none. Raises :class:`QueryError` (offsets in *text*) when it has one
+    and does not compile."""
+    if not text or AGO not in text:
+        return text
+    out, at = [], 0
+    for start, end, seconds in _parsed(text)[1]:
+        out += [text[at:start], f'"{iso_before(seconds, now)}"']
+        at = end
+    return "".join(out) + text[at:]
+
+
 def parse_query(text):
     """The AST of query *text*: ``("or"|"and", [nodes])``, ``("not", node)``,
     ``("in", field, [literals])`` or ``("cmp", field, op, literal)``, with
@@ -566,10 +611,11 @@ def parse_query(text):
     ``("env_packages", package)`` or ``("up", selector, keys)``
     (:mod:`vmn_exp.core.query_up`); ``under("v")`` is ``("under", v)``, ``similar("t")``
     ``("similar", t)``. Raises :class:`QueryError` like
-    :func:`compile_query`; the SQL backend compiles the same tree."""
+    :func:`compile_query`; the SQL backend compiles the same tree. Its
+    ``ago()`` calls are pinned to now (:func:`pin_ago`)."""
     if not text or not text.strip():
         raise QueryError("empty query")
-    return _Parser(text).parse()
+    return _parsed(pin_ago(text))[0]
 
 
 @functools.lru_cache(maxsize=256)
@@ -586,7 +632,6 @@ def parse_field(text):
     return field
 
 
-@functools.lru_cache(maxsize=256)
 def compile_query(text):
     """Compile query *text* into a ``row -> bool`` predicate.
 
@@ -595,8 +640,14 @@ def compile_query(text):
 
     Cached: the dashboard polls with an unchanged query, and a predicate is a
     stateless closure over the parsed expression, so it is safe to share. An
-    exception is not cached — a bad query re-raises from a fresh parse.
+    exception is not cached — a bad query re-raises from a fresh parse. A
+    query with ``ago()`` is cached by its pinned text (:func:`pin_ago`).
     """
+    return _compiled(pin_ago(text))
+
+
+@functools.lru_cache(maxsize=256)
+def _compiled(text):
     return _predicate(parse_query(text))
 
 

@@ -118,15 +118,16 @@ class JobKey:
         return job_key(value, self.descending, self.inner.target(proj))
 
 
-def keyed(cache, snapshot, schema, last, f, projs):
-    """The sort key of the order *cache* serves for *last* and the filters *f*."""
+def keyed(cache, snapshot, schema, last, f, projs, attention=()):
+    """The sort key of the order *cache* serves for *last* and the filters *f*
+    (and the *attention* queries a ``job:attention`` sort ranks by)."""
     plain = f._replace(sort=None, order=None) if f.sort in JOB_SORTS else f
     base = cache._base(snapshot)[0]
     present = _presence(cache, snapshot, schema, last, plain)
     key = RowKey(schema, plain.sort, plain.order, present, base, projs)
     if f.sort not in JOB_SORTS:
         return key
-    summaries = cache.job_rollups(snapshot, schema)
+    summaries = cache._job_view.summaries(snapshot, schema, f.sort, attention)
     field = JOB_SORTS[f.sort]
     return JobKey(key, summaries, field, job_descending(field, f.order, summaries, schema))
 

@@ -19,7 +19,9 @@ from vmn_exp.ui.job_rollup_payload import failure_counts, job_payload, job_summa
 from vmn_exp.ui.job_split import SplitSpec
 from vmn_exp.ui.job_split_payload import split_payload
 from vmn_exp.ui.job_tally import RollupSpec
+from vmn_exp.ui.leaderboard_scope import check_scope
 from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.status_summary import tallied_summary
 
 # Rollups moved on across generations: one per (app, schema) in use.
 LATEST_ROLLUPS = 16
@@ -40,6 +42,10 @@ def _payload(job, parts, spec, now, idx_of):
 
 def _failure_counts(job, parts, spec, now, idx_of):
     return failure_counts(parts)
+
+
+def _status_summary(job, parts, spec, now, idx_of):
+    return tallied_summary(parts, now)
 
 
 class JobRollupCache:
@@ -66,6 +72,16 @@ class JobRollupCache:
         """``{failure signature: runs}`` over *verstr*'s subtree, or None
         when it is not a job."""
         return self._rolled_up(snapshot, schema, verstr, _failure_counts)
+
+    def status_summary(self, snapshot, schema, verstr):
+        """The status summary of *verstr*'s subtree (without it): every count
+        0 for a run without children,
+        :class:`~vmn_exp.ui.leaderboard_scope.UnknownScope` for no run."""
+        found = self._rolled_up(snapshot, schema, verstr, _status_summary)
+        if found is None:
+            check_scope(self._cache._base(snapshot)[0], verstr)
+            found = tallied_summary((), experiment_status._now())
+        return found
 
     def split_rollup(self, snapshot, field, verstr):
         """*verstr*'s counts and durations per value of *field* (a

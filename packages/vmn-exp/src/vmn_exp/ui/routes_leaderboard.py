@@ -23,11 +23,15 @@ A flat page carries ``next_cursor``; ``cursor=`` asks for the page after it
 (keyset paging, plan 23 S6, :mod:`~vmn_exp.ui.leaderboard_cursor`).
 Grouped with ``top``, each group sums its jobs' rollups; every group carries
 the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
+A ``q`` with ``ago()`` is pinned to the minute first (plan 28 P1,
+:func:`~vmn_exp.ui.attention.pinned`), so its ETag and orders follow the
+clock; a Jobs view page's ``job`` carries the app's attention counts.
 """
 from functools import partial
 
 from fastapi import HTTPException, Request
 from vmn_exp.core.query import QueryError
+from vmn_exp.ui.attention import pinned
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.http_params import clamp_page, key_list
@@ -54,14 +58,18 @@ MAX_ROWS_PER_GROUP = 100
 MAX_GROUPED_ROWS = 5000
 
 
-def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None):
+def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None,
+             attention_of=None):
     """*inputs(ws_name, app_tag)* -> ``(snapshot, metrics schema)``, raising
     the route's HTTP errors for a bad workspace or app; *comments_of(ws_name,
     app_tag)* -> ``({verstr: {total, unresolved}}, generation)``; without it
     rows carry no comment counts. *aggregate_of(ws_name, app_tag)* -> the
-    app's default group aggregate (conf ``experiment.ui.group_aggregate``)."""
+    app's default group aggregate (conf ``experiment.ui.group_aggregate``);
+    *attention_of(ws_name, app_tag)* -> its attention queries
+    (:func:`~vmn_exp.ui.attention.queries_of`)."""
     comments_of = comments_of or (lambda ws_name, app_tag: ({}, 0))
     aggregate_of = aggregate_of or (lambda ws_name, app_tag: DEFAULT_AGGREGATE)
+    attention_of = attention_of or (lambda ws_name, app_tag: ())
     base = f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
     bodies = LRU(ENCODED_BODIES)
 
@@ -89,7 +97,8 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
-        top = _top(top)
+        top, q = _top(top), _pinned(q)
+        attention = attention_of(ws_name, app_tag) if top else ()
         offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
                       order=order, archived=archived, scope=_scope(scope), top=top)
@@ -117,10 +126,11 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         if by_comments:
             compute = partial(page_by_comments, cache, counts=counts)
         else:
-            compute = partial(cache.page, match_subtree=match_subtree)
+            compute = partial(cache.page, match_subtree=match_subtree, attention=attention)
         return _answer(request, lambda *a, **p: joined(compute(*a, **p), counts), snapshot,
                        schema, dict(params, last=last, cursor=cursor), comments=generation,
-                       match_subtree=match_subtree and not by_comments, **clock)
+                       match_subtree=match_subtree and not by_comments, attention=attention,
+                       **clock)
 
     @app.get(f"{base}/experiments-columns", dependencies=[require(VIEWER)])
     def experiment_columns(
@@ -140,7 +150,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         _check_order(order)
         params = dict(
             keys=tuple(key_list(keys) or ()), limit=limit,
-            sort=sort, status=status, query=q, order=order, archived=archived,
+            sort=sort, status=status, query=_pinned(q), order=order, archived=archived,
             scope=_scope(scope),
         )
         return _answer(request, cache.columns, snapshot, schema, params, route="columns")
@@ -157,7 +167,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         scope: str = None,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
-        params = dict(metric=metric, status=status, query=q, archived=archived,
+        params = dict(metric=metric, status=status, query=_pinned(q), archived=archived,
                       scope=_scope(scope))
         return _answer(request, cache.importance, snapshot, schema, params, route="importance")
 
@@ -167,7 +177,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         scope: str = None, q: str = None, status: str = None,
     ):
         snapshot, _ = inputs(ws_name, app_tag)
-        where = dict(archived=archived, scope=_scope(scope), query=q, status=status)
+        where = dict(archived=archived, scope=_scope(scope), query=_pinned(q), status=status)
         etag = cache.etag(snapshot, None, route="facets", **where)
         try:
             return memoized_json_response(
@@ -181,6 +191,12 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         try:
             return top_filter(top)
         except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    def _pinned(q):
+        try:
+            return pinned(q)
+        except QueryError as e:
             raise HTTPException(400, str(e))
 
     def _scope(scope):

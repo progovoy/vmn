@@ -16,7 +16,7 @@ import os
 import threading
 
 import vmn_exp.core.index as experiment_index
-from vmn_exp.core.app_settings import metrics_overlay, ui_overlay
+from vmn_exp.core.app_settings import attention_entries, metrics_overlay, ui_overlay
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.query_extra import bind_similar_scope
@@ -287,6 +287,10 @@ class ExperimentSource:
     def stale_after_min(self, ws, app_name, settings=None):
         """The app's ``experiment.ui.stale_after_min``, else the default."""
         return exp_reader.stale_after_of(self.experiment_ui(ws, app_name, settings))
+
+    def attention(self, ws, app_name, settings=None):
+        """The app's ``experiment.ui.attention`` queries (plan 28 P1)."""
+        return attention_entries(self.experiment_ui(ws, app_name, settings))
 
     def split_by(self, ws, app_name, settings=None):
         """The app's ``experiment.ui.split_by`` (plan 28 P3), else None."""

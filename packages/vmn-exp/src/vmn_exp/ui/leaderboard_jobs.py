@@ -7,7 +7,9 @@ The top-level rows are few (tens to thousands), so a ``job:*`` order is the
 board's default order of them stably sorted by the summaries, memoized per
 base, time bucket and minute (the summaries' throughput and ETA follow
 :func:`~vmn_exp.ui.job_rollup_cache.minute`). Rows without the value (single runs, a job without the metric)
-come last, ties keep the default order.
+come last, ties keep the default order. ``job:attention`` ranks by the
+summaries' ``attention_rank`` (:mod:`~vmn_exp.ui.attention`), the app's
+attention queries given.
 """
 from operator import itemgetter
 
@@ -26,7 +28,9 @@ JOB_SORTS = {
     "job:best": "best",
     "job:total": "total",
     "job:started": "started_at",
+    "job:attention": "attention_rank",
 }
+ATTENTION_SORT = "job:attention"
 
 
 def check_job_sort(sort, top):
@@ -77,20 +81,28 @@ class JobsView:
         self._cache = cache
         self._orders = cache.generations.track(LRU(size))
 
-    def ordered(self, snapshot, schema, last, f):
+    def ordered(self, snapshot, schema, last, f, attention=()):
         """The rows passing the :class:`~vmn_exp.ui.leaderboard_scope.Filters`
-        *f* in order, a ``job:*`` sort included."""
+        *f* in order, a ``job:*`` sort included (by the *attention* queries'
+        counts for ``job:attention``)."""
         cache = self._cache
         check_job_sort(f.sort, f.top)
         if f.sort not in JOB_SORTS:
             return cache._ordered(snapshot, schema, last, f)
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema), last) + f
+        key = (base.token, bucket, minute(), cache.schema_key(schema), last, attention) + f
         return self._orders.get(key, lambda: job_sorted(
             cache._ordered(snapshot, schema, last, f._replace(sort=None, order=None)),
-            cache.job_rollups(snapshot, schema), f.sort, f.order, schema))
+            self.summaries(snapshot, schema, f.sort, attention), f.sort, f.order, schema))
 
-    def with_jobs(self, snapshot, schema, rows):
-        """Copies of *rows* carrying ``job``."""
-        summaries = self._cache.job_rollups(snapshot, schema)
+    def summaries(self, snapshot, schema, sort=None, attention=()):
+        """``{job: summary}``, with attention counts given *attention*
+        queries or a ``job:attention`` *sort*."""
+        if attention or sort == ATTENTION_SORT:
+            return self._cache.attention.summaries(snapshot, schema, attention)
+        return self._cache.job_rollups(snapshot, schema)
+
+    def with_jobs(self, snapshot, schema, rows, attention=()):
+        """Copies of *rows* carrying ``job`` (with its *attention* counts)."""
+        summaries = self.summaries(snapshot, schema, None, attention)
         return [dict(row, job=summaries.get(row["verstr"])) for row in rows]

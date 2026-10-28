@@ -39,6 +39,19 @@ def status_summary(rows, now, recent_sec=RECENT_SEC):
     return summary_payload(len(rows), counts, settled, failed_recent)
 
 
+def tallied_summary(parts, now, recent_sec=RECENT_SEC):
+    """:func:`status_summary` of the rows job rollup *parts* tally
+    (:class:`~vmn_exp.ui.job_tally.Tally`), recent failures by finish minute."""
+    counts, settled = dict.fromkeys(STATUSES, 0), dict.fromkeys(SETTLED, 0)
+    for part in parts:
+        for status, n in part.counts.items():
+            (settled if status in settled else counts)[status] += n
+    minute = int(now.timestamp() // 60)
+    failed_recent = sum(p.timeline[FAILED].recent(minute, recent_sec // 60) for p in parts)
+    total = sum(counts.values()) + sum(settled.values())
+    return summary_payload(total, counts, settled, failed_recent)
+
+
 def summary_payload(total, counts, settled, failed_recent):
     """What :func:`status_summary` answers for these tallies."""
     return {

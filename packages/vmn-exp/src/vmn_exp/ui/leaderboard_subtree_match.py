@@ -29,14 +29,14 @@ class SubtreeMatch:
             (base.token, bucket, query, archived),
             lambda: _hits(base, bucket, cache._candidates(snapshot, query), query, archived))
 
-    def page(self, snapshot, schema, last, offset, limit, f, pager):
+    def page(self, snapshot, schema, last, offset, limit, f, pager, attention=()):
         """:meth:`~vmn_exp.ui.leaderboard_cache.LeaderboardCache.page` for
         the :class:`Filters` *f* (``top`` set), matching subtrees."""
         cache = self._cache
         hits = self.hits(snapshot, f.query, f.archived)
-        rows = cache._job_view.ordered(snapshot, schema, last, f._replace(query=None))
+        rows = cache._job_view.ordered(snapshot, schema, last, f._replace(query=None), attention)
         kept = [row for row in rows if row["verstr"] in hits]
-        out = cache.paged(snapshot, schema, kept, offset, limit, f.top, pager)
+        out = cache.paged(snapshot, schema, kept, offset, limit, f.top, pager, attention)
         for row in out if limit is None else out["rows"]:
             row["matched"] = hits[row["verstr"]]  # with_jobs' copies
         if limit is None:

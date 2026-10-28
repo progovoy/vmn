@@ -21,6 +21,7 @@ from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.ui.api_errors import APP_NOT_FOUND, CodedError, raise_read_error
 from vmn_exp.ui.app_presence import app_exists
+from vmn_exp.ui.attention import queries_of
 from vmn_exp.ui.audit import AuditLog, install_audit_middleware
 from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.auth.authz import require, require_action
@@ -386,6 +387,15 @@ def create_app(
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         return source.split_by(ws, app_name, _settings(ws, app_name))
 
+    def _attention_entries(ws_name, app_tag):
+        """The app's attention queries: conf.yml over the store settings."""
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return source.attention(ws, app_name, _settings(ws, app_name))
+
+    def _attention_inputs(ws_name, app_tag):
+        """``(the board's metrics schema, attention entries)`` of an app."""
+        return _leaderboard_inputs(ws_name, app_tag)[1], _attention_entries(ws_name, app_tag)
+
     def _similar_weights(ws_name, app_name):
         """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp
         similar`` and the SDK reader read them; none in a store."""
@@ -712,7 +722,8 @@ def create_app(
         return index.comment_counts(_app_name(app_tag)), index.generation
 
     routes_leaderboard.register(app, API_PREFIX, _leaderboard_inputs, leaderboards,
-                                _comment_counts, _group_aggregate)
+                                _comment_counts, _group_aggregate,
+                                lambda ws, tag: queries_of(_attention_entries(ws, tag)))
     routes_pivot.register(app, API_PREFIX, _leaderboard_inputs, leaderboards, _group_aggregate)
     routes_series.register(app, API_PREFIX, _series_storage, MAX_SERIES_POINTS)
 
@@ -728,7 +739,8 @@ def create_app(
                                 source.stale_after_min(ws, app_name, _settings(ws, app_name)))
 
     forget_git = routes_shell.register(
-        app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness)
+        app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness,
+        _attention_inputs)
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
