@@ -150,6 +150,27 @@ class LRU:
         )[1]
 
 
+class GroupedLRU(LRU):
+    """An :class:`LRU` keeping at most *per_group* entries of each group
+    (``group_of(value)``) and *groups* groups, least recent leaving first:
+    one busy group never evicts the others' entries."""
+
+    def __init__(self, per_group, groups, group_of, name="memo"):
+        super().__init__(per_group * groups, name)
+        self._per_group, self._groups, self._group_of = per_group, groups, group_of
+
+    def put(self, key, value):
+        with self._lock:
+            self._entries[key] = value
+            self._entries.move_to_end(key)
+            group = self._group_of(value)
+            mine = [k for k, v in self._entries.items() if self._group_of(v) == group]
+            for k in mine[:-self._per_group]:
+                del self._entries[k]
+            while len({self._group_of(v) for v in self._entries.values()}) > self._groups:
+                self._entries.popitem(last=False)
+
+
 def _stale_entry(stale):
     value = stale()
     return None if value is None else (None, value)

@@ -75,7 +75,7 @@ from vmn_exp.ui.leaderboard_top_counts import TopCounts
 from vmn_exp.ui.leaderboard_tree import derive_tree, tree_index
 from vmn_exp.ui.leaderboard_up import ancestors_changed, query_reads_up
 from vmn_exp.ui.leaderboard_warm import BoardWarmer
-from vmn_exp.ui.memo import LRU, Generations
+from vmn_exp.ui.memo import LRU, Generations, GroupedLRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import sort_rows, split_by_of
 from vmn_exp.ui.search_index import SearchIndexes
@@ -93,6 +93,8 @@ GENERATIONS_KEPT = 3
 # Seconds a request waits on another thread's build of a generation's base
 # before it answers from the app's previous generation instead.
 BASE_WAIT_SEC = 2.0
+# Apps whose bases are kept (two each), least recently used leaving first.
+BASE_APPS = 8
 # Tokens are per process, so an ETag from before a restart never matches.
 _NONCE = os.urandom(8).hex()
 
@@ -315,9 +317,11 @@ class LeaderboardCache(SetAnswers):
         # few bytes each, so a larger bound than _bases costs nothing.
         self._base_tokens = LRU(size, name="leaderboard base tokens")
         # Each generation's _Base is a full copy of annotated rows (heavy at
-        # 100k+ runs); keep just enough to survive a refresh's old/new
-        # snapshot handoff, and to derive the next generation from.
-        self._bases = LRU(2, name="leaderboard bases")
+        # 100k+ runs); keep just enough per app to survive a refresh's
+        # old/new snapshot handoff, and to derive the next generation from —
+        # per app, so going round apps (or a /metrics scrape) rebuilds none.
+        self._bases = GroupedLRU(2, BASE_APPS, lambda hit: hit[1].snapshot.app_name,
+                                 name="leaderboard bases")
         # Caches keyed by a base token first keep each app's newest generations.
         self.generations = Generations(GENERATIONS_KEPT)
         track = self.generations.track
