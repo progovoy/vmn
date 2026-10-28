@@ -124,6 +124,8 @@ class Refresher(_Listeners):
     # True: a snapshot is served at once, at most ~interval_sec behind.
     background = True
     full_sweep_sec = RECONCILE_SEC
+    # None: the indexes of a journal (a store's) never idle out; True/False: all or none.
+    keep_warm = None
 
     def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC, on_refresh=None,
                  clock=time.monotonic, keep_warm=None):
@@ -147,7 +149,7 @@ class Refresher(_Listeners):
         (hinted by *journal*, when given)."""
         if journal is not None:
             self._follow(journal, index)
-        self._watch(index, self._keeps_warm(journal))
+        self._watch(index)
         # Never wait for a cold index's first load: it answers an empty
         # snapshot saying it is loading meanwhile.
         snapshot_now = getattr(index, "snapshot_now", None)
@@ -236,10 +238,12 @@ class Refresher(_Listeners):
         except BaseException:  # SystemExit & co: end visibly; the next request restarts it
             _LOGGER.error("The change journal reader of %s stopped", scope, exc_info=True)
 
-    def _keeps_warm(self, journal):
-        return journal is not None if self.keep_warm is None else self.keep_warm
+    def _keeps_warm(self, index):
+        """Whether *index* never idles out: its journal's, unless ``keep_warm`` says."""
+        journaled = self._journal_of.get(index) is not None
+        return journaled if self.keep_warm is None else self.keep_warm
 
-    def _watch(self, index, keep_warm=False):
+    def _watch(self, index):
         if index not in self._watches:
             use_io_process = getattr(index, "use_io_process", None)
             if use_io_process:
@@ -249,7 +253,7 @@ class Refresher(_Listeners):
             if watch is None:
                 watch = self._watches[index] = Watch(getattr(index, "app_name", None),
                                                      self._clock, _LOGGER)
-            watch.touched_at, watch.keep_warm = self._clock(), keep_warm
+            watch.touched_at, watch.keep_warm = self._clock(), self._keeps_warm(index)
             self._warn_if_slow(watch)
             if not watch.alive() and not self._stopped.is_set():
                 if watch.thread is not None:
