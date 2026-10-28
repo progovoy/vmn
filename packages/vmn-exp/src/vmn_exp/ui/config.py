@@ -198,10 +198,6 @@ def _flag(args, name, default=None):
     return None if value == default else value
 
 
-def _or(value, fallback):
-    return fallback if value is None else value
-
-
 def resolve_config(args, env=None):
     """The effective config for a ``vmn-exp ui`` invocation, or ``None``
     when neither ``--config`` nor a DB (flag or env) is given — today's
@@ -212,12 +208,13 @@ def resolve_config(args, env=None):
     if not path and not db:
         return None
     cfg = load_config(path) if path else ServerConfig()
+    keep_warm = getattr(args, "keep_warm", None)
     server = dataclasses.replace(
         cfg.server,
         host=_flag(args, "host", DEFAULT_HOST) or cfg.server.host,
         port=_flag(args, "port", DEFAULT_PORT) or cfg.server.port,
         public_url=env.get(ENV_PUBLIC_URL) or cfg.server.public_url,
-        keep_warm=_or(getattr(args, "keep_warm", None), cfg.server.keep_warm),
+        keep_warm=cfg.server.keep_warm if keep_warm is None else keep_warm,
     )
     return dataclasses.replace(
         cfg,

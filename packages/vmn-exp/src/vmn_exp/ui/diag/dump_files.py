@@ -37,11 +37,13 @@ def _write_and_log(data_dir):
     try:
         path = write_dump(data_dir)
     except Exception as exc:
-        print(f"{utc_stamp()} vmn-exp ui: diagnostic dump failed: {exc!r}", file=sys.stderr,
-              flush=True)
+        _say(f"diagnostic dump failed: {exc!r}")
         return
-    print(f"{utc_stamp()} vmn-exp ui: diagnostic dump written to {path}", file=sys.stderr,
-          flush=True)
+    _say(f"diagnostic dump written to {path}")
+
+
+def _say(text):
+    print(f"{utc_stamp()} vmn-exp ui: {text}", file=sys.stderr, flush=True)
 
 
 def install_signal_handler(data_dir):
