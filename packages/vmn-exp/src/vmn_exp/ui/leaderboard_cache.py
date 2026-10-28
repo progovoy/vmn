@@ -63,6 +63,7 @@ from vmn_exp.ui.leaderboard_delta import (
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
 from vmn_exp.ui.leaderboard_jobs import JobsView
+from vmn_exp.ui.leaderboard_live_below import LiveBelow, reads_live_below
 from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, is_live, order_key
 from vmn_exp.ui.leaderboard_scope import (
     Filters,
@@ -348,6 +349,7 @@ class LeaderboardCache(SetAnswers):
         self._search = SearchIndexes()
         self._job_view = JobsView(self, size)
         self._subtree = SubtreeMatch(self, size)
+        self._live_below = LiveBelow(self, size)
         self._filtered_facets = track(LRU(size))
         self._top_counts = TopCounts(self)
         self._status_counts = StatusCounts(self)
@@ -419,6 +421,8 @@ class LeaderboardCache(SetAnswers):
 
     def _ordered(self, snapshot, schema, last, f):
         """The rows passing the :class:`Filters` *f* in order (no ``job:*`` sort)."""
+        if reads_live_below(f.top_query):
+            return self._live_below.ordered(snapshot, schema, last, f)
         base, bucket = self._base(snapshot)
         check_filters(base, f)
         schema_key = _schema_key(schema)
@@ -591,23 +595,32 @@ class LeaderboardCache(SetAnswers):
 
     def columns(
         self, snapshot, schema, keys, limit=None, sort=None, status=None,
-        query=None, order=None, archived=False, scope=None, top=False,
+        query=None, order=None, archived=False, scope=None, top=False, top_query=None,
+        match_subtree=False,
     ):
-        """``{verstrs, idx, columns, total}`` over the first *limit* ordered rows.
+        """``{verstrs, idx, columns, total}`` over the first *limit* ordered rows
+        (with *top*, *top_query* and *match_subtree* the rows a Jobs view page
+        shows, :meth:`page`).
 
         Raises ``ValueError`` on an unknown key, ``QueryError`` on a bad *query*.
         """
+        if (top_query or match_subtree) and not top:
+            raise ValueError("top_q and match_subtree need top=1")
         limit = clamp_columns_limit(limit)
         keys = tuple(keys)
         base, bucket = self._base(snapshot)
-        f = Filters(sort, status, query, order, archived, scope, top)
+        f = Filters(sort, status, query, order, archived, scope, top, top_query=top_query)
+        subtree = bool(match_subtree and query and query.strip())
         return self._columns.get(
-            (base.token, bucket, _schema_key(schema), keys, limit) + f,
-            lambda: self._columns_payload(snapshot, schema, f, keys, limit),
+            (base.token, bucket, _schema_key(schema), keys, limit, subtree) + f,
+            lambda: self._columns_payload(snapshot, schema, f, keys, limit, subtree),
         )
 
-    def _columns_payload(self, snapshot, schema, f, keys, limit):
-        rows = self._job_view.ordered(snapshot, schema, None, f)
+    def _columns_payload(self, snapshot, schema, f, keys, limit, subtree=False):
+        if subtree:
+            rows = self._subtree.ordered(snapshot, schema, f)
+        else:
+            rows = self._job_view.ordered(snapshot, schema, None, f)
         return columns_payload(rows[:limit], keys, len(rows), snapshot.system_metrics_of,
                                snapshot)
 

@@ -90,7 +90,7 @@ ROW_FIELDS = frozenset(
     kind depth tree_status settled imported_from forked_from forked_from_step rerun_of
     author has_intent intent keywords
     end_reason error_summary signal root failure_sig released_at resume_count
-    queue_sec duration_ratio
+    queue_sec duration_ratio live_below
     """.split()
 )
 

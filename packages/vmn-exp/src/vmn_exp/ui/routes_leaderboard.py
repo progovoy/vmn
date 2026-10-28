@@ -165,13 +165,19 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         limit: int = None,
         archived: bool = False,
         scope: str = None,
+        top: str = None,
+        top_q: str = None,
+        match_subtree: bool = False,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
+        top = _top(top)
+        if (top_q or match_subtree) and not top:
+            raise HTTPException(400, "top_q and match_subtree need top=1")
         params = dict(
             keys=tuple(key_list(keys) or ()), limit=limit,
             sort=sort, status=status, query=_pinned(q), order=order, archived=archived,
-            scope=_scope(scope),
+            scope=_scope(scope), top=top, top_query=_pinned(top_q), match_subtree=match_subtree,
         )
         return _answer(request, cache.columns, snapshot, schema, params, route="columns")
 

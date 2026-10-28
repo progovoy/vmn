@@ -423,7 +423,9 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   runs, with everything above (attention strip, bars, tree expanders,
   baseline chips, live updates):
   - **Live** ("what is on the cluster now") lists the outer runs in flight
-    (their own status or their tree status running, waiting or stuck) or
+    (their own status or their tree status running, waiting or stuck, or
+    any run below them still running, waiting or stuck: `live_below > 0`,
+    so a tree with a failed run and others still running stays) or
     finished within the last 6 hours, needs attention first (`job:attention`).
   - **Review** ("is this launch good to ship?") lists the ended ones, newest
     first, each with its baseline chip.
@@ -832,7 +834,10 @@ message.
   - `top_q=<query>` keeps the top-level runs passing it by their own fields,
     beside `q` (which `match_subtree` may match over subtrees), flat or
     grouped. Its `ago()` is pinned to the minute like `q`'s; without `top`
-    it is a 400. The Live and Review presets send it.
+    it is a 400. The Live and Review presets send it. It alone can read
+    `live_below`: the runs below the row still running, waiting or stuck
+    (its rollup's `counts`, settled runs left out; 0 for a single run).
+    Elsewhere (`q`, `vmn-exp list --query`) no row carries it.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`experiments?children_of=<verstr>`** pages that run's direct children
   for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`
@@ -1253,8 +1258,9 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   takes it, `∅` for no value); anything else is a 400.
   Columns align with `verstrs` and `idx` (the `@N` index).
 - Metric values are numbers or `null`; params are verbatim.
-- `q`, `status`, `sort`, `order`, `archived` work as on the list, in the same
-  order. `limit` (default 20000, at most 50000) caps the rows; `total` counts
+- `q`, `status`, `sort`, `order`, `archived`, `scope`, `top`, `top_q` and
+  `match_subtree` work as on the list, in the same order, so a select-all
+  on an Outer runs, Live or Review page takes the outer runs it shows. `limit` (default 20000, at most 50000) caps the rows; `total` counts
   every match. ETag/304 like the list.
 
 ### Parameter importance
