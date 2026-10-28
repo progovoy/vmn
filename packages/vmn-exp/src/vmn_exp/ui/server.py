@@ -30,6 +30,7 @@ from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
+from vmn_exp.ui.baseline_views import BaselineViews
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_scope import UnknownScope
@@ -56,6 +57,7 @@ from vmn_exp.ui import (
     diag,
     control_plane_sweep,
     routes_admin,
+    routes_baseline,
     routes_cache,
     routes_comments,
     routes_events,
@@ -749,6 +751,8 @@ def create_app(
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
     routes_job.register(app, API_PREFIX, _leaderboard_inputs, job_views, _segment,
                         _split_by)
+    routes_baseline.register(app, API_PREFIX, _leaderboard_inputs, BaselineViews(job_views),
+                             _segment, _attention_entries)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment,
                           lambda ws_name, app_tag, verstr: job_views.job_summary(
                               *_leaderboard_inputs(ws_name, app_tag), verstr))

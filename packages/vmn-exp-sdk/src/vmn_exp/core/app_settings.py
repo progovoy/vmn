@@ -4,7 +4,7 @@ The reader-facing subset of conf's ``experiment:`` block, kept in the store
 (:mod:`vmn_exp.core.app_settings_store`) so a store workspace, which has no
 checkout, reads it too: ``metrics.<name|glob>.{goal,summary,hidden,primary,
 step_metric}`` and ``ui.*`` (``group_aggregate``, ``stale_after_min``,
-``progress`` and ``attention`` checked, other ``ui`` keys kept as they are). A
+``progress``, ``attention`` and ``baseline`` checked, other ``ui`` keys kept as they are). A
 checkout's conf beats them, per metric name and per ``ui`` key; they beat what runs declare. Pure.
 """
 import re
@@ -117,6 +117,8 @@ def _check_ui(ui):
             raise SettingsError(f"invalid ui.{field}: {ui[field]!r}")
     if "attention" in ui:
         _check_attention(ui["attention"])
+    if "baseline" in ui:
+        _check_baseline(ui["baseline"])
 
 
 def _check_attention(entries):
@@ -159,6 +161,69 @@ def attention_entries(ui):
         return []
     return [{"key": e["key"], "label": e.get("label", e["key"]), "query": e["query"],
              "level": e.get("level", "warn")} for e in entries]
+
+
+# ``ui.baseline`` (plan 28 N3): the fields an outer run's baseline shares
+# with it (``match``) and the field its direct children pair by
+# (``children_by``), each a ``params.<k>``/``tags.<k>``.
+MAX_BASELINE_MATCH = 8
+_BASELINE_KEYS = ("match", "children_by")
+_FIELD_PREFIXES = ("params", "tags")
+
+
+def _is_field(value):
+    prefix, dot, name = value.partition(".") if isinstance(value, str) else ("", "", "")
+    return bool(dot and name.strip()) and prefix in _FIELD_PREFIXES
+
+
+def _check_field(value, where):
+    if not _is_field(value):
+        raise SettingsError(f"invalid {where}: {value!r} (params.<key> or tags.<key>)")
+
+
+def _check_match(fields, where):
+    if not isinstance(fields, list):
+        raise SettingsError(f"{where} must be a list")
+    if len(fields) > MAX_BASELINE_MATCH:
+        raise SettingsError(f"{where} holds at most {MAX_BASELINE_MATCH} fields")
+    for i, field in enumerate(fields):
+        _check_field(field, f"{where}[{i}]")
+    if len(set(fields)) < len(fields):
+        raise SettingsError(f"{where} names a field twice")
+
+
+def _check_baseline(baseline):
+    _check_mapping(baseline, "ui.baseline")
+    for key in baseline:
+        if key not in _BASELINE_KEYS:
+            raise SettingsError(f"unknown field ui.baseline.{key}; one of {', '.join(_BASELINE_KEYS)}")
+    _check_match(baseline.get("match", []), "ui.baseline.match")
+    if baseline.get("children_by") is not None:
+        _check_field(baseline["children_by"], "ui.baseline.children_by")
+
+
+def baseline_conf(ui):
+    """*ui*'s ``baseline`` as ``{match: [fields], children_by: field|None}``;
+    no rule when it is invalid."""
+    baseline = (ui or {}).get("baseline") or {}
+    try:
+        _check_baseline(baseline)
+    except SettingsError:
+        baseline = {}
+    return {"match": list(baseline.get("match", [])), "children_by": baseline.get("children_by")}
+
+
+def baseline_fields(text):
+    """A URL's comma-separated ``match=`` fields; SettingsError on a bad one."""
+    fields = [f.strip() for f in text.split(",")] if text.strip() else []
+    _check_match(fields, "match")
+    return fields
+
+
+def check_baseline_field(field, where="by"):
+    """*field* when it is a ``params.<k>``/``tags.<k>``, else SettingsError."""
+    _check_field(field, where)
+    return field
 
 
 def metrics_overlay(settings, conf_metrics):

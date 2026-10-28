@@ -107,6 +107,12 @@ class JobViews:
         return visible([patched.get(i, base.rows[i]) for i in scope_positions(base, verstr)],
                        False)
 
+    def children(self, snapshot, verstr):
+        """The visible rows right under *verstr*, as of now."""
+        base, patched = self._view(snapshot)
+        at = (base.position[k] for k in base.children_of.get(verstr, ()) if k in base.position)
+        return visible([patched.get(i, base.rows[i]) for i in at], False)
+
     def summary(self, snapshot, schema, verstr, split=None):
         """The job's rollup with its row fields and ``top``, or None; with
         a *split* field (``tags.<k>``/``params.<k>``) its counts and

@@ -52,7 +52,8 @@ def pivot_spec(rows, cols, cell="count", match=None, metric=None, agg="mean",
                      status or None, query or None, bool(archived), scope)
 
 
-def _value_order(key, value):
+def value_order(key, value):
+    """A group key's place on an axis: numbers by value, then text, ``(none)`` last."""
     if key == NONE:
         return (2, 0, "")
     if is_finite_number(value):
@@ -64,8 +65,8 @@ def _axis(field, keys, first, cap):
     """``(headers, {key: position}, distinct keys)`` of the *cap* most
     populous of the rows' *keys*, ordered by value (*first*: a value per key)."""
     counts = Counter(keys)
-    kept = heapq.nsmallest(cap, counts, key=lambda k: (-counts[k], _value_order(k, first[k])))
-    kept.sort(key=lambda k: _value_order(k, first[k]))
+    kept = heapq.nsmallest(cap, counts, key=lambda k: (-counts[k], value_order(k, first[k])))
+    kept.sort(key=lambda k: value_order(k, first[k]))
     headers = [{"key": k, "label": NONE_LABEL if k == NONE else key_text(k), "n": counts[k],
                 "clause": value_clause(field, k, first[k])} for k in kept]
     return headers, {k: i for i, k in enumerate(kept)}, len(counts)
