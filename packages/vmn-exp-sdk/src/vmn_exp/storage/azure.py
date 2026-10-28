@@ -59,10 +59,11 @@ class AzureObjectClient(ObjectClient):
     def _put(self, key, body, if_none_match, if_match):
         blob = self._blob(key)
         if if_match:
-            blob.upload_blob(body, overwrite=True, etag=if_match,
-                             match_condition=self._if_not_modified)
+            props = blob.upload_blob(body, overwrite=True, etag=if_match,
+                                     match_condition=self._if_not_modified)
         else:
-            blob.upload_blob(body, overwrite=not if_none_match)
+            props = blob.upload_blob(body, overwrite=not if_none_match)
+        return (props or {}).get("etag")
 
     def _iter(self, prefix, delimiter, start_after):
         if delimiter:

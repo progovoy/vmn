@@ -33,6 +33,7 @@ from vmn_exp.storage.s3_base import (  # noqa: F401  (re-exported)
     app_key,
     error_code,
     is_missing,
+    is_taken,
 )
 from vmn_exp.storage.s3_listing import S3Listing
 from vmn_exp.storage.s3_logs import S3Logs
@@ -127,6 +128,16 @@ class S3SnapshotStorage(
     def save_file(self, app_name, verstr, filename, data):
         self._put(f"{self._record_prefix(app_name, verstr)}/{filename}", data)
         return True
+
+    def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
+        key = f"{self._record_prefix(app_name, verstr)}/{filename}"
+        try:
+            resp = self._put(key, data, **({"IfMatch": etag} if etag else {}))
+        except Exception as e:
+            if etag and is_taken(e):
+                return False, None
+            raise
+        return True, (resp or {}).get("ETag")
 
     # -- artifacts ----------------------------------------------------------
 

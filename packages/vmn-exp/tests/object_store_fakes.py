@@ -67,7 +67,8 @@ class FakeBlob:
             generation = cur.generation if cur else 0
             if if_generation_match is not None and if_generation_match != generation:
                 raise PreconditionFailed(self.name)
-            self.bucket.objects[self.name] = _Obj(_as_bytes(data))
+            obj = self.bucket.objects[self.name] = _Obj(_as_bytes(data))
+            self.generation = obj.generation  # as the SDK does, from the response
 
     def upload_from_filename(self, filename):
         with open(filename, "rb") as f:
@@ -245,7 +246,8 @@ class FakeBlobClient:
                     raise ResourceModifiedError(self.blob_name)
             elif cur is not None and not overwrite:
                 raise ResourceExistsError(self.blob_name)
-            self.container.objects[self.blob_name] = _Obj(_as_bytes(data))
+            obj = self.container.objects[self.blob_name] = _Obj(_as_bytes(data))
+            return {"etag": BlobProperties(self.blob_name, obj).etag}
 
     def download_blob(self, offset=None, length=None):
         obj = self._current()

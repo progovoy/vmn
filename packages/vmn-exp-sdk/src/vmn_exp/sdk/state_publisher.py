@@ -14,6 +14,11 @@ is dropped when another attempt has finished the run, so the losing duplicate
 never flips it back to running. Best-effort: the read and the write are not
 atomic, so a final state landing between them is overwritten once (the next
 beat then sees its own state and carries on).
+
+A remote that hands back a version token (S3/Azure ETag, GCS generation)
+spares that read: a beat after this attempt's own write is a conditional PUT
+on the token, which lands only while nobody else wrote the file; refused, the
+beat falls back to the read. That halves a live run's state requests.
 """
 import logging
 
@@ -45,6 +50,16 @@ def split_storage(storage, app_name, verstr):
     return None, lambda: storage
 
 
+def _save(side, where, data, etag=None):
+    """``(written, token)`` of writing *data*; a store without
+    ``save_file_if_match`` (a caller's own) writes unconditionally."""
+    save = getattr(side, "save_file_if_match", None)
+    if save is None:
+        side.save_file(*where, data)
+        return True, None
+    return save(*where, data, etag)
+
+
 def finished_by_another(stored, attempt):
     """Whether *stored* is a final state that *attempt* did not write."""
     return bool(stored) and stored.get("state") == "finished" and (
@@ -63,6 +78,8 @@ class RunStatePublisher:
         # Sides this attempt has written its own state to: only there can a
         # stored final state be another attempt's.
         self._written = set()
+        # Remote side -> the token of this attempt's last write there.
+        self._tokens = {}
         self.superseded = False
         self._remote = None
         if self._remote_target is not None:
@@ -94,10 +111,22 @@ class RunStatePublisher:
     def _upload(self, item):
         data, heartbeat, attempt = item
         target = self._remote_target()
-        if target is None or (heartbeat and self._stale(target, attempt)):
+        if target is None:
             return
-        target.save_file(*self._where, data)
-        self._written.add(id(target))
+        token = self._tokens.pop(id(target), None)
+        if heartbeat and token is not None:
+            written, token = _save(target, self._where, data, token)
+            if written:
+                self._remember(target, token)
+                return
+        if heartbeat and self._stale(target, attempt):
+            return
+        self._remember(target, _save(target, self._where, data)[1])
+
+    def _remember(self, side, token):
+        self._written.add(id(side))
+        if token is not None:
+            self._tokens[id(side)] = token
 
     def _stale(self, side, attempt):
         if id(side) not in self._written:

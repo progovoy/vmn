@@ -167,10 +167,12 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       metavar="[NAME=]URI[#DIGEST]",
                       help="create/run/add: record a dataset or artifact input. "
                            "Optional name= prefix and #digest suffix. Repeatable.")
-    pexp.add_argument("--sync-interval", type=int, default=30,
-                      help="Seconds between S3 metric syncs during 'run' (default: 30).")
-    pexp.add_argument("--heartbeat-interval", type=int, default=30,
-                      help="Seconds between run-state heartbeats during 'run' (default: 30).")
+    pexp.add_argument("--sync-interval", type=int, default=None,
+                      help="Seconds between remote syncs during 'run' (default: "
+                           "VMN_EXP_SYNC_SEC, else conf sync_interval_sec, else 30).")
+    pexp.add_argument("--heartbeat-interval", type=int, default=None,
+                      help="Seconds between run-state heartbeats during 'run' (default: "
+                           "VMN_EXP_HEARTBEAT_SEC, else conf heartbeat_interval_sec, else 30).")
     pexp.add_argument("--kill-grace-sec", type=float, default=None,
                       help="Seconds a child gets to exit after a forwarded signal "
                            "before it is killed during 'run'.")

@@ -29,7 +29,12 @@ from vmn_exp.core.intent import build_intent_entry
 from vmn_exp.core.metric_compact import compact_by
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
 from vmn_exp.core.run_error import error_from_exception, error_from_message
-from vmn_exp.core.status import DEFAULT_HEARTBEAT_INTERVAL_SEC, positive_env_sec
+from vmn_exp.core.run_intervals import (
+    DEFAULT_SYNC_INTERVAL_SEC,
+    resolve_heartbeat_sec,
+    resolve_sync_sec,
+)
+from vmn_exp.core.status import positive_env_sec
 from vmn_exp.core.storage_resolve import _try_repo_root
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
@@ -79,7 +84,8 @@ from vmn_exp.sdk.steps import StepCounter, first_step
 # a library emits records rather than configuring handlers.
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_SYNC_INTERVAL_SEC = 30
+# start_run()'s sync_interval_sec when not given: env > conf > 30 decide.
+_SYNC_UNSET = object()
 # How long finish() waits for the last remote writes before giving up on them,
 # unless FINAL_UPLOAD_TIMEOUT_ENV overrides it.
 FINAL_REMOTE_TIMEOUT_SEC = 60
@@ -123,7 +129,7 @@ def start_run(
     heartbeat_interval_sec=None,
     storage=None,
     system_metrics=None,
-    sync_interval_sec=DEFAULT_SYNC_INTERVAL_SEC,
+    sync_interval_sec=_SYNC_UNSET,
     run_id=None,
     all_ranks=False,
     name=None,
@@ -156,7 +162,10 @@ def start_run(
 
     ``sync_interval_sec`` pushes the log to a remote store (when *storage* has
     one) at most that often, off the heartbeat thread. ``None``/``0`` syncs only
-    on ``finish()``.
+    on ``finish()``. Not given, it and ``heartbeat_interval_sec`` come from
+    ``VMN_EXP_SYNC_SEC`` / ``VMN_EXP_HEARTBEAT_SEC``, else conf
+    ``experiment.sync_interval_sec`` / ``experiment.heartbeat_interval_sec``,
+    else 30.
 
     ``name`` is a human-readable run name, stored in ``metadata.yml`` and shown
     by ``vmn-exp list``; ``tags`` (``{key: value}``) are set once the run opens.
@@ -228,9 +237,12 @@ def start_run(
         storage,
         app_name,
         verstr,
-        heartbeat_interval_sec or DEFAULT_HEARTBEAT_INTERVAL_SEC,
+        resolve_heartbeat_sec(heartbeat_interval_sec, exp_conf),
         system_metrics=sysmetrics.sdk_enabled(system_metrics, exp_conf),
-        sync_interval_sec=sync_interval_sec,
+        sync_interval_sec=resolve_sync_sec(
+            None if sync_interval_sec is _SYNC_UNSET else sync_interval_sec or 0,
+            exp_conf,
+        ),
         prior_state=prior_state,
         name=name,
         capture_output=capture_output,

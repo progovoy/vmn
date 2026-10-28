@@ -71,7 +71,8 @@ class ObjectClient:
     - ``_stat(key)`` -> ``{"Key","Size","LastModified","ETag"}`` or None
     - ``_get(key, offset, length)`` -> ``get_object``-shaped dict (raises
       MISSING/BAD_RANGE); *length* None reads to the end
-    - ``_put(key, body, if_none_match, if_match)`` (raises TAKEN on a failed condition)
+    - ``_put(key, body, if_none_match, if_match)`` -> the new version token
+      or None (raises TAKEN on a failed condition)
     - ``_iter(prefix, delimiter, start_after)`` -> object dicts and, with a
       delimiter, common-prefix strings; only names after *start_after*
     - ``_remove(key)`` (missing is fine), ``_upload(src, key)``, ``_download(key, dest)``
@@ -101,8 +102,9 @@ class ObjectClient:
 
     def put_object(self, Bucket, Key, Body, IfNoneMatch=None, IfMatch=None):
         with translated_errors():
-            self._put(Key, Body, if_none_match=IfNoneMatch == "*", if_match=IfMatch)
-        return {}
+            token = self._put(Key, Body, if_none_match=IfNoneMatch == "*",
+                              if_match=IfMatch)
+        return {"ETag": token} if token else {}
 
     def delete_object(self, Bucket, Key):
         with translated_errors():

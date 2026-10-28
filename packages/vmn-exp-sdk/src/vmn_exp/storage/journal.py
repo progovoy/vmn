@@ -111,6 +111,8 @@ class JournaledStorage:
     update_metadata = _journaled_write("update_metadata", lambda r, a: r is not False)
     update_note = _journaled_write("update_note")
     save_file = _journaled_write("save_file", lambda r, a: not _is_heartbeat(*a[:2]))
+    save_file_if_match = _journaled_write(
+        "save_file_if_match", lambda r, a: r[0] and not _is_heartbeat(*a[:2]))
     save_artifact_file = _journaled_write("save_artifact_file")
     append_log_entry = _journaled_write("append_log_entry")
     append_log_entries = _journaled_write("append_log_entries")
