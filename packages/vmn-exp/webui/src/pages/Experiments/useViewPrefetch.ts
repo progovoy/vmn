@@ -12,6 +12,7 @@ import type { RowsFilter } from "../../queries";
 import { NO_GROUP } from "../../util/groupBy";
 import { hasSearch } from "../../util/searchScope";
 import type { JobsKindState } from "./jobsKind";
+import type { Preset } from "./presets";
 
 /** How long the shown view has the network to itself first. */
 export const PREFETCH_DELAY_MS = 1_000;
@@ -33,9 +34,9 @@ export function viewFilters(view: View, withJobs: boolean): Partial<Record<TopVi
   };
 }
 
-/** *shown* is the view on screen (never prefetched); *kind* null facets
- *  (not known yet) wait. */
-export function useViewPrefetch(ws: string, app: string, view: View, shown: TopView, kind: JobsKindState) {
+/** *shown* is the view on screen (never prefetched; a preset, plan 28
+ *  §4.5, is none of them); *kind* null facets (not known yet) wait. */
+export function useViewPrefetch(ws: string, app: string, view: View, shown: TopView | Preset, kind: JobsKindState) {
   const client = useQueryClient();
   const known = kind.counts !== null;
   const withJobs = kind.kind !== null;

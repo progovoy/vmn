@@ -3,7 +3,8 @@
 export default function Segmented<T extends string>({ label, options, value, onChange }: {
   label: string;
   options: readonly (readonly [T, string])[];
-  value: T;
+  /** None pressed when null. */
+  value: T | null;
   onChange: (value: T) => void;
 }) {
   return (

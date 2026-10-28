@@ -2,8 +2,10 @@
 """The board's row filters (plan 23 S2): archived, ``top`` (top-level runs
 only, the Jobs view: ``True`` all of them, ``"jobs"`` those with children,
 ``"singles"`` those without, plan 23 S7), ``scope`` (a run's subtree without the run),
-``children_of`` (a run's direct children, the tree's pages, plan 28 N6), the
-status whitelist and the query language, as one hashable :class:`Filters`
+``children_of`` (a run's direct children, the tree's pages, plan 28 N6),
+``top_query`` (a query the top-level rows pass by their own fields, beside a
+``query`` that may match their subtrees: the Live/Review presets, plan 28
+§4.5), the status whitelist and the query language, as one hashable :class:`Filters`
 the cached orders are keyed by.
 
 A row is in a scope when the scope is on its parent chain (the snapshot's
@@ -47,8 +49,8 @@ class UnknownScope(LookupError):
     """A ``scope`` naming no run of the snapshot."""
 
 
-Filters = namedtuple("Filters", "sort status query order archived scope top children_of",
-                     defaults=(None, None, None, None, False, None, False, None))
+Filters = namedtuple("Filters", "sort status query order archived scope top children_of top_query",
+                     defaults=(None, None, None, None, False, None, False, None, None))
 
 
 def _child_of(row, parent):
@@ -60,6 +62,8 @@ def filtered(snapshot, rows, f):
     rows = visible(rows, f.archived)
     if f.top:
         rows = [row for row in rows if is_top(row, f.top)]
+        if f.top_query:
+            rows = apply_filters(rows, None, f.top_query, snapshot)
     if f.scope is not None:
         edges = snapshot.edges
         rows = [row for row in rows if f.scope in ancestors(row["verstr"], edges)]
@@ -68,9 +72,12 @@ def filtered(snapshot, rows, f):
     return apply_filters(rows, f.status, f.query, snapshot)
 
 
+def _reads_off_row(query):
+    return bool(query and query.strip()) and reads_off_row(query)
+
+
 def _rejudgeable(f):
-    query = f.query
-    return f.scope is None and not (query and query.strip() and reads_off_row(query))
+    return f.scope is None and not (_reads_off_row(f.query) or _reads_off_row(f.top_query))
 
 
 def left_filtered(order, left, f):

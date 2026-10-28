@@ -63,6 +63,7 @@ from vmn_exp.ui.leaderboard_delta import (
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
 from vmn_exp.ui.leaderboard_jobs import JobsView
+from vmn_exp.ui.leaderboard_live_below import LiveBelow, reads_live_below
 from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, is_live, order_key
 from vmn_exp.ui.leaderboard_scope import (
     Filters,
@@ -348,6 +349,7 @@ class LeaderboardCache(SetAnswers):
         self._search = SearchIndexes()
         self._job_view = JobsView(self, size)
         self._subtree = SubtreeMatch(self, size)
+        self._live_below = LiveBelow(self, size)
         self._filtered_facets = track(LRU(size))
         self._top_counts = TopCounts(self)
         self._status_counts = StatusCounts(self)
@@ -419,6 +421,8 @@ class LeaderboardCache(SetAnswers):
 
     def _ordered(self, snapshot, schema, last, f):
         """The rows passing the :class:`Filters` *f* in order (no ``job:*`` sort)."""
+        if reads_live_below(f.top_query):
+            return self._live_below.ordered(snapshot, schema, last, f)
         base, bucket = self._base(snapshot)
         check_filters(base, f)
         schema_key = _schema_key(schema)
@@ -457,7 +461,8 @@ class LeaderboardCache(SetAnswers):
         key = (schema_key,) + filters
         latest = self._orders_for(filters).latest
         last = latest.peek(key)
-        moves = last and self._deltas.since(last.token, base, query_reads_up(filters.query))
+        reads_up = query_reads_up(filters.query) or query_reads_up(filters.top_query)
+        moves = last and self._deltas.since(last.token, base, reads_up)
         static = moves and last.advanced(base, *moves, schema, filters)
         static = static or _Static.build(base, schema, filters,
                                          slots=self._candidates(base.snapshot, filters.query,
@@ -501,6 +506,7 @@ class LeaderboardCache(SetAnswers):
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,
         status=None, query=None, order=None, archived=False, scope=None, top=False,
         match_subtree=False, cursor=None, attention=(), children_of=None, split=None,
+        top_query=None,
     ):
         """What ``leaderboard`` answers for the same arguments, from the memo.
 
@@ -514,14 +520,17 @@ class LeaderboardCache(SetAnswers):
         their ``job`` carries the *attention* queries' counts (:mod:`~vmn_exp.ui.attention`).
         *children_of* keeps a run's direct children, always paged, as the
         tree serves them (split by the *split* field, plan 28 N6,
-        :mod:`~vmn_exp.ui.leaderboard_children`).
+        :mod:`~vmn_exp.ui.leaderboard_children`). *top_query* keeps the top
+        rows passing it by their own fields (plan 28 §4.5; needs *top*).
         Raises ``QueryError`` on a
         bad *query*, :class:`~vmn_exp.ui.leaderboard_scope.UnknownScope` on an
         unknown *scope*.
         """
-        f = Filters(sort, status, query, order, archived, scope, top, children_of)
+        f = Filters(sort, status, query, order, archived, scope, top, children_of, top_query)
         if match_subtree and not top:
             raise ValueError("match_subtree needs top=1")
+        if top_query and not top:
+            raise ValueError("top_q needs top=1")
         if top and children_of is not None:
             raise ValueError("children_of cannot be combined with top")
         subtree = bool(match_subtree and query and query.strip())
@@ -558,9 +567,9 @@ class LeaderboardCache(SetAnswers):
         return {"rows": cut, "total": len(rows), "next_cursor": after}
 
     def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False,
-                scope=None, top=False, query=None):
+                scope=None, top=False, query=None, top_query=None):
         """Every row passing the filters in :meth:`page`'s order, unpaged."""
-        f = Filters(sort, status, query, order, archived, scope, top)
+        f = Filters(sort, status, query, order, archived, scope, top, top_query=top_query)
         return self._job_view.ordered(snapshot, schema, None, f)
 
     def groups(self, snapshot, schema, group, **params):
@@ -586,23 +595,32 @@ class LeaderboardCache(SetAnswers):
 
     def columns(
         self, snapshot, schema, keys, limit=None, sort=None, status=None,
-        query=None, order=None, archived=False, scope=None, top=False,
+        query=None, order=None, archived=False, scope=None, top=False, top_query=None,
+        match_subtree=False,
     ):
-        """``{verstrs, idx, columns, total}`` over the first *limit* ordered rows.
+        """``{verstrs, idx, columns, total}`` over the first *limit* ordered rows
+        (with *top*, *top_query* and *match_subtree* the rows a Jobs view page
+        shows, :meth:`page`).
 
         Raises ``ValueError`` on an unknown key, ``QueryError`` on a bad *query*.
         """
+        if (top_query or match_subtree) and not top:
+            raise ValueError("top_q and match_subtree need top=1")
         limit = clamp_columns_limit(limit)
         keys = tuple(keys)
         base, bucket = self._base(snapshot)
-        f = Filters(sort, status, query, order, archived, scope, top)
+        f = Filters(sort, status, query, order, archived, scope, top, top_query=top_query)
+        subtree = bool(match_subtree and query and query.strip())
         return self._columns.get(
-            (base.token, bucket, _schema_key(schema), keys, limit) + f,
-            lambda: self._columns_payload(snapshot, schema, f, keys, limit),
+            (base.token, bucket, _schema_key(schema), keys, limit, subtree) + f,
+            lambda: self._columns_payload(snapshot, schema, f, keys, limit, subtree),
         )
 
-    def _columns_payload(self, snapshot, schema, f, keys, limit):
-        rows = self._job_view.ordered(snapshot, schema, None, f)
+    def _columns_payload(self, snapshot, schema, f, keys, limit, subtree=False):
+        if subtree:
+            rows = self._subtree.ordered(snapshot, schema, f)
+        else:
+            rows = self._job_view.ordered(snapshot, schema, None, f)
         return columns_payload(rows[:limit], keys, len(rows), snapshot.system_metrics_of,
                                snapshot)
 

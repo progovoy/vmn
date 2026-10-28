@@ -11,8 +11,10 @@ from vmn_exp.ui.leaderboard_group_jobs import job_fields
 from vmn_exp.ui.leaderboard_group_spec import GroupSpec
 from vmn_exp.ui.leaderboard_groups import Grouping, groups_payload
 from vmn_exp.ui.leaderboard_jobs import check_job_sort
+from vmn_exp.ui.leaderboard_live_below import reads_live_below
 from vmn_exp.ui.leaderboard_scope import check_scope
 from vmn_exp.ui.memo import LRU
+from vmn_exp.ui.readers.experiments import apply_filters
 
 # Groupings moved on across generations, like the cache's latest orders.
 LATEST_GROUPINGS = 32
@@ -27,17 +29,24 @@ class GroupCache:
 
     def groups(self, snapshot, schema, group, sort=None, status=None, query=None,
                order=None, archived=False, agg=DEFAULT_AGGREGATE, offset=0, limit=None,
-               rows_per_group=10, group_key=None, rows_filter=None, scope=None, top=False):
+               rows_per_group=10, group_key=None, rows_filter=None, scope=None, top=False,
+               top_query=None):
         """K1's payload (see :func:`~vmn_exp.ui.leaderboard_groups.groups_payload`).
         Raises ValueError on an unknown field or aggregate, ``QueryError`` on
         a bad *query*, LookupError on an unknown *group_key* or *scope*.
         *rows_filter* (rows -> rows) replaces *query*, uncached: a query
-        reading comments. *scope*/*top* narrow the rows as for a page; with
+        reading comments. *scope*/*top*/*top_query* narrow the rows as for a page; with
         *top* each group sums its jobs' rollups (plan 23 S7,
-        :mod:`~vmn_exp.ui.leaderboard_group_jobs`)."""
+        :mod:`~vmn_exp.ui.leaderboard_group_jobs`). A *top_query* reading
+        ``live_below`` groups uncached too (the top rows are few)."""
         check_job_sort(sort, False)
         check_scope(self._cache._base(snapshot)[0], scope)
-        where = dict(scope=scope, top=top)
+        if top_query and not top:
+            raise ValueError("top_q needs top=1")
+        where = dict(scope=scope, top=top, top_query=top_query)
+        live_below = reads_live_below(top_query)
+        if live_below and rows_filter is None:
+            rows_filter = lambda rows: apply_filters(rows, None, query, snapshot)  # noqa: E731
         if rows_filter is None:
             spec = GroupSpec(group, agg, schema, sort, order, status, query, archived, **where)
             grouping = self.grouping(snapshot, schema, spec)
@@ -47,7 +56,8 @@ class GroupCache:
         unfiltered = None
         if status or query or rows_filter is not None:
             plain = GroupSpec(group, DEFAULT_AGGREGATE, schema, archived=archived, **where)
-            unfiltered = self.grouping(snapshot, schema, plain)
+            unfiltered = (self._uncached(snapshot, schema, plain, list) if live_below
+                          else self.grouping(snapshot, schema, plain))
         extra = job_fields(grouping, self._cache.job_rollups(snapshot, schema)) if top else None
         return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
                               unfiltered, extra)
@@ -57,7 +67,7 @@ class GroupCache:
         live = base.patched(bucket)
         f = spec.flat
         rows = rows_filter(self._cache.ordered(snapshot, schema, f.sort, f.status, f.order,
-                                               f.archived, f.scope, f.top))
+                                               f.archived, f.scope, f.top, top_query=f.top_query))
         return Grouping.of_rows(base, spec, rows, live)
 
     def grouping(self, snapshot, schema, spec):

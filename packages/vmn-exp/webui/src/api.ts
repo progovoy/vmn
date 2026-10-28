@@ -28,6 +28,9 @@ export interface PageOpts {
   scope?: string;
   /** With `top`: keep the top-level runs whose subtree matches `query` (plan 23 W11). */
   matchSubtree?: boolean;
+  /** With `top`: a query the top-level runs pass by their own fields (`top_q`,
+   *  the Live/Review presets, plan 28 §4.5). */
+  topQuery?: string;
   /** The page after this keyset cursor (a page's `next_cursor`, plan 23 S6) instead of `offset`. */
   cursor?: string;
 }
@@ -57,6 +60,7 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.top) p.set("top", opts.top === true ? "1" : opts.top);
   if (opts.scope) p.set("scope", opts.scope);
   if (opts.matchSubtree) p.set("match_subtree", "1");
+  if (opts.topQuery) p.set("top_q", opts.topQuery);
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 
