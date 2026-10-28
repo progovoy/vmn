@@ -28,7 +28,7 @@
 > (= `packages/vmn-exp-sdk/src/vmn_exp/sdk/`) or `docs/`.
 
 Status: **built** (2026-10-28), except T2c (deferred). Every item of §7 is on master;
-appendix A row 6 is still being investigated (docs/plans/28-measurements.md).
+appendix A is closed (row 6 explained in docs/plans/28-measurements.md).
 
 Sources:
 - fgm's document, as four screenshots. It is pinned to fgm `master` @ `01eab866`
@@ -993,4 +993,4 @@ Reported by the reviewer from a soak test of fgm's store (588k runs, 0.1.24 on
 | 3 | A `cache_tidy.tick()` start race: an unlocked check-then-start (`ui/cache_tidy.py:31-40`, confirmed at `3d71ee63`), called from concurrent request threads, answered a 500 (a `RuntimeError` from starting the same thread twice). | **Fixed** in `3ad95ecc`: the start is under a lock; `test_ui_cache_tidy_race.py`. |
 | 4 | Upgrades and cold starts: 0.1.22's schema change wiped the index on upgrade (fixed in 0.1.23, `835cd2ed`). A cold index hung every request until its first publish, about 1 h 50 min there. 0.1.23's merge T (`42c44969`, `dd553eee`) serves a cold remote index from its first 500-record chunk. | **Fixed**: 0.1.24 still blocked a request on the refresh lock while a cold index loaded; `3e599ed6` makes a request watching a loading index never wait on it (`test_ui_cold_index_routes.py`, 3 s a route, serial). |
 | 5 | Logs need timestamps and the failing record's key (the reviewer had to work out `.vmx` run keys from diag dumps). | **Fixed**: every line the server writes to stderr starts with a timestamp (`9326d3d7`), and a warning about one run names its app and verstr (`b1e72688`), the set-aside warning included. |
-| 6 | GC pauses are longer on 3.15.2t than on 3.15.1t (1.5 s, 2.8 s, 2.9 s max against 1.6 s; the event loop's worst stall 2.6 s). | **Investigating.** |
+| 6 | GC pauses are longer on 3.15.2t than on 3.15.1t (1.5 s, 2.8 s, 2.9 s max against 1.6 s; the event loop's worst stall 2.6 s). | **Explained**, no 3.15.2t regression (docs/plans/28-measurements.md): at low load both builds pause the same (30k runs: max 68-76 ms vs 68-75 ms). A pause is the live heap (~34 ms per million objects, `gc.freeze()` does not help on free-threaded builds) plus the stop-the-world wait, which grows when threads outnumber cores, so the soak's busy host lengthened it. Not built: drop the full per-run fold objects after a cold load (heap to the warm ~26 objects/run, about half each pause) and cap the cold load's threads at the core count. |
