@@ -898,6 +898,37 @@ This order agrees, with two changes:
 1. **B0** (S): fgm's fixture store + a uiload profile shaped like their tree (5 levels,
    20k runs a launch, ~10⁴ live). Baselines for `experiments-status`, the summary and
    a minute-keyed `ago()` count at 588k.
+   - **Built** (`packages/vmn-exp/tests/uiload/`, see its README): `fgm_tree`/`fgm_leaf`
+     plan fgm's tree deterministically (launch → date → study → trial / 3 refits /
+     assembler → pod, 60 dates × 4 studies, ~19.4k runs a launch, a cost report each;
+     Phase 0 tags, `health` with BCA's unstable share growing by date, rare `state`,
+     declared `progress`/`progress_total`, released runs, an eviction wave, leftover
+     released/never-started/orphaned runs). Profiles `fgm` (32 launches, 4 live:
+     594k runs, 10.3k running), `fgm-small` (51.5k, 2.6k running), `fgm-tiny`.
+     `fgm_records` folds them into an in-memory snapshot; `seed_fgm` writes a
+     layout-2 store (594k records in ~9 min with 12 workers); `probe_fgm` serves it
+     in-process against `slo.FGM_BUDGETS`. Tests: `test_uiload_fgm_{shape,records,
+     store,bench}.py` (the bench serial; `VMN_UILOAD_FGM_PROFILE=fgm` for full scale).
+   - **Measured** at `fgm-small` (51.5k runs, ~1/11.5 of 588k; laptop, CPython 3.9
+     with the GIL). In memory, after the board base's warm (~2.1 s):
+     - `experiments-status`: 24 ms first, 0.7 ms again, 80 ms after a generation.
+     - The live launch's summary (12.7k runs): 57 ms, or 283 ms with
+       `split=tags.kind`; the ended launch 144 ms. Next generation: 74 / 111 ms.
+     - Grouped boards: a launch by `tags.kind` 53 ms; an ended launch's unstable
+       runs by `trade_date` 100 ms; the app by parent (25.9k groups) 483 ms; 0.2 ms
+       memoized.
+     - A minute-keyed waiting count (a fresh timestamp literal, what an `ago()`
+       rebuild costs) 40 ms per minute.
+     - The split tallies cost ~1.6 KB per run with children (41 MB over 25.9k parents).
+     Over HTTP (`probe_fgm`, 20 requests each): cold local index 43 s; first request
+     status 454 ms, summary 75 ms, summary+split 368 ms, board by kind 65 ms, by date
+     128 ms, app board 501 ms; p50s 1.4-3 ms (waiting 42 ms).
+   - **Not measured at 588k.** Seeding the full store works, but its cold local index
+     did not finish within ~55 min on this machine's GIL build, so the full-size
+     numbers need the real server (free-threaded Python or fgm's own store). The
+     in-memory bench runs at full scale (~10 GB) with `VMN_UILOAD_FGM_PROFILE=fgm`.
+     If the costs grow linearly with runs that is ~11× the numbers above (unverified).
+     The waiting count uses a timestamp literal per minute, not P1's `ago()` itself.
 2. **API1** `create_runs` (M) ∥ **API2** `release` + `on_sigterm` + row fields +
    timeline `released` (M) ∥ **API3** out-of-pod finish/notes (S). Optuna goal fix (S).
 3. **A0** store-side settings (M).
