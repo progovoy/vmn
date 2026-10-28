@@ -16,6 +16,7 @@ import threading
 
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.sqlite_conn import checkpoint, connect, wal_oversized
+from vmn_exp.core.traced_lock import TracedLock
 
 TIDY_SEC = 60.0
 _LOGGER = logging.getLogger(__name__)
@@ -26,18 +27,21 @@ class CacheTidy:
         self.path, self._clock, self._every_sec = path, clock, every_sec
         self._tidied_at = None
         self._thread = None
+        self._lock = TracedLock("cache tidy")
 
     def tick(self):
-        """Start a tidy when the last one is :data:`TIDY_SEC` old and done."""
-        now = self._clock()
-        if self._tidied_at is not None and now - self._tidied_at < self._every_sec:
-            return
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._tidied_at = now
-        self._thread = threading.Thread(target=self._tidy, daemon=True,
-                                        name="vmn-ui-cache-tidy")
-        self._thread.start()
+        """Start a tidy when the last one is :data:`TIDY_SEC` old and done
+        (concurrent request threads start one)."""
+        with self._lock:
+            now = self._clock()
+            if self._tidied_at is not None and now - self._tidied_at < self._every_sec:
+                return
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._tidied_at = now
+            self._thread = threading.Thread(target=self._tidy, daemon=True,
+                                            name="vmn-ui-cache-tidy")
+            self._thread.start()
 
     def wait(self, timeout=None):
         """Wait for a running tidy (for tests and shutdown)."""
