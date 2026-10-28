@@ -1515,6 +1515,15 @@ curves tab share one x axis control: Step (each metric's declared
 chart. `Log y` is an on/off chip; a log axis labels each tick with its own
 value (`1e-4`, `0.001`, `10`).
 
+The run page's overlay box takes an fnmatch glob (`cv*.grad_norm_mean`, the
+matcher `define_metric` uses) and draws every training metric it matches in
+one chart, sorted, at most 20 (`showing 20 of N matches` past that), on the
+page's x axis and `Log y`. The step ranges a run marked with
+`run.mark_range(name, start_step, end_step)` are shaded as x bands on every
+step chart (the overlay too) and named under the toolbar. Run detail carries
+them as `ranges: [{name, start_step, end_step}]` (the first 100 distinct, in
+log order) and `ranges_total`, both absent when the run marked none.
+
 ### Diffs and artifacts
 
 `GET .../experiments-diff?v=&to=` materializes both runs and diffs their code.

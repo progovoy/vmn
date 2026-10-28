@@ -352,6 +352,13 @@ export interface OutputEntry {
   size: number | null;
 }
 
+/** A step range a run marked with `run.mark_range` (an SWA window). */
+export interface RunRange {
+  name: string;
+  start_step: number;
+  end_step: number;
+}
+
 export interface ExperimentDetail {
   metadata: Record<string, unknown> & { verstr: string };
   /** The run's storage index (`@N`); null when the server did not resolve it. */
@@ -408,6 +415,10 @@ export interface ExperimentDetail {
   compacted?: boolean | null;
   /** Rewinds of this run, in log order: history past `step` was hidden. */
   rewinds?: RunRewind[];
+  /** Step ranges the run marked (`run.mark_range`): the first 100, in log order; absent when none. */
+  ranges?: RunRange[];
+  /** How many distinct ranges the run marked. */
+  ranges_total?: number;
   /** Failed/stuck runs only (absent otherwise): the last <= 40 lines of
    *  `outputs/output.log` (one 16 KB range read), null without one. */
   output_tail?: { lines: string[]; truncated: boolean } | null;

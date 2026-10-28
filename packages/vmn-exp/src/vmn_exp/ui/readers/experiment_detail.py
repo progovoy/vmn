@@ -257,7 +257,8 @@ def experiment_detail(
     without it. A failed or stuck run adds ``output_tail``/``last_step``/
     ``last_good`` (:mod:`~vmn_exp.ui.readers.failure_context`; *last_good*
     is ``verstr -> {verstr, idx, name} | None``). *job_status*: see
-    :func:`status_detail`.
+    :func:`status_detail`. ``ranges``/``ranges_total`` are the run's marked
+    step ranges, bounded (:mod:`vmn_exp.core.ranges`); absent when none.
     """
     verstr, err = _resolve_name(storage, app_name, verstr_ref, resolve)
     if err:
@@ -305,6 +306,7 @@ def experiment_detail(
         "hidden_metrics": snapshot.hidden_metrics(schema),
         "artifacts": artifacts_read.result(),
         **detail_media(snapshot.media),
+        **(snapshot.ranges if snapshot.ranges["ranges_total"] else {}),
         "status": status_detail(
             storage,
             app_name,

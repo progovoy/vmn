@@ -43,6 +43,7 @@ from vmn_exp.core.lineage import DEFAULT_LIMIT
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
+from vmn_exp.core.ranges import ranges_view
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.query import filter_rows
@@ -222,7 +223,8 @@ def _subtree_row(app_name, storage, verstr, snapshot):
 def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     """One run: a :func:`list_runs` row plus its ``log``, ``series``,
     ``step_metrics``, ``artifacts`` and the ``media`` / ``tables`` /
-    ``histograms`` indexes (see :mod:`vmn_exp.core.media`).
+    ``histograms`` indexes (see :mod:`vmn_exp.core.media`) and the marked
+    ``ranges`` / ``ranges_total`` (see :mod:`vmn_exp.core.ranges`).
 
     *ref* takes whatever the CLI takes — a full verstr, a unique prefix, ``@N``
     or ``latest``. Raises ValueError when it resolves to nothing.
@@ -257,6 +259,7 @@ def get_run(app_name=None, ref="latest", *, storage=None, x=None):
     row["step_metrics"] = step_metrics(series, fold_definitions(fold), schema)
     row["artifacts"] = list_artifacts(storage, app_name, verstr)
     row.update(media_index(log))
+    row.update(ranges_view(log))
     return row
 
 

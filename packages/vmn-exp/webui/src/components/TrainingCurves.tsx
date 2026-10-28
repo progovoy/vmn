@@ -1,16 +1,18 @@
 import { memo, useMemo, useState, type ReactNode } from "react";
-import type { SeriesPoint } from "../types";
+import type { RunRange, SeriesPoint } from "../types";
 import { seriesColor } from "../util";
 import { allTimestamped, runOrigin, splitSysMetrics } from "../util/chartData";
 import { filterMetrics } from "../util/seriesArrays";
 import { xMetricMap, xMetricOptions, type XMap } from "../util/xMetric";
 import { useJoinedSeries } from "../hooks/useJoinedSeries";
 import { useCurveControls, type CurveControlProps } from "../hooks/useCurveControls";
-import { LogToggle, MetricSearch } from "./ChartControls";
+import { LogToggle, MetricSearch, OverlaySearch } from "./ChartControls";
 import XAxisControl from "./XAxisControl";
 import MetricGrid, { type GridView } from "./MetricGrid";
 import SmoothingSlider from "./SmoothingSlider";
 import MetricKeyPicker from "./MetricKeyPicker";
+import GlobOverlay from "./GlobOverlay";
+import RangeLegend from "./RangeLegend";
 import type { FetchRange } from "../hooks/useZoomRefetch";
 import type { MetricKeysPage, MetricKeysQuery } from "../apiRun";
 
@@ -31,10 +33,12 @@ export const SHOWN_BY_DEFAULT = 12;
  *  Smoothing, x mode, x metric and log scale follow *controls* when given.
  *  *fetchRange* refetches a drag-zoomed step range at full resolution; with
  *  more than MANY_KEYS metrics and *fetchKeys*, the charted ones are picked
- *  from a paged, searchable key list. */
+ *  from a paged, searchable key list. *ranges* (`run.mark_range`) are
+ *  shaded on every step chart; the overlay glob draws every training metric
+ *  it matches in one chart (GlobOverlay). */
 function TrainingCurves({
   series, seriesTotal, startedAt, stepMetrics, fetchJoined, markStep, hiddenMetrics,
-  fetchRange, fetchKeys, ...control
+  fetchRange, fetchKeys, ranges: givenRanges, rangesTotal, ...control
 }: CurveControlProps & {
   series: Series;
   seriesTotal?: Record<string, number>;
@@ -45,11 +49,17 @@ function TrainingCurves({
   hiddenMetrics?: string[];
   fetchRange?: FetchRange;
   fetchKeys?: (q: MetricKeysQuery) => Promise<MetricKeysPage>;
+  ranges?: RunRange[] | null;
+  rangesTotal?: number;
 }) {
   const {
     smoothing: alpha, setSmoothing: setAlpha, xMode, setXMode, x: xChoice, setX: setXChoice, logY, setLogY,
   } = useCurveControls(control);
   const [query, setQuery] = useState("");
+  const [overlay, setOverlay] = useState("");
+  // A poll brings equal ranges in a new array: keep the charts' options.
+  const rangesKey = JSON.stringify(givenRanges ?? []);
+  const ranges = useMemo(() => givenRanges ?? null, [rangesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const origin = useMemo(() => runOrigin(series, startedAt), [series, startedAt]);
   const { training, system } = useMemo(
@@ -76,7 +86,7 @@ function TrainingCurves({
   );
   const { data: joined, error: joinError } = useJoinedSeries(xMap, fetchJoined, series);
   const view = useMemo<GridView>(
-    () => ({ xMode, origin, alpha, logY, markStep }), [xMode, origin, alpha, logY, markStep],
+    () => ({ xMode, origin, alpha, logY, markStep, ranges }), [xMode, origin, alpha, logY, markStep, ranges],
   );
   // Host samples carry no step: always plot them against run time.
   const sysView = useMemo<GridView>(
@@ -108,11 +118,14 @@ function TrainingCurves({
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12, flexWrap: "wrap" }}>
+          <OverlaySearch value={overlay} onChange={setOverlay} />
           <MetricSearch value={query} onChange={setQuery} />
           <SmoothingSlider value={alpha} onChange={setAlpha} />
         </div>
       </div>
       {joinError && <div className="error">{joinError.message}</div>}
+      <RangeLegend ranges={ranges} total={rangesTotal} />
+      {overlay.trim() && <GlobOverlay pattern={overlay.trim()} names={training} series={series} view={view} />}
       {picking && <MetricKeyPicker fetchPage={fetchKeys!} selected={selected} onToggle={toggle} />}
       {training.length > 0 && shownTraining.length + shownHidden.length === 0 && (
         <div style={{ color: "var(--text-3)", fontSize: 12 }}>No metric matches “{query}”.</div>

@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef, useState } from "react";
 import type uPlot from "uplot";
+import type { RunRange } from "../types";
 import type { XMode } from "../util/chartData";
 import { chartTheme } from "../util/cssColor";
 import { useThemeVersion } from "../hooks/useTheme";
@@ -7,7 +8,7 @@ import {
   curveData, curveOptions, X_TICK, type CurveSeries,
 } from "../util/curveOptions";
 import { tooltipRows } from "../util/seriesArrays";
-import { withStepMarker } from "../util/chartMarkers";
+import { withRangeBands, withStepMarker } from "../util/chartMarkers";
 import { isFullRange, type StepRange } from "../util/zoomSeries";
 import CurveTooltip from "./CurveTooltip";
 import UPlotChart, { type CursorInfo } from "./UPlotChart";
@@ -22,7 +23,7 @@ const stepLabel = (x: number) => `step ${x}`;
  *  changes; new values for the same curves are swapped in place. */
 function CurveChart({
   series, xMode, logY = false, height = 280, hidden, focused = null,
-  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, formatX, markX = null, onXRange, emptyText,
+  tooltipLimit = DEFAULT_TOOLTIP_LIMIT, formatX, markX = null, bands = null, onXRange, emptyText,
 }: {
   series: CurveSeries[];
   xMode: XMode;
@@ -36,6 +37,8 @@ function CurveChart({
   formatX?: (x: number) => string;
   /** Step axes only: mark this x with a dashed line (a fork point). */
   markX?: number | null;
+  /** Step axes only: shade these step ranges (`run.mark_range`) as x bands. */
+  bands?: RunRange[] | null;
   /** Step axes only: the visible x range after a drag-zoom, null once reset
    *  to the whole data. The zoom then survives new data. */
   onXRange?: (range: StepRange | null) => void;
@@ -51,9 +54,10 @@ function CurveChart({
   const options = useMemo(() => {
     const theme = chartTheme();
     const opts = curveOptions(series, { xMode, logY, height, theme });
-    const marked = withStepMarker(opts, xMode === "step" ? markX : null, theme.axis);
+    const step = xMode === "step";
+    const marked = withRangeBands(withStepMarker(opts, step ? markX : null, theme.axis), step ? bands : null, theme.axis);
     return zoomable ? withScaleHook(marked, zoom.onScale) : marked;
-  }, [shape, xMode, logY, height, themeVersion, markX, zoomable]);
+  }, [shape, xMode, logY, height, themeVersion, markX, bands, zoomable]);
   const data = useMemo(() => curveData(series), [series]);
   const hiddenFlags = useMemo(() => hidden && series.map((s) => hidden.has(s.key)), [shape, hidden]);
   const focusIdx = focused === null ? -1 : series.findIndex((s) => s.key === focused && !s.faded);

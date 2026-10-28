@@ -22,6 +22,9 @@ _KIND_SCHEMAS = {
     "unit": {"type": "number", "minimum": 0, "maximum": 1},
     "posint": {"type": "integer", "minimum": 1},
     "strlist": {"type": "array", "items": {"type": "string"}},
+    "keys": {"type": "array", "items": {"type": "string"},
+             "description": "metric names or fnmatch globs (cv*.grad_norm_mean): "
+                            "one chart per matching key"},
     "step": {"oneOf": [{"type": "integer", "minimum": 0}, {"const": "last"}]},
     "cell": {"enum": ["count", "share", "agg"]},
     "agg": {"enum": list(GROUP_AGGREGATES)},
@@ -41,7 +44,7 @@ _KIND_SCHEMAS = {
 
 # type -> ({field: kind}, required fields, single-run)
 PANEL_TYPES = {
-    "curves": ({"keys": "strlist", "x": "x", "smoothing": "unit", "log_y": "bool",
+    "curves": ({"keys": "keys", "x": "x", "smoothing": "unit", "log_y": "bool",
                 "max_points": "posint"}, ("keys",), False),
     "leaderboard": ({"columns": "strlist", "params": "strlist"}, (), False),
     "bar": ({"metric": "str"}, ("metric",), False),
@@ -98,7 +101,7 @@ def _is_kind(value, kind):
         return isinstance(value, (int, float)) and 0 <= value <= 1
     if kind == "posint":
         return isinstance(value, int) and value >= 1
-    if kind == "strlist":
+    if kind in ("strlist", "keys"):
         return isinstance(value, list) and all(isinstance(v, str) for v in value)
     if kind == "step":
         return value == "last" or (isinstance(value, int) and value >= 0)

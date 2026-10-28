@@ -30,6 +30,7 @@ from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.core.logfiles import is_log_file
 from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.metric_files import is_indexed_file, is_metric_file
+from vmn_exp.core.ranges import RangeIndex
 from vmn_exp.core.series_reader import indexed_entries, stream_entries
 from vmn_exp.core.streams import display_writer
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -66,6 +67,8 @@ class _Parsed:
         self.fold = fold_log([])
         self.media = MediaIndex()
         self.media_view = self.media.view()
+        self.ranges = RangeIndex()
+        self.ranges_view = self.ranges.view()
         self.offsets = None  # {log file: bytes consumed} when incremental
         self.read = {}  # {log file: its entries read so far} when incremental
         self.sig = None
@@ -82,6 +85,8 @@ class _Parsed:
         fold_log(new_entries, self.fold, start=len(self.entries))
         if self.media.add(new_entries):
             self.media_view = self.media.view()
+        if self.ranges.add(new_entries):
+            self.ranges_view = self.ranges.view()
         self.entries.extend(new_entries)
         for key, points in metric_series(new_entries).items():
             self.series.setdefault(key, []).extend(points)

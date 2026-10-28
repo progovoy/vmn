@@ -7,6 +7,7 @@ import { fetchSeriesBatch } from "../apiSeries";
 import { useJoinedSeries } from "../hooks/useJoinedSeries";
 import type { SeriesPoint } from "../types";
 import { metricCurves } from "../pages/overlayCoverage";
+import { expandKeys } from "../util/metricGlob";
 import { AUTO_X, xMetricLabel, xMetricMap, type XMap } from "../util/xMetric";
 import { OVERLAY_POINTS, useOverlaySeries, type OverlayData, type OverlayRunData } from "../pages/overlaySeries";
 import CurveChart from "./CurveChart";
@@ -22,7 +23,8 @@ export interface OverlayChartProps {
   app: string;
   /** Runs drawn on every chart, coloured by their position here. */
   verstrs: string[];
-  /** One chart per metric key. */
+  /** One chart per metric key; a glob (`cv*.loss`) gives one per key it
+   *  matches among the runs' metrics. */
   keys: string[];
   maxPoints?: number;
   /** The x metric choice: `AUTO_X`, "none" or a metric name. */
@@ -40,13 +42,16 @@ export interface OverlayChartProps {
  *  rendered from props alone: the runs' series come from *data* or the
  *  overlay query, joined on an x metric when *x* (or a declared step metric) asks. */
 export default function OverlayChart({
-  ws, app, verstrs, keys, maxPoints = OVERLAY_POINTS, x = AUTO_X, smoothing = 0,
+  ws, app, verstrs, keys: wanted, maxPoints = OVERLAY_POINTS, x = AUTO_X, smoothing = 0,
   xMode = "step", logY = false, hidden = NO_RUNS, focused = null, data: given,
 }: OverlayChartProps) {
   const fetched = useOverlaySeries(ws, app, given ? [] : verstrs, maxPoints).data;
   const data = given ?? fetched;
   const loaded = useMemo(() => data?.runs ?? [], [data]);
   const loadedKeys = useMemo(() => loaded.map((r) => r.key), [loaded]);
+  const keys = useMemo(
+    () => expandKeys(wanted, new Set(loaded.flatMap((r) => Object.keys(r.series)))), [wanted, loaded],
+  );
   const xMap = useMemo(
     () => xMetricMap(keys, xMode, x, data?.stepMetrics), [keys, xMode, x, data],
   );
