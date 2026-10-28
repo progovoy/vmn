@@ -46,6 +46,7 @@ from vmn_exp.ui.responses import (
     json_response,
 )
 from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
+from vmn_exp.ui.settings_cache import request_scope
 from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
 from vmn_exp.ui.slow_reads import slow_read
 from vmn_exp.ui.static_files import mount_static
@@ -204,6 +205,12 @@ def create_app(
 
     install_audit_middleware(app)
     install_org_middleware(app, getattr(manager, "tenancy", "single"))
+
+    @app.middleware("http")
+    async def _settings_scope(request: Request, call_next):
+        # Inline refresh re-reads apps' settings once per request, not per read path.
+        with request_scope():
+            return await call_next(request)
 
     def _principal(request):
         if diag_routes.is_diag_request(API_PREFIX, request.url.path):
