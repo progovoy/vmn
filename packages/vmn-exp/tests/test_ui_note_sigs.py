@@ -135,3 +135,19 @@ def test_scoped_facets_without_notes_have_no_signatures(now):
 def test_the_sql_backend_refuses_notes():
     with pytest.raises(QueryError):
         compile_sql('notes ~ "sigterm"')
+
+
+ROW_NOTE_BUDGET = 200  # bytes notes may add to a served board row (plan 27: 1.5 KB a run)
+
+
+def test_notes_add_a_bounded_number_of_bytes_to_a_board_row():
+    import json
+
+    from vmn_exp.core.note_sigs import MAX_SIGS, note_signature
+
+    worst = {note_signature("é" * 30 + chr(97 + i) * 500): {"count": 9, "last_at": _at(i)}
+             for i in range(MAX_SIGS)}
+    for status in ("succeeded", "failed"):
+        row = {"verstr": "a", "status": status, "exit_code": 1}
+        bare = len(json.dumps(signed(dict(row))))
+        assert len(json.dumps(signed(dict(row), worst))) - bare <= ROW_NOTE_BUDGET

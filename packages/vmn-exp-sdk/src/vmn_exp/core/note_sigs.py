@@ -24,6 +24,10 @@ from vmn_exp.core.text_mask import mask
 
 MAX_SIGS = 8
 MAX_SIG = 56  # characters of a signature as JSON stores it (escapes included)
+# Characters of a note masked: masking at most triples a run of text ("1" ->
+# "<n>"), so a head this long still fills a signature, and a huge note (a
+# pasted traceback) is never regex-scanned nor kept as a mask() cache key whole.
+MASKED_HEAD = 4 * MAX_SIG
 
 
 def _cut(sig):
@@ -37,7 +41,7 @@ def note_signature(text):
     """The signature of a note *text*, or None for a blank or non-str one."""
     if not isinstance(text, str):
         return None
-    return _cut(mask(text)) or None
+    return _cut(mask(text[:MASKED_HEAD])) or None
 
 
 def apply_note(fold, entry, key):

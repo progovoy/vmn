@@ -137,3 +137,19 @@ def test_notes_queries_match_signatures(evicted):
     assert _verstrs(evicted, 'notes ~ "retry <n>"') == ["b"]
     assert _verstrs(evicted, "notes = null") == ["c"]
     assert _verstrs(evicted, 'not notes ~ "oom"') == ["a", "c"]
+
+
+def test_a_huge_note_is_masked_from_a_bounded_head(monkeypatch):
+    from vmn_exp.core import note_sigs
+
+    seen = []
+    real = note_sigs.mask
+
+    def recording(text):
+        seen.append(len(text))
+        return real(text)
+
+    monkeypatch.setattr(note_sigs, "mask", recording)
+    head = "Traceback at step 12 in /srv/train.py "
+    assert note_signature(head + "x" * 1_000_000) == note_signature(head + "x" * 300 + "y" * 2_000_000)
+    assert max(seen) <= 4 * MAX_SIG
