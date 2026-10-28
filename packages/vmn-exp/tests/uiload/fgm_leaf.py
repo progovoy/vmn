@@ -8,7 +8,7 @@ grows with the trade date (incident 1). ``state`` (trial, assembler,
 refit_single) is rare. Refits and the assembler lag the trials of a date in
 flight, and queue longer.
 """
-MINUTE, HOUR = 60, 3600
+MINUTE = 60
 REFITS = ("refit", "refit_single", "refit_expansion")
 HEALTH_KINDS = frozenset({"trial", "refit_single"})
 STATE_KINDS = frozenset({"trial", "assembler", "refit_single"})
@@ -36,8 +36,8 @@ class Leaf:
         ended = self.ended if kind == "trial" else self.ended ** 2  # refits lag the trials
         spec = self.launch.add(self.study, kind, name, self.tags, self._params(kind, params),
                                created_at=self.start + self.rng.uniform(0, 30),
-                               defines=DEFINES if kind == "trial" else {})
-        spec["fate"] = self._fate(ended)
+                               defines=DEFINES if kind == "trial" else {},
+                               fate=self._fate(ended))
         self._times(spec, kind)
         if spec["fate"] in ("succeeded", "failed"):
             self._results(spec, kind)
@@ -58,8 +58,8 @@ class Leaf:
             x = rng.random()
             if x < FAILED_SHARE:
                 return "failed"
-            threshold = FAILED_SHARE
-            for fate, share in () if self.launch.live else LEFTOVERS:
+            threshold, leftovers = FAILED_SHARE, () if self.launch.live else LEFTOVERS
+            for fate, share in leftovers:
                 threshold += share
                 if x < threshold:
                     return fate
@@ -126,7 +126,7 @@ class Leaf:
         """The pod run *child*'s last attempt opened under it, unless it never started."""
         fate = child["fate"]
         if fate == "created":
-            return None
+            return
         kind = child["tags"]["kind"]
         script = POD_SCRIPTS.get(kind, "refit.py")
         rng, n = self.rng, len(self.launch.specs)
@@ -149,4 +149,3 @@ class Leaf:
             pod["metrics"] = {"res.wall_s": round(wall, 1), "res.cpu_util": round(rng.random(), 3),
                               "res.mem_peak_mb": round(peak), "res.mem_headroom":
                               round(1 - peak / 32000, 3)}
-        return pod

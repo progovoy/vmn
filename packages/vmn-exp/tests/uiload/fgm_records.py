@@ -7,22 +7,24 @@ run that never started), and the index snapshot those records fold into.
     snapshot(profile, now) -> (IndexSnapshot, specs)   # in memory, for benches
 
 A live run's heartbeat is *now*: it reads ``running`` while *now* is
-recent (a reader with ``VMN_EXP_MIN_STALE_SEC`` raised keeps it so).
+recent, or while its *live_interval_sec* says it may beat that rarely
+(:mod:`uiload.seed_fgm` keeps a seeded store live that way).
 """
+import datetime
+
+from vmn_exp.core import status as status_mod
 from vmn_exp.core.fold import fold_log
 from vmn_exp.core.index import snapshot_of_folds
 from vmn_exp.core.index_snapshot import IndexSnapshot
+from vmn_exp.core.index_views import SIDE_TABLES
 from vmn_exp.core.run_error import slim_run_state
 
-from uiload import fgm_tree, seed_records
+from uiload import fgm_tree
+from uiload.seed_records import iso
 
 APP = "fastglobalmacro"
 HEARTBEAT_SEC = 30
 STUCK_AFTER_SEC = 120  # an orphan's last beat after its start
-
-
-def iso(t):
-    return seed_records.iso(t)
 
 
 def metadata(app, spec):
@@ -62,8 +64,17 @@ def last_write(spec, now):
     return spec["released_at"] if fate == "released" else spec["finished_at"]
 
 
-def run_state(spec, now):
-    """The run's ``run_state.yml``, None when it never started."""
+def freeze_clock(patch, now):
+    """Derive statuses as of *now* (epoch seconds) under the monkeypatch
+    *patch*; returns *now* as a datetime."""
+    at = datetime.datetime.fromtimestamp(now, datetime.timezone.utc)
+    patch.setattr(status_mod, "_now", lambda when=None: when or at)
+    return at
+
+
+def run_state(spec, now, live_interval_sec=HEARTBEAT_SEC):
+    """The run's ``run_state.yml``, None when it never started; a running
+    one's heartbeat interval is *live_interval_sec*."""
     fate = spec["fate"]
     if fate == "created":
         return None
@@ -72,7 +83,7 @@ def run_state(spec, now):
              "pid": 4242, "host": "fgm-node",
              "started_at": iso(spec["started_at"]), "heartbeat": iso(beat),
              "heartbeat_seq": int((beat - spec["started_at"]) // HEARTBEAT_SEC),
-             "heartbeat_interval_sec": HEARTBEAT_SEC}
+             "heartbeat_interval_sec": live_interval_sec if fate == "running" else HEARTBEAT_SEC}
     if spec["resume_count"]:
         state["resume_count"] = spec["resume_count"]
     duration = round(beat - spec["started_at"], 3)
@@ -89,8 +100,8 @@ def run_state(spec, now):
     return state
 
 
-def build_run(spec, now, app=APP):
-    return metadata(app, spec), log_entries(spec, now), run_state(spec, now)
+def build_run(spec, now, app=APP, live_interval_sec=HEARTBEAT_SEC):
+    return metadata(app, spec), log_entries(spec, now), run_state(spec, now, live_interval_sec)
 
 
 def snapshot(profile, now, app=APP):
@@ -119,6 +130,4 @@ def next_generation(snap, finished, now):
                               finished_at=iso(now), heartbeat=iso(now))
     return IndexSnapshot.build(
         snap.app_name, snap.generation + 1, snap.rows, states, snap.create_notes,
-        snap.run_state_observed_at, metric_parts=snap.metric_parts, outputs=snap.outputs,
-        declared_defs=snap.declared_defs, features=snap.features, intents=snap.intents,
-        hypotheses=snap.hypotheses, system_metrics=snap.system_metrics)
+        snap.run_state_observed_at, **{name: getattr(snap, name) for name in SIDE_TABLES})

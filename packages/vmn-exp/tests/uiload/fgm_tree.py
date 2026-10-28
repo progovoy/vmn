@@ -63,6 +63,18 @@ def get_profile(name):
     return PROFILES[name]
 
 
+def derived_status(fate):
+    """The status a run of *fate* derives: a released run waits again."""
+    return "created" if fate == "released" else fate
+
+
+def launches(specs):
+    """``(live launch, ended launch)`` verstrs of *specs*: the first of each."""
+    heads = [s for s in specs if s["tags"]["kind"] == "launch"]
+    return (next(s["verstr"] for s in heads if s["fate"] == "running"),
+            next(s["verstr"] for s in heads if s["fate"] == "succeeded"))
+
+
 def trade_date(d):
     return f"{2021 + d // 12}-{d % 12 + 1:02d}-01"
 
@@ -142,14 +154,15 @@ class _Launch:
                 1 - (j + 0.5) / p.live_inflight, False)
 
     def date(self, launch, d):
-        start, ended, done = self._phase(d)
+        phase = self._phase(d)
+        start, _, done = phase
         day = trade_date(d)
         params = {"trade_date": day, "model_type": self.model_type, "table_name": self.table}
         date = self.add(launch, "date", f"{self.launch_id}/{day}", {"trade_date": day}, params,
                         created_at=start, started_at=start)
         for target in TARGETS[:self.p.targets]:
             for group in GROUPS[:self.p.groups]:
-                self.study(date, d, target, group, (start, ended, done))
+                self.study(date, d, target, group, phase)
         if not done:
             date["fate"] = "running"
         else:
@@ -160,7 +173,7 @@ class _Launch:
         return date
 
     def study(self, date, d, target, group, phase):
-        start, ended, done = phase
+        start, _, done = phase
         day = date["tags"]["trade_date"]
         tags = {"trade_date": day, "group": group, "target": target}
         params = dict(tags, n_trials=self.p.trials, model_type=self.model_type,

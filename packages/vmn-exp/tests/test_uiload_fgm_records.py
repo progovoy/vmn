@@ -3,23 +3,19 @@ SDK would write, folded into an index snapshot: statuses, tags, declared
 progress, released runs, settling and the ``tags.kind`` split read as fgm's
 store would make them."""
 import collections
-import datetime
 
 import pytest
 from uiload import fgm_records, fgm_tree
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import key_text
 
 NOW = 1_800_000_000.0
-STATUS = {"released": "created"}
 
 
 @pytest.fixture
 def tiny(monkeypatch):
-    at = datetime.datetime.fromtimestamp(NOW, datetime.timezone.utc)
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or at)
+    fgm_records.freeze_clock(monkeypatch, NOW)
     snap, specs = fgm_records.snapshot(fgm_tree.get_profile("fgm-tiny"), NOW)
     return snap, {s["verstr"]: s for s in specs}
 
@@ -30,7 +26,7 @@ def test_every_row_derives_its_planned_status_and_keeps_its_tags(tiny):
     rows = LeaderboardCache().rows(snap)
     for row in rows:
         spec = specs[row["verstr"]]
-        assert row["status"] == STATUS.get(spec["fate"], spec["fate"]), spec
+        assert row["status"] == fgm_tree.derived_status(spec["fate"]), spec
         assert row["tags"] == spec["tags"]
         assert row["parent"] == spec["parent"]
         assert row["name"] == spec["name"]
@@ -56,13 +52,9 @@ def test_the_declared_schema_ranks_value_and_hides_health(tiny):
     assert schema["health.*"]["hidden"] is True
 
 
-def _launches(specs):
-    return [s for s in specs.values() if s["tags"]["kind"] == "launch"]
-
-
 def test_a_live_launch_summary_reads_its_declared_progress_split_by_kind(tiny):
     snap, specs = tiny
-    live = next(s for s in _launches(specs) if s["fate"] == "running")
+    live = specs[fgm_tree.launches(specs.values())[0]]
     views = JobViews(LeaderboardCache())
     summary = views.summary(snap, snap.declared_schema(), live["verstr"], split="tags.kind")
     declared = summary["declared_progress"]

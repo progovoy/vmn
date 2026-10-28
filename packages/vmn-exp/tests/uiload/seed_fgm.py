@@ -7,12 +7,13 @@ per task over worker processes, then ``<root>/fgm-seed.json`` (profile, ``now``,
     seed(root, fgm_tree.get_profile("fgm-tiny")) -> manifest
 
 ``run_state.yml``'s mtime is the run's last write, so orphans read stale to
-the store too. Live runs beat at seeding time: serve the store with
-``VMN_EXP_MIN_STALE_SEC`` at :data:`LIVE_STALE_SEC` to keep them running.
-The full ``fgm`` profile (~594k runs, ~1.8M files) takes a while:
+the store too. Live runs beat at seeding time with a heartbeat interval of
+:data:`LIVE_INTERVAL_SEC`, so they read ``running`` for months while the
+orphans read ``stuck``. The full ``fgm`` profile (~594k runs, ~1.8M files)
+takes about an hour on a laptop's APFS:
 
     python packages/vmn-exp/tests/uiload/seed_fgm.py /tmp/fgm --profile fgm
-    VMN_EXP_MIN_STALE_SEC=31536000 vmn-exp ui --repo /tmp/fgm
+    vmn-exp ui --repo /tmp/fgm
 """
 import argparse
 import collections
@@ -26,33 +27,30 @@ import yaml
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.store_marker import MARKER, new_marker
 
 from uiload import fgm_records, fgm_tree
+from uiload.seeder import _write
 
 MANIFEST = "fgm-seed.json"
-LIVE_STALE_SEC = 365 * 86400
+LIVE_INTERVAL_SEC = 120 * 86400  # stale after 3 missed beats: a year
 WRITER = "fgm-pod"
 _DUMPER = getattr(yaml, "CSafeDumper", yaml.SafeDumper)
-
-
-def store_root(root):
-    return os.path.join(root, ".vmn", "store")
-
-
-def _write(path, text):
-    with open(path, "w") as f:
-        f.write(text)
 
 
 def _yaml(data):
     return yaml.dump(data, Dumper=_DUMPER, sort_keys=False, default_flow_style=False)
 
 
+def seeded_run_state(spec, now):
+    """*spec*'s ``run_state.yml`` as seeded (live runs beating rarely)."""
+    return fgm_records.run_state(spec, now, LIVE_INTERVAL_SEC)
+
+
 def write_run(base, spec, now, app):
-    meta, entries, state = fgm_records.build_run(spec, now, app)
+    meta, entries, state = fgm_records.build_run(spec, now, app, LIVE_INTERVAL_SEC)
     folder = os.path.join(base, spec["verstr"])
-    os.makedirs(os.path.join(folder, "log"))
     _write(os.path.join(folder, "metadata.yml"), _yaml(meta))
     _write(os.path.join(folder, "log", f"{WRITER}.jsonl"),
            "".join(json.dumps(e) + "\n" for e in entries))
@@ -66,7 +64,7 @@ def write_run(base, spec, now, app):
 def write_part(task):
     """Write every *parts*-th record of launch *n* from *part* on; their fates."""
     root, profile, n, part, parts, now, app = task
-    base = os.path.join(store_root(root), "runs", app)
+    base = os.path.join(local_store_root(root), "runs", app)
     fates = collections.Counter()
     for spec in fgm_tree.launch_runs(profile, n, now)[part::parts]:
         write_run(base, spec, now, app)
@@ -85,7 +83,7 @@ def _parts(tasks, workers):
 def seed(root, profile, app=fgm_records.APP, workers=None, now=None, progress=False):
     """Seed *profile* into a fresh *root* as of *now* (default: now)."""
     root, now = os.path.abspath(root), time.time() if now is None else now
-    store = store_root(root)
+    store = local_store_root(root)
     os.makedirs(os.path.join(store, "runs", app))
     _write(os.path.join(store, ".gitignore"), "*\n")
     _write(os.path.join(store, MARKER), yaml.safe_dump(new_marker()))

@@ -52,6 +52,23 @@ def app_path(ws, app):
     return f"/workspaces/{ws}/apps/{_app_tag(app)}"
 
 
+def wait_indexed(base_url, ws, app, total, token=None, timeout=7200):
+    """``(seconds, body)`` once ``experiments-status`` counts *total* runs,
+    not indexing."""
+    url = f"{app_path(ws, app)}/experiments-status"
+    t0 = time.monotonic()
+    with _client(base_url, token) as client:
+        while time.monotonic() - t0 < timeout:
+            try:
+                body = client.get(url).json()
+                if body.get("total", 0) >= total and "indexing" not in body:
+                    return round(time.monotonic() - t0, 2), body
+            except (httpx.HTTPError, ValueError):
+                pass
+            time.sleep(1)
+    raise TimeoutError(f"index not loaded after {timeout}s")
+
+
 class Probe:
     def __init__(self, base_url, ws=None, app=None, token=None, seed=None):
         self.base_url = base_url

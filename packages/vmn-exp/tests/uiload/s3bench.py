@@ -31,7 +31,7 @@ import httpx  # noqa: E402
 
 from uiload import s3bench_load, s3bench_seed  # noqa: E402
 from uiload.s3bench_coldload import ColdLoadProbe  # noqa: E402
-from uiload.probe import API, app_path  # noqa: E402
+from uiload.probe import API, wait_indexed  # noqa: E402
 from uiload.ui_server import UIServer, free_port  # noqa: E402
 
 BUCKET, ROOT = "bench", "vmn-exp"
@@ -92,22 +92,6 @@ def _deltas(marks):
             for (_, before), (phase, after) in zip(marks, marks[1:])}
 
 
-def wait_indexed(base_url, ws, app, total):
-    """Seconds until ``experiments-status`` counts *total* runs, not indexing."""
-    url = f"{base_url}{API}{app_path(ws, app)}/experiments-status"
-    t0 = time.monotonic()
-    with httpx.Client(timeout=60) as client:
-        while time.monotonic() - t0 < INDEX_TIMEOUT_SEC:
-            try:
-                body = client.get(url).json()
-                if body.get("total", 0) >= total and "indexing" not in body:
-                    return round(time.monotonic() - t0, 2), body
-            except (httpx.HTTPError, ValueError):
-                pass
-            time.sleep(1)
-    raise TimeoutError(f"index not loaded after {INDEX_TIMEOUT_SEC}s")
-
-
 def seed_data(args):
     params = {"runs": args.runs, "stuck": args.stuck, "segments": args.segments, "seed": args.seed}
     data = args.data or os.path.join(tempfile.gettempdir(),
@@ -128,7 +112,7 @@ def measure(args, manifest, ui, endpoint):
     report = {}
     marks = [("start", s3_requests(endpoint))]
     cold = ColdLoadProbe(ui.base_url, ws, app, manifest["stuck"][:3]).start()
-    report["index_load_sec"], report["status"] = wait_indexed(ui.base_url, ws, app, args.runs)
+    report["index_load_sec"], report["status"] = wait_indexed(ui.base_url, ws, app, args.runs, timeout=INDEX_TIMEOUT_SEC)
     report["cold_jobs"] = cold.stop()
     marks.append(("index", s3_requests(endpoint)))
     if args.cold_only:

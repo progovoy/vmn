@@ -28,13 +28,12 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from uiload import fgm_records, fgm_tree, seed_fgm, slo
 from uiload.inproc_server import serve_root
-from uiload.probe import _client, _ms_since, app_path
+from uiload.probe import _client, _ms_since, app_path, wait_indexed
 from uiload.probe_stats import _summary
 
 ROUTES = ("status", "summary", "summary_split", "board_kind", "board_dates", "board_app",
           "waiting")
 INDEX_TIMEOUT_SEC = 6 * 3600
-POLL_SEC = 1.0
 
 
 def _requests(ws_app, live, ended, now):
@@ -58,19 +57,6 @@ def _requests(ws_app, live, ended, now):
     }
 
 
-def wait_indexed(client, ws_app, expected, timeout=INDEX_TIMEOUT_SEC):
-    """Poll ``experiments-status`` until it counts *expected* runs; its body."""
-    deadline = time.monotonic() + timeout
-    while True:
-        resp = client.get(f"{ws_app}/experiments-status")
-        body = resp.json() if resp.status_code == 200 else {}
-        if body.get("total") == expected and not body.get("indexing"):
-            return body
-        if time.monotonic() > deadline:
-            raise TimeoutError(f"index holds {body.get('total')} of {expected} runs")
-        time.sleep(POLL_SEC)
-
-
 def _launches(client, ws_app):
     rows = client.get(f"{ws_app}/experiments", params={"q": 'tags.kind = "launch"',
                                                        "limit": 1000}).raise_for_status()
@@ -89,24 +75,22 @@ def _timed(client, path, params):
 def measure(base_url, ws, app, profile, expected, token=None, now=None):
     """The result dict :func:`uiload.slo.fgm_violations` reads."""
     ws_app, now = app_path(ws, app), time.time() if now is None else now
+    index_sec, indexed = wait_indexed(base_url, ws, app, expected, token, INDEX_TIMEOUT_SEC)
     with _client(base_url, token) as client:
-        waited = time.perf_counter()
-        indexed = wait_indexed(client, ws_app, expected)
-        index_sec = round(time.perf_counter() - waited, 1)
         live, ended = _launches(client, ws_app)
-        routes, errors, kinds = {}, 0, None
-        for route, request in _requests(ws_app, live, ended, now).items():
+        requests = _requests(ws_app, live, ended, now)
+        routes, errors = {}, 0
+        for route, request in requests.items():
             times = []
             for i in range(profile.probe_requests):
                 ms, resp = _timed(client, *request(i))
                 times.append(ms)
                 errors += resp.status_code != 200
-                if route == "summary_split" and resp.status_code == 200:
-                    kinds = len(resp.json()["by"])
             routes[route] = dict(_summary(times), first_ms=times[0])
+        path, params = requests["summary_split"](0)
+        split = client.get(path, params=params).raise_for_status().json()
     return {"routes": routes, "errors": errors, "status_total": indexed["total"],
-            "index_sec": index_sec,
-            "live": live, "ended": ended, "kinds": kinds}
+            "index_sec": index_sec, "live": live, "ended": ended, "kinds": len(split["by"])}
 
 
 def main(argv=None):
@@ -119,7 +103,6 @@ def main(argv=None):
     with open(os.path.join(a.root, seed_fgm.MANIFEST)) as f:
         manifest = json.load(f)
     profile = fgm_tree.get_profile(manifest["profile"])
-    os.environ.setdefault("VMN_EXP_MIN_STALE_SEC", str(seed_fgm.LIVE_STALE_SEC))
     data_dir = a.data_dir or tempfile.mkdtemp(prefix="uiload-ui-")
     started = time.monotonic()
     with serve_root(a.root, data_dir, "ws") as (url, ws):
