@@ -40,7 +40,7 @@ import vmn_exp.core.status as experiment_status
 from vmn_exp.core.gc_pause import freeze_long_lived, gc_paused
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.query import parse_query
-from vmn_exp.core.status import status_fields
+from vmn_exp.core.status import status_fields, with_queue_sec
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.core.tree import annotate_rows
 from vmn_exp.ui.attention import AttentionCounts
@@ -72,6 +72,7 @@ from vmn_exp.ui.memo import LRU, Generations
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 from vmn_exp.ui.readers.experiments import sort_rows
 from vmn_exp.ui.search_index import SearchIndexes
+from vmn_exp.ui.sibling_durations import SiblingDurations, SplitBindings, restamped, stamped
 from vmn_exp.ui.search_rank import results
 from vmn_exp.ui.status_counts import StatusCounts
 
@@ -91,24 +92,26 @@ BASE_WAIT_SEC = 2.0
 _NONCE = os.urandom(8).hex()
 
 
-def _status(snapshot, verstr):
-    """*verstr*'s status fields, judged with the store's write time too."""
-    return status_fields(
+def _status(snapshot, row):
+    """*row*'s status fields, judged with the store's write time too."""
+    verstr = row["verstr"]
+    return with_queue_sec(row, status_fields(
         snapshot.run_states.get(verstr),
         observed_at=snapshot.run_state_observed_at.get(verstr),
-    )
+    ))
 
 
 def _restated(snapshot, row):
     """A copy of *row* with its status fields as of now."""
-    return signed({**row, **_status(snapshot, row["verstr"])})
+    return signed({**row, **_status(snapshot, row)})
 
 
 class _Base:
     """One snapshot's rows with their status and tree fields."""
 
-    def __init__(self, snapshot, token, bucket, rows, position, patch, tree):
+    def __init__(self, snapshot, token, bucket, rows, position, patch, tree, siblings):
         self.snapshot = snapshot
+        self.siblings = siblings  # the duration_ratio medians (sibling_durations)
         self.token = token
         self.rows = rows
         self.position = position
@@ -129,23 +132,28 @@ class _Base:
         self.built_bucket = bucket
 
     @classmethod
-    def build(cls, snapshot, token, bucket):
+    def build(cls, snapshot, token, bucket, split=None):
         """From scratch: O(N) — a copy of every row, so with collection
-        paused (see :mod:`~vmn_exp.core.gc_pause`)."""
+        paused (see :mod:`~vmn_exp.core.gc_pause`). *split*: the field
+        ``duration_ratio`` compares siblings by (none: the parent alone)."""
         states = snapshot.run_states
         with gc_paused():
             live = [i for i, row in enumerate(snapshot.rows) if is_live(snapshot, row["verstr"])]
             rows = [signed(row) for row in
                     annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)]
+            siblings = SiblingDurations.stamping(rows, split)
             position = {row["verstr"]: i for i, row in enumerate(rows)}
             patch = LivePatch.of_rows(rows, live, position)
-            return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows))
+            return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows), siblings)
 
     @classmethod
-    def derived(cls, prev, snapshot, token, bucket, delta=None):
+    def derived(cls, prev, snapshot, token, bucket, delta=None, split=None):
         """From *prev*'s base, re-deriving only what changed (*delta*:
         ``(storage indexes, verstrs gone)``, else found); None when the
-        delta is large, a verstr repeats or a parent chain loops."""
+        delta is large, a verstr repeats, a parent chain loops or *split*
+        is not *prev*'s."""
+        if split != prev.siblings.split:
+            return None
         delta = delta or row_delta(prev, snapshot)
         if delta is None:
             return None
@@ -163,10 +171,14 @@ class _Base:
         if tree is None:
             return None
         rows, children_of, counts, rebuilt = tree
+        was = [prev.rows[prev.position[v]] for v in (*fresh, *gone) if v in prev.position]
+        siblings, regrouped = prev.siblings.advanced(was, fresh.values())
+        copied = restamped((rows, position, children_of), siblings, regrouped, fresh, rebuilt)
         live = sorted(position[v] for v in fresh if is_live(snapshot, v))
         patch = LivePatch.from_counts(rows, live, position, snapshot.edges, counts)
-        base = cls(snapshot, token, bucket, rows, position, patch, (children_of, counts))
-        base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone)
+        base = cls(snapshot, token, bucket, rows, position, patch, (children_of, counts),
+                   siblings)
+        base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone, copied)
         base.up_moved = ancestors_changed(prev, fresh, gone, children_of)
         return base
 
@@ -202,6 +214,7 @@ class _Base:
 
     def _rederive_live(self):
         fresh = {i: _restated(self.snapshot, self.rows[i]) for i in self.patch.live}
+        stamped(fresh.values(), self.siblings)
         return self.patch.rolled_up(self.rows, fresh)
 
 
@@ -322,11 +335,17 @@ class LeaderboardCache(SetAnswers):
         self._status_counts = StatusCounts(self)
         self.attention = AttentionCounts(self)
         self._warmer = BoardWarmer(self)
+        self._splits = SplitBindings()
 
     schema_key = staticmethod(_schema_key)
 
     def _bucket(self):
         return int(experiment_status._now().timestamp() // self.bucket_sec)
+
+    def bind_split(self, snapshot, split):
+        """Siblings of *snapshot*'s rows (``duration_ratio``) share a parent
+        and a value of *split* (the app's ``experiment.ui.split_by``)."""
+        self._splits.bind(snapshot, split)
 
     def _base(self, snapshot):
         """``(base, bucket)``; the bucket is None while nothing is live.
@@ -335,9 +354,10 @@ class LeaderboardCache(SetAnswers):
         ``base_wait_sec``, the previous generation of its index answers
         instead (when one is kept)."""
         bucket = self._bucket()
-        token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens))
+        split = self._splits.of(snapshot)
+        token = self._base_tokens.per_snapshot(snapshot, lambda: next(self._tokens), key=(split,))
         base = self._bases.per_snapshot(
-            snapshot, lambda: self._new_base(snapshot, token, bucket),
+            snapshot, lambda: self._new_base(snapshot, token, bucket, split), key=(split,),
             stale=lambda: self._previous_base(snapshot),
             wait_sec=self.base_wait_sec,
         )
@@ -359,23 +379,24 @@ class LeaderboardCache(SetAnswers):
         stuck): derived like a new generation, else built."""
         token, bucket = next(self._tokens), self._bucket()
         live = (sorted(prev.patch.live), set())  # nothing else changed
-        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live)
+        split = prev.siblings.split
+        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live, split=split)
         if base:
             self._deltas.add(base)
-        base = base or _Base.build(prev.snapshot, token, bucket)
+        base = base or _Base.build(prev.snapshot, token, bucket, split)
         self.generations.advance(prev.snapshot.app_name, token)
         return base
 
-    def _new_base(self, snapshot, token, bucket):
+    def _new_base(self, snapshot, token, bucket, split=None):
         """Derived from the app's latest kept base, else built. Any base is a
         valid start (even another workspace's): the delta is found by identity."""
         prev = self._latest_base(snapshot.app_name)
         prev = prev and latest(prev, bucket)
-        base = prev and _Base.derived(prev, snapshot, token, bucket)
+        base = prev and _Base.derived(prev, snapshot, token, bucket, split=split)
         if base:
             self._deltas.add(base)
         else:
-            base = _Base.build(snapshot, token, bucket)
+            base = _Base.build(snapshot, token, bucket, split)
             # A whole board's new rows; a derived base's few are not worth a
             # freeze, which keeps every cycle alive now for good.
             freeze_long_lived()

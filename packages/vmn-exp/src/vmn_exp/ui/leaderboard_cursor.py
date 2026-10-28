@@ -17,6 +17,7 @@ import hashlib
 import json
 from collections import ChainMap
 
+from vmn_exp.core.field_sort import field_sort
 from vmn_exp.core.log import DATE_SORTS, primary_metric
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_jobs import (
@@ -69,7 +70,9 @@ class RowKey:
         self.base = base
         position = ChainMap(base.position, {p[0]: p[1] for p in projs})
         self.key, ranked = order_key(schema, sort, DESCENDING.get(order), present, position)
-        self.kind = "date" if sort in DATE_SORTS else "metric" if ranked else None
+        self.field = field_sort(sort)
+        self.kind = ("date" if sort in DATE_SORTS else "field" if self.field
+                     else "metric" if ranked else None)
         self.name = sort if self.kind == "date" else sort or primary_metric(schema)
 
     def has(self, verstr):
@@ -79,6 +82,8 @@ class RowKey:
         if self.kind == "metric":
             value = row["metrics"].get(self.name)
             return value if is_finite_number(value) else None
+        if self.kind == "field":
+            return self.field.raw(row)
         return row.get(self.name) or None if self.kind == "date" else None
 
     def project(self, row):
@@ -93,6 +98,8 @@ class RowKey:
             row["metrics"][self.name] = value
         elif self.kind == "date":
             row[self.name] = value
+        elif self.kind == "field":
+            row.update(self.field.placed(value))
         return self.key(row)
 
 

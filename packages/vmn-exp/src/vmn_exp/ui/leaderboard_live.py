@@ -19,6 +19,7 @@ page slice costs O(page + changed).
 import bisect
 from collections import Counter
 
+from vmn_exp.core.field_sort import field_sort
 from vmn_exp.core.log import (
     DATE_SORTS,
     IDX_SORT,
@@ -238,11 +239,22 @@ def _date_value(field, newest_first):
     return value_of
 
 
+def _field_value(field, descending):
+    def value_of(row):
+        value = field.value(row)
+        return Desc(value) if descending and value is not None else value
+
+    return value_of
+
+
 def order_key(schema, sort, descending, metric_present, position):
     """``(key, ranked)``: the sort key ``sort_rows`` orders by, and whether it
     ranks by a metric (*metric_present*: some filtered row carries it)."""
     if sort in DATE_SORTS:
         return _ranked(_date_value(sort, descending is not False), position), False
+    field = field_sort(sort)
+    if field:
+        return _ranked(_field_value(field, descending), position), False
     if sort == IDX_SORT:
         sign = 1 if descending is False else -1
         return (lambda row: sign * row["idx"]), False

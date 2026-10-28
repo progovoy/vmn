@@ -1013,8 +1013,11 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `heartbeat_interval_sec`, `children`, `kind`, `depth`, `tree_status`,
   `imported_from`, `forked_from`, `forked_from_step`, `rerun_of`,
   `end_reason`, `error_summary`, `signal`, `released_at`, `resume_count`,
-  `author`, `has_intent`, `intent`,
-  `keywords` (see [ui.md](ui.md#experiment-status-fields)). `author` is who
+  `queue_sec`, `duration_ratio`, `author`, `has_intent`, `intent`,
+  `keywords` (see [ui.md](ui.md#experiment-status-fields)). `queue_sec` is
+  creation to start (`null` until started); `duration_ratio` (duration over
+  the siblings' median) is only on `vmn-exp ui` board rows, so elsewhere a
+  comparison with it is false. `author` is who
   ran it (the [features](experiments.md#what-a-run-records-for-similar)
   author's git email, else OS user, else writer; `null` when unknown);
   `has_intent` is a bool on every row. `intent` is the latest

@@ -6,7 +6,7 @@ import { finiteNumbers, maxOf, minOf } from "../util/stats";
 /** Default column widths (px) under `table-layout: fixed`, so a long value
  *  is clipped with an ellipsis instead of stretching its column. */
 const W = {
-  check: 34, idx: 72, status: 110, experiment: 240, fleet: 76, date: 150,
+  check: 34, idx: 72, status: 110, experiment: 240, fleet: 76, date: 150, ratio: 110,
   metric: 110, param: 120, tags: 180, note: 200, when: 90,
 };
 /** Narrowest the experiment column gets when it shrinks to fit the table. */
@@ -14,13 +14,19 @@ const MIN_EXPERIMENT_WIDTH = 200;
 /** Narrowest a column can be dragged to. */
 export const MIN_COL_WIDTH = 40;
 
-/** The run's own start/end, right after the experiment column (on with `show=`). */
-export const FLEET_COLS = ["started", "ended"] as const;
+/** The run's own start/end, queue time, duration and duration against its
+ *  siblings (plan 28 N4), right after the experiment column (on with `show=`). */
+export const FLEET_COLS = ["started", "ended", "queue", "duration", "ratio"] as const;
 export type FleetCol = (typeof FLEET_COLS)[number];
 
 /** The server sort key behind each sortable date column. */
 export const DATE_SORT_OF: Readonly<Record<string, "started_at" | "finished_at">> = {
   "c:started": "started_at", "c:ended": "finished_at",
+};
+
+/** The server sort key (a row field, plan 28 FS) behind each duration column. */
+export const DURATION_SORT_OF: Readonly<Record<string, "queue_sec" | "duration_sec" | "duration_ratio">> = {
+  "c:queue": "queue_sec", "c:duration": "duration_sec", "c:ratio": "duration_ratio",
 };
 
 const MIN_TABLE_WIDTH = 760;
@@ -82,6 +88,7 @@ export function columnLayout(cells: readonly ColumnCell[], tags = false): Column
 export function defaultWidth(id: string): number {
   if (id in DATE_SORT_OF) return W.date;
   if (id === "c:tags") return W.tags;
+  if (id === "c:ratio") return W.ratio;
   const prefix = id.slice(0, 2);
   if (prefix === "c:") return W.fleet;
   if (prefix === "m:") return W.metric;

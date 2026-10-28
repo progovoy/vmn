@@ -25,6 +25,7 @@ from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
 from vmn_exp.ui.readers.config import read_conf_file
 from vmn_exp.ui.readers.experiment_detail import experiment_detail
 from vmn_exp.ui.readers.versions import version_counts
+from vmn_exp.ui.sibling_durations import SiblingDurations
 
 
 def experiment_storage(root_path):
@@ -167,14 +168,17 @@ def leaderboard(
     query=None,
     order=None,
     observed_at=None,
+    split=None,
 ):
-    """The one list pipeline: derive status, filter, then order and page.
+    """The one list pipeline: derive status (and ``duration_ratio`` against
+    siblings sharing a value of *split*), filter, then order and page.
 
     Status is derived from the current time and ``query`` is per request, so
     neither is ever cached — callers pass freshly fetched rows. *observed_at*
     is ``{verstr: run_state.yml store write time}``.
     """
     annotated = [signed(row) for row in annotate_rows(rows, run_states, observed_at=observed_at)]
+    SiblingDurations.stamping(annotated, split)
     return sort_rows(
         apply_filters(annotated, status, query),
         schema,

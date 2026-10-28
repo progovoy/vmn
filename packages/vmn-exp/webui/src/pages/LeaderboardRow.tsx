@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { ExperimentRow } from "../types";
 import type { Density } from "../util/density";
 import type { MemberPlace } from "../util/groupItems";
-import { fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
+import { fmtDuration, fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import RowCheckbox from "../components/RowCheckbox";
 import StatusPill from "../components/StatusPill";
 import OuterBadge from "../components/OuterBadge";
@@ -12,7 +12,7 @@ import { useRowNavigate } from "../hooks/useRowNavigate";
 import { tagLabel } from "../util/tags";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
 import {
-  DATE_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
+  DATE_SORT_OF, DURATION_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
 
 /** Everything a row needs that is the same for every row — kept as one
@@ -90,6 +90,21 @@ function DateCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProp
   const text = date != null ? shortDate(date) : "";
   return (
     <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={date ?? undefined}>
+      {text}
+    </td>
+  );
+}
+
+/** A run's queue time, duration or duration against its siblings' median
+ *  (`c:queue`/`c:duration`/`c:ratio`, plan 28 N4). */
+function DurationCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProperties }) {
+  const field = DURATION_SORT_OF[`c:${c}`];
+  const value = r[field];
+  const text = value == null ? "—" : field === "duration_ratio" ? `${value.toFixed(1)}× siblings` : fmtDuration(value);
+  const title = value == null ? undefined
+    : field === "duration_ratio" ? `${value}× the median duration of its siblings` : `${value} s`;
+  return (
+    <td data-col={c} data-col-id={`c:${c}`} className={`num fleet-cell fleet-${c}`} style={style} title={title}>
       {text}
     </td>
   );
@@ -237,6 +252,7 @@ function Row({
         );
     }
     if (isGapId(id)) return <td key={id} aria-hidden style={style} />;
+    if (id in DURATION_SORT_OF) return <DurationCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("c:")) return <DateCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (

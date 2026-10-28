@@ -79,7 +79,8 @@ from vmn_exp.core.system_metrics import is_system_metric
 from vmn_exp.core.tree import ancestry_of
 
 # Every non-metric field a row can carry, from ``experiment_row`` +
-# ``experiment_status.status_fields`` + ``experiment_tree.annotate_tree``.
+# ``experiment_status.status_fields`` + ``experiment_tree.annotate_tree``
+# (``queue_sec``) + the board's ``duration_ratio`` (plan 28 N4).
 # Spelled out so a typo is a query error instead of a silently empty result.
 ROW_FIELDS = frozenset(
     """
@@ -89,6 +90,7 @@ ROW_FIELDS = frozenset(
     kind depth tree_status settled imported_from forked_from forked_from_step rerun_of
     author has_intent intent keywords
     end_reason error_summary signal root failure_sig released_at resume_count
+    queue_sec duration_ratio
     """.split()
 )
 

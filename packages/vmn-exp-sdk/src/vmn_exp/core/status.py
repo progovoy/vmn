@@ -96,6 +96,21 @@ def _age_sec(ts, now):
     return (now - parsed).total_seconds()
 
 
+def queue_sec(created, started):
+    """Seconds a run waited from *created* to *started* (ISO stamps), never
+    below 0; None until both are known (plan 28 N4)."""
+    created, started = parse_iso(created), parse_iso(started)
+    if created is None or started is None:
+        return None
+    return round(max((started - created).total_seconds(), 0.0), 3)
+
+
+def with_queue_sec(row, fields):
+    """*fields* (:func:`status_fields` of *row*'s run) with *row*'s ``queue_sec``."""
+    fields["queue_sec"] = queue_sec(row.get("timestamp"), fields["started_at"])
+    return fields
+
+
 def heartbeat_interval_sec(run_state):
     """The run's heartbeat cadence, falling back to the default."""
     interval = (run_state or {}).get("heartbeat_interval_sec")

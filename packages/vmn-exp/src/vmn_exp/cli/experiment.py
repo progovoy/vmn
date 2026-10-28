@@ -40,6 +40,7 @@ from vmn_exp.cli.views import (
     show_payload,
 )
 from vmn_exp.core.app_conf import experiment_conf
+from vmn_exp.core.field_sort import field_sort
 from vmn_exp.core.identity import known_identity
 from vmn_exp.core.snapshot_features import EXPERIMENT_FILE, write_features_file
 from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
@@ -651,7 +652,7 @@ def _list_rows(index_rows, last, sort, schema):
     before ``--last``/sort/``--top`` touch the order. Sorting runs on the flat
     rows, where the date fields (``timestamp``, ``started_at``, ...) live."""
     shown = index_rows[-last:] if last else index_rows
-    if sort and sort not in (*DATE_SORTS, IDX_SORT) and not any(
+    if sort and sort not in (*DATE_SORTS, IDX_SORT) and not field_sort(sort) and not any(
         sort in row["metrics"] for row in shown
     ):
         VMN_LOGGER.warning(f"Sort key '{sort}' not found in any experiment")

@@ -11,6 +11,7 @@ export const ROW_FIELDS = [
   "intent", "keywords",
   "error_summary", "signal", "end_reason", "name", "archived", "tags",
   "imported_from", "forked_from_step", "root", "failure_sig", "released_at", "resume_count",
+  "queue_sec", "duration_ratio",
 ];
 
 /** Predicates written as calls: `similar("focal loss")` keeps the runs whose

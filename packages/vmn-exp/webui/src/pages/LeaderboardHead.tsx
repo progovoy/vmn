@@ -3,7 +3,7 @@
  *  keyboard equivalents) and the select-all checkbox. */
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { GroupAggregate } from "../apiGroups";
-import { DATE_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isGapId, isPinned } from "./leaderboardColumns";
+import { DATE_SORT_OF, DURATION_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isGapId, isPinned } from "./leaderboardColumns";
 import ColumnMenu, { type MenuAction } from "./ColumnMenu";
 import { ARIA_SORT, HeaderCheckbox, ResizeGrip, SortButton, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import { layoutIds, type RowLayout } from "./LeaderboardRow";
@@ -59,6 +59,7 @@ function headInfo(id: string, layout: RowLayout, aggregate?: GroupAggregate): { 
   if (id === "idx") return { label: "#", sort: IDX_SORT, title: "sort by run number (newest first)" };
   if (id === "when") return { label: "when", sort: TIMESTAMP_SORT, title: "sort by time (newest first)" };
   if (id in DATE_SORT_OF) return { label: name, sort: DATE_SORT_OF[id], title: `sort by ${name} time (newest first)` };
+  if (id in DURATION_SORT_OF) return { label: name, sort: DURATION_SORT_OF[id], title: `sort by ${name} (high first)` };
   if (id.startsWith("m:")) {
     const meta = layout.colMeta[name];
     const hasGoal = meta && meta.goal !== null;

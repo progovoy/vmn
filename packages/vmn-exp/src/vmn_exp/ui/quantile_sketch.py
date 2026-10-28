@@ -30,6 +30,13 @@ def _value(key):
     return 2 * _GAMMA ** key / (_GAMMA + 1)
 
 
+def bucketed(value):
+    """What a sketch reports for a finite *value*: its bucket's value."""
+    if abs(value) < MIN_MAGNITUDE:
+        return 0.0
+    return math.copysign(_value(_key(abs(value))), value)
+
+
 class _Side:
     """One sign's ``{bucket: count}`` and its collapse floor."""
 

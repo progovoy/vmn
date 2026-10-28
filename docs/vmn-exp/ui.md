@@ -540,7 +540,10 @@ when none declares one), up to six params whose values vary across the loaded
 runs (as many as fit the window), and `when`. An outer run's experiment cell
 adds `tree <status>` when its subtree differs and an incomplete sweep's
 `16/20 · incomplete`. Note, tags, the run's
-`started`/`ended` dates and the rest come from the Columns picker. The choices
+`started`/`ended` dates, its `queue` time, `duration` and `ratio` (its
+[`duration_ratio`](#experiment-status-fields), `3.1× siblings`; `show=c:queue`,
+`c:duration`, `c:ratio`, plan 28 N4) and the rest come from the Columns picker.
+Clicking a date, duration or param header sorts the board by it server-side. The choices
 live in the URL (`show=`/`hide=`, e.g. `show=m:train_loss`, `hide=p:seed`;
 `hide=` always hides, except that it still shows a schema-hidden metric, as
 before; `pin=`; `pin=-` pins nothing), and dragged
@@ -806,7 +809,9 @@ Every row of `.../experiments` and the run detail carry:
 | `started_at` / `finished_at` | ISO-8601 timestamps |
 | `heartbeat` | last heartbeat refresh |
 | `stale_sec` | seconds since the last proof of life (the fresher of the heartbeat and the store's write time of `run_state.yml`) |
-| `duration_sec` | wall-clock run time once finished |
+| `duration_sec` | wall-clock run time once finished (elapsed while running) |
+| `queue_sec` | seconds from creation (`timestamp`) to `started_at`, never below 0; `null` until the run starts |
+| `duration_ratio` | board rows only: `duration_sec` over the median duration of its siblings, the finished (succeeded or failed), unarchived runs with the same parent and the same value of `experiment.ui.split_by` (none: the parent alone; values from P3's per-value sketches, within 1 %). A running run uses its elapsed time. `null` with fewer than 3 finished siblings (the run counted), without a parent, and for a waiting, stuck or end-less run. The board's `ratio` column reads `3.1× siblings`; `q=duration_ratio > 3` finds the outliers |
 | `pid` / `host` / `command` | what ran, where |
 | `last_metric_at` | when a metric was last logged, to spot a run that is alive but not progressing |
 | `parent` / `children` | verstrs linking outer and inner jobs |
@@ -997,6 +1002,13 @@ message and offset (`unknown field 'statuz' at offset 0`).
 - `sort` is a metric name, `timestamp`, `started_at` or `finished_at` (dates
   sort newest first). `order=asc|desc` overrides the direction the metric's
   goal implies; runs without the metric stay last either way.
+- `sort` also takes any other row field (`duration_sec`, `queue_sec`,
+  `duration_ratio`, `stale_sec`, `status`, ...), `tags.<k>` or `params.<k>`
+  (plan 28 FS): numbers (bools as 0/1) before strings, ascending unless
+  `order=desc`, runs without a value last either way. These orders are cached
+  and moved across index generations like the metric orders; a running run's
+  `duration_sec`/`duration_ratio` place it again per time bucket. The board's
+  param columns and its `queue`/`duration`/`ratio` columns sort this way.
 - `archived=1` includes archived runs, which `.../experiments`,
   `-columns`, `-importance` and `-facets` otherwise leave out (and out of
   `total`).

@@ -31,6 +31,7 @@ from vmn_exp.core.status import (
     derive_status,
     settle_status,
     status_fields,
+    with_queue_sec,
 )
 
 OUTER = "outer"  # has children
@@ -205,10 +206,10 @@ def annotate_rows(rows, run_states, observed_at=None, now=None):
     observed_at = observed_at or {}
     now = experiment_status._now(now)  # one clock reading for every row
     return _annotate_tree_in_place([
-        dict(row, **status_fields(
+        dict(row, **with_queue_sec(row, status_fields(
             run_states.get(row["verstr"]), now=now,
             observed_at=observed_at.get(row["verstr"]),
-        ))
+        )))
         for row in rows
     ])
 

@@ -16,6 +16,7 @@ or ``exp``.
 import os
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.field_sort import field_sort, sort_by_field
 from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.values import is_finite_number
@@ -169,13 +170,18 @@ def sort_by_metric(rows, schema, sort=None, descending=None):
     direction, in their original order. ``sort="timestamp"`` orders by creation
     time, ``started_at``/``finished_at`` by the run's start/end (undated rows
     last) and ``sort="idx"`` by run number,
-    newest first unless *descending* is False. When the metric is not
+    newest first unless *descending* is False. A row field, ``tags.<k>`` or
+    ``params.<k>`` (:mod:`~vmn_exp.core.field_sort`) sorts ascending unless
+    *descending*. When the metric is not
     present anywhere, rows keep storage order (reversed if *descending*).
     """
     if sort in DATE_SORTS:
         return _by_date(rows, sort, newest_first=descending is not False)
     if sort == IDX_SORT:
         return sorted(rows, key=lambda r: r["idx"], reverse=descending is not False)
+    field = field_sort(sort)
+    if field:
+        return sort_by_field(rows, field, descending)
 
     keys = set()
     for row in rows:

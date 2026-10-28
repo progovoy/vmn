@@ -665,7 +665,9 @@ and never changes with `--sort`/`--top`/`--last`/`--query`. Metric columns are
 the [schema](#metrics-schema-sorting--goals)'s first, then the rest
 alphabetically. Without `--sort`, the schema's `primary` metric orders rows.
 `--sort` takes a metric name, or `timestamp` (creation), `started_at`,
-`finished_at` (undated runs last) or `idx` (run number), all newest first.
+`finished_at` (undated runs last) or `idx` (run number), all newest first, or
+any other row field (`duration_sec`, `queue_sec`, `status`, ...), `tags.<k>` or
+`params.<k>`, ascending with runs lacking a value last.
 
 `--query` takes [the query language](sdk.md#the-query-language) and applies
 before `--last`, `--sort` and `--top`; a bad query exits 1 with the offset.

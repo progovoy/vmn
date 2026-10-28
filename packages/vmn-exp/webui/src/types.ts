@@ -91,6 +91,11 @@ export interface RunStatus {
   command: string[] | null;
   /** Seconds since the last heartbeat. */
   stale_sec: number | null;
+  /** Seconds from creation to start (plan 28 N4); null until started. */
+  queue_sec?: number | null;
+  /** The duration over its finished siblings' median (same parent and split
+   *  value; plan 28 N4); null without enough of them. Board rows only. */
+  duration_ratio?: number | null;
   /** How often the runner beats — the cadence status can change at. */
   heartbeat_interval_sec?: number | null;
   /** Verstr of the outer run that launched this one. */
