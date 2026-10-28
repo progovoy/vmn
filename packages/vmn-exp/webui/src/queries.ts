@@ -25,6 +25,8 @@ export interface RowsFilter {
   scope?: string;
   /** With `top`: match `query` over each top-level run's subtree. */
   matchSubtree?: boolean;
+  /** With `top`: a query the top-level runs pass by their own fields. */
+  topQuery?: string;
 }
 export interface RowsData extends SubtreeMatches {
   rows: ExperimentRow[];

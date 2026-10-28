@@ -19,11 +19,13 @@ summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`)
 ``match_subtree=1`` matches ``q`` over their subtrees instead (plan 23 S8b,
 :mod:`~vmn_exp.ui.leaderboard_subtree_match`; flat pages only).
 ``top=jobs``/``top=singles`` those with and without children (plan 23 S7).
+``top_q`` (with ``top``) keeps the top-level runs passing it by their own
+fields, beside ``q``, flat or grouped: the Live/Review presets (plan 28 §4.5).
 A flat page carries ``next_cursor``; ``cursor=`` asks for the page after it
 (keyset paging, plan 23 S6, :mod:`~vmn_exp.ui.leaderboard_cursor`).
 Grouped with ``top``, each group sums its jobs' rollups; every group carries
 the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
-A ``q`` with ``ago()`` is pinned to the minute first (plan 28 P1,
+A ``q`` (or ``top_q``) with ``ago()`` is pinned to the minute first (plan 28 P1,
 :func:`~vmn_exp.ui.attention.pinned`), so its ETag and orders follow the
 clock; a Jobs view page's ``job`` carries the app's attention counts.
 ``children_of=<verstr>`` pages that run's direct children for the tree
@@ -101,15 +103,19 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         match_subtree: bool = False,
         cursor: str = None,
         children_of: str = None,
+        top_q: str = None,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
-        top, q = _top(top), _pinned(q)
+        top, q, top_q = _top(top), _pinned(q), _pinned(top_q)
+        if top_q and not top:
+            raise HTTPException(400, "top_q needs top=1")
         tree = children_of is not None
         attention = queries_of(attention_of(ws_name, app_tag)) if top or tree else ()
         offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
-                      order=order, archived=archived, scope=_scope(scope), top=top)
+                      order=order, archived=archived, scope=_scope(scope), top=top,
+                      top_query=top_q)
         # A Jobs view's summaries (throughput, ETA) follow the minute; the
         # etag carries the live bucket already.
         clock = dict(minute=minute()) if top or tree else {}

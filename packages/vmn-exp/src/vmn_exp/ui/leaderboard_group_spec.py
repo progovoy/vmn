@@ -24,7 +24,7 @@ class GroupSpec:
     """One grouping's field, aggregate, sort and filters."""
 
     def __init__(self, group, agg, schema, sort=None, order=None, status=None,
-                 query=None, archived=False, scope=None, top=False):
+                 query=None, archived=False, scope=None, top=False, top_query=None):
         self.group = check_group(group)
         self.counted = COUNT_SORTS.get(sort)
         # The groups' order beyond the flat board's (a count sort), else None.
@@ -34,10 +34,10 @@ class GroupSpec:
             sort = order = None
         self.agg = check_aggregate(agg)
         # Whether its groups or filters read ancestors (leaderboard_up).
-        self.reads_up = bool(up_node(group)) or query_reads_up(query)
+        self.reads_up = bool(up_node(group)) or query_reads_up(query) or query_reads_up(top_query)
         self.schema, self.sort, self.descending = schema, sort, DESCENDING.get(order)
         # The flat board's filters.
-        self.flat = Filters(sort, status, query, order, archived, scope, top)
+        self.flat = Filters(sort, status, query, order, archived, scope, top, top_query=top_query)
         self.metric = sort or primary_metric(schema)
         self._goal = metric_goal(schema, self.metric) if self.metric else None
         descending = self.descending

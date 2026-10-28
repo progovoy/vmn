@@ -418,6 +418,21 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - its [baseline chip](#baseline-compare) (`▼ best_value from 2024-12 (5 of 41 trade_date values worse than the baseline's p10)`), opening its Overview; the page's outer runs' chips come in one `experiments-baselines` request.
 
   Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
+- **Live** and **Review** (`view=live|review`, a second switch `Live · Review`
+  beside the first, shown when the app has outer runs) are presets of Outer
+  runs, with everything above (attention strip, bars, tree expanders,
+  baseline chips, live updates):
+  - **Live** ("what is on the cluster now") lists the outer runs in flight
+    (their own status or their tree status running, waiting or stuck) or
+    finished within the last 6 hours, needs attention first (`job:attention`).
+  - **Review** ("is this launch good to ship?") lists the ended ones, newest
+    first, each with its baseline chip.
+
+  The preset is sent as `top_q` ([API](#outer-runs-scope-and-search)), so the
+  filter bar and a search still apply as in Outer runs; a sort picked in the
+  header beats the preset's. An outer run whose tree ended short of its plan
+  (`16/20 · incomplete`) reads `created`, so it stays in Live. The last view,
+  presets included, is remembered per app.
 - **Single runs** lists the top-level runs without children.
 - **All runs** is the flat board with Group by ([below](#grouped-board)).
 
@@ -814,6 +829,10 @@ message.
   - With `match_subtree=1` and a `q`, an outer run matches when it or any run of its
     subtree does. Each row then gets `matched`, and the page gets
     `jobs_matched`/`runs_matched`.
+  - `top_q=<query>` keeps the top-level runs passing it by their own fields,
+    beside `q` (which `match_subtree` may match over subtrees), flat or
+    grouped. Its `ago()` is pinned to the minute like `q`'s; without `top`
+    it is a 400. The Live and Review presets send it.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`experiments?children_of=<verstr>`** pages that run's direct children
   for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`

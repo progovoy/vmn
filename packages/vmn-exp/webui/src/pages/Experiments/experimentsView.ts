@@ -1,4 +1,5 @@
-/** Which view the experiments page shows (plan 23 W1, §8): `view=jobs|all`
+/** Which view the experiments page shows (plan 23 W1, §8): `view=jobs|all`,
+ *  or a preset of the Outer runs view, `view=live|review` (plan 28 §4.5),
  *  in the URL wins, else the app's last view (localStorage), else Jobs. A
  *  chart view in `view=` (`bar`, `scatter`, ...) belongs to the All runs
  *  board's Charts tab, so it means All runs, like `tab=charts`; `group=parent`
@@ -7,17 +8,18 @@ import { useCallback, useEffect } from "react";
 import { useUrlState } from "../../hooks/useUrlState";
 import { BOARD_ONLY_PARAMS, CHART_VIEWS } from "../../hooks/useLeaderboardView";
 import { rememberChoice, storedChoice } from "../../util/appChoice";
+import { isPreset, type Preset } from "./presets";
 
-export type ExperimentsView = "jobs" | "all";
+export type ExperimentsView = "jobs" | "all" | Preset;
 
 export const VIEW_KEY = "vmn_experiments_view";
 
-const isView = (v: string | null): v is ExperimentsView => v === "jobs" || v === "all";
+const isView = (v: string | null): v is ExperimentsView => v === "jobs" || v === "all" || isPreset(v);
 
 function urlView(p: URLSearchParams): ExperimentsView | null {
   const raw = p.get("view");
   if (p.get("group") === "parent") return "jobs";
-  if (raw === "jobs" || raw === "all") return raw;
+  if (isView(raw)) return raw;
   const charts = (CHART_VIEWS as readonly string[]).includes(raw ?? "") || p.get("tab") === "charts";
   return charts ? "all" : null;
 }

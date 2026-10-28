@@ -1,7 +1,8 @@
 /** The Jobs view's data (plan 23 W1): the top-level rows (`top=1`, or the
  *  jobs or single runs only, `top=jobs|singles`, §3.1), flat or
  *  grouped, kept fresh by the `top` scope's live events (polling while a
- *  run is in flight and the stream is down), plus the selection. */
+ *  run is in flight and the stream is down), plus the selection. A
+ *  *preset* (Live, Review) adds its query on the top rows and its sort. */
 import { useMemo, useState } from "react";
 import { useFacets, useMetricsSchema } from "../../queries";
 import { useBoardFilter } from "../../hooks/useBoardFilter";
@@ -18,6 +19,7 @@ import { BIG_GROUP } from "../../util/groupClause";
 import { boardSortState } from "../boardSortState";
 import { jobBestOrder, mainMetric } from "./jobColumns";
 import type { TopRuns } from "../../types";
+import { PRESETS, type Preset } from "./presets";
 
 type View = ReturnType<typeof useLeaderboardView>;
 
@@ -25,7 +27,9 @@ type View = ReturnType<typeof useLeaderboardView>;
 const treeRunning = (r: ExperimentRow) => r.status === "running" || r.tree_status === "running";
 
 /** *top* null (not known yet) fetches nothing. */
-export function useJobsBoard(ws: string, app: string, view: View, top: TopRuns | null) {
+export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns | null, preset?: Preset) {
+  const fixed = preset && PRESETS[preset];
+  const view = fixed && !shown.sort ? { ...shown, sort: fixed.sort } : shown;
   const schema = useMetricsSchema(ws, app);
   const facets = useFacets(ws, app);
   const [paused, setPaused] = useState(false);
@@ -39,7 +43,7 @@ export function useJobsBoard(ws: string, app: string, view: View, top: TopRuns |
   }), [view.query, view.search, view.branch, view.archived]);
   const matchSubtree = hasSearch(search);
   const { filter, filtered } = useBoardFilter(view, chosen, {
-    top: top ?? true, matchSubtree: matchSubtree || undefined,
+    top: top ?? true, matchSubtree: matchSubtree || undefined, topQuery: fixed?.query,
   });
 
   const data = useBoardRows(ws, app, filter, {
@@ -60,6 +64,6 @@ export function useJobsBoard(ws: string, app: string, view: View, top: TopRuns |
     metric, goal: metric ? metricGoal(schema, metric) : null,
     sort: { sort: filter.sort, order: sort.order ?? "desc", onSort: sort.onSort },
     live: { running, paused, setPaused },
-    filtered,
+    filtered: filtered || Boolean(fixed),
   };
 }

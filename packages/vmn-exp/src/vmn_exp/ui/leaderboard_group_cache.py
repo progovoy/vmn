@@ -27,17 +27,20 @@ class GroupCache:
 
     def groups(self, snapshot, schema, group, sort=None, status=None, query=None,
                order=None, archived=False, agg=DEFAULT_AGGREGATE, offset=0, limit=None,
-               rows_per_group=10, group_key=None, rows_filter=None, scope=None, top=False):
+               rows_per_group=10, group_key=None, rows_filter=None, scope=None, top=False,
+               top_query=None):
         """K1's payload (see :func:`~vmn_exp.ui.leaderboard_groups.groups_payload`).
         Raises ValueError on an unknown field or aggregate, ``QueryError`` on
         a bad *query*, LookupError on an unknown *group_key* or *scope*.
         *rows_filter* (rows -> rows) replaces *query*, uncached: a query
-        reading comments. *scope*/*top* narrow the rows as for a page; with
+        reading comments. *scope*/*top*/*top_query* narrow the rows as for a page; with
         *top* each group sums its jobs' rollups (plan 23 S7,
         :mod:`~vmn_exp.ui.leaderboard_group_jobs`)."""
         check_job_sort(sort, False)
         check_scope(self._cache._base(snapshot)[0], scope)
-        where = dict(scope=scope, top=top)
+        if top_query and not top:
+            raise ValueError("top_q needs top=1")
+        where = dict(scope=scope, top=top, top_query=top_query)
         if rows_filter is None:
             spec = GroupSpec(group, agg, schema, sort, order, status, query, archived, **where)
             grouping = self.grouping(snapshot, schema, spec)
@@ -57,7 +60,7 @@ class GroupCache:
         live = base.patched(bucket)
         f = spec.flat
         rows = rows_filter(self._cache.ordered(snapshot, schema, f.sort, f.status, f.order,
-                                               f.archived, f.scope, f.top))
+                                               f.archived, f.scope, f.top, top_query=f.top_query))
         return Grouping.of_rows(base, spec, rows, live)
 
     def grouping(self, snapshot, schema, spec):

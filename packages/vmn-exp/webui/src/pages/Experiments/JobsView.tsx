@@ -2,7 +2,8 @@
  *  its progress, best, spread, size, failures, throughput and ETA, or a
  *  single run — the jobs or the single runs (*kind*, the page's switch), filtered
  *  by the board's filter bar, sorted by the job sort keys and grouped into
- *  groups of jobs, a group over 50 opening as a filter (§3.4). */
+ *  groups of jobs, a group over 50 opening as a filter (§3.4); under a
+ *  *preset* (Live, Review, plan 28 §4.5) narrowed and sorted by it. */
 import { useMemo, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { appName as toAppName } from "../../api";
@@ -25,6 +26,7 @@ import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
 import JobsToolbar from "./JobsToolbar";
 import { kindNoun, kindQuery, type JobsKind, type JobsKindState } from "./jobsKind";
+import { PRESETS, type Preset } from "./presets";
 import { useBaselineChips } from "./useBaselineChips";
 import { useJobsBoard } from "./useJobsBoard";
 import { useAppStatus } from "../../shell/useShellData";
@@ -46,14 +48,18 @@ function countText(loading: boolean, rows: { job?: unknown }[], total: number, k
 const emptyText = (kind: JobsKind | null, filtered: boolean) =>
   filtered ? `No ${kindNoun(kind)}s match the filters.` : `No ${kindNoun(kind)}s yet.`;
 
-export default function JobsView({ ws, app, views, kind, onAll }: {
-  ws: string; app: string; views?: ReactNode; kind: JobsKindState;
+/** The `vmn-exp list --query` selecting the view's rows. */
+const listQuery = (kind: JobsKind | null, preset?: Preset) =>
+  preset ? `${kindQuery(kind)} and (${PRESETS[preset].query})` : kindQuery(kind);
+
+export default function JobsView({ ws, app, views, kind, preset, onAll }: {
+  ws: string; app: string; views?: ReactNode; kind: JobsKindState; preset?: Preset;
   /** Open the All runs view. */
   onAll: () => void;
 }) {
   const appName = toAppName(app);
   const view = useLeaderboardView();
-  const board = useJobsBoard(ws, app, view, kind.top);
+  const board = useJobsBoard(ws, app, view, kind.top, preset);
   const { data, rows, selection, live } = board;
   // A store's index still loading: the rows so far are the newest runs.
   const status = useAppStatus(ws, app).data;
@@ -147,7 +153,7 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
               {data.moreError && <span className="error">{data.moreError}</span>}
             </div>
           )}
-          <div className="cli-card">vmn-exp list {appName} --query &apos;{kindQuery(kind.kind)}&apos;</div>
+          <div className="cli-card">vmn-exp list {appName} --query &apos;{listQuery(kind.kind, preset)}&apos;</div>
         </>
       )}
     </>
