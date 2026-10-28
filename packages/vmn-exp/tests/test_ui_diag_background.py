@@ -125,11 +125,15 @@ def test_a_board_warm_records_its_failure():
     app = _unique("app")
 
     class Cache:
+        def conf_of(self, snapshot):
+            return {}, {}
+
         def _base(self, snapshot):
             raise ValueError("no base")
 
     snapshot = types.SimpleNamespace(app_name=app, generation=1, rows=[],
                                      declared_schema=lambda: {})
+    snapshot.summarized = lambda schema: snapshot
     BoardWarmer(Cache()).warm(snapshot)
     assert "no base" in _wait_for("board warm", app)["last_error"]["error"]
 

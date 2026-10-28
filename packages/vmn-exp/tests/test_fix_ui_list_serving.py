@@ -226,7 +226,8 @@ def test_the_s3_index_persists_under_the_data_dir(s3_workspace, monkeypatch):
     real_get = S3SnapshotStorage._get
 
     def counted(self, key):
-        gets.append(key)
+        if "/settings/" not in key:  # the app's settings are read per process
+            gets.append(key)
         return real_get(self, key)
 
     monkeypatch.setattr(S3SnapshotStorage, "_get", counted)
