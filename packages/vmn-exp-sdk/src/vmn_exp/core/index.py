@@ -757,7 +757,7 @@ class ExperimentIndex:
         """
         done = load_new_records(self._storage, direct, self.app_name, work)
         if not done and self._backlog():
-            done = self._remote_loaders().load(self.app_name, work)
+            done = self._remote_loaders().load(self.app_name, work, self._unreadable)
         todo = [w for w in work if w[0] not in done]
         done.update(zip((w[0] for w in todo), self._refresh_all(todo, direct)))
         return [(key, *done[key]) for key, _, _ in work]

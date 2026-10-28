@@ -27,6 +27,15 @@ _STORE_CLIENTS = ("botocore", "boto3", "urllib3", "google", "azure")
 _LOGGER = logging.getLogger("vmn_exp.core.index")
 
 
+class StoreRefused(OSError):
+    """A store failure met in a worker process, as it crosses the pipe (a
+    client's exception may not pickle)."""
+
+    @classmethod
+    def of(cls, exc):
+        return cls(f"{type(exc).__name__}: {exc}")
+
+
 def store_failed(exc):
     """Whether *exc* is the store's failure, not the record's."""
     return isinstance(exc, OSError) or type(exc).__module__.split(".")[0] in _STORE_CLIENTS

@@ -15,7 +15,10 @@ on the caller's thread, which owns the records (plan 26 decision 3).
 
 Workers are started on first use and stay up between chunks
 (:meth:`RemoteLoaders.close` ends them; one that fails is dropped). Best
-effort: whatever a worker cannot load the caller loads in-process.
+effort: whatever a worker cannot load the caller loads in-process — but a
+record the store refused (:func:`~vmn_exp.core.index_unreadable.store_failed`)
+is set aside as the caller would, not read again at the store that refused
+it, and a record set aside is left to the caller's due retry.
 """
 import importlib
 import os
@@ -26,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from vmn_exp._base import ensure_logger
 from vmn_exp.core.index_record import refresh_record, update_record
+from vmn_exp.core.index_unreadable import StoreRefused, store_failed
 from vmn_exp.core.index_io_process import _read, _read_raw as _receive_raw
 from vmn_exp.core.index_io_process import _write as _send
 from vmn_exp.core.index_workers import _can_spawn, _cpus, _spawn, worker_command
@@ -33,6 +37,7 @@ from vmn_exp.core.index_workers import _can_spawn, _cpus, _spawn, worker_command
 WORKERS = 4  # at most, and at most a CPU each but one
 THREADS = 16  # requests a worker keeps in flight
 MIN_RECORDS = 64  # a batch worth handing out
+_SET_ASIDE = (None, False, False, False)  # a new record's refresh result once set aside
 
 
 def worker_count():
@@ -65,10 +70,13 @@ class RemoteLoaders:
         self._workers = None
         self._lock = threading.Lock()
 
-    def load(self, app_name, work):
+    def load(self, app_name, work, unreadable=None):
         """``{key: refresh_record result}`` of *work*'s new records
-        (``[(key, names, record)]``), as far as the workers loaded them."""
-        new = [(key, names) for key, names, record in work if record is None]
+        (``[(key, names, record)]``) not in *unreadable*, as far as the
+        workers loaded them; those the store refused join *unreadable*
+        (without one, they are left to the caller)."""
+        new = [(key, names) for key, names, record in work
+               if record is None and key not in (unreadable or ())]
         workers = self._started() if len(new) >= MIN_RECORDS else []
         if not workers:
             return {}
@@ -78,7 +86,7 @@ class RemoteLoaders:
         done = {}
         for raw in raws:
             if raw is not None:
-                done.update((key, result) for key, result in pickle.loads(raw) if result)
+                done.update(_loaded(pickle.loads(raw), unreadable))
         return done
 
     def _ask(self, worker, request):
@@ -112,6 +120,18 @@ class RemoteLoaders:
             worker.close()
 
 
+def _loaded(answers, unreadable):
+    """The ``(key, result)`` of a worker's *answers* to keep: a record the
+    store refused is set aside in *unreadable*, without one left out."""
+    for key, result in answers:
+        if isinstance(result, StoreRefused):
+            if unreadable is not None:
+                unreadable.failed(key, result)
+                yield key, _SET_ASIDE
+        elif result:
+            yield key, result
+
+
 def _open(spec):
     module, name, args, kwargs = spec
     return getattr(importlib.import_module(module), name)(*args, **kwargs)
@@ -126,8 +146,9 @@ def _load(storage, app_name, items):
         try:
             return key, refresh_record(
                 key, names, None, lambda *a: update_record(storage, direct, app_name, *a))
-        except Exception:
-            return key, None  # the caller loads it, meeting any real error
+        except Exception as exc:
+            # The caller loads it, meeting any real error — unless the store refused it.
+            return key, StoreRefused.of(exc) if store_failed(exc) else None
 
     with ThreadPoolExecutor(THREADS, thread_name_prefix="vmn-index-remote") as pool:
         return list(pool.map(one, items))
@@ -135,7 +156,8 @@ def _load(storage, app_name, items):
 
 def main():
     """Worker entry point: a pickled spec, then ``(app, items)`` requests,
-    each answered with ``[(key, result or None)]`` (length-prefixed pickles)."""
+    each answered with ``[(key, result or StoreRefused or None)]``
+    (length-prefixed pickles)."""
     ensure_logger()
     stdin, stdout = sys.stdin.buffer, sys.stdout.buffer
     storage = _open(_read(stdin))
