@@ -61,6 +61,7 @@ export function RunCurves({ ws, app, detail }: { ws: string; app: string; detail
       stepMetrics={detail.step_metrics} fetchJoined={fetchJoined}
       fetchRange={fetchRange} fetchKeys={fetchKeys}
       markStep={detail.forked_from?.step} hiddenMetrics={detail.hidden_metrics}
+      ranges={detail.ranges} rangesTotal={detail.ranges_total}
     />
   );
 }

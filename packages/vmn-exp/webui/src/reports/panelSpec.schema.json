@@ -76,7 +76,8 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "metric names or fnmatch globs (cv*.grad_norm_mean): one chart per matching key"
         },
         "x": {
           "type": "object",

@@ -22,3 +22,18 @@ export function MetricSearch({ value, onChange }: { value: string; onChange: (v:
     />
   );
 }
+
+/** The Run page overlay's glob: every training metric it matches in one chart. */
+export function OverlaySearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <input
+      type="search"
+      placeholder="overlay glob, e.g. cv*.loss"
+      aria-label="overlay metrics"
+      title="draw every metric this fnmatch glob matches in one chart (at most 20)"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ fontSize: 12, padding: "2px 8px", width: 170 }}
+    />
+  );
+}

@@ -87,7 +87,7 @@ Types (`*` = single-run types, which take pinned `runs` only):
 
 | `type` | Fields (required in bold) |
 |---|---|
-| `curves` | **`keys`**, `x: {mode: step\|wall\|relative\|metric, metric}`, `smoothing` (0-1), `log_y`, `max_points` |
+| `curves` | **`keys`** (metric names or fnmatch globs like `cv*.loss`: one chart per matching key), `x: {mode: step\|wall\|relative\|metric, metric}`, `smoothing` (0-1), `log_y`, `max_points` |
 | `leaderboard` | `columns`, `params` |
 | `bar` | **`metric`** |
 | `scatter` | **`x`**, **`y`** |

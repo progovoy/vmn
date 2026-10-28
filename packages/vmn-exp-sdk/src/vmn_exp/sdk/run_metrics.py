@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""``Run.log_metric(s)`` and ``Run.step``: metrics entries, auto-stepped.
+"""``Run.log_metric(s)`` and ``Run.step``: metrics entries, auto-stepped;
+``set_progress`` and ``mark_range`` beside them.
 
 Mixed into :class:`~vmn_exp.sdk.run.Run`, which provides ``_steps`` (a
 :class:`~vmn_exp.sdk.steps.StepCounter`), ``_log_buffer`` and ``_append``.
 """
 from vmn_exp.core.progress import DONE, TOTAL, UNIT
+from vmn_exp.core.ranges import create_range_entry
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import create_log_entry
 
@@ -41,6 +43,12 @@ class RunMetrics:
         if unit is not None and unit != self._progress_unit:
             self._progress_unit = unit
             self.log_params({UNIT: unit})
+
+    def mark_range(self, name, start_step, end_step):
+        """Mark steps *start_step*..*end_step* as *name* (an SWA window, a
+        warm-up): a ``range`` entry the run page shades on every chart (plan
+        28 N5). ValueError for a non-numeric step or a start past the end."""
+        self._append(create_range_entry(name, start_step, end_step))
 
     def _log_unstepped(self, mapping):
         """Metrics on the clock, not on the training step (system metrics, progress)."""

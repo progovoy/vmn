@@ -40,6 +40,7 @@ class LogSnapshot:
         self._metric_fold = _metric_parts(parsed.fold)
         self.last_metric_at = fold_last_metric_at(parsed.fold)
         self.media = parsed.media_view
+        self.ranges = parsed.ranges_view
         # The fold keys a rewind by its log position (see fold_log).
         self._rewinds = [(r[0], r[1]) for r in fold_rewinds(parsed.fold)]
         self.memo = {}  # derived views (thinned series) of this exact snapshot

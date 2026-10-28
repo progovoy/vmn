@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import type { SeriesPoint } from "../types";
+import type { RunRange, SeriesPoint } from "../types";
 import type { XMode } from "../util/chartData";
 import { withSmoothing } from "../util/curveOptions";
 import { toXY } from "../util/seriesArrays";
@@ -18,6 +18,8 @@ export interface GridView {
   logY: boolean;
   /** Mark this step on step charts (where a forked run branched off). */
   markStep?: number | null;
+  /** Shade these step ranges (`run.mark_range`) on step charts. */
+  ranges?: RunRange[] | null;
 }
 
 const MetricCell = memo(function MetricCell({
@@ -39,20 +41,22 @@ const MetricCell = memo(function MetricCell({
   const { zoom, onXRange } = useZoomRefetch(name, zoomable ? fetchRange : undefined);
   const points = useMemo(() => (zoomable ? spliceZoom(coarse, zoom) : coarse), [coarse, zoom, zoomable]);
   const markStep = xMode === "step" ? view.markStep ?? null : null;
+  const ranges = xMode === "step" ? view.ranges ?? null : null;
   const formatX = useMemo(() => (xMetric ? xMetricLabel(xMetric) : undefined), [xMetric]);
   const curves = useMemo(() => {
     const xy = toXY(points, xMode, origin, { positiveOnly: logY });
     return withSmoothing({ key: name, label: name, color, ...xy }, alpha);
   }, [points, xMode, origin, logY, alpha, name, color]);
   return (
-    <div data-testid="metric-chart" data-metric={name} data-mark-step={markStep ?? undefined}>
+    <div data-testid="metric-chart" data-metric={name} data-mark-step={markStep ?? undefined}
+      data-ranges={ranges?.length || undefined}>
       <div className="mono" style={{ fontSize: 12, color: "var(--text-2)", height: HEADER_H }}>
         {name}{xMetric && <span style={{ color: "var(--text-3)" }}> vs {xMetric}</span>}
       </div>
       <LazyMount height={height}>
         <CurveChart
           series={curves} xMode={xMode} logY={logY} height={height} formatX={formatX} markX={markStep}
-          onXRange={zoomable ? onXRange : undefined}
+          bands={ranges} onXRange={zoomable ? onXRange : undefined}
         />
       </LazyMount>
     </div>

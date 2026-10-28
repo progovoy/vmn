@@ -153,3 +153,11 @@ def test_non_string_type_is_error_result(bad_type):
     result = validate_panel({"v": 1, "id": "p", "type": bad_type, "app": "a",
                              "runs": {"verstrs": ["x"]}})
     assert not result.ok and "unknown panel type" in result.error
+
+
+def test_curves_keys_take_globs():
+    """Plan 28 N5: a curves key may be an fnmatch glob, one chart per match."""
+    assert validate_panel(_spec("curves", {"keys": ["cv*.grad_norm_mean", "val_[ab]"]})).ok
+    curves = next(b for b in json_schema()["oneOf"]
+                  if b["properties"]["type"]["const"] == "curves")
+    assert "glob" in curves["properties"]["keys"]["description"]
