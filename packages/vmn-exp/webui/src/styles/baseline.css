@@ -1,0 +1,21 @@
+/* An outer run against its baseline (plan 28 N3): the chip (header, Outer
+   runs rows and cards, the Overview card), the card's delta and pair tables. */
+.baseline-chip {
+  margin-left: 8px; padding: 0 6px; border-radius: 9px; font-size: 11px; white-space: nowrap;
+  border: 1px solid currentColor; color: var(--text-2); text-decoration: none;
+}
+.baseline-chip.baseline-worse { color: var(--st-bad, var(--bad)); }
+.baseline-chip.baseline-better { color: var(--st-good, var(--good)); }
+.baseline-chip.baseline-pending { color: var(--text-3); }
+.job-baseline .baseline-chip { margin-left: 0; white-space: normal; }
+.baseline-deltas, .baseline-pairs table { border-collapse: collapse; font-size: 12px; }
+.baseline-deltas th, .baseline-deltas td, .baseline-pairs th, .baseline-pairs td {
+  padding: 2px 8px; text-align: left; white-space: nowrap;
+}
+.baseline-deltas th[scope="row"], .baseline-pairs thead th { color: var(--text-2); font-weight: 500; }
+.baseline-deltas .num, .baseline-pairs .num { text-align: right; font-variant-numeric: tabular-nums; }
+.delta-better { color: var(--st-good, var(--good)); }
+.delta-worse { color: var(--st-bad, var(--bad)); }
+.baseline-pairs { overflow: auto; max-height: 360px; margin-top: 4px; }
+.baseline-pairs thead th { position: sticky; top: 0; background: var(--panel); }
+.baseline-pairs .pair-worse td { color: var(--st-bad, var(--bad)); }

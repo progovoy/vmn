@@ -465,13 +465,16 @@ ui:
     - {key: unstable, query: 'tags.health = "unstable"', level: error}
     - {key: waiting, label: waiting over 1h,
        query: 'status = "created" and timestamp < ago("1h")'}
+  baseline:
+    match: [params.table_name, params.model_type]
+    children_by: params.trade_date
 ```
 
 - Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
-  `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention` checked;
-  other `ui` keys kept). `ui.attention` lists at most 8 attention queries
-  `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
+  `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention`,
+  `baseline` checked; other `ui` keys kept). `ui.attention` lists at most 8
+  attention queries `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
   `key` letters, digits, `_`, `-` (unique, not the built-in
   `stuck`/`failed`/`running`/`outlived`),
   `label` defaulting to the key, `level` `warn` (default) or `error`. Saving
@@ -479,6 +482,12 @@ ui:
   naming it and the offset; one read from a conf.yml or a file written behind
   vmn's back is reported on its part (`error`). A checkout's conf.yml `experiment.ui.attention` beats
   it as a whole (a bad list there reads as none).
+  `ui.baseline` is how an outer run finds the one it is
+  [compared with](ui.md#baseline-compare): `match` (at most 8 distinct
+  `params.<k>`/`tags.<k>` fields the baseline must share; none: any) and
+  `children_by` (one such field the two outer runs' direct children pair
+  by; none: no pairing). A checkout's conf.yml `experiment.ui.baseline`
+  beats it as a whole (a bad one there reads as none).
   Anything else, or a bad value, is refused on write; a file broken behind
   vmn's back reads as no settings, with a warning.
 - Precedence: a git workspace's conf.yml (per metric name, per `ui` key) >

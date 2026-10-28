@@ -51,7 +51,10 @@ export type JobHeadSummary = Pick<JobPageSummary, "verstr" | "name" | "idx" | "s
 const hasProgress = (s: JobHeadSummary): s is JobHeadSummary & JobProgressFields =>
   s.total != null && s.counts !== undefined;
 
-export default function JobHeader({ summary, actions }: { summary: JobHeadSummary; actions: ReactNode }) {
+/** *baseline*: the chip comparing it with its baseline (plan 28 N3), in the title row. */
+export default function JobHeader({ summary, actions, baseline }: {
+  summary: JobHeadSummary; actions: ReactNode; baseline?: ReactNode;
+}) {
   const status = summary.tree_status ?? summary.status;
   return (
     <header className="job-header">
@@ -62,6 +65,7 @@ export default function JobHeader({ summary, actions }: { summary: JobHeadSummar
         <StatusPill status={status} />
         <OuterBadge count={summary.total} />
         {summary.sweep && <span className="badge">sweep</span>}
+        {baseline}
       </div>
       <div className="job-actions" role="group" aria-label="Outer run actions">{actions}</div>
       {hasProgress(summary) && <JobHeaderProgress summary={summary} />}

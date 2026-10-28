@@ -414,6 +414,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
+  - its [baseline chip](#baseline-compare) (`▼ best_value from 2024-12 (5 of 41 trade_date values worse than the baseline's p10)`), opening its Overview; the page's outer runs' chips come in one `experiments-baselines` request.
 
   Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
 - **Single runs** lists the top-level runs without children.
@@ -474,10 +475,11 @@ clause as a filter.
 
 **The outer run's page** is what a run with children opens on (`?tab=`).
 - **The header** has the name, `@N`, the tree status, the `outer · N runs`
-  badge, the actions and the live indicator, then the full-width run bar and
-  its counts.
+  badge, the [baseline chip](#baseline-compare) (linked to the baseline run),
+  the actions and the live indicator, then the full-width run bar and its
+  counts.
 - **The tabs** (each a URL value of `tab=`):
-  - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), with a split field (`?split=tags.kind` on the page, else `experiment.ui.split_by` from conf.yml or the store settings) a table under them of runs, done, failed, running, waiting and p50/p90 duration per value (each cell opens the Runs tab filtered by that value and status), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, a [pivot heatmap](#pivot-heatmap) of two fields picked from its facets (tags, params, their ancestors' `up.*`, status, branch; cell = runs, the share matching a query, or an aggregate of a metric; each cell opens the Runs tab filtered to its runs), and, for a sweep, the params that matter.
+  - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), with a split field (`?split=tags.kind` on the page, else `experiment.ui.split_by` from conf.yml or the store settings) a table under them of runs, done, failed, running, waiting and p50/p90 duration per value (each cell opens the Runs tab filtered by that value and status), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, a [pivot heatmap](#pivot-heatmap) of two fields picked from its facets (tags, params, their ancestors' `up.*`, status, branch; cell = runs, the share matching a query, or an aggregate of a metric; each cell opens the Runs tab filtered to its runs), the [baseline](#baseline-compare) card (the run it is compared with, the chip, the rollup deltas and the children paired by key, the worse ones marked), and, for a sweep, the params that matter.
   - `runs`: the board scoped to the outer run's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
   - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
   - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
@@ -714,6 +716,8 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `ws/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-pivot?rows=&cols=` | [Pivot heatmap](#pivot-heatmap) |
+| `GET` | `.../experiments/{verstr}/baseline?to=&match=&by=` | [An outer run against its baseline](#baseline-compare) |
+| `GET` | `ws/{ws}/apps/{app}/experiments-baselines?v=` | [Many outer runs' baseline chips](#baseline-compare) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-status` | [Status counts and rollup](#status-counts-and-rollup) |
 | `GET` | `ws/{ws}/apps-status` | [Every app's status counts](#status-counts-and-rollup), one request |
 | `GET` | `ws/{ws}/apps/{app}/experiments-diff?v=&to=` | [Code diff of two runs](#diffs-and-artifacts) |
@@ -1212,6 +1216,73 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   ancestor an `up` field reads) changes, so a finished launch's heatmap is
   built once per process and keeps its ETag (a 304) across generations
   (`ui/pivot_cache.py`). Otherwise ETag/304 like the list.
+
+### Baseline compare
+
+`GET .../experiments/{verstr}/baseline` compares an outer run with its
+baseline (plan 28 N3): the outer run's Overview card and the chip on its
+header and its Outer runs row.
+
+- **Which run.** `?to=<verstr>` (any other outer run), else the latest peer
+  (same parent; top-level for a top-level run) tagged `baseline=true`, else
+  the latest peer that ended (succeeded, failed or stuck) before it was
+  created, both with equal values on the match fields. The rule is
+  conf/[settings](server.md#app-settings) `experiment.ui.baseline: {match:
+  [<field>...], children_by: <field>}` (fields `params.<k>`/`tags.<k>`);
+  `?match=params.a,params.b` (empty: match nothing) and `?by=<field>`
+  (empty: no pairing) override it.
+- **What.** Per goal metric of the rollup (the primary included) its `best`
+  and `median`, then `failed_pct`, `duration_p90`, each attention query's
+  share of the subtree (`attention`, with both counts), and the metrics
+  both outer runs log themselves (`own`, at most 20; e.g. a cost per date
+  logged at close). Each is `{value, baseline, delta, better}`, `better`
+  following the goal (failures, durations and attention shares: lower).
+- **Children.** With `children_by`, the two outer runs' direct children
+  pair by that field's value (a retried value: its latest run), in key
+  order (`pairs`, of `pairs_total` values the outer run holds): per pair the
+  main metric (a child's own, else its subtree's best) on both sides, the
+  delta, and `done`.
+- **The chip** counts the finished pairs worse than the baseline's worst
+  decile (its children's `p10` of a higher-is-better main metric, `p90` of a
+  lower-is-better one): `▼ best_value from 2024-12 (5 of 41 trade_date values
+  worse than the baseline's p10)` (`state` `worse`), `▲`/`=` when none is
+  (`better`/`same` by the median delta), `pending` before any has finished,
+  so it shows while the launch still runs. Without `children_by` it is the
+  best value's change (`▼ best_value 0.81 (baseline 0.92)`); a goal-less
+  main metric has none.
+
+```json
+{"verstr": "0.4.0-dev.abc", "match": ["params.table_name", "params.model_type"],
+ "by": "params.trade_date", "values": {"params.table_name": "fx", "params.model_type": "nn"},
+ "baseline": {"verstr": "0.3.0-dev.def", "idx": 12, "name": "wf_41aa", "status": "succeeded",
+              "source": "latest", "started_at": "…", "finished_at": "…"},
+ "metric": "best_value", "goal": "max",
+ "metrics": {"best_value": {"best": {"value": 1.21, "baseline": 1.3, "delta": -0.09, "better": false},
+                            "median": {"value": 0.9, "baseline": 0.8, "delta": 0.1, "better": true}}},
+ "failed_pct": {"value": 5.0, "baseline": 2.0, "delta": 3.0, "better": false},
+ "duration_p90": {"value": 7200, "baseline": 3600, "delta": 3600, "better": false},
+ "attention": [{"key": "unstable", "label": "unstable", "level": "warn", "q": "…", "count": 12,
+                "baseline_count": 3, "value": 0.12, "baseline": 0.03, "delta": 0.09, "better": false}],
+ "own": {}, "pairs_total": 41,
+ "pairs": [{"key": "2024-12", "label": "2024-12", "verstr": "…", "idx": 102, "baseline_verstr": "…",
+            "value": 0.2, "baseline": 1.0, "delta": -0.8, "better": false, "done": true, "worse": true}],
+ "chip": {"state": "worse", "metric": "best_value", "from": "2024-12", "worse": 5, "of": 41,
+          "quantile": "p10", "threshold": 0.94, "text": "▼ best_value from 2024-12 (…)"}}
+```
+
+- No baseline found: `baseline` and `chip` are null and nothing is compared.
+  A run without children (or an unknown run, or a `to` that is no outer run)
+  is a 404; `to` the run itself or a bad field a 400.
+- `GET .../experiments-baselines?v=<verstr>&v=...` (at most 200, `match`/`by`
+  as above) answers `{"chips": {verstr: chip with its "baseline", or null}}`:
+  what a page of the Outer runs view shows, in one request per page rather
+  than one per row, computed for the shown runs only (board pages carry no
+  baseline).
+- Kept per index generation and time bucket; a pair with nothing live in
+  either subtree is kept until a run of either changes, with its own ETag (a
+  304 across generations), so a finished launch and its baseline are
+  compared once per process (`ui/baseline_views.py`). Otherwise ETag/304
+  like the list.
 
 ### Facets
 

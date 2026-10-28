@@ -1,11 +1,12 @@
 /** The job's Overview tab (plan 23 §3.2): its answers, all from the rollup
  *  — KPI tiles (and, with a split, per value: plan 28 P3), progress over time, the main metric's distribution, the top
- *  runs, the top failure clusters, a pivot heatmap of two fields (plan 28 N2) and, for a sweep, the params that matter.
+ *  runs, the top failure clusters, a pivot heatmap of two fields (plan 28 N2), the baseline comparison (N3) and, for a sweep, the params that matter.
  *  (Best-so-far by completion order is not in the §10 contract: left out.) */
 import { useMemo, type ReactNode } from "react";
 import type { JobPageSummary } from "../../apiJob";
 import { runHref } from "../../util";
 import { failedCount, mainMetric } from "./jobData";
+import JobBaseline from "./JobBaseline";
 import JobKpiTiles from "./JobKpiTiles";
 import JobMetricHistogram from "./JobMetricHistogram";
 import JobPivot from "./JobPivot";
@@ -41,6 +42,9 @@ export default function JobOverview({ ws, app, summary }: { ws: string; app: str
         </Card>
         <Card title="Failure clusters">
           <JobFailureTop ws={ws} app={app} verstr={summary.verstr} failed={failedCount(summary)} failuresHref={jobTabHref(runBase, "failures")} />
+        </Card>
+        <Card title="Baseline" wide>
+          <JobBaseline ws={ws} app={app} verstr={summary.verstr} done={summary.done} />
         </Card>
         <Card title="Pivot" wide>
           <JobPivot ws={ws} app={app} verstr={summary.verstr} metrics={metricNames} done={summary.done} expected={summary.expected} />

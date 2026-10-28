@@ -19,6 +19,7 @@ import AddToReport from "../../reports/AddToReport";
 import { runSpec } from "../../reports/viewSpecs";
 import type { ExperimentDetail, ExperimentRow } from "../../types";
 import { RunChangesSection } from "../RunLayout";
+import { JobBaselineChip } from "./JobBaseline";
 import JobCharts from "./JobCharts";
 import JobFailures from "./JobFailures";
 import JobHeader, { JOB_PANEL_ID, JobCliCard, JobTabs, jobTabId } from "./JobHeader";
@@ -94,6 +95,7 @@ export default function JobPage({ ws, app, runRef, verstr: v, row, summary }: {
     <div className="job-page">
       <JobHeader
         summary={head}
+        baseline={data && <JobBaselineChip ws={ws} app={app} verstr={v} done={data.done} />}
         actions={(
           <RunHeaderActions ws={ws} app={app} verstr={v} command={command}>
             <AddToReport ws={ws} spec={() => runSpec(app, v)} />

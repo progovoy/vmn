@@ -2,6 +2,8 @@
  *  or a single run's base, and its best value with the inner
  *  run it comes from. */
 import { Link } from "react-router-dom";
+import type { BaselineChipEntry } from "../../apiBaseline";
+import BaselineChip from "../../components/BaselineChip";
 import JobProgress from "../../components/JobProgress";
 import Sparkline from "../../components/Sparkline";
 import type { AttentionEntry } from "../../shell/contracts";
@@ -19,6 +21,15 @@ export interface JobContext {
   search?: SearchFilter | null;
   /** The app's attention queries (plan 28 P1): labels and levels of `job.attention`. */
   attention?: readonly AttentionEntry[];
+  /** Each outer run's baseline chip (plan 28 N3), by verstr; null: none. */
+  baselines?: Readonly<Record<string, BaselineChipEntry | null>>;
+}
+
+/** An outer run's baseline chip, opening its Overview (where the comparison is). */
+export function BaselineCell({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
+  const chip = ctx.baselines?.[r.verstr];
+  if (!chip) return null;
+  return <BaselineChip chip={chip} baseline={chip.baseline} href={`${runHref(ctx.runBase, r.verstr)}?tab=overview`} />;
 }
 
 /** An outer run's non-zero attention counts, `2 unstable`, in config order. */

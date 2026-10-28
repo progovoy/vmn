@@ -25,6 +25,7 @@ import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
 import JobsToolbar from "./JobsToolbar";
 import { kindNoun, kindQuery, type JobsKind, type JobsKindState } from "./jobsKind";
+import { useBaselineChips } from "./useBaselineChips";
 import { useJobsBoard } from "./useJobsBoard";
 import { useAppStatus } from "../../shell/useShellData";
 import { freshnessShort } from "../../util/freshness";
@@ -62,8 +63,9 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
   // that only moves a count keeps every row's context.
   const entriesSig = JSON.stringify((status?.attention ?? []).map((e) => [e.key, e.label, e.level, e.q]));
   const attention = useMemo(() => status?.attention, [entriesSig]); // eslint-disable-line react-hooks/exhaustive-deps
-  const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal, search: board.search, attention }),
-    [base, board.metric, board.goal, board.search, attention]);
+  const baselines = useBaselineChips(ws, app, rows);
+  const ctx = useMemo(() => ({ runBase: base, metric: board.metric, goal: board.goal, search: board.search, attention, baselines }),
+    [base, board.metric, board.goal, board.search, attention, baselines]);
   // The strip counts runs, not outer runs: its parts open All runs filtered.
   const { search: here } = useLocation();
   // A saved view or a big group replaces the URL: the filter bar re-reads it.

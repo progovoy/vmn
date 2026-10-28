@@ -12,7 +12,7 @@ import { isGroupItem, type GroupHeaderItem } from "../../util/groupItems";
 import { HeaderCheckbox } from "../LeaderboardHeadParts";
 import { CardGroupMore } from "../LeaderboardCardGroup";
 import { headStatus } from "../LeaderboardRow";
-import { AttentionChips, BestValue, JobSubLine, type JobContext } from "./JobCells";
+import { AttentionChips, BaselineCell, BestValue, JobSubLine, type JobContext } from "./JobCells";
 import type { JobsTableProps } from "./JobsTable";
 import "../leaderboardCards.css";
 
@@ -33,7 +33,7 @@ const JobCard = memo(function JobCard({ r, ctx, selected, onToggle }: {
           </Link>
           {status && <StatusPill status={status} exitCode={r.exit_code} durationSec={r.duration_sec} staleSec={r.stale_sec} errorSummary={r.error_summary} />}
         </div>
-        <div className="lb-mcard-sub"><JobSubLine r={r} /><AttentionChips r={r} ctx={ctx} /></div>
+        <div className="lb-mcard-sub"><JobSubLine r={r} /><AttentionChips r={r} ctx={ctx} /><BaselineCell r={r} ctx={ctx} /></div>
         <div className="lb-mcard-metric job-mcard-best"><BestValue r={r} ctx={ctx} /></div>
         <div className="lb-mcard-foot mono">@{r.idx}{r.branch ? ` · ${r.branch}` : ""} · {relTime(r.started_at ?? r.timestamp)}</div>
       </div>
