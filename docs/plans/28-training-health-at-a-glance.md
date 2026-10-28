@@ -27,7 +27,8 @@
 > (= `packages/vmn-exp-sdk/src/vmn_exp/core/`), `sdk/`
 > (= `packages/vmn-exp-sdk/src/vmn_exp/sdk/`) or `docs/`.
 
-Status: **proposal** (2026-10-28). Nothing built.
+Status: **built** (2026-10-28), except T2c (deferred). Every item of §7 is on master;
+appendix A row 6 is still being investigated (docs/plans/28-measurements.md).
 
 Sources:
 - fgm's document, as four screenshots. It is pinned to fgm `master` @ `01eab866`
@@ -988,7 +989,7 @@ Reported by the reviewer from a soak test of fgm's store (588k runs, 0.1.24 on
 | # | Issue | Status |
 |---|---|---|
 | 1 | The refresher stops 60 s after the last request (`ui/refresher.py:IDLE_SEC = 60`). An unwatched server's index stays partial (153k of 588k runs during the soak), and the store upkeep (child markers, compaction of failed/stuck runs) stops with it. A feed meant to alert "without anyone watching the UI" (T2a) would serve stale numbers. | **Fixed** in `263702f3`: keep-warm. Store workspaces' indexes refresh while the server runs, watched or not, and the upkeep runs with them; checkouts still idle out. `--keep-warm`/`--no-keep-warm` or server.yml `server.keep_warm` overrides it. T2a's `/metrics` gauges build on it. |
-| 2 | S3 `SlowDown` throttling failed refreshes and compactions after 4 retries (on 3.15t). | **Fixed**: botocore retries are `adaptive` (5 attempts), a record the store still refuses is set aside and retried when due (60 s doubling to 10 min) instead of failing the refresh, and a failing refresher/journal backs off (`689a37ad`). Follow-ups: a failed listing never resets the sweep (`f9ecd7b1`), the freshness payload and banner report set-aside records (`c6a6f7e4`), bulk-load workers never re-read a refused record (`e02691d5`), a cold load ends when a cut record is set aside (`69e9d1b9`). Not done: capping concurrent S3 calls per prefix (Q4's request budget). |
+| 2 | S3 `SlowDown` throttling failed refreshes and compactions after 4 retries (on 3.15t). | **Fixed**: botocore retries are `adaptive` (5 attempts), a record the store still refuses is set aside and retried when due (60 s doubling to 10 min) instead of failing the refresh, and a failing refresher/journal backs off (`689a37ad`). Follow-ups: a failed listing never resets the sweep (`f9ecd7b1`), the freshness payload and banner report set-aside records (`c6a6f7e4`), bulk-load workers never re-read a refused record (`e02691d5`), a cold load ends when a cut record is set aside (`69e9d1b9`). Per-prefix cap: at most `VMN_EXP_S3_PREFIX_CONCURRENCY` (64) S3 calls in flight per key prefix (`storage/s3_prefix_cap.py`), shown in the diag dump. |
 | 3 | A `cache_tidy.tick()` start race: an unlocked check-then-start (`ui/cache_tidy.py:31-40`, confirmed at `3d71ee63`), called from concurrent request threads, answered a 500 (a `RuntimeError` from starting the same thread twice). | **Fixed** in `3ad95ecc`: the start is under a lock; `test_ui_cache_tidy_race.py`. |
 | 4 | Upgrades and cold starts: 0.1.22's schema change wiped the index on upgrade (fixed in 0.1.23, `835cd2ed`). A cold index hung every request until its first publish, about 1 h 50 min there. 0.1.23's merge T (`42c44969`, `dd553eee`) serves a cold remote index from its first 500-record chunk. | **Fixed**: 0.1.24 still blocked a request on the refresh lock while a cold index loaded; `3e599ed6` makes a request watching a loading index never wait on it (`test_ui_cold_index_routes.py`, 3 s a route, serial). |
 | 5 | Logs need timestamps and the failing record's key (the reviewer had to work out `.vmx` run keys from diag dumps). | **Fixed**: every line the server writes to stderr starts with a timestamp (`9326d3d7`), and a warning about one run names its app and verstr (`b1e72688`), the set-aside warning included. |
