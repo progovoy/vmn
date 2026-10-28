@@ -526,7 +526,7 @@ its runs are the Runs tab, not a card.
 
 ## App settings page
 
-`/ws/{ws}/app/{app}/settings` (⌘K `settings`) edits the app's
+`/ws/{ws}/app/{app}/settings` (sidebar Settings, ⌘K `settings`) edits the app's
 [store settings](server.md#app-settings): the YAML as saved, with who saved
 it and when. Save sends it to the server, which refuses invalid settings
 with the reason (shown under the text, the edit kept); a stored file that
