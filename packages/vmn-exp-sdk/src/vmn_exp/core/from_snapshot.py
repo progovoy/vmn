@@ -70,6 +70,21 @@ def _record_template(snap_meta, app, note):
     return template
 
 
+def snapshot_record(snapshot_meta_path, app_name=None, note=None):
+    """``(app, code_verstr, template)`` of a run of the exported tree — the
+    record's metadata minus its identity — or None (logged) when unusable."""
+    snap_meta = _load_snapshot_meta(snapshot_meta_path)
+    if snap_meta is None:
+        return None
+    app = app_name or snap_meta.get("app_name")
+    if not app:
+        VMN_LOGGER.error(
+            "App name not found in snapshot metadata and not provided via CLI"
+        )
+        return None
+    return app, snap_meta["verstr"], _record_template(snap_meta, app, note)
+
+
 def create_from_snapshot(
     storage,
     app_name,
@@ -80,7 +95,6 @@ def create_from_snapshot(
     name=None,
     env=None,
     features=_READ_FEATURES,
-    run_id=None,
 ):
     """Create an experiment from an exported snapshot directory or metadata file.
 
@@ -89,28 +103,21 @@ def create_from_snapshot(
     *env* is a pre-captured environment dict; when given it is embedded as a
     summary in the metadata and written as ``env.yml`` (best-effort). The
     run's ``features`` entry is *features* when given (:func:`exported_features`,
-    read before a caller's lock), else read here. *run_id*: the exact name
-    (see :func:`~vmn_exp.core.writer.create_run`).
+    read before a caller's lock), else read here.
     """
     meta_file = _meta_file(snapshot_meta_path)
-    snap_meta = _load_snapshot_meta(meta_file)
-    if snap_meta is None:
+    record = snapshot_record(meta_file, app_name, note)
+    if record is None:
         return None, 1
-
-    app = app_name or snap_meta.get("app_name")
-    if not app:
-        VMN_LOGGER.error(
-            "App name not found in snapshot metadata and not provided via CLI"
-        )
-        return None, 1
+    app, code_verstr, template = record
 
     # Allocation creates the record: the name is claimed atomically, so two
     # hosts sharing a bucket or directory never end up with the same run.
     verstr = create_run(
         storage,
         app,
-        snap_meta["verstr"],
-        _record_template(snap_meta, app, note),
+        code_verstr,
+        template,
         {},
         note=note,
         create_data=extra_create_data,
@@ -118,6 +125,5 @@ def create_from_snapshot(
         name=name,
         env=env,
         features=exported_features(meta_file) if features is _READ_FEATURES else features,
-        run_id=run_id,
     )
     return verstr, None

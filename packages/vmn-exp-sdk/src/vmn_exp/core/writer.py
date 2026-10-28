@@ -13,6 +13,8 @@ That is what lets ``vmn_exp/sdk/`` be lifted into its own distribution:
 it shares these primitives with ``version_stamp/cli/experiment.py`` instead of
 importing them upward out of it.
 """
+import itertools
+import logging
 import os
 import socket
 
@@ -441,15 +443,32 @@ def _claim_made(storage, app_name, verstr, make_record):
 def _claim_from_hint(storage, app_name, code_verstr, make_record, hint):
     """The ``.rN`` claimed upward from *hint*'s run, else None (no hint, its
     run is gone, or the next names were all taken)."""
-    last = run_hint.get(hint)
-    if last is None or not storage.exists(app_name, run_hint.run_name(code_verstr, last)):
-        return None
-    for n in range(last + 1, last + 1 + _HINT_MISSES):
-        candidate = run_hint.run_name(code_verstr, n)
+    names = hinted_names(storage, app_name, code_verstr)
+    for candidate in itertools.islice(names or (), _HINT_MISSES):
         if _claim_made(storage, app_name, candidate, make_record):
-            run_hint.note(hint, n)
+            run_hint.note(hint, run_hint.run_number(code_verstr, candidate))
             return candidate
     return None
+
+
+def hinted_names(storage, app_name, code_verstr):
+    """The ``.rN`` names after the last one this process claimed while that
+    run still exists (:mod:`vmn_exp.core.run_hint`), else None."""
+    last = run_hint.get(run_hint.hint_key(storage, app_name, code_verstr))
+    if last is None or not storage.exists(app_name, run_hint.run_name(code_verstr, last)):
+        return None
+    return (run_hint.run_name(code_verstr, n) for n in itertools.count(last + 1))
+
+
+def record_maker(template, code_verstr, parent=None, name=None, patches=None):
+    """``verstr -> (metadata, patches)``: *template* stamped with a claim's
+    identity — the verstr, ``code_verstr``, parent and name."""
+    def make_record(verstr):
+        metadata = dict(template, verstr=verstr, code_verstr=code_verstr)
+        attach_parent(metadata, parent)
+        attach_name(metadata, name)
+        return metadata, patches or {}
+    return make_record
 
 
 def create_run(
@@ -483,43 +502,55 @@ def create_run(
     *features*, a ``features`` log entry (``core.features.build_features_entry``),
     is written right after the create entry, in the same write.
     """
-    effective_template = template
-    if env is not None:
-        try:
-            from vmn_exp.core.env import env_summary
-
-            effective_template = dict(template, env=env_summary(env))
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "vmn: could not compute env summary — env key omitted from metadata"
-            )
-
-    def make_record(verstr):
-        metadata = dict(effective_template, verstr=verstr, code_verstr=code_verstr)
-        attach_parent(metadata, parent)
-        attach_name(metadata, name)
-        return metadata, patches
-
+    make_record = record_maker(template_with_env(template, env), code_verstr, parent,
+                               name, patches)
     if run_id is None:
         verstr = allocate_run_verstr(storage, app_name, code_verstr, make_record=make_record)
     else:
         check_run_id(code_verstr, run_id)
         verstr = claim_exact(storage, app_name, run_id, make_record)
 
-    if env is not None:
-        try:
-            storage.save_file(
-                app_name, verstr, "env.yml", yaml.dump(env, sort_keys=False)
-            )
-        except Exception:
-            import logging
+    write_env_file(storage, app_name, verstr, env_yaml(env))
+    write_create_entries(storage, app_name, verstr, create_data, note, features)
+    return verstr
 
-            logging.getLogger(__name__).warning(
-                f"vmn: could not write env.yml for run {verstr}"
-            )
 
+def env_yaml(env):
+    """The ``env.yml`` text of a full *env* dict, None without one."""
+    return None if env is None else yaml.dump(env, sort_keys=False)
+
+
+def template_with_env(template, env):
+    """*template* with *env*'s summary under ``env`` (best-effort)."""
+    if env is None:
+        return template
+    try:
+        from vmn_exp.core.env import env_summary
+
+        return dict(template, env=env_summary(env))
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "vmn: could not compute env summary — env key omitted from metadata"
+        )
+        return template
+
+
+def write_env_file(storage, app_name, verstr, text):
+    """:func:`env_yaml`'s *text* as the run's ``env.yml`` (best-effort; None
+    writes nothing)."""
+    if text is None:
+        return
+    try:
+        storage.save_file(app_name, verstr, "env.yml", text)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            f"vmn: could not write env.yml for run {verstr}"
+        )
+
+
+def write_create_entries(storage, app_name, verstr, create_data, note, features):
+    """The run's ``create`` entry (*create_data* merged in), then *features*
+    when given, in one write."""
     entry = create_log_entry("create", note=note)
     if create_data:
         entry.update(create_data)
@@ -529,4 +560,3 @@ def create_run(
         features = {"timestamp": entry["timestamp"], **features}
         append_entries_to_log(storage, app_name, verstr,
                               [sanitize_entry(entry), sanitize_entry(features)])
-    return verstr

@@ -39,7 +39,7 @@ app `vmn_examples`.
 - [Library logging](#library-logging)
 - [Slim install](#slim-install)
 
-Public names in `vmn_exp.sdk`: `start_run`, `create_run`, `Run`, `NoOpRun`, `current_run`,
+Public names in `vmn_exp.sdk`: `start_run`, `create_run`, `create_runs`, `Run`, `NoOpRun`, `current_run`,
 `install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`, and the
 registry functions `register_model`, `set_alias`, `remove_alias`,
 `get_model_version`, `list_models`, `download_model`, `register_dataset`,
@@ -681,8 +681,9 @@ with start_run("my_app", note="lr sweep"):
 ```
 
 To register a run without starting it (a fleet's *waiting* count),
-`create_run("my_app", name=, params=, note=, parent=)` returns the new verstr
-and opens nothing; it nests like `nested=True`. A worker later takes it with
+`create_run("my_app", name=, params=, tags=, note=, parent=)` returns the new
+verstr and opens nothing; it nests like `nested=True`, and its params and tags
+are in its create entry. A worker later takes it with
 `start_run("my_app", run_id=<verstr>)`
 ([fleet counts](ai-fleet-tracking.md)):
 
@@ -699,6 +700,44 @@ that name, no listing of the code version's runs, and `RunExistsError`
 a `.rN` name lists the code version's runs once per process and then claims
 upward from the highest this process claimed; a writer-suffixed name
 (`VMN_WRITER_ID`, offline) lists only the names under its suffix.
+
+#### Many at once: `create_runs`
+
+A launcher that pre-registers thousands of runs (a study's trials) registers
+them in one batch:
+
+```python
+from vmn_exp.sdk import create_runs
+
+trial_ids = create_runs(
+    "my_app",
+    [{"name": f"trial{i}", "params": hp, "tags": {"kind": "trial"}}
+     for i, hp in enumerate(sampled)],
+    parent=study_id,
+)                                        # verstrs, in the order of the items
+```
+
+`create_runs(app_name, runs, *, parent=None, storage=None, capture_env=False,
+workers=16, exist_ok=False)`. Each item is a dict of `name`, `params`, `tags`,
+`note` and `run_id`, all optional, as for `create_run` (which is a batch of
+one). The batch shares one parent (picked like `create_run`'s), one checkout
+capture or export read, one environment capture (off unless
+`capture_env=True`) and one lock. The code version's runs are listed once per
+batch (none when this process's last `.rN` run still exists, and never for
+items with `run_id`), and once more if another host claimed one of the names
+meanwhile; those runs take the next free names. Each run then costs its own
+claim (`create_exclusive`), its parent's child marker and one create entry
+holding its params and tags, `workers` runs at a time.
+
+- A bad item (an unknown field, a `run_id` of another code version or given
+  twice, an empty tag key) raises `ValueError` before anything is created.
+- A taken `run_id` raises `RunExistsError` once the other runs are created.
+  With `exist_ok=True`, a run already registered under that `run_id` with the
+  same parent and name is returned as is, so a restarted launcher can register
+  its batch again.
+- Git-free (`VMN_SNAPSHOT_METADATA`, store-only or with a `VMN_EXPERIMENT_DIR`
+  scratch dir, whose create entries are shipped to the bucket right away) and in
+  a checkout alike; each run is opened later with `start_run(run_id=...)`.
 
 Either way you get the [outer/inner structure](experiments.md#outer--inner-jobs-sweeps)
 (`kind`, `tree_status`) a CLI sweep produces.
