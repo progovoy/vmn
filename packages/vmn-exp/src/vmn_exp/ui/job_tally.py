@@ -72,6 +72,9 @@ class RollupSpec:
     def same_metrics(self, other):
         return (self.metrics, self.main, self.ranked) == (other.metrics, other.main, other.ranked)
 
+    def tally(self):
+        return Tally()
+
 
 def _extreme(current, value, by, better):
     """``(value, rows holding it)`` after adding (*by* > 0) or removing
@@ -198,6 +201,9 @@ class Tally:
         out.timeline = {name: series.copy() for name, series in self.timeline.items()}
         out.metrics = {name: metric.copy() for name, metric in self.metrics.items()}
         return out
+
+    def empty(self):
+        return not self.counts
 
     def add(self, row, spec, by=1):
         """Adds *row* (``by=-1``: removes it); whether an extreme is now unknown."""

@@ -370,6 +370,11 @@ def create_app(
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         return source.group_aggregate(ws, app_name, _settings(ws, app_name))
 
+    def _split_by(ws_name, app_tag):
+        """An outer run summary's default split: conf.yml, else the store settings."""
+        ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
+        return source.split_by(ws, app_name, _settings(ws, app_name))
+
     def _similar_weights(ws_name, app_name):
         """The app's conf.yml ``experiment.similar.weights``, read as ``vmn-exp
         similar`` and the SDK reader read them; none in a store."""
@@ -717,7 +722,8 @@ def create_app(
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
-    routes_job.register(app, API_PREFIX, _leaderboard_inputs, job_views, _segment)
+    routes_job.register(app, API_PREFIX, _leaderboard_inputs, job_views, _segment,
+                        _split_by)
     routes_sweep.register(app, API_PREFIX, _lineage_inputs, _segment,
                           lambda ws_name, app_tag, verstr: job_views.job_summary(
                               *_leaderboard_inputs(ws_name, app_tag), verstr))

@@ -47,21 +47,27 @@ def field(group):
     return key and f"{prefix}.{key}"
 
 
-def _value(group, row):
+def value_of(group, row):
+    """*row*'s value of the row field or ``tags.<k>``/``params.<k>`` *group*."""
     prefix, dot, name = group.partition(".")
     if dot and prefix in DICT_FIELDS:
         return (row.get(prefix) or {}).get(name)
     return row.get(group)
 
 
-def clause(group, key, row, loose):
-    """The clause of *group*'s group *key*, *row* one of its rows."""
+def value_clause(group, key, value):
+    """The clause of *group*'s group *key*, *value* one of its rows' value."""
     name = field(group)
-    if loose or name is None:
+    if name is None:
         return None
     if key == NONE:
         if group.partition(".")[0] in DICT_FIELDS:
             return f"{name} = null"
         return f'({name} = null or {name} = "")'  # key_of: no value or ""
-    text = literal(_value(group, row))
+    text = literal(value)
     return text and f"{name} = {text}"
+
+
+def clause(group, key, row, loose):
+    """The clause of *group*'s group *key*, *row* one of its rows."""
+    return None if loose else value_clause(group, key, value_of(group, row))

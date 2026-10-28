@@ -38,10 +38,15 @@ class UnknownGroup(LookupError):
     """A ``group_key`` no group of the board has."""
 
 
+def is_dict_field(field):
+    """Whether *field* is a ``tags.<k>``/``params.<k>``."""
+    prefix, dot, name = (field or "").partition(".")
+    return bool(dot and name and prefix in DICT_FIELDS)
+
+
 def check_group(group):
     """*group* when it is a field the board groups by, else ValueError."""
-    prefix, dot, name = (group or "").partition(".")
-    if group in LINKS or group in FIELDS or (dot and name and prefix in DICT_FIELDS):
+    if group in LINKS or group in FIELDS or is_dict_field(group):
         return group
     choices = ", ".join(LINKS + FIELDS + tuple(f"{p}.<key>" for p in DICT_FIELDS))
     raise ValueError(f"group must be one of {choices}, not {group!r}")

@@ -1,5 +1,5 @@
 /** The job's Overview tab (plan 23 §3.2): its answers, all from the rollup
- *  — KPI tiles, progress over time, the main metric's distribution, the top
+ *  — KPI tiles (and, with a split, per value: plan 28 P3), progress over time, the main metric's distribution, the top
  *  runs, the top failure clusters and, for a sweep, the params that matter.
  *  (Best-so-far by completion order is not in the §10 contract: left out.) */
 import type { ReactNode } from "react";
@@ -8,6 +8,7 @@ import { runHref } from "../../util";
 import { failedCount, mainMetric } from "./jobData";
 import JobKpiTiles from "./JobKpiTiles";
 import JobMetricHistogram from "./JobMetricHistogram";
+import JobSplitTable from "./JobSplitTable";
 import { JobFailureTop, JobImportance } from "./JobOverviewParts";
 import { jobTabHref } from "./jobQueries";
 import JobTimelineChart from "./JobTimelineChart";
@@ -29,6 +30,7 @@ export default function JobOverview({ ws, app, summary }: { ws: string; app: str
   return (
     <div className="job-overview">
       <JobKpiTiles summary={summary} runBase={appBase} />
+      <JobSplitTable summary={summary} runBase={runBase} />
       <div className="job-grid">
         <Card title="Progress over time"><JobTimelineChart timeline={summary.timeline} /></Card>
         <Card title="Distribution"><JobMetricHistogram metrics={summary.metrics} initial={metric} /></Card>

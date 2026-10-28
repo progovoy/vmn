@@ -11,9 +11,11 @@ export const jobPrefix = (ws: string, app: string, v: string) => ["job", ws, app
  *  below key on the rollup count they follow, so they refetch only once it moves. */
 export const jobSummaryKey = (ws: string, app: string, v: string) => [...jobPrefix(ws, app, v), "summary"];
 
-export const jobSummaryQuery = (ws: string, app: string, v: string) => ({
-  queryKey: jobSummaryKey(ws, app, v),
-  queryFn: ({ signal }: { signal: AbortSignal }) => withSignal(signal, () => jobSummary(ws, app, v)),
+/** *split*: the page's `?split=` (plan 28 P3), else the server's default. */
+export const jobSummaryQuery = (ws: string, app: string, v: string, split?: string | null) => ({
+  queryKey: split ? [...jobSummaryKey(ws, app, v), split] : jobSummaryKey(ws, app, v),
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    withSignal(signal, () => (split ? jobSummary(ws, app, v, split) : jobSummary(ws, app, v))),
 });
 
 /** Clusters of the job's *failed* (failed + stuck) runs. */

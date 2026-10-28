@@ -107,12 +107,14 @@ class JobViews:
         return visible([patched.get(i, base.rows[i]) for i in scope_positions(base, verstr)],
                        False)
 
-    def summary(self, snapshot, schema, verstr):
-        """The job's rollup with its row fields and ``top``, or None."""
-        return self.rollups.answer(snapshot, schema, verstr, "summary",
-                                   lambda: self._summary(snapshot, schema, verstr))
+    def summary(self, snapshot, schema, verstr, split=None):
+        """The job's rollup with its row fields and ``top``, or None; with
+        a *split* field (``tags.<k>``/``params.<k>``) its counts and
+        durations per value as ``by`` (plan 28 P3)."""
+        return self.rollups.answer(snapshot, schema, verstr, ("summary", split),
+                                   lambda: self._summary(snapshot, schema, verstr, split))
 
-    def _summary(self, snapshot, schema, verstr):
+    def _summary(self, snapshot, schema, verstr, split):
         row = self._row(snapshot, verstr)
         first = self._first_child(snapshot, verstr)
         return {
@@ -121,6 +123,8 @@ class JobViews:
             "tree_status": row.get("tree_status"), "kind": row.get("kind"),
             "sweep": _is_sweep(row, first),
             "top": self._top(snapshot, schema, verstr),
+            "split": split,
+            "by": split and self.rollups.split_rollup(snapshot, split, verstr),
         }
 
     def _top(self, snapshot, schema, verstr):

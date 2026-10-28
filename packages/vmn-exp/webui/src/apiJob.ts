@@ -50,6 +50,26 @@ export interface JobTimeline {
   buckets: TimelineBucket[];
 }
 
+/** One value of a summary's split (plan 28 P3): its runs' counts and
+ *  durations over the job's subtree; `other` (last) holds the values past
+ *  the 12 listed. `key` is the group key (`∅` for no value), `clause` the
+ *  query selecting the value's runs (null when the language can't say it). */
+export interface JobSplitEntry
+  extends Pick<JobProgressFields, "total" | "counts" | "done" | "never_started" | "lost" | "failed_pct"> {
+  key: string | null;
+  label: string;
+  clause: string | null;
+  other?: boolean;
+  duration: JobDuration;
+}
+
+/** Finished runs' duration quantiles, seconds. */
+export interface JobDuration {
+  n: number;
+  p50: number | null;
+  p90: number | null;
+}
+
 /** A job page's summary (`experiments/{v}/summary`). */
 export interface JobPageSummary extends JobProgressFields {
   verstr: string;
@@ -66,10 +86,14 @@ export interface JobPageSummary extends JobProgressFields {
   metrics: Record<string, JobMetric | null>;
   /** False when no tracked metric has a declared goal: `top` and `best` rank nothing. */
   ranked?: boolean;
-  duration: { n: number; p50: number | null; p90: number | null };
+  duration: JobDuration;
   failures: { sig: string; label: string; count: number }[];
   top: JobTopRun[];
   timeline: JobTimeline;
+  /** The field `by` splits the subtree by (`?split=`, else the app's
+   *  `experiment.ui.split_by`); null without one. */
+  split?: string | null;
+  by?: JobSplitEntry[] | null;
 }
 
 export interface FailureCluster {
@@ -91,9 +115,10 @@ export interface JobFailures {
   clusters: FailureCluster[];
 }
 
-/** The rollup of job *v*; 404 when *v* has no children. */
-export const jobSummary = (ws: string, app: string, v: string) =>
-  get<JobPageSummary>(`${runBase(ws, app, v)}/summary`);
+/** The rollup of job *v* (split by *split*, else the app's default); 404
+ *  when *v* has no children. */
+export const jobSummary = (ws: string, app: string, v: string, split?: string | null) =>
+  get<JobPageSummary>(`${runBase(ws, app, v)}/summary${split ? `?${new URLSearchParams({ split })}` : ""}`);
 
 export const FAILURES_LIMIT = 20;
 

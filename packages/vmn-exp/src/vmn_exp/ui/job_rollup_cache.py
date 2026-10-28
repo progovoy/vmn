@@ -6,16 +6,22 @@ on from the last one served for the app and schema across the deltas since
 (else built), one live overlay per time bucket, and every job answer (these
 rollups and :class:`~vmn_exp.ui.job_views.JobViews`') in one memo per
 (base, live bucket, :func:`minute`, schema) — a request is a memo hit.
+Split rollups (plan 28 P3) are kept the same way per split field, in LRUs
+of their own (:class:`_SplitRollups`).
 """
 import vmn_exp.core.status as experiment_status
 from vmn_exp.core.progress import progress_names
 from vmn_exp.ui.job_rollup import JobTree, StaticRollups, overlay
 from vmn_exp.ui.job_rollup_payload import failure_counts, job_payload, job_summary
+from vmn_exp.ui.job_split import SplitSpec
+from vmn_exp.ui.job_split_payload import split_payload
 from vmn_exp.ui.job_tally import RollupSpec
 from vmn_exp.ui.memo import LRU
 
 # Rollups moved on across generations: one per (app, schema) in use.
 LATEST_ROLLUPS = 16
+# Split rollups moved on: one per (app, split field) in use.
+LATEST_SPLITS = 8
 ANSWERS = 256
 
 
@@ -50,6 +56,7 @@ class JobRollupCache:
         self._trees = track(LRU(size))
         self._answers = track(LRU(ANSWERS))
         self._specs = track(LRU(size))
+        self._splits = _SplitRollups(cache, size)
 
     def job_rollup(self, snapshot, schema, verstr):
         """*verstr*'s full rollup, or None when it is not a job."""
@@ -63,6 +70,23 @@ class JobRollupCache:
         """``{failure signature: runs}`` over *verstr*'s subtree, or None
         when it is not a job."""
         return self._rolled_up(snapshot, schema, verstr, _failure_counts)
+
+    def split_rollup(self, snapshot, field, verstr):
+        """*verstr*'s counts and durations per value of *field* (a
+        ``tags.<k>``/``params.<k>``), or None when it is not a job. Kept
+        apart from the schema rollups (a client picks the field) and per
+        (base, live bucket) only: a split has no clock of its own."""
+        base, bucket = self._cache._base(snapshot)
+        tree = self.tree(base)
+        if verstr not in tree.jobs:
+            return None
+        return self._splits.answers.get(
+            (base.token, bucket, field, verstr),
+            lambda: self._split(snapshot.app_name, base, bucket, tree, field, verstr))
+
+    def _split(self, app_name, base, bucket, tree, field, verstr):
+        static, live = self._splits.sources(app_name, base, bucket, field)
+        return split_payload(_parts(tree, static, live)(verstr), static.spec)
 
     def spec(self, snapshot, schema):
         """The :class:`~vmn_exp.ui.job_tally.RollupSpec` of *schema* over
@@ -102,10 +126,7 @@ class JobRollupCache:
         live = self._overlays.get((base.token, bucket, schema_key),
                                   lambda: overlay(base, bucket, static.spec))
         now = experiment_status._now()
-
-        def parts(job):
-            sources = (static.tallies, live)
-            return [s[j] for j in tree.subtree_jobs(job) for s in sources if j in s]
+        parts = _parts(tree, static, live)
 
         def row(job):
             return base.rows[base.position[job]]
@@ -123,8 +144,47 @@ class JobRollupCache:
     def _static_of(self, snapshot, base, spec, schema_key):
         key = (snapshot.app_name, schema_key)
         last = self._latest.peek(key)
-        moves = last and last.spec.same_metrics(spec) and self._cache._deltas.since(
-            last.token, base)
-        static = last.advanced(base, *moves) if moves else StaticRollups.build(base, spec)
+        static = _moved(self._cache, last, base, spec) if last and last.spec.same_metrics(
+            spec) else StaticRollups.build(base, spec)
         self._latest.put(key, static)
+        return static
+
+
+def _moved(cache, last, base, spec):
+    """*last* moved on to *base* by the deltas since, else *base*'s built."""
+    moves = cache._deltas.since(last.token, base)
+    return last.advanced(base, *moves) if moves else StaticRollups.build(base, spec)
+
+
+def _parts(tree, static, live):
+    """``job -> [tally]``: the static and live tallies of *job*'s subtree."""
+    sources = (static.tallies, live)
+    return lambda job: [s[j] for j in tree.subtree_jobs(job) for s in sources if j in s]
+
+
+class _SplitRollups:
+    """The split rollups (static per base, live per bucket, answers), in
+    LRUs of their own so a client's fields never evict the schema rollups."""
+
+    def __init__(self, cache, size):
+        track = cache.generations.track
+        self._cache = cache
+        self._static = track(LRU(size))
+        self._latest = LRU(LATEST_SPLITS)
+        self._overlays = track(LRU(size))
+        self.answers = track(LRU(ANSWERS))
+
+    def sources(self, app_name, base, bucket, field):
+        """``(static, live)`` tallies of *base* split by *field*."""
+        static = self._static.get((base.token, field),
+                                  lambda: self._static_of(app_name, base, field))
+        live = self._overlays.get((base.token, bucket, field),
+                                  lambda: overlay(base, bucket, static.spec))
+        return static, live
+
+    def _static_of(self, app_name, base, field):
+        last = self._latest.peek((app_name, field))
+        static = (_moved(self._cache, last, base, last.spec) if last
+                  else StaticRollups.build(base, SplitSpec(field)))
+        self._latest.put((app_name, field), static)
         return static

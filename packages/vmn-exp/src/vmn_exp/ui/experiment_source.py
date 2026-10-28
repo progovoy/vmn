@@ -278,6 +278,10 @@ class ExperimentSource:
         """The app's ``experiment.ui.stale_after_min``, else the default."""
         return exp_reader.stale_after_of(self.experiment_ui(ws, app_name, settings))
 
+    def split_by(self, ws, app_name, settings=None):
+        """The app's ``experiment.ui.split_by`` (plan 28 P3), else None."""
+        return exp_reader.split_by_of(self.experiment_ui(ws, app_name, settings))
+
     def detail_options(self, ws, snap):
         """``edges``/``resolve``/``read_child_row``/``last_good`` (and with a background
         refresher ``read_run_state``/``read_observed_at``) for a

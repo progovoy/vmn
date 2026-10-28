@@ -71,6 +71,27 @@ def declared_fields(declared, start, now, ended):
     }
 
 
+def count_fields(parts):
+    """``total``, ``counts``, ``done``, the settled counts and ``failed_pct``
+    of the rows *parts* (anything with status ``counts``) tally."""
+    counts, settled = _counts(parts)
+    lost = settled[LOST]
+    total = sum(counts.values()) + sum(settled.values())
+    return {
+        "total": total, "counts": counts,
+        "done": sum(counts[STATES[s]] for s in DONE) + lost,
+        NEVER_STARTED: settled[NEVER_STARTED], LOST: lost,
+        "failed_pct": round(100 * (counts["failed"] + lost) / total, 2) if total else 0.0,
+    }
+
+
+def duration_fields(sketches):
+    """``{n, p50, p90}`` of the merged duration *sketches*."""
+    duration = _merged(sketches) if sketches else QuantileSketch()
+    p50, p90 = duration.quantiles([0.5, 0.9])
+    return {"n": duration.count, "p50": p50, "p90": p90}
+
+
 def progress_fields(job, parts, now, names=DEFAULT_NAMES):
     """Counts, size, progress, throughput, ETA and time span. Once the job
     has ``ended`` (:func:`~vmn_exp.core.settle.closes`) its settled runs
@@ -78,10 +99,8 @@ def progress_fields(job, parts, now, names=DEFAULT_NAMES):
     finished failed; only its running and waiting runs are left. A progress
     the job's own row declares (:func:`declared_fields`) replaces the
     run-count progress and ETA; the run counts stay."""
-    counts, settled = _counts(parts)
-    lost = settled[LOST]
-    total = sum(counts.values()) + sum(settled.values())
-    done = sum(counts[STATES[s]] for s in DONE) + lost
+    fields = count_fields(parts)
+    counts, total, done = fields["counts"], fields["total"], fields["done"]
     expected = _expected(job, total)
     ended = row_closes(job)
     now_minute = int(now.timestamp() // 60)
@@ -90,10 +109,8 @@ def progress_fields(job, parts, now, names=DEFAULT_NAMES):
     left = counts["running"] + counts["waiting"] if ended else max(expected - done, 0)
     started = _edge(parts, "started", min)
     fields = {
-        "verstr": job["verstr"], "total": total, "counts": counts, "done": done,
-        NEVER_STARTED: settled[NEVER_STARTED], LOST: lost, "ended": ended,
+        "verstr": job["verstr"], **fields, "ended": ended,
         "expected": expected, "progress": _share(done, expected),
-        "failed_pct": round(100 * (counts["failed"] + lost) / total, 2) if total else 0.0,
         "throughput_per_min": throughput, "eta_sec": _eta(left, throughput),
         "started_at": started, "finished_at": _edge(parts, "finished", max),
         "declared_progress": None,
@@ -167,14 +184,12 @@ def _failures(parts):
 
 def job_payload(job, parts, spec, now):
     """The full rollup of the job whose row is *job*."""
-    duration = _merged([p.duration for p in parts]) if parts else QuantileSketch()
-    p50, p90 = duration.quantiles([0.5, 0.9])
     return {
         **progress_fields(job, parts, now, spec.progress),
         "metric": spec.main, "ranked": spec.ranked,
         "metrics": {m: metric_fields(parts, m, spec.descending[m], ranked=spec.ranked)
                     for m in spec.metrics},
-        "duration": {"n": duration.count, "p50": p50, "p90": p90},
+        "duration": duration_fields([p.duration for p in parts]),
         "failures": _failures(parts),
         "timeline": timeline(parts),
     }

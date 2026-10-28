@@ -20,7 +20,6 @@ built per time bucket (:func:`overlay`).
 Archived rows are left out, as the board leaves them out by default.
 """
 from vmn_exp.core.tree import subtree_verstrs
-from vmn_exp.ui.job_tally import Tally
 from vmn_exp.ui.leaderboard_facets import visible
 
 
@@ -30,13 +29,22 @@ def _parent(row):
 
 
 def _tallies(rows, spec):
-    """``{parent: Tally}`` of the visible *rows*."""
+    """``{parent: spec.tally()}`` of the visible *rows*."""
     tallies = {}
     for row in visible(rows, False):
         parent = _parent(row)
         if parent:
-            tallies.setdefault(parent, Tally()).add(row, spec)
+            if parent not in tallies:
+                tallies[parent] = spec.tally()
+            tallies[parent].add(row, spec)
     return tallies
+
+
+def _tally_of(rows, spec):
+    tally = spec.tally()
+    for row in rows:
+        tally.add(row, spec)
+    return tally
 
 
 def _static_rows(base, changed):
@@ -49,7 +57,10 @@ def _static_children(base, parent, changed):
 
 
 class StaticRollups:
-    """``{parent: Tally}`` of one base's static rows, for one schema's spec."""
+    """``{parent: tally}`` of one base's static rows, for one *spec*: a
+    schema's :class:`~vmn_exp.ui.job_tally.RollupSpec` (its tallies are
+    :class:`~vmn_exp.ui.job_tally.Tally`) or a
+    :class:`~vmn_exp.ui.job_split.SplitSpec` (per-value tallies)."""
 
     def __init__(self, token, spec, tallies):
         self.token = token  # of the base these tallies were built or moved for
@@ -72,21 +83,21 @@ class StaticRollups:
                     continue
                 if parent not in owned:
                     owned.add(parent)
-                    tallies[parent] = tallies[parent].copy() if parent in tallies else Tally()
+                    tallies[parent] = tallies[parent].copy() if parent in tallies else self.spec.tally()
                 if tallies[parent].add(row, self.spec, by):
                     unknown.add(parent)
         changed = set(base.patch.changed) if unknown else ()
         for parent in unknown:
             children = _static_children(base, parent, changed)
-            tallies[parent] = Tally.of(children, self.spec)
+            tallies[parent] = _tally_of(children, self.spec)
         for parent in owned:
-            if not tallies[parent].counts:
+            if tallies[parent].empty():
                 del tallies[parent]
         return StaticRollups(base.token, self.spec, tallies)
 
 
 def overlay(base, bucket, spec):
-    """``{parent: Tally}`` of *base*'s changed rows as of *bucket*."""
+    """``{parent: tally}`` of *base*'s changed rows as of *bucket*."""
     return _tallies(base.changed_at(bucket), spec)
 
 

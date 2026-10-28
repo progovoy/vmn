@@ -19,6 +19,7 @@ from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.facet_values import distinct_count, value_key
 from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN
+from vmn_exp.ui.job_split import check_split
 from vmn_exp.ui.readers.branch_conf import app_conf_path
 from vmn_exp.ui.readers.config import read_app_conf as _read_app_conf
 from vmn_exp.ui.readers.config import read_conf_file
@@ -58,6 +59,15 @@ def stale_after_of(ui):
     :data:`~vmn_exp.ui.freshness.DEFAULT_STALE_AFTER_MIN`."""
     value = ui.get("stale_after_min")
     return value if is_finite_number(value) and value > 0 else DEFAULT_STALE_AFTER_MIN
+
+
+def split_by_of(ui):
+    """An outer run summary's default split (plan 28 P3): *ui*'s ``split_by``
+    when a ``tags.<k>``/``params.<k>``, else None."""
+    try:
+        return check_split(ui.get("split_by"))
+    except ValueError:
+        return None
 
 
 def list_apps(root_path):

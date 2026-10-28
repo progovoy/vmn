@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
 import { cachedRows, findCachedRow, rowsPrefix, runQuery, useMetricsSchema, useRunRow } from "../queries";
@@ -63,7 +63,8 @@ export default function Run() {
   const st = detail?.status;
   const isJob = st ? st.kind === "outer" || !!st.fleet : rowJob;
   const v = detail?.metadata.verstr ?? row?.verstr ?? verstr;
-  const summary = useQuery({ ...jobSummaryQuery(ws, app, v), enabled: isJob }, client);
+  const split = useSearchParams()[0].get("split");
+  const summary = useQuery({ ...jobSummaryQuery(ws, app, v, split), enabled: isJob }, client);
   if (isJob && (summary.data || summary.isPending)) {
     return <JobPage ws={ws} app={app} runRef={verstr} verstr={v} row={row} summary={summary} />;
   }

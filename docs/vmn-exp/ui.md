@@ -464,7 +464,7 @@ clause as a filter.
   badge, the actions and the live indicator, then the full-width run bar and
   its counts.
 - **The tabs** (each a URL value of `tab=`):
-  - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
+  - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), with a split field (`?split=tags.kind` on the page, else `experiment.ui.split_by` from conf.yml or the store settings) a table under them of runs, done, failed, running, waiting and p50/p90 duration per value (each cell opens the Runs tab filtered by that value and status), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
   - `runs`: the board scoped to the outer run's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
   - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
   - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
@@ -745,6 +745,19 @@ message.
   failure signatures, `top` (10 best) and a `timeline` (epoch-second buckets
   of `started`/`succeeded`/`failed`, plus `released` where runs were handed
   back, sparse; the chart draws releases per minute beside completions).
+  - `?split=tags.<k>|params.<k>` (default: `experiment.ui.split_by` from conf.yml, else the store
+    settings; another field is a 400)
+    adds `split` (the field, else `null`) and `by`: per value
+    `{key, label, clause, total, counts, done, never_started, lost,
+    failed_pct, duration: {n, p50, p90}}`, most runs first, at most 12, then
+    one `{key: null, label: "other", other: true, ...}` for the rest. `key`
+    is the group key (`∅` = no value, label `(none)`), `clause` the query
+    selecting the value's runs (`other`: `<field> not in (...)`). The index
+    keeps one tally per (parent, value) for at most 12 values a parent (the
+    first in key order; the rest under the parent's `other`), moved by the
+    same deltas as the rollup. A value some parent may hold under its `other`
+    is never listed: its runs count under `other`, so a listed value's
+    numbers are always its whole subtree's.
 - **`experiments/{v}/failures?limit=`** returns the clusters. Both outer run
   endpoints 404 for a run without children, and answer 304 on an early ETag.
 - **`search?text=&limit=`** is ⌘K's run search over every run. It ranks exact
