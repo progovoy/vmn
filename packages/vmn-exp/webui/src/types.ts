@@ -111,8 +111,12 @@ export interface RunStatus {
   fleet?: Fleet | null;
   /** One-line `Type: message` of what ended a failed run (rows and detail). */
   error_summary?: string | null;
-  /** Signal that ended the child, e.g. "SIGKILL". */
+  /** Signal that ended the child, e.g. "SIGKILL" (or made it release its run). */
   signal?: string | null;
+  /** The run's last release (`run.release()`): waiting for a retry while `created`. */
+  released_at?: string | null;
+  /** Times the run was reopened (`start_run(run_id=...)`). */
+  resume_count?: number | null;
   /** The full recorded error — run detail only. */
   error?: RunError | null;
 }

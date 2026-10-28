@@ -22,7 +22,7 @@ from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.run_error import state_error_summary
 
-CREATED = "created"  # experiment exists, no run was ever started
+CREATED = "created"  # experiment exists, no attempt is running (none yet, or released)
 RUNNING = "running"  # heartbeat is fresh
 STUCK = "stuck"  # claims running, heartbeat went stale
 SUCCEEDED = "succeeded"  # finished, exit code 0
@@ -31,6 +31,16 @@ FAILED = "failed"  # finished, non-zero exit code
 # run_state ``end_reason`` of a run its supervisor ended on purpose (sweep
 # early stopping): it did its job, whatever the child exited with.
 STOPPED = "stopped"
+# run_state ``state`` and ``end_reason`` of a run its process handed back
+# unfinished (``run.release()``): waiting again, for another attempt.
+RELEASED = "released"
+
+
+def settle_status(status, end_reason):
+    """What settling reads a run of *status* as: ``released`` for a waiting
+    run its process handed back (:mod:`~vmn_exp.core.settle`), else *status*."""
+    return RELEASED if status == CREATED and end_reason == RELEASED else status
+
 
 DEFAULT_HEARTBEAT_INTERVAL_SEC = 30
 # A heartbeat may be late without the run being dead: a busy box, a slow S3
@@ -230,6 +240,8 @@ def status_fields(run_state, now=None, observed_at=None):
         "end_reason": run_state.get("end_reason"),
         "error_summary": state_error_summary(run_state),
         "signal": run_state.get("signal"),
+        "released_at": run_state.get("released_at"),
+        "resume_count": run_state.get("resume_count"),
         "started_at": run_state.get("started_at"),
         "finished_at": run_state.get("finished_at"),
         "heartbeat": run_state.get("heartbeat"),

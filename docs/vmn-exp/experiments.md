@@ -235,7 +235,7 @@ current time:
 
 | Status | Means |
 |---|---|
-| `created` | no command was ever started (e.g. `exp create`) |
+| `created` | waiting: no command was ever started (e.g. `exp create`), or the SDK run was handed back unfinished (`state: released`, [`run.release()`](sdk.md#handing-a-run-back-release)) for a retry to reopen |
 | `running` | the heartbeat is fresh |
 | `stuck` | claims running, no exit code, and the heartbeat is stale |
 | `succeeded` | finished with exit code 0 (or `end_reason: stopped`, a sweep's early stop) |
@@ -289,7 +289,9 @@ output is captured, the final state also records `error`, parsed from
 `output.log`: `source: output`, the `output_tail` (last 50 lines) and, when the
 output holds a Python traceback, its `type`, `message` and `traceback`. Not with
 `--no-capture-output`. The SDK records `error` from the exception itself
-(`source: exception`) and `signal` when SIGTERM finalized the run. Rows and
+(`source: exception`) and `signal` when SIGTERM finalized the run — or released
+it (`start_run(on_sigterm="release")`: `state: released`, no exit code, reads
+`created`; see [sdk.md](sdk.md#handing-a-run-back-release)). Rows and
 queries carry the one-line `error_summary` (`Type: message`); a failure alert's
 text ends with it too.
 
@@ -391,7 +393,8 @@ Rows of such a sweep carry `sweep_planned` and `sweep_trials`; the UI shows
 ended — its own status is `succeeded`, `failed` or `stuck` (its orchestrator
 died) — nothing will start its waiting children any more, so each descendant
 gets a derived `settled` field (never stored; a run's own `status` stays): a
-`created` one is `never_started`, a `stuck` one `lost`. The nearest started
+`created` one is `never_started`, a `stuck` or released one (it ran and never
+finished) `lost`. The nearest started
 ancestor decides: a container that never ran passes its parent's verdict on,
 a still-running sub-outer keeps its own children open. Rollups then count
 them apart: a never-started run adds nothing to `tree_status` and a lost one

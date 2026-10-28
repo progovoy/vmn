@@ -39,4 +39,15 @@ describe("JobTimelineChart", () => {
     expect(units).toEqual(["runs", "per min"]);
     expect(container.querySelectorAll(".job-area .job-grid")).toHaveLength(3);
   });
+
+  it("draws releases per minute beside completions only when a run was released", () => {
+    const { container, unmount } = render(<JobTimelineChart timeline={timeline} />);
+    expect(container.querySelector(".job-release-line")).toBeNull();
+    unmount();
+    const wave = { ...timeline, buckets: [timeline.buckets[0], { ...timeline.buckets[1], released: 30 }] };
+    const { container: c } = render(<JobTimelineChart timeline={wave} />);
+    expect(c.querySelector(".job-release-line")).not.toBeNull();
+    expect(c.querySelector(".job-axis-rate .job-axis-max")?.textContent).toBe("30");
+    expect(c.querySelector(".job-chart-caption")?.textContent).toContain("30 released");
+  });
 });

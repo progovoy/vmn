@@ -70,4 +70,16 @@ describe("StatusPill", () => {
     render(<StatusPill status="failed" exitCode={1} errorSummary={null} />);
     expect(pill().title).toBe("failed — exit 1");
   });
+
+  it("marks a released waiting run, and when it was handed back (plan 28 API2)", () => {
+    const at = new Date(Date.now() - 180_000).toISOString();
+    render(<StatusPill status="created" releasedAt={at} />);
+    expect(pill().textContent).toContain("created · released");
+    expect(pill().getAttribute("title")).toBe("waiting — released 3m ago");
+  });
+
+  it("says nothing of an old release once the run is running again", () => {
+    render(<StatusPill status="running" releasedAt="2026-01-01T00:00:00Z" />);
+    expect(pill().textContent).not.toContain("released");
+  });
 });

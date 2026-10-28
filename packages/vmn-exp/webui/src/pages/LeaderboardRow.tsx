@@ -210,7 +210,7 @@ function Row({
               <StatusPill
                 status={displayStatus} exitCode={r.exit_code}
                 durationSec={r.duration_sec} staleSec={r.stale_sec}
-                errorSummary={r.error_summary}
+                errorSummary={r.error_summary} releasedAt={r.released_at}
               />
             )}
           </td>

@@ -1,8 +1,9 @@
 /** Progress over time (plan 23 §3.2): a stacked area of the job's runs by
  *  state per time bucket (succeeded and failed cumulative, running between
  *  them), and below it, on its own axis, completions per minute (a trailing
- *  average on a long timeline) — where a stall or a failure storm shows. Status colours from the CSS tokens,
- *  legend in words, a per-bucket tooltip. */
+ *  average on a long timeline) — where a stall or a failure storm shows —
+ *  and runs released per minute, where an eviction wave does (plan 28 API2).
+ *  Status colours from the CSS tokens, legend in words, a per-bucket tooltip. */
 import type { JobTimeline } from "../../apiJob";
 import { fmtCount } from "../../util";
 import { round2, timelineSeries, type TimelineSeries } from "./jobData";
@@ -48,13 +49,14 @@ function stackPaths(s: TimelineSeries, bucketMs: number, x: X) {
   return { paths, max };
 }
 
-/** A step line over the same bucket edges as the area, so both charts read
- *  on one x axis. */
-function ratePath(s: TimelineSeries, bucketMs: number, x: X) {
-  const max = Math.max(1e-9, ...s.perMinAvg);
+/** Step lines over the same bucket edges as the area, so both charts read
+ *  on one x axis: completions per minute, and releases (null when none). */
+function ratePaths(s: TimelineSeries, bucketMs: number, x: X) {
+  const max = Math.max(1e-9, ...s.perMinAvg, ...s.released);
   const y = (v: number) => RATE_H - (v / max) * (RATE_H - 4) - 2;
-  const points = s.t.flatMap((t, i) => [`${x(t)},${y(s.perMinAvg[i])}`, `${x(t + bucketMs)},${y(s.perMinAvg[i])}`]);
-  return { d: `M${points.join("L")}`, max };
+  const line = (vs: number[]) =>
+    `M${s.t.flatMap((t, i) => [`${x(t)},${y(vs[i])}`, `${x(t + bucketMs)},${y(vs[i])}`]).join("L")}`;
+  return { d: line(s.perMinAvg), released: s.released.some((v) => v > 0) ? line(s.released) : null, max };
 }
 
 /** `24-min average` (`2-h` past two hours); null for a one-bucket window. */
@@ -83,8 +85,9 @@ function YAxis({ className, ticks, max }: { className: string; ticks: number[]; 
 }
 
 function bucketTitle(s: TimelineSeries, i: number) {
+  const released = s.released[i] ? `, ${round2(s.released[i])} released/min` : "";
   return `${timeText(s.t[i])}: ${fmtCount(s.running[i])} running, ${fmtCount(s.succeeded[i])} succeeded, `
-    + `${fmtCount(s.failed[i])} failed, ${round2(s.perMin[i])} completions/min`;
+    + `${fmtCount(s.failed[i])} failed, ${round2(s.perMin[i])} completions/min${released}`;
 }
 
 export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }) {
@@ -95,7 +98,8 @@ export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }
   const started = s.running[last] + s.succeeded[last] + s.failed[last];
   const { lo, hi, x } = edges(s, bucketMs);
   const { paths, max } = stackPaths(s, bucketMs, x);
-  const rate = ratePath(s, bucketMs, x);
+  const rate = ratePaths(s, bucketMs, x);
+  const releasedTotal = timeline.buckets.reduce((n, b) => n + (b.released ?? 0), 0);
   const summary = `Progress over time: ${fmtCount(started)} started, ${fmtCount(s.succeeded[last])} succeeded, `
     + `${fmtCount(s.failed[last])} failed, ${fmtCount(s.running[last])} running`;
   const rateNow = round2(s.perMinAvg[last]);
@@ -127,6 +131,7 @@ export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }
       </div>
       <div className="job-chart-caption">
         completions per minute <span className="mono">({average && `${average}, `}peak {round2(rate.max)})</span>
+        {releasedTotal > 0 && <> · <span className="job-released">{fmtCount(releasedTotal)} released</span></>}
       </div>
       <div className="job-axis-unit" aria-hidden="true">per min</div>
       <div className="job-plot">
@@ -134,6 +139,7 @@ export default function JobTimelineChart({ timeline }: { timeline: JobTimeline }
         <svg className="job-rate" viewBox={`0 0 ${W} ${RATE_H}`} preserveAspectRatio="none" role="img"
           aria-label={`Completions per minute${average ? ` (${average})` : ""}: latest ${rateNow}`}>
           <path d={rate.d} className="job-rate-line" vectorEffect="non-scaling-stroke" />
+          {rate.released && <path d={rate.released} className="job-release-line" vectorEffect="non-scaling-stroke" />}
         </svg>
       </div>
       <div className="job-axis-x" aria-hidden="true"><span>{timeText(lo)}</span><span>{timeText(hi)}</span></div>

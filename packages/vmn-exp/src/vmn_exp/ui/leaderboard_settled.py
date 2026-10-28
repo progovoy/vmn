@@ -10,7 +10,7 @@ recursively: O(that subtree) once, never O(all rows).
 """
 import heapq
 
-from vmn_exp.core.settle import closes, settled_as
+from vmn_exp.core.settle import closes, row_settled_as
 
 
 def resettled(seeds, was, parent_of, children_of, was_closed):
@@ -31,8 +31,8 @@ def resettled(seeds, was, parent_of, children_of, was_closed):
     while queue:
         _, verstr = heapq.heappop(queue)
         parent = parent_of(verstr)
-        was.settled[verstr] = settled_as(was.row(verstr)["status"],
-                                         parent is not None and closes_now(parent))
+        was.settled[verstr] = row_settled_as(was.row(verstr),
+                                             parent is not None and closes_now(parent))
         if closes_now(verstr) == was_closed(verstr):
             continue
         for kid in children_of.get(verstr, ()):

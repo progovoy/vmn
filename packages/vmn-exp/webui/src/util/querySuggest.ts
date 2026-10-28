@@ -10,7 +10,7 @@ export const ROW_FIELDS = [
   "heartbeat_interval_sec", "forked_from", "rerun_of", "author", "has_intent",
   "intent", "keywords",
   "error_summary", "signal", "end_reason", "name", "archived", "tags",
-  "imported_from", "forked_from_step", "root", "failure_sig",
+  "imported_from", "forked_from_step", "root", "failure_sig", "released_at", "resume_count",
 ];
 
 /** Predicates written as calls: `similar("focal loss")` keeps the runs whose

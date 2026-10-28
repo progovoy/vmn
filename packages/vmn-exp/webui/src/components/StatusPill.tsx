@@ -1,5 +1,5 @@
 import type { RunState } from "../types";
-import { fmtDuration } from "../util";
+import { fmtDuration, relTime } from "../util";
 
 /** Extra detail worth carrying in the pill's accessible label — the numbers
  *  that explain *why* a run is in this state. */
@@ -30,22 +30,29 @@ function describe(
 }
 
 /** Colored pill for a run's job status. `running` pulses; `stuck` carries a
- *  warning glyph so a dead runner never reads as a live one. */
-export default function StatusPill({ status, exitCode, durationSec, staleSec, errorSummary }: {
+ *  warning glyph so a dead runner never reads as a live one; a waiting run
+ *  its process handed back (`released_at`, plan 28 API2) says so. */
+export default function StatusPill({ status, exitCode, durationSec, staleSec, errorSummary, releasedAt }: {
   status: RunState;
   exitCode?: number | null;
   durationSec?: number | null;
   staleSec?: number | null;
   /** What ended a failed run — appended to its tooltip. */
   errorSummary?: string | null;
+  /** The run's last release; shown only while it waits. */
+  releasedAt?: string | null;
 }) {
-  const base = describe(status, exitCode, durationSec, staleSec);
+  const released = status === "created" && !!releasedAt;
+  const base = released
+    ? `waiting — released ${relTime(releasedAt)}`
+    : describe(status, exitCode, durationSec, staleSec);
   const label = status === "failed" && errorSummary ? `${base} — ${errorSummary}` : base;
   return (
     <span className={`status-pill ${status}`} title={label} aria-label={label}>
       <span className="dot" />
       {status === "stuck" && <span className="warn">⚠</span>}
       {status}
+      {released && " · released"}
     </span>
   );
 }

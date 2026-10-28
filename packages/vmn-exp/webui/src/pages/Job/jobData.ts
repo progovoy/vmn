@@ -18,6 +18,8 @@ export interface TimelineSeries {
   failed: number[];
   /** Completions per minute in each bucket. */
   perMin: number[];
+  /** Runs released per minute in each bucket (an eviction wave shows here). */
+  released: number[];
   /** `perMin`'s trailing average over `rateWindow` buckets: what the chart plots. */
   perMinAvg: number[];
   rateWindow: number;
@@ -39,12 +41,15 @@ function trailingMean(values: number[], window: number): number[] {
 function denseBuckets({ bucket_sec: size, buckets }: JobTimeline) {
   const step = size * 1000;
   const at = new Map(buckets.map((b) => [toMs(b.t), b]));
-  const out: (Omit<TimelineBucket, "t"> & { t: number })[] = [];
+  const out: (Required<Omit<TimelineBucket, "t">> & { t: number })[] = [];
   if (!buckets.length || step <= 0) return out;
   const last = toMs(buckets[buckets.length - 1].t);
   for (let ms = toMs(buckets[0].t); ms <= last; ms += step) {
     const b = at.get(ms);
-    out.push({ t: ms / 1000, started: b?.started ?? 0, succeeded: b?.succeeded ?? 0, failed: b?.failed ?? 0 });
+    out.push({
+      t: ms / 1000, started: b?.started ?? 0, succeeded: b?.succeeded ?? 0, failed: b?.failed ?? 0,
+      released: b?.released ?? 0,
+    });
   }
   return out;
 }
@@ -53,7 +58,9 @@ function denseBuckets({ bucket_sec: size, buckets }: JobTimeline) {
  *  ended, the finished ones cumulative; plus completions per minute, raw
  *  and as a trailing average (2 days of minutes would be noise). */
 export function timelineSeries(timeline: JobTimeline): TimelineSeries {
-  const out: TimelineSeries = { t: [], running: [], succeeded: [], failed: [], perMin: [], perMinAvg: [], rateWindow: 1 };
+  const out: TimelineSeries = {
+    t: [], running: [], succeeded: [], failed: [], perMin: [], released: [], perMinAvg: [], rateWindow: 1,
+  };
   const minutes = timeline.bucket_sec / 60;
   let started = 0, succeeded = 0, failed = 0;
   for (const b of denseBuckets(timeline)) {
@@ -65,6 +72,7 @@ export function timelineSeries(timeline: JobTimeline): TimelineSeries {
     out.succeeded.push(succeeded);
     out.failed.push(failed);
     out.perMin.push(minutes > 0 ? (b.succeeded + b.failed) / minutes : 0);
+    out.released.push(minutes > 0 ? b.released / minutes : 0);
   }
   out.rateWindow = Math.max(1, Math.round(out.t.length / RATE_POINTS));
   out.perMinAvg = trailingMean(out.perMin, out.rateWindow);

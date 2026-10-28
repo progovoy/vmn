@@ -29,7 +29,8 @@ function StatusParts({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => str
   const roll = isOuter && (sweepIncompleteLabel(st) ?? (st.fleet && innerCount(st.fleet)));
   return (
     <>
-      <StatusPill status={primary} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec} />
+      <StatusPill status={primary} exitCode={st.exit_code} durationSec={st.duration_sec} staleSec={st.stale_sec}
+        releasedAt={isOuter ? null : st.released_at} />
       {roll && <span className="tree-roll">{roll}</span>}
       {showOwn && <span className="tree-roll">own {st.status}</span>}
       {st.status === "stuck" && st.stale_sec != null && (

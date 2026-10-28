@@ -736,7 +736,8 @@ message.
   run's ETA only its running and waiting ones), progress, throughput, ETA, `metric`, `ranked`, per-metric
   `{n,min,max,mean,best,best_verstr,p10,p50,p90,hist}`, duration p50/p90,
   failure signatures, `top` (10 best) and a `timeline` (epoch-second buckets
-  of `started`/`succeeded`/`failed`, sparse).
+  of `started`/`succeeded`/`failed`, plus `released` where runs were handed
+  back, sparse; the chart draws releases per minute beside completions).
 - **`experiments/{v}/failures?limit=`** returns the clusters. Both outer run
   endpoints 404 for a run without children, and answer 304 on an early ETag.
 - **`search?text=&limit=`** is ⌘K's run search over every run. It ranks exact
@@ -768,10 +769,11 @@ Every row of `.../experiments` and the run detail carry:
 | `parent` / `children` | verstrs linking outer and inner jobs |
 | `kind` | `outer`, `inner` or `single` |
 | `depth` | nesting depth, for indenting the list |
-| `settled` | `never_started` (created) or `lost` (stuck) for a run under an outer run that ended, else `null`: derived, the run's own `status` stays |
+| `settled` | `never_started` (created) or `lost` (stuck, or released) for a run under an outer run that ended, else `null`: derived, the run's own `status` stays |
 | `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created` and a `never_started` run are left out, a `lost` run adds `failed`, an incomplete sweep that has not ended adds `created` |
 | `sweep_planned` / `sweep_trials` | a sweep outer's planned trials (grid size, else `run_cap`) and the trial slots its inner runs fill; absent for other runs and uncapped random/bayes sweeps. While `sweep_trials < sweep_planned` the UI reads `16/20 · incomplete`, and the detail's `status.fleet.expected` is the planned size |
-| `signal` / `end_reason` | the signal that ended the run (`SIGTERM`), `stopped` for an early-stopped sweep trial |
+| `signal` / `end_reason` | the signal that ended (or released) the run (`SIGTERM`); `stopped` for an early-stopped sweep trial, `released` for a run handed back unfinished (`run.release()`, status `created`) |
+| `released_at` / `resume_count` | the run's last release (kept once it is reopened) and how many times it was reopened (`start_run(run_id=)`), else `null` |
 | `error_summary` | `Type: message` of a failed run's recorded `error`, else `null` |
 
 The run detail also groups them under a top-level `status` object, which also

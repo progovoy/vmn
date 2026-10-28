@@ -25,7 +25,7 @@ from vmn_exp.core.log import (
     primary_metric,
     sort_descending,
 )
-from vmn_exp.core.settle import row_closes, settled_as
+from vmn_exp.core.settle import row_closes, row_settled_as
 from vmn_exp.core.status import CREATED, RUNNING
 from vmn_exp.core.tree import (
     children_by_parent,
@@ -170,7 +170,7 @@ class LivePatch:
         rows are the caller's private copies)."""
         own = {}
         for i, row in fresh.items():
-            row["settled"] = settled_as(row["status"], self._parent_closed.get(i, False))
+            row["settled"] = row_settled_as(row, self._parent_closed.get(i, False))
             own[i] = own_rollup_status(row["status"], False, settled=row["settled"])
         out = []
         for i in self.changed:

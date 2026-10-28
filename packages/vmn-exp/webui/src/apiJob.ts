@@ -33,13 +33,15 @@ export interface JobTopRun {
   value: number | null;
 }
 
-/** Per bucket: runs started, succeeded and failed in it. `t` is the bucket's
+/** Per bucket: runs started, succeeded and failed in it, and released
+ *  (handed back unfinished; only where some were). `t` is the bucket's
  *  start (epoch seconds or ISO). */
 export interface TimelineBucket {
   t: number | string;
   started: number;
   succeeded: number;
   failed: number;
+  released?: number;
 }
 
 export interface JobTimeline {

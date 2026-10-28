@@ -29,6 +29,7 @@ from vmn_exp.core.status import (
     STUCK,
     SUCCEEDED,
     derive_status,
+    settle_status,
     status_fields,
 )
 
@@ -212,7 +213,9 @@ def _annotate_tree_in_place(rows):
     parent_of = {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}
 
     children_of = children_by_parent(rows)
-    settled = settled_runs({v: r.get("status") for v, r in by_verstr.items()}, parent_of)
+    settled = settled_runs(
+        {v: settle_status(r.get("status"), r.get("end_reason")) for v, r in by_verstr.items()},
+        parent_of)
     for row in rows:
         row["settled"] = settled.get(row["verstr"])
         if row.get("sweep_planned") is not None:
@@ -281,8 +284,8 @@ def subtree_status(
 
     statuses = {v: status_of(v, state) for v, state in states.items()}
     chain = ancestors(verstr, parent_of)
-    settled = subtree_settled(order, statuses, parent_of, chain,
-                              lambda v: status_of(v, read_state(v)))
+    settled = subtree_settled(order, {v: _settle_key(statuses[v], states[v]) for v in order},
+                              parent_of, chain, lambda v: status_of(v, read_state(v)))
     sweep = _sweep_fields(verstr, children, row_of)
     own = own_rollup_status(statuses[verstr], bool(children), sweep_incomplete(sweep),
                             settled[verstr])
@@ -321,6 +324,10 @@ def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None
     status = status_fields(run_state, observed_at=observed_at(verstr) if observed_at else None)
     status.update(tree)
     return status
+
+
+def _settle_key(status, state):
+    return settle_status(status, (state or {}).get("end_reason"))
 
 
 FLEET_MAX_CHILDREN_DETAIL = 50
@@ -365,12 +372,12 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
         return None
 
     child_details = []
-    statuses = []
+    counted = []
     for child in children:
         state = read_state(child)
         obs = observed_at(child) if observed_at else None
         status = derive_status(state, observed_at=obs)
-        statuses.append(status)
+        counted.append(settled_as(_settle_key(status, state), closed) or status)
 
         if len(child_details) < FLEET_MAX_CHILDREN_DETAIL:
             row = (read_child_row(child) if read_child_row else None) or {}
@@ -381,7 +388,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
     else:
         expected = max(expected, len(children))
 
-    counts = count_statuses(settled_as(s, closed) or s for s in statuses)
+    counts = count_statuses(counted)
     known = sum(counts.values())
     waiting, slots_never = split_slots(max(0, expected - known), closed)
 

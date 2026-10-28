@@ -75,7 +75,7 @@ ROW_FIELDS = frozenset(
     duration_sec pid host command stale_sec heartbeat_interval_sec children
     kind depth tree_status settled imported_from forked_from forked_from_step rerun_of
     author has_intent intent keywords
-    end_reason error_summary signal root failure_sig
+    end_reason error_summary signal root failure_sig released_at resume_count
     """.split()
 )
 

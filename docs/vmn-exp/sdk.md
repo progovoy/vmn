@@ -79,6 +79,7 @@ start_run(
     sync_interval_sec=30, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
     capture_output=False, mode=None, intent=None, intent_keywords=None,
+    on_sigterm="fail",
 )
 ```
 
@@ -94,6 +95,7 @@ start_run(
 | `system_metrics` | `None`: sample `sys_*` unless opted out (below); `False`: off; `True`: on despite conf.yml, still off under `VMN_SYSTEM_METRICS=0` |
 | `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Failed syncs are retried on a later beat |
 | `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
+| `on_sigterm` | what SIGTERM does with the run: `"fail"` (default) finishes it with exit 143; `"release"` hands it back unfinished. See [Handing a run back](#handing-a-run-back-release) |
 | `rewind_to_step` | with `run_id` (required): hide the run's history past this step. See [Rewinding](#rewinding-a-run) |
 | `fork_from` / `fork_step` | a NEW run seeded with another run's history up to `fork_step` (`"<ref>?_step=N"` works too). See [Forking](#forking-a-run) |
 | `all_ranks` | record on every rank; default only rank 0 (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
@@ -520,7 +522,8 @@ yourself when a `with` block doesn't fit. It is idempotent.
   forever. Remote state and log uploads run off that thread; a hung PUT never
   delays a beat.
 - **SIGTERM finalizes every open run** with exit code 143 and
-  `received_signal: SIGTERM` (so it reads `failed`, never `stuck`), waits for
+  `received_signal: SIGTERM` (so it reads `failed`, never `stuck`) — or
+  releases it, for a run opened with `on_sigterm="release"` — waits for
   the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 60; one
   shared wait for all runs), then calls the previous handler or re-delivers the
   signal. The handler is installed when `vmn_exp.sdk` is imported on the main
@@ -565,6 +568,33 @@ spans every attempt; `resume_count` and `resumed_at` record the restarts. A
 `note`/`params` passed on resume is appended. An unknown ref raises
 `ValueError`. `$VMN_RESUME_RUN_ID` is removed from the environment when used, so
 neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
+
+### Handing a run back (`release`)
+
+An orchestrator that retries an evicted pod as the *same* run wants the pod to
+stop recording without ending it:
+
+```python
+run = start_run("my_app", run_id=pre_registered, on_sigterm="release")
+...
+run.release(reason="preempted")   # by hand; on_sigterm="release" does it on SIGTERM
+```
+
+`release()` drains media uploads, flushes the log, stops the heartbeat and the
+`sys_*` sampler and runs the final sync (within
+`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`), then writes `run_state.yml` with
+`state: released`, no exit code, `released_at`, `end_reason: released`,
+`release_reason` (the *reason*) and `signal` when SIGTERM caused it. The run
+leaves `current_run()` and atexit leaves it alone; `finish()` after it changes
+nothing. It reads as **waiting** (`created`) at once, not `running` until it
+goes `stuck` (the UI pill: `created · released`, "waiting — released 3m
+ago"); under an outer run that has ended it settles as `lost` (it ran and
+never finished). `start_run(run_id=...)` reopens it (`resume_count` + 1;
+`released_at` keeps the last release). Rows and queries carry `end_reason`,
+`signal`, `released_at` and `resume_count`: `end_reason = "released"`,
+`signal = "SIGTERM"`, `status = "succeeded" and resume_count > 0` (retries that
+ended done). An outer run's timeline counts releases per minute, so an eviction
+wave shows as a spike. `NoOpRun.release()` does nothing.
 
 ### Forking a run
 
@@ -936,7 +966,8 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `duration_sec`, `pid`, `host`, `command`, `stale_sec`,
   `heartbeat_interval_sec`, `children`, `kind`, `depth`, `tree_status`,
   `imported_from`, `forked_from`, `forked_from_step`, `rerun_of`,
-  `end_reason`, `error_summary`, `signal`, `author`, `has_intent`, `intent`,
+  `end_reason`, `error_summary`, `signal`, `released_at`, `resume_count`,
+  `author`, `has_intent`, `intent`,
   `keywords` (see [ui.md](ui.md#experiment-status-fields)). `author` is who
   ran it (the [features](experiments.md#what-a-run-records-for-similar)
   author's git email, else OS user, else writer; `null` when unknown);

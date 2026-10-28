@@ -70,6 +70,9 @@ class NoOpRun:
     def finish(self, exit_code=0, error=None):
         return None
 
+    def release(self, reason=None):
+        return None
+
     def pause_background(self, timeout=None):
         return True  # no background threads
 

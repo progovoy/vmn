@@ -21,6 +21,7 @@ from vmn_exp.core.status import (
     CREATED,
     FAILED,
     RUNNING,
+    RELEASED,
     STUCK,
     SUCCEEDED,
     parse_iso,
@@ -33,8 +34,9 @@ DONE = (SUCCEEDED, FAILED)
 # A job's states (D12), as the rollup names them.
 STATES = {RUNNING: "running", CREATED: "waiting", SUCCEEDED: "succeeded",
           FAILED: "failed", STUCK: "stuck"}
-# What a job's timeline counts per minute: runs started, and runs ended per outcome.
-TIMELINE = ("started", SUCCEEDED, FAILED)
+# What a job's timeline counts per minute: runs started, runs ended per
+# outcome, and runs handed back unfinished (their last release, plan 28 API2).
+TIMELINE = ("started", SUCCEEDED, FAILED, RELEASED)
 MINUTES_KEPT = 24 * 60
 COARSE_MINUTES = 10
 
@@ -203,6 +205,9 @@ class Tally:
         started = _minute(row["started_at"]) if row.get("started_at") else None
         if started is not None:
             self.timeline["started"].add(started, by)
+        released = _minute(row["released_at"]) if row.get("released_at") else None
+        if released is not None:
+            self.timeline[RELEASED].add(released, by)
         if status in DONE and row.get("finished_at"):
             minute = _minute(row["finished_at"])
             if minute is not None:

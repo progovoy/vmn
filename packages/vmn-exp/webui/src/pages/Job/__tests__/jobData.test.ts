@@ -22,6 +22,15 @@ describe("timelineSeries", () => {
     expect(s.perMin).toEqual([0, 2, 0.5]);
   });
 
+  it("counts runs released per minute, zero where a bucket names none", () => {
+    const s = timelineSeries({
+      bucket_sec: 120, start: 0,
+      buckets: [{ t: 0, started: 3, succeeded: 0, failed: 0 }, { t: 240, started: 0, succeeded: 0, failed: 0, released: 4 }],
+    });
+    expect(s.released).toEqual([0, 0, 2]);
+    expect(s.running).toEqual([3, 3, 3]);
+  });
+
   it("fills the empty buckets a sparse timeline leaves out with zeros", () => {
     const s = timelineSeries({
       bucket_sec: 60, start: 0,

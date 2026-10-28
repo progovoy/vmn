@@ -46,6 +46,7 @@ from vmn_exp.sdk import (
     _resolve_app_name,  # noqa: F401  (one shared resolver)
     context,
     fork,
+    release,
     resume,
     signals,
     sysmetrics,
@@ -135,6 +136,7 @@ def start_run(
     mode=None,
     intent=None,
     intent_keywords=None,
+    on_sigterm=release.FAIL,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -185,7 +187,12 @@ def start_run(
     ``intent`` (with ``intent_keywords``) says what the run is for, as with
     :meth:`Run.set_intent` once the run opens — a resumed run gets one only
     when given. A bad one raises ValueError before anything is created.
+
+    ``on_sigterm`` is what the SDK's SIGTERM handler does with the run:
+    ``"fail"`` finishes it with exit code 143; ``"release"`` hands it back
+    unfinished (:meth:`Run.release`) for a retry to reopen with ``run_id=``.
     """
+    release.check_on_sigterm(on_sigterm)
     if is_disabled(mode):
         return NoOpRun(app_name, disabled=True)
     if not all_ranks and is_secondary_rank():
@@ -228,6 +235,7 @@ def start_run(
         name=name,
         capture_output=capture_output,
         exp_conf=exp_conf,
+        on_sigterm=on_sigterm,
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -282,8 +290,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         name=None,
         capture_output=False,
         exp_conf=None,
+        on_sigterm=release.FAIL,
     ):
         self._storage = storage
+        self._on_sigterm = on_sigterm
         # The checkout's `experiment:` conf, as start_run() read it.
         self._exp_conf = exp_conf
         self.app_name = app_name
@@ -392,6 +402,17 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         """
         self._finish(exit_code, error=error)
 
+    def release(self, reason=None):
+        """Hand the run back unfinished, for another attempt to reopen with
+        ``start_run(run_id=...)``: everything logged so far is flushed and
+        synced, recording stops, and the run reads as waiting (``created``)
+        with ``end_reason: released`` (*reason* as ``release_reason``).
+        Idempotent; a no-op on a finished run. Never raises for a storage
+        failure, like :meth:`finish`."""
+        deadline = _final_upload_deadline()
+        if self._record_release(deadline, reason=reason):
+            self._close_remote_writers(deadline)
+
     def _finish(self, exit_code, error=None, **final_state):
         deadline = _final_upload_deadline()
         if self._record_final(exit_code, deadline, error=error, **final_state):
@@ -415,7 +436,37 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
 
     def _record_final(self, exit_code, deadline, error=None, **final_state):
         """Write the run's last log entries and final state locally, queue their
-        upload and close the run. False if it was finished already.
+        upload and close the run. False if it was finished already."""
+
+        def outcome():
+            duration = self._duration()
+            if error is not None:
+                recorded = self._record_guard("error", self._record_error, error)
+                if recorded is not None:
+                    final_state["error"] = recorded
+            self._record_guard(
+                "run entry",
+                self._append,
+                create_log_entry(
+                    "run",
+                    command=self._state["command"],
+                    exit_code=exit_code,
+                    duration_sec=duration,
+                ),
+            )
+            return dict(state="finished", exit_code=exit_code, finished_at=now_iso(),
+                        duration_sec=duration, **final_state)
+
+        return self._close_attempt(deadline, outcome, alerts=True)
+
+    def _record_release(self, deadline, reason=None, signal=None):
+        """:meth:`_record_final` of a released attempt (no exit code, no alerts)."""
+        return self._close_attempt(
+            deadline, lambda: release.released_state(self._duration(), reason, signal))
+
+    def _close_attempt(self, deadline, outcome, alerts=False):
+        """Stop recording, write *outcome()*'s state last, queue the uploads
+        and close the run. False if it was closed already.
 
         Media files are waited for (until *deadline*) first: their entries are
         appended as they are stored, so they must land before the final flush.
@@ -434,37 +485,16 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
                 max(0.0, deadline - time.monotonic()),
             )
             self._heartbeat.stop()
-            duration = self._duration()
-            if error is not None:
-                recorded = self._record_guard("error", self._record_error, error)
-                if recorded is not None:
-                    final_state["error"] = recorded
-            self._record_guard(
-                "run entry",
-                self._append,
-                create_log_entry(
-                    "run",
-                    command=self._state["command"],
-                    exit_code=exit_code,
-                    duration_sec=duration,
-                ),
-            )
+            final_state = outcome()
             if self._output is not None:
                 self._record_guard("output log", self._record_output)
             # The log lands before the final state: a reader that sees the run
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
-            self._record_guard(
-                "final state",
-                self._publish,
-                state="finished",
-                exit_code=exit_code,
-                finished_at=now_iso(),
-                duration_sec=duration,
-                **final_state,
-            )
+            self._record_guard("final state", self._publish, **final_state)
             self._log_sync.submit(None)
-            self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
+            if alerts:
+                self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
         finally:
             context.unregister(self)
         return True
@@ -663,7 +693,9 @@ def _finalize_open_runs(exit_code=None, **final_state):
     explicit code, so a killed process is unaffected.
 
     Only this process's runs: a forked child exiting normally must not finalize
-    — and so mark failed — the parent's still-running run.
+    — and so mark failed — the parent's still-running run. A run opened with
+    ``on_sigterm="release"`` is released instead when a signal ended it
+    (``final_state["signal"]``).
     """
     error = None
     if exit_code is None:
@@ -677,10 +709,16 @@ def _finalize_open_runs(exit_code=None, **final_state):
     recorded = [
         run
         for run in reversed(context.open_runs())
-        if _quietly(run._record_final, exit_code, deadline, error=error, **final_state)
+        if _quietly(_end_attempt, run, deadline, exit_code, error, final_state)
     ]
     for run in recorded:
         _quietly(run._close_remote_writers, deadline)
+
+
+def _end_attempt(run, deadline, exit_code, error, final_state):
+    if final_state.get("signal") and run._on_sigterm == release.RELEASE:
+        return run._record_release(deadline, signal=final_state["signal"])
+    return run._record_final(exit_code, deadline, error=error, **final_state)
 
 
 def _quietly(step, *args, **kwargs):
@@ -712,7 +750,8 @@ def _system_exit_code(exc):
 
 
 def _finalize_signaled(signum):
-    """A run a signal ended exits ``128 + N``, as a shell reports it."""
+    """A run a signal ended exits ``128 + N``, as a shell reports it — or is
+    released, when it was opened with ``on_sigterm="release"``."""
     name = signal.Signals(signum).name
     with finalizing():
         _finalize_open_runs(128 + signum, received_signal=name, signal=name)

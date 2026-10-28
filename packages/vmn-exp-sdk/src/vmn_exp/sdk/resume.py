@@ -5,7 +5,8 @@ A preempted job that is requeued should continue the run it was — same verstr,
 same log — rather than start a new one. The resumed run republishes itself as
 running, heartbeats, and appends to the log (a new process writes its own log
 segment, which readers merge). ``started_at`` is kept, so the run's duration
-spans every attempt; ``resume_count`` says how many there were.
+spans every attempt; ``resume_count`` says how many there were. A released
+run (``run.release()``) is reopened the same way.
 """
 import datetime
 import os
@@ -64,6 +65,9 @@ def resumed_state(prior, fresh):
     state["resumed_at"] = fresh["started_at"]
     state["resume_count"] = (as_int(prior.get("resume_count")) or 0) + 1
     state["heartbeat_seq"] = (as_int(prior.get("heartbeat_seq")) or 0) + 1
+    # The last release stays on record: an eviction wave outlives its retries.
+    if prior.get("released_at"):
+        state["released_at"] = prior["released_at"]
     return state
 
 
