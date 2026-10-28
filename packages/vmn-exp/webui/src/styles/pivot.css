@@ -1,0 +1,23 @@
+/* The pivot heatmap (components/PivotHeatmap.tsx): cells 2px apart on the
+   panel, each value written in its fill; the headers recede. */
+.pivot-scroll { overflow: auto; max-height: 520px; }
+.pivot-table { border-collapse: separate; border-spacing: 2px; font-size: 12px; }
+.pivot-table th {
+  color: var(--text-2); font-weight: 500; text-align: left; white-space: nowrap;
+  padding: 2px 6px; background: var(--panel);
+}
+.pivot-table thead th { position: sticky; top: 0; z-index: 1; }
+.pivot-table tbody th { position: sticky; left: 0; }
+.pivot-corner { color: var(--text-3) !important; }
+.pivot-cell { padding: 0; }
+.pivot-cell > a, .pivot-cell > span {
+  display: block; min-width: 44px; padding: 4px 6px; border-radius: 4px;
+  text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.pivot-cell > a:hover { text-decoration: none; outline: 2px solid var(--text); outline-offset: -2px; }
+.pivot-empty { min-width: 44px; }
+.pivot-legend { display: flex; align-items: center; gap: 8px; margin-top: 8px; font: 12px var(--mono); color: var(--text-2); }
+.pivot-legend-ramp { width: 160px; height: 8px; border-radius: 4px; }
+.pivot-note { margin: 6px 0 0; font-size: 12px; }
+.pivot-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin-bottom: 8px; }
+.pivot-tools input { min-width: 240px; }

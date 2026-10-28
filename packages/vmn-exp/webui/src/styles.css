@@ -3,6 +3,7 @@
 @import "./styles/board.css";
 @import "./styles/filter.css";
 @import "./styles/forms.css";
+@import "./styles/pivot.css";
 :root {
   /* surfaces */
   --bg: #0c0c0b;

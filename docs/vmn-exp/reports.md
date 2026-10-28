@@ -94,11 +94,18 @@ Types (`*` = single-run types, which take pinned `runs` only):
 | `parallel` | **`columns`** |
 | `importance` | **`metric`** |
 | `grouped` | **`group_by`**, **`metric`** |
+| `pivot` | **`rows`**, **`cols`** (group fields), `cell: count\|share\|agg` (default `count`), `match` (a query; needed by `share`), `metric` (needed by `agg`), `agg: mean\|best\|median\|min\|max`, `scope` (an outer run's verstr) |
 | `media`* | **`key`**, `step` (integer or `last`) |
 | `table`* | **`path`** |
 | `histogram`* | **`key`** |
 | `lineage`* | `depth` |
 | `run`* | none |
+
+A `pivot` panel is the [pivot heatmap](ui.md#pivot-heatmap) of its runs (a
+query as the pivot's `q`, pinned verstrs as `verstr in (...)`), each cell a
+link to the board (with `scope`: the outer run's Runs tab) filtered to its
+runs. Across launches, `rows: tags.trade_date` x `cols: root` compares them
+date by date.
 
 A panel with a bad spec renders as an error box. The rest of the report still
 renders. You don't have to write blocks by hand: the editor's insert-panel

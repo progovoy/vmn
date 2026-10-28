@@ -467,7 +467,7 @@ clause as a filter.
   badge, the actions and the live indicator, then the full-width run bar and
   its counts.
 - **The tabs** (each a URL value of `tab=`):
-  - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), with a split field (`?split=tags.kind` on the page, else `experiment.ui.split_by` from conf.yml or the store settings) a table under them of runs, done, failed, running, waiting and p50/p90 duration per value (each cell opens the Runs tab filtered by that value and status), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, and, for a sweep, the params that matter.
+  - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), with a split field (`?split=tags.kind` on the page, else `experiment.ui.split_by` from conf.yml or the store settings) a table under them of runs, done, failed, running, waiting and p50/p90 duration per value (each cell opens the Runs tab filtered by that value and status), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, a [pivot heatmap](#pivot-heatmap) of two fields picked from its facets (tags, params, their ancestors' `up.*`, status, branch; cell = runs, the share matching a query, or an aggregate of a metric; each cell opens the Runs tab filtered to its runs), and, for a sweep, the params that matter.
   - `runs`: the board scoped to the outer run's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
   - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
   - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
@@ -700,6 +700,7 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `ws/{ws}/apps/{app}/experiments-columns` | [Whole-set chart columns](#columns-for-whole-set-charts) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
+| `GET` | `ws/{ws}/apps/{app}/experiments-pivot?rows=&cols=` | [Pivot heatmap](#pivot-heatmap) |
 | `GET` | `ws/{ws}/apps/{app}/experiments-status` | [Status counts and rollup](#status-counts-and-rollup) |
 | `GET` | `ws/{ws}/apps-status` | [Every app's status counts](#status-counts-and-rollup), one request |
 | `GET` | `ws/{ws}/apps/{app}/experiments-diff?v=&to=` | [Code diff of two runs](#diffs-and-artifacts) |
@@ -746,8 +747,8 @@ message.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`scope=<verstr>`** keeps that run's subtree, without the run itself. It
   works on `experiments` (flat and grouped), `experiments-columns`,
-  `experiments-facets` (which also takes `q`/`status`) and
-  `experiments-importance`. An unknown run is a 404.
+  `experiments-facets` (which also takes `q`/`status`), `experiments-importance`
+  and `experiments-pivot`. An unknown run is a 404.
 - **Grouped answers** give every group a `clause`, the filter text that
   selects exactly it. With `top=`, groups add `job_counts`, `runs`, `failed`
   and `job_aggregates` (over the outer runs' best values).
@@ -1120,6 +1121,43 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 - Takes `q`, `status`, `archived`. `metric` is required; a metric no visible
   run carries, or a bad `q`, is a 400; no matching run answers `[]`.
 - Past 5000 matching runs a deterministic sample of 5000 is scored. ETag/304.
+
+### Pivot heatmap
+
+`GET .../experiments-pivot?rows=<field>&cols=<field>` crosses the matching
+runs by two [group fields](#paging-sorting-and-order) (`tags.<k>`,
+`params.<k>`, `up.*`, `branch`, `status`, `failure_sig`, a link, or `root`):
+one cell per pair of values (plan 28 N2; the outer run's Overview card and
+the reports' [`pivot` panel](reports.md#panels-vmn-panel-blocks)).
+
+```sh
+curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
+  --data-urlencode 'match=tags.health = "unstable"' \
+  "http://localhost:8265/api/v1/workspaces/my-repo/apps/my_app/experiments-pivot?rows=tags.trade_date&cols=tags.group&cell=share&scope=0.4.0-dev.abc"
+```
+
+```json
+{"rows": [{"key": "2024-06", "label": "2024-06", "n": 240, "clause": "tags.trade_date = \"2024-06\""}],
+ "cols": [{"key": "BCA", "label": "BCA", "n": 60, "clause": "tags.group = \"BCA\""}],
+ "cells": [[{"n": 24, "value": 0.125, "hits": 3,
+             "clause": "tags.trade_date = \"2024-06\" and tags.group = \"BCA\""}]],
+ "total": 240, "rows_total": 1, "cols_total": 1, "cell": "share",
+ "match": "tags.health = \"unstable\"", "metric": null, "agg": null}
+```
+
+- `cell=count` (the default): `value` is the cell's runs. `cell=share&match=<query>`:
+  the share of them matching the query (`hits` of `n`). `cell=agg&metric=<m>&agg=`
+  `mean|best|median|min|max` (default the app's group aggregate): the aggregate of
+  the metric's finite values, `null` when none carries it.
+- Takes `scope`, `q`, `status`, `archived`. A bad field, cell or query is a 400.
+- Each axis keeps its 200 (rows) / 50 (cols) most common values, ordered by
+  value (numbers before text, `(none)` last); `rows_total`/`cols_total` count
+  them all. An empty cell is `null`. Headers and cells carry the `clause`
+  selecting their runs (`null` when the language can't say the value).
+- Kept per index generation; within a `scope` with nothing live under it (a
+  settled launch) the pivot is kept until a run of its subtree (or an
+  ancestor an `up` field reads) changes, so a finished launch's heatmap is
+  built once per process (`ui/pivot_cache.py`). ETag/304.
 
 ### Facets
 

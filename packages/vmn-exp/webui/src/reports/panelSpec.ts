@@ -40,6 +40,15 @@ export type PanelSpec =
   | (Common<"parallel"> & { columns: string[] })
   | (Common<"importance"> & { metric: string })
   | (Common<"grouped"> & { group_by: string; metric: string })
+  | (Common<"pivot"> & {
+      rows: string;
+      cols: string;
+      cell?: "count" | "share" | "agg";
+      match?: string;
+      metric?: string;
+      agg?: "mean" | "best" | "median" | "min" | "max";
+      scope?: string;
+    })
   | (Common<"media", PinnedRuns> & { key: string; step?: number | "last" })
   | (Common<"table", PinnedRuns> & { path: string })
   | (Common<"histogram", PinnedRuns> & { key: string })
@@ -56,6 +65,7 @@ const TYPE_REQUIRED: Record<PanelType, string[]> = {
   parallel: ["columns"],
   importance: ["metric"],
   grouped: ["group_by", "metric"],
+  pivot: ["rows", "cols"],
   media: ["key"],
   table: ["path"],
   histogram: ["key"],

@@ -9,6 +9,7 @@ import { AUTO_X } from "../util/xMetric";
 import { validate, type PanelSpec } from "./panelSpec";
 import { useQueryVerstrs } from "./panelData";
 import { frozenClient, LivePanelScope, type PanelPayload } from "./publishedData";
+import PivotPanel from "./PivotPanel";
 import { ROW_TYPES, RowPanel, type RowSpec } from "./RowPanels";
 import { RUN_TYPES, RunPanel, type RunSpec } from "./RunPanels";
 
@@ -44,6 +45,7 @@ function body(ws: string, spec: PanelSpec): ReactNode {
       ? <Curves ws={ws} spec={spec} verstrs={runs.verstrs} />
       : <QueryCurves ws={ws} spec={{ ...spec, runs }} />;
   }
+  if (spec.type === "pivot") return <PivotPanel ws={ws} spec={spec} />;
   if (ROW_TYPES.has(spec.type)) return <RowPanel ws={ws} spec={spec as RowSpec} />;
   if (RUN_TYPES.has(spec.type)) return <RunPanel ws={ws} spec={spec as RunSpec} />;
   return null;
