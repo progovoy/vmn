@@ -104,6 +104,7 @@ def _answered_within(client, path, timeout):
     return answer[0] if answer else None
 
 
+@pytest.mark.serial  # timed: 3 s a route
 def test_the_main_routes_answer_while_a_cold_index_loads(cold):
     client, release = cold
     status = client.get(f"{BASE}/experiments-status").json()
