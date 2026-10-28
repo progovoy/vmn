@@ -57,6 +57,7 @@ server:
   tenancy: single                       # single | multi (Postgres, SaaS)
   endpoint_allowlist: []                # store endpoint_urls allowed in multi tenancy
   keep_warm: true                       # refresh every loaded index while serving; default: store workspaces only
+  metrics_ended_hours: 24               # an ended outer run stays on /metrics this long (default 24)
 data_dir: /var/lib/vmn-exp              # default ~/.vmn-ui
 db: sqlite:////var/lib/vmn-exp/control.db   # or postgresql://vmn@db/vmn; default: SQLite in data_dir
 audit:
@@ -89,6 +90,7 @@ variable > file > default:
 | `data_dir` | `--data-dir` | `VMN_UI_DATA_DIR` |
 | static token | `--token` | the variable named by `auth.static_token_env` (default `VMN_UI_TOKEN`) |
 | `server.keep_warm` | `--keep-warm` / `--no-keep-warm` | none |
+| `server.metrics_ended_hours` | `--metrics-ended-hours` | none |
 
 `server.keep_warm` unset keeps a store workspace's indexes refreshing while
 the server runs, nobody watching (its journal makes an idle refresh cheap),
@@ -304,6 +306,43 @@ The journal is only useful for minutes. `vmn-exp prune` deletes journal
 partitions older than 2 days. On object stores, add a lifecycle rule as well
 (see [byo-bucket.md](byo-bucket.md#journal-lifecycle-rule)).
 
+## Prometheus metrics
+
+`GET /metrics` (viewer; with a token, scrape with `Authorization: Bearer`)
+serves Prometheus text (0.0.4), so Grafana can alert on a fleet with nobody
+watching the UI. Besides `vmn_cache_drift_total` (counter, per `workspace`),
+every app carries these gauges, labelled `workspace` and `app`:
+
+| Gauge | Extra labels | Value |
+|---|---|---|
+| `vmn_runs` | `status` | Runs per status (`created`, `running`, `stuck`, `succeeded`, `failed`, plus `never_started`/`lost` under ended outer runs); archived runs left out. `experiments-status`' `counts`. |
+| `vmn_attention` | `key` | The attention strip: `stuck`, `failed` (failed in the last 24 h, `failed_recent`), `running`, then each `experiment.ui.attention` query by its key ([attention queries](ui.md#run-status-in-the-dashboard)); a query that does not compile is left out. |
+| `vmn_job_runs` | `outer_run` (verstr), `name`, `status` | Runs under a top-level outer run per status: `running`, `waiting`, `succeeded`, `failed`, `stuck`, `never_started`, `lost` (its `summary` counts). |
+| `vmn_job_progress` | `outer_run`, `name` | Its progress, 0 to 1 (the declared progress when its row has one); absent when unknown. |
+| `vmn_job_eta_seconds` | `outer_run`, `name` | Seconds left at its current rate; absent without a rate. |
+| `vmn_index_freshness_seconds` | | Seconds since the app's index last refreshed (`freshness.as_of`'s age). |
+
+- **Which outer runs.** Top-level ones that are live (running, or with runs
+  running, waiting or stuck under them), and those that ended within
+  `server.metrics_ended_hours` (`--metrics-ended-hours`, default 24; an
+  outer run's end is its own finish, else its runs' last). At most 200 per
+  app: the live ones first, then the newest. The cap bounds the series; an
+  older outer run's numbers stay on its `.../experiments/{v}/summary`.
+  The `outer_run` label is the verstr (`job` is Prometheus' own target label).
+- **What a scrape reads.** Only what an index already published: a scrape
+  never loads, refreshes or waits for one. An app nobody asked for since the
+  server started is absent (the startup warm-up asks for every app), and one
+  whose first load is still running reports `vmn_index_freshness_seconds`
+  only. The numbers come off the board's caches, those `experiments-status`
+  and the Outer runs view serve, so a scrape walks the outer runs, not the
+  runs. Each app's gauges are computed once per published snapshot and
+  minute (under its conf / store settings); scrapes in between are lookups,
+  so a run turning stuck shows within a minute.
+- **Keep it current.** A store workspace's indexes keep refreshing unwatched
+  by default ([keep-warm](ui.md#the-index)); a checkout's stop a minute after
+  their last request unless `--keep-warm`, and their gauges then go stale (a
+  growing `vmn_index_freshness_seconds` says so).
+
 ## Diagnostic dumps
 
 A slow or stuck server can dump its threads, in-flight requests, thread
@@ -337,8 +376,8 @@ for admins and show a progress line (`rebuilding: 41,000 / 100,000 records`).
 (`idle`/`rebuilding`), `progress {done, total}`, `rebuilds`,
 `last_rebuild_reason`, `drift`, `journal_lag_sec`, and per app the
 `generation`, `records`, `drift` and `last_reconcile_at`. `GET /metrics`
-(viewer) serves `vmn_cache_drift_total{workspace=...}` in Prometheus text
-format.
+(viewer) serves `vmn_cache_drift_total{workspace=...}` beside the
+[rollup gauges](#prometheus-metrics).
 
 The CLI takes the server address from `--config` (`server.host`/`port`, and
 its token), or else from `--host`/`--port`/`--token`/`VMN_UI_TOKEN`. Without

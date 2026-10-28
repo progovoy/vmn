@@ -27,13 +27,14 @@ from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.auth.authz import require, require_action
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
-from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS
+from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.memo import TTLCache
+from vmn_exp.ui.metrics_feed import MetricsFeed
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.report_index import ReportIndexes
@@ -105,6 +106,7 @@ def create_app(
     cache_dsn=None,
     audit_retention_days=DEFAULT_AUDIT_RETENTION_DAYS,
     keep_warm=None,
+    metrics_ended_hours=DEFAULT_METRICS_ENDED_HOURS,
 ):
     """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
     watched apps' indexes are refreshed by daemon threads and requests serve
@@ -119,7 +121,9 @@ def create_app(
     ``/api/v1/search`` in SQL; a Postgres *cache_dsn* caches store
     workspaces' indexes there, refreshed by one elected replica. *keep_warm*
     keeps a background-refreshed index refreshing with nobody watching (None:
-    store workspaces' indexes only; see :mod:`~vmn_exp.ui.refresher`)."""
+    store workspaces' indexes only; see :mod:`~vmn_exp.ui.refresher`). An
+    ended outer run stays on ``/metrics`` for *metrics_ended_hours*
+    (:mod:`~vmn_exp.ui.metrics_feed`)."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
@@ -709,7 +713,8 @@ def create_app(
             source.workspace_index(ws)
         return source.cache(ws)
 
-    routes_cache.register(app, API_PREFIX, _cache_of, source.caches)
+    app.state.metrics_feed = MetricsFeed(source, manager.get, leaderboards, metrics_ended_hours)
+    routes_cache.register(app, API_PREFIX, _cache_of, source.caches, app.state.metrics_feed.text)
     def _report_index(ws_name):
         ws = _experiment_workspace(ws_name)
         return report_indexes.get(ws, _any_exp_storage(ws))

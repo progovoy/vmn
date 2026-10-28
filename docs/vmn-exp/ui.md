@@ -39,6 +39,7 @@ any directory, inside a git checkout or not.
 | `--store` | — | Attach a read-only experiment store URI as a workspace |
 | `--no-index` | off | Keep no on-disk index; git workspaces index in memory only |
 | `--keep-warm` / `--no-keep-warm` | store workspaces on, checkouts off | Keep refreshing every index once loaded, with nobody watching (see [the index](#the-index)) |
+| `--metrics-ended-hours` | `24` | Keep an ended outer run's gauges on [`/metrics`](server.md#prometheus-metrics) this many hours |
 | `--no-browser` | off | Don't open a browser (one opens only for a loopback `--host`) |
 | `--diag-every` | off | Write a [diagnostic dump](#diagnostic-dumps) every N seconds (keeps the last 20) |
 
@@ -190,7 +191,7 @@ restart.
 - **Keep-warm**: the server loads every app at startup, and a store
   workspace's apps then keep refreshing while the server runs, watched or
   not, so a cold load runs to the end, store upkeep keeps going and
-  `/metrics` scrapes see current numbers with no browser open. That costs
+  [`/metrics`](server.md#prometheus-metrics) scrapes see current numbers with no browser open. That costs
   little: a store's refreshes follow its change journal, so an idle one lists
   only the hinted and live records. A checkout's apps stop refreshing a minute
   after their last request. `--keep-warm` keeps checkouts warm too,
@@ -892,7 +893,9 @@ an `outlived` one (still running) stays in `counts.running`.
 `running` if any runs, else `null`. A known app with no runs answers zeros; an
 unknown app is a 404 `{"detail", "code": "app_not_found"}`, checked against the
 checkout (`.vmn/<app>/conf.yml`) and the store (any run or snapshot record),
-not the cached app list. ETag/304, accurate to the hour for `failed_recent`.
+not the cached app list. ETag/304, accurate to the hour for `failed_recent`. The same
+counts, the attention parts and per outer run rollups are Prometheus gauges on
+[`/metrics`](server.md#prometheus-metrics).
 
 With attention queries configured (`experiment.ui.attention`, at most 8, see
 [server.md](server.md#app-settings)), the summary carries a count for each,

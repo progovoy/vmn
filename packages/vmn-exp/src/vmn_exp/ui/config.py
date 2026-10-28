@@ -17,6 +17,8 @@ DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".vmn-ui")
 TENANCIES = ("single", "multi")
 DOWNLOAD_MODES = ("stream", "redirect")
 DEFAULT_AUDIT_RETENTION_DAYS = 365
+# How long an ended outer run stays on /metrics (plan 28 T2a).
+DEFAULT_METRICS_ENDED_HOURS = 24
 
 # Environment fallbacks for keys that have no other env var.
 ENV_DB = "VMN_UI_DB"
@@ -37,6 +39,7 @@ class ServerSection:
     endpoint_allowlist: Tuple[str, ...] = ()  # store endpoint_urls allowed in multi tenancy
     # Refresh watched indexes while the server runs; None: store workspaces' only.
     keep_warm: Optional[bool] = None
+    metrics_ended_hours: int = DEFAULT_METRICS_ENDED_HOURS
 
 
 @dataclass(frozen=True)
@@ -118,6 +121,12 @@ def _bool(value, where):
         raise ConfigError(f"{where}: expected true or false, got {value!r}")
 
 
+def _positive(value, where):
+    _int(value, where)
+    if value <= 0:
+        raise ConfigError(f"{where}: expected a positive integer, got {value}")
+
+
 def _choice(value, choices, where):
     if value not in choices:
         raise ConfigError(f"{where}: expected one of {', '.join(choices)}, got {value!r}")
@@ -132,6 +141,7 @@ def _server(data):
     _int(s.port, "server.port")
     _choice(s.tenancy, TENANCIES, "server.tenancy")
     _bool(s.keep_warm, "server.keep_warm")
+    _positive(s.metrics_ended_hours, "server.metrics_ended_hours")
     return s
 
 
@@ -209,12 +219,14 @@ def resolve_config(args, env=None):
         return None
     cfg = load_config(path) if path else ServerConfig()
     keep_warm = getattr(args, "keep_warm", None)
+    ended_hours = getattr(args, "metrics_ended_hours", None)
     server = dataclasses.replace(
         cfg.server,
         host=_flag(args, "host", DEFAULT_HOST) or cfg.server.host,
         port=_flag(args, "port", DEFAULT_PORT) or cfg.server.port,
         public_url=env.get(ENV_PUBLIC_URL) or cfg.server.public_url,
         keep_warm=cfg.server.keep_warm if keep_warm is None else keep_warm,
+        metrics_ended_hours=ended_hours or cfg.server.metrics_ended_hours,
     )
     return dataclasses.replace(
         cfg,

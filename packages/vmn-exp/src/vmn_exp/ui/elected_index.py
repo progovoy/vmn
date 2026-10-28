@@ -93,6 +93,10 @@ class ElectedIndex:
     def freshness(self):
         return self._current().freshness()
 
+    @property
+    def published(self):
+        return self._current().published
+
     def snapshot(self):
         return self._current().snapshot()
 

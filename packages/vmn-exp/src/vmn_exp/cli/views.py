@@ -79,6 +79,17 @@ def positive_max_bytes(text):
     return value
 
 
+def positive_int(text):
+    """argparse type of a count of at least 1."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: {text!r}") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, not {value}")
+    return value
+
+
 def _untracked_names(patches):
     """The paths in the untracked tarballs, dep paths under ``deps/<dep>/``;
     None when a tarball cannot be read (corrupt, cut short)."""

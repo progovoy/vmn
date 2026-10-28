@@ -244,6 +244,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
 
 
 def _add_ui_parser(subprasers):  # noqa: N802
+    from vmn_exp.cli import views
+
     pui = subprasers.add_parser(
         "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
     )
@@ -289,6 +291,9 @@ def _add_ui_parser(subprasers):  # noqa: N802
                           "server.keep_warm)")
     pui.add_argument("--no-keep-warm", dest="keep_warm", action="store_const", const=False,
                      help="Let an index nobody asked for in 60 s stop refreshing")
+    pui.add_argument("--metrics-ended-hours", type=views.positive_int, default=None, metavar="H",
+                     help="Keep an ended outer run on /metrics for H hours (default 24; "
+                          "or server.metrics_ended_hours)")
     pui.add_argument("--diag-every", type=float, default=None, metavar="SEC",
                      help="Write a diagnostic dump to <data-dir>/diag/ every SEC seconds "
                           "(keeps the last 20; SIGUSR1 writes one on demand)")

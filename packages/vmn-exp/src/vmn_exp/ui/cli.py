@@ -169,7 +169,7 @@ def _oidc_chain(cfg, control_plane, env):
 def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):
     """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
     from vmn_exp.core.writer import set_default_writer_id
-    from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS
+    from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
     from vmn_exp.ui.onboarding import SERVER_WRITER_ID
     from vmn_exp.ui.server import create_app
 
@@ -180,6 +180,8 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
     auth = _oidc_chain(cfg, control_plane, env) if cfg else None
     host = cfg.server.host if cfg else args.host
     keep_warm = cfg.server.keep_warm if cfg else getattr(args, "keep_warm", None)
+    ended_hours = (cfg.server.metrics_ended_hours if cfg
+                   else getattr(args, "metrics_ended_hours", None) or DEFAULT_METRICS_ENDED_HOURS)
     app = create_app(
         manager,
         token=token,
@@ -193,6 +195,7 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
         cache_dsn=dsn,
         audit_retention_days=cfg.audit.retention_days if cfg else DEFAULT_AUDIT_RETENTION_DAYS,
         keep_warm=keep_warm,
+        metrics_ended_hours=ended_hours,
         **kwargs,
     )
     app.state.config = cfg

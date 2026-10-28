@@ -1,31 +1,27 @@
 """Cache maintenance routes (plan 11 §4.6): ``POST .../cache/resync``
 (``?full=1`` rebuilds), ``GET .../cache/status`` (both admin) and the
-Prometheus-text ``/metrics`` with ``vmn_cache_drift_total``."""
+Prometheus-text ``/metrics``: ``vmn_cache_drift_total``, then the apps'
+rollup gauges (plan 28 T2a, :mod:`~vmn_exp.ui.metrics_feed`)."""
 from fastapi.responses import PlainTextResponse
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER
-
-
-def _label(value):
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+from vmn_exp.ui.prometheus import Family, exposition
 
 
 def prometheus_text(caches):
     """``vmn_cache_drift_total`` per workspace, in the text exposition format."""
-    lines = [
-        "# HELP vmn_cache_drift_total Records the consistency check found changed"
-        " without a journal entry.",
-        "# TYPE vmn_cache_drift_total counter",
-    ]
+    drift = Family("vmn_cache_drift_total", "counter",
+                   "Records the consistency check found changed without a journal entry.")
     for name, cache in sorted(caches.items()):
-        lines.append(f'vmn_cache_drift_total{{workspace="{_label(name)}"}} {cache.status()["drift"]}')
-    return "\n".join(lines) + "\n"
+        drift.add({"workspace": name}, cache.status()["drift"])
+    return exposition([drift])
 
 
-def register(app, api_prefix, cache_of, caches):
+def register(app, api_prefix, cache_of, caches, gauges):
     """*cache_of(ws_name)* -> the workspace's ``WorkspaceCache`` (404 if
-    unknown); *caches()* -> ``{name: WorkspaceCache}`` of every one in use."""
+    unknown); *caches()* -> ``{name: WorkspaceCache}`` of every one in use;
+    *gauges()* -> the rest of ``/metrics``' text."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/cache"
 
     @app.post(f"{base}/resync", status_code=202, dependencies=[require(ADMIN)])
@@ -38,4 +34,5 @@ def register(app, api_prefix, cache_of, caches):
 
     @app.get("/metrics", dependencies=[require(VIEWER)])
     def metrics():
-        return PlainTextResponse(prometheus_text(caches()), media_type="text/plain; version=0.0.4")
+        return PlainTextResponse(prometheus_text(caches()) + gauges(),
+                                 media_type="text/plain; version=0.0.4")

@@ -135,11 +135,30 @@ class ExperimentSource:
         """The app's current :class:`IndexSnapshot`, its rows summarized by the
         metrics *schema* when one is given; a query's ``similar()`` over it
         searches the app's similar-runs scope."""
-        snap = self._snapshot(ws, app_name, s3_storage, schema)
+        return self._served(ws, app_name, self._snapshot(ws, app_name, s3_storage, schema))
+
+    def _served(self, ws, app_name, snap):
         self._owners.note(snap, (ws, app_name))
         key = (ws.name, app_name)
         bind_similar_scope(snap, lambda s: self.similar.scope(key, app_name, s))
         return snap
+
+    def served_apps(self):
+        """``[(workspace name, app name)]`` of every app an index served."""
+        return sorted(self._served_by.copy())
+
+    def published(self, ws, app_name, schema=None):
+        """Like :meth:`snapshot`, the snapshot the app's index last published,
+        but never loading, refreshing or waiting for it: None before one."""
+        index = self._served_by.get((ws.name, app_name))
+        snap = None if index is None else index.published
+        return None if snap is None else self._served(ws, app_name, snap.summarized(schema))
+
+    def as_of(self, ws_name, app_name):
+        """The wall time the app's index last refreshed from (its
+        ``freshness()['as_of']``), else None."""
+        index = self._served_by.get((ws_name, app_name))
+        return None if index is None else index.freshness()["as_of"]
 
     def _snapshot(self, ws, app_name, s3_storage, schema):
         refresher = self._refresher_of(ws, app_name, s3_storage)
