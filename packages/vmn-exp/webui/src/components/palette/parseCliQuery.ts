@@ -6,7 +6,8 @@ import type { RunState } from "../../types";
 import { completeToken, stripCliPrefix, tokenize, type Token } from "./tokenize";
 
 export interface ParseScope { apps: string[]; workspaces: string[]; app?: string }
-export type PageName = "models" | "model" | "reports" | "tokens" | "actions" | "experiments" | "apps" | "docs";
+export type PageName =
+  | "models" | "model" | "reports" | "tokens" | "actions" | "experiments" | "apps" | "docs" | "settings";
 
 export type CliIntent =
   | { kind: "none" }
@@ -42,7 +43,7 @@ const USAGE: Record<string, string> = {
   diff: "diff <app> <ref> <ref>", overlay: "overlay <app> <ref> <ref>", goto: "goto -v <version> <app>",
   restore: "restore <app> -v <ref>", rerun: "rerun <app> -v <ref>", tree: "tree <app> [version]",
   status: "status <app> <state>", create: "create <app>", actions: "actions <app>",
-  experiments: "experiments <app>",
+  experiments: "experiments <app>", settings: "settings <app>",
 };
 const SIMPLE_PAGES: Record<string, PageName> = {
   models: "models", reports: "reports", tokens: "tokens", docs: "docs", apps: "apps",
@@ -51,7 +52,7 @@ const SIMPLE_PAGES: Record<string, PageName> = {
 export const VERBS = [
   "show", "list", "compare", "diff", "overlay", "goto", "restore", "rerun", "tree", "status",
   "create", "new", "models", "model", "reports", "tokens", "actions", "experiments", "runs",
-  "apps", "docs", "app", "ws", "q",
+  "apps", "docs", "app", "ws", "q", "settings",
 ];
 
 interface Args { app?: string; refs: string[]; to?: string; rest: Token[]; archived: boolean }
@@ -122,7 +123,7 @@ function appVerb(verb: string, app: string, args: Args): CliIntent {
     case "list": return { kind: "list", app, query: exprOf(args.rest), archived: args.archived };
     case "goto": case "tree": return { kind: verb, app, version: first };
     case "create": return { kind: "create", app };
-    case "actions": case "experiments": return { kind: "page", page: verb, app };
+    case "actions": case "experiments": case "settings": return { kind: "page", page: verb, app };
     case "status": {
       const state = STATES.find((s) => s === first);
       return state ? { kind: "status", app, status: state } : error(`status is one of ${STATES.join(", ")}`);

@@ -8,7 +8,7 @@ export interface RecentEntry { label: string; to: string; kind: string }
 const KIND: Partial<Record<RouteId, string>> = {
   run: "run", experiments: "app", "compare-runs": "experiments", tree: "tree", actions: "actions", apps: "ws", home: "workspace",
   models: "models", model: "models", reports: "reports", report: "reports", "report-edit": "reports",
-  tokens: "key",
+  tokens: "key", "app-settings": "settings",
 };
 export const recentKindOf = (routeId: RouteId): string => KIND[routeId] ?? "page";
 

@@ -439,7 +439,10 @@ ui:
   the metrics an outer run's declared progress is read from (`ui.progress`,
   see [ui.md](ui.md)).
 - Write them with `vmn-exp settings <app> set -f <file> [--store <uri>]`
-  ([experiments.md](experiments.md#store-settings-vmn-exp-settings)), or as an
+  ([experiments.md](experiments.md#store-settings-vmn-exp-settings)), in the
+  web UI on the app's settings page (`/ws/{ws}/app/{app}/settings`, ⌘K
+  `settings`: the YAML with Save; a refused write shows why and keeps the
+  edit; read-only for viewers and on read-only servers), or as an
   editor with `PUT /api/v1/workspaces/{ws}/apps/{app}/settings`
   `{"text": "..."}` (`GET` returns `{text, settings, error, updated_at,
   updated_by}`); read-only servers refuse writes. Writes are journaled: a

@@ -7,7 +7,7 @@ import type { Indexing } from "../util/indexing";
 export type RouteId =
   | "home" | "tokens" | "apps" | "experiments" | "run" | "compare-runs"
   | "tree" | "actions" | "models" | "model" | "reports" | "report"
-  | "report-edit" | "not-found" | "sign-in";
+  | "report-edit" | "not-found" | "sign-in" | "app-settings";
 /** Every route's `handle` (routes.tsx). */
 export interface RouteHandle { id: RouteId; wide?: boolean }
 

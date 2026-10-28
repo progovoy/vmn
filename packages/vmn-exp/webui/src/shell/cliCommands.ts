@@ -42,6 +42,7 @@ function vmnExpArgs(input: CrumbInput): string[][] {
       const refs = compareRefs(search);
       return refs.length ? [["compare", app, ...refs.flatMap((r) => ["-v", r])]] : [];
     }
+    case "app-settings": return [["settings", app, "show"]];
     case "models": return [["model", "list"]];
     case "model": return [["model", "show", params.modelName ?? ""]];
     default: return [];

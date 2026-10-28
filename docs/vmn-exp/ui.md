@@ -515,6 +515,15 @@ closed choice is remembered per browser (localStorage `vmn-exp:disclosures`).
 A run with children opens the [outer run's page](#outer-runs-and-the-outer-runs-page) instead;
 its runs are the Runs tab, not a card.
 
+## App settings page
+
+`/ws/{ws}/app/{app}/settings` (⌘K `settings`) edits the app's
+[store settings](server.md#app-settings): the YAML as saved, with who saved
+it and when. Save sends it to the server, which refuses invalid settings
+with the reason (shown under the text, the edit kept); a stored file that
+does not parse is flagged as ignored. Viewers, read-only servers and stores
+without edit access see it read-only, with the reason.
+
 ## Leaderboard columns
 
 By default the leaderboard shows `#`, status, experiment, the metrics whose

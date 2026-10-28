@@ -36,6 +36,10 @@ export function patch<T>(path: string, body: unknown): Promise<T> {
   return send<T>("PATCH", path, body);
 }
 
+export function put<T>(path: string, body: unknown): Promise<T> {
+  return send<T>("PUT", path, body);
+}
+
 /** Every request. A 401 is reported to the auth state (the shell then asks
  *  for a sign-in) and thrown like any error: nothing is retried behind the
  *  caller's back, so a mutation is never sent twice. */
@@ -45,7 +49,7 @@ function send<T>(method: string, path: string, body?: unknown, signal?: AbortSig
 }
 
 async function sendNow<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const json = method === "POST" || method === "PATCH";
+  const json = method === "POST" || method === "PATCH" || method === "PUT";
   const sentToken = sessionStorage.getItem(TOKEN_KEY);
   const res = await fetch(`${BASE}${path}`, {
     method,

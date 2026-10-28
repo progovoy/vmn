@@ -44,6 +44,7 @@ function appTrail(input: CrumbInput, base: string): Crumb[] {
   if (routeId === "experiments") return [appCrumb, { label: "experiments" }];
   appCrumb.to = base;
   if (routeId === "actions") return [appCrumb, { label: "actions" }];
+  if (routeId === "app-settings") return [appCrumb, { label: "settings" }];
   if (routeId === "tree") {
     const v = search.get("v");
     if (!v) return [appCrumb, { label: "stamp tree" }];
@@ -57,7 +58,7 @@ const GLOBAL: Partial<Record<RouteId, string>> = {
 };
 
 const APP_ROUTES = new Set<RouteId>([
-  "experiments", "run", "compare-runs", "tree", "actions",
+  "experiments", "run", "compare-runs", "tree", "actions", "app-settings",
 ]);
 export const isAppRoute = (routeId: RouteId) => APP_ROUTES.has(routeId);
 

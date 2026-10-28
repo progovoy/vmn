@@ -44,7 +44,7 @@ export const SECTION_CAP = 5;
 const TYPED_RUNS = 8;
 const RECENT_ICONS: Record<string, IconName> = {
   run: "run", app: "app", ws: "workspace", workspace: "workspace", experiments: "experiments",
-  tree: "tree", actions: "actions", models: "models", reports: "reports", key: "key",
+  tree: "tree", actions: "actions", models: "models", reports: "reports", key: "key", settings: "page",
 };
 
 /** A command as the row's right column shows it: without `vmn-exp `. */
@@ -71,6 +71,9 @@ interface PageScope { ctx: PaletteCtx; ws: string; app?: string; base?: string }
 const PAGES: Record<SharedPage, (s: PageScope) => [IconName, string, Partial<PaletteItem>]> = {
   experiments: ({ ctx, app, base }) => ["experiments", "Experiments", { secondary: app, to: base, command: vx(ctx, "list", app!) }],
   actions: ({ app, base }) => ["actions", "Actions", { secondary: app, to: `${base}/actions` }],
+  settings: ({ ctx, app, base }) => ["page", "Settings", {
+    secondary: app, to: `${base}/settings`, command: vx(ctx, "settings", app!, "show"),
+  }],
   apps: ({ ws }) => ["apps", "Apps", { secondary: ws, to: `/ws/${ws}` }],
   models: ({ ctx, ws }) => ["models", "Models", { to: `/ws/${ws}/models`, command: vx(ctx, "model", "list") }],
   reports: ({ ws }) => ["reports", "Reports", { to: `/ws/${ws}/reports` }],

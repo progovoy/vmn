@@ -22,6 +22,7 @@ const Tokens = lazy(() => import("./pages/Tokens"));
 const Reports = lazy(() => import("./pages/Reports"));
 const Report = lazy(() => import("./pages/Report"));
 const ReportEdit = lazy(() => import("./pages/ReportEdit"));
+const AppSettings = lazy(() => import("./pages/AppSettings"));
 
 const page = (Page: LazyExoticComponent<ComponentType>, label: string) => (
   <Suspense fallback={<PageFallback label={label} />}><Page /></Suspense>
@@ -54,6 +55,7 @@ export const routes: RouteObject[] = [
       child("ws/:ws/app/:app/compare-runs", "compare-runs", inApp(page(ComparePage, "comparison"))),
       child("ws/:ws/app/:app/tree", "tree", inGitApp("tree", page(StampTree, "stamp tree"))),
       child("ws/:ws/app/:app/actions", "actions", inGitApp("actions", page(Actions, "actions"))),
+      child("ws/:ws/app/:app/settings", "app-settings", inApp(page(AppSettings, "settings"))),
       child("ws/:ws/models", "models", inWs(page(Models, "models"))),
       child("ws/:ws/models/:modelName", "model", inWs(page(ModelDetail, "model"))),
       child("ws/:ws/reports", "reports", inWs(page(Reports, "reports"))),
