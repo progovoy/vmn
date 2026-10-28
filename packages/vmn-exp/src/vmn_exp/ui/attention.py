@@ -100,7 +100,8 @@ class AttentionCounts:
         ``attention_rank`` (:func:`severity`)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema), queries)
+        key = (base.token, bucket, minute(), cache.schema_key(schema),
+               cache.jobs.progress_names(snapshot), queries)
         return self._summaries.get(key, lambda: self._merged(snapshot, schema, queries))
 
     def _merged(self, snapshot, schema, queries):
