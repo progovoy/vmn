@@ -123,7 +123,7 @@ export default function JobsView({ ws, app, views, kind, onAll }: {
           <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "outer run" : "run"} onShow={data.showNew} />
           <StaleRows stale={data.stale} error={data.staleError}>
             <JobsTable
-              items={data.items} ctx={ctx} sort={board.sort}
+              items={data.items} ctx={ctx} sort={board.sort} trees={{ ws, app }}
               selected={view.selected} density={view.density}
               headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll, label: "Select all visible outer runs" }}
               emptyText={emptyText(kind.kind, board.filtered)}

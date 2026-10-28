@@ -39,11 +39,16 @@ export function AttentionChips({ r, ctx }: { r: ExperimentRow; ctx: JobContext }
   if (!shown.length) return null;
   return (
     <span className="job-attention">
-      {shown.map((e) => (
-        <span key={e.key} className={`job-attention-chip attention-${e.level}`} title={e.q}>
-          {`${fmtCount(counts![e.key])} ${e.label}`}
-        </span>
-      ))}
+      {shown.map((e) => <AttentionChip key={e.key} entry={e} count={counts![e.key]} />)}
+    </span>
+  );
+}
+
+/** One attention part's chip, `2 unstable`, coloured by its level. */
+export function AttentionChip({ entry, count }: { entry: AttentionEntry; count: number }) {
+  return (
+    <span className={`job-attention-chip attention-${entry.level}`} title={entry.q}>
+      {`${fmtCount(count)} ${entry.label}`}
     </span>
   );
 }

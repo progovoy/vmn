@@ -414,6 +414,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
+  - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row, about ten rows tall.
   - its [baseline chip](#baseline-compare) (`▼ best_value from 2024-12 (5 of 41 trade_date values worse than the baseline's p10)`), opening its Overview; the page's outer runs' chips come in one `experiments-baselines` request.
 
   Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
@@ -480,7 +481,7 @@ clause as a filter.
   counts.
 - **The tabs** (each a URL value of `tab=`):
   - `overview` (the default): KPI tiles (done of expected, in a declared progress's unit with a `runs done` tile beside it, failed, running, waiting, stuck, median and p90 duration, best), with a split field (`?split=tags.kind` on the page, else `experiment.ui.split_by` from conf.yml or the store settings) a table under them of runs, done, failed, running, waiting and p50/p90 duration per value (each cell opens the Runs tab filtered by that value and status), status over time with completions per minute, the main metric's distribution with p10/p50/p90, the top 10 runs, the top failure clusters, a [pivot heatmap](#pivot-heatmap) of two fields picked from its facets (tags, params, their ancestors' `up.*`, status, branch; cell = runs, the share matching a query, or an aggregate of a metric; each cell opens the Runs tab filtered to its runs), the [baseline](#baseline-compare) card (the run it is compared with, the chip, the rollup deltas and the children paired by key, the worse ones marked), and, for a sweep, the params that matter.
-  - `runs`: the board scoped to the outer run's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection. Archiving it archives every matching run, with a count confirm first.
+  - `runs`: a `Flat | Tree` switch (`layout=flat|tree`; the app's last choice is remembered, flat until one is made), then either the board scoped to the outer run's subtree, with a facet sidebar (status and per-param value counts or histograms; a click filters) and "Select all N matching", which adds the query to the app's selection (archiving it archives every matching run, with a count confirm first), or [the tree](#the-tree).
   - `charts`: a param-vs-metric scatter of every run, parallel coordinates (a brush filters the Runs tab), top-K curves, and a box plot per param value.
   - `failures`: failed and stuck runs clustered by a failure signature, which masks the numbers, paths and ids in `end_reason`, `signal`, `exit_code` and `error_summary`. Each cluster shows its count, share, first and last seen, top hosts, and the params overrepresented in it (at most 20 distinct values, at least 5 runs and 10% of the cluster, a lift of at least 1.5). It also has "Show these runs" and copy-rerun.
   - `code` and `log`.
@@ -506,6 +507,34 @@ runs` (at most 20, and the note says so when capped).
 
 Live pages update from the server's change stream (SSE, `.../events`) and
 poll only as a fallback.
+
+### The tree
+
+The tree lays an outer run's runs out by parent, as deep as they nest (a
+launch, its dates, their studies, their trials). Each row is a run and the
+rollup of its subtree:
+- the name, indented by depth, behind its expander, and its `tags.kind`;
+- for a run with children its run bar and line (declared progress first), for
+  a run without its status;
+- the worst attention part over its subtree (error level first, then the most
+  runs), e.g. `2 unstable`; a run without children shows the ones it matches;
+- the best value on the main metric (linked to that run), its duration and
+  `3.1× siblings` ([`duration_ratio`](#experiment-status-fields));
+- the columns `experiment.ui.tree_columns` names for its `tags.kind` value
+  (conf.yml or the [store settings](server.md#app-settings)), e.g.
+  `tree_columns: {study: [m:best_value, p:group], refit: [t:health, c:ratio]}`:
+  show keys `m:<metric>`, `p:<param>`, `t:<tag>`, `c:duration|queue|ratio`
+  (or another row field), shown as `label value` chips.
+
+Children load when a node opens, 100 at a time with a `+N more` row. A node
+the server marks `open` (attention in its subtree, or running or stuck runs
+below) starts open; healthy ones stay folded, so a 10k-run launch opens as a
+handful of rows. Opening or folding a node yourself sticks while the page is
+open. Pages showing running runs refresh every 15 s. The tree is a WAI-ARIA
+tree grid (`aria-level`, `aria-expanded`, `aria-posinset`/`aria-setsize`):
+Up/Down move between rows, Right opens a node (or steps into it), Left folds
+it (or steps to its parent), Enter toggles it, Home/End jump. It is
+virtualized like the board.
 
 ## The run page
 
@@ -724,6 +753,7 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `GET` | `/workspaces/{ws}/git` | [Branch, HEAD, dirty, store](#git-context) of a git workspace |
 | `GET` | `/workspaces/{ws}/apps` | Apps with experiments or versions |
 | `GET` | `ws/{ws}/apps/{app}/experiments` | Run rows ([paging](#paging-sorting-and-order), [query](#filtering-with-a-query)); with `group=`, [groups of runs](#grouped-runs) |
+| `GET` | `ws/{ws}/apps/{app}/experiments?children_of=<v>` | [A run's direct children](#outer-runs-scope-and-search) for the tree, each with its `job` and `open` |
 | `GET` | `ws/{ws}/apps/{app}/experiments/{verstr}` | [Run detail](#run-detail-is-bounded) (`latest`, `@N`, prefixes resolve) |
 | `GET` | `.../experiments/{verstr}/log?offset=&limit=` | A page of the log, `{"entries", "total"}`, oldest first |
 | `GET` | `.../experiments/{verstr}/artifacts/{path}` | [Artifact download](#diffs-and-artifacts) |
@@ -785,6 +815,28 @@ message.
     subtree does. Each row then gets `matched`, and the page gets
     `jobs_matched`/`runs_matched`.
   - `experiments-facets` returns `jobs`/`singles` counts.
+- **`experiments?children_of=<verstr>`** pages that run's direct children
+  for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`
+  (always paged, `limit` <= 1000), filtered (`q`, `status`, `archived`),
+  sorted (`sort`/`order`, the `job:*` sorts by the children's summaries
+  too) and keyset-paged (`cursor`) like the board, with the same ETag/304.
+  - A child with children carries `job`, the outer run row's summary with
+    `attention` (`{key: n}`, the runs of its own subtree, itself included,
+    each attention query matches; built-in parts only when non-zero) and
+    `attention_rank`, plus `split` and `by` (its runs per value, as the
+    summary's) when `experiment.ui.split_by` is set. A child without children
+    has `job: null` and `attention` when it matches a query itself. Rows keep
+    `duration_ratio`.
+  - Every row carries `open`: true for a child with children whose subtree
+    has attention, or running or stuck runs.
+  - `tree_columns` is the app's `experiment.ui.tree_columns`
+    (`{<tags.kind value>: [show keys]}`, `{}` when unset).
+  - Children orders are cached and moved across index generations like the
+    board's, in caches of their own, so opening nodes never evicts the
+    board's orders; attention per node is counted once per generation over
+    the tree a request reads. An unknown run is a 404, a malformed one a 400,
+    as is `children_of` with `group`, `top`, `match_subtree` or a query
+    reading `comments`.
 - **`scope=<verstr>`** keeps that run's subtree, without the run itself. It
   works on `experiments` (flat and grouped), `experiments-columns`,
   `experiments-facets` (which also takes `q`/`status`), `experiments-importance`

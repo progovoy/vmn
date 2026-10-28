@@ -1,10 +1,12 @@
 /** One Jobs-view row (plan 23 W1, §3.1): a job, or a single run, across the
- *  JOB_COLUMNS. A click outside its links and checkbox opens the run. */
+ *  JOB_COLUMNS. A click outside its links and checkbox opens the run; a
+ *  job's expander opens its tree under the row (plan 28 N6). */
 import { memo } from "react";
 import { Link } from "react-router-dom";
 import MatchingRunsChip from "../../components/MatchingRunsChip";
 import RowCheckbox from "../../components/RowCheckbox";
 import StatusPill from "../../components/StatusPill";
+import TreeToggle from "../../components/TreeToggle";
 import type { ExperimentRow } from "../../types";
 import type { Density } from "../../util/density";
 import { useRowNavigate } from "../../hooks/useRowNavigate";
@@ -22,12 +24,14 @@ function titleOf(id: string, r: ExperimentRow, numbers: Record<JobNumber, JobCel
   return numbers[id as JobNumber]?.title;
 }
 
-function NameCell({ r, href, compact, ctx }: {
+function NameCell({ r, href, compact, ctx, expanded, onExpand }: {
   r: ExperimentRow; href: string; compact: boolean; ctx: JobContext;
+  expanded: boolean; onExpand?: (verstr: string) => void;
 }) {
   return (
     <>
       <div className="nest">
+        {r.job && onExpand && <TreeToggle label={r.name || r.verstr} expanded={expanded} onToggle={() => onExpand(r.verstr)} />}
         <Link className={`run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}>
           {r.name || r.verstr}
         </Link>
@@ -41,12 +45,15 @@ function NameCell({ r, href, compact, ctx }: {
   );
 }
 
-function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle }: {
+function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, expanded = false, onExpand }: {
   r: ExperimentRow; index: number;
   /** The table's one tab stop (roving tabindex). */
   isActive: boolean; isSelected: boolean;
   density?: Density; ctx: JobContext;
   onToggle: (verstr: string, range: boolean) => void;
+  /** Whether its tree is open under it, and what opens or folds it (plan 28 N6). */
+  expanded?: boolean;
+  onExpand?: (verstr: string) => void;
 }) {
   const href = runHref(ctx.runBase, r.verstr);
   const numbers = jobNumbers(r);
@@ -67,7 +74,8 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle }: {
             staleSec={r.stale_sec} errorSummary={r.error_summary}
           />
         );
-      case "name": return <NameCell r={r} href={href} compact={density === "compact"} ctx={ctx} />;
+      case "name":
+        return <NameCell r={r} href={href} compact={density === "compact"} ctx={ctx} expanded={expanded} onExpand={onExpand} />;
       case "best": return <BestValue r={r} ctx={ctx} />;
       case "spread": return <SpreadCell r={r} />;
       case "runs": case "failed": case "throughput": case "eta": return numbers[id].text;

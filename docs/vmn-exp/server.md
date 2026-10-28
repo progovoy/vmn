@@ -471,12 +471,18 @@ ui:
   views:
     - {name: health, page: runs, search: '?show=t:health&show=t:state', default: true}
     - {name: by kind, page: job, search: '?tab=runs&group=tags.kind', default: true}
+  tree_columns:
+    study: [m:best_value, p:group]
+    refit: [t:health, c:ratio]
 ```
 
 - Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
   `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention`,
-  `baseline`, `views` checked; other `ui` keys kept). `ui.attention` lists at most 8
+  `baseline`, `views`, `tree_columns` checked; other `ui` keys kept).
+  `ui.tree_columns` maps a `tags.kind` value to the show keys
+  (`m:`/`p:`/`t:`/`c:<name>`) the [tree](ui.md#the-tree) shows for runs of
+  that kind. `ui.attention` lists at most 8
   attention queries `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
   `key` letters, digits, `_`, `-` (unique, not the built-in
   `stuck`/`failed`/`running`/`outlived`),

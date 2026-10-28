@@ -6,25 +6,13 @@
 import { useCallback, useEffect } from "react";
 import { useUrlState } from "../../hooks/useUrlState";
 import { BOARD_ONLY_PARAMS, CHART_VIEWS } from "../../hooks/useLeaderboardView";
+import { rememberChoice, storedChoice } from "../../util/appChoice";
 
 export type ExperimentsView = "jobs" | "all";
 
 export const VIEW_KEY = "vmn_experiments_view";
 
-const storageKey = (ws: string, app: string) => `${VIEW_KEY}:${ws}/${app}`;
-
-function stored(ws: string, app: string): ExperimentsView | null {
-  try {
-    const v = localStorage.getItem(storageKey(ws, app));
-    return v === "jobs" || v === "all" ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-function remember(ws: string, app: string, v: ExperimentsView) {
-  try { localStorage.setItem(storageKey(ws, app), v); } catch { /* not persisted */ }
-}
+const isView = (v: string | null): v is ExperimentsView => v === "jobs" || v === "all";
 
 function urlView(p: URLSearchParams): ExperimentsView | null {
   const raw = p.get("view");
@@ -48,8 +36,8 @@ export const allRunsSearch = (search: string) => `?${switchView(new URLSearchPar
 
 export function useExperimentsView(ws: string, app: string) {
   const { params, update } = useUrlState();
-  const view = urlView(params) ?? stored(ws, app) ?? "jobs";
-  useEffect(() => { remember(ws, app, view); }, [ws, app, view]);
+  const view = urlView(params) ?? storedChoice(VIEW_KEY, ws, app, isView) ?? "jobs";
+  useEffect(() => { rememberChoice(VIEW_KEY, ws, app, view); }, [ws, app, view]);
 
   /** *kind* (`jobs`/`singles`) picks the Jobs view's side. */
   const setView = useCallback((next: ExperimentsView, kind?: string) =>

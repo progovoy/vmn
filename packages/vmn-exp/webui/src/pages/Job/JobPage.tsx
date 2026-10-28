@@ -26,7 +26,7 @@ import JobHeader, { JOB_PANEL_ID, JobCliCard, JobTabs, jobTabId } from "./JobHea
 import { failedCount } from "./jobData";
 import { jobHead } from "./jobHead";
 import JobOverview from "./JobOverview";
-import JobRuns from "./JobRuns";
+import JobRunsTab from "./JobRunsTab";
 import { jobSummaryKey, onTabSearch, useJobTab, type JobTab } from "./jobQueries";
 import { useScopedStatus } from "../../shell/useShellData";
 import "./job.css";
@@ -38,7 +38,7 @@ function Panel({ tab, ws, app, v, name, detail, summary, live }: {
   live: { paused: boolean; onPaused: (paused: boolean) => void; refresh: () => unknown };
 }) {
   switch (tab) {
-    case "runs": return <JobRuns ws={ws} app={app} verstr={v} name={name} paused={live.paused} onPaused={live.onPaused} onLive={live.refresh} />;
+    case "runs": return <JobRunsTab ws={ws} app={app} verstr={v} name={name} paused={live.paused} onPaused={live.onPaused} onLive={live.refresh} />;
     case "code": return <RunChangesSection ws={ws} app={app} verstr={v} />;
     case "log": {
       if (!detail) return <Skeleton />;

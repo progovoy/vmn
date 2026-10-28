@@ -1,0 +1,17 @@
+/* An outer run's tree (JobTree.tsx): the board's grid, a node's name indented
+   by its depth behind its expander, its kind and fields as small chips. */
+.job-tree { table-layout: fixed; width: 1350px; }
+.job-tree td { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.job-tree td.num { font-variant-numeric: tabular-nums; }
+.job-tree .tree-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.job-tree .tree-name .run-link { overflow: hidden; text-overflow: ellipsis; }
+.job-tree .tree-toggle-gap { flex: none; width: 18px; }
+.job-tree .tree-kind, .job-tree .tree-field {
+  font-size: 11px; color: var(--text-2); border-radius: 4px; padding: 1px 6px;
+}
+.job-tree .tree-field + .tree-field { margin-left: 6px; }
+.job-tree .tree-duration { display: inline-flex; gap: 8px; justify-content: flex-end; }
+.job-tree .tree-ratio { color: var(--text-3); }
+.job-tree .tree-ratio.slow { color: var(--st-stuck, var(--hotfix)); }
+.job-tree .tree-more { border: 0; background: none; padding: 0; cursor: pointer; color: var(--accent); }
+.job-tree tr.tree-row:focus { outline: 2px solid var(--accent); outline-offset: -2px; }

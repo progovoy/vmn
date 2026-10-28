@@ -22,12 +22,14 @@ import JobRow from "./JobRow";
 import { densityRowHeight } from "../LeaderboardRow";
 import { JobGroupRow, JobMoreRow } from "./JobGroupRows";
 import { COLUMN_STYLES, JOBS_WIDTH, JOB_COLUMNS, type Order } from "./jobColumns";
+import { JobsTreeSlot, SLOT_HEIGHT, isTreeSlot, useTreeSlots } from "./JobsTreeSlot";
 import "../leaderboardTable.css";
 import "./jobsTable.css";
 
 const NEAR_END_ROWS = 20;
 const SKELETON_ROWS = 8;
 const CARDS_REFRESHED = 40;
+const NO_ITEMS: BoardItem[] = [];
 const HEAD_STYLES: readonly CSSProperties[] = COLUMN_STYLES.map((st) => ({
   ...st, position: "sticky", top: 0, zIndex: 2, background: STICKY_BG,
 }));
@@ -66,6 +68,8 @@ export interface JobsTableProps {
   onClearAnchor: () => void;
   /** Said in place of the rows when there are none. */
   emptyText: string;
+  /** Where an outer run's tree reads its children; none: rows have no expander. */
+  trees?: { ws: string; app: string };
 }
 
 export default function JobsTable(props: JobsTableProps) {
@@ -109,18 +113,19 @@ function Head({ sort, check }: { sort: JobsSort; check: HeaderCheckProps }) {
 
 function JobsGrid({
   items, ctx, sort, selected, density, headerCheck, groups, hasMore, onNearEnd, visibleRef,
-  onToggle, onClearAnchor, emptyText, viewportRef,
+  onToggle, onClearAnchor, emptyText, viewportRef, trees,
 }: JobsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   useFillHeight(parentRef);
   useHeldViewport(viewportRef, parentRef, selected);
   const scroll = useScrollMemory();
-  const list = useMemo(() => items ?? [], [items]);
+  const slots = useTreeSlots(items ?? NO_ITEMS);
+  const list = slots.list;
   const height = densityRowHeight(density);
   const virtualizer = useVirtualizer({
     count: list.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => height,
+    estimateSize: (i) => (isTreeSlot(list[i]) ? SLOT_HEIGHT : height),
     overscan: 20,
     initialOffset: scroll.initial,
   });
@@ -130,13 +135,14 @@ function JobsGrid({
     open: navigate,
     toggle: (i, range) => {
       const it = list[i];
+      if (isTreeSlot(it)) return;
       if (!isGroupItem(it)) onToggle(it.verstr, range);
       else if (it.item === "group" && it.rows.length) groups.onCheck(it.rows);
     },
     clearAnchor: onClearAnchor,
   });
   visibleRef.current = () =>
-    virtual.map((v) => list[v.index]).flatMap((r) => (r && !isGroupItem(r) ? [r.verstr] : []));
+    virtual.map((v) => list[v.index]).flatMap((r) => (r && !isTreeSlot(r) && !isGroupItem(r) ? [r.verstr] : []));
 
   const onScroll = () => {
     const el = parentRef.current;
@@ -169,6 +175,9 @@ function JobsGrid({
             {virtual.map((v) => {
               const it = list[v.index];
               const active = v.index === keys.active;
+              if (isTreeSlot(it)) {
+                return trees && <JobsTreeSlot key={`tree:${it.row.verstr}`} slot={it} ws={trees.ws} app={trees.app} ctx={ctx} />;
+              }
               if (isGroupItem(it)) {
                 return it.item === "more"
                   ? <JobMoreRow key={`more:${it.key}`} item={it} index={v.index} isActive={active} height={height} onMore={groups.onMore} />
@@ -184,6 +193,7 @@ function JobsGrid({
                   key={it.verstr} r={it} index={v.index} isActive={active}
                   isSelected={selected.has(it.verstr)}
                   density={density} ctx={ctx} onToggle={onToggle}
+                  expanded={slots.open.has(it.verstr)} onExpand={trees ? slots.toggle : undefined}
                 />
               );
             })}
