@@ -4,33 +4,20 @@
 Runs that failed for the same reason should cluster, so the signature keeps
 the shape of what went wrong (status, ``end_reason``, ``signal``,
 ``exit_code`` and the ``error_summary`` text) and masks what differs per
-run: uuids, versions, paths, hex ids and numbers. "CUDA out of memory.
-Tried to allocate 2.31 GiB" and "... 1.07 GiB" give the same signature.
+run (:func:`~vmn_exp.core.text_mask.mask`): uuids, versions, paths, hex ids
+and numbers. "CUDA out of memory. Tried to allocate 2.31 GiB" and "...
+1.07 GiB" give the same signature. A run without an ``error_summary``
+clusters by its latest note signature (``note_sig``, plan 28 N7) instead.
+
+:func:`signed` gives a board row its ``failure_sig`` and, from the run's note
+signatures (``IndexSnapshot.notes_of``), its ``note_sig`` and
+``note_minutes`` (what a job timeline counts, :mod:`~vmn_exp.ui.job_tally`).
 """
-import functools
-import re
-
+from vmn_exp.core.note_sigs import last_note_sig, note_minutes
 from vmn_exp.core.status import FAILED, STUCK
+from vmn_exp.core.text_mask import mask
 
-MAX_MESSAGE = 160
-_MSG = " | msg="
-_MASKS = [
-    (re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", re.IGNORECASE), "<uuid>"),
-    (re.compile(r"\b\d+\.\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?(?:\+[\w.]+)?"), "<ver>"),
-    (re.compile(r"(?<![\w.<>])(?:~|\.{1,2})?(?:/[\w.\-+@%=]+)+/?"), "<path>"),
-    (re.compile(r"\b[A-Za-z]:\\[\w\\.\-]+"), "<path>"),
-    (re.compile(r"\b0x[0-9a-f]+\b", re.IGNORECASE), "<hex>"),
-    (re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b", re.IGNORECASE), "<hex>"),
-    (re.compile(r"\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"), "<n>"),
-]
-
-
-@functools.lru_cache(maxsize=4096)
-def mask(text):
-    """*text* with per-run detail masked and whitespace collapsed."""
-    for pattern, placeholder in _MASKS:
-        text = pattern.sub(placeholder, text)
-    return " ".join(text.split())[:MAX_MESSAGE]
+_MSG, _NOTE = " | msg=", " | note="
 
 
 def signature(row):
@@ -44,11 +31,16 @@ def signature(row):
             parts.append(f"{key}={row[field]}")
     sig = " | ".join(parts)
     message = mask(str(row.get("error_summary") or ""))
-    return sig + _MSG + message if message else sig
+    if message:
+        return sig + _MSG + message
+    return sig + _NOTE + row["note_sig"] if row.get("note_sig") else sig
 
 
-def signed(row):
-    """*row* with its ``failure_sig`` (plan 23 S2), set in place."""
+def signed(row, notes=None):
+    """*row* with its ``failure_sig`` (plan 23 S2) and, when the run has
+    note signatures *notes*, its ``note_sig``/``note_minutes``, set in place."""
+    if notes:
+        row["note_sig"], row["note_minutes"] = last_note_sig(notes), note_minutes(notes)
     row["failure_sig"] = signature(row)
     return row
 
@@ -58,6 +50,7 @@ def label(sig):
     if sig is None:
         return None
     head, _, message = sig.partition(_MSG)
+    head, _, note = head.partition(_NOTE)
     status, *fields = head.split(" | ")
     detail = dict(field.split("=", 1) for field in fields)
     notes = [detail["reason"]] if "reason" in detail else []
@@ -65,5 +58,7 @@ def label(sig):
         notes.append(f"signal {detail['signal']}")
     if "exit" in detail:
         notes.append(f"exit {detail['exit']}")
+    if not message:
+        message = f"Last note: {note}" if note else None
     text = message or ("Stuck: no heartbeat" if status == STUCK else "Failed")
     return f"{text} ({', '.join(notes)})" if notes else text

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """What :class:`~vmn_exp.ui.leaderboard_cache.LeaderboardCache` answers
 over a whole filtered set rather than a page: parameter importance and the
-facets (plan 23 S2: within a scope and the filters too)."""
+facets (plan 23 S2: within a scope and the filters too; there, also the
+top note signatures, plan 28 N7)."""
+from collections import Counter
+
 from vmn_exp.core.importance import param_importance
 from vmn_exp.ui.leaderboard_scope import Filters, check_scope, scope_positions
 from vmn_exp.ui.leaderboard_top_counts import top_counts
@@ -12,6 +15,21 @@ IMPORTANCE_RESULTS = 8
 NO_TOP_RUNS = {"jobs": 0, "singles": 0}
 # A job's importance is scored again per this share of its runs scored.
 IMPORTANCE_STEP = 0.05
+# Note signatures a filtered facets answer lists.
+TOP_NOTE_SIGS = 20
+
+
+def note_facet(rows, notes_of):
+    """``[{sig, runs, count}]``: the :data:`TOP_NOTE_SIGS` note signatures
+    most of *rows* logged (then most notes, then by name), from
+    ``notes_of(verstr)`` (plan 28 N7)."""
+    runs, counts = Counter(), Counter()
+    for row in rows:
+        for sig, held in (notes_of(row["verstr"]) or {}).items():
+            runs[sig] += 1
+            counts[sig] += held.get("count") or 0
+    top = sorted(runs, key=lambda sig: (-runs[sig], -counts[sig], sig))[:TOP_NOTE_SIGS]
+    return [{"sig": sig, "runs": runs[sig], "count": counts[sig]} for sig in top]
 
 
 def _importance_step(base, scope):
@@ -90,6 +108,9 @@ class SetAnswers:
 
         def both():
             rows = base.tail(bucket, 0, f)
-            return facets_of(rows), (NO_TOP_RUNS if scope else top_counts(rows))
+            found, sigs = facets_of(rows), note_facet(rows, base.snapshot.notes_of)
+            if sigs:
+                found["note_sigs"] = sigs
+            return found, (NO_TOP_RUNS if scope else top_counts(rows))
 
         return self._filtered_facets.get((base.token, bucket) + f, both)

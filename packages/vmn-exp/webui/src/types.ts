@@ -304,6 +304,9 @@ export interface ExperimentFacets {
   /** Top-level runs with children, and without (plan 23 §3.1). */
   jobs: number;
   singles: number;
+  /** A scoped or filtered answer's top 20 note signatures, by runs (plan
+   *  28 N7); absent when the runs logged no notes. */
+  note_sigs?: { sig: string; runs: number; count: number }[];
 }
 
 /** The top-level runs a list asks for: every one, the jobs, or the single runs. */

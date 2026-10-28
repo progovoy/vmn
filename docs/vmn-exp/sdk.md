@@ -195,7 +195,7 @@ Every call appends to the run's log; nothing is rewritten.
 | `log_params({...})` | more inputs, merged into the run's params |
 | `log_input(uri, name=None, digest=None, kind=None)` | a dataset/artifact the run consumed; `name` defaults to the URI basename without extension; folded last-write-wins by name |
 | `use_artifact(ref, path, name=None, app_name=None)` | consume artifact `path` of another run and return a local path to it (downloaded when remote). Records an input `vmn://<app>/<verstr>/<path>` with the artifact's digest and `kind="artifact"` ([Lineage](#lineage)). `ValueError` if that run logged no such artifact |
-| `log_note(text)` | a note |
+| `log_note(text)` | a note. The index keeps its [signature](#note-signatures) (`notes ~ "sigterm"`), never its text |
 | `log_artifact(path, name=None)` | a file, stored as `name` (a relative `a/b/c.txt` path) or its basename |
 | `log_artifacts(local_dir, prefix=None)` | every file under `local_dir`, named by its relative path (under `prefix`) |
 | `log_dict(obj, name)` | JSON or YAML by `name`'s extension (`.json`/`.yaml`/`.yml`, else `ValueError`) |
@@ -619,6 +619,27 @@ never finished). `start_run(run_id=...)` reopens it (`resume_count` + 1;
 `signal = "SIGTERM"`, `status = "succeeded" and resume_count > 0` (retries that
 ended done). An outer run's timeline counts releases per minute, so an eviction
 wave shows as a spike. `NoOpRun.release()` does nothing.
+
+### Note signatures
+
+The index never keeps a note's text (plan 28 N7). It masks each `log_note`
+text like a failure signature (numbers, sizes, ids, hex, versions, paths
+become `<n>`, `<hex>`, `<path>`, ...; at most 56 characters) and keeps, per
+signature, how many notes had it and when the latest was logged:
+`"Received SIGTERM at step 1200"` and `"... step 87"` are one signature,
+`Received SIGTERM at step <n>`. A run keeps at most 8: a new one past that
+evicts the one with the fewest notes, the least recently seen of those, so
+the most frequent stay and the newest always enters. They stay off the rows
+(a side table, like the intent), within plan 27's per-run budget (at most
+1 KB a run).
+
+- `notes ~ "sigterm"` matches a run whose signatures hold the text
+  (`list_runs(query=)`, `vmn-exp list --query`, the UI; not the Postgres
+  search backend).
+- `vmn-exp ui`: scoped or filtered `experiments-facets` list the top 20
+  signatures, an outer run's timeline counts them per minute, and a failed
+  run without an `error_summary` clusters by its latest one
+  ([ui.md](ui.md#outer-runs-scope-and-search)).
 
 ### Forking a run
 
@@ -1046,7 +1067,9 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `has_intent` is a bool on every row. `intent` is the latest
   [intent](experiments.md#intent-what-a-run-is-for)'s text and `keywords` its
   keyword list (`~` matches any element); both are missing on a run without
-  an intent. `archived = true` only matters with `include_archived=True`.
+  an intent. `notes` is the run's [note signatures](#note-signatures) (`~`
+  matches any; missing on a run that logged no note).
+  `archived = true` only matters with `include_archived=True`.
 - `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
   is missing), `env.<key>` (the captured environment summary: `python`,
   `platform`, `packages_count`, …) and `env.packages.<pkg>` for the key packages

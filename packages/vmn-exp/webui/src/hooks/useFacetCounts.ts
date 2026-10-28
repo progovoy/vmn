@@ -47,6 +47,13 @@ export function useFacetParams(ws: string, app: string, opts: FacetOpts): FacetP
   }, [facets]);
 }
 
+/** The filtered runs' most common note signatures (plan 28 N7), runs per
+ *  signature, read off the same facets answer. */
+export function useNoteSigs(ws: string, app: string, opts: FacetOpts): ValueCount[] {
+  const facets = useFacets(ws, app, clean(opts));
+  return useMemo(() => (facets?.note_sigs ?? []).map((s) => ({ key: s.sig, count: s.runs })), [facets]);
+}
+
 export interface FacetParam {
   key: string;
   /** More distinct values than a facet lists (the facets cap the count past 20). */

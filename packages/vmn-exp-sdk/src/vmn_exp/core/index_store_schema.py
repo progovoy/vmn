@@ -49,8 +49,8 @@ from vmn_exp.core import similar_fts
 from vmn_exp.core.index_store_kv import write_puts
 from vmn_exp.core.sqlite_conn import write_tx
 
-RECORDS_VERSION = 18
-DERIVED_VERSION = 19
+RECORDS_VERSION = 19
+DERIVED_VERSION = 20
 SCHEMA_VERSION = f"exp-index-{DERIVED_VERSION}"
 # Older records versions whose records still read right in this one.
 COPYABLE_RECORDS = frozenset()

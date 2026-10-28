@@ -13,7 +13,7 @@ corpus through both backends.
 import json
 
 from vmn_exp.core.query import SIMILAR, QueryError, parse_query
-from vmn_exp.core.query_extra import INTENT, KEYWORDS
+from vmn_exp.core.query_extra import INTENT, KEYWORDS, NOTES
 from vmn_exp.core.query_up import UP
 
 # What Python's ``x or y`` treats as false, as jsonb.
@@ -53,7 +53,7 @@ class _Compiler:
             raise QueryError("up fields are not supported by the SQL backend")
         kind, arg = field
         if kind == "path":
-            if arg[0] in (INTENT, KEYWORDS):  # off the synced rows
+            if arg[0] in (INTENT, KEYWORDS, NOTES):  # off the synced rows
                 raise QueryError(f"{arg[0]} is not supported by the SQL backend")
             return f"({self.column} #> {self.param(list(arg), '::text[]')})"
         packages = f"({self.column} #> '{{env,packages}}')"

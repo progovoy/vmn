@@ -36,8 +36,10 @@ DONE = (SUCCEEDED, FAILED)
 STATES = {RUNNING: "running", CREATED: "waiting", SUCCEEDED: "succeeded",
           FAILED: "failed", STUCK: "stuck"}
 # What a job's timeline counts per minute: runs started, runs ended per
-# outcome, and runs handed back unfinished (their last release, plan 28 API2).
-TIMELINE = ("started", SUCCEEDED, FAILED, RELEASED)
+# outcome, runs handed back unfinished (their last release, plan 28 API2)
+# and note signatures, each by the minute a run last noted it (plan 28 N7).
+NOTES = "notes"
+TIMELINE = ("started", SUCCEEDED, FAILED, RELEASED, NOTES)
 MINUTES_KEPT = 24 * 60
 COARSE_MINUTES = 10
 
@@ -218,6 +220,8 @@ class Tally:
         released = _minute(row["released_at"]) if row.get("released_at") else None
         if released is not None:
             self.timeline[RELEASED].add(released, by)
+        for minute in row.get("note_minutes") or ():
+            self.timeline[NOTES].add(minute, by)
         if status in DONE and row.get("finished_at"):
             minute = _minute(row["finished_at"])
             if minute is not None:

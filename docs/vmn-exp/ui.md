@@ -825,7 +825,12 @@ message.
 
 - **Rows** carry `root` (the top-level ancestor's verstr, null at the top) and
   `failure_sig`. Both are query fields, as is `under("<verstr>")` (in that
-  run's subtree).
+  run's subtree). A run that logged notes also carries `note_sig` (its latest
+  [note signature](sdk.md#note-signatures)) and `note_minutes` (the epoch
+  minute each of its signatures was last noted in); a failed or stuck run
+  without an `error_summary` has `failure_sig` `failed | exit=143 |
+  note=<its note_sig>`, so its failures cluster by what it noted last
+  ("Last note: ..."). `notes ~ "sigterm"` matches the signatures.
 - **`experiments?top=1|jobs|singles`** lists top-level runs only (all, those
   with children, those without). An outer run's row carries `job`: `{total, counts,
   done, expected, progress, failed_pct, throughput_per_min, eta_sec,
@@ -876,6 +881,10 @@ message.
   works on `experiments` (flat and grouped), `experiments-columns`,
   `experiments-facets` (which also takes `q`/`status`), `experiments-importance`
   and `experiments-pivot`. An unknown run is a 404.
+  - A scoped or filtered `experiments-facets` adds `note_sigs`: the 20 note
+    signatures most of its runs logged, `[{sig, runs, count}]` (`count` =
+    notes), absent when they logged none. The Runs tab's facet sidebar lists
+    them under Notes; a click adds `notes ~ "<sig>"`.
 - **Grouped answers** give every group a `clause`, the filter text that
   selects exactly it. With `top=`, groups add `job_counts`, `runs`, `failed`
   and `job_aggregates` (over the outer runs' best values).
@@ -886,7 +895,9 @@ message.
   `{n,min,max,mean,best,best_verstr,p10,p50,p90,hist}`, duration p50/p90,
   failure signatures, `top` (10 best) and a `timeline` (epoch-second buckets
   of `started`/`succeeded`/`failed`, plus `released` where runs were handed
-  back, sparse; the chart draws releases per minute beside completions).
+  back and `notes` where runs noted something (each note signature counted
+  once, in the minute a run last noted it), sparse; the chart draws releases
+  per minute beside completions, not notes yet).
   - `?split=tags.<k>|params.<k>` (default: `experiment.ui.split_by` from conf.yml, else the store
     settings; another field is a 400)
     adds `split` (the field, else `null`) and `by`: per value
