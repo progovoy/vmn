@@ -11,11 +11,11 @@ runs, so its rows, store upkeep and ``/metrics`` stay current with nobody
 watching. By default a store workspace's indexes are (they come with a
 journal, so an idle refresh lists only hinted and live records) and a
 checkout's are not; ``keep_warm=True``/``False`` forces either way.
-Only the very first request of an index waits (for its initial load, which
-the persisted SQLite store makes fast). A refresh that fails is logged and
-the last snapshot keeps being served; the next one (like a journal tick
-after a failed one) is tried ``interval_sec`` later doubling per failure, up
-to ``MAX_FAILURE_BACKOFF_SEC``, wakes or not
+No request waits for an index's first load (half a second at most, then an
+empty snapshot saying it is loading), nor for its refresh lock. A refresh
+that fails is logged and the last snapshot keeps being served; the next one
+(like a journal tick after a failed one) is tried ``interval_sec`` later
+doubling per failure, up to ``MAX_FAILURE_BACKOFF_SEC``, wakes or not
 (:meth:`~vmn_exp.ui.failure_streak.FailureStreak.backoff_sec`).
 
 A store workspace passes its :class:`~vmn_exp.ui.journal_follow.WorkspaceJournal`

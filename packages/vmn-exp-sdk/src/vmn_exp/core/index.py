@@ -344,14 +344,20 @@ class ExperimentIndex:
     def use_io_process(self):
         """Do this index's filesystem work in a helper process from now on;
         False when the storage is not a plain local store, the index already
-        loaded in-process, or no helper could start. :meth:`close` stops it."""
-        with self._lock:
+        loaded in-process, or no helper could start; also False, at once, while
+        a refresh holds the index (it loads in-process: a request asking never
+        waits out a cold load). :meth:`close` stops it."""
+        if not self._lock.acquire(blocking=False):
+            return self._io is not None
+        try:
             if self._io is None and self._records is None:
                 self._io = start_io_process(self._storage, self.app_name, self._cache_path)
                 if self._io is not None:
                     self._sweep.watch = self._io.watch
                     self._freshness.load()  # now: the pipe is the refresh's
             return self._io is not None
+        finally:
+            self._lock.release()
 
     def close(self):
         """Stop the I/O helper process, if any; later refreshes run in-process
