@@ -114,6 +114,13 @@ class _Watch:
         if self._io.alive():
             self._io.call("reset")
 
+    def forget(self, keys):
+        if keys and self._io.alive():
+            try:
+                self._io.call("forget", list(keys))
+            except IOProcessError:
+                pass  # its successor starts from empty baselines
+
 
 class ProcessIO:
     def __init__(self, args, app_name, cache_path):

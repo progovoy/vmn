@@ -410,9 +410,15 @@ class ExperimentIndex:
         try:
             with self._paused_unless_remote():
                 self._refresh_from_storage(started)
+            self._sweep.applied()
         except Exception:
-            # A listing's changes may have been taken but not applied.
-            self._sweep.reset()
+            # A listing's changes may have been taken but not applied: list
+            # them again — all of them once a dead I/O helper took its
+            # baselines along.
+            if self._io is not None and not self._io.alive():
+                self._sweep.reset()
+            else:
+                self._sweep.failed()
             raise
         finally:
             self._published.set()

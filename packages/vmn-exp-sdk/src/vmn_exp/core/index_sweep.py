@@ -64,6 +64,7 @@ import time
 from vmn_exp.core.index_lazy import has_meta
 from vmn_exp.core.index_listing import METADATA_FILE, ListingWatch, as_sigs  # noqa: F401
 from vmn_exp.core.index_sweep_behind import SweepBehind
+from vmn_exp.core.index_sweep_failed import SweepRetake
 from vmn_exp.core.index_sweep_state import SweepState, _settled
 from vmn_exp.core.status import heartbeat_interval_sec, stale_after_sec
 
@@ -104,7 +105,7 @@ def live_relist_sec(record):
     return min(period, stale_after_sec(run_state) / 2)
 
 
-class Sweep(SweepBehind, SweepState):
+class Sweep(SweepBehind, SweepRetake, SweepState):
     """The listing policy of one index; times are the caller's monotonic clock."""
 
     def __init__(self, storage, app_name, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC, watch=None):
@@ -128,6 +129,7 @@ class Sweep(SweepBehind, SweepState):
         self._restored = False  # baselines restored: check the records against them
         self._unprinted = set()  # records no listing of this process fingerprinted yet
         self.listed_gone = set()  # keys the last listing named and found without metadata
+        self._taken = set()  # keys this refresh's listings took (see SweepRetake)
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""
@@ -190,10 +192,13 @@ class Sweep(SweepBehind, SweepState):
         if self._restored:
             changed, gone_names = self._against_records(records, changed, gone_names)
         keys = sorted(set(self._to_list(records, changed, gone_names, now)) | hinted)
+        self._took(keys, gone_names)
         listing = self.watch.files(keys)
         gone = self.listed_gone = _without_metadata(keys, listing)
         if self.watch.rolling and self.full_sweep_sec:
-            rolled, rolled_gone = self.watch.slice_changes(self._next_slice(now, self._sigs))
+            due = self._next_slice(now, self._sigs)
+            self._took(due)
+            rolled, rolled_gone = self.watch.slice_changes(due)
             listing = {**rolled, **listing}
             gone |= rolled_gone
         self._pending = {key for key in gone if key in self._sigs and key not in records}
@@ -209,6 +214,7 @@ class Sweep(SweepBehind, SweepState):
         candidates = hinted | self._pending | self._live
         keys = [key for key in candidates if key in hinted or self._live_due(records, key, now)]
         self._explained.update(keys)
+        self._took(keys)
         listing = self._hinted_files(keys)
         gone = self.listed_gone = _without_metadata(keys, listing)
         if self._relisting is not None and self._relisting.files:
@@ -225,9 +231,11 @@ class Sweep(SweepBehind, SweepState):
     def _consistency_check(self, records, now):
         """``(files of the slice's changed records, keys gone)``, counting drift."""
         due = self._next_slice(now, records)
+        self._took(due)
         changed, gone = self.watch.slice_changes(due) if due else ({}, set())
         if self._wrapped:
             unseen = self._unseen_names(records)
+            self._took(unseen)
             new, _ = self.watch.slice_changes(unseen) if unseen else ({}, set())
             changed = {**new, **changed}
         unexplained = [
@@ -342,15 +350,16 @@ class Sweep(SweepBehind, SweepState):
         return due
 
     def _full_listing(self, records, now):
+        listing, present = self.watch.full_changes()
         self._last_full = self._rolled_at = now
         self._restored = False  # every record is compared below
         self.last_reconcile_at = _wall()
-        listing, present = self.watch.full_changes()
         if self._live is None:
             self._live = {
                 k for k, r in records.items() if has_meta(r) and not _settled(r)
             }
         self._pending = {k for k in self._sigs if k not in present}
+        self._listed_full = listing
         return listing, [key for key in records if key not in present]
 
     def _full_due(self, now):

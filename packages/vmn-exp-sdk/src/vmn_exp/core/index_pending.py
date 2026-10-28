@@ -4,7 +4,7 @@ not persist yet (plan 25 §2: a failed save marks its records dirty again).
 
 A refresh hands its changes to :meth:`PendingSave.save`, which saves them
 together with whatever an earlier failed save left behind; when the store
-answers False they all stay pending for the next refresh. The pending
+answers False (or raises) they all stay pending for the next refresh. The pending
 records are the refreshed objects themselves, so a later save writes their
 latest content.
 
@@ -36,15 +36,22 @@ class PendingSave:
         for n, keys in enumerate(parts):
             last = n == len(parts) - 1
             extra = {"kv_puts": kv_puts} if kv_puts and last else {}
-            saved = store.save(scope, _only(changed, keys), set(removed) if last else set(),
-                               _only(states, keys), **extra)
+            try:
+                saved = store.save(scope, _only(changed, keys), set(removed) if last else set(),
+                                   _only(states, keys), **extra)
+            except Exception:
+                self._keep(changed, removed, states, parts[n:])
+                raise
             if saved is False:
-                rest = [key for part in parts[n:] for key in part]
-                self._changed, self._states = _only(changed, rest), _only(states, rest)
-                self._removed = set(removed)
+                self._keep(changed, removed, states, parts[n:])
                 return False
         self._changed, self._removed, self._states = {}, set(), {}
         return True
+
+    def _keep(self, changed, removed, states, parts):
+        rest = [key for part in parts for key in part]
+        self._changed, self._states = _only(changed, rest), _only(states, rest)
+        self._removed = set(removed)
 
     def _with_pending(self, changed, removed, states):
         return (

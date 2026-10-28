@@ -10,8 +10,9 @@ full or sliced listing (``full_changes``/``slice_changes``) saw them. The same c
 local store, in its I/O helper process (:mod:`experiment_index_io_process`),
 where the baselines live next to the listings and only changes cross the pipe.
 
-A caller that failed to apply a change calls :meth:`reset`: the next listings
-then report everything again.
+A caller that failed to apply the changes of some records calls
+:meth:`forget` with them: the next listings report those again (:meth:`reset`:
+everything).
 
 The baselines outlive the process (:mod:`~vmn_exp.core.index_baseline`):
 :meth:`ListingWatch.baseline` hands them out with the keys that moved since
@@ -62,6 +63,12 @@ class ListingWatch:
 
     def reset(self):
         self._names, self._prints, self._moved = {}, {}, None
+
+    def forget(self, keys):
+        """Report *keys*' records as changed when next listed."""
+        for key in keys:
+            self._prints.pop(key, None)
+        self._moved_keys(keys)
 
     def baseline(self):
         """``(names, prints, keys moved since the last call or None for

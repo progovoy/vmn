@@ -87,9 +87,10 @@ class SweepBehind:
                 hinted = set()
                 while len(hinted) < limit:
                     hinted.add(self._hinted.pop())
-                return hinted
-            hinted, self._hinted = self._hinted, set()
-            self.mark_taken = self._hint_mark
+            else:
+                hinted, self._hinted = self._hinted, set()
+                self.mark_taken = self._hint_mark
+        self._took(hinted)
         return hinted
 
     def _begin_journaled(self, records, now):
@@ -100,11 +101,11 @@ class SweepBehind:
                 self._judge_all_live(records)
                 self._unprinted = set(records)
         if self._names_wanted:
-            self._names_wanted = False
             if self.behind:
                 self._relist(records, files=False)
             else:
                 self._hint_unlisted(records, self.watch.record_names())
+            self._names_wanted = False
 
     def _hint_unlisted(self, records, names):
         if names is None:
@@ -171,13 +172,20 @@ class SweepBehind:
         """``(files of the relisted records that changed, keys gone)`` of
         what the relisting under way listed since the last refresh."""
         relisting = self._relisting
-        keys, files, done = relisting.take(RELIST_PER_REFRESH)
+        try:
+            keys, files, done = relisting.take(RELIST_PER_REFRESH)
+        except Exception:
+            self._relisting = None  # the next refresh starts another
+            self._names_wanted |= not relisting.files
+            raise
         if done:
             self._relisting = None
-        if not relisting.files:
-            with self._hint_lock:
+        with self._hint_lock:
+            self._hinted.update(relisting.take_refused())
+            if not relisting.files:
                 self._hinted.update(keys)
-            return {}, set()
+                return {}, set()
+        self._took(keys)
         if done:
             self._listed_fully(now)
         changed, _ = self.watch.listed_changes(keys, files)
