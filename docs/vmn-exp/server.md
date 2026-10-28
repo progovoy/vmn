@@ -421,11 +421,13 @@ metrics:
 ui:
   group_aggregate: best
   stale_after_min: 30
+  progress: {done: dates_done, total: dates_total, unit: dates}
 ```
 
 - Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
-  `ui.*` (`group_aggregate`, `stale_after_min` checked; other `ui` keys kept).
+  `ui.*` (`group_aggregate`, `stale_after_min`, `progress` checked; other
+  `ui` keys kept).
   Anything else, or a bad value, is refused on write; a file broken behind
   vmn's back reads as no settings, with a warning.
 - Precedence: a git workspace's conf.yml (per metric name, per `ui` key) >
@@ -433,7 +435,9 @@ ui:
   the settings of its checkout's store below its conf.
 - They drive the metrics schema (sort direction, summaries, primary, hidden),
   the default group aggregate and the stale window — in the server and in
-  `vmn-exp list` / `list_runs()` over the same store.
+  `vmn-exp list` / `list_runs()` over the same store — and, in the server,
+  the metrics an outer run's declared progress is read from (`ui.progress`,
+  see [ui.md](ui.md)).
 - Write them with `vmn-exp settings <app> set -f <file> [--store <uri>]`
   ([experiments.md](experiments.md#store-settings-vmn-exp-settings)), or as an
   editor with `PUT /api/v1/workspaces/{ws}/apps/{app}/settings`

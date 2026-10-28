@@ -167,7 +167,17 @@ def create_app(
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
                               store_upkeep=upkeep)
-    leaderboards = LeaderboardCache()
+    def _board_conf(snapshot):
+        """``(metrics schema, experiment.ui)`` of *snapshot*'s app, as a request reads them."""
+        owner = source.owner_of(snapshot)
+        if owner is None:
+            return {}, {}
+        ws, app_name = owner
+        settings = _settings(ws, app_name)
+        return (source.metrics_schema(ws, app_name, settings),
+                source.experiment_ui(ws, app_name, settings))
+
+    leaderboards = LeaderboardCache(conf_of=_board_conf)
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)

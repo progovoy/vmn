@@ -35,6 +35,7 @@ from vmn_exp.ui.refresher import InlineRefresher, NotingRefresher
 from vmn_exp.ui.schema_cache import MetricsSchemaCache
 from vmn_exp.ui.settings_cache import SettingsCache
 from vmn_exp.ui.similar_corpora import SimilarCorpora
+from vmn_exp.ui.snapshot_owners import SnapshotOwners
 
 # A background server re-reads an app's store settings this often at most;
 # a journal entry for them drops them at once.
@@ -108,6 +109,8 @@ class ExperimentSource:
         self._lock = threading.Lock()
         self._search_rows = search_rows
         self._upkeep = store_upkeep
+        self._owners = SnapshotOwners()
+        self.refresher.add_listener(self._owners.refreshed)
         if store_upkeep is not None:
             self.refresher.add_listener(store_upkeep.refreshed)
         # Where similar runs are searched, kept in step on every refresh.
@@ -133,6 +136,7 @@ class ExperimentSource:
         metrics *schema* when one is given; a query's ``similar()`` over it
         searches the app's similar-runs scope."""
         snap = self._snapshot(ws, app_name, s3_storage, schema)
+        self._owners.note(snap, (ws, app_name))
         key = (ws.name, app_name)
         bind_similar_scope(snap, lambda s: self.similar.scope(key, app_name, s))
         return snap
@@ -164,6 +168,7 @@ class ExperimentSource:
 
         def note(index):
             self._served_by[(ws.name, app_name)] = index
+            self._owners.serves(index, (ws, app_name))
             self.similar.note(index, (ws.name, app_name), app_name)
             if self._search_rows is not None:
                 self._search_rows.note(index, ws.name, app_name, schema_of)
@@ -250,6 +255,11 @@ class ExperimentSource:
             self._pg.index(ws, app_name, s3_storage).refresh()
             return
         ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws))
+
+    def owner_of(self, snapshot):
+        """``(workspace, app name)`` of the app *snapshot* was served or
+        published for, else None (:mod:`~vmn_exp.ui.snapshot_owners`)."""
+        return self._owners.of(snapshot)
 
     def app_settings(self, ws, app_name, storage):
         """The app's store settings in *storage* (:mod:`vmn_exp.core.app_settings`)."""

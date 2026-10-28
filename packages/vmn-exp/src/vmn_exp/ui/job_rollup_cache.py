@@ -5,7 +5,10 @@ one :class:`~vmn_exp.ui.job_rollup.StaticRollups` per (base, schema), moved
 on from the last one served for the app and schema across the deltas since
 (else built), one live overlay per time bucket, and every job answer (these
 rollups and :class:`~vmn_exp.ui.job_views.JobViews`') in one memo per
-(base, live bucket, :func:`minute`, schema) — a request is a memo hit.
+(base, live bucket, :func:`minute`, schema, progress names) — a request is a
+memo hit. The progress names (plan 28 P2) come from the app's
+``experiment.ui.progress`` (``LeaderboardCache.conf_of``), so a settings
+change reaches the answers without a new generation.
 Split rollups (plan 28 P3) are kept the same way per split field, in LRUs
 of their own (:class:`_SplitRollups`).
 """
@@ -29,13 +32,6 @@ def minute():
     """The clock job answers follow besides the live bucket: throughput and
     ETA count completions per minute back from now."""
     return int(experiment_status._now().timestamp() // 60)
-
-
-def progress_names_of(snapshot):
-    """The metric names *snapshot*'s app declares progress by: the
-    defaults until app settings (plan 28 A0) reach the rollups with
-    ``experiment.ui.progress`` (then part of the spec's memo key too)."""
-    return progress_names(None)
 
 
 def _payload(job, parts, spec, now, idx_of):
@@ -88,14 +84,20 @@ class JobRollupCache:
         static, live = self._splits.sources(app_name, base, bucket, field)
         return split_payload(_parts(tree, static, live)(verstr), static.spec)
 
+    def progress_names(self, snapshot):
+        """The metric names *snapshot*'s app declares progress by (its
+        ``experiment.ui.progress``, else the defaults)."""
+        _, ui = self._cache.conf_of(snapshot)
+        return progress_names((ui or {}).get("progress"))
+
     def spec(self, snapshot, schema):
         """The :class:`~vmn_exp.ui.job_tally.RollupSpec` of *schema* over
         *snapshot* (its fallback metrics are the snapshot's most common)."""
         cache = self._cache
         base, _ = cache._base(snapshot)
-        return self._specs.get((base.token, cache.schema_key(schema)), lambda: RollupSpec(
-            schema, lambda: cache._facets.common_metrics(snapshot),
-            progress=progress_names_of(snapshot)))
+        names = self.progress_names(snapshot)
+        return self._specs.get((base.token, cache.schema_key(schema), names), lambda: RollupSpec(
+            schema, lambda: cache._facets.common_metrics(snapshot), progress=names))
 
     def tree(self, base):
         """*base*'s :class:`~vmn_exp.ui.job_rollup.JobTree`."""
@@ -108,7 +110,8 @@ class JobRollupCache:
         base, bucket = cache._base(snapshot)
         if verstr is not None and verstr not in self.tree(base).jobs:
             return None
-        key = (base.token, bucket, minute(), cache.schema_key(schema), verstr, kind)
+        key = (base.token, bucket, minute(), cache.schema_key(schema),
+               self.progress_names(snapshot), verstr, kind)
         return self._answers.get(key, build)
 
     def _rolled_up(self, snapshot, schema, verstr, answer):
@@ -135,7 +138,7 @@ class JobRollupCache:
             return row(job)["idx"] if job in base.position else None
 
         def answered(job):
-            return answer(row(job), parts(job), static.spec, now, idx_of)
+            return answer(row(job), parts(job), spec, now, idx_of)
 
         if verstr is not None:
             return answered(verstr)

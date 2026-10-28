@@ -273,9 +273,18 @@ def _schema_key(schema):
     return json.dumps(schema or {}, sort_keys=True, default=str)
 
 
+def _no_conf(snapshot):
+    return {}, {}
+
+
 class LeaderboardCache(SetAnswers):
     def __init__(self, max_page=MAX_PAGE, bucket_sec=BUCKET_SEC, size=32,
-                 base_wait_sec=BASE_WAIT_SEC):
+                 base_wait_sec=BASE_WAIT_SEC, conf_of=_no_conf):
+        """*conf_of(snapshot)* -> ``(metrics schema, experiment.ui)`` of the
+        app whose index published *snapshot* (its conf over its store
+        settings): what the board warm-up sorts by and job rollups read
+        their progress names from."""
+        self.conf_of = conf_of
         self.max_page = max_page
         self.bucket_sec = bucket_sec
         self.base_wait_sec = base_wait_sec
@@ -547,7 +556,8 @@ class LeaderboardCache(SetAnswers):
         """Changes whenever :meth:`page` could answer differently."""
         base, bucket = self._base(snapshot)
         raw = json.dumps(
-            [_NONCE, base.token, bucket, _schema_key(schema), sorted(params.items())],
+            [_NONCE, base.token, bucket, _schema_key(schema), self.jobs.progress_names(snapshot),
+             sorted(params.items())],
             default=str,
         )
         return hashlib.blake2b(raw.encode(), digest_size=16).hexdigest()
