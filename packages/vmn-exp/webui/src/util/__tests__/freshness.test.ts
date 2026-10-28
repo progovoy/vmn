@@ -87,6 +87,48 @@ describe("freshnessBanner", () => {
   });
 });
 
+describe("freshnessBanner: runs set aside unread", () => {
+  const throttled = { count: 12, store_errors: 12, last_error:
+    "ClientError('An error occurred (SlowDown) when calling the GetObject operation')" };
+
+  it("warns on fresh data that runs could not be read, naming a throttling store", () => {
+    expect(freshnessBanner({ ...fresh, unreadable: throttled }, AS_OF_MS + MIN)).toEqual({
+      kind: "stale",
+      text: "⚠ 12 runs could not be read (the store is throttling: SlowDown); retrying.",
+    });
+  });
+
+  it("names the last error of another failure", () => {
+    const one = { count: 1, store_errors: 0, last_error: "TypeError('x')" };
+    expect(freshnessBanner({ ...fresh, unreadable: one }, AS_OF_MS + MIN)?.text).toBe(
+      "⚠ 1 run could not be read (last error: TypeError('x')); retrying.");
+    const reset = { count: 2, store_errors: 2, last_error: "OSError('reset')" };
+    expect(freshnessBanner({ ...fresh, unreadable: reset }, AS_OF_MS + MIN)?.text).toBe(
+      "⚠ 2 runs could not be read (store error: OSError('reset')); retrying.");
+  });
+
+  it("adds them to the stale data's banner", () => {
+    expect(freshnessBanner({ ...syncing, unreadable: throttled }, AS_OF_MS + 10 * MIN)?.text)
+      .toBe("⚠ Showing data as of Oct 22 19:44 UTC (10m old). Syncing with the store — "
+        + "listing runs, ~45%. New runs will appear when it finishes. 12 runs could not be "
+        + "read (the store is throttling: SlowDown); retrying.");
+  });
+
+  it("leaves them out while the refresh is failing", () => {
+    const failing = { ...fresh, refresh_failing: true, last_error: "OSError('reset')",
+      unreadable: throttled };
+    expect(freshnessBanner(failing, AS_OF_MS + MIN)).toBeNull();
+    expect(freshnessBanner(failing, AS_OF_MS + 40 * MIN)?.text).toBe(
+      "⚠ Data is 40m old and the background refresh has not completed for 40m "
+      + "(last error: OSError('reset')).");
+  });
+
+  it("says nothing of none", () => {
+    expect(freshnessBanner({ ...fresh, unreadable: { ...throttled, count: 0 } }, AS_OF_MS + MIN))
+      .toBeNull();
+  });
+});
+
 describe("freshnessShort", () => {
   it("is empty while fresh", () => {
     expect(freshnessShort(fresh, AS_OF_MS + MIN)).toBe("");

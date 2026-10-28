@@ -879,6 +879,14 @@ an index that serves old data or stopped keeping up:
   last error), its thread is gone, or it has run past 10 minutes (stuck).
 - `stale_after_sec`: the age past which the dashboard warns — conf
   `experiment.ui.stale_after_min` of a checkout's app (default 5).
+- `unreadable` (absent when none): `{"count": 12, "store_errors": 12,
+  "last_error": "ClientError('An error occurred (SlowDown) ...')"}` — the
+  records the index set aside unread, retried 60 s later doubling to 10 min:
+  `store_errors` of them failed on the store (a throttled, refused or reset
+  read), the rest on their own content; `last_error` is the latest failure's
+  short repr. The refresh succeeds around them, so this is the only sign of a
+  throttled store; a new record stays out and a known one keeps what the
+  index had.
 
 Its times count by the minute in the ETag, and what a refresh does only while
 the data is stale or the refresh failing (a fresh index's once-a-second
@@ -888,14 +896,20 @@ than `stale_after_sec` or a refresh runs on data older than that ("Showing
 data as of Oct 22 19:44 UTC (4d old). Syncing with the store — listing runs,
 ~45%. New runs will appear when it finishes."), or when the refresh is failing
 ("Data is 4d old and the background refresh has not completed for 25m
-(last error: …)"); none once a refresh published fresh data. It polls the
+(last error: …)"); none once a refresh published fresh data. Unless the
+refresh is failing, runs set aside unread add a warning to it, or make one
+on fresh data ("12 runs could not be read (the store is throttling:
+SlowDown); retrying."). It polls the
 status every 2 s while a refresh runs on stale data. The refresher heals
 itself: an error in any refresh step is logged (a WARNING with the traceback
 when a failure streak starts, every 10 minutes while it lasts, and when it
 recovers) and never ends its thread; a refresh or journal thread that ended
 anyway is restarted by the next request (an ERROR); a refresh running past
 10 minutes is warned about once. S3 calls time out (10 s connect, 30 s per
-read) and retry in botocore's standard mode.
+read) and retry in botocore's adaptive mode (a throttling store's `SlowDown`
+slows the client down); a refresh or journal tick that failed is retried
+`interval_sec` later doubling up to 60 s, and a record the store failed to
+read is set aside and read again after 60 s doubling to 10 min.
 
 `GET ws/{ws}/apps-status` answers `{"<app tag>": <the same summary>, ...}` for
 every app of the workspace in one request (tags use `-` for `/`), memoized

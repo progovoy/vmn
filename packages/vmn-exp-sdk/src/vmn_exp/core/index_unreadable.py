@@ -16,12 +16,16 @@ the refresh dropped the reads of the records around it, and on S3 a
 not the record's, so they are warned about once per :data:`STORE_LOG_EVERY_SEC`
 for all records, with the count set aside meanwhile; a store that cannot
 list fails the refresh at its listing.
+
+:meth:`Unreadable.summary` tells the index's freshness how many are set
+aside: the refresh succeeds around them, so it is the dashboard's only sign.
 """
 import logging
 import threading
 
 MAX_RETRY_SEC = 600.0
 STORE_LOG_EVERY_SEC = 600.0
+ERROR_CHARS = 200
 _STORE_CLIENTS = ("botocore", "boto3", "urllib3", "google", "azure")
 
 _LOGGER = logging.getLogger("vmn_exp.core.index")
@@ -44,7 +48,8 @@ def store_failed(exc):
 class Unreadable:
     def __init__(self, app_name, clock):
         self._app, self._clock = app_name, clock
-        self._failed = {}  # key -> (failed at, failures)
+        self._failed = {}  # key -> (failed at, failures, a store failure)
+        self._store_errors, self._last_error = 0, None
         self._store_warned_at, self._store_failures = float("-inf"), 0
         self._lock = threading.Lock()
 
@@ -55,10 +60,14 @@ class Unreadable:
         return len(self._failed)
 
     def failed(self, key, exc):
+        store = store_failed(exc)
         with self._lock:
-            failures = self._failed.get(key, (0, 0))[1] + 1
-            self._failed[key] = (self._clock(), failures)
-        if store_failed(exc):
+            _, failures, was_store = self._failed.get(key, (0, 0, False))
+            failures += 1
+            self._failed[key] = (self._clock(), failures, store)
+            self._store_errors += store - was_store
+            self._last_error = repr(exc)[:ERROR_CHARS]
+        if store:
             self._warn_store_failure(key, exc)
         elif failures == 1:
             _LOGGER.warning("Index of %s: could not read %s; set aside, retried later",
@@ -83,7 +92,24 @@ class Unreadable:
 
     def read(self, key):
         with self._lock:
-            self._failed.pop(key, None)
+            entry = self._failed.pop(key, None)
+            if entry is not None:
+                self._store_errors -= entry[2]
+
+    def forget(self, keys):
+        """*keys* are gone from the store: none is unreadable any more."""
+        for key in keys:
+            self.read(key)
+
+    def summary(self):
+        """``{count, store_errors, last_error}`` of the records set aside
+        (*store_errors*: how many failed on the store's failure, not their
+        own; *last_error*: the latest failure's short repr), else None."""
+        with self._lock:
+            if not self._failed:
+                return None
+            return {"count": len(self._failed), "store_errors": self._store_errors,
+                    "last_error": self._last_error}
 
     def due(self, base_sec):
         """The keys whose retry is due now."""
@@ -99,5 +125,5 @@ class Unreadable:
 
 
 def _due(entry, now, base_sec):
-    at, failures = entry
+    at, failures, _ = entry
     return now - at >= min(base_sec * 2 ** min(failures - 1, 32), MAX_RETRY_SEC)

@@ -12,7 +12,10 @@ not moved for as long (the index's ``stalled_sec``) counts as failing
 (stuck), like a failure streak or a refresh thread that is gone. ``stale_after_sec``
 is the age past which the dashboard warns (conf
 ``experiment.ui.stale_after_min`` of a checkout's app, else
-:data:`DEFAULT_STALE_AFTER_MIN`).
+:data:`DEFAULT_STALE_AFTER_MIN`). ``unreadable`` (``{count, store_errors,
+last_error}``, absent when none) counts the records the index set aside
+unread (:mod:`~vmn_exp.core.index_unreadable`): the refresh succeeds around
+them, a throttled store's included, so it is the dashboard's only sign.
 """
 import datetime
 
@@ -27,7 +30,7 @@ def freshness(health, state, stale_after_min=DEFAULT_STALE_AFTER_MIN):
     running, stalled = health["refreshing_sec"], state.get("stalled_sec")
     stuck = running is not None and running >= STUCK_REFRESH_SEC and (
         stalled is None or stalled >= STUCK_REFRESH_SEC)
-    return {
+    payload = {
         "as_of": _iso(state["as_of"]),
         "refreshing": running is not None or state["refreshing"],
         "refresh_running_sec": None if running is None else int(running),
@@ -37,6 +40,9 @@ def freshness(health, state, stale_after_min=DEFAULT_STALE_AFTER_MIN):
         "last_error": health["last_error"],
         "stale_after_sec": stale_after_min * 60,
     }
+    if state.get("unreadable"):
+        payload["unreadable"] = state["unreadable"]
+    return payload
 
 
 def freshness_key(fresh, now):

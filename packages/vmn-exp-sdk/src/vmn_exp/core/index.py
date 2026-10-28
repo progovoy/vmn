@@ -147,6 +147,7 @@ class ExperimentIndex:
         self._loaders = None  # a bulk load's worker processes (index_remote_workers)
         self._rests = set()  # records a bulk load read rows-first, the rest to read
         self._unreadable = Unreadable(app_name, lambda: _monotonic())
+        self._io_unreadable = None  # the I/O helper's Unreadable.summary(), after its refresh
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
         self._revalidator = None  # the thread a warm snapshot() started
@@ -253,10 +254,15 @@ class ExperimentIndex:
         refresh runs; never waits. A journaled index's full listing behind
         serving (progress: the share of records listed) or catch-up on the
         journal (a replay, an overflow, hints queued) shows as
-        ``full_listing``/``journal`` between refreshes too."""
+        ``full_listing``/``journal`` between refreshes too. ``unreadable``
+        (:meth:`Unreadable.summary`: the I/O helper's, which reads the
+        records) counts the records set aside, absent when none."""
         state = self._reported_freshness()
         if state["refreshing"]:
             state["stalled_sec"] = self._freshness.stalled_sec(state["phase"], state["progress"])
+        unreadable = self._io_unreadable if self._io is not None else self._unreadable.summary()
+        if unreadable:
+            state["unreadable"] = unreadable
         return state
 
     def _reported_freshness(self):
@@ -435,6 +441,7 @@ class ExperimentIndex:
         self._freshness.listing(self._listing_phase(started), self._records,
                                 self._listing_position())
         listing, removed = self._sweep.listing(self._records, started)
+        self._unreadable.forget(self._sweep.listed_gone)
         self._load_listed(listing, removed, started)
         while self._more_relisted(started):
             self._load_listed(*self._sweep.next_relisted(self._records, _monotonic()), started)
@@ -477,6 +484,7 @@ class ExperimentIndex:
         self._freshness.loading(unread)
         if self._io is not None:  # the helper process persists them
             results = self._io.refresh(work, removed)
+            self._io_unreadable = self._io.unreadable()
             self._apply(results, removed, started)
             self._save_mark(self._mark_puts(results, removed))
             return
@@ -605,6 +613,7 @@ class ExperimentIndex:
             del self._records[key]
             self._rows.pop(key, None)
             self._sweep.forget(key)
+        self._unreadable.forget(removed)
         if not self._lean:
             self._publish(new, removed, redescribed, touched)
 
@@ -715,6 +724,7 @@ class ExperimentIndex:
         (``None`` records stand for those it found unchanged)."""
         results = self._refresh_local(work)
         self._persist(results, removed)
+        self._unreadable.forget(removed)
         return results
 
     def _refresh_local(self, work):

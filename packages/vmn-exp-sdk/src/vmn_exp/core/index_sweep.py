@@ -127,6 +127,7 @@ class Sweep(SweepBehind, SweepState):
         self.last_reconcile_at = None  # wall time a full listing or round last began
         self._restored = False  # baselines restored: check the records against them
         self._unprinted = set()  # records no listing of this process fingerprinted yet
+        self.listed_gone = set()  # keys the last listing named and found without metadata
 
     def reset(self):
         """Forget every baseline: the next listing is full and compares all."""
@@ -169,7 +170,9 @@ class Sweep(SweepBehind, SweepState):
     def listing(self, records, now):
         """``(files of the records to refresh, keys of records gone)``; a
         hinted key is listed either way (its listing may not have changed:
-        a record set aside unread, :mod:`~vmn_exp.core.index_unreadable`)."""
+        a record set aside unread, :mod:`~vmn_exp.core.index_unreadable`);
+        :attr:`listed_gone` says which keys it named are gone."""
+        self.listed_gone = set()
         if self.journaled:
             return self._journaled_listing(records, now)
         hinted = self._take_hints()
@@ -179,14 +182,16 @@ class Sweep(SweepBehind, SweepState):
             if changes is not None:
                 self._apply_sigs(*changes)
             listing, gone = self._full_listing(records, now)
-            missing = [key for key in hinted if key not in listing]
-            return {**self.watch.files(missing), **listing}, gone
+            listing = {**self.watch.files([key for key in hinted if key not in listing]),
+                       **listing}
+            self.listed_gone = _without_metadata(hinted, listing)
+            return listing, gone
         changed, gone_names = changes
         if self._restored:
             changed, gone_names = self._against_records(records, changed, gone_names)
         keys = sorted(set(self._to_list(records, changed, gone_names, now)) | hinted)
         listing = self.watch.files(keys)
-        gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
+        gone = self.listed_gone = _without_metadata(keys, listing)
         if self.watch.rolling and self.full_sweep_sec:
             rolled, rolled_gone = self.watch.slice_changes(self._next_slice(now, self._sigs))
             listing = {**rolled, **listing}
@@ -205,7 +210,7 @@ class Sweep(SweepBehind, SweepState):
         keys = [key for key in candidates if key in hinted or self._live_due(records, key, now)]
         self._explained.update(keys)
         listing = self._hinted_files(keys)
-        gone = {key for key in keys if METADATA_FILE not in listing.get(key, {})}
+        gone = self.listed_gone = _without_metadata(keys, listing)
         if self._relisting is not None and self._relisting.files:
             checked, checked_gone = self._relisted(records, now)
         else:
@@ -375,3 +380,7 @@ class Sweep(SweepBehind, SweepState):
 
     def _touch_window(self):
         return min(self.full_sweep_sec, TOUCH_WINDOW_SEC)
+
+
+def _without_metadata(keys, listing):
+    return {key for key in keys if METADATA_FILE not in listing.get(key, {})}

@@ -2,7 +2,17 @@
  *  `freshness`, ui/freshness.py), and what the dashboard says about it: a
  *  banner while the data is older than `stale_after_sec` (a sync's progress,
  *  or an error when the refresh does not complete), nothing once a refresh
- *  published fresh data. */
+ *  published fresh data — unless runs could not be read (`unreadable`): then
+ *  a warning that they are retried, unless the refresh is failing. */
+
+/** Records the index set aside unread (core/index_unreadable.py). */
+export interface Unreadable {
+  count: number;
+  /** How many failed on the store's failure (a throttle, a reset), not their own. */
+  store_errors: number;
+  /** The latest failure's short repr. */
+  last_error: string | null;
+}
 
 export interface Freshness {
   /** ISO wall time of the data (the last completed refresh's start); null before one. */
@@ -16,6 +26,8 @@ export interface Freshness {
   refresh_failing: boolean;
   last_error: string | null;
   stale_after_sec: number;
+  /** Absent when none. */
+  unreadable?: Unreadable;
 }
 
 import { fmtPct, humanizeSeconds } from "../util";
@@ -53,8 +65,28 @@ const ageText = (sec: number) => humanizeSeconds(Math.max(sec, 0));
 const percent = (p: number | null) => (p === null ? "" : `~${fmtPct(p * 100)}`);
 const lastError = (f: Freshness) => (f.last_error ? ` (last error: ${f.last_error})` : "");
 
+const THROTTLE = /\b(SlowDown|Throttl\w*|TooManyRequests|RequestLimitExceeded|ServerBusy)\b/;
+
+/** `12 runs could not be read (the store is throttling: SlowDown); retrying.` */
+function unreadableText(u: Unreadable | undefined): string {
+  if (!u?.count) return "";
+  const error = u.last_error ?? "";
+  const throttle = u.store_errors ? THROTTLE.exec(error) : null;
+  const reason = throttle ? `the store is throttling: ${throttle[1]}`
+    : u.store_errors === u.count ? `store error: ${error}` : `last error: ${error}`;
+  return `${u.count} ${u.count === 1 ? "run" : "runs"} could not be read (${reason}); retrying.`;
+}
+
 export function freshnessBanner(f: Freshness | undefined, now = Date.now()): FreshnessBanner | null {
   if (!f) return null;
+  const banner = ageBanner(f, now);
+  const unreadable = f.refresh_failing ? "" : unreadableText(f.unreadable);
+  if (!unreadable) return banner;
+  return banner ? { ...banner, text: `${banner.text} ${unreadable}` }
+    : { kind: "stale", text: `⚠ ${unreadable}` };
+}
+
+function ageBanner(f: Freshness, now: number): FreshnessBanner | null {
   const age = ageSec(f, now);
   if (age === null) {
     return f.refresh_failing

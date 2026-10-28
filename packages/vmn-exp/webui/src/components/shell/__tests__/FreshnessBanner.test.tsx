@@ -23,6 +23,15 @@ describe("FreshnessBanner", () => {
     expect(banner).toHaveTextContent("(4d old). Syncing with the store — listing runs, ~45%.");
   });
 
+  it("warns, not alarms, when runs could not be read from a throttling store", () => {
+    render(<FreshnessBanner freshness={freshness(1000, { unreadable: {
+      count: 12, store_errors: 12, last_error: "ClientError('... (SlowDown) ...')" } })} />);
+    const banner = screen.getByRole("status");
+    expect(banner).toHaveClass("freshness-banner", "stale");
+    expect(banner).toHaveTextContent(
+      "12 runs could not be read (the store is throttling: SlowDown); retrying.");
+  });
+
   it("shows the error variant when the refresh does not complete", () => {
     render(<FreshnessBanner freshness={freshness(4 * DAY, {
       refresh_failing: true, refresh_running_sec: 1500, last_error: "OSError('x')" })} />);

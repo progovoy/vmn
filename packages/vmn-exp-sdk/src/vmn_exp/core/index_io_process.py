@@ -188,6 +188,10 @@ class ProcessIO:
         results = {r[0]: r for r in self.call("refresh", send, list(removed))} if send or removed else {}
         return [results.get(key, (key, None, False, False, False)) for key, _, _ in work]
 
+    def unreadable(self):
+        """The helper index's set-aside records (:meth:`Unreadable.summary`)."""
+        return self.call("unreadable")
+
     def close(self):
         if self._proc is not None:
             try:
@@ -255,6 +259,9 @@ class _Helper:
     def derive(self):
         return self.index._derive_first()
 
+    def unreadable(self):
+        return self.index._unreadable.summary()
+
 
 def _answer(out, result):
     if isinstance(result, list):
@@ -290,6 +297,6 @@ def main():
 def _handle(helper, op, args):
     """*helper*'s answer to *op*: bulk work, done with collection paused."""
     with gc_paused():
-        if op in ("load", "refresh", "kv_get", "kv_put", "deriving", "derive"):
+        if op in ("load", "refresh", "kv_get", "kv_put", "deriving", "derive", "unreadable"):
             return getattr(helper, op)(*args)
         return getattr(helper.watch, op)(*args)
