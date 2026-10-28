@@ -17,12 +17,13 @@ S3_WORKERS = 10
 # Connections a client pools, for every thread sharing it (boto3's default: 10):
 # the threads starting fan-outs plus the workers fan-outs share (fanout).
 MAX_POOL_CONNECTIONS = 32 * S3_WORKERS
-# Every call is bounded: a stalled connection fails and is retried (standard
-# mode: backoff with jitter, a retry quota during outages) instead of holding
-# an index refresh; read_timeout is per socket read, not per transfer.
+# Every call is bounded: a stalled connection fails and is retried (adaptive
+# mode: standard's backoff with jitter and retry quota, plus a client-side
+# rate limit that a throttling store's SlowDown lowers) instead of holding an
+# index refresh; read_timeout is per socket read, not per transfer.
 CONNECT_TIMEOUT_SEC = 10
 READ_TIMEOUT_SEC = 30
-RETRIES = {"mode": "standard", "total_max_attempts": 5}
+RETRIES = {"mode": "adaptive", "total_max_attempts": 5}
 MISSING_CODES = ("404", "NoSuchKey", "NotFound")
 TAKEN_CODES = ("412", "PreconditionFailed", "409", "ConditionalRequestConflict")
 

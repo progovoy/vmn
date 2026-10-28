@@ -8,7 +8,10 @@ every ``interval_sec``. The thread exits once nobody asked for ``idle_sec``,
 so an app no one looks at costs nothing; the next request starts it again.
 Only the very first request of an index waits (for its initial load, which
 the persisted SQLite store makes fast). A refresh that fails is logged and
-the last snapshot keeps being served.
+the last snapshot keeps being served; the next one (like a journal tick
+after a failed one) is tried ``interval_sec`` later doubling per failure, up
+to ``MAX_FAILURE_BACKOFF_SEC``, wakes or not
+(:meth:`~vmn_exp.ui.failure_streak.FailureStreak.backoff_sec`).
 
 A store workspace passes its :class:`~vmn_exp.ui.journal_follow.WorkspaceJournal`
 along: one thread per journal ticks it every ``interval_sec``, hinting the
@@ -54,6 +57,8 @@ IDLE_SEC = 60.0
 # Background refreshes list hinted (or new, by name) and live records, and
 # everything this often: the reconcile listing (plan 11 §5.2).
 RECONCILE_SEC = 3600
+# The longest a failing index (or journal) waits between refreshes (ticks).
+MAX_FAILURE_BACKOFF_SEC = 60.0
 # A refresh running this long is warned about once (and reported by health()).
 SLOW_REFRESH_SEC = 600
 
@@ -220,7 +225,7 @@ class Refresher(_Listeners):
                     streak.failed(exc)
                 else:
                     streak.succeeded()
-                if self._stopped.wait(self.interval_sec):
+                if self._stopped.wait(self._wait_sec(streak)):
                     return
         except BaseException:  # SystemExit & co: end visibly; the next request restarts it
             _LOGGER.error("The change journal reader of %s stopped", scope, exc_info=True)
@@ -256,12 +261,20 @@ class Refresher(_Listeners):
             # Refresh at once: a restart after idling catches up before it waits.
             while not self._idle(index, watch):
                 self._refresh(index, watch)
-                watch.wake.wait(self.interval_sec)
+                if watch.failing:
+                    self._stopped.wait(self._wait_sec(watch.streak))
+                else:
+                    watch.wake.wait(self.interval_sec)
                 watch.wake.clear()
                 if self._stopped.is_set():
                     return
         except BaseException:  # SystemExit & co: end visibly; the next request restarts it
             _LOGGER.error("The index refresher of %s stopped", watch.app, exc_info=True)
+
+    def _wait_sec(self, streak):
+        if not streak.failing:
+            return self.interval_sec
+        return streak.backoff_sec(self.interval_sec, MAX_FAILURE_BACKOFF_SEC)
 
     def _idle(self, index, watch):
         with self._lock:

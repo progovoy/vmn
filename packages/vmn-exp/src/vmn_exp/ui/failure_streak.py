@@ -28,6 +28,12 @@ class FailureStreak:
     def failing(self):
         return self.failures > 0
 
+    def backoff_sec(self, base_sec, cap_sec):
+        """How long to wait before trying again: *base_sec* doubling per
+        failure, up to *cap_sec* (a throttling store, S3 ``SlowDown``, tried
+        every second only got more of the requests it was refusing)."""
+        return min(base_sec * 2 ** min(self.failures - 1, 32), cap_sec)
+
     def failed(self, exc):
         with self._lock:
             now = self._clock()

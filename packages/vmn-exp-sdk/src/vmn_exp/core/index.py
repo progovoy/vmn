@@ -69,7 +69,7 @@ from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_record import refresh_record, update_record
-from vmn_exp.core.index_unreadable import Unreadable, store_failed
+from vmn_exp.core.index_unreadable import Unreadable
 from vmn_exp.core.index_remote_workers import RemoteLoaders, worker_count
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
@@ -796,14 +796,15 @@ class ExperimentIndex:
     def _refresh_one(self, key, names, record, direct):
         """:func:`refresh_record` of one record; one that fails is set aside
         (:mod:`~vmn_exp.core.index_unreadable`), never the refresh, and read
-        afresh when retried (a failure may have left it half updated)."""
+        afresh when retried (a failure may have left it half updated), not
+        before its retry is due."""
         retried = key in self._unreadable
+        if retried and not self._unreadable.is_due(key, RETRY_UNREADABLE_SEC):
+            return record, False, False, False
         try:
             result = refresh_record(key, names, None if retried else record,
                                     lambda *a: self._update(*a, direct))
         except Exception as exc:
-            if store_failed(exc):
-                raise
             self._unreadable.failed(key, exc)
             return record, False, False, False
         if retried:

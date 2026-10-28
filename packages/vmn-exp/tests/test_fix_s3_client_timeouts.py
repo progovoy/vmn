@@ -1,7 +1,8 @@
 """vmn's S3 clients bound every call: explicit connect/read timeouts and
-standard retries, so a stalled connection fails (and is retried) instead of
+adaptive retries, so a stalled connection fails (and is retried) instead of
 hanging an index refresh forever (botocore waits 60 s per read by default and
-retries legacy-style)."""
+retries legacy-style), and a throttling store (``SlowDown``) slows the client
+down instead of failing request after request."""
 import pytest
 
 pytest.importorskip("boto3")
@@ -21,7 +22,7 @@ def test_the_s3_client_has_explicit_timeouts_and_retries(make):
     config = make().meta.config
     assert 0 < config.connect_timeout <= 15
     assert 0 < config.read_timeout <= 60
-    assert config.retries["mode"] == "standard"
+    assert config.retries["mode"] == "adaptive"
     assert config.retries["total_max_attempts"] >= 3  # botocore's key for attempts in all
 
 

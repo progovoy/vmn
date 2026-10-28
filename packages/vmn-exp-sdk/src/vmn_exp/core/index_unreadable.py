@@ -10,13 +10,18 @@ traceback, and it is read afresh once its retry is due: *base_sec* after the
 first failure, doubling per failure up to :data:`MAX_RETRY_SEC`.
 
 A failure of the store itself (:func:`store_failed`: a reset connection, a
-timeout, a refused or throttled request) still fails the refresh: it is not
-the record's, and the refresher retries the refresh, keeping what it read.
+timeout, a refused or throttled request) sets the record aside too: failing
+the refresh dropped the reads of the records around it, and on S3 a
+``SlowDown`` past botocore's retries failed every refresh after it. Those are
+not the record's, so they are warned about once per :data:`STORE_LOG_EVERY_SEC`
+for all records, with the count set aside meanwhile; a store that cannot
+list fails the refresh at its listing.
 """
 import logging
 import threading
 
 MAX_RETRY_SEC = 600.0
+STORE_LOG_EVERY_SEC = 600.0
 _STORE_CLIENTS = ("botocore", "boto3", "urllib3", "google", "azure")
 
 _LOGGER = logging.getLogger("vmn_exp.core.index")
@@ -31,6 +36,7 @@ class Unreadable:
     def __init__(self, app_name, clock):
         self._app, self._clock = app_name, clock
         self._failed = {}  # key -> (failed at, failures)
+        self._store_warned_at, self._store_failures = float("-inf"), 0
         self._lock = threading.Lock()
 
     def __contains__(self, key):
@@ -43,12 +49,28 @@ class Unreadable:
         with self._lock:
             failures = self._failed.get(key, (0, 0))[1] + 1
             self._failed[key] = (self._clock(), failures)
-        if failures == 1:
+        if store_failed(exc):
+            self._warn_store_failure(key, exc)
+        elif failures == 1:
             _LOGGER.warning("Index of %s: could not read %s; set aside, retried later",
                             self._app, key, exc_info=exc)
         else:
             _LOGGER.debug("Index of %s: %s still unreadable (%d failures)",
                           self._app, key, failures, exc_info=exc)
+
+    def _warn_store_failure(self, key, exc):
+        with self._lock:
+            self._store_failures += 1
+            now = self._clock()
+            due = now - self._store_warned_at >= STORE_LOG_EVERY_SEC
+            if due:
+                count, self._store_failures, self._store_warned_at = self._store_failures, 0, now
+        if due:
+            _LOGGER.warning("Index of %s: the store failed reading %s (%d records set aside"
+                            " since the last warning, retried later): %s",
+                            self._app, key, count, exc)
+        else:
+            _LOGGER.debug("Index of %s: the store failed reading %s", self._app, key, exc_info=exc)
 
     def read(self, key):
         with self._lock:
@@ -58,5 +80,15 @@ class Unreadable:
         """The keys whose retry is due now."""
         now = self._clock()
         with self._lock:
-            return [key for key, (at, failures) in self._failed.items()
-                    if now - at >= min(base_sec * 2 ** (failures - 1), MAX_RETRY_SEC)]
+            return [key for key, entry in self._failed.items() if _due(entry, now, base_sec)]
+
+    def is_due(self, key, base_sec):
+        """Whether set-aside *key*'s retry is due now (a listing before then
+        reads nothing: a live run is listed every heartbeat)."""
+        entry = self._failed.get(key)
+        return entry is not None and _due(entry, self._clock(), base_sec)
+
+
+def _due(entry, now, base_sec):
+    at, failures = entry
+    return now - at >= min(base_sec * 2 ** min(failures - 1, 32), MAX_RETRY_SEC)

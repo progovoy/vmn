@@ -70,17 +70,21 @@ def test_a_cold_load_answers_after_its_first_chunk(s3, tmp_path):
     assert len(index.snapshot().rows) == N
 
 
+class _Killed(BaseException):
+    """The process dying mid-load (a store error only sets a record aside)."""
+
+
 def test_a_cold_load_cut_short_keeps_what_it_read(s3, tmp_path):
     _seed(_storage())
     cache = str(tmp_path / "i.sqlite")
     broken = _storage()
 
-    def fail_past_first_chunk(n):
+    def die_past_first_chunk(n):
         if n > CHUNK:
-            raise OSError("connection reset")
+            raise _Killed()
 
-    _metadata_loads(broken, fail_past_first_chunk)
-    with pytest.raises(OSError):
+    _metadata_loads(broken, die_past_first_chunk)
+    with pytest.raises(_Killed):
         ExperimentIndex(broken, APP, cache).refresh()
 
     storage = _storage()
