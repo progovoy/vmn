@@ -332,7 +332,7 @@ shows `{"error": ...}` instead of breaking the dump:
 | `indexes` | per watched app: rows, records, `loading` progress, generation, seconds since publish/refresh, last refresh duration, refresher thread alive, journaled, full listing due |
 | `process` | Python/implementation/free-threaded, vmn and vmn-exp versions, uptime, CPU, RSS, threads, open fds, gc counts/stats, the server's options |
 | `env` | names of the set `VMN_*`/`AWS_*` variables, never their values |
-| `s3` | per S3 operation: count, errors by code, retries, in flight, bytes read, latency p50/p95/max; `by_kind`: the same per operation × object kind (`metadata.yml`, `run_state.yml`, `log segment`, `metric stream`, `metric index (.vmx)`, `child marker`, `children listing`, `run listing`, `journal`, `comments`, …), so a flood of `NoSuchKey` names what is missing; `recent_failures` (last 50 failed calls with their keys) and `recent_other_failures` (the same without `NoSuchKey`); `by_thread`: calls outside any request per thread name (pools are named: `vmn-index-load`, `vmn-series-read`, `vmn-listing`, …); clients and their pool sizes; the 10 oldest calls in flight |
+| `s3` | per S3 operation: count, errors by code, retries, in flight, bytes read, latency p50/p95/max; `by_kind`: the same per operation × object kind (`metadata.yml`, `run_state.yml`, `log segment`, `metric stream`, `metric index (.vmx)`, `child marker`, `children listing`, `run listing`, `journal`, `comments`, …), so a flood of `NoSuchKey` names what is missing; `recent_failures` (last 50 failed calls with their keys) and `recent_other_failures` (the same without `NoSuchKey`); `by_thread`: calls outside any request per thread name (pools are named: `vmn-index-load`, `vmn-series-read`, `vmn-listing`, …); clients and their pool sizes; the 10 oldest calls in flight; `prefix_caps`: the per-prefix cap (`limit`) and the 20 most waited-on `(bucket, prefix)`s with `in_flight`/`peak_in_flight`/`waiting`/`waits`/`wait_ms_total`/`wait_ms_max` |
 | `locks` | the server's key locks (report index, index refresh per app, refresher, store upkeep, leaderboard base per app) held or waited on now — holder thread, held for, each waiter and its wait — and per lock acquires, contended, max wait, max held |
 | `background` | per background activity (index refresh per app, journal tick, report index refresh, store upkeep, board warm, startup warmup): runs, running now (thread, for how long), last/max duration, last ok, last error |
 | `logs` | the last 200 warnings/errors (logger, message, exception type/message, thread), counts per logger and level, the last 50 vmn-exp info lines |
@@ -1070,7 +1070,10 @@ recovers) and never ends its thread; a refresh or journal thread that ended
 anyway is restarted by the next request (an ERROR); a refresh running past
 10 minutes is warned about once. S3 calls time out (10 s connect, 30 s per
 read) and retry in botocore's adaptive mode (a throttling store's `SlowDown`
-slows the client down); a refresh or journal tick that failed is retried
+slows the client down), and at most 64 run at once per key prefix (a
+store area and its scope, e.g. `<root>/runs/<app>`; S3 throttles per prefix;
+`VMN_EXP_S3_PREFIX_CONCURRENCY` sets another cap, a call made inside another
+call's slot takes none); a refresh or journal tick that failed is retried
 `interval_sec` later doubling up to 60 s, and a record the store failed to
 read is set aside and read again after 60 s doubling to 10 min.
 

@@ -68,6 +68,20 @@ def test_recent_errors_and_lag():
     assert "event loop lag p95 2.1ms max 4100.0ms" in text and "STALLED" in text
 
 
+def test_s3_prefixes_that_waited_for_a_slot():
+    s3 = {"operations": {}, "prefix_caps": {"limit": 64, "prefixes_seen": 3, "prefixes": [
+        {"bucket": "b", "prefix": "vmn/runs/app", "limit": 64, "in_flight": 64,
+         "peak_in_flight": 64, "waiting": 120, "waits": 9000,
+         "wait_ms_total": 81000.0, "wait_ms_max": 2500.0},
+        {"bucket": "b", "prefix": "vmn/journal", "limit": 64, "in_flight": 1,
+         "peak_in_flight": 3, "waiting": 0, "waits": 0,
+         "wait_ms_total": 0.0, "wait_ms_max": 0.0}]}}
+    text = summarize(_dump(s3=s3))
+    assert "S3 prefix caps (64 calls in flight a prefix):" in text
+    assert "b/vmn/runs/app: 64 in flight, 120 waiting; 9000 waits, max 2.5s" in text
+    assert "vmn/journal" not in text  # never waited: noise
+
+
 def test_odd_shapes_never_break_the_summary():
     text = summarize(_dump(locks=[1], background="x", logs={"recent": 3}, latency=None,
                            s3={"operations": {}, "by_kind": [1]}))

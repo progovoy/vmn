@@ -23,6 +23,7 @@ import time
 import weakref
 
 from vmn_exp.storage.s3_kinds import classify
+from vmn_exp.storage.s3_prefix_cap import prefix_cap_stats
 
 # Upper bounds (ms) of the latency buckets; one more bucket holds the rest.
 BOUNDS_MS = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000,
@@ -242,7 +243,8 @@ def instrument(client):
 
 def s3_stats():
     """The dump section: per-operation and per-kind stats, pools, oldest
-    in-flight calls, the last failed calls (newest first)."""
+    in-flight calls, the last failed calls (newest first), the per-prefix
+    caps' waits (:mod:`~vmn_exp.storage.s3_prefix_cap`)."""
     now = time.monotonic()
     with _lock:
         operations = {name: op.as_dict() for name, op in sorted(_ops.items())}
@@ -266,6 +268,7 @@ def s3_stats():
                       for t0, op, key, c in oldest],
         "recent_failures": _failure_rows(failures, now),
         "recent_other_failures": _failure_rows(other_failures, now),
+        "prefix_caps": prefix_cap_stats(),
     }
 
 
