@@ -9,7 +9,7 @@ import json
 from vmn_exp.core import index_point_sql
 from vmn_exp.core.index_intern import compact_state
 from vmn_exp.core.index_lazy import STATE_KEYS, LazyRecord, LazyRecords
-from vmn_exp.core.index_lean_store import read_lean
+from vmn_exp.core.index_lean_store import is_run, read_lean
 from vmn_exp.core.sqlite_conn import in_chunks, read_tx
 
 _CHUNK = 256  # records read per query, under SQLite's bound-parameter limit
@@ -62,6 +62,22 @@ class LeanReads:
             "SELECT key FROM exp_index WHERE app = ?", (app_name,)
         ))
         return LazyRecords(seqs, _Prefetch(self, app_name, seqs, first_chunk=1))
+
+    def lazy_records(self, app_name, records):
+        """``{key: LazyRecord}`` of *records* (``{key: record}``, all saved)
+        as a warm start holds them: each its run state alone — the same
+        objects — read back from the store when touched; a record the store
+        lacks as it is. None when unavailable (or never saved)."""
+        seqs = self._read(lambda: self.generation(app_name) and dict(self._conn.execute(
+            "SELECT key, seq FROM exp_index WHERE app = ?", (app_name,))), None)
+        if not seqs:
+            return None
+        fetch = _Prefetch(self, app_name, seqs)
+        return {
+            key: LazyRecord(key, {k: record[k] for k in STATE_KEYS}, fetch, is_run(record))
+            if key in seqs and not isinstance(record, LazyRecord) else record
+            for key, record in records.items()
+        }
 
     def listing(self, app_name, read):
         """``read(conn)``'s answer, all of it read at one generation; None
