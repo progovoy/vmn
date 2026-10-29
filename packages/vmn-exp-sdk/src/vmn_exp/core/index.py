@@ -161,6 +161,7 @@ class ExperimentIndex:
         self._lean = False  # see sync()
         self._lean_index = None  # the lean copy sync() refreshes while this one is unloaded
         self._unread = 0  # new records a chunked refresh has yet to read
+        self._cold = False  # records loaded whole, their folds held until saved (_drop_folds)
 
     @classmethod
     def follower(cls, cache_store, scope):
@@ -460,6 +461,21 @@ class ExperimentIndex:
             for key in self._rests:  # what rows-first left unread: listed afresh
                 self._sweep.hint(key)
             self._rests = set()
+        if self._cold:
+            self._drop_folds()
+
+    def _drop_folds(self):
+        """Once a cold load is over and saved, hold its records as a warm
+        restart does: each its run state alone, read back from the store
+        when a refresh touches it. A free-threaded collection walks every
+        live object, and the folds doubled them (plan 28 appendix A row 6)."""
+        if self._unsaved.pending or self._rests or self._sweep.relisted_new() is not False:
+            return  # still loading, or not all saved: the store lacks some
+        lazy_of = getattr(self._store, "lazy_records", None)
+        lazy = lazy_of(self.app_name, self._records) if lazy_of else None
+        if lazy is not None:
+            self._records.update(lazy)  # in place: an adopter shares the dict
+            self._cold = False
 
     def _more_relisted(self, started):
         """Whether to load more of what a listing behind serving hands over
@@ -724,6 +740,7 @@ class ExperimentIndex:
         warm = getattr(self._store, "load_warm", None)
         loaded = warm(self.app_name) if warm else None
         if loaded is None:
+            self._cold = True
             return self._store.load(self.app_name)
         records, self._order, lean, self._stamps = loaded
         self._rows.seed(lean)
