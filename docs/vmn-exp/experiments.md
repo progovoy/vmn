@@ -216,6 +216,7 @@ runner: exp run         # "sdk" for a start_run() run
 cwd: src                # child cwd relative to the repo root ("." at the root)
 pid: 12345
 host: somebox
+attempt: 3f9c2a7b1e04  # random per runner process (an SDK attempt or exp run)
 started_at: 2026-09-21T12:00:00Z
 heartbeat: 2026-09-21T12:03:00Z
 heartbeat_seq: 6        # +1 per beat: a clock-free "it moved" signal
@@ -270,7 +271,8 @@ watch `last_metric_at` (UI/API) for "alive but not making progress".
 
 Two attempts of one SDK run (speculative duplicate pods, a run resumed with
 `start_run(run_id=)` while the old process still lives) share its
-`run_state.yml`. Each SDK attempt records a random `attempt` id, and a
+`run_state.yml`. Each attempt records a random `attempt` id (`vmn-exp run`
+records one too), and an SDK
 heartbeat first reads the stored state: once another attempt has written the
 final state, the beat is dropped and this attempt stops heartbeating (one
 warning), so the loser never flips a finished run back to `running`. A start
