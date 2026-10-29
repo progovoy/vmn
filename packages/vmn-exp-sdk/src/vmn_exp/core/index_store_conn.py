@@ -151,3 +151,8 @@ class StoreConnection:
             except sqlite3.Error:
                 pass
             self.conn = None
+
+    def __del__(self):
+        # A sqlite3 connection is in a cycle with its own statement cache
+        # (CPython >= 3.11): unclosed, it holds the file until a collection.
+        self.close()
