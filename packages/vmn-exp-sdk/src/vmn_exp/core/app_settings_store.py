@@ -24,9 +24,22 @@ def settings_area(storage):
     return authoritative(storage).in_area(SETTINGS)
 
 
+def _readable_area(storage):
+    """The settings area, or None for a storage without store areas (a
+    duck-typed or plugin backend that implements only the documented
+    SnapshotStorage methods has no settings)."""
+    if not hasattr(authoritative(storage), "in_area"):
+        return None
+    try:
+        return settings_area(storage)
+    except NotImplementedError:
+        return None
+
+
 def read_settings_text(storage, app_name):
     """The app's settings file as written, or None."""
-    data = settings_area(storage).load_file(app_name, RECORD, SETTINGS_FILE)
+    area = _readable_area(storage)
+    data = area.load_file(app_name, RECORD, SETTINGS_FILE) if area else None
     if data is None:
         return None
     return data.decode() if isinstance(data, bytes) else data
@@ -58,7 +71,8 @@ def write_settings(storage, app_name, text, actor=None):
 
 def settings_metadata(storage, app_name):
     """Who wrote the app's settings last, and when (``{}`` when never)."""
-    metadata = settings_area(storage).load_metadata(app_name, RECORD) or {}
+    area = _readable_area(storage)
+    metadata = (area.load_metadata(app_name, RECORD) if area else None) or {}
     return {k: metadata[k] for k in ("updated_at", "updated_by") if k in metadata}
 
 
