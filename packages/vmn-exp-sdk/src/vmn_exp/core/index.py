@@ -51,7 +51,6 @@ import bisect
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 
 from vmn_exp.core.fold import fold_log, fold_row
@@ -85,6 +84,7 @@ from vmn_exp.core.index_sweep import (
     METADATA_FILE,
     Sweep,
 )
+from vmn_exp.core.index_load_pool import LoadPool
 from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import load_log
@@ -92,7 +92,8 @@ from vmn_exp.core.status import load_run_state, observed_at_by_verstr
 from vmn_exp.core.traced_lock import TracedLock
 
 _LOGGER = logging.getLogger(__name__)
-# Records a remote backend re-reads at once (each costs a few round trips).
+# Records a remote backend re-reads at once (each costs a few round trips;
+# on a free-threaded build no more than the cores: index_load_pool).
 _REMOTE_WORKERS = 32
 # Records a remote backend reads between persisting what it has (and, while
 # the index is small, publishing it: see index_bulk).
@@ -145,6 +146,7 @@ class ExperimentIndex:
         self._snapshot = None
         self._placeholder = None  # (expected, the empty snapshot saying so)
         self._loaders = None  # a bulk load's worker processes (index_remote_workers)
+        self._pool = LoadPool(_REMOTE_WORKERS, "vmn-index-load")  # kept across a bulk load's chunks
         self._rests = set()  # records a bulk load read rows-first, the rest to read
         self._unreadable = Unreadable(app_name, lambda: _monotonic())
         self._io_unreadable = None  # the I/O helper's Unreadable.summary(), after its refresh
@@ -370,6 +372,7 @@ class ExperimentIndex:
         from a full listing."""
         with self._lock:
             self._close_loaders()
+            self._pool.close()
             if self._io is not None:
                 self._io.close()
                 self._io = None
@@ -808,9 +811,11 @@ class ExperimentIndex:
             for _, _, record in work:
                 if record is not None:
                     record.get("meta_sig")
-            with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS,
-                                    thread_name_prefix="vmn-index-load") as pool:
-                return list(pool.map(lambda w: self._refresh_one(*w, direct), work))
+            try:
+                return self._pool.map(lambda w: self._refresh_one(*w, direct), work)
+            finally:
+                if not self._unread and not self._backlog():  # else the next chunk reuses it
+                    self._pool.close()
         return [self._refresh_one(*w, direct) for w in work]
 
     def _remote(self):
