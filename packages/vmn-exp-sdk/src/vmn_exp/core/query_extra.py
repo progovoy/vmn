@@ -6,9 +6,11 @@ for the rows of a snapshot: ``outputs`` (``outputs_of``), ``ancestors``
 (``under()``, from its ``edges``), ``intent``/``keywords`` (the latest
 intent's text and keyword list, from ``intent_of``) and ``similar``
 (``similar()``, :mod:`vmn_exp.core.query_similar`). :func:`rows_extra`
-adds ``notes`` (the note signatures, from ``notes_of``, plan 28 N7) and the
+adds ``notes`` (the note signatures, from ``notes_of``, plan 28 N7), the
 reader of ``up`` fields (other rows of the snapshot, memoized per
-snapshot, :func:`~vmn_exp.core.query_up.ancestor_fields`); every entry point
+snapshot, :func:`~vmn_exp.core.query_up.ancestor_fields`) and the
+:data:`~vmn_exp.core.query.BELOW_FIELDS` (counted over the snapshot's rows,
+status-annotated on the first read, :mod:`~vmn_exp.core.query_below`); every entry point
 filtering snapshot rows takes it, or :func:`lean_extra`/:func:`store_extra`
 built on it. Every entry point that
 filters snapshot rows takes its extra from here.
@@ -29,20 +31,23 @@ from vmn_exp.core.index_snapshot import schema_less
 from vmn_exp.core.note_sigs import note_texts
 from vmn_exp.core.query import (
     ANCESTORS,
+    BELOW_FIELDS,
     SIMILAR,
     SYSTEM_METRICS,
     query_roots,
     reads_system_metrics,
 )
+from vmn_exp.core.query_below import lazy_below_extra
 from vmn_exp.core.query_similar import scope_matcher
 from vmn_exp.core.query_up import UP, ancestor_fields
-from vmn_exp.core.tree import ancestors
+from vmn_exp.core.tree import ancestors, annotate_rows
 
 INTENT, KEYWORDS, NOTES = "intent", "keywords", "notes"
 # The query roots answered from the snapshot, not the rows.
 SNAPSHOT_FIELDS = frozenset({"outputs", ANCESTORS, INTENT, KEYWORDS, SIMILAR})
-# The query roots a lean row cannot answer alone: those, ``notes`` and ``up`` fields.
-OFF_ROW_FIELDS = SNAPSHOT_FIELDS | {NOTES, UP}
+# The query roots a lean row cannot answer alone: those, ``notes``, ``up``
+# fields and the counts of the runs below it.
+OFF_ROW_FIELDS = SNAPSHOT_FIELDS | {NOTES, UP} | BELOW_FIELDS
 
 _BOUND = weakref.WeakKeyDictionary()  # snapshot -> scope_of(snapshot)
 
@@ -93,12 +98,14 @@ def snapshot_extra(snapshot, scope_of=None):
 
 
 def rows_extra(snapshot, scope_of=None):
-    """:func:`snapshot_extra` with ``notes`` and the ``up`` reader (None
-    without a snapshot)."""
+    """:func:`snapshot_extra` with ``notes``, the ``up`` reader and the
+    ``*_below`` counts (None without a snapshot)."""
     extra = snapshot_extra(snapshot, scope_of)
     if extra is not None:
         extra[NOTES] = lambda verstr: note_texts(snapshot.notes_of(verstr))
         extra[UP] = lambda verstr: ancestor_fields(snapshot).of(verstr)
+        extra.update(lazy_below_extra(lambda: annotate_rows(
+            snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at)))
     return extra
 
 
