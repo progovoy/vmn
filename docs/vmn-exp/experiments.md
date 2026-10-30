@@ -1959,6 +1959,8 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window (default 60) |
 | `VMN_EXP_HEARTBEAT_SEC` | heartbeat period when `--heartbeat-interval` / `start_run(heartbeat_interval_sec=)` is not given (beats conf `experiment.heartbeat_interval_sec`; default 30) |
 | `VMN_EXP_SYNC_SEC` | remote sync period when `--sync-interval` / `start_run(sync_interval_sec=)` is not given (beats conf `experiment.sync_interval_sec`; default 30) |
+| `VMN_EXP_ON_SIGTERM` | SDK: `start_run(on_sigterm=)` when not given — `fail` (default) or `release` ([sdk.md](sdk.md#handing-a-run-back-release)) |
+| `VMN_EXP_SIGTERM_EXIT` | SDK: `start_run(sigterm_exit=)` when not given — `kill` (default) re-delivers SIGTERM, `raise` raises `SystemExit(143)` so `finally` blocks run ([sdk.md](sdk.md#finishing-failures-and-the-heartbeat)) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | [alert](#alerts) sinks and triggers |
 | `VMN_SNAPSHOT_MAX_FILE_MB` / `_TOTAL_MB` | untracked-file capture caps (50 / 200) |
 | `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) instead of the XDG cache/state dirs |

@@ -79,7 +79,7 @@ start_run(
     sync_interval_sec=<env/conf/30>, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
     capture_output=False, mode=None, intent=None, intent_keywords=None,
-    on_sigterm="fail", reopen=False,
+    on_sigterm=None, sigterm_exit=None, reopen=False,
 )
 ```
 
@@ -96,7 +96,8 @@ start_run(
 | `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Not given: `$VMN_EXP_SYNC_SEC`, else conf `experiment.sync_interval_sec`, else 30 s. Failed syncs are retried on a later beat |
 | `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
 | `reopen` | with `run_id`: also reopen a run that has finished (clears its exit code); without it that raises `ValueError`. `$VMN_RESUME_REOPEN=1` does the same for `$VMN_RESUME_RUN_ID` |
-| `on_sigterm` | what SIGTERM does with the run: `"fail"` (default) finishes it with exit 143; `"release"` hands it back unfinished. See [Handing a run back](#handing-a-run-back-release) |
+| `on_sigterm` | what SIGTERM does with the run: `"fail"` finishes it with exit 143; `"release"` hands it back unfinished. Not given: `$VMN_EXP_ON_SIGTERM`, else `"fail"`. See [Handing a run back](#handing-a-run-back-release) |
+| `sigterm_exit` | what the SIGTERM handler does after finalizing: `"kill"` re-delivers the signal (the process dies of it, no `finally` runs); `"raise"` raises `SystemExit(143)` in the main thread, so `finally` blocks and context managers run. Not given: `$VMN_EXP_SIGTERM_EXIT`, else `"kill"` |
 | `rewind_to_step` | with `run_id` (required): hide the run's history past this step. See [Rewinding](#rewinding-a-run) |
 | `fork_from` / `fork_step` | a NEW run seeded with another run's history up to `fork_step` (`"<ref>?_step=N"` works too). See [Forking](#forking-a-run) |
 | `all_ranks` | record on every rank; default only rank 0 (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
@@ -562,7 +563,9 @@ yourself when a `with` block doesn't fit. It is idempotent.
   releases it, for a run opened with `on_sigterm="release"` — waits for
   the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 60; one
   shared wait for all runs), then calls the previous handler or re-delivers the
-  signal. The handler is installed when `vmn_exp.sdk` is imported on the main
+  signal — or, when an open run has `sigterm_exit="raise"` and no Python
+  handler sits underneath, raises `SystemExit(143)` in the main thread, so
+  the process exits 143 after its `finally` blocks. The handler is installed when `vmn_exp.sdk` is imported on the main
   thread (never over `SIG_IGN`). If you install your own SIGTERM handler later,
   or first import the SDK from a worker thread, call
   `install_signal_handlers()` from the main thread to chain it.

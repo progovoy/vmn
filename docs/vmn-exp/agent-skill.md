@@ -74,6 +74,8 @@ so it reads waiting again and the next pod reopens it (`run_id=`, which bumps
 ```python
 pod = start_run("<app_name>", run_id=pod_id, on_sigterm="release")  # SIGTERM -> released
 # by hand, any run: run.release(reason="preempted") (flush, stop, state `released`)
+# process-wide: VMN_EXP_ON_SIGTERM=release; VMN_EXP_SIGTERM_EXIT=raise (or sigterm_exit=)
+# exits via SystemExit(143) so finally blocks run, instead of re-killing
 ```
 
 A finished pod (done or failed) is not reopened: `start_run(run_id=)` raises

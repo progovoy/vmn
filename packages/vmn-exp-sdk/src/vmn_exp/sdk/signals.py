@@ -13,7 +13,9 @@ run it finalizes nothing. It is never installed over ``SIG_IGN`` — a process
 that ignores SIGTERM survives it, so its runs did not end. When it fires it
 finalizes the open runs, puts the previous handler back and hands the signal
 on: a Python handler the workload installed is called, and the default
-disposition is re-delivered so the process still dies of SIGTERM.
+disposition is re-delivered so the process still dies of SIGTERM — unless an
+open run asked for ``sigterm_exit="raise"``: then ``SystemExit(128 + N)`` is
+raised in the main thread instead, so its ``finally`` blocks still run.
 """
 import os
 import signal
@@ -22,24 +24,31 @@ import threading
 _HANDLED = signal.SIGTERM
 # Only ever touched from the main thread (Python delivers signals there too),
 # so there is no lock: the one "concurrent" caller is the handler itself.
-_STATE = {"previous": None, "finalize": None, "timeout": None, "finalizing": False}
+_STATE = {"previous": None, "finalize": None, "timeout": None, "raises": None,
+          "finalizing": False}
 
 
 def _on_main_thread():
     return threading.current_thread() is threading.main_thread()
 
 
-def install(finalize, timeout):
+def _never():
+    return False
+
+
+def install(finalize, timeout, raises=_never):
     """Route SIGTERM through ``finalize(signum)`` first, waiting at most
     ``timeout()`` seconds for it (read when the signal arrives). Idempotent; chains whatever handler is current,
-    so it can be called again after the workload installed its own."""
+    so it can be called again after the workload installed its own. Where the
+    default disposition would kill, ``raises()`` (read before finalizing)
+    raises ``SystemExit`` instead."""
     if not _on_main_thread():
         return
     previous = signal.getsignal(_HANDLED)
     # None: a handler installed outside Python, which cannot be chained.
     if previous in (_handle, signal.SIG_IGN, None):
         return
-    _STATE.update(previous=previous, finalize=finalize, timeout=timeout)
+    _STATE.update(previous=previous, finalize=finalize, timeout=timeout, raises=raises)
     signal.signal(_HANDLED, _handle)
 
 
@@ -48,6 +57,7 @@ def _handle(signum, frame):
         # A repeat signal interrupting the wait below: the first one's
         # finalizer is already running, and that handler hands the signal on.
         return
+    raises = _STATE["raises"]()
     _STATE["finalizing"] = True
     previous = _STATE["previous"]
     try:
@@ -56,7 +66,7 @@ def _handle(signum, frame):
         _STATE["finalizing"] = False
         if signal.getsignal(_HANDLED) is _handle:
             signal.signal(_HANDLED, previous)
-        _chain(previous, signum, frame)
+        _chain(previous, signum, frame, raises)
 
 
 def _run_bounded(finalize, signum, timeout):
@@ -68,8 +78,10 @@ def _run_bounded(finalize, signum, timeout):
     worker.join(timeout=timeout)
 
 
-def _chain(previous, signum, frame):
+def _chain(previous, signum, frame, raises):
     if callable(previous):
         previous(signum, frame)
+    elif previous == signal.SIG_DFL and raises:
+        raise SystemExit(128 + signum)
     elif previous == signal.SIG_DFL:
         os.kill(os.getpid(), signum)

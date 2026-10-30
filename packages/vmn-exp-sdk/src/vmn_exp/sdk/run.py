@@ -142,7 +142,8 @@ def start_run(
     mode=None,
     intent=None,
     intent_keywords=None,
-    on_sigterm=release.FAIL,
+    on_sigterm=None,
+    sigterm_exit=None,
     reopen=False,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
@@ -203,8 +204,14 @@ def start_run(
     ``on_sigterm`` is what the SDK's SIGTERM handler does with the run:
     ``"fail"`` finishes it with exit code 143; ``"release"`` hands it back
     unfinished (:meth:`Run.release`) for a retry to reopen with ``run_id=``.
+    Not given, it is ``VMN_EXP_ON_SIGTERM``, else ``"fail"``. ``sigterm_exit``
+    is what the handler does next: ``"kill"`` re-delivers the signal so the
+    process dies of it; ``"raise"`` raises ``SystemExit(143)`` in the main
+    thread so ``finally`` blocks run. Not given, ``VMN_EXP_SIGTERM_EXIT``,
+    else ``"kill"``. Either raises ValueError before anything is created.
     """
-    release.check_on_sigterm(on_sigterm)
+    on_sigterm = release.resolve_on_sigterm(on_sigterm)
+    sigterm_exit = release.resolve_sigterm_exit(sigterm_exit)
     if is_disabled(mode):
         return NoOpRun(app_name, disabled=True)
     if not all_ranks and is_secondary_rank():
@@ -252,6 +259,7 @@ def start_run(
         capture_output=capture_output,
         exp_conf=exp_conf,
         on_sigterm=on_sigterm,
+        sigterm_exit=sigterm_exit,
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -307,9 +315,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         capture_output=False,
         exp_conf=None,
         on_sigterm=release.FAIL,
+        sigterm_exit=release.KILL,
     ):
         self._storage = storage
         self._on_sigterm = on_sigterm
+        self._sigterm_exit = sigterm_exit
         # The checkout's `experiment:` conf, as start_run() read it.
         self._exp_conf = exp_conf
         self.app_name = app_name
@@ -793,7 +803,13 @@ def install_signal_handlers():
     again after installing a SIGTERM handler of your own (it is chained), or
     when the SDK is first imported from a worker thread.
     """
-    signals.install(_finalize_signaled, timeout=final_upload_timeout_sec)
+    signals.install(_finalize_signaled, timeout=final_upload_timeout_sec,
+                    raises=_sigterm_raises)
+
+
+def _sigterm_raises():
+    """Whether an open run asked for ``sigterm_exit="raise"``."""
+    return any(run._sigterm_exit == release.RAISE for run in context.open_runs())
 
 
 atexit.register(_finalize_open_runs)
