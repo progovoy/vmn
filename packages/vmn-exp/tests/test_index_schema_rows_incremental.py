@@ -11,6 +11,7 @@ import dataclasses
 import gc
 import threading
 import time
+import types
 
 import pytest
 from vmn_exp.core import index_views
@@ -138,7 +139,8 @@ def test_a_request_is_served_the_previous_view_while_another_computes_the_next(m
     try:
         assert entered.wait(30)
         served, done = [], threading.Event()
-        threading.Thread(target=lambda: (served.append(second.summarized(SCHEMA)), done.set()),
+        threading.Thread(target=lambda: (served.append(second.summarized(SCHEMA, stale_ok=True)),
+                                         done.set()),
                          daemon=True).start()
         assert done.wait(2), "a request waited for another thread's computation"
         assert served == [first]
@@ -174,3 +176,95 @@ def test_bench_a_new_generation_of_200k_rows_costs_what_changed():
     moved = times.pop("inserted mid-order")  # renumbers a quarter of the rows
     assert moved < cold / 4, (cold, moved)
     assert all(t < cold / 10 for t in times.values()), (cold, times)
+
+
+class _Computing:
+    """Another thread computing *snapshot*'s view, held inside the
+    computation until :meth:`release` (or *after* seconds)."""
+
+    def __init__(self, monkeypatch, snapshot, after=None):
+        self.entered, self._release = threading.Event(), threading.Event()
+        real = index_views.summarized_row
+
+        def gated(row, parts, policies):
+            if threading.current_thread() is self._thread:
+                self.entered.set()
+                assert self._release.wait(30)
+            return real(row, parts, policies)
+
+        monkeypatch.setattr(index_views, "summarized_row", gated)
+        self.views = []
+        self._thread = threading.Thread(target=lambda: self.views.append(snapshot.summarized(SCHEMA)))
+        self._thread.start()
+        assert self.entered.wait(30)
+        if after is not None:
+            threading.Timer(after, self._release.set).start()
+
+    def release(self):
+        self._release.set()
+        self._thread.join(timeout=30)
+
+
+def test_a_caller_not_opting_into_stale_gets_its_own_generation(monkeypatch):
+    index = _Index(50)
+    first = index.publish().summarized(SCHEMA)  # still served, so kept alive
+    second = index.change(10)
+    computing = _Computing(monkeypatch, second, after=0.2)
+    try:
+        assert second.summarized(SCHEMA).generation == second.generation != first.generation
+    finally:
+        computing.release()
+
+
+def test_the_view_served_stale_never_goes_back_a_generation(monkeypatch):
+    index = _Index(50)
+    older, newer = index.publish(), index.change(5)
+    kept = newer.summarized(SCHEMA)
+    older.summarized(SCHEMA)  # a request still holding the older generation
+    third = index.change(10)
+    computing = _Computing(monkeypatch, third)
+    try:
+        assert third.summarized(SCHEMA, stale_ok=True) is kept
+    finally:
+        computing.release()
+
+
+class _Leader:
+    leading = True
+
+
+def test_the_search_rows_writer_writes_the_generation_it_was_given(monkeypatch):
+    from vmn_exp.ui import search_rows_writer
+
+    index = _Index(50)
+    first = index.publish().summarized(SCHEMA)  # still served, so kept alive
+    second = index.change(10)
+    written, real = [], search_rows_writer.search_rows
+    monkeypatch.setattr(search_rows_writer, "search_rows",
+                        lambda snap: written.append(snap.generation) or real(snap))
+    writer = search_rows_writer.SearchRowsWriter(types.SimpleNamespace(write=lambda *a: None))
+    leader = _Leader()
+    writer.note(leader, "ws", "app", lambda: SCHEMA)
+    computing = _Computing(monkeypatch, second, after=0.2)
+    try:
+        writer.refreshed(leader, second)
+    finally:
+        computing.release()
+    assert written == [second.generation] != [first.generation]
+
+
+def test_the_board_warmer_warms_the_generation_it_was_given(monkeypatch):
+    from vmn_exp.ui.leaderboard_warm import BoardWarmer
+
+    index = _Index(50)
+    first = index.publish().summarized(SCHEMA)  # still served, so kept alive
+    second = index.change(10)
+    warmed = []
+    cache = types.SimpleNamespace(conf_of=lambda snap: (SCHEMA, None),
+                                  _base=lambda board: warmed.append(board.generation))
+    computing = _Computing(monkeypatch, second, after=0.2)
+    try:
+        BoardWarmer(cache).warm(second)
+    finally:
+        computing.release()
+    assert warmed == [second.generation] != [first.generation]
