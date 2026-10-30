@@ -209,27 +209,6 @@ def read_lean(conn, app):
     return keys, lean, stamps
 
 
-def read_newest(conn, app, limit):
-    """``(runs, {key: lean_row tuple})``: how many runs *app* has, and its
-    *limit* newest in storage order, numbered as :func:`read_lean` numbers
-    them — read off the timestamp index, no other row's pages."""
-    (runs,) = conn.execute("SELECT COUNT(*) FROM exp_rows WHERE app = ?", (app,)).fetchone()
-    newest = conn.execute(
-        "SELECT key, row FROM exp_rows WHERE app = ? ORDER BY timestamp DESC, key DESC LIMIT ?",
-        (app, limit),
-    ).fetchall()[::-1]
-    sides = _sides(
-        side for chunk, marks in in_chunks(key for key, _ in newest)
-        for side in conn.execute(
-            f"SELECT key, kind, data FROM exp_sides WHERE app = ? AND key IN ({marks})",
-            (app, *chunk),
-        )
-    )
-    first = runs - len(newest) + 1
-    return runs, {key: _lean(decode_row(first + n, row), sides.get(key, {}))
-                  for n, (key, row) in enumerate(newest)}
-
-
 def _sides(rows):
     """``{key: {kind: value as kept}}`` of ``(key, kind, JSON)`` *rows*."""
     sides = {}

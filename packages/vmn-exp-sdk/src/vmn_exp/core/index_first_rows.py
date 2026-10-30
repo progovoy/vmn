@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """What a warm restart serves before it has read its persisted rows back:
-the newest few, ``loading`` their share of every persisted run.
+the newest few and the trees around them, ``loading`` their share of every
+persisted run.
 
 Reading every persisted row back is O(runs) — at ~700k runs, minutes on a
 server with nothing to show meanwhile. The newest rows come off the
-persisted timestamp index alone (:func:`~vmn_exp.core.index_lean_store.read_newest`),
-numbered as the whole snapshot numbers them, so a board opened meanwhile
-shows the recent runs as they will stay.
+persisted indexes alone (:mod:`~vmn_exp.core.index_lean_first`) with their
+ancestors and the newest outer runs, numbered as the whole snapshot numbers
+them, so a board or an Outer runs view opened meanwhile shows the recent
+runs as they will stay.
 """
 from dataclasses import replace
 
@@ -18,13 +20,14 @@ from vmn_exp.core.index_snapshot import (
 )
 
 
-def first_rows(store, app_name, limit):
+def first_rows(store, app_name, limit, max_rows):
     """An :class:`IndexSnapshot` (generation 0) of *store*'s *limit* newest
-    persisted runs of *app_name*, ``loading`` ``(rows, persisted runs)``;
+    persisted runs of *app_name* and the trees around them (at most
+    *max_rows*), ``loading`` ``(rows, persisted runs)``;
     None when the store has none to serve (never saved, re-deriving,
     unavailable, or not a SQLite store)."""
     newest_of = getattr(store, "load_newest", None)
-    newest = newest_of(app_name, limit) if newest_of else None
+    newest = newest_of(app_name, limit, max_rows) if newest_of else None
     if not newest or not newest[1]:
         return None
     runs, lean, states = newest

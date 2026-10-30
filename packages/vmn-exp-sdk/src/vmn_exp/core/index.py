@@ -111,6 +111,7 @@ BEHIND_REFRESH_SEC = 30.0
 FIRST_SNAPSHOT_WAIT_SEC = 0.5
 # The newest persisted rows a warm restart serves before reading back the rest.
 FIRST_ROWS = 500
+FIRST_ROWS_MAX = 2000  # with their ancestors and the newest outer runs
 _BISECT_NEW = 64  # new records past which the order is merged, not inserted into
 # Seconds between the empty snapshots a re-derive publishes its progress in.
 MIGRATING_PUBLISH_SEC = 1.0
@@ -424,6 +425,7 @@ class ExperimentIndex:
                 self._refresh_from_storage(started)
             self._sweep.applied()
         except Exception:
+            self._first_rows = None  # a failed first load: a retry serves them again
             # A listing's changes may have been taken but not applied: list
             # them again — all of them once a dead I/O helper took its
             # baselines along.
@@ -475,10 +477,11 @@ class ExperimentIndex:
 
     def _serve_first_rows(self):
         """Before reading the persisted rows back (O(runs)), let
-        :meth:`snapshot_now` serve the newest FIRST_ROWS of them."""
+        :meth:`snapshot_now` serve the newest FIRST_ROWS of them and the trees
+        around them (:mod:`~vmn_exp.core.index_lean_first`)."""
         if self._lean or self._io is not None or self._snapshot is not None:
             return
-        self._first_rows = first_rows(self._store, self.app_name, FIRST_ROWS)
+        self._first_rows = first_rows(self._store, self.app_name, FIRST_ROWS, FIRST_ROWS_MAX)
         if self._first_rows is not None:
             self._servable.set()
 

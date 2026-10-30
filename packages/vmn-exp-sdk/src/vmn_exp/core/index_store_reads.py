@@ -9,7 +9,8 @@ import json
 from vmn_exp.core import index_point_sql
 from vmn_exp.core.index_intern import compact_state
 from vmn_exp.core.index_lazy import STATE_KEYS, LazyRecord, LazyRecords
-from vmn_exp.core.index_lean_store import is_run, read_lean, read_newest
+from vmn_exp.core.index_lean_first import read_first_rows
+from vmn_exp.core.index_lean_store import is_run, read_lean
 from vmn_exp.core.sqlite_conn import in_chunks, read_tx
 
 _CHUNK = 256  # records read per query, under SQLite's bound-parameter limit
@@ -48,16 +49,16 @@ class LeanReads:
         }
         return records, keys, lean, stamps
 
-    def load_newest(self, app_name, limit):
+    def load_newest(self, app_name, limit, max_rows):
         """``(runs, {key: lean_row tuple}, {key: run state fields})`` of
-        *app_name*'s *limit* newest runs (see
-        :func:`~vmn_exp.core.index_lean_store.read_newest`), read at one
+        *app_name*'s *limit* newest runs and the trees around them, at most
+        *max_rows* (see :mod:`~vmn_exp.core.index_lean_first`), read at one
         generation; None when unavailable, never saved or left to re-derive."""
         return self._read(lambda: self._at_one_generation(
-            app_name, lambda conn: self._newest(conn, app_name, limit)), None)
+            app_name, lambda conn: self._first_rows(conn, app_name, limit, max_rows)), None)
 
-    def _newest(self, conn, app_name, limit):
-        runs, lean = read_newest(conn, app_name, limit)
+    def _first_rows(self, conn, app_name, limit, max_rows):
+        runs, lean = read_first_rows(conn, app_name, limit, max_rows)
         states = {}
         for chunk, marks in in_chunks(lean):
             states.update(conn.execute(
