@@ -82,3 +82,26 @@ def test_every_record_lock_is_reentrant_in_a_thread(tmp_path, lock):
             assert _held_elsewhere(_path(tmp_path, name))
         assert _held_elsewhere(_path(tmp_path, name))
     assert not _held_elsewhere(_path(tmp_path, name))
+
+
+def test_a_failure_right_after_the_flock_leaves_the_lock_free(tmp_path, monkeypatch):
+    with ship_state.state_lock(str(tmp_path)):
+        pass  # the fd is cached now
+
+    def stale(path, *a, **k):  # an NFS record deleted from another host
+        raise OSError(116, "Stale file handle", path)
+
+    with monkeypatch.context() as m:
+        m.setattr(ship_state.os, "stat", stale)
+        with pytest.raises(OSError):
+            with ship_state.state_lock(str(tmp_path)):
+                pass
+    assert not _held_elsewhere(_path(tmp_path))
+
+
+def test_a_lock_on_a_network_filesystem_keeps_no_fd_open(tmp_path, monkeypatch):
+    monkeypatch.setattr(ship_state, "filesystem_type", lambda path: "nfs")
+    with ship_state.state_lock(str(tmp_path)):
+        assert _held_elsewhere(_path(tmp_path))
+    assert _path(tmp_path) not in ship_state._FDS
+    assert not _held_elsewhere(_path(tmp_path))

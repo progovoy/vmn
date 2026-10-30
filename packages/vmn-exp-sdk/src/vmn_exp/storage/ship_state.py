@@ -26,6 +26,7 @@ except ImportError:  # not POSIX
 
 from filelock import FileLock, Timeout
 from vmn_exp.storage.files import atomic_write
+from vmn_exp.storage.fs_type import filesystem_type, is_network_fs
 
 SHIP_DIR = ".ship"
 # A holder keeping the lock this long is stuck (a process frozen mid-upload):
@@ -199,7 +200,7 @@ def _record_lock(record_dir, name):
 def _lock_file(path, name):
     """Take the cross-process lock of the file at *path* (its thread lock
     held); returns its release."""
-    if fcntl is None:  # not POSIX: a lock file per hold
+    if fcntl is None or _on_network_fs(path):  # a lock file per hold
         file_lock = FileLock(path)
         try:
             file_lock.acquire(timeout=_wait_sec())
@@ -210,7 +211,13 @@ def _lock_file(path, name):
     while True:
         fd = _open_fd(path)
         _flock(fd, deadline, name)
-        if _is_current(fd, path):
+        try:
+            current = _is_current(fd, path)
+        except BaseException:
+            _unlock_fd(path, fd)
+            _close_fd(path)
+            raise
+        if current:
             return functools.partial(_unlock_fd, path, fd)
         _unlock_fd(path, fd)  # the file was removed or replaced: lock the new one
         _close_fd(path)
@@ -255,6 +262,14 @@ def _evict_unheld():
                     os.close(_FDS.pop(path))
             finally:
                 local.release()
+
+
+def _on_network_fs(path):
+    """Whether *path* (``<record>/.ship/<name>``) is on a network
+    filesystem, where an fd kept open would make deleting the record leave
+    an ``.nfsXXXX`` file behind (decided per app directory, cached)."""
+    app_dir = os.path.dirname(os.path.dirname(os.path.dirname(path)))
+    return is_network_fs(filesystem_type(app_dir))
 
 
 def _is_current(fd, path):
