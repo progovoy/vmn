@@ -51,6 +51,7 @@ import threading
 import time
 
 from vmn_exp.core.activity import activity
+from vmn_exp.core.gc_policy import POLICY
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.failure_streak import FailureStreak
 from vmn_exp.ui.gil_hint import GilHint
@@ -143,6 +144,7 @@ class Refresher(_Listeners):
         self._stopped = threading.Event()
         self._warmer = LatestWorker(self._warm, name="vmn-ui-warm")
         self.gil_hint = GilHint()
+        self.gc_policy = POLICY  # process-wide, like the collector it schedules
 
     def snapshot(self, index, journal=None):
         """*index*'s current snapshot, keeping *index* refreshed from now on
@@ -318,7 +320,9 @@ class Refresher(_Listeners):
 
     def _after_refresh(self, index, snapshot):
         """Each step after a refresh, none keeping the others from running."""
-        self._step(index, "The GIL hint", self.gil_hint.note, len(getattr(snapshot, "rows", ())))
+        records = len(getattr(snapshot, "rows", ()))
+        self._step(index, "The GIL hint", self.gil_hint.note, records)
+        self._step(index, "The GC policy", self.gc_policy.after_publish, records)
         for listener in list(self._listeners):
             self._step(index, f"The refresh listener {_name(listener)}", listener, index, snapshot)
         if self.on_refresh is not None:

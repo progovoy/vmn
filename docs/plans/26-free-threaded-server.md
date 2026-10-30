@@ -268,6 +268,17 @@ file. Units run in parallel unless marked *after*.
   - On 3.14t, RSS after cold load ≤ 1.2× live bytes.
 
 ### F5. Free-threaded GC policy (decision 5; *after* F1, F2)
+- **Done ahead of F1/F2 (2026-10-30, a 705k-run ui on 3.15t paused 4-9 s per
+  automatic collection):** `core/gc_policy.py` `GcPolicy`, from
+  `FREE_THREADED_LARGE_RECORDS` (= the gil_hint bound) on a free-threaded build:
+  automatic collection off (`gc_pause.set_automatic`, which a running
+  `gc_paused` ends into), then after a refresher publish collect + freeze at
+  most every `GC_MIN_INTERVAL_SEC` (300). Collect runs *before* freeze, so no
+  garbage cycle is frozen. No threshold change (collection is off). Diag
+  `gc.policy`. Tests: `test_ft_gc_policy.py`, and
+  `test_ft_gc_policy_generations.py` (no cyclic garbage per generation;
+  50 generations frozen after each publish are freed; passes on 3.14.10t).
+  Still open: the acceptance run in F0.
 - `core/gc_policy.py`: `policy_for(gil_enabled)` returns `DefaultPolicy` (no-op) or
   `FreeThreadedPolicy`, which does three things:
   - `after_publish(snapshot)`: freeze, then collect if due;

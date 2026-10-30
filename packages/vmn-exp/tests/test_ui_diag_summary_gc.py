@@ -60,3 +60,17 @@ def test_a_stall_no_pause_overlaps_says_so():
 
 def test_no_gc_section_prints_nothing_about_it():
     assert "Garbage collector" not in summarize(_dump())
+
+
+def test_a_scheduled_collector_says_how_often_it_collected():
+    policy = {"active": True, "interval_sec": 300, "collections": 4, "total_ms": 1200.0,
+              "last_ms": 250.0, "last_at": AT}
+    text = summarize(_dump(gc=_gc(enabled=False, policy=policy)))
+    assert "automatic collection off: collected 4 times after a publish" in text
+    assert "every 300s at most, 1.2s paused, last 250ms" in text
+
+
+def test_an_inactive_policy_adds_nothing():
+    policy = {"active": False, "interval_sec": 300, "collections": 0, "total_ms": 0.0,
+              "last_ms": None, "last_at": None}
+    assert "after a publish" not in summarize(_dump(gc=_gc(policy=policy)))

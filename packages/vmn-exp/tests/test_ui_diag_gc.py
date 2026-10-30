@@ -112,6 +112,12 @@ def test_the_section_says_how_the_collector_is_set_up():
     assert section["allocator"]["allocated_blocks"] > 0
 
 
+def test_the_section_says_whether_the_free_threaded_policy_schedules_collections():
+    from vmn_exp.core.gc_policy import POLICY
+
+    assert gc_pauses.gc_section()["policy"] == POLICY.stats()
+
+
 def test_a_free_threaded_build_allocates_with_mimalloc():
     info = gc_pauses.allocator_info(environ={"MIMALLOC_PURGE_DELAY": "0", "HOME": "/h"},
                                     free_threaded=True)

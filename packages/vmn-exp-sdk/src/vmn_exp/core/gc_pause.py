@@ -8,7 +8,8 @@ was the collector, not the decoding. Nothing in such a stretch makes cycles
 worth collecting early, so :func:`gc_paused` turns collection off for it.
 
 Process-wide state shared by threads: collection resumes once the last of the
-overlapping pauses ends, and only if it was on when the first began.
+overlapping pauses ends, and only if it was on when the first began — or as
+:func:`set_automatic` last set it during the pauses.
 """
 import gc
 import threading
@@ -34,6 +35,17 @@ def gc_paused():
             _depth -= 1
             if _depth == 0 and _resume:
                 gc.enable()
+
+
+def set_automatic(enabled):
+    """Turn automatic collection on or off for good (see
+    :mod:`~vmn_exp.core.gc_policy`); a pause running now ends into it."""
+    global _resume
+    with _LOCK:
+        if _depth:
+            _resume = enabled
+        else:
+            (gc.enable if enabled else gc.disable)()
 
 
 def freeze_long_lived():

@@ -18,9 +18,10 @@ import sys
 import threading
 
 from vmn_exp._base import ensure_logger
+from vmn_exp.core.gc_policy import FREE_THREADED_LARGE_RECORDS
 
 LARGE_STORE_RECORDS = 10_000
-FREE_THREADED_MAX_RECORDS = 200_000
+FREE_THREADED_MAX_RECORDS = FREE_THREADED_LARGE_RECORDS
 _DOCS = "(see docs/vmn-exp/ui.md, 'Large stores: run the UI on free-threaded Python')"
 HINT = (
     "This store has %d runs and this Python has the GIL enabled, which caps the "

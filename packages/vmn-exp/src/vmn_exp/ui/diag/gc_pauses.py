@@ -17,6 +17,7 @@ import sys
 import time
 from collections import deque
 
+from vmn_exp.core.gc_policy import POLICY
 from vmn_exp.ui.diag.latency import _ms
 from vmn_exp.ui.gil_hint import gil_enabled
 
@@ -99,6 +100,7 @@ def gc_section():
         "gil_enabled": gil_enabled(),
         "threshold": list(gc.get_threshold()),
         "freeze_count": gc.get_freeze_count(),
+        "policy": POLICY.stats(),
         **PAUSES.stats(),
         "allocator": allocator_info(),
     }

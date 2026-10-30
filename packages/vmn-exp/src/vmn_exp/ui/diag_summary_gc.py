@@ -38,6 +38,17 @@ def _totals(section):
             f"{section.get('uncollectable', 0)} uncollectable")
 
 
+def _policy(section):
+    policy = _dict(section.get("policy"))
+    if not policy.get("active"):
+        return []
+    last = policy.get("last_ms")
+    return [f"  automatic collection off: collected {policy.get('collections', 0)} times after a"
+            f" publish, every {policy.get('interval_sec')}s at most, "
+            f"{_duration(policy.get('total_ms', 0))} paused, "
+            f"last {_duration(last) if last is not None else '-'}"]
+
+
 def _recent(pauses):
     if not pauses:
         return []
@@ -83,5 +94,5 @@ def gc_part(sections):
     if not section or section.get("error"):
         return []
     pauses = _list(section.get("recent"))
-    return ([_setup(section), _totals(section)] + _recent(pauses)
+    return ([_setup(section), _totals(section)] + _policy(section) + _recent(pauses)
             + _allocator(section, _dict(sections.get("process"))) + _stall(pauses, sections))

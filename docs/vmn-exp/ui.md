@@ -291,12 +291,21 @@ Two things cause this, and both grow with the heap:
   walked: 50 ms per 8M objects on 3.14t, about 18 ms per GB of heap. Freezing
   did not make collections more frequent. Under steady churn (as many frees as
   allocations), 3.14t did not collect at all.
+  From 200k runs a free-threaded ui therefore turns automatic collection off
+  and collects on the refresher thread right after a publish, at most every
+  5 minutes, then freezes what survived, so the next collection scans only
+  what is new (serving index generations makes no cyclic garbage). Measured on
+  3.14.10t with 2M rows growing to 4M: at most 100 ms per collection, even with
+  a collection after every publish; automatic collections of the same heap
+  took 250 ms each, and the 705k-run ui on 3.15t stopped 4 to 9 s per
+  automatic collection.
 
 As RSS grows 10%, a collection runs and takes longer than the last one, so
 stalls and growth arrive together. The dump's `gc` section and
 `vmn-exp ui diag --summarize` show it: count, total and worst pause, recent
 pauses, frozen objects, the allocator and its block count next to RSS, and
-whether the event loop's worst lag overlaps a GC pause.
+whether the event loop's worst lag overlaps a GC pause; with collection
+scheduled, also how many it ran, its total and last pause (`gc.policy`).
 
 ## Diagnostic dumps
 
