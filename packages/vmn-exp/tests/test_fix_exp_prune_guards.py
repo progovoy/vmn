@@ -35,6 +35,16 @@ def _state(heartbeat_minutes_ago):
     }
 
 
+class _EmptyArea:
+    """A sibling store area (settings, comments) holding nothing."""
+
+    def load_file(self, app_name, verstr, name):
+        return None
+
+    def delete(self, app_name, verstr):
+        pass
+
+
 class _Storage:
     def __init__(self, states, remote=False):
         self.states = states
@@ -60,6 +70,9 @@ class _Storage:
 
     def is_remote(self):
         return self.remote
+
+    def in_area(self, name):
+        return _EmptyArea()
 
 
 def _args(**kw):
