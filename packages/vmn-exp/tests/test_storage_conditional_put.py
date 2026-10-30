@@ -2,8 +2,8 @@
 token (S3 ETag, GCS generation, Azure ETag) and, given the token of the last
 write, lands only while nobody wrote the file since.
 
-A backend without version tokens (a local dir) writes unconditionally and
-returns no token, so its caller reads before each write instead.
+A local dir's token is its content's hash: a heartbeat on the token of its
+own last write is one locked read, no parse.
 """
 from test_storage_object_stores import _meta, store  # noqa: F401 (fixture)
 
@@ -44,7 +44,9 @@ def test_a_write_under_a_stale_token_is_refused(store):  # noqa: F811
     assert store.load_file(APP, V1, NAME) == b"other: 1\n"
 
 
-def test_a_local_store_writes_without_a_token(tmp_path):
+def test_a_local_store_returns_the_token_of_its_write(tmp_path):
     storage = _claimed(LocalSnapshotStorage(str(tmp_path)))
-    assert storage.save_file_if_match(APP, V1, NAME, "a: 1\n") == (True, None)
-    assert storage.load_file(APP, V1, NAME) == b"a: 1\n"
+    written, token = storage.save_file_if_match(APP, V1, NAME, "a: 1\n")
+    assert written and token == storage.load_file_with_token(APP, V1, NAME)[1]
+    assert storage.save_file_if_match(APP, V1, NAME, "a: 2\n", token)[0]
+    assert storage.load_file(APP, V1, NAME) == b"a: 2\n"

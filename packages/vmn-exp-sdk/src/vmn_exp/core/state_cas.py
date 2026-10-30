@@ -49,17 +49,6 @@ def finished_by_another(stored, attempt):
     )
 
 
-def save_unless_finished_by_another(side, app_name, verstr, filename, state):
-    """:func:`compare_and_save` of *state*, kept off a run another attempt
-    (than ``state["attempt"]``) has finished; whether it was written."""
-    attempt = state.get("attempt")
-
-    def update(stored):
-        return None if finished_by_another(stored, attempt) else state
-
-    return compare_and_save(side, app_name, verstr, filename, update) is not None
-
-
 def compare_and_save(side, app_name, verstr, filename, update):
     """Write ``update(stored state)`` (a mapping) while the stored state is
     still the one it was computed from; the state written, or None when
@@ -67,15 +56,30 @@ def compare_and_save(side, app_name, verstr, filename, update):
 
     A store without version tokens (a caller's own) writes unconditionally.
     """
+    return compare_and_save_token(side, (app_name, verstr, filename), update)[0]
+
+
+def compare_and_save_token(side, where, update, seed=None):
+    """:func:`compare_and_save` at *where*, returning ``(state written or
+    None, its token)``. *seed* — ``(stored state, token)`` known without a
+    read, as of the caller's own last write — is the first round's: while
+    its token is current the write is one conditional save, no read."""
     for _ in range(_ROUNDS):
-        stored, token = _load(side, app_name, verstr, filename)
+        stored, token = seed or _load(side, *where)
+        seed = None
         state = update(stored)
         if state is None:
-            return None
-        data = yaml.dump(state, sort_keys=False)
-        if save_if_match(side, (app_name, verstr, filename), data, token)[0]:
-            return state
-    raise StateContendedError(f"the {filename} of {verstr} kept changing under every write")
+            return None, None
+        written, token = save_if_match(side, where, yaml.dump(state, sort_keys=False), token)
+        if written:
+            return state, token
+    raise StateContendedError(f"the {where[2]} of {where[1]} kept changing under every write")
+
+
+def pull_record(storage, inline, app_name, verstr):
+    """Fetch a record only *storage*'s remote holds into *inline*, its local side."""
+    if inline is not None and inline is not storage and not inline.exists(app_name, verstr):
+        storage.load_record(app_name, verstr)
 
 
 def _load(side, app_name, verstr, filename):

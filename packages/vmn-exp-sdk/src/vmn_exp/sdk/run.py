@@ -349,7 +349,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         # Every background storage call goes through it: pause_background()
         # and the fork handlers (fork_safety) hold them all.
         self._gate = BackgroundGate()
-        self._state_publisher = RunStatePublisher(storage, app_name, verstr, self._gate)
+        self._state_publisher = RunStatePublisher(
+            storage, app_name, verstr, self._gate, resumes=prior_state)
         self._log_buffer = LogBuffer(
             functools.partial(append_entries_to_log, storage, app_name, verstr),
             self._gate,

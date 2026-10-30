@@ -20,7 +20,7 @@ import uuid
 
 from vmn_exp._base import now_iso
 from vmn_exp.core.run_error import error_from_exception, error_from_message
-from vmn_exp.core.state_cas import compare_and_save, split_storage
+from vmn_exp.core.state_cas import compare_and_save, pull_record, split_storage
 from vmn_exp.core.status import (
     FAILED,
     RUN_STATE_FILE,
@@ -74,8 +74,7 @@ def _save_final(storage, app_name, verstr, update):
     """A compare-and-swap of ``update(stored state)`` where the run's state
     is shared (its remote, else the store), then a copy to the local side."""
     inline, remote_target = split_storage(storage, app_name, verstr)
-    if inline is not None and inline is not storage and not inline.exists(app_name, verstr):
-        storage.load_record(app_name, verstr)  # a cache pulls a remote-only record
+    pull_record(storage, inline, app_name, verstr)
     shared = (remote_target and remote_target()) or inline
     state = compare_and_save(shared, app_name, verstr, RUN_STATE_FILE, update)
     if inline is not None and inline is not shared:

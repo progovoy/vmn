@@ -236,13 +236,14 @@ both for runs that last hours (e.g. `VMN_EXP_HEARTBEAT_SEC=120`: stuck after
 6 min) without code changes. The interval is stored per run, so readers always
 use the run's own window.
 
-Each beat rewrites `run_state.yml`. Before writing, a beat makes sure another
-attempt of the same run has not finished it (a duplicate pod's beats must not
-reopen it). On S3, GCS and Azure that costs no read while this attempt was the
-last writer: the beat is a conditional PUT on the ETag (GCS generation) of its
-own previous write, and only a refused PUT falls back to reading the stored
-state, which stops the beaten attempt's heartbeat. One request per beat
-instead of a GET and a PUT.
+Each beat rewrites `run_state.yml`, as a compare-and-swap that refuses to land
+once another attempt of the same run has finished it (a duplicate pod's beats
+must not reopen it). That costs no read while this attempt was the last
+writer: the beat is a conditional write on the version token of its own
+previous write (S3/Azure ETag, GCS generation; a content hash checked under a
+per-record lock on a local store), and only a refused write falls back to
+reading the stored state, which stops the beaten attempt's heartbeat. One
+request per beat instead of a GET and a PUT.
 
 ### Derived statuses
 
@@ -270,14 +271,15 @@ watch `last_metric_at` (UI/API) for "alive but not making progress".
 
 Two attempts of one SDK run (speculative duplicate pods, a run resumed with
 `start_run(run_id=)` while the old process still lives) share its
-`run_state.yml`. Each SDK attempt records a random `attempt` id, and a
-heartbeat first reads the stored state: once another attempt has written the
-final state, the beat is dropped and this attempt stops heartbeating (one
-warning), so the loser never flips a finished run back to `running`. A start
-is always written, so resuming a finished run still reopens it. Best-effort:
-there is no compare-and-swap, so a final state that lands between a beat's
-read and its write is overwritten once; and the losing attempt's own final
-state (when it finishes later) still replaces the winner's.
+`run_state.yml`. Each SDK attempt records a random `attempt` id, and every
+write of the state — each beat, an attempt's first write, its final state — is
+a compare-and-swap: once another attempt has written the final state, the
+write is dropped and this attempt stops heartbeating (one warning), so the
+loser never flips a finished run back to `running` nor erases its exit code,
+even when that final state lands between the beat's read and its write. The
+one final state an attempt may replace is the one it resumed, so resuming a
+finished run with `start_run(run_id=)` still reopens it; a finish landing
+after the resumer read the state wins.
 
 ### Preemption and signals
 

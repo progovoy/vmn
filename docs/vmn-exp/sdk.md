@@ -563,7 +563,10 @@ yourself when a `with` block doesn't fit. It is idempotent.
   flight at the deadline). The final write is a compare-and-swap on the
   state's version token (S3/Azure ETag, GCS generation, a content hash under
   a per-record lock on a local store), so two finishers racing cannot both
-  land. A release never displaces a finish; a finish replaces a release.
+  land. So is every other state write — each heartbeat and a resumed
+  attempt's first write — so the losing attempt never flips the finished run
+  back to `running` either (its heartbeat stops). A release never displaces a
+  finish; a finish replaces a release.
 - The run **heartbeats itself** from a daemon thread (bumping `heartbeat_seq`
   in `run_state.yml`), so an OOM-killed or lost job goes
   [`stuck`](experiments.md#run-status-did-my-job-die) instead of `running`

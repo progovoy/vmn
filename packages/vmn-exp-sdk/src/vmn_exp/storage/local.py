@@ -363,8 +363,8 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
     def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
         """The record's state lock makes the compare and the rename one step
         for every conditional writer (an unconditional one may still land).
-        No token comes back: a conditional writer reads first
-        (:meth:`load_file_with_token`), then writes once."""
+        The token back is *data*'s content hash, so a writer on the token of
+        its own last write needs no read before it."""
         if self._refuse_orphan_write(app_name, verstr, filename):
             return False, None
         with ship_state.state_lock(self._snapshot_dir(app_name, verstr)):
@@ -372,7 +372,7 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
             if etag and _content_token(stored) != etag:
                 return False, None
             self.save_file(app_name, verstr, filename, data)
-            return True, None
+            return True, _content_token(data)
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         name = artifact_name_for(src_path, name)
