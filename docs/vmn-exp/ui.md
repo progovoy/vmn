@@ -292,20 +292,24 @@ Two things cause this, and both grow with the heap:
   did not make collections more frequent. Under steady churn (as many frees as
   allocations), 3.14t did not collect at all.
   From 200k runs a free-threaded ui therefore turns automatic collection off
-  and collects on the refresher thread right after a publish, at most every
-  5 minutes, then freezes what survived, so the next collection scans only
-  what is new (serving index generations makes no cyclic garbage). Measured on
-  3.14.10t with 2M rows growing to 4M: at most 100 ms per collection, even with
-  a collection after every publish; automatic collections of the same heap
-  took 250 ms each, and the 705k-run ui on 3.15t stopped 4 to 9 s per
-  automatic collection.
+  and a `vmn-gc` thread collects on its own clock instead: first after 5
+  minutes, then the wait doubles up to an hour while collections find little
+  garbage (under 100k objects), and halves when one finds more. Serving the
+  board, HTTP polls and S3 reads make almost no cyclic garbage (0 to 30
+  objects each). This makes pauses rarer, not shorter: each one still scans
+  everything alive. Measured on 3.14.10t, 16 request threads, the heap growing
+  from 4M to 17M tracked objects as the 705k-run ui's did (intervals scaled
+  down 20 times): 4 collections and 3.4 s paused, against 6 and 5.3 s
+  automatic, each 0.1 to 2 s either way. A heap that stops growing is not
+  collected automatically at all, so there the clock adds one an hour.
 
 As RSS grows 10%, a collection runs and takes longer than the last one, so
 stalls and growth arrive together. The dump's `gc` section and
 `vmn-exp ui diag --summarize` show it: count, total and worst pause, recent
 pauses, frozen objects, the allocator and its block count next to RSS, and
 whether the event loop's worst lag overlaps a GC pause; with collection
-scheduled, also how many it ran, its total and last pause (`gc.policy`).
+scheduled, also how many it ran, its total and last pause, the garbage it
+found and the wait until the next one (`gc.policy`).
 
 ## Diagnostic dumps
 

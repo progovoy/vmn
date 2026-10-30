@@ -62,15 +62,15 @@ def test_no_gc_section_prints_nothing_about_it():
     assert "Garbage collector" not in summarize(_dump())
 
 
-def test_a_scheduled_collector_says_how_often_it_collected():
-    policy = {"active": True, "interval_sec": 300, "collections": 4, "total_ms": 1200.0,
-              "last_ms": 250.0, "last_at": AT}
+def test_a_scheduled_collector_says_how_often_and_how_much_it_collected():
+    policy = {"active": True, "interval_sec": 1200, "collections": 4, "total_ms": 1200.0,
+              "last_ms": 250.0, "last_at": AT, "garbage": 3000, "last_garbage": 40}
     text = summarize(_dump(gc=_gc(enabled=False, policy=policy)))
-    assert "automatic collection off: collected 4 times after a publish" in text
-    assert "every 300s at most, 1.2s paused, last 250ms" in text
+    assert "automatic collection off: the vmn-gc thread collected 4 times" in text
+    assert "1.2s paused, last 250ms found 40 garbage (3000 in all); next in 1200s" in text
 
 
 def test_an_inactive_policy_adds_nothing():
     policy = {"active": False, "interval_sec": 300, "collections": 0, "total_ms": 0.0,
-              "last_ms": None, "last_at": None}
-    assert "after a publish" not in summarize(_dump(gc=_gc(policy=policy)))
+              "last_ms": None, "last_at": None, "garbage": 0, "last_garbage": None}
+    assert "vmn-gc" not in summarize(_dump(gc=_gc(policy=policy)))

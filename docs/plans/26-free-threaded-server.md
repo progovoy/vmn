@@ -269,16 +269,25 @@ file. Units run in parallel unless marked *after*.
 
 ### F5. Free-threaded GC policy (decision 5; *after* F1, F2)
 - **Done ahead of F1/F2 (2026-10-30, a 705k-run ui on 3.15t paused 4-9 s per
-  automatic collection):** `core/gc_policy.py` `GcPolicy`, from
-  `FREE_THREADED_LARGE_RECORDS` (= the gil_hint bound) on a free-threaded build:
-  automatic collection off (`gc_pause.set_automatic`, which a running
-  `gc_paused` ends into), then after a refresher publish collect + freeze at
-  most every `GC_MIN_INTERVAL_SEC` (300). Collect runs *before* freeze, so no
-  garbage cycle is frozen. No threshold change (collection is off). Diag
-  `gc.policy`. Tests: `test_ft_gc_policy.py`, and
-  `test_ft_gc_policy_generations.py` (no cyclic garbage per generation;
-  50 generations frozen after each publish are freed; passes on 3.14.10t).
-  Still open: the acceptance run in F0.
+  automatic collection, ten in 45 min):** `core/gc_policy.py` `GcPolicy`, from
+  `FREE_THREADED_LARGE_RECORDS` (= the gil_hint bound) on a free-threaded build,
+  switched on by the first refresher publish that large: automatic collection
+  off (`gc_pause.set_automatic`, which a running `gc_paused` ends into) and a
+  `vmn-gc` daemon thread that collects on its own clock, publish or not: the
+  wait doubles from 300 s to 3600 s while a collection finds < 100k garbage
+  objects and halves when one finds more. No freeze (on 3.14t a collection
+  still walks frozen objects, `28-measurements.md` point 5, and every freeze
+  pins the cycles alive at that moment) and no threshold change. This makes
+  pauses *rarer*, not *shorter*: a pause is still ∝ everything alive, which
+  only F1 shrinks. Measured cyclic garbage: S3 refresh with a change ~30
+  objects, an S3 get ~25, an HTTP board poll 0 server-side (17 from the test
+  client). Bench (3.14.10t, heap growing 4M -> 17M tracked, time /20): 4
+  collections, 3.4 s paused vs 6 and 5.3 s automatic; a heap that stops
+  growing collects 0 times automatically, so there the clock adds one an
+  hour. Diag `gc.policy`. Tests: `test_ft_gc_policy.py`,
+  `test_ft_gc_policy_generations.py`. Still open: the policy starts after
+  the first publish, so a cold remote first load still collects
+  automatically; the acceptance run in F0.
 - `core/gc_policy.py`: `policy_for(gil_enabled)` returns `DefaultPolicy` (no-op) or
   `FreeThreadedPolicy`, which does three things:
   - `after_publish(snapshot)`: freeze, then collect if due;

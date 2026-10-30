@@ -1,18 +1,23 @@
 """On a free-threaded build every collection is a full stop-the-world scan
-(the generation argument is ignored), and the automatic trigger fires on RSS
-growth, which the allocator's retention alone keeps causing. A 705k-run ui on
-3.15t stopped 4-9 s per automatic collection, at random moments on any
-thread. So past :data:`FREE_THREADED_LARGE_RECORDS` runs a free-threaded ui
-turns automatic collection off and collects on the refresher thread right
-after a publish, at most every :data:`GC_MIN_INTERVAL_SEC`, freezing what
-survives so the next one scans only what is new (plan 26 F5). A GIL build,
-or a smaller store, is left alone."""
+of everything alive, frozen objects included (docs/plans/28-measurements.md
+point 5), and the automatic trigger fires on RSS growth, which the
+allocator's retention alone keeps causing. A 705k-run ui on 3.15t stopped
+4-9 s per automatic collection, ten times in 45 minutes. A pause cannot get
+shorter without fewer live objects (plan 26 F1), so past
+:data:`FREE_THREADED_LARGE_RECORDS` runs a free-threaded ui runs fewer of
+them: automatic collection off, and a ``vmn-gc`` thread collects on its own
+clock, whether or not refreshes publish. The wait doubles from
+:data:`GC_MIN_INTERVAL_SEC` to :data:`GC_MAX_INTERVAL_SEC` while collections
+find little garbage, and halves when one finds much, so cyclic garbage stays
+bounded. A GIL build, or a smaller store, is left alone."""
 import gc
+import threading
 from types import SimpleNamespace
 
 import pytest
 from vmn_exp.core.gc_pause import gc_paused, set_automatic
-from vmn_exp.core.gc_policy import FREE_THREADED_LARGE_RECORDS, GC_MIN_INTERVAL_SEC, GcPolicy
+from vmn_exp.core.gc_policy import (FREE_THREADED_LARGE_RECORDS, GC_MAX_INTERVAL_SEC,
+                                    GC_MIN_INTERVAL_SEC, MUCH_GARBAGE, GcPolicy)
 from vmn_exp.ui.gil_hint import FREE_THREADED_MAX_RECORDS
 from vmn_exp.ui.refresher import Refresher
 
@@ -27,20 +32,17 @@ def _gc_enabled():
     (gc.enable if was else gc.disable)()
 
 
-class _Clock:
-    def __init__(self):
-        self.now = 1000.0
+def _policy(free_threaded=True, garbage=0):
+    calls, started = [], []
 
-    def __call__(self):
-        return self.now
+    def collect():
+        calls.append("collect")
+        return garbage
 
-
-def _policy(free_threaded=True):
-    calls, clock = [], _Clock()
-    policy = GcPolicy(free_threaded=lambda: free_threaded, clock=clock,
-                      collect=lambda: calls.append("collect"),
-                      set_automatic=lambda on: calls.append(("automatic", on)))
-    return policy, calls, clock
+    policy = GcPolicy(free_threaded=lambda: free_threaded, collect=collect,
+                      set_automatic=lambda on: calls.append(("automatic", on)),
+                      start=started.append)
+    return policy, calls, started
 
 
 def test_the_policy_starts_where_the_ui_stops_recommending_free_threaded():
@@ -48,56 +50,84 @@ def test_the_policy_starts_where_the_ui_stops_recommending_free_threaded():
 
 
 def test_a_gil_build_serving_a_large_store_is_left_alone():
-    policy, calls, _ = _policy(free_threaded=False)
+    policy, calls, started = _policy(free_threaded=False)
     policy.after_publish(LARGE * 3)
-    assert calls == []
+    assert calls == [] and started == []
     assert policy.stats()["active"] is False
 
 
 def test_a_free_threaded_build_serving_a_small_store_is_left_alone():
-    policy, calls, _ = _policy()
+    policy, calls, started = _policy()
     policy.after_publish(LARGE - 1)
-    assert calls == []
+    assert calls == [] and started == []
     assert policy.stats()["active"] is False
 
 
-def test_a_large_store_on_free_threaded_turns_automatic_collection_off_then_collects():
-    policy, calls, _ = _policy()
+def test_a_large_store_on_free_threaded_turns_automatic_collection_off_and_starts_a_collector():
+    policy, calls, started = _policy()
     policy.after_publish(LARGE)
-    assert calls == [("automatic", False), "collect"]
+    policy.after_publish(LARGE)
+    assert calls == [("automatic", False)]
+    assert len(started) == 1
     assert policy.stats()["active"] is True
 
 
-def test_collections_are_at_most_one_per_interval():
-    policy, calls, clock = _policy()
-    policy.after_publish(LARGE)
-    clock.now += GC_MIN_INTERVAL_SEC - 1
-    policy.after_publish(LARGE)
-    assert calls.count("collect") == 1
-    clock.now += 1
-    policy.after_publish(LARGE)
-    assert calls.count("collect") == 2
-    assert calls.count(("automatic", False)) == 1
+def test_a_publish_does_not_collect():
+    policy, calls, _ = _policy()
+    for _ in range(5):
+        policy.after_publish(LARGE)
+    assert "collect" not in calls
 
 
-def test_the_policy_stays_on_once_on():
-    policy, calls, clock = _policy()
+def test_the_wait_doubles_up_to_the_cap_while_collections_find_little():
+    policy, _, _ = _policy(garbage=MUCH_GARBAGE - 1)
     policy.after_publish(LARGE)
-    clock.now += GC_MIN_INTERVAL_SEC
-    policy.after_publish(10)
-    assert calls.count("collect") == 2
-    assert ("automatic", True) not in calls
+    assert policy.stats()["interval_sec"] == GC_MIN_INTERVAL_SEC
+    waits = [policy.collect_now() for _ in range(8)]
+    assert waits[0] == GC_MIN_INTERVAL_SEC * 2
+    assert waits[-1] == GC_MAX_INTERVAL_SEC
+    assert waits == sorted(waits)
 
 
-def test_stats_say_how_often_and_how_long_it_collected():
-    policy, _, clock = _policy()
+def test_the_wait_halves_down_to_the_floor_when_a_collection_finds_much():
+    policy, _, _ = _policy(garbage=0)
+    for _ in range(8):
+        policy.collect_now()
+    policy._collect = lambda: MUCH_GARBAGE
+    assert policy.collect_now() == GC_MAX_INTERVAL_SEC / 2
+    waits = [policy.collect_now() for _ in range(8)]
+    assert waits[-1] == GC_MIN_INTERVAL_SEC
+
+
+def test_the_collector_thread_collects_without_any_publish():
+    collected = threading.Event()
+    policy = GcPolicy(free_threaded=lambda: True, set_automatic=lambda on: None,
+                      collect=lambda: collected.set() or 0, min_interval=0.01,
+                      max_interval=0.02)
     policy.after_publish(LARGE)
-    clock.now += GC_MIN_INTERVAL_SEC
+    assert collected.wait(5)
+    names = [t.name for t in threading.enumerate()]
+    assert "vmn-gc" in names
+    policy.stop()
+
+
+def test_stats_say_how_often_how_long_and_how_much_it_collected():
+    policy, _, _ = _policy(garbage=7)
     policy.after_publish(LARGE)
+    policy.collect_now()
+    policy.collect_now()
     stats = policy.stats()
-    assert stats["collections"] == 2
-    assert stats["interval_sec"] == GC_MIN_INTERVAL_SEC
+    assert stats["collections"] == 2 and stats["garbage"] == 14 and stats["last_garbage"] == 7
+    assert stats["interval_sec"] == GC_MIN_INTERVAL_SEC * 4
     assert stats["last_at"] is not None and stats["last_ms"] >= 0 and stats["total_ms"] >= 0
+
+
+def test_the_real_collect_does_not_freeze():
+    gc.unfreeze()
+    policy = GcPolicy(free_threaded=lambda: True, set_automatic=lambda on: None,
+                      start=lambda target: None)
+    policy.collect_now()
+    assert gc.get_freeze_count() == 0
 
 
 def test_automatic_collection_turned_off_inside_a_pause_stays_off_after_it():

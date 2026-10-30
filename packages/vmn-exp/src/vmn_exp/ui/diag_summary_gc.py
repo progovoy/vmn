@@ -43,10 +43,11 @@ def _policy(section):
     if not policy.get("active"):
         return []
     last = policy.get("last_ms")
-    return [f"  automatic collection off: collected {policy.get('collections', 0)} times after a"
-            f" publish, every {policy.get('interval_sec')}s at most, "
-            f"{_duration(policy.get('total_ms', 0))} paused, "
-            f"last {_duration(last) if last is not None else '-'}"]
+    last = (f"last {_duration(last)} found {policy.get('last_garbage')} garbage"
+            if last is not None else "none yet")
+    return [f"  automatic collection off: the vmn-gc thread collected "
+            f"{policy.get('collections', 0)} times, {_duration(policy.get('total_ms', 0))} paused, "
+            f"{last} ({policy.get('garbage', 0)} in all); next in {policy.get('interval_sec', 0):g}s"]
 
 
 def _recent(pauses):
