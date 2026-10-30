@@ -171,6 +171,10 @@ def _ships_meet(*hosts):
 
 def _ship_together(*hosts):
     _ships_meet(*hosts)
+    _ship_at_once(*hosts)
+
+
+def _ship_at_once(*hosts):
     ships = [threading.Thread(target=_ship, args=(h,)) for h in hosts]
     for ship in ships:
         ship.start()
@@ -195,7 +199,7 @@ def test_two_processes_of_one_clone_shipping_at_once_keep_each_line_once(tmp_pat
     _append(live, 1, "a1")
     _append(tagger, 2, "a2")
 
-    _ship_together(live, tagger)
+    _ship_at_once(live, tagger)  # the copy's ship lock takes them in turn
     _append(live, 3, "a3")
     _ship(live)
     _ship(tagger)
