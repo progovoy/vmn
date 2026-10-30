@@ -12,6 +12,7 @@ is the view a schema gives (see :mod:`vmn_exp.core.index_views`).
 """
 import weakref
 from dataclasses import dataclass, field, replace
+from functools import partial
 from operator import is_not
 
 from vmn_exp.core.index_snapshot_maps import SnapshotMaps
@@ -168,12 +169,13 @@ class IndexSnapshot:
             self._declared.append(runs_declared_schema(self.declared_defs, self.row))
         return self._declared[0]
 
-    def summarized(self, schema):
+    def summarized(self, schema, stale_ok=False):
         """This snapshot with its rows' metrics under the metrics *schema* —
         the same object for the same schema, and this very snapshot when the
         schema changes no row. The shared rows are never touched. Concurrent
         callers with one schema share one computation; while it runs, a
-        caller gets the view computed last (see
+        *stale_ok* caller (a request) gets the newest view computed instead,
+        maybe of an older generation (see
         :meth:`~vmn_exp.core.index_views.SchemaRows.latest_or`)."""
         base = self.schema_less()
         if not schema or not base.metric_parts:
@@ -182,7 +184,8 @@ class IndexSnapshot:
         view = base._views.get(key)
         if view is not None:
             return view
-        return base._schema_rows.latest_or(key, lambda: base._view_of(key, schema))
+        serve = base._schema_rows.latest_or if stale_ok else base._schema_rows.kept
+        return serve(key, partial(base._view_of, key, schema))
 
     def _view_of(self, key, schema):
         view = self._views.get(key)

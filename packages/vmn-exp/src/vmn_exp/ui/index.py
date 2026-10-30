@@ -66,8 +66,8 @@ def _snapshot_of(index_of, storage, app_name, refresher, schema=None, journal=No
         if refresher.full_sweep_sec is not None:
             index.full_sweep_sec = reconcile_sec or refresher.full_sweep_sec
         if journal is None:
-            return refresher.snapshot(index).summarized(schema)
-        return refresher.snapshot(index, journal).summarized(schema)
+            return refresher.snapshot(index).summarized(schema, stale_ok=True)
+        return refresher.snapshot(index, journal).summarized(schema, stale_ok=True)
     except Exception:
         _LOGGER.warning("Experiment index failed; reading directly", exc_info=True)
         return experiment_index.direct_snapshot(storage, app_name, schema)

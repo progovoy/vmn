@@ -150,7 +150,8 @@ class SchemaRows:
     new generation summarizes only the rows the index did not reuse, and a
     row it only renumbered (a run inserted before it) keeps its summarized
     metrics. One caller per schema summarizes at a time (:meth:`turn`); a
-    caller arriving meanwhile gets the view last kept (:meth:`latest_or`)."""
+    caller arriving meanwhile waits for it (:meth:`kept`) or gets the newest
+    view kept (:meth:`latest_or`)."""
 
     def __init__(self):
         self._summaries = OrderedDict()  # schema key -> _Summary
@@ -189,17 +190,22 @@ class SchemaRows:
         instead (waiting only when there is none)."""
         with self._turns.turn(key, blocking=False) as mine:
             if mine:
-                return self._keep(key, compute())
+                return self.kept(key, compute)
             stale = self._latest.get(key)
             stale = stale() if stale is not None else None
             if stale is not None:
                 return stale
-        with self.turn(key):
-            return self._keep(key, compute())
+        return self.kept(key, compute)
 
-    def _keep(self, key, view):
+    def kept(self, key, compute):
+        """*compute()*'s view in the schema *key*'s turn, kept as the latest
+        unless a newer generation's view is."""
+        with self.turn(key):
+            view = compute()
         with self._lock:
-            if key in self._summaries:
+            latest = self._latest.get(key)
+            latest = latest() if latest is not None else None
+            if key in self._summaries and (latest is None or latest.generation <= view.generation):
                 self._latest[key] = weakref.ref(view)
         return view
 

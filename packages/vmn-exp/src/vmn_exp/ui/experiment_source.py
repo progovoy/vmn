@@ -152,7 +152,7 @@ class ExperimentSource:
         but never loading, refreshing or waiting for it: None before one."""
         index = self._served_by.get((ws.name, app_name))
         snap = None if index is None else index.published
-        return None if snap is None else self._served(ws, app_name, snap.summarized(schema))
+        return None if snap is None else self._served(ws, app_name, snap.summarized(schema, stale_ok=True))
 
     def as_of(self, ws_name, app_name):
         """The wall time the app's index last refreshed from (its
