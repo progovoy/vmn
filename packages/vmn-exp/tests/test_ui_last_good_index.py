@@ -115,3 +115,11 @@ def test_a_unique_command_on_a_big_app_is_a_lookup():
     for n in range(299_990, 300_000):
         assert last_good(snap, f"v{n}") is None
     assert (time.perf_counter() - started) / 10 < 0.002
+
+
+def test_a_command_holding_nested_lists_or_dicts_still_matches():
+    nested = ["python", ["-m", "train"], {"env": {"A": "1"}}]
+    rows = [_row(0), _row(1), _row(2)]
+    states = {"v0": _state(nested, 0), "v1": _state(["python", ["-m", "other"]], 0),
+              "v2": _state(nested)}
+    assert last_good(_snapshot(rows, states), "v2") == {"verstr": "v0", "idx": 1, "name": "n0"}

@@ -23,10 +23,19 @@ PER_APP = 2  # the indexes kept per app: its newest snapshots'
 _NOT = object()  # a slot whose run is no succeeded one
 
 
+def _frozen(value):
+    """*value* hashable, equal where it was equal: lists as tuples, dicts as
+    tagged item tuples (so a dict never equals a list of its pairs)."""
+    if isinstance(value, list):
+        return tuple(_frozen(v) for v in value)
+    if isinstance(value, dict):
+        return (dict, tuple(sorted((k, _frozen(v)) for k, v in value.items())))
+    return value
+
+
 def _command_key(state):
     """*state*'s command, hashable (an argv list as a tuple)."""
-    command = (state or {}).get("command")
-    return tuple(command) if isinstance(command, list) else command
+    return _frozen((state or {}).get("command"))
 
 
 def _succeeded_command(row, run_states):
