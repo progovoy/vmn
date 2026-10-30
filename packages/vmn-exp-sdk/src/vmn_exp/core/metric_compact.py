@@ -19,6 +19,7 @@ import time
 from contextlib import nullcontext
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.core.index_metric_reads import MetricObjectGone
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import is_indexed_file, last_seq
 from vmn_exp.core.metric_index_file import build_index
@@ -93,17 +94,28 @@ def _compacting(storage, app_name, verstr, writer):
 
 def compact_writer(storage, app_name, verstr, writer, rewinds=(), rebuild=False):
     """Build stream *writer*'s ``.vmx``; True when stored. A compacted stream
-    is left alone unless *rebuild*, which rewrites its file."""
+    is left alone unless *rebuild*, which rewrites its file. An object gone
+    since the listing (another compactor rolled the stream up) has the
+    stream listed once more; gone again, it is left to that compactor."""
     with _compacting(storage, app_name, verstr, writer):
-        objects = _objects(storage, app_name, verstr, writer)
-        if not objects or (is_compacted(objects) and not rebuild):
-            return False
-        keys = writer_columns(storage, app_name, verstr, objects, rewinds)
-        if not keys:
-            return False
-        data = build_index(writer, keys, rewinds_applied=bool(rewinds))
-        covers = max(last_seq(n for n, _ in objects), 0)
-        return put_index(storage, app_name, verstr, writer, data, replace=rebuild, covers=covers)
+        for _ in range(2):
+            try:
+                return _compact_listed(storage, app_name, verstr, writer, rewinds, rebuild)
+            except MetricObjectGone:
+                pass
+        return False
+
+
+def _compact_listed(storage, app_name, verstr, writer, rewinds, rebuild):
+    objects = _objects(storage, app_name, verstr, writer)
+    if not objects or (is_compacted(objects) and not rebuild):
+        return False
+    keys = writer_columns(storage, app_name, verstr, objects, rewinds)
+    if not keys:
+        return False
+    data = build_index(writer, keys, rewinds_applied=bool(rewinds))
+    covers = max(last_seq(n for n, _ in objects), 0)
+    return put_index(storage, app_name, verstr, writer, data, replace=rebuild, covers=covers)
 
 
 def record_rewinds(storage, app_name, verstr):

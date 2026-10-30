@@ -11,6 +11,7 @@ its key. Pure apart from the duck-typed storage reads of :meth:`from_storage`.
 """
 import heapq
 
+from vmn_exp.core.index_metric_reads import object_read
 from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_entries import is_metric_entry, points_to_entries
@@ -150,8 +151,8 @@ def hidden(rewinds, ts, step):
 
 def _read_all(storage, app_name, verstr, objects):
     """Each object's bytes, in order, read :data:`SEGMENT_READ_WORKERS` at a
-    time; a failed read raises."""
-    read = lambda obj: storage.read_range(app_name, verstr, obj[0], 0, obj[1])  # noqa: E731
+    time; a failed read raises, one of an object gone ``MetricObjectGone``."""
+    read = lambda obj: object_read(storage, (app_name, verstr), obj[0])(0, obj[1])  # noqa: E731
     return fan_out(read, objects, SEGMENT_READ_WORKERS, "vmn-series-read")
 
 
@@ -163,7 +164,7 @@ def blocks_source(blocks):
 def _stream_blocks(storage, app_name, verstr, objects):
     blocks = []
     for data in _read_all(storage, app_name, verstr, objects):
-        blocks.extend(decode_blocks(data or b""))
+        blocks.extend(decode_blocks(data))
     return blocks
 
 
@@ -193,8 +194,7 @@ class _ChainedSource:
 
 
 def _indexed(storage, app_name, verstr, name, size):
-    read = lambda off, n: storage.read_range(app_name, verstr, name, off, n)  # noqa: E731
-    return _IndexedSource(MetricIndexReader(read, size))
+    return _IndexedSource(MetricIndexReader(object_read(storage, (app_name, verstr), name), size))
 
 
 def indexed_entries(storage, app_name, verstr, name, size):
