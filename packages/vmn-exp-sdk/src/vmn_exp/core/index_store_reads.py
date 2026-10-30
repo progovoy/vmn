@@ -41,7 +41,7 @@ class LeanReads:
         if read is None:
             return None  # never saved: nothing to start warm from
         seqs, states, (keys, lean, stamps) = read
-        fetch = _Prefetch(self, app_name, seqs)
+        fetch = _Prefetch(self, app_name, seqs, first_chunk=1)
         records = {
             key: LazyRecord(key, _state_from(states.get(key)), fetch, key in lean)
             for key in seqs
@@ -72,7 +72,7 @@ class LeanReads:
             "SELECT key, seq FROM exp_index WHERE app = ?", (app_name,))), None)
         if not seqs:
             return None
-        fetch = _Prefetch(self, app_name, seqs)
+        fetch = _Prefetch(self, app_name, seqs, first_chunk=1)
         return {
             key: LazyRecord(key, {k: record[k] for k in STATE_KEYS}, fetch, is_run(record))
             if key in seqs and not isinstance(record, LazyRecord) else record
@@ -157,7 +157,7 @@ class _Prefetch:
     """A warm start's records' stored parts, read a chunk at a time: a
     refresh that touches one record usually touches the ones after it next
     (a full listing walks them all), and one query per record cost more than
-    decoding them all."""
+    decoding them all. Only the last chunk's unasked parts are held."""
 
     def __init__(self, store, app_name, seqs, first_chunk=_CHUNK):
         """*first_chunk*: how many records a read takes at first; it doubles
@@ -193,10 +193,13 @@ class _Prefetch:
                 if len(chunk) == self._size:
                     break
         self._next = end
+        # The last chunk's parts nobody asked for are dropped (read again if
+        # asked): a refresh's scattered asks would otherwise end up holding
+        # every record's head and fold.
+        self._asked.difference_update(self._ready)
         self._asked.update(chunk)
-        self._ready.update(
-            self._store.records_parts(self._app, {key: self._seqs[key] for key in chunk})
-        )
+        self._ready = self._store.records_parts(
+            self._app, {key: self._seqs[key] for key in chunk})
 
 
 def _state_from(data):
