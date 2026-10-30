@@ -19,7 +19,7 @@ import time
 from contextlib import nullcontext
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.index_metric_reads import MetricObjectGone
+from vmn_exp.core.index_metric_reads import relisted
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import is_indexed_file, last_seq
 from vmn_exp.core.metric_index_file import build_index
@@ -98,12 +98,8 @@ def compact_writer(storage, app_name, verstr, writer, rewinds=(), rebuild=False)
     since the listing (another compactor rolled the stream up) has the
     stream listed once more; gone again, it is left to that compactor."""
     with _compacting(storage, app_name, verstr, writer):
-        for _ in range(2):
-            try:
-                return _compact_listed(storage, app_name, verstr, writer, rewinds, rebuild)
-            except MetricObjectGone:
-                pass
-        return False
+        return relisted(lambda: _compact_listed(storage, app_name, verstr, writer, rewinds, rebuild),
+                        gone=False)
 
 
 def _compact_listed(storage, app_name, verstr, writer, rewinds, rebuild):

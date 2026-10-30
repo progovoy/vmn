@@ -11,6 +11,7 @@ import os
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.fork import resolve_run
+from vmn_exp.core.index_metric_reads import relisted
 from vmn_exp.core.series_reader import SeriesReader, rewind_markers
 from vmn_exp.core.streams import display_writer
 from vmn_exp.storage.files import flatten_logs
@@ -24,10 +25,10 @@ def run_rows(storage, app_name, verstr, keys=None):
     """*verstr*'s rows: stream/index points plus v1 ``metrics`` log entries."""
     logs = storage.load_logs_by_writer(app_name, verstr)
     entries = [e for writer_entries in logs.values() for e in writer_entries or ()]
-    reader = SeriesReader.from_storage(storage, app_name, verstr,
-                                       rewinds=rewind_markers(entries),
-                                       legacy=flatten_logs(logs))
-    for stream, *row in reader.rows(keys=keys):
+    rows = relisted(lambda: list(SeriesReader.from_storage(
+        storage, app_name, verstr, rewinds=rewind_markers(entries),
+        legacy=flatten_logs(logs)).rows(keys=keys)))
+    for stream, *row in rows:
         yield (verstr, display_writer(stream), *row)
 
 

@@ -15,7 +15,7 @@ from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     log_writer_and_seq,
     parse_jsonl,
 )
-from vmn_exp.core.index_metric_reads import MetricObjectGone
+from vmn_exp.core.index_metric_reads import relisted
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.streams import display_writer
@@ -166,11 +166,9 @@ def merged_log(storage, app_name, verstr, logs_by_writer):
     points back as ``metrics`` entries (plan 12 §5.5) — the log view. A
     metric object merged away since its listing reads the run's metrics again."""
     logs = {w: list(entries or []) for w, entries in logs_by_writer.items()}
-    try:
-        metrics = SeriesReader.from_storage(storage, app_name, verstr, rewinds=())
-    except MetricObjectGone:
-        metrics = SeriesReader.from_storage(storage, app_name, verstr, rewinds=())
-    for writer, entries in metrics.entries_by_writer().items():
+    metrics = relisted(lambda: SeriesReader.from_storage(
+        storage, app_name, verstr, rewinds=()).entries_by_writer())
+    for writer, entries in metrics.items():
         logs.setdefault(writer, []).extend(dict(e, _writer=display_writer(writer)) for e in entries)
     return flatten_logs(logs)
 

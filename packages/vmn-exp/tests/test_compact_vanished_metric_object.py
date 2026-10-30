@@ -13,6 +13,7 @@ from test_series_reader import APP, V, _entries, _storage, _write
 from vmn_exp.core.index_metric_reads import MetricObjectGone
 from vmn_exp.core.metric_compact import compact_record, compact_writer
 from vmn_exp.core.metric_files import indexed_name, is_indexed_file
+from vmn_exp.core.metric_index_reader import TAIL_READ_BYTES
 from vmn_exp.core.series_reader import writer_source
 
 GHOST = indexed_name("w", 99)
@@ -108,3 +109,49 @@ def test_the_log_view_reads_the_run_again_when_a_metric_object_vanished(tmp_path
     stored = _stored(tmp_path)
     expected = merged_log(stored, APP, V, {})
     assert repr(merged_log(_Vanishing(stored), APP, V, {})) == repr(expected)  # NaN-safe
+
+
+class _GoneAfterTail(_Vanishing):
+    """*storage* whose ``.vmx`` vanishes once its tail is read: the reader's
+    first chunk read before the tail answers None, as a compactor rolled it
+    up since; a fresh listing reads the wider file."""
+
+    def __init__(self, storage):
+        super().__init__(storage, stale=0)
+        self.gone = 1
+
+    def read_range(self, app_name, verstr, name, offset, length):
+        size = dict(self._storage.metric_objects(app_name, verstr)["w"]).get(name, 0)
+        if self.gone and is_indexed_file(name) and offset + length <= size - TAIL_READ_BYTES:
+            self.gone -= 1
+            return None
+        return self._storage.read_range(app_name, verstr, name, offset, length)
+
+
+def _big_compacted(tmp_path):
+    storage = _storage(tmp_path)
+    _write(storage, "w", _entries(random.Random(5), 8000, 1_700_000_000_000_000), flush_every=500)
+    assert compact_record(storage, APP, V) == ["w"]
+    (name, size), = storage.metric_objects(APP, V)["w"]
+    assert is_indexed_file(name) and size > 2 * TAIL_READ_BYTES
+    return storage
+
+
+def test_the_log_view_reads_again_when_a_big_vmx_vanishes_after_its_tail(tmp_path):
+    from vmn_exp.storage.files import merged_log
+
+    stored = _big_compacted(tmp_path)
+    expected = merged_log(stored, APP, V, {})
+    vanishing = _GoneAfterTail(stored)
+    assert repr(merged_log(vanishing, APP, V, {})) == repr(expected)
+    assert vanishing.gone == 0
+
+
+def test_export_reads_again_when_a_big_vmx_vanishes_after_its_tail(tmp_path):
+    from vmn_exp.cli.export_metrics import run_rows
+
+    stored = _big_compacted(tmp_path)
+    expected = list(run_rows(stored, APP, V))
+    vanishing = _GoneAfterTail(stored)
+    assert repr(list(run_rows(vanishing, APP, V))) == repr(expected)
+    assert vanishing.gone == 0
