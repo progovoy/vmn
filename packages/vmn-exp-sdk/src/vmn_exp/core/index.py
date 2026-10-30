@@ -14,7 +14,10 @@ warm; a heartbeat there rewrites only its small run-state row. A restarted
 server's first :meth:`ExperimentIndex.snapshot` serves those persisted rows
 as soon as they are read and revalidates them against the storage listing in
 the background (seconds at 100k records); :meth:`refresh_if_stale` and
-:meth:`refresh` still answer only once storage was listed.
+:meth:`refresh` still answer only once storage was listed. Reading them
+back is O(runs) (minutes at ~700k on a server): meanwhile
+:meth:`~ExperimentIndex.snapshot_now` serves the newest ``FIRST_ROWS``
+(:mod:`experiment_index_first_rows`).
 
 Readers get an immutable :class:`IndexSnapshot` per ``generation`` (bumped by
 anything visible, run states included) that never takes the index lock or
@@ -59,6 +62,7 @@ from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_bulk import BulkPublish, loading_snapshot
+from vmn_exp.core.index_first_rows import first_rows
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_journal_mark import JournalMark
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
@@ -105,6 +109,8 @@ BEHIND_REFRESH_SEC = 30.0
 # How long a request on an index that published nothing yet waits for its
 # first snapshot before it gets an empty one saying it is loading.
 FIRST_SNAPSHOT_WAIT_SEC = 0.5
+# The newest persisted rows a warm restart serves before reading back the rest.
+FIRST_ROWS = 500
 _BISECT_NEW = 64  # new records past which the order is merged, not inserted into
 # Seconds between the empty snapshots a re-derive publishes its progress in.
 MIGRATING_PUBLISH_SEC = 1.0
@@ -145,6 +151,7 @@ class ExperimentIndex:
         self._bulk = BulkPublish()
         self._snapshot = None
         self._placeholder = None  # (expected, the empty snapshot saying so)
+        self._first_rows = None  # a warm restart's newest rows, until its snapshot (snapshot_now)
         self._loaders = None  # a bulk load's worker processes (index_remote_workers)
         self._pool = LoadPool(_REMOTE_WORKERS, "vmn-index-load")  # kept across a bulk load's chunks
         self._rests = set()  # records a bulk load read rows-first, the rest to read
@@ -152,6 +159,7 @@ class ExperimentIndex:
         self._io_unreadable = None  # the I/O helper's Unreadable.summary(), after its refresh
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
+        self._servable = threading.Event()  # that, or the first rows (snapshot_now)
         self._revalidator = None  # the thread a warm snapshot() started
         self._revalidator_lock = threading.Lock()
         self.generation = 0
@@ -425,7 +433,7 @@ class ExperimentIndex:
                 self._sweep.failed()
             raise
         finally:
-            self._published.set()
+            self._set_published()
             self._freshness.idle()
         self.last_refresh_at = started
         self._freshness.refreshed()
@@ -440,6 +448,7 @@ class ExperimentIndex:
     def _refresh_from_storage(self, started):
         if self._records is None:
             placeholder = self._derive_first()
+            self._serve_first_rows()
             if self._keeps_baseline():  # read before the records it vouches for
                 self._baseline.load(self._sweep, started)
             with gc_paused():
@@ -463,6 +472,19 @@ class ExperimentIndex:
             self._rests = set()
         if self._cold:
             self._drop_folds()
+
+    def _serve_first_rows(self):
+        """Before reading the persisted rows back (O(runs)), let
+        :meth:`snapshot_now` serve the newest FIRST_ROWS of them."""
+        if self._lean or self._io is not None or self._snapshot is not None:
+            return
+        self._first_rows = first_rows(self._store, self.app_name, FIRST_ROWS)
+        if self._first_rows is not None:
+            self._servable.set()
+
+    def _set_published(self):
+        self._published.set()
+        self._servable.set()
 
     def _drop_folds(self):
         """Once a cold load is over and saved, hold its records as a warm
@@ -555,7 +577,7 @@ class ExperimentIndex:
         self._snapshot = self._rows.snapshot(
             self.app_name, self.generation, [], {}, loading=(done, total))
         self.published_at = _monotonic()
-        self._published.set()
+        self._set_published()
 
     def _listing_phase(self, now):
         sweep = self._sweep
@@ -615,7 +637,7 @@ class ExperimentIndex:
                 raise
             self._persist(results, removed, baseline_at)
         if self._snapshot is not None:
-            self._published.set()
+            self._set_published()
         return results
 
     def _apply(self, results, removed, started):
@@ -710,8 +732,8 @@ class ExperimentIndex:
         revalidates them."""
         self._order = self._sorted_keys()
         self.generation += 1
-        self._snapshot = self._build_snapshot()
-        self._published.set()
+        self._snapshot, self._first_rows = self._build_snapshot(), None
+        self._set_published()
 
     def _refresh_from_cache(self):
         if self._records is None:
@@ -904,8 +926,8 @@ class ExperimentIndex:
         if snap is not None or self._cache_gen is not None:
             return snap or self._first_load()
         self._revalidate_in_background()
-        self._published.wait(wait_sec)
-        snap = self._snapshot
+        self._servable.wait(wait_sec)
+        snap = self._snapshot or self._first_rows
         if snap is not None:
             return snap
         new = self._sweep.relisted_new()

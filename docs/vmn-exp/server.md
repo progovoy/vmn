@@ -275,7 +275,10 @@ every entry up to which they reflect. A restart (or an app watched again after
 a pause) replays the journal from that mark instead of listing the store, so
 runs created while the server was down show within the first ticks. Only a
 mark older than the journal keeps (2 days, less an hour of margin) falls back
-to a full listing.
+to a full listing. Reading every saved row back takes seconds per 100k runs
+(minutes for a very big app on a slower host): meanwhile the board shows the
+newest 500 runs and `experiments-status` reports `indexing {loaded: 500,
+total}`, with `total` every saved run.
 
 Two more checks catch what the journal can miss (a writer that crashed between
 its data write and its journal put, a clock far behind, a hand-edited file):
