@@ -69,6 +69,9 @@ class _FakeStorage:
     def load_file(self, app_name, verstr, name):
         return None
 
+    def in_area(self, area):
+        return self  # no settings: load_file finds nothing
+
     def list_snapshots(self, app_name):
         return [self._meta]
 

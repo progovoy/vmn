@@ -34,6 +34,7 @@ _RUN_STATE_KEYS = {
     "cwd",
     "pid",
     "host",
+    "attempt",
     "started_at",
     "heartbeat",
     "heartbeat_interval_sec",
