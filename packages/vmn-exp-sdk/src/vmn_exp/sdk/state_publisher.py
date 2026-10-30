@@ -87,6 +87,7 @@ class RunStatePublisher:
             # The record exists only remotely so far (a run resumed on
             # another host): the full store fetches it, then writes both.
             self._storage.save_file(*self._where, data)
+            self._written.update(id(side) for side in (self._inline, self._remote_target()))
             return False
         self._written.add(id(self._inline))
         return True
@@ -97,13 +98,20 @@ class RunStatePublisher:
         self._supersede("its final state is dropped")
         return False
 
+    def _cache_winner(self, target):
+        """Replace this attempt's local final state with the remote's winner."""
+        data = target.load_file(*self._where) if self._inline is not None else None
+        if data:
+            self._inline.save_file(*self._where, data)
+
     def _upload(self, item):
         data, heartbeat, attempt, final = item
         target = self._remote_target()
         if target is None:
             return
         if final is not None and id(target) in self._written:
-            self._save_final(target, final)
+            if not self._save_final(target, final):
+                self._cache_winner(target)
             return
         token = self._tokens.pop(id(target), None)
         if heartbeat and token is not None:

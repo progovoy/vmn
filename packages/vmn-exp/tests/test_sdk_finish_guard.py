@@ -9,14 +9,14 @@ version token, so two finishers racing cannot both land.
 """
 import pytest
 import yaml
-from s3_helpers import meta, mocked_bucket, s3_storage
+from s3_helpers import cached_host, meta, mocked_bucket, s3_storage
 
 from vmn_exp.core.state_cas import compare_and_save
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from vmn_exp.sdk import manage
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
-from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.cached import CachedSnapshotStorage, local_side
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -85,10 +85,11 @@ def test_an_attempt_may_finish_over_another_attempts_release(storage):
 
 
 def test_a_finished_run_reports_its_own_win_again(storage):
-    a, _ = _attempts(storage)
+    a, b = _attempts(storage)
     assert a.finish(0) is True
     assert a.finish(1) is True
     assert _stored(storage)["exit_code"] == 0
+    b.release()
 
 
 def _racing(side, racer_state):
@@ -173,3 +174,31 @@ def test_manage_finish_loses_to_a_racing_finisher(cached, local):
     with pytest.raises(manage.FinishRefusedError, match="finished"):
         manage.finish_run(APP, VERSTR, 1, storage=cached)
     assert _stored(cached)["attempt"] == "racer"
+
+
+@pytest.fixture
+def two_hosts(monkeypatch, tmp_path):
+    """Two local-first caches of one S3 store; only the first holds the run."""
+    with mocked_bucket(monkeypatch):
+        first, second = cached_host(tmp_path, "h1"), cached_host(tmp_path, "h2")
+        assert first.create_exclusive(APP, VERSTR, meta(VERSTR), {})
+        yield first, second
+
+
+def test_manage_finish_also_lands_in_a_cache_without_the_record(two_hosts):
+    _, second = two_hosts
+    manage.finish_run(APP, VERSTR, 4, storage=second)
+    assert _stored(local_side(second))["exit_code"] == 4
+
+
+def test_a_loser_on_another_host_caches_the_winners_state(two_hosts):
+    first, second = two_hosts
+    a, b = Run(first, APP, VERSTR, 60), Run(second, APP, VERSTR, 60)
+    a._open()
+    b._open()
+
+    assert a.finish(0) is True
+    assert b.finish(1) is False
+
+    state = _stored(local_side(second))
+    assert (state["exit_code"], state["attempt"]) == (0, a._state["attempt"])

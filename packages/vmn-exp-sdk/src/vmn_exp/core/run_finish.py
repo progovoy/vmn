@@ -74,6 +74,8 @@ def _save_final(storage, app_name, verstr, update):
     """A compare-and-swap of ``update(stored state)`` where the run's state
     is shared (its remote, else the store), then a copy to the local side."""
     inline, remote_target = split_storage(storage, app_name, verstr)
+    if inline is not None and inline is not storage:
+        storage.load_record(app_name, verstr)  # a cache pulls a remote-only record
     shared = (remote_target and remote_target()) or inline
     state = compare_and_save(shared, app_name, verstr, RUN_STATE_FILE, update)
     if inline is not None and inline is not shared:
