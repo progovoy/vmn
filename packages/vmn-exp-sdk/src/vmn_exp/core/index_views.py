@@ -230,13 +230,11 @@ class _Summary:
             by_verstr, memo = last.by_verstr.copy(), last.memo
             gone = [raw[i] for i in changed if i < common] + list(raw[n:])
         for i in changed:
-            out[i] = _summarized(memo, rows[i], parts, policies)
+            out[i] = by_verstr[rows[i]["verstr"]] = _summarized(memo, rows[i], parts, policies)
         if gone:
             for verstr in {r["verstr"] for r in gone} - {rows[i]["verstr"] for i in changed}:
                 memo.pop(verstr, None)
                 by_verstr.pop(verstr, None)
-        for i in changed:
-            by_verstr[rows[i]["verstr"]] = out[i]
         return cls(rows, tuple(out), by_verstr, memo)
 
 
