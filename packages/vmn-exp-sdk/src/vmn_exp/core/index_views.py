@@ -160,9 +160,10 @@ class SchemaRows:
         """*rows* summarized by *schema* (see :func:`summarized_row`)."""
         key = schema_key(schema)
         with self.turn(key):
-            return self._summarized(key, rows, parts, schema)
+            return self.rows_in_turn(key, rows, parts, schema)
 
-    def _summarized(self, key, rows, parts, schema):
+    def rows_in_turn(self, key, rows, parts, schema):
+        """:meth:`rows` for a caller already holding the schema *key*'s turn."""
         with self._lock:
             memo = self._memos.get(key, {})
         policies = SchemaPolicies(schema)

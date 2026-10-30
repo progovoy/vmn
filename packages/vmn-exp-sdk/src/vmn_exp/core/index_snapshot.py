@@ -176,10 +176,14 @@ class IndexSnapshot:
         if not schema or not base.metric_parts:
             return base
         key = schema_key(schema)
+        view = base._views.get(key)
+        if view is not None:
+            return view
         with base._schema_rows.turn(key):
             view = base._views.get(key)
             if view is None:
-                view = base._view(base._schema_rows.rows(base.rows, base.metric_parts, schema))
+                view = base._view(base._schema_rows.rows_in_turn(
+                    key, base.rows, base.metric_parts, schema))
                 if len(base._views) >= _VIEWS_PER_SNAPSHOT:
                     base._views.clear()
                 base._views[key] = view

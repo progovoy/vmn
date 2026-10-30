@@ -20,7 +20,9 @@ class KeyedLocks:
     @contextmanager
     def turn(self, key):
         with self._guard:
-            entry = self._locks.setdefault(key, [TracedLock(self._name, reentrant=True), 0])
+            entry = self._locks.get(key)
+            if entry is None:
+                entry = self._locks[key] = [TracedLock(self._name, reentrant=True), 0]
             entry[1] += 1
         try:
             with entry[0]:
