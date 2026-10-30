@@ -6,18 +6,24 @@
     vmn-exp tag my_app @3 stage=prod owner=ann --remove todo
     vmn-exp archive my_app @1 @2
     vmn-exp unarchive my_app @2
+    vmn-exp archive my_app --query 'tags.batch = "old"' [--dry-run]
 
 Positionals after the app name are run refs (a verstr, a unique prefix, ``@N``
 or ``latest``) and, for ``tag``, ``key=value`` pairs — a verstr never contains
 ``=``, so the two cannot be confused. ``-v``/``--latest`` name a run too.
+``archive``/``unarchive --query`` act on every run the query selects instead
+(:func:`vmn_exp.sdk.manage.archive_runs`) and print a count.
 Neither ever touches a run's results (metrics, log history, artifacts):
 see :mod:`vmn_exp.core.manage`.
 """
 from vmn_exp.core.manage import set_archived, tag_run
+from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import resolve_experiment
+from vmn_exp.sdk import manage
 from version_stamp.api import VMN_LOGGER
 
 MANAGE_ACTIONS = ("tag", "archive", "unarchive")
+DRY_RUN_SAMPLE = 10
 
 
 def refuse_stray_refs(args):
@@ -76,8 +82,32 @@ def _tag(storage, app_name, verstrs, tags, remove):
     return 0
 
 
+def _archive_by_query(storage, app_name, args):
+    verb = args.action
+    bulk = manage.archive_runs if verb == "archive" else manage.unarchive_runs
+    try:
+        verstrs = bulk(app_name, args.query, storage=storage, dry_run=args.dry_run)
+    except QueryError as e:
+        VMN_LOGGER.error(f"Invalid --query: {e}")
+        return 1
+    if not args.dry_run:
+        print(f"{verb.capitalize()}d {len(verstrs)} run(s)")
+        return 0
+    print(f"Would {verb} {len(verstrs)} run(s)")
+    for verstr in verstrs[:DRY_RUN_SAMPLE]:
+        print(f"  {verstr}")
+    if len(verstrs) > DRY_RUN_SAMPLE:
+        print(f"  ... and {len(verstrs) - DRY_RUN_SAMPLE} more")
+    return 0
+
+
 def experiment_manage(app_name, storage, args):
     refs, tags = _split_refs(args)
+    if getattr(args, "query", None) is not None and args.action != "tag":
+        if refs or tags:
+            VMN_LOGGER.error(f"exp {args.action} takes runs or --query, not both")
+            return 1
+        return _archive_by_query(storage, app_name, args)
     if not refs:
         VMN_LOGGER.error(f"exp {args.action} needs a run: a ref, -v or --latest")
         return 1

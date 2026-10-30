@@ -914,6 +914,20 @@ disk, under the ETag on S3). `list`, `list_runs` and the UI hide archived
 runs unless asked (`--archived`, `include_archived=True`, `archived=1`); the
 query language matches `archived = true`.
 
+In bulk, by [query](sdk.md#the-query-language) (refs and `--query` do not mix):
+
+```sh
+vmn-exp archive my_app --query 'tags.batch = "old" and status = "failed"' --dry-run
+vmn-exp archive my_app --query 'tags.batch = "old" and status = "failed"'
+vmn-exp unarchive my_app --query 'tags.batch = "old"'
+```
+
+`--query` selects what `list --archived --query` would show; only the runs
+that would change are touched (an archived run is not archived again) and the
+writes run concurrently. It prints `Archived N run(s)`; `--dry-run` prints
+`Would archive N run(s)` and the first 10 verstrs, writing nothing. An empty
+or invalid query exits 1. SDK: `manage.archive_runs`/`unarchive_runs`.
+
 ### `rewind`
 
 Hide a run's history past a step, in place:

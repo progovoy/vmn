@@ -399,6 +399,7 @@ from vmn_exp.sdk import manage
 
 manage.archive_run("my_app", "@3")          # hidden from list_runs by default
 manage.unarchive_run("my_app", "@3")
+manage.archive_runs("my_app", 'tags.batch = "old"')  # every matching run
 manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
 ```
 
@@ -408,6 +409,16 @@ storage=None)` take any addressing form, return the verstr they changed and
 raise `ValueError` for an unknown ref. Archiving sets `archived: true` in
 `metadata.yml`; nothing is deleted, and only listings treat archived runs
 differently (`vmn-exp prune` counts them like any finished run).
+
+`archive_runs(app_name=None, query=None, *, status=None, storage=None,
+dry_run=False)` and `unarchive_runs(...)` act on every run
+[`query`](#the-query-language) (and `status`) selects — as `list_runs(query=,
+status=, include_archived=True)` would — skipping runs already in that
+state, with the writes spread over threads (one metadata write per run, no
+per-run loop on your side). They return the verstrs changed (with
+`dry_run=True`, the ones that would be, writing nothing) and raise
+`QueryError` on an empty or bad query, so a typo never archives every run.
+CLI: `vmn-exp archive my_app --query '...' [--dry-run]`.
 
 ### Finishing a run from outside it
 

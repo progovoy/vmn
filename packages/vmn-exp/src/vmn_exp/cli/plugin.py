@@ -111,6 +111,7 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="Prune experiments older than duration (e.g., 30d)")
     pexp.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
                       help="prune: print what would be deleted, delete nothing; "
+                           "archive/unarchive --query: print what would change, write nothing; "
                            "rerun: print the plan, create nothing; "
                            "push: print what would be pushed, write nothing remote; "
                            "similar-backfill/backfill-children: print what would be "
@@ -151,7 +152,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--query", default=None,
                       help="list/importance/similar: filter rows by query "
                            "(e.g. 'metrics.loss < 0.5'); "
-                           "prune: select candidates by query (dry-run unless --yes/-y)")
+                           "prune: select candidates by query (dry-run unless --yes/-y); "
+                           "archive/unarchive: act on every run the query selects")
     pexp.add_argument("--yes", "-y", action="store_true", default=False,
                       help="prune --query: confirm deletion")
     pexp.add_argument("--json", action="store_true", default=False,
