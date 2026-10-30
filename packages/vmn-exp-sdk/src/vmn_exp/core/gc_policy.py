@@ -55,10 +55,11 @@ class GcPolicy:
     def _collect_now(self):
         started, self._last_at = self._clock(), self._wall()
         self._collect()
-        self._last = self._clock() - started
+        ended = self._clock()
+        self._last = ended - started
         self._total += self._last
         self._collections += 1
-        self._due_at = self._clock() + GC_MIN_INTERVAL_SEC
+        self._due_at = ended + GC_MIN_INTERVAL_SEC
 
     def stats(self):
         return {
