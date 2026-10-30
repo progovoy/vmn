@@ -170,17 +170,19 @@ class IndexSnapshot:
     def summarized(self, schema):
         """This snapshot with its rows' metrics under the metrics *schema* —
         the same object for the same schema, and this very snapshot when the
-        schema changes no row. The shared rows are never touched."""
+        schema changes no row. The shared rows are never touched. Concurrent
+        callers with one schema wait for the view in flight and share it."""
         base = self.schema_less()
         if not schema or not base.metric_parts:
             return base
         key = schema_key(schema)
-        view = base._views.get(key)
-        if view is None:
-            view = base._view(base._schema_rows.rows(base.rows, base.metric_parts, schema))
-            if len(base._views) >= _VIEWS_PER_SNAPSHOT:
-                base._views.clear()
-            base._views[key] = view
+        with base._schema_rows.turn(key):
+            view = base._views.get(key)
+            if view is None:
+                view = base._view(base._schema_rows.rows(base.rows, base.metric_parts, schema))
+                if len(base._views) >= _VIEWS_PER_SNAPSHOT:
+                    base._views.clear()
+                base._views[key] = view
         return view
 
     def _view(self, rows):

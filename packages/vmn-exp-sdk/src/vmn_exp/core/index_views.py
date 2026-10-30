@@ -38,6 +38,7 @@ from vmn_exp.core.fold import (
     fold_row,
 )
 from vmn_exp.core.index_intern import compact_row, keyed
+from vmn_exp.core.keyed_locks import KeyedLocks
 from vmn_exp.core.metric_pack import PackedSummary
 from vmn_exp.core.metric_schema import declared_fields, declared_schema
 from vmn_exp.core.metric_summary import SchemaPolicies, with_schema_policies
@@ -143,17 +144,27 @@ def summarized_row(row, parts, policies):
 
 class SchemaRows:
     """Rows summarized by a few recent schemas, kept across generations: a
-    row object the index reused keeps its summarized row."""
+    row object the index reused keeps its summarized row. One caller per
+    schema summarizes at a time (:meth:`turn`); the next reuses its rows."""
 
     def __init__(self):
         self._memos = OrderedDict()  # schema key -> {verstr: (row, summarized)}
         self._lock = threading.Lock()
+        self._turns = KeyedLocks("schema rows")
+
+    def turn(self, key):
+        """The schema *key*'s turn to summarize (reentrant)."""
+        return self._turns.turn(key)
 
     def rows(self, rows, parts, schema):
         """*rows* summarized by *schema* (see :func:`summarized_row`)."""
         key = schema_key(schema)
+        with self.turn(key):
+            return self._summarized(key, rows, parts, schema)
+
+    def _summarized(self, key, rows, parts, schema):
         with self._lock:
-            memo = self._memos.pop(key, {})
+            memo = self._memos.get(key, {})
         policies = SchemaPolicies(schema)
         fresh, out = {}, []
         for row in rows:
@@ -166,6 +177,7 @@ class SchemaRows:
             out.append(hit[1])
         with self._lock:
             self._memos[key] = fresh
+            self._memos.move_to_end(key)
             while len(self._memos) > _SCHEMAS_KEPT:
                 self._memos.popitem(last=False)
         return out
