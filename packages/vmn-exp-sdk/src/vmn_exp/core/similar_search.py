@@ -28,6 +28,7 @@ from vmn_exp.core.index import direct_snapshot, indexed_snapshot, shared_index, 
 from vmn_exp.core.index_point import index_path, point_view
 from vmn_exp.core.log import load_log
 from vmn_exp.core.query import filter_rows
+from vmn_exp.core.query_below import below_extra
 from vmn_exp.core.query_extra import lean_extra
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.similar import similar_runs_multi, target_from_snapshot
@@ -219,7 +220,8 @@ def candidate_filter(scopes, query, include_archived):
 def _matching(scope, snap, rows, query):
     """*rows* of *snap* matching *query*, its ``similar()`` searching *scope*."""
     annotated = annotate_rows(list(rows), snap.run_states, snap.run_state_observed_at)
-    return filter_rows(annotated, query, extra=lean_extra(snap, lambda _: scope))
+    extra = {**lean_extra(snap, lambda _: scope), **below_extra(annotated)}
+    return filter_rows(annotated, query, extra=extra)
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,

@@ -1131,6 +1131,14 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   an intent. `notes` is the run's [note signatures](#note-signatures) (`~`
   matches any; missing on a run that logged no note).
   `archived = true` only matters with `include_archived=True`.
+- Subtree counts: `live_below` (the runs below a run still running, waiting
+  or stuck), `running_below` and `stuck_below` (those running or stuck
+  alone); 0 for a run without children. They count by the job rollup's rule
+  ([experiments.md](experiments.md#outer--inner-jobs-sweeps)): settled runs
+  never (an `outlived` one counts as running), an archived run's subtree
+  only in it. `running_below > 0` finds an ended launch whose grandchild
+  still runs. A query reading one takes one pass over the app's runs;
+  one that does not pays nothing.
 - `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
   is missing), `env.<key>` (the captured environment summary: `python`,
   `platform`, `packages_count`, …) and `env.packages.<pkg>` for the key packages

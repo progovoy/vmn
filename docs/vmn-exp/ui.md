@@ -862,11 +862,13 @@ message.
     beside `q` (which `match_subtree` may match over subtrees), flat or
     grouped. Its `ago()` is pinned to the minute like `q`'s; without `top`
     it is a 400. The Live and Review presets and the Outer runs' status
-    chips send it. It alone can read `live_below`: the runs below the row
+    chips send it. It reads `live_below`: the runs below the row
     still running, waiting or stuck (its rollup's `counts`, settled runs
     left out; 0 for a single run), and `running_below`/`stuck_below`, those
-    running or stuck alone.
-    Elsewhere (`q`, `vmn-exp list --query`) no row carries them.
+    running or stuck alone — the counts `vmn-exp list --query` and the SDK
+    read too ([query fields](sdk.md#the-query-language)), so the command line
+    under the board lists the same outer runs. The board's `q` does not
+    carry them.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`experiments?children_of=<verstr>`** pages that run's direct children
   for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`

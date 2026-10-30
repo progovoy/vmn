@@ -429,7 +429,14 @@ part, `running · outlived` on its pill); it turns `lost` once it goes stuck.
 Query them with `settled = "never_started"`, `settled = "lost"`, `settled =
 "outlived"` or `settled = null`.
 
-A never-started run is not waiting: it leaves `live_below` and the waiting
+Every query surface (`vmn-exp list --query`, `prune`/`archive --query`, the
+SDK's `list_runs`, the UI's `top_q`) reads the subtree counts `live_below`,
+`running_below` and `stuck_below` (the runs below a row still running,
+waiting or stuck; [query fields](sdk.md#the-query-language)) by the job
+rollups' rule: a settled run counts nowhere, an archived run's subtree only
+in it, so `vmn-exp list --query 'running_below > 0'` lists the ended launches
+whose grandchildren still run, the same outer runs the UI's Outer runs page
+keeps. A never-started run is not waiting: it leaves `live_below` and the waiting
 counts, so a launch a resume replaced (it ended `failed`, its dates, studies
 and trials never started) drops out of the UI's [Live](ui.md#outer-runs-and-the-outer-runs-page)
 view, while a running launch's `created` runs stay waiting (`settled =

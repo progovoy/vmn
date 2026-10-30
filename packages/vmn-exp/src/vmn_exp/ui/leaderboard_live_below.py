@@ -2,19 +2,21 @@
 """``live_below`` (plan 28 §4.5): how many runs below a top-level row still
 run, wait or are stuck — its Jobs view rollup's counts (settled runs left
 out; 0 for a single run) — and ``running_below``/``stuck_below``, those
-running or stuck alone (the outer runs' status chips). A ``top_query``
+running or stuck alone (the outer runs' status chips): the core's
+:mod:`~vmn_exp.core.query_below` counts, which ``vmn-exp list --query`` and
+the SDK read, taken here from the cached rollups. A ``top_query``
 reading one (the Live/Review presets, a status chip) is judged on the order
 without it, per base and time bucket, not in the cache's moved orders: a
 run deep in a tree changes it without changing the top-level row.
 """
 from vmn_exp.core.query import BELOW_FIELDS, filter_rows, query_roots
+from vmn_exp.core.query_below import BELOW_STATES
 from vmn_exp.core.query_extra import lean_extra
+from vmn_exp.ui.job_tally import STATES
 from vmn_exp.ui.memo import LRU
 
 # Each of the BELOW_FIELDS and the rollup states it counts.
-BELOW = {"live_below": ("running", "waiting", "stuck"),
-         "running_below": ("running",), "stuck_below": ("stuck",)}
-assert BELOW.keys() == BELOW_FIELDS
+BELOW = {field: tuple(STATES[s] for s in states) for field, states in BELOW_STATES.items()}
 
 
 def reads_below(query):

@@ -28,6 +28,7 @@ from vmn_exp.core.index_snapshot import put_side_tables
 from vmn_exp.core.index_views import runs_declared_schema
 from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import filter_rows, parse_query
+from vmn_exp.core.query_below import below_extra
 from vmn_exp.core.query_extra import store_extra
 from vmn_exp.core.status import RUNNING, STUCK
 from vmn_exp.core.tree import annotate_rows
@@ -103,7 +104,8 @@ def _matching(storage, app_name, snap, query, with_create_note):
     whole tree whatever subset is kept."""
     tree = annotate_rows(row_copies(snap, with_create_note), snap.run_states,
                          snap.run_state_observed_at)
-    return filter_rows(tree, query, extra=store_extra(storage, app_name, snap)), tree
+    extra = {**store_extra(storage, app_name, snap), **below_extra(tree)}
+    return filter_rows(tree, query, extra=extra), tree
 
 
 def _read(conn, app, where, params, last):
