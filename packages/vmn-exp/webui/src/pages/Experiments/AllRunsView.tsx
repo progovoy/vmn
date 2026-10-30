@@ -115,7 +115,9 @@ export function AllRunsView({ ws, app, views, onJobs }: {
   const { sortLabel, anyRunning } = board;
   // `vmn-exp list` sorts runs, not groups.
   const cliSort = isGroupCountId(sortLabel) ? null : sortLabel;
-  const shownTop = topLevel(tableRows ?? []);
+  // A partly loaded board's total counts inner runs too, and its first page
+  // may hold only inner ones (a big sweep's newest trials): count every row.
+  const shownTop = all.length < data.total ? (tableRows ?? []).length : topLevel(tableRows ?? []);
   // Groups hold only their first rows: the facets count the board's runs.
   const wholeBoard = data.grouped && rows !== undefined && !filtered && facets !== null;
 
