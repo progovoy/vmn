@@ -67,9 +67,9 @@ def _append_bytes(path, text):
 
 
 def _content_token(data):
-    """A local file's version token: its content's hash (None: no file)."""
+    """A local file's version token: its content's hash (:data:`NO_FILE`: no file)."""
     if data is None:
-        return None
+        return NO_FILE
     return hashlib.sha256(data.encode("utf-8") if isinstance(data, str) else data).hexdigest()
 
 
@@ -374,7 +374,7 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
             return True, None
         with ship_state.state_lock(self._snapshot_dir(app_name, verstr)):
             stored = _content_token(self.load_file(app_name, verstr, filename))
-            if etag and stored != (None if etag == NO_FILE else etag):
+            if etag and stored != etag:
                 return False, None
             self._write_file(app_name, verstr, filename, data)
             return True, _content_token(data)

@@ -65,3 +65,16 @@ def test_a_create_only_write_is_refused_once_the_file_exists(store):  # noqa: F8
 
 def test_a_local_create_only_write_is_refused_once_the_file_exists(tmp_path):
     _create_only_cases(_claimed(LocalSnapshotStorage(str(tmp_path))))
+
+
+def _missing_file_cases(storage):
+    assert storage.load_file_with_token(APP, V1, NAME) == (None, NO_FILE)
+    assert storage.save_file_if_match(APP, V1, NAME, "a: 1\n", NO_FILE)[0]
+
+
+def test_a_missing_file_reads_as_the_create_only_token(store):  # noqa: F811
+    _missing_file_cases(_claimed(store))
+
+
+def test_a_local_missing_file_reads_as_the_create_only_token(tmp_path):
+    _missing_file_cases(_claimed(LocalSnapshotStorage(str(tmp_path))))
