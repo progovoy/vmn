@@ -23,6 +23,7 @@ import { useAppStatus } from "../../shell/useShellData";
 import AttentionStrip from "../../components/AttentionStrip";
 import { LiveText } from "../../components/LiveStatus";
 import { NARROW_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
+import { indexingText, type Indexing } from "../../util/indexing";
 
 /** The runs no other run launched (the subtitle's `N runs`). */
 const topLevel = (rows: readonly ExperimentRow[]) => rows.filter((r) => !r.depth).length;
@@ -40,6 +41,16 @@ export function EmptyBoard({ ws, app, appName, onCreate }: {
         vmn-exp create {appName}
       </div>
       {canCreate && <button className="primary" onClick={onCreate}>New run</button>}
+    </div>
+  );
+}
+
+/** An empty board while the store's index still loads: its runs are on
+ *  their way, so no "no runs yet". */
+export function IndexingBoard({ indexing }: { indexing: Indexing }) {
+  return (
+    <div className="empty">
+      Loading runs from the store ({indexingText(indexing)}). They appear here as the index fills.
     </div>
   );
 }
@@ -141,7 +152,7 @@ export function AllRunsView({ ws, app, views, onJobs }: {
       {/* Filtered down to nothing is not "no runs yet": keep the table
           and its filter bar, or there is no way back from the query. */}
       {empty ? (
-        !view.creating && (
+        status?.indexing ? <IndexingBoard indexing={status.indexing} /> : !view.creating && (
           <EmptyBoard ws={ws} app={app} appName={appName} onCreate={() => view.openCreate(true)} />
         )
       ) : (
