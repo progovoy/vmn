@@ -867,8 +867,7 @@ message.
     left out; 0 for a single run), and `running_below`/`stuck_below`, those
     running or stuck alone — the counts `vmn-exp list --query` and the SDK
     read too ([query fields](sdk.md#the-query-language)), so the command line
-    under the board lists the same outer runs. The board's `q` does not
-    carry them.
+    under the board lists the same outer runs.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`experiments?children_of=<verstr>`** pages that run's direct children
   for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`

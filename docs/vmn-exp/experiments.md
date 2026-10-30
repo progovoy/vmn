@@ -435,7 +435,7 @@ Query them with `settled = "never_started"`, `settled = "lost"`, `settled =
 "outlived"` or `settled = null`.
 
 Every query surface (`vmn-exp list --query`, `prune`/`archive --query`, the
-SDK's `list_runs`, the UI's `top_q`) reads the subtree counts `live_below`,
+SDK's `list_runs`, the UI's `q` and `top_q`) reads the subtree counts `live_below`,
 `running_below` and `stuck_below` (the runs below a row still running,
 waiting or stuck; [query fields](sdk.md#the-query-language)) by the job
 rollups' rule: a settled run counts nowhere, an archived run's subtree only

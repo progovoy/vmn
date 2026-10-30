@@ -127,3 +127,22 @@ def test_the_board_top_q_and_the_cli_keep_the_same_outer_runs(app_layout, capfd)
         board = sorted(r["verstr"] for r in body.json()["rows"])
         assert board == _expected(numbers), query
         assert _cli(app, capfd, TOP + query) == board, query
+
+
+def test_the_board_q_and_the_cli_keep_the_same_runs(app_layout, capfd):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
+
+    app, _ = _seed(app_layout)
+    manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
+    manager.attach_path("main", app_layout.repo_path)
+    client = TestClient(create_app(manager))
+    url = f"/api/v1/workspaces/main/apps/{app}/experiments"
+    for query, numbers in QUERIES.items():
+        body = client.get(url, params={"q": query, "limit": 50})
+        assert body.status_code == 200, body.text
+        board = sorted(r["verstr"] for r in body.json()["rows"])
+        assert board == _expected(numbers), query
+        assert _cli(app, capfd, query) == board, query
