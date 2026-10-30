@@ -414,7 +414,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
-  - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row (on a phone, under its card), about ten rows tall.
+  - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row (on a phone, under its card): its rows flow inline at full height, scrolling with the board (one scrollbar), and only the rows on screen are drawn.
   - its [baseline chip](#baseline-compare) (`▼ best_value from 2024-12 (5 of 41 trade_date values worse than the baseline's p10)`), opening its Overview; the page's outer runs' chips come in one `experiments-baselines` request.
 
   The status chips match an outer run by its tree, not its own status (a

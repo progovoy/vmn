@@ -16,8 +16,12 @@ vi.mock("../../../apiTree", async (orig) => ({
   fetchChildren: vi.fn(),
 }));
 vi.mock("../../../components/NewExperiment", () => ({ default: () => null }));
+/** Each virtualizer's scroll element getter, to see which box it scrolls with. */
+const scrollers = vi.hoisted(() => [] as (() => Element | null)[]);
 vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: (i: number) => number }) => ({
+  useVirtualizer: ({ count, estimateSize, getScrollElement }: {
+    count: number; estimateSize: (i: number) => number; getScrollElement: () => Element | null;
+  }) => (scrollers.push(getScrollElement), {
     getTotalSize: () => Array.from({ length: count }, (_, i) => estimateSize(i)).reduce((a, b) => a + b, 0),
     scrollToIndex: () => {},
     getVirtualItems: () =>
@@ -39,6 +43,7 @@ const CHILD = { ...singleRow(37, { name: "trial-1", parent: GRID.verstr, depth: 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  scrollers.length = 0;
   localStorage.clear();
   m.metricsSchema.mockResolvedValue({ val_loss: { goal: "min" } });
   m.facets.mockRejectedValue(notFound());
@@ -58,5 +63,20 @@ describe("an Outer runs row's tree", () => {
     expect(fetched.mock.calls[0][2]).toBe(GRID.verstr);
     fireEvent.click(screen.getByRole("button", { name: "collapse lr_layers_grid" }));
     await waitFor(() => expect(screen.queryByRole("treegrid")).toBeNull());
+  });
+
+  it("flows inline in the board's one scroll box, with no scroll box of its own", async () => {
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    fireEvent.click(screen.getByRole("button", { name: "expand lr_layers_grid" }));
+    await screen.findByRole("link", { name: "trial-1" });
+    const scroller = screen.getByRole("grid", { name: "outer runs" }).closest<HTMLElement>(".tbl-scroll")!;
+    const tree = screen.getByRole("treegrid");
+    expect(tree.closest<HTMLElement>("tr.jobs-tree-slot")!.style.height).toBe("");
+    for (let el = tree.parentElement; el && el !== scroller; el = el.parentElement) {
+      expect(el.style.maxHeight).toBe("");
+      expect(el.style.overflow).toBe("");
+    }
+    for (const scrollElement of scrollers) expect(scrollElement()).toBe(scroller);
   });
 });

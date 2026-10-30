@@ -176,7 +176,12 @@ function JobsGrid({
               const it = list[v.index];
               const active = v.index === keys.active;
               if (isTreeSlot(it)) {
-                return trees && <JobsTreeSlot key={`tree:${it.row.verstr}`} slot={it} ws={trees.ws} app={trees.app} ctx={ctx} />;
+                return trees && (
+                  <JobsTreeSlot
+                    key={`tree:${it.row.verstr}`} slot={it} ws={trees.ws} app={trees.app} ctx={ctx}
+                    index={v.index} measure={virtualizer.measureElement}
+                  />
+                );
               }
               if (isGroupItem(it)) {
                 return it.item === "more"
