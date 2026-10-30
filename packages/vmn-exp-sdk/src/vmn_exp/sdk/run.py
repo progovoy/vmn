@@ -19,7 +19,6 @@ import signal
 import socket
 import sys
 import time
-import uuid
 
 from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
@@ -34,6 +33,7 @@ from vmn_exp.core.run_intervals import (
     resolve_heartbeat_sec,
     resolve_sync_sec,
 )
+from vmn_exp.core.state_cas import new_attempt_id
 from vmn_exp.core.status import positive_env_sec
 from vmn_exp.core.storage_resolve import _try_repo_root
 from vmn_exp.core.values import sanitize_entry
@@ -395,7 +395,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             "host": socket.gethostname(),
             # This process's attempt at the run: a duplicate attempt's
             # heartbeats never reopen a run another attempt finished.
-            "attempt": uuid.uuid4().hex[:12],
+            "attempt": new_attempt_id(),
             "started_at": started_at,
             "heartbeat": started_at,
             # Bumped every beat: a liveness signal that needs no clock.

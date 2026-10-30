@@ -16,11 +16,15 @@ The final state carries a new ``attempt``, so a forced-out live attempt
 drops its next heartbeat instead of reopening the run
 (:mod:`vmn_exp.sdk.state_publisher`).
 """
-import uuid
 
 from vmn_exp._base import now_iso
 from vmn_exp.core.run_error import error_from_exception, error_from_message
-from vmn_exp.core.state_cas import compare_and_save, pull_record, split_storage
+from vmn_exp.core.state_cas import (
+    compare_and_save,
+    new_attempt_id,
+    pull_record,
+    split_storage,
+)
 from vmn_exp.core.status import (
     FAILED,
     RUN_STATE_FILE,
@@ -90,7 +94,7 @@ def final_state(prior, exit_code, error=None, end_reason=None):
         exit_code=exit_code,
         finished_at=finished_at,
         duration_sec=_duration(prior.get("started_at"), finished_at),
-        attempt=uuid.uuid4().hex[:12],
+        attempt=new_attempt_id(),
     )
     if error is not None:
         state["error"] = error

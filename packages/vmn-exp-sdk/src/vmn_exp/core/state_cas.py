@@ -9,6 +9,8 @@ its version token (S3/Azure ETag, GCS generation, a local content hash) and
 writes only while the token still matches; refused, it reads again and decides
 again. Two finishers racing cannot both land.
 """
+import uuid
+
 import yaml
 
 from vmn_exp import _base
@@ -47,6 +49,11 @@ def finished_by_another(stored, attempt):
     return bool(stored) and stored.get("state") == "finished" and (
         stored.get("attempt") != attempt
     )
+
+
+def new_attempt_id():
+    """A new id of one process's attempt at a run (its state's ``attempt``)."""
+    return uuid.uuid4().hex[:12]
 
 
 def compare_and_save(side, app_name, verstr, filename, update):
