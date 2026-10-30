@@ -14,13 +14,13 @@ tree unfolds it (attention or a live run below).
 
 A query's matching runs, grouped by top-level run, are
 :meth:`~vmn_exp.ui.attention.AttentionCounts.matches` (what the Jobs view
-counts per tree too); here they are counted up the ancestor chains of one
-tree at a time, the tree a request reads: O(that tree's matches × depth)
+counts per tree too); here they are counted up the ancestor chains (to the
+nearest archived job, :meth:`~vmn_exp.ui.job_rollup.JobTree.counted_in`) of
+one tree at a time, the tree a request reads: O(that tree's matches × depth)
 once per generation.
 """
 from collections import Counter
 
-from vmn_exp.core.tree import ancestors
 from vmn_exp.ui.attention import pinned_texts, with_attention
 from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.memo import LRU
@@ -96,12 +96,12 @@ class TreeNodes:
         return self._counts.get(
             (base.token, bucket, texts, root),
             lambda: _counted(self._cache.attention.matches(snapshot, schema, queries).get(root, ()),
-                             snapshot.edges))
+                             self._cache.jobs.tree(base)))
 
 
-def _counted(matches, edges):
+def _counted(matches, tree):
     counts = {}
     for key, verstr in matches:
-        for node in (verstr, *ancestors(verstr, edges)):
+        for node in tree.counted_in(verstr):
             counts.setdefault(node, Counter())[key] += 1
     return counts

@@ -3,7 +3,7 @@ status counts, progress), its status summary and its attention counts —
 an archived job takes its whole subtree out of the jobs above it, and
 archiving a run moves the counts already served."""
 import pytest
-from leaderboard_fleet import T0, Fleet, running
+from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.ui.attention import AttentionQuery
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
@@ -61,3 +61,30 @@ def test_attention_counts_leave_archived_runs_out(tree):
     assert cache.attention.summaries(snap, {}, WAITING)[driver]["attention"]["waiting"] == 2
     nodes = cache.tree_nodes.counts(snap, {}, driver, WAITING)
     assert nodes[driver]["waiting"] == 2
+
+
+FAILED = (AttentionQuery("failed", 'status = "failed"', "error"),)
+
+
+def test_an_archived_top_level_job_counts_its_subtree_in_rollup_and_attention(tree):
+    fleet, driver, _, _, _, cache = tree
+    fleet.append(parent=driver, state=finished(1))
+    snap = _archive(fleet, driver)
+    rollup = cache.job_rollup(snap, {}, driver)
+    assert (rollup["counts"]["waiting"], rollup["counts"]["failed"]) == (6, 1)
+    summary = cache.attention.summaries(snap, {}, WAITING + FAILED)[driver]
+    assert summary["attention"] == {"waiting": 6, "failed": 1}
+    assert cache.tree_nodes.counts(snap, {}, driver, WAITING)[driver]["waiting"] == 6
+
+
+def test_an_archived_nested_job_counts_its_subtree_but_its_parent_does_not(tree):
+    fleet, driver, outer, _, _, cache = tree
+    fleet.append(parent=outer, state=finished(1))
+    snap = _archive(fleet, outer)
+    rollup = cache.job_rollup(snap, {}, outer)
+    assert (rollup["counts"]["waiting"], rollup["counts"]["failed"]) == (4, 1)
+    nodes = cache.tree_nodes.counts(snap, {}, driver, WAITING + FAILED)
+    assert (nodes[outer]["waiting"], nodes[outer]["failed"]) == (4, 1)
+    assert (nodes[driver]["waiting"], nodes[driver]["failed"]) == (2, 0)
+    summary = cache.attention.summaries(snap, {}, WAITING + FAILED)[driver]
+    assert summary["attention"] == {"waiting": 2, "failed": 0}
