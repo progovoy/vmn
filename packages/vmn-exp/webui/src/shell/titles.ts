@@ -28,9 +28,11 @@ function parts(input: CrumbInput): [string, string?] {
 /** The title's subject alone: what the announcer and ⌘K's Recent name. */
 export const subjectFor = (input: CrumbInput): string => parts(input)[0];
 
-/** *stuck* prefixes `(N stuck) ` on app routes. */
-export function titleFor(input: CrumbInput, opts: { stuck?: number } = {}): string {
+/** *stuck* prefixes `(N stuck) ` on app routes, `(N stuck so far) ` while
+ *  the store still indexes (*partial*). */
+export function titleFor(input: CrumbInput, opts: { stuck?: number; partial?: boolean } = {}): string {
   const [subject, scope] = parts(input);
-  const stuck = opts.stuck && isAppRoute(input.routeId) ? `(${opts.stuck} stuck) ` : "";
+  const stuck = opts.stuck && isAppRoute(input.routeId)
+    ? `(${opts.stuck} stuck${opts.partial ? " so far" : ""}) ` : "";
   return `${stuck}${subject}${scope ? ` · ${scope}` : ""}${SUFFIX}`;
 }

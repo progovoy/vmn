@@ -21,11 +21,12 @@ export function useShellCrumbs(ctx: ShellContext): {
     rid ? client.getQueryData<ReportDetail>(["report", ws, rid])?.title ?? "" : "");
   const storeUri = storeUriOf(workspace);
   const stuck = status?.counts.stuck;
+  const partial = Boolean(status?.indexing);
 
   return useMemo(() => {
     const input: CrumbInput = {
       routeId, ws, app, appTag, params, search, run, reportTitle: reportTitle || undefined, storeUri,
     };
-    return { crumbs: crumbsFor(input), cli: cliFor(input), title: titleFor(input, { stuck }), subject: subjectFor(input) };
-  }, [routeId, ws, app, appTag, params, search, run, reportTitle, storeUri, stuck]);
+    return { crumbs: crumbsFor(input), cli: cliFor(input), title: titleFor(input, { stuck, partial }), subject: subjectFor(input) };
+  }, [routeId, ws, app, appTag, params, search, run, reportTitle, storeUri, stuck, partial]);
 }

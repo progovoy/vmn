@@ -20,7 +20,7 @@ import BoardGridTools from "../BoardGridTools";
 import BoardCaption from "../BoardCaption";
 import BoardHead from "../BoardHead";
 import { useTrayBoard } from "../SelectionTrayHost";
-import { EmptyBoard } from "./AllRunsView";
+import { EmptyBoard, IndexingBoard } from "./AllRunsView";
 import { allRunsSearch } from "./experimentsView";
 import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
@@ -31,7 +31,7 @@ import { useBaselineChips } from "./useBaselineChips";
 import { useJobsBoard } from "./useJobsBoard";
 import { useAppStatus } from "../../shell/useShellData";
 import { freshnessShort } from "../../util/freshness";
-import { indexingText } from "../../util/indexing";
+import { indexingText, soFar } from "../../util/indexing";
 
 /** `20 jobs`, `19,580 single runs`; listing every top-level run, `14 jobs ·
  *  3 single runs` once every row is loaded, else the total. */
@@ -95,7 +95,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
     <>
       <BoardHead
         title={appName}
-        count={[countText(loading, rows, data.total, kind.kind), indexingText(indexing), freshnessShort(status?.freshness)]
+        count={[countText(loading, rows, data.total, kind.kind) + (loading ? "" : soFar({ indexing })), indexingText(indexing), freshnessShort(status?.freshness)]
           .filter(Boolean).join(" · ")}
         views={views}
         actions={!empty && <JobsToolbar ws={ws} app={app} view={view} board={board} onViewApplied={resetFilter} onAll={onAll} />}
@@ -108,7 +108,8 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
         />
       )}
       {empty ? (
-        !view.creating && <EmptyBoard ws={ws} app={app} appName={appName} onCreate={() => view.openCreate(true)} />
+        indexing ? <IndexingBoard indexing={indexing} />
+          : !view.creating && <EmptyBoard ws={ws} app={app} appName={appName} onCreate={() => view.openCreate(true)} />
       ) : (
         <>
           <AttentionStrip status={status} from={allRunsSearch(here)} />

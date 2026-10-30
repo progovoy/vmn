@@ -93,4 +93,10 @@ describe("StatusRollup", () => {
       expect(a).toHaveAccessibleName(a.textContent!);
     });
   });
+
+  it("marks the counts as so far while the store's index still loads", () => {
+    renderRollup({ ...status({ stuck: 13, running: 2 }, 1, "stuck"), indexing: { loaded: 500, total: 709_603 } });
+    expect(screen.getAllByRole("link").map((a) => a.textContent))
+      .toEqual(["13 stuck so far", "1 failed (24h) so far", "2 running so far"]);
+  });
 });

@@ -1,6 +1,7 @@
 /** The attention strip's parts (plan 20 C6): what needs a look now, each with
  *  the leaderboard search that lists exactly those runs. */
 import type { AppStatus, AttentionEntry, AttentionLevel } from "../shell/contracts";
+import { partsSoFar } from "./indexing";
 
 /** experiments-status counts failures this far back (status_summary.py). */
 const RECENT_MS = 24 * 3600 * 1000;
@@ -34,7 +35,8 @@ const configuredPart = (e: AttentionEntry, current: string): AttentionPart =>
 
 /** Nothing when no run is stuck, none failed in the last 24h and no
  *  configured query matches: running runs alone need no attention.
- *  *current* is the search the links start from (the board's). */
+ *  *current* is the search the links start from (the board's). A store
+ *  still indexing counts its runs so far. */
 export function attentionParts(status: AppStatus, current: string, now: number): AttentionPart[] {
   const { counts, failed_recent } = status;
   const configured = (status.attention ?? []).filter((e) => (e.count ?? 0) > 0);
@@ -57,5 +59,5 @@ export function attentionParts(status: AppStatus, current: string, now: number):
   if (counts.running) {
     parts.push({ key: "running", text: `${counts.running} running`, search: withFilter(current, { status: "running" }) });
   }
-  return parts;
+  return partsSoFar(parts, status);
 }

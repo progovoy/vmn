@@ -23,7 +23,7 @@ import { useAppStatus } from "../../shell/useShellData";
 import AttentionStrip from "../../components/AttentionStrip";
 import { LiveText } from "../../components/LiveStatus";
 import { NARROW_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
-import { indexingText, type Indexing } from "../../util/indexing";
+import { indexingText, storeTotal, type Indexing } from "../../util/indexing";
 
 /** The runs no other run launched (the subtitle's `N runs`). */
 const topLevel = (rows: readonly ExperimentRow[]) => rows.filter((r) => !r.depth).length;
@@ -120,18 +120,21 @@ export function AllRunsView({ ws, app, views, onJobs }: {
   const shownTop = all.length < data.total ? (tableRows ?? []).length : topLevel(tableRows ?? []);
   // Groups hold only their first rows: the facets count the board's runs.
   const wholeBoard = data.grouped && rows !== undefined && !filtered && facets !== null;
+  // A store still indexing: the board holds its newest runs, of the store's.
+  const indexing = status?.indexing;
+  const total = filtered ? data.total : storeTotal(data.total, indexing);
 
   return (
     <>
       <BoardHead
         title={appName}
         count={runCountText(wholeBoard ? {
-          loading: false, filtered, loaded: data.total, total: data.total,
+          loading: false, filtered, loaded: data.total, total,
           shownTop, loadedTop: Math.max(0, data.total - facets.parented),
         } : {
-          loading: rows === undefined, filtered, loaded: all.length, total: data.total,
+          loading: rows === undefined, filtered, loaded: all.length, total,
           shownTop, loadedTop: topLevel(all),
-        })}
+        }) + (indexing ? " · indexing" : "")}
         live={narrow && anyRunning && <LiveText paused={paused} updatedAt={data.updatedAt} />}
         views={views}
         actions={!empty && (
@@ -154,7 +157,7 @@ export function AllRunsView({ ws, app, views, onJobs }: {
       {/* Filtered down to nothing is not "no runs yet": keep the table
           and its filter bar, or there is no way back from the query. */}
       {empty ? (
-        status?.indexing ? <IndexingBoard indexing={status.indexing} /> : !view.creating && (
+        indexing ? <IndexingBoard indexing={indexing} /> : !view.creating && (
           <EmptyBoard ws={ws} app={app} appName={appName} onCreate={() => view.openCreate(true)} />
         )
       ) : (

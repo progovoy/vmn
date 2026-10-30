@@ -77,6 +77,12 @@ describe("useShellCrumbs", () => {
     expect(appStatus).toHaveBeenCalledWith("ml-repo", "ml_app");
   });
 
+  it("marks the stuck count as so far while the store's index still loads", async () => {
+    appStatus.mockResolvedValue({ ...status(2), indexing: { loaded: 500, total: 709_603 } });
+    const { result } = shell(appCtx("experiments"));
+    await waitFor(() => expect(result.current.title).toBe("(2 stuck so far) ml_app experiments · ml-repo — vmn-exp"));
+  });
+
   it("adds --store for a store workspace", () => {
     const { result } = shell(appCtx("experiments", {
       workspace: { name: "team", kind: "store", store: "s3://team-exp/ml" }, isGit: false,

@@ -6,6 +6,7 @@ import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import type { AppStatus } from "../../shell/contracts";
 import { stuckFilter } from "../../util/attention";
+import { partsSoFar } from "../../util/indexing";
 import "./StatusRollup.css";
 
 const RUNS = "?view=all";
@@ -26,7 +27,7 @@ function partsOf(status: AppStatus): Part[] {
     });
   }
   if (counts.running) parts.push({ text: `${counts.running} running`, search: `${RUNS}&status=running` });
-  return parts;
+  return partsSoFar(parts, status);
 }
 
 /** *href* turns a leaderboard search (`?status=stuck`) into a link target.

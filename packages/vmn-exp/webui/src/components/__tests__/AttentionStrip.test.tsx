@@ -80,4 +80,9 @@ describe("AttentionStrip", () => {
     fireEvent.click(screen.getByRole("link", { name: "1 stuck" }));
     expect(onFollow).toHaveBeenCalled();
   });
+
+  it("marks the counts as so far while the store's index still loads", () => {
+    strip({ ...status({ stuck: 13, running: 2 }, 1), indexing: { loaded: 500, total: 709_603 } });
+    expect(screen.getByRole("status")).toHaveTextContent("13 stuck so far · 1 failed in 24h so far · 2 running so far");
+  });
 });
