@@ -40,7 +40,7 @@ from vmn_exp.core.fold import (
 from vmn_exp.core.index_intern import compact_row, keyed
 from vmn_exp.core.metric_pack import PackedSummary
 from vmn_exp.core.metric_schema import declared_fields, declared_schema
-from vmn_exp.core.metric_summary import with_policies
+from vmn_exp.core.metric_summary import SchemaPolicies, with_schema_policies
 from vmn_exp.core.note_sigs import fold_note_sigs
 from vmn_exp.core.system_metrics import split_system
 
@@ -132,10 +132,12 @@ def runs_declared_schema(declared_defs, row_of):
     return declared_schema(declared_defs[v] for v in sorted(declared_defs, key=created))
 
 
-def summarized_row(row, parts, schema):
-    """*row* with its metrics under *schema*; *row* itself when unchanged."""
+def summarized_row(row, parts, policies):
+    """*row* with its metrics under *policies* (a schema's
+    :class:`~vmn_exp.core.metric_summary.SchemaPolicies`); *row* itself when
+    unchanged."""
     summary, defs = parts
-    metrics = with_policies(row["metrics"], summary, defs, schema)
+    metrics = with_schema_policies(row["metrics"], summary, defs, policies)
     return row if metrics is row["metrics"] else dict(row, metrics=metrics)
 
 
@@ -152,13 +154,14 @@ class SchemaRows:
         key = schema_key(schema)
         with self._lock:
             memo = self._memos.pop(key, {})
+        policies = SchemaPolicies(schema)
         fresh, out = {}, []
         for row in rows:
             verstr = row["verstr"]
             hit = memo.get(verstr)
             if hit is None or hit[0] is not row:
                 part = parts.get(verstr)
-                hit = (row, summarized_row(row, part, schema) if part else row)
+                hit = (row, summarized_row(row, part, policies) if part else row)
             fresh[verstr] = hit
             out.append(hit[1])
         with self._lock:

@@ -203,18 +203,46 @@ def same_value(a, b):
     return a != a and b != b
 
 
+class SchemaPolicies:
+    """Each metric's summary policy under a metrics *schema* — the run's
+    definitions first — with the schema's resolved once per metric name, so
+    rows sharing names pay a dict lookup per metric, not a glob scan."""
+
+    def __init__(self, schema):
+        self._schema = schema or {}
+        self._memo = {}
+
+    def __bool__(self):
+        return bool(self._schema)
+
+    def of(self, name, run_defs=None):
+        """*name*'s policy: *run_defs*' (exact, then glob), else the schema's."""
+        policy = lookup(name, run_defs, _policy_of) if run_defs else None
+        if policy:
+            return policy
+        try:
+            return self._memo[name]
+        except KeyError:
+            policy = self._memo[name] = lookup(name, self._schema, _policy_of)
+            return policy
+
+
 def with_policies(metrics, summary, run_defs, schema):
     """*metrics* with each metric of *summary* at its policy's value — the
-    run's definitions first, then *schema*. Only a metric logged more than
-    once can differ from its last value, so the rest are left as they are;
-    *metrics* itself comes back when no value changes."""
-    if not summary or not (run_defs or schema):
+    run's definitions first, then *schema* (see :func:`with_schema_policies`)."""
+    return with_schema_policies(metrics, summary, run_defs, SchemaPolicies(schema))
+
+
+def with_schema_policies(metrics, summary, run_defs, policies):
+    """*metrics* with each metric of *summary* at the value *policies* (a
+    :class:`SchemaPolicies`) picks. Only a metric logged more than once can
+    differ from its last value, so the rest are left as they are; *metrics*
+    itself comes back when no value changes."""
+    if not summary or not (run_defs or policies):
         return metrics
     picked = {}
     for name, seen in summary.items():
-        policy = lookup(name, run_defs or {}, _policy_of) or lookup(
-            name, schema or {}, _policy_of
-        )
+        policy = policies.of(name, run_defs)
         best = seen[policy] if policy in _BEST else None
         value = seen["last"] if best is None else best
         if not same_value(value, metrics.get(name)):
