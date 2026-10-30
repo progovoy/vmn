@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """The local-disk backend: ``<root>/<area>/<app key>/<verstr>/``."""
+import hashlib
 import json
 import os
 import shutil
@@ -15,7 +16,7 @@ from vmn_exp.core.record_files import read_file, read_file_from
 from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
 from vmn_exp.storage.base import SnapshotStorage
 from vmn_exp.storage.child_markers import LocalChildren
-from vmn_exp.storage import host_dirs
+from vmn_exp.storage import host_dirs, ship_state
 from vmn_exp.storage.files import (
     METADATA_FILE,
     apply_metadata_updates,
@@ -63,6 +64,13 @@ def _append_bytes(path, text):
             data = data[os.write(fd, data) :]
     finally:
         os.close(fd)
+
+
+def _content_token(data):
+    """A local file's version token: its content's hash (None: no file)."""
+    if data is None:
+        return None
+    return hashlib.sha256(data.encode("utf-8") if isinstance(data, str) else data).hexdigest()
 
 
 def _read_class(storage):
@@ -347,6 +355,24 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
             # signature (list_record_names) too.
             os.utime(snap_dir)
         return True
+
+    def load_file_with_token(self, app_name, verstr, filename):
+        data = self.load_file(app_name, verstr, filename)
+        return data, _content_token(data)
+
+    def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
+        """The record's state lock makes the compare and the rename one step
+        for every conditional writer (an unconditional one may still land).
+        No token comes back: a conditional writer reads first
+        (:meth:`load_file_with_token`), then writes once."""
+        if self._refuse_orphan_write(app_name, verstr, filename):
+            return False, None
+        with ship_state.state_lock(self._snapshot_dir(app_name, verstr)):
+            stored = self.load_file(app_name, verstr, filename)
+            if etag and _content_token(stored) != etag:
+                return False, None
+            self.save_file(app_name, verstr, filename, data)
+            return True, None
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         name = artifact_name_for(src_path, name)

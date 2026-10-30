@@ -406,6 +406,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def finish(self, exit_code=0, error=None):
         """Finalize the run. Idempotent: a second call changes nothing.
 
+        False when another attempt of the run (a duplicate pod, a resumed
+        one) finished it first: its final state stays, this one is dropped
+        with a warning. True otherwise — also when the final upload is still
+        in flight at the deadline.
+
         *error* — an exception or a message — is recorded as the final run
         state's ``error`` (and an ``error`` log entry), whatever *exit_code* is.
 
@@ -413,7 +418,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         run is logged, not thrown at the workload), and always closes the run —
         it leaves the open-run registry and hands the env back either way.
         """
-        self._finish(exit_code, error=error)
+        return self._finish(exit_code, error=error)
 
     def release(self, reason=None):
         """Hand the run back unfinished, for another attempt to reopen with
@@ -421,15 +426,18 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         synced, recording stops, and the run reads as waiting (``created``)
         with ``end_reason: released`` (*reason* as ``release_reason``).
         Idempotent; a no-op on a finished run. Never raises for a storage
-        failure, like :meth:`finish`."""
+        failure, like :meth:`finish`. False, like :meth:`finish`, when another
+        attempt finished the run: the release is dropped, its ending stays."""
         deadline = _final_upload_deadline()
         if self._record_release(deadline, reason=reason):
             self._close_remote_writers(deadline)
+        return not self._state_publisher.superseded
 
     def _finish(self, exit_code, error=None, **final_state):
         deadline = _final_upload_deadline()
         if self._record_final(exit_code, deadline, error=error, **final_state):
             self._close_remote_writers(deadline)
+        return not self._state_publisher.superseded
 
     def _record_error(self, error):
         """Append the ``error`` log entry of *error*; return its run-state mapping."""
@@ -504,7 +512,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             # The log lands before the final state: a reader that sees the run
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
-            self._record_guard("final state", self._publish, **final_state)
+            self._record_guard("final state", self._publish_final, final_state)
             self._log_sync.submit(None)
             if alerts:
                 self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
@@ -667,6 +675,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _publish(self, **updates):
         self._state.update(updates)
         self._state_publisher.publish(self._state)
+
+    def _publish_final(self, updates):
+        self._state.update(updates)
+        self._state_publisher.publish(self._state, final=True)
 
     def _beat(self):
         # Independent chores: a failed heartbeat write must not skip the sync

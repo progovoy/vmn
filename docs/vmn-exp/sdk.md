@@ -428,7 +428,9 @@ manage.finish_run("my_app", run_id, 1, error="OOMKilled", end_reason="closed")
   released or stuck run.
 - It raises `manage.FinishRefusedError` (a `ValueError`) while another attempt
   still heartbeats the run — fresh by the writer's clock or the store's write
-  time, the rule that tells running from stuck — and once the run has finished.
+  time, the rule that tells running from stuck — and once the run has finished,
+  including by an attempt that finishes it while the call writes (the write is
+  a compare-and-swap, like `run.finish()`'s).
   `force=True` finishes it anyway; the final state carries a new `attempt`, so
   the live attempt's next heartbeats are dropped instead of reopening it.
 - `log_note(app_name, ref, text)` and `log_metrics(app_name, ref, values,
@@ -540,6 +542,15 @@ yourself when a `with` block doesn't fit. It is idempotent.
   `{message, source: user}`. An `error` is recorded whatever the exit code.
 - `finish()` never raises for a storage failure (a 503 at the end of a
   ten-hour run is logged as a warning) and always closes the run.
+- **The first attempt to end a run wins.** Two attempts of one run (a
+  speculative duplicate, a pod resumed next to a live one) share its
+  `run_state.yml`; once one has finished it, another attempt's `finish()` or
+  `release()` keeps the winner's state (exit code and all), logs a warning and
+  returns `False` (`True` otherwise, also when the final upload is still in
+  flight at the deadline). The final write is a compare-and-swap on the
+  state's version token (S3/Azure ETag, GCS generation, a content hash under
+  a per-record lock on a local store), so two finishers racing cannot both
+  land. A release never displaces a finish; a finish replaces a release.
 - The run **heartbeats itself** from a daemon thread (bumping `heartbeat_seq`
   in `run_state.yml`), so an OOM-killed or lost job goes
   [`stuck`](experiments.md#run-status-did-my-job-die) instead of `running`

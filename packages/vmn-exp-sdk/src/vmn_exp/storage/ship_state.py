@@ -149,6 +149,13 @@ def owner_lock(record_dir):
     return _record_lock(record_dir, "owner.lock")
 
 
+def state_lock(record_dir):
+    """The copy's state lock, held by a conditional state write from its
+    compare to its rename (:meth:`LocalSnapshotStorage.save_file_if_match`);
+    nothing else is taken under it."""
+    return _record_lock(record_dir, "state.lock")
+
+
 @contextmanager
 def _record_lock(record_dir, name):
     """Lock *name* of the copy, given back in a ``finally`` the hold is taken

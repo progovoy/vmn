@@ -87,6 +87,9 @@ class S3SnapshotStorage(
     def load_file(self, app_name, verstr, filename):
         return self._get(f"{self._record_prefix(app_name, verstr)}/{filename}")
 
+    def load_file_with_token(self, app_name, verstr, filename):
+        return self._get_with_etag(f"{self._record_prefix(app_name, verstr)}/{filename}")
+
     def direct_files(self):
         return self
 
