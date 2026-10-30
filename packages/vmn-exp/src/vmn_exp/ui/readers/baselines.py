@@ -11,6 +11,7 @@ from vmn_exp.core.log import primary_metric
 from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.status import derive_status
 from vmn_exp.core.values import is_finite_number
+from vmn_exp.ui.readers.last_good_index import last_good_row
 
 ORIGINS = ("parent", "forked_from", "rerun_of")
 _GLOB = frozenset("*?[")
@@ -57,16 +58,7 @@ def previous_run(snapshot, row):
 def last_good(snapshot, verstr):
     """``{verstr, idx, name}`` of the latest earlier succeeded run of
     *verstr*'s command, or None (also for a run the snapshot lacks)."""
-    row = snapshot.row(verstr)
-    if row is None:
-        return None
-    command = _command(snapshot, verstr)
-    found = next(
-        (r for r in _earlier_rows(snapshot, row)
-         if _command(snapshot, r["verstr"]) == command
-         and status_of(snapshot, r["verstr"]) == "succeeded"),
-        None,
-    )
+    found = last_good_row(snapshot, verstr)
     return run_ref(found) if found else None
 
 
