@@ -356,7 +356,8 @@ def experiment_prune(vcs, params, storage, args, app_name):
 
     if _is_dry_run(args):
         if getattr(args, "query", None) is not None:
-            print_preview(to_delete)
+            print_preview(f"Would delete {len(to_delete)} experiments:",
+                          [meta["verstr"] for meta in to_delete])
         else:
             print(f"Would delete {len(to_delete)} experiments:")
             for meta in to_delete:

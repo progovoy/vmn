@@ -11,7 +11,7 @@ from vmn_exp.ui.leaderboard_group_jobs import job_fields
 from vmn_exp.ui.leaderboard_group_spec import GroupSpec
 from vmn_exp.ui.leaderboard_groups import Grouping, groups_payload
 from vmn_exp.ui.leaderboard_jobs import check_job_sort
-from vmn_exp.ui.leaderboard_live_below import reads_live_below
+from vmn_exp.ui.leaderboard_live_below import reads_below
 from vmn_exp.ui.leaderboard_scope import check_scope
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import apply_filters
@@ -44,7 +44,7 @@ class GroupCache:
         if top_query and not top:
             raise ValueError("top_q needs top=1")
         where = dict(scope=scope, top=top, top_query=top_query)
-        live_below = reads_live_below(top_query)
+        live_below = reads_below(top_query)
         if live_below and rows_filter is None:
             rows_filter = lambda rows: apply_filters(rows, None, query, snapshot)  # noqa: E731
         if rows_filter is None:

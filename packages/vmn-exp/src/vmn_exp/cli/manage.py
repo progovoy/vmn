@@ -16,6 +16,7 @@ or ``latest``) and, for ``tag``, ``key=value`` pairs — a verstr never contains
 Neither ever touches a run's results (metrics, log history, artifacts):
 see :mod:`vmn_exp.core.manage`.
 """
+from vmn_exp.cli.prune_query import print_preview
 from vmn_exp.core.manage import set_archived, tag_run
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import resolve_experiment
@@ -93,11 +94,7 @@ def _archive_by_query(storage, app_name, args):
     if not args.dry_run:
         print(f"{verb.capitalize()}d {len(verstrs)} run(s)")
         return 0
-    print(f"Would {verb} {len(verstrs)} run(s)")
-    for verstr in verstrs[:DRY_RUN_SAMPLE]:
-        print(f"  {verstr}")
-    if len(verstrs) > DRY_RUN_SAMPLE:
-        print(f"  ... and {len(verstrs) - DRY_RUN_SAMPLE} more")
+    print_preview(f"Would {verb} {len(verstrs)} run(s)", verstrs, DRY_RUN_SAMPLE)
     return 0
 
 

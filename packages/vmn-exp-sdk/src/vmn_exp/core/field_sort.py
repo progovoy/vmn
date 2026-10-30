@@ -7,18 +7,17 @@ or a list/dict ranks no row, which then goes last whichever the direction.
 The row fields are the query language's (:data:`~vmn_exp.core.query.ROW_FIELDS`)
 but the dates and ``idx`` (their own sorts, :data:`~vmn_exp.core.log.DATE_SORTS`)
 and what a lean row lacks (``intent``, ``keywords``, the Jobs view's
-``live_below``, ``running_below``, ``stuck_below``).
+:data:`~vmn_exp.core.query.BELOW_FIELDS`).
 """
 import functools
 
-from vmn_exp.core.query import ROW_FIELDS
+from vmn_exp.core.query import BELOW_FIELDS, ROW_FIELDS
 from vmn_exp.core.query_up import UP_PREFIXES as PREFIXES
 from vmn_exp.core.query_up import dig
 from vmn_exp.core.values import is_finite_number
 
-SORT_FIELDS = ROW_FIELDS - {"timestamp", "started_at", "finished_at", "idx",
-                            "intent", "keywords", "live_below", "running_below",
-                            "stuck_below"}
+SORT_FIELDS = ROW_FIELDS - BELOW_FIELDS - {"timestamp", "started_at", "finished_at",
+                                          "idx", "intent", "keywords"}
 
 
 def ranked_value(value):

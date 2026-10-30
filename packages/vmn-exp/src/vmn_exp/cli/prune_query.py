@@ -25,16 +25,16 @@ def query_candidates(storage, app_name, metas, query_text, schema=None):
     return [m for m in metas if m["verstr"] in matching]
 
 
-def print_preview(to_delete, cap=_PREVIEW_CAP):
-    """Print the dry-run summary for *to_delete*, showing at most *cap* entries.
+def print_preview(header, verstrs, cap=_PREVIEW_CAP):
+    """Print the dry-run *header* and *verstrs*, showing at most *cap* of them.
 
     When more than *cap* entries are present, the last line reports how many
     were omitted: ``... and N more``.
     """
-    shown = to_delete[:cap]
-    extra = len(to_delete) - len(shown)
-    print(f"Would delete {len(to_delete)} experiments:")
-    for meta in shown:
-        print(f"  {meta['verstr']}")
+    shown = verstrs[:cap]
+    extra = len(verstrs) - len(shown)
+    print(header)
+    for verstr in shown:
+        print(f"  {verstr}")
     if extra > 0:
         print(f"  ... and {extra} more")

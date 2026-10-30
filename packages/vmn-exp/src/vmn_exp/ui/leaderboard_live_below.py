@@ -7,17 +7,18 @@ reading one (the Live/Review presets, a status chip) is judged on the order
 without it, per base and time bucket, not in the cache's moved orders: a
 run deep in a tree changes it without changing the top-level row.
 """
-from vmn_exp.core.query import filter_rows, query_roots
+from vmn_exp.core.query import BELOW_FIELDS, filter_rows, query_roots
 from vmn_exp.core.query_extra import lean_extra
 from vmn_exp.ui.memo import LRU
 
-# Each field and the rollup states it counts.
+# Each of the BELOW_FIELDS and the rollup states it counts.
 BELOW = {"live_below": ("running", "waiting", "stuck"),
          "running_below": ("running",), "stuck_below": ("stuck",)}
+assert BELOW.keys() == BELOW_FIELDS
 
 
-def reads_live_below(query):
-    return bool(query and query.strip()) and not BELOW.keys().isdisjoint(query_roots(query))
+def reads_below(query):
+    return bool(query and query.strip()) and not BELOW_FIELDS.isdisjoint(query_roots(query))
 
 
 def _counter(summaries, states):

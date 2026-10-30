@@ -23,7 +23,7 @@ rollup still reads its subtree).
 """
 from functools import cached_property
 
-from vmn_exp.core.tree import subtree_verstrs
+from vmn_exp.core.tree import ancestors, subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
 
 
@@ -134,5 +134,6 @@ class JobTree:
         """The runs under an archived job: none counts in the jobs above it."""
         below = set()
         for job in self.archived:
-            below.update(v for v in subtree_verstrs(job, self._base.children_of) if v != job)
+            if self.archived.isdisjoint(ancestors(job, self._parent)):  # top-most only
+                below.update(v for v in subtree_verstrs(job, self._base.children_of) if v != job)
         return below

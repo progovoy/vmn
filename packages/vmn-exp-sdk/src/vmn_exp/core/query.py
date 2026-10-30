@@ -82,8 +82,10 @@ from vmn_exp.core.tree import ancestry_of
 # Every non-metric field a row can carry, from ``experiment_row`` +
 # ``experiment_status.status_fields`` + ``experiment_tree.annotate_tree``
 # (``queue_sec``) + the board's ``duration_ratio`` (plan 28 N4).
-# Spelled out so a typo is a query error instead of a silently empty result.
-ROW_FIELDS = frozenset(
+# Spelled out so a typo is a query error instead of a silently empty result;
+# BELOW_FIELDS are the Jobs view's counts of the runs below a top-level row.
+BELOW_FIELDS = frozenset({"live_below", "running_below", "stuck_below"})
+ROW_FIELDS = BELOW_FIELDS | frozenset(
     """
     idx verstr code_verstr timestamp note branch base_version parent
     name archived tags last_metric_at status exit_code started_at finished_at heartbeat
@@ -91,7 +93,7 @@ ROW_FIELDS = frozenset(
     kind depth tree_status settled imported_from forked_from forked_from_step rerun_of
     author has_intent intent keywords notes
     end_reason error_summary signal root failure_sig released_at resume_count
-    queue_sec duration_ratio live_below running_below stuck_below
+    queue_sec duration_ratio
     """.split()
 )
 

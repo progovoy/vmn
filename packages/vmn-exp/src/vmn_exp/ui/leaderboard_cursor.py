@@ -28,7 +28,7 @@ from vmn_exp.ui.leaderboard_jobs import (
     sortable,
 )
 from vmn_exp.ui.leaderboard_live import bisect_key, order_key
-from vmn_exp.ui.leaderboard_live_below import reads_live_below
+from vmn_exp.ui.leaderboard_live_below import reads_below
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 
 TAIL = 4
@@ -143,7 +143,7 @@ def keyed(cache, snapshot, schema, last, f, projs, attention=()):
 def _presence(cache, snapshot, schema, last, f):
     """Whether a metric ranks the order (some filtered row carries it); a
     ``live_below`` top query's is the order's it filters."""
-    if reads_live_below(f.top_query):
+    if reads_below(f.top_query):
         f = f._replace(top_query=None)
     rows = cache._ordered(snapshot, schema, last, f)
     if last:
