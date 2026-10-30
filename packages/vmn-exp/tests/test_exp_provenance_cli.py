@@ -4,6 +4,7 @@ All pure-unit or fake-storage tests; no Docker required.
 """
 import types
 import pytest
+from empty_storage import EmptyStorage
 from version_stamp.core.logging import init_stamp_logger
 
 
@@ -52,8 +53,8 @@ def _imported_meta(source_commit="abc1234"):
     }
 
 
-class _FakeStorage:
-    """Minimal duck-typed storage for provenance CLI tests."""
+class _FakeStorage(EmptyStorage):
+    """Minimal storage for provenance CLI tests; its areas hold no settings."""
 
     def __init__(self, metadata, patches=None, log=None):
         self._meta = metadata
@@ -65,12 +66,6 @@ class _FakeStorage:
 
     def load_metadata(self, app_name, verstr):
         return self._meta
-
-    def load_file(self, app_name, verstr, name):
-        return None
-
-    def in_area(self, area):
-        return self  # no settings: load_file finds nothing
 
     def list_snapshots(self, app_name):
         return [self._meta]

@@ -7,13 +7,11 @@ another attempt finished the run cannot then flip it back to running and
 erase its exit code. A beat on the token of its own last write still costs
 one conditional PUT and no read.
 """
-import time
-
 import pytest
-import yaml
-from s3_helpers import meta, mocked_bucket, s3_storage
+from pg_locks import until
+from s3_helpers import meta, mocked_bucket, record_calls, s3_storage
 
-from vmn_exp.core.status import load_run_state
+from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from vmn_exp.sdk.run import Run
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -98,17 +96,8 @@ def bucket(monkeypatch):
         yield
 
 
-def _until(predicate, timeout=10):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return
-        time.sleep(0.01)
-    raise AssertionError("timed out")
-
-
 def _remote_holds(state):
-    _until(lambda: load_run_state(s3_storage(), APP, X) == state)
+    until(lambda: load_run_state(s3_storage(), APP, X) == state)
 
 
 def test_a_remote_beat_that_read_before_the_winners_finish_keeps_it(bucket):
@@ -195,42 +184,19 @@ def test_resuming_a_finished_run_still_reopens_it(root):
         assert b.finish(0) is True
 
 
-class _CountingRemote:
-    """An in-memory remote with version tokens, counting its state calls."""
-
-    def __init__(self):
-        self.data, self.version, self.calls = None, 0, []
-
-    def is_remote(self):
-        return True
-
-    def load_file_with_token(self, app_name, verstr, filename):
-        self.calls.append("get")
-        return self.data, str(self.version)
-
-    def load_file(self, app_name, verstr, filename):
-        return self.load_file_with_token(app_name, verstr, filename)[0]
-
-    def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
-        self.calls.append("conditional put" if etag else "put")
-        if etag and etag != str(self.version):
-            return False, None
-        self.data, self.version = data, self.version + 1
-        return True, str(self.version)
-
-    def save_file(self, *args):
-        self.calls.append("unconditional put")
-        return self.save_file_if_match(*args)[0]
+def _state_calls(calls):
+    return [(op, "IfMatch" in params) for op, params in calls
+            if params.get("Key", "").endswith(RUN_STATE_FILE)]
 
 
-def test_a_steady_remote_beat_is_one_conditional_put_and_no_get():
-    remote = _CountingRemote()
-    publisher = RunStatePublisher(remote, APP, X)
+def test_a_steady_remote_beat_is_one_conditional_put_and_no_get(bucket):
+    storage, calls = s3_storage(), []
+    publisher = RunStatePublisher(storage, APP, X)
     for seq in range(12):
         if seq == 2:
-            remote.calls.clear()
+            calls = record_calls(storage._s3)
         publisher.publish(_running(seq, "mine"), heartbeat=seq > 0)
-        _until(lambda: remote.data and yaml.safe_load(remote.data)["heartbeat_seq"] == seq)
+        until(lambda: (load_run_state(s3_storage(), APP, X) or {}).get("heartbeat_seq") == seq)
     assert publisher.close(10)
 
-    assert remote.calls == ["conditional put"] * 10
+    assert _state_calls(calls) == [("PutObject", True)] * 10
