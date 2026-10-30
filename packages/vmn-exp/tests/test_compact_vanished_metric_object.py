@@ -100,3 +100,11 @@ def test_a_chart_read_reads_the_run_again_when_its_vmx_vanished(tmp_path):
     storage = _Vanishing(_stored(tmp_path))
     log, reader = read_run(storage, APP, V)
     assert reader.keys()
+
+
+def test_the_log_view_reads_the_run_again_when_a_metric_object_vanished(tmp_path):
+    from vmn_exp.storage.files import merged_log
+
+    stored = _stored(tmp_path)
+    expected = merged_log(stored, APP, V, {})
+    assert repr(merged_log(_Vanishing(stored), APP, V, {})) == repr(expected)  # NaN-safe
