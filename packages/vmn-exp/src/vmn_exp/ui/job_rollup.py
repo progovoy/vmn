@@ -20,9 +20,12 @@ built per time bucket (:func:`overlay`).
 Archived rows are left out, as the board leaves them out by default, and
 an archived job takes its whole subtree out of the jobs above it (its own
 rollup still reads its subtree): :class:`JobTree`'s one membership rule,
-which the attention counts follow too (:meth:`JobTree.counted_in`).
+which the attention counts follow too (:meth:`JobTree.counted_in`,
+:meth:`JobTree.top_counted`).
 """
-from vmn_exp.core.tree import ancestors, subtree_verstrs
+from functools import cached_property
+
+from vmn_exp.core.tree import counted_chain, subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
 
 
@@ -118,7 +121,6 @@ class JobTree:
         self.archived = {job for job in self.jobs if base.rows[base.position[job]].get("archived")}
         self._counted = {job: [kid for kid in kids if kid not in self.archived]
                          for job, kids in self.nested.items()}
-        self._counted_parent = {kid: job for job, kids in self._counted.items() for kid in kids}
 
     def peers(self, job):
         """The jobs beside *job*: under its parent job, else the top-level ones."""
@@ -134,7 +136,21 @@ class JobTree:
         chain to its nearest archived job (whose own rollup reads its
         subtree; the jobs above it do not)."""
         if verstr in self.jobs:
-            return [verstr, *ancestors(verstr, self._counted_parent)]
+            return [verstr, *counted_chain(verstr, self._parent, self.archived.__contains__)]
+        parent = self._job_above(verstr)
+        return [verstr, *self.counted_in(parent)] if parent else [verstr]
+
+    def top_counted(self, verstr):
+        """The last of :meth:`counted_in` *verstr*: the top-most run it counts in."""
+        job = verstr if verstr in self.jobs else self._job_above(verstr)
+        return self._top_counted[job] if job else verstr
+
+    @cached_property
+    def _top_counted(self):
+        return {job: self.counted_in(job)[-1] for job in self.jobs}
+
+    def _job_above(self, verstr):
+        """*verstr*'s parent when it is a job, else None."""
         at = self._base.position.get(verstr)
         parent = _parent(self._base.rows[at]) if at is not None else None
-        return [verstr, *self.counted_in(parent)] if parent in self.jobs else [verstr]
+        return parent if parent in self.jobs else None
