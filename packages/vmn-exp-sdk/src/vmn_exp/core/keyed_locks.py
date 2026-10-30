@@ -18,15 +18,22 @@ class KeyedLocks:
         self._locks = {}  # key -> [TracedLock, holders and waiters]
 
     @contextmanager
-    def turn(self, key):
+    def turn(self, key, blocking=True):
+        """Hold *key*'s turn, yielding True; with *blocking* False, yield
+        False at once (holding nothing) while another thread holds it."""
         with self._guard:
             entry = self._locks.get(key)
             if entry is None:
                 entry = self._locks[key] = [TracedLock(self._name, reentrant=True), 0]
             entry[1] += 1
+        lock = entry[0]
         try:
-            with entry[0]:
-                yield
+            got = lock.acquire(blocking)
+            try:
+                yield got
+            finally:
+                if got:
+                    lock.release()
         finally:
             with self._guard:
                 entry[1] -= 1

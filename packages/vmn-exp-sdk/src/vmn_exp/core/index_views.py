@@ -28,7 +28,10 @@ in memory (:class:`~vmn_exp.core.metric_pack.PackedSummary`,
 """
 import json
 import threading
+import weakref
 from collections import OrderedDict
+from itertools import compress
+from operator import is_not
 
 from vmn_exp.core.fold import (
     fold_definitions,
@@ -144,11 +147,14 @@ def summarized_row(row, parts, policies):
 
 class SchemaRows:
     """Rows summarized by a few recent schemas, kept across generations: a
-    row object the index reused keeps its summarized row. One caller per
-    schema summarizes at a time (:meth:`turn`); the next reuses its rows."""
+    new generation summarizes only the rows the index did not reuse, and a
+    row it only renumbered (a run inserted before it) keeps its summarized
+    metrics. One caller per schema summarizes at a time (:meth:`turn`); a
+    caller arriving meanwhile gets the view last kept (:meth:`latest_or`)."""
 
     def __init__(self):
-        self._memos = OrderedDict()  # schema key -> {verstr: (row, summarized)}
+        self._summaries = OrderedDict()  # schema key -> _Summary
+        self._latest = {}  # schema key -> weakref to the view last kept
         self._lock = threading.Lock()
         self._turns = KeyedLocks("schema rows")
 
@@ -160,25 +166,93 @@ class SchemaRows:
         """*rows* summarized by *schema* (see :func:`summarized_row`)."""
         key = schema_key(schema)
         with self.turn(key):
-            return self.rows_in_turn(key, rows, parts, schema)
+            return self.rows_in_turn(key, rows, parts, schema)[0]
 
     def rows_in_turn(self, key, rows, parts, schema):
-        """:meth:`rows` for a caller already holding the schema *key*'s turn."""
+        """``(rows, {verstr: row})`` of :meth:`rows`, for a caller already
+        holding the schema *key*'s turn. Shared: copy before changing."""
         with self._lock:
-            memo = self._memos.get(key, {})
-        policies = SchemaPolicies(schema)
-        fresh, out = {}, []
-        for row in rows:
-            verstr = row["verstr"]
-            hit = memo.get(verstr)
-            if hit is None or hit[0] is not row:
-                part = parts.get(verstr)
-                hit = (row, summarized_row(row, part, policies) if part else row)
-            fresh[verstr] = hit
-            out.append(hit[1])
+            last = self._summaries.get(key)
+        if last is None or last.raw is not rows:
+            last = _Summary.next(last, rows, parts, SchemaPolicies(schema))
+            with self._lock:
+                self._summaries[key] = last
+                self._summaries.move_to_end(key)
+                while len(self._summaries) > _SCHEMAS_KEPT:
+                    dropped, _ = self._summaries.popitem(last=False)
+                    self._latest.pop(dropped, None)
+        return last.rows, last.by_verstr
+
+    def latest_or(self, key, compute):
+        """*compute()*'s view in the schema *key*'s turn, kept as the latest;
+        while another thread holds that turn, the latest view still alive
+        instead (waiting only when there is none)."""
+        with self._turns.turn(key, blocking=False) as mine:
+            if mine:
+                return self._keep(key, compute())
+            stale = self._latest.get(key)
+            stale = stale() if stale is not None else None
+            if stale is not None:
+                return stale
+        with self.turn(key):
+            return self._keep(key, compute())
+
+    def _keep(self, key, view):
         with self._lock:
-            self._memos[key] = fresh
-            self._memos.move_to_end(key)
-            while len(self._memos) > _SCHEMAS_KEPT:
-                self._memos.popitem(last=False)
-        return out
+            if key in self._summaries:
+                self._latest[key] = weakref.ref(view)
+        return view
+
+
+class _Summary:
+    """One schema's rows as summarized for one generation: the index's rows
+    (*raw*), the summarized ones in their order and by verstr, and *memo*
+    ``{verstr: (raw row, parts, summarized row)}`` (shared with the next
+    generation's summary, which updates it in place)."""
+
+    __slots__ = ("by_verstr", "memo", "raw", "rows")
+
+    def __init__(self, raw, rows, by_verstr, memo):
+        self.raw, self.rows, self.by_verstr, self.memo = raw, rows, by_verstr, memo
+
+    @classmethod
+    def next(cls, last, rows, parts, policies):
+        """The summary of *rows* from *last* (or None): only the positions
+        whose row object changed are summarized, at C speed found."""
+        n = len(rows)
+        if last is None:
+            out, by_verstr, memo, gone = [None] * n, {}, {}, ()
+            changed = range(n)
+        else:
+            raw, common = last.raw, min(n, len(last.raw))
+            changed = [*compress(range(common), map(is_not, rows, raw)), *range(common, n)]
+            out = [*last.rows[:common], *[None] * (n - common)]
+            by_verstr, memo = last.by_verstr.copy(), last.memo
+            gone = [raw[i] for i in changed if i < common] + list(raw[n:])
+        for i in changed:
+            out[i] = _summarized(memo, rows[i], parts, policies)
+        if gone:
+            for verstr in {r["verstr"] for r in gone} - {rows[i]["verstr"] for i in changed}:
+                memo.pop(verstr, None)
+                by_verstr.pop(verstr, None)
+        for i in changed:
+            by_verstr[rows[i]["verstr"]] = out[i]
+        return cls(rows, tuple(out), by_verstr, memo)
+
+
+def _summarized(memo, row, parts, policies):
+    """*row* summarized under *policies*, reusing *memo*'s summary of the
+    same row — or of a renumbered copy of it (same metrics, same parts)."""
+    verstr = row["verstr"]
+    part = parts.get(verstr)
+    hit = memo.get(verstr)
+    if hit is not None and hit[1] is part and hit[0]["metrics"] is row["metrics"]:
+        was, _, done = hit
+        if done is was:
+            done = row
+        elif was is not row:
+            done = dict(row, metrics=done["metrics"])
+    else:
+        done = summarized_row(row, part, policies) if part else row
+    memo[verstr] = (row, part, done)
+    return done

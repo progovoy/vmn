@@ -8,11 +8,11 @@ request arriving while another thread computes the next view is served the
 previous one instead of waiting.
 """
 import dataclasses
+import gc
 import threading
 import time
 
 import pytest
-
 from vmn_exp.core import index_views
 from vmn_exp.core.index_snapshot import IndexSnapshot, RowCache
 from vmn_exp.core.index_views import SchemaRows, kept_lean
@@ -83,12 +83,12 @@ def test_a_run_inserted_mid_order_summarizes_only_that_run(calls):
     index = _Index(300)
     first = index.publish().summarized(SCHEMA)
     calls.clear()
-    view = index.insert(150)
-    view = view.summarized(SCHEMA)
+    view = index.insert(150).summarized(SCHEMA)
     assert calls == ["0.0.301"]
     assert [r["idx"] for r in view.rows] == list(range(1, 302))
     assert all(r["metrics"]["loss"] == 0.1 for r in view.rows)
-    assert view.row("0.0.302") is view.rows[151] and view.row("0.0.302") is not first.rows[151]
+    moved = view.row("0.0.300")  # was rows[150], renumbered
+    assert moved is view.rows[151] and moved is not first.rows[150]
 
 
 class _Watched(dict):
@@ -150,9 +150,16 @@ def test_a_request_is_served_the_previous_view_while_another_computes_the_next(m
 
 
 def _timed(snapshot):
-    started = time.perf_counter()
-    snapshot.summarized(SCHEMA)
-    return time.perf_counter() - started
+    """Seconds to summarize *snapshot*, the collector off: its pauses,
+    proportional to the whole heap, would swamp the ratios."""
+    gc.collect()
+    gc.disable()
+    try:
+        started = time.perf_counter()
+        snapshot.summarized(SCHEMA)
+        return time.perf_counter() - started
+    finally:
+        gc.enable()
 
 
 @pytest.mark.serial
@@ -164,4 +171,6 @@ def test_bench_a_new_generation_of_200k_rows_costs_what_changed():
              "unchanged": _timed(index.publish(set()))}
     print(f"\ncold {cold * 1000:.0f} ms; " + "; ".join(
         f"{name} {t * 1000:.1f} ms" for name, t in times.items()))
+    moved = times.pop("inserted mid-order")  # renumbers a quarter of the rows
+    assert moved < cold / 4, (cold, moved)
     assert all(t < cold / 10 for t in times.values()), (cold, times)

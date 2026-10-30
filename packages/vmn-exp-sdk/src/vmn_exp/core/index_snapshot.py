@@ -12,6 +12,7 @@ is the view a schema gives (see :mod:`vmn_exp.core.index_views`).
 """
 import weakref
 from dataclasses import dataclass, field, replace
+from operator import is_not
 
 from vmn_exp.core.index_snapshot_maps import SnapshotMaps
 from vmn_exp.core.index_views import (
@@ -171,7 +172,9 @@ class IndexSnapshot:
         """This snapshot with its rows' metrics under the metrics *schema* —
         the same object for the same schema, and this very snapshot when the
         schema changes no row. The shared rows are never touched. Concurrent
-        callers with one schema wait for the view in flight and share it."""
+        callers with one schema share one computation; while it runs, a
+        caller gets the view computed last (see
+        :meth:`~vmn_exp.core.index_views.SchemaRows.latest_or`)."""
         base = self.schema_less()
         if not schema or not base.metric_parts:
             return base
@@ -179,21 +182,25 @@ class IndexSnapshot:
         view = base._views.get(key)
         if view is not None:
             return view
-        with base._schema_rows.turn(key):
-            view = base._views.get(key)
-            if view is None:
-                view = base._view(base._schema_rows.rows_in_turn(
-                    key, base.rows, base.metric_parts, schema))
-                if len(base._views) >= _VIEWS_PER_SNAPSHOT:
-                    base._views.clear()
-                base._views[key] = view
+        return base._schema_rows.latest_or(key, lambda: base._view_of(key, schema))
+
+    def _view_of(self, key, schema):
+        view = self._views.get(key)
+        if view is None:
+            view = self._view(*self._schema_rows.rows_in_turn(
+                key, self.rows, self.metric_parts, schema))
+            if len(self._views) >= _VIEWS_PER_SNAPSHOT:
+                self._views.clear()
+            self._views[key] = view
         return view
 
-    def _view(self, rows):
-        if all(a is b for a, b in zip(rows, self.rows)):
+    def _view(self, rows, by_verstr=None):
+        if not any(map(is_not, rows, self.rows)):
             return self
+        if by_verstr is None:
+            by_verstr = {r["verstr"]: r for r in rows}
         return replace(
-            self, rows=tuple(rows), _by_verstr={r["verstr"]: r for r in rows},
+            self, rows=tuple(rows), _by_verstr=by_verstr,
             _views={}, _base=weakref.ref(self), _raw_rows=self.rows,
         )
 
