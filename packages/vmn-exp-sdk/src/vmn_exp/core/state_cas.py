@@ -59,27 +59,41 @@ def compare_and_save(side, app_name, verstr, filename, update):
     return compare_and_save_token(side, (app_name, verstr, filename), update)[0]
 
 
-def compare_and_save_token(side, where, update, seed=None):
+def compare_and_save_token(side, where, update, seed=None, dumped=None):
     """:func:`compare_and_save` at *where*, returning ``(state written or
     None, its token)``. *seed* — ``(stored state, token)`` known without a
     read, as of the caller's own last write — is the first round's: while
-    its token is current the write is one conditional save, no read."""
+    its token is current the write is one conditional save, no read.
+    *dumped* — ``(state, its YAML)`` — saves dumping a state *update* returns
+    as is."""
     for _ in range(_ROUNDS):
         stored, token = seed or _load(side, *where)
         seed = None
         state = update(stored)
         if state is None:
             return None, None
-        written, token = save_if_match(side, where, yaml.dump(state, sort_keys=False), token)
+        data = dumped[1] if dumped and state is dumped[0] else dump_state(state)
+        written, token = save_if_match(side, where, data, token)
         if written:
             return state, token
     raise StateContendedError(f"the {where[2]} of {where[1]} kept changing under every write")
 
 
+def dump_state(state):
+    """The YAML a run state is stored as."""
+    return yaml.dump(state, sort_keys=False)
+
+
 def pull_record(storage, inline, app_name, verstr):
-    """Fetch a record only *storage*'s remote holds into *inline*, its local side."""
-    if inline is not None and inline is not storage and not inline.exists(app_name, verstr):
-        storage.load_record(app_name, verstr)
+    """Fetch a record only *storage*'s remote holds into *inline*, its local
+    side; whether *inline* holds the record now (*inline* being *storage*
+    itself: nothing to fetch, it does)."""
+    if inline is None or inline is storage:
+        return inline is not None
+    if inline.exists(app_name, verstr):
+        return True
+    storage.load_record(app_name, verstr)
+    return inline.exists(app_name, verstr)
 
 
 def _load(side, app_name, verstr, filename):

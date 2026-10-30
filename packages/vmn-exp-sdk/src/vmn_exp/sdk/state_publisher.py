@@ -26,6 +26,7 @@ import logging
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.state_cas import (
     compare_and_save_token,
+    dump_state,
     finished_by_another,
     pull_record,
     split_storage,
@@ -44,13 +45,14 @@ class RunStatePublisher:
     def __init__(self, storage, app_name, verstr, gate=None, resumes=None):
         self._storage = storage
         self._inline, self._remote_target = split_storage(storage, app_name, verstr)
-        self._split = self._inline is not storage
         self._where = (app_name, verstr, RUN_STATE_FILE)
-        self._resumes = resumes
-        # Sides this attempt has written its own state to: only there can a
-        # stored final state not be the one it resumes.
-        self._written = set()
-        # Side -> (state, token) of this attempt's last write there.
+        self._resuming = bool(resumes)
+        # The final state this attempt resumes, if any, it may replace once.
+        self._resumes_final = self._resuming and resumes.get("state") == "finished"
+        self._resumed_attempt = resumes.get("attempt") if self._resumes_final else None
+        # Side -> token (None: the side has none) of this attempt's last
+        # write there; only on a side it has written can a stored final
+        # state not be the one it resumes.
         self._tokens = {}
         self.superseded = False
         self._remote = None
@@ -66,63 +68,58 @@ class RunStatePublisher:
         if heartbeat and self.superseded:
             return
         state = dict(state)
+        dumped = (state, dump_state(state))
         if self._inline is not None:
-            if not self._holds_record() or not self._save(self._inline, state, final):
+            if not self._holds_record() or not self._save(self._inline, dumped, final):
                 return
         if self._remote is not None:
-            self._remote.submit((state, final))
+            self._remote.submit((dumped, final))
 
     def _holds_record(self):
         """Whether the local side may be written: a record only the remote
         holds so far (a run resumed on another host) is fetched first."""
-        if not self._split or id(self._inline) in self._written:
-            return True
-        pull_record(self._storage, self._inline, *self._where[:2])
-        return self._inline.exists(*self._where[:2])
+        return id(self._inline) in self._tokens or pull_record(
+            self._storage, self._inline, *self._where[:2])
 
     def _upload(self, item):
-        state, final = item
+        dumped, final = item
         target = self._remote_target()
         if target is None or (self.superseded and not final):
             return
-        if not self._save(target, state, final) and final:
+        if not self._save(target, dumped, final) and final:
             self._cache_winner(target)
 
-    def _save(self, side, state, final):
-        """Whether *state* landed on *side*."""
+    def _save(self, side, dumped, final):
+        """Whether *dumped* — ``(state, its YAML)`` — landed on *side*."""
         written, token = compare_and_save_token(
-            side, self._where, self._unless_lost(side, state), self._seed(side))
+            side, self._where, self._unless_lost(side, dumped[0]), self._seed(side), dumped)
         if written is None:
             self._supersede("its final state is dropped" if final
                             else "this attempt stops heartbeating")
             return False
-        self._written.add(id(side))
-        self._tokens[id(side)] = (state, token) if token is not None else None
+        self._tokens[id(side)] = token
         return True
 
     def _seed(self, side):
-        """The CAS's first round on *side*: this attempt's last write there;
-        before one, a new run's record (just claimed) holds no state yet, so
-        its first write is a create, no read."""
-        if id(side) in self._written or self._resumes:
-            return self._tokens.get(id(side))
+        """The CAS's first round on *side*: the token of this attempt's last
+        write there (its own state, which *update* keeps); before one, a new
+        run's record (just claimed) holds no state yet, so its first write is
+        a create, no read."""
+        if id(side) in self._tokens or self._resuming:
+            token = self._tokens.get(id(side))
+            return ({}, token) if token is not None else None
         return {}, NO_FILE
 
     def _unless_lost(self, side, state):
         attempt = state.get("attempt")
-        first = id(side) not in self._written
+        first = id(side) not in self._tokens
 
         def update(stored):
-            lost = finished_by_another(stored, attempt) and not (
-                first and self._resumed(stored))
+            resumed = self._resumes_final and stored.get("attempt") == self._resumed_attempt
+            lost = finished_by_another(stored, attempt) and not (first and resumed)
             return None if lost else state
 
         return update
-
-    def _resumed(self, stored):
-        """Whether *stored* is the final state this attempt resumes."""
-        return bool(self._resumes) and self._resumes.get("state") == "finished" and (
-            stored.get("attempt") == self._resumes.get("attempt"))
 
     def _cache_winner(self, target):
         """Replace this attempt's local final state with the remote's winner."""
