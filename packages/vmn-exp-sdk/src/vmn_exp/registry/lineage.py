@@ -24,8 +24,12 @@ from vmn_exp.registry.view import run_models
 
 
 class RegistryLinks:
-    """The registry lookups :func:`resolve_lineage` takes as *registry*: the
-    registry's run → versions map is read once per walk, not once per node."""
+    """The registry lookups lineage makes, read from *storage*:
+    :func:`resolve_lineage`'s *registry* (``models_of``, ``version_live``)
+    and :func:`version_lineage`'s (``version``, ``kind``, ``status``,
+    ``uses``). The run → versions map is read once per walk, not once per
+    node. The ui passes a snapshot with the same methods instead
+    (:mod:`vmn_exp.ui.registry_snapshot`), so a request reads no store."""
 
     def __init__(self, storage):
         self.storage = storage
@@ -50,9 +54,17 @@ class RegistryLinks:
         return (self._status[name].get(n) != "deleted"
                 and get_version(self.storage, name, n) is not None)
 
+    def version(self, name, n):
+        return get_version(self.storage, name, n)
 
-def _version_status(storage, name, n):
-    return fold_registry(read_entries(storage, name))["status"].get(n, "active")
+    def kind(self, name):
+        return model_kind(self.storage, name)
+
+    def status(self, name, n):
+        return fold_registry(read_entries(self.storage, name))["status"].get(n, "active")
+
+    def uses(self, name, n):
+        return read_uses(self.storage, name).get(n, [])
 
 
 def app_indexes(storage):
@@ -70,11 +82,14 @@ def app_indexes(storage):
 
 
 def run_lineage(
-    storage, app_name, verstr, index_for, *, depth=1, limit=DEFAULT_LIMIT, status_of=None
+    storage, app_name, verstr, index_for, *, depth=1, limit=DEFAULT_LIMIT, status_of=None,
+    registry=None,
 ):
     """``{"app", "verstr", "upstream", "downstream", "datasets", "models",
-    "truncated"}`` of run *verstr*. Raises KeyError when the run is unknown."""
-    links = RegistryLinks(storage)
+    "truncated"}`` of run *verstr*, the registry read through *registry*
+    (:class:`RegistryLinks` of *storage* by default). Raises KeyError when
+    the run is unknown."""
+    links = registry or RegistryLinks(storage)
     found = resolve_lineage(
         app_name, verstr, index_for, depth=depth, limit=limit, status_of=status_of,
         registry=links,
@@ -84,25 +99,26 @@ def run_lineage(
     return found
 
 
-def version_lineage(storage, name, n, index_for=None, status_of=None):
+def version_lineage(storage, name, n, index_for=None, status_of=None, registry=None):
     """``{"model", "version", "kind", "status", "producer", "consumers"}`` of
-    version *n* of *name* — deleted versions too. *producer* is None for a
-    reference dataset; *consumers* are in first-use order. Raises KeyError
-    when the version does not exist."""
-    meta = get_version(storage, name, n)
+    version *n* of *name* — deleted versions too — the registry read through
+    *registry* (:class:`RegistryLinks` of *storage* by default). *producer*
+    is None for a reference dataset; *consumers* are in first-use order.
+    Raises KeyError when the version does not exist."""
+    registry = registry or RegistryLinks(storage)
+    meta = registry.version(name, n)
     if meta is None:
         raise KeyError(f"Version {n} of {name!r} does not exist")
     index_for = index_for or app_indexes(storage)
     producer = run_of(meta)
-    uses = read_uses(storage, name).get(n, [])
     return {
         "model": name,
         "version": n,
-        "kind": model_kind(storage, name) or "model",
-        "status": _version_status(storage, name, n),
+        "kind": registry.kind(name) or "model",
+        "status": registry.status(name, n),
         "producer": run_node(producer, index_for, status_of=status_of) if producer else None,
         "consumers": [
             run_node((use["app"], use["verstr"]), index_for, status_of=status_of)
-            for use in uses
+            for use in registry.uses(name, n)
         ],
     }

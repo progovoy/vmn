@@ -192,15 +192,20 @@ def _scan_run_models(storage, listing):
         run = run_of(meta)
         if run is None:
             continue
-        run_models.setdefault(run, []).append({
-            "model": model,
-            "kind": kind,
-            "version": n,
-            "aliases": sorted(a for a, v in fold["aliases"].items() if v == n),
-            "status": fold["status"].get(n, "active"),
-            "artifact_path": meta.get("artifact_path"),
-        })
+        run_models.setdefault(run, []).append(version_entry(model, kind, n, meta, fold))
     return run_models
+
+
+def version_entry(model, kind, n, meta, fold):
+    """:func:`run_models`' entry of version *n* of *model*."""
+    return {
+        "model": model,
+        "kind": kind,
+        "version": n,
+        "aliases": sorted(a for a, v in fold["aliases"].items() if v == n),
+        "status": fold["status"].get(n, "active"),
+        "artifact_path": meta.get("artifact_path"),
+    }
 
 
 def _live_versions(storage, listing):

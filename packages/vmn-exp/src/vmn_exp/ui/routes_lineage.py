@@ -114,10 +114,11 @@ def _checked(depth, limit):
         raise HTTPException(400, f"limit must be 1..{MAX_LIMIT}")
 
 
-def register(app, prefix, lineage_inputs, segment):
+def register(app, prefix, lineage_inputs, segment, registry_of):
     """Add the route; *lineage_inputs(ws_name, app_tag)* →
     ``(app_name, snapshot_for(app_name), storage)``, *segment(verstr)* returns
-    a URL verstr or raises a 400."""
+    a URL verstr or raises a 400, *registry_of(storage)* the
+    :class:`~vmn_exp.ui.registry_snapshot.RegistrySnapshot` to read."""
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments/{{verstr}}/lineage", dependencies=[require(VIEWER)])
     def experiment_lineage(
@@ -135,16 +136,16 @@ def register(app, prefix, lineage_inputs, segment):
         try:
             found = run_lineage(
                 storage, app_name, verstr, apps.index_for, depth=depth, limit=limit,
-                status_of=apps.status_of,
+                status_of=apps.status_of, registry=registry_of(storage),
             )
         except KeyError as e:
             raise HTTPException(404, e.args[0])
         return json_response(found, request=request)
 
 
-def register_version_lineage(app, prefix, workspace_inputs):
+def register_version_lineage(app, prefix, workspace_inputs, registry_of):
     """Add ``GET .../models/{name}/versions/{n}/lineage``; *workspace_inputs(ws_name)*
-    → ``(snapshot_for(app_name), storage)``."""
+    → ``(snapshot_for(app_name), storage)``, *registry_of* as :func:`register`'s."""
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/models/{{model_name}}/versions/{{n}}/lineage", dependencies=[require(VIEWER)])
     def version_lineage_route(request: Request, ws_name: str, model_name: str, n: int):
@@ -154,7 +155,8 @@ def register_version_lineage(app, prefix, workspace_inputs):
         apps = _Apps(snapshot_for)
         try:
             found = version_lineage(
-                storage, model_name, n, index_for=apps.index_for, status_of=apps.status_of
+                storage, model_name, n, index_for=apps.index_for, status_of=apps.status_of,
+                registry=registry_of(storage),
             )
         except KeyError as e:
             raise HTTPException(404, e.args[0])

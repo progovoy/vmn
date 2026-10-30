@@ -38,6 +38,7 @@ from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.metrics_feed import MetricsFeed
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.ui.registry_snapshot import RegistrySnapshots
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -770,8 +771,10 @@ def create_app(
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
-    routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment)
-    routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs)
+    registries = RegistrySnapshots(refresher.background)
+    routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment, registries.get)
+    routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs,
+                                            registries.get)
     routes_job.register(app, API_PREFIX, _leaderboard_inputs, job_views, _segment,
                         _split_by)
     routes_baseline.register(app, API_PREFIX, _leaderboard_inputs, BaselineViews(job_views),
