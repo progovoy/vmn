@@ -504,6 +504,9 @@ clause as a filter.
   - `code` and `log`.
 
   Every number comes from a per-outer-run rollup the index keeps up to date.
+  Archived runs count nowhere above them: an archived run with children takes
+  its whole subtree out of every outer run above it (its own page still
+  counts its subtree), in counts, progress and attention alike.
 
 Without a declared goal, an outer run tracks the app's most common metrics,
 never a param folded into metrics. It shows their spread but crowns no best
@@ -1038,7 +1041,8 @@ not compile counts `null` and carries `error`. `?scope=<verstr>` answers the
 whole summary over that run's subtree, without the run (an outer run's page;
 counts and recent failures from its rollup; 404 for no such run). On the
 Outer runs view (`experiments?top=...`) each row's `job` carries `attention:
-{key: n}` (the runs of its tree, itself included, each query matches) and
+{key: n}` (the runs of its tree, itself included, each query matches, none
+under an archived run) and
 `attention_rank`, which `sort=job:attention` orders by.
 
 One part is built in, configured queries or not, and comes before them:

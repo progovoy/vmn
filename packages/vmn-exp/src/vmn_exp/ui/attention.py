@@ -147,9 +147,13 @@ class AttentionCounts:
         return self._matches.get(key, lambda: self._grouped(snapshot, schema, queries, texts))
 
     def _grouped(self, snapshot, schema, queries, texts):
+        """Each query's matching runs per tree, those under an archived run left out."""
+        hidden = self._cache.jobs.tree(self._cache._base(snapshot)[0]).below_archived
         out = {}
         for q, text in zip(queries, texts):
             for row in self._matching(snapshot, schema, q, text):
+                if row["verstr"] in hidden:
+                    continue
                 out.setdefault(row["root"] or row["verstr"], []).append((q.key, row["verstr"]))
         return out
 

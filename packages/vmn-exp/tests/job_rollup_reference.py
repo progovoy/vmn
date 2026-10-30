@@ -19,7 +19,8 @@ def annotated(snapshot):
     return annotate_rows(snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at)
 
 
-def subtree(verstr, children_of):
+def subtree(verstr, children_of, pruned=()):
+    """The runs below *verstr*, not walking below any run in *pruned*."""
     out, stack, seen = [], list(children_of.get(verstr, ())), {verstr}
     while stack:
         kid = stack.pop()
@@ -27,8 +28,18 @@ def subtree(verstr, children_of):
             continue
         seen.add(kid)
         out.append(kid)
-        stack.extend(children_of.get(kid, ()))
+        if kid not in pruned:
+            stack.extend(children_of.get(kid, ()))
     return out
+
+
+def members_of(rows, verstr):
+    """Brute force: the runs a job's rollup counts — present, unarchived and
+    under no archived run below *verstr*."""
+    by_verstr = {row["verstr"]: row for row in rows}
+    archived = {v for v, row in by_verstr.items() if row.get("archived")}
+    return [by_verstr[v] for v in subtree(verstr, children_by_parent(rows), archived)
+            if v in by_verstr and v not in archived]
 
 
 def jobs(rows):
@@ -128,8 +139,7 @@ def settled_of(row, by_verstr):
 
 def rollup(rows, verstr, schema):
     by_verstr = {row["verstr"]: row for row in rows}
-    members = [by_verstr[v] for v in subtree(verstr, children_by_parent(rows))
-               if v in by_verstr and not by_verstr[v].get("archived")]
+    members = members_of(rows, verstr)
     counts = {state: 0 for state in STATES.values()}
     settled = {"never_started": 0, "lost": 0}
     for row in members:

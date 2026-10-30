@@ -17,8 +17,12 @@ recomputes that one tally from its parent's static children, at most once a
 generation. The live rows (and their ancestors) are an overlay of tallies
 built per time bucket (:func:`overlay`).
 
-Archived rows are left out, as the board leaves them out by default.
+Archived rows are left out, as the board leaves them out by default, and
+an archived job takes its whole subtree out of the jobs above it (its own
+rollup still reads its subtree).
 """
+from functools import cached_property
+
 from vmn_exp.core.tree import subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
 
@@ -106,11 +110,15 @@ class JobTree:
     each, and the top-level ones (under no job)."""
 
     def __init__(self, base):
+        self._base = base
         self.jobs = {v for v, kids in base.children_of.items() if kids and v in base.position}
         self.nested = {job: [kid for kid in base.children_of[job] if kid in self.jobs]
                        for job in self.jobs}
         self._parent = {kid: job for job, kids in self.nested.items() for kid in kids}
         self.top = [job for job in self.jobs if job not in self._parent]
+        self.archived = {job for job in self.jobs if base.rows[base.position[job]].get("archived")}
+        self._counted = {job: [kid for kid in kids if kid not in self.archived]
+                         for job, kids in self.nested.items()}
 
     def peers(self, job):
         """The jobs beside *job*: under its parent job, else the top-level ones."""
@@ -118,5 +126,13 @@ class JobTree:
         return self.top if parent is None else self.nested[parent]
 
     def subtree_jobs(self, job):
-        """*job* and every job below it (cycle-safe)."""
-        return subtree_verstrs(job, self.nested)
+        """*job* and every job below it but under no archived one (cycle-safe)."""
+        return subtree_verstrs(job, self._counted)
+
+    @cached_property
+    def below_archived(self):
+        """The runs under an archived job: none counts in the jobs above it."""
+        below = set()
+        for job in self.archived:
+            below.update(v for v in subtree_verstrs(job, self._base.children_of) if v != job)
+        return below

@@ -6,9 +6,8 @@ snapshot answers; a parent keeps at most 12 values (the rest under
 import datetime
 
 import pytest
-from job_rollup_reference import STATES, annotated, exact_quantile, jobs, settled_of, subtree
+from job_rollup_reference import STATES, annotated, exact_quantile, jobs, members_of, settled_of
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core.tree import children_by_parent
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import key_of
 
@@ -47,17 +46,11 @@ def _clock(monkeypatch):
     monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
 
 
-def _members(rows, verstr):
-    by_verstr = {row["verstr"]: row for row in rows}
-    return [by_verstr[v] for v in subtree(verstr, children_by_parent(rows))
-            if v in by_verstr and not by_verstr[v].get("archived")]
-
-
 def reference(rows, verstr, field):
     """``{key: {total, counts, done, never_started, lost, failed_pct, durations}}``."""
     by_verstr, key = {row["verstr"]: row for row in rows}, key_of(field)
     out = {}
-    for row in _members(rows, verstr):
+    for row in members_of(rows, verstr):
         entry = out.setdefault(key(row), {
             "counts": dict.fromkeys(STATES.values(), 0), "never_started": 0, "lost": 0,
             "durations": []})
