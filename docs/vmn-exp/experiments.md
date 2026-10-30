@@ -429,6 +429,15 @@ part, `running · outlived` on its pill); it turns `lost` once it goes stuck.
 Query them with `settled = "never_started"`, `settled = "lost"`, `settled =
 "outlived"` or `settled = null`.
 
+A never-started run is not waiting: it leaves `live_below` and the waiting
+counts, so a launch a resume replaced (it ended `failed`, its dates, studies
+and trials never started) drops out of the UI's [Live](ui.md#outer-runs-and-the-outer-runs-page)
+view, while a running launch's `created` runs stay waiting (`settled =
+null`). A rule for runs waiting too long counts only the open ones with
+`status = "created" and settled = null and timestamp < ago("1h")` — a bare
+`status = "created"` also counts every run an ended outer run never
+started.
+
 `exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
 it differs) on the outer run.
 

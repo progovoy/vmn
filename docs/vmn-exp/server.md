@@ -464,7 +464,7 @@ ui:
   attention:
     - {key: unstable, query: 'tags.health = "unstable"', level: error}
     - {key: waiting, label: waiting over 1h,
-       query: 'status = "created" and timestamp < ago("1h")'}
+       query: 'status = "created" and settled = null and timestamp < ago("1h")'}
   baseline:
     match: [params.table_name, params.model_type]
     children_by: params.trade_date

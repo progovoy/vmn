@@ -229,3 +229,11 @@ def test_vmn_exp_skill_covers_the_fleet_health_apis(capfd):
                  "never_started", "outlived", "/metrics", 'chart="bars"',
                  "VMN_EXP_HEARTBEAT_SEC"):
         assert text in out, text
+
+
+def test_vmn_exp_skill_waiting_rule_leaves_settled_runs_out(capfd):
+    """A waiting rule counting ``status = "created"`` alone also counts the
+    runs an ended outer run never started (``settled = "never_started"``)."""
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    assert 'status = "created" and settled = null and timestamp < ago("1h")' in out

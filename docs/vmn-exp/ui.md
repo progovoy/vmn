@@ -384,8 +384,8 @@ count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
 stuck, one failed in the last 24 hours, one still runs under an outer run
 that ended (`2 outlived their outer run`, built in) or one of the app's attention queries
 (conf/[settings](server.md#app-settings) `experiment.ui.attention`, e.g.
-`tags.health = "unstable"` or `status = "created" and timestamp <
-ago("1h")`) matches a run; each part links to the board filtered to exactly
+`tags.health = "unstable"` or `status = "created" and settled = null and
+timestamp < ago("1h")`) matches a run; each part links to the board filtered to exactly
 those runs (`status=stuck`; the failures also get a `finished_at >= "<24h
 ago>"` token, newest first; a configured part its query, coloured by its
 `warn`/`error` level), replacing the other filters. The same strip sits on
@@ -435,6 +435,10 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
     any run below them still running, waiting or stuck: `live_below > 0`,
     so a tree with a failed run and others still running stays) or
     finished within the last 6 hours, needs attention first (`job:attention`).
+    The runs an ended outer run never started (`settled = "never_started"`,
+    [settled runs](experiments.md#outer--inner-jobs-sweeps)) are not waiting: a launch that
+    ended with only those below it leaves Live, while a running launch's
+    `created` runs keep it there.
   - **Review** ("is this launch good to ship?") lists the ended ones, newest
     first, each with its baseline chip.
 

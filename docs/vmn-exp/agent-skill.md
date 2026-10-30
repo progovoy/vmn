@@ -86,7 +86,8 @@ manage.finish_run("<app_name>", "<verstr>", 137, error="OOMKilled")
 ```
 
 Once an outer run has ended, what is left under it settles (derived, never
-written): `never_started` (waiting; adds nothing to the counts), `lost`
+written, query it as `settled`): `never_started` (still `created`, but no
+longer waiting or live; adds nothing to the counts), `lost`
 (stuck; counted as failed) or `outlived` (still beating; counted as running
 and flagged). For runs lasting hours, slow the beat with
 `VMN_EXP_HEARTBEAT_SEC=120` (stuck after 6 min) and the log sync with
@@ -227,7 +228,8 @@ ui:
   split_by: tags.kind              # per-kind counts/durations on an outer run's page
   attention:                       # <= 8 named queries, counted on every outer run
     - {key: unstable, query: 'tags.health = "unstable"', level: error}
-    - {key: slow_start, query: 'status = "created" and timestamp < ago("1h")', level: warn}
+    - {key: slow_start, level: warn,  # settled = null: not what an ended outer run left
+       query: 'status = "created" and settled = null and timestamp < ago("1h")'}
   baseline: {match: [tags.target], children_by: tags.trade_date}  # compare with the last launch
   views: [{name: Live, page: jobs, search: "view=live", default: true}]
 ```
