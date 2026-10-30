@@ -8,9 +8,13 @@ request, and :func:`read_each` reads a long list's first object alone first —
 so a stale listing costs one miss (a few at most), not a 404 per segment, and
 the reader lists the record once more, as the experiment index does
 (:mod:`vmn_exp.core.index_logs`).
+
+A record's objects are read as wide as the request lane: a long-stuck run's
+thousands of segments are one round trip each, so ten at a time
+(``S3_WORKERS``) kept a run page's first open waiting 9 s for 2,000 of them.
 """
 from vmn_exp.core.index_logs import PROBE_OVER
-from vmn_exp.storage.s3_base import parallel_map
+from vmn_exp.storage.fanout import REQUEST_WORKERS, fan_out
 
 
 class StaleListing(Exception):
@@ -43,13 +47,17 @@ class ListedReads:
 
 
 def read_each(read, items):
-    """``[read(item)]`` in order, concurrently; of more than
-    :data:`PROBE_OVER` items the first is read before the others."""
+    """``[read(item)]`` in order, up to :data:`REQUEST_WORKERS` at a time;
+    of more than :data:`PROBE_OVER` items the first is read before the others."""
     items = list(items)
     if len(items) > PROBE_OVER:
         first = read(items[0])
-        return [first] + parallel_map(read, items[1:])
-    return parallel_map(read, items)
+        return [first] + _read_wide(read, items[1:])
+    return _read_wide(read, items)
+
+
+def _read_wide(read, items):
+    return fan_out(read, items, REQUEST_WORKERS, "vmn-listed-reads")
 
 
 def store_identity(storage):
