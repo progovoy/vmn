@@ -1,7 +1,7 @@
 /** The Jobs view's grid (plan 23 W1): virtualized like the board, its
  *  headers sorting by the job sort keys, the board's keys (useRowKeys) and
  *  density; grouped, a header row per group of jobs. Below 640px, cards. */
-import { useMemo, useRef, type CSSProperties, type MutableRefObject } from "react";
+import { useCallback, useMemo, useRef, type CSSProperties, type MutableRefObject } from "react";
 import { useFillHeight } from "../../hooks/useFillHeight";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -122,11 +122,12 @@ function JobsGrid({
   const slots = useTreeSlots(items ?? NO_ITEMS);
   const list = slots.list;
   const height = densityRowHeight(density);
+  const getItemKey = useCallback((i: number) => gridItemKey(list[i]), [list]);
   const virtualizer = useVirtualizer({
     count: list.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (i) => (isTreeSlot(list[i]) ? SLOT_HEIGHT : height),
-    getItemKey: (i) => gridItemKey(list[i]),
+    getItemKey,
     overscan: 20,
     initialOffset: scroll.initial,
   });

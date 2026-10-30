@@ -70,7 +70,8 @@ const TEXT_MATCH = /^text\s*~\s*(?:"([^"]*)"|'([^']*)')$/i;
 const valueOf = (m: RegExpMatchArray) => m[1] ?? m[2] ?? m[3];
 const unquote = (v: string) => v.trim().replace(/^(["'])(.*)\1$/, "$2");
 const isStatus = (v: string): v is RunState => (STATUS_ORDER as string[]).includes(v);
-const inDisplayOrder = (statuses: readonly string[]) => STATUS_ORDER.filter((s) => statuses.includes(s));
+/** The *statuses* that are run states, in the chips' display order. */
+export const inDisplayOrder = (statuses: readonly string[]) => STATUS_ORDER.filter((s) => statuses.includes(s));
 
 /** What one clause filters: a status, a branch, the free-text search, or
  *  anything else, kept verbatim. */

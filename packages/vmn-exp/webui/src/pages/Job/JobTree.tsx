@@ -53,7 +53,7 @@ export default function JobTree({ ws, app, verstr, name, attention, embedded = f
   const unfilled = useRef<HTMLDivElement>(null);
   useFillHeight(embedded ? unfilled : parentRef);
   const outer = useOuterScroll(cardRef, bodyRef, embedded);
-  const margin = embedded ? outer.margin : 0;
+  const { margin } = outer;
   const { items } = tree;
   const virtualizer = useVirtualizer({
     count: items.length, getScrollElement: () => (embedded ? outer.box.current : parentRef.current),
@@ -102,14 +102,16 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-/** An embedded tree's scroll box (the one around its card) and where its
- *  rows start in that box's content, re-read each render. */
+/** An embedded tree's scroll box (the one around its card, found once) and
+ *  where its rows start in that box's content, re-read each render: a re-sort
+ *  above moves the slot without resizing anything an observer could watch. */
 function useOuterScroll(card: RefObject<HTMLElement>, body: RefObject<HTMLElement>, on: boolean) {
   const box = useRef<HTMLElement | null>(null);
   const [margin, setMargin] = useState(0);
   useLayoutEffect(() => {
-    if (!on) return;
-    box.current = scrollParent(card.current?.parentElement ?? null);
+    if (on) box.current = scrollParent(card.current?.parentElement ?? null);
+  }, [on, card]);
+  useLayoutEffect(() => {
     const scroller = box.current;
     if (!scroller || !body.current) return;
     setMargin(body.current.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop);

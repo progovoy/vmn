@@ -6,7 +6,7 @@
  *  ended states and created match its tree_status. Sent as `top_q`, beside
  *  the preset's query. */
 import type { RunState } from "../../types";
-import { STATUS_ORDER } from "../../util/filterTokens";
+import { inDisplayOrder } from "../../util/filterTokens";
 
 const TREE_CLAUSES: Record<RunState, string> = {
   running: 'status = "running" or running_below > 0',
@@ -18,6 +18,5 @@ const TREE_CLAUSES: Record<RunState, string> = {
 
 /** The `?status=` CSV as a query over the outer runs' trees ("" for none). */
 export function treeStatusQuery(csv: string): string {
-  const statuses = csv.split(",");
-  return STATUS_ORDER.filter((s) => statuses.includes(s)).map((s) => TREE_CLAUSES[s]).join(" or ");
+  return inDisplayOrder(csv.split(",")).map((s) => TREE_CLAUSES[s]).join(" or ");
 }

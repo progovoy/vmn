@@ -44,7 +44,7 @@ export function useTreeSlots(items: readonly BoardItem[]) {
 export function JobsTreeSlot({ slot, ws, app, ctx, index, measure }: {
   slot: TreeSlot; ws: string; app: string; ctx: JobContext;
   /** Its place in the board's virtualizer, which *measure*s its height. */
-  index: number; measure?: (el: HTMLElement | null) => void;
+  index: number; measure: (el: HTMLElement | null) => void;
 }) {
   return (
     <tr className="jobs-tree-slot" data-index={index} ref={measure}>
