@@ -85,6 +85,19 @@ def ancestors(verstr, parent_of):
     return chain
 
 
+def counted_chain(verstr, parent_of, is_archived):
+    """The runs above *verstr* it counts in, nearest first: its parent chain
+    (:func:`ancestors`) up to its nearest archived run — none for an archived
+    run itself, whose own rollup reads its subtree."""
+    chain = []
+    if not is_archived(verstr):
+        for up in ancestors(verstr, parent_of):
+            chain.append(up)
+            if is_archived(up):
+                break
+    return chain
+
+
 def parent_map(rows):
     """``{verstr: parent}`` of *rows*' own ``parent`` links."""
     return {r["verstr"]: r.get("parent") for r in rows if r.get("parent")}

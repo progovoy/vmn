@@ -384,8 +384,8 @@ count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
 stuck, one failed in the last 24 hours, one still runs under an outer run
 that ended (`2 outlived their outer run`, built in) or one of the app's attention queries
 (conf/[settings](server.md#app-settings) `experiment.ui.attention`, e.g.
-`tags.health = "unstable"` or `status = "created" and timestamp <
-ago("1h")`) matches a run; each part links to the board filtered to exactly
+`tags.health = "unstable"` or `status = "created" and settled = null and
+timestamp < ago("1h")`) matches a run; each part links to the board filtered to exactly
 those runs (`status=stuck`; the failures also get a `finished_at >= "<24h
 ago>"` token, newest first; a configured part its query, coloured by its
 `warn`/`error` level), replacing the other filters. The same strip sits on
@@ -414,8 +414,16 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
-  - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row (on a phone, under its card), about ten rows tall.
+  - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row (on a phone, under its card): its rows flow inline at full height, scrolling with the board (one scrollbar), and only the rows on screen are drawn.
   - its [baseline chip](#baseline-compare) (`▼ best_value from 2024-12 (5 of 41 trade_date values worse than the baseline's p10)`), opening its Overview; the page's outer runs' chips come in one `experiments-baselines` request.
+
+  The status chips match an outer run by its tree, not its own status (a
+  launch run ends once it has submitted its runs): **running** keeps it when
+  it or any run below it runs (`status = "running" or running_below > 0`),
+  **stuck** likewise (`stuck_below`), and **failed**, **succeeded** and
+  **created** match its `tree_status` (so a tree with a failed run reads
+  failed, and may still read running). They travel in `top_q`, beside a
+  preset's query, and the command line under the board shows them.
 
   Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
 - **Live** and **Review** (`view=live|review`, a second switch `Live · Review`
@@ -427,6 +435,10 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
     any run below them still running, waiting or stuck: `live_below > 0`,
     so a tree with a failed run and others still running stays) or
     finished within the last 6 hours, needs attention first (`job:attention`).
+    The runs an ended outer run never started (`settled = "never_started"`,
+    [settled runs](experiments.md#outer--inner-jobs-sweeps)) are not waiting: a launch that
+    ended with only those below it leaves Live, while a running launch's
+    `created` runs keep it there.
   - **Review** ("is this launch good to ship?") lists the ended ones, newest
     first, each with its baseline chip.
 
@@ -504,6 +516,9 @@ clause as a filter.
   - `code` and `log`.
 
   Every number comes from a per-outer-run rollup the index keeps up to date.
+  Archived runs count nowhere above them: an archived run with children takes
+  its whole subtree out of every outer run above it (its own page still
+  counts its subtree), in counts, progress and attention alike.
 
 Without a declared goal, an outer run tracks the app's most common metrics,
 never a param folded into metrics. It shows their spread but crowns no best
@@ -846,10 +861,13 @@ message.
   - `top_q=<query>` keeps the top-level runs passing it by their own fields,
     beside `q` (which `match_subtree` may match over subtrees), flat or
     grouped. Its `ago()` is pinned to the minute like `q`'s; without `top`
-    it is a 400. The Live and Review presets send it. It alone can read
-    `live_below`: the runs below the row still running, waiting or stuck
-    (its rollup's `counts`, settled runs left out; 0 for a single run).
-    Elsewhere (`q`, `vmn-exp list --query`) no row carries it.
+    it is a 400. The Live and Review presets and the Outer runs' status
+    chips send it. It reads `live_below`: the runs below the row
+    still running, waiting or stuck (its rollup's `counts`, settled runs
+    left out; 0 for a single run), and `running_below`/`stuck_below`, those
+    running or stuck alone — the counts `vmn-exp list --query` and the SDK
+    read too ([query fields](sdk.md#the-query-language)), so the command line
+    under the board lists the same outer runs.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`experiments?children_of=<verstr>`** pages that run's direct children
   for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`
@@ -1038,7 +1056,8 @@ not compile counts `null` and carries `error`. `?scope=<verstr>` answers the
 whole summary over that run's subtree, without the run (an outer run's page;
 counts and recent failures from its rollup; 404 for no such run). On the
 Outer runs view (`experiments?top=...`) each row's `job` carries `attention:
-{key: n}` (the runs of its tree, itself included, each query matches) and
+{key: n}` (the runs of its tree, itself included, each query matches, none
+under an archived run) and
 `attention_rank`, which `sort=job:attention` orders by.
 
 One part is built in, configured queries or not, and comes before them:

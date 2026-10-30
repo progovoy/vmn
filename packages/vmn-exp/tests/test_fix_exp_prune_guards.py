@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
+from empty_storage import EmptyStorage
 
 from vmn_exp.cli.prune import experiment_prune
 from version_stamp.core.logging import init_stamp_logger
@@ -36,6 +37,9 @@ def _state(heartbeat_minutes_ago):
 
 
 class _Storage:
+    """Duck-typed, not an ``EmptyStorage``: without ``list_files`` prune reads
+    each run's state from storage instead of the experiment index."""
+
     def __init__(self, states, remote=False):
         self.states = states
         self.deleted = []
@@ -60,6 +64,9 @@ class _Storage:
 
     def is_remote(self):
         return self.remote
+
+    def in_area(self, name):
+        return EmptyStorage()
 
 
 def _args(**kw):

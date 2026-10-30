@@ -422,6 +422,8 @@ or loses the original.
 - **Resume** reopens the run (`running` again, fresh heartbeat, new entries
   in this process's own log segment; `resume_count`/`resumed_at` record the
   attempts). `VMN_RESUME_RUN_ID` is removed from the environment once used.
+  A finished run (succeeded or failed) is refused unless you pass
+  `reopen=True` (or `VMN_RESUME_REOPEN=1`): reopening clears its exit code.
   Resume doesn't check whether another process still writes the run, so resume
   only a run whose job is gone.
 - **Rewind** deletes nothing: it appends a marker that makes every reader skip
@@ -451,7 +453,7 @@ id_file = ckpt_dir / "vmn_run_id"
 prior = id_file.read_text() if id_file.exists() else None
 ckpt_step = latest_checkpoint_step(ckpt_dir)          # your code; None on a fresh start
 
-with start_run("my_app", run_id=prior,
+with start_run("my_app", run_id=prior, on_sigterm="release",
                rewind_to_step=ckpt_step if prior else None) as run:
     id_file.write_text(run.id)
     for step in range(run.step, 10_000):              # ckpt_step + 1 after a rewind, else 0
@@ -460,8 +462,8 @@ with start_run("my_app", run_id=prior,
             save_checkpoint(ckpt_dir, step)
 ```
 
-The preempted attempt was finalized on SIGTERM (`failed`, exit 143), so the
-resumed attempt can rewind it at once. If the old process died without
+The preempted attempt was released on SIGTERM (`released`, no exit code), so
+the resumed attempt can reopen and rewind it at once. If the old process died without
 finalizing (a SIGKILL), it reads `running` until its heartbeat goes stale
 (`max(3 x heartbeat interval, 60s)`); until then the rewind raises
 `RuntimeError`, so requeue with a delay.

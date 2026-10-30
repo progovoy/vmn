@@ -63,7 +63,12 @@ STORAGE_ENV = {
 
 def offline_mode():
     """Whether ``VMN_EXP_OFFLINE`` asks to record to the local root only."""
-    return os.environ.get(OFFLINE_ENV, "").strip().lower() in _TRUE_VALUES
+    return is_true(os.environ.get(OFFLINE_ENV))
+
+
+def is_true(value):
+    """Whether an env value (maybe None) says yes: 1/true/yes/on."""
+    return (value or "").strip().lower() in _TRUE_VALUES
 
 
 _WRITER_ID = None

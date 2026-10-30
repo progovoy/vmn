@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """The local-disk backend: ``<root>/<area>/<app key>/<verstr>/``."""
+import hashlib
 import json
 import os
 import shutil
@@ -13,9 +14,9 @@ from vmn_exp._base import VMN_LOGGER, parse_record_metadata
 from vmn_exp.core.record_format import with_format_version
 from vmn_exp.core.record_files import read_file, read_file_from
 from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
-from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.base import NO_FILE, SnapshotStorage
 from vmn_exp.storage.child_markers import LocalChildren
-from vmn_exp.storage import host_dirs
+from vmn_exp.storage import host_dirs, ship_state
 from vmn_exp.storage.files import (
     METADATA_FILE,
     apply_metadata_updates,
@@ -63,6 +64,13 @@ def _append_bytes(path, text):
             data = data[os.write(fd, data) :]
     finally:
         os.close(fd)
+
+
+def _content_token(data):
+    """A local file's version token: its content's hash (:data:`NO_FILE`: no file)."""
+    if data is None:
+        return NO_FILE
+    return hashlib.sha256(data.encode("utf-8") if isinstance(data, str) else data).hexdigest()
 
 
 def _read_class(storage):
@@ -338,6 +346,10 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
     def save_file(self, app_name, verstr, filename, data):
         if self._refuse_orphan_write(app_name, verstr, filename):
             return False
+        self._write_file(app_name, verstr, filename, data)
+        return True
+
+    def _write_file(self, app_name, verstr, filename, data):
         snap_dir = self._snapshot_dir(app_name, verstr)
         path = os.path.join(snap_dir, filename)
         _ensure_parent(path)
@@ -346,7 +358,26 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
             # The rename moved only its folder's mtime: move the record's
             # signature (list_record_names) too.
             os.utime(snap_dir)
-        return True
+
+    def load_file_with_token(self, app_name, verstr, filename):
+        data = self.load_file(app_name, verstr, filename)
+        return data, _content_token(data)
+
+    def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
+        """The record's state lock makes the compare and the rename one step
+        for every conditional writer (an unconditional one may still land).
+        The token back is *data*'s content hash, so a writer on the token of
+        its own last write needs no read before it. A write into a deleted
+        record is dropped, as :meth:`save_file` drops it: ``(True, None)``,
+        nothing for the writer to retry."""
+        if self._refuse_orphan_write(app_name, verstr, filename):
+            return True, None
+        with ship_state.state_lock(self._snapshot_dir(app_name, verstr)):
+            stored = _content_token(self.load_file(app_name, verstr, filename))
+            if etag and stored != etag:
+                return False, None
+            self._write_file(app_name, verstr, filename, data)
+            return True, _content_token(data)
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         name = artifact_name_for(src_path, name)

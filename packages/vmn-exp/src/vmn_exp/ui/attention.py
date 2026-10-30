@@ -133,9 +133,12 @@ class AttentionCounts:
         base, bucket = cache._base(snapshot)
         texts = pinned_texts(queries)
         key = (base.token, bucket, cache.schema_key(schema), texts)
-        return self._by_root.get(key, lambda: {
-            root: dict(Counter(k for k, _ in pairs))
-            for root, pairs in self.matches(snapshot, schema, queries).items()})
+        return self._by_root.get(key, lambda: self._per_root(base, snapshot, schema, queries))
+
+    def _per_root(self, base, snapshot, schema, queries):
+        top = self._cache.jobs.tree(base).top_counted
+        return {root: dict(Counter(k for k, v in pairs if top(v) == root))
+                for root, pairs in self.matches(snapshot, schema, queries).items()}
 
     def matches(self, snapshot, schema, queries):
         """``{top-level verstr: [(key, matching verstr)]}``, once per base,
@@ -147,6 +150,7 @@ class AttentionCounts:
         return self._matches.get(key, lambda: self._grouped(snapshot, schema, queries, texts))
 
     def _grouped(self, snapshot, schema, queries, texts):
+        """Each query's matching runs per top-level run."""
         out = {}
         for q, text in zip(queries, texts):
             for row in self._matching(snapshot, schema, q, text):

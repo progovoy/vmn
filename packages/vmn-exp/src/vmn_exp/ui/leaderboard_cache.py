@@ -63,7 +63,7 @@ from vmn_exp.ui.leaderboard_delta import (
 from vmn_exp.ui.leaderboard_facets import Facets
 from vmn_exp.ui.leaderboard_group_cache import GroupCache
 from vmn_exp.ui.leaderboard_jobs import JobsView
-from vmn_exp.ui.leaderboard_live_below import LiveBelow, reads_live_below
+from vmn_exp.ui.leaderboard_live_below import LiveBelow, filters_read_below
 from vmn_exp.ui.leaderboard_live import LivePatch, MergedRows, is_live, order_key
 from vmn_exp.ui.leaderboard_scope import (
     Filters,
@@ -423,7 +423,7 @@ class LeaderboardCache(SetAnswers):
 
     def _ordered(self, snapshot, schema, last, f):
         """The rows passing the :class:`Filters` *f* in order (no ``job:*`` sort)."""
-        if reads_live_below(f.top_query):
+        if filters_read_below(f):
             return self._live_below.ordered(snapshot, schema, last, f)
         base, bucket = self._base(snapshot)
         check_filters(base, f)

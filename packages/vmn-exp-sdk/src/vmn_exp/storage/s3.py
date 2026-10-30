@@ -16,7 +16,7 @@ import tempfile
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.base import NO_FILE, SnapshotStorage
 from vmn_exp.storage.child_markers import S3Children
 from vmn_exp.storage.files import (
     METADATA_FILE,
@@ -87,6 +87,10 @@ class S3SnapshotStorage(
     def load_file(self, app_name, verstr, filename):
         return self._get(f"{self._record_prefix(app_name, verstr)}/{filename}")
 
+    def load_file_with_token(self, app_name, verstr, filename):
+        data, etag = self._get_with_etag(f"{self._record_prefix(app_name, verstr)}/{filename}")
+        return data, (NO_FILE if data is None else etag)
+
     def direct_files(self):
         return self
 
@@ -132,7 +136,7 @@ class S3SnapshotStorage(
     def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
         key = f"{self._record_prefix(app_name, verstr)}/{filename}"
         try:
-            resp = self._put(key, data, **({"IfMatch": etag} if etag else {}))
+            resp = self._put(key, data, **_condition(etag))
         except Exception as e:
             if etag and is_taken(e):
                 return False, None
@@ -220,3 +224,10 @@ class S3SnapshotStorage(
         """Stable ``<scheme>://`` URI referencing artifact *path* for this record."""
         key = f"{self._record_prefix(app_name, verstr)}/{path}"
         return f"{self.scheme}://{self.bucket}/{key}"
+
+
+def _condition(etag):
+    """The ``put_object`` precondition of :meth:`save_file_if_match`'s *etag*."""
+    if etag == NO_FILE:
+        return {"IfNoneMatch": "*"}
+    return {"IfMatch": etag} if etag else {}

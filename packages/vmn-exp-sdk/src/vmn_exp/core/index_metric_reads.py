@@ -22,3 +22,19 @@ def object_read(storage, where, name):
         return data
 
     return read
+
+
+_RAISE = object()
+
+
+def relisted(read, attempts=2, gone=_RAISE):
+    """``read()`` — a record's metric objects listed, opened and consumed as
+    one unit — run afresh while an object it named is gone; after *attempts*
+    the :class:`MetricObjectGone` propagates, or *gone* is returned."""
+    for attempt in range(attempts):
+        try:
+            return read()
+        except MetricObjectGone:
+            if attempt == attempts - 1 and gone is _RAISE:
+                raise
+    return gone

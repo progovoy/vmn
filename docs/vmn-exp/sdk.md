@@ -79,7 +79,7 @@ start_run(
     sync_interval_sec=<env/conf/30>, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
     capture_output=False, mode=None, intent=None, intent_keywords=None,
-    on_sigterm="fail",
+    on_sigterm=None, sigterm_exit=None, reopen=False,
 )
 ```
 
@@ -95,7 +95,9 @@ start_run(
 | `system_metrics` | `None`: sample `sys_*` unless opted out (below); `False`: off; `True`: on despite conf.yml, still off under `VMN_SYSTEM_METRICS=0` |
 | `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Not given: `$VMN_EXP_SYNC_SEC`, else conf `experiment.sync_interval_sec`, else 30 s. Failed syncs are retried on a later beat |
 | `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
-| `on_sigterm` | what SIGTERM does with the run: `"fail"` (default) finishes it with exit 143; `"release"` hands it back unfinished. See [Handing a run back](#handing-a-run-back-release) |
+| `reopen` | with `run_id`: also reopen a run that has finished (clears its exit code); without it that raises `ValueError`. `$VMN_RESUME_REOPEN=1` does the same for `$VMN_RESUME_RUN_ID` |
+| `on_sigterm` | what SIGTERM does with the run: `"fail"` finishes it with exit 143; `"release"` hands it back unfinished. Not given: `$VMN_EXP_ON_SIGTERM`, else `"fail"`. See [Handing a run back](#handing-a-run-back-release) |
+| `sigterm_exit` | what the SIGTERM handler does after finalizing: `"kill"` re-delivers the signal (the process dies of it, no `finally` runs); `"raise"` raises `SystemExit(143)` in the main thread, so `finally` blocks and context managers run. Not given: `$VMN_EXP_SIGTERM_EXIT`, else `"kill"` |
 | `rewind_to_step` | with `run_id` (required): hide the run's history past this step. See [Rewinding](#rewinding-a-run) |
 | `fork_from` / `fork_step` | a NEW run seeded with another run's history up to `fork_step` (`"<ref>?_step=N"` works too). See [Forking](#forking-a-run) |
 | `all_ranks` | record on every rank; default only rank 0 (see [Distributed training](#distributed-training-ddp-torchrun-slurm)) |
@@ -397,6 +399,7 @@ from vmn_exp.sdk import manage
 
 manage.archive_run("my_app", "@3")          # hidden from list_runs by default
 manage.unarchive_run("my_app", "@3")
+manage.archive_runs("my_app", 'tags.batch = "old"')  # every matching run
 manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
 ```
 
@@ -406,6 +409,16 @@ storage=None)` take any addressing form, return the verstr they changed and
 raise `ValueError` for an unknown ref. Archiving sets `archived: true` in
 `metadata.yml`; nothing is deleted, and only listings treat archived runs
 differently (`vmn-exp prune` counts them like any finished run).
+
+`archive_runs(app_name=None, query=None, *, status=None, storage=None,
+dry_run=False)` and `unarchive_runs(...)` act on every run
+[`query`](#the-query-language) (and `status`) selects — as `list_runs(query=,
+status=, include_archived=True)` would — skipping runs already in that
+state, with the writes spread over threads (one metadata write per run, no
+per-run loop on your side). They return the verstrs changed (with
+`dry_run=True`, the ones that would be, writing nothing) and raise
+`QueryError` on an empty or bad query, so a typo never archives every run.
+CLI: `vmn-exp archive my_app --query '...' [--dry-run]`.
 
 ### Finishing a run from outside it
 
@@ -428,7 +441,9 @@ manage.finish_run("my_app", run_id, 1, error="OOMKilled", end_reason="closed")
   released or stuck run.
 - It raises `manage.FinishRefusedError` (a `ValueError`) while another attempt
   still heartbeats the run — fresh by the writer's clock or the store's write
-  time, the rule that tells running from stuck — and once the run has finished.
+  time, the rule that tells running from stuck — and once the run has finished,
+  including by an attempt that finishes it while the call writes (the write is
+  a compare-and-swap, like `run.finish()`'s).
   `force=True` finishes it anyway; the final state carries a new `attempt`, so
   the live attempt's next heartbeats are dropped instead of reopening it.
 - `log_note(app_name, ref, text)` and `log_metrics(app_name, ref, values,
@@ -540,6 +555,18 @@ yourself when a `with` block doesn't fit. It is idempotent.
   `{message, source: user}`. An `error` is recorded whatever the exit code.
 - `finish()` never raises for a storage failure (a 503 at the end of a
   ten-hour run is logged as a warning) and always closes the run.
+- **The first attempt to end a run wins.** Two attempts of one run (a
+  speculative duplicate, a pod resumed next to a live one) share its
+  `run_state.yml`; once one has finished it, another attempt's `finish()` or
+  `release()` keeps the winner's state (exit code and all), logs a warning and
+  returns `False` (`True` otherwise, also when the final upload is still in
+  flight at the deadline). The final write is a compare-and-swap on the
+  state's version token (S3/Azure ETag, GCS generation, a content hash under
+  a per-record lock on a local store), so two finishers racing cannot both
+  land. So is every other state write — each heartbeat and an attempt's
+  first write (a create-only write while no state exists) — so the losing attempt never flips the finished run
+  back to `running` either (its heartbeat stops). A release never displaces a
+  finish; a finish replaces a release.
 - The run **heartbeats itself** from a daemon thread (bumping `heartbeat_seq`
   in `run_state.yml`), so an OOM-killed or lost job goes
   [`stuck`](experiments.md#run-status-did-my-job-die) instead of `running`
@@ -550,7 +577,9 @@ yourself when a `with` block doesn't fit. It is idempotent.
   releases it, for a run opened with `on_sigterm="release"` — waits for
   the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 60; one
   shared wait for all runs), then calls the previous handler or re-delivers the
-  signal. The handler is installed when `vmn_exp.sdk` is imported on the main
+  signal — or, when an open run has `sigterm_exit="raise"` and no Python
+  handler sits underneath, raises `SystemExit(143)` in the main thread, so
+  the process exits 143 after its `finally` blocks. The handler is installed when `vmn_exp.sdk` is imported on the main
   thread (never over `SIG_IGN`). If you install your own SIGTERM handler later,
   or first import the SDK from a worker thread, call
   `install_signal_handlers()` from the main thread to chain it.
@@ -593,6 +622,14 @@ spans every attempt; `resume_count` and `resumed_at` record the restarts. A
 `ValueError`. `$VMN_RESUME_RUN_ID` is removed from the environment when used, so
 neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
 
+Only an unfinished run (created, released, running or stuck) resumes as is. A
+**finished** run — succeeded or failed, including a SIGTERM'd one under the
+default `on_sigterm="fail"` — raises `ValueError` naming the run, since
+reopening it clears its exit code (a resubmitted trial would lose its result).
+Reopen it on purpose with `start_run(run_id=..., reopen=True)`, or
+`VMN_RESUME_REOPEN=1` next to `$VMN_RESUME_RUN_ID` (consumed the same way). A
+job that expects to be preempted and resumed passes `on_sigterm="release"`.
+
 ### Handing a run back (`release`)
 
 An orchestrator that retries an evicted pod as the *same* run wants the pod to
@@ -619,6 +656,26 @@ never finished). `start_run(run_id=...)` reopens it (`resume_count` + 1;
 `signal = "SIGTERM"`, `status = "succeeded" and resume_count > 0` (retries that
 ended done). An outer run's timeline counts releases per minute, so an eviction
 wave shows as a spike. `NoOpRun.release()` does nothing.
+
+### Walking away from a run (`detach`)
+
+When two pods race for one run, the loser must let go without touching what
+the winner writes. `run.detach()` writes nothing more to the store — no final
+state, no release, not even a last heartbeat:
+
+```python
+if lost_the_lease:
+    run.detach()
+```
+
+It stops the run's threads (heartbeat, `sys_*` sampler, log flusher, remote
+sync, state, output and media uploads), waiting within
+`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` only for a write already in flight, and
+drops whatever was still queued. The run leaves `current_run()` and the
+exported `VMN_EXPERIMENT_ID`; atexit and the SIGTERM handler leave it alone.
+Logging on it afterwards (metrics, params, notes, tags, artifacts, media)
+records nothing, and `finish()`, `release()` and the `with` block's exit write
+nothing. Idempotent; a no-op on a finished run and on a `NoOpRun`.
 
 ### Note signatures
 
@@ -1046,8 +1103,9 @@ keywords ~ "long tail"
 Literals: numbers (including `1e-4`, `2.5E+3`), quoted strings (either quote),
 `true`, `false`, `null`. Relative time: `ago("30m")`, `ago("1h")`, `ago("2d")`
 (whole minutes, hours or days) is the UTC ISO time that long before now,
-second precision, so `status = "created" and timestamp < ago("1h")` lists the
-runs waiting for over an hour. It stands only right of `<` `<=` `>` `>=` and
+second precision, so `status = "created" and settled = null and timestamp <
+ago("1h")` lists the runs waiting for over an hour (`settled = null` leaves
+out what an ended outer run never started). It stands only right of `<` `<=` `>` `>=` and
 compares as the stored stamps do (as strings). It is pinned when a query is
 compiled, so a cached query never keeps its clock; the server pins it to the
 minute. The Postgres backend compares the pinned time too. Keywords are case-insensitive; **field names are
@@ -1076,6 +1134,14 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   an intent. `notes` is the run's [note signatures](#note-signatures) (`~`
   matches any; missing on a run that logged no note).
   `archived = true` only matters with `include_archived=True`.
+- Subtree counts: `live_below` (the runs below a run still running, waiting
+  or stuck), `running_below` and `stuck_below` (those running or stuck
+  alone); 0 for a run without children. They count by the job rollup's rule
+  ([experiments.md](experiments.md#outer--inner-jobs-sweeps)): settled runs
+  never (an `outlived` one counts as running), an archived run's subtree
+  only in it. `running_below > 0` finds an ended launch whose grandchild
+  still runs. A query reading one takes one pass over the app's runs;
+  one that does not pays nothing.
 - `metrics.<name>`, `params.<name>`, `tags.<key>` (always strings; a removed tag
   is missing), `env.<key>` (the captured environment summary: `python`,
   `platform`, `packages_count`, …) and `env.packages.<pkg>` for the key packages

@@ -216,7 +216,6 @@ runner: exp run         # "sdk" for a start_run() run
 cwd: src                # child cwd relative to the repo root ("." at the root)
 pid: 12345
 host: somebox
-attempt: 3f9c2a7b1e04  # random per runner process (an SDK attempt or exp run)
 started_at: 2026-09-21T12:00:00Z
 heartbeat: 2026-09-21T12:03:00Z
 heartbeat_seq: 6        # +1 per beat: a clock-free "it moved" signal
@@ -237,13 +236,14 @@ both for runs that last hours (e.g. `VMN_EXP_HEARTBEAT_SEC=120`: stuck after
 6 min) without code changes. The interval is stored per run, so readers always
 use the run's own window.
 
-Each beat rewrites `run_state.yml`. Before writing, a beat makes sure another
-attempt of the same run has not finished it (a duplicate pod's beats must not
-reopen it). On S3, GCS and Azure that costs no read while this attempt was the
-last writer: the beat is a conditional PUT on the ETag (GCS generation) of its
-own previous write, and only a refused PUT falls back to reading the stored
-state, which stops the beaten attempt's heartbeat. One request per beat
-instead of a GET and a PUT.
+Each beat rewrites `run_state.yml`, as a compare-and-swap that refuses to land
+once another attempt of the same run has finished it (a duplicate pod's beats
+must not reopen it). That costs no read while this attempt was the last
+writer: the beat is a conditional write on the version token of its own
+previous write (S3/Azure ETag, GCS generation; a content hash checked under a
+per-record lock on a local store), and only a refused write falls back to
+reading the stored state, which stops the beaten attempt's heartbeat. One
+request per beat instead of a GET and a PUT.
 
 ### Derived statuses
 
@@ -271,15 +271,19 @@ watch `last_metric_at` (UI/API) for "alive but not making progress".
 
 Two attempts of one SDK run (speculative duplicate pods, a run resumed with
 `start_run(run_id=)` while the old process still lives) share its
-`run_state.yml`. Each attempt records a random `attempt` id (`vmn-exp run`
-records one too), and an SDK
-heartbeat first reads the stored state: once another attempt has written the
-final state, the beat is dropped and this attempt stops heartbeating (one
-warning), so the loser never flips a finished run back to `running`. A start
-is always written, so resuming a finished run still reopens it. Best-effort:
-there is no compare-and-swap, so a final state that lands between a beat's
-read and its write is overwritten once; and the losing attempt's own final
-state (when it finishes later) still replaces the winner's.
+`run_state.yml`. Each SDK attempt records a random `attempt` id (`vmn-exp run`
+records one too), and every
+write of the state — each beat, an attempt's first write, its final state — is
+a compare-and-swap: once another attempt has written the final state, the
+write is dropped and this attempt stops heartbeating (one warning), so the
+loser never flips a finished run back to `running` nor erases its exit code,
+even when that final state lands between the beat's read and its write. A
+write that found no state file only creates one (`If-None-Match: *`, GCS
+generation 0, or a check under the local lock), so two new attempts racing to
+start cannot overwrite each other either; a new run's first write is that
+create, with no read. The one final state an attempt may replace is the one it resumed, so resuming a
+finished run with `start_run(run_id=)` still reopens it; a finish landing
+after the resumer read the state wins.
 
 ### Preemption and signals
 
@@ -430,6 +434,22 @@ its own children open, and the UI flags it (a built-in `outlived` attention
 part, `running · outlived` on its pill); it turns `lost` once it goes stuck.
 Query them with `settled = "never_started"`, `settled = "lost"`, `settled =
 "outlived"` or `settled = null`.
+
+Every query surface (`vmn-exp list --query`, `prune`/`archive --query`, the
+SDK's `list_runs`, the UI's `q` and `top_q`) reads the subtree counts `live_below`,
+`running_below` and `stuck_below` (the runs below a row still running,
+waiting or stuck; [query fields](sdk.md#the-query-language)) by the job
+rollups' rule: a settled run counts nowhere, an archived run's subtree only
+in it, so `vmn-exp list --query 'running_below > 0'` lists the ended launches
+whose grandchildren still run, the same outer runs the UI's Outer runs page
+keeps. A never-started run is not waiting: it leaves `live_below` and the waiting
+counts, so a launch a resume replaced (it ended `failed`, its dates, studies
+and trials never started) drops out of the UI's [Live](ui.md#outer-runs-and-the-outer-runs-page)
+view, while a running launch's `created` runs stay waiting (`settled =
+null`). A rule for runs waiting too long counts only the open ones with
+`status = "created" and settled = null and timestamp < ago("1h")` — a bare
+`status = "created"` also counts every run an ended outer run never
+started.
 
 `exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
 it differs) on the outer run.
@@ -906,6 +926,20 @@ Sets (or clears) `archived: true` in the run's `metadata.yml` (atomically on
 disk, under the ETag on S3). `list`, `list_runs` and the UI hide archived
 runs unless asked (`--archived`, `include_archived=True`, `archived=1`); the
 query language matches `archived = true`.
+
+In bulk, by [query](sdk.md#the-query-language) (refs and `--query` do not mix):
+
+```sh
+vmn-exp archive my_app --query 'tags.batch = "old" and status = "failed"' --dry-run
+vmn-exp archive my_app --query 'tags.batch = "old" and status = "failed"'
+vmn-exp unarchive my_app --query 'tags.batch = "old"'
+```
+
+`--query` selects what `list --archived --query` would show; only the runs
+that would change are touched (an archived run is not archived again) and the
+writes run concurrently. It prints `Archived N run(s)`; `--dry-run` prints
+`Would archive N run(s)` and the first 10 verstrs, writing nothing. An empty
+or invalid query exits 1. SDK: `manage.archive_runs`/`unarchive_runs`.
 
 ### `rewind`
 
@@ -1627,10 +1661,8 @@ mem = "my_pkg.store:open_store"
 `open_store(uri, area=...)` receives a `vmn_exp.storage.uri.StoreURI` (`scheme`,
 `location` = bucket/container, `path` = root, `options` = the query string)
 and an area (`runs`, `snapshots`, `code`, `sweeps`, `registry`, `reports`,
-`comments`, `settings`; see `vmn_exp.storage.areas`), and returns a
-`vmn_exp.storage.base.SnapshotStorage`. A backend reaches its root's other
-areas by overriding `_open_area(name)` (behind `in_area`); one that does not
-reads as having no app settings (`vmn-exp settings set` needs it). `vmn_exp.storage.registry.register_store(scheme,
+`comments`; see `vmn_exp.storage.areas`), and returns a
+`vmn_exp.storage.base.SnapshotStorage`. `vmn_exp.storage.registry.register_store(scheme,
 factory)` does the same at runtime. The contract:
 
 - **Records**: `<root>/<area>/<scope>/<name>/` (scope = app key, model name,
@@ -1954,6 +1986,8 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window (default 60) |
 | `VMN_EXP_HEARTBEAT_SEC` | heartbeat period when `--heartbeat-interval` / `start_run(heartbeat_interval_sec=)` is not given (beats conf `experiment.heartbeat_interval_sec`; default 30) |
 | `VMN_EXP_SYNC_SEC` | remote sync period when `--sync-interval` / `start_run(sync_interval_sec=)` is not given (beats conf `experiment.sync_interval_sec`; default 30) |
+| `VMN_EXP_ON_SIGTERM` | SDK: `start_run(on_sigterm=)` when not given — `fail` (default) or `release` ([sdk.md](sdk.md#handing-a-run-back-release)) |
+| `VMN_EXP_SIGTERM_EXIT` | SDK: `start_run(sigterm_exit=)` when not given — `kill` (default) re-delivers SIGTERM, `raise` raises `SystemExit(143)` so `finally` blocks run ([sdk.md](sdk.md#finishing-failures-and-the-heartbeat)) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | [alert](#alerts) sinks and triggers |
 | `VMN_SNAPSHOT_MAX_FILE_MB` / `_TOTAL_MB` | untracked-file capture caps (50 / 200) |
 | `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) instead of the XDG cache/state dirs |

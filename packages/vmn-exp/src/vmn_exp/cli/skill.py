@@ -83,7 +83,13 @@ so it reads waiting again and the next pod reopens it (`run_id=`, which bumps
 ```python
 pod = start_run("<app_name>", run_id=pod_id, on_sigterm="release")  # SIGTERM -> released
 # by hand, any run: run.release(reason="preempted") (flush, stop, state `released`)
+# process-wide: VMN_EXP_ON_SIGTERM=release; VMN_EXP_SIGTERM_EXIT=raise (or sigterm_exit=)
+# exits via SystemExit(143) so finally blocks run, instead of re-killing
 ```
+
+A finished pod (done or failed) is not reopened: `start_run(run_id=)` raises
+ValueError unless `reopen=True` (env `VMN_RESUME_REOPEN=1` with
+`VMN_RESUME_RUN_ID`), since reopening clears its exit code.
 
 A pod that died without finishing can be finished from outside (a controller,
 a cleanup job); refused while the run still beats unless forced:
@@ -95,7 +101,8 @@ manage.finish_run("<app_name>", "<verstr>", 137, error="OOMKilled")
 ```
 
 Once an outer run has ended, what is left under it settles (derived, never
-written): `never_started` (waiting; adds nothing to the counts), `lost`
+written, query it as `settled`): `never_started` (still `created`, but no
+longer waiting or live; adds nothing to the counts), `lost`
 (stuck; counted as failed) or `outlived` (still beating; counted as running
 and flagged). For runs lasting hours, slow the beat with
 `VMN_EXP_HEARTBEAT_SEC=120` (stuck after 6 min) and the log sync with
@@ -236,7 +243,8 @@ ui:
   split_by: tags.kind              # per-kind counts/durations on an outer run's page
   attention:                       # <= 8 named queries, counted on every outer run
     - {key: unstable, query: 'tags.health = "unstable"', level: error}
-    - {key: slow_start, query: 'status = "created" and timestamp < ago("1h")', level: warn}
+    - {key: slow_start, level: warn,  # settled = null: not what an ended outer run left
+       query: 'status = "created" and settled = null and timestamp < ago("1h")'}
   baseline: {match: [tags.target], children_by: tags.trade_date}  # compare with the last launch
   views: [{name: Live, page: jobs, search: "view=live", default: true}]
 ```

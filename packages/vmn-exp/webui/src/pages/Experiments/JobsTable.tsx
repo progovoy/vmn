@@ -1,7 +1,7 @@
 /** The Jobs view's grid (plan 23 W1): virtualized like the board, its
  *  headers sorting by the job sort keys, the board's keys (useRowKeys) and
  *  density; grouped, a header row per group of jobs. Below 640px, cards. */
-import { useMemo, useRef, type CSSProperties, type MutableRefObject } from "react";
+import { useCallback, useMemo, useRef, type CSSProperties, type MutableRefObject } from "react";
 import { useFillHeight } from "../../hooks/useFillHeight";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -22,7 +22,7 @@ import JobRow from "./JobRow";
 import { densityRowHeight } from "../LeaderboardRow";
 import { JobGroupRow, JobMoreRow } from "./JobGroupRows";
 import { COLUMN_STYLES, JOBS_WIDTH, JOB_COLUMNS, type Order } from "./jobColumns";
-import { JobsTreeSlot, SLOT_HEIGHT, isTreeSlot, useTreeSlots } from "./JobsTreeSlot";
+import { JobsTreeSlot, SLOT_HEIGHT, gridItemKey, isTreeSlot, useTreeSlots } from "./JobsTreeSlot";
 import "../leaderboardTable.css";
 import "./jobsTable.css";
 
@@ -122,10 +122,12 @@ function JobsGrid({
   const slots = useTreeSlots(items ?? NO_ITEMS);
   const list = slots.list;
   const height = densityRowHeight(density);
+  const getItemKey = useCallback((i: number) => gridItemKey(list[i]), [list]);
   const virtualizer = useVirtualizer({
     count: list.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (i) => (isTreeSlot(list[i]) ? SLOT_HEIGHT : height),
+    getItemKey,
     overscan: 20,
     initialOffset: scroll.initial,
   });
@@ -176,21 +178,26 @@ function JobsGrid({
               const it = list[v.index];
               const active = v.index === keys.active;
               if (isTreeSlot(it)) {
-                return trees && <JobsTreeSlot key={`tree:${it.row.verstr}`} slot={it} ws={trees.ws} app={trees.app} ctx={ctx} />;
+                return trees && (
+                  <JobsTreeSlot
+                    key={gridItemKey(it)} slot={it} ws={trees.ws} app={trees.app} ctx={ctx}
+                    index={v.index} measure={virtualizer.measureElement}
+                  />
+                );
               }
               if (isGroupItem(it)) {
                 return it.item === "more"
-                  ? <JobMoreRow key={`more:${it.key}`} item={it} index={v.index} isActive={active} height={height} onMore={groups.onMore} />
+                  ? <JobMoreRow key={gridItemKey(it)} item={it} index={v.index} isActive={active} height={height} onMore={groups.onMore} />
                   : (
                     <JobGroupRow
-                      key={`group:${it.group.key}`} item={it} index={v.index} isActive={active} height={height}
+                      key={gridItemKey(it)} item={it} index={v.index} isActive={active} height={height}
                       onFold={groups.onFold} asFilter={groups.asFilter} noun={groups.noun} check={{ state: groups.checkOf(it.rows), onToggle: () => groups.onCheck(it.rows) }}
                     />
                   );
               }
               return (
                 <JobRow
-                  key={it.verstr} r={it} index={v.index} isActive={active}
+                  key={gridItemKey(it)} r={it} index={v.index} isActive={active}
                   isSelected={selected.has(it.verstr)}
                   density={density} ctx={ctx} onToggle={onToggle}
                   expanded={slots.open.has(it.verstr)} onExpand={trees ? slots.toggle : undefined}

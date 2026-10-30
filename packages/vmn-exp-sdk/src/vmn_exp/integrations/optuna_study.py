@@ -156,7 +156,7 @@ class StudyTracker:
         if outer is None:
             from vmn_exp.sdk import start_run
 
-            outer = start_run(self._app_name, run_id=self._outer_id)
+            outer = start_run(self._app_name, run_id=self._outer_id, reopen=True)
             outer.log_params(_study_params(self._study))
         _log_best(outer, self._study)
         outer.finish()

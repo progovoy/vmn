@@ -9,76 +9,50 @@ the newest pending state is uploaded, in order, so the final state can never be
 overwritten by an older heartbeat that was still in flight.
 
 Two attempts of one run (speculative duplicates, a pod resumed next to a live
-one) share its ``run_state.yml``. A heartbeat reads the stored state first and
-is dropped when another attempt has finished the run, so the losing duplicate
-never flips it back to running. Best-effort: the read and the write are not
-atomic, so a final state landing between them is overwritten once (the next
-beat then sees its own state and carries on).
+one) share its ``run_state.yml``, and every write of it — each heartbeat, the
+first write of a resumed attempt, a final state — is a compare-and-swap
+(:mod:`vmn_exp.core.state_cas`) that is dropped, and :attr:`superseded` set,
+when another attempt finished the run: the losing duplicate never flips it
+back to running, nor erases its exit code. The one final state an attempt may
+replace is the one it resumes, on its first write to each side.
 
-A remote that hands back a version token (S3/Azure ETag, GCS generation)
-spares that read: a beat after this attempt's own write is a conditional PUT
-on the token, which lands only while nobody else wrote the file; refused, the
-beat falls back to the read. That halves a live run's state requests.
+The compare costs no read while this attempt's own last write is current: a
+beat is a conditional write on that write's version token (S3/Azure ETag, GCS
+generation, a local content hash, checked under the record's state lock) —
+one PUT per beat remotely. Refused, it reads the state and decides again.
 """
 import logging
 
-import yaml
-
 from vmn_exp.core.background import Coalescing
-from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
-from vmn_exp.storage.cached import CachedSnapshotStorage, local_side
+from vmn_exp.core.state_cas import (
+    compare_and_save_token,
+    dump_state,
+    finished_by_another,
+    pull_record,
+    split_storage,
+)
+from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.storage.base import NO_FILE
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def split_storage(storage, app_name, verstr):
-    """``(inline, remote target or None)`` of *storage* for one run's state
-    writes; the target is called for the store to upload to (None: none yet).
-
-    A local-first cache with a remote is split into its local side and its
-    remote — written only once the remote is known to hold this run
-    (:meth:`CachedSnapshotStorage.remote_for`, whose check may be a GET, so it
-    runs in the background too). A store that is remote only is written
-    entirely in the background; anything else (a local store, or a caller's
-    own wrapper) is written inline, as given.
-    """
-    local = local_side(storage)
-    if not getattr(storage, "is_remote", lambda: False)():
-        return local, None
-    if isinstance(storage, CachedSnapshotStorage):
-        return local, lambda: storage.remote_for(app_name, verstr)
-    return None, lambda: storage
-
-
-def _save(side, where, data, etag=None):
-    """``(written, token)`` of writing *data*; a store without
-    ``save_file_if_match`` (a caller's own) writes unconditionally."""
-    save = getattr(side, "save_file_if_match", None)
-    if save is None:
-        side.save_file(*where, data)
-        return True, None
-    return save(*where, data, etag)
-
-
-def finished_by_another(stored, attempt):
-    """Whether *stored* is a final state that *attempt* did not write."""
-    return bool(stored) and stored.get("state") == "finished" and (
-        stored.get("attempt") != attempt
-    )
-
-
 class RunStatePublisher:
-    """Writes one run's state: inline locally, latest-wins in order remotely."""
+    """Writes one run's state: inline locally, latest-wins in order remotely.
 
-    def __init__(self, storage, app_name, verstr, gate=None):
+    *resumes* is the stored state the attempt resumes (None: a new run)."""
+
+    def __init__(self, storage, app_name, verstr, gate=None, resumes=None):
         self._storage = storage
         self._inline, self._remote_target = split_storage(storage, app_name, verstr)
-        self._split = self._inline is not storage
         self._where = (app_name, verstr, RUN_STATE_FILE)
-        # Sides this attempt has written its own state to: only there can a
-        # stored final state be another attempt's.
-        self._written = set()
-        # Remote side -> the token of this attempt's last write there.
+        self._resuming = bool(resumes)
+        # The final state this attempt resumes, if any, it may replace once.
+        self._resumes_final = self._resuming and resumes.get("state") == "finished"
+        self._resumed_attempt = resumes.get("attempt") if self._resumes_final else None
+        # Side -> token (None: the side has none) of this attempt's last
+        # write there; only on a side it has written can a stored final
+        # state not be the one it resumes.
         self._tokens = {}
         self.superseded = False
         self._remote = None
@@ -86,60 +60,79 @@ class RunStatePublisher:
             upload = gate.wrap(self._upload) if gate is not None else self._upload
             self._remote = Coalescing(upload, "vmn-run-state")
 
-    def publish(self, state, heartbeat=False):
+    def publish(self, state, heartbeat=False, final=False):
         """Write *state* now locally; queue it for the remote. Raises on a
-        failed local write, like the storage call it replaces. A *heartbeat*
-        is dropped, and :attr:`superseded` set, where another attempt has
-        finished the run, and so is every heartbeat after that."""
+        failed local write, like the storage call it replaces. Dropped, and
+        :attr:`superseded` set, where another attempt has finished the run;
+        so is every heartbeat after that."""
         if heartbeat and self.superseded:
             return
-        data = yaml.dump(state, sort_keys=False)
-        attempt = state.get("attempt") if heartbeat else None
+        state = dict(state)
+        dumped = (state, dump_state(state))
         if self._inline is not None:
-            if heartbeat and self._stale(self._inline, attempt):
+            if not self._holds_record() or not self._save(self._inline, dumped, final):
                 return
-            refused = self._inline.save_file(*self._where, data) is False
-            if refused and self._split:
-                # The record exists only remotely so far (a run resumed on
-                # another host): the full store fetches it, then writes both.
-                self._storage.save_file(*self._where, data)
-                return
-            self._written.add(id(self._inline))
         if self._remote is not None:
-            self._remote.submit((data, heartbeat, attempt))
+            self._remote.submit((dumped, final))
+
+    def _holds_record(self):
+        """Whether the local side may be written: a record only the remote
+        holds so far (a run resumed on another host) is fetched first."""
+        return id(self._inline) in self._tokens or pull_record(
+            self._storage, self._inline, *self._where[:2])
 
     def _upload(self, item):
-        data, heartbeat, attempt = item
+        dumped, final = item
         target = self._remote_target()
-        if target is None:
+        if target is None or (self.superseded and not final):
             return
-        token = self._tokens.pop(id(target), None)
-        if heartbeat and token is not None:
-            written, token = _save(target, self._where, data, token)
-            if written:
-                self._remember(target, token)
-                return
-        if heartbeat and self._stale(target, attempt):
-            return
-        self._remember(target, _save(target, self._where, data)[1])
+        if not self._save(target, dumped, final) and final:
+            self._cache_winner(target)
 
-    def _remember(self, side, token):
-        self._written.add(id(side))
-        if token is not None:
-            self._tokens[id(side)] = token
+    def _save(self, side, dumped, final):
+        """Whether *dumped* — ``(state, its YAML)`` — landed on *side*."""
+        written, token = compare_and_save_token(
+            side, self._where, self._unless_lost(side, dumped[0]), self._seed(side), dumped)
+        if written is None:
+            self._supersede("its final state is dropped" if final
+                            else "this attempt stops heartbeating")
+            return False
+        self._tokens[id(side)] = token
+        return True
 
-    def _stale(self, side, attempt):
-        if id(side) not in self._written:
-            return False
-        if not finished_by_another(load_run_state(side, *self._where[:2]), attempt):
-            return False
+    def _seed(self, side):
+        """The CAS's first round on *side*: the token of this attempt's last
+        write there (its own state, which *update* keeps); before one, a new
+        run's record (just claimed) holds no state yet, so its first write is
+        a create, no read."""
+        if id(side) in self._tokens or self._resuming:
+            token = self._tokens.get(id(side))
+            return ({}, token) if token is not None else None
+        return {}, NO_FILE
+
+    def _unless_lost(self, side, state):
+        attempt = state.get("attempt")
+        first = id(side) not in self._tokens
+
+        def update(stored):
+            resumed = self._resumes_final and stored.get("attempt") == self._resumed_attempt
+            lost = finished_by_another(stored, attempt) and not (first and resumed)
+            return None if lost else state
+
+        return update
+
+    def _cache_winner(self, target):
+        """Replace this attempt's local final state with the remote's winner."""
+        data = target.load_file(*self._where) if self._inline is not None else None
+        if data:
+            self._inline.save_file(*self._where, data)
+
+    def _supersede(self, consequence):
         if not self.superseded:
             self.superseded = True
             _LOGGER.warning(
-                f"vmn: run {self._where[1]} was finished by another attempt; "
-                "this attempt stops heartbeating"
+                f"vmn: run {self._where[1]} was finished by another attempt; {consequence}"
             )
-        return True
 
     def close(self, timeout):
         """Upload what is pending, then stop. False if that did not finish."""

@@ -15,11 +15,13 @@ import { metricGoal } from "../../util";
 import { NO_GROUP } from "../../util/groupBy";
 import { boardRows } from "../../util/groupItems";
 import { hasSearch, type SearchFilter } from "../../util/searchScope";
+import { combineQueries } from "../../util/searchQuery";
 import { BIG_GROUP } from "../../util/groupClause";
 import { boardSortState } from "../boardSortState";
 import { jobBestOrder, mainMetric } from "./jobColumns";
 import type { TopRuns } from "../../types";
 import { PRESETS, type Preset } from "./presets";
+import { treeStatusQuery } from "./treeStatus";
 
 type View = ReturnType<typeof useLeaderboardView>;
 
@@ -42,8 +44,12 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
     query: view.query, search: view.search, branch: view.branch, archived: view.archived,
   }), [view.query, view.search, view.branch, view.archived]);
   const matchSubtree = hasSearch(search);
+  // The outer runs match a status by their trees, beside the preset's query.
+  const tree = top === "jobs" ? treeStatusQuery(view.status) : "";
+  const topQuery = combineQueries(fixed?.query ?? "", tree || null) || undefined;
   const { filter, filtered } = useBoardFilter(view, chosen, {
-    top: top ?? true, matchSubtree: matchSubtree || undefined, topQuery: fixed?.query,
+    top: top ?? true, matchSubtree: matchSubtree || undefined, topQuery,
+    status: tree ? undefined : view.status || undefined,
   });
 
   const data = useBoardRows(ws, app, filter, {
@@ -64,6 +70,6 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
     metric, goal: metric ? metricGoal(schema, metric) : null,
     sort: { sort: filter.sort, order: sort.order ?? "desc", onSort: sort.onSort },
     live: { running, paused, setPaused },
-    filtered: filtered || Boolean(fixed),
+    filtered: filtered || Boolean(fixed), topQuery,
   };
 }

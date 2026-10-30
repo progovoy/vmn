@@ -12,6 +12,7 @@ reads at once: its metadata (the existence check), its JSONL logs and its
 metric objects do not depend on each other.
 """
 from vmn_exp.core.fold import fold_definitions, fold_log
+from vmn_exp.core.index_metric_reads import MetricObjectGone
 from vmn_exp.core.metric_entries import is_metric_entry
 from vmn_exp.core.series_reader import SeriesReader, metric_sources
 from vmn_exp.core.step_metric import step_metrics
@@ -39,7 +40,7 @@ def read_run(storage, app_name, verstr):
         return None
     try:
         log, sources = log.result(), sources.result()
-    except StaleListing:  # merged since listed: the store's own reads list it afresh
+    except (StaleListing, MetricObjectGone):  # merged since listed: list it afresh
         log, sources = jsonl_log(storage, app_name, verstr), metric_sources(storage, app_name, verstr)
     legacy = [e for e in log if is_metric_entry(e)]
     return log, SeriesReader.of(sources, log=log, legacy=legacy)

@@ -143,7 +143,7 @@ def test_rewind_hides_later_history_and_logging_continues(app_layout):
     _bootstrap(app_layout)
     source = _source(app_layout)
 
-    with start_run(app_layout.app_name, run_id=source, rewind_to_step=2) as run:
+    with start_run(app_layout.app_name, run_id=source, rewind_to_step=2, reopen=True) as run:
         assert run.id == source
         assert run.start_step == 3
         run.log_metric("loss", 0.9, step=3)
@@ -210,7 +210,7 @@ def test_cli_run_forks_a_run(app_layout):
 def test_cli_show_lists_rewinds(app_layout, capfd):
     _bootstrap(app_layout)
     source = _source(app_layout)
-    with start_run(app_layout.app_name, run_id=source, rewind_to_step=2):
+    with start_run(app_layout.app_name, run_id=source, rewind_to_step=2, reopen=True):
         pass
     capfd.readouterr()
 

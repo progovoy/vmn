@@ -27,6 +27,11 @@ from vmn_exp.storage.files import (
     valid_artifact_path,
 )
 
+# The ``save_file_if_match`` token of a file that does not exist: the write
+# only creates it (S3/Azure ``If-None-Match: *``, GCS generation 0). A
+# ``load_file_with_token`` of a missing file returns it: ``(None, NO_FILE)``.
+NO_FILE = "*"
+
 
 class SnapshotStorage(ABC):
     # The store area (:mod:`vmn_exp.storage.areas`) this storage reads/writes.
@@ -173,7 +178,9 @@ class SnapshotStorage(ABC):
     def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
         """:meth:`save_file`, returning ``(written, token)``: the stored
         version's token, which a later call passes as *etag* to write only
-        while nobody else wrote the file since (else ``(False, None)``).
+        while nobody else wrote the file since (else ``(False, None)``);
+        :data:`NO_FILE` writes only while there is no file, and None
+        unconditionally.
 
         A backend without version tokens writes unconditionally and returns
         no token, so its caller has none to pass and reads first instead.

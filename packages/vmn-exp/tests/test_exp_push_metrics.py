@@ -39,7 +39,7 @@ def offline(app_layout, monkeypatch):
 def _run(app_layout, steps=range(5), run_id=None):
     from vmn_exp.sdk import start_run
 
-    with start_run(app_layout.app_name, run_id=run_id) as run:
+    with start_run(app_layout.app_name, run_id=run_id, reopen=True) as run:
         for i in steps:
             run.log_metrics({"loss": 1.0 / (i + 1), "acc": i * 0.1}, step=i)
     return run.id

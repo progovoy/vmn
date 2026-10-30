@@ -86,7 +86,8 @@ def test_a_retried_pod_reopens_its_failed_run(app_layout):
     first.finish(exit_code=1)
     assert _row(app_layout, verstr)["status"] == "failed"
 
-    with start_run(app_layout.app_name, run_id=verstr, tags={"attempt": "2"}):
+    with start_run(app_layout.app_name, run_id=verstr, tags={"attempt": "2"},
+                   reopen=True):
         assert _row(app_layout, verstr)["status"] == "running"
 
     row = _row(app_layout, verstr)

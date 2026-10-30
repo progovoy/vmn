@@ -7,21 +7,25 @@ orchestrator outside the run's pod — finish them or log to them.
     from vmn_exp.sdk import manage
 
     manage.archive_run("my_app", "@3")
+    manage.archive_runs("my_app", 'tags.batch = "old"')
     manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
     manage.log_note("my_app", run_id, "closed by orchestrator at study end")
     manage.finish_run("my_app", run_id, 1, error="OOMKilled", end_reason="closed")
 
 *ref* takes whatever the CLI takes — a full verstr, a unique prefix, ``@N`` or
 ``latest`` — and each call returns the verstr it changed, or raises ValueError
-when *ref* resolves to no run. Archived runs are hidden by
+when *ref* resolves to no run. :func:`archive_runs`/:func:`unarchive_runs`
+take a query instead and return every verstr they changed. Archived runs are hidden by
 :func:`vmn_exp.sdk.reader.list_runs` unless ``include_archived=True``.
 """
 from vmn_exp.core import run_finish
 from vmn_exp.core.manage import set_archived, tag_run
+from vmn_exp.core.query import compile_query
 from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.run_finish import FinishRefusedError  # noqa: F401
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
-from vmn_exp.sdk.reader import _resolve
+from vmn_exp.sdk.reader import _resolve, list_runs
+from vmn_exp.storage.s3_base import parallel_map
 
 
 def _target(app_name, ref, storage):
@@ -47,6 +51,32 @@ def archive_run(app_name=None, ref="latest", *, storage=None):
 def unarchive_run(app_name=None, ref="latest", *, storage=None):
     app_name, storage, verstr = _target(app_name, ref, storage)
     return _changed(set_archived(storage, app_name, verstr, False), app_name, verstr)
+
+
+def archive_runs(app_name=None, query=None, *, status=None, storage=None, dry_run=False):
+    """Archive every unarchived run *query* (and *status*) selects, like
+    ``list_runs(query=, status=)``; the verstrs archived (with *dry_run*,
+    the ones that would be). Raises ``QueryError`` on an empty or bad query.
+    """
+    return _set_archived_by_query(app_name, query, status, storage, dry_run, True)
+
+
+def unarchive_runs(app_name=None, query=None, *, status=None, storage=None, dry_run=False):
+    """Unarchive every archived run *query* (and *status*) selects."""
+    return _set_archived_by_query(app_name, query, status, storage, dry_run, False)
+
+
+def _set_archived_by_query(app_name, query, status, storage, dry_run, archived):
+    compile_query(query or "")  # an empty query must not select every run
+    app_name, storage, _ = _resolve(app_name, storage)
+    rows = list_runs(app_name, storage=storage, query=query, status=status,
+                     include_archived=True)
+    verstrs = [r["verstr"] for r in rows if bool(r.get("archived")) != archived]
+    if dry_run:
+        return verstrs
+    done = parallel_map(lambda v: set_archived(storage, app_name, v, archived), verstrs)
+    # A run deleted since the listing is not counted.
+    return [v for v, ok in zip(verstrs, done) if ok]
 
 
 def set_tags(app_name=None, ref="latest", tags=None, *, remove=None, storage=None):

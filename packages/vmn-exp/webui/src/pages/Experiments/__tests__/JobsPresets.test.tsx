@@ -125,7 +125,29 @@ describe("the presets", () => {
     fireEvent.click(within(views()).getByRole("button", { name: /^Outer runs/ }));
     await waitFor(() => expect(urlParams().get("view")).toBe("jobs"));
     expect(urlParams().get("status")).toBe("failed");
-    await waitFor(() => expect(lastOpts().topQuery).toBeUndefined());
+    // The preset's query gone, the status chip's (over the trees) kept.
+    await waitFor(() => expect(lastOpts().topQuery).toBe('tree_status = "failed"'));
+  });
+
+  // A launch run ended (failed) while the runs below it still run: the
+  // running chip keeps it, as the outer run's own status never would.
+  it("a status chip matches the outer run's tree, its command line too", async () => {
+    renderExperiments("/ws/test/app/my-app?view=live&status=running");
+    await screen.findByRole("link", { name: "launch" });
+    const tree = `(${LIVE_QUERY}) and (status = "running" or running_below > 0)`;
+    expect(lastOpts()).toEqual(expect.objectContaining({ top: "jobs", topQuery: tree }));
+    expect(lastOpts().status).toBeUndefined();
+    expect(screen.getByText(/vmn-exp list my\/app --query/).textContent)
+      .toContain(`depth = 0 and kind = "outer" and (${tree})`);
+  });
+
+  it("a status chip matches the tree in plain Outer runs too", async () => {
+    renderExperiments("/ws/test/app/my-app?view=jobs&status=running");
+    await screen.findByRole("link", { name: "launch" });
+    expect(lastOpts()).toEqual(expect.objectContaining({
+      top: "jobs", topQuery: 'status = "running" or running_below > 0',
+    }));
+    expect(lastOpts().status).toBeUndefined();
   });
 
   it("its command line selects the same outer runs", async () => {

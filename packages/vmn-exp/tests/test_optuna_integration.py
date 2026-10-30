@@ -327,6 +327,22 @@ def test_attached_finish_logs_best_on_existing_outer(app_layout):
     assert outer["status"] == "succeeded"
 
 
+def test_attached_finish_reopens_an_already_finished_outer(app_layout):
+    """A later finish() (more trials after the first) updates the finished outer."""
+    _bootstrap(app_layout)
+    outer_id = _create_outer(app_layout)
+
+    study = optuna.create_study(direction="minimize")
+    for _round in range(2):
+        pod = start_study_run(study, app_name=app_layout.app_name, outer=outer_id)
+        study.optimize(pod.wrap(_quadratic), n_trials=2)
+        start_study_run(study, app_name=app_layout.app_name, outer=outer_id).finish()
+
+    outer = next(r for r in _rows(app_layout) if r["verstr"] == outer_id)
+    assert outer["metrics"]["best_value"] == pytest.approx(study.best_value)
+    assert outer["status"] == "succeeded"
+
+
 def test_outer_rejects_outer_run_kwargs(app_layout):
     """start_run kwargs configure a new outer run, so they make no sense with outer=."""
     _bootstrap(app_layout)

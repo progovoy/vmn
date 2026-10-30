@@ -6,9 +6,10 @@
  *  folded, so a 10k-run launch opens as a handful of rows; under a filter,
  *  each level keeps the nodes whose subtree passes it and those with a
  *  passing run below start open. Virtualized like
- *  the board; a WAI-ARIA tree grid: Up/Down move, Right opens (or steps
+ *  the board; embedded, its rows flow inline in the scroll box around it
+ *  (one scrollbar), virtualized against that box. A WAI-ARIA tree grid: Up/Down move, Right opens (or steps
  *  into), Left folds (or steps out), Enter toggles. */
-import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TreeFilter } from "../../apiTree";
 import { appTag } from "../../http";
@@ -25,7 +26,7 @@ import "../leaderboardTable.css";
 import "../Experiments/jobsTable.css";
 import "./jobTree.css";
 
-/** The tree's height inside an Outer runs row (Jobs view): about ten rows. */
+/** An opened tree's height inside an Outer runs row before it is measured. */
 export const EMBEDDED_HEIGHT = TREE_ROW_HEIGHT * 10 + 36;
 
 export default function JobTree({ ws, app, verstr, name, attention, embedded = false, filter }: {
@@ -34,7 +35,7 @@ export default function JobTree({ ws, app, verstr, name, attention, embedded = f
   name?: string;
   /** The app's attention parts: the labels and levels of the counts. */
   attention?: readonly AttentionEntry[];
-  /** Inside an Outer runs row: a fixed height instead of the page's. */
+  /** Inside an Outer runs row: no scroll box of its own, it grows in the board's. */
   embedded?: boolean;
   /** The Runs tab's filters: each level keeps the nodes whose subtree passes. */
   filter?: TreeFilter;
@@ -47,30 +48,34 @@ export default function JobTree({ ws, app, verstr, name, attention, embedded = f
     attention,
   }), [ws, app, metric, schema, attention]);
   const parentRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
   const unfilled = useRef<HTMLDivElement>(null);
   useFillHeight(embedded ? unfilled : parentRef);
+  const outer = useOuterScroll(cardRef, bodyRef, embedded);
+  const { margin } = outer;
   const { items } = tree;
   const virtualizer = useVirtualizer({
-    count: items.length, getScrollElement: () => parentRef.current,
-    estimateSize: () => TREE_ROW_HEIGHT, overscan: 20,
+    count: items.length, getScrollElement: () => (embedded ? outer.box.current : parentRef.current),
+    estimateSize: () => TREE_ROW_HEIGHT, overscan: 20, scrollMargin: margin,
   });
   const keys = useTreeKeys(parentRef, items, tree.toggle, (i) => virtualizer.scrollToIndex?.(i));
   const virtual = virtualizer.getVirtualItems();
   const last = virtual[virtual.length - 1];
 
   return (
-    <div className="card flush job-tree-card">
+    <div className="card flush job-tree-card" ref={cardRef}>
       <div
         className="tbl-scroll" ref={parentRef}
-        style={{ maxHeight: embedded ? EMBEDDED_HEIGHT : "calc(100vh - 340px)", overflow: "auto" }}
+        style={embedded ? { overflowX: "visible" } : { maxHeight: "calc(100vh - 340px)", overflow: "auto" }}
       >
         <table role="treegrid" aria-label={`runs of ${name ?? verstr}`} className="lb-table job-tree">
           <colgroup>{TREE_COLUMNS.map((c) => <col key={c.id} style={{ width: c.width }} />)}</colgroup>
           <thead>
             <tr>{TREE_COLUMNS.map((c) => <th key={c.id} role="columnheader" className={c.numeric ? "num" : undefined}>{c.label}</th>)}</tr>
           </thead>
-          <tbody onKeyDown={keys.onKeyDown}>
-            {virtual.length > 0 && virtual[0].start > 0 && <tr aria-hidden style={{ height: virtual[0].start }} />}
+          <tbody ref={bodyRef} onKeyDown={keys.onKeyDown}>
+            {virtual.length > 0 && virtual[0].start > margin && <tr aria-hidden style={{ height: virtual[0].start - margin }} />}
             {virtual.map((v) => (
               <JobTreeRow
                 key={itemKey(items[v.index])} item={items[v.index]} index={v.index}
@@ -78,14 +83,40 @@ export default function JobTree({ ws, app, verstr, name, attention, embedded = f
                 onToggle={tree.toggle} onMore={tree.more}
               />
             ))}
-            {last && virtualizer.getTotalSize() > last.end && (
-              <tr aria-hidden style={{ height: virtualizer.getTotalSize() - last.end }} />
+            {last && virtualizer.getTotalSize() > last.end - margin && (
+              <tr aria-hidden style={{ height: virtualizer.getTotalSize() - (last.end - margin) }} />
             )}
           </tbody>
         </table>
       </div>
     </div>
   );
+}
+
+/** The nearest box around *el* (itself included) that scrolls vertically. */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el; node; node = node.parentElement) {
+    const st = getComputedStyle(node);
+    if (/auto|scroll/.test(`${st.overflow} ${st.overflowY}`)) return node;
+  }
+  return null;
+}
+
+/** An embedded tree's scroll box (the one around its card, found once) and
+ *  where its rows start in that box's content, re-read each render: a re-sort
+ *  above moves the slot without resizing anything an observer could watch. */
+function useOuterScroll(card: RefObject<HTMLElement>, body: RefObject<HTMLElement>, on: boolean) {
+  const box = useRef<HTMLElement | null>(null);
+  const [margin, setMargin] = useState(0);
+  useLayoutEffect(() => {
+    if (on) box.current = scrollParent(card.current?.parentElement ?? null);
+  }, [on, card]);
+  useLayoutEffect(() => {
+    const scroller = box.current;
+    if (!scroller || !body.current) return;
+    setMargin(body.current.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop);
+  });
+  return { box, margin };
 }
 
 /** The tree grid's roving tab stop and keys over `tr[data-tree-index]` rows. */

@@ -10,16 +10,24 @@ and the caller's ``error``/``end_reason`` replace the rest.
 
 Refused unless forced: a run another attempt is still heartbeating (fresh by
 the writer's clock or the store's, :func:`~vmn_exp.core.status.derive_status`)
-and a run that already finished. The final state carries a new ``attempt``,
-so a forced-out live attempt drops its next heartbeat instead of reopening
-the run (:mod:`vmn_exp.sdk.state_publisher`).
+and a run that already finished — also one that finishes while this call
+writes: the write is a compare-and-swap (:mod:`vmn_exp.core.state_cas`).
+The final state carries a new ``attempt``, so a forced-out live attempt
+drops its next heartbeat instead of reopening the run
+(:mod:`vmn_exp.sdk.state_publisher`).
 """
-import uuid
 
 from vmn_exp._base import now_iso
 from vmn_exp.core.run_error import error_from_exception, error_from_message
+from vmn_exp.core.state_cas import (
+    compare_and_save,
+    new_attempt_id,
+    pull_record,
+    split_storage,
+)
 from vmn_exp.core.status import (
     FAILED,
+    RUN_STATE_FILE,
     RUNNING,
     SUCCEEDED,
     derive_status,
@@ -48,17 +56,33 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
     exit_code = _checked_exit_code(exit_code)
     if not storage.exists(app_name, verstr):
         return False
-    prior = load_run_state(storage, app_name, verstr) or {}
-    if not force:
-        _refuse_unfinishable(prior, run_state_observed_at(storage, app_name, verstr), verstr)
+    observed_at = run_state_observed_at(storage, app_name, verstr)
+
+    def finishable(prior):
+        if not force:
+            _refuse_unfinishable(prior, observed_at, verstr)
+        return prior
+
+    finishable(load_run_state(storage, app_name, verstr) or {})
     recorded = None if error is None else _error_mapping(error)
     if recorded is not None:
         append_to_log(storage, app_name, verstr,
                       create_log_entry("error", message=recorded["message"]))
         flush_log(storage, app_name, verstr)
-    save_run_state(storage, app_name, verstr,
-                   final_state(prior, exit_code, recorded, end_reason))
+    _save_final(storage, app_name, verstr, lambda prior: final_state(
+        finishable(prior), exit_code, recorded, end_reason))
     return True
+
+
+def _save_final(storage, app_name, verstr, update):
+    """A compare-and-swap of ``update(stored state)`` where the run's state
+    is shared (its remote, else the store), then a copy to the local side."""
+    inline, remote_target = split_storage(storage, app_name, verstr)
+    pull_record(storage, inline, app_name, verstr)
+    shared = (remote_target and remote_target()) or inline
+    state = compare_and_save(shared, app_name, verstr, RUN_STATE_FILE, update)
+    if inline is not None and inline is not shared:
+        save_run_state(inline, app_name, verstr, state)
 
 
 def final_state(prior, exit_code, error=None, end_reason=None):
@@ -70,7 +94,7 @@ def final_state(prior, exit_code, error=None, end_reason=None):
         exit_code=exit_code,
         finished_at=finished_at,
         duration_sec=_duration(prior.get("started_at"), finished_at),
-        attempt=uuid.uuid4().hex[:12],
+        attempt=new_attempt_id(),
     )
     if error is not None:
         state["error"] = error

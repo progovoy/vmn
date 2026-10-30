@@ -17,9 +17,15 @@ recomputes that one tally from its parent's static children, at most once a
 generation. The live rows (and their ancestors) are an overlay of tallies
 built per time bucket (:func:`overlay`).
 
-Archived rows are left out, as the board leaves them out by default.
+Archived rows are left out, as the board leaves them out by default, and
+an archived job takes its whole subtree out of the jobs above it (its own
+rollup still reads its subtree): :class:`JobTree`'s one membership rule,
+which the attention counts follow too (:meth:`JobTree.counted_in`,
+:meth:`JobTree.top_counted`).
 """
-from vmn_exp.core.tree import subtree_verstrs
+from functools import cached_property
+
+from vmn_exp.core.tree import counted_chain, subtree_verstrs
 from vmn_exp.ui.leaderboard_facets import visible
 
 
@@ -106,11 +112,15 @@ class JobTree:
     each, and the top-level ones (under no job)."""
 
     def __init__(self, base):
+        self._base = base
         self.jobs = {v for v, kids in base.children_of.items() if kids and v in base.position}
         self.nested = {job: [kid for kid in base.children_of[job] if kid in self.jobs]
                        for job in self.jobs}
         self._parent = {kid: job for job, kids in self.nested.items() for kid in kids}
         self.top = [job for job in self.jobs if job not in self._parent]
+        self.archived = {job for job in self.jobs if base.rows[base.position[job]].get("archived")}
+        self._counted = {job: [kid for kid in kids if kid not in self.archived]
+                         for job, kids in self.nested.items()}
 
     def peers(self, job):
         """The jobs beside *job*: under its parent job, else the top-level ones."""
@@ -118,5 +128,29 @@ class JobTree:
         return self.top if parent is None else self.nested[parent]
 
     def subtree_jobs(self, job):
-        """*job* and every job below it (cycle-safe)."""
-        return subtree_verstrs(job, self.nested)
+        """*job* and every job below it but under no archived one (cycle-safe)."""
+        return subtree_verstrs(job, self._counted)
+
+    def counted_in(self, verstr):
+        """*verstr* and the jobs it counts in, nearest first: up its parent
+        chain to its nearest archived job (whose own rollup reads its
+        subtree; the jobs above it do not)."""
+        if verstr in self.jobs:
+            return [verstr, *counted_chain(verstr, self._parent, self.archived.__contains__)]
+        parent = self._job_above(verstr)
+        return [verstr, *self.counted_in(parent)] if parent else [verstr]
+
+    def top_counted(self, verstr):
+        """The last of :meth:`counted_in` *verstr*: the top-most run it counts in."""
+        job = verstr if verstr in self.jobs else self._job_above(verstr)
+        return self._top_counted[job] if job else verstr
+
+    @cached_property
+    def _top_counted(self):
+        return {job: self.counted_in(job)[-1] for job in self.jobs}
+
+    def _job_above(self, verstr):
+        """*verstr*'s parent when it is a job, else None."""
+        at = self._base.position.get(verstr)
+        parent = _parent(self._base.rows[at]) if at is not None else None
+        return parent if parent in self.jobs else None

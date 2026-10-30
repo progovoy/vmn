@@ -19,7 +19,6 @@ import signal
 import socket
 import sys
 import time
-import uuid
 
 from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.background import Coalescing
@@ -34,6 +33,7 @@ from vmn_exp.core.run_intervals import (
     resolve_heartbeat_sec,
     resolve_sync_sec,
 )
+from vmn_exp.core.state_cas import new_attempt_id
 from vmn_exp.core.status import positive_env_sec
 from vmn_exp.core.storage_resolve import _try_repo_root
 from vmn_exp.core.values import sanitize_entry
@@ -142,7 +142,9 @@ def start_run(
     mode=None,
     intent=None,
     intent_keywords=None,
-    on_sigterm=release.FAIL,
+    on_sigterm=None,
+    sigterm_exit=None,
+    reopen=False,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -172,6 +174,8 @@ def start_run(
 
     ``run_id`` (or ``VMN_RESUME_RUN_ID``) reopens an existing run of the app
     instead of creating one — a requeued job continuing where it was preempted.
+    A finished run is refused (ValueError) unless ``reopen=True`` (or
+    ``VMN_RESUME_REOPEN=1`` with the env var): reopening clears its exit code.
     With ``rewind_to_step=N`` too, the reopened run's history past step N is
     hidden (refused while the run is live elsewhere).
 
@@ -200,8 +204,14 @@ def start_run(
     ``on_sigterm`` is what the SDK's SIGTERM handler does with the run:
     ``"fail"`` finishes it with exit code 143; ``"release"`` hands it back
     unfinished (:meth:`Run.release`) for a retry to reopen with ``run_id=``.
+    Not given, it is ``VMN_EXP_ON_SIGTERM``, else ``"fail"``. ``sigterm_exit``
+    is what the handler does next: ``"kill"`` re-delivers the signal so the
+    process dies of it; ``"raise"`` raises ``SystemExit(143)`` in the main
+    thread so ``finally`` blocks run. Not given, ``VMN_EXP_SIGTERM_EXIT``,
+    else ``"kill"``. Either raises ValueError before anything is created.
     """
-    release.check_on_sigterm(on_sigterm)
+    on_sigterm = release.resolve_on_sigterm(on_sigterm)
+    sigterm_exit = release.resolve_sigterm_exit(sigterm_exit)
     if is_disabled(mode):
         return NoOpRun(app_name, disabled=True)
     if not all_ranks and is_secondary_rank():
@@ -212,13 +222,14 @@ def start_run(
     _check_intent(intent, intent_keywords)
 
     prior_state, start_step = None, None
-    ref = resume.requested_run_id(run_id)
+    ref, reopen = resume.requested_run_id(run_id, reopen)
     fork.check_modes(ref, fork_from, rewind_to_step)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
             app_name, ref, storage
         )
+        resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id)
         if rewind_to_step is not None:
             start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
     else:
@@ -248,6 +259,7 @@ def start_run(
         capture_output=capture_output,
         exp_conf=exp_conf,
         on_sigterm=on_sigterm,
+        sigterm_exit=sigterm_exit,
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -303,9 +315,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         capture_output=False,
         exp_conf=None,
         on_sigterm=release.FAIL,
+        sigterm_exit=release.KILL,
     ):
         self._storage = storage
         self._on_sigterm = on_sigterm
+        self._sigterm_exit = sigterm_exit
         # The checkout's `experiment:` conf, as start_run() read it.
         self._exp_conf = exp_conf
         self.app_name = app_name
@@ -321,6 +335,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self.pid = os.getpid()
 
         self._finished = False
+        self._detached = False
         self._monotonic_start = time.monotonic()
         self._sync_interval_sec = sync_interval_sec
         self._last_sync = self._monotonic_start
@@ -334,7 +349,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         # Every background storage call goes through it: pause_background()
         # and the fork handlers (fork_safety) hold them all.
         self._gate = BackgroundGate()
-        self._state_publisher = RunStatePublisher(storage, app_name, verstr, self._gate)
+        self._state_publisher = RunStatePublisher(
+            storage, app_name, verstr, self._gate, resumes=prior_state)
         self._log_buffer = LogBuffer(
             functools.partial(append_entries_to_log, storage, app_name, verstr),
             self._gate,
@@ -379,7 +395,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             "host": socket.gethostname(),
             # This process's attempt at the run: a duplicate attempt's
             # heartbeats never reopen a run another attempt finished.
-            "attempt": uuid.uuid4().hex[:12],
+            "attempt": new_attempt_id(),
             "started_at": started_at,
             "heartbeat": started_at,
             # Bumped every beat: a liveness signal that needs no clock.
@@ -406,6 +422,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def finish(self, exit_code=0, error=None):
         """Finalize the run. Idempotent: a second call changes nothing.
 
+        False when another attempt of the run (a duplicate pod, a resumed
+        one) finished it first: its final state stays, this one is dropped
+        with a warning. True otherwise — also when the final upload is still
+        in flight at the deadline.
+
         *error* — an exception or a message — is recorded as the final run
         state's ``error`` (and an ``error`` log entry), whatever *exit_code* is.
 
@@ -413,7 +434,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         run is logged, not thrown at the workload), and always closes the run —
         it leaves the open-run registry and hands the env back either way.
         """
-        self._finish(exit_code, error=error)
+        return self._finish(exit_code, error=error)
 
     def release(self, reason=None):
         """Hand the run back unfinished, for another attempt to reopen with
@@ -421,15 +442,45 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         synced, recording stops, and the run reads as waiting (``created``)
         with ``end_reason: released`` (*reason* as ``release_reason``).
         Idempotent; a no-op on a finished run. Never raises for a storage
-        failure, like :meth:`finish`."""
+        failure, like :meth:`finish`. False, like :meth:`finish`, when another
+        attempt finished the run: the release is dropped, its ending stays."""
         deadline = _final_upload_deadline()
         if self._record_release(deadline, reason=reason):
             self._close_remote_writers(deadline)
+        return not self._state_publisher.superseded
+
+    def detach(self):
+        """Walk away from the run without writing anything more to the store —
+        no final state, no release, not even a last heartbeat — for an attempt
+        that lost the run to another one. Its threads stop (waiting, within the
+        final-upload timeout, for a write already in flight), what is still
+        queued is dropped and the run leaves this process's context, so
+        atexit and SIGTERM leave it alone. Logging afterwards records nothing;
+        ``finish()``, ``release()`` and the context manager's exit write
+        nothing. Idempotent; a no-op on a finished run."""
+        if self._finished:
+            return
+        self._finished = self._detached = True
+        try:
+            self._stop_background(_final_upload_deadline())
+        finally:
+            context.unregister(self)
+
+    def _stop_background(self, deadline):
+        """Stop a detached run's threads; its closed gate skips their last calls."""
+        self._gate.close(_left(deadline))
+        self._heartbeat.stop()
+        self._log_buffer.discard()
+        if self._output is not None:
+            self._output.stop()
+        self._media_uploads.close(_left(deadline))
+        self._close_writers(deadline)
 
     def _finish(self, exit_code, error=None, **final_state):
         deadline = _final_upload_deadline()
         if self._record_final(exit_code, deadline, error=error, **final_state):
             self._close_remote_writers(deadline)
+        return not self._state_publisher.superseded
 
     def _record_error(self, error):
         """Append the ``error`` log entry of *error*; return its run-state mapping."""
@@ -495,7 +546,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             self._record_guard(
                 "media files",
                 self._close_media_uploads,
-                max(0.0, deadline - time.monotonic()),
+                _left(deadline),
             )
             self._heartbeat.stop()
             final_state = outcome()
@@ -504,7 +555,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             # The log lands before the final state: a reader that sees the run
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
-            self._record_guard("final state", self._publish, **final_state)
+            self._record_guard("final state", self._publish, final_state, final=True)
             self._log_sync.submit(None)
             if alerts:
                 self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
@@ -518,14 +569,21 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _close_remote_writers(self, deadline):
         # One deadline for all: they upload in parallel, so waiting for each
         # in turn would double the worst case.
+        for what in self._close_writers(deadline):
+            _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
+        compact_by(self._storage, self.app_name, self.id,
+                   own_stream(self._storage, self.app_name, self.id), deadline)
+
+    def _close_writers(self, deadline):
+        """Close the remote writers; the names of those still uploading."""
+        return [what for what, writer in self._remote_writers()
+                if not writer.close(_left(deadline))]
+
+    def _remote_writers(self):
         writers = [("log", self._log_sync), ("state", self._state_publisher)]
         if self._output is not None:
             writers.append(("output log", self._output))
-        for what, writer in writers:
-            if not writer.close(max(0.0, deadline - time.monotonic())):
-                _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
-        compact_by(self._storage, self.app_name, self.id,
-                   own_stream(self._storage, self.app_name, self.id), deadline)
+        return writers
 
     def _duration(self):
         return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)
@@ -577,6 +635,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._append(create_log_entry("artifact", **info))
 
     def _save_artifact_file(self, path, name):
+        if self._detached:
+            return
         save_artifact(self._storage, self.app_name, self.id, path, name=name)
 
     def register_model(self, name, artifact_path=None, alias=None, description=None, *, storage=None):
@@ -639,7 +699,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         latest intent wins, also on a finished run — nothing ships its log
         any more, so the entry is synced to the remote at once."""
         self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
-        if self._finished:
+        if self._finished and not self._detached:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
                                self.id)
 
@@ -664,9 +724,9 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         if entry is not None:
             self._log_buffer.append(entry)
 
-    def _publish(self, **updates):
+    def _publish(self, updates=(), final=False):
         self._state.update(updates)
-        self._state_publisher.publish(self._state)
+        self._state_publisher.publish(self._state, final=final)
 
     def _beat(self):
         # Independent chores: a failed heartbeat write must not skip the sync
@@ -752,6 +812,10 @@ def _final_upload_deadline():
     return time.monotonic() + final_upload_timeout_sec()
 
 
+def _left(deadline):
+    return max(0.0, deadline - time.monotonic())
+
+
 def _system_exit_code(exc):
     """``sys.exit()``'s effective process exit code, as the interpreter itself
     computes it: no argument (or ``None``) is 0, a non-int argument (a message)
@@ -777,7 +841,13 @@ def install_signal_handlers():
     again after installing a SIGTERM handler of your own (it is chained), or
     when the SDK is first imported from a worker thread.
     """
-    signals.install(_finalize_signaled, timeout=final_upload_timeout_sec)
+    signals.install(_finalize_signaled, timeout=final_upload_timeout_sec,
+                    raises=_sigterm_raises)
+
+
+def _sigterm_raises():
+    """Whether an open run asked for ``sigterm_exit="raise"``."""
+    return any(run._sigterm_exit == release.RAISE for run in context.open_runs())
 
 
 atexit.register(_finalize_open_runs)

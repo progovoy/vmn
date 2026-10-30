@@ -123,3 +123,54 @@ def test_prune_treats_archived_runs_like_any_finished_run(app_layout):
     assert _exp(app, action="prune", keep=1) == 0
 
     assert _storage(app_layout).list_verstrs(app) == [newer]
+
+
+def _by_query(app_layout, capfd, action, query, *extra, refs=()):
+    capfd.readouterr()
+    args = [*refs, "--query", query, *extra]
+    code = _exp(app_layout.app_name, action=action, extra_args=args)
+    return code, capfd.readouterr().out
+
+
+def _named_runs(app_layout):
+    return [_create(app_layout, "--name", name) for name in ("old", "new", "old")]
+
+
+def test_archive_by_query_archives_the_matching_runs_and_prints_the_count(app_layout, capfd):
+    _bootstrap(app_layout)
+    first, kept, third = _named_runs(app_layout)
+
+    code, out = _by_query(app_layout, capfd, "archive", 'name = "old"')
+
+    assert code == 0
+    assert "Archived 2 run(s)" in out
+    assert [_row(app_layout, v)["archived"] for v in (first, kept, third)] == [True, False, True]
+    _, shown = _list(app_layout, capfd)
+    assert shown == [kept]
+
+    code, out = _by_query(app_layout, capfd, "unarchive", 'name = "old"')
+    assert code == 0
+    assert "Unarchived 2 run(s)" in out
+    _, shown = _list(app_layout, capfd)
+    assert shown == [first, kept, third]
+
+
+def test_archive_by_query_dry_run_writes_nothing(app_layout, capfd):
+    _bootstrap(app_layout)
+    first, kept, third = _named_runs(app_layout)
+
+    code, out = _by_query(app_layout, capfd, "archive", 'name = "old"', "--dry-run")
+
+    assert code == 0
+    assert "Would archive 2 run(s)" in out
+    assert first in out and third in out and kept not in out
+    assert not any(_row(app_layout, v)["archived"] for v in (first, kept, third))
+
+
+def test_archive_by_query_refuses_refs_and_a_bad_query(app_layout, capfd):
+    _bootstrap(app_layout)
+    first = _create(app_layout, "--name", "old")
+
+    assert _by_query(app_layout, capfd, "archive", 'name = "old"', refs=[first])[0] == 1
+    assert _by_query(app_layout, capfd, "archive", "name ==")[0] == 1
+    assert _row(app_layout, first)["archived"] is False

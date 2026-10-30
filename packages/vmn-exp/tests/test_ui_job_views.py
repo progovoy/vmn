@@ -4,9 +4,8 @@ from the leaderboard cache, as a brute-force walk of the snapshot does."""
 import datetime
 
 import pytest
-from job_rollup_reference import annotated, subtree
+from job_rollup_reference import annotated, members_of
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core.tree import children_by_parent
 from vmn_exp.ui.failure_signature import signature
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
@@ -22,10 +21,7 @@ def _clock(monkeypatch):
 
 
 def _members(snap, job):
-    rows = annotated(snap)
-    by_verstr = {row["verstr"]: row for row in rows}
-    return [by_verstr[v] for v in subtree(job, children_by_parent(rows))
-            if v in by_verstr and not by_verstr[v].get("archived")]
+    return members_of(annotated(snap), job)
 
 
 def _want_top(members, descending=False):

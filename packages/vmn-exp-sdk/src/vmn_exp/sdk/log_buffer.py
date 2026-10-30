@@ -11,7 +11,8 @@ interpreter exit — so nothing logged before the run ends is lost.
 
 Each batch is a single write of whole lines, so a reader sees an entry
 entirely or not at all. A forked child that inherited the buffer, or a write
-after :meth:`LogBuffer.close`, goes straight to storage.
+after :meth:`LogBuffer.close`, goes straight to storage; after
+:meth:`LogBuffer.discard` (a detached run) nothing is written at all.
 """
 import collections
 import logging
@@ -42,9 +43,12 @@ class LogBuffer:
         self._pending = collections.deque()
         self._reset_locks()
         self._closed = False
+        self._discarded = False
         self._flusher = None
 
     def append(self, entry):
+        if self._discarded:
+            return
         if self._closed or os.getpid() != self._pid:
             self._write([entry])
             return
@@ -89,11 +93,20 @@ class LogBuffer:
 
     def close(self):
         """Flush and stop batching: later entries are written at once."""
+        self._stop_flusher()
+        self.flush()
+
+    def discard(self):
+        """Stop batching and drop what is queued and every later entry."""
+        self._discarded = True
+        self._stop_flusher()
+        self._pending.clear()
+
+    def _stop_flusher(self):
         self._closed = True
         flusher, self._flusher = self._flusher, None
         if flusher is not None:
             flusher.stop()
-        self.flush()
 
     def _start_flusher(self):
         with self._start_lock:
