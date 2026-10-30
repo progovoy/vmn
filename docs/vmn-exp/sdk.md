@@ -563,8 +563,8 @@ yourself when a `with` block doesn't fit. It is idempotent.
   flight at the deadline). The final write is a compare-and-swap on the
   state's version token (S3/Azure ETag, GCS generation, a content hash under
   a per-record lock on a local store), so two finishers racing cannot both
-  land. So is every other state write — each heartbeat and a resumed
-  attempt's first write — so the losing attempt never flips the finished run
+  land. So is every other state write — each heartbeat and an attempt's
+  first write (a create-only write while no state exists) — so the losing attempt never flips the finished run
   back to `running` either (its heartbeat stops). A release never displaces a
   finish; a finish replaces a release.
 - The run **heartbeats itself** from a daemon thread (bumping `heartbeat_seq`

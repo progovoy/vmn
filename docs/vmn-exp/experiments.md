@@ -276,8 +276,11 @@ write of the state — each beat, an attempt's first write, its final state — 
 a compare-and-swap: once another attempt has written the final state, the
 write is dropped and this attempt stops heartbeating (one warning), so the
 loser never flips a finished run back to `running` nor erases its exit code,
-even when that final state lands between the beat's read and its write. The
-one final state an attempt may replace is the one it resumed, so resuming a
+even when that final state lands between the beat's read and its write. A
+write that found no state file only creates one (`If-None-Match: *`, GCS
+generation 0, or a check under the local lock), so two new attempts racing to
+start cannot overwrite each other either; a new run's first write is that
+create, with no read. The one final state an attempt may replace is the one it resumed, so resuming a
 finished run with `start_run(run_id=)` still reopens it; a finish landing
 after the resumer read the state wins.
 

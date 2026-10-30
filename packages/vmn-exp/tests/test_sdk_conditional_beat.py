@@ -67,9 +67,8 @@ def test_beats_after_our_own_write_skip_the_read(storage):
     puts = _state_calls(calls, "PutObject")
     gets = _state_calls(calls, "GetObject")
     assert len(puts) == BEATS + 1
-    # Beats used to read before every write: 2 * BEATS requests, not BEATS.
-    # The one read is the first write's guard (no other attempt finished it).
-    assert len(gets) == 1
+    # Today's beats read before every write: 2 * BEATS requests, not BEATS.
+    assert gets == []
     assert sum("IfMatch" in p for p in puts) == BEATS
 
 

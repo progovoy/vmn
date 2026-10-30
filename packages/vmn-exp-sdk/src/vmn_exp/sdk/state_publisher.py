@@ -31,6 +31,7 @@ from vmn_exp.core.state_cas import (
     split_storage,
 )
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.storage.base import NO_FILE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class RunStatePublisher:
     def _save(self, side, state, final):
         """Whether *state* landed on *side*."""
         written, token = compare_and_save_token(
-            side, self._where, self._unless_lost(side, state), self._tokens.get(id(side)))
+            side, self._where, self._unless_lost(side, state), self._seed(side))
         if written is None:
             self._supersede("its final state is dropped" if final
                             else "this attempt stops heartbeating")
@@ -98,6 +99,14 @@ class RunStatePublisher:
         self._written.add(id(side))
         self._tokens[id(side)] = (state, token) if token is not None else None
         return True
+
+    def _seed(self, side):
+        """The CAS's first round on *side*: this attempt's last write there;
+        before one, a new run's record (just claimed) holds no state yet, so
+        its first write is a create, no read."""
+        if id(side) in self._written or self._resumes:
+            return self._tokens.get(id(side))
+        return {}, NO_FILE
 
     def _unless_lost(self, side, state):
         attempt = state.get("attempt")

@@ -12,6 +12,7 @@ again. Two finishers racing cannot both land.
 import yaml
 
 from vmn_exp import _base
+from vmn_exp.storage.base import NO_FILE
 from vmn_exp.storage.cached import CachedSnapshotStorage, local_side
 
 # Each refusal is another writer landing in between: a live attempt's beat,
@@ -87,6 +88,8 @@ def _load(side, app_name, verstr, filename):
     raw, token = load(app_name, verstr, filename) if load else (
         side.load_file(app_name, verstr, filename), None)
     state = _base.yaml_safe_load(raw) if raw else None
+    if load and raw is None and token is None:
+        token = NO_FILE  # read no file: write only while there is still none
     return (state if isinstance(state, dict) else {}), token
 
 

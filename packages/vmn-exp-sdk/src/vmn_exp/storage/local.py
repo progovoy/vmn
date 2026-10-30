@@ -14,7 +14,7 @@ from vmn_exp._base import VMN_LOGGER, parse_record_metadata
 from vmn_exp.core.record_format import with_format_version
 from vmn_exp.core.record_files import read_file, read_file_from
 from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
-from vmn_exp.storage.base import SnapshotStorage
+from vmn_exp.storage.base import NO_FILE, SnapshotStorage
 from vmn_exp.storage.child_markers import LocalChildren
 from vmn_exp.storage import host_dirs, ship_state
 from vmn_exp.storage.files import (
@@ -346,6 +346,10 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
     def save_file(self, app_name, verstr, filename, data):
         if self._refuse_orphan_write(app_name, verstr, filename):
             return False
+        self._write_file(app_name, verstr, filename, data)
+        return True
+
+    def _write_file(self, app_name, verstr, filename, data):
         snap_dir = self._snapshot_dir(app_name, verstr)
         path = os.path.join(snap_dir, filename)
         _ensure_parent(path)
@@ -354,7 +358,6 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
             # The rename moved only its folder's mtime: move the record's
             # signature (list_record_names) too.
             os.utime(snap_dir)
-        return True
 
     def load_file_with_token(self, app_name, verstr, filename):
         data = self.load_file(app_name, verstr, filename)
@@ -364,14 +367,16 @@ class LocalSnapshotStorage(LocalChildren, LocalStreams, LocalMetrics, SnapshotSt
         """The record's state lock makes the compare and the rename one step
         for every conditional writer (an unconditional one may still land).
         The token back is *data*'s content hash, so a writer on the token of
-        its own last write needs no read before it."""
+        its own last write needs no read before it. A write into a deleted
+        record is dropped, as :meth:`save_file` drops it: ``(True, None)``,
+        nothing for the writer to retry."""
         if self._refuse_orphan_write(app_name, verstr, filename):
-            return False, None
+            return True, None
         with ship_state.state_lock(self._snapshot_dir(app_name, verstr)):
-            stored = self.load_file(app_name, verstr, filename)
-            if etag and _content_token(stored) != etag:
+            stored = _content_token(self.load_file(app_name, verstr, filename))
+            if etag and stored != (None if etag == NO_FILE else etag):
                 return False, None
-            self.save_file(app_name, verstr, filename, data)
+            self._write_file(app_name, verstr, filename, data)
             return True, _content_token(data)
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):

@@ -7,6 +7,7 @@ own last write is one locked read, no parse.
 """
 from test_storage_object_stores import _meta, store  # noqa: F401 (fixture)
 
+from vmn_exp.storage.base import NO_FILE
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 APP = "trainer"
@@ -50,3 +51,17 @@ def test_a_local_store_returns_the_token_of_its_write(tmp_path):
     assert written and token == storage.load_file_with_token(APP, V1, NAME)[1]
     assert storage.save_file_if_match(APP, V1, NAME, "a: 2\n", token)[0]
     assert storage.load_file(APP, V1, NAME) == b"a: 2\n"
+
+
+def _create_only_cases(storage):
+    assert storage.save_file_if_match(APP, V1, NAME, "a: 1\n", NO_FILE)[0]
+    assert storage.save_file_if_match(APP, V1, NAME, "b: 1\n", NO_FILE) == (False, None)
+    assert storage.load_file(APP, V1, NAME) == b"a: 1\n"
+
+
+def test_a_create_only_write_is_refused_once_the_file_exists(store):  # noqa: F811
+    _create_only_cases(_claimed(store))
+
+
+def test_a_local_create_only_write_is_refused_once_the_file_exists(tmp_path):
+    _create_only_cases(_claimed(LocalSnapshotStorage(str(tmp_path))))

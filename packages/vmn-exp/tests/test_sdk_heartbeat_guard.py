@@ -131,6 +131,39 @@ def test_a_remote_beat_that_read_before_the_winners_finish_keeps_it(bucket):
     assert b.superseded
 
 
+def test_a_new_attempts_first_local_write_keeps_a_finish_landing_before_it(root):
+    a = RunStatePublisher(_local(root), APP, X)
+    b_side = _local(root)
+    b = RunStatePublisher(b_side, APP, X)
+
+    _before_next(b_side, ("save_file", "save_file_if_match"), _finisher(a))
+    b.publish(_running(0, "b"))
+
+    assert load_run_state(_local(root), APP, X) == _final("a")
+    assert b.superseded
+
+
+def test_a_new_attempts_first_remote_write_keeps_a_finish_landing_before_it(bucket):
+    a, b_side = RunStatePublisher(s3_storage(), APP, X), s3_storage()
+    b = RunStatePublisher(b_side, APP, X)
+
+    _before_next(b_side, ("save_file", "save_file_if_match"), _finisher(a))
+    b.publish(_running(0, "b"))
+    assert b.close(10)
+
+    assert load_run_state(s3_storage(), APP, X) == _final("a")
+    assert b.superseded
+
+
+def test_a_beat_into_a_deleted_local_record_is_dropped(root):
+    publisher = RunStatePublisher(_local(root), APP, X)
+    publisher.publish(_running(0, "a"))
+    _local(root).delete(APP, X)
+    publisher.publish(_running(1, "a"), heartbeat=True)
+    publisher.publish(_final("a"), final=True)
+    assert not publisher.superseded
+
+
 def test_a_resumed_attempts_first_write_keeps_a_finish_landing_before_it(root):
     a = Run(_local(root), APP, X, 3600)
     a._open()
