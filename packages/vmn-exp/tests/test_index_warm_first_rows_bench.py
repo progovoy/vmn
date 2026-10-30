@@ -6,7 +6,7 @@ import time
 
 import pytest
 from uiload import seeder
-from vmn_exp.core.index import FIRST_ROWS, ExperimentIndex
+from vmn_exp.core.index import FIRST_ROWS, FIRST_ROWS_MAX, ExperimentIndex
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 
@@ -44,6 +44,11 @@ def test_a_restart_serves_its_newest_rows_before_reading_every_row_back(store):
 
     print(f"\n{RUNS} runs: newest {len(first.rows)} rows after {served:.3f}s, "
           f"every persisted row after {persisted:.2f}s")
-    assert first.loading == (FIRST_ROWS, len(full.rows))
-    assert [r["verstr"] for r in first.rows] == [r["verstr"] for r in full.rows[-FIRST_ROWS:]]
+    # The newest runs, plus the outer runs and parents around them.
+    assert first.loading == (len(first.rows), len(full.rows))
+    assert len(first.rows) <= FIRST_ROWS_MAX
+    shown = [r["verstr"] for r in first.rows]
+    assert {r["verstr"] for r in full.rows[-FIRST_ROWS:]} <= set(shown)
+    order = {r["verstr"]: i for i, r in enumerate(full.rows)}
+    assert shown == sorted(shown, key=order.__getitem__)  # the full snapshot's order
     assert served <= FIRST_ROWS_SEC
