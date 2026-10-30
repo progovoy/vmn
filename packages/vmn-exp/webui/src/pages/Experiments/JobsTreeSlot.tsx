@@ -20,6 +20,14 @@ export const SLOT_HEIGHT = EMBEDDED_HEIGHT + 16;
 
 export const isTreeSlot = (it: GridItem | undefined): it is TreeSlot => it != null && "item" in it && it.item === "tree";
 
+/** A board item's key: the virtualizer keeps measured sizes by it, so a
+ *  tree's height stays with its slot when the list above shifts. */
+export function gridItemKey(it: GridItem): string {
+  if (isTreeSlot(it)) return `tree:${it.row.verstr}`;
+  if (!isGroupItem(it)) return it.verstr;
+  return it.item === "more" ? `more:${it.key}` : `group:${it.group.key}`;
+}
+
 /** *items* with a tree slot after each row whose tree is open, and the toggle. */
 export function useTreeSlots(items: readonly BoardItem[]) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());

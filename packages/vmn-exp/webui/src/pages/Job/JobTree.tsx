@@ -67,7 +67,7 @@ export default function JobTree({ ws, app, verstr, name, attention, embedded = f
     <div className="card flush job-tree-card" ref={cardRef}>
       <div
         className="tbl-scroll" ref={parentRef}
-        style={embedded ? undefined : { maxHeight: "calc(100vh - 340px)", overflow: "auto" }}
+        style={embedded ? { overflowX: "visible" } : { maxHeight: "calc(100vh - 340px)", overflow: "auto" }}
       >
         <table role="treegrid" aria-label={`runs of ${name ?? verstr}`} className="lb-table job-tree">
           <colgroup>{TREE_COLUMNS.map((c) => <col key={c.id} style={{ width: c.width }} />)}</colgroup>

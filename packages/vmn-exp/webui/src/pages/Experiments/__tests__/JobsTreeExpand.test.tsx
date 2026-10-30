@@ -18,10 +18,13 @@ vi.mock("../../../apiTree", async (orig) => ({
 vi.mock("../../../components/NewExperiment", () => ({ default: () => null }));
 /** Each virtualizer's scroll element getter, to see which box it scrolls with. */
 const scrollers = vi.hoisted(() => [] as (() => Element | null)[]);
+/** Each virtualizer's count and item keys, to see what its measured sizes follow. */
+const keyed = vi.hoisted(() => [] as { count: number; getItemKey?: (i: number) => unknown }[]);
 vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: ({ count, estimateSize, getScrollElement }: {
+  useVirtualizer: ({ count, estimateSize, getScrollElement, getItemKey }: {
     count: number; estimateSize: (i: number) => number; getScrollElement: () => Element | null;
-  }) => (scrollers.push(getScrollElement), {
+    getItemKey?: (i: number) => unknown;
+  }) => (scrollers.push(getScrollElement), keyed.push({ count, getItemKey }), {
     getTotalSize: () => Array.from({ length: count }, (_, i) => estimateSize(i)).reduce((a, b) => a + b, 0),
     scrollToIndex: () => {},
     getVirtualItems: () =>
@@ -30,6 +33,9 @@ vi.mock("@tanstack/react-virtual", () => ({
       })),
   }),
 }));
+
+/** The last virtualizer made over *count* items. */
+const lastWith = (count: number) => keyed.filter((v) => v.count === count).reverse()[0];
 
 import { api } from "../../../api";
 import { fetchChildren } from "../../../apiTree";
@@ -44,6 +50,7 @@ const CHILD = { ...singleRow(37, { name: "trial-1", parent: GRID.verstr, depth: 
 beforeEach(() => {
   vi.clearAllMocks();
   scrollers.length = 0;
+  keyed.length = 0;
   localStorage.clear();
   m.metricsSchema.mockResolvedValue({ val_loss: { goal: "min" } });
   m.facets.mockRejectedValue(notFound());
@@ -78,5 +85,29 @@ describe("an Outer runs row's tree", () => {
       expect(el.style.overflow).toBe("");
     }
     for (const scrollElement of scrollers) expect(scrollElement()).toBe(scroller);
+  });
+
+  it("keeps no horizontal scrollbar of its own, under its last row", async () => {
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    fireEvent.click(screen.getByRole("button", { name: "expand lr_layers_grid" }));
+    await screen.findByRole("link", { name: "trial-1" });
+    expect(screen.getByRole("treegrid").parentElement!.style.overflowX).toBe("visible");
+  });
+
+  it("sizes the board's rows by what they are, not where they are, so a folded tree's height stays with it", async () => {
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    fireEvent.click(screen.getByRole("button", { name: "expand lr_layers_grid" }));
+    await screen.findByRole("link", { name: "trial-1" });
+    const open = lastWith(3);
+    fireEvent.click(screen.getByRole("button", { name: "collapse lr_layers_grid" }));
+    await waitFor(() => expect(screen.queryByRole("treegrid")).toBeNull());
+    const folded = lastWith(2);
+    expect(open.getItemKey).toBeDefined();
+    expect(folded.getItemKey).toBeDefined();
+    const keysOf = (v: typeof open) => Array.from({ length: v.count }, (_, i) => v.getItemKey!(i));
+    expect(keysOf(folded)).toEqual([open.getItemKey!(0), open.getItemKey!(2)]);
+    expect(keysOf(folded)).not.toContain(open.getItemKey!(1));
   });
 });
