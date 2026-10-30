@@ -16,6 +16,7 @@ import os
 from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.status import load_run_state, parse_iso
+from vmn_exp.core.writer import is_true
 from vmn_exp.sdk import _resolve_app_name
 from vmn_exp.sdk.create import (
     SNAPSHOT_METADATA_ENV,
@@ -27,7 +28,6 @@ from vmn_exp.sdk.ranks import as_int
 
 RESUME_ENV = "VMN_RESUME_RUN_ID"
 REOPEN_ENV = "VMN_RESUME_REOPEN"
-_TRUE_VALUES = ("1", "true", "yes", "on")
 
 
 def requested_run_id(run_id, reopen=False):
@@ -40,7 +40,7 @@ def requested_run_id(run_id, reopen=False):
     if run_id:
         return run_id, reopen
     ref = os.environ.pop(RESUME_ENV, None) or None
-    return ref, os.environ.pop(REOPEN_ENV, "").strip().lower() in _TRUE_VALUES
+    return ref, is_true(os.environ.pop(REOPEN_ENV, None))
 
 
 def check_reopenable(app_name, verstr, prior_state, reopen, from_env):

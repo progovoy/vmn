@@ -467,14 +467,13 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
 
     def _stop_background(self, deadline):
         """Stop a detached run's threads; its closed gate skips their last calls."""
-        self._gate.close(max(0.0, deadline - time.monotonic()))
+        self._gate.close(_left(deadline))
         self._heartbeat.stop()
         self._log_buffer.discard()
         if self._output is not None:
             self._output.stop()
-        self._media_uploads.close(max(0.0, deadline - time.monotonic()))
-        for _, writer in self._remote_writers():
-            writer.close(max(0.0, deadline - time.monotonic()))
+        self._media_uploads.close(_left(deadline))
+        self._close_writers(deadline)
 
     def _finish(self, exit_code, error=None, **final_state):
         deadline = _final_upload_deadline()
@@ -546,7 +545,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             self._record_guard(
                 "media files",
                 self._close_media_uploads,
-                max(0.0, deadline - time.monotonic()),
+                _left(deadline),
             )
             self._heartbeat.stop()
             final_state = outcome()
@@ -555,7 +554,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             # The log lands before the final state: a reader that sees the run
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
-            self._record_guard("final state", self._publish_final, final_state)
+            self._record_guard("final state", self._publish, final_state, final=True)
             self._log_sync.submit(None)
             if alerts:
                 self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
@@ -569,11 +568,15 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _close_remote_writers(self, deadline):
         # One deadline for all: they upload in parallel, so waiting for each
         # in turn would double the worst case.
-        for what, writer in self._remote_writers():
-            if not writer.close(max(0.0, deadline - time.monotonic())):
-                _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
+        for what in self._close_writers(deadline):
+            _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
         compact_by(self._storage, self.app_name, self.id,
                    own_stream(self._storage, self.app_name, self.id), deadline)
+
+    def _close_writers(self, deadline):
+        """Close the remote writers; the names of those still uploading."""
+        return [what for what, writer in self._remote_writers()
+                if not writer.close(_left(deadline))]
 
     def _remote_writers(self):
         writers = [("log", self._log_sync), ("state", self._state_publisher)]
@@ -720,13 +723,9 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         if entry is not None:
             self._log_buffer.append(entry)
 
-    def _publish(self, **updates):
+    def _publish(self, updates=(), final=False):
         self._state.update(updates)
-        self._state_publisher.publish(self._state)
-
-    def _publish_final(self, updates):
-        self._state.update(updates)
-        self._state_publisher.publish(self._state, final=True)
+        self._state_publisher.publish(self._state, final=final)
 
     def _beat(self):
         # Independent chores: a failed heartbeat write must not skip the sync
@@ -810,6 +809,10 @@ def final_upload_timeout_sec():
 
 def _final_upload_deadline():
     return time.monotonic() + final_upload_timeout_sec()
+
+
+def _left(deadline):
+    return max(0.0, deadline - time.monotonic())
 
 
 def _system_exit_code(exc):

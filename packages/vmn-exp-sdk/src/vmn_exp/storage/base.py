@@ -170,12 +170,6 @@ class SnapshotStorage(ABC):
         """Save an auxiliary file into a snapshot directory. data is bytes or str."""
         ...
 
-    def load_file_with_token(self, app_name, verstr, filename):
-        """``(data, token)``: :meth:`load_file` and the token of the version
-        read, for :meth:`save_file_if_match` (None: a backend without tokens,
-        or no file)."""
-        return self.load_file(app_name, verstr, filename), None
-
     def save_file_if_match(self, app_name, verstr, filename, data, etag=None):
         """:meth:`save_file`, returning ``(written, token)``: the stored
         version's token, which a later call passes as *etag* to write only

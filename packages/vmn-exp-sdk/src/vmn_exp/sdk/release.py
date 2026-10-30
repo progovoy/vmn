@@ -42,13 +42,9 @@ def _resolve(value, choices, name, env):
     if value is None and os.environ.get(env):
         value, name = os.environ[env], env
     value = choices[0] if value is None else value
-    _check_choice(value, choices, name)
-    return value
-
-
-def _check_choice(value, choices, name):
     if value not in choices:
         raise ValueError(f"{name} must be one of {', '.join(choices)}, not {value!r}")
+    return value
 
 
 def released_state(duration_sec, reason=None, signal=None):

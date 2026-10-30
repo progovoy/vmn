@@ -22,7 +22,8 @@ is a compare-and-swap (:mod:`vmn_exp.core.state_cas`), dropped — and
 A remote that hands back a version token (S3/Azure ETag, GCS generation)
 spares that read: a beat after this attempt's own write is a conditional PUT
 on the token, which lands only while nobody else wrote the file; refused, the
-beat falls back to the read. That halves a live run's state requests.
+beat falls back to the read. That halves a live run's state requests; a
+final state likewise lands without its compare-and-swap read.
 """
 import logging
 
@@ -109,11 +110,14 @@ class RunStatePublisher:
         target = self._remote_target()
         if target is None:
             return
+        token = self._tokens.pop(id(target), None)
         if final is not None and id(target) in self._written:
+            # Nobody wrote since this attempt's last write: no one finished it.
+            if token is not None and _save(target, self._where, data, token)[0]:
+                return
             if not self._save_final(target, final):
                 self._cache_winner(target)
             return
-        token = self._tokens.pop(id(target), None)
         if heartbeat and token is not None:
             written, token = _save(target, self._where, data, token)
             if written:
