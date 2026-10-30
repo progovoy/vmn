@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { appName as toAppName } from "../api";
-import { cachedRows, findCachedRow, rowsPrefix, runQuery, useMetricsSchema, useRunRow } from "../queries";
+import { cachedRows, rowsPrefix, runQuery, useMetricsSchema, useRunRow } from "../queries";
 import type { ExperimentDetail, ExperimentRow } from "../types";
 import { runHref } from "../util";
 import { isParamOnly } from "../util/paramKeys";
@@ -69,10 +69,12 @@ export default function Run() {
     return <JobPage ws={ws} app={app} runRef={verstr} verstr={v} row={row} summary={summary} />;
   }
   if (!settled) return <Skeleton />;
-  return <SingleRun />;
+  return <SingleRun indexRow={row} />;
 }
 
-function SingleRun() {
+/** *indexRow*: the index's row of the run (a board's cached one, else the
+ *  one-row lookup), which paints the top until the detail lands. */
+function SingleRun({ indexRow }: { indexRow: ExperimentRow | undefined }) {
   const { ws, app, verstr } = useParams() as { ws: string; app: string; verstr: string };
   const client = useQueryClient();
   // Structural sharing keeps every unchanged part of a polled detail (its
@@ -95,8 +97,8 @@ function SingleRun() {
     if (isMissingRun(query.error)) return <NotFound kind="run" ws={ws} appTag={app} runRef={verstr} />;
     return <div className="error">{String(query.error)}</div>;
   }
-  // Until the detail lands, the leaderboard's row for this run paints the top.
-  const row = detail ? undefined : findCachedRow(client, ws, app, verstr);
+  // Until the detail lands, the index's row for this run paints the top.
+  const row = detail ? undefined : indexRow;
   const summary = detail ? summaryFromDetail(detail) : row ? summaryFromRow(row) : null;
   if (!summary) return <Skeleton />;
 
