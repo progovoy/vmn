@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import LiveStatus from "../components/LiveStatus";
 import { isGroupCountId } from "../util/groupCountSort";
+import { IDX_SORT } from "./LeaderboardHead";
 import "./boardCaption.css";
 
 export const BOARD_CAPTION_ID = "board-caption";
@@ -27,9 +28,10 @@ export default function BoardCaption({ sortLabel, reversed, live, tools, legend 
         {legend && <span className="legend-chip"><span className="sq" aria-hidden="true" /> best in column</span>}
         {sortLabel && (
           <span className="board-caption-sort">
-            {isGroupCountId(sortLabel)
-              ? <>groups sorted by <b>{sortLabel.slice(2)} runs</b>, {reversed ? "fewest first" : "most first"}</>
-              : <>sorted by <b>{sortLabel}</b>, {reversed ? "worst first" : "best first"}</>}
+            {sortLabel === IDX_SORT ? (reversed ? "oldest first" : "newest first")
+              : isGroupCountId(sortLabel)
+                ? <>groups sorted by <b>{sortLabel.slice(2)} runs</b>, {reversed ? "fewest first" : "most first"}</>
+                : <>sorted by <b>{sortLabel}</b>, {reversed ? "worst first" : "best first"}</>}
           </span>
         )}
         <span className="spacer" />

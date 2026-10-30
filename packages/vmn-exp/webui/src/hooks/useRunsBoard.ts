@@ -101,7 +101,10 @@ export function useRunsBoard(ws: string, app: string, view: View, opts: RunsBoar
     schema, facets, sort, filter, serverQuery, data, grouping, rows, all, refresh, anyRunning,
     base, colPrefs, setTableWidth, cols, layout, columnEdits, queryHelp, filtered,
     tableItems, tableRows, selection, groupActions, chartGrouping, sortState,
-    sortLabel: sort ?? cols.primary,
+    /** The order the rows were asked in (the caption's), as `boardFilter` sends it. */
+    sortLabel: filter.sort,
+    /** The metric a chart or the CLI hint defaults to. */
+    defaultMetric: sort ?? cols.primary,
   };
 }
 

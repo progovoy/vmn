@@ -112,9 +112,9 @@ export function AllRunsView({ ws, app, views, onJobs }: {
   if (data.pageError) return <div className="error">{data.pageError}</div>;
 
   const empty = rows !== undefined && rows.length === 0 && !filtered;
-  const { sortLabel, anyRunning } = board;
+  const { defaultMetric, anyRunning } = board;
   // `vmn-exp list` sorts runs, not groups.
-  const cliSort = isGroupCountId(sortLabel) ? null : sortLabel;
+  const cliSort = isGroupCountId(defaultMetric) ? null : defaultMetric;
   // A partly loaded board's total counts inner runs too, and its first page
   // may hold only inner ones (a big sweep's newest trials): count every row.
   const shownTop = all.length < data.total ? (tableRows ?? []).length : topLevel(tableRows ?? []);
@@ -188,7 +188,7 @@ export function AllRunsView({ ws, app, views, onJobs }: {
                   <LeaderboardChartsPanel
                     ws={ws} app={app} filter={filter} view={view.chart} onView={view.setChart}
                     loaded={all} total={data.total} metricCols={cols.metricCols} paramCols={cols.paramCols}
-                    allParams={cols.suggestFacets.param_keys} schema={schema} defaultMetric={sortLabel}
+                    allParams={cols.suggestFacets.param_keys} schema={schema} defaultMetric={defaultMetric}
                     onBrushed={setBrushed} grouping={board.chartGrouping} selected={view.selected}
                   />
                 )}
