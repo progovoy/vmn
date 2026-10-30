@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
 """``live_below`` (plan 28 §4.5): how many runs below a top-level row still
 run, wait or are stuck — its Jobs view rollup's counts (settled runs left
-out; 0 for a single run). A ``top_query`` reading it (the Live/Review
-presets) is judged on the order without it, per base and time bucket, not
-in the cache's moved orders: a run deep in a tree changes it without
-changing the top-level row.
+out; 0 for a single run) — and ``running_below``/``stuck_below``, those
+running or stuck alone (the outer runs' status chips). A ``top_query``
+reading one (the Live/Review presets, a status chip) is judged on the order
+without it, per base and time bucket, not in the cache's moved orders: a
+run deep in a tree changes it without changing the top-level row.
 """
 from vmn_exp.core.query import filter_rows, query_roots
 from vmn_exp.core.query_extra import lean_extra
 from vmn_exp.ui.memo import LRU
 
-FIELD = "live_below"
-LIVE_STATES = ("running", "waiting", "stuck")
+# Each field and the rollup states it counts.
+BELOW = {"live_below": ("running", "waiting", "stuck"),
+         "running_below": ("running",), "stuck_below": ("stuck",)}
 
 
 def reads_live_below(query):
-    return bool(query and query.strip()) and FIELD in query_roots(query)
+    return bool(query and query.strip()) and not BELOW.keys().isdisjoint(query_roots(query))
 
 
-def live_count(summary):
-    counts = (summary or {}).get("counts") or {}
-    return sum(counts.get(state, 0) for state in LIVE_STATES)
+def _counter(summaries, states):
+    def count(verstr):
+        counts = (summaries.get(verstr) or {}).get("counts") or {}
+        return sum(counts.get(state, 0) for state in states)
+    return count
 
 
 def passing(snapshot, rows, query, summaries):
-    """Those of *rows* passing *query*, ``live_below`` read from *summaries*."""
+    """Those of *rows* passing *query*, the :data:`BELOW` fields read from *summaries*."""
     extra = dict(lean_extra(snapshot) or {})
-    extra[FIELD] = lambda verstr: live_count(summaries.get(verstr))
+    extra.update({field: _counter(summaries, states) for field, states in BELOW.items()})
     return filter_rows(rows, query, extra=extra)
 
 

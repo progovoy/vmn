@@ -417,6 +417,14 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - an expander (`▸`) before its name that opens its [tree](#the-tree) in place, under the row (on a phone, under its card), about ten rows tall.
   - its [baseline chip](#baseline-compare) (`▼ best_value from 2024-12 (5 of 41 trade_date values worse than the baseline's p10)`), opening its Overview; the page's outer runs' chips come in one `experiments-baselines` request.
 
+  The status chips match an outer run by its tree, not its own status (a
+  launch run ends once it has submitted its runs): **running** keeps it when
+  it or any run below it runs (`status = "running" or running_below > 0`),
+  **stuck** likewise (`stuck_below`), and **failed**, **succeeded** and
+  **created** match its `tree_status` (so a tree with a failed run reads
+  failed, and may still read running). They travel in `top_q`, beside a
+  preset's query, and the command line under the board shows them.
+
   Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
 - **Live** and **Review** (`view=live|review`, a second switch `Live · Review`
   beside the first, shown when the app has outer runs) are presets of Outer
@@ -849,10 +857,12 @@ message.
   - `top_q=<query>` keeps the top-level runs passing it by their own fields,
     beside `q` (which `match_subtree` may match over subtrees), flat or
     grouped. Its `ago()` is pinned to the minute like `q`'s; without `top`
-    it is a 400. The Live and Review presets send it. It alone can read
-    `live_below`: the runs below the row still running, waiting or stuck
-    (its rollup's `counts`, settled runs left out; 0 for a single run).
-    Elsewhere (`q`, `vmn-exp list --query`) no row carries it.
+    it is a 400. The Live and Review presets and the Outer runs' status
+    chips send it. It alone can read `live_below`: the runs below the row
+    still running, waiting or stuck (its rollup's `counts`, settled runs
+    left out; 0 for a single run), and `running_below`/`stuck_below`, those
+    running or stuck alone.
+    Elsewhere (`q`, `vmn-exp list --query`) no row carries them.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`experiments?children_of=<verstr>`** pages that run's direct children
   for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`

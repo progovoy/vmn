@@ -26,7 +26,7 @@ import JobsMatchLine from "./JobsMatchLine";
 import JobsTable from "./JobsTable";
 import JobsToolbar from "./JobsToolbar";
 import { kindNoun, kindQuery, type JobsKind, type JobsKindState } from "./jobsKind";
-import { PRESETS, type Preset } from "./presets";
+import type { Preset } from "./presets";
 import { useBaselineChips } from "./useBaselineChips";
 import { useJobsBoard } from "./useJobsBoard";
 import { useAppStatus } from "../../shell/useShellData";
@@ -48,9 +48,10 @@ function countText(loading: boolean, rows: { job?: unknown }[], total: number, k
 const emptyText = (kind: JobsKind | null, filtered: boolean) =>
   filtered ? `No ${kindNoun(kind)}s match the filters.` : `No ${kindNoun(kind)}s yet.`;
 
-/** The `vmn-exp list --query` selecting the view's rows. */
-const listQuery = (kind: JobsKind | null, preset?: Preset) =>
-  preset ? `${kindQuery(kind)} and (${PRESETS[preset].query})` : kindQuery(kind);
+/** The `vmn-exp list --query` selecting the view's rows (*topQuery*: the
+ *  preset's and the status chips' query on them). */
+const listQuery = (kind: JobsKind | null, topQuery?: string) =>
+  topQuery ? `${kindQuery(kind)} and (${topQuery})` : kindQuery(kind);
 
 export default function JobsView({ ws, app, views, kind, preset, onAll }: {
   ws: string; app: string; views?: ReactNode; kind: JobsKindState; preset?: Preset;
@@ -153,7 +154,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
               {data.moreError && <span className="error">{data.moreError}</span>}
             </div>
           )}
-          <div className="cli-card">vmn-exp list {appName} --query &apos;{listQuery(kind.kind, preset)}&apos;</div>
+          <div className="cli-card">vmn-exp list {appName} --query &apos;{listQuery(kind.kind, board.topQuery)}&apos;</div>
         </>
       )}
     </>
