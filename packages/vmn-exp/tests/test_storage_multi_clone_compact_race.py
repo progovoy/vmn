@@ -80,9 +80,9 @@ def test_a_segment_shipped_after_a_compaction_read_the_stream_survives(
             _add(cached_host(tmp_path, "b"), 5.0, start=50)
         return out
 
-    monkeypatch.setattr(metric_compact, "writer_columns", columns)
-    assert compact_record(cached_host(tmp_path, "a"), APP, V)
-    monkeypatch.undo()
+    with monkeypatch.context() as m:
+        m.setattr(metric_compact, "writer_columns", columns)
+        assert compact_record(cached_host(tmp_path, "a"), APP, V)
     _add(cached_host(tmp_path, "b"), 6.0, start=60)
 
     assert remote_metric_values() == [1.0, 2.0, 5.0, 6.0]
@@ -100,9 +100,9 @@ def test_a_block_appended_while_its_stream_seals_is_read(tmp_path, monkeypatch):
             _add(a, 5.0, start=50)  # the run logs on while it seals
         return out
 
-    monkeypatch.setattr(metric_compact, "writer_columns", columns)
-    assert seal_writer(a, APP, V, stream(a))
-    monkeypatch.undo()
+    with monkeypatch.context() as m:
+        m.setattr(metric_compact, "writer_columns", columns)
+        assert seal_writer(a, APP, V, stream(a))
     _add(a, 6.0, start=60)
 
     assert remote_metric_values() == [1.0, 5.0, 6.0]
