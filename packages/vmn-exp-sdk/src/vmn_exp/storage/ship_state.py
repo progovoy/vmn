@@ -11,10 +11,18 @@ read and written only under ``<record>/.ship/lock``, which every ship and
 every compaction of the copy's own streams holds. A stream the state does not
 know (a failed ship forgets it: its upload may have landed) is listed again.
 """
+import collections
+import functools
 import json
 import os
 import threading
+import time
 from contextlib import contextmanager
+
+try:
+    import fcntl
+except ImportError:  # not POSIX
+    fcntl = None
 
 from filelock import FileLock, Timeout
 from vmn_exp.storage.files import atomic_write
@@ -31,6 +39,13 @@ _FINALIZING = threading.Event()
 _THREAD_LOCKS = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 _DEPTH = threading.local()  # per thread: {lock path: [times held]}
+# One fd open per lock file a process takes, so a hold (every heartbeat takes
+# the state lock) is one flock, not a makedirs + open + close. At most
+# _MAX_OPEN_FDS stay open (a server touches many records): the least recently
+# used one nobody holds is closed for a new one.
+_MAX_OPEN_FDS = 64
+_FDS = collections.OrderedDict()  # lock path -> fd, least recently used first
+_POLL_SEC = 0.05  # how often a contended lock file is tried again
 
 
 def _thread_lock(path):
@@ -160,27 +175,112 @@ def state_lock(record_dir):
 def _record_lock(record_dir, name):
     """Lock *name* of the copy, given back in a ``finally`` the hold is taken
     in: an interrupt landing right after cannot leave it held."""
-    os.makedirs(os.path.join(record_dir, SHIP_DIR), exist_ok=True)
     path = os.path.join(record_dir, SHIP_DIR, name)
     local, depth = _thread_lock(path), _DEPTH.__dict__.setdefault(path, [0])
-    held, file_lock = [], None
+    held, release = [], None
     try:
         held.append(local.acquire(timeout=_wait_sec()))
         if not held[0]:
             raise RuntimeError(f"the record's {name} is held by a stuck thread")
         if not depth[0]:
-            file_lock = FileLock(path)
-            try:
-                file_lock.acquire(timeout=_wait_sec())
-            except Timeout:
-                raise RuntimeError(f"the record's {name} is held by a stuck process") from None
+            release = _lock_file(path, name)
         depth[0] += 1
         try:
             yield
         finally:
             depth[0] -= 1
     finally:
-        if file_lock is not None and file_lock.is_locked:
-            file_lock.release()
+        if release is not None:
+            release()
         if held and held[0]:
             local.release()
+
+
+def _lock_file(path, name):
+    """Take the cross-process lock of the file at *path* (its thread lock
+    held); returns its release."""
+    if fcntl is None:  # not POSIX: a lock file per hold
+        file_lock = FileLock(path)
+        try:
+            file_lock.acquire(timeout=_wait_sec())
+        except Timeout:
+            raise _stuck_process(name) from None
+        return file_lock.release
+    deadline = time.monotonic() + _wait_sec()
+    while True:
+        fd = _open_fd(path)
+        _flock(fd, deadline, name)
+        if _is_current(fd, path):
+            return functools.partial(_unlock_fd, path, fd)
+        _unlock_fd(path, fd)  # the file was removed or replaced: lock the new one
+        _close_fd(path)
+
+
+def _flock(fd, deadline, name):
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                raise _stuck_process(name) from None
+            time.sleep(_POLL_SEC)
+
+
+def _stuck_process(name):
+    return RuntimeError(f"the record's {name} is held by a stuck process")
+
+
+def _open_fd(path):
+    with _THREAD_LOCKS_GUARD:
+        fd = _FDS.get(path)
+        if fd is not None:
+            _FDS.move_to_end(path)
+            return fd
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    with _THREAD_LOCKS_GUARD:
+        _evict_unheld()
+        _FDS[path] = fd
+    return fd
+
+
+def _evict_unheld():
+    """Close the least recently used fds no thread holds, down to the cap."""
+    for path in list(_FDS)[: max(0, len(_FDS) + 1 - _MAX_OPEN_FDS)]:
+        local = _THREAD_LOCKS[path]
+        if local.acquire(blocking=False):
+            try:
+                if not _DEPTH.__dict__.get(path, [0])[0]:
+                    os.close(_FDS.pop(path))
+            finally:
+                local.release()
+
+
+def _is_current(fd, path):
+    """Whether *fd* is still open on the file at *path*."""
+    try:
+        return os.path.samestat(os.fstat(fd), os.stat(path))
+    except FileNotFoundError:
+        return False
+
+
+def _unlock_fd(path, fd):
+    if _FDS.get(path) == fd:  # not closed since (a fork's child closes them all)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+def _close_fd(path):
+    with _THREAD_LOCKS_GUARD:
+        os.close(_FDS.pop(path))
+
+
+def _close_all_fds():
+    """In a fork's child: the fds share the parent's open files, so a flock
+    or unlock through them would be the parent's; the child opens its own."""
+    while _FDS:
+        os.close(_FDS.popitem()[1])
+
+
+if fcntl is not None and hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_close_all_fds)
