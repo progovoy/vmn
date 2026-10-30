@@ -73,6 +73,9 @@ class NoOpRun:
     def release(self, reason=None):
         return None
 
+    def detach(self):
+        return None
+
     def pause_background(self, timeout=None):
         return True  # no background threads
 

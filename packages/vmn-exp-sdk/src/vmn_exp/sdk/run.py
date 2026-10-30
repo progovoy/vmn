@@ -335,6 +335,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self.pid = os.getpid()
 
         self._finished = False
+        self._detached = False
         self._monotonic_start = time.monotonic()
         self._sync_interval_sec = sync_interval_sec
         self._last_sync = self._monotonic_start
@@ -447,6 +448,34 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             self._close_remote_writers(deadline)
         return not self._state_publisher.superseded
 
+    def detach(self):
+        """Walk away from the run without writing anything more to the store —
+        no final state, no release, not even a last heartbeat — for an attempt
+        that lost the run to another one. Its threads stop (waiting, within the
+        final-upload timeout, for a write already in flight), what is still
+        queued is dropped and the run leaves this process's context, so
+        atexit and SIGTERM leave it alone. Logging afterwards records nothing;
+        ``finish()``, ``release()`` and the context manager's exit write
+        nothing. Idempotent; a no-op on a finished run."""
+        if self._finished:
+            return
+        self._finished = self._detached = True
+        try:
+            self._stop_background(_final_upload_deadline())
+        finally:
+            context.unregister(self)
+
+    def _stop_background(self, deadline):
+        """Stop a detached run's threads; its closed gate skips their last calls."""
+        self._gate.close(max(0.0, deadline - time.monotonic()))
+        self._heartbeat.stop()
+        self._log_buffer.discard()
+        if self._output is not None:
+            self._output.stop()
+        self._media_uploads.close(max(0.0, deadline - time.monotonic()))
+        for _, writer in self._remote_writers():
+            writer.close(max(0.0, deadline - time.monotonic()))
+
     def _finish(self, exit_code, error=None, **final_state):
         deadline = _final_upload_deadline()
         if self._record_final(exit_code, deadline, error=error, **final_state):
@@ -540,14 +569,17 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _close_remote_writers(self, deadline):
         # One deadline for all: they upload in parallel, so waiting for each
         # in turn would double the worst case.
-        writers = [("log", self._log_sync), ("state", self._state_publisher)]
-        if self._output is not None:
-            writers.append(("output log", self._output))
-        for what, writer in writers:
+        for what, writer in self._remote_writers():
             if not writer.close(max(0.0, deadline - time.monotonic())):
                 _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
         compact_by(self._storage, self.app_name, self.id,
                    own_stream(self._storage, self.app_name, self.id), deadline)
+
+    def _remote_writers(self):
+        writers = [("log", self._log_sync), ("state", self._state_publisher)]
+        if self._output is not None:
+            writers.append(("output log", self._output))
+        return writers
 
     def _duration(self):
         return round(self._elapsed_before + time.monotonic() - self._monotonic_start, 3)
@@ -599,6 +631,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._append(create_log_entry("artifact", **info))
 
     def _save_artifact_file(self, path, name):
+        if self._detached:
+            return
         save_artifact(self._storage, self.app_name, self.id, path, name=name)
 
     def register_model(self, name, artifact_path=None, alias=None, description=None, *, storage=None):
@@ -661,7 +695,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         latest intent wins, also on a finished run — nothing ships its log
         any more, so the entry is synced to the remote at once."""
         self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
-        if self._finished:
+        if self._finished and not self._detached:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
                                self.id)
 

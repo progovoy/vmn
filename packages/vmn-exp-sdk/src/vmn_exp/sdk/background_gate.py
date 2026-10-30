@@ -24,19 +24,21 @@ class BackgroundGate:
         self._paused = 0
         self._busy = {}  # thread ident -> nesting depth
         self._released = False
+        self._closed = False
 
     def wrap(self, fn):
-        """*fn* as a background call: waits while paused, counts while running."""
+        """*fn* as a background call: waits while paused, counts while running;
+        skipped (None) once the gate is closed."""
 
         @functools.wraps(fn)
         def gated(*args, **kwargs):
-            with self._call(wait=True):
-                return fn(*args, **kwargs)
+            with self._call(wait=True) as admitted:
+                return fn(*args, **kwargs) if admitted else None
 
         return gated
 
     def attempt(self, fn):
-        """Run *fn* as a background call now, unless paused. True if it ran."""
+        """Run *fn* as a background call now, unless paused or closed. True if it ran."""
         with self._call(wait=False) as admitted:
             if admitted:
                 fn()
@@ -47,9 +49,10 @@ class BackgroundGate:
         ident = threading.get_ident()
         with self._cond:
             # A thread already inside a call finishes it: the pause waits for it.
-            admitted = ident in self._busy or not self._held()
-            if not admitted and wait:
-                admitted = self._cond.wait_for(lambda: not self._held())
+            admitted = not self._closed and (ident in self._busy or not self._held())
+            if not admitted and wait and not self._closed:
+                self._cond.wait_for(lambda: self._closed or not self._held())
+                admitted = not self._closed
             if admitted:
                 self._busy[ident] = self._busy.get(ident, 0) + 1
         if not admitted:
@@ -71,12 +74,13 @@ class BackgroundGate:
     def pause(self, timeout=None):
         """Hold new calls and wait up to *timeout* seconds (None: no limit) for
         the ones in flight. True once none is (the caller's own aside)."""
-        me = threading.get_ident()
         with self._cond:
             self._paused += 1
-            return self._cond.wait_for(
-                lambda: not (self._busy.keys() - {me}), timeout
-            )
+            return self._wait_idle(timeout)
+
+    def _wait_idle(self, timeout):
+        me = threading.get_ident()
+        return self._cond.wait_for(lambda: not (self._busy.keys() - {me}), timeout)
 
     def resume(self):
         """Undo one :meth:`pause`; calls proceed once every pause is undone."""
@@ -90,11 +94,19 @@ class BackgroundGate:
             self._released = True
             self._cond.notify_all()
 
+    def close(self, timeout=None):
+        """Never run a call again: the run is detached. Waits up to *timeout*
+        seconds for the calls in flight; True once none is."""
+        with self._cond:
+            self._closed = True
+            self._cond.notify_all()
+            return self._wait_idle(timeout)
+
     def after_fork_in_child(self):
         """The child has none of the parent's threads; start from a clean gate."""
-        released = self._released
+        released, closed = self._released, self._closed
         self._reset()
-        self._released = released
+        self._released, self._closed = released, closed
 
 
 class RunBackground:

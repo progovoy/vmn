@@ -643,6 +643,26 @@ never finished). `start_run(run_id=...)` reopens it (`resume_count` + 1;
 ended done). An outer run's timeline counts releases per minute, so an eviction
 wave shows as a spike. `NoOpRun.release()` does nothing.
 
+### Walking away from a run (`detach`)
+
+When two pods race for one run, the loser must let go without touching what
+the winner writes. `run.detach()` writes nothing more to the store — no final
+state, no release, not even a last heartbeat:
+
+```python
+if lost_the_lease:
+    run.detach()
+```
+
+It stops the run's threads (heartbeat, `sys_*` sampler, log flusher, remote
+sync, state, output and media uploads), waiting within
+`VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` only for a write already in flight, and
+drops whatever was still queued. The run leaves `current_run()` and the
+exported `VMN_EXPERIMENT_ID`; atexit and the SIGTERM handler leave it alone.
+Logging on it afterwards (metrics, params, notes, tags, artifacts, media)
+records nothing, and `finish()`, `release()` and the `with` block's exit write
+nothing. Idempotent; a no-op on a finished run and on a `NoOpRun`.
+
 ### Note signatures
 
 The index never keeps a note's text (plan 28 N7). It masks each `log_note`
