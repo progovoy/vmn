@@ -92,8 +92,8 @@ def test_a_failed_computation_does_not_wedge_waiters(monkeypatch):
 def test_different_schemas_compute_independently(monkeypatch):
     blocked, release = threading.Event(), threading.Event()
 
-    def gated(row, parts, schema):
-        if schema == SCHEMA:
+    def gated(row, parts, policies):
+        if threading.current_thread() is slow:  # SCHEMA's summarizing
             blocked.set()
             assert release.wait(30)
         return dict(row, metrics={"loss": 0.1})
