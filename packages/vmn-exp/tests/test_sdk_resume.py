@@ -15,7 +15,8 @@ from vmn_exp.sdk import start_run
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_RESUME_RUN_ID"):
+    for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_RESUME_RUN_ID",
+                "VMN_RESUME_REOPEN"):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -35,7 +36,7 @@ def _metric_steps(app_layout, verstr):
 def _preempted_run(app_layout):
     run = start_run(app_layout.app_name)
     run.log_metric("loss", 1.0, step=1)
-    run.finish(exit_code=143)
+    run.release(reason="preempted")
     return run
 
 
@@ -110,3 +111,62 @@ def test_explicit_run_id_wins_over_the_env(app_layout, monkeypatch):
 
     with start_run(app_layout.app_name, run_id=first.id) as resumed:
         assert resumed.id == first.id
+
+
+def _finished_run(app_layout):
+    run = start_run(app_layout.app_name)
+    run.log_metric("loss", 0.1, step=1)
+    run.finish()
+    return run
+
+
+def test_reopening_a_finished_run_needs_reopen(app_layout):
+    _bootstrap(app_layout)
+    done = _finished_run(app_layout)
+    before = _state(app_layout, done.id)
+
+    with pytest.raises(ValueError, match="reopen=True") as excinfo:
+        start_run(app_layout.app_name, run_id=done.id)
+
+    assert done.id in str(excinfo.value)
+    assert _state(app_layout, done.id) == before
+
+
+def test_reopen_true_reopens_a_finished_run(app_layout):
+    _bootstrap(app_layout)
+    done = _finished_run(app_layout)
+
+    with start_run(app_layout.app_name, run_id=done.id, reopen=True) as again:
+        assert again.id == done.id
+        assert _state(app_layout, done.id)["state"] == "running"
+        assert _state(app_layout, done.id)["resume_count"] == 1
+
+
+def test_env_resume_of_a_finished_run_needs_the_reopen_env(app_layout, monkeypatch):
+    _bootstrap(app_layout)
+    done = _finished_run(app_layout)
+    monkeypatch.setenv("VMN_RESUME_RUN_ID", done.id)
+
+    with pytest.raises(ValueError, match="VMN_RESUME_REOPEN=1"):
+        start_run(app_layout.app_name)
+    assert _state(app_layout, done.id)["exit_code"] == 0
+
+
+def test_reopen_env_reopens_a_finished_run_once(app_layout, monkeypatch):
+    _bootstrap(app_layout)
+    done = _finished_run(app_layout)
+    monkeypatch.setenv("VMN_RESUME_RUN_ID", done.id)
+    monkeypatch.setenv("VMN_RESUME_REOPEN", "1")
+
+    with start_run(app_layout.app_name) as again:
+        assert again.id == done.id
+        assert "VMN_RESUME_REOPEN" not in os.environ
+
+
+def test_an_unfinished_run_resumes_without_reopen(app_layout):
+    _bootstrap(app_layout)
+    run = start_run(app_layout.app_name)
+    run.release(reason="preempted")
+
+    with start_run(app_layout.app_name, run_id=run.id) as resumed:
+        assert resumed.id == run.id

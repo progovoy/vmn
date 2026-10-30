@@ -79,7 +79,7 @@ start_run(
     sync_interval_sec=<env/conf/30>, run_id=None, all_ranks=False, name=None, tags=None,
     capture_env=None, fork_from=None, fork_step=None, rewind_to_step=None,
     capture_output=False, mode=None, intent=None, intent_keywords=None,
-    on_sigterm="fail",
+    on_sigterm="fail", reopen=False,
 )
 ```
 
@@ -95,6 +95,7 @@ start_run(
 | `system_metrics` | `None`: sample `sys_*` unless opted out (below); `False`: off; `True`: on despite conf.yml, still off under `VMN_SYSTEM_METRICS=0` |
 | `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Not given: `$VMN_EXP_SYNC_SEC`, else conf `experiment.sync_interval_sec`, else 30 s. Failed syncs are retried on a later beat |
 | `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
+| `reopen` | with `run_id`: also reopen a run that has finished (clears its exit code); without it that raises `ValueError`. `$VMN_RESUME_REOPEN=1` does the same for `$VMN_RESUME_RUN_ID` |
 | `on_sigterm` | what SIGTERM does with the run: `"fail"` (default) finishes it with exit 143; `"release"` hands it back unfinished. See [Handing a run back](#handing-a-run-back-release) |
 | `rewind_to_step` | with `run_id` (required): hide the run's history past this step. See [Rewinding](#rewinding-a-run) |
 | `fork_from` / `fork_step` | a NEW run seeded with another run's history up to `fork_step` (`"<ref>?_step=N"` works too). See [Forking](#forking-a-run) |
@@ -603,6 +604,14 @@ spans every attempt; `resume_count` and `resumed_at` record the restarts. A
 `note`/`params` passed on resume is appended. An unknown ref raises
 `ValueError`. `$VMN_RESUME_RUN_ID` is removed from the environment when used, so
 neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
+
+Only an unfinished run (created, released, running or stuck) resumes as is. A
+**finished** run — succeeded or failed, including a SIGTERM'd one under the
+default `on_sigterm="fail"` — raises `ValueError` naming the run, since
+reopening it clears its exit code (a resubmitted trial would lose its result).
+Reopen it on purpose with `start_run(run_id=..., reopen=True)`, or
+`VMN_RESUME_REOPEN=1` next to `$VMN_RESUME_RUN_ID` (consumed the same way). A
+job that expects to be preempted and resumed passes `on_sigterm="release"`.
 
 ### Handing a run back (`release`)
 

@@ -95,7 +95,8 @@ def test_sdk_resume_of_local_only_run_writes_nothing_to_remote(
         LocalSnapshotStorage(local_store_root(app_layout.repo_path), area="runs"), remote
     )
     resumed = start_run(
-        app_layout.app_name, run_id=first.id, storage=online, heartbeat_interval_sec=0.05
+        app_layout.app_name, run_id=first.id, storage=online, heartbeat_interval_sec=0.05,
+        reopen=True,
     )
     resumed.log_metric("loss", 0.5, step=2)
     resumed.set_tag("resumed", "yes")

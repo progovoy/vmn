@@ -121,7 +121,7 @@ def test_resume_continues_after_last_logged_step(app_layout):
     first.log_metric("loss", 0.9, step=7)
     first.finish(exit_code=143)
 
-    with _quiet_run(app_layout, run_id=first.id) as resumed:
+    with _quiet_run(app_layout, run_id=first.id, reopen=True) as resumed:
         assert resumed.step == 8
         resumed.log_metric("loss", 0.5)
     assert _steps(app_layout, first.id, "loss") == [0, 7, 8]
@@ -133,12 +133,12 @@ def test_resume_ignores_rewound_steps(app_layout):
     for _ in range(5):
         first.log_metric("loss", 1.0)
     first.finish(exit_code=143)
-    with _quiet_run(app_layout, run_id=first.id, rewind_to_step=1) as rewound:
+    with _quiet_run(app_layout, run_id=first.id, rewind_to_step=1, reopen=True) as rewound:
         assert rewound.step == 2
         rewound.log_metric("loss", 0.1)
     rewound.finish()
 
-    with _quiet_run(app_layout, run_id=first.id) as resumed:
+    with _quiet_run(app_layout, run_id=first.id, reopen=True) as resumed:
         assert resumed.step == 3
 
 

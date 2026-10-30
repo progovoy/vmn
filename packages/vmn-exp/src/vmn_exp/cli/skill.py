@@ -85,6 +85,10 @@ pod = start_run("<app_name>", run_id=pod_id, on_sigterm="release")  # SIGTERM ->
 # by hand, any run: run.release(reason="preempted") (flush, stop, state `released`)
 ```
 
+A finished pod (done or failed) is not reopened: `start_run(run_id=)` raises
+ValueError unless `reopen=True` (env `VMN_RESUME_REOPEN=1` with
+`VMN_RESUME_RUN_ID`), since reopening clears its exit code.
+
 A pod that died without finishing can be finished from outside (a controller,
 a cleanup job); refused while the run still beats unless forced:
 

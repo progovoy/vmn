@@ -389,7 +389,7 @@ def test_resume_keeps_env(app_layout, monkeypatch):
 
     # Resume the same run — env must NOT be re-captured.
     captured_calls.clear()
-    with start_run(app_layout.app_name, run_id=verstr) as run2:
+    with start_run(app_layout.app_name, run_id=verstr, reopen=True) as run2:
         assert run2.id == verstr
 
     assert len(captured_calls) == 0, "env captured again on resume"

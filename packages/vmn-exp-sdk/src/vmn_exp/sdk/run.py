@@ -143,6 +143,7 @@ def start_run(
     intent=None,
     intent_keywords=None,
     on_sigterm=release.FAIL,
+    reopen=False,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -172,6 +173,8 @@ def start_run(
 
     ``run_id`` (or ``VMN_RESUME_RUN_ID``) reopens an existing run of the app
     instead of creating one — a requeued job continuing where it was preempted.
+    A finished run is refused (ValueError) unless ``reopen=True`` (or
+    ``VMN_RESUME_REOPEN=1`` with the env var): reopening clears its exit code.
     With ``rewind_to_step=N`` too, the reopened run's history past step N is
     hidden (refused while the run is live elsewhere).
 
@@ -212,13 +215,14 @@ def start_run(
     _check_intent(intent, intent_keywords)
 
     prior_state, start_step = None, None
-    ref = resume.requested_run_id(run_id)
+    ref, reopen = resume.requested_run_id(run_id, reopen)
     fork.check_modes(ref, fork_from, rewind_to_step)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
             app_name, ref, storage
         )
+        resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id)
         if rewind_to_step is not None:
             start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
     else:

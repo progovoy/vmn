@@ -101,7 +101,7 @@ def test_resuming_with_an_intent_appends_it(app_layout):
     _bootstrap(app_layout)
     with start_run(app_layout.app_name, intent="first idea") as run:
         verstr = run.id
-    with start_run(app_layout.app_name, run_id=verstr, intent="second idea"):
+    with start_run(app_layout.app_name, run_id=verstr, intent="second idea", reopen=True):
         pass
 
     storage = _storage(app_layout)
@@ -114,7 +114,7 @@ def test_resuming_without_an_intent_adds_none(app_layout):
     _bootstrap(app_layout)
     with start_run(app_layout.app_name, intent="first idea") as run:
         verstr = run.id
-    with start_run(app_layout.app_name, run_id=verstr):
+    with start_run(app_layout.app_name, run_id=verstr, reopen=True):
         pass
     assert len(_intents(_storage(app_layout), app_layout.app_name, verstr)) == 1
 

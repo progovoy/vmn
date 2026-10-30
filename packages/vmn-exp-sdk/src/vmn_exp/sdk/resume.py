@@ -6,7 +6,9 @@ same log — rather than start a new one. The resumed run republishes itself as
 running, heartbeats, and appends to the log (a new process writes its own log
 segment, which readers merge). ``started_at`` is kept, so the run's duration
 spans every attempt; ``resume_count`` says how many there were. A released
-run (``run.release()``) is reopened the same way.
+run (``run.release()``) is reopened the same way. A finished run is reopened
+only on request (``reopen=True`` / ``VMN_RESUME_REOPEN=1``): reopening clears
+its exit code, so a resubmitted job must not do it by accident.
 """
 import datetime
 import os
@@ -24,17 +26,33 @@ from vmn_exp.sdk.create import (
 from vmn_exp.sdk.ranks import as_int
 
 RESUME_ENV = "VMN_RESUME_RUN_ID"
+REOPEN_ENV = "VMN_RESUME_REOPEN"
+_TRUE_VALUES = ("1", "true", "yes", "on")
 
 
-def requested_run_id(run_id):
-    """The run to resume: *run_id*, else ``VMN_RESUME_RUN_ID``, else None.
+def requested_run_id(run_id, reopen=False):
+    """``(ref, reopen)``: *run_id* with *reopen*, else ``VMN_RESUME_RUN_ID``
+    with ``VMN_RESUME_REOPEN``.
 
-    The env value is consumed: left in place, every run this process opens next
-    — and every vmn subprocess it launches — would resume the same run again.
+    The env values are consumed: left in place, every run this process opens
+    next — and every vmn subprocess it launches — would resume the same run again.
     """
     if run_id:
-        return run_id
-    return os.environ.pop(RESUME_ENV, None) or None
+        return run_id, reopen
+    ref = os.environ.pop(RESUME_ENV, None) or None
+    return ref, os.environ.pop(REOPEN_ENV, "").strip().lower() in _TRUE_VALUES
+
+
+def check_reopenable(app_name, verstr, prior_state, reopen, from_env):
+    """ValueError when *verstr* has finished and reopening it was not asked for."""
+    if reopen or prior_state.get("state") != "finished":
+        return
+    how = f"{REOPEN_ENV}=1" if from_env else "start_run(..., reopen=True)"
+    raise ValueError(
+        f"Run '{verstr}' of '{app_name}' has finished (exit code "
+        f"{prior_state.get('exit_code')}); reopening it clears that result. "
+        f"Pass {how} to reopen it anyway."
+    )
 
 
 def locate(app_name, ref, storage, action="resume"):
