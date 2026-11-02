@@ -171,6 +171,7 @@ class ExperimentIndex:
         self._lean_index = None  # the lean copy sync() refreshes while this one is unloaded
         self._unread = 0  # new records a chunked refresh has yet to read
         self._cold = False  # records loaded whole, their folds held until saved (_drop_folds)
+        self.drops_folds = True  # False: whoever adopts this index drops them (a rebuild)
 
     @classmethod
     def follower(cls, cache_store, scope):
@@ -402,6 +403,7 @@ class ExperimentIndex:
             self._records, self._order, self._stamps = other._records, other._order, other._stamps
             self._rows, self._sweep, self._bulk = other._rows, other._sweep, other._bulk
             self._store, self._unsaved = store or other._store, other._unsaved
+            self._cold = other._cold  # a rebuild's folds: dropped against this store
             if self._store is not other._store:
                 self._baseline = ListingBaseline(self._store, self.app_name)
                 self._mark = JournalMark(self._store, self.app_name)
@@ -494,6 +496,8 @@ class ExperimentIndex:
         restart does: each its run state alone, read back from the store
         when a refresh touches it. A free-threaded collection walks every
         live object, and the folds doubled them (plan 28 appendix A row 6)."""
+        if not self.drops_folds:
+            return  # a rebuild: its store closes once committed
         if self._unsaved.pending or self._rests or self._sweep.relisted_new() is not False:
             return  # still loading, or not all saved: the store lacks some
         lazy_of = getattr(self._store, "lazy_records", None)
