@@ -280,3 +280,63 @@ handed_back 103, unstable 761, failed_trials 834` in the first session,
 aged past an hour and its releases past two in between); the summary's
 default split `tags.kind` (10 kinds). The full 588k-run shape was not measured: its cold
 index took over 55 minutes on the GIL build, past this session's bench budget.
+
+## 3. fgm at full scale (594k runs) over HTTP on 3.15.2t
+
+**Incomplete: the cold index did not finish.** The laptop went into clamshell
+sleep on battery 40 minutes into the cold load (`pmset -g log`: "Entering
+Sleep state due to 'Clamshell Sleep'" at 18:56:26), and after that the
+machine ran only in short maintenance wakes. No route was timed and there was
+no warm restart. The numbers below cover the 40 minutes before the sleep
+(18:16-18:56, load average 6-10, checked every 2 s), on master `692601da`
+(a cold load drops its full folds once saved; cold-load threads capped at the
+core count on free-threaded builds).
+
+Seed: `seed_fgm.py --profile fgm --workers 12` wrote 594,129 runs (550,000
+succeeded, 26,239 failed, 10,276 running, 3,931 created, 3,121 released, 562
+stuck) in 134 s, 6.8 GB on APFS. Probe: `probe_fgm.measure` through a
+scratch driver that serves the root in-process like `probe_fgm.main` (fresh
+`VMN_EXP_CACHE_DIR` and `--data-dir`). It also polls `experiments-status`
+every 2 s and samples the RSS of the server and its children.
+
+| | fgm-small (51.5k), §2 low load | fgm (594k), this run |
+|---|---|---|
+| seed | 68 s (8 workers) | 134 s (12 workers) |
+| index ready | 50-51 s | not reached; ≥ 72 min projected |
+| index rows persisted | 51.5k | 250k at 16.5 min, 322.5k at 27 min, 383k at 37 min, ~395k at the sleep |
+| ingest rate | ~1,000 runs/s | ~250 runs/s for the first 250k, then ~100-110 runs/s |
+| first publish (`total > 0`) | (not recorded) | none in 40 min |
+| `experiments-status` while loading | (loads in under a minute) | `indexing {loaded: 0, total: null}` for all 40 min |
+| server process RSS | (not recorded) | peak 1.24 GB while listing (first ~2 min), then 63-85 MB |
+| I/O helper RSS | (not recorded) | peak 4.76 GB, then 1.3-2.0 GB |
+| index file | (not recorded) | 3.1 GB + 0.66 GB WAL at ~400k rows |
+| routes, `waiting_cold_ms`, budget breaches, GC pauses, objects per run | §2 | not measured |
+
+What the run shows:
+
+1. **A local store's cold load runs in the I/O helper process
+   (`core/index_io_process.py`), so the server holds almost nothing during
+   it.** The server process stays at 63-85 MB. The helper, one thread at
+   ~100 % CPU, does the reading and the saving, and peaked at 4.8 GB. The
+   threads-capped-at-core-count change does not reach this path. The heap
+   that GC pauses scan is in the server only after the helper streams the
+   rows back, which this run never reached.
+2. **The load does not scale linearly.** Linear scaling from fgm-small (×11.5)
+   would mean ~10 minutes. Instead the first 250k rows went at ~250 runs/s
+   and the rate then fell to ~100 runs/s as the SQLite file grew past 1.5 GB.
+   Even at a steady 100 runs/s, the ~200k rows left would take another
+   ~33 minutes, so ready at ≥ 72 minutes (~7× the linear figure). macOS
+   `sample` of the helper at ~380k rows: `pwrite`, `pread` and `fsync` took
+   ~60 % of its samples, then `walFindFrame` and B-tree seeks. The save
+   (exp_rows, exp_sides and the similar-FTS tables in one file with a
+   0.4-0.66 GB WAL) is the bottleneck, not YAML parsing.
+3. **This cold load shows no progress and publishes no first chunk.** The
+   chunked publish (`_REMOTE_CHUNK` = 500, `indexing {loaded, total}`)
+   applies to remote stores. The local helper path reported
+   `{loaded: 0, total: null}` and `total: 0` for 40 minutes, so the web shows
+   neither a count nor rows until the whole load is saved.
+
+Still open: the full-scale route table (p50/p95/first and the minute-shifting
+`waiting`), `waiting_cold_ms`, GC pauses and objects per run after the load,
+and the warm restart. They need a run on mains power with the lid open (or
+`caffeinate -s`), started with ~1.5 h free for the cold load alone.
