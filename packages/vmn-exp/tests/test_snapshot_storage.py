@@ -103,9 +103,10 @@ def test_s3_snapshot_list():
 
 def test_s3_snapshot_endpoint_url():
     """Test S3 backend passes endpoint_url to boto3."""
-    with mock_patch("boto3.client") as mock_boto:
+    with mock_patch("boto3.session.Session") as mock_session:
         S3SnapshotStorage("test-bucket", endpoint_url="http://localhost:9000")
-        mock_boto.assert_called_once_with("s3", config=ANY, endpoint_url="http://localhost:9000")
+        mock_session.return_value.client.assert_called_once_with(
+            "s3", config=ANY, endpoint_url="http://localhost:9000")
 
 
 @pytest.fixture

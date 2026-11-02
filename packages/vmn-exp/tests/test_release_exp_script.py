@@ -41,6 +41,7 @@ def test_releases_only_the_exp_packages_with_patch(tmp_path):
     proc, calls = _release(tmp_path, EXP_TAGGED="1")
     assert proc.returncode == 0, proc.stderr
     assert calls == [
+        "make _build_ui",
         "vmn stamp -r patch vmn_exp",
         "make _build NAME=vmn_exp",
         "make upload NAME=vmn_exp",
