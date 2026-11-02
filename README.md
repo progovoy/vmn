@@ -195,9 +195,38 @@ Modes from 2 and 3 are applied as `--orm` or `-r` per `release_mode_policy`
 For independently deployed services, use a root app:
 
 ```sh
-vmn stamp -r patch platform/auth       # auth 0.0.1; platform 1
-vmn stamp -r minor platform/billing    # billing 0.1.0; platform 2
-vmn show --root platform               # 2
+vmn stamp -r patch platform/auth       # auth 0.0.1
+vmn stamp -r minor platform/billing    # billing 0.1.0
+vmn show --root platform               # 3 on a fresh repo: every service stamp, including each service's first-use init, bumps the root
+vmn goto --root -v 3 platform          # root version 3, with each service as it was at that stamp
+```
+
+Tags for `platform/auth` are named `platform-auth_<version>` (the `/` becomes `-`), and root versions are tagged `platform_<N>`.
+
+## Try it in 60 seconds (local only)
+
+`demo.sh` creates throwaway repos in a temp dir. Local bare repos act as the remotes, and vmn is installed into a temp venv. Nothing touches your real remotes.
+
+```sh
+curl -O https://raw.githubusercontent.com/progovoy/vmn/master/demo/demo.sh
+bash demo.sh
+```
+
+What it shows (vmn 0.11.2):
+
+```sh
+vmn stamp -r patch platform/auth        # 0.0.1   (auto-initializes vmn and the app)
+vmn stamp -r minor platform/billing     # 0.1.0
+vmn show --root platform                # 3: every service stamp, including first-use init, bumps the root
+
+# platform/auth declares ../lib_core as a dependency in .vmn/platform/auth/conf.yml
+vmn stamp -r minor platform/auth        # 0.1.0, root 4
+git cat-file -p platform-auth_0.1.0     # YAML: commit + remote of the app repo and ../lib_core
+
+# ...more commits in both repos...
+vmn goto -v 0.1.0 platform/auth         # app repo and lib_core back to the stamped commits
+vmn goto platform/auth                  # back to the branch tip
+vmn goto --root -v 4 platform           # root version 4, services as they were at that stamp
 ```
 
 ## Configuration
