@@ -77,3 +77,17 @@ def test_a_windowed_cache_ignores_request_scopes(tmp_path, reads):
         now[0] = 61.0
         cache.get("ws", storage, APP)
     assert len(reads) == 2
+
+
+def test_the_settings_scope_is_plain_asgi_middleware(tmp_path):
+    # A BaseHTTPMiddleware (``@app.middleware``) leaves a task group and memory
+    # streams of cyclic garbage per request, which the free-threaded GC policy
+    # only collects on its stretched clock.
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from vmn_exp.ui.server import SettingsScope
+
+    app = _client(tmp_path).app
+    classes = [m.cls for m in app.user_middleware]
+    assert SettingsScope in classes
+    wrapped = [m.kwargs.get("dispatch") for m in app.user_middleware if m.cls is BaseHTTPMiddleware]
+    assert all(getattr(d, "__name__", "") != "_settings_scope" for d in wrapped)

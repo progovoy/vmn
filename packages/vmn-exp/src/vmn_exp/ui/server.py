@@ -95,6 +95,20 @@ MAX_SERIES_POINTS = 20_000
 APPS_TTL_SEC = 5
 
 
+class SettingsScope:
+    """Inline refresh re-reads apps' settings once per request, not per read
+    path. Plain ASGI: a BaseHTTPMiddleware leaves cyclic garbage per request."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        with request_scope():
+            await self.app(scope, receive, send)
+
+
 def create_app(
     manager,
     token=None,
@@ -207,11 +221,7 @@ def create_app(
     install_audit_middleware(app)
     install_org_middleware(app, getattr(manager, "tenancy", "single"))
 
-    @app.middleware("http")
-    async def _settings_scope(request: Request, call_next):
-        # Inline refresh re-reads apps' settings once per request, not per read path.
-        with request_scope():
-            return await call_next(request)
+    app.add_middleware(SettingsScope)
 
     def _principal(request):
         if diag_routes.is_diag_request(API_PREFIX, request.url.path):
