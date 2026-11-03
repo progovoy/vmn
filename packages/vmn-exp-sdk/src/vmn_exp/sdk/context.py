@@ -12,7 +12,8 @@ straight when it does:
 * **the environment** exported for subprocesses (``VMN_EXPERIMENT_ID``,
   ``VMN_APP_NAME``): it names the most recently opened run still open, and once
   the last one closes it is exactly what it was before the first one opened —
-  however out of order the runs finished.
+  however out of order the runs finished. A run opened with
+  ``export_env=False`` is left out: it never sets, restores or re-exports it.
 """
 import contextvars
 import os
@@ -38,10 +39,15 @@ def _is_open_here(run):
     return getattr(run, "pid", os.getpid()) == os.getpid()
 
 
-def _registered_here():
-    """This process's registered runs, finishing ones included: a run stays
-    exported as ``VMN_EXPERIMENT_ID`` until it unregisters."""
-    return [r for r in _OPEN_RUNS if getattr(r, "pid", os.getpid()) == os.getpid()]
+def _exports(run):
+    return getattr(run, "_export_env", True)
+
+
+def _exported_here():
+    """This process's registered exporting runs, finishing ones included: a
+    run stays exported as ``VMN_EXPERIMENT_ID`` until it unregisters."""
+    return [r for r in _OPEN_RUNS
+            if getattr(r, "pid", os.getpid()) == os.getpid() and _exports(r)]
 
 
 def open_runs():
@@ -71,15 +77,17 @@ def context_run():
 
 
 def register(run):
-    """Mark *run* open: bind it to this context and export it to subprocesses."""
+    """Mark *run* open: bind it to this context and, unless it opted out,
+    export it to subprocesses."""
     with _LOCK:
-        if not _registered_here():
+        if _exports(run) and not _exported_here():
             _BASELINE["pid"] = os.getpid()
             _BASELINE["env"] = {key: os.environ.get(key) for key in _ENV_KEYS}
         _OPEN_RUNS.append(run)
         run._ctx_prev = _CURRENT.get()
         _CURRENT.set(run)
-        _export(run)
+        if _exports(run):
+            _export(run)
 
 
 def unregister(run):
@@ -90,9 +98,10 @@ def unregister(run):
         if _CURRENT.get() is run:
             prev = getattr(run, "_ctx_prev", None)
             _CURRENT.set(prev if _is_open_here(prev) else None)
-        if getattr(run, "pid", os.getpid()) != os.getpid():
-            return  # a forked child closing an inherited run owns no env for it
-        remaining = open_runs() or _registered_here()
+        if getattr(run, "pid", os.getpid()) != os.getpid() or not _exports(run):
+            return  # a forked child's inherited run, or one that never exported
+        exported = _exported_here()
+        remaining = [r for r in open_runs() if _exports(r)] or exported
         if remaining:
             _export(remaining[-1])
         else:
@@ -102,7 +111,7 @@ def unregister(run):
 def launcher_experiment_id():
     """``VMN_EXPERIMENT_ID`` as the process received it, before any run of ours."""
     with _LOCK:
-        if _BASELINE["pid"] == os.getpid() and _registered_here():
+        if _BASELINE["pid"] == os.getpid() and _exported_here():
             return _BASELINE["env"].get(EXPERIMENT_ID_ENV)
         return os.environ.get(EXPERIMENT_ID_ENV)
 

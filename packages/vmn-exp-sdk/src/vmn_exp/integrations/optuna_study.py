@@ -46,7 +46,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def start_study_run(
     study, app_name: Optional[str] = None, outer: Optional[str] = None,
-    **start_run_kwargs,
+    export_env: bool = True, **start_run_kwargs,
 ):
     """Open an outer experiment run for an Optuna study, or attach to one.
 
@@ -57,6 +57,9 @@ def start_study_run(
         outer: a ref of an existing outer run (e.g. ``VMN_EXPERIMENT_ID``) to
             nest trials under instead of opening a new one; for trials that
             run in separate processes.  ``finish()`` then reopens it.
+        export_env: ``False`` opens the outer run, every trial and the
+            attached ``finish()`` reopen with ``start_run(export_env=False)``,
+            so none of them touches ``VMN_EXPERIMENT_ID`` / ``VMN_APP_NAME``.
         **start_run_kwargs: forwarded verbatim to ``start_run()`` for the
             outer run.  ``name`` defaults to ``study.study_name``.
 
@@ -81,11 +84,13 @@ def start_study_run(
 
         # Resolved once: trials then pass an exact verstr, not a ref to re-list.
         app_name, _, outer_id, _, _ = resume.locate(app_name, outer, None, action="attach to")
-        return StudyTracker(app_name, outer_id, study)
+        return StudyTracker(app_name, outer_id, study, export_env=export_env)
     params = _study_params(study)
     name = start_run_kwargs.pop("name", study.study_name or "optuna-study")
-    outer_run = start_run(app_name, name=name, params=params, **start_run_kwargs)
-    return StudyTracker(outer_run.app_name, outer_run.id, study, outer_run)
+    outer_run = start_run(
+        app_name, name=name, params=params, export_env=export_env, **start_run_kwargs)
+    return StudyTracker(
+        outer_run.app_name, outer_run.id, study, outer_run, export_env=export_env)
 
 
 class StudyTracker:
@@ -94,8 +99,9 @@ class StudyTracker:
     Returned by :func:`start_study_run`.
     """
 
-    def __init__(self, app_name, outer_id, study, outer_run=None):
+    def __init__(self, app_name, outer_id, study, outer_run=None, export_env=True):
         self._app_name = app_name
+        self._export_env = export_env
         self._outer_id = outer_id
         self._study = study
         self._outer = outer_run  # None when attached to an existing outer run
@@ -126,6 +132,7 @@ class StudyTracker:
                 parent=outer_id,
                 nested=True,
                 tags={"trial_number": str(trial.number)},
+                export_env=self._export_env,
             )
             _install_report_hook(trial, run)
             try:
@@ -156,7 +163,8 @@ class StudyTracker:
         if outer is None:
             from vmn_exp.sdk import start_run
 
-            outer = start_run(self._app_name, run_id=self._outer_id, reopen=True)
+            outer = start_run(self._app_name, run_id=self._outer_id, reopen=True,
+                              export_env=self._export_env)
             outer.log_params(_study_params(self._study))
         _log_best(outer, self._study)
         outer.finish()

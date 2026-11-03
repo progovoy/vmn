@@ -145,6 +145,7 @@ def start_run(
     on_sigterm=None,
     sigterm_exit=None,
     reopen=False,
+    export_env=True,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -209,6 +210,13 @@ def start_run(
     process dies of it; ``"raise"`` raises ``SystemExit(143)`` in the main
     thread so ``finally`` blocks run. Not given, ``VMN_EXP_SIGTERM_EXIT``,
     else ``"kill"``. Either raises ValueError before anything is created.
+
+    ``export_env=False`` keeps the run out of ``os.environ``: it is still the
+    calling context's current run (heartbeat, atexit, nesting), but neither
+    opening nor closing it sets or restores ``VMN_EXPERIMENT_ID`` /
+    ``VMN_APP_NAME`` — for orchestrators opening runs from worker threads,
+    where the process-shared env would leak one run's ID into a sibling.
+    Subprocesses then do not nest under it unless given the ID themselves.
     """
     on_sigterm = release.resolve_on_sigterm(on_sigterm)
     sigterm_exit = release.resolve_sigterm_exit(sigterm_exit)
@@ -260,6 +268,7 @@ def start_run(
         exp_conf=exp_conf,
         on_sigterm=on_sigterm,
         sigterm_exit=sigterm_exit,
+        export_env=export_env,
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -316,8 +325,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         exp_conf=None,
         on_sigterm=release.FAIL,
         sigterm_exit=release.KILL,
+        export_env=True,
     ):
         self._storage = storage
+        self._export_env = export_env
         self._on_sigterm = on_sigterm
         self._sigterm_exit = sigterm_exit
         # The checkout's `experiment:` conf, as start_run() read it.
