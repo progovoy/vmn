@@ -283,6 +283,11 @@ index took over 55 minutes on the GIL build, past this session's bench budget.
 
 ## 3. fgm at full scale (594k runs) over HTTP on 3.15.2t
 
+The remote path (what fgm's S3 store takes) is measured in full in §3.2.
+§3.1 is the local-store path, which was cut short.
+
+### 3.1 Local store (incomplete)
+
 **Incomplete: the cold index did not finish.** The laptop went into clamshell
 sleep on battery 40 minutes into the cold load (`pmset -g log`: "Entering
 Sleep state due to 'Clamshell Sleep'" at 18:56:26), and after that the
@@ -336,7 +341,79 @@ What the run shows:
    `{loaded: 0, total: null}` and `total: 0` for 40 minutes, so the web shows
    neither a count nor rows until the whole load is saved.
 
-Still open: the full-scale route table (p50/p95/first and the minute-shifting
-`waiting`), `waiting_cold_ms`, GC pauses and objects per run after the load,
-and the warm restart. They need a run on mains power with the lid open (or
-`caffeinate -s`), started with ~1.5 h free for the cold load alone.
+### 3.2 Remote path (complete)
+
+On AC power with `caffeinate -s`, master `f687091c`, 3.15.2t. The seeded
+root is served as a remote store (`is_remote()` true, as
+`gc_pause_bench._remote_storage` does), so the cold load takes S3's path:
+`_REMOTE_CHUNK` = 500 records published at a time, parallel readers. The
+driver is in-process like `probe_fgm.main`. Routes are 50 requests each,
+taken after the index is ready; budgets are `slo.FGM_BUDGETS["fgm"]`. Two
+cold loads (each from a fresh index) and one warm restart on the index the
+first left.
+
+| | cold 1 | cold 2 | warm restart |
+|---|---|---|---|
+| load average before / at ready | 7.6 / 181 | 7.0 / 7.8 | 5.7 / 8.7 |
+| server up | 0.66 s | - | 0.67 s |
+| first publish | 58.8 s (6,383 runs) | 43.5 s | 0.74 s |
+| index ready (594,129 runs) | 612 s | 608 s | 37 s |
+| RSS peak / after the probe | 26.1 / 19.8 GB | 22.1 / 14.3 GB | 11.2 / 10.3 GB |
+| GC: collections, total paused, max pause | 79, 50.0 s, 3.22 s | 82, 50.1 s, 3.09 s | 14, 2.2 s, 1.24 s |
+| `gc.collect()` after the probe | 5.8 s, 4.0 s | 11.4 s, 10.3 s | 7.3 s, 6.6 s |
+| `waiting_cold_ms` | 453 | - | 529 |
+| budget breaches | `board_app` p95 2.06 s, first 5.8 s; `waiting` p95 1.48 s (load 155) | `board_app` p95 1.87 s | `board_app` p95 2.16 s |
+
+Routes after ready, p50 / p95 / first, ms (cold 1 at load ~155, warm at ~9):
+
+| route (budget p95) | cold 1 | warm restart |
+|---|---|---|
+| status | 1.4 / 1.6 / 172 | 1.9 / 3.2 / 163 |
+| summary | 1.5 / 1.9 / 134 | 1.6 / 2.7 / 145 |
+| summary_split | 1.3 / 1.7 / 1.4 | 2.3 / 3.8 / 3.3 |
+| board_kind | 1.4 / 1.7 / 39 | 2.0 / 2.8 / 45 |
+| board_dates | 1.5 / 1.9 / 168 | 4.3 / 9.4 / 45 |
+| board_app (1,000) | 1.7 / **2,057** / **5,769** | **1,963** / **2,164** / 1,854 |
+| waiting, `ago()` shifting a minute a request (1,000) | 548 / **1,476** / 6 | 451 / 596 / 131 |
+
+While loading (cold 1, before ready), routes were answered from the
+published chunks with p50s of 0.3-3 s and p95s of 6-12 s, at load 14-180:
+the load itself (32 readers, YAML parsing, folds, saves) competes with
+serving on the same cores.
+
+What the run shows:
+
+1. **The remote cold load scales about linearly.** It was ready in 608-612 s,
+   against fgm-small's ~51 s × 11.5 ≈ 590 s. It answers from its first chunk
+   at 44-59 s and shows `indexing {loaded, total}` throughout. That is unlike
+   the local path in §3.1, which shows nothing for over an hour.
+2. **The fold drop (mitigation 1) takes effect at full scale.** Cold 2
+   checked the index every 30 s for 3 minutes after the probe. Each check
+   showed `cold: False` with nothing unsaved and no listing in flight, the
+   state `_drop_folds` leaves, while RSS fell from 20.3 to 14.2 GB. A
+   rebuild's folds are now dropped by the adopting index (`6a527942`).
+3. **Objects per run is not a fold measure at this scale.** It was 61 (cold 1),
+   109 (cold 2, rising 58 → 109 over 3 idle minutes) and 82 (warm), with
+   `gc.collect()` then taking 4-11 s. The free-threaded GC policy (automatic
+   collection off, collecting on its own 300 s clock) let an idle server's
+   cyclic garbage pile up between its collections. Background refresh and
+   board polls make cyclic garbage: `test_ft_gc_policy_generations` counts 88
+   cyclic objects per HTTP board poll against its 50 budget. Most of it comes
+   from the `@app.middleware` (BaseHTTPMiddleware) layers. The settings scope
+   is now plain ASGI (`f687091c`); the audit, auth and tenancy layers still
+   are BaseHTTPMiddleware.
+4. **`board_app` misses its budget at 594k runs even warm.** The whole-app
+   board took 1.9-2.4 s per request at load ~9 (budget 1 s p95). Scoped
+   boards (`board_kind`, `board_dates`) and status/summary stay in
+   single-digit ms. `waiting` (an `ago()` count rebuilt every request) holds
+   450-600 ms at low load, inside its 1 s budget.
+5. **The GC pauses during a cold load are as long as the soak saw** (max
+   3.1-3.2 s, ~50 s paused in all over the 10-minute load). That matches
+   §1's model: a pause is the live heap (~31-36M objects here) plus the
+   stop-the-world wait. The fold drop shrinks the heap after the load, not
+   during it.
+
+Follow-ups (not plan 28 items): the whole-app board at this scale; the
+remaining BaseHTTPMiddleware layers; the local-store cold load (one helper
+thread bound on SQLite writes, nothing published until it ends); whether the
+GC policy's clock should shorten when an idle server's garbage grows.
