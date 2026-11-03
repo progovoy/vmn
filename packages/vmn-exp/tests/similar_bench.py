@@ -61,9 +61,13 @@ def target_verstr(store):
     from vmn_exp.core.index_store import SqliteStore
 
     _, path = store
-    (verstr,) = SqliteStore(path)._conn.execute(
-        "SELECT verstr FROM exp_rows WHERE app = ? AND parent IS NULL ORDER BY idx"
-        " LIMIT 1 OFFSET 50", (APP,)).fetchone()
+    index = SqliteStore(path)  # held: a dropped store closes its connection
+    try:
+        (verstr,) = index._conn.execute(
+            "SELECT verstr FROM exp_rows WHERE app = ? AND parent IS NULL ORDER BY idx"
+            " LIMIT 1 OFFSET 50", (APP,)).fetchone()
+    finally:
+        index.close()
     return verstr
 
 
