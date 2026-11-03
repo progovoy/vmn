@@ -28,7 +28,8 @@
 > (= `packages/vmn-exp-sdk/src/vmn_exp/sdk/`) or `docs/`.
 
 Status: **built** (2026-10-28), except T2c (deferred). Every item of §7 is on master;
-appendix A is closed (row 6 explained in docs/plans/28-measurements.md).
+appendix A is closed (row 6 explained, and B0 measured at full scale, in
+docs/plans/28-measurements.md).
 
 Sources:
 - fgm's document, as four screenshots. It is pinned to fgm `master` @ `01eab866`
@@ -924,12 +925,12 @@ This order agrees, with two changes:
      Over HTTP (`probe_fgm`, 20 requests each): cold local index 43 s; first request
      status 454 ms, summary 75 ms, summary+split 368 ms, board by kind 65 ms, by date
      128 ms, app board 501 ms; p50s 1.4-3 ms (waiting 42 ms).
-   - **Not measured at 588k.** Seeding the full store works, but its cold local index
-     did not finish within ~55 min on this machine's GIL build, so the full-size
-     numbers need the real server (free-threaded Python or fgm's own store). The
-     in-memory bench runs at full scale (~10 GB) with `VMN_UILOAD_FGM_PROFILE=fgm`.
-     If the costs grow linearly with runs that is ~11× the numbers above (unverified).
-     The waiting count uses a timestamp literal per minute, not P1's `ago()` itself.
+   - **Measured at full scale** (594k runs, 3.15.2t, docs/plans/28-measurements.md §3).
+     On the remote (S3) path a cold load answers from its first chunk at 44-59 s
+     and is ready in ~610 s (about linear in runs); a warm restart is ready in 37 s.
+     The probe uses P1's `ago("1h")`. Only the whole-app board misses its budget
+     (~2 s p95). The local-store path is much slower (≥ 72 min, nothing published
+     until the end): a follow-up, not a plan 28 item.
 2. **API1** `create_runs` (M) ∥ **API2** `release` + `on_sigterm` + row fields +
    timeline `released` (M) ∥ **API3** out-of-pod finish/notes (S). Optuna goal fix (S).
 3. **A0** store-side settings (M).
