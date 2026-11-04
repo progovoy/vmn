@@ -224,9 +224,9 @@ name before uploading any). Each entry records `path`, `size` and `sha256`.
 lines at most ~1 s apart, at 1000 pending entries, on every heartbeat and at
 `finish()`/SIGTERM/exit (before the final state, so a reader that sees a run
 finished sees everything it logged). A reader never sees half a line, and live
-readers (`vmn-exp show`, the UI) see a metric within about a second. A forked
-child writing through an inherited `Run`, or a write after `finish()`, goes
-straight to the store.
+readers (`vmn-exp show`, the UI) see a metric within about a second. A write
+after `finish()` goes straight to the store; a forked child writing through an
+inherited `Run` writes nothing (see [Threads, forks](#threads-forks-and-current_run)).
 
 **Metrics are not JSONL lines.** `log_metric`/`log_metrics` values go to the
 record copy's columnar metric stream (`metrics/<writer>~<owner>.vms`, one
@@ -888,16 +888,25 @@ run, else `None`.
   as a parent via `VMN_EXPERIMENT_ID` (only the value the process was launched
   with is); pass `parent=outer.id` to nest across threads. Once every run has
   finished, the environment is restored.
-- **Forks** (`multiprocessing` fork, DataLoader workers): the child inherits the
-  `Run` objects but not the runs: `current_run()` is `None` there and the
-  child's exit never finalizes the parent's run. A child calling `start_run()`
-  becomes an inner run via the inherited `VMN_EXPERIMENT_ID`.
+- **Forks** (`os.fork`, `multiprocessing` fork, DataLoader workers): the child
+  inherits the `Run` objects but not the runs, which stay the parent's alone.
+  In the child `current_run()` is `None`, and an inherited `Run` is inert:
+  recording calls (`log_*`, `set_tags`, `set_intent`, `alert`, artifacts and
+  media) are dropped with one warning per run per process (`run <verstr> was
+  opened by pid N; in a forked worker call start_run() to record`), and
+  `finish()`, `release()`, `detach()` and leaving its `with` block do nothing —
+  so a child that exits a `with start_run():` block, or calls `finish()`, never
+  finalizes the parent's run, and never ships the parent's queued log entries.
+  A child calling `start_run()` opens a new inner run under the inherited
+  `VMN_EXPERIMENT_ID`, with its own stream owner and log buffer.
 - **Fork safety**: a run's background threads (heartbeat, periodic log flush,
   remote log sync, run-state/output/media uploads) make storage calls; a fork
   that catches one mid call (a boto3 connection-pool, logging or SDK lock held)
   could deadlock the child. The SDK registers `os.register_at_fork` handlers:
   before every `os.fork()` (also `multiprocessing`'s `fork` start method) it
-  pauses every open run's background threads, waiting for the calls in flight
+  pauses the background threads of every run of this process — open ones and
+  runs still finishing (from `finish()`/`release()` until their final log
+  sync, state and output uploads are done) — waiting for the calls in flight
   at most `vmn_exp.sdk.fork_safety.FORK_PAUSE_TIMEOUT_SEC` (10 s, in total
   across runs) — a hung call delays the fork by that much and is then forked
   through; after the fork the parent resumes them and the child starts with

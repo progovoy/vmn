@@ -96,7 +96,7 @@ def write_image(image, dest):
 
 class RunMedia:
     """Mixed into :class:`~vmn_exp.sdk.run.Run`; needs ``_media_uploads`` (a
-    :class:`~vmn_exp.sdk.media_uploads.MediaUploads`) and ``_append``.
+    :class:`~vmn_exp.sdk.media_uploads.MediaUploads`), ``_in_owner`` and ``_append``.
 
     Media files are stored as artifacts without an ``artifact`` log entry of
     their own: the table/image entry is their record, as media and as an
@@ -128,6 +128,8 @@ class RunMedia:
         *path* (its name may take the written file's extension); its *kind*
         entry is appended once it is stored. ``(width, height)`` of a PNG goes
         into the entry, with the stored bytes' ``sha256`` and ``size``."""
+        if not self._in_owner():
+            return
         tmp = staging_dir()
         try:
             written = produce(os.path.join(tmp, os.path.basename(path)))

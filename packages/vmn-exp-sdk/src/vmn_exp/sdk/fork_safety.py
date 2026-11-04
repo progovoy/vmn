@@ -5,16 +5,19 @@ A thread mid storage call at ``fork()`` (a boto3/urllib3 pool lock, a logging
 lock, an SDK lock held) leaves that lock held forever in the child, which can
 then deadlock on it. Handlers registered once with ``os.register_at_fork``:
 
-* before the fork, every open run of this process is paused
+* before the fork, every run of this process is paused — the open ones and
+  those still finishing (from ``finish()`` until its final uploads are done,
+  ``context._CLOSING`` once it left the registry) —
   (:meth:`~vmn_exp.sdk.background_gate.BackgroundGate.pause`), waiting for the
   calls in flight at most ``FORK_PAUSE_TIMEOUT_SEC`` in total — a hung S3 call
   delays the fork by that much, never forever, and is then forked through;
 * after it, the parent resumes them;
 * the child, which has none of the parent's threads and is not the parent
-  runs' writer (``Run.pid``), gets clean gates, log-buffer locks and the
-  open-run registry lock.
+  runs' writer (``Run.pid``: an inherited run records nothing there), gets
+  clean gates, log-buffer locks and the open-run registry lock, and no
+  finishing runs.
 
-The module helpers pause the same set by hand. ``PROCESS_GATE`` gates the
+The module helpers pause the open runs by hand. ``PROCESS_GATE`` gates the
 background calls no run owns (the sysmetrics init thread's ``nvmlInit``); only
 a fork pauses it, within the same budget.
 """
@@ -47,6 +50,18 @@ _paused_for_fork = {}
 def _open_runs():
     # No registry lock: another thread may hold it at fork time.
     return [r for r in list(context._OPEN_RUNS) if context._is_open_here(r)]
+
+
+def _fork_runs():
+    """Every run of this process with background calls that may be in flight:
+    open, finishing (still registered or already ``_CLOSING``) or detaching.
+    A finishing run's released gate admits every call, but pausing it still
+    waits for the ones in flight."""
+    here = os.getpid()
+    runs = list(context._OPEN_RUNS) + list(context._CLOSING)
+    # Unlocked reads: a run moving to _CLOSING meanwhile may show up twice.
+    mine = {id(r): r for r in runs if getattr(r, "pid", here) == here}
+    return list(mine.values())
 
 
 def _pause(runs, timeout):
@@ -83,7 +98,7 @@ def background_paused(timeout=None):
 
 
 def _before_fork():
-    runs = _open_runs() + [_PROCESS_THREADS]
+    runs = _fork_runs() + [_PROCESS_THREADS]
     _pause(runs, FORK_PAUSE_TIMEOUT_SEC)
     _paused_for_fork[threading.get_ident()] = runs
 
@@ -97,10 +112,11 @@ def _after_fork_in_child():
     _paused_for_fork.clear()
     context._LOCK = threading.RLock()
     _PROCESS_THREADS._after_fork_in_child()
-    for run in list(context._OPEN_RUNS):
+    for run in list(context._OPEN_RUNS) + list(context._CLOSING):
         after_fork = getattr(run, "_after_fork_in_child", None)
         if after_fork is not None:
             after_fork()
+    context._CLOSING.clear()
 
 
 if hasattr(os, "register_at_fork"):

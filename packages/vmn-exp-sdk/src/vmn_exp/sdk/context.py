@@ -27,6 +27,10 @@ _ENV_KEYS = (EXPERIMENT_ID_ENV, APP_NAME_ENV)
 # Every run ever registered and not yet closed, oldest first. Filtered by pid on
 # read, so entries a forked child inherited are invisible to it.
 _OPEN_RUNS = []
+# Runs that left the registry but are still waiting for their last uploads
+# (``Run._close_attempt`` to ``_close_remote_writers``): a fork waits for them
+# too. Filtered by pid on read, like ``_OPEN_RUNS``; a forked child clears it.
+_CLOSING = []
 _LOCK = threading.RLock()
 _CURRENT = contextvars.ContextVar("vmn_current_run", default=None)
 # The exported env as it was before this process opened its first run.
@@ -106,6 +110,21 @@ def unregister(run):
             _export(remaining[-1])
         else:
             _restore_baseline()
+
+
+def mark_closing(run):
+    """:func:`unregister` *run*, which keeps uploading until :func:`closed`."""
+    with _LOCK:
+        unregister(run)
+        if run not in _CLOSING:
+            _CLOSING.append(run)
+
+
+def closed(run):
+    """*run*'s last uploads are done (or given up on). Idempotent."""
+    with _LOCK:
+        if run in _CLOSING:
+            _CLOSING.remove(run)
 
 
 def launcher_experiment_id():

@@ -10,9 +10,10 @@ which the run calls on each heartbeat, at ``finish()``, on SIGTERM and at
 interpreter exit — so nothing logged before the run ends is lost.
 
 Each batch is a single write of whole lines, so a reader sees an entry
-entirely or not at all. A forked child that inherited the buffer, or a write
-after :meth:`LogBuffer.close`, goes straight to storage; after
-:meth:`LogBuffer.discard` (a detached run) nothing is written at all.
+entirely or not at all. A write after :meth:`LogBuffer.close` goes straight
+to storage; after :meth:`LogBuffer.discard` (a detached run) nothing is
+written at all. A forked child that inherited the buffer writes nothing — not
+its own entries, nor the parent's queued ones: only the parent ships them.
 """
 import collections
 import logging
@@ -47,9 +48,9 @@ class LogBuffer:
         self._flusher = None
 
     def append(self, entry):
-        if self._discarded:
+        if self._discarded or not self._in_owner():
             return
-        if self._closed or os.getpid() != self._pid:
+        if self._closed:
             self._write([entry])
             return
         self._pending.append(entry)
@@ -63,6 +64,9 @@ class LogBuffer:
             # self.flush().
             self._gate.attempt(self._flush_quietly)
 
+    def _in_owner(self):
+        return os.getpid() == self._pid
+
     def _reset_locks(self):
         # Reentrant (a SIGTERM flush may interrupt one on its own thread);
         # keeps batches in order.
@@ -75,6 +79,8 @@ class LogBuffer:
 
     def flush(self):
         """Write what is queued. On failure the batch is kept for the next try."""
+        if not self._in_owner():
+            return
         with self._write_lock:
             batch = self._take()
             if not batch:

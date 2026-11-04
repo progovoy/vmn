@@ -3,7 +3,8 @@
 ``set_progress`` and ``mark_range`` beside them.
 
 Mixed into :class:`~vmn_exp.sdk.run.Run`, which provides ``_steps`` (a
-:class:`~vmn_exp.sdk.steps.StepCounter`), ``_log_buffer`` and ``_append``.
+:class:`~vmn_exp.sdk.steps.StepCounter`), ``_log_buffer``, ``_in_owner`` and
+``_append``.
 """
 from vmn_exp.core.progress import DONE, TOTAL, UNIT
 from vmn_exp.core.ranges import create_range_entry
@@ -28,6 +29,8 @@ class RunMetrics:
         the next call shares it. A call whose every value is dropped as
         non-numeric consumes no step.
         """
+        if not self._in_owner():
+            return
         entry = sanitize_entry(create_log_entry("metrics", values=dict(mapping)))
         if entry is None:
             return

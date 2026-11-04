@@ -342,8 +342,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._steps = StepCounter()
         self._progress_unit = None  # the last set_progress() unit logged
         # The process that owns the run. A forked child inherits this object but
-        # not the run: `current_run()` there is None and atexit leaves it alone.
+        # not the run: `current_run()` there is None, atexit leaves it alone and
+        # every recording or closing call on it is dropped (_in_owner).
         self.pid = os.getpid()
+        self._inert_warned_pid = None
 
         self._finished = False
         self._detached = False
@@ -469,7 +471,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         atexit and SIGTERM leave it alone. Logging afterwards records nothing;
         ``finish()``, ``release()`` and the context manager's exit write
         nothing. Idempotent; a no-op on a finished run."""
-        if self._finished:
+        if self._finished or not self._in_owner():
             return
         self._finished = self._detached = True
         try:
@@ -546,7 +548,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         Media files are waited for (until *deadline*) first: their entries are
         appended as they are stored, so they must land before the final flush.
         """
-        if self._finished:
+        if self._finished or not self._in_owner():
             return False
         self._finished = True
         # A paused run still drains: its last uploads must not wait for a resume.
@@ -570,20 +572,26 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             self._log_sync.submit(None)
             if alerts:
                 self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
-        finally:
+        except BaseException:
             context.unregister(self)
+            raise
+        # Still uploading: a fork waits for it until _close_remote_writers ends.
+        context.mark_closing(self)
         return True
 
     def _record_output(self):
         self._append(self._output.stop())
 
     def _close_remote_writers(self, deadline):
-        # One deadline for all: they upload in parallel, so waiting for each
-        # in turn would double the worst case.
-        for what in self._close_writers(deadline):
-            _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
-        compact_by(self._storage, self.app_name, self.id,
-                   own_stream(self._storage, self.app_name, self.id), deadline)
+        try:
+            # One deadline for all: they upload in parallel, so waiting for each
+            # in turn would double the worst case.
+            for what in self._close_writers(deadline):
+                _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
+            compact_by(self._storage, self.app_name, self.id,
+                       own_stream(self._storage, self.app_name, self.id), deadline)
+        finally:
+            context.closed(self)
 
     def _close_writers(self, deadline):
         """Close the remote writers; the names of those still uploading."""
@@ -639,6 +647,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def log_artifact(self, path, name=None):
         """Store the file at *path* as artifact *name* (a relative ``a/b/c``
         path; default: its basename), at ``artifacts/<name>`` in the run."""
+        if not self._in_owner():
+            return
         info = compute_artifact_info(path)
         if name is not None:
             info["path"] = user_artifact_path(checked_artifact_name(name))
@@ -709,6 +719,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         (model id) that wrote it, if any. Matched by similar-run search; the
         latest intent wins, also on a finished run — nothing ships its log
         any more, so the entry is synced to the remote at once."""
+        if not self._in_owner():
+            return
         self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
         if self._finished and not self._detached:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
@@ -730,7 +742,21 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._gate.after_fork_in_child()
         self._log_buffer.after_fork_in_child()
 
+    def _in_owner(self):
+        """Whether this process opened the run; in a forked child it did not,
+        and the call is dropped (warned once per run per process)."""
+        here = os.getpid()
+        if here == self.pid:
+            return True
+        if self._inert_warned_pid != here:
+            self._inert_warned_pid = here
+            _LOGGER.warning(f"vmn: run {self.id} was opened by pid {self.pid}; "
+                            "in a forked worker call start_run() to record")
+        return False
+
     def _append(self, entry):
+        if not self._in_owner():
+            return
         entry = sanitize_entry(entry)
         if entry is not None:
             self._log_buffer.append(entry)

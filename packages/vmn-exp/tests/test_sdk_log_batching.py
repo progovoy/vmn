@@ -207,7 +207,8 @@ def test_log_metric_never_raises_when_the_store_keeps_failing(tmp_path):
 
 
 @pytest.mark.skipif(not hasattr(os, "fork"), reason="needs fork")
-def test_a_forked_child_writes_straight_through(storage, monkeypatch):
+def test_a_forked_child_writes_nothing_to_the_inherited_run(storage, monkeypatch):
+    # Plan 30 G5: the child is not the run's writer; only the parent ships.
     monkeypatch.setattr(log_buffer, "FLUSH_INTERVAL_SEC", 3600)
     run = _open_run(storage)
     pid = os.fork()
@@ -218,8 +219,10 @@ def test_a_forked_child_writes_straight_through(storage, monkeypatch):
             os._exit(0)
     os.waitpid(pid, 0)
 
-    assert _logged_steps(storage) == [42]
-    run.finish()
+    try:
+        assert _logged_steps(storage) == []
+    finally:
+        run.finish()
 
 
 def test_the_log_flusher_thread_is_not_named_like_the_run_heartbeat():

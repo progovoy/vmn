@@ -9,7 +9,8 @@ from vmn_exp.core.writer import create_log_entry
 
 class RunAlerts:
     """Needs ``self._storage``, ``app_name``, ``id``, ``name``, ``_state``,
-    ``_exp_conf``, ``_gate`` and ``_append`` from the ``Run`` it is mixed into."""
+    ``_exp_conf``, ``_gate``, ``_in_owner`` and ``_append`` from the ``Run`` it is
+    mixed into."""
 
     _alerter_instance = None
     _exp_conf = None
@@ -20,8 +21,11 @@ class RunAlerts:
         Repeats of one *title* within *wait_sec* seconds (default: conf
         ``alerts.wait_sec``, 60) are dropped, neither logged nor sent. Returns
         whether this alert went through. Delivery is off-thread and
-        best-effort; ``finish()`` waits briefly for it.
+        best-effort; ``finish()`` waits briefly for it. False in a forked
+        child that inherited the run.
         """
+        if not self._in_owner():
+            return False
         alert = make_alert(
             "alert", self.app_name, self.id, title, text, level,
             run_name=self.name, status="running", run_state=self._state,
