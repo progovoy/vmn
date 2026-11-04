@@ -146,3 +146,21 @@ def test_a_real_forked_child_builds_a_client_without_env_proxies():
     proc = subprocess.run([_PY, "-c", _CHILD_WITHOUT_ENV_PROXIES], env=env,
                           capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0 and "OK" in proc.stdout, proc.stdout + proc.stderr
+
+
+def test_a_botocore_without_the_resolved_proxies_falls_back_to_the_environment(
+        monkeypatch, no_env_proxies, forked):
+    from vmn_exp.storage import fork_proxies
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    built = []
+    factory = fork_proxies.child_factory(
+        lambda url, proxies=None: built.append((url, proxies)) or object(),
+        "https://s3.example", object())
+    forked()
+    _system_proxies(monkeypatch, _system_lookup_crashes)
+    factory()
+    import botocore.utils
+
+    assert built == [("https://s3.example", None)]
+    assert botocore.utils.getproxies is urllib.request.getproxies_environment

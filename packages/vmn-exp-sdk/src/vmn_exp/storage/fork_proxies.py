@@ -25,8 +25,13 @@ def child_factory(build, endpoint_url, client):
 
 def _resolved_proxies(client):
     """The proxies botocore resolved for *client* (``get_environ_proxies``
-    of its endpoint) when it built it."""
-    return client._endpoint.http_session._proxy_config._proxies
+    of its endpoint) when it built it — private botocore state, so None when
+    a botocore lays it out differently: the child then resolves them from
+    the environment alone (:func:`environment_proxies_only`)."""
+    try:
+        return client._endpoint.http_session._proxy_config._proxies
+    except AttributeError:
+        return None
 
 
 def _child_build(build, endpoint_url, proxies):
