@@ -52,7 +52,7 @@ def resolve_experiment_storage(
 
     root = dir or os.environ.get("VMN_EXPERIMENT_DIR")
     if not root and repo_root is not False:
-        root = _repo_store(repo_root if repo_root is not None else _try_repo_root())
+        root = _repo_store(repo_root if repo_root is not None else try_repo_root())
 
     params = {
         "store": store,
@@ -111,7 +111,7 @@ def _open(root, params, writer=True):
                         writer=writer)
 
 
-def _try_repo_root() -> "str | None":
+def try_repo_root() -> "str | None":
     """Return the .vmn / .git root for the current working directory, or None."""
     try:
         from vmn_exp._base import resolve_root_path

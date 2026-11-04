@@ -49,7 +49,7 @@ from vmn_exp.core.index_rows import row_copies
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import rows_extra, store_extra
 from vmn_exp.core.record_format import record_format_version
-from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_storage
+from vmn_exp.core.storage_resolve import resolve_experiment_storage, try_repo_root
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import point_placement, resolve_experiment, tree_links
 from vmn_exp.core.similar_search import find as _find_similar
@@ -81,7 +81,7 @@ def _resolve(app_name, storage):
     Returns ``(app_name, storage, root_path)``; *root_path* is None when the
     caller supplied both or no checkout is found: there is no conf.yml to read.
     """
-    root_path = None if (app_name and storage) else _try_repo_root()
+    root_path = None if (app_name and storage) else try_repo_root()
     storage = storage or resolve_experiment_storage(repo_root=root_path or False)
     app_name = _resolve_app_name(app_name, lambda: _app_candidates(storage))
     return app_name, storage, root_path

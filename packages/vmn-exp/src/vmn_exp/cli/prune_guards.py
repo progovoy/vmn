@@ -1,21 +1,7 @@
 #!/usr/bin/env python3
 """The guards of ``vmn-exp prune`` (see :mod:`vmn_exp.cli.prune`): which
 candidates are tag-protected or registered, and how a skip reads."""
-from concurrent.futures import ThreadPoolExecutor
-
 from vmn_exp.core.status import STUCK
-
-# Remote reads/deletes in flight at once; a delete fans out further inside S3.
-_REMOTE_WORKERS = 4
-
-
-def map_storage(storage, fn, items):
-    """``[fn(item)]`` in order — concurrently when each call goes over the
-    network, so 10k remote runs are not 10k serial round trips."""
-    if len(items) < 2 or not storage.is_remote():
-        return [fn(item) for item in items]
-    with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
-        return list(pool.map(fn, items))
 
 
 def tag_protected(candidates, protect_tags):

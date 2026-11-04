@@ -23,16 +23,16 @@ A code object (:mod:`vmn_exp.core.code_store`) is deleted with the last run of
 its code.
 """
 import datetime
+from functools import partial
 
 from vmn_exp.cli.prune_guards import (
-    map_storage,
     registry_protected,
     skip_message,
     tag_protected,
     tag_skip_message,
 )
 from vmn_exp.cli.prune_query import print_preview, query_candidates
-from vmn_exp.cli.prune_targeted import targeted_metas, without_kept_parents
+from vmn_exp.cli.prune_targeted import map_storage, targeted_metas, without_kept_parents
 from vmn_exp.cli.views import metrics_schema
 from vmn_exp.core.children import unmark_parent
 from vmn_exp.core.code_store import drop_unused_code
@@ -102,7 +102,7 @@ def _read_state(storage, app_name, verstr):
     )
 
 
-def _live_runs(storage, app_name, candidates, snapshot=None):
+def _live_runs(storage, app_name, candidates, snapshot):
     """``{verstr: status}`` of the *candidates* that may still be running.
 
     The index *snapshot* supplies run states and their store write times when
@@ -121,22 +121,27 @@ def _live_runs(storage, app_name, candidates, snapshot=None):
     return {v: status for v, status in statuses if status in _LIVE}
 
 
-def _apply_guards(
-    storage, app_name, metas, candidates, force, protect_tags=None, snapshot=None,
-    reg_protected=None,
-):
-    """Split *candidates* into (delete, {skipped live verstr: status},
-    {skipped tag-protected verstr: tag name}, {registry-protected verstr: reason})."""
+def _apply_guards(storage, app_name, candidates, args, reg, snapshot, keep_parents):
+    """``(delete, {skipped live verstr: status}, {skipped tag-protected
+    verstr: tag name})``: *candidates* less the live, tag-protected and
+    registry-protected (*reg*) ones, less those *keep_parents* (doomed
+    verstrs → the ones that may go) keeps for a surviving child."""
+    force = getattr(args, "force", False)
     live = {} if force else _live_runs(storage, app_name, candidates, snapshot)
+    protect_tags = getattr(args, "protect_tag", None)
     protected = {} if force else tag_protected(candidates, protect_tags)
-    reg = reg_protected or {}
-
     doomed = {m["verstr"] for m in candidates} - set(live) - set(protected) - set(reg)
+    doomed = keep_parents(doomed)
+    return [m for m in candidates if m["verstr"] in doomed], live, protected
+
+
+def _without_kept_ancestors(metas, doomed):
+    """*doomed* less every ancestor of a run in *metas* that is not doomed."""
     parent_of = {m["verstr"]: m.get("parent") for m in metas if m.get("parent")}
     for meta in metas:
         if meta["verstr"] not in doomed:
             doomed -= _ancestors(meta["verstr"], parent_of)
-    return [m for m in candidates if m["verstr"] in doomed], live, protected, reg
+    return doomed
 
 
 def _local_view(storage):
@@ -177,7 +182,7 @@ def _refuse_mixed_selection(args):
     return None
 
 
-def _select_candidates(storage, app_name, metas, args, schema=None):
+def _select_candidates(storage, app_name, metas, args, schema):
     """Return ``(candidates, error_code)`` according to the policy flags.
 
     *error_code* is non-None when the caller should return it immediately.
@@ -188,39 +193,30 @@ def _select_candidates(storage, app_name, metas, args, schema=None):
     older_than = getattr(args, "older_than", None)
     query = getattr(args, "query", None)
 
-    if query is not None:
+    if query is None:
+        scope, noun = metas, "experiments"
+    else:
         try:
-            candidates = query_candidates(storage, app_name, metas, query, schema)
+            scope = query_candidates(storage, app_name, metas, query, schema)
         except QueryError as e:
             VMN_LOGGER.error(f"Invalid --query: {e}")
             return None, 1
-        # --keep / --older-than refine within the query scope
-        if keep is not None or older_than is not None:
-            if keep is not None and keep >= len(candidates):
-                print(
-                    f"Only {len(candidates)} matching experiments, "
-                    f"nothing to prune (--keep {keep})"
-                )
-                return None, None
-            try:
-                candidates = _candidates(candidates, keep, older_than)
-            except ValueError as e:
-                VMN_LOGGER.error(str(e))
-                return None, 1
-        return candidates, None
+        noun = "matching experiments"
 
     if keep is None and older_than is None:
-        VMN_LOGGER.error("Specify --keep N or --older-than Xd (or -v <ref>)")
-        return None, 1
-    if keep is not None and 0 < len(metas) <= keep:
-        print(f"Only {len(metas)} experiments, nothing to prune (--keep {keep})")
+        if query is None:
+            VMN_LOGGER.error("Specify --keep N or --older-than Xd (or -v <ref>)")
+            return None, 1
+        return scope, None
+    # --keep / --older-than refine within the query scope, if any
+    if keep is not None and keep >= len(scope):
+        print(f"Only {len(scope)} {noun}, nothing to prune (--keep {keep})")
         return None, None
     try:
-        candidates = _candidates(metas, keep, older_than)
+        return _candidates(scope, keep, older_than), None
     except ValueError as e:
         VMN_LOGGER.error(str(e))
         return None, 1
-    return candidates, None
 
 
 def _is_dry_run(args):
@@ -259,20 +255,17 @@ def experiment_prune(vcs, params, storage, args, app_name):
 
 
 def _prune_targeted(storage, app_name, args):
-    force = getattr(args, "force", False)
-    protect_tags = None if force else getattr(args, "protect_tag", None)
-    metas, err = targeted_metas(storage, app_name, args.version, bool(protect_tags))
+    with_tags = not getattr(args, "force", False) and bool(getattr(args, "protect_tag", None))
+    metas, err = targeted_metas(storage, app_name, args.version, with_tags)
     if err:
         VMN_LOGGER.error(err)
         return 1
     reg, rc = _read_registry(storage, app_name, metas)
     if rc is not None:
         return rc
-    live = {} if force else _live_runs(storage, app_name, metas)
-    protected = tag_protected(metas, protect_tags)
-    doomed = {m["verstr"] for m in metas} - set(live) - set(protected) - set(reg)
-    doomed = without_kept_parents(storage, app_name, doomed)
-    to_delete = [m for m in metas if m["verstr"] in doomed]
+    to_delete, live, protected = _apply_guards(
+        storage, app_name, metas, args, reg, None,
+        partial(without_kept_parents, storage, app_name))
     return _finish(storage, app_name, args, to_delete, (live, protected, reg))
 
 
@@ -292,21 +285,15 @@ def _prune_by_policy(vcs, storage, app_name, args):
     if candidates is None:
         return 0
 
-    reg_protected, rc = _read_registry(storage, app_name, candidates)
+    reg, rc = _read_registry(storage, app_name, candidates)
     if rc is not None:
         return rc
 
-    to_delete, *skipped = _apply_guards(
-        storage,
-        app_name,
-        metas,
-        candidates,
-        force=getattr(args, "force", False),
-        protect_tags=getattr(args, "protect_tag", None),
-        snapshot=snapshot,
-        reg_protected=reg_protected,
-    )
-    return _finish(storage, app_name, args, to_delete, skipped, total=len(metas))
+    to_delete, live, protected = _apply_guards(
+        storage, app_name, candidates, args, reg, snapshot,
+        partial(_without_kept_ancestors, metas))
+    return _finish(storage, app_name, args, to_delete, (live, protected, reg),
+                   total=len(metas))
 
 
 def _print_skipped(live, protected, reg):

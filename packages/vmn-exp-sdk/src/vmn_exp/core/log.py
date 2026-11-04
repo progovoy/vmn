@@ -28,6 +28,7 @@ from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
     fold_log,
     fold_metrics,
     fold_row,
+    fold_tags,
     fold_values,
 )
 
@@ -39,6 +40,11 @@ from vmn_exp.core.fold import (  # noqa: F401  (re-exported)
 def effective_params(log):
     """Effective params: the `create` entry's, folded with later `params` ones."""
     return fold_values(fold_log(log), "params")
+
+
+def current_tags(log):
+    """The tags a run carries now: later `tags` entries win, removed ones are gone."""
+    return fold_tags(fold_log(log))
 
 
 # ---------------------------------------------------------------------------

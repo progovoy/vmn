@@ -453,9 +453,9 @@ def _exp_run_without_repo(args):
 def _prune_outside_checkout(action):
     """A prune needs only its store: outside a checkout it runs git-free on
     the store flags / ``VMN_EXPERIMENT_*`` and the app name."""
-    from vmn_exp.core.storage_resolve import _try_repo_root
+    from vmn_exp.core.storage_resolve import try_repo_root
 
-    return action == "prune" and _try_repo_root() is None
+    return action == "prune" and try_repo_root() is None
 
 
 # ---------------------------------------------------------------------------

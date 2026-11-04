@@ -35,7 +35,7 @@ from vmn_exp.core.run_intervals import (
 )
 from vmn_exp.core.state_cas import new_attempt_id
 from vmn_exp.core.status import positive_env_sec
-from vmn_exp.core.storage_resolve import _try_repo_root
+from vmn_exp.core.storage_resolve import try_repo_root
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import (
     append_entries_to_log,
@@ -303,7 +303,7 @@ def _checkout_relative_cwd():
     """This process's cwd relative to its checkout; None when git-free."""
     if os.environ.get(SNAPSHOT_METADATA_ENV):
         return None
-    return repo_relative_cwd(os.getcwd(), _try_repo_root())
+    return repo_relative_cwd(os.getcwd(), try_repo_root())
 
 
 class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunBackground):
