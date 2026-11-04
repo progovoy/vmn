@@ -7,8 +7,7 @@ experiment index or list the app's runs; only ``latest`` / ``@N`` refs resolve
 through it, once per call.
 """
 
-from vmn_exp.core.refs import point_placement, resolve_experiment
-from vmn_exp.core.resolve_ref import LATEST_WORDS
+from vmn_exp.core.refs import is_relative_ref, point_placement, resolve_experiment
 from vmn_exp.core.status import load_run_state, run_state_observed_at, status_fields
 from vmn_exp.storage.s3_base import parallel_map
 
@@ -26,12 +25,22 @@ def run_state_entry(storage, app_name, verstr):
     """Run *verstr*'s ``run_state.yml`` fields, its derived status fields, the
     raw ``run_state`` (None before the run started), its store write time
     ``observed_at`` and ``verstr`` — or None when there is no such run."""
+    read = read_run_state(storage, app_name, verstr)
+    if read is None:
+        return None
+    state, observed, fields = read
+    return dict(fields, run_state=state, observed_at=observed, verstr=verstr)
+
+
+def read_run_state(storage, app_name, verstr):
+    """``(run_state, observed_at, fields)`` of run *verstr* — *fields* its
+    ``run_state.yml`` plus derived status fields — or None when there is no
+    such run."""
     state = load_run_state(storage, app_name, verstr)
     if state is None and not storage.exists(app_name, verstr):
         return None
     observed = run_state_observed_at(storage, app_name, verstr) if state else None
-    return dict(state or {}, **status_fields(state, observed_at=observed),
-                run_state=state, observed_at=observed, verstr=verstr)
+    return state, observed, dict(state or {}, **status_fields(state, observed_at=observed))
 
 
 def _resolve_refs(storage, app_name, refs):
@@ -42,14 +51,10 @@ def _resolve_refs(storage, app_name, refs):
     for ref in refs:
         if ref in resolved:
             continue
-        if not ref or not _is_relative(ref):
+        if not ref or not is_relative_ref(ref):
             resolved[ref] = ref or None
             continue
         placement = placement or point_placement(storage, app_name)
         verstr, err = resolve_experiment(storage, app_name, ref, snapshot=placement)
         resolved[ref] = None if err else verstr
     return resolved
-
-
-def _is_relative(ref):
-    return ref in LATEST_WORDS or ref.startswith("@")

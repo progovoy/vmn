@@ -22,8 +22,8 @@ take a query instead and return every verstr they changed. Archived runs are hid
 from vmn_exp.core import run_finish
 from vmn_exp.core.manage import set_archived, tag_run
 from vmn_exp.core.query import compile_query
-from vmn_exp.core.refs import resolve_experiment
-from vmn_exp.core.run_finish import FinishRefusedError  # noqa: F401
+from vmn_exp.core.refs import needs_listing, point_placement, resolve_experiment
+from vmn_exp.core.run_finish import FinishRefusedError, RunRefusedError  # noqa: F401
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
 from vmn_exp.sdk.reader import _resolve, list_runs
 from vmn_exp.sdk.resume import ReopenRefusedError  # noqa: F401
@@ -117,17 +117,34 @@ def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force
     app_name, storage, _ = _resolve(app_name, storage)
     refs = list(dict.fromkeys(refs))
 
-    def finish(ref):
+    def finish(target):
+        if isinstance(target, ValueError):
+            return target
         try:
-            verstr, err = resolve_experiment(storage, app_name, ref)
-            if err:
-                raise ValueError(err)
-            return _finish_one(storage, app_name, verstr, exit_code, error,
+            return _finish_one(storage, app_name, target, exit_code, error,
                                end_reason, force)
         except ValueError as exc:
             return exc
 
-    return dict(zip(refs, parallel_map(finish, refs)))
+    return dict(zip(refs, parallel_map(finish, _targets(storage, app_name, refs))))
+
+
+def _targets(storage, app_name, refs):
+    """Each ref's verstr, or the ValueError of one that resolves to no run:
+    full names as given, the rest through one placement shared by the call."""
+    listed = parallel_map(lambda ref: needs_listing(storage, app_name, ref), refs)
+    placement, targets = None, []
+    for ref, needed in zip(refs, listed):
+        try:
+            if needed:
+                placement = placement or point_placement(storage, app_name)
+                ref, err = resolve_experiment(storage, app_name, ref, snapshot=placement)
+                if err:
+                    raise ValueError(err)
+            targets.append(ref)
+        except ValueError as exc:
+            targets.append(exc)
+    return targets
 
 
 def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force):

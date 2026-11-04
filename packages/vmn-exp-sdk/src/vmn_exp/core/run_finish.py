@@ -43,18 +43,27 @@ from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, save
 _ENDING_FIELDS = ("error", "end_reason", "signal", "received_signal")
 
 
+# Why a change to a run is refused; a *force* overrides a set of them.
 LIVE = "live"
 FINISHED = "finished"
+_FORCE_OVERRIDES = {False: frozenset(), LIVE: frozenset({LIVE}),
+                    True: frozenset({LIVE, FINISHED})}
 
 
-class FinishRefusedError(ValueError):
-    """The run is live elsewhere (``reason="live"``) or already finished
-    (``reason="finished"``); ``status`` is its derived status and
-    ``exit_code`` its prior one (None while unfinished)."""
+class RunRefusedError(ValueError):
+    """A run's state refused a change: ``reason`` (:data:`LIVE` or
+    :data:`FINISHED`), the run's derived ``status``, its prior ``exit_code``
+    (None while unfinished) and its ``verstr``."""
 
-    def __init__(self, message, reason, status, exit_code):
+    def __init__(self, message, reason, status, exit_code, verstr):
         super().__init__(message)
-        self.reason, self.status, self.exit_code = reason, status, exit_code
+        self.reason, self.status, self.exit_code, self.verstr = (
+            reason, status, exit_code, verstr)
+
+
+class FinishRefusedError(RunRefusedError):
+    """The run is live elsewhere (``reason="live"``) or already finished
+    (``reason="finished"``)."""
 
 
 def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None,
@@ -67,14 +76,13 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
     *exit_code* that is not an int or an unknown *force*.
     """
     exit_code = checked_exit_code(exit_code)
-    force = checked_force(force)
+    overridden = checked_force(force)
     if not storage.exists(app_name, verstr):
         return False
     observed_at = run_state_observed_at(storage, app_name, verstr)
 
     def finishable(prior):
-        if force is not True:
-            _refuse_unfinishable(prior, observed_at, verstr, force)
+        _refuse_unfinishable(prior, observed_at, verstr, overridden)
         return prior
 
     finishable(load_run_state(storage, app_name, verstr) or {})
@@ -124,26 +132,27 @@ def checked_exit_code(exit_code):
 
 
 def checked_force(force):
-    if force is True or force is False:
-        return force
-    if force == LIVE:
-        return LIVE
+    """The refusal reasons *force* (False, ``"live"`` or True) overrides."""
+    if force is True or force is False or force == LIVE:
+        return _FORCE_OVERRIDES[force]
     raise ValueError(f"force must be False, 'live' or True, got {force!r}")
 
 
-def _refuse_unfinishable(prior, observed_at, verstr, force):
+def _refuse_unfinishable(prior, observed_at, verstr, overridden):
+    if overridden == _FORCE_OVERRIDES[True]:
+        return  # nothing left to refuse: the prior state is not even read
     status = derive_status(prior, observed_at=observed_at)
     exit_code = prior.get("exit_code")
-    if status == RUNNING and force != LIVE:
+    if status == RUNNING and LIVE not in overridden:
         raise FinishRefusedError(
             f"Run '{verstr}' is still heartbeating (attempt {prior.get('attempt')} "
             f"on {prior.get('host')}); pass force to finish it anyway",
-            LIVE, status, exit_code)
-    if status in (SUCCEEDED, FAILED):
+            LIVE, status, exit_code, verstr)
+    if status in (SUCCEEDED, FAILED) and FINISHED not in overridden:
         raise FinishRefusedError(
             f"Run '{verstr}' already finished ({status}, exit code "
             f"{exit_code}); pass force to finish it again",
-            FINISHED, status, exit_code)
+            FINISHED, status, exit_code, verstr)
 
 
 def _error_mapping(error):

@@ -6,7 +6,7 @@ Writes the run's final state from outside it (see :mod:`vmn_exp.core.run_finish`
 after the add's other entries, so a ``--note`` lands before the run reads finished.
 """
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.run_finish import FinishRefusedError, finish_run
+from vmn_exp.core.run_finish import LIVE, FinishRefusedError, finish_run
 
 
 def add_finish_flags(parser):
@@ -46,4 +46,4 @@ def apply_finish(storage, app_name, verstr, args):
 
 
 def _force(args):
-    return True if args.force else ("live" if args.force_live else False)
+    return True if args.force else (LIVE if args.force_live else False)

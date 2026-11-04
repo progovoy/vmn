@@ -446,8 +446,9 @@ manage.finish_runs("my_app", run_ids, 1, error="study closed", force="live")
   time, the rule that tells running from stuck — and once the run has finished,
   including by an attempt that finishes it while the call writes (the write is
   a compare-and-swap, like `run.finish()`'s). The error carries `reason`
-  (`"live"` or `"finished"`), `status` (the derived status) and `exit_code`
-  (the prior one, `None` while unfinished), so callers need not parse its text.
+  (`"live"` or `"finished"`), `status` (the derived status), `exit_code`
+  (the prior one, `None` while unfinished) and `verstr`, so callers need not
+  parse its text. It and `ReopenRefusedError` subclass `manage.RunRefusedError`.
 - `force` is `False`, `"live"` or `True`. `force="live"` finishes a run past a
   live heartbeat but never past a final state: a finished run — also one that
   finishes while the call writes — is still refused. `force=True` finishes it
@@ -640,7 +641,7 @@ neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
 Only an unfinished run (created, released, running or stuck) resumes as is. A
 **finished** run — succeeded or failed, including a SIGTERM'd one under the
 default `on_sigterm="fail"` — raises `manage.ReopenRefusedError` (a
-`ValueError` with `reason="finished"`, `exit_code` and `verstr`) naming the run, since
+`manage.RunRefusedError` with `reason="finished"`, `status`, `exit_code` and `verstr`) naming the run, since
 reopening it clears its exit code (a resubmitted trial would lose its result).
 Reopen it on purpose with `start_run(run_id=..., reopen=True)`, or
 `VMN_RESUME_REOPEN=1` next to `$VMN_RESUME_RUN_ID` (consumed the same way). A

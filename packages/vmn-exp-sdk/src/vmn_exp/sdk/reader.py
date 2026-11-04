@@ -53,16 +53,12 @@ from vmn_exp.core.storage_resolve import _try_repo_root, resolve_experiment_stor
 from vmn_exp.core.step_metric import join_all, step_metrics
 from vmn_exp.core.refs import point_placement, resolve_experiment, tree_links
 from vmn_exp.core.similar_search import find as _find_similar
-from vmn_exp.core.status import (
-    load_run_state,
-    run_state_observed_at,
-    status_fields,
-)
+from vmn_exp.core.status import load_run_state, run_state_observed_at
 from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.lineage import app_indexes, run_lineage
 from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, snapshot_app_names
-from vmn_exp.sdk.run_states import read_run_states
+from vmn_exp.sdk.run_states import read_run_state, read_run_states
 
 
 # ---------------------------------------------------------------------------
@@ -280,11 +276,10 @@ def get_run_state(app_name=None, verstr=None, *, storage=None):
     listing. *verstr* must be the exact name. Raises ValueError when no such
     run exists."""
     app_name, storage, _ = _resolve(app_name, storage)
-    state = load_run_state(storage, app_name, verstr) if verstr else None
-    if state is None and not (verstr and storage.exists(app_name, verstr)):
+    read = read_run_state(storage, app_name, verstr) if verstr else None
+    if read is None:
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
-    observed = run_state_observed_at(storage, app_name, verstr) if state else None
-    return dict(state or {}, **status_fields(state, observed_at=observed))
+    return read[2]
 
 
 def get_run_states(app_name=None, refs=(), *, storage=None):

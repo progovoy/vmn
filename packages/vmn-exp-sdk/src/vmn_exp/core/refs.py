@@ -88,12 +88,19 @@ class _Own:
         return self._links.get(key, default)
 
 
-def _needs_listing(storage, app_name, ref, latest):
-    if latest or ref in LATEST_WORDS:
+def is_relative_ref(ref):
+    """``latest`` or ``@N``: a ref only the app's list of runs resolves."""
+    return ref in LATEST_WORDS or ref.startswith("@")
+
+
+def needs_listing(storage, app_name, ref, latest=False):
+    """Whether *ref* resolves only against the app's list of runs: a relative
+    ref, or a dev-verstr prefix that names no record."""
+    if latest:
         return True
     if ref is None:
         return False
-    if ref.startswith("@"):
+    if is_relative_ref(ref):
         return True
     return "-dev." in ref and not storage.exists(app_name, ref)
 
@@ -103,7 +110,7 @@ def resolve_experiment(storage, app_name, ref, latest=False, snapshot=None):
 
     *snapshot* is an :class:`IndexSnapshot` the caller already holds.
     """
-    if not _needs_listing(storage, app_name, ref, latest):
+    if not needs_listing(storage, app_name, ref, latest):
         return ref, None
     return point_placement(storage, app_name, snapshot).resolve(ref, latest=latest, kind=KIND)
 

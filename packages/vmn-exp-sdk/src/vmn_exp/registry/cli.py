@@ -307,8 +307,8 @@ def _resolve_run_ref(storage, app_name, ref):
     """
     if not ref:
         return None
-    from vmn_exp.core.refs import _needs_listing, resolve_experiment
-    if not _needs_listing(storage, app_name, ref, False):
+    from vmn_exp.core.refs import needs_listing, resolve_experiment
+    if not needs_listing(storage, app_name, ref, False):
         return ref
     if not app_name:
         _LOG.error("Run ref %r requires --app to resolve via experiment index", ref)
