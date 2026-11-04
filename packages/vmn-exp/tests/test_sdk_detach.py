@@ -31,7 +31,14 @@ def _clean_env(monkeypatch):
 
 
 @pytest.fixture
-def run(tmp_path):
+def threads_before():
+    """The threads alive before the run opens: an earlier test's, such as a
+    slow sync it left to end in the background, are not the run's."""
+    return set(threading.enumerate())
+
+
+@pytest.fixture
+def run(tmp_path, threads_before):
     storage = LocalSnapshotStorage(str(tmp_path), area="runs")
     storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
     run = Run(storage, APP, VERSTR, 0.05, sync_interval_sec=0.05)
@@ -53,8 +60,9 @@ def _store_files(run):
     return files
 
 
-def _run_threads():
-    return [t.name for t in threading.enumerate() if t.name in _RUN_THREADS]
+def _run_threads(threads_before):
+    return [t.name for t in threading.enumerate()
+            if t.name in _RUN_THREADS and t not in threads_before]
 
 
 def test_detach_writes_nothing_even_after_the_heartbeat_interval(run):
@@ -65,10 +73,10 @@ def test_detach_writes_nothing_even_after_the_heartbeat_interval(run):
     assert _store_files(run) == before
 
 
-def test_detach_stops_the_runs_threads_and_lets_go_of_it(run):
-    assert _run_threads()
+def test_detach_stops_the_runs_threads_and_lets_go_of_it(run, threads_before):
+    assert _run_threads(threads_before)
     run.detach()
-    assert _run_threads() == []
+    assert _run_threads(threads_before) == []
     assert run not in open_runs() and current_run() is None
     assert os.environ.get("VMN_EXPERIMENT_ID") is None
 
