@@ -6,6 +6,8 @@ generation is the ETag, so ``if_generation_match=0`` is the atomic
 ``If-None-Match: *`` create and ``if_generation_match=<generation>`` the
 ``If-Match`` overwrite. Credentials come from Application Default Credentials.
 """
+import functools
+
 from vmn_exp.storage.files import valid_artifact_path
 from vmn_exp.storage.object_client import Body, ObjectClient
 from vmn_exp.storage.registry import default_prefix, missing_extra
@@ -87,10 +89,14 @@ def _chunks(blob, size):
 class GCSSnapshotStorage(S3SnapshotStorage):
     scheme = "gs"
 
-    def __init__(self, bucket, prefix="vmn/snapshots", client=None):
-        if client is None:
-            client = _default_client()
-        super().__init__(bucket, prefix=prefix, client=GCSObjectClient(client, bucket))
+    def __init__(self, bucket, prefix="vmn/snapshots", client=None, endpoint_url=None):
+        """Without *client*, one from Application Default Credentials, built
+        again in a forked child."""
+        if client is not None:
+            super().__init__(bucket, prefix=prefix, client=GCSObjectClient(client, bucket))
+            return
+        factory = functools.partial(_default_adapter, bucket, endpoint_url)
+        super().__init__(bucket, prefix=prefix, client_factory=factory)
 
     def open_artifact(self, app_name, verstr, name):
         """Streamed, never buffered: a GCS read is one whole-object download."""
@@ -110,7 +116,10 @@ def _default_client(endpoint_url=None):
     return storage.Client()
 
 
+def _default_adapter(bucket, endpoint_url):
+    return GCSObjectClient(_default_client(endpoint_url), bucket)
+
+
 def open_gcs_store(uri, area):
-    client = _default_client(uri.options.get("endpoint_url"))
     return GCSSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
-                              client=client)
+                              endpoint_url=uri.options.get("endpoint_url"))

@@ -16,6 +16,7 @@ background fan-outs (an index load's folds, upkeep) hold the rest.
 """
 import contextlib
 import contextvars
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -27,6 +28,7 @@ SHARED_WORKERS = 160
 REQUEST_WORKERS = 32
 _SLOTS = threading.Semaphore(SHARED_WORKERS - REQUEST_WORKERS)
 _REQUEST_SLOTS = threading.Semaphore(REQUEST_WORKERS)
+_slots_pid = os.getpid()
 _SERVING = contextvars.ContextVar("vmn_fanout_serving_request", default=False)
 
 
@@ -41,8 +43,19 @@ def serving_request():
         _SERVING.reset(token)
 
 
+def _own_slots():
+    """A forked child's full budget: the slots its parent's fan-outs held
+    are never given back in it."""
+    global _SLOTS, _REQUEST_SLOTS, _slots_pid
+    if _slots_pid != os.getpid():
+        _SLOTS = threading.Semaphore(SHARED_WORKERS - REQUEST_WORKERS)
+        _REQUEST_SLOTS = threading.Semaphore(REQUEST_WORKERS)
+        _slots_pid = os.getpid()
+
+
 def _borrow(wanted):
     """``[(semaphore, n)]`` of the workers lent, at most *wanted* in all."""
+    _own_slots()
     pools = (_REQUEST_SLOTS, _SLOTS) if _SERVING.get() else (_SLOTS,)
     loans = []
     for slots in pools:

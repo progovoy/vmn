@@ -10,6 +10,7 @@ The account: ``AZURE_STORAGE_CONNECTION_STRING``, else an account URL
 ``DefaultAzureCredential`` when azure-identity is installed (or a SAS token
 in the URL).
 """
+import functools
 import os
 
 from vmn_exp.storage.object_client import BAD_RANGE, Body, ObjectClient, ObjectStoreError
@@ -97,9 +98,12 @@ class AzureSnapshotStorage(S3SnapshotStorage):
     scheme = "az"
 
     def __init__(self, container_name, prefix="vmn/snapshots", container=None,
-                 if_not_modified=None):
-        client = AzureObjectClient(container, if_not_modified)
-        super().__init__(container_name, prefix=prefix, client=client)
+                 if_not_modified=None, client_factory=None):
+        """*client_factory* (an :class:`AzureObjectClient` builder, used
+        instead of *container*) builds the client again in a forked child."""
+        client = None if client_factory else AzureObjectClient(container, if_not_modified)
+        super().__init__(container_name, prefix=prefix, client=client,
+                         client_factory=client_factory)
 
 
 def _sdk():
@@ -132,10 +136,15 @@ def _default_credential():
     return DefaultAzureCredential()
 
 
-def open_azure_store(uri, area):
+def _default_adapter(name, account_url):
+    """A client of its own: container client, credential and token cache."""
     container_cls, match = _sdk()
-    container = _container_client(container_cls, uri.location,
-                                  uri.options.get("account_url"))
+    return AzureObjectClient(_container_client(container_cls, name, account_url),
+                             match.IfNotModified)
+
+
+def open_azure_store(uri, area):
+    factory = functools.partial(_default_adapter, uri.location,
+                                uri.options.get("account_url"))
     return AzureSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
-                                container=container,
-                                if_not_modified=match.IfNotModified)
+                                client_factory=factory)

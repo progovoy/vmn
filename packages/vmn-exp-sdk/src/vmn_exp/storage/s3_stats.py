@@ -18,10 +18,10 @@ costs one tuple truthiness check.
 import bisect
 import collections
 import itertools
-import threading
 import time
 import weakref
 
+from vmn_exp.storage.per_process import PerProcessLock
 from vmn_exp.storage.s3_kinds import classify
 from vmn_exp.storage.s3_prefix_cap import prefix_cap_stats
 
@@ -41,7 +41,7 @@ _KEY = "_vmn_s3_key"
 S3Call = collections.namedtuple(
     "S3Call", "operation key duration_ms status error retries bytes_read")
 
-_lock = threading.Lock()
+_lock = PerProcessLock()  # a forked child's own (a parent thread may hold it)
 _ops = {}
 _kinds = {}  # "<operation> <kind>" -> _KindStats
 _failures = collections.deque(maxlen=FAILURES_SHOWN)  # (t, op, key, error, status)

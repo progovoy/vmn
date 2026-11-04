@@ -19,6 +19,7 @@ import threading
 import time
 
 from vmn_exp.storage import areas
+from vmn_exp.storage.per_process import PerProcessLock
 
 # ~20 ms a call makes 64 slots ~3,200 calls a second: under S3's per-prefix
 # rates, and a fifth of the client's pool (s3_base.MAX_POOL_CONNECTIONS).
@@ -31,8 +32,11 @@ _AREAS = frozenset((areas.RUNS, areas.SNAPSHOTS, areas.CODE, areas.SWEEPS, areas
 _TARGET = "_vmn_s3_cap_target"
 _SLOT = "_vmn_s3_cap_slot"
 
-_lock = threading.Lock()
+# Per process: a forked child never waits on a lock or a slot its parent's
+# threads held at the fork.
+_lock = PerProcessLock()
 _caps = {}  # (bucket, prefix) -> _PrefixCap
+_caps_pid = os.getpid()
 _held = threading.local()  # .depth: {_PrefixCap: calls of this thread in it}
 
 
@@ -96,11 +100,19 @@ class _PrefixCap:
                 "wait_ms_max": round(self.wait_ms_max, 1)}
 
 
+def _own_caps():
+    global _caps, _caps_pid
+    if _caps_pid != os.getpid():
+        _caps, _caps_pid = {}, os.getpid()
+    return _caps
+
+
 def _cap_of(bucket, prefix):
+    caps = _own_caps()
     with _lock:
-        cap = _caps.get((bucket, prefix))
+        cap = caps.get((bucket, prefix))
         if cap is None:
-            cap = _caps[(bucket, prefix)] = _PrefixCap(bucket, prefix, limit())
+            cap = caps[(bucket, prefix)] = _PrefixCap(bucket, prefix, limit())
         return cap
 
 
@@ -160,7 +172,8 @@ def cap_prefixes(client):
 
 def prefix_cap_stats():
     """The dump section: the cap and the most waited-on prefixes."""
+    caps = _own_caps()
     with _lock:
-        rows = [cap.as_dict() for cap in _caps.values()]
+        rows = [cap.as_dict() for cap in caps.values()]
     rows.sort(key=lambda r: (-r["waiting"], -r["waits"], -r["peak_in_flight"]))
     return {"limit": limit(), "prefixes_seen": len(rows), "prefixes": rows[:PREFIXES_SHOWN]}

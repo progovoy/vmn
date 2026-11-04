@@ -5,6 +5,8 @@ log halves (:mod:`snapshot_storage_s3`)."""
 import copy
 import datetime
 import email.utils
+import functools
+import os
 
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.storage.base import NO_FILE
@@ -13,6 +15,7 @@ from vmn_exp.storage.registry import missing_extra
 from vmn_exp.storage.s3_prefix_cap import cap_prefixes
 from vmn_exp.storage.s3_stats import instrument
 from vmn_exp.storage.fanout import fan_out
+from vmn_exp.storage.per_process import PerProcess
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
 S3_WORKERS = 10
@@ -75,7 +78,22 @@ def boto3_client(endpoint_url=None):
 def sigv4_client(endpoint_url=None):
     """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs):
     one per presigned URL, so the default session's (no session to build)."""
-    return _client(boto3_client_module(), endpoint_url, signature_version="s3v4")
+    boto3 = boto3_client_module()
+    _own_default_session(boto3)
+    return _client(boto3, endpoint_url, signature_version="s3v4")
+
+
+_default_session_pid = os.getpid()
+
+
+def _own_default_session(boto3):
+    """Drop a default session a forked child inherited: its credential cache
+    and refresh lock are the parent's."""
+    global _default_session_pid
+    pid = os.getpid()
+    if _default_session_pid != pid:
+        boto3.DEFAULT_SESSION = None
+        _default_session_pid = pid
 
 
 def _client(session, endpoint_url, **config):
@@ -122,18 +140,39 @@ def boto3_client_module():
     return boto3
 
 
+def _injected(pid):
+    raise RuntimeError(
+        f"this store's client was injected in pid {pid}; a forked child cannot reuse "
+        "its connections: open the store again in the child (or pass client_factory)"
+    )
+
+
 class S3Base:
     """``client`` speaks the boto3 S3 client subset these halves use; other
     object stores pass an adapter (:mod:`vmn_exp.storage.object_client`)."""
 
     scheme = "s3"
 
-    def __init__(self, bucket, prefix="vmn/snapshots", endpoint_url=None, client=None):
+    def __init__(self, bucket, prefix="vmn/snapshots", endpoint_url=None, client=None,
+                 client_factory=None):
+        """*client_factory* builds *client* again in a forked child; without
+        one an injected *client* refuses use there."""
         self.bucket = bucket
         self.prefix = prefix
         self.endpoint_url = endpoint_url
-        self._s3 = client or boto3_client(endpoint_url)
-        self._own_client = client is None  # not another object store's adapter
+        # Not another object store's adapter.
+        self._own_client = client is None and client_factory is None
+        if self._own_client:
+            client_factory = functools.partial(boto3_client, endpoint_url)
+        if client is None:
+            client = client_factory()
+        # Area clones share it: one client and connection pool per process.
+        self._clients = PerProcess(client_factory or functools.partial(_injected, os.getpid()),
+                                   value=client)
+
+    @property
+    def _s3(self):
+        return self._clients.get()
 
     @property
     def area(self):
