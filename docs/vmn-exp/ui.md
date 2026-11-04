@@ -223,7 +223,11 @@ a pass per app at most every 60 seconds, on the replica that leads the index):
   marked also flags the app as having all its markers (after one listing of
   its run names, to catch runs the index has not seen yet; an attempt that
   does not flag waits two passes, then twice as long each time, up to an
-  hour), so the first `vmn-exp prune -v` skips its one-time scan.
+  hour), so the first `vmn-exp prune -v` skips its one-time scan. The flag
+  is learned from the index refresher's listing of the app (the flag object's
+  size tells complete from dropped, its ETag is the version token), so a
+  flagged app costs a pass no read, even right after a restart; `prune -v`
+  still reads the flag itself before trusting it.
 - **Compaction.** A failed or stuck run whose writer died before compacting
   keeps one metrics segment per 30 s sync, hundreds for a long run; the server
   compacts each one once (newest first, 30 seconds of work per pass), so its

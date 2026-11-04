@@ -18,6 +18,13 @@ is unreachable) is kept in the local copy instead; while it is there this
 host trusts no flag, later drops stay local (no remote call per unmarked
 child), and its next read of the flag replays the drop on the remote. Other hosts see the remote's stale flag until then — the same hosts
 that cannot see this host's unpushed child either.
+
+On S3 a delimited listing of the app's prefix shows the flag object too, and
+the two texts differ in size, so this process notes the flag's state and
+token from every such listing, as from its own reads and writes
+(:meth:`S3ChildrenFlag.children_flag_seen`): the store upkeep skips a flagged
+app with no read, and uses a listed token as its ``since``. A noted state
+may be stale, so nothing that trusts the flag (``prune -v``) uses it.
 """
 import os
 import uuid
@@ -32,6 +39,10 @@ _COMPLETE, _DROPPED = "complete", "dropped"
 
 def _flag_text(complete):
     return f"{_COMPLETE if complete else _DROPPED} {uuid.uuid4().hex}\n"
+
+
+_COMPLETE_SIZE = len(_flag_text(True).encode())  # a drop's is one byte less
+_SEEN = {}  # (store, flag key) -> (complete, token) as last listed, read or written
 
 
 class LocalChildrenFlag:
@@ -89,34 +100,60 @@ class LocalChildrenFlag:
 
 
 class S3ChildrenFlag:
+    """The flag on S3, and as this process last listed, read or wrote it."""
+
     has_child_markers = True
 
     def _children_complete_key(self, app_name):
         return f"{self._key_prefix(app_name)}/{CHILDREN_COMPLETE_FILE}"
 
+    def children_flag_seen(self, app_name):
+        """``(complete, token)`` of the flag when this process last listed,
+        read or wrote it, else None. Only good for a skip or as a ``since``
+        token (it may be stale): what trusts the flag reads it."""
+        return _SEEN.get(self._seen_key(self._children_complete_key(app_name)))
+
+    def _seen_key(self, key):
+        # Process-wide: equivalent storage objects share one index, whichever lists.
+        return self.scheme, self.endpoint_url, self.bucket, key
+
+    def _saw_children_flag(self, key, complete, token):
+        _SEEN[self._seen_key(key)] = (complete, token)
+
+    def _listed_children_flag(self, app_base, obj):
+        """A whole delimited listing of the app prefix *app_base* showed the
+        flag object *obj* (None: no flag)."""
+        key = app_base + CHILDREN_COMPLETE_FILE
+        if obj is None:
+            self._saw_children_flag(key, False, NO_FILE)
+        else:
+            self._saw_children_flag(key, obj["Size"] == _COMPLETE_SIZE, obj.get("ETag"))
+
     def children_flag_state(self, app_name):
-        data, etag = self._get_with_etag(self._children_complete_key(app_name))
-        if data is None:
-            return False, NO_FILE
-        return data.startswith(_COMPLETE.encode()), etag
+        key = self._children_complete_key(app_name)
+        data, etag = self._get_with_etag(key)
+        state = (False, NO_FILE) if data is None else (data.startswith(_COMPLETE.encode()), etag)
+        self._saw_children_flag(key, *state)
+        return state
 
     def children_flag(self, app_name):
         return self.children_flag_state(app_name)[1]
 
     def children_complete(self, app_name):
-        data = self._get(self._children_complete_key(app_name)) or b""
-        return data.startswith(_COMPLETE.encode())
+        return self.children_flag_state(app_name)[0]
 
     def set_children_complete(self, app_name, complete, since=None):
         from vmn_exp.storage.s3_base import is_taken, put_condition  # S3's own: loaded
 
+        key = self._children_complete_key(app_name)
         try:
-            self._put(self._children_complete_key(app_name), _flag_text(complete),
-                      **put_condition(since))
+            resp = self._put(key, _flag_text(complete), **put_condition(since))
         except Exception as e:
+            _SEEN.pop(self._seen_key(key), None)
             if since is not None and is_taken(e):
                 return False
             raise
+        self._saw_children_flag(key, complete, resp.get("ETag"))
         return True
 
 

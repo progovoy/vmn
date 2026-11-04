@@ -9,12 +9,16 @@
   (``log/<name>``, ``metrics/<name>``), as in a local listing: each costs a
   prefixed listing of its own.
 
+A whole listing of an app's names or files also shows its child-marker flag
+(``.children_complete``, never a record): it is noted for
+:meth:`~vmn_exp.storage.children_flag.S3ChildrenFlag.children_flag_seen`.
 """
 
 from vmn_exp import _base
 from vmn_exp._base import VMN_LOGGER
 from vmn_exp.core.metric_files import METRICS_DIR, is_metric_file
 from vmn_exp.storage.files import (
+    CHILDREN_COMPLETE_FILE,
     LOG_DIR,
     METADATA_FILE,
     is_log_file,
@@ -66,9 +70,19 @@ class S3Listing:
     def _names_under(self, prefix):
         base = prefix + "/"
         return {
-            unsafe_verstr(cp[len(base) :].rstrip("/")): prefix
-            for cp in self._common_prefixes(base)
+            unsafe_verstr(cp["Prefix"][len(base) :].rstrip("/")): prefix
+            for page in self._name_pages(base)
+            for cp in page.get("CommonPrefixes", [])
         }
+
+    def _name_pages(self, base):
+        """The delimited listing pages of the app prefix *base*; the flag
+        they show is noted once the last one is through."""
+        flag_key, flag = base + CHILDREN_COMPLETE_FILE, None
+        for page in self._pages(Prefix=base, Delimiter="/"):
+            flag = next((o for o in page.get("Contents", []) if o["Key"] == flag_key), flag)
+            yield page
+        self._listed_children_flag(base, flag)
 
     def _names_by_prefix(self, app_name):
         """``{verstr: the app prefix it lives under}``."""
@@ -152,10 +166,13 @@ class S3Listing:
             walks.pop(base, None)
 
     def _walk_record_files(self, base, walks):
-        files = {}
+        files, flag = {}, None
         for obj, verstr, name, skipped in self._walk(base, walks=walks):
             if not skipped and _is_record_file(name):
                 files.setdefault(unsafe_verstr(verstr), {})[name] = _signature(obj)
+            elif verstr == CHILDREN_COMPLETE_FILE and not name:
+                flag = obj
+        self._listed_children_flag(base, flag)
         return files
 
     def _walk(self, base, start_after=None, walks=None):
@@ -187,7 +204,7 @@ class S3Listing:
         """:meth:`list_record_names`' names a LIST page at a time, in the
         store's order, so a caller can start on the first page."""
         base = self._app_prefix(app_name) + "/"
-        for page in self._pages(Prefix=base, Delimiter="/"):
+        for page in self._name_pages(base):
             names = [unsafe_verstr(cp["Prefix"][len(base):].rstrip("/"))
                      for cp in page.get("CommonPrefixes", [])]
             if names:

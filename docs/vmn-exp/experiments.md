@@ -1397,8 +1397,9 @@ index; `read N/M runs` on stderr) and one marker listing per parent. A
 `vmn-exp ui` serving the store does this itself unless `--read-only` (see
 [ui.md](ui.md#store-upkeep)), and so does the first `prune -v` of an app, so
 the command is optional. A run with no failed marker flags the app as having
-all its markers (`<app>/.children_complete` beside its records — no listing
-takes it for a run); a child whose marker later fails to write drops the
+all its markers (`<app>/.children_complete` beside its records, holding
+`complete <nonce>` or the one-byte-shorter `dropped <nonce>`, so an S3
+listing's size tells them apart — no listing takes it for a run); a child whose marker later fails to write drops the
 flag, so the next `prune -v` rescans. A pass sets the flag only if no drop
 landed since it started listing (a conditional write on the flag's version
 token: S3 `If-Match`, a local compare under a lock), so a child created mid-pass whose

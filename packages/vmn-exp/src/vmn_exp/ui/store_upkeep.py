@@ -12,8 +12,8 @@ an :class:`AppUpkeep` pass over it at most every ``interval_sec`` per index:
   a time); a few new children are marked directly (one PUT each; markers are
   idempotent), so a steady pass costs nothing for the runs it has checked.
   A pass that leaves every child of its snapshot marked flags the app's
-  markers complete (:mod:`~vmn_exp.ui.upkeep_flag`: one read of the flag per
-  pass once flagged, else a listing of the run names first — backed off,
+  markers complete (:mod:`~vmn_exp.ui.upkeep_flag`: nothing once the index's
+  listing shows it flagged, else a listing of the run names first — backed off,
   doubling up to :data:`FLAG_BACKOFF_MAX_SEC`, after an attempt that did not
   flag), so a ``prune -v`` of the store skips its one-time scan;
 * compaction (:mod:`vmn_exp.core.metric_compact`, :mod:`vmn_exp.core.log_compact`)

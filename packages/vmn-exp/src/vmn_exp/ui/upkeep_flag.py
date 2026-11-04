@@ -11,6 +11,11 @@ snapshot lacks has its ``metadata.yml`` read and, if it is a child, its
 marker written — unless more than :data:`MAX_UNSEEN` are missing (the index
 is still catching up; a later pass flags). The flag is then set on that
 token, so a drop since — a child whose marker failed — keeps it unset.
+
+The flag's state and token come from the index refresher's listing of the
+app where the store notes them (S3: ``children_flag_seen``), else from a
+read: a flagged app costs a pass nothing, and a listed token predates the
+pass's own listing as the conditional set needs.
 """
 from collections import defaultdict
 
@@ -27,11 +32,20 @@ def flag_marked_app(storage, app_name, snapshot):
     (worth a backoff: it listed the app), None when nothing was tried."""
     if not storage.has_child_markers or snapshot.loading is not None:
         return None
-    complete, token = storage.children_flag_state(app_name)
+    complete, token = _flag_state(storage, app_name)
     if complete or token is None:
         return None
     return flag_after_pass(storage, app_name,
                            lambda: _mark_listed(storage, app_name, snapshot), token)
+
+
+def _flag_state(storage, app_name):
+    """``(complete, token)`` of the flag: as the index refresher's listing
+    (or this process's last write) showed it where the store tells
+    (``children_flag_seen``), else read."""
+    seen = getattr(storage, "children_flag_seen", None)
+    state = seen(app_name) if seen else None
+    return state if state is not None else storage.children_flag_state(app_name)
 
 
 def _mark_listed(storage, app_name, snapshot):
