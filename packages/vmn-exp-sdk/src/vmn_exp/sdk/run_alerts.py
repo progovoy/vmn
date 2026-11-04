@@ -9,7 +9,7 @@ from vmn_exp.core.writer import create_log_entry
 
 class RunAlerts:
     """Needs ``self._storage``, ``app_name``, ``id``, ``name``, ``_state``,
-    ``_exp_conf`` and ``_append`` from the ``Run`` it is mixed into."""
+    ``_exp_conf``, ``_gate`` and ``_append`` from the ``Run`` it is mixed into."""
 
     _alerter_instance = None
     _exp_conf = None
@@ -32,7 +32,7 @@ class RunAlerts:
         self._append(create_log_entry("alert", title=alert["title"],
                                       text=alert["text"], level=level))
         if alerter.wants("alert"):
-            alerter.send_async(alert)
+            alerter.send_async(alert, gate=self._gate)
         return True
 
     def _alerter(self):

@@ -14,7 +14,9 @@ then deadlock on it. Handlers registered once with ``os.register_at_fork``:
   runs' writer (``Run.pid``), gets clean gates, log-buffer locks and the
   open-run registry lock.
 
-The module helpers pause the same set by hand.
+The module helpers pause the same set by hand. ``PROCESS_GATE`` gates the
+background calls no run owns (the sysmetrics init thread's ``nvmlInit``); only
+a fork pauses it, within the same budget.
 """
 import contextlib
 import os
@@ -22,8 +24,21 @@ import threading
 import time
 
 from vmn_exp.sdk import context
+from vmn_exp.sdk.background_gate import BackgroundGate, RunBackground
 
 FORK_PAUSE_TIMEOUT_SEC = 10.0
+
+
+class _ProcessThreads(RunBackground):
+    def __init__(self, gate):
+        self._gate = gate
+
+    def _after_fork_in_child(self):
+        self._gate.after_fork_in_child()
+
+
+PROCESS_GATE = BackgroundGate()
+_PROCESS_THREADS = _ProcessThreads(PROCESS_GATE)
 
 # Forking thread -> the runs its before-handler paused (threads may fork at once).
 _paused_for_fork = {}
@@ -68,7 +83,7 @@ def background_paused(timeout=None):
 
 
 def _before_fork():
-    runs = _open_runs()
+    runs = _open_runs() + [_PROCESS_THREADS]
     _pause(runs, FORK_PAUSE_TIMEOUT_SEC)
     _paused_for_fork[threading.get_ident()] = runs
 
@@ -81,6 +96,7 @@ def _after_fork_in_parent():
 def _after_fork_in_child():
     _paused_for_fork.clear()
     context._LOCK = threading.RLock()
+    _PROCESS_THREADS._after_fork_in_child()
     for run in list(context._OPEN_RUNS):
         after_fork = getattr(run, "_after_fork_in_child", None)
         if after_fork is not None:

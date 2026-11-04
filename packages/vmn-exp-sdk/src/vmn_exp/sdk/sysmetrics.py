@@ -33,6 +33,7 @@ import threading
 import time
 
 from vmn_exp.core.env import opted_in
+from vmn_exp.sdk.fork_safety import PROCESS_GATE
 from vmn_exp.sdk.sysmetrics_gpu import (
     GPU_MEM_MB,
     GPU_NODE_MEM_MB,
@@ -324,7 +325,8 @@ class Sampler:
 
     def _build(self):
         try:
-            collector = build_collector(self._pid)
+            # nvmlInit: a fork must not catch the driver state half-built.
+            collector = PROCESS_GATE.wrap(build_collector)(self._pid)
         except Exception:
             _LOGGER.debug("Building the system-metrics collector failed", exc_info=True)
             collector = None

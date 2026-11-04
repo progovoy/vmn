@@ -72,9 +72,13 @@ class Alerter:
             delivered = delivered or bool(ok)
         return delivered
 
-    def send_async(self, alert):
-        """Deliver on a daemon thread, so a slow endpoint never stalls the caller."""
-        thread = threading.Thread(target=self.send, args=(alert,), daemon=True,
+    def send_async(self, alert, gate=None):
+        """Deliver on a daemon thread, so a slow endpoint never stalls the caller.
+
+        With a *gate* (the run's ``BackgroundGate``) the send is one of its
+        background calls: a fork waits for it, a pause holds it."""
+        send = self.send if gate is None else gate.wrap(self.send)
+        thread = threading.Thread(target=send, args=(alert,), daemon=True,
                                   name="vmn-alert")
         with self._lock:
             self._threads = [t for t in self._threads if t.is_alive()] + [thread]
