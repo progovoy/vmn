@@ -8,6 +8,7 @@ import boto3
 from moto import mock_aws
 
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.storage.store_marker import forget_checked
 
 BUCKET = "vmn-bucket"
 PREFIX = "exps"
@@ -24,9 +25,11 @@ def mocked_bucket(monkeypatch):
         init_stamp_logger()
     except Exception:
         pass
+    forget_checked()  # every mocked bucket shares one marker-cache key
     with mock_aws():
         boto3.client("s3").create_bucket(Bucket=BUCKET)
         yield
+    forget_checked()
 
 
 def s3_storage():

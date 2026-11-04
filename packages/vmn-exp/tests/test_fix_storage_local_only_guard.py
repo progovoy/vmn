@@ -152,9 +152,9 @@ def test_local_only_run_colliding_with_foreign_remote_record_does_not_write_into
     foreign = s3_storage()
     foreign.save(APP, X, meta(X, timestamp="2026-05-05T00:00:00Z"), {})
     foreign.save_file(APP, X, RUN_STATE_FILE, "state: running\n")
+    host = _local_only(tmp_path)  # opening as a writer may adopt the store (store.yml)
     before = raw_keys()
 
-    host = _local_only(tmp_path)
     assert tag_run(host, APP, X, tags={"k": "v"})
     save_run_state(host, APP, X, dict(FINISHED))
     save_artifact(host, APP, X, _artifact(tmp_path))
