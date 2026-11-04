@@ -15,6 +15,7 @@ from cold_store import APP, ColdStore
 import vmn_exp.core.index as index_module
 from vmn_exp.core import index_remote_workers
 from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.core.index_relist import Relisting
 from vmn_exp.core.index_remote_workers import RemoteLoaders
 from vmn_exp.core.index_unreadable import Unreadable
 
@@ -111,7 +112,24 @@ def _cold_load(store, tmp_path):
     return index
 
 
+def _hand_over_once_listed(monkeypatch):
+    """The cold listing hands its records over only once it listed them all:
+    the newest then leads the first chunk, read by the workers (a backlog of
+    1000 behind it). Handed over as its threads list them, a tail of 1000 or
+    fewer (no backlog) is read in-process: the newest's first read, not a
+    re-read, so the load would not exercise what this test asserts."""
+    take = Relisting.take
+
+    def take_once_listed(self, limit=None):
+        with self._changed:
+            self._changed.wait_for(lambda: self._done)
+        return take(self, limit)
+
+    monkeypatch.setattr(Relisting, "take", take_once_listed)
+
+
 def test_a_cold_load_does_not_reread_a_record_the_store_refused_a_worker(tmp_path, monkeypatch):
+    _hand_over_once_listed(monkeypatch)
     store = ThrottledStore(1500)
     refused = store.names[-1]  # the newest: in the first chunk, read by the workers
     store.refused.add(refused)
