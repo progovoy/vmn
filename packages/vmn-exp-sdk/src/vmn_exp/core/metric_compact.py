@@ -25,9 +25,10 @@ from vmn_exp.core.metric_files import is_indexed_file, last_seq
 from vmn_exp.core.metric_index_file import build_index
 from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited, stepless_twin
 from vmn_exp.core.series_reader import hidden, rewind_markers, writer_source
+from vmn_exp.storage.per_process import PerProcessLock
 
 SEAL_POINTS = 10_000_000
-_SEAL_LOCK = threading.Lock()
+_SEAL_LOCK = PerProcessLock()  # a forked child's own
 
 
 def _objects(storage, app_name, verstr, writer):

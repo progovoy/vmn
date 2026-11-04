@@ -27,6 +27,7 @@ except ImportError:  # not POSIX
 from filelock import FileLock, Timeout
 from vmn_exp.storage.files import atomic_write
 from vmn_exp.storage.fs_type import filesystem_type, is_network_fs
+from vmn_exp.storage.per_process import PerProcess, PerProcessLock
 
 SHIP_DIR = ".ship"
 # A holder keeping the lock this long is stuck (a process frozen mid-upload):
@@ -35,11 +36,13 @@ SHIP_DIR = ".ship"
 # signal froze mid-ship: the wait is short then.
 LOCK_WAIT_SEC = 30
 FINALIZING_WAIT_SEC = 2.0
-_FINALIZING = threading.Event()
+_FINALIZING = PerProcess(threading.Event)  # a forked child's own, cleared
 
-_THREAD_LOCKS = {}
-_THREAD_LOCKS_GUARD = threading.Lock()
-_DEPTH = threading.local()  # per thread: {lock path: [times held]}
+# A forked child's own: the parent's threads may hold them (and its thread's
+# hold depths are the parent's holds).
+_THREAD_LOCKS = PerProcess(dict)
+_THREAD_LOCKS_GUARD = PerProcessLock()
+_DEPTH = PerProcess(threading.local)  # per thread: {lock path: [times held]}
 # One fd open per lock file a process takes, so a hold (every heartbeat takes
 # the state lock) is one flock, not a makedirs + open + close. At most
 # _MAX_OPEN_FDS stay open (a server touches many records): the least recently
@@ -51,7 +54,7 @@ _POLL_SEC = 0.05  # how often a contended lock file is tried again
 
 def _thread_lock(path):
     with _THREAD_LOCKS_GUARD:
-        return _THREAD_LOCKS.setdefault(path, threading.RLock())
+        return _THREAD_LOCKS.get().setdefault(path, threading.RLock())
 
 
 class ShipState:
@@ -109,16 +112,16 @@ def forget_streams(record_dir, which):
 def finalizing():
     """While the SDK's SIGTERM finalizer runs: ship locks are waited for at
     most :data:`FINALIZING_WAIT_SEC`."""
-    _FINALIZING.set()
+    _FINALIZING.get().set()
     try:
         yield
     finally:
-        _FINALIZING.clear()
+        _FINALIZING.get().clear()
 
 
 def is_finalizing():
     """Whether the SDK's SIGTERM finalizer is running (:func:`finalizing`)."""
-    return _FINALIZING.is_set()
+    return _FINALIZING.get().is_set()
 
 
 def live_rollup_due(seq, shipped_bytes, every, max_bytes, final_flush):
@@ -132,7 +135,7 @@ def live_rollup_due(seq, shipped_bytes, every, max_bytes, final_flush):
 
 
 def _wait_sec():
-    return FINALIZING_WAIT_SEC if _FINALIZING.is_set() else LOCK_WAIT_SEC
+    return FINALIZING_WAIT_SEC if is_finalizing() else LOCK_WAIT_SEC
 
 
 @contextmanager
@@ -177,7 +180,7 @@ def _record_lock(record_dir, name):
     """Lock *name* of the copy, given back in a ``finally`` the hold is taken
     in: an interrupt landing right after cannot leave it held."""
     path = os.path.join(record_dir, SHIP_DIR, name)
-    local, depth = _thread_lock(path), _DEPTH.__dict__.setdefault(path, [0])
+    local, depth = _thread_lock(path), _DEPTH.get().__dict__.setdefault(path, [0])
     held, release = [], None
     try:
         held.append(local.acquire(timeout=_wait_sec()))
@@ -255,10 +258,10 @@ def _open_fd(path):
 def _evict_unheld():
     """Close the least recently used fds no thread holds, down to the cap."""
     for path in list(_FDS)[: max(0, len(_FDS) + 1 - _MAX_OPEN_FDS)]:
-        local = _THREAD_LOCKS[path]
+        local = _THREAD_LOCKS.get().setdefault(path, threading.RLock())
         if local.acquire(blocking=False):
             try:
-                if not _DEPTH.__dict__.get(path, [0])[0]:
+                if not _DEPTH.get().__dict__.get(path, [0])[0]:
                     os.close(_FDS.pop(path))
             finally:
                 local.release()

@@ -15,6 +15,7 @@ from vmn_exp.storage.registry import missing_extra
 from vmn_exp.storage.s3_prefix_cap import cap_prefixes
 from vmn_exp.storage.s3_stats import instrument
 from vmn_exp.storage.fanout import fan_out
+from vmn_exp.storage.fork_proxies import child_factory, environment_proxies_only
 from vmn_exp.storage.per_process import PerProcess
 
 # Requests one call keeps in flight: enough to hide S3 latency at 10k+ runs.
@@ -66,13 +67,14 @@ def app_key(app_name):
     return app_name.replace("/", "-")
 
 
-def boto3_client(endpoint_url=None):
+def boto3_client(endpoint_url=None, proxies=None):
     """A client of a session of its own that parses timestamps with
-    :func:`parse_timestamp` (the default session's clients keep botocore's)."""
+    :func:`parse_timestamp` (the default session's clients keep botocore's);
+    *proxies* given, botocore does not look them up."""
     session = boto3_client_module().session.Session()
     session._session.get_component("response_parser_factory").set_parser_defaults(
         timestamp_parser=parse_timestamp)
-    return _client(session, endpoint_url)
+    return _client(session, endpoint_url, **({} if proxies is None else {"proxies": proxies}))
 
 
 def sigv4_client(endpoint_url=None):
@@ -94,6 +96,7 @@ def _own_default_session(boto3):
     if _default_session_pid != pid:
         boto3.DEFAULT_SESSION = None
         _default_session_pid = pid
+        environment_proxies_only()
 
 
 def _client(session, endpoint_url, **config):
@@ -163,8 +166,9 @@ class S3Base:
         # Not another object store's adapter.
         self._own_client = client is None and client_factory is None
         if self._own_client:
-            client_factory = functools.partial(boto3_client, endpoint_url)
-        if client is None:
+            client = boto3_client(endpoint_url)
+            client_factory = child_factory(boto3_client, endpoint_url, client)
+        elif client is None:
             client = client_factory()
         # Area clones share it: one client and connection pool per process.
         self._clients = PerProcess(client_factory or functools.partial(_injected, os.getpid()),

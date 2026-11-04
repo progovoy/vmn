@@ -9,12 +9,12 @@ writers also refuse while ``migrating`` is set.
 import datetime
 import os
 import tempfile
-import threading
 import time
 
 import yaml
 
 from vmn_exp.storage import areas
+from vmn_exp.storage.per_process import PerProcessLock
 
 MARKER = "store.yml"
 LAYOUT = 2
@@ -25,7 +25,7 @@ _V1_CONTAINERS = ("experiments", "snapshots")
 _V1_PREFIXES = ("vmn-experiments", "vmn-snapshots")
 
 _checked = set()
-_lock = threading.Lock()
+_lock = PerProcessLock()  # a forked child's own
 
 
 class StoreLayoutError(ValueError):
@@ -136,10 +136,15 @@ def _v1_local_record(vmn_dir, skip):
 
 
 class ObjectRoot:
-    def __init__(self, client, bucket, prefix, endpoint_url=None):
-        self.client, self.bucket, self.prefix = client, bucket, prefix
-        self.key = ("object", type(client).__name__, endpoint_url, bucket, prefix)
+    def __init__(self, storage, bucket, prefix, endpoint_url=None):
+        self._storage, self.bucket, self.prefix = storage, bucket, prefix
+        self.key = ("object", type(self.client).__name__, endpoint_url, bucket, prefix)
         self._dir = f"{prefix}/" if prefix else ""
+
+    @property
+    def client(self):
+        """The storage's client of this process (a forked child's own)."""
+        return self._storage._s3
 
     def _key(self):
         return self._dir + MARKER
@@ -193,10 +198,9 @@ def root_of(storage):
     """The marker location of a backend storage, or None (unknown backend)."""
     if hasattr(storage, "root") and hasattr(storage, "area"):
         return LocalRoot(storage.root)
-    client = getattr(storage, "_s3", None)
-    if client is None:
+    if getattr(storage, "_s3", None) is None:
         return None
-    return ObjectRoot(client, storage.bucket, storage.prefix.rpartition("/")[0],
+    return ObjectRoot(storage, storage.bucket, storage.prefix.rpartition("/")[0],
                       getattr(storage, "endpoint_url", None))
 
 
