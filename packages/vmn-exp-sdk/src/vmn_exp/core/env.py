@@ -19,6 +19,7 @@ import re
 import socket
 import subprocess
 import sys
+import sysconfig
 
 _PACKAGE_CAP = 2000
 _PEP503_RE = re.compile(r"[-_.]+")
@@ -181,6 +182,20 @@ def _container_info():
 
 
 # ---------------------------------------------------------------------------
+# Free-threading (PEP 703)
+# ---------------------------------------------------------------------------
+
+def _threading_info():
+    """``free_threaded``: a GIL-disabled build; ``gil_enabled``: the GIL is on
+    right now (a free-threaded build re-enables it for a GIL-needing extension)."""
+    is_gil_enabled = getattr(sys, "_is_gil_enabled", None)
+    return {
+        "free_threaded": sysconfig.get_config_var("Py_GIL_DISABLED") == 1,
+        "gil_enabled": bool(is_gil_enabled()) if is_gil_enabled else True,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Full env capture
 # ---------------------------------------------------------------------------
 
@@ -192,6 +207,7 @@ def capture_env() -> dict:
             "version": platform.python_version(),
             "implementation": platform.python_implementation(),
             "executable": sys.executable,
+            **_threading_info(),
         },
         "platform": {
             "system": platform.system(),
@@ -229,6 +245,9 @@ def env_summary(env: dict) -> dict:
         "packages_count": len(packages),
         "packages_sha": packages_sha(packages),
     }
+    python = env.get("python")
+    if isinstance(python, dict):
+        summary.update({k: python[k] for k in ("free_threaded", "gil_enabled") if k in python})
     if key_pkgs:
         summary["key_packages"] = key_pkgs
     cuda = env.get("cuda")

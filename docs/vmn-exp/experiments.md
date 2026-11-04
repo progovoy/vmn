@@ -609,6 +609,12 @@ Queries read `env.<key>` (summary fields) and `env.packages.<pkg>` for the
 summary's key packages only (`torch`, `tensorflow`, `jax`, `numpy`,
 `transformers`; other packages live in `env.yml` and never match). Versions are
 strings, so compare with `=`: `env.packages.torch = "2.0.0"`.
+`env.yml`'s `python` section also records free-threading (PEP 703):
+`free_threaded` (a GIL-disabled build, `Py_GIL_DISABLED`) and `gil_enabled`
+(the GIL is on when env is captured — a free-threaded build re-enables it for an
+extension that needs it; `true` before 3.13). Both are copied to the summary,
+so `env.free_threaded = true and env.gil_enabled = false` finds the runs that
+really ran without the GIL (runs captured before this have neither).
 
 ### Intent: what a run is for
 
