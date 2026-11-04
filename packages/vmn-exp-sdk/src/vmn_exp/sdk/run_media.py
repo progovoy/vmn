@@ -34,6 +34,7 @@ from vmn_exp.core.histogram import histogram, precomputed
 from vmn_exp.core.png import array_to_png, png_size, to_uint8
 from vmn_exp.core.tables import MAX_TABLE_ROWS, table_document
 from vmn_exp.core.writer import create_log_entry
+from vmn_exp.sdk.context import owner_only
 from vmn_exp.sdk.media_uploads import staging_dir
 from vmn_exp.sdk.run_artifacts import checked_stored_path
 from vmn_exp.storage.files import OUTPUTS_DIR
@@ -123,13 +124,12 @@ class RunMedia:
         if not self._media_uploads.close(timeout):
             _LOGGER.warning(f"vmn: the final media files of run {self.id} are still uploading")
 
+    @owner_only()
     def _store(self, kind, name, step, path, produce, **fields):
         """Queue the file *produce(tmp path)* writes for storing as artifact
         *path* (its name may take the written file's extension); its *kind*
         entry is appended once it is stored. ``(width, height)`` of a PNG goes
         into the entry, with the stored bytes' ``sha256`` and ``size``."""
-        if not self._in_owner():
-            return
         tmp = staging_dir()
         try:
             written = produce(os.path.join(tmp, os.path.basename(path)))

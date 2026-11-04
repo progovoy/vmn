@@ -10,6 +10,7 @@ from vmn_exp.core.progress import DONE, TOTAL, UNIT
 from vmn_exp.core.ranges import create_range_entry
 from vmn_exp.core.values import sanitize_entry
 from vmn_exp.core.writer import create_log_entry
+from vmn_exp.sdk.context import owner_only
 
 
 class RunMetrics:
@@ -21,6 +22,7 @@ class RunMetrics:
     def log_metric(self, key, value, step=None, commit=True):
         self.log_metrics({key: value}, step=step, commit=commit)
 
+    @owner_only()
     def log_metrics(self, mapping, step=None, commit=True):
         """Record *mapping* at *step* (default: ``run.step``, then advanced).
 
@@ -29,8 +31,6 @@ class RunMetrics:
         the next call shares it. A call whose every value is dropped as
         non-numeric consumes no step.
         """
-        if not self._in_owner():
-            return
         entry = sanitize_entry(create_log_entry("metrics", values=dict(mapping)))
         if entry is None:
             return

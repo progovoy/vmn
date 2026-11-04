@@ -29,7 +29,6 @@ from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.local import LocalSnapshotStorage
-from vmn_exp.storage.remote_presence import RemotePresence
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5
 
@@ -67,19 +66,27 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         area=RUNS,
         flush_interval_sec=DEFAULT_FLUSH_INTERVAL_SEC,
     ):
+        self._flush_interval_sec = flush_interval_sec
+        self._start_buffer(remote, area)
+
+    def _start_buffer(self, remote, area):
+        """A new buffer of this process: its dir (created on the first write,
+        so a read-only command leaves nothing behind) and a new owner."""
         self._pid = os.getpid()
-        # Created on the first write, so a read-only command leaves nothing behind.
+        for name in _PROCESS_STATE:
+            self.__dict__.pop(name, None)
         self._buffer_root = _new_buffer_root()
         super().__init__(LocalSnapshotStorage(self._buffer_root, area), remote)
-        self._flush_interval_sec = flush_interval_sec
-        self._owner = new_owner()  # a new buffer, a new owner
+        self._owner = new_owner()
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
         self._metrics_flushed_at = {}
 
     @property
     def _local(self):
-        self._this_process()
+        # Read by nearly every storage call: the pid compare stays inline.
+        if self._pid != os.getpid():
+            self._start_child_buffer()
         return self.__dict__["_local"]
 
     @_local.setter
@@ -87,21 +94,15 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self.__dict__["_local"] = local
 
     def _this_process(self):
+        if self._pid != os.getpid():
+            self._start_child_buffer()
+
+    def _start_child_buffer(self):
         """In a forked child, start a buffer of its own on the first touch:
         the inherited one (its dir, unshipped lines, stream owner) stays the
         parent's, never shipped nor removed from here."""
-        if self._pid == os.getpid():
-            return
-        self._pid = os.getpid()
         _PENDING.discard(self)
-        for name in _PROCESS_STATE:
-            self.__dict__.pop(name, None)
-        self._buffer_root = _new_buffer_root()
-        self._local = LocalSnapshotStorage(self._buffer_root, self.__dict__["_local"].area)
-        self._presence = RemotePresence(self._local, self._remote)
-        self._init_logs()
-        self._owner = new_owner()
-        self._flushed_at, self._unshipped, self._metrics_flushed_at = {}, set(), {}
+        self._start_buffer(self._remote, self.__dict__["_local"].area)
 
     def _open_area(self, name):
         return BufferedRemoteStorage(self._remote.in_area(name), name, self._flush_interval_sec)

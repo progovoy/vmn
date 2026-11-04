@@ -27,23 +27,13 @@ import threading
 import time
 
 from vmn_exp.sdk import context
-from vmn_exp.sdk.background_gate import BackgroundGate, RunBackground
+from vmn_exp.sdk.background_gate import BackgroundGate
 
 FORK_PAUSE_TIMEOUT_SEC = 10.0
 
-
-class _ProcessThreads(RunBackground):
-    def __init__(self, gate):
-        self._gate = gate
-
-    def _after_fork_in_child(self):
-        self._gate.after_fork_in_child()
-
-
 PROCESS_GATE = BackgroundGate()
-_PROCESS_THREADS = _ProcessThreads(PROCESS_GATE)
 
-# Forking thread -> the runs its before-handler paused (threads may fork at once).
+# Forking thread -> the gates its before-handler paused (threads may fork at once).
 _paused_for_fork = {}
 
 
@@ -57,61 +47,65 @@ def _fork_runs():
     open, finishing (still registered or already ``_CLOSING``) or detaching.
     A finishing run's released gate admits every call, but pausing it still
     waits for the ones in flight."""
-    here = os.getpid()
-    runs = list(context._OPEN_RUNS) + list(context._CLOSING)
     # Unlocked reads: a run moving to _CLOSING meanwhile may show up twice.
-    mine = {id(r): r for r in runs if getattr(r, "pid", here) == here}
-    return list(mine.values())
+    runs = list(context._OPEN_RUNS) + list(context._CLOSING)
+    return list({id(r): r for r in runs if context._is_mine(r)}.values())
 
 
-def _pause(runs, timeout):
-    """Pause *runs* within *timeout* seconds in total (None: no limit)."""
+def _gates(runs):
+    return [run._gate for run in runs]
+
+
+def _pause(gates, timeout):
+    """Pause *gates* within *timeout* seconds in total (None: no limit)."""
     deadline = None if timeout is None else time.monotonic() + timeout
     quiesced = True
-    for run in runs:
+    for gate in gates:
         left = None if deadline is None else max(0.0, deadline - time.monotonic())
-        quiesced = run.pause_background(left) and quiesced
+        quiesced = gate.pause(left) and quiesced
     return quiesced
+
+
+def _resume(gates):
+    for gate in gates:
+        gate.resume()
 
 
 def pause_background(timeout=None):
     """Pause the background threads of every open run of this process; wait
     up to *timeout* seconds in total (None: no limit). True if quiesced."""
-    return _pause(_open_runs(), timeout)
+    return _pause(_gates(_open_runs()), timeout)
 
 
 def resume_background():
     """Undo one :func:`pause_background` on every open run."""
-    for run in _open_runs():
-        run.resume_background()
+    _resume(_gates(_open_runs()))
 
 
 @contextlib.contextmanager
 def background_paused(timeout=None):
     """``with background_paused():`` — every open run paused inside."""
-    runs = _open_runs()
+    gates = _gates(_open_runs())
     try:
-        yield _pause(runs, timeout)
+        yield _pause(gates, timeout)
     finally:
-        for run in runs:
-            run.resume_background()
+        _resume(gates)
 
 
 def _before_fork():
-    runs = _fork_runs() + [_PROCESS_THREADS]
-    _pause(runs, FORK_PAUSE_TIMEOUT_SEC)
-    _paused_for_fork[threading.get_ident()] = runs
+    gates = _gates(_fork_runs()) + [PROCESS_GATE]
+    _pause(gates, FORK_PAUSE_TIMEOUT_SEC)
+    _paused_for_fork[threading.get_ident()] = gates
 
 
 def _after_fork_in_parent():
-    for run in _paused_for_fork.pop(threading.get_ident(), ()):
-        run.resume_background()
+    _resume(_paused_for_fork.pop(threading.get_ident(), ()))
 
 
 def _after_fork_in_child():
     _paused_for_fork.clear()
     context._LOCK = threading.RLock()
-    _PROCESS_THREADS._after_fork_in_child()
+    PROCESS_GATE.after_fork_in_child()
     for run in list(context._OPEN_RUNS) + list(context._CLOSING):
         after_fork = getattr(run, "_after_fork_in_child", None)
         if after_fork is not None:

@@ -16,6 +16,7 @@ straight when it does:
   ``export_env=False`` is left out: it never sets, restores or re-exports it.
 """
 import contextvars
+import functools
 import os
 import threading
 
@@ -37,10 +38,28 @@ _CURRENT = contextvars.ContextVar("vmn_current_run", default=None)
 _BASELINE = {"pid": None, "env": {}}
 
 
+def _is_mine(run):
+    """Whether this process created *run* (a forked child's inherited one is not)."""
+    return getattr(run, "pid", os.getpid()) == os.getpid()
+
+
 def _is_open_here(run):
     if run is None or getattr(run, "_finished", False):
         return False
-    return getattr(run, "pid", os.getpid()) == os.getpid()
+    return _is_mine(run)
+
+
+def owner_only(default=None):
+    """Decorate a ``Run`` method: dropped, returning *default*, unless
+    ``self._in_owner()`` (False in a forked child that inherited the run)."""
+    def decorate(method):
+        @functools.wraps(method)
+        def guarded(self, *args, **kwargs):
+            if not self._in_owner():
+                return default
+            return method(self, *args, **kwargs)
+        return guarded
+    return decorate
 
 
 def _exports(run):
@@ -50,8 +69,7 @@ def _exports(run):
 def _exported_here():
     """This process's registered exporting runs, finishing ones included: a
     run stays exported as ``VMN_EXPERIMENT_ID`` until it unregisters."""
-    return [r for r in _OPEN_RUNS
-            if getattr(r, "pid", os.getpid()) == os.getpid() and _exports(r)]
+    return [r for r in _OPEN_RUNS if _is_mine(r) and _exports(r)]
 
 
 def open_runs():
@@ -102,7 +120,7 @@ def unregister(run):
         if _CURRENT.get() is run:
             prev = getattr(run, "_ctx_prev", None)
             _CURRENT.set(prev if _is_open_here(prev) else None)
-        if getattr(run, "pid", os.getpid()) != os.getpid() or not _exports(run):
+        if not _is_mine(run) or not _exports(run):
             return  # a forked child's inherited run, or one that never exported
         exported = _exported_here()
         remaining = [r for r in open_runs() if _exports(r)] or exported

@@ -5,6 +5,7 @@ The alert config is built on first use from the ``experiment:`` conf
 """
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config, make_alert
 from vmn_exp.core.writer import create_log_entry
+from vmn_exp.sdk.context import owner_only
 
 
 class RunAlerts:
@@ -15,6 +16,7 @@ class RunAlerts:
     _alerter_instance = None
     _exp_conf = None
 
+    @owner_only(default=False)
     def alert(self, title, text="", level="info", wait_sec=None):
         """Record an ``alert`` log entry and send it to the configured sinks.
 
@@ -24,8 +26,6 @@ class RunAlerts:
         best-effort; ``finish()`` waits briefly for it. False in a forked
         child that inherited the run.
         """
-        if not self._in_owner():
-            return False
         alert = make_alert(
             "alert", self.app_name, self.id, title, text, level,
             run_name=self.name, status="running", run_state=self._state,

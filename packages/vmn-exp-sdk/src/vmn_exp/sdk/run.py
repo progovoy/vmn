@@ -60,6 +60,7 @@ from vmn_exp.sdk.context import (  # noqa: F401  (re-exported API)
     _OPEN_RUNS,
     EXPERIMENT_ID_ENV,
     current_run,
+    owner_only,
 )
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, create_record  # noqa: F401
 from vmn_exp.sdk import fork_safety  # noqa: F401  (registers the fork handlers)
@@ -644,11 +645,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         """
         self._append(create_input_entry(uri, name=name, digest=digest, kind=kind, ts=now_iso()))
 
+    @owner_only()
     def log_artifact(self, path, name=None):
         """Store the file at *path* as artifact *name* (a relative ``a/b/c``
         path; default: its basename), at ``artifacts/<name>`` in the run."""
-        if not self._in_owner():
-            return
         info = compute_artifact_info(path)
         if name is not None:
             info["path"] = user_artifact_path(checked_artifact_name(name))
@@ -713,14 +713,13 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def remove_tag(self, key):
         self._append(create_tags_entry(remove=[key]))
 
+    @owner_only()
     def set_intent(self, text, keywords=None, generator=None):
         """Say what this run is for: markdown *text* (cut at 16 KiB),
         *keywords* (synonyms, the problem's usual names) and the *generator*
         (model id) that wrote it, if any. Matched by similar-run search; the
         latest intent wins, also on a finished run — nothing ships its log
         any more, so the entry is synced to the remote at once."""
-        if not self._in_owner():
-            return
         self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
         if self._finished and not self._detached:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
@@ -754,9 +753,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
                             "in a forked worker call start_run() to record")
         return False
 
+    @owner_only()
     def _append(self, entry):
-        if not self._in_owner():
-            return
         entry = sanitize_entry(entry)
         if entry is not None:
             self._log_buffer.append(entry)
