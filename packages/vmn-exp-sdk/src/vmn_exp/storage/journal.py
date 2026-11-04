@@ -10,6 +10,7 @@ after its retries stays queued and goes out with the next write (or
 """
 import atexit
 import itertools
+import os
 import threading
 import time
 import weakref
@@ -40,7 +41,22 @@ class _JournalState:
         self.pending = []
         self.lock = threading.Lock()
         self.local = threading.local()
+        self.pid = os.getpid()
+        self._successors = {}  # pid -> a forked child's own state
         _STATES.add(self)
+
+    def for_this_process(self):
+        """This state, or in a forked child a fresh one (same sink, empty
+        queue, new lock): the queue and lock stay the parent's, so the child
+        never takes a lock a parent thread held at fork."""
+        pid = os.getpid()
+        if self.pid == pid:
+            return self
+        successor = self._successors.get(pid)
+        if successor is None:
+            fresh = _JournalState(self.sink, self.writer_id, self.retries, self.backoff, self.clock)
+            successor = self._successors.setdefault(pid, fresh)
+        return successor
 
     def record(self, area, app_name, name):
         writer = self.writer_id or _writer_id()
@@ -105,6 +121,16 @@ def _journaled_write(name, when=lambda result, args: True):
 
 class JournaledStorage:
     """Mixed in front of a backend class by :func:`journaled`."""
+
+    @property
+    def _journal_state(self):
+        state = self.__dict__["_journal_state"].for_this_process()
+        self.__dict__["_journal_state"] = state
+        return state
+
+    @_journal_state.setter
+    def _journal_state(self, state):
+        self.__dict__["_journal_state"] = state
 
     save = _journaled_write("save")
     create_exclusive = _journaled_write("create_exclusive", lambda r, a: bool(r))
@@ -181,7 +207,9 @@ def prune_journal(storage, now=None, max_age_sec=JOURNAL_MAX_AGE_SEC):
 
 @atexit.register
 def _flush_all():
-    for state in list(_STATES):
+    """Flush this process's journal states; a forked child skips its parent's."""
+    pid = os.getpid()
+    for state in [s for s in list(_STATES) if s.pid == pid]:
         try:
             state.flush()
         except Exception:

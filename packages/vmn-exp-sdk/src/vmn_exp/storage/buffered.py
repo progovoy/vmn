@@ -29,6 +29,7 @@ from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.storage.remote_presence import RemotePresence
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5
 
@@ -36,11 +37,22 @@ DEFAULT_FLUSH_INTERVAL_SEC = 5
 # exit flush; one with nothing pending is freed like any other object.
 _PENDING = set()
 
+# Per-process state: what a storage drops when a forked child first touches it.
+_PROCESS_STATE = ("_sealed_counts", "_metrics")
+
 
 def close_all():
-    """Ship every storage's buffered lines (run at interpreter exit)."""
+    """Ship this process's buffered lines (run at interpreter exit). A forked
+    child skips the storages it inherited: their lines, buffer dir and stream
+    owner are its parent's."""
+    pid = os.getpid()
     for storage in list(_PENDING):
-        storage.close()
+        if storage._pid == pid:
+            storage.close()
+
+
+def _new_buffer_root():
+    return os.path.join(tempfile.gettempdir(), f"vmn-log-buffer-{uuid.uuid4().hex}")
 
 
 atexit.register(close_all)
@@ -55,16 +67,41 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         area=RUNS,
         flush_interval_sec=DEFAULT_FLUSH_INTERVAL_SEC,
     ):
+        self._pid = os.getpid()
         # Created on the first write, so a read-only command leaves nothing behind.
-        self._buffer_root = os.path.join(
-            tempfile.gettempdir(), f"vmn-log-buffer-{uuid.uuid4().hex}"
-        )
+        self._buffer_root = _new_buffer_root()
         super().__init__(LocalSnapshotStorage(self._buffer_root, area), remote)
         self._flush_interval_sec = flush_interval_sec
         self._owner = new_owner()  # a new buffer, a new owner
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
         self._metrics_flushed_at = {}
+
+    @property
+    def _local(self):
+        self._this_process()
+        return self.__dict__["_local"]
+
+    @_local.setter
+    def _local(self, local):
+        self.__dict__["_local"] = local
+
+    def _this_process(self):
+        """In a forked child, start a buffer of its own on the first touch:
+        the inherited one (its dir, unshipped lines, stream owner) stays the
+        parent's, never shipped nor removed from here."""
+        if self._pid == os.getpid():
+            return
+        self._pid = os.getpid()
+        _PENDING.discard(self)
+        for name in _PROCESS_STATE:
+            self.__dict__.pop(name, None)
+        self._buffer_root = _new_buffer_root()
+        self._local = LocalSnapshotStorage(self._buffer_root, self.__dict__["_local"].area)
+        self._presence = RemotePresence(self._local, self._remote)
+        self._init_logs()
+        self._owner = new_owner()
+        self._flushed_at, self._unshipped, self._metrics_flushed_at = {}, set(), {}
 
     def _open_area(self, name):
         return BufferedRemoteStorage(self._remote.in_area(name), name, self._flush_interval_sec)
@@ -88,6 +125,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         return True
 
     def stream_owner(self, app_name, verstr, writer):
+        self._this_process()
         return self._owner
 
     def _stream_owned(self, app_name, verstr):
@@ -95,6 +133,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
 
     def retire_stream(self, app_name, verstr, stream):
         """A compacted stream is not appended to again: a new owner."""
+        self._this_process()
         if owner_of(stream) == self._owner:
             self._owner = new_owner()
 
@@ -143,6 +182,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         _PENDING.add(self)
 
     def sync_log_to_remote(self, app_name, verstr, writer_id):
+        self._this_process()
         key = (app_name, verstr, writer_id)
         self._flushed_at[key] = time.monotonic()
         super().sync_log_to_remote(app_name, verstr, writer_id)
@@ -171,6 +211,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         return True
 
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
+        self._this_process()
         self._metrics_flushed_at[(app_name, verstr, writer_id)] = time.monotonic()
         super().sync_metrics_to_remote(app_name, verstr, writer_id)
 
@@ -184,6 +225,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
 
     def close(self):
         """Ship whatever is still buffered and drop the buffer."""
+        self._this_process()
         self._final_flush = True
         try:
             self._close()
