@@ -23,6 +23,9 @@ from vmn_exp.core.streams import display_writer
 METADATA_FILE = "metadata.yml"
 # A parent record's child markers (:mod:`vmn_exp.storage.child_markers`).
 CHILDREN_DIR = "children"
+# Beside an app's records: every child in the app has its marker. A dot name,
+# so no listing takes it for a record.
+CHILDREN_COMPLETE_FILE = ".children_complete"
 # The derived experiment-index cache, beside the records it summarizes.
 INDEX_CACHE_FILE = ".index.sqlite"
 # (patches key, file name, binary?)

@@ -9,8 +9,12 @@ cold load also reads every run's state and logs. Every run whose ``parent``
 is a run of the app gets that parent's marker unless its listing (one per
 parent) already holds it. A child of a run that is gone is left alone.
 Markers are written directly, not best-effort, so a failure is counted
-(exit 1) and the next backfill retries it. Prints ``wrote N, present M``
-(and ``failed F``).
+(exit 1) and the next backfill retries it. A pass with no failure flags the
+app's markers complete (``set_children_complete``). Prints ``wrote N,
+present M`` (and ``failed F``).
+
+Optional: the first ``vmn-exp prune -v`` of an app not flagged complete runs
+the same pass itself (:mod:`vmn_exp.cli.prune_targeted`).
 """
 import sys
 import threading
@@ -36,18 +40,30 @@ def experiment_backfill_children(storage, app_name, args):
 
 def backfill_app(storage, app_name, dry_run=False):
     """``{"wrote", "present", "failed"}`` marker counts of *app_name*'s runs."""
+    return scan_app(storage, app_name, dry_run)[0]
+
+
+def scan_app(storage, app_name, dry_run=False, notice=None):
+    """``(marker counts, {parent: [child]})`` of *app_name*'s runs, each
+    child's missing marker written unless *dry_run*. A complete pass (not
+    dry, nothing failed) flags the app's markers complete. *notice* is told
+    the number of runs once they are listed."""
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        by_parent = _children_by_parent(storage, app_name, pool)
-        results = pool.map(
+        names = list(storage.list_verstrs(app_name))
+        if notice:
+            notice(len(names))
+        by_parent = _children_by_parent(storage, app_name, names, pool)
+        results = list(pool.map(
             lambda p: _backfill_parent(storage, app_name, p, by_parent[p], dry_run),
-            sorted(by_parent))
-        results = list(results)
-    return {key: sum(r[key] for r in results) for key in ("wrote", "present", "failed")}
+            sorted(by_parent)))
+    counts = {key: sum(r[key] for r in results) for key in ("wrote", "present", "failed")}
+    if not dry_run and not counts["failed"]:
+        storage.set_children_complete(app_name, True)
+    return counts, by_parent
 
 
-def _children_by_parent(storage, app_name, pool):
-    """``{parent: [child]}`` of the app's runs whose parent is one of them."""
-    names = list(storage.list_verstrs(app_name))
+def _children_by_parent(storage, app_name, names, pool):
+    """``{parent: [child]}`` of *names* (the app's runs) whose parent is one of them."""
     progress = _Progress(len(names))
 
     def read_parent(verstr):

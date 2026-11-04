@@ -19,6 +19,7 @@ keyed by its name), would be orphaned by a rename. Those are skipped.
 """
 import os
 
+from vmn_exp.core.children import mark_parent, unmark_parent
 from vmn_exp.core.push_identity import run_identity
 from vmn_exp.core.push_run import COLLISION, FAILED, NEW, Outcome, push_run
 from vmn_exp.core.status import (
@@ -114,9 +115,11 @@ class _Claim:
         renamed = dict(self._meta, verstr=name, renamed_from=self._verstr)
         if self._target.create_exclusive(self._app, name, renamed, self._patches,
                                          claim_token=self._identity):
+            mark_parent(self._target, self._app, renamed)
             return _FRESH
         remote = self._target.load_metadata(self._app, name)
         if remote is not None and run_identity(self._app, remote) == self._identity:
+            mark_parent(self._target, self._app, remote)
             return _OURS
         return None
 
@@ -124,6 +127,9 @@ class _Claim:
 def _move_local(local, app_name, old, new, ledger):
     local.update_metadata(app_name, old, {"verstr": new, "renamed_from": old})
     os.rename(local._snapshot_dir(app_name, old), local._snapshot_dir(app_name, new))
+    moved = local.load_metadata(app_name, new)
+    unmark_parent(local, app_name, dict(moved, verstr=old))
+    mark_parent(local, app_name, moved)
     for meta in local.list_snapshots(app_name):
         if meta.get("parent") == old:
             local.update_metadata(app_name, meta["verstr"], {"parent": new})

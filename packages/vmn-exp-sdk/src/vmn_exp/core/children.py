@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Keeping a parent's child markers (:mod:`vmn_exp.storage.child_markers`)
-in step with its children: best-effort, never failing the write that called."""
+— and the app's "every child is marked" flag — in step with its children:
+best-effort, never failing the write that called."""
 from vmn_exp._base import VMN_LOGGER
 
 
@@ -23,8 +24,21 @@ def _best_effort(storage, method, app_name, metadata):
 
 def mark_parent(storage, app_name, metadata):
     """Mark the run *metadata* describes in its parent's record; whether a
-    marker was written."""
-    return _best_effort(storage, "mark_child", app_name, metadata)
+    marker was written. A child left unmarked drops the app's completeness
+    flag, so the next targeted prune rescans the app's parent links."""
+    marked = _best_effort(storage, "mark_child", app_name, metadata)
+    if not marked and parent_of(metadata):
+        _drop_complete(storage, app_name)
+    return marked
+
+
+def _drop_complete(storage, app_name):
+    if not getattr(storage, "has_child_markers", False):
+        return
+    try:
+        storage.set_children_complete(app_name, False)
+    except Exception:
+        VMN_LOGGER.debug(f"Dropping {app_name}'s child-marker flag failed", exc_info=True)
 
 
 def unmark_parent(storage, app_name, metadata):

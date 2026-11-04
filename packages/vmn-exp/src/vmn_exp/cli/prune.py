@@ -16,7 +16,9 @@ or ``@N``), by naming the exact run(s) to delete. Either way, guards
   that no longer exists.
 
 A policy prune selects through the experiment index; a targeted one reads its
-targets alone (:mod:`vmn_exp.cli.prune_targeted`). A policy prune also trims
+targets alone (:mod:`vmn_exp.cli.prune_targeted`) — after one scan of the
+app's parent links the first time, and on every prune of a backend without
+child markers. A policy prune also trims
 the change journal unless ``--no-trim-journal``; a targeted one never does.
 
 A code object (:mod:`vmn_exp.core.code_store`) is deleted with the last run of
@@ -264,9 +266,16 @@ def _prune_targeted(storage, app_name, args):
     if rc is not None:
         return rc
     to_delete, live, protected = _apply_guards(
-        storage, app_name, metas, args, reg, None,
-        partial(without_kept_parents, storage, app_name))
+        storage, app_name, metas, args, reg, None, _targeted_keep_parents(storage, app_name, args))
     return _finish(storage, app_name, args, to_delete, (live, protected, reg))
+
+
+def _targeted_keep_parents(storage, app_name, args):
+    """The surviving-child guard of a targeted prune: by child markers, or —
+    on a backend without them — from every run's parent."""
+    if getattr(storage, "has_child_markers", False):
+        return partial(without_kept_parents, storage, app_name, dry_run=_is_dry_run(args))
+    return partial(_without_kept_ancestors, _metas_and_snapshot(storage, app_name)[0])
 
 
 def _prune_by_policy(vcs, storage, app_name, args):

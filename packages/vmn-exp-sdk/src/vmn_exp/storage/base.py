@@ -110,6 +110,18 @@ class SnapshotStorage(ABC):
 
     # -- child markers (:mod:`vmn_exp.storage.child_markers`) ------------------
 
+    # Whether this backend keeps child markers at all; without them a reader
+    # finds a run's children from every run's ``parent`` field.
+    has_child_markers = False
+
+    def children_complete(self, app_name):
+        """Whether every child in *app_name* is known to have its marker."""
+        return False
+
+    def set_children_complete(self, app_name, complete):
+        """Record (or, with a false *complete*, drop) that every child in
+        *app_name* has its marker."""
+
     def mark_child(self, app_name, parent, child):
         """Mark *child* in *parent*'s record; False when nothing was written
         (a backend without markers)."""

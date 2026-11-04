@@ -907,9 +907,16 @@ A policy prune (`--keep`/`--older-than`/`--query`) selects through the
 older than 2 days. A `-v` prune reads only its targets — an exact verstr
 needs no index or listing (a prefix or `@N` may), the guards read each
 target's metadata, run state and (for `--protect-tag`) log, and descendants
-come from the targets' [child markers](#backfill-children) (run
-`backfill-children` once on a store older than them) — and never trims the
-journal. Its summary is `Pruned N experiments` (no kept count).
+come from the targets' [child markers](#backfill-children) — and never trims
+the journal. Its summary is `Pruned N experiments` (no kept count). Markers
+are trusted once an app is flagged as having all of them: the first `-v`
+prune of an app without the flag (a store older than markers, or one where a
+marker failed to write) reads every run's parent once (`Indexing child links
+of <app> once (N runs); later prunes read only their targets` on stderr),
+writes the missing markers and the flag, and keeps every run with a
+surviving child; a `--dry-run` does the same read but writes nothing. A
+store backend without child markers (a plugin's) is checked against every
+run's parent on each `-v` prune.
 
 Outside a git checkout, `prune` needs no `--from-snapshot`: the store comes
 from `--store`/`--bucket`/`--experiment-dir` or `VMN_EXPERIMENT_STORE`/
@@ -1388,7 +1395,11 @@ renamed) is skipped. `backfill-children` writes the markers a store lacks
 one listing of the app's runs, each run's `metadata.yml` alone (never the
 index; `read N/M runs` on stderr) and one marker listing per parent. A
 `vmn-exp ui` serving the store does this itself unless `--read-only` (see
-[ui.md](ui.md#store-upkeep)), so the command is only needed without one:
+[ui.md](ui.md#store-upkeep)), and so does the first `prune -v` of an app, so
+the command is optional. A run with no failed marker flags the app as having
+all its markers (`<app>/.children_complete` beside its records — no listing
+takes it for a run); a child whose marker later fails to write drops the
+flag, so the next `prune -v` rescans:
 
 ```sh
 vmn-exp backfill-children my_app --dry-run
