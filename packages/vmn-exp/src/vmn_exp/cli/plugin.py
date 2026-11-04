@@ -141,6 +141,11 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="prune: delete local copies only, keep the remote (S3) ones")
     pexp.add_argument("--protect-tag", dest="protect_tag", action="append", default=None,
                       help="prune: never delete a run carrying this tag key (repeatable)")
+    pexp.add_argument("--no-trim-journal", dest="no_trim_journal", action="store_true",
+                      default=False,
+                      help="prune --keep/--older-than/--query: leave the change journal "
+                           "alone (a bucket whose lifecycle rule expires it); -v never "
+                           "trims it")
     pexp.add_argument("--full-log", action="store_true", default=False,
                       help="show: print every log entry (default: the last 50)")
     pexp.add_argument("--patch", action="store_true", default=False,
@@ -369,8 +374,8 @@ def _ui_run_without_repo(args):
 def _exp_run_without_repo(args):
     """Experiment commands that work without a git repo.
 
-    Handles: run under VMN_MODE=disabled, import-mlflow (always git-free) and
-    from-snapshot mode.
+    Handles: run under VMN_MODE=disabled, import-mlflow (always git-free),
+    from-snapshot mode and a prune outside a checkout.
 
     Returns an int exit code if handled, None to fall through to normal dispatch.
     """
@@ -390,7 +395,7 @@ def _exp_run_without_repo(args):
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"
     )
-    if args.command not in ("experiment", "exp") or not from_snapshot:
+    if not is_experiment or not (from_snapshot or _prune_outside_checkout(action)):
         return None
 
     from vmn_exp.cli.experiment import (
@@ -437,7 +442,20 @@ def _exp_run_without_repo(args):
     if getattr(args, "writer_id", None):
         os.environ["VMN_WRITER_ID"] = args.writer_id
     params = experiment_storage_params(None, args)
-    return handler(None, params, _get_experiment_storage(None, params), args)
+    try:
+        storage = _get_experiment_storage(None, params)
+    except ValueError as exc:
+        VMN_LOGGER.error(str(exc))
+        return 1
+    return handler(None, params, storage, args)
+
+
+def _prune_outside_checkout(action):
+    """A prune needs only its store: outside a checkout it runs git-free on
+    the store flags / ``VMN_EXPERIMENT_*`` and the app name."""
+    from vmn_exp.core.storage_resolve import _try_repo_root
+
+    return action == "prune" and _try_repo_root() is None
 
 
 # ---------------------------------------------------------------------------

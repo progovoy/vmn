@@ -99,12 +99,22 @@ def drop_unused_code(storage, app_name, code_verstrs):
     code_verstrs = set(code_verstrs) - {None}
     if not code_verstrs:
         return
-    doomed = code_verstrs - _dot_prefixes(storage.list_record_names(app_name))
+    doomed = code_verstrs - _used_code(storage, app_name, code_verstrs)
     if not doomed:
         return
     for key in code_storage(storage).list_record_names(app_name):
         if key.rsplit(".", 1)[0] in doomed:
             code_storage(storage).delete(app_name, key)
+
+
+def _used_code(storage, app_name, code_verstrs):
+    """The *code_verstrs* some run of the app still has: by a listing scoped
+    to each one when the storage has it (a few against a 600k-run app), else
+    by the app's full listing."""
+    scoped = getattr(storage, "list_run_verstrs", None)
+    if scoped is None:
+        return _dot_prefixes(storage.list_record_names(app_name)) & code_verstrs
+    return {cv for cv in code_verstrs if cv in _dot_prefixes(scoped(app_name, cv))}
 
 
 def _dot_prefixes(names):

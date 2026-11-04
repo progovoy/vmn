@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """``vmn-exp prune``: delete old experiments without breaking live runs or trees.
 
-Selection proposes candidates, either by policy (``--keep N`` / ``--older-than``)
-or, with ``-v <ref>`` (repeatable — a verstr, a unique prefix or ``@N``), by
-naming the exact run(s) to delete. Either way, guards then take runs back out
-of the list:
+Selection proposes candidates, either by policy (``--keep N`` / ``--older-than``
+/ ``--query``) or, with ``-v <ref>`` (repeatable — a verstr, a unique prefix
+or ``@N``), by naming the exact run(s) to delete. Either way, guards
+(:mod:`vmn_exp.cli.prune_guards`) then take runs back out of the list:
 
 * a run whose derived status is ``running`` or ``stuck`` is never deleted
   (``--force`` overrides) — a stuck run may just have a late heartbeat, and a
@@ -15,19 +15,29 @@ of the list:
 * a run with a kept descendant is kept, so no surviving run points at a parent
   that no longer exists.
 
+A policy prune selects through the experiment index; a targeted one reads its
+targets alone (:mod:`vmn_exp.cli.prune_targeted`). A policy prune also trims
+the change journal unless ``--no-trim-journal``; a targeted one never does.
+
 A code object (:mod:`vmn_exp.core.code_store`) is deleted with the last run of
 its code.
 """
 import datetime
-from concurrent.futures import ThreadPoolExecutor
 
+from vmn_exp.cli.prune_guards import (
+    map_storage,
+    registry_protected,
+    skip_message,
+    tag_protected,
+    tag_skip_message,
+)
 from vmn_exp.cli.prune_query import print_preview, query_candidates
+from vmn_exp.cli.prune_targeted import targeted_metas, without_kept_parents
 from vmn_exp.cli.views import metrics_schema
 from vmn_exp.core.children import unmark_parent
 from vmn_exp.core.code_store import drop_unused_code
 from vmn_exp.core.index import indexed_snapshot
 from vmn_exp.core.query import QueryError
-from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.reports import comments
 from vmn_exp.core.status import (
     RUNNING,
@@ -40,8 +50,6 @@ from vmn_exp.core.status import (
 from vmn_exp.storage.journal import prune_journal
 from version_stamp.api import VMN_LOGGER
 
-# Remote reads/deletes in flight at once; a delete fans out further inside S3.
-_REMOTE_WORKERS = 4
 _LIVE = (RUNNING, STUCK)
 
 
@@ -86,15 +94,6 @@ def _delete_run(storage, app_name, meta):
         comments.delete_thread(storage, ("run", app_name, verstr))
 
 
-def _map(storage, fn, items):
-    """``[fn(item)]`` in order — concurrently when each call goes over the
-    network, so 10k remote runs are not 10k serial round trips."""
-    if len(items) < 2 or not storage.is_remote():
-        return [fn(item) for item in items]
-    with ThreadPoolExecutor(max_workers=_REMOTE_WORKERS) as pool:
-        return list(pool.map(fn, items))
-
-
 def _read_state(storage, app_name, verstr):
     """``(run state, its store write time)`` straight from storage."""
     return (
@@ -112,7 +111,7 @@ def _live_runs(storage, app_name, candidates, snapshot=None):
     verstrs = [m["verstr"] for m in candidates]
     if snapshot is None:
         read = lambda v: _read_state(storage, app_name, v)  # noqa: E731
-        states = _map(storage, read, verstrs)
+        states = map_storage(storage, read, verstrs)
     else:
         observed = snapshot.run_state_observed_at
         states = [(snapshot.run_states.get(v), observed.get(v)) for v in verstrs]
@@ -122,21 +121,6 @@ def _live_runs(storage, app_name, candidates, snapshot=None):
     return {v: status for v, status in statuses if status in _LIVE}
 
 
-def _tag_protected(candidates, protect_tags):
-    """``{verstr: matched tag name}`` of *candidates* carrying any of
-    *protect_tags* — a run's own current tags, so a removed tag never
-    protects it."""
-    if not protect_tags:
-        return {}
-    protect = set(protect_tags)
-    protected = {}
-    for meta in candidates:
-        hit = protect & set((meta.get("tags") or {}).keys())
-        if hit:
-            protected[meta["verstr"]] = sorted(hit)[0]
-    return protected
-
-
 def _apply_guards(
     storage, app_name, metas, candidates, force, protect_tags=None, snapshot=None,
     reg_protected=None,
@@ -144,7 +128,7 @@ def _apply_guards(
     """Split *candidates* into (delete, {skipped live verstr: status},
     {skipped tag-protected verstr: tag name}, {registry-protected verstr: reason})."""
     live = {} if force else _live_runs(storage, app_name, candidates, snapshot)
-    protected = {} if force else _tag_protected(candidates, protect_tags)
+    protected = {} if force else tag_protected(candidates, protect_tags)
     reg = reg_protected or {}
 
     doomed = {m["verstr"] for m in candidates} - set(live) - set(protected) - set(reg)
@@ -153,42 +137,6 @@ def _apply_guards(
         if meta["verstr"] not in doomed:
             doomed -= _ancestors(meta["verstr"], parent_of)
     return [m for m in candidates if m["verstr"] in doomed], live, protected, reg
-
-
-def _skip_message(verstr, status):
-    if status == STUCK:
-        return (
-            f"Skipping {verstr}: stuck (its heartbeat is late; it may still be "
-            "running — use --force to delete it)"
-        )
-    return f"Skipping {verstr}: still running (use --force to delete it)"
-
-
-def _tag_skip_message(verstr, tag_name):
-    return (
-        f"Skipping {verstr}: protected by tag '{tag_name}' "
-        "(use --force to delete it)"
-    )
-
-
-def _registry_protected(storage, app_name, candidates):
-    """Return ``{verstr: reason}`` for candidates referenced by a non-deleted
-    model version.  Never overridable by ``--force``.
-
-    Raises any exception from the registry — callers must catch and fail closed.
-    Only called when *storage* exposes ``list_record_names`` (the registry
-    interface); storages without it are treated as having no registry.
-    """
-    if not candidates or not hasattr(storage, "list_record_names"):
-        return {}
-    import vmn_exp.registry.view as _rv  # lazy: keeps stamping paths clean
-    refs = _rv.registered_runs(storage)
-    _REASON = "registered as a model version; use `vmn-exp model delete` first"
-    return {
-        m["verstr"]: _REASON
-        for m in candidates
-        if (app_name, m["verstr"]) in refs
-    }
 
 
 def _local_view(storage):
@@ -213,24 +161,24 @@ def _metas_and_snapshot(storage, app_name):
     return storage.list_snapshots(app_name), None
 
 
-def _targeted_candidates(storage, app_name, metas, snapshot, refs):
-    """The subset of *metas* named by *refs*, or (None, error) for the first
-    ref that does not resolve to an existing run."""
-    by_verstr = {m["verstr"]: m for m in metas}
-    candidates = []
-    for ref in refs:
-        verstr, err = resolve_experiment(storage, app_name, ref, snapshot=snapshot)
-        if err:
-            return None, err
-        meta = by_verstr.get(verstr)
-        if meta is None:
-            return None, f"Experiment '{verstr}' not found for {app_name}"
-        candidates.append(meta)
-    return candidates, None
+def _refuse_mixed_selection(args):
+    """1 (after logging why) when ``-v`` is combined with a policy flag."""
+    if not getattr(args, "version", None):
+        return None
+    if getattr(args, "query", None) is not None:
+        VMN_LOGGER.error("--query cannot be combined with -v: use one or the other")
+        return 1
+    if getattr(args, "keep", None) is not None or getattr(args, "older_than", None) is not None:
+        VMN_LOGGER.error(
+            "-v cannot be combined with --keep/--older-than: prune either "
+            "a specific run or by policy, not both"
+        )
+        return 1
+    return None
 
 
-def _select_candidates(storage, app_name, metas, snapshot, args, schema=None):
-    """Return ``(candidates, error_code)`` according to the selection flags.
+def _select_candidates(storage, app_name, metas, args, schema=None):
+    """Return ``(candidates, error_code)`` according to the policy flags.
 
     *error_code* is non-None when the caller should return it immediately.
     *candidates* is None when the function already printed a "nothing to do"
@@ -238,15 +186,9 @@ def _select_candidates(storage, app_name, metas, snapshot, args, schema=None):
     """
     keep = getattr(args, "keep", None)
     older_than = getattr(args, "older_than", None)
-    refs = getattr(args, "version", None)
     query = getattr(args, "query", None)
 
     if query is not None:
-        if refs:
-            VMN_LOGGER.error(
-                "--query cannot be combined with -v: use one or the other"
-            )
-            return None, 1
         try:
             candidates = query_candidates(storage, app_name, metas, query, schema)
         except QueryError as e:
@@ -265,19 +207,6 @@ def _select_candidates(storage, app_name, metas, snapshot, args, schema=None):
             except ValueError as e:
                 VMN_LOGGER.error(str(e))
                 return None, 1
-        return candidates, None
-
-    if refs:
-        if keep is not None or older_than is not None:
-            VMN_LOGGER.error(
-                "-v cannot be combined with --keep/--older-than: prune either "
-                "a specific run or by policy, not both"
-            )
-            return None, 1
-        candidates, err = _targeted_candidates(storage, app_name, metas, snapshot, refs)
-        if err:
-            VMN_LOGGER.error(err)
-            return None, 1
         return candidates, None
 
     if keep is None and older_than is None:
@@ -308,10 +237,47 @@ def _trim_journal(storage):
         VMN_LOGGER.warning(f"Could not trim the change journal: {e}")
 
 
+def _read_registry(storage, app_name, candidates):
+    """``(registry-protected, None)``, or ``(None, 1)`` when the registry
+    cannot be read — a prune then deletes nothing."""
+    try:
+        return registry_protected(storage, app_name, candidates), None
+    except Exception as e:
+        VMN_LOGGER.error(f"Cannot read model registry: {e}. Refusing to prune.")
+        return None, 1
+
+
 def experiment_prune(vcs, params, storage, args, app_name):
     if getattr(args, "local_only", False):
         storage = _local_view(storage)
-    if not _is_dry_run(args):
+    rc = _refuse_mixed_selection(args)
+    if rc is not None:
+        return rc
+    if getattr(args, "version", None):
+        return _prune_targeted(storage, app_name, args)
+    return _prune_by_policy(vcs, storage, app_name, args)
+
+
+def _prune_targeted(storage, app_name, args):
+    force = getattr(args, "force", False)
+    protect_tags = None if force else getattr(args, "protect_tag", None)
+    metas, err = targeted_metas(storage, app_name, args.version, bool(protect_tags))
+    if err:
+        VMN_LOGGER.error(err)
+        return 1
+    reg, rc = _read_registry(storage, app_name, metas)
+    if rc is not None:
+        return rc
+    live = {} if force else _live_runs(storage, app_name, metas)
+    protected = tag_protected(metas, protect_tags)
+    doomed = {m["verstr"] for m in metas} - set(live) - set(protected) - set(reg)
+    doomed = without_kept_parents(storage, app_name, doomed)
+    to_delete = [m for m in metas if m["verstr"] in doomed]
+    return _finish(storage, app_name, args, to_delete, (live, protected, reg))
+
+
+def _prune_by_policy(vcs, storage, app_name, args):
+    if not _is_dry_run(args) and not getattr(args, "no_trim_journal", False):
         _trim_journal(storage)
     metas, snapshot = _metas_and_snapshot(storage, app_name)
     if not metas:
@@ -319,22 +285,18 @@ def experiment_prune(vcs, params, storage, args, app_name):
         return 0
 
     candidates, rc = _select_candidates(
-        storage, app_name, metas, snapshot, args, metrics_schema(vcs, storage, app_name)
+        storage, app_name, metas, args, metrics_schema(vcs, storage, app_name)
     )
     if rc is not None:
         return rc
     if candidates is None:
         return 0
 
-    try:
-        reg_protected = _registry_protected(storage, app_name, candidates)
-    except Exception as e:
-        VMN_LOGGER.error(
-            f"Cannot read model registry: {e}. Refusing to prune."
-        )
-        return 1
+    reg_protected, rc = _read_registry(storage, app_name, candidates)
+    if rc is not None:
+        return rc
 
-    to_delete, live, protected, reg = _apply_guards(
+    to_delete, *skipped = _apply_guards(
         storage,
         app_name,
         metas,
@@ -344,12 +306,21 @@ def experiment_prune(vcs, params, storage, args, app_name):
         snapshot=snapshot,
         reg_protected=reg_protected,
     )
+    return _finish(storage, app_name, args, to_delete, skipped, total=len(metas))
+
+
+def _print_skipped(live, protected, reg):
     for verstr in sorted(live):
-        print(_skip_message(verstr, live[verstr]))
+        print(skip_message(verstr, live[verstr]))
     for verstr in sorted(protected):
-        print(_tag_skip_message(verstr, protected[verstr]))
+        print(tag_skip_message(verstr, protected[verstr]))
     for verstr in sorted(reg):
         print(f"Skipping {verstr}: {reg[verstr]}")
+
+
+def _finish(storage, app_name, args, to_delete, skipped, total=None):
+    """Report the *skipped* runs, then preview or delete *to_delete*."""
+    _print_skipped(*skipped)
     if not to_delete:
         print("Nothing to prune")
         return 0
@@ -364,10 +335,10 @@ def experiment_prune(vcs, params, storage, args, app_name):
                 print(f"  {meta['verstr']}")
         return 0
 
-    verstrs = [m["verstr"] for m in to_delete]
-    _map(storage, lambda m: _delete_run(storage, app_name, m), to_delete)
+    map_storage(storage, lambda m: _delete_run(storage, app_name, m), to_delete)
     drop_unused_code(storage, app_name, {m.get("code_verstr") for m in to_delete})
-    for verstr in verstrs:
-        print(f"Deleted {verstr}")
-    print(f"Pruned {len(to_delete)} experiments, kept {len(metas) - len(to_delete)}")
+    for meta in to_delete:
+        print(f"Deleted {meta['verstr']}")
+    kept = "" if total is None else f", kept {total - len(to_delete)}"
+    print(f"Pruned {len(to_delete)} experiments{kept}")
     return 0

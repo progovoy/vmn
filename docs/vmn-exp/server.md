@@ -305,8 +305,9 @@ its data write and its journal put, a clock far behind, a hand-edited file):
 **Git workspaces** have no journal. They are refreshed by listing the
 checkout's records, as before.
 
-The journal is only useful for minutes. `vmn-exp prune` deletes journal
-partitions older than 2 days. On object stores, add a lifecycle rule as well
+The journal is only useful for minutes. A policy `vmn-exp prune` deletes
+journal partitions older than 2 days (not `prune -v`, nor with
+`--no-trim-journal`). On object stores, add a lifecycle rule as well
 (see [byo-bucket.md](byo-bucket.md#journal-lifecycle-rule)).
 
 ## Prometheus metrics

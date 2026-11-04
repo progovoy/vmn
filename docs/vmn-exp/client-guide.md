@@ -544,11 +544,16 @@ vmn-exp prune my_app --keep 50 --dry-run                     # preview
 vmn-exp prune my_app --older-than 30d --protect-tag stage
 vmn-exp prune my_app --query 'status = "failed"' --yes       # --query previews unless --yes
 vmn-exp prune my_app -v @4                                   # exactly one run
+vmn-exp prune my_app -v <verstr> --store s3://bucket/ml      # no checkout; reads only that run
 ```
 
 Prune never deletes a `running` or `stuck` run or one with a `--protect-tag`
 key (`--force` overrides both), a run with a surviving inner run, or a run
 registered as a model version (not even with `--force`; run
 `vmn-exp model delete` first). It deletes the remote copy too unless
-`--local-only`. Prefer `archive` for runs you only want out of sight. See
+`--local-only`. Prefer `archive` for runs you only want out of sight. A
+policy prune also trims the store's change journal (`--no-trim-journal` if
+a bucket lifecycle rule expires it); `-v` never does, and with a full
+verstr it touches only that run, however large the store. Outside a git
+checkout, name the store with `--store` or `VMN_EXPERIMENT_STORE`. See
 [`prune`](experiments.md#prune).

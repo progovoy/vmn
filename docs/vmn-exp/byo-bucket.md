@@ -144,8 +144,9 @@ the edit paths for read + edits.
 ## Journal lifecycle rule
 
 Journal objects are empty and only useful for a few minutes, but they pile up.
-The server never deletes them. `vmn-exp prune` drops journal partitions older
-than 2 days. On object stores, also expire them with a lifecycle rule on the
+The server never deletes them. A policy `vmn-exp prune` (`--keep`/
+`--older-than`/`--query`) drops journal partitions older than 2 days
+(`--no-trim-journal` skips it; `prune -v` never trims). On object stores, also expire them with a lifecycle rule on the
 literal prefix `<prefix>/journal/`:
 
 ```json

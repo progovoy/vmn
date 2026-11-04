@@ -869,6 +869,8 @@ vmn-exp prune my_app -v @4 -v @5            # exactly these runs
 vmn-exp prune my_app --keep 5 --protect-tag stage
 vmn-exp prune my_app --query 'status = "failed"'          # preview only
 vmn-exp prune my_app --query 'status = "failed"' --yes    # delete
+vmn-exp prune my_app --keep 100 --no-trim-journal         # a bucket with a journal lifecycle rule
+vmn-exp prune my_app -v <verstr> --store s3://bucket/ml   # no git checkout needed
 ```
 
 | Flag | Description |
@@ -882,6 +884,7 @@ vmn-exp prune my_app --query 'status = "failed"' --yes    # delete
 | `--protect-tag <key>` | never delete a run carrying this tag key (repeatable) |
 | `--force` | also delete `running`/`stuck` and tag-protected runs |
 | `--local-only` | keep the remote copies |
+| `--no-trim-journal` | a policy prune leaves the [change journal](server.md) alone (for a bucket whose [lifecycle rule](byo-bucket.md#journal-lifecycle-rule) expires it) |
 
 Guards take runs back out of any selection:
 
@@ -897,6 +900,20 @@ Guards take runs back out of any selection:
 With a remote store, prune deletes local **and** remote copies (which may be
 teammates' runs); `--local-only` touches only local ones. A code object is
 deleted with the last run of its code. Archived runs are pruned like others.
+
+A policy prune (`--keep`/`--older-than`/`--query`) selects through the
+[experiment index](#the-experiment-index-per-host-cache) and, unless
+`--dry-run` or `--no-trim-journal`, also drops store-wide journal partitions
+older than 2 days. A `-v` prune reads only its targets — an exact verstr
+needs no index or listing (a prefix or `@N` may), the guards read each
+target's metadata, run state and (for `--protect-tag`) log, and descendants
+come from the targets' [child markers](#backfill-children) (run
+`backfill-children` once on a store older than them) — and never trims the
+journal. Its summary is `Pruned N experiments` (no kept count).
+
+Outside a git checkout, `prune` needs no `--from-snapshot`: the store comes
+from `--store`/`--bucket`/`--experiment-dir` or `VMN_EXPERIMENT_STORE`/
+`VMN_EXPERIMENT_DIR` ([resolution](#storage-local-s3-gcs-azure-plugins)), the app from its name.
 
 ### `tag`
 
@@ -1641,7 +1658,8 @@ vmn-exp run my_app --from-snapshot /mnt/code --experiment-dir /mnt/runs -- pytho
 `--from-snapshot` (or `$VMN_SNAPSHOT_METADATA`) accepts the file or its
 directory. In this mode `create`, `run`, `add`, `list`, `show`, `compare`,
 `prune`, `rewind`, `push`, `similar-backfill`, `backfill-children` and `similar` (with `-v`/`--latest`
-or `--text-only`) work; other actions need a checkout. A run recorded this way
+or `--text-only`) work; other actions need a checkout. `prune` also runs
+outside a checkout without `--from-snapshot` ([prune](#prune)). A run recorded this way
 copies the exported run's [features](#what-a-run-records-for-similar) from
 `vmn_features.yml`.
 `start_run()` honours the same variables
