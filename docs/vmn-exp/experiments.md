@@ -924,9 +924,14 @@ surviving child; a `--dry-run` does the same read but writes nothing. A
 store backend without child markers (a plugin's) is checked against every
 run's parent on each `-v` prune.
 
-Outside a git checkout, `prune` needs no `--from-snapshot`: the store comes
-from `--store`/`--bucket`/`--experiment-dir` or `VMN_EXPERIMENT_STORE`/
-`VMN_EXPERIMENT_DIR` ([resolution](#storage-local-s3-gcs-azure-plugins)), the app from its name.
+Outside a git checkout, the store-only maintenance commands — `prune`,
+[`backfill-children`](#backfill-children), [`compact`](#compact) and
+[`similar-backfill`](#similar-backfill) — need no `--from-snapshot`: the store
+comes from `--store`/`--bucket`/`--experiment-dir` or `VMN_EXPERIMENT_STORE`/
+`VMN_EXPERIMENT_DIR` ([resolution](#storage-local-s3-gcs-azure-plugins)), the app
+from its name, and no store at all exits 1 naming those flags. Read commands
+(`list`, `show`, `export-metrics`, `lineage`, ...) and `push` (it ships a
+checkout's local records) still need a checkout or `--from-snapshot`.
 
 ### `tag`
 
@@ -1423,8 +1428,10 @@ vmn-exp backfill-children my_app --store s3://bucket/prefix
 wrote 1840, present 12
 ```
 
-It takes the repo lock like other writing actions, also runs without a
-checkout (`--from-snapshot`), and exits 1 (adding `failed F`) when a marker
+It takes the repo lock like other writing actions, also runs outside a
+checkout on the store flags alone ([store-only maintenance](#prune), e.g.
+`vmn-exp backfill-children my_app --store s3://bucket/prefix` on a box with no
+git), and exits 1 (adding `failed F`) when a marker
 could not be written; run it again to retry. Markers are not record files:
 listings, index signatures and the change journal ignore `children/`.
 - Prints `<verstr>  backfilled|partial|skipped|failed[ (detail)]` per run
@@ -1682,8 +1689,9 @@ vmn-exp run my_app --from-snapshot /mnt/code --experiment-dir /mnt/runs -- pytho
 `--from-snapshot` (or `$VMN_SNAPSHOT_METADATA`) accepts the file or its
 directory. In this mode `create`, `run`, `add`, `list`, `show`, `compare`,
 `prune`, `rewind`, `push`, `similar-backfill`, `backfill-children` and `similar` (with `-v`/`--latest`
-or `--text-only`) work; other actions need a checkout. `prune` also runs
-outside a checkout without `--from-snapshot` ([prune](#prune)). A run recorded this way
+or `--text-only`) work; other actions need a checkout. `prune`,
+`backfill-children`, `compact` and `similar-backfill` also run outside a
+checkout without `--from-snapshot` ([store-only maintenance](#prune)). A run recorded this way
 copies the exported run's [features](#what-a-run-records-for-similar) from
 `vmn_features.yml`.
 `start_run()` honours the same variables

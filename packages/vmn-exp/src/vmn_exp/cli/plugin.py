@@ -375,7 +375,7 @@ def _exp_run_without_repo(args):
     """Experiment commands that work without a git repo.
 
     Handles: run under VMN_MODE=disabled, import-mlflow (always git-free),
-    from-snapshot mode and a prune outside a checkout.
+    from-snapshot mode and the store-only maintenance commands outside a checkout.
 
     Returns an int exit code if handled, None to fall through to normal dispatch.
     """
@@ -395,12 +395,13 @@ def _exp_run_without_repo(args):
     from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
         "VMN_SNAPSHOT_METADATA"
     )
-    if not is_experiment or not (from_snapshot or _prune_outside_checkout(action)):
+    if not is_experiment or not (from_snapshot or _store_only_outside_checkout(action)):
         return None
 
     from vmn_exp.cli.experiment import (
         _get_experiment_storage,
         experiment_add,
+        experiment_compact,
         experiment_compare,
         experiment_create,
         experiment_list,
@@ -423,6 +424,7 @@ def _exp_run_without_repo(args):
         "show": experiment_show,
         "compare": experiment_compare,
         "prune": experiment_prune,
+        "compact": experiment_compact,
         "rewind": experiment_rewind,
         "push": experiment_push,
         "similar": experiment_similar,
@@ -432,11 +434,7 @@ def _exp_run_without_repo(args):
 
     handler = dispatch.get(action)
     if handler is None:
-        VMN_LOGGER.error(
-            "Action '%s' requires a git repository "
-            "(not available in --from-snapshot mode)",
-            action,
-        )
+        VMN_LOGGER.error("Action '%s' requires a git repository", action)
         return 1
 
     if getattr(args, "writer_id", None):
@@ -450,12 +448,15 @@ def _exp_run_without_repo(args):
     return handler(None, params, storage, args)
 
 
-def _prune_outside_checkout(action):
-    """A prune needs only its store: outside a checkout it runs git-free on
-    the store flags / ``VMN_EXPERIMENT_*`` and the app name."""
+# Maintenance commands that need only a store and an app name: outside a
+# checkout they run git-free on the store flags / ``VMN_EXPERIMENT_*``.
+_STORE_ONLY_ACTIONS = frozenset({"prune", "backfill-children", "compact", "similar-backfill"})
+
+
+def _store_only_outside_checkout(action):
     from vmn_exp.core.storage_resolve import try_repo_root
 
-    return action == "prune" and try_repo_root() is None
+    return action in _STORE_ONLY_ACTIONS and try_repo_root() is None
 
 
 # ---------------------------------------------------------------------------

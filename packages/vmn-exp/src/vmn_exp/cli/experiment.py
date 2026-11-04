@@ -390,9 +390,7 @@ def handle_experiment(vmn_ctx):
 
         return experiment_export_metrics(storage, _app_name(vcs, args), args)
     elif action == "compact":
-        from vmn_exp.cli.compact import experiment_compact
-
-        return experiment_compact(storage, _app_name(vcs, args), args)
+        return experiment_compact(vcs, params, storage, args)
     elif action == "push":
         return experiment_push(vcs, params, storage, args)
     elif action == "lineage":
@@ -623,6 +621,12 @@ def experiment_backfill_children(vcs, params, storage, args):
     from vmn_exp.cli.backfill_children import experiment_backfill_children as backfill
 
     return backfill(storage, _app_name(vcs, args), args)
+
+
+def experiment_compact(vcs, params, storage, args):
+    from vmn_exp.cli.compact import experiment_compact as compact
+
+    return compact(storage, _app_name(vcs, args), args)
 
 
 def experiment_push(vcs, params, storage, args):

@@ -152,8 +152,10 @@ Running/stuck and `--protect-tag` runs are kept unless `--force`; a run with a
 kept descendant is always kept. A `-v` prune reads only its targets (exact verstrs need
 no index) and never trims the change journal; a policy prune
 (`--keep`/`--older-than`/`--query`) trims it unless `--no-trim-journal` (for a
-bucket whose lifecycle rule expires it). Outside a git checkout prune takes its
-store from `--store`/`--experiment-dir` or `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_DIR`.
+bucket whose lifecycle rule expires it). Outside a git checkout the store-only
+maintenance commands (`prune`, `backfill-children`, `compact`, `similar-backfill`)
+take their store from `--store`/`--experiment-dir` or
+`VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_DIR`.
 
 ## Similar experiments
 
