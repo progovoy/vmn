@@ -62,6 +62,7 @@ from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.lineage import app_indexes, run_lineage
 from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, snapshot_app_names
+from vmn_exp.sdk.run_states import read_run_states
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +285,17 @@ def get_run_state(app_name=None, verstr=None, *, storage=None):
         raise ValueError(f"Experiment '{verstr}' not found for {app_name}")
     observed = run_state_observed_at(storage, app_name, verstr) if state else None
     return dict(state or {}, **status_fields(state, observed_at=observed))
+
+
+def get_run_states(app_name=None, refs=(), *, storage=None):
+    """``{ref: entry}`` for many runs at once — :func:`get_run_state`'s fields
+    plus the raw ``run_state`` (None before the run started), its store write
+    time ``observed_at`` and the resolved ``verstr``; None for a ref that
+    resolves to no run. Read concurrently, two reads per run; full verstrs
+    never touch the index or list the app (``latest`` / ``@N`` resolve through
+    it once per call; prefixes are not resolved)."""
+    app_name, storage, _ = _resolve(app_name, storage)
+    return read_run_states(storage, app_name, list(refs))
 
 
 def get_lineage(app_name=None, ref="latest", *, depth=1, storage=None, limit=DEFAULT_LIMIT):
