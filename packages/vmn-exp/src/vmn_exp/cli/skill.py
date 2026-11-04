@@ -88,21 +88,30 @@ pod = start_run("<app_name>", run_id=pod_id, on_sigterm="release")  # SIGTERM ->
 ```
 
 A finished pod (done or failed) is not reopened: `start_run(run_id=)` raises
-`manage.ReopenRefusedError` (a ValueError; `.exit_code`) unless `reopen=True`
+`manage.ReopenRefusedError` (`.reason` "finished") unless `reopen=True`
 (env `VMN_RESUME_REOPEN=1` with `VMN_RESUME_RUN_ID`), since reopening clears
 its exit code.
 
 A pod that died without finishing can be finished from outside (a controller,
-a cleanup job); `manage.FinishRefusedError` (`.reason` "live"/"finished",
-`.status`, `.exit_code`) while the run still beats or once it finished.
-`force="live"` finishes a live run but never re-finishes one; `force=True` both:
+a cleanup job); `manage.FinishRefusedError` (`.reason` "live"/"finished")
+while the run still beats or once it finished.
+`force="live"` finishes a live run but never re-finishes one; `force=True` both.
+Both errors subclass `manage.RunRefusedError` (a ValueError carrying `.reason`,
+`.status`, `.exit_code`, `.verstr`), so branch on fields, not message text:
 
 ```python
 from vmn_exp.sdk import manage
 manage.finish_run("<app_name>", "<verstr>", 137, error="OOMKilled")
-manage.finish_runs("<app_name>", ["<verstr>", ...], 1, force="live")  # {ref: verstr | error}
+# many at once; never raises per run: {ref: verstr | FinishRefusedError | ValueError}
+manage.finish_runs("<app_name>", ["<verstr>", ...], 1, force="live")
 # shell: vmn-exp add <app_name> -v <verstr> --finish 137 --error OOMKilled [--force-live|--force]
 ```
+
+To check many pods' states (resume, audit) on a large store, read them in one
+call without the index: `vmn_exp.sdk.reader.get_run_states("<app_name>", refs)`
+returns `{ref: state | None}` (`get_run_state`'s fields plus `run_state`,
+`observed_at`, `verstr`). Exact verstrs read only their own run; `latest`/`@N`
+resolve once per call; prefixes are not resolved (None).
 
 Once an outer run has ended, what is left under it settles (derived, never
 written, query it as `settled`): `never_started` (still `created`, but no
@@ -139,6 +148,21 @@ vmn-exp create <app_name> --note "WIP: refactoring auth"
 vmn-exp restore <app_name> --latest
 vmn-exp export <app_name> -o wip.tar.gz   # portable tarball of the captured state
 ```
+
+### Pruning
+
+```sh
+vmn-exp prune <app_name> --keep 100 --dry-run         # policy: preview first
+vmn-exp prune <app_name> -v <verstr> -v <verstr>      # exactly these runs
+vmn-exp prune <app_name> -v <verstr> --store s3://<bucket>/<prefix>  # no checkout needed
+```
+
+Running/stuck and `--protect-tag` runs are kept unless `--force`; a run with a
+kept descendant is always kept. A `-v` prune reads only its targets (exact verstrs need
+no index) and never trims the change journal; a policy prune
+(`--keep`/`--older-than`/`--query`) trims it unless `--no-trim-journal` (for a
+bucket whose lifecycle rule expires it). Outside a git checkout prune takes its
+store from `--store`/`--experiment-dir` or `VMN_EXPERIMENT_STORE`/`VMN_EXPERIMENT_DIR`.
 
 ## Similar experiments
 
