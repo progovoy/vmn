@@ -80,23 +80,19 @@ def boto3_client(endpoint_url=None, proxies=None):
 def sigv4_client(endpoint_url=None):
     """A client that presigns with SigV4 (``X-Amz-Expires`` bounded URLs):
     one per presigned URL, so the default session's (no session to build)."""
-    boto3 = boto3_client_module()
-    _own_default_session(boto3)
-    return _client(boto3, endpoint_url, signature_version="s3v4")
+    _DEFAULT_SESSION_OWNED.get()
+    return _client(boto3_client_module(), endpoint_url, signature_version="s3v4")
 
 
-_default_session_pid = os.getpid()
+def _forget_inherited_default_session():
+    """In a forked child: drop the default session it inherited (its
+    credential cache and refresh lock are the parent's)."""
+    boto3_client_module().DEFAULT_SESSION = None
+    environment_proxies_only()
+    return True
 
 
-def _own_default_session(boto3):
-    """Drop a default session a forked child inherited: its credential cache
-    and refresh lock are the parent's."""
-    global _default_session_pid
-    pid = os.getpid()
-    if _default_session_pid != pid:
-        boto3.DEFAULT_SESSION = None
-        _default_session_pid = pid
-        environment_proxies_only()
+_DEFAULT_SESSION_OWNED = PerProcess(_forget_inherited_default_session, value=True)
 
 
 def _client(session, endpoint_url, **config):

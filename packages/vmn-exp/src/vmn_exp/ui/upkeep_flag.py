@@ -43,8 +43,7 @@ def _flag_state(storage, app_name):
     """``(complete, token)`` of the flag: as the index refresher's listing
     (or this process's last write) showed it where the store tells
     (``children_flag_seen``), else read."""
-    seen = getattr(storage, "children_flag_seen", None)
-    state = seen(app_name) if seen else None
+    state = storage.children_flag_seen(app_name)
     return state if state is not None else storage.children_flag_state(app_name)
 
 

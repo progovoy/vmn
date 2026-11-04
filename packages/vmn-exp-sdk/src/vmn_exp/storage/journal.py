@@ -22,6 +22,7 @@ from vmn_exp.core.journal_keys import JOURNAL_PREFIX, JournalKey, encode_key, pa
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.areas import app_key
 from vmn_exp.storage.journal_sinks import journal_sinks, sink_for
+from vmn_exp.storage.per_process import PerProcess
 
 JOURNAL_MAX_AGE_SEC = 2 * 86_400
 _SEQ = itertools.count()
@@ -42,21 +43,16 @@ class _JournalState:
         self.lock = threading.Lock()
         self.local = threading.local()
         self.pid = os.getpid()
-        self._successors = {}  # pid -> a forked child's own state
         _STATES.add(self)
 
-    def for_this_process(self):
-        """This state, or in a forked child a fresh one (same sink, empty
+    def per_process(self):
+        """This state, and in a forked child a fresh one (same sink, empty
         queue, new lock): the queue and lock stay the parent's, so the child
         never takes a lock a parent thread held at fork."""
-        pid = os.getpid()
-        if self.pid == pid:
-            return self
-        successor = self._successors.get(pid)
-        if successor is None:
-            fresh = _JournalState(self.sink, self.writer_id, self.retries, self.backoff, self.clock)
-            successor = self._successors.setdefault(pid, fresh)
-        return successor
+        return PerProcess(
+            lambda: _JournalState(self.sink, self.writer_id, self.retries, self.backoff,
+                                  self.clock),
+            value=self)
 
     def record(self, area, app_name, name):
         writer = self.writer_id or _writer_id()
@@ -124,13 +120,7 @@ class JournaledStorage:
 
     @property
     def _journal_state(self):
-        state = self.__dict__["_journal_state"].for_this_process()
-        self.__dict__["_journal_state"] = state
-        return state
-
-    @_journal_state.setter
-    def _journal_state(self, state):
-        self.__dict__["_journal_state"] = state
+        return self._journal_states.get()
 
     save = _journaled_write("save")
     create_exclusive = _journaled_write("create_exclusive", lambda r, a: bool(r))
@@ -161,7 +151,7 @@ class JournaledStorage:
         opened = super()._open_area(name)
         if isinstance(opened, JournaledStorage):
             return opened
-        return _adopt(opened, self._journal_state)
+        return _adopt(opened, self._journal_states)
 
 
 _CLASSES = {}
@@ -174,10 +164,11 @@ def _journaled_class(cls):
     return _CLASSES[cls]
 
 
-def _adopt(inner, state):
+def _adopt(inner, states):
+    """*inner* journaled to *states* (a :class:`PerProcess` its areas share)."""
     wrapped = object.__new__(_journaled_class(type(inner)))
     wrapped.__dict__.update(inner.__dict__)
-    wrapped._journal_state = state
+    wrapped._journal_states = states
     return wrapped
 
 
@@ -191,7 +182,7 @@ def journaled(inner, sink=None, writer_id=None, retries=3,
     if sink is None:
         VMN_LOGGER.debug(f"{type(inner).__name__} has no change journal")
         return inner
-    return _adopt(inner, _JournalState(sink, writer_id, retries, backoff, clock))
+    return _adopt(inner, _JournalState(sink, writer_id, retries, backoff, clock).per_process())
 
 
 def prune_journal(storage, now=None, max_age_sec=JOURNAL_MAX_AGE_SEC):

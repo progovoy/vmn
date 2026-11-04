@@ -138,6 +138,11 @@ class SnapshotStorage(ABC):
         where the backend can."""
         return self.children_complete(app_name), self.children_flag(app_name)
 
+    def children_flag_seen(self, app_name):
+        """``(complete, token)`` of the flag as this process last saw it
+        where the backend notes it (S3: its listings), else None."""
+        return None
+
     def set_children_complete(self, app_name, complete, since=None):
         """Record (or, with a false *complete*, drop) that every child in
         *app_name* has its marker; whether it was written. Every drop is a

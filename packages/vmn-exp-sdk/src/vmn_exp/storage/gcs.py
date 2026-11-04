@@ -89,14 +89,15 @@ def _chunks(blob, size):
 class GCSSnapshotStorage(S3SnapshotStorage):
     scheme = "gs"
 
-    def __init__(self, bucket, prefix="vmn/snapshots", client=None, endpoint_url=None):
-        """Without *client*, one from Application Default Credentials, built
-        again in a forked child."""
+    def __init__(self, bucket, prefix="vmn/snapshots", client=None, client_factory=None):
+        """*client_factory* (a :class:`GCSObjectClient` builder, used instead
+        of a ``google.cloud.storage`` *client*) builds the client again in a
+        forked child; without either, one from Application Default Credentials."""
         if client is not None:
-            super().__init__(bucket, prefix=prefix, client=GCSObjectClient(client, bucket))
-            return
-        factory = functools.partial(_default_adapter, bucket, endpoint_url)
-        super().__init__(bucket, prefix=prefix, client_factory=factory)
+            client = GCSObjectClient(client, bucket)
+        elif client_factory is None:
+            client_factory = functools.partial(_default_adapter, bucket, None)
+        super().__init__(bucket, prefix=prefix, client=client, client_factory=client_factory)
 
     def open_artifact(self, app_name, verstr, name):
         """Streamed, never buffered: a GCS read is one whole-object download."""
@@ -121,5 +122,6 @@ def _default_adapter(bucket, endpoint_url):
 
 
 def open_gcs_store(uri, area):
+    factory = functools.partial(_default_adapter, uri.location, uri.options.get("endpoint_url"))
     return GCSSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
-                              endpoint_url=uri.options.get("endpoint_url"))
+                              client_factory=factory)

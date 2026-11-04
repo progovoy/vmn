@@ -38,10 +38,13 @@ _COMPLETE, _DROPPED = "complete", "dropped"
 
 
 def _flag_text(complete):
+    """The flag object's text. A complete flag's and a dropped one's differ
+    in size (asserted below): a listing's object size tells its state."""
     return f"{_COMPLETE if complete else _DROPPED} {uuid.uuid4().hex}\n"
 
 
 _COMPLETE_SIZE = len(_flag_text(True).encode())  # a drop's is one byte less
+assert len(_flag_text(False).encode()) != _COMPLETE_SIZE
 _SEEN = {}  # (store, flag key) -> (complete, token) as last listed, read or written
 
 
@@ -120,15 +123,6 @@ class S3ChildrenFlag:
     def _saw_children_flag(self, key, complete, token):
         _SEEN[self._seen_key(key)] = (complete, token)
 
-    def _listed_children_flag(self, app_base, obj):
-        """A whole delimited listing of the app prefix *app_base* showed the
-        flag object *obj* (None: no flag)."""
-        key = app_base + CHILDREN_COMPLETE_FILE
-        if obj is None:
-            self._saw_children_flag(key, False, NO_FILE)
-        else:
-            self._saw_children_flag(key, obj["Size"] == _COMPLETE_SIZE, obj.get("ETag"))
-
     def children_flag_state(self, app_name):
         key = self._children_complete_key(app_name)
         data, etag = self._get_with_etag(key)
@@ -155,6 +149,16 @@ class S3ChildrenFlag:
             raise
         self._saw_children_flag(key, complete, resp.get("ETag"))
         return True
+
+
+def listed_children_flag(storage, app_base, obj):
+    """A whole delimited listing of *storage*'s app prefix *app_base* showed
+    the flag object *obj* (None: no flag)."""
+    key = app_base + CHILDREN_COMPLETE_FILE
+    if obj is None:
+        storage._saw_children_flag(key, False, NO_FILE)
+    else:
+        storage._saw_children_flag(key, obj["Size"] == _COMPLETE_SIZE, obj.get("ETag"))
 
 
 class CachedChildrenFlag:

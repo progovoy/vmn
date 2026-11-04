@@ -5,7 +5,7 @@ client's pooled keep-alive connections are the parent's too (two writers on
 one TLS session corrupt it for both), and a lock a parent thread held at the
 fork stays held forever. A :class:`PerProcess` value compares the pid on each
 use, which is all the parent pays; the first use in another process builds a
-fresh value (the parent's is kept, never closed).
+fresh value (the parent's is dropped, never closed).
 """
 import os
 import threading
@@ -17,7 +17,7 @@ class PerProcess:
 
     def __init__(self, build, value=None):
         self._build = build
-        self._by_pid = {}
+        self._by_pid = {}  # only while threads race on a process's first build
         self._current = (None, None)  # (pid, value): one attribute, read atomically
         if value is not None:
             self._current = (os.getpid(), value)
@@ -28,22 +28,33 @@ class PerProcess:
         current = self._current
         if current[0] == pid:
             return current[1]
+        return self._settle(pid)
+
+    def _settle(self, pid):
         # Threads racing to build all settle on the first value stored.
         value = self._by_pid.get(pid)
         if value is None:
             value = self._by_pid.setdefault(pid, self._build())
+        for other in list(self._by_pid):  # an ancestor's: never used here
+            if other != pid:
+                self._by_pid.pop(other, None)
         self._current = (pid, value)
         return value
 
 
 class PerProcessLock:
-    """A ``with`` lock that is a fresh one in a forked child."""
+    """A ``with`` lock that is a fresh one in a forked child; a ``with``
+    gives back the lock it took, whichever process it ends in."""
 
     def __init__(self, factory=threading.Lock):
         self._locks = PerProcess(factory)
+        self._entered = threading.local()  # .locks: this thread's, innermost last
 
     def __enter__(self):
-        return self._locks.get().__enter__()
+        lock = self._locks.get()
+        entered = lock.__enter__()
+        self._entered.__dict__.setdefault("locks", []).append(lock)
+        return entered
 
     def __exit__(self, *exc):
-        return self._locks.get().__exit__(*exc)
+        return self._entered.locks.pop().__exit__(*exc)

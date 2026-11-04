@@ -4,10 +4,11 @@ botocore resolves proxies with urllib's ``getproxies``/``proxy_bypass``
 (:func:`botocore.utils.get_environ_proxies`: building a client's endpoint and
 the credential chain's metadata fetcher). Without a ``*_proxy`` variable set,
 on macOS they ask SystemConfiguration (``_scproxy``), which is not fork-safe:
-a forked child calling it segfaults. So the parent resolves a client's proxies
-when it builds the client, the child passes them to botocore explicitly
-(``Config(proxies=...)``: botocore then skips the lookup), and botocore's other
-lookups in the child read the environment only. Elsewhere nothing changes.
+a forked child calling it segfaults. So the parent keeps the proxies botocore
+resolved when it built a client (no lookup of its own), the child passes them
+to botocore explicitly (``Config(proxies=...)``: botocore then skips the
+lookup), and botocore's other lookups in the child read the environment only.
+Elsewhere nothing changes.
 """
 import functools
 import sys
@@ -19,10 +20,13 @@ def child_factory(build, endpoint_url, client):
     *client* with it."""
     if sys.platform != "darwin":
         return functools.partial(build, endpoint_url)
-    from botocore.utils import get_environ_proxies
+    return functools.partial(_child_build, build, endpoint_url, _resolved_proxies(client))
 
-    proxies = get_environ_proxies(client.meta.endpoint_url)
-    return functools.partial(_child_build, build, endpoint_url, proxies)
+
+def _resolved_proxies(client):
+    """The proxies botocore resolved for *client* (``get_environ_proxies``
+    of its endpoint) when it built it."""
+    return client._endpoint.http_session._proxy_config._proxies
 
 
 def _child_build(build, endpoint_url, proxies):
