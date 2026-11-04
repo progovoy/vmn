@@ -239,3 +239,14 @@ def test_finish_and_note_reach_the_remote_with_no_heartbeat(tmp_path, monkeypatc
         notes = [e["text"] for e in remote.load_merged_log(APP, VERSTR)
                  if e["type"] == "note"]
         assert notes == ["closed at study end"]
+
+
+def test_a_refusal_builds_from_a_message_alone_like_any_value_error():
+    from vmn_exp.sdk.manage import FinishRefusedError, ReopenRefusedError, RunRefusedError
+
+    for cls in (RunRefusedError, FinishRefusedError, ReopenRefusedError):
+        err = cls("refused")
+        assert str(err) == "refused"
+        assert (err.reason, err.status, err.exit_code, err.verstr) == (None,) * 4
+    err = FinishRefusedError("refused", reason="live", verstr="v1")
+    assert (err.reason, err.verstr) == ("live", "v1")

@@ -55,7 +55,7 @@ class RunRefusedError(ValueError):
     :data:`FINISHED`), the run's derived ``status``, its prior ``exit_code``
     (None while unfinished) and its ``verstr``."""
 
-    def __init__(self, message, reason, status, exit_code, verstr):
+    def __init__(self, message, reason=None, status=None, exit_code=None, verstr=None):
         super().__init__(message)
         self.reason, self.status, self.exit_code, self.verstr = (
             reason, status, exit_code, verstr)
