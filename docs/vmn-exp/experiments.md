@@ -1399,7 +1399,12 @@ index; `read N/M runs` on stderr) and one marker listing per parent. A
 the command is optional. A run with no failed marker flags the app as having
 all its markers (`<app>/.children_complete` beside its records — no listing
 takes it for a run); a child whose marker later fails to write drops the
-flag, so the next `prune -v` rescans:
+flag, so the next `prune -v` rescans. A pass sets the flag only if no drop
+landed since it started listing (a conditional write on the flag's version
+token: S3 `If-Match`, a local lock), so a child created mid-pass whose
+marker failed is never covered by it. A cached store keeps the flag on its
+remote; a drop the remote refuses is kept locally, where it stops this host
+trusting the flag and is replayed on the remote at its next read:
 
 ```sh
 vmn-exp backfill-children my_app --dry-run

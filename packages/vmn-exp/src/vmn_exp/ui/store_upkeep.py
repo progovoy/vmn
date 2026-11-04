@@ -10,7 +10,11 @@ an :class:`AppUpkeep` pass over it at most every ``interval_sec`` per index:
   are listed the first time a pass sees it, and again when more than
   :data:`RELIST_OVER` of its children are new (a cold load shows them 500 at
   a time); a few new children are marked directly (one PUT each; markers are
-  idempotent), so a steady pass costs nothing for the runs it has checked;
+  idempotent), so a steady pass costs nothing for the runs it has checked.
+  A pass that leaves every child of its snapshot marked flags the app's
+  markers complete (:mod:`~vmn_exp.ui.upkeep_flag`: one read of the flag per
+  pass once flagged, else a listing of the run names first), so a
+  ``prune -v`` of the store skips its one-time scan;
 * compaction (:mod:`vmn_exp.core.metric_compact`, :mod:`vmn_exp.core.log_compact`)
   of each failed or stuck run, once per server process, newest first, until
   the pass's ``budget_sec`` is spent (the next pass goes on): a dead writer's
@@ -33,6 +37,7 @@ from vmn_exp.core.log_compact import compact_record_logs
 from vmn_exp.core.metric_compact import compact_record
 from vmn_exp.core.status import FAILED, STUCK, derive_status
 from vmn_exp.core.traced_lock import TracedLock
+from vmn_exp.ui.upkeep_flag import flag_marked_app
 
 UPKEEP_INTERVAL_SEC = 60
 PASS_BUDGET_SEC = 30
@@ -55,13 +60,15 @@ class AppUpkeep:
     def run(self, snapshot, budget_sec=PASS_BUDGET_SEC):
         """One pass over *snapshot*: ``{"marked", "compacted", "failed"}``."""
         counts = {"marked": 0, "compacted": 0, "failed": 0}
-        self._mark_children(snapshot.rows, counts)
+        if self._mark_children(snapshot.rows, counts):
+            self._flag(snapshot)
         self._compact_dead(snapshot, self._clock() + budget_sec, counts)
         return counts
 
     def _mark_children(self, rows, counts):
+        """Mark *rows*' unmarked children; whether every one is marked now."""
         known = {row["verstr"] for row in rows}
-        pending = defaultdict(list)
+        pending, complete = defaultdict(list), True
         for row in rows:
             parent = row.get("parent")
             if parent in known and parent != row["verstr"] \
@@ -72,6 +79,16 @@ class AppUpkeep:
             for kid in kids:
                 if kid in present or self._mark(parent, kid, counts):
                     self._marked.add((parent, kid))
+                else:
+                    complete = False
+        return complete
+
+    def _flag(self, snapshot):
+        try:
+            flag_marked_app(self._storage, self._app, snapshot)
+        except Exception:
+            _LOGGER.warning("Store upkeep of %s: flagging its child markers failed",
+                            self._app, exc_info=True)
 
     def _listing(self, parent, unchecked):
         """*parent*'s markers: listed the first time, and again when more than

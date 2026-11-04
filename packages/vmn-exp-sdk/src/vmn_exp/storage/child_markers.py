@@ -11,10 +11,10 @@ a pass over the app's runs writes the ones a store lacks — the first
 store upkeep. A marker may outlive its child or name a run that was renamed:
 readers skip a marker whose record does not exist.
 
-A complete pass flags the app (``children_complete``): an empty
-``.children_complete`` beside its records, a dot name no listing takes for a
-record. A child whose marker fails to write drops the flag, so a reader that
-trusts only flagged markers (``prune -v``) rescans the app instead.
+A complete pass flags the app (``children_complete``,
+:mod:`~vmn_exp.storage.children_flag`). A child whose marker fails to write
+drops the flag, so a reader that trusts only flagged markers (``prune -v``)
+rescans the app instead.
 
 Not part of a record's files, by design: ``children/`` is neither a signed
 folder of a local listing (:mod:`~vmn_exp.storage.listing`) nor one of the
@@ -26,37 +26,19 @@ journaled: the child's own claim is, and the index derives the edge from it.
 """
 import os
 
-from vmn_exp.storage.files import (
-    CHILDREN_COMPLETE_FILE,
-    CHILDREN_DIR,
-    safe_verstr,
-    unsafe_verstr,
+from vmn_exp.storage.children_flag import (
+    CachedChildrenFlag,
+    LocalChildrenFlag,
+    S3ChildrenFlag,
 )
+from vmn_exp.storage.files import CHILDREN_DIR, safe_verstr, unsafe_verstr
 
 
 def _marker_names(names):
     return sorted(unsafe_verstr(n) for n in names if n and not n.startswith("."))
 
 
-class LocalChildren:
-    has_child_markers = True
-
-    def _children_complete_path(self, app_name):
-        return os.path.join(self._snapshot_base_dir(app_name), CHILDREN_COMPLETE_FILE)
-
-    def children_complete(self, app_name):
-        return os.path.isfile(self._children_complete_path(app_name))
-
-    def set_children_complete(self, app_name, complete):
-        path = self._children_complete_path(app_name)
-        if not complete:
-            try:
-                os.unlink(path)
-            except FileNotFoundError:
-                pass
-        elif os.path.isdir(os.path.dirname(path)):  # never an app of its own
-            os.close(os.open(path, os.O_WRONLY | os.O_CREAT, 0o666))
-
+class LocalChildren(LocalChildrenFlag):
     def _children_dir(self, app_name, parent):
         return os.path.join(self._snapshot_dir(app_name, parent), CHILDREN_DIR)
 
@@ -87,22 +69,7 @@ class LocalChildren:
             return []
 
 
-class S3Children:
-    has_child_markers = True
-
-    def _children_complete_key(self, app_name):
-        return f"{self._key_prefix(app_name)}/{CHILDREN_COMPLETE_FILE}"
-
-    def children_complete(self, app_name):
-        return self._head(self._children_complete_key(app_name))
-
-    def set_children_complete(self, app_name, complete):
-        key = self._children_complete_key(app_name)
-        if complete:
-            self._put(key, b"")
-        else:
-            self._s3.delete_object(Bucket=self.bucket, Key=key)
-
+class S3Children(S3ChildrenFlag):
     def _children_prefix(self, app_name, parent):
         return f"{self._record_prefix(app_name, parent)}/{CHILDREN_DIR}/"
 
@@ -121,24 +88,9 @@ class S3Children:
         return _marker_names(n for n in names if "/" not in n)
 
 
-class CachedChildren:
+class CachedChildren(CachedChildrenFlag):
     """Both copies: the local one when it is a replica, the remote one when
-    it holds the parent. The completeness flag is the authoritative copy's
-    (the remote's, if any)."""
-
-    @property
-    def _flag_holder(self):
-        return self._remote or self._local
-
-    @property
-    def has_child_markers(self):
-        return getattr(self._flag_holder, "has_child_markers", False)
-
-    def children_complete(self, app_name):
-        return self._flag_holder.children_complete(app_name)
-
-    def set_children_complete(self, app_name, complete):
-        self._flag_holder.set_children_complete(app_name, complete)
+    it holds the parent."""
 
     def mark_child(self, app_name, parent, child):
         marked = False

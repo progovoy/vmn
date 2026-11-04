@@ -219,7 +219,10 @@ a pass per app at most every 60 seconds, on the replica that leads the index):
 - **Child markers.** Inner runs created before markers existed (or whose
   marker failed to write) get one, so an outer run's page lists its runs with
   one listing instead of waiting for the index. This is what
-  `vmn-exp backfill-children` does by hand.
+  `vmn-exp backfill-children` does by hand. A pass that leaves every child
+  marked also flags the app as having all its markers (after one listing of
+  its run names, to catch runs the index has not seen yet), so the first
+  `vmn-exp prune -v` skips its one-time scan.
 - **Compaction.** A failed or stuck run whose writer died before compacting
   keeps one metrics segment per 30 s sync, hundreds for a long run; the server
   compacts each one once (newest first, 30 seconds of work per pass), so its

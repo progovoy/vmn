@@ -118,9 +118,18 @@ class SnapshotStorage(ABC):
         """Whether every child in *app_name* is known to have its marker."""
         return False
 
-    def set_children_complete(self, app_name, complete):
+    def children_flag(self, app_name):
+        """The flag's version token now (:data:`NO_FILE`: never set): a pass
+        takes it before it lists the app, to set the flag only on it."""
+        return None
+
+    def set_children_complete(self, app_name, complete, since=None):
         """Record (or, with a false *complete*, drop) that every child in
-        *app_name* has its marker."""
+        *app_name* has its marker; whether it was written. Every drop is a
+        new token, and a set *since* a token is written only while the flag
+        still holds it — a pass never sets the flag over a drop that landed
+        while it listed."""
+        return False
 
     def mark_child(self, app_name, parent, child):
         """Mark *child* in *parent*'s record; False when nothing was written

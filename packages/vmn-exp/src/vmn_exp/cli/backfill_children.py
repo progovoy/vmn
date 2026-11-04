@@ -46,20 +46,33 @@ def backfill_app(storage, app_name, dry_run=False):
 def scan_app(storage, app_name, dry_run=False, notice=None):
     """``(marker counts, {parent: [child]})`` of *app_name*'s runs, each
     child's missing marker written unless *dry_run*. A complete pass (not
-    dry, nothing failed) flags the app's markers complete. *notice* is told
-    the number of runs once they are listed."""
+    dry, nothing failed) flags the app's markers complete — conditionally,
+    on the flag's token taken before the listing, so a drop that landed
+    meanwhile (a child the listing may have missed) keeps it unset.
+    *notice* is told the number of runs once they are listed."""
+    token = None if dry_run else flag_token(storage, app_name)
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         names = list(storage.list_verstrs(app_name))
         if notice:
             notice(len(names))
         by_parent = _children_by_parent(storage, app_name, names, pool)
         results = list(pool.map(
-            lambda p: _backfill_parent(storage, app_name, p, by_parent[p], dry_run),
+            lambda p: backfill_parent(storage, app_name, p, by_parent[p], dry_run),
             sorted(by_parent)))
     counts = {key: sum(r[key] for r in results) for key in ("wrote", "present", "failed")}
-    if not dry_run and not counts["failed"]:
-        storage.set_children_complete(app_name, True)
+    if token is not None and not counts["failed"]:
+        storage.set_children_complete(app_name, True, since=token)
     return counts, by_parent
+
+
+def flag_token(storage, app_name):
+    """The completeness flag's token before a pass lists *app_name*; None
+    (set nothing) when it cannot be read."""
+    try:
+        return storage.children_flag(app_name)
+    except Exception:
+        VMN_LOGGER.debug(f"Reading {app_name}'s child-marker flag failed", exc_info=True)
+        return None
 
 
 def _children_by_parent(storage, app_name, names, pool):
@@ -90,7 +103,7 @@ class _Progress:
                 print(f"read {self.done}/{self.total} runs", file=sys.stderr, flush=True)
 
 
-def _backfill_parent(storage, app_name, parent, kids, dry_run):
+def backfill_parent(storage, app_name, parent, kids, dry_run):
     present = set(storage.list_children(app_name, parent))
     counts = {"wrote": 0, "present": 0, "failed": 0}
     for kid in kids:
