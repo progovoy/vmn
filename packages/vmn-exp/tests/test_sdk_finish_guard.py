@@ -202,3 +202,21 @@ def test_a_loser_on_another_host_caches_the_winners_state(two_hosts):
 
     state = _stored(local_side(second))
     assert (state["exit_code"], state["attempt"]) == (0, a._state["attempt"])
+
+
+def test_force_live_refuses_a_finished_run(cached):
+    _finished(cached)
+    with pytest.raises(manage.FinishRefusedError) as excinfo:
+        manage.finish_run(APP, VERSTR, 1, force="live", storage=cached)
+    assert (excinfo.value.reason, excinfo.value.exit_code) == ("finished", 0)
+    assert _stored(cached)["exit_code"] == 0
+
+
+def test_force_live_loses_to_a_racing_finisher(cached, local):
+    cached.save_file(*WHERE, yaml.dump({"state": "running", "attempt": "live"}))
+    _racing(local, {"state": "finished", "attempt": "racer", "exit_code": 0})
+
+    with pytest.raises(manage.FinishRefusedError) as excinfo:
+        manage.finish_run(APP, VERSTR, 1, force="live", storage=cached)
+    assert excinfo.value.reason == "finished"
+    assert _stored(cached)["attempt"] == "racer"

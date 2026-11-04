@@ -10,7 +10,8 @@ import pytest
 from exp_helpers import _bootstrap, _storage
 
 from vmn_exp.core.status import RUNNING, derive_status, load_run_state
-from vmn_exp.sdk import start_run
+from vmn_exp.sdk import manage, start_run
+from vmn_exp.sdk.resume import ReopenRefusedError
 
 
 @pytest.fixture(autouse=True)
@@ -130,6 +131,19 @@ def test_reopening_a_finished_run_needs_reopen(app_layout):
 
     assert done.id in str(excinfo.value)
     assert _state(app_layout, done.id) == before
+
+
+def test_a_refused_reopen_is_typed(app_layout):
+    _bootstrap(app_layout)
+    done = _finished_run(app_layout)
+
+    with pytest.raises(ReopenRefusedError) as excinfo:
+        start_run(app_layout.app_name, run_id=done.id)
+
+    exc = excinfo.value
+    assert isinstance(exc, ValueError)
+    assert (exc.reason, exc.exit_code, exc.verstr) == ("finished", 0, done.id)
+    assert manage.ReopenRefusedError is ReopenRefusedError
 
 
 def test_reopen_true_reopens_a_finished_run(app_layout):

@@ -88,16 +88,20 @@ pod = start_run("<app_name>", run_id=pod_id, on_sigterm="release")  # SIGTERM ->
 ```
 
 A finished pod (done or failed) is not reopened: `start_run(run_id=)` raises
-ValueError unless `reopen=True` (env `VMN_RESUME_REOPEN=1` with
-`VMN_RESUME_RUN_ID`), since reopening clears its exit code.
+`manage.ReopenRefusedError` (a ValueError; `.exit_code`) unless `reopen=True`
+(env `VMN_RESUME_REOPEN=1` with `VMN_RESUME_RUN_ID`), since reopening clears
+its exit code.
 
 A pod that died without finishing can be finished from outside (a controller,
-a cleanup job); refused while the run still beats unless forced:
+a cleanup job); `manage.FinishRefusedError` (`.reason` "live"/"finished",
+`.status`, `.exit_code`) while the run still beats or once it finished.
+`force="live"` finishes a live run but never re-finishes one; `force=True` both:
 
 ```python
 from vmn_exp.sdk import manage
 manage.finish_run("<app_name>", "<verstr>", 137, error="OOMKilled")
-# shell: vmn-exp add <app_name> -v <verstr> --finish 137 --error OOMKilled [--force]
+manage.finish_runs("<app_name>", ["<verstr>", ...], 1, force="live")  # {ref: verstr | error}
+# shell: vmn-exp add <app_name> -v <verstr> --finish 137 --error OOMKilled [--force-live|--force]
 ```
 
 Once an outer run has ended, what is left under it settles (derived, never

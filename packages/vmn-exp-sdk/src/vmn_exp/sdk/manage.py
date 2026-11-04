@@ -11,6 +11,7 @@ orchestrator outside the run's pod — finish them or log to them.
     manage.set_tags("my_app", "latest", {"verdict": "keep"}, remove=["todo"])
     manage.log_note("my_app", run_id, "closed by orchestrator at study end")
     manage.finish_run("my_app", run_id, 1, error="OOMKilled", end_reason="closed")
+    manage.finish_runs("my_app", run_ids, 1, error="study closed", force="live")
 
 *ref* takes whatever the CLI takes — a full verstr, a unique prefix, ``@N`` or
 ``latest`` — and each call returns the verstr it changed, or raises ValueError
@@ -25,6 +26,7 @@ from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.core.run_finish import FinishRefusedError  # noqa: F401
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
 from vmn_exp.sdk.reader import _resolve, list_runs
+from vmn_exp.sdk.resume import ReopenRefusedError  # noqa: F401
 from vmn_exp.storage.s3_base import parallel_map
 
 
@@ -92,11 +94,43 @@ def finish_run(app_name, ref, exit_code, *, error=None, end_reason=None, force=F
     ``running`` first. *error* (a message or an exception) and *end_reason*
     are recorded like ``run.finish``'s.
 
-    Raises :class:`FinishRefusedError` while another attempt still heartbeats
-    the run (fresh by its clock or the store's) or once it has finished,
-    unless *force*: that attempt's later heartbeats are then dropped.
+    Raises :class:`FinishRefusedError` (``reason`` ``"live"``) while another
+    attempt still heartbeats the run (fresh by its clock or the store's) and
+    (``reason`` ``"finished"``) once it has finished. ``force="live"``
+    overrides only the first, ``force=True`` both; the live attempt's later
+    heartbeats are then dropped.
     """
     app_name, storage, verstr = _target(app_name, ref, storage)
+    return _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force)
+
+
+def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force=False,
+                storage=None):
+    """:func:`finish_run` for every ref in *refs*, concurrently, as
+    ``{ref: result}`` in *refs*' order: the verstr finished, the
+    :class:`FinishRefusedError` that refused it, or the ValueError of a ref
+    that resolves to no run. One bad run never raises; a bad *exit_code* or
+    *force* raises ValueError before anything is written.
+    """
+    run_finish.checked_exit_code(exit_code)
+    run_finish.checked_force(force)
+    app_name, storage, _ = _resolve(app_name, storage)
+    refs = list(dict.fromkeys(refs))
+
+    def finish(ref):
+        try:
+            verstr, err = resolve_experiment(storage, app_name, ref)
+            if err:
+                raise ValueError(err)
+            return _finish_one(storage, app_name, verstr, exit_code, error,
+                               end_reason, force)
+        except ValueError as exc:
+            return exc
+
+    return dict(zip(refs, parallel_map(finish, refs)))
+
+
+def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force):
     done = run_finish.finish_run(storage, app_name, verstr, exit_code, error=error,
                                  end_reason=end_reason, force=force)
     return _changed(done, app_name, verstr)

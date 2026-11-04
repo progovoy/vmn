@@ -12,6 +12,8 @@ Refused unless forced: a run another attempt is still heartbeating (fresh by
 the writer's clock or the store's, :func:`~vmn_exp.core.status.derive_status`)
 and a run that already finished — also one that finishes while this call
 writes: the write is a compare-and-swap (:mod:`vmn_exp.core.state_cas`).
+``force="live"`` overrides only the first: a live run is finished, a finished
+one still refused; ``force=True`` overrides both.
 The final state carries a new ``attempt``, so a forced-out live attempt
 drops its next heartbeat instead of reopening the run
 (:mod:`vmn_exp.sdk.state_publisher`).
@@ -41,8 +43,18 @@ from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log, save
 _ENDING_FIELDS = ("error", "end_reason", "signal", "received_signal")
 
 
+LIVE = "live"
+FINISHED = "finished"
+
+
 class FinishRefusedError(ValueError):
-    """The run is live elsewhere or already finished; ``force`` finishes it anyway."""
+    """The run is live elsewhere (``reason="live"``) or already finished
+    (``reason="finished"``); ``status`` is its derived status and
+    ``exit_code`` its prior one (None while unfinished)."""
+
+    def __init__(self, message, reason, status, exit_code):
+        super().__init__(message)
+        self.reason, self.status, self.exit_code = reason, status, exit_code
 
 
 def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None,
@@ -50,17 +62,19 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
     """Write *verstr*'s final run state; False when there is no such record.
 
     *error* — a message or an exception — becomes the state's ``error`` and an
-    ``error`` log entry. Raises :class:`FinishRefusedError` (see the module
-    doc) and ValueError for an *exit_code* that is not an int.
+    ``error`` log entry. *force* is False, ``"live"`` or True (see the module
+    doc). Raises :class:`FinishRefusedError` and ValueError for an
+    *exit_code* that is not an int or an unknown *force*.
     """
-    exit_code = _checked_exit_code(exit_code)
+    exit_code = checked_exit_code(exit_code)
+    force = checked_force(force)
     if not storage.exists(app_name, verstr):
         return False
     observed_at = run_state_observed_at(storage, app_name, verstr)
 
     def finishable(prior):
-        if not force:
-            _refuse_unfinishable(prior, observed_at, verstr)
+        if force is not True:
+            _refuse_unfinishable(prior, observed_at, verstr, force)
         return prior
 
     finishable(load_run_state(storage, app_name, verstr) or {})
@@ -103,22 +117,33 @@ def final_state(prior, exit_code, error=None, end_reason=None):
     return state
 
 
-def _checked_exit_code(exit_code):
+def checked_exit_code(exit_code):
     if isinstance(exit_code, bool) or not isinstance(exit_code, int):
         raise ValueError(f"exit_code must be an int, got {exit_code!r}")
     return exit_code
 
 
-def _refuse_unfinishable(prior, observed_at, verstr):
+def checked_force(force):
+    if force is True or force is False:
+        return force
+    if force == LIVE:
+        return LIVE
+    raise ValueError(f"force must be False, 'live' or True, got {force!r}")
+
+
+def _refuse_unfinishable(prior, observed_at, verstr, force):
     status = derive_status(prior, observed_at=observed_at)
-    if status == RUNNING:
+    exit_code = prior.get("exit_code")
+    if status == RUNNING and force != LIVE:
         raise FinishRefusedError(
             f"Run '{verstr}' is still heartbeating (attempt {prior.get('attempt')} "
-            f"on {prior.get('host')}); pass force to finish it anyway")
+            f"on {prior.get('host')}); pass force to finish it anyway",
+            LIVE, status, exit_code)
     if status in (SUCCEEDED, FAILED):
         raise FinishRefusedError(
             f"Run '{verstr}' already finished ({status}, exit code "
-            f"{prior.get('exit_code')}); pass force to finish it again")
+            f"{exit_code}); pass force to finish it again",
+            FINISHED, status, exit_code)
 
 
 def _error_mapping(error):

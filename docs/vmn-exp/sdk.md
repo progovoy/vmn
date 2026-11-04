@@ -431,6 +431,7 @@ it running and heartbeat first):
 manage.log_note("my_app", run_id, "closed by orchestrator at study end")
 manage.log_metrics("my_app", run_id, {"retries": 3})          # step= optional
 manage.finish_run("my_app", run_id, 1, error="OOMKilled", end_reason="closed")
+manage.finish_runs("my_app", run_ids, 1, error="study closed", force="live")
 ```
 
 - `finish_run(app_name, ref, exit_code, *, error=None, end_reason=None,
@@ -444,15 +445,28 @@ manage.finish_run("my_app", run_id, 1, error="OOMKilled", end_reason="closed")
   still heartbeats the run — fresh by the writer's clock or the store's write
   time, the rule that tells running from stuck — and once the run has finished,
   including by an attempt that finishes it while the call writes (the write is
-  a compare-and-swap, like `run.finish()`'s).
-  `force=True` finishes it anyway; the final state carries a new `attempt`, so
-  the live attempt's next heartbeats are dropped instead of reopening it.
+  a compare-and-swap, like `run.finish()`'s). The error carries `reason`
+  (`"live"` or `"finished"`), `status` (the derived status) and `exit_code`
+  (the prior one, `None` while unfinished), so callers need not parse its text.
+- `force` is `False`, `"live"` or `True`. `force="live"` finishes a run past a
+  live heartbeat but never past a final state: a finished run — also one that
+  finishes while the call writes — is still refused. `force=True` finishes it
+  either way. A forced final state carries a new `attempt`, so the live
+  attempt's next heartbeats are dropped instead of reopening it. Any other
+  value raises `ValueError`.
+- `finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None,
+  force=False, storage=None)` finishes many runs concurrently, each with the
+  same compare-and-swap, and returns `{ref: result}` keyed by the ref as given,
+  in order (duplicates once): the finished verstr, the `FinishRefusedError`
+  that refused it, or the `ValueError` of a ref that resolves to no run. One
+  bad run never raises; a bad `exit_code` or `force` raises before any write.
 - `log_note(app_name, ref, text)` and `log_metrics(app_name, ref, values,
   step=None)` append under the caller's own stream, on a run in any state.
 - All three flush to the remote store at once: no heartbeat is around to ship
   them later.
 - CLI: `vmn-exp add <app> -v <ref> --finish <code> [--error <text>]
-  [--end-reason <text>] [--force]` (after the add's `--note`/`--metrics`).
+  [--end-reason <text>] [--force-live | --force]` (after the add's
+  `--note`/`--metrics`; `--force-live` is `force="live"`).
 
 ---
 
@@ -625,7 +639,8 @@ neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
 
 Only an unfinished run (created, released, running or stuck) resumes as is. A
 **finished** run — succeeded or failed, including a SIGTERM'd one under the
-default `on_sigterm="fail"` — raises `ValueError` naming the run, since
+default `on_sigterm="fail"` — raises `manage.ReopenRefusedError` (a
+`ValueError` with `reason="finished"`, `exit_code` and `verstr`) naming the run, since
 reopening it clears its exit code (a resubmitted trial would lose its result).
 Reopen it on purpose with `start_run(run_id=..., reopen=True)`, or
 `VMN_RESUME_REOPEN=1` next to `$VMN_RESUME_RUN_ID` (consumed the same way). A

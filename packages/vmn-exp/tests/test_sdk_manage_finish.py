@@ -156,6 +156,52 @@ def test_force_finishes_a_live_run_and_its_heartbeats_stop(storage):
         run.finish()
 
 
+def test_a_live_refusal_is_typed(storage):
+    _write_state(storage, age_sec=5)
+
+    with pytest.raises(manage.FinishRefusedError) as excinfo:
+        manage.finish_run(APP, VERSTR, 1, storage=storage)
+
+    exc = excinfo.value
+    assert isinstance(exc, ValueError)
+    assert (exc.reason, exc.status, exc.exit_code) == ("live", "running", None)
+
+
+def test_a_finished_refusal_is_typed(storage):
+    _write_state(storage, age_sec=5, state="finished", exit_code=3)
+
+    with pytest.raises(manage.FinishRefusedError) as excinfo:
+        manage.finish_run(APP, VERSTR, 1, storage=storage)
+
+    exc = excinfo.value
+    assert (exc.reason, exc.status, exc.exit_code) == ("finished", "failed", 3)
+
+
+def test_force_live_finishes_a_heartbeating_run(storage):
+    _write_state(storage, age_sec=5)
+
+    manage.finish_run(APP, VERSTR, 143, force="live", storage=storage)
+
+    assert (_state(storage)["state"], _state(storage)["exit_code"]) == ("finished", 143)
+
+
+def test_force_live_refuses_a_finished_run(storage):
+    _write_state(storage, age_sec=5, state="finished", exit_code=0)
+
+    with pytest.raises(manage.FinishRefusedError, match="finished"):
+        manage.finish_run(APP, VERSTR, 1, force="live", storage=storage)
+
+    assert _state(storage)["exit_code"] == 0
+
+
+@pytest.mark.parametrize("force", ["yes", "finished", 1, None])
+def test_an_unknown_force_is_rejected(storage, force):
+    _stuck(storage)
+    with pytest.raises(ValueError, match="force"):
+        manage.finish_run(APP, VERSTR, 1, force=force, storage=storage)
+    assert _state(storage)["state"] == "running"
+
+
 def test_finish_rejects_a_non_integer_exit_code(storage):
     with pytest.raises(ValueError, match="exit_code"):
         manage.finish_run(APP, VERSTR, "boom", storage=storage)

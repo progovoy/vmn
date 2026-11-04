@@ -3,7 +3,7 @@ the CLI's ``manage.finish_run`` (plan 28 API3)."""
 from exp_helpers import _bootstrap, _exp, _storage
 
 from vmn_exp.core.status import load_run_state, status_fields
-from vmn_exp.sdk import create_run
+from vmn_exp.sdk import create_run, start_run
 
 
 def _waiting_run(app_layout):
@@ -49,3 +49,21 @@ def test_add_error_needs_finish(app_layout):
     verstr = _waiting_run(app_layout)
     assert _add(app_layout, verstr, "--error", "pod lost") == 1
     assert _state(app_layout, verstr) is None
+
+
+def test_add_finish_force_live_never_refinishes(app_layout):
+    verstr = _waiting_run(app_layout)
+    assert _add(app_layout, verstr, "--finish", "0") == 0
+
+    assert _add(app_layout, verstr, "--finish", "1", "--force-live") == 1
+    assert _state(app_layout, verstr)["exit_code"] == 0
+
+
+def test_add_finish_force_live_finishes_a_live_run(app_layout):
+    _bootstrap(app_layout)
+    run = start_run(app_layout.app_name, capture_env=False)
+    try:
+        assert _add(app_layout, run.id, "--finish", "143", "--force-live") == 0
+        assert _state(app_layout, run.id)["exit_code"] == 143
+    finally:
+        run.finish()

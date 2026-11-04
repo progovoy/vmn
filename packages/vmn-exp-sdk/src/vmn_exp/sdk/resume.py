@@ -43,15 +43,29 @@ def requested_run_id(run_id, reopen=False):
     return ref, is_true(os.environ.pop(REOPEN_ENV, None))
 
 
+class ReopenRefusedError(ValueError):
+    """Resuming *verstr* would reopen a finished run (``reason="finished"``,
+    ``exit_code`` its result) without ``reopen=True``."""
+
+    reason = "finished"
+
+    def __init__(self, message, verstr, exit_code):
+        super().__init__(message)
+        self.verstr, self.exit_code = verstr, exit_code
+
+
 def check_reopenable(app_name, verstr, prior_state, reopen, from_env):
-    """ValueError when *verstr* has finished and reopening it was not asked for."""
+    """:class:`ReopenRefusedError` when *verstr* has finished and reopening it
+    was not asked for."""
     if reopen or prior_state.get("state") != "finished":
         return
     how = f"{REOPEN_ENV}=1" if from_env else "start_run(..., reopen=True)"
-    raise ValueError(
+    exit_code = prior_state.get("exit_code")
+    raise ReopenRefusedError(
         f"Run '{verstr}' of '{app_name}' has finished (exit code "
-        f"{prior_state.get('exit_code')}); reopening it clears that result. "
-        f"Pass {how} to reopen it anyway."
+        f"{exit_code}); reopening it clears that result. "
+        f"Pass {how} to reopen it anyway.",
+        verstr, exit_code,
     )
 
 
