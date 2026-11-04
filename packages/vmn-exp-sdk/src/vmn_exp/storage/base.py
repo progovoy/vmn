@@ -11,6 +11,7 @@ and the local-first :mod:`snapshot_storage_cached`.
 The defaults here keep duck-typed or older backends working; the real
 backends override them with cheaper, atomic versions.
 """
+import hashlib
 import os
 from abc import ABC, abstractmethod
 
@@ -31,6 +32,13 @@ from vmn_exp.storage.files import (
 # only creates it (S3/Azure ``If-None-Match: *``, GCS generation 0). A
 # ``load_file_with_token`` of a missing file returns it: ``(None, NO_FILE)``.
 NO_FILE = "*"
+
+
+def content_token(data):
+    """A local file's version token: its content's hash (:data:`NO_FILE`: no file)."""
+    if data is None:
+        return NO_FILE
+    return hashlib.sha256(data.encode("utf-8") if isinstance(data, str) else data).hexdigest()
 
 
 class SnapshotStorage(ABC):
@@ -119,9 +127,16 @@ class SnapshotStorage(ABC):
         return False
 
     def children_flag(self, app_name):
-        """The flag's version token now (:data:`NO_FILE`: never set): a pass
-        takes it before it lists the app, to set the flag only on it."""
+        """The flag's version token now (:data:`NO_FILE`: never set; None:
+        unreadable): a pass takes it before it lists the app, to set the flag
+        only on it. Opaque — compared, never parsed (a cached store's is a
+        pair of its copies' tokens)."""
         return None
+
+    def children_flag_state(self, app_name):
+        """``(children_complete, children_flag)`` — one read of the flag
+        where the backend can."""
+        return self.children_complete(app_name), self.children_flag(app_name)
 
     def set_children_complete(self, app_name, complete, since=None):
         """Record (or, with a false *complete*, drop) that every child in

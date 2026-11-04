@@ -7,6 +7,7 @@ import datetime
 import email.utils
 
 from vmn_exp._base import VMN_LOGGER
+from vmn_exp.storage.base import NO_FILE
 from vmn_exp.storage.files import checked_app_path, safe_verstr
 from vmn_exp.storage.registry import missing_extra
 from vmn_exp.storage.s3_prefix_cap import cap_prefixes
@@ -41,6 +42,14 @@ def is_missing(exc):
 def is_taken(exc):
     """Whether *exc* is a failed write precondition (someone else got there)."""
     return error_code(exc) in TAKEN_CODES
+
+
+def put_condition(etag):
+    """The ``put_object`` precondition of a write on version token *etag*
+    (:data:`NO_FILE`: only create; none: unconditional)."""
+    if etag == NO_FILE:
+        return {"IfNoneMatch": "*"}
+    return {"IfMatch": etag} if etag else {}
 
 
 def parallel_map(fn, items):

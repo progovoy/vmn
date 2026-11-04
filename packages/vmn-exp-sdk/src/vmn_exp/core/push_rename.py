@@ -54,7 +54,7 @@ def push_or_rename(local, target, app_name, verstr, ledger, code,
         return Outcome(verstr, SKIPPED, refusal)
     try:
         new, fresh = _claim_new_name(local, target, app_name, verstr, meta, ledger, code)
-        _move_local(local, app_name, verstr, new, ledger)
+        _move_local(local, app_name, verstr, new, ledger, meta)
     except Exception as e:
         return Outcome(verstr, FAILED, f"rename: {e or type(e).__name__}")
     outcome = push_run(local, target, app_name, new, ledger, code)
@@ -124,15 +124,16 @@ class _Claim:
         return None
 
 
-def _move_local(local, app_name, old, new, ledger):
+def _move_local(local, app_name, old, new, ledger, meta):
+    """Rename local run *old* (its metadata *meta*) to *new*, its parent's
+    marker with it."""
     local.update_metadata(app_name, old, {"verstr": new, "renamed_from": old})
     os.rename(local._snapshot_dir(app_name, old), local._snapshot_dir(app_name, new))
-    moved = local.load_metadata(app_name, new)
-    unmark_parent(local, app_name, dict(moved, verstr=old))
-    mark_parent(local, app_name, moved)
-    for meta in local.list_snapshots(app_name):
-        if meta.get("parent") == old:
-            local.update_metadata(app_name, meta["verstr"], {"parent": new})
+    unmark_parent(local, app_name, dict(meta, verstr=old))
+    mark_parent(local, app_name, dict(meta, verstr=new, renamed_from=old))
+    for child in local.list_snapshots(app_name):
+        if child.get("parent") == old:
+            local.update_metadata(app_name, child["verstr"], {"parent": new})
     entry = ledger.get(old) or {}
     entry.pop("pending_target", None)
     ledger.put(new, entry)

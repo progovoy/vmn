@@ -13,8 +13,9 @@ an :class:`AppUpkeep` pass over it at most every ``interval_sec`` per index:
   idempotent), so a steady pass costs nothing for the runs it has checked.
   A pass that leaves every child of its snapshot marked flags the app's
   markers complete (:mod:`~vmn_exp.ui.upkeep_flag`: one read of the flag per
-  pass once flagged, else a listing of the run names first), so a
-  ``prune -v`` of the store skips its one-time scan;
+  pass once flagged, else a listing of the run names first — backed off,
+  doubling up to :data:`FLAG_BACKOFF_MAX_SEC`, after an attempt that did not
+  flag), so a ``prune -v`` of the store skips its one-time scan;
 * compaction (:mod:`vmn_exp.core.metric_compact`, :mod:`vmn_exp.core.log_compact`)
   of each failed or stuck run, once per server process, newest first, until
   the pass's ``budget_sec`` is spent (the next pass goes on): a dead writer's
@@ -42,6 +43,7 @@ from vmn_exp.ui.upkeep_flag import flag_marked_app
 UPKEEP_INTERVAL_SEC = 60
 PASS_BUDGET_SEC = 30
 RELIST_OVER = 100
+FLAG_BACKOFF_MAX_SEC = 3600
 
 DEAD = (FAILED, STUCK)
 
@@ -56,6 +58,7 @@ class AppUpkeep:
         self._listed = set()  # parents whose markers were listed
         self._marked = set()  # (parent, child) known to be marked
         self._compacted = set()  # verstrs compacted (or failed to) this process
+        self._flag_delay, self._flag_retry_at = 0, 0  # backoff of a declined flag
 
     def run(self, snapshot, budget_sec=PASS_BUDGET_SEC):
         """One pass over *snapshot*: ``{"marked", "compacted", "failed"}``."""
@@ -84,11 +87,27 @@ class AppUpkeep:
         return complete
 
     def _flag(self, snapshot):
+        """Flag the app's markers complete — not before a declined attempt's
+        backoff (it listed the app) is over."""
+        if self._flag_retry_at and self._clock() < self._flag_retry_at:
+            return
         try:
-            flag_marked_app(self._storage, self._app, snapshot)
+            flagged = flag_marked_app(self._storage, self._app, snapshot)
         except Exception:
             _LOGGER.warning("Store upkeep of %s: flagging its child markers failed",
                             self._app, exc_info=True)
+            flagged = False
+        if flagged is False:
+            self._back_off()
+        else:
+            self._flag_delay = self._flag_retry_at = 0
+
+    def _back_off(self):
+        """Double the wait after each declined attempt in a row, from two
+        passes up to :data:`FLAG_BACKOFF_MAX_SEC`."""
+        self._flag_delay = min(2 * (self._flag_delay or UPKEEP_INTERVAL_SEC),
+                               FLAG_BACKOFF_MAX_SEC)
+        self._flag_retry_at = self._clock() + self._flag_delay
 
     def _listing(self, parent, unchecked):
         """*parent*'s markers: listed the first time, and again when more than

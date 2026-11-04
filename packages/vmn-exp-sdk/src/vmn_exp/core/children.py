@@ -33,8 +33,6 @@ def mark_parent(storage, app_name, metadata):
 
 
 def _drop_complete(storage, app_name):
-    if not getattr(storage, "has_child_markers", False):
-        return
     try:
         storage.set_children_complete(app_name, False)
     except Exception:

@@ -273,7 +273,7 @@ def _prune_targeted(storage, app_name, args):
 def _targeted_keep_parents(storage, app_name, args):
     """The surviving-child guard of a targeted prune: by child markers, or —
     on a backend without them — from every run's parent."""
-    if getattr(storage, "has_child_markers", False):
+    if storage.has_child_markers:
         return partial(without_kept_parents, storage, app_name, dry_run=_is_dry_run(args))
     return partial(_without_kept_ancestors, _metas_and_snapshot(storage, app_name)[0])
 

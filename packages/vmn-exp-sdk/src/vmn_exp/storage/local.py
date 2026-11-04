@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """The local-disk backend: ``<root>/<area>/<app key>/<verstr>/``."""
-import hashlib
 import json
 import os
 import shutil
@@ -14,7 +13,7 @@ from vmn_exp._base import VMN_LOGGER, parse_record_metadata
 from vmn_exp.core.record_format import with_format_version
 from vmn_exp.core.record_files import read_file, read_file_from
 from vmn_exp.storage.areas import SNAPSHOTS, app_key, app_name_of
-from vmn_exp.storage.base import NO_FILE, SnapshotStorage
+from vmn_exp.storage.base import SnapshotStorage, content_token as _content_token
 from vmn_exp.storage.child_markers import LocalChildren
 from vmn_exp.storage import host_dirs, ship_state
 from vmn_exp.storage.files import (
@@ -64,13 +63,6 @@ def _append_bytes(path, text):
             data = data[os.write(fd, data) :]
     finally:
         os.close(fd)
-
-
-def _content_token(data):
-    """A local file's version token: its content's hash (:data:`NO_FILE`: no file)."""
-    if data is None:
-        return NO_FILE
-    return hashlib.sha256(data.encode("utf-8") if isinstance(data, str) else data).hexdigest()
 
 
 def _read_class(storage):

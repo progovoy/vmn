@@ -14,39 +14,46 @@ token, so a drop since — a child whose marker failed — keeps it unset.
 """
 from collections import defaultdict
 
-from vmn_exp.cli.backfill_children import backfill_parent, flag_token
 from vmn_exp.core.children import parent_of
+from vmn_exp.core.children_scan import backfill_parent, flag_after_pass
+from vmn_exp.storage.s3_base import parallel_map
 
 MAX_UNSEEN = 100
 
 
 def flag_marked_app(storage, app_name, snapshot):
     """Flag *app_name* complete after a pass marked every child in
-    *snapshot*; whether it was flagged now."""
-    if not getattr(storage, "has_child_markers", False) or snapshot.loading is not None:
-        return False
-    if storage.children_complete(app_name):
-        return False
-    token = flag_token(storage, app_name)
-    if token is None:
-        return False
+    *snapshot*: True when flagged now, False when tried and not flagged
+    (worth a backoff: it listed the app), None when nothing was tried."""
+    if not storage.has_child_markers or snapshot.loading is not None:
+        return None
+    complete, token = storage.children_flag_state(app_name)
+    if complete or token is None:
+        return None
+    return flag_after_pass(storage, app_name,
+                           lambda: _mark_listed(storage, app_name, snapshot), token)
+
+
+def _mark_listed(storage, app_name, snapshot):
+    """List *app_name*'s run names and mark the children among (or of) the
+    runs *snapshot* lacks; whether every one is marked."""
     names = list(storage.list_verstrs(app_name))
     unseen = [n for n in names if snapshot.row(n) is None]
-    if len(unseen) > MAX_UNSEEN or not _mark_unseen(storage, app_name, snapshot, names, unseen):
-        return False
-    return storage.set_children_complete(app_name, True, since=token)
+    return len(unseen) <= MAX_UNSEEN and _mark_unseen(storage, app_name, snapshot, names, unseen)
 
 
 def _mark_unseen(storage, app_name, snapshot, names, unseen):
     """Mark the children among (or of) *unseen* runs; whether none failed."""
     known, unseen_set = set(names), set(unseen)
     by_parent = defaultdict(list)
-    for verstr in unseen:
-        parent = parent_of(storage.load_metadata(app_name, verstr))
+    metas = parallel_map(lambda v: storage.load_metadata(app_name, v), unseen)
+    for verstr, meta in zip(unseen, metas):
+        parent = parent_of(meta)
         if parent in known:
             by_parent[parent].append(verstr)
     for row in snapshot.rows:
         if row.get("parent") in unseen_set and parent_of(row):
             by_parent[row["parent"]].append(row["verstr"])
-    return not any(backfill_parent(storage, app_name, parent, kids, False)["failed"]
-                   for parent, kids in by_parent.items())
+    counts = parallel_map(lambda p: backfill_parent(storage, app_name, p, by_parent[p], False),
+                          list(by_parent))
+    return not any(c["failed"] for c in counts)

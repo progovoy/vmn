@@ -1401,10 +1401,11 @@ all its markers (`<app>/.children_complete` beside its records — no listing
 takes it for a run); a child whose marker later fails to write drops the
 flag, so the next `prune -v` rescans. A pass sets the flag only if no drop
 landed since it started listing (a conditional write on the flag's version
-token: S3 `If-Match`, a local lock), so a child created mid-pass whose
+token: S3 `If-Match`, a local compare under a lock), so a child created mid-pass whose
 marker failed is never covered by it. A cached store keeps the flag on its
 remote; a drop the remote refuses is kept locally, where it stops this host
-trusting the flag and is replayed on the remote at its next read:
+trusting the flag (later drops stay local) and is replayed on the remote at
+its next read:
 
 ```sh
 vmn-exp backfill-children my_app --dry-run
