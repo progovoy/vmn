@@ -10,17 +10,16 @@ counts its attention queries (``attention``, plan 28 P1,
 :mod:`vmn_exp.ui.attention`) and lists its team views (``views``, plan 28
 P4: every app page reads this status, so a page knows its default view at
 first paint) and its ``failed_pct_threshold`` when not the default 5 (the
-Outer runs failed chip's "≥ N% failed", plan 31 §1), and ``?scope=<verstr>`` answers the counts over that run's
-subtree (an outer run's page)."""
+Outer runs failed chip's "≥ N% failed", plan 31 §1), and
+``?scope=<verstr>`` answers the counts over that run's subtree (an outer
+run's page)."""
 import hashlib
 import json
 
-import vmn_exp.core.status as experiment_status
 from fastapi import HTTPException, Request
-from vmn_exp.core.app_settings import (
-    DEFAULT_FAILED_PCT_THRESHOLD,
-    failed_pct_threshold_of,
-)
+
+import vmn_exp.core.status as experiment_status
+from vmn_exp.core.app_settings import DEFAULT_FAILED_PCT_THRESHOLD, failed_pct_threshold_of
 from vmn_exp.ui.api_errors import CodedError
 from vmn_exp.ui.attention import attention_key, attention_payload
 from vmn_exp.ui.auth.authz import require
@@ -105,9 +104,10 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         views = [] if scope else views_of(ws_name, app_tag)
         if views:
             payload, etag = dict(payload, views=views), _digest(etag + json.dumps(views))
-        threshold = None if scope else failed_pct_threshold_of(ui_of(ws_name, app_tag))
-        if threshold not in (None, DEFAULT_FAILED_PCT_THRESHOLD):
-            payload, etag = dict(payload, failed_pct_threshold=threshold), _digest(f"{etag}:{threshold}")
+        if not scope:
+            threshold = failed_pct_threshold_of(ui_of(ws_name, app_tag))
+            if threshold != DEFAULT_FAILED_PCT_THRESHOLD:
+                payload, etag = dict(payload, failed_pct_threshold=threshold), _digest(f"{etag}:{threshold}")
         return json_response(payload, etag=etag, request=request)
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps-status", dependencies=[require(VIEWER)])

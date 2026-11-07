@@ -31,7 +31,8 @@ import { useBaselineChips } from "./useBaselineChips";
 import { useJobsBoard } from "./useJobsBoard";
 import { useAppStatus } from "../../shell/useShellData";
 import { DEFAULT_FAILED_PCT_THRESHOLD } from "../../shell/contracts";
-import type { FailedShare } from "../../components/FilterShortcuts";
+import ToggleChip from "../../components/ToggleChip";
+import type { RunState } from "../../types";
 import { freshnessShort } from "../../util/freshness";
 import { indexingText, soFar } from "../../util/indexing";
 
@@ -55,10 +56,18 @@ const emptyText = (kind: JobsKind | null, filtered: boolean) =>
 const listQuery = (kind: JobsKind | null, topQuery?: string) =>
   topQuery ? `${kindQuery(kind)} and (${topQuery})` : kindQuery(kind);
 
-/** The failed chip's "≥ N% failed": the URL's N, else the app's threshold. */
-function failedShare(view: ReturnType<typeof useLeaderboardView>, threshold = DEFAULT_FAILED_PCT_THRESHOLD): FailedShare {
+/** After the failed chip, once on, its "≥ N% failed" (plan 31 §1): the
+ *  URL's N, else the app's threshold. */
+function failedShareChip(view: ReturnType<typeof useLeaderboardView>, threshold = DEFAULT_FAILED_PCT_THRESHOLD) {
   const pct = view.failedPct ?? threshold;
-  return { pct, on: view.failedPct !== null, onChange: (on) => view.setFailedPct(on ? pct : null) };
+  return (s: RunState, pressed: boolean) => s === "failed" && pressed && (
+    <ToggleChip
+      pressed={view.failedPct !== null} title="outer runs with at least this share of failed runs"
+      onChange={(on) => view.setFailedPct(on ? pct : null)}
+    >
+      ≥ {pct}% failed
+    </ToggleChip>
+  );
 }
 
 export default function JobsView({ ws, app, views, kind, preset, onAll }: {
@@ -135,7 +144,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
             queryHints={data.hints}
             archived={view.archived}
             onArchivedChange={view.setArchived}
-            failedShare={kind.top === "jobs" ? failedShare(view, status?.failed_pct_threshold) : undefined}
+            afterChip={kind.top === "jobs" ? failedShareChip(view, status?.failed_pct_threshold) : undefined}
           />
           <JobsMatchLine matches={data.matches} appBase={base} search={board.search} />
           <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "outer run" : "run"} onShow={data.showNew} />
