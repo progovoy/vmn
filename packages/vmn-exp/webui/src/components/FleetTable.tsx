@@ -96,7 +96,7 @@ export default function FleetTable({ rows, paramKeys, metric, runUrl, best, rowT
                 {r.stoppedEarly && <span className="badge">stopped early</span>}
               </td>
               {paramKeys.map((p) => (
-                <td key={p} className="mono">{p in r.params ? fmtParam(r.params[p]) : "–"}</td>
+                <td key={p} className="mono">{p in r.params ? fmtParam(r.params[p]) : "—"}</td>
               ))}
               {metric && <td className="num"><Value row={r} best={r.verstr === bestVerstr} runUrl={runUrl} /></td>}
               {cols.some((c) => c.key === "progress") && (

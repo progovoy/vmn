@@ -23,7 +23,10 @@ const fleet = (children: FleetChild[]): Fleet => ({
 
 const children = [child(1, 0.5), child(2, 0.2), child(3, null), child(4, 0.9)];
 
-function renderFleet(f: Fleet = fleet(children), schema: MetricsSchema | null = null) {
+/** The children's metric declares its goal: none is guessed from a name (plan 32). */
+const LOSS_MIN: MetricsSchema = { loss: { goal: "min" } };
+
+function renderFleet(f: Fleet = fleet(children), schema: MetricsSchema | null = LOSS_MIN) {
   return render(
     <MemoryRouter>
       <FleetCard fleet={f} schema={schema} runUrl={(v) => `/run/${v}`} />
@@ -60,7 +63,8 @@ describe("FleetCard table", () => {
   it("hides the progress column when no child's progress is known", () => {
     renderFleet();
     expect(headers()).not.toContain("progress");
-    expect(table().textContent).not.toContain("—");
+    // The one dash is trial-3's missing loss (plan 32: missing reads `—` everywhere).
+    expect(within(table()).getAllByText("—")).toHaveLength(1);
   });
 
   it("shows progress as last_step / of when known", () => {
@@ -84,7 +88,7 @@ describe("FleetCard table", () => {
 
   it("starts a max-goal metric high first", () => {
     const acc = children.map((c, i) => ({ ...c, metrics: { acc: [0.7, 0.9, 0.8, 0.6][i] } }));
-    renderFleet(fleet(acc));
+    renderFleet(fleet(acc), { acc: { goal: "max" } });
     const head = within(table()).getAllByRole("columnheader").find((th) => th.textContent?.startsWith("acc"))!;
     fireEvent.click(within(head).getByRole("button"));
     expect(head).toHaveAttribute("aria-sort", "descending");

@@ -4,6 +4,7 @@ import type { RunsBoard } from "../hooks/useRunsBoard";
 import type { useLeaderboardView } from "../hooks/useLeaderboardView";
 import BoardCaption, { BOARD_CAPTION_ID } from "./BoardCaption";
 import BoardGridTools from "./BoardGridTools";
+import GoalHint from "./GoalHint";
 import LeaderboardTable from "./LeaderboardTable";
 import NewRowsBar from "../components/NewRowsBar";
 import StaleRows from "../components/StaleRows";
@@ -44,6 +45,7 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
         live={{ running: board.anyRunning, paused, updatedAt: data.updatedAt, onPaused, onRefresh: board.refresh }}
         tools={<BoardGridTools density={view.density} onDensity={view.setDensity} />}
       />
+      <GoalHint metrics={board.cols.visibleMetrics} schema={board.schema ?? null} base={board.base} />
       {board.rows !== undefined && data.hasMore && (
         <div className="load-more">
           <button onClick={data.loadMore}>{data.moreLabel}</button>

@@ -61,7 +61,7 @@ const ALL3 = "?sel=0.0.1-dev.a&sel=0.0.2-dev.b&sel=0.0.3-dev.c";
 beforeEach(() => {
   vi.clearAllMocks();
   m.experiment.mockImplementation((_w: string, _a: string, v: string) => Promise.resolve(DETAILS[v]));
-  m.metricsSchema.mockResolvedValue({ acc: { goal: "max" } });
+  m.metricsSchema.mockResolvedValue({ loss: { goal: "min" }, acc: { goal: "max" } });
 });
 
 describe("CompareRuns", () => {

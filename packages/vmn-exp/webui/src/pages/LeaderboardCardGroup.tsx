@@ -22,7 +22,7 @@ function Aggregate({ item, metric, agg }: { item: GroupHeaderItem; metric: strin
   if (!title) return null;
   return (
     <span className="lb-mgroup-agg" title={title}>
-      <span className="lb-mgroup-value metric">{value === null ? "—" : fmtVal(value)}</span>
+      <span className="lb-mgroup-value metric">{fmtVal(value)}</span>
       <span className="lb-mgroup-metric">{metric} {aggregateName(a, agg)}</span>
     </span>
   );

@@ -11,7 +11,7 @@ const GROUP: RunGroup = {
   target: { verstr: "0.1.0-dev.a.b.1", idx: 4, name: "sweep", status: "succeeded",
             tree_status: "running", metrics: { loss: 0.91 } },
   counts: { total: 16, running: 2, waiting: 0, done: 13, failed: 1, stuck: 0 },
-  aggregates: { loss: { mean: 0.5, best: 0.2, median: 0.45, min: 0.2, max: 0.9, n: 16 } },
+  aggregates: { loss: { mean: 0.5, best: 0.2, median: 0.45, min: 0.2, max: 0.9, n: 16, goal: "min" } },
   rows: [], rows_total: 16, rows_unfiltered: 20, clause: null, loose: false,
 };
 

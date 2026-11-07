@@ -32,7 +32,7 @@ import { page, renderBoard, row, selection, urlParams } from "./leaderboardHarne
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const v = (i: number) => `0.0.${i}-dev.x`;
 const counts = (extra = {}) => ({ total: 3, running: 1, waiting: 0, done: 1, failed: 1, stuck: 0, ...extra });
-const agg = (mean: number, extra = {}) => ({ mean, best: mean / 2, median: mean, min: mean / 2, max: mean * 2, n: 3, ...extra });
+const agg = (mean: number, extra = {}) => ({ mean, best: mean / 2, median: mean, min: mean / 2, max: mean * 2, n: 3, goal: "min" as "min" | null, ...extra });
 
 const OUTER = row(1, { kind: "outer", name: "sweep", children: [v(2), v(3)], tree_status: "failed", metrics: { loss: 0.9 } });
 const INNER = [row(2, { kind: "inner", parent: v(1), depth: 1, metrics: { loss: 0.2 } }),
@@ -42,7 +42,7 @@ const LONE = row(4, { metrics: { loss: 0.5 } });
 const sweepGroup = (extra: Partial<RunGroup> = {}): RunGroup => ({
   key: v(1), label: v(1),
   target: { verstr: v(1), idx: 1, name: "sweep", status: "succeeded", tree_status: "failed", metrics: { loss: 0.91 } },
-  counts: counts(), aggregates: { loss: agg(0.3), acc: agg(0.8, { best: null }) }, rows: INNER, rows_total: 2,
+  counts: counts(), aggregates: { loss: agg(0.3), acc: agg(0.8, { best: null, goal: null }) }, rows: INNER, rows_total: 2,
   rows_unfiltered: (extra.counts ?? counts()).total, loose: false, clause: null, ...extra,
 });
 // The runs with no parent that head no group (plan 22 F12): the sweep's run is its header.

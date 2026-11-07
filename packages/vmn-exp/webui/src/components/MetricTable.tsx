@@ -20,7 +20,7 @@ function MetricTable({ name, rows, total }: { name: string; rows: StepValue[]; t
           <tbody>
             {rows.map((r) => (
               <tr key={String(r.step)}>
-                <td>{r.step ?? "–"}</td>
+                <td>{r.step ?? "—"}</td>
                 <td>{fmtVal(Number.isFinite(r.value) ? r.value : null)}</td>
               </tr>
             ))}

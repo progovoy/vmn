@@ -32,7 +32,8 @@ describe("queryHelpData", () => {
   });
 
   it("compares the primary metric toward its goal", () => {
-    const help = queryHelpData({ facets: FACETS, branches: [], rows: ROWS, primary: "acc" });
+    const help = queryHelpData({ facets: FACETS, branches: [], rows: ROWS, primary: "acc",
+      schema: { acc: { goal: "max" } } });
     expect(help.examples[0]).toBe("metrics.acc > 0.85");
     expect(help.examples[2]).toBe('status = "failed"');
   });

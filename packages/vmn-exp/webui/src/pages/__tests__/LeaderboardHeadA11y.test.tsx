@@ -72,6 +72,16 @@ describe("LeaderboardHead sorting (C3)", () => {
     expect(sortButton("m:acc")).toHaveAttribute("title", "sort by acc (no goal: low first)");
   });
 
+  it("labels a goal-less metric's header (no goal), a goal metric's with its arrow (plan 32)", () => {
+    const meta = (goal: "min" | null) => ({ goal, best: goal ? 0.1 : null, isBar: false, min: 0.1, max: 0.9 });
+    const s: SortState = { sort: null, order: null, reversed: false, onSort: vi.fn() };
+    render(<table><Head layout={{ ...layout(), colMeta: { loss: meta("min"), acc: meta(null) } }} sort={s}
+      check={{ state: "none", onToggle: vi.fn() }} /></table>);
+    expect(head("m:acc").querySelector(".no-goal")).toHaveTextContent("(no goal)");
+    expect(head("m:loss").querySelector(".no-goal")).toBeNull();
+    expect(head("m:loss")).toHaveTextContent("↓");
+  });
+
   it("keeps the select-all checkbox and the resize grips", () => {
     const { onToggle } = renderHead();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible runs" }));

@@ -315,9 +315,10 @@ th.col-drop { box-shadow: inset 2px 0 0 var(--accent); }
   cursor: col-resize; user-select: none;
 }
 .col-resize:hover, .col-resize:active { background: var(--accent); opacity: 0.5; }
-th .goal {
+th .goal, th .no-goal {
   color: var(--text-3); font-weight: 400; text-transform: none; letter-spacing: 0;
 }
+th .no-goal { font-size: 0.85em; }
 th.num, td.num { text-align: right; }
 tr:last-child td { border-bottom: none; }
 tr.row { cursor: pointer; }

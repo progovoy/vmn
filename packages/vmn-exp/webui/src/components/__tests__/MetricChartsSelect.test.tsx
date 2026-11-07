@@ -112,7 +112,7 @@ describe("MetricBarChart", () => {
   });
 
   it("marks the best bar and gives every bar a tooltip", () => {
-    render(<MetricBarChart rows={ROWS} metricCols={["acc"]} schema={null} />);
+    render(<MetricBarChart rows={ROWS} metricCols={["acc"]} schema={{ acc: { goal: "max" } }} />);
     const [best, other] = screen.getAllByTestId("bar-fill");
     expect(best.style.background).toBe("var(--good)");
     expect(other.style.background).toBe("var(--accent)");

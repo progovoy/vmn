@@ -61,7 +61,7 @@ describe("compareRows", () => {
   });
 
   it("picks the best metric value by the goal", () => {
-    const rows = compareRows(runs, "metrics", { acc: { goal: "max" } });
+    const rows = compareRows(runs, "metrics", { loss: { goal: "min" }, acc: { goal: "max" } });
     expect(rows.find((r) => r.key === "loss")!.best).toBe(0.2);
     expect(rows.find((r) => r.key === "acc")!.best).toBe(0.9);
   });

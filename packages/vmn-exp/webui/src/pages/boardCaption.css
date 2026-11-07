@@ -19,3 +19,6 @@
 @media (max-width: 639px) {
   .board-grid-tools { display: none; }
 }
+/* Plan 32: the metric columns without a goal (GoalHint.tsx), one muted line. */
+.goal-hint { margin: 2px 2px 0; font-size: 12px; }
+.goal-hint code { font-size: 11.5px; }

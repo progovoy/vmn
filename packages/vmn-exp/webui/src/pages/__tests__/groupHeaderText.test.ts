@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { aggregateCell, barSegments, countParts, countsText, sizeText, spokenCounts } from "../groupHeaderText";
 
 const counts = (extra = {}) => ({ total: 16, running: 2, waiting: 0, done: 13, failed: 1, stuck: 0, ...extra });
-const agg = (extra = {}) => ({ mean: 0.5, best: 0.2, median: 0.4, min: 0.2, max: 0.9, n: 16, ...extra });
+const agg = (extra = {}) => ({ mean: 0.5, best: 0.2, median: 0.4, min: 0.2, max: 0.9, n: 16, goal: "min" as const, ...extra });
 
 describe("a group header's status count (plan 22 G4)", () => {
   it("reads the total in words, then every state that is not done (F2)", () => {
@@ -59,7 +59,12 @@ describe("a group header's aggregate cell (plan 22 G10)", () => {
   });
 
   it("has no best for a metric without a goal, and says so, never the mean (plan 32 F6)", () => {
-    expect(aggregateCell(agg({ best: null }), "best")).toEqual({ value: null, title: "best of 16 (no goal)" });
+    expect(aggregateCell(agg({ best: null, goal: null }), "best")).toEqual({ value: null, title: "best of 16 (no goal)" });
+  });
+
+  it("reads (no goal) from the aggregate's goal, never from a null best (plan 32)", () => {
+    expect(aggregateCell(agg({ best: null }), "best").title).toBe("best of 16");
+    expect(aggregateCell(agg({ goal: null }), "mean").title).toBe("mean of 16");
   });
 
   it("is empty when the group has no value of the metric", () => {

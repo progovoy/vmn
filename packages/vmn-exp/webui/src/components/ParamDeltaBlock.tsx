@@ -6,7 +6,7 @@ import type { DiffDelta } from "../types";
 import { fmtParam } from "../util";
 import "./ParamDeltaBlock.css";
 
-const side = (v: number | null) => (v == null ? "–" : fmtParam(v));
+const side = (v: number | null) => (v == null ? "—" : fmtParam(v));
 
 export default function ParamDeltaBlock({ deltas, heads }: {
   deltas: Record<string, DiffDelta>;

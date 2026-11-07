@@ -53,8 +53,9 @@ describe("ParamPlots trend cards (E5)", () => {
   });
 
   it("marks best only on a metric with a direction", () => {
-    render(<ParamPlots rows={rows} metricCols={cols} schema={null} />);
-    // loss (MIN_LIKE) and acc (MAX_LIKE) have one; grad_norm has none (D1).
+    render(<ParamPlots rows={rows} metricCols={cols}
+      schema={{ loss: { goal: "min" }, acc: { goal: "max" } }} />);
+    // loss and acc declare one; grad_norm has none (D1).
     const best = screen.getAllByText(/^best /);
     expect(best.map((b) => b.textContent)).toEqual(["best 0.4", "best 0.3"]);
     for (const b of best) expect(b).toHaveStyle({ color: "var(--good)" });

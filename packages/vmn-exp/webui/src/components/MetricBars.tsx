@@ -42,7 +42,7 @@ function MetricBars({ name, rows: steps, total, color }: {
         {rows.map((r) => (
           <div key={String(r.step)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, height: 18 }}>
             <span data-testid="bar-step" className="mono" style={{ width: 48, textAlign: "right", color: "var(--text-3)" }}>
-              {r.step ?? "–"}
+              {r.step ?? "—"}
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{

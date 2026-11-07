@@ -15,5 +15,5 @@ export function deltaTone(d: DiffDelta, diff: number | null): DeltaTone {
 }
 
 export function fmtDelta(diff: number | null): string {
-  return diff === null ? "–" : (diff > 0 ? "+" : "") + fmtVal(diff);
+  return diff === null ? "—" : (diff > 0 ? "+" : "") + fmtVal(diff);
 }

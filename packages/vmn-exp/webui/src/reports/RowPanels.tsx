@@ -53,7 +53,7 @@ function LeaderboardTable({ ws, app, rows, metricCols, paramCols }: Cols & {
           <tr key={r.verstr}>
             <td><Link to={runHref(appHref(ws, app), r.verstr)}>@{r.idx}</Link></td>
             {metricCols.map((c) => <td key={`m.${c}`} className="mono">{fmtVal(r.metrics[c])}</td>)}
-            {paramCols.map((c) => <td key={`p.${c}`} className="mono">{fmtParam(r.params?.[c] ?? "–")}</td>)}
+            {paramCols.map((c) => <td key={`p.${c}`} className="mono">{fmtParam(r.params?.[c] ?? "—")}</td>)}
           </tr>
         ))}
       </tbody>

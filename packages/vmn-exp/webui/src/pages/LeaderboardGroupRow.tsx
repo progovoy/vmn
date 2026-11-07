@@ -116,7 +116,7 @@ function AggregateCell({ id, item, agg, style }: {
   const own = item.group.target?.metrics[name];
   return (
     <td data-col-id={id} style={style} title={title} className="group-metric">
-      {title && <span className="metric group-agg">{value === null ? "—" : fmtVal(value)}</span>}
+      {title && <span className="metric group-agg">{fmtVal(value)}</span>}
       {typeof own === "number" && <span className="group-own">own {fmtVal(own)}</span>}
     </td>
   );

@@ -61,6 +61,7 @@ describe("the baseline card", () => {
     vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
       goal: null, chip: null, pairs: goalLess,
       metrics: { best_value: {
+        goal: null,
         best: { value: null, baseline: null, delta: null, better: null },
         median: { value: 0.9, baseline: 0.8, delta: 0.1, better: null },
       } },
@@ -75,6 +76,22 @@ describe("the baseline card", () => {
     const pairs = screen.getByRole("table", { name: "Per trade_date" });
     expect(within(pairs).getByRole("columnheader", { name: "Δ best_value (no goal)" })).toBeInTheDocument();
     expect(pairs.querySelector(".pair-worse")).toBeNull();
+  });
+
+  it("reads (no goal) from the metric's goal, not from a missing best (plan 32)", async () => {
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
+      metrics: {
+        best_value: { goal: "max", best: { value: null, baseline: null, delta: null, better: null },
+          median: { value: 0.9, baseline: 0.8, delta: 0.1, better: true } },
+        cost: { goal: null, best: { value: 1, baseline: 2, delta: -1, better: null },
+          median: { value: 1, baseline: 2, delta: -1, better: null } },
+      },
+    }));
+    renderCard();
+    const table = await screen.findByRole("table", { name: "Against the baseline" });
+    const row = (name: string) => within(table).getByRole("row", { name: new RegExp(name) });
+    expect(row("best best_value")).not.toHaveTextContent("(no goal)");
+    expect(row("best cost")).toHaveTextContent("best cost (no goal)");
   });
 
   it("says when no outer run alike has ended yet", async () => {

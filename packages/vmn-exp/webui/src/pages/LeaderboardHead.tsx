@@ -3,6 +3,7 @@
  *  keyboard equivalents) and the select-all checkbox. */
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { GroupAggregate } from "../apiGroups";
+import { NO_GOAL } from "../util";
 import { DATE_SORT_OF, DURATION_SORT_OF, EXPERIMENT_COL_INDEX, STICKY_BG, canShift, isGapId, isPinned } from "./leaderboardColumns";
 import ColumnMenu, { type MenuAction } from "./ColumnMenu";
 import { ARIA_SORT, HeaderCheckbox, ResizeGrip, SortButton, type HeaderCheckProps } from "./LeaderboardHeadParts";
@@ -69,6 +70,7 @@ function headInfo(id: string, layout: RowLayout, aggregate?: GroupAggregate): { 
         <>
           {name}{" "}
           {hasGoal && meta.best !== null && <span className="goal">{meta.goal === "min" ? "↓" : "↑"}</span>}
+          {!hasGoal && <span className="no-goal">{NO_GOAL.trim()}</span>}
           {aggregate && <span className="agg-tag">{aggregate}</span>}
         </>
       ),

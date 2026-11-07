@@ -19,6 +19,6 @@ describe("diff delta tone", () => {
     expect(numericChange(dd(1, 3))).toBe(2);
     expect(numericChange(dd("x", 3))).toBeNull();
     expect(fmtDelta(2)).toBe("+2");
-    expect(fmtDelta(null)).toBe("–");
+    expect(fmtDelta(null)).toBe("—");
   });
 });

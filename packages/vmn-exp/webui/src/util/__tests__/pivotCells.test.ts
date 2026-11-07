@@ -23,7 +23,7 @@ describe("pivot cells", () => {
     expect(cellText(cell({ n: 1234, value: 1234 }), "count")).toBe("1,234");
     expect(cellText(cell({ value: 0.125, hits: 1, n: 8 }), "share")).toBe("13%");
     expect(cellText(cell({ value: 0.48213 }), "agg")).toBe("0.4821");
-    expect(cellText(cell({ value: null }), "agg")).toBe("–");
+    expect(cellText(cell({ value: null }), "agg")).toBe("—");
   });
 
   it("ranges a count or an aggregate over its cells, a share over 0..1", () => {
@@ -55,7 +55,7 @@ describe("pivot cells", () => {
   it("names a goal-less metric's best (no goal), its cells without a value (plan 32 F6)", () => {
     const best = pivot({ cell: "agg", metric: "loss", agg: "best", goal: null, cells: [[cell({ value: null }), null]] });
     expect(pivotTitle(best)).toBe("best loss (no goal)");
-    expect(cellText(best.cells[0][0]!, "agg")).toBe("–");
+    expect(cellText(best.cells[0][0]!, "agg")).toBe("—");
     expect(cellLabel(best, "tags.date", "tags.group", 0, 0, best.cells[0][0]!))
       .toBe("tags.date d1, tags.group g1: best loss (no goal) no value (4 runs)");
     expect(pivotTitle(pivot({ cell: "agg", metric: "loss", agg: "best", goal: "min" }))).toBe("best loss");

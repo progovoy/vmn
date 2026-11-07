@@ -196,7 +196,7 @@ describe("Leaderboard metrics", () => {
     await waitFor(() => expect(screen.getByText("0.5")).toBeInTheDocument());
     expect(screen.getByText("0.5").className).toContain("best");
     const first = screen.getByText("0.0.1-dev.x").closest("tr") as HTMLElement;
-    expect(within(first).getByText("–")).toBeInTheDocument();
+    expect(within(first).getByText("—")).toBeInTheDocument();
   });
 });
 

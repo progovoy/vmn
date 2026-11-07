@@ -56,8 +56,8 @@ describe("fmtVal", () => {
   });
 
   it("returns a dash for null/undefined", () => {
-    expect(fmtVal(null)).toBe("–");
-    expect(fmtVal(undefined)).toBe("–");
+    expect(fmtVal(null)).toBe("—");
+    expect(fmtVal(undefined)).toBe("—");
   });
 
   it("returns strings verbatim", () => {

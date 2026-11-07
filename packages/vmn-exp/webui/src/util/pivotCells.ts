@@ -20,7 +20,7 @@ export const scaleText = (value: number, kind: PivotKind) => (kind === "share" ?
 
 export function cellText(cell: PivotCell, kind: PivotKind): string {
   if (kind === "count") return fmtCount(cell.n);
-  return cell.value === null ? "–" : scaleText(cell.value, kind);
+  return cell.value === null ? "—" : scaleText(cell.value, kind);
 }
 
 /** `[low, high]` the fills span: a share's 0..1, else its cells' values. */

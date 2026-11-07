@@ -35,7 +35,7 @@ import { page, renderBoard, row, urlParams } from "./leaderboardHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const facets = { branches: ["main"], metric_keys: ["loss"], param_keys: [], tag_keys: [], param_values: {}, parented: 0, total: 3 };
-const agg = { mean: 0.3, best: 0.1, median: 0.25, min: 0.1, max: 0.5, n: 2 };
+const agg = { mean: 0.3, best: 0.1, median: 0.25, min: 0.1, max: 0.5, n: 2, goal: "min" as const };
 
 /** One `branch = main` group of two finished rows; a third run (running)
  *  sits in a group past the loaded page. */

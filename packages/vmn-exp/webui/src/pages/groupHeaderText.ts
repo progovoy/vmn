@@ -46,8 +46,8 @@ export function barSegments(c: Omit<GroupCounts, "waiting">): { tone: CountTone;
   return BAR.filter((t) => c[t] > 0).map((t) => ({ tone: t, pct: Math.round((c[t] / c.total) * 10000) / 100 }));
 }
 
-/** `best` of a group's values with no best: the metric has no goal (plan 32 F6). */
-export const noGoalBest = (a: MetricAggregate, agg: GroupAggregate) => agg === "best" && a.best === null;
+/** `best` of a metric without a goal: it has none (plan 32 F6). */
+export const noGoalBest = (a: MetricAggregate, agg: GroupAggregate) => agg === "best" && !a.goal;
 
 /** The aggregate's name as a header shows it: `best (no goal)` without a goal. */
 export const aggregateName = (a: MetricAggregate, agg: GroupAggregate) =>

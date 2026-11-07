@@ -44,21 +44,17 @@ function DeltaRow({ label, d, fmt = fmtVal, deltaFmt = fmt }: {
   label: string; d: BaselineDelta | null; fmt?: Format; deltaFmt?: Format;
 }) {
   if (!d) return null;
-  const shown = (v: number | null) => (v == null ? "–" : fmt(v));
+  const shown = (v: number | null) => (v == null ? "—" : fmt(v));
   const tone = d.better == null ? "" : d.better ? "delta-better" : "delta-worse";
   return (
     <tr>
       <th scope="row">{label}</th>
       <td className="num">{shown(d.value)}</td>
       <td className="num">{shown(d.baseline)}</td>
-      <td className="num"><span className={tone}>{d.delta == null ? "–" : signed(d.delta, deltaFmt)}</span></td>
+      <td className="num"><span className={tone}>{d.delta == null ? "—" : signed(d.delta, deltaFmt)}</span></td>
     </tr>
   );
 }
-
-const anyValue = (d: BaselineDelta) => d.value != null || d.baseline != null;
-/** A tracked metric without a goal: no best on either side while its median has one. */
-const noBest = (d: BaselineCompare["metrics"][string]) => !anyValue(d.best) && anyValue(d.median);
 
 function DeltaTable({ data }: { data: BaselineCompare }) {
   return (
@@ -66,7 +62,7 @@ function DeltaTable({ data }: { data: BaselineCompare }) {
       <thead><tr><th /><th scope="col">this</th><th scope="col">baseline</th><th scope="col">Δ</th></tr></thead>
       <tbody>
         {Object.entries(data.metrics).flatMap(([m, d]) => [
-          <DeltaRow key={`best ${m}`} label={`best ${m}${noBest(d) ? NO_GOAL : ""}`} d={d.best} />,
+          <DeltaRow key={`best ${m}`} label={`best ${m}${d.goal ? "" : NO_GOAL}`} d={d.best} />,
           <DeltaRow key={`median ${m}`} label={`median ${m}`} d={d.median} />,
         ])}
         <DeltaRow label="failed" d={data.failed_pct} fmt={fmtPct} deltaFmt={pts} />

@@ -19,7 +19,7 @@ describe("ParamDeltaBlock", () => {
     const rows = within(block).getAllByRole("row").slice(1)
       .map((r) => within(r).getAllByRole("cell").map((c) => c.textContent)
         .reduce((acc, t) => `${acc} ${t}`, within(r).getByRole("rowheader").textContent ?? ""));
-    expect(rows).toEqual(["batch_size 32 –", "lr 0.1 0.01"]);
+    expect(rows).toEqual(["batch_size 32 —", "lr 0.1 0.01"]);
     expect(within(block).queryByText("loss")).toBeNull();
   });
 

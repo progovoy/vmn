@@ -36,7 +36,7 @@ export interface GroupCounts {
 }
 
 /** A metric's finite values over a group; null when it has none (`best`:
- *  also without a goal). */
+ *  also without a goal). `goal` is the metric's (null: none, no best). */
 export interface MetricAggregate {
   mean: number | null;
   best: number | null;
@@ -44,6 +44,7 @@ export interface MetricAggregate {
   min: number | null;
   max: number | null;
   n: number;
+  goal: "min" | "max" | null;
 }
 
 /** A link group's header run (`parent`/`forked_from`/`rerun_of`). */

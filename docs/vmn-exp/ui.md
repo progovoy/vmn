@@ -398,7 +398,10 @@ running, the leaderboard and the run page poll on their own and show
 `● live · updated Ns ago` with a Pause button (Resume restarts it); with
 nothing running they show a Refresh button instead. On the leaderboard this
 sits in the table's caption, under the board, with the "best in column" legend
-and the sort; below 640px, where the caption follows every card, the page head
+and the sort. A metric column without a declared goal reads `(no goal)` in its
+header (no arrow, no best, sorts low first), and one line under the caption
+counts those columns and points to conf.yml or the app's settings page to
+declare `goal: min|max`; below 640px, where the caption follows every card, the page head
 also shows `live · updated Ns ago` (or `paused`) as plain text after the run
 count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
 · 4 unstable · 4 running`, from `experiments-status`) appears while a run is
@@ -759,7 +762,7 @@ a copy button next to it. The table tab opens with **Only differing** on
 (`?diff=0` turns it off); its Metrics section leaves out params that were folded
 into `metrics` without ever being logged as a metric, and its Params section
 says how many params changed. A best value is marked only for a metric with a
-goal (declared, or a loss/accuracy-like name). The curves tab has one labelled
+declared goal (none is guessed from a name). The curves tab has one labelled
 x axis control (Step, Wall, Relative, or a metric), a Log y chip and a
 smoothing slider that reads `off` or its value.
 

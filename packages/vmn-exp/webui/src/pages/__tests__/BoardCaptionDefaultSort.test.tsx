@@ -1,7 +1,7 @@
 /** The caption names the order the server was asked for: with no sort in
  *  the URL the board is newest first, not by the app's primary metric. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { renderWithClient } from "../../test-utils";
 
@@ -86,5 +86,25 @@ describe("the board's caption matches its order", () => {
     await screen.findByText("0.0.1-dev.x");
     expect(mockedApi.experiments).toHaveBeenLastCalledWith("test", "my-app", "value", undefined);
     await waitFor(() => expect(sortText()).toBe("sorted by value, best first"));
+  });
+});
+
+describe("the board's goal hint (plan 32)", () => {
+  it("names the shown metric columns without a goal and links to the settings", async () => {
+    mockedApi.metricsSchema.mockResolvedValue({});
+    mockedApi.experiments.mockResolvedValue(page([row(1, { metrics: { value: 3, loss: 1 } })]));
+    renderAt("/ws/test/app/my-app");
+    const hint = await screen.findByRole("note");
+    expect(hint).toHaveTextContent("2 metrics have no goal");
+    expect(within(hint).getByRole("link", { name: "app settings" }))
+      .toHaveAttribute("href", "/ws/test/app/my-app/settings");
+  });
+
+  it("is absent when every shown metric column has a goal", async () => {
+    mockedApi.experiments.mockResolvedValue(page([row(1, { metrics: { value: 3 } })]));
+    renderAt("/ws/test/app/my-app");
+    await screen.findByText("0.0.1-dev.x");
+    await waitFor(() => expect(mockedApi.metricsSchema).toHaveBeenCalled());
+    expect(screen.queryByRole("note")).toBeNull();
   });
 });

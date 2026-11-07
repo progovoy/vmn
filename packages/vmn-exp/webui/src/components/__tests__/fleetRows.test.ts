@@ -60,8 +60,8 @@ describe("varyingParams", () => {
 describe("fleetMetric", () => {
   it("prefers the schema's primary metric, then a metric with a goal", () => {
     const children = [child(1, { metrics: { acc: 0.9, loss: 0.2, lr: 0.1 } })];
-    expect(fleetMetric(children, { acc: { primary: true } })).toEqual({ name: "acc", goal: "max" });
-    expect(fleetMetric(children, null)).toEqual({ name: "acc", goal: "max" });
+    expect(fleetMetric(children, { acc: { primary: true } })).toEqual({ name: "acc", goal: null });
+    expect(fleetMetric(children, { loss: { goal: "min" } })).toEqual({ name: "loss", goal: "min" });
   });
 
   it("is null when no child metric has a goal", () => {

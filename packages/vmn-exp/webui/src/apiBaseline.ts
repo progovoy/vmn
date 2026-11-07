@@ -77,7 +77,8 @@ export interface BaselineCompare {
   baseline: BaselineRef | null;
   metric: string | null;
   goal: "min" | "max" | null;
-  metrics: Record<string, { best: BaselineDelta; median: BaselineDelta }>;
+  /** Each tracked metric's deltas and its goal (null: none, no best or verdict). */
+  metrics: Record<string, { goal: "min" | "max" | null; best: BaselineDelta; median: BaselineDelta }>;
   failed_pct: BaselineDelta | null;
   duration_p90: BaselineDelta | null;
   attention: BaselineAttention[];

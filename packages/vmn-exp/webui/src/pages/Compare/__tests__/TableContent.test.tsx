@@ -59,7 +59,7 @@ const rowKeys = () => screen.getAllByRole("row")
 beforeEach(() => {
   vi.clearAllMocks();
   m.experiment.mockImplementation((_w: string, _a: string, v: string) => Promise.resolve(DETAILS[v]));
-  m.metricsSchema.mockResolvedValue({});
+  m.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
   m.experimentsPaged.mockResolvedValue({ rows: [], total: 0 });
 });
 

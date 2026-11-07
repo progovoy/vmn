@@ -19,7 +19,7 @@ export function compareFixture(over: Partial<BaselineCompare> = {}): BaselineCom
     verstr: "0.0.2-rc.1", match: ["params.table_name", "params.model_type"], by: "params.trade_date",
     values: { "params.table_name": "t1", "params.model_type": "m1" },
     baseline: REF, metric: "best_value", goal: "max",
-    metrics: { best_value: { best: d(1.21, 1.3, -0.09, false), median: d(0.9, 0.8, 0.1, true) } },
+    metrics: { best_value: { goal: "max", best: d(1.21, 1.3, -0.09, false), median: d(0.9, 0.8, 0.1, true) } },
     failed_pct: d(5, 2, 3, false), duration_p90: d(7200, 3600, 3600, false),
     attention: [{ key: "unstable", label: "unstable", level: "warn", q: 'tags.health = "unstable"',
       count: 12, baseline_count: 3, ...d(0.12, 0.03, 0.09, false) }],
