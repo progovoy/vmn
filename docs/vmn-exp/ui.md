@@ -449,7 +449,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   failed, and may still read running). They travel in `top_q`, beside a
   preset's query, and the command line under the board shows them.
 
-  Every column sorts (`job:progress`, `job:failed_pct`, `job:throughput`, `job:best`, `job:total`, `job:started`); the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
+  Every column sorts by what its cell shows (`job:progress`, `job:failed_pct`, `job:rate`, `job:throughput`, `job:best`, `job:total`, `job:started`): **rate** is a declared progress per minute since the outer run started (`declared_progress.rate_per_min`, `—` without one), **throughput** the runs finished per minute over the last 10 minutes (`throughput_per_min`, always), and **when** the subtree's first start, else the outer run's own, else its creation labelled `created` (`when_at`, `when_source`). `progress`/`eta_sec` come from the declared progress when there is one, else from the runs; `progress_source` (`declared`/`runs`) says which; the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
 - **Live** and **Review** (`view=live|review`, a second switch `Live · Review`
   beside the first, shown when the app has outer runs) are presets of Outer
   runs, with everything above (attention strip, bars, tree expanders,

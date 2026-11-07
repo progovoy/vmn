@@ -56,7 +56,7 @@ def test_best_idx_is_the_best_runs_idx(board):
 
 @pytest.mark.parametrize("sort,field", [
     ("job:progress", "progress"), ("job:failed_pct", "failed_pct"), ("job:total", "total"),
-    ("job:throughput", "throughput_per_min"), ("job:started", "started_at")])
+    ("job:throughput", "throughput_per_min"), ("job:started", "when_at")])
 def test_job_sorts_rank_jobs_most_first_singles_last(board, sort, field):
     fleet, jobs, singles, cache = board
     snap = fleet.snapshot()

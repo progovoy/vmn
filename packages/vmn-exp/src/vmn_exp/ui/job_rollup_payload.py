@@ -66,7 +66,7 @@ def declared_fields(declared, start, now, ended):
     return {
         "declared_progress": {"done": done, "total": total, "unit": unit,
                               "rate_per_min": None if rate is None else round(rate, 4)},
-        "progress": _share(done, total),
+        "progress": _share(done, total), "progress_source": "declared",
         "eta_sec": _eta(0 if ended else max(total - done, 0), rate),
     }
 
@@ -98,7 +98,8 @@ def progress_fields(job, parts, now, names=DEFAULT_NAMES):
     count beside ``counts``: ``never_started`` ones never run, ``lost`` ones
     finished failed; only its running and waiting runs are left. A progress
     the job's own row declares (:func:`declared_fields`) replaces the
-    run-count progress and ETA; the run counts stay."""
+    run-count progress and ETA (``progress_source`` says which); the run
+    counts stay."""
     fields = count_fields(parts)
     counts, total, done = fields["counts"], fields["total"], fields["done"]
     expected = _expected(job, total)
@@ -113,12 +114,23 @@ def progress_fields(job, parts, now, names=DEFAULT_NAMES):
         "expected": expected, "progress": _share(done, expected),
         "throughput_per_min": throughput, "eta_sec": _eta(left, throughput),
         "started_at": started, "finished_at": _edge(parts, "finished", max),
-        "declared_progress": None,
+        **when_fields(job, started),
+        "declared_progress": None, "progress_source": "runs",
     }
     declared = declared_progress(job, names)
     if declared:
         fields.update(declared_fields(declared, job.get("started_at") or started, now, ended))
     return fields
+
+
+def when_fields(job, started):
+    """``when_at``, the time a Jobs row shows and ``job:started`` sorts on:
+    the subtree's first start, else the outer run's own, else its creation;
+    ``when_source`` says which (``started``/``created``)."""
+    at = started or job.get("started_at")
+    if at:
+        return {"when_at": at, "when_source": "started"}
+    return {"when_at": job.get("timestamp"), "when_source": "created"}
 
 
 def _merged(sketches):

@@ -322,8 +322,8 @@ every app carries these gauges, labelled `workspace` and `app`:
 | `vmn_runs` | `status` | Runs per status (`created`, `running`, `stuck`, `succeeded`, `failed`, plus `never_started`/`lost` under ended outer runs); archived runs left out. `experiments-status`' `counts`. |
 | `vmn_attention` | `key` | The attention strip: `stuck`, `failed` (failed in the last 24 h, `failed_recent`), `running`, `outlived` (0 included), then each `experiment.ui.attention` query by its key ([attention queries](ui.md#run-status-in-the-dashboard)); a query that does not compile is left out. |
 | `vmn_job_runs` | `outer_run` (verstr), `name`, `status` | Runs under a top-level outer run per status: `running`, `waiting`, `succeeded`, `failed`, `stuck`, `never_started`, `lost` (its `summary` counts). |
-| `vmn_job_progress` | `outer_run`, `name` | Its progress, 0 to 1 (the declared progress when its row has one); absent when unknown. |
-| `vmn_job_eta_seconds` | `outer_run`, `name` | Seconds left at its current rate; absent without a rate. |
+| `vmn_job_progress` | `outer_run`, `name`, `source` (`declared`/`runs`, its `progress_source`) | Its progress, 0 to 1 (the declared progress when its row has one); absent when unknown. |
+| `vmn_job_eta_seconds` | `outer_run`, `name`, `source` (`declared`/`runs`, its `progress_source`) | Seconds left at its current rate; absent without a rate. |
 | `vmn_index_freshness_seconds` | | Seconds since the app's index last refreshed (`freshness.as_of`'s age). |
 
 - **Which outer runs.** Top-level ones that are live (running, or with runs

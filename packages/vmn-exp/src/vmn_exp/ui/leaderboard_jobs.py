@@ -21,14 +21,15 @@ from vmn_exp.ui.leaderboard_live import Desc
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import _DESCENDING as DESCENDING
 
-# sort key -> summary field
+# sort key -> summary field (a dotted one is nested), the one its cell shows
 JOB_SORTS = {
     "job:progress": "progress",
     "job:failed_pct": "failed_pct",
     "job:throughput": "throughput_per_min",
+    "job:rate": "declared_progress.rate_per_min",
     "job:best": "best",
     "job:total": "total",
-    "job:started": "started_at",
+    "job:started": "when_at",
     "job:attention": "attention_rank",
 }
 ATTENTION_SORT = "job:attention"
@@ -56,7 +57,9 @@ def job_descending(field, order, summaries, schema):
 
 def job_value(summaries, row, field):
     """*row*'s job summary *field*, None when missing or not sortable."""
-    value = (summaries.get(row["verstr"]) or {}).get(field)
+    value = summaries.get(row["verstr"])
+    for part in field.split("."):
+        value = (value or {}).get(part)
     return value if sortable(value) else None
 
 

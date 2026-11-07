@@ -72,9 +72,10 @@ def _counts(gauge, labels, counts, settled, statuses):
 
 
 def _job_samples(labels, job):
+    sourced = dict(labels, source=job["progress_source"])
     return _counts("vmn_job_runs", labels, job["counts"], job, job["counts"]) + [
-        ("vmn_job_progress", labels, job["progress"]),
-        ("vmn_job_eta_seconds", labels, job["eta_sec"])]
+        ("vmn_job_progress", sourced, job["progress"]),
+        ("vmn_job_eta_seconds", sourced, job["eta_sec"])]
 
 
 def feed_jobs(rows, summaries, now, ended_sec):

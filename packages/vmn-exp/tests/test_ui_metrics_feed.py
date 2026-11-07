@@ -147,8 +147,9 @@ def test_live_and_recently_ended_outer_runs_match_their_summaries(server):
                       lost=summary["lost"])
         assert {s: value(samples, "vmn_job_runs", **job, status=s) for s in counts} == {
             s: float(c) for s, c in counts.items()}
-        assert value(samples, "vmn_job_progress", **job) == summary["progress"]
-        assert value(samples, "vmn_job_eta_seconds", **job) == summary["eta_sec"]
+        sourced = dict(job, source=summary["progress_source"])
+        assert value(samples, "vmn_job_progress", **sourced) == summary["progress"]
+        assert value(samples, "vmn_job_eta_seconds", **sourced) == summary["eta_sec"]
     assert value(samples, "vmn_job_runs", **LABELS, outer_run=_v(1), name=GRID,
                  status="waiting") == 1
 
