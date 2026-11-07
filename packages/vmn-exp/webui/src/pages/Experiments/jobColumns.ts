@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import type { Order } from "../../hooks/useLeaderboardView";
 import { IDX_SORT } from "../LeaderboardHead";
+import { UNKNOWN_BEST } from "../boardSortState";
 import { goalOrder, type Goal } from "../../util";
 
 export type { Order };
@@ -52,9 +53,9 @@ export const CELL_CLASSES: readonly string[] = JOB_COLUMNS.map((c) =>
   `jobs-cell-${c.id}${c.numeric ? " num" : ""}${SHARED_CELL[c.id] ?? ""}`);
 
 /** `job:value`'s best-first direction: toward its goal (the rows'
- *  `rolled.goal`), ascending without one (plan 32 F4); null for every
- *  other column. */
-export function jobValueOrder(sort: string, goal: Goal): Order | null {
+ *  `rolled.goal`), ascending without one (plan 32 F4), unknown while the
+ *  goal is (undefined); null for every other column. */
+export function jobValueOrder(sort: string, goal: Goal | undefined): Order | typeof UNKNOWN_BEST | null {
   if (sort !== JOB_SORTS.value) return null;
-  return goalOrder(goal);
+  return goal === undefined ? UNKNOWN_BEST : goalOrder(goal);
 }

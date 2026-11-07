@@ -18,7 +18,8 @@ import { combineQueries } from "../../util/searchQuery";
 import { BIG_GROUP } from "../../util/groupClause";
 import { boardSortState } from "../boardSortState";
 import { jobValueOrder } from "./jobColumns";
-import type { TopRuns } from "../../types";
+import type { MetricsSchema, TopRuns } from "../../types";
+import { metricGoal, type Goal } from "../../util";
 import { PRESETS, type Preset } from "./presets";
 import { treeStatusQuery } from "./treeStatus";
 
@@ -26,6 +27,17 @@ type View = ReturnType<typeof useLeaderboardView>;
 
 /** A job keeps the view live while any run of its tree runs. */
 const treeRunning = (r: ExperimentRow) => r.status === "running" || r.tree_status === "running";
+
+/** The goal `job:value` sorts toward without a `rolled`, from the metric the
+ *  server orders it by: the URL's `job_agg_metric`'s in the schema, else the
+ *  page's main metric's (*mainGoal*); undefined while that is not known
+ *  (the page or schema not answered yet; plan 32: no guessed goal). */
+function valueGoalBeforeRolled(
+  schema: MetricsSchema | null, metric: string | null, mainGoal: Goal | undefined,
+): Goal | undefined {
+  if (!metric) return mainGoal;
+  return schema?.[metric] ? metricGoal(schema, metric) : undefined;
+}
 
 /** *top* null (not known yet) fetches nothing. */
 export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns | null, preset?: Preset) {
@@ -70,12 +82,14 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   });
 
   const selection = useBoardSelection(ws, app, filter, rows, view);
-  const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobValueOrder(s, rolled ? rolled.goal : goal));
+  // `data.main?.goal`, not `goal`: undefined (no page yet) is not null (no goal).
+  const valueGoal = rolled ? rolled.goal : valueGoalBeforeRolled(schema, view.jobAgg.metric, data.main?.goal);
+  const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobValueOrder(s, valueGoal));
 
   return {
     data, rows, facets, group: chosen, selection, search: matchSubtree ? search : null,
     metric, goal, rolled, aggregate,
-    sort: { sort: filter.sort, order: sort.order ?? "desc", onSort: sort.onSort },
+    sort: { sort: filter.sort, order: sort.order, onSort: sort.onSort },
     live: { running, paused, setPaused },
     filtered: filtered || Boolean(fixed), topQuery,
   };

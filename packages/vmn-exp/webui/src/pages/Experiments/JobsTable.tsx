@@ -38,7 +38,8 @@ const HEAD_STYLES: readonly CSSProperties[] = COLUMN_STYLES.map((st) => ({
 
 export interface JobsSort {
   sort: string;
-  order: Order;
+  /** Null: the sorted column's direction is not known yet (no arrow). */
+  order: Order | null;
   onSort: (sort: string) => void;
 }
 
@@ -107,19 +108,20 @@ function Head({ sort, check, heads }: { sort: JobsSort; check: HeaderCheckProps;
       <tr>
         {JOB_COLUMNS.map((c, i) => {
           const sorted = c.sort === sort.sort;
+          const order = sorted ? sort.order : null;
           const head = heads?.[c.id];
           return (
             <th
               key={c.id} data-col-id={c.id} style={HEAD_STYLES[i]}
               className={[c.numeric && "num", c.sort && "sortable", sorted && "sorted", c.id === "check" && "check-cell"].filter(Boolean).join(" ") || undefined}
-              aria-sort={c.sort ? (sorted ? ARIA_SORT[sort.order] : "none") : undefined}
+              aria-sort={c.sort ? (order ? ARIA_SORT[order] : "none") : undefined}
               onClick={c.sort ? () => sort.onSort(c.sort!) : undefined}
             >
               {c.id === "check" ? <HeaderCheckbox {...check} />
                 : c.sort ? (
                   <>
                     <SortButton title={c.title} onSort={() => sort.onSort(c.sort!)}>
-                      {head?.label ?? c.label}{sorted ? (sort.order === "asc" ? " ▴" : " ▾") : ""}
+                      {head?.label ?? c.label}{order ? (order === "asc" ? " ▴" : " ▾") : ""}
                     </SortButton>
                     {head?.menu && <span onClick={noSort}>{head.menu}</span>}
                   </>
