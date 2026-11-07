@@ -94,6 +94,9 @@ def _as_older_derived(db):
     tables out of date (a reader trusting them would serve garbage)."""
     conn = sqlite3.connect(sqlite_files.live_path(db))
     conn.execute("UPDATE exp_index_meta SET v = ? WHERE k = 'schema'", (OLDER,))
+    # Its records current: written by the older schema (see records_version).
+    conn.execute("UPDATE exp_index_meta SET v = ? WHERE k = 'records'",
+                 (f"{index_store_schema.RECORDS_VERSION}/{OLDER}",))
     conn.execute("DELETE FROM exp_rows WHERE key = (SELECT MIN(key) FROM exp_rows)")
     conn.execute("""UPDATE exp_rows SET row = '{"verstr": "stale"}', status = 'stale'""")
     conn.execute("DELETE FROM exp_sides")
@@ -114,8 +117,8 @@ def journal():
 
 
 def test_the_versions_split_records_from_what_is_derived_from_them():
-    assert (index_store_schema.RECORDS_VERSION, index_store_schema.DERIVED_VERSION) == (18, 19)
-    assert index_store_schema.SCHEMA_VERSION == "exp-index-19"
+    assert (index_store_schema.RECORDS_VERSION, index_store_schema.DERIVED_VERSION) == (19, 20)
+    assert index_store_schema.SCHEMA_VERSION == "exp-index-20"
 
 
 def test_an_older_derived_version_is_rederived_from_the_records_without_storage(

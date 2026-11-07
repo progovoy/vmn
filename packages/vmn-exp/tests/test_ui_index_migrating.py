@@ -42,6 +42,9 @@ def _seed(tmp_path, n=3):
 def _older_derived(db):
     conn = sqlite3.connect(sqlite_files.live_path(db))
     conn.execute("UPDATE exp_index_meta SET v = ? WHERE k = 'schema'", (OLDER,))
+    # Its records current: written by the older schema (see records_version).
+    conn.execute("UPDATE exp_index_meta SET v = ? WHERE k = 'records'",
+                 (f"{index_store_schema.RECORDS_VERSION}/{OLDER}",))
     conn.commit()
     conn.close()
 
