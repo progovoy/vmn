@@ -47,10 +47,10 @@ def _mark_sent(storage, app_name, verstr, sent, key):
     save_sent(storage, app_name, verstr, dict(sent, **{key: now_iso()}))
 
 
-def transition_key(status, run_state, observed_at=None):
+def transition_key(status, run_state, observed_at=None, now=None):
     if status == FAILED:
         return f"failed@{run_state.get('finished_at')}"
-    since = _transition_time(status, run_state, observed_at)
+    since = _transition_time(status, run_state, observed_at, now)
     return f"stuck@{since.isoformat() if since else None}"
 
 
@@ -97,7 +97,7 @@ def alert_transition(storage, app_name, verstr, run_state, status, alerter,
 
     *observed_at* (the store's write time of ``run_state.yml``) dates a stuck
     transition the way :func:`derive_status` does."""
-    key = transition_key(status, run_state, observed_at)
+    key = transition_key(status, run_state, observed_at, now)
     sent = load_sent(storage, app_name, verstr)
     if key in sent:
         return False

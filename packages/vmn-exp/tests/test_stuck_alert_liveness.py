@@ -59,11 +59,11 @@ class _Alerter:
         return True
 
 
-def _watch(monkeypatch, run_state, observed_at, within_sec):
+def _watch(monkeypatch, run_state, observed_at, within_sec, now=NOW, storage=None):
     snap = _Snap("0.0.1-dev.1", run_state, observed_at)
     monkeypatch.setattr(tr.experiment_index, "indexed_snapshot", lambda *a, **k: snap)
     alerter = _Alerter()
-    fired = tr.watch_app(_Storage(), "app", alerter, within_sec, now=NOW)
+    fired = tr.watch_app(storage or _Storage(), "app", alerter, within_sec, now=now)
     return fired, alerter
 
 
@@ -105,3 +105,17 @@ def test_a_run_that_never_beat_says_so():
     alert = tr.transition_alert("app", "0.0.1-dev.1", _stuck(started_age=900), st.STUCK, now=NOW)
     assert alert["text"].startswith("no heartbeat since start (900s ago)")
     assert "no heartbeat for" not in alert["text"]
+
+
+def test_the_stuck_key_judges_a_future_heartbeat_by_the_watch_time(monkeypatch):
+    """watch_app(now=T): a heartbeat after T (but before the wall clock) is the
+    writer's clock ahead of T, so the stuck status and its key both date the
+    transition from the store write — the key must not consult the wall clock."""
+    watch_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+    observed = watch_at - datetime.timedelta(seconds=600)
+    state = dict(_stuck(), heartbeat=_iso(watch_at + datetime.timedelta(seconds=60)))
+    assert st.derive_status(state, now=watch_at, observed_at=observed) == st.STUCK
+    storage = _Storage()
+    _watch(monkeypatch, state, observed, 3600, now=watch_at, storage=storage)
+    [key] = tr.load_sent(storage, "app", "0.0.1-dev.1")
+    assert st.parse_iso(key.split("@", 1)[1]) == observed
