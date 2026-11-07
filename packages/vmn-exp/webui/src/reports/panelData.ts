@@ -35,11 +35,12 @@ export function useRunDetail(ws: string, app: string, verstr: string) {
   });
 }
 
-export function detailToRow(d: ExperimentDetail, i: number): ExperimentRow {
+export function detailToRow(d: ExperimentDetail): ExperimentRow {
   const meta = d.metadata;
   return {
     ...d.status,
-    idx: typeof meta.idx === "number" ? meta.idx : i + 1,
+    // The server's @N; 0 (idx is 1-based) when it has not indexed the run yet.
+    idx: d.idx ?? 0,
     verstr: meta.verstr,
     code_verstr: String(meta.code_verstr ?? meta.verstr),
     timestamp: (meta.timestamp as string | undefined) ?? null,
@@ -58,7 +59,7 @@ export function usePinnedRows(ws: string, app: string, verstrs: string[]): Exper
   });
   const details = results.map((r) => r.data);
   return useMemo(
-    () => details.flatMap((d, i) => (d ? [detailToRow(d, i)] : [])),
+    () => details.flatMap((d) => (d ? [detailToRow(d)] : [])),
     details, // eslint-disable-line react-hooks/exhaustive-deps
   );
 }

@@ -50,4 +50,21 @@ describe("MetricBarChart", () => {
     expect(container.querySelectorAll("[data-testid='bar']")).toHaveLength(3);
     expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("loss");
   });
+
+  it("orders a goal-less metric's bars ascending and calls none the top (plan 32 F4)", () => {
+    const { container } = render(<MetricBarChart rows={ROWS} metricCols={["loss"]} schema={{}} />);
+    const labels = [...container.querySelectorAll("[data-testid='bar']")].map((b) => b.textContent);
+    expect(labels.map((t) => t?.slice(0, 2))).toEqual(["@2", "@1", "@3"]);
+  });
+
+  it("labels a run the server has not indexed (idx 0) by its verstr", () => {
+    const { container } = render(<MetricBarChart rows={[{ ...ROWS[0], idx: 0 }]} metricCols={["loss"]} schema={SCHEMA} />);
+    expect(container.querySelector("[data-testid='bar']")!.textContent).toContain("1.0.0-dev.a");
+  });
+
+  it("captions a capped goal-less chart by order, not as the top runs", () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ ...ROWS[0], idx: i + 1, verstr: `v${i}`, metrics: { size: i } }));
+    render(<MetricBarChart rows={many} metricCols={["size"]} schema={{}} />);
+    expect(screen.getByText(/of 60 runs/).textContent).toBe("showing the first 50 of 60 runs by size, ascending (no goal)");
+  });
 });

@@ -21,7 +21,7 @@ function row(i: number, metrics: Record<string, number | null>, params: Record<s
 describe("MetricBarChart at scale", () => {
   it("caps the bars to the top 50 runs and says so", () => {
     const rows = Array.from({ length: 120 }, (_, i) => row(i + 1, { acc: i / 120 }));
-    const { container } = render(<MetricBarChart rows={rows} metricCols={["acc"]} schema={null} />);
+    const { container } = render(<MetricBarChart rows={rows} metricCols={["acc"]} schema={{ acc: { goal: "max" } }} />);
     expect(screen.getByText(/top 50 of 120/)).toBeInTheDocument();
     expect(container.querySelectorAll("[data-testid='bar']").length).toBe(50);
   });

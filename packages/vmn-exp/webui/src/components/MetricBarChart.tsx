@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { fmtVal, metricGoal } from "../util";
+import { NO_GOAL, fmtVal, goalOrder, metricGoal } from "../util";
 import { isFiniteNumber } from "../util/stats";
 import type { ChartGroups } from "../util/chartGroups";
 import { useRunSelect } from "./chartHooks";
@@ -65,9 +65,11 @@ function MetricBarChart({ rows, metricCols, schema, groups, onSelect }: {
 
   const { data, total, maxAbs } = useMemo(() => {
     const all = rows
-      .map((r) => ({ label: `@${r.idx}`, value: r.metrics[metric], verstr: r.verstr }))
+      .map((r) => ({ label: r.idx ? `@${r.idx}` : r.verstr, value: r.metrics[metric], verstr: r.verstr }))
       .filter((d): d is BarDatum => isFiniteNumber(d.value));
-    const sorted = [...all].sort((a, b) => (goal === "min" ? a.value - b.value : b.value - a.value));
+    // Best first toward the goal; ascending without one (plan 32 F4).
+    const sign = goalOrder(goal) === "asc" ? 1 : -1;
+    const sorted = [...all].sort((a, b) => sign * (a.value - b.value));
     const shown = sorted.slice(0, MAX_BARS);
     return { data: shown, total: all.length, maxAbs: Math.max(0, ...shown.map((d) => Math.abs(d.value))) };
   }, [rows, metric, goal]);
@@ -92,7 +94,8 @@ function MetricBarChart({ rows, metricCols, schema, groups, onSelect }: {
       </div>
       {total > data.length && (
         <div style={{ color: "var(--text-3)", fontSize: 11, marginBottom: 6 }}>
-          showing the top {MAX_BARS} of {total} runs by {metric}
+          {goal ? `showing the top ${MAX_BARS} of ${total} runs by ${metric}`
+            : `showing the first ${MAX_BARS} of ${total} runs by ${metric}, ascending${NO_GOAL}`}
         </div>
       )}
       <div data-testid="bar-chart" style={{ width: "100%", minHeight: 40 }}>
