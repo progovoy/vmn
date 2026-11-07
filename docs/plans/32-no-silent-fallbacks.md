@@ -27,9 +27,10 @@ master `1f6133c7..b53ad3bc`.
   predicates, `core/index_reread.py`).
 
 Follow-ups (not in this plan):
-- The board's shared `declared_schema` still merges run-declared goals with
-  the latest run winning. Two runs that compare as "goals differ" (F9) can
-  still be ranked by one goal on the board. This is a board-wide change.
+- ✓ The board's shared `declared_schema` merged run-declared goals with the
+  latest run winning. Now the conf goal wins, else the runs' one goal; runs
+  declaring different goals give none (`goal_conflict`, `goals` counts, web
+  `(goals differ)`), counts kept per generation (`core/goal_counts.py`).
 - ✓ F1's `mixed` flag on pivot cells, Jobs rollup metrics and the baseline
   card is shown by the web (a `*` titled `2 runs use min`); CLI
   `compare`/`diff` name policies and say `summaries differ: min vs last`.

@@ -9,6 +9,7 @@ derives the next generation of each map from them alone (plan 26 F00), so a
 generation that changed a few runs costs a few entries, not a copy of every
 map.
 """
+from vmn_exp.core.goal_counts import GoalCounts
 from vmn_exp.core.index_views import SIDE_TABLES, kept_side
 from vmn_exp.core.shared_map import SharedMap
 
@@ -23,6 +24,7 @@ class SnapshotMaps:
         self._maps = {name: SharedMap() for name in _FIELDS}
         self._changes = {name: {} for name in _FIELDS}
         self._removed = {name: set() for name in SIDE_TABLES}
+        self._goals = GoalCounts()  # of the declared_defs map
 
     def put(self, row, note, sides, state, observed):
         verstr, changes = row["verstr"], self._changes
@@ -33,6 +35,8 @@ class SnapshotMaps:
         changes["edges"][verstr] = row.get("parent")
         for name, value in zip(SIDE_TABLES, sides):
             value = kept_side(name, value)
+            if name == "declared_defs":
+                self._goals.move(self._current(name, verstr), value)
             if value:  # side tables are sparse: an empty value is no entry
                 changes[name][verstr] = value
                 self._removed[name].discard(verstr)
@@ -40,8 +44,15 @@ class SnapshotMaps:
                 changes[name].pop(verstr, None)
                 self._removed[name].add(verstr)
 
+    def _current(self, name, verstr):
+        """*verstr*'s value in map *name* with the changes put so far."""
+        if verstr in self._changes[name]:
+            return self._changes[name][verstr]
+        return None if verstr in self._removed[name] else self._maps[name].get(verstr)
+
     def shared(self):
-        """``{snapshot field: SharedMap}`` with every change put so far."""
+        """``{snapshot field: SharedMap}`` with every change put so far, and
+        the ``declared_goals`` counts."""
         for name, changes in self._changes.items():
             removed = self._removed.get(name, ())
             if changes or removed:
@@ -49,4 +60,5 @@ class SnapshotMaps:
                 self._changes[name] = {}
                 if removed:
                     self._removed[name] = set()
-        return {_FIELDS[name]: shared for name, shared in self._maps.items()}
+        maps = {_FIELDS[name]: shared for name, shared in self._maps.items()}
+        return {**maps, "declared_goals": self._goals.shared()}

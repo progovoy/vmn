@@ -36,6 +36,10 @@ export interface PolicyMix {
 /** Per-metric leaderboard config from conf.yml (experiment.metrics). */
 export interface MetricSpec {
   goal?: "min" | "max";
+  /** Its runs declare different goals and the conf none (plan 32): no
+   *  `goal`, and `goals` counts the runs behind each. */
+  goal_conflict?: true;
+  goals?: Partial<Record<"min" | "max", number>>;
   /** Which value the run ranks on; defaults from `goal` (else `last`). */
   summary?: MetricPolicy;
   primary?: boolean;

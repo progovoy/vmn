@@ -118,6 +118,12 @@ export const goalOrder = (goal: Goal): "asc" | "desc" => (goal === "max" ? "desc
 
 /** Where a best would be, for a metric without a goal. */
 export const NO_GOAL = " (no goal)";
+/** ... and for one whose runs declare different goals (the server's `goal_conflict`). */
+export const GOALS_DIFFER = "(goals differ)";
+
+/** Whether the server found *key*'s runs declaring different goals. */
+export const goalsDiffer = (schema: Record<string, { goal_conflict?: boolean }> | null, key: string) =>
+  schema?.[key]?.goal_conflict === true;
 
 /** The Run page's path under an app's base path (`/ws/<ws>/app/<tag>`). */
 export const runHref = (base: string, verstr: string) => `${base}/run/${encodeURIComponent(verstr)}`;

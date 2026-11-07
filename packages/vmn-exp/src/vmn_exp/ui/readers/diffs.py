@@ -13,7 +13,7 @@ from vmn_exp.core.fold import (
     fold_definitions, fold_log, fold_metrics, fold_values, is_folded_param, logged_params,
 )
 from vmn_exp.core.log import load_log
-from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.metric_schema import metric_goal, resolve_goal
 from vmn_exp.core.metric_summary import SchemaPolicies, value_policy
 from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
@@ -123,14 +123,17 @@ def _is_param_key(key, sides):
 def _goal_fields(key, run_defs, schema, declared):
     """The one goal of *key* for both runs (plan 32 F9): the app's *schema*
     first, then the two runs' own definitions (*run_defs*), then what other
-    runs *declared*. Runs declaring different goals give no goal and say so."""
-    goal = metric_goal(schema, key)
-    if goal:
-        return {"goal": goal}
+    runs *declared* (the board's goal). Runs declaring different goals give
+    no goal and say so (:func:`~vmn_exp.core.metric_schema.resolve_goal`,
+    which the board resolves through too)."""
+    conf_goal = metric_goal(schema, key)
+    if conf_goal:
+        return {"goal": conf_goal}
     own = [metric_goal(defs, key) for defs in run_defs]
-    if None not in own and own[0] != own[1]:
-        return {"goal": None, "goal_conflict": True, "goals": own}
-    return {"goal": own[0] or own[1] or metric_goal(declared, key)}
+    resolved = resolve_goal(None, own)
+    if resolved.get("goal_conflict"):
+        return {**resolved, "goals": own}
+    return {"goal": resolved["goal"] or metric_goal(declared, key)}
 
 
 def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None, declared=None):
@@ -271,8 +274,7 @@ def experiment_diff_from_snapshot(snap, v1, v2, schema=None):
     holds, from its rows and side tables (no log, record or code read: a
     long-stuck run's log is thousands of segments); None when it lacks one.
     The rows' metrics are already folded per summary policy; each goal is
-    :func:`_goal_fields`'s, the other runs' declarations (latest run wins)
-    taken last."""
+    :func:`_goal_fields`'s, the board's goal taken last."""
     rows = [snap.row(v) for v in (v1, v2)]
     if None in rows:
         return None

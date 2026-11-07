@@ -25,6 +25,7 @@ from vmn_exp.core.index_views import (
     runs_declared_schema,
     schema_key,
 )
+from vmn_exp.core.metric_schema import goal_counts
 from vmn_exp.core.resolve_ref import RefLookups, no_runs_error, resolve_with
 from vmn_exp.core.status import derive_status, observed_at_from_mtime
 from vmn_exp.core.tree import children_by_parent
@@ -53,6 +54,9 @@ class IndexSnapshot:
     # {verstr: {metric: {"goal"?, "hidden"?, "chart"?}}} of rows whose run declares
     # any — what declared_schema() merges.
     declared_defs: dict = field(default_factory=dict, repr=False)
+    # {metric: {goal: runs declaring it}} of declared_defs, kept across
+    # generations by the RowCache; None: counted from declared_defs.
+    declared_goals: dict = field(default=None, repr=False)
     # {verstr: value} of rows with a folded features entry / intent /
     # hypothesis (see vmn_exp.core.fold_facts) — off the rows like outputs.
     features: dict = field(default_factory=dict, repr=False)
@@ -68,6 +72,7 @@ class IndexSnapshot:
     # chunk by chunk; None once every record was read.
     loading: tuple = None
     _declared: list = field(default_factory=list, repr=False)  # memo, shared by views
+    _goals: list = field(default_factory=list, repr=False)  # goal_counts memo, ditto
     _children: list = field(default_factory=list, repr=False)  # children_of memo, ditto
     _up: list = field(default_factory=list, repr=False)  # ancestor fields (core/query_up.py), ditto
     _by_verstr: dict = field(default_factory=dict, repr=False)
@@ -162,12 +167,23 @@ class IndexSnapshot:
                              observed_at=self.run_state_observed_at.get(verstr))
 
     def declared_schema(self):
-        """``{metric: {"goal"?, "hidden"?, "chart"?}}`` the runs declare, the latest
-        run winning — computed once per snapshot. Shared: copy before
+        """``{metric: {"goal"?, "goal_conflict"?, "hidden"?, "chart"?}}`` the
+        runs declare (see :func:`~vmn_exp.core.metric_schema.declared_schema`)
+        — computed once per snapshot. Shared: copy before
         changing."""
         if not self._declared:
-            self._declared.append(runs_declared_schema(self.declared_defs, self.row))
+            self._declared.append(
+                runs_declared_schema(self.declared_defs, self.row, self.goal_counts()))
         return self._declared[0]
+
+    def goal_counts(self):
+        """``{metric: {goal: runs declaring it}}`` over every run (archived
+        too). Shared: copy before changing."""
+        if self.declared_goals is not None:
+            return self.declared_goals
+        if not self._goals:
+            self._goals.append(goal_counts(self.declared_defs.values()))
+        return self._goals[0]
 
     def summarized(self, schema, stale_ok=False):
         """This snapshot with its rows' metrics under the metrics *schema* —

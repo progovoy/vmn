@@ -122,3 +122,17 @@ def test_metrics_schema_endpoint_merges_declared_goals_for_s3_workspace(s3_clien
         "acc": {"goal": "max", "hidden": True}}
     rows = client.get(f"{base}/experiments", params={"sort": "acc"}).json()
     assert [r["verstr"] for r in rows] == ["1.0.0-dev.high", "1.0.0-dev.low"]
+
+
+def test_runs_declaring_different_goals_give_the_board_none_and_say_so(app_layout):
+    """Plan 32 follow-up: no latest-run goal; the schema names the conflict
+    and how many runs declare each goal, and the board ranks nothing."""
+    _bootstrap(app_layout)
+    mid = _run(app_layout, 0.5, goal="max")
+    low = _run(app_layout, 0.1, goal="min")
+    high = _run(app_layout, 0.9, goal="min")
+    client = _client(app_layout)
+    schema = client.get(f"{_base(app_layout)}/metrics-schema").json()
+    assert schema == {"acc": {"goal_conflict": True, "goals": {"min": 2, "max": 1}}}
+    rows = client.get(f"{_base(app_layout)}/experiments", params={"sort": "acc"}).json()
+    assert [r["verstr"] for r in rows] == [low, mid, high]

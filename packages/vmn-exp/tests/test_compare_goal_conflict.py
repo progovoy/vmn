@@ -66,3 +66,14 @@ def test_another_runs_declaration_gives_the_goal_when_neither_declares(tmp_path)
     _run(storage, V3, 0.1, "max", day=3)
 
     assert _snapshot_delta(storage)["loss"] == {"from": 0.5, "to": 0.3, "goal": "max", "param": False}
+
+
+def test_other_runs_conflicting_goals_give_no_goal_when_neither_declares(tmp_path):
+    """The board's resolution (plan 32 follow-up): other runs declaring
+    different goals give no goal, not the latest one's."""
+    storage = _storage(tmp_path, None, None)
+    _run(storage, V3, 0.1, "max", day=3)
+    _run(storage, "1.0.0-dev.ggg.hhh", 0.2, "min", day=4)
+
+    delta = _snapshot_delta(storage)["loss"]
+    assert delta["goal"] is None and "goal_conflict" not in delta

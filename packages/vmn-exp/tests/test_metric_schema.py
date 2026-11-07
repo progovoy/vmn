@@ -38,18 +38,21 @@ def test_declared_fields_keep_only_goal_and_hidden():
     assert declared_fields(defs) == {"loss": {"goal": "min"}, "lr": {"hidden": True}}
 
 
-def test_latest_run_declaration_wins():
-    assert declared_schema([{"loss": {"goal": "min"}}, {"loss": {"goal": "max"}}]) == {
-        "loss": {"goal": "max"}}
+def test_latest_run_declaration_wins_but_never_a_goal_other_runs_dispute():
+    """Plan 32 follow-up: runs declaring different goals give none
+    (``goal_conflict``); ``hidden``/``chart`` still take the latest run's."""
+    assert declared_schema([{"loss": {"goal": "min", "hidden": True}},
+                            {"loss": {"goal": "max", "hidden": False}}]) == {
+        "loss": {"hidden": False, "goal_conflict": True}}
     rows = [{"verstr": "new", "timestamp": "2026-01-02"},
             {"verstr": "old", "timestamp": "2026-01-01"}]
     snap = IndexSnapshot.build(
         "app", 1, rows, {},
-        declared_defs={"new": {"loss": {"goal": "max"}}, "old": {"loss": {"goal": "min"}}},
+        declared_defs={"new": {"loss": {"hidden": False}}, "old": {"loss": {"hidden": True}}},
     )
-    assert snap.declared_schema() == {"loss": {"goal": "max"}}
+    assert snap.declared_schema() == {"loss": {"hidden": False}}
     assert snap.summarized({"loss": {"goal": "min"}}).declared_schema() == {
-        "loss": {"goal": "max"}}
+        "loss": {"hidden": False}}
 
 
 def test_glob_goal_sets_sort_direction():

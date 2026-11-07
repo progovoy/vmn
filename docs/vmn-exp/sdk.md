@@ -338,7 +338,9 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
   `min`/`max`/`mean` summary without a finite value leaves the metric out of
   `row["metrics"]`.
 - A run's `goal`, `hidden` and `chart` also count across runs for names
-  conf.yml does not declare (the latest run wins): they set sort direction,
+  conf.yml does not declare (`hidden`/`chart`: the latest run wins; `goal`:
+  the one goal the runs declare, none when they declare different goals —
+  the UI says *goals differ*): they set sort direction,
   the UI's hidden columns and chart kinds, never which value another run
   ranks on.
 

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
-import { metricGoal, rowParams } from "../util";
+import { goalsDiffer, metricGoal, rowParams } from "../util";
 import { isFoldedParam } from "../util/paramKeys";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
 import { mixedPolicies } from "../util/metricPolicy";
@@ -258,6 +258,8 @@ export interface ColMeta {
   /** Whether a loaded row's run overrides the schema's summary policy
    *  (plan 32 F1). */
   mixed?: boolean;
+  /** No goal because its runs declare different ones (plan 32). */
+  goalConflict?: boolean;
 }
 
 /** Per metric column: its goal, best value, the span its bar scales over
@@ -280,6 +282,7 @@ export function computeColMeta(
       isBar: m === primary && vals.length > 0,
       min, max,
       mixed: mixedPolicies(rows, m),
+      goalConflict: goalsDiffer(schema, m),
     };
   });
   return meta;

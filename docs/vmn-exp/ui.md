@@ -407,11 +407,12 @@ running, the leaderboard and the run page poll on their own and show
 nothing running they show a Refresh button instead. On the leaderboard this
 sits in the table's caption, under the board, with the "best in column" legend
 and the sort. A metric column without a declared goal reads `(no goal)` in its
-header (no arrow, no best, sorts low first). A value its run's own summary
+header (no arrow, no best, sorts low first); one whose runs declare different
+goals reads `(goals differ)` and is treated the same. A value its run's own summary
 picked, unlike the schema's (row `metric_policy`), carries a small muted tag
 (`min`), and the header reads `loss · mixed` while a loaded row does.
 One line under the caption
-counts those columns and points to conf.yml or the app's settings page to
+counts those columns (a second line counts the conflicting ones) and points to conf.yml or the app's settings page to
 declare `goal: min|max`; below 640px, where the caption follows every card, the page head
 also shows `live · updated Ns ago` (or `paused`) as plain text after the run
 count. Above the board, an attention strip (`⚠ 2 stuck · 3 failed in 24h
@@ -1230,7 +1231,10 @@ message and offset (`unknown field 'statuz' at offset 0`).
 The goal comes from the app's effective metrics schema,
 `GET .../metrics-schema`: conf.yml's `experiment.metrics` over the app's
 [store settings](server.md#app-settings), plus the `goal`/`hidden`/`chart` runs
-declare for names neither has (see
+declare for names neither has. A conf/settings goal (exact or glob) always
+wins; else the one goal the app's runs (archived ones too) declare. Runs
+declaring different goals give no goal: the entry reads `goal_conflict: true`
+and `goals: {min: <runs>, max: <runs>}` (see
 [Metrics schema](experiments.md#metrics-schema-sorting--goals)); a store
 workspace has no conf.yml, only the settings and the runs' declarations. Each
 metric the app's runs log that a glob (`val_*: {goal: max}`) gives a goal also
@@ -1674,8 +1678,8 @@ metric of a param's name keeps its place; rows list such names in
 `logged_params`), so a param only one run set is still a param. The Compare *Code* tab and the run page's
 *Changes* card list those under *Params changed*, the rest as metrics.
 `goal` is one goal for both runs: the app's metrics schema, else the two runs'
-own `define_metric` goals, else (store workspaces) the latest other run's
-declaration. When the two runs declare
+own `define_metric` goals, else (store workspaces) the board's goal from the
+other runs (none when they disagree). When the two runs declare
 different goals the delta has no direction: `goal: null`, `goal_conflict:
 true` and `goals: [from's, to's]`, and the web shows *goals differ* instead
 of a better/worse tone.

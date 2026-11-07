@@ -128,15 +128,17 @@ def run_declared(fold):
     return declared_fields(_definitions(fold)) or None
 
 
-def runs_declared_schema(declared_defs, row_of):
+def runs_declared_schema(declared_defs, row_of, counts=None):
     """:func:`~vmn_exp.core.metric_schema.declared_schema` of *declared_defs*
     (``{verstr: declared}``), the runs taken oldest first by their row's
-    timestamp (*row_of(verstr)*), so the latest run's declaration wins."""
+    timestamp (*row_of(verstr)*), so the latest run's declaration wins;
+    *counts* their goal counts when already kept."""
     def created(verstr):
         row = row_of(verstr) or {}
         return (row.get("timestamp") or "", row.get("idx") or 0)
 
-    return declared_schema(declared_defs[v] for v in sorted(declared_defs, key=created))
+    ordered = (declared_defs[v] for v in sorted(declared_defs, key=created))
+    return declared_schema(ordered, counts)
 
 
 def summarized_row(row, parts, policies):
