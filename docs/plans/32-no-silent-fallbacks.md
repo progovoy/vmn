@@ -146,12 +146,18 @@ step-metric joins, cursor projections, config precedence (the applied value is
 reported). Reports and export, audited 2026-11-07: pinned-run panels
 labelled runs by their position (`@1`, `@2`; `reports/panelData.ts`), and
 the bar chart ranked a goal-less metric descending as "the top 50"; both
-fixed. Left: "Add to report" saves the chart's first metric and default
-axes (`reports/viewSpecs.ts:38-47`, `grouped` always by `branch`), not the
-ones the reader picked; an exported image over the media cap is a blank
-`src` (`reports/export.tsx:26`) instead of "not included"; a published
-panel asking for a query it did not capture shows "Loading…" forever
-(`reports/publishedData.tsx:96`) instead of "not published". Server side
+fixed. Also fixed: "Add to report" saved the chart's first metric and
+default axes (`reports/viewSpecs.ts`, `grouped` always by `branch`); it now
+saves the metric, axes and group the reader picked (the charts report them
+through `onChoice`). An exported image left out was a blank `src`
+(`reports/export.tsx`); the export now records each skipped URI with why,
+and the page shows "not included in export (over N MB)" or "(file
+missing)". A published panel asking for a query it did not capture showed
+"Loading…" forever (`reports/publishedData.tsx`); the frozen cache now fails
+it and the panel says "not published with this report". The job page's
+main metric fell back to the first tracked metric with values
+(`pages/Job/jobData.ts`); it now reads only the server's, and the best tile
+reads `—` with "(no main metric)" or "(no values yet)". Server side
 (`ui/reports_publish.py`, `cli/report_export.py`, `core/panel_spec.py`)
 computes no values: clean.
 
