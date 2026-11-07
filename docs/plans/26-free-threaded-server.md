@@ -308,6 +308,10 @@ file. Units run in parallel unless marked *after*.
 - **Acceptance:** allocation per `experiments` page ↓ 2× in F0.
 
 ### F7. Gate and flip (*after* F0–F6)
+- **Done (plan 31 D2, 2026-11-07)** on the client's production numbers rather than
+  F0's: a 737k-run ui at 112 GB RSS on 3.14 vs 74 GB on 3.14t after a cold index,
+  and 18 GB on 3.15.2t after 40 min. `ui/gil_hint.py` recommends 3.15t at every
+  size and no longer warns on a free-threaded build; ui.md "Large stores" says so.
 - Run F0 twice. If §1 holds:
   - `ui/gil_hint.py` recommends 3.14t/3.15t again at every size (drop the 200k
     cap and the free-threaded warning, red tests first);

@@ -240,14 +240,20 @@ server needs write access to the store's `runs/` area for both; with
 
 ### Large stores: run the UI on free-threaded Python
 
-With the GIL, every request and the refresher share one core. A free-threaded
-Python (3.14t) uses all of them. The UI needs none of your jobs' packages, so it can run on
-its own interpreter:
+Run the UI on free-threaded Python 3.15t, whatever the store's size. With the
+GIL, every request and the refresher share one core; a free-threaded Python
+uses all of them, and on large stores it also holds less memory. The UI needs
+none of your jobs' packages, so it can run on its own interpreter:
 
 ```sh
-uvx --python 3.14t --from "vmn-exp[ui]" vmn-exp ui --repo .
-uv tool install --python 3.14t "vmn-exp[ui]"     # or install it once
+uvx --python 3.15t --from "vmn-exp[ui]" vmn-exp ui --repo .
+uv tool install --python 3.15t "vmn-exp[ui]"     # or install it once
 ```
+
+On a 737k-run S3 store, a cold index took the UI to 112 GB RSS on 3.14 (GIL)
+and 74 GB on 3.14t. On 3.15.2t, loading from the built index, it held 18 GB
+RSS (19 GB peak) after 40 minutes; warm board pages answered in about 10 ms
+and an outer run's summary in 0.1 to 0.2 s.
 
 The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 500 live jobs,
 16 clients) measured:
@@ -263,12 +269,12 @@ The load harness (`packages/vmn-exp/tests/uiload`, `--profile load`: 100k runs, 
 `orjson` has no free-threaded wheel yet, so the `ui` extra leaves it out and
 3.14t encodes JSON with the standard library (included above). On a regular
 CPython, `pip install "vmn-exp[ui,orjson]"` renders large pages faster. With the GIL on and a watched app of
-10,000 to 199,999 runs, `vmn-exp ui` prints this hint once.
+10,000 runs or more, `vmn-exp ui` prints this hint once.
 
-**Past ~200k runs, use a GIL build** (3.12, 3.14). A 486k-run server on S3 grew
-from 28 GiB to 250 GiB on 3.14t with a constant row count, and stalled for about
-two minutes at a time. On 3.14t with that many runs, `vmn-exp ui` warns once.
-Two things cause this, and both grow with the heap:
+Two costs of a free-threaded build still grow with the heap. On a 486k-run
+store, `vmn-exp ui` 0.1.21 on 3.14t grew from 28 GiB to 250 GiB with a constant
+row count and stalled for about two minutes at a time, partly from leaks fixed
+since; what is left is the runtime's own:
 
 - **The allocator keeps every thread's peak.** A free-threaded build always
   allocates with mimalloc, which gives each thread its own heap. Memory that a
