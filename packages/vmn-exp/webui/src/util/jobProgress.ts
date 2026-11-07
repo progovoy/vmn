@@ -36,13 +36,17 @@ export function progressLead(j: Pick<JobProgressFields, "done" | "expected" | "d
     : { done: j.done, total: j.expected, unit: null, declared: false };
 }
 
-/** The job's completions a minute (its declared progress's rate, when it
- *  declares one), null while nothing completes. */
-export function throughputText(j: Pick<JobProgressFields, "throughput_per_min" | "declared_progress">) {
-  const d = j.declared_progress;
-  if (d) return d.rate_per_min ? fmtRate(d.rate_per_min, d.unit) : null;
-  return j.throughput_per_min > 0 ? fmtThroughput(j.throughput_per_min) : null;
-}
+type Rates = Pick<JobProgressFields, "throughput_per_min" | "declared_progress">;
+
+/** A declared progress's rate, null without one or while none is done. */
+const declaredRateText = ({ declared_progress: d }: Rates) =>
+  (d?.rate_per_min ? fmtRate(d.rate_per_min, d.unit) : null);
+
+/** The runs finished a minute, null while none finishes. */
+const runsRateText = (j: Rates) => (j.throughput_per_min > 0 ? fmtThroughput(j.throughput_per_min) : null);
+
+/** The progress line's rate: its declared progress's, when it declares one, else the runs'. */
+const throughputText = (j: Rates) => (j.declared_progress ? declaredRateText(j) : runsRateText(j));
 
 /** The time left, null when done or unknown. */
 export const etaText = (j: Pick<JobProgressFields, "eta_sec">) => (j.eta_sec ? humanizeSeconds(j.eta_sec) : null);
@@ -171,15 +175,14 @@ export function jobRateCell(j: Progress): JobCell {
   const d = j.declared_progress;
   if (!d) return { text: "—", title: "no declared progress" };
   const what = d.unit ?? "progress";
-  if (!d.rate_per_min) return { text: "—", title: `no ${what} done yet` };
-  return { text: fmtRate(d.rate_per_min, d.unit), title: `${what} done since the outer run started` };
+  const rate = declaredRateText(j);
+  return rate ? { text: rate, title: `${what} done since the outer run started` } : { text: "—", title: `no ${what} done yet` };
 }
 
 /** The runs finished a minute (`41/min`), declared progress or not; else a
  *  dash saying why none finish. */
 export function jobThroughputCell(j: Progress): JobCell {
-  if (j.throughput_per_min > 0) {
-    return { text: fmtThroughput(j.throughput_per_min), title: "runs finished a minute, over the last 10 minutes" };
-  }
+  const rate = runsRateText(j);
+  if (rate) return { text: rate, title: "runs finished a minute, over the last 10 minutes" };
   return { text: "—", title: inFlight(j) ? STALLED_TITLE : "the outer run has ended" };
 }

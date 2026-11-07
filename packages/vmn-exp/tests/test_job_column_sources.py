@@ -61,20 +61,21 @@ def _rated(verstr, rate):
     return {"verstr": verstr, "declared_progress": declared, "throughput_per_min": 9 - (rate or 0)}
 
 
-def test_job_rate_sorts_by_the_declared_rate_jobs_without_one_last():
-    summaries = {s["verstr"]: s for s in (_rated("a", 1.0), _rated("b", None), _rated("c", 3.0))}
+RATED = {s["verstr"]: s for s in (_rated("a", 1.0), _rated("b", None), _rated("c", 3.0))}
+
+
+def _order(sort, order=None):
     rows = [{"verstr": v} for v in ("a", "b", "c")]
-    ordered = [r["verstr"] for r in job_sorted(rows, summaries, "job:rate", None, {})]
-    assert ordered == ["c", "a", "b"]
-    asc = [r["verstr"] for r in job_sorted(rows, summaries, "job:rate", "asc", {})]
-    assert asc == ["a", "c", "b"]
+    return [r["verstr"] for r in job_sorted(rows, RATED, sort, order, {})]
+
+
+def test_job_rate_sorts_by_the_declared_rate_jobs_without_one_last():
+    assert _order("job:rate") == ["c", "a", "b"]
+    assert _order("job:rate", "asc") == ["a", "c", "b"]
 
 
 def test_job_throughput_sorts_by_the_runs_throughput_declared_or_not():
-    summaries = {s["verstr"]: s for s in (_rated("a", 1.0), _rated("b", None), _rated("c", 3.0))}
-    rows = [{"verstr": v} for v in ("a", "b", "c")]
-    ordered = [r["verstr"] for r in job_sorted(rows, summaries, "job:throughput", None, {})]
-    assert ordered == ["b", "a", "c"]
+    assert _order("job:throughput") == ["b", "a", "c"]
 
 
 def test_the_progress_and_eta_gauges_carry_the_source():

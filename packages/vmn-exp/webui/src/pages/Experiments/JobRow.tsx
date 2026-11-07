@@ -11,14 +11,14 @@ import type { ExperimentRow } from "../../types";
 import type { Density } from "../../util/density";
 import { useRowNavigate } from "../../hooks/useRowNavigate";
 import { runHref } from "../../util";
-import { jobWhen, jobWhenText, jobWhenTitle } from "../../util/jobWhen";
+import { jobWhen, jobWhenText, jobWhenTitle, type JobWhen } from "../../util/jobWhen";
 import { densityRowHeight, headStatus } from "../LeaderboardRow";
 import type { JobCell } from "../../util/jobProgress";
 import { AttentionChips, BaselineCell, BestValue, JobSubLine, SpreadCell, jobNumbers, type JobContext, type JobNumber } from "./JobCells";
 import { CELL_CLASSES, COLUMN_STYLES, JOB_COLUMNS } from "./jobColumns";
 
-function titleOf(id: string, r: ExperimentRow, numbers: Record<JobNumber, JobCell>): string | undefined {
-  if (id === "when") return jobWhenTitle(jobWhen(r));
+function titleOf(id: string, when: JobWhen, numbers: Record<JobNumber, JobCell>): string | undefined {
+  if (id === "when") return jobWhenTitle(when);
   return numbers[id as JobNumber]?.title;
 }
 
@@ -55,6 +55,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, expand
 }) {
   const href = runHref(ctx.runBase, r.verstr);
   const numbers = jobNumbers(r);
+  const when = jobWhen(r);
   const status = headStatus(r);
   const onClick = useRowNavigate(href);
 
@@ -78,7 +79,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, expand
       case "spread": return <SpreadCell r={r} />;
       case "runs": case "failed": case "rate": case "throughput": case "eta": return numbers[id].text;
       case "branch": return r.branch;
-      case "when": return jobWhenText(jobWhen(r));
+      case "when": return jobWhenText(when);
     }
     return null;
   };
@@ -93,7 +94,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, expand
       {JOB_COLUMNS.map((c, i) => (
         <td
           key={c.id} data-col-id={c.id} style={COLUMN_STYLES[i]} className={CELL_CLASSES[i]}
-          title={titleOf(c.id, r, numbers)}
+          title={titleOf(c.id, when, numbers)}
         >
           {body(c.id)}
         </td>
