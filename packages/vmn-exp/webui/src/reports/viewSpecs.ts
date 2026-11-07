@@ -1,5 +1,6 @@
 /** Serialize a page's current chart view to a `vmn-panel` spec ("Add to report"). */
 import { appName } from "../api";
+import type { ChartChoice } from "../components/chartHooks";
 import type { ChartView } from "../hooks/useLeaderboardView";
 import type { RowsFilter } from "../queries";
 import type { XMode } from "../util/chartData";
@@ -18,6 +19,8 @@ export interface LeaderboardView {
   metricCols: string[];
   paramCols: string[];
   defaultMetric?: string | null;
+  /** What the reader picked in the shown chart. */
+  choice?: ChartChoice;
 }
 
 function boardRuns({ filter, verstrs }: LeaderboardView): PinnedRuns | QueryRuns {
@@ -31,20 +34,30 @@ function boardRuns({ filter, verstrs }: LeaderboardView): PinnedRuns | QueryRuns
 
 const paramKeys = (cols: string[]) => cols.map((c) => `params.${c}`);
 
-/** The spec for a leaderboard chart, or null for views no panel type renders. */
+/** A chart picker's bare name as a spec key: a param's is `params.<name>`. */
+function specKey(v: LeaderboardView, name: string): string {
+  return !v.metricCols.includes(name) && v.paramCols.includes(name) ? `params.${name}` : name;
+}
+
+/** The spec for a leaderboard chart, or null for views no panel type renders.
+ *  It saves the reader's *choice* in the chart; without one (the chart not
+ *  loaded yet), the chart's own defaults. */
 export function leaderboardSpec(v: LeaderboardView): PanelSpec | null {
   const common = { ...base(v.app), runs: boardRuns(v) };
   const first = v.metricCols[0] ?? "";
+  const c = v.choice ?? {};
+  const metric = c.metric ?? first;
   switch (v.view) {
-    case "bar": return { ...common, type: "bar", metric: first };
+    case "bar": return { ...common, type: "bar", metric };
     case "scatter": {
+      if (c.x !== undefined && c.y !== undefined) return { ...common, type: "scatter", x: specKey(v, c.x), y: specKey(v, c.y) };
       // MetricScatter's own default axes.
       const param = paramKeys(v.paramCols)[0];
       return { ...common, type: "scatter", x: v.metricCols[0] ?? param ?? "", y: v.metricCols[1] ?? param ?? first };
     }
     case "parallel": return { ...common, type: "parallel", columns: [...v.metricCols, ...paramKeys(v.paramCols)] };
-    case "grouped": return { ...common, type: "grouped", group_by: "branch", metric: first };
-    case "importance": return { ...common, type: "importance", metric: v.defaultMetric || first };
+    case "grouped": return { ...common, type: "grouped", group_by: specKey(v, c.group ?? "branch"), metric };
+    case "importance": return { ...common, type: "importance", metric: c.metric ?? (v.defaultMetric || first) };
     default: return null;
   }
 }

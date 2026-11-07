@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useCallback, useRef } from "react";
+import type { ChartChoice } from "../components/chartHooks";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import type { RowsFilter } from "../queries";
 import { CHART_VIEWS, type ChartView } from "../hooks/useLeaderboardView";
@@ -81,10 +82,14 @@ export default function LeaderboardCharts({
   /** Set when the charts follow the board's selection (plan 22 F7). */
   selection?: ChartSelection;
 }) {
-  const common = { rows, metricCols, schema };
+  // The shown chart's picks, for "Add to report"; a pick of another view is stale.
+  const picked = useRef<{ view: ChartView; choice: ChartChoice } | null>(null);
+  const onChoice = useCallback((choice: ChartChoice) => { picked.current = { view, choice }; }, [view]);
+  const common = { rows, metricCols, schema, onChoice };
   const spec = () => leaderboardSpec({
     app: importance.app, view, filter: importance.filter, verstrs: rows.map((r) => r.verstr),
     metricCols, paramCols, defaultMetric: importance.defaultMetric,
+    choice: picked.current?.view === view ? picked.current.choice : undefined,
   });
   return (
     <>

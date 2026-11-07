@@ -9,7 +9,7 @@ import { pointGrid } from "../util/pointGrid";
 import { NO_GROUP_COLOR, type ChartGroups } from "../util/chartGroups";
 import { DENSE_POINTS, scatterData, scatterOptions } from "../util/scatterOptions";
 import { TOOLTIP_STYLE } from "./chartStyles";
-import { useRunSelect } from "./chartHooks";
+import { useChoiceReport, useRunSelect, type ChartChoice } from "./chartHooks";
 import UPlotChart, { type CursorInfo } from "./UPlotChart";
 
 interface Props {
@@ -31,6 +31,7 @@ interface Props {
   /** The Y picker's choices, read as metrics even where a param shares a
    *  name (default: every column, a param's read from params). */
   yCols?: string[];
+  onChoice?: (c: ChartChoice) => void;
 }
 
 const HEIGHT = 320;
@@ -56,7 +57,7 @@ function AxisSelect({ label, value, cols, onChange }: {
  *  the best point by the y metric's goal is highlighted. Hover shows the
  *  nearest run, click opens it. */
 function MetricScatter({
-  rows, metricCols, paramCols, schema, onSelect, initialX, initialY, groups: byGroup, x, y, onAxes, yCols,
+  rows, metricCols, paramCols, schema, onSelect, initialX, initialY, groups: byGroup, x, y, onAxes, yCols, onChoice,
 }: Props) {
   // A numeric param folds into metrics too: one entry per name.
   const allCols = useMemo(() => [...new Set([...metricCols, ...paramCols])], [metricCols, paramCols]);
@@ -66,6 +67,7 @@ function MetricScatter({
   const xCol = x ?? ownX, yCol = y ?? ownY;
   const setXCol = (v: string) => (onAxes ? onAxes(v, yCol) : setOwnX(v));
   const setYCol = (v: string) => (onAxes ? onAxes(xCol, v) : setOwnY(v));
+  useChoiceReport(onChoice, { x: xCol, y: yCol });
   const yGoal = metricGoal(schema, yCol);
   const select = useRunSelect(onSelect);
 

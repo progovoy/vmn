@@ -6,6 +6,7 @@ import type { ExperimentRow, MetricsSchema, ParamImportanceEntry } from "../type
 import { fmtVal } from "../util";
 import { barPercent, valueMeans } from "../util/importanceData";
 import MetricScatter from "./MetricScatter";
+import { useChoiceReport, type ChartChoice } from "./chartHooks";
 
 interface Props {
   ws: string;
@@ -18,6 +19,7 @@ interface Props {
   schema: MetricsSchema | null;
   /** Target metric to start from (the leaderboard's sort), when it is one. */
   defaultMetric?: string | null;
+  onChoice?: (c: ChartChoice) => void;
 }
 
 const corrColor = (c: number) => (c > 0 ? "var(--good)" : c < 0 ? "var(--bad)" : undefined);
@@ -27,11 +29,12 @@ const fmtCorr = (c: number | null) => (c === null ? "—" : `${c > 0 ? "+" : ""}
  *  random-forest importance (bars, scaled to the top param) and the signed
  *  correlation, computed server-side over every run the filter matches.
  *  Clicking a param drills into it against the metric. */
-function ParamImportance({ ws, app, filter, rows, metricCols, paramCols, schema, defaultMetric }: Props) {
+function ParamImportance({ ws, app, filter, rows, metricCols, paramCols, schema, defaultMetric, onChoice }: Props) {
   const client = useQueryClient();
   // Derived each render: the metric columns can arrive after the first one.
   const [chosen, setMetric] = useState<string | null>(null);
   const metric = [chosen, defaultMetric].find((c) => c && metricCols.includes(c)) ?? metricCols[0] ?? "";
+  useChoiceReport(onChoice, { metric });
   const [picked, setPicked] = useState<ParamImportanceEntry | null>(null);
   const opts = { status: filter.status, query: filter.query, archived: filter.archived };
   const q = useQuery({

@@ -4,7 +4,7 @@ import { NO_GOAL, fmtVal, goalOrder, metricGoal } from "../util";
 import { isFiniteNumber } from "../util/stats";
 import { runText } from "../shell/crumbs";
 import type { ChartGroups } from "../util/chartGroups";
-import { useRunSelect } from "./chartHooks";
+import { useChoiceReport, useRunSelect, type ChartChoice } from "./chartHooks";
 
 /** One bar per run stops being readable (and renderable) long before 50k runs. */
 export const MAX_BARS = 50;
@@ -49,7 +49,7 @@ function Bar({ d, maxAbs, isBest, color, onClick }: {
 
 /** The top runs by one metric, best first, as plain HTML bars that fill any
  *  width. Click a bar to open its run. */
-function MetricBarChart({ rows, metricCols, schema, groups, onSelect }: {
+function MetricBarChart({ rows, metricCols, schema, groups, onSelect, onChoice }: {
   rows: ExperimentRow[];
   metricCols: string[];
   schema: MetricsSchema | null;
@@ -57,10 +57,12 @@ function MetricBarChart({ rows, metricCols, schema, groups, onSelect }: {
   groups?: ChartGroups;
   /** Called with a clicked bar's run; defaults to opening the run page. */
   onSelect?: (verstr: string) => void;
+  onChoice?: (c: ChartChoice) => void;
 }) {
   const [chosen, setMetric] = useState(metricCols[0] ?? "");
   // The metrics can arrive after the chart mounted.
   const metric = metricCols.includes(chosen) ? chosen : metricCols[0] ?? "";
+  useChoiceReport(onChoice, { metric });
   const select = useRunSelect(onSelect);
   const goal = metricGoal(schema, metric);
 

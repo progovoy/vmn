@@ -3,6 +3,7 @@ import type { ExperimentRow, MetricsSchema } from "../types";
 import { fmtVal, metricGoal, paramValue } from "../util";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
 import GroupBars, { type GroupBar } from "./GroupBars";
+import { useChoiceReport, type ChartChoice } from "./chartHooks";
 
 function mean(vals: number[]): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -63,12 +64,13 @@ function computeGroups(
   return result;
 }
 
-function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
+function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup, onChoice }: {
   rows: ExperimentRow[];
   initialGroup?: string;
   metricCols: string[];
   paramCols: string[];
   schema: MetricsSchema | null;
+  onChoice?: (c: ChartChoice) => void;
 }) {
   const groupOptions = useMemo(
     () => ["branch", ...paramCols],
@@ -77,6 +79,7 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
 
   const [groupKey, setGroupKey] = useState(initialGroup ?? "branch");
   const [chartMetric, setChartMetric] = useState(metricCols[0] ?? "");
+  useChoiceReport(onChoice, { group: groupKey, metric: chartMetric });
 
   const groups = useMemo(
     () => computeGroups(rows, groupKey),
