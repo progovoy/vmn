@@ -96,17 +96,20 @@ describe("MetricScatter", () => {
   });
 });
 
+// A declared goal: without one the bars rank nothing (plan 32 F4).
+const ACC_MAX = { acc: { goal: "max" as const } };
+
 describe("MetricBarChart", () => {
   it("calls onSelect with the clicked bar's run", () => {
     const onSelect = vi.fn();
-    render(<MetricBarChart rows={ROWS} metricCols={["acc"]} schema={null} onSelect={onSelect} />);
+    render(<MetricBarChart rows={ROWS} metricCols={["acc"]} schema={ACC_MAX} onSelect={onSelect} />);
     fireEvent.click(screen.getAllByTestId("bar")[0]);
     // bars are sorted best-first: acc 0.9 is run 2
     expect(onSelect).toHaveBeenCalledWith("0.0.1-dev.2");
   });
 
   it("sizes bars relative to the largest value, so they fill any width", () => {
-    render(<MetricBarChart rows={ROWS} metricCols={["acc"]} schema={null} />);
+    render(<MetricBarChart rows={ROWS} metricCols={["acc"]} schema={ACC_MAX} />);
     const fills = screen.getAllByTestId("bar-fill").map((el) => el.style.width);
     expect(fills).toEqual(["100%", `${(0.8 / 0.9) * 100}%`]);
   });
