@@ -37,7 +37,7 @@ every row an ``open`` hint, the page the app's ``tree_columns``; with
 ``match_subtree=1`` the status and ``q`` keep the children whose subtree holds
 a passing run, each carrying ``matched`` (:mod:`~vmn_exp.ui.leaderboard_tree_match`).
 A flat or grouped page matching nothing carries ``hints`` ("did you mean
-tags.kind?", :mod:`~vmn_exp.ui.query_hints`); the web page's own URL params
+tags.kind?", :mod:`~vmn_exp.core.query_hints`); the web page's own URL params
 (``view``, ``kind``, ``tab``, ``sel``) are a 400 (plan 31 §4.2).
 """
 from functools import partial

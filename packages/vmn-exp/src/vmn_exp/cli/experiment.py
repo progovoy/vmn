@@ -3,6 +3,7 @@
 import os
 import shutil
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import List, Optional
 
 import yaml
@@ -735,7 +736,8 @@ def experiment_list(vcs, params, storage, args):
     if args.top:
         rows = rows[: args.top]
     if not matching and getattr(args, "query", None):
-        print_query_hints(storage, app_name, args.query, getattr(args, "archived", False))
+        every = SimpleNamespace(archived=getattr(args, "archived", False))
+        print_query_hints(args.query, lambda: _listed(storage, app_name, every, schema)[0])
 
     if as_json:
         print(dumps([row["meta"] for row in rows]))

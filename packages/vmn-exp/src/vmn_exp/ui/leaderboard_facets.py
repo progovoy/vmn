@@ -10,6 +10,7 @@ is the last one's counts minus the rows that left plus the rows that joined
 """
 
 from vmn_exp.core.fold import is_folded_param
+from vmn_exp.core.query import ROW_FIELDS
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.facet_values import DISTINCT_CAP, ParamValues
 from vmn_exp.ui.leaderboard_delta import changed_slots, delta_limit, left_rows
@@ -75,14 +76,16 @@ class FacetCounts:
                 out.param_values.move(params, by)
                 tags = row.get("tags") or {}
                 _tally(out.tag_keys, tags, by)
-                out.tag_values.move(tags, by)
+                # Only a tag named like a row field can answer a query hint.
+                out.tag_values.move({k: v for k, v in tags.items() if k in ROW_FIELDS}, by)
                 if row.get("parent"):
                     out.parented += by
         return out
 
     def may_carry(self, prefix, key, value):
         """Whether some row's ``params``/``tags`` (*prefix*) *key* may be
-        *value*: it is, or the key has too many values to tell."""
+        *value*: it is, or the key has too many values to tell (tags are
+        counted for the :data:`~vmn_exp.core.query.ROW_FIELDS` names only)."""
         values = self.param_values if prefix == "params" else self.tag_values
         return values.may_hold(key, value)
 

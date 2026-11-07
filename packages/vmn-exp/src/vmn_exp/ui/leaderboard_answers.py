@@ -6,9 +6,9 @@ top note signatures, plan 28 N7) and an empty answer's query hints."""
 from collections import Counter
 
 from vmn_exp.core.importance import param_importance
+from vmn_exp.core.query_hints import hints
 from vmn_exp.ui.leaderboard_scope import Filters, check_scope, scope_positions
 from vmn_exp.ui.leaderboard_top_counts import top_counts
-from vmn_exp.ui.query_hints import hints
 from vmn_exp.ui.readers.experiments import facets as facets_of
 
 # Importance results kept (each pins its scored runs' params dicts).
@@ -96,8 +96,8 @@ class SetAnswers:
         return self._status_counts.summary(snapshot, now)
 
     def query_hints(self, snapshot, texts, archived=False):
-        """Why *texts*, queries that matched nothing, did (:mod:`~vmn_exp.ui.query_hints`)."""
-        return hints(texts, self._facets.counts(snapshot, archived))
+        """Why *texts*, queries that matched nothing, did (:mod:`~vmn_exp.core.query_hints`)."""
+        return hints(texts, self._facets.counts(snapshot, archived).may_carry)
 
     def facets_payload(self, snapshot, **where):
         """What ``experiments-facets`` answers: :meth:`facets` with

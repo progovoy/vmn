@@ -3,8 +3,9 @@
 the built-in row field, so a run tagged ``kind: launch`` never matches it.
 When a query answers no row, each ``<row field> = <value>`` it requires
 (through ``and``/``or``, never under ``not``) whose value some row carries
-as ``tags.<field>`` or ``params.<field>`` gets a "did you mean" line, read
-from the facet counts, never from a row pass."""
+as ``tags.<field>`` or ``params.<field>`` gets a "did you mean" line. The
+caller says where a value is carried: the board from its facet counts, the
+CLI from its rows."""
 import json
 
 from vmn_exp.core.query import ROW_FIELDS, QueryError, parse_query
@@ -14,11 +15,12 @@ SUGGESTED = ("tags", "params")
 
 def row_equalities(text):
     """``(field, value)`` of each row-field equality *text* requires."""
+    if not text or not text.strip():
+        return []
     try:
-        node = parse_query(text) if text and text.strip() else None
+        return list(_equalities(parse_query(text)))
     except QueryError:
         return []
-    return list(_equalities(node)) if node else []
 
 
 def _equalities(node):
@@ -31,15 +33,15 @@ def _equalities(node):
             yield keys[0], node[3]
 
 
-def hints(texts, counts):
-    """The hint lines for queries *texts* that matched nothing, over the
-    :class:`~vmn_exp.ui.leaderboard_facets.FacetCounts` *counts*."""
-    out = []
+def hints(texts, carries):
+    """The hint lines for queries *texts* that matched nothing;
+    *carries(prefix, field, value)* says whether some row's ``tags``/``params``
+    (*prefix*) holds *value* at *field*."""
+    out = {}
     for text in texts:
         for field, value in row_equalities(text):
-            prefix = next((p for p in SUGGESTED if counts.may_carry(p, field, value)), None)
-            line = prefix and (f"{field} = {json.dumps(value)} matches nothing; "
+            prefix = next((p for p in SUGGESTED if carries(p, field, value)), None)
+            if prefix:
+                out.setdefault(f"{field} = {json.dumps(value)} matches nothing; "
                                f"did you mean {prefix}.{field}?")
-            if line and line not in out:
-                out.append(line)
-    return out
+    return list(out)
