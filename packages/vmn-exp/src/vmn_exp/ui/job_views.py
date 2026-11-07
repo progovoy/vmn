@@ -77,6 +77,17 @@ def _leading(order, metric, count=TOP):
     return scored
 
 
+def visible_rows(base, patched, verstrs):
+    """The visible rows of the present *verstrs*, as of the bucket *patched* is of."""
+    at = (base.position[v] for v in verstrs if v in base.position)
+    return visible([patched.get(i, base.rows[i]) for i in at], False)
+
+
+def child_rows(base, patched, verstr):
+    """The visible rows right under *verstr*, as of the bucket *patched* is of."""
+    return visible_rows(base, patched, base.children_of.get(verstr, ()))
+
+
 class JobViews:
     def __init__(self, cache):
         self.cache = cache
@@ -110,13 +121,11 @@ class JobViews:
 
     def rows_of(self, snapshot, verstrs):
         """The visible rows of the present *verstrs*, as of now."""
-        base, patched = self._view(snapshot)
-        at = (base.position[v] for v in verstrs if v in base.position)
-        return visible([patched.get(i, base.rows[i]) for i in at], False)
+        return visible_rows(*self._view(snapshot), verstrs)
 
     def children(self, snapshot, verstr):
         """The visible rows right under *verstr*, as of now."""
-        return self.rows_of(snapshot, self.cache._base(snapshot)[0].children_of.get(verstr, ()))
+        return child_rows(*self._view(snapshot), verstr)
 
     def summary(self, snapshot, schema, verstr, split=None):
         """The job's rollup with its row fields and ``top``, or None; with

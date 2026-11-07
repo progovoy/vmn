@@ -25,7 +25,7 @@ from vmn_exp.core.metric_schema import higher_is_better, metric_goal, with_resol
 from vmn_exp.ui.job_rollup_cache import _SplitRollups
 from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields
 from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, own_value
-from vmn_exp.ui.leaderboard_facets import visible
+from vmn_exp.ui.job_views import child_rows
 from vmn_exp.ui.leaderboard_group_summary import TAILS, of_sorted, tail_quantile
 from vmn_exp.ui.memo import LRU
 
@@ -190,13 +190,6 @@ class JobAggregates:
         if agg.by == CHILDREN:
             patched = base.patched(bucket)
             return lambda job: [(row["verstr"], None, own_value(row, metric))
-                                for row in _children(base, patched, job)]
+                                for row in child_rows(base, patched, job)]
         static, live = self._units.sources(snapshot.app_name, base, bucket, (agg.by, metric))
         return lambda job: carriers_below(job, tree, (static.tallies, live))
-
-
-def _children(base, patched, job):
-    """The visible rows right under *job*, as of the bucket *patched* is of."""
-    at = [base.position[kid] for kid in base.children_of.get(job, ())
-          if kid in base.position and kid != job]
-    return visible([patched.get(i, base.rows[i]) for i in at], False)
