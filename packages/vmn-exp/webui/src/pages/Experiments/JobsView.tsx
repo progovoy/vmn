@@ -124,6 +124,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
             onSearchChange={view.setSearch}
             onBranchChange={view.setBranch}
             queryError={data.queryError}
+            queryHints={data.hints}
             archived={view.archived}
             onArchivedChange={view.setArchived}
           />

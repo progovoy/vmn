@@ -37,6 +37,8 @@ export interface RowsData extends SubtreeMatches {
   held?: HeldChange;
   /** A Jobs view page's main metric (`top=`). */
   main?: MainMetric;
+  /** Why the query matched nothing (plan 31 §4.2): "did you mean tags.kind?". */
+  hints?: string[];
 }
 
 /** Every cached leaderboard list of an app, whatever its filter. */

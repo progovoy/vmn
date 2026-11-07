@@ -175,6 +175,7 @@ export function AllRunsView({ ws, app, views, onJobs }: {
             onSearchChange={view.setSearch}
             onBranchChange={view.setBranch}
             queryError={data.queryError}
+            queryHints={data.hints}
             archived={view.archived}
             onArchivedChange={view.setArchived}
             onSimilarChange={setSimilarText}

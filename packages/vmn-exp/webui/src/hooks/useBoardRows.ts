@@ -41,7 +41,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
   return {
     rows: data?.rows, total: data ? Math.max(data.total, data.rows.length) : 0, items, grouped,
     matches: undefined,
-    groups: data?.groups, main: data?.main,
+    groups: data?.groups, main: data?.main, hints: data?.hints,
     aggregate: data?.aggregate, defaultAggregate: groups.defaultAggregate, running: data?.running ?? 0,
     stale: groups.stale, staleError: groups.staleError,
     queryError: groups.queryError, pageError: groups.pageError, missing: false, moreError: groups.moreError,

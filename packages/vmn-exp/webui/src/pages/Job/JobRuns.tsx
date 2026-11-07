@@ -75,6 +75,7 @@ export default function JobRuns({ ws, app, verstr, name, paused, onPaused, onLiv
           onSearchChange={view.setSearch}
           onBranchChange={view.setBranch}
           queryError={data.queryError}
+          queryHints={data.hints}
           archived={view.archived}
           onArchivedChange={view.setArchived}
           help={board.queryHelp}

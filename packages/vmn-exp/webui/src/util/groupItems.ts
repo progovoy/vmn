@@ -21,6 +21,7 @@ export interface GroupedRows {
   running?: number;
   /** A Jobs view page's main metric (`top=`). */
   main?: MainMetric;
+  hints?: string[];
 }
 
 export type MoreState = "idle" | "loading" | "error";

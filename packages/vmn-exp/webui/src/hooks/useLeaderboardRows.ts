@@ -19,7 +19,7 @@ function firstPage(ws: string, app: string, f: RowsFilter): Promise<RowsData> {
     ? api.experiments(ws, app, f.sort, f.status, f.query)
     : api.experiments(ws, app, f.sort, f.status);
   return req.then((r) => ({
-    rows: [...r], total: r.total ?? r.length, next_cursor: r.next_cursor,
+    rows: [...r], total: r.total ?? r.length, next_cursor: r.next_cursor, hints: r.hints,
   }));
 }
 
@@ -155,6 +155,7 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
       : { jobs: data.jobs_matched ?? 0, runs: data.runs_matched },
     /** A Jobs view page's main metric (plan 32 F10). */
     main: data?.main,
+    hints: data?.hints,
     stale, queryError, pageError, staleError, missing, moreError,
     loadMore, refresh, visibleRef, viewportRef, showNew,
     hasMore: data ? hasMoreOf(data) : false,

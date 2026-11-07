@@ -26,12 +26,14 @@ const NO_FACETS: SuggestFacets = {};
  *  theirs. Each filter is reported for the server to apply; *rows* only feed
  *  the branch list when no branches are given. */
 export default function LeaderboardFilter({
-  rows = [], queryError, branches: knownBranches, facets = NO_FACETS, initial, archived = false,
+  rows = [], queryError, queryHints, branches: knownBranches, facets = NO_FACETS, initial, archived = false,
   onArchivedChange, onSimilarChange, help, ...reports
 }: FilterReports & {
   rows?: ExperimentRow[];
   /** What the server said about the query it refused; shown beside the bar. */
   queryError?: string | null;
+  /** Why the query matched nothing, from the server; shown under the bar. */
+  queryHints?: readonly string[];
   /** Every branch of the app (server facets); else the rows' branches. */
   branches?: string[] | null;
   /** Field names the query box suggests. */
@@ -93,6 +95,7 @@ export default function LeaderboardFilter({
           placeholder={similarOn ? SIMILAR_HINT : QUERY_HINT}
           suggestions={!similarOn}
           error={queryError}
+          notes={queryHints}
           hint={typedHint && <QueryFieldHint hint={typedHint} onApply={grammar.apply} />}
           inside={(onSimilarChange || help) && (
             <SearchTools>

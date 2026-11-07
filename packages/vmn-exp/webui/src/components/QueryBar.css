@@ -25,4 +25,5 @@
 .filter-bar .query-bar-box .similar-toggle { height: 24px; margin-left: auto; }
 .query-bar { flex-wrap: wrap; }
 .query-hint { flex-basis: 100%; font-size: 12px; color: var(--text-3); }
+.query-notes { flex-basis: 100%; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--text-2); }
 .query-hint .link { padding: 0; font-size: inherit; }

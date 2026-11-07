@@ -94,6 +94,8 @@ export interface GroupedPage {
   goal: "min" | "max" | null;
   /** A Jobs view page's main metric (`top=`). */
   main?: MainMetric;
+  /** Why the query matched nothing (plan 31 §4.2). */
+  hints?: string[];
 }
 
 export interface GroupOpts extends Omit<PageOpts, "last"> {

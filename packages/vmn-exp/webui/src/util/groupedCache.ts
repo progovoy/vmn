@@ -14,6 +14,7 @@ export function cacheOf(page: GroupedPage): GroupedRows {
     aggregate: page.aggregate,
     running: page.running,
     main: page.main,
+    hints: page.hints,
   };
 }
 
@@ -29,6 +30,7 @@ export function withGroups(cur: GroupedRows, next: GroupedPage): GroupedRows {
     aggregate: next.aggregate,
     running: next.running,
     main: next.main,
+    hints: next.hints,
   };
 }
 

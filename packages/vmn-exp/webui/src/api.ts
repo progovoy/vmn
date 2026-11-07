@@ -65,7 +65,11 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
 }
 
 /** A page of rows, the server's total and the next page's keyset cursor. */
-export type RowsPage = { rows: ExperimentRow[]; total: number; next_cursor?: string | null } & SubtreeMatches;
+export type RowsPage = {
+  rows: ExperimentRow[]; total: number; next_cursor?: string | null;
+  /** Why the query matched nothing (plan 31 §4.2). */
+  hints?: string[];
+} & SubtreeMatches;
 
 /** One page of rows plus the server's total. Tolerates a server that still
  *  answers a plain list. */
@@ -116,7 +120,7 @@ export const api = {
     ws: string, app: string, sort?: string, status?: string, query?: string
   ) =>
     fetchPage(ws, app, { sort, status, query, offset: 0, limit: PAGE_SIZE })
-      .then(({ rows, total, next_cursor }) => Object.assign(rows, { total, next_cursor }) as ExperimentPage),
+      .then(({ rows, total, next_cursor, hints }) => Object.assign(rows, { total, next_cursor, hints }) as ExperimentPage),
   experimentsPaged: (ws: string, app: string, opts?: PageOpts) =>
     fetchPage(ws, app, opts),
   /** The board's runs grouped by a link or a field (plan 22 K1). */

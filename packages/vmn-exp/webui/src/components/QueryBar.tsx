@@ -8,7 +8,7 @@ import "./QueryBar.css";
  *  the text box that types more of them (*inside*, e.g. the similar toggle,
  *  sits in the box). */
 export default function QueryBar({
-  tokens, onRemove, text, onText, onSubmit, facets, placeholder, suggestions, error, hint, inside,
+  tokens, onRemove, text, onText, onSubmit, facets, placeholder, suggestions, error, hint, notes, inside,
 }: {
   tokens: readonly FilterToken[];
   onRemove: (token: FilterToken) => void;
@@ -22,6 +22,8 @@ export default function QueryBar({
   error?: string | null;
   /** A note on how the typed text is read, beside the box. */
   hint?: ReactNode;
+  /** What the server said about a query that matched nothing (plan 31 §4.2). */
+  notes?: readonly string[];
   inside?: ReactNode;
 }) {
   const last = tokens[tokens.length - 1];
@@ -53,6 +55,11 @@ export default function QueryBar({
       </div>
       {error && <span className="query-error" role="alert">{error}</span>}
       {hint && <span className="query-hint">{hint}</span>}
+      {notes && notes.length > 0 && (
+        <ul className="query-notes" aria-label="Query hints">
+          {notes.map((n) => <li key={n} className="query-note">{n}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
