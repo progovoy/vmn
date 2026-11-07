@@ -115,6 +115,12 @@ class JobRollupCache:
         return self._specs.get((base.token, cache.schema_key(schema), names), lambda: RollupSpec(
             schema, lambda: cache._facets.common_metrics(snapshot), progress=names))
 
+    def main(self, snapshot, schema):
+        """``{metric, goal}``: the metric every job summary is of (a Jobs
+        view page's ``main``, plan 32 F10)."""
+        spec = self.spec(snapshot, schema)
+        return {"metric": spec.main, "goal": spec.goals.get(spec.main)}
+
     def tree(self, base):
         """*base*'s :class:`~vmn_exp.ui.job_rollup.JobTree`."""
         return self._trees.get(base.token, lambda: JobTree(base))

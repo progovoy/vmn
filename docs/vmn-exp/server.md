@@ -329,7 +329,9 @@ every app carries these gauges, labelled `workspace` and `app`:
 - **Which outer runs.** Top-level ones that are live (running, or with runs
   running, waiting or stuck under them), and those that ended within
   `server.metrics_ended_hours` (`--metrics-ended-hours`, default 24; an
-  outer run's end is its own finish, else its runs' last). At most 200 per
+  outer run's end is its own finish, else its runs' last, else its
+  creation time when none finished: that end only decides which outer runs
+  are listed, no gauge reports it). At most 200 per
   app: the live ones first, then the newest. The cap bounds the series; an
   older outer run's numbers stay on its `.../experiments/{v}/summary`.
   The `outer_run` label is the verstr (`job` is Prometheus' own target label).

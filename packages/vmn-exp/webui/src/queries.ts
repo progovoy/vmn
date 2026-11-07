@@ -6,7 +6,7 @@ import { fetchRunStatuses } from "./apiSeries";
 import type { HeldChange } from "./pages/leaderboardRefresh";
 import { SHARED_STALE_MS } from "./queryClient";
 import type {
-  AppRow, ExperimentFacets, ExperimentRow, Meta, MetricsSchema, TopRuns, Workspace,
+  AppRow, ExperimentFacets, ExperimentRow, MainMetric, Meta, MetricsSchema, TopRuns, Workspace,
 } from "./types";
 
 /** Run detail served from cache for this long before a mount refetches it. */
@@ -35,6 +35,8 @@ export interface RowsData extends SubtreeMatches {
   next_cursor?: string | null;
   /** What a held refresh kept off screen (the `N new · show` bar, plan 23 W6). */
   held?: HeldChange;
+  /** A Jobs view page's main metric (`top=`). */
+  main?: MainMetric;
 }
 
 /** Every cached leaderboard list of an app, whatever its filter. */

@@ -882,7 +882,10 @@ message.
   rate_per_min}` when the outer run declares one (else null); `progress`
   and `eta_sec` are then its, while `done`/`expected`/`counts`/
   `throughput_per_min` stay run counts. The outer run's `summary` carries
-  the same.
+  the same. A paged answer (`limit`, flat or grouped) carries `main`:
+  `{metric, goal}`, the metric every `job` is of (the primary, else the
+  alphabetically first metric with a goal), so a page of single runs names
+  it too; the web's Best column reads only it.
   - With `match_subtree=1` and a `q`, an outer run matches when it or any run of its
     subtree does. Each row then gets `matched`, and the page gets
     `jobs_matched`/`runs_matched`.
@@ -898,7 +901,7 @@ message.
     under the board lists the same outer runs.
   - `experiments-facets` returns `jobs`/`singles` counts.
 - **`experiments?children_of=<verstr>`** pages that run's direct children
-  for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns}`
+  for [the tree](#the-tree): `{rows, total, next_cursor, tree_columns, main}`
   (always paged, `limit` <= 1000), filtered (`q`, `status`, `archived`),
   sorted (`sort`/`order`, the `job:*` sorts by the children's summaries
   too) and keyset-paged (`cursor`) like the board, with the same ETag/304.

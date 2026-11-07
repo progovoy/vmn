@@ -123,6 +123,15 @@ describe("an outer run's tree", () => {
     expect(within(treeRow("solo")).getByText("3.1× siblings")).toBeInTheDocument();
   });
 
+  it("shows a leaf's value of the page's main metric with its goal, not the schema's (plan 32 F10)", async () => {
+    fetched.mockImplementation(async () => ({
+      ...page([row("leaf", { metrics: { loss: 0.3, acc: 0.8 } })]), main: { metric: "acc", goal: "max" },
+    }));
+    renderTree();
+    await screen.findByRole("link", { name: "leaf" });
+    expect(treeRow("leaf").querySelector('[data-col-id="best"]')!.textContent).toBe("0.8 ↑");
+  });
+
   it("shows the columns the app's settings name for a node's kind", async () => {
     renderTree();
     await screen.findByRole("link", { name: "t1" });

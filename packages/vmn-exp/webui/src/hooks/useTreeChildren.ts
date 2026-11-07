@@ -59,6 +59,7 @@ export function useTreeChildren(ws: string, app: string, root: string, filter: T
     }))),
   });
   const columns = results.find((r) => r.data?.tree_columns)?.data?.tree_columns;
+  const main = results.find((r) => r.data?.main)?.data?.main;
 
   const toggle = useCallback((verstr: string, open: boolean) =>
     setOverrides((m) => new Map(m).set(verstr, open)), []);
@@ -66,7 +67,7 @@ export function useTreeChildren(ws: string, app: string, root: string, filter: T
     setPageCounts((m) => new Map(m).set(parent, (m.get(parent) ?? 1) + 1)), []);
   const rows = items.flatMap((it) => (it.kind === "node" ? [it.row] : []));
 
-  return { items, rows, columns, toggle, more };
+  return { items, rows, columns, main, toggle, more };
 }
 
 const sameItem = (a: TreeItem, b: TreeItem) =>

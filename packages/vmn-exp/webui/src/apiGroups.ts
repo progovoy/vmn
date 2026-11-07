@@ -4,7 +4,7 @@
 import { setFilter } from "./api";
 import type { PageOpts } from "./api";
 import { appTag, get } from "./http";
-import type { ExperimentRow } from "./types";
+import type { ExperimentRow, MainMetric } from "./types";
 
 /** Links between runs (the run pointed at heads the group; `code_verstr`:
  *  the code state) and row fields. */
@@ -92,6 +92,8 @@ export interface GroupedPage {
   /** The metric the groups sort by and its goal (null: none, `best` has no value). */
   metric: string | null;
   goal: "min" | "max" | null;
+  /** A Jobs view page's main metric (`top=`). */
+  main?: MainMetric;
 }
 
 export interface GroupOpts extends Omit<PageOpts, "last"> {

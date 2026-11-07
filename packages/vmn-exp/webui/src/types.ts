@@ -260,6 +260,13 @@ export interface DeclaredProgress {
   rate_per_min: number | null;
 }
 
+/** A Jobs view or tree page's `main` (plan 32 F10): the metric its job
+ *  summaries' best and spread are of, and its goal (null: none declared). */
+export interface MainMetric {
+  metric: string | null;
+  goal: "min" | "max" | null;
+}
+
 /** A job's compact rollup on its Jobs-view row (plan 23 §10). */
 export interface JobRollup extends JobProgressFields {
   /** The main metric the best and spread are of, and its goal (null: no best). */

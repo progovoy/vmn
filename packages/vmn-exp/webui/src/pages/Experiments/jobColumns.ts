@@ -1,7 +1,6 @@
 /** The Jobs view's columns (plan 23 W1, §3.1) and the sort keys of the
  *  contract (§10) their headers sort by. */
 import type { CSSProperties } from "react";
-import type { ExperimentRow, MetricsSchema } from "../../types";
 import type { Order } from "../../hooks/useLeaderboardView";
 import { IDX_SORT } from "../LeaderboardHead";
 import { goalOrder, type Goal } from "../../util";
@@ -51,24 +50,6 @@ const SHARED_CELL: Record<string, string> = { check: " check-cell", idx: " idx-c
 /** Each column's body cell class. */
 export const CELL_CLASSES: readonly string[] = JOB_COLUMNS.map((c) =>
   `jobs-cell-${c.id}${c.numeric ? " num" : ""}${SHARED_CELL[c.id] ?? ""}`);
-
-/** The metric the Best and Spread columns are of: the jobs' rollup metric,
- *  else the schema's primary, else its first metric with a goal. */
-export function mainMetric(rows: readonly ExperimentRow[], schema: MetricsSchema | null | undefined): string | null {
-  const fromJob = rows.find((r) => r.job?.metric)?.job?.metric;
-  if (fromJob) return fromJob;
-  const entries = Object.entries(schema ?? {});
-  return entries.find(([, s]) => s.primary)?.[0] ?? entries.find(([, s]) => s.goal)?.[0] ?? null;
-}
-
-/** The Best column's goal: the server's job rollup's (null: it ranks
- *  nothing), else, with single runs only, the schema's declared one;
- *  never guessed (plan 32 F5). */
-export function mainGoal(rows: readonly ExperimentRow[], metric: string | null, schema: MetricsSchema | null | undefined): Goal {
-  const job = rows.find((r) => r.job?.metric)?.job;
-  if (job) return job.goal;
-  return (metric && schema?.[metric]?.goal) || null;
-}
 
 /** `job:best`'s best-first direction: toward its goal, ascending without
  *  one (plan 32 F4); null for every other column. */

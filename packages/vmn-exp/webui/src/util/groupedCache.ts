@@ -13,6 +13,7 @@ export function cacheOf(page: GroupedPage): GroupedRows {
     total_groups: page.total_groups,
     aggregate: page.aggregate,
     running: page.running,
+    main: page.main,
   };
 }
 
@@ -27,6 +28,7 @@ export function withGroups(cur: GroupedRows, next: GroupedPage): GroupedRows {
     total_groups: next.total_groups,
     aggregate: next.aggregate,
     running: next.running,
+    main: next.main,
   };
 }
 

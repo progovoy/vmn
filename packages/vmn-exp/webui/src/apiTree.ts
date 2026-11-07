@@ -3,7 +3,7 @@
  *  job summary, every one an `open` hint. Kept apart from api.ts so tests
  *  mocking `../api` keep the tree's own. */
 import { appTag, get } from "./http";
-import type { ExperimentRow, JobRollup } from "./types";
+import type { ExperimentRow, JobRollup, MainMetric } from "./types";
 
 /** A child job's summary: attention over its own subtree (plan 28 P1) and,
  *  with the app's `split_by`, its runs per value (P3). */
@@ -29,6 +29,8 @@ export interface TreePage {
   next_cursor?: string | null;
   /** The app's `experiment.ui.tree_columns`: show keys per `tags.kind` value. */
   tree_columns?: Record<string, string[]>;
+  /** The metric (and goal) the nodes' best is of. */
+  main?: MainMetric;
 }
 
 /** The Runs tab's filters a tree is asked under: its status and query

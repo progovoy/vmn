@@ -4,7 +4,7 @@ import { render } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { createQueryClient } from "../../../queryClient";
-import type { ExperimentRow } from "../../../types";
+import type { ExperimentRow, MainMetric } from "../../../types";
 import { readPicks } from "../../../util/runSelection";
 import { job } from "../../../util/__tests__/jobFixture";
 import ExperimentsPage from "../ExperimentsPage";
@@ -67,6 +67,8 @@ export function topRow(i: number, extra: Partial<ExperimentRow> = {}): Experimen
 export const singleRow = (i: number, extra: Partial<ExperimentRow> = {}) =>
   topRow(i, { kind: "single", status: "succeeded", tree_status: "succeeded", job: null, ...extra });
 
-export const jobsPage = (rows: ExperimentRow[], total?: number) => ({ rows, total: total ?? rows.length });
+/** A Jobs view page: its `main` is the job fixture's metric unless given. */
+export const jobsPage = (rows: ExperimentRow[], total?: number, main: MainMetric = { metric: "val_loss", goal: "min" }) =>
+  ({ rows, total: total ?? rows.length, main });
 
 export const notFound = () => Object.assign(new Error("nf"), { status: 404 });

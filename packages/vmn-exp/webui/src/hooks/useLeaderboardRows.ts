@@ -153,6 +153,8 @@ export function useLeaderboardRows(ws: string, app: string, filter: RowsFilter, 
     /** A Jobs view search's counts (plan 23 W11), when the server sent them. */
     matches: data?.runs_matched === undefined ? undefined
       : { jobs: data.jobs_matched ?? 0, runs: data.runs_matched },
+    /** A Jobs view page's main metric (plan 32 F10). */
+    main: data?.main,
     stale, queryError, pageError, staleError, missing, moreError,
     loadMore, refresh, visibleRef, viewportRef, showNew,
     hasMore: data ? hasMoreOf(data) : false,

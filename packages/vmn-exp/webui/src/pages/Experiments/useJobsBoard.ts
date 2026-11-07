@@ -17,7 +17,7 @@ import { hasSearch, type SearchFilter } from "../../util/searchScope";
 import { combineQueries } from "../../util/searchQuery";
 import { BIG_GROUP } from "../../util/groupClause";
 import { boardSortState } from "../boardSortState";
-import { jobBestOrder, mainGoal, mainMetric } from "./jobColumns";
+import { jobBestOrder } from "./jobColumns";
 import type { TopRuns } from "../../types";
 import { PRESETS, type Preset } from "./presets";
 import { treeStatusQuery } from "./treeStatus";
@@ -56,13 +56,14 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   });
   const { refresh } = data;
   const rows = useMemo(() => (data.items ? boardRows(data.items) : []), [data.items]);
-  const metric = mainMetric(rows, schema);
+  // The server's main metric, never one picked from the rows (plan 32 F10).
+  const metric = data.main?.metric ?? null;
+  const goal = data.main?.goal ?? null;
   const running = useBoardLive({
     ws, app, scope: "top", paused, rows, serverRunning: data.running > 0, refresh, isRunning: treeRunning,
   });
 
   const selection = useBoardSelection(ws, app, filter, rows, view);
-  const goal = mainGoal(rows, metric, schema);
   const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobBestOrder(s, goal));
 
   return {

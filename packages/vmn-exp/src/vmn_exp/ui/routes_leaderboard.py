@@ -15,7 +15,9 @@ Archived rows are left out of all of them unless the request passes
 (plan 22 K1, :mod:`~vmn_exp.ui.leaderboard_groups`). ``scope=<verstr>``
 narrows each of them to that run's subtree (without it; an unknown run is a
 404), and ``top=1`` the list to the top-level runs, each with its ``job``
-summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`);
+summary, sortable by ``job:*`` (plan 23 S2, :mod:`~vmn_exp.ui.leaderboard_jobs`),
+a paged answer (and a tree page) carrying ``main``, the metric and goal those
+summaries are of (plan 32 F10);
 ``match_subtree=1`` matches ``q`` over their subtrees instead (plan 23 S8b,
 :mod:`~vmn_exp.ui.leaderboard_subtree_match`; flat pages only).
 ``top=jobs``/``top=singles`` those with and without children (plan 23 S7).
@@ -142,15 +144,16 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
                           rows_per_group=rows_per_group, group_key=group_key)
             compute = (partial(groups_by_comments, cache, counts=counts) if by_comments
                        else cache.groups)
-            return _answer(request, lambda s, sc, **p: joined_groups(compute(s, sc, group, **p),
-                                                                     counts),
+            return _answer(request, _with_main(lambda s, sc, **p: joined_groups(
+                compute(s, sc, group, **p), counts), top),
                            snapshot, schema, params, comments=generation, group=group,
                            **clock)
         if by_comments:
             compute = partial(page_by_comments, cache, counts=counts)
         else:
             compute = partial(cache.page, match_subtree=match_subtree, attention=attention)
-        return _answer(request, lambda *a, **p: joined(compute(*a, **p), counts), snapshot,
+        page = _with_main(lambda *a, **p: joined(compute(*a, **p), counts), top)
+        return _answer(request, page, snapshot,
                        schema, dict(params, last=last, cursor=cursor), comments=generation,
                        match_subtree=match_subtree and not by_comments, attention=attention,
                        **clock)
@@ -226,8 +229,21 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
             body = cache.page(*args, **page, attention=attention, split=split)
             return dict(joined(body, counts), tree_columns=columns)
 
-        return _answer(request, compute, snapshot, schema, params, attention=attention,
+        return _answer(request, _with_main(compute), snapshot, schema, params, attention=attention,
                        split=split, tree_columns=columns, **tag_extra)
+
+    def _with_main(compute, jobs=True):
+        """*compute* whose page (a dict) carries ``main``, the metric and
+        goal of its ``job`` summaries, when it is of *jobs* (plan 32 F10)."""
+        if not jobs:
+            return compute
+
+        def answer(snapshot, schema, **params):
+            body = compute(snapshot, schema, **params)
+            if not isinstance(body, dict):
+                return body
+            return dict(body, main=cache.jobs.main(snapshot, schema))
+        return answer
 
     def _top(top):
         try:
