@@ -143,8 +143,17 @@ shown without a direction. The payload's `ranked` is per metric.
 Checked and clean: status rollups (`core/tree.py`, `ui/status_summary.py`),
 baseline deltas (`ui/baseline_views.py:51-60`), group-of-jobs aggregates,
 step-metric joins, cursor projections, config precedence (the applied value is
-reported). Not audited yet: `webui/src/reports/*` panel values and
-`ui/export_bundle`. Audit those first, as part of this plan.
+reported). Reports and export, audited 2026-11-07: pinned-run panels
+labelled runs by their position (`@1`, `@2`; `reports/panelData.ts`), and
+the bar chart ranked a goal-less metric descending as "the top 50"; both
+fixed. Left: "Add to report" saves the chart's first metric and default
+axes (`reports/viewSpecs.ts:38-47`, `grouped` always by `branch`), not the
+ones the reader picked; an exported image over the media cap is a blank
+`src` (`reports/export.tsx:26`) instead of "not included"; a published
+panel asking for a query it did not capture shows "Loading…" forever
+(`reports/publishedData.tsx:96`) instead of "not published". Server side
+(`ui/reports_publish.py`, `cli/report_export.py`, `core/panel_spec.py`)
+computes no values: clean.
 
 ## 4. Order
 
