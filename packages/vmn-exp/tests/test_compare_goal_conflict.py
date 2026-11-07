@@ -9,7 +9,9 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.readers import diffs as diff_reader
 
 V1, V2, V3 = "1.0.0-dev.aaa.bbb", "1.0.0-dev.ccc.ddd", "1.0.0-dev.eee.fff"
+# from_policy/to_policy: plan 32 F1 (each side's summary; None for last).
 CONFLICT = {"from": 0.5, "to": 0.3, "goal": None, "param": False,
+            "from_policy": None, "to_policy": None,
             "goal_conflict": True, "goals": ["min", "max"]}
 
 
@@ -50,7 +52,8 @@ def test_the_apps_schema_goal_is_the_one_goal_of_both_runs(tmp_path):
     schema = {"loss": {"goal": "max"}}
 
     for delta in (_storage_delta(storage, schema), _snapshot_delta(storage, schema)):
-        assert delta["loss"] == {"from": 0.5, "to": 0.3, "goal": "max", "param": False}
+        assert delta["loss"] == {"from": 0.5, "to": 0.3, "goal": "max", "param": False,
+                                 "from_policy": "max", "to_policy": "max"}
 
 
 def test_the_compared_runs_declaration_beats_a_later_runs(tmp_path):
@@ -65,7 +68,8 @@ def test_another_runs_declaration_gives_the_goal_when_neither_declares(tmp_path)
     storage = _storage(tmp_path, None, None)
     _run(storage, V3, 0.1, "max", day=3)
 
-    assert _snapshot_delta(storage)["loss"] == {"from": 0.5, "to": 0.3, "goal": "max", "param": False}
+    assert _snapshot_delta(storage)["loss"] == {"from": 0.5, "to": 0.3, "goal": "max", "param": False,
+                                 "from_policy": None, "to_policy": None}
 
 
 def test_other_runs_conflicting_goals_give_no_goal_when_neither_declares(tmp_path):
