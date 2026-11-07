@@ -1655,6 +1655,12 @@ holding the key holds it as a param it never logged as a metric (a logged
 metric of a param's name keeps its place; rows list such names in
 `logged_params`), so a param only one run set is still a param. The Compare *Code* tab and the run page's
 *Changes* card list those under *Params changed*, the rest as metrics.
+`goal` is one goal for both runs: the app's metrics schema, else the two runs'
+own `define_metric` goals, else (store workspaces) the latest other run's
+declaration. When the two runs declare
+different goals the delta has no direction: `goal: null`, `goal_conflict:
+true` and `goals: [from's, to's]`, and the web shows *goals differ* instead
+of a better/worse tone.
 
 `GET .../experiments/{verstr}/artifacts/{path}` downloads an artifact, and
 `.../outputs/{path}` one of vmn's own outputs (`output.log`, media, tables;

@@ -577,6 +577,9 @@ export interface DiffDelta {
   to: number | null;
   goal: "min" | "max" | null;
   param: boolean;
+  /** The two runs declare different goals: `goal` is null, `goals` names them. */
+  goal_conflict?: true;
+  goals?: ["min" | "max", "min" | "max"];
 }
 
 export interface DiffResult {

@@ -5,6 +5,7 @@ import type { PatchFile } from "../apiRunCode";
 import type { DiffDelta } from "../types";
 import { fmtVal } from "../util";
 import DiffText from "./DiffText";
+import GoalsDiffer from "./GoalsDiffer";
 import { deltaTone, fmtDelta, numericChange } from "./diffDeltaTone";
 
 /** Metrics shown before "+N more". */
@@ -39,7 +40,7 @@ export function MetricDelta({ deltas }: { deltas: Record<string, DiffDelta> }) {
             const diff = change(entry);
             return (
               <tr key={k}>
-                <th scope="row">{k}</th>
+                <th scope="row">{k}<GoalsDiffer delta={d} /></th>
                 <td className="metric num">{fmtVal(d.from)}</td>
                 <td className="metric num">{fmtVal(d.to)}</td>
                 <td className={`metric num delta ${deltaTone(d, diff)}`}>

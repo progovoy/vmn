@@ -13,7 +13,7 @@ from vmn_exp.core.fold import (
     fold_definitions, fold_log, fold_metrics, fold_values, logged_params,
 )
 from vmn_exp.core.log import load_log
-from vmn_exp.core.metric_schema import effective_schema, metric_goal
+from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.ui.memo import LRU
@@ -122,16 +122,20 @@ def _is_param_key(key, sides):
     )
 
 
-def _resolve_goal(key, run_defs1, run_defs2, schema):
-    """The goal of *key*: the runs' own definitions first, then the schema."""
-    return (
-        metric_goal(run_defs1, key)
-        or metric_goal(run_defs2, key)
-        or metric_goal(schema, key)
-    )
+def _goal_fields(key, run_defs, schema, declared):
+    """The one goal of *key* for both runs (plan 32 F9): the app's *schema*
+    first, then the two runs' own definitions (*run_defs*), then what other
+    runs *declared*. Runs declaring different goals give no goal and say so."""
+    goal = metric_goal(schema, key)
+    if goal:
+        return {"goal": goal}
+    own = [metric_goal(defs, key) for defs in run_defs]
+    if None not in own and own[0] != own[1]:
+        return {"goal": None, "goal_conflict": True, "goals": own}
+    return {"goal": own[0] or own[1] or metric_goal(declared, key)}
 
 
-def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None):
+def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None, declared=None):
     params1, logged1, defs1 = side1_extra
     params2, logged2, defs2 = side2_extra
     delta = {}
@@ -139,13 +143,8 @@ def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None):
         if m1.get(key) == m2.get(key):
             continue
         is_param = _is_param_key(key, ((m1, params1, logged1), (m2, params2, logged2)))
-        goal = None if is_param else _resolve_goal(key, defs1, defs2, schema)
-        delta[key] = {
-            "from": m1.get(key),
-            "to": m2.get(key),
-            "goal": goal,
-            "param": is_param,
-        }
+        goal = {"goal": None} if is_param else _goal_fields(key, (defs1, defs2), schema, declared)
+        delta[key] = {"from": m1.get(key), "to": m2.get(key), **goal, "param": is_param}
     return delta
 
 
@@ -269,17 +268,16 @@ def experiment_diff_from_snapshot(snap, v1, v2, schema=None):
     """:func:`experiment_diff_from_storage` of two runs the index *snap*
     holds, from its rows and side tables (no log, record or code read: a
     long-stuck run's log is thousands of segments); None when it lacks one.
-    The rows' metrics are already folded per summary policy; the goals come
-    from the declared schema (run definitions, latest run wins) under *schema*."""
+    The rows' metrics are already folded per summary policy; each goal is
+    :func:`_goal_fields`'s, the other runs' declarations (latest run wins)
+    taken last."""
     rows = [snap.row(v) for v in (v1, v2)]
     if None in rows:
         return None
-    goals = effective_schema(schema, snap.declared_schema())
-    no_defs = {}
     delta = _metrics_delta(
         snap.metrics_of(v1), snap.metrics_of(v2),
-        (rows[0]["params"], rows[0].get("logged_params", ()), no_defs),
-        (rows[1]["params"], rows[1].get("logged_params", ()), no_defs),
-        goals,
+        (rows[0]["params"], rows[0].get("logged_params", ()), snap.declared_defs.get(v1)),
+        (rows[1]["params"], rows[1].get("logged_params", ()), snap.declared_defs.get(v2)),
+        schema, snap.declared_schema(),
     )
     return _metrics_only([v1, v2], delta)

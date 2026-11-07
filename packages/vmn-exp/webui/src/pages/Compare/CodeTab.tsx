@@ -8,6 +8,7 @@ import DiffText from "../../components/DiffText";
 import RunPicker from "../../components/RunPicker";
 import CopyRefButton from "../../components/CopyRefButton";
 import ParamDeltaBlock from "../../components/ParamDeltaBlock";
+import GoalsDiffer from "../../components/GoalsDiffer";
 import { DIFF_REASON } from "../../components/RunChangesBody";
 import { deltaTone, fmtDelta, numericChange, type DeltaTone } from "../../components/diffDeltaTone";
 import { useRunLabels } from "./useRunLabels";
@@ -117,7 +118,7 @@ export default function CodeTab({ ws, app, v, to, onFrom, onTo }: {
                     const color = TONE_COLOR[deltaTone(d, diff)];
                     return (
                       <tr key={k}>
-                        <td style={{ fontSize: 13 }}>{k}</td>
+                        <td style={{ fontSize: 13 }}><span>{k}</span><GoalsDiffer delta={d} /></td>
                         <td className="metric num" style={{ color: "var(--text-2)" }}>
                           {fmtVal(d.from)}
                         </td>
