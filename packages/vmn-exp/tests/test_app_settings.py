@@ -70,6 +70,9 @@ def test_an_empty_file_is_no_settings(text):
     ("ui: {group_aggregate: sum}\n", "group_aggregate"),
     ("ui: {stale_after_min: 0}\n", "stale_after_min"),
     ("ui: {stale_after_min: true}\n", "stale_after_min"),
+    ("ui: {failed_pct_threshold: 0}\n", "failed_pct_threshold"),
+    ("ui: {failed_pct_threshold: 101}\n", "failed_pct_threshold"),
+    ("ui: {failed_pct_threshold: '5'}\n", "failed_pct_threshold"),
     ("metrics: {loss: [\n", "YAML"),
 ])
 def test_invalid_settings_are_refused_naming_the_key(text, words):

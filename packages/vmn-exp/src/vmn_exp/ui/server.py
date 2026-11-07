@@ -779,7 +779,7 @@ def create_app(
 
     forget_git = routes_shell.register(
         app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness,
-        _attention_entries, _status_schema, _views)
+        _attention_entries, _status_schema, _views, _experiment_ui)
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)

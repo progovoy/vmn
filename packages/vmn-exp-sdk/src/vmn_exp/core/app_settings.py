@@ -4,7 +4,7 @@ The reader-facing subset of conf's ``experiment:`` block, kept in the store
 (:mod:`vmn_exp.core.app_settings_store`) so a store workspace, which has no
 checkout, reads it too: ``metrics.<name|glob>.{goal,summary,hidden,primary,
 step_metric,chart}`` and ``ui.*`` (``group_aggregate``, ``stale_after_min``,
-``progress``, ``attention``, ``baseline``, ``views`` and ``tree_columns`` checked, other ``ui``
+``failed_pct_threshold``, ``progress``, ``attention``, ``baseline``, ``views`` and ``tree_columns`` checked, other ``ui``
 keys kept as they are). A checkout's conf beats them, per metric name and per
 ``ui`` key; they beat what runs declare. Pure.
 """
@@ -50,9 +50,14 @@ def _tree_columns(value):
         for kind, keys in value.items())
 
 
+def _percent(value):
+    return is_finite_number(value) and 0 < value <= 100
+
+
 _UI_FIELDS = {
     "group_aggregate": lambda v: v in GROUP_AGGREGATES,
     "stale_after_min": lambda v: is_finite_number(v) and v > 0,
+    "failed_pct_threshold": _percent,
     "progress": _progress_mapping,
     "tree_columns": _tree_columns,
 }
@@ -284,6 +289,17 @@ def views_entries(ui):
 def _search(text):
     query = text.strip().lstrip("?")
     return f"?{query}" if query else ""
+
+
+# The N of the Outer runs failed chip's "≥ N% failed" option (plan 31 §1).
+DEFAULT_FAILED_PCT_THRESHOLD = 5
+
+
+def failed_pct_threshold_of(ui):
+    """*ui*'s ``failed_pct_threshold``, :data:`DEFAULT_FAILED_PCT_THRESHOLD`
+    when it has none or it is invalid."""
+    value = (ui or {}).get("failed_pct_threshold")
+    return value if _percent(value) else DEFAULT_FAILED_PCT_THRESHOLD
 
 
 def tree_columns_of(ui):

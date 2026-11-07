@@ -83,8 +83,11 @@ from vmn_exp.core.tree import ancestry_of
 # ``experiment_status.status_fields`` + ``experiment_tree.annotate_tree``
 # (``queue_sec``) + the board's ``duration_ratio`` (plan 28 N4).
 # Spelled out so a typo is a query error instead of a silently empty result;
-# BELOW_FIELDS are the Jobs view's counts of the runs below a top-level row.
-BELOW_FIELDS = frozenset({"live_below", "running_below", "stuck_below"})
+# BELOW_FIELDS are the Jobs view's counts of the runs below a top-level row
+# (live ones, and the failed ones with their share, plan 31 §1).
+LIVE_BELOW_FIELDS = frozenset({"live_below", "running_below", "stuck_below"})
+FAILED_BELOW_FIELDS = frozenset({"failed_below", "failed_pct"})
+BELOW_FIELDS = LIVE_BELOW_FIELDS | FAILED_BELOW_FIELDS
 ROW_FIELDS = BELOW_FIELDS | frozenset(
     """
     idx verstr code_verstr timestamp note branch base_version parent

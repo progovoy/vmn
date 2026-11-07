@@ -9,7 +9,7 @@ from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_live_below import BELOW
 
 from vmn_exp.core import status as status_mod
-from vmn_exp.core.query import BELOW_FIELDS, filter_rows
+from vmn_exp.core.query import LIVE_BELOW_FIELDS, filter_rows
 from vmn_exp.core.query_below import below_extra
 
 
@@ -24,7 +24,7 @@ def _ui_counts(rollups, verstr):
 
 
 def _core_counts(extra, verstr):
-    return {field: extra[field](verstr) for field in BELOW_FIELDS}
+    return {field: extra[field](verstr) for field in LIVE_BELOW_FIELDS}
 
 
 def _top(cache, snap, query):
@@ -48,7 +48,7 @@ def test_core_and_board_count_the_same_runs_below(seed):
         for row in rows:
             verstr = row["verstr"]
             assert _core_counts(extra, verstr) == _ui_counts(rollups, verstr), verstr
-        for field in BELOW_FIELDS:
+        for field in LIVE_BELOW_FIELDS:
             assert _top(cache, snap, f"{field} > 0") == _core_top(rows, f"{field} > 0"), field
         fleet.mutate(T0, 15)
 

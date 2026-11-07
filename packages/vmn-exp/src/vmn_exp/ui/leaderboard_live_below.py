@@ -2,7 +2,9 @@
 """``live_below`` (plan 28 §4.5): how many runs below a row still run, wait
 or are stuck — its Jobs view rollup's counts (settled runs left out; 0 for
 a run without children) — and ``running_below``/``stuck_below``, those
-running or stuck alone (the outer runs' status chips): the core's
+running or stuck alone (the outer runs' status chips), and
+``failed_below``/``failed_pct`` (plan 31 §1: the rollup's failed and lost
+runs and ``failed_pct``): the core's
 :mod:`~vmn_exp.core.query_below` counts, which ``vmn-exp list --query`` and
 the SDK read, taken here from the cached rollups (:func:`board_extra`). A
 ``query`` or ``top_query`` reading one (the Live/Review presets, a status
@@ -15,6 +17,7 @@ from functools import cache as once
 from vmn_exp.core.query import BELOW_FIELDS, filter_rows, query_roots
 from vmn_exp.core.query_below import BELOW_STATES
 from vmn_exp.core.query_extra import lean_extra
+from vmn_exp.core.settle import LOST
 from vmn_exp.ui.job_tally import STATES
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import sort_rows
@@ -45,12 +48,25 @@ def _counter(summaries, states):
     return count
 
 
+def _failed(summaries):
+    def count(verstr):
+        rollup = summaries().get(verstr) or {}
+        return (rollup.get("counts") or {}).get("failed", 0) + (rollup.get(LOST) or 0)
+    return count
+
+
+def _failed_pct(summaries):
+    return lambda verstr: (summaries().get(verstr) or {}).get("failed_pct", 0.0)
+
+
 def board_extra(cache, snapshot, schema):
     """:func:`~vmn_exp.core.query_extra.lean_extra` of *snapshot* with the
-    :data:`BELOW` fields read from *cache*'s job rollups (on the first read)."""
+    :data:`~vmn_exp.core.query.BELOW_FIELDS` read from *cache*'s job rollups
+    (on the first read)."""
     summaries = once(lambda: cache.job_rollups(snapshot, schema))
     extra = dict(lean_extra(snapshot) or {})
     extra.update({field: _counter(summaries, states) for field, states in BELOW.items()})
+    extra.update(failed_below=_failed(summaries), failed_pct=_failed_pct(summaries))
     return extra
 
 

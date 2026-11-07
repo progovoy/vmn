@@ -44,3 +44,12 @@ def test_a_bad_top_q_is_a_400(client):  # noqa: F811
 def test_grouped_top_q(client):  # noqa: F811
     body = client.get(URL, params={"top": 1, "top_q": OUTERS, "group": "status"}).json()
     assert sum(g["rows_total"] for g in body["groups"]) == 1
+
+
+def test_top_q_failed_pct_keeps_the_high_failure_trees(client):  # noqa: F811
+    # lr_grid's two runs below: one failed; "other" has none (plan 31 §1).
+    params = {"top": "jobs", "top_q": "failed_pct > 5", "limit": 50}
+    body = client.get(URL, params=params).json()
+    assert [r["verstr"] for r in body["rows"]] == [_verstr(1)]
+    params["top_q"] = "failed_below = 1 and failed_pct = 50"
+    assert [r["verstr"] for r in client.get(URL, params=params).json()["rows"]] == [_verstr(1)]

@@ -6,6 +6,7 @@ from collections import Counter
 
 from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.core.progress import DEFAULT_NAMES, declared_progress
+from vmn_exp.core.query_below import failed_share
 from vmn_exp.core.settle import LOST, NEVER_STARTED, SETTLED, row_closes
 from vmn_exp.core.status import _age_sec
 from vmn_exp.core.values import is_finite_number
@@ -82,7 +83,7 @@ def count_fields(parts):
         "total": total, "counts": counts,
         "done": sum(counts[STATES[s]] for s in DONE) + lost,
         NEVER_STARTED: settled[NEVER_STARTED], LOST: lost,
-        "failed_pct": round(100 * (counts["failed"] + lost) / total, 2) if total else 0.0,
+        "failed_pct": failed_share(counts["failed"] + lost, total),
     }
 
 

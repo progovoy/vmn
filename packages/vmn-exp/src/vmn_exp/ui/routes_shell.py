@@ -9,14 +9,18 @@ index that serves old data or stopped refreshing. An app's status also
 counts its attention queries (``attention``, plan 28 P1,
 :mod:`vmn_exp.ui.attention`) and lists its team views (``views``, plan 28
 P4: every app page reads this status, so a page knows its default view at
-first paint), and ``?scope=<verstr>`` answers the counts over that run's
+first paint) and its ``failed_pct_threshold`` when not the default 5 (the
+Outer runs failed chip's "≥ N% failed", plan 31 §1), and ``?scope=<verstr>`` answers the counts over that run's
 subtree (an outer run's page)."""
 import hashlib
 import json
 
-from fastapi import HTTPException, Request
-
 import vmn_exp.core.status as experiment_status
+from fastapi import HTTPException, Request
+from vmn_exp.core.app_settings import (
+    DEFAULT_FAILED_PCT_THRESHOLD,
+    failed_pct_threshold_of,
+)
 from vmn_exp.ui.api_errors import CodedError
 from vmn_exp.ui.attention import attention_key, attention_payload
 from vmn_exp.ui.auth.authz import require
@@ -33,7 +37,7 @@ STATUS_BODIES = 256
 
 
 def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards,
-             freshness_of, attention_of=None, schema_of=None, views_of=None):
+             freshness_of, attention_of=None, schema_of=None, views_of=None, ui_of=None):
     """Add the routes; *git_workspace(ws_name)* raises the route's 400/404,
     *status_snapshot(ws_name, app_tag)* -> the app's snapshot (raising its
     404 when there is no such app), *app_tags(ws_name)* -> the workspace's
@@ -41,12 +45,14 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     ``freshness`` or None (after the snapshot was asked for),
     *attention_of(ws_name, app_tag)* -> its attention entries,
     *schema_of(ws_name, app_tag, snapshot)* -> the board's metrics schema,
-    *views_of(ws_name, app_tag)* -> its team views. Returns
+    *views_of(ws_name, app_tag)* -> its team views, *ui_of(ws_name,
+    app_tag)* -> its ``experiment.ui``. Returns
     ``forget(ws_name)``, which drops a removed workspace's git context."""
     contexts = TTLCache(GIT_TTL_SEC)
     summaries = LRU(STATUS_BODIES)
     attention_of = attention_of or (lambda ws_name, app_tag: [])
     views_of = views_of or (lambda ws_name, app_tag: [])
+    ui_of = ui_of or (lambda ws_name, app_tag: {})
 
     def summary(ws_name, app_tag, now, scope=None, entries=()):
         """``(summary, etag)`` of an app (*scope*'s subtree when given) with
@@ -99,6 +105,9 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         views = [] if scope else views_of(ws_name, app_tag)
         if views:
             payload, etag = dict(payload, views=views), _digest(etag + json.dumps(views))
+        threshold = None if scope else failed_pct_threshold_of(ui_of(ws_name, app_tag))
+        if threshold not in (None, DEFAULT_FAILED_PCT_THRESHOLD):
+            payload, etag = dict(payload, failed_pct_threshold=threshold), _digest(f"{etag}:{threshold}")
         return json_response(payload, etag=etag, request=request)
 
     @app.get(f"{prefix}/workspaces/{{ws_name}}/apps-status", dependencies=[require(VIEWER)])
