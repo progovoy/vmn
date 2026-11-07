@@ -147,19 +147,20 @@ def _highest(tallies):
     return high
 
 
-def metric_fields(parts, name, descending, bins=HIST_BINS, quantiles=True, ranked=True):
+def metric_fields(parts, name, goal, bins=HIST_BINS, quantiles=True):
     """One tracked metric over the subtree, or None when no run carries it;
-    a goal-less one (not *ranked*) has no best."""
+    its best follows *goal* (``min``/``max``), a goal-less one has none."""
     tallies = _metric_parts(parts, name)
     if not tallies:
         return None
     n = sum(t.n for t in tallies)
     low = min(t.low[0] for t in tallies)
     high = _highest(tallies)
-    best = (high if descending else low) if ranked else (None, None)
+    best = {"max": high, "min": low}.get(goal, (None, None))
     sketch = _merged([t.sketch for t in tallies])
     fields = {
-        "n": n, "min": low[0], "max": high[0], "mean": _significant(sum(t.total for t in tallies) / n),
+        "goal": goal, "n": n, "min": low[0], "max": high[0],
+        "mean": _significant(sum(t.total for t in tallies) / n),
         "best": best[0], "best_verstr": best[1],
         "hist": sketch.histogram(bins=bins, lo=low[0], hi=high[0]),
     }
@@ -187,8 +188,7 @@ def job_payload(job, parts, spec, now):
     return {
         **progress_fields(job, parts, now, spec.progress),
         "metric": spec.main, "ranked": spec.ranked,
-        "metrics": {m: metric_fields(parts, m, spec.descending[m], ranked=spec.ranked)
-                    for m in spec.metrics},
+        "metrics": {m: metric_fields(parts, m, spec.goals[m]) for m in spec.metrics},
         "duration": duration_fields([p.duration for p in parts]),
         "failures": _failures(parts),
         "timeline": timeline(parts),
@@ -199,12 +199,12 @@ def job_summary(job, parts, spec, now, idx_of=None):
     """The compact rollup a Jobs view sorts on: progress, plus the main
     metric's best (its ``idx`` from *idx_of(verstr)*) and a spread
     histogram (counts only)."""
-    main = spec.main and metric_fields(parts, spec.main, spec.descending[spec.main],
-                                       bins=SPREAD_BINS, quantiles=False, ranked=spec.ranked)
+    main = spec.main and metric_fields(parts, spec.main, spec.goals[spec.main],
+                                       bins=SPREAD_BINS, quantiles=False)
     main = main or {}
     return {
         **progress_fields(job, parts, now, spec.progress),
-        "metric": spec.main,
+        "metric": spec.main, "goal": spec.goals.get(spec.main),
         "best": main.get("best"),
         "best_verstr": main.get("best_verstr"),
         "best_idx": idx_of(main["best_verstr"]) if idx_of and main.get("best_verstr") else None,

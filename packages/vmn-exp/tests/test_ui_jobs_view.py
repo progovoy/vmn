@@ -75,6 +75,17 @@ def test_job_best_is_best_first_by_the_goal(board):
     assert best == sorted(best)  # loss: lower is better
 
 
+def test_job_best_on_a_goal_less_primary_ranks_nothing(board):
+    """Plan 32 F5: no goal, no best; ``job:best`` keeps the default order."""
+    fleet, _, _, cache = board
+    snap, schema = fleet.snapshot(), {"loss": {"primary": True, "hidden": False}}
+    ordered = cache.page(snap, schema, limit=100, top=True, sort="job:best")["rows"]
+    default = cache.page(snap, schema, limit=100, top=True)["rows"]
+    assert [r["verstr"] for r in ordered] == [r["verstr"] for r in default]
+    jobs = [r["job"] for r in ordered if r["job"]]
+    assert jobs and all(j["best"] is None and j["goal"] is None for j in jobs)
+
+
 def test_q_and_status_filter_the_top_rows_by_their_own_fields(board):
     fleet, jobs, singles, cache = board
     snap = fleet.snapshot()

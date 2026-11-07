@@ -24,11 +24,12 @@ def _median(ordered):
 
 
 def of_sorted(ordered, agg, goal):
-    """*agg* of sorted finite *ordered* (None when empty); ``best`` follows *goal*."""
-    if not ordered:
-        return None
+    """*agg* of sorted finite *ordered* (None when empty); ``best`` follows
+    *goal*, None without one (plan 32 F6)."""
     if agg == "best":
-        agg = goal if goal in ("min", "max") else "mean"
+        agg = goal if goal in ("min", "max") else None
+    if not ordered or agg is None:
+        return None
     if agg == "min":
         return ordered[0]
     if agg == "max":
@@ -40,8 +41,7 @@ def of_sorted(ordered, agg, goal):
 
 def stats(ordered, goal):
     """Every aggregate of sorted finite *ordered*; ``best`` follows *goal*."""
-    best = of_sorted(ordered, goal, goal) if goal in ("min", "max") else None
-    return {"mean": of_sorted(ordered, "mean", goal), "best": best,
+    return {"mean": of_sorted(ordered, "mean", goal), "best": of_sorted(ordered, "best", goal),
             "median": of_sorted(ordered, "median", goal), "min": of_sorted(ordered, "min", goal),
             "max": of_sorted(ordered, "max", goal), "n": len(ordered)}
 

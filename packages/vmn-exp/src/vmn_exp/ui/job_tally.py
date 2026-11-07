@@ -14,8 +14,8 @@ that tally from its rows.
 import math
 import operator
 
-from vmn_exp.core.log import primary_metric, sort_descending
-from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.log import primary_metric
+from vmn_exp.core.metric_schema import higher_is_better, metric_goal
 from vmn_exp.core.progress import DEFAULT_NAMES
 from vmn_exp.core.settle import counted_status
 from vmn_exp.core.status import (
@@ -53,12 +53,13 @@ FALLBACK_METRICS = 5
 
 class RollupSpec:
     """What a schema makes a rollup track: its goal metrics (exact names)
-    and primary metric, each with its direction; ``main`` names the one a
-    compact summary shows. A schema without any tracks the app's
-    :data:`FALLBACK_METRICS` most *common()* metrics instead, goal-less
-    (``ranked`` False: no best, nothing to rank — plan 20). ``progress``
-    names the metrics a job's declared progress is read from
-    (:mod:`~vmn_exp.core.progress`)."""
+    and primary metric, each with its ``goals`` entry (``min``/``max``, None
+    without one) and ``up`` (higher is better, None without a goal); ``main`` names the one a compact summary
+    shows. A schema without any tracks the app's :data:`FALLBACK_METRICS`
+    most *common()* metrics instead. A metric without a goal is shown but
+    never ranked: no best, no verdict (plans 20, 32 F5); ``ranked`` says
+    whether ``main`` is. ``progress`` names the metrics a job's declared
+    progress is read from (:mod:`~vmn_exp.core.progress`)."""
 
     def __init__(self, schema, common=tuple, progress=DEFAULT_NAMES):
         schema = schema or {}
@@ -66,13 +67,14 @@ class RollupSpec:
         names = {m for m in schema if not _is_glob(m) and metric_goal(schema, m)}
         primary = primary_metric(schema)
         names.update([primary] if primary else [])
-        self.ranked = bool(names)
         self.metrics = tuple(sorted(names)) if names else tuple(common())[:FALLBACK_METRICS]
-        self.descending = {m: sort_descending(schema, m) for m in self.metrics}
+        self.goals = {m: metric_goal(schema, m) for m in self.metrics}
+        self.up = {m: higher_is_better(goal) for m, goal in self.goals.items()}
         self.main = primary or (self.metrics[0] if self.metrics else None)
+        self.ranked = bool(self.goals.get(self.main))
 
     def same_metrics(self, other):
-        return (self.metrics, self.main, self.ranked) == (other.metrics, other.main, other.ranked)
+        return (self.metrics, self.main, self.goals) == (other.metrics, other.main, other.goals)
 
     def tally(self):
         return Tally()

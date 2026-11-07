@@ -293,4 +293,5 @@ def groups_payload(grouping, offset=0, limit=None, rows_per_group=10, group_key=
     keys = grouping.keys()
     return {"groups": [group(k, 0, rows_per_group) for k in keys[offset:offset + limit]],
             "total_groups": len(keys), "total_rows": grouping.total,
-            "running": grouping.running, "aggregate": grouping.spec.agg}
+            "running": grouping.running, "aggregate": grouping.spec.agg,
+            "metric": grouping.spec.metric, "goal": grouping.spec.goal}

@@ -39,7 +39,7 @@ class GroupSpec:
         # The flat board's filters.
         self.flat = Filters(sort, status, query, order, archived, scope, top, top_query=top_query)
         self.metric = sort or primary_metric(schema)
-        self._goal = metric_goal(schema, self.metric) if self.metric else None
+        self.goal = metric_goal(schema, self.metric) if self.metric else None
         descending = self.descending
         if descending is None and self.metric:
             descending = sort_descending(schema, self.metric)
@@ -68,5 +68,5 @@ class GroupSpec:
 
     def value(self, summary):
         """A group's sort value: its aggregate, signed by the direction."""
-        value = summary.value(self.metric, self.agg, self._goal)
+        value = summary.value(self.metric, self.agg, self.goal)
         return None if value is None else self._sign * value

@@ -151,7 +151,7 @@ class JobViews:
         static = self.cache.static_order(base, schema, Filters(sort=sort, scope=verstr))
         live = [patched[i] for i in scope_positions(base, verstr) if i in patched]
         rows = _leading(static.sorted, main) + visible(live, False)
-        return top_rows(rows, main, spec.descending[main])
+        return top_rows(rows, main, spec.up[main])
 
     def _first_child(self, snapshot, verstr):
         base, _ = self.cache._base(snapshot)

@@ -431,7 +431,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
 - **Outer runs** has one row per top-level outer run. Each row shows:
   - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, drawn as failures (see [settled runs](experiments.md#nesting)).
   - An outer run whose own row carries finite metrics `progress` and `progress_total` (`run.set_progress(done, total, unit)`; the unit is the `progress_unit` param) declares its progress: the bar fills that share, the line leads with it and the runs follow (`41/60 dates · 1,415 runs · 3 failed · 20 dates/h · ETA 14m`), and the rate and ETA are the declared progress since the outer run started. Use it when the inner-run count grows as work gets planned. Metrics under other names count once `experiment.ui.progress: {done: <metric>, total: <metric>, unit: <label>}` (conf.yml or the [store settings](server.md#app-settings)) names them; a settings change shows at once.
-  - the best run on the main metric, linked (`—` when no goal is declared), and a sparkline of the metric's spread.
+  - the best run on the main metric, linked (`—` when the main metric has no goal), and a sparkline of the metric's spread.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
@@ -542,8 +542,10 @@ clause as a filter.
   counts its subtree), in counts, progress and attention alike.
 
 Without a declared goal, an outer run tracks the app's most common metrics,
-never a param folded into metrics. It shows their spread but crowns no best
-(`ranked: false`).
+never a param folded into metrics. A metric without a goal (a `primary: true`
+one too) shows its spread but crowns no best and gets no better/worse
+verdict: its rollup entry has `goal: null` and `best: null`, and `ranked`
+says whether the main metric has a goal (`ranked: false` without one).
 
 **An inner run's page** carries an outer run context bar: `Outer run <name> ›
 run 1,903 of 2,000 · rank 1 of 1,409 on val_loss · ‹ prev  next ›`. It also
@@ -706,7 +708,7 @@ group, from K1's `rows_unfiltered`), then up to 10 of its rows and a
 was loaded). Each metric column of a header shows the
 group's aggregate (`?agg=`, default conf `experiment.ui.group_aggregate`,
 else mean; the cell title says `mean of 16`, and `(no goal)` where `best`
-falls back to the mean), plus `own 0.91` when the target run logged the
+has no goal and so no value), plus `own 0.91` when the target run logged the
 metric itself; the metric headers carry a small aggregate tag. `?collapse=`
 lists the closed groups. Sorting orders the groups (by the aggregate) and the rows within
 them; 50 groups load per page. A filter keeps the groups with a matching run
@@ -870,7 +872,9 @@ message.
 - **`experiments?top=1|jobs|singles`** lists top-level runs only (all, those
   with children, those without). An outer run's row carries `job`: `{total, counts,
   done, expected, progress, failed_pct, throughput_per_min, eta_sec,
-  declared_progress, metric, best, best_verstr, best_idx, spread}`. It takes
+  declared_progress, metric, goal, best, best_verstr, best_idx, spread}`
+  (`goal` the main metric's, `best` null without one, so `job:best` puts it
+  after the ranked ones). It takes
   the `job:*` sorts. `declared_progress` is `{done, total, unit,
   rate_per_min}` when the outer run declares one (else null); `progress`
   and `eta_sec` are then its, while `done`/`expected`/`counts`/
@@ -931,7 +935,8 @@ message.
   `ended` (its own status succeeded/failed/stuck), `never_started` and `lost`
   (its settled runs, never in `counts`; `done` takes the lost ones, an ended
   run's ETA only its running and waiting ones), progress, throughput, ETA, `metric`, `ranked`, per-metric
-  `{n,min,max,mean,best,best_verstr,p10,p50,p90,hist}`, duration p50/p90,
+  `{goal,n,min,max,mean,best,best_verstr,p10,p50,p90,hist}` (`best` null
+  when `goal` is), duration p50/p90,
   failure signatures, `top` (10 best) and a `timeline` (epoch-second buckets
   of `started`/`succeeded`/`failed`, plus `released` where runs were handed
   back and `notes` where runs noted something (each note signature counted
@@ -1269,7 +1274,8 @@ tags or name regroups the runs below it.
   policy; `best` follows the metric's goal and is null without one.
 - `sort`/`order` order rows within a group as on the flat list. Groups order
   by `agg=mean|best|median|min|max` of the sort metric (`best` without a goal
-  is the mean; groups without a value after the others), and by their first
+  has no value; groups without a value after the others); the page names
+  that `metric` and its `goal` (null without one), and by their first
   row for a date or no metric sort. `sort=c:total|c:waiting|c:running|c:done|c:failed`
   orders groups by that count instead (`waiting` = created, `done` =
   succeeded, `failed` = failed + stuck; the board's Sort groups row),
@@ -1373,13 +1379,14 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
  "cells": [[{"n": 24, "value": 0.125, "hits": 3,
              "clause": "tags.trade_date = \"2024-06\" and tags.group = \"BCA\""}]],
  "total": 240, "rows_total": 1, "cols_total": 1, "cell": "share",
- "match": "tags.health = \"unstable\"", "metric": null, "agg": null}
+ "match": "tags.health = \"unstable\"", "metric": null, "agg": null, "goal": null}
 ```
 
 - `cell=count` (the default): `value` is the cell's runs. `cell=share&match=<query>`:
   the share of them matching the query (`hits` of `n`). `cell=agg&metric=<m>&agg=`
   `mean|best|median|min|max` (default the app's group aggregate): the aggregate of
-  the metric's finite values, `null` when none carries it.
+  the metric's finite values, `null` when none carries it; `goal` is the
+  metric's, and `best` without one is `null` in every cell.
 - Takes `scope`, `q`, `status`, `archived`. A bad field, cell or query is a 400.
 - Each axis keeps its 200 (rows) / 50 (cols) most common values, ordered by
   value (numbers before text, `(none)` last); `rows_total`/`cols_total` count
@@ -1410,7 +1417,8 @@ header and its Outer runs row.
   share of the subtree (`attention`, with both counts), and the metrics
   both outer runs log themselves (`own`, at most 20; e.g. a cost per date
   logged at close). Each is `{value, baseline, delta, better}`, `better`
-  following the goal (failures, durations and attention shares: lower).
+  following the goal (failures, durations and attention shares: lower); a
+  metric without a goal has no `best` and its `better` is null.
 - **Children.** With `children_by`, the two outer runs' direct children
   pair by that field's value (a retried value: its latest run), in key
   order (`pairs`, the first 200 listed, of `pairs_total` values the outer
@@ -1423,8 +1431,9 @@ header and its Outer runs row.
   worse than the baseline's p10)` (`state` `worse`), `▲`/`=` when none is
   (`better`/`same` by the median delta), `pending` before any has finished,
   so it shows while the launch still runs. Without `children_by` it is the
-  best value's change (`▼ best_value 0.81 (baseline 0.92)`); a goal-less
-  main metric has none.
+  best value's change (`▼ best_value 0.81 (baseline 0.92)`). A main metric
+  without a goal (`goal: null`) has no chip: its pairs carry the deltas with
+  `better: null` and no `worse` mark.
 
 ```json
 {"verstr": "0.4.0-dev.abc", "match": ["params.table_name", "params.model_type"],
@@ -1533,7 +1542,7 @@ only when it exists, each `{verstr, idx, name, status}`:
 | `base` | the run itself, when it captured a working-tree or local-commits patch |
 | `parent` / `forked_from` / `rerun_of` | its origins, when indexed |
 | `previous` | the latest earlier unarchived run on the same `branch` with the same `command` |
-| `best` | the best other run on the primary declared goal (`primary: true` with a goal, else the first exactly named schema metric with one); absent without a declared goal |
+| `best` | the best other run on the primary declared goal (`primary: true` with a goal, else the first exactly named schema metric with one), with the `metric` it is best on; absent without a declared goal |
 
 A run not indexed yet answers `{}`; an unknown run is 404. Both are viewer
 reads with a body-digest ETag.

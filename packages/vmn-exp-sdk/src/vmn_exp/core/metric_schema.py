@@ -95,6 +95,12 @@ def metric_goal(schema, metric):
     return lookup(metric, schema or {}, _goal_of)
 
 
+def higher_is_better(goal):
+    """A *goal*'s direction: True for ``max``, False for ``min``, None
+    without one (no guessed direction, plan 32)."""
+    return None if goal is None else goal == "max"
+
+
 def _hidden_of(definition):
     hidden = (definition or {}).get("hidden")
     return (hidden,) if isinstance(hidden, bool) else None

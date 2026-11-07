@@ -3,7 +3,7 @@ scratch over freshly annotated rows, for the cache's incremental answer to
 be checked against."""
 import math
 
-from vmn_exp.core.log import primary_metric, sort_descending
+from vmn_exp.core.log import primary_metric
 from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.status import parse_iso
 from vmn_exp.core.tree import annotate_rows, children_by_parent
@@ -69,13 +69,15 @@ def common_metrics(rows, count=5):
 
 
 def tracked_metrics(schema, rows):
-    """``(metrics, main, ranked)``: the goal metrics, else the most common
-    ones, goal-less (never crowned)."""
+    """``(metrics, main, ranked)``: the goal metrics (and the primary),
+    else the most common ones; ranked when *main* has a goal (plan 32 F5)."""
     goals = goal_metrics(schema)
     if goals:
-        return goals, primary_metric(schema) or goals[0], True
-    common = common_metrics(rows)
-    return common, (common[0] if common else None), False
+        main = primary_metric(schema) or goals[0]
+    else:
+        goals = common_metrics(rows)
+        main = goals[0] if goals else None
+    return goals, main, bool(main and metric_goal(schema, main))
 
 
 def _finite(value):
@@ -87,14 +89,14 @@ def exact_quantile(values, q):
     return ordered[round(q * (len(ordered) - 1))] if ordered else None
 
 
-def _metric(rows, name, schema, ranked=True):
+def _metric(rows, name, schema):
     pairs = [(row["metrics"][name], row["verstr"]) for row in rows
              if _finite(row["metrics"].get(name))]
     if not pairs:
         return None
     low = min(pairs)
     high = min(pairs, key=lambda p: (-p[0], p[1]))
-    best = (high if sort_descending(schema, name) else low) if ranked else (None, None)
+    best = {"max": high, "min": low}.get(metric_goal(schema, name), (None, None))
     values = [v for v, _ in pairs]
     return {"n": len(values), "min": low[0], "max": high[0], "mean": sum(values) / len(values),
             "best": best[0], "best_verstr": best[1], "values": values}
@@ -174,7 +176,7 @@ def rollup(rows, verstr, schema):
         "expected": _expected(by_verstr[verstr], len(members)),
         "throughput_per_min": recent / 10,
         "started_at": min(started, default=None), "finished_at": max(finished, default=None),
-        "metrics": {m: _metric(members, m, schema, ranked) for m in metrics},
+        "metrics": {m: _metric(members, m, schema) for m in metrics},
         "durations": durations,
         "failures": sorted(failures.items(), key=lambda kv: (-kv[1], kv[0]))[:10],
         "events": events,

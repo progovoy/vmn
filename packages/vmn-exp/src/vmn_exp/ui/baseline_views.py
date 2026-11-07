@@ -19,7 +19,7 @@ summaries.
 import hashlib
 
 from vmn_exp.core.app_settings import baseline_conf
-from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.metric_schema import higher_is_better, metric_goal
 from vmn_exp.core.similar_profile import objective_names
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.attention import attention_key, attention_payload
@@ -45,18 +45,12 @@ def _ref(row, source):
             "started_at": row.get("started_at"), "finished_at": row.get("finished_at")}
 
 
-def _directions(spec):
-    """``{tracked metric: higher is better}`` (None for a goal-less rollup)."""
-    return {m: spec.descending[m] if spec.ranked else None for m in spec.metrics}
-
-
 def _own(row, base_row, schema):
     """The deltas of the metrics both outer runs log themselves."""
     ours, theirs = row.get("metrics") or {}, base_row.get("metrics") or {}
     names = sorted(n for n in objective_names(row) & objective_names(base_row)
                    if is_finite_number(ours[n]) and is_finite_number(theirs[n]))
-    goal = lambda n: metric_goal(schema, n)  # noqa: E731
-    return {n: delta(ours[n], theirs[n], None if goal(n) is None else goal(n) == "max")
+    return {n: delta(ours[n], theirs[n], higher_is_better(metric_goal(schema, n)))
             for n in names[:MAX_OWN_METRICS]}
 
 
@@ -168,10 +162,9 @@ class BaselineViews:
     def _build(self, snapshot, schema, verstr, chosen, fields, by):
         row = self.views.row(snapshot, verstr)
         spec = self.views.rollups.spec(snapshot, schema)
-        main = spec.main if spec.ranked else None
         body = {"verstr": verstr, "match": list(fields), "by": by,
                 "values": {f: value_of(f)(row) for f in fields}, "baseline": None,
-                "metric": spec.main, "goal": metric_goal(schema, spec.main) if main else None,
+                "metric": spec.main, "goal": spec.goals.get(spec.main),
                 "metrics": {}, "failed_pct": None, "duration_p90": None, "attention": [],
                 "own": {}, "pairs": [], "pairs_total": 0, "chip": None}
         base_v, source = chosen
@@ -180,18 +173,21 @@ class BaselineViews:
         base_row = self.views.row(snapshot, base_v)
         rollups = self.views.rollups
         ours, theirs = (rollups.job_rollup(snapshot, schema, v) for v in (verstr, base_v))
-        deltas = rollup_deltas(ours, theirs, _directions(spec))
+        deltas = rollup_deltas(ours, theirs, spec.up)
         body.update(deltas, baseline=_ref(base_row, source), own=_own(row, base_row, schema))
         if by:
-            body.update(self._paired(snapshot, schema, verstr, base_v, by, main, spec))
+            body.update(self._paired(snapshot, schema, verstr, base_v, by, spec))
         else:
-            body["chip"] = best_chip(deltas, main)
+            body["chip"] = best_chip(deltas, spec.main)
         return body
 
-    def _paired(self, snapshot, schema, verstr, base_v, by, main, spec):
+    def _paired(self, snapshot, schema, verstr, base_v, by, spec):
+        """The children paired by *by* with their main metric's deltas; a
+        goal-less main metric pairs without a direction and has no chip."""
+        main = spec.main
         value = self._child_value(snapshot, schema, main)
         kids = [self.views.children(snapshot, v) for v in (verstr, base_v)]
-        up = spec.descending[main] if main else None
+        up = spec.up.get(main)
         pairs, total = pair_children(*kids, by, value, up)
         keyed = value_of(by)
         base_values = [value(r) for r in kids[1] if keyed(r) is not None]

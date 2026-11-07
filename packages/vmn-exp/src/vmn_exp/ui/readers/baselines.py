@@ -87,8 +87,9 @@ def best_run(ordered, metric, verstr):
 
 def baselines(snapshot, verstr, has_patch, schema, ordered_by):
     """K3's ``{base?, parent?, forked_from?, rerun_of?, previous?, best?}``,
-    each ``{verstr, idx, name, status}``; *ordered_by(metric)* is the app's
-    rows best first on *metric*, asked only when *schema* declares a goal."""
+    each ``{verstr, idx, name, status}``, ``best`` also naming the ``metric``
+    it is best on (plan 32 F7); *ordered_by(metric)* is the app's rows best
+    first on *metric*, asked only when *schema* declares a goal."""
     row = snapshot.row(verstr)
     found = {"base": row if has_patch else None}
     for origin in ORIGINS:
@@ -96,4 +97,7 @@ def baselines(snapshot, verstr, has_patch, schema, ordered_by):
     found["previous"] = previous_run(snapshot, row)
     metric = primary_goal(schema)
     found["best"] = best_run(ordered_by(metric), metric, verstr) if metric else None
-    return {k: _with_status(snapshot, r) for k, r in found.items() if r is not None}
+    out = {k: _with_status(snapshot, r) for k, r in found.items() if r is not None}
+    if "best" in out:
+        out["best"]["metric"] = metric
+    return out

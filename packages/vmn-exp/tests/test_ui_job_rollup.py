@@ -14,7 +14,9 @@ from vmn_exp.core import status as status_mod
 from vmn_exp.ui import job_rollup
 
 SCHEMAS = [{}, {"loss": {"goal": "min", "primary": True}},
-           {"acc": {"goal": "max"}, "loss": {"goal": "min"}, "val_*": {"goal": "min"}}]
+           {"acc": {"goal": "max"}, "loss": {"goal": "min"}, "val_*": {"goal": "min"}},
+           # plan 32 F5: a goal-less primary is tracked but never ranked
+           {"loss": {"primary": True, "hidden": False}, "acc": {"goal": "max"}}]
 
 
 def _at(monkeypatch, when):

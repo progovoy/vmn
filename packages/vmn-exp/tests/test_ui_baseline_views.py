@@ -130,6 +130,28 @@ def test_chips_for_many_rows():
     assert chips[v(2)] is None and chips[v(40)] is None and chips[v(99)] is None
 
 
+GOAL_LESS = {"best_value": {"primary": True, "hidden": False}}
+
+
+def test_a_goal_less_main_metric_pairs_deltas_without_a_verdict():
+    """Plan 32 F5: no goal, no chip and no worse/better, but the deltas show."""
+    body = _views().baseline(snapshot(_specs()), GOAL_LESS, v(3))
+    assert body["metric"] == "best_value" and body["goal"] is None
+    assert body["chip"] is None
+    assert [p["delta"] for p in body["pairs"]] == [0.1, -0.8, -0.9, 0.2]
+    assert all(p["better"] is None and "worse" not in p for p in body["pairs"])
+    metric = body["metrics"]["best_value"]
+    assert metric["best"]["value"] is None and metric["best"]["better"] is None
+    assert metric["median"]["delta"] is not None and metric["median"]["better"] is None
+
+
+def test_a_goal_less_main_metric_has_no_best_value_chip():
+    conf = {"baseline": {"match": ["params.table_name", "params.model_type"]}}
+    body = _views(conf).baseline(snapshot(_specs()), GOAL_LESS, v(3))
+    assert body["baseline"]["verstr"] == v(1) and body["chip"] is None
+    assert _views().chips(snapshot(_specs()), GOAL_LESS, [v(3)])[v(3)] is None
+
+
 def _next(snap, replace=None):
     replace = replace or {}
     rows = [replace.get(row["verstr"], row) for row in snap.rows]

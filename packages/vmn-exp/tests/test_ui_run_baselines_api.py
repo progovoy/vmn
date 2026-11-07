@@ -59,6 +59,13 @@ def test_best_is_the_best_other_run_on_the_declared_goal(app_layout):
     assert _baselines(app_layout, "0.0.1-dev.r2")["best"]["verstr"] == "0.0.1-dev.r1"
 
 
+def test_best_names_the_metric_it_was_chosen_on(app_layout):
+    """Plan 32 F7: the best baseline says which metric it is best on."""
+    _seed_fleet(app_layout)
+    assert _baselines(app_layout, "0.0.1-dev.r4")["best"]["metric"] == "loss"
+    assert "metric" not in _baselines(app_layout, "0.0.1-dev.r4")["previous"]
+
+
 def test_best_is_absent_without_a_declared_goal(app_layout):
     _seed_fleet(app_layout, goal=False)
     assert "best" not in _baselines(app_layout, "0.0.1-dev.r4")

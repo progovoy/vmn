@@ -11,8 +11,8 @@ from vmn_exp.core.log import (
     list_artifacts,
     load_log,
     metric_series,
-    metric_sort_descending,
     sort_by_metric,
+    sort_descending,
 )
 
 
@@ -80,20 +80,25 @@ def test_last_metric_at_returns_the_newest_metrics_timestamp():
 @pytest.mark.parametrize(
     "schema, expected",
     [
-        ({}, True),
+        ({}, False),
+        ({"loss": {}}, False),
+        ({"loss": {"hidden": True}}, False),
+        ({"loss": {"chart": "log"}}, False),
         ({"loss": {"goal": "min"}}, False),
         ({"loss": {"goal": "max"}}, True),
+        ({"lo*": {"goal": "max"}}, True),
     ],
 )
-def test_metric_sort_descending_follows_the_goal(schema, expected):
-    assert metric_sort_descending(schema, "loss") is expected
+def test_sort_descending_follows_the_goal_only(schema, expected):
+    """Plan 32 F4: a metric without a goal sorts ascending, schema entry or not."""
+    assert sort_descending(schema, "loss") is expected
 
 
-def test_metric_sort_descending_warns_and_falls_back_on_a_bad_goal():
+def test_sort_descending_sorts_a_bad_goal_ascending():
     from version_stamp.core.logging import init_stamp_logger
 
     init_stamp_logger(supress_stdout=True)
-    assert metric_sort_descending({"loss": {"goal": "nonsense"}}, "loss") is True
+    assert sort_descending({"loss": {"goal": "nonsense"}}, "loss") is False
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +167,12 @@ def test_sort_by_metric_uses_the_primary_metric_and_its_goal():
 def test_sort_by_metric_sorts_an_off_schema_metric_ascending():
     rows = _rows(("a", {"acc": 0.9}), ("b", {"acc": 0.1}))
     assert [r["verstr"] for r in sort_by_metric(rows, {}, sort="acc")] == ["b", "a"]
+
+
+def test_sort_by_metric_sorts_a_goal_less_schema_metric_ascending():
+    rows = _rows(("a", {"acc": 0.9}), ("b", {"acc": 0.1}))
+    schema = {"acc": {"hidden": False, "chart": "log"}}
+    assert [r["verstr"] for r in sort_by_metric(rows, schema, sort="acc")] == ["b", "a"]
 
 
 def test_sort_by_metric_puts_rows_missing_the_metric_last():

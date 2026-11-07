@@ -74,6 +74,19 @@ def test_aggregate_of_a_metric():
                  "value") == [[3.0, 2.0], [None, 6.0]]
 
 
+def test_best_follows_the_goal_and_is_empty_without_one():
+    """Plan 32 F6: ``best`` without a goal is no value, not the mean; the
+    payload names the goal ``best`` was taken by."""
+    snap, spec = _fleet(), pivot_spec("tags.date", "tags.group", cell="agg", metric="loss",
+                                      agg="best", scope=v(1))
+    goal_less = PivotCache(lb.LeaderboardCache()).pivot(snap, {}, spec)
+    assert _grid(goal_less, "value") == [[None, None], [None, None]]
+    assert goal_less["agg"] == "best" and goal_less["goal"] is None
+    lowest = PivotCache(lb.LeaderboardCache()).pivot(snap, {"loss": {"goal": "min"}}, spec)
+    assert _grid(lowest, "value") == [[1.0, 2.0], [None, 4.0]]
+    assert lowest["goal"] == "min"
+
+
 def test_every_clause_selects_its_runs():
     snap = _fleet()
     body = _pivot(snap)

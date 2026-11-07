@@ -121,4 +121,4 @@ def build_pivot(snapshot, rows, spec, schema):
         cells[i][j] = cell
     return {"rows": row_heads, "cols": col_heads, "cells": cells, "total": len(rows),
             "rows_total": rows_total, "cols_total": cols_total, "cell": spec.cell,
-            "match": spec.match, "metric": spec.metric, "agg": spec.agg}
+            "match": spec.match, "metric": spec.metric, "agg": spec.agg, "goal": goal}

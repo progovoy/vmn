@@ -755,17 +755,17 @@ def test_experiment_metrics_schema_primary_default_sort(app_layout, capfd):
 def test_experiment_metrics_schema_sort_key_removed(app_layout, capfd):
     """Clean break: legacy `sort:` is ignored — only `goal:` drives direction.
 
-    A schema entry carrying only `sort` falls back to the default
-    (higher-is-better) without crashing or warning.
+    A schema entry carrying only `sort` has no goal, so it sorts ascending
+    (plan 32 F4) without crashing or warning.
     """
-    _setup_three_experiments(app_layout, capfd, {"metrics": {"acc": {"sort": "asc"}}})
+    _setup_three_experiments(app_layout, capfd, {"metrics": {"acc": {"sort": "desc"}}})
 
     capfd.readouterr()
     assert _experiment(app_layout.app_name, action="list", sort="acc") == 0
     captured = capfd.readouterr()
     lines = [l for l in captured.out.strip().split("\n") if l.startswith("[")]
-    # Default goal (max/higher-is-better) applies; `sort: asc` has no effect.
-    assert "acc=0.91" in lines[0]
+    # No goal: ascending applies; `sort: desc` has no effect.
+    assert "acc=0.8 " in lines[0]  # run0, the lowest acc (0.80)
 
 
 def test_experiment_create_without_git_remote(app_layout, capfd):

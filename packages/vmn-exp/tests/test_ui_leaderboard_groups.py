@@ -181,9 +181,11 @@ def test_rows_within_a_group_follow_the_sort_and_order_flips_groups_too():
     assert members(group_of(flipped, v(1))) == [v(2), v(3)]
 
 
-def test_best_on_a_goal_less_metric_sorts_by_the_mean():
+def test_best_on_a_goal_less_metric_gives_groups_no_value():
+    """Plan 32 F6: no goal, no best (not the mean): the groups keep the
+    no-value order, by their first row (loss 1.0 before 3.0)."""
     out = _groups(_two_sweeps(), "parent", sort="loss", agg="best")
-    assert keys(out) == [v(4), v(1)]
+    assert keys(out) == [v(1), v(4)]
 
 
 def test_groups_without_a_value_sort_after_the_valued_ones():

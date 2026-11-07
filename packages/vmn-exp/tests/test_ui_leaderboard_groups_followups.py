@@ -70,6 +70,15 @@ def test_the_page_names_the_aggregate_it_was_sorted_by(agg):
     assert _groups(FLEET, "parent", agg=agg)["aggregate"] == agg
 
 
+def test_the_page_names_the_metric_and_goal_its_groups_sort_by():
+    """Plan 32 F6: ``best`` reads with its goal; no goal, no best."""
+    page = _groups(FLEET, "parent", sort="loss", agg="best")
+    assert (page["metric"], page["goal"]) == ("loss", None)
+    page = LeaderboardCache().groups(snapshot(FLEET), {"loss": {"goal": "min"}}, "parent",
+                                     sort="loss", agg="best")
+    assert (page["metric"], page["goal"]) == ("loss", "min")
+
+
 def test_the_page_counts_the_running_rows_of_every_group():
     assert _groups(FLEET, "parent")["running"] == 1
     assert _groups(FLEET, "parent", limit=1, rows_per_group=1)["running"] == 1

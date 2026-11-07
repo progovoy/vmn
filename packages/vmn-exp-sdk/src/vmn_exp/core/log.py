@@ -97,30 +97,15 @@ def last_metric_at(log):
     return fold_last_metric_at(fold_log(log))
 
 
-def metric_sort_descending(schema, key):
-    """Whether metric ``key`` sorts best-first as descending (higher is better).
-
-    Driven by ``goal: min|max`` in the metrics schema (``max`` = higher-is-better
-    = descending) — the exact name's, else a matching glob's
-    (:func:`~vmn_exp.core.metric_schema.metric_goal`). Unspecified metrics
-    default to higher-is-better.
-    """
-    goal = metric_goal(schema, key)
-    if goal is not None:
-        return goal == "max"
-    invalid = ((schema or {}).get(key) or {}).get("goal")
-    if invalid is not None:
-        VMN_LOGGER.warning(f"Invalid goal '{invalid}' for metric '{key}'; using 'max'")
-    return True
-
-
 def sort_descending(schema, metric):
-    """The direction *metric* sorts in when the caller forces none: its goal's
-    (exact name or glob), else descending for an exact schema entry without
-    one, else ascending."""
-    if metric_goal(schema, metric) is None and metric not in (schema or {}):
-        return False
-    return metric_sort_descending(schema, metric)
+    """The direction *metric* sorts in when the caller forces none: by its
+    goal (exact name or glob, :func:`~vmn_exp.core.metric_schema.metric_goal`),
+    ``max`` descending; without a goal ascending (plan 32 F4: no guess)."""
+    goal = metric_goal(schema, metric)
+    invalid = None if goal else ((schema or {}).get(metric) or {}).get("goal")
+    if invalid is not None:
+        VMN_LOGGER.warning(f"Invalid goal '{invalid}' for metric '{metric}'; sorting ascending")
+    return goal == "max"
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +155,7 @@ def sort_by_metric(rows, schema, sort=None, descending=None):
     """Order rows like ``vmn-exp list``: by *sort*, else by the primary metric.
 
     A metric's direction comes from its schema entry or a matching glob's
-    goal (:func:`sort_descending`); a metric absent from the schema sorts
+    goal (:func:`sort_descending`); a metric without a goal sorts
     ascending. *descending* forces the direction. Rows whose
     value is missing, None, non-finite or non-numeric sort last in either
     direction, in their original order. ``sort="timestamp"`` orders by creation

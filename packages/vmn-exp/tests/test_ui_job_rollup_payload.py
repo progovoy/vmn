@@ -104,3 +104,38 @@ def test_the_summary_is_compact_and_carries_the_main_metrics_best_and_spread():
     assert sum(summary["spread"]) == 20
     assert "metrics" not in summary and "failures" not in summary
     assert summary["counts"]["succeeded"] == 20
+
+
+GOAL_LESS_MAIN = {"loss": {"primary": True, "hidden": False}, "acc": {"goal": "max"}}
+
+
+def _goal_less_rows():
+    return [_row(i, metrics={"loss": loss, "acc": acc})
+            for i, (loss, acc) in enumerate([(0.5, 0.1), (0.2, 0.9), (0.9, 0.3)])]
+
+
+def test_a_goal_less_primary_is_shown_but_not_ranked():
+    """Plan 32 F5: no goal, no best; each metric names the goal it ranks by."""
+    spec = RollupSpec(GOAL_LESS_MAIN)
+    payload = job_payload({"verstr": "job", "params": {}}, [Tally.of(_goal_less_rows(), spec)],
+                          spec, T0)
+    assert payload["metric"] == "loss" and payload["ranked"] is False
+    loss, acc = payload["metrics"]["loss"], payload["metrics"]["acc"]
+    assert loss["goal"] is None and loss["best"] is None and loss["best_verstr"] is None
+    assert (loss["min"], loss["max"], loss["n"]) == (0.2, 0.9, 3)
+    assert acc["goal"] == "max" and (acc["best"], acc["best_verstr"]) == (0.9, "v001")
+
+
+def test_a_goal_metric_names_its_goal():
+    metrics = _payload(_goal_less_rows())["metrics"]
+    assert metrics["loss"]["goal"] == "min" and metrics["acc"]["goal"] == "max"
+
+
+def test_the_summary_of_a_goal_less_primary_has_no_best():
+    spec = RollupSpec(GOAL_LESS_MAIN)
+    summary = job_summary({"verstr": "job"}, [Tally.of(_goal_less_rows(), spec)], spec, T0)
+    assert summary["metric"] == "loss" and summary["goal"] is None
+    assert summary["best"] is None and summary["best_verstr"] is None
+    assert sum(summary["spread"]) == 3
+    ranked = job_summary({"verstr": "job"}, [Tally.of(_goal_less_rows(), SPEC)], SPEC, T0)
+    assert ranked["goal"] == "min"
