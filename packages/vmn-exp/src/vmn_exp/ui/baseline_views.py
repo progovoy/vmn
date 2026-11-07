@@ -12,15 +12,18 @@ two subtrees are settled (:mod:`~vmn_exp.ui.settled_subtree`) is kept
 across generations until either changes, with an ETag of its own — a
 finished launch and its baseline are compared once per process. Attention
 shares (an ``ago()`` query follows the clock) are kept per generation
-apart from it, so they never rebuild a settled pair. A child's main metric
-is its own, else (an outer run) its subtree's best from the Jobs view's
-summaries.
+apart from it, so they never rebuild a settled pair. A child's value is
+the Outer runs row's (plan 31 §2, :mod:`~vmn_exp.ui.job_aggregate`): the
+app's ``job_aggregate`` metric, its own or its subtree's best by the
+aggregate's ``value``, the same source on both sides (plan 32); the chip
+without pairs compares the two jobs' ``rolled``.
 """
 import hashlib
 
 from vmn_exp.core.app_settings import baseline_conf
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal
 from vmn_exp.core.similar_profile import objective_names
+from vmn_exp.ui.job_aggregate import board_job_agg
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.attention import attention_key, attention_payload
 from vmn_exp.ui.baseline_choice import choose_baseline
@@ -131,7 +134,8 @@ class BaselineViews:
         """``(payload without attention, ETag)``: per generation, else a
         settled pair's kept one, else built."""
         base, bucket = self._cache._base(snapshot)
-        key = (verstr, to, rule, self._cache.schema_key(schema))
+        key = (verstr, to, rule, self._cache.schema_key(schema),
+               board_job_agg(self._cache, snapshot))
         return self._answers.get((base.token, bucket) + key,
                                  lambda: self._resolved(snapshot, schema, verstr, to, rule, key))
 
@@ -171,41 +175,29 @@ class BaselineViews:
         if base_v is None:
             return body
         base_row = self.views.row(snapshot, base_v)
-        rollups = self.views.rollups
+        rollups, aggregates = self.views.rollups, self._cache.job_aggregates
         ours, theirs = (rollups.job_rollup(snapshot, schema, v) for v in (verstr, base_v))
-        deltas = rollup_deltas(ours, theirs, spec.goals)
+        rolled = [aggregates.one(snapshot, schema, v) for v in (verstr, base_v)]
+        deltas = rollup_deltas(ours, theirs, spec.goals, rolled)
         body.update(deltas, baseline=_ref(base_row, source), own=_own(row, base_row, schema))
         if by:
-            body.update(self._paired(snapshot, schema, verstr, base_v, by, spec))
+            body.update(self._paired(snapshot, schema, verstr, base_v, by))
         else:
-            body["chip"] = best_chip(deltas, spec.main)
+            body["chip"] = best_chip(deltas)
         return body
 
-    def _paired(self, snapshot, schema, verstr, base_v, by, spec):
-        """The children paired by *by* with their main metric's deltas; a
-        goal-less main metric pairs without a direction and has no chip."""
-        main = spec.main
-        value = self._child_value(snapshot, schema, main)
+    def _paired(self, snapshot, schema, verstr, base_v, by):
+        """The children paired by *by* with their values' deltas (the
+        board's value function); a goal-less metric pairs without a
+        direction and has no chip."""
+        metric, value = self._cache.job_aggregates.value_of(snapshot, schema)
         kids = [self.views.children(snapshot, v) for v in (verstr, base_v)]
-        up = spec.up.get(main)
+        up = higher_is_better(metric_goal(schema, metric)) if metric else None
         pairs, total = pair_children(*kids, by, value, up)
         keyed = value_of(by)
         base_values = [value(r) for r in kids[1] if keyed(r) is not None]
         return {"pairs": pairs[:MAX_PAIRS], "pairs_total": total,
-                "chip": chip(pairs, base_values, main, up, by)}
-
-    def _child_value(self, snapshot, schema, main):
-        """``row -> its main metric``: its own, else its subtree's best."""
-        if main is None:
-            return lambda row: None
-        summaries = self._cache.job_rollups(snapshot, schema)
-
-        def value(row):
-            own = (row.get("metrics") or {}).get(main)
-            if is_finite_number(own):
-                return own
-            return (summaries.get(row["verstr"]) or {}).get("best")
-        return value
+                "chip": chip(pairs, base_values, metric, up, by, total)}
 
     def _attention(self, snapshot, schema, body, entries, pinned_key):
         """Each attention query's share under both subtrees, per generation."""

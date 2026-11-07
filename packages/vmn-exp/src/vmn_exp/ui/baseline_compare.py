@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """An outer run against its baseline (plan 28 N3), pure: the deltas of two
-rollups (:mod:`~vmn_exp.ui.job_rollup_payload`), their direct children
-paired by a key field with the delta of the main metric per pair, and the
+rollups (:mod:`~vmn_exp.ui.job_rollup_payload`) and of their ``rolled``
+aggregates (plan 31 §2), their direct children paired by a key field with
+the delta of their value per pair (a key either side lacks a value for is
+unpaired, never filled from another source: plan 32), and the
 chip, which counts the finished pairs worse than the baseline's worst
 decile (``p10`` of a higher-is-better metric, ``p90`` of a lower-is-better
 one) — so a regression shows as soon as the first matched children end.
@@ -49,15 +51,28 @@ def _metric_deltas(target, baseline, name, goal):
     return out
 
 
-def rollup_deltas(target, baseline, goals):
+ROLLED_FIELDS = ("agg", "by", "source", "metric", "goal", "percentile")
+
+
+def rolled_delta(target, baseline):
+    """The delta of two ``rolled`` aggregates (the same aggregate), naming it."""
+    return {**{k: target[k] for k in ROLLED_FIELDS},
+            **delta(target["value"], baseline["value"], higher_is_better(target["goal"]))}
+
+
+def rollup_deltas(target, baseline, goals, rolled=None):
     """The deltas of two job rollups: per metric of *goals* (``{name: goal,
     None when goal-less}``) its goal, best and median, then ``failed_pct``
-    and ``duration_p90`` (lower is better)."""
+    and ``duration_p90`` (lower is better); with *rolled* (both jobs'
+    ``rolled``) its delta as ``rolled``."""
     metrics = {name: _metric_deltas(target, baseline, name, goal) for name, goal in goals.items()}
     p90 = lambda rollup: (rollup.get("duration") or {}).get("p90")  # noqa: E731
-    return {"metrics": metrics,
-            "failed_pct": delta(target.get("failed_pct"), baseline.get("failed_pct"), False),
-            "duration_p90": delta(p90(target), p90(baseline), False)}
+    out = {"metrics": metrics,
+           "failed_pct": delta(target.get("failed_pct"), baseline.get("failed_pct"), False),
+           "duration_p90": delta(p90(target), p90(baseline), False)}
+    if rolled:
+        out["rolled"] = rolled_delta(*rolled)
+    return out
 
 
 def _keyed(rows, field):
@@ -75,18 +90,21 @@ def _keyed(rows, field):
 
 def pair_children(target, baseline, field, value, higher_better):
     """``(pairs, keys)``: the rows of *target* and *baseline* sharing a value
-    of *field*, in key order, each ``{key, label, verstr, idx,
-    baseline_verstr, value, baseline, delta, better, done}`` (*value(row)*
-    its main metric), and how many keys *target* holds."""
+    of *field* and both holding a *value(row)*, in key order, each ``{key,
+    label, verstr, idx, baseline_verstr, value, baseline, delta, better,
+    done}``, and how many keys *target* holds (the unpaired among them)."""
     ours, theirs = _keyed(target, field), _keyed(baseline, field)
     keys = sorted((k for k in ours if k in theirs), key=lambda k: value_order(k, ours[k][0]))
     pairs = []
     for key in keys:
         row, base = ours[key][1], theirs[key][1]
+        mine, other = value(row), value(base)
+        if mine is None or other is None:
+            continue
         pairs.append({"key": key, "label": key_text(key),
                       "verstr": row["verstr"], "idx": row.get("idx"),
                       "baseline_verstr": base["verstr"],
-                      **delta(value(row), value(base), higher_better), "done": row_closes(row)})
+                      **delta(mine, other, higher_better), "done": row_closes(row)})
     return pairs, len(ours)
 
 
@@ -106,11 +124,12 @@ def _noun(field):
     return f"{field.partition('.')[2]} values"
 
 
-def chip(pairs, baseline_values, metric, higher_better, field):
+def chip(pairs, baseline_values, metric, higher_better, field, total=None):
     """The chip of *pairs* (marking each finished one ``worse`` or not):
-    ``{state, text, metric, from, worse, of, quantile, threshold}``, None for
-    a goal-less *metric*. *baseline_values*: the main metric of every
-    baseline child holding a key."""
+    ``{state, text, metric, from, worse, of, quantile, threshold, paired,
+    total}`` (*total*: the keys the target holds, paired or not), None for
+    a goal-less *metric*. *baseline_values*: the value of every baseline
+    child holding a key."""
     if higher_better is None or metric is None:
         return None
     ordered = sorted(v for v in baseline_values if is_finite_number(v))
@@ -122,7 +141,8 @@ def chip(pairs, baseline_values, metric, higher_better, field):
             p["value"] < threshold if higher_better else p["value"] > threshold)
     worse = [p for p in finished if p["worse"]]
     out = {"metric": metric, "from": worse[0]["label"] if worse else None, "worse": len(worse),
-           "of": len(finished), "quantile": quantile, "threshold": threshold}
+           "of": len(finished), "quantile": quantile, "threshold": threshold,
+           "paired": len(pairs), "total": len(pairs) if total is None else total}
     return dict(out, **_state(out, finished, higher_better, field))
 
 
@@ -140,12 +160,15 @@ def _state(out, finished, higher_better, field):
     return {"state": state, "text": f"{MARKS[state]} {metric} (none of {out['of']} {tail}"}
 
 
-def best_chip(rollup_delta, metric):
-    """The chip without paired children: the best value's change."""
-    best = rollup_delta["metrics"].get(metric, {}).get("best") if metric else None
-    if not best or best["delta"] is None:
+def best_chip(rollup_delta):
+    """The chip without paired children: the ``rolled`` value's change
+    (named by its aggregate unless it is the ``best``)."""
+    rolled = rollup_delta.get("rolled")
+    if not rolled or rolled["delta"] is None:
         return None
-    state = STATES[best["better"]]
+    state, metric = STATES[rolled["better"]], rolled["metric"]
+    name = metric if rolled["agg"] == "best" else f"{rolled['agg']} {metric}"
     return dict(dict.fromkeys(("from", "worse", "of", "quantile", "threshold")),
                 state=state, metric=metric,
-                text=f"{MARKS[state]} {metric} {best['value']:.4g} (baseline {best['baseline']:.4g})")
+                text=f"{MARKS[state]} {name} {rolled['value']:.4g} "
+                     f"(baseline {rolled['baseline']:.4g})")

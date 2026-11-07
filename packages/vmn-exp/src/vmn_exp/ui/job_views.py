@@ -136,6 +136,7 @@ class JobViews:
             "top": self._top(snapshot, schema, verstr),
             "split": split,
             "by": split and self.rollups.split_rollup(snapshot, split, verstr),
+            "rolled": self.cache.job_aggregates.one(snapshot, schema, verstr),
         }
 
     def _top(self, snapshot, schema, verstr):
