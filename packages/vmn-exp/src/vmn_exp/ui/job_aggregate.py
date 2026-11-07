@@ -139,8 +139,6 @@ class JobAggregates:
         tree = self._cache.jobs.tree(base)
         if verstr not in tree.jobs:
             return None
-        if tree.is_top(verstr):
-            return self.rolled(snapshot, schema, agg)[verstr]
         key = (base.token, bucket, self._cache.schema_key(schema), agg, verstr)
         return self._answers.get(key, lambda: self._payload_of(snapshot, schema, agg)(verstr))
 
