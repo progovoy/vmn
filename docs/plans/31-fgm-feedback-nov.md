@@ -10,7 +10,18 @@
 > `cli/` = `packages/vmn-exp/src/vmn_exp/…`; web = `packages/vmn-exp/webui/src`;
 > tests in `packages/vmn-exp/tests/`.
 
-Status: **proposal** (2026-11-07). Code read at `1ce18300` (vmn_exp 0.1.34).
+Status: **done except §3** (2026-11-07; §3 on hold by the owner's call).
+Shipped: §1 failed_pct query fields, the chip and `c:total`/`c:failed_pct`
+tree columns; §2 the Outer runs row aggregate (`job_agg*`, `rolled`,
+`job:value`, `ui.job_aggregate`, baselines on the same value function, the
+web value column, picker and KPI tile), with fgm's `field:params.trade_date` /
+own `date.best_value` shape and the `wf.best_value_median` acceptance test;
+§4.1 stuck vs lost (no query change needed); §4.2 hints and web-only-param
+400s; §4.3 parallel registry reads in prune; §4.4 the boto3 startup check
+(no runtime S3-add path exists, so the startup check covers it); §5 D1/D2.
+Departures: `children` is always read exactly (no sketch above 256);
+baselines take the app default aggregate, not URL overrides.
+Proposal text below. Code read at `1ce18300` (vmn_exp 0.1.34).
 
 ## 0. Triage
 
