@@ -84,11 +84,8 @@ export function timelineSeries(timeline: JobTimeline): TimelineSeries {
 export const failedCount = (s: Pick<JobPageSummary, "counts" | "lost">) =>
   s.counts.failed + s.counts.stuck + (s.lost ?? 0);
 
-/** The main metric: the server's, else the first tracked one with values. */
-export function mainMetric(s: JobPageSummary): string | null {
-  if (s.metric && s.metrics[s.metric]) return s.metric;
-  return Object.keys(s.metrics).find((m) => s.metrics[m]) ?? null;
-}
+/** The main metric: the server's only, never another tracked one (plan 32). */
+export const mainMetric = (s: JobPageSummary): string | null => s.metric ?? null;
 
 export interface KpiTile {
   label: string;
@@ -122,15 +119,16 @@ export function jobKpis(s: JobPageSummary): KpiTile[] {
     { label: "median duration", value: fmtDuration(s.duration.p50) },
     { label: "p90 duration", value: fmtDuration(s.duration.p90) },
   ];
-  const metric = mainMetric(s);
-  const m = metric ? s.metrics[metric] : null;
-  if (metric && m) tiles.push(bestTile(metric, m));
-  return tiles;
+  return [...tiles, bestTile(mainMetric(s), s)];
 }
 
-/** The main metric's best, linked; a goal-less one has none (plan 32 F5). */
-function bestTile(metric: string, m: JobMetric): KpiTile {
+/** The main metric's best, linked; a goal-less one has none (plan 32 F5),
+ *  nor does a job whose server names no main metric or which has no values. */
+function bestTile(metric: string | null, s: JobPageSummary): KpiTile {
+  if (!metric) return { label: "best", value: "—", sub: "(no main metric)" };
   const label = `best ${metric}`;
+  const m = s.metrics[metric];
+  if (!m) return { label, value: "—", sub: "(no values yet)" };
   if (m.goal === null) return { label, value: "—", sub: NO_GOAL.trim() };
   return { label, value: fmtVal(m.best), href: m.best_verstr ?? undefined };
 }

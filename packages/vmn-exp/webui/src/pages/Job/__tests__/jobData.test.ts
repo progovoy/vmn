@@ -95,10 +95,26 @@ describe("jobKpis", () => {
 });
 
 describe("mainMetric", () => {
-  it("takes the server's metric, else the first tracked one with values", () => {
+  it("takes only the server's metric, never another tracked one (plan 32)", () => {
     expect(mainMetric(jobSummaryFixture())).toBe("val_loss");
-    expect(mainMetric({ ...jobSummaryFixture(), metric: undefined, metrics: { a: null, b: jobSummaryFixture().metrics.val_loss } })).toBe("b");
+    expect(mainMetric({ ...jobSummaryFixture(), metric: undefined, metrics: { a: null, b: jobSummaryFixture().metrics.val_loss } })).toBeNull();
     expect(mainMetric({ ...jobSummaryFixture(), metric: null, metrics: {} })).toBeNull();
+  });
+
+  it("keeps the server's metric before it has values", () => {
+    expect(mainMetric({ ...jobSummaryFixture(), metrics: { val_loss: null, b: jobSummaryFixture().metrics.val_loss } })).toBe("val_loss");
+  });
+});
+
+describe("jobKpis without a main metric value", () => {
+  it("reads a dash, (no main metric), when the server names none", () => {
+    const s = { ...jobSummaryFixture(), metric: null };
+    expect(jobKpis(s).find((t) => t.label.startsWith("best"))).toEqual({ label: "best", value: "—", sub: "(no main metric)" });
+  });
+
+  it("reads a dash, (no values yet), for a main metric no run logged", () => {
+    const s = { ...jobSummaryFixture(), metrics: { val_loss: null, b: jobSummaryFixture().metrics.val_loss } };
+    expect(jobKpis(s).filter((t) => t.label.startsWith("best"))).toEqual([{ label: "best val_loss", value: "—", sub: "(no values yet)" }]);
   });
 });
 

@@ -83,7 +83,7 @@ export interface JobPageSummary extends JobProgressFields {
   sweep: boolean;
   started_at: string | null;
   finished_at: string | null;
-  /** The main metric's name, when the server names it (else the first of `metrics`). */
+  /** The main metric's name; null: the server names none, and the page shows none. */
   metric?: string | null;
   metrics: Record<string, JobMetric | null>;
   /** False when the main metric has no declared goal: `top` and its `best` rank nothing. */
