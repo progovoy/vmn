@@ -81,6 +81,9 @@ export function SweepCard({ view, boardUrl, runUrl, idxOf = () => null }: {
             {fleetLabel({ verstr: best.verstr, idx: idxOf(best.verstr), name: best.name })}
           </Link>
           {" "}{spec.metric.name} = <span className="metric best">{fmtVal(best.value)}</span>
+          {best.metric_source !== best.verstr && (
+            <> (from <Link to={runUrl(best.metric_source)} title={best.metric_source}>a nested run</Link>)</>
+          )}
         </div>
       )}
       {trials.length === 0 ? (

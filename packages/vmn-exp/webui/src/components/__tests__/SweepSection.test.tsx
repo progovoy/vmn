@@ -40,7 +40,10 @@ function view(t: SweepTrial[] = trials): SweepView {
     trials: t,
     summary: {
       counts: { succeeded: 3, failed: 1 }, stopped_early: 1, trials: t.length,
-      best: best ? { verstr: best.verstr, name: best.name, trial: best.trial, value: 0.2, params: best.params } : null,
+      best: best ? {
+        verstr: best.verstr, name: best.name, trial: best.trial, value: 0.2,
+        metric_source: best.metric_source, params: best.params,
+      } : null,
     },
   };
 }
@@ -92,6 +95,17 @@ describe("SweepCard", () => {
     expect(rows[1].className).not.toContain("best");
     expect(screen.getByTestId("sweep-best").textContent).toContain("sw-t0");
     expect(screen.getByTestId("sweep-best").textContent).toContain("0.2");
+  });
+
+  it("says the best's value came from a nested run, linked to it (plan 32 F16)", () => {
+    renderCard();
+    const from = within(screen.getByTestId("sweep-best")).getByRole("link", { name: /nested run/ });
+    expect(from.getAttribute("href")).toBe(`/run/${trials[0].metric_source}`);
+  });
+
+  it("names no source when the best trial logged the value itself", () => {
+    renderCard(view([trial(0, "succeeded", 0.2, { metric_source: "0.0.1-dev.aaa.bbb.r2" })]));
+    expect(screen.getByTestId("sweep-best").textContent).not.toContain("nested run");
   });
 
   it("marks early-stopped trials", () => {

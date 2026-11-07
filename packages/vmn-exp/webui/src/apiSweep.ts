@@ -30,6 +30,8 @@ export interface SweepBest {
   name: string | null;
   trial: number;
   value: number;
+  /** The run the value came from: the trial itself, or a run nested in it. */
+  metric_source: string;
   params: Record<string, unknown>;
 }
 

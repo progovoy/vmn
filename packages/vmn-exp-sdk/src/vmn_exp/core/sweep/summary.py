@@ -144,6 +144,8 @@ def summarize(spec, rows, claimed=()):
             "name": best.get("name"),
             "trial": trial_of(best)[0],
             "value": metric_value(spec, best),
+            # The run the value came from: the trial, or a run nested in it.
+            "metric_source": best.get("metric_source", best["verstr"]),
             "params": best.get("params") or {},
         },
     }

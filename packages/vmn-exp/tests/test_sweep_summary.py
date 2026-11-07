@@ -117,3 +117,35 @@ def test_a_trial_with_no_metric_anywhere_has_itself_as_source():
     [attributed] = attribute_metric(_spec(), [trial], [trial, _child("a", trial["verstr"])])
     assert attributed["metric_source"] == trial["verstr"]
     assert "loss" not in attributed["metrics"]
+
+
+# ---------------------------------------------------------------------------
+# the best names the run its value came from (plan 32 F16)
+# ---------------------------------------------------------------------------
+
+
+def _attributed_best(own=None, nested=0.2):
+    trial = dict(_row(0, "succeeded", own), parent="sweep")
+    other = dict(_row(1, "succeeded", 0.9), parent="sweep")
+    rows = [trial, other, _child("g", trial["verstr"], nested)]
+    trials = attribute_metric(_spec(), [trial, other], rows)
+    return summarize(_spec(), trials)
+
+
+def test_the_best_carries_the_nested_run_its_value_came_from():
+    best = _attributed_best()["best"]
+    assert (best["verstr"], best["value"], best["metric_source"]) == ("v0.0", 0.2, "g")
+
+
+def test_a_best_with_its_own_value_is_its_own_source():
+    best = _attributed_best(own=0.1)["best"]
+    assert (best["value"], best["metric_source"]) == (0.1, "v0.0")
+
+
+def test_sweep_status_prints_where_a_nested_best_came_from():
+    from vmn_exp.cli.sweep.handler import format_status
+
+    nested = dict(_attributed_best(), sweep="s")
+    assert "loss=0.2 from g " in format_status(nested)
+    own = dict(_attributed_best(own=0.1), sweep="s")
+    assert "loss=0.1  (lr=0.5)" in format_status(own)

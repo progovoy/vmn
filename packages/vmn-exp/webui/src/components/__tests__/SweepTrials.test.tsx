@@ -26,7 +26,7 @@ const view: SweepView = {
   trials,
   summary: {
     counts: { succeeded: 3 }, stopped_early: 0, trials: 3,
-    best: { verstr: trials[1].verstr, name: "sw-t1", trial: 1, value: 0.2, params: trials[1].params },
+    best: { verstr: trials[1].verstr, name: "sw-t1", trial: 1, value: 0.2, metric_source: trials[1].metric_source, params: trials[1].params },
   },
 };
 

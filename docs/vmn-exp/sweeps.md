@@ -183,7 +183,11 @@ sweep 0.1.0-dev.1a2b3c4.5d6e7f8.r4 (random, loss min): 12 trial(s) of 50
 
 `--json` prints `sweep`, `method`, `metric`, `run_cap`, `trials`, `claimed`,
 `unstarted`, `counts` (by status, latest attempt per trial), `stopped_early`
-and `best` (`verstr`, `name`, `trial`, `value`, `params`).
+and `best` (`verstr`, `name`, `trial`, `value`, `metric_source`, `params`).
+A trial that logged no target metric takes its best nested run's
+(`start_run()` inside the trial): `metric_source` names the run the value
+came from, and the text line says `loss=0.183 from <verstr>`; the sweep
+section links it.
 
 In the UI, the sweep run's page has a **sweep** section: the spec, the trial
 table (status, params, metric linked to the run it came from, best trial

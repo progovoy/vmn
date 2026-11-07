@@ -99,6 +99,8 @@ def format_status(summary):
     best = summary["best"]
     if best:
         params = ", ".join(f"{k}={v}" for k, v in sorted(best["params"].items()))
+        source = best["metric_source"]
+        origin = f" from {source}" if source != best["verstr"] else ""
         lines.append(f"  best: trial {best['trial']} {best['verstr']} "
-                     f"{metric['name']}={best['value']}  ({params})")
+                     f"{metric['name']}={best['value']}{origin}  ({params})")
     return "\n".join(lines)
