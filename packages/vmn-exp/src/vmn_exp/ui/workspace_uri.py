@@ -29,3 +29,17 @@ def check_workspace_uri(uri, tenancy="single", endpoint_allowlist=()):
     if endpoint and endpoint.rstrip("/") not in {e.rstrip("/") for e in endpoint_allowlist}:
         return f"endpoint_url {endpoint} is not in the server's endpoint allowlist"
     return None
+
+
+def missing_s3_extra(uris):
+    """The install hint when one of *uris* is an S3 store and boto3 (the
+    ``s3`` extra) is not installed, else None: without it the server would
+    start, then answer 500 on the store's first read."""
+    import importlib.util
+
+    if not any(uri and uri.startswith("s3://") for uri in uris):
+        return None
+    if importlib.util.find_spec("boto3") is not None:
+        return None
+    return ('An s3:// store needs boto3 (the "s3" extra). Install it with:\n\n'
+            '  pip install "vmn-exp[ui,s3]"\n')

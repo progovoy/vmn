@@ -267,12 +267,17 @@ def handle_ui(args):
 
     from vmn_exp.ui import server_logging
     from vmn_exp.ui.config import ConfigError
+    from vmn_exp.ui.workspace_uri import missing_s3_extra
 
     server_logging.install()
     try:
         manager, cfg, control_plane = build_server(args)
     except ConfigError as e:
         VMN_LOGGER.error(str(e))
+        return 1
+    missing = missing_s3_extra(w.store for w in manager.list())
+    if missing:
+        VMN_LOGGER.error(missing)
         return 1
     host = cfg.server.host if cfg else args.host
     port = cfg.server.port if cfg else args.port

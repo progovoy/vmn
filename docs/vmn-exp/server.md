@@ -99,7 +99,8 @@ both warm, `false` neither (see [ui.md](ui.md#the-index)).
 
 Workspaces in `workspaces:` are only added when no workspace has that name
 yet, so changes made in the UI survive a restart. `--repo` and `--store` still
-attach more workspaces.
+attach more workspaces. An `s3://` workspace needs the `s3` extra
+(`pip install "vmn-exp[ui,s3]"`); without it the server refuses to start.
 
 `downloads: redirect` makes artifact, media and output-log downloads of a
 store workspace answer `302` with a presigned GET for that one object, signed
