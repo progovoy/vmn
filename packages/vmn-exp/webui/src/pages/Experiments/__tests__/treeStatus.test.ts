@@ -17,5 +17,13 @@ describe("the outer runs' status chips", () => {
 
   it("are no query without a status", () => {
     expect(treeStatusQuery("")).toBe("");
+    expect(treeStatusQuery("", 5)).toBe("");
+  });
+
+  // Plan 31 §1: failed with a share keeps the trees failing at least N%.
+  it("match failed by the tree's failure share when given one", () => {
+    expect(treeStatusQuery("failed", 5)).toBe("failed_pct >= 5");
+    expect(treeStatusQuery("stuck,failed", 12.5)).toBe('status = "stuck" or stuck_below > 0 or failed_pct >= 12.5');
+    expect(treeStatusQuery("running", 5)).toBe('status = "running" or running_below > 0');
   });
 });

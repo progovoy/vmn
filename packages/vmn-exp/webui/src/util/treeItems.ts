@@ -3,7 +3,7 @@
  *  columns the app's `tree_columns` name for a node's kind. */
 import type { TreeRow } from "../apiTree";
 import type { AttentionEntry } from "../shell/contracts";
-import { fmtDuration, fmtParam, fmtVal } from "../util";
+import { fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal } from "../util";
 import { runDurationText } from "./runDuration";
 
 /** What is loaded of each parent's children: pages asked for, and each one's rows. */
@@ -104,6 +104,9 @@ export function cellText(r: TreeRow, key: string): [string, string] {
   if (name === "ratio") return ["vs siblings", shown(r.duration_ratio, (v: number) => `${v.toFixed(1)}×`)];
   if (name === "duration") return [name, runDurationText(r)[0]];
   if (name === "queue") return [name, shown(r.queue_sec, fmtDuration)];
+  // Its own rollup's (plan 31 §2): a run without children has none.
+  if (name === "total") return ["runs", shown(r.job?.total, fmtCount)];
+  if (name === "failed_pct") return ["failed", shown(r.job?.failed_pct, fmtPct)];
   return [name, shown((r as unknown as Record<string, unknown>)[name], fmtParam)];
 }
 

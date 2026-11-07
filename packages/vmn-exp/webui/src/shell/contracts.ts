@@ -32,7 +32,12 @@ export interface AppStatus {
   attention?: AttentionEntry[];
   /** The app's team views (plan 28 P4), in config order; absent when none. */
   views?: TeamView[];
+  /** The app's `experiment.ui.failed_pct_threshold` (plan 31 §1); absent at
+   *  the default, {@link DEFAULT_FAILED_PCT_THRESHOLD}. */
+  failed_pct_threshold?: number;
 }
+/** core/app_settings.py's default failure share the Outer runs failed chip offers. */
+export const DEFAULT_FAILED_PCT_THRESHOLD = 5;
 /** One `experiment.ui.attention` query and the runs it matches now; *q* is
  *  the query text the board filters by. A query that does not compile
  *  counts null, with its *error*. */

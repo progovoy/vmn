@@ -37,6 +37,12 @@ function setBoardTab(p: URLSearchParams, tab: BoardTab) {
   if (boardTab(p) !== tab) p.set("tab", tab);
 }
 
+/** A percent in (0, 100], else null. */
+function parsePercent(v: string | null): number | null {
+  const n = v ? Number(v) : NaN;
+  return n > 0 && n <= 100 ? n : null;
+}
+
 /** The leaderboard's whole view — sort, filters, tab, chart, hidden columns,
  *  column order, pinning and density — read from and written to the URL,
  *  so it is bookmarkable and Back returns to exactly what was on screen —
@@ -51,6 +57,8 @@ export function useLeaderboardView() {
     sort: params.get("sort") || null,
     order: sortOrder === "asc" || sortOrder === "desc" ? (sortOrder as Order) : undefined,
     status: read("status"),
+    /** `failed_pct=`: the Outer runs failed chip's "≥ N% failed" (plan 31 §1). */
+    failedPct: parsePercent(params.get("failed_pct")),
     query: read("q"),
     search: read("search"),
     branch: read("branch"),
@@ -108,6 +116,7 @@ export function useLeaderboardView() {
 
   const setters = useMemo(() => ({
     setStatus: (csv: string) => setParam("status", csv),
+    setFailedPct: (pct: number | null) => setParam("failed_pct", pct === null ? "" : String(pct)),
     setQuery: (q: string) => setParam("q", q),
     setSearch: (s: string) => setParam("search", s),
     setBranch: (b: string) => setParam("branch", b),

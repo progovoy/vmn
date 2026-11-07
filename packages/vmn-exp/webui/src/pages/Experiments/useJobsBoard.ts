@@ -44,7 +44,7 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   }), [view.query, view.search, view.branch, view.archived]);
   const matchSubtree = hasSearch(search);
   // The outer runs match a status by their trees, beside the preset's query.
-  const tree = top === "jobs" ? treeStatusQuery(view.status) : "";
+  const tree = top === "jobs" ? treeStatusQuery(view.status, view.failedPct) : "";
   const topQuery = combineQueries(fixed?.query ?? "", tree || null) || undefined;
   const { filter, filtered } = useBoardFilter(view, chosen, {
     top: top ?? true, matchSubtree: matchSubtree || undefined, topQuery,

@@ -87,6 +87,20 @@ describe("cellText", () => {
   });
 });
 
+// Plan 31 §2 client answers: a date row shows its runs and failure share.
+describe("cellText rollup columns", () => {
+  it("reads c:total and c:failed_pct from the row's own rollup", () => {
+    const date = node("d", { job: job({ total: 1200, failed_pct: 7.5 }) });
+    expect(cellText(date, "c:total")).toEqual(["runs", "1,200"]);
+    expect(cellText(date, "c:failed_pct")).toEqual(["failed", "7.5%"]);
+  });
+
+  it("dashes them on a run without children", () => {
+    expect(cellText(row("leaf"), "c:total")).toEqual(["runs", "—"]);
+    expect(cellText(row("leaf"), "c:failed_pct")).toEqual(["failed", "—"]);
+  });
+});
+
 describe("cellText duration (plan 32 F13)", () => {
   it("marks a stuck run's lower bound and a running run's elapsed time", () => {
     const stuck = row("s", { status: "stuck", duration_sec: null, duration_at_least_sec: 11000 });

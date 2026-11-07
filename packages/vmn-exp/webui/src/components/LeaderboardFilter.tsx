@@ -5,7 +5,7 @@ import { useFilterGrammar, type FilterReports } from "../hooks/useFilterGrammar"
 import { filterTokens, removeToken, type FilterToken, type FilterValues } from "../util/filterTokens";
 import type { SuggestFacets } from "../util/querySuggest";
 import { fieldHint } from "../util/queryFields";
-import FilterShortcuts from "./FilterShortcuts";
+import FilterShortcuts, { type FailedShare } from "./FilterShortcuts";
 import QueryBar from "./QueryBar";
 import QueryFieldHint from "./QueryFieldHint";
 import SimilarToggle from "./SimilarToggle";
@@ -27,7 +27,7 @@ const NO_FACETS: SuggestFacets = {};
  *  the branch list when no branches are given. */
 export default function LeaderboardFilter({
   rows = [], queryError, queryHints, branches: knownBranches, facets = NO_FACETS, initial, archived = false,
-  onArchivedChange, onSimilarChange, help, ...reports
+  onArchivedChange, onSimilarChange, help, failedShare, ...reports
 }: FilterReports & {
   rows?: ExperimentRow[];
   /** What the server said about the query it refused; shown beside the bar. */
@@ -49,6 +49,8 @@ export default function LeaderboardFilter({
   onSimilarChange?: (text: string | null) => void;
   /** The query help's content; its `?` appears with it (plan 20 C5). */
   help?: QueryHelpData;
+  /** The failed chip's "≥ N% failed" option (the Outer runs view). */
+  failedShare?: FailedShare;
 }) {
   const [similarOn, setSimilarOn] = useState(false);
   const [similarText, setSimilarText] = useState("");
@@ -114,6 +116,7 @@ export default function LeaderboardFilter({
         onBranch={(branch) => setState((s) => ({ ...s, branch }))}
         archived={archived}
         onArchived={onArchivedChange}
+        failedShare={failedShare}
       />
       {hasFilter && (
         <button className="filter-clear" title="Clear filters" onClick={clear}>

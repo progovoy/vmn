@@ -3,8 +3,9 @@
  *  runs, and a failed run anywhere makes its tree_status read failed while
  *  the rest still run. Running and stuck match the outer run or any run
  *  below it (`running_below`, `stuck_below`, its rollup's counts); the
- *  ended states and created match its tree_status. Sent as `top_q`, beside
- *  the preset's query. */
+ *  ended states and created match its tree_status; failed with a failure
+ *  share N (plan 31 §1) matches the trees failing at least N% instead
+ *  (`failed_pct`). Sent as `top_q`, beside the preset's query. */
 import type { RunState } from "../../types";
 import { inDisplayOrder } from "../../util/filterTokens";
 
@@ -16,7 +17,9 @@ const TREE_CLAUSES: Record<RunState, string> = {
   created: 'tree_status = "created"',
 };
 
-/** The `?status=` CSV as a query over the outer runs' trees ("" for none). */
-export function treeStatusQuery(csv: string): string {
-  return inDisplayOrder(csv.split(",")).map((s) => TREE_CLAUSES[s]).join(" or ");
+/** The `?status=` CSV as a query over the outer runs' trees ("" for none),
+ *  failed by *failedPct* (`?failed_pct=`) when given. */
+export function treeStatusQuery(csv: string, failedPct?: number | null): string {
+  const clause = (s: RunState) => (s === "failed" && failedPct != null ? `failed_pct >= ${failedPct}` : TREE_CLAUSES[s]);
+  return inDisplayOrder(csv.split(",")).map(clause).join(" or ");
 }

@@ -30,6 +30,8 @@ import type { Preset } from "./presets";
 import { useBaselineChips } from "./useBaselineChips";
 import { useJobsBoard } from "./useJobsBoard";
 import { useAppStatus } from "../../shell/useShellData";
+import { DEFAULT_FAILED_PCT_THRESHOLD } from "../../shell/contracts";
+import type { FailedShare } from "../../components/FilterShortcuts";
 import { freshnessShort } from "../../util/freshness";
 import { indexingText, soFar } from "../../util/indexing";
 
@@ -52,6 +54,12 @@ const emptyText = (kind: JobsKind | null, filtered: boolean) =>
  *  preset's and the status chips' query on them). */
 const listQuery = (kind: JobsKind | null, topQuery?: string) =>
   topQuery ? `${kindQuery(kind)} and (${topQuery})` : kindQuery(kind);
+
+/** The failed chip's "≥ N% failed": the URL's N, else the app's threshold. */
+function failedShare(view: ReturnType<typeof useLeaderboardView>, threshold = DEFAULT_FAILED_PCT_THRESHOLD): FailedShare {
+  const pct = view.failedPct ?? threshold;
+  return { pct, on: view.failedPct !== null, onChange: (on) => view.setFailedPct(on ? pct : null) };
+}
 
 export default function JobsView({ ws, app, views, kind, preset, onAll }: {
   ws: string; app: string; views?: ReactNode; kind: JobsKindState; preset?: Preset;
@@ -127,6 +135,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
             queryHints={data.hints}
             archived={view.archived}
             onArchivedChange={view.setArchived}
+            failedShare={kind.top === "jobs" ? failedShare(view, status?.failed_pct_threshold) : undefined}
           />
           <JobsMatchLine matches={data.matches} appBase={base} search={board.search} />
           <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "outer run" : "run"} onShow={data.showNew} />
