@@ -10,13 +10,29 @@
 > `packages/vmn-exp/src/vmn_exp/…`; web = `packages/vmn-exp/webui/src`; tests
 > in `packages/vmn-exp/tests/`.
 
-Status: **proposal** (2026-11-07). Code read at `1ce18300` (vmn_exp 0.1.34).
-Progress: **F4-F7 done** (`1f6133c7`, `21a84819`, `90335295`, `704e5537`,
-`08b885ba`; F12 too). Beyond the plan: the web no longer guesses a goal from
-a metric's name (`loss` → min, `acc` → max). It reads goals from the server,
-which resolves glob goals per name (`metrics-schema`), plus a per-metric
-`goal` on baseline metrics and group aggregates. A board hint asks to declare
-missing goals.
+Status: **done** (2026-11-07). Code read at `1ce18300` (vmn_exp 0.1.34).
+Progress: **all items done** (F1-F16 and the reports/export audit), on
+master `1f6133c7..b53ad3bc`.
+- Goals (F4-F7, F12): beyond the plan, the web no longer guesses a goal from a
+  metric's name (`loss` → min, `acc` → max). It reads goals from the server,
+  which resolves glob goals per name (`metrics-schema`) and puts a `goal` on
+  each baseline metric and group aggregate. A board hint asks users to declare
+  missing goals.
+- F1: `metric_policy` lists only a run's overrides of the schema (an explicit
+  `last` included), not every non-`last` value. Listing every value gave false
+  tags for metrics logged once and cost about 1 KB per row per schema view.
+  `DERIVED_VERSION` 21: a local re-derive, no storage reads.
+- F8: `RECORDS_VERSION` 19. Version-18 records are copied; only runs with a
+  param also logged as a metric are re-read from storage (`COPYABLE_RECORDS`
+  predicates, `core/index_reread.py`).
+
+Follow-ups (not in this plan):
+- The board's shared `declared_schema` still merges run-declared goals with
+  the latest run winning. Two runs that compare as "goals differ" (F9) can
+  still be ranked by one goal on the board. This is a board-wide change.
+- F1's `mixed` flag on pivot cells and Jobs rollup metrics is sent by the
+  server but not yet shown by the web. CLI `compare` doesn't name policies.
+- The single runs' own-value column on the Jobs view is plan 31 §2's.
 Items marked ✓ were checked against the code by hand. The rest come from the
 audit and are re-checked when their test is written.
 
