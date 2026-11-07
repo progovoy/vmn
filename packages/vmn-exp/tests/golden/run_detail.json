@@ -92,6 +92,7 @@
    }
   ],
   "log_total": 4,
+  "logged_params": [],
   "media": {},
   "metadata": {
    "code_verstr": "1.0.0-dev.a",
@@ -297,6 +298,7 @@
    }
   ],
   "log_total": 4,
+  "logged_params": [],
   "media": {},
   "metadata": {
    "code_verstr": "1.0.0-dev.a",
@@ -485,6 +487,7 @@
    }
   ],
   "log_total": 4,
+  "logged_params": [],
   "media": {},
   "metadata": {
    "code_verstr": "1.0.0-dev.a",

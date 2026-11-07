@@ -79,7 +79,8 @@ def _other(storage, v):
 def test_compare_keeps_a_once_logged_metric_sharing_a_param_name_a_metric(tmp_path):
     delta = _pair(LocalSnapshotStorage(str(tmp_path), area="runs"), _logged_once, _other)
 
-    assert delta["acc"] == {"from": 0.9, "to": 0.7, "goal": None, "param": False}
+    assert delta["acc"] == {"from": 0.9, "to": 0.7, "goal": None, "param": False,
+                            "from_policy": None, "to_policy": None}
 
 
 def test_the_snapshot_compare_keeps_it_a_metric_too(tmp_path):
@@ -92,7 +93,8 @@ def test_the_snapshot_compare_keeps_it_a_metric_too(tmp_path):
 
     delta = diff_reader.experiment_diff_from_snapshot(_snap(storage), v1, v2)["metrics_delta"]
 
-    assert delta["acc"] == {"from": 0.9, "to": 0.7, "goal": None, "param": False}
+    assert delta["acc"] == {"from": 0.9, "to": 0.7, "goal": None, "param": False,
+                            "from_policy": None, "to_policy": None}
 
 
 def test_a_streamed_metric_keeps_its_place_from_a_later_param(tmp_path):
