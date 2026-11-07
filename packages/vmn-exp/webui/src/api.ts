@@ -33,6 +33,12 @@ export interface PageOpts {
   topQuery?: string;
   /** The page after this keyset cursor (a page's `next_cursor`, plan 23 S6) instead of `offset`. */
   cursor?: string;
+  /** With `top`: the Outer runs row's aggregate (plan 31 §2), each over
+   *  the app's `experiment.ui.job_aggregate`. */
+  jobAgg?: string;
+  jobAggBy?: string;
+  jobAggValue?: string;
+  jobAggMetric?: string;
 }
 
 /** The Jobs view search's counts (plan 23 W11): every matching run of the app. */
@@ -61,6 +67,10 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.scope) p.set("scope", opts.scope);
   if (opts.matchSubtree) p.set("match_subtree", "1");
   if (opts.topQuery) p.set("top_q", opts.topQuery);
+  if (opts.jobAgg) p.set("job_agg", opts.jobAgg);
+  if (opts.jobAggBy) p.set("job_agg_by", opts.jobAggBy);
+  if (opts.jobAggValue) p.set("job_agg_value", opts.jobAggValue);
+  if (opts.jobAggMetric) p.set("job_agg_metric", opts.jobAggMetric);
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 

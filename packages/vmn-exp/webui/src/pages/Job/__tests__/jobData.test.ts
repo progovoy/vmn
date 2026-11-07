@@ -118,6 +118,37 @@ describe("jobKpis without a main metric value", () => {
   });
 });
 
+describe("jobKpis's aggregate tile (plan 31 §2)", () => {
+  const dates = {
+    agg: "median", by: "field:params.trade_date", source: "own", metric: "date.best_value", goal: "max",
+    percentile: null, value: 0.65, n: 14, of: 16, conflicts: 0, verstr: "0.0.2-dev.d7", approx: false,
+  } as const;
+
+  it("sits beside the best: the aggregate, its metric and units, the coverage with its source, linked", () => {
+    const tiles = jobKpis(jobSummaryFixture({ rolled: { ...dates } }));
+    const at = tiles.findIndex((t) => t.label === "median date.best_value · dates");
+    expect(tiles[at]).toEqual({
+      label: "median date.best_value · dates", value: "0.65", sub: "of 14/16 dates' own", href: "0.0.2-dev.d7",
+    });
+    expect(tiles[at - 1].label).toBe("best val_loss");
+  });
+
+  it("reads a dash, (no goal), without a goal, and ≈ for an approximate quantile", () => {
+    const none = jobKpis(jobSummaryFixture({ rolled: { ...dates, goal: null, value: null, verstr: null } }));
+    expect(none.find((t) => t.label === "median date.best_value · dates")).toEqual({
+      label: "median date.best_value · dates", value: "—", sub: "(no goal)",
+    });
+    const approx = jobKpis(jobSummaryFixture({ rolled: { ...dates, by: "runs", approx: true, verstr: null } }));
+    expect(approx.find((t) => t.label === "median date.best_value · runs")?.value).toBe("≈ 0.65");
+  });
+
+  it("is left out when it is the best tile again (the main metric's best of subtree bests), or absent", () => {
+    const same = { ...dates, agg: "best", by: "children", source: "best", metric: "val_loss", goal: "min" } as const;
+    expect(jobKpis(jobSummaryFixture({ rolled: same })).filter((t) => t.label.includes("val_loss"))).toHaveLength(1);
+    expect(jobKpis(jobSummaryFixture({ rolled: null })).some((t) => t.label.includes(" · "))).toBe(false);
+  });
+});
+
 describe("failure helpers", () => {
   it("quotes a signature for the query language", () => {
     expect(failureQuery("failed | exit=<n>")).toBe('failure_sig = "failed | exit=<n>"');

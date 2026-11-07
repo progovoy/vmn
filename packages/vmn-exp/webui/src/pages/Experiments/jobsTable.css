@@ -40,3 +40,15 @@
 .tree-toggle:hover { color: var(--accent); }
 .jobs-table tr.jobs-tree-slot > td { padding: 4px 8px 12px 36px; vertical-align: top; }
 .lb-mcard-group .fold-toggle { font-weight: 600; background: none; border: none; padding: 6px 0; }
+
+/* The value column's aggregate menu (plan 31 §2): a small trigger after the
+   header's sort button; the menu is fixed under it, so the grid's scroller
+   never clips it. */
+.jobs-table th .job-agg { margin-left: 2px; vertical-align: middle; }
+.jobs-table th .job-agg-trigger { padding: 0 4px; border: 0; background: none; color: var(--text-3); cursor: pointer; }
+.jobs-table th .job-agg-trigger:hover,
+.jobs-table th .job-agg-trigger[aria-expanded="true"] { color: var(--text); }
+.group-by-menu.job-agg-menu {
+  position: fixed; top: var(--job-agg-top, auto); left: var(--job-agg-left, auto); right: auto;
+  text-align: left; font-weight: normal; text-transform: none;
+}

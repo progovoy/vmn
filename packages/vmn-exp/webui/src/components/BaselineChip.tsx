@@ -16,11 +16,16 @@ export function pickedText(source: BaselineSource, match?: readonly string[]): s
 
 export const baselineTitle = (ref: BaselineRef) => `vs ${fleetLabel(ref)}, ${pickedText(ref.source)}`;
 
+/** ` · 5 of 39 paired` when some keys lack a value on a side, else nothing. */
+const pairedText = ({ paired, total }: BaselineChipData) =>
+  paired != null && total != null && paired < total ? ` · ${paired} of ${total} paired` : "";
+
 export default function BaselineChip({ chip, baseline, href }: {
   chip: BaselineChipData; baseline?: BaselineRef | null; href?: string;
 }) {
   const className = `baseline-chip baseline-${chip.state}`;
   const title = baseline ? baselineTitle(baseline) : undefined;
-  if (href) return <Link className={className} to={href} title={title}>{chip.text}</Link>;
-  return <span className={className} title={title}>{chip.text}</span>;
+  const text = chip.text + pairedText(chip);
+  if (href) return <Link className={className} to={href} title={title}>{text}</Link>;
+  return <span className={className} title={title}>{text}</span>;
 }

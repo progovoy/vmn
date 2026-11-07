@@ -1,6 +1,6 @@
 /** What a Jobs-view row and card show (plan 23 W1, §3.1): a job's progress
- *  or a single run's base, and its best value with the inner
- *  run it comes from. */
+ *  or a single run's base, and its value (the board's aggregate, plan 31
+ *  §2) with the run holding it. */
 import { Link } from "react-router-dom";
 import type { BaselineChipEntry } from "../../apiBaseline";
 import BaselineChip from "../../components/BaselineChip";
@@ -8,15 +8,16 @@ import JobProgress from "../../components/JobProgress";
 import PolicyMixMark from "../../components/PolicyMixMark";
 import Sparkline from "../../components/Sparkline";
 import type { AttentionEntry } from "../../shell/contracts";
-import type { ExperimentRow } from "../../types";
-import { NO_GOAL, fmtCount, fmtPct, fmtVal, runHref } from "../../util";
+import type { ExperimentRow, JobRolled, PolicyMix } from "../../types";
+import { NO_GOAL, fmtCount, fmtPct, fmtVal, noGoalTitle, runHref } from "../../util";
 import type { SearchFilter } from "../../util/searchScope";
 import { jobEtaCell, jobRateCell, jobThroughputCell, type JobCell } from "../../util/jobProgress";
+import { rolledTitle, rolledValueText } from "../../util/jobAggregate";
 import { mixText, withMix } from "../../util/metricPolicy";
 
 export interface JobContext {
   runBase: string;
-  /** The Best column's metric, and the way it improves. */
+  /** The page's main metric (a single run's value), and the way it improves. */
   metric: string | null;
   goal: "min" | "max" | null;
   /** The search every run is matched by (plan 23 W11), for the job chips. */
@@ -64,9 +65,46 @@ export function JobSubLine({ r, inline = false }: { r: ExperimentRow; inline?: b
 
 const arrow = (goal: JobContext["goal"]) => (goal === "min" ? "↓" : goal === "max" ? "↑" : "");
 
-/** A job's best run on the metric (its `@N` linked, the arrow its rollup's
- *  goal), a single run's own value; `— (no goal)` for a job whose runs have
- *  the metric but no best (no goal declared: the server ranks nothing). */
+/** The value column: a job's chosen aggregate (`rolled`, plan 31 §2; none
+ *  without one, never its best instead), a single run's own main metric. */
+export function ValueCell({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
+  if (!r.job) return <BestValue r={r} ctx={ctx} />;
+  const { rolled } = r.job;
+  if (!rolled) return null;
+  // The rollup's policy mix is of the main metric's runs: only its own aggregate's.
+  return <RolledValue r={rolled} ctx={ctx} policies={rolled.metric === r.job.metric ? r.job.policies : undefined} />;
+}
+
+/** The value (linked to the unit holding it, `≈` when approximate, the
+ *  arrow its goal), titled by its aggregate, coverage and source; `— (no
+ *  goal)` without a goal (the server ranks nothing), `—` with no unit. */
+function RolledValue({ r, ctx, policies }: { r: JobRolled; ctx: JobContext; policies?: PolicyMix["policies"] }) {
+  const title = withMix(rolledTitle(r), policies);
+  if (r.value == null) {
+    return (
+      <span className="job-best">
+        <span className="muted" title={title}>—</span>
+        {!r.goal && <span className="goal">{NO_GOAL}</span>}
+      </span>
+    );
+  }
+  const text = rolledValueText(r);
+  const goal = arrow(r.goal);
+  return (
+    <span className="job-best" title={title}>
+      {r.verstr
+        ? <Link className="metric" to={runHref(ctx.runBase, r.verstr)}>{text}</Link>
+        : <span className="metric">{text}</span>}
+      <PolicyMixMark text={mixText(policies)} />
+      {goal && <span className="goal"> {goal}</span>}
+    </span>
+  );
+}
+
+/** A tree row's best run on the metric (its `@N` linked, the arrow its
+ *  rollup's goal: a tree row keeps its own values, plan 31 §2), a single
+ *  run's own value; `— (no goal)` for a job whose runs have the metric but
+ *  no best (no goal declared: the server ranks nothing). */
 export function BestValue({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
   const j = r.job;
   const value = j ? j.best : ctx.metric ? r.metrics[ctx.metric] : null;
@@ -74,7 +112,7 @@ export function BestValue({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
     if (!j?.metric || j.goal !== null || !j.spread?.some(Boolean)) return null;
     return (
       <span className="job-best">
-        <span className="muted" title={`no goal declared for ${j.metric} — not ranked`}>—</span>
+        <span className="muted" title={noGoalTitle(j.metric)}>—</span>
         <span className="goal">{NO_GOAL}</span>
       </span>
     );

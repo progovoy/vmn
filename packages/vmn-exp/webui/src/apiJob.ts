@@ -3,7 +3,7 @@
 import { api } from "./api";
 import { runBase } from "./apiRunCode";
 import { get } from "./http";
-import type { JobProgressFields, PolicyMix, RunState } from "./types";
+import type { JobProgressFields, JobRolled, PolicyMix, RunState } from "./types";
 
 export interface HistBin {
   lo: number;
@@ -96,6 +96,8 @@ export interface JobPageSummary extends JobProgressFields {
    *  `experiment.ui.split_by`); null without one. */
   split?: string | null;
   by?: JobSplitEntry[] | null;
+  /** The Outer runs row's aggregate by the app's default (plan 31 §2). */
+  rolled?: JobRolled | null;
 }
 
 export interface FailureCluster {

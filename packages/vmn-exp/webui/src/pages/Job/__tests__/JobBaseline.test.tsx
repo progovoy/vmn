@@ -94,6 +94,33 @@ describe("the baseline card", () => {
     expect(row("best cost")).toHaveTextContent("best cost (no goal)");
   });
 
+  it("leads with the Outer runs row's aggregate, named by its aggregate, metric and units (plan 31 §2)", async () => {
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
+      rolled: {
+        agg: "median", by: "field:params.trade_date", source: "own", metric: "date.best_value", goal: "max",
+        percentile: null, value: 0.65, baseline: 1, delta: -0.35, better: false,
+      },
+    }));
+    renderCard();
+    const table = await screen.findByRole("table", { name: "Against the baseline" });
+    const first = within(table).getAllByRole("row")[1];
+    expect(first).toHaveTextContent("median date.best_value · dates");
+    expect(first).toHaveTextContent("0.65");
+    expect(within(first).getByText("-0.35")).toHaveClass("delta-worse");
+  });
+
+  it("names a goal-less aggregate's row (no goal), without a verdict", async () => {
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
+      rolled: {
+        agg: "median", by: "children", source: "best", metric: "cost", goal: null,
+        percentile: null, value: null, baseline: null, delta: null, better: null,
+      },
+    }));
+    renderCard();
+    const table = await screen.findByRole("table", { name: "Against the baseline" });
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("median cost · children (no goal)");
+  });
+
   it("says when no outer run alike has ended yet", async () => {
     vi.mocked(jobBaseline).mockResolvedValue(compareFixture({ baseline: null, chip: null, pairs: [], metrics: {} }));
     renderCard();

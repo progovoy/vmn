@@ -16,7 +16,7 @@ import { HeaderCheckbox } from "../LeaderboardHeadParts";
 import { CardGroupMore } from "../LeaderboardCardGroup";
 import { headStatus } from "../LeaderboardRow";
 import JobTree from "../Job/JobTree";
-import { AttentionChips, BaselineCell, BestValue, JobSubLine, type JobContext } from "./JobCells";
+import { AttentionChips, BaselineCell, JobSubLine, ValueCell, type JobContext } from "./JobCells";
 import type { JobsTableProps } from "./JobsTable";
 import { isTreeSlot, useTreeSlots } from "./JobsTreeSlot";
 import "../leaderboardCards.css";
@@ -44,7 +44,7 @@ const JobCard = memo(function JobCard({ r, ctx, selected, onToggle, expanded, on
           {status && <StatusPill status={status} exitCode={r.exit_code} durationSec={r.duration_sec} staleSec={r.stale_sec} errorSummary={r.error_summary} />}
         </div>
         <div className="lb-mcard-sub"><JobSubLine r={r} /><AttentionChips r={r} ctx={ctx} /><BaselineCell r={r} ctx={ctx} /></div>
-        <div className="lb-mcard-metric job-mcard-best"><BestValue r={r} ctx={ctx} /></div>
+        <div className="lb-mcard-metric job-mcard-best"><ValueCell r={r} ctx={ctx} /></div>
         <div className="lb-mcard-foot mono">@{r.idx}{r.branch ? ` · ${r.branch}` : ""} · {jobWhenText(jobWhen(r))}</div>
       </div>
     </li>
@@ -69,13 +69,14 @@ function CardGroupLabel({ item, groups }: { item: GroupHeaderItem; groups: JobsT
   );
 }
 
-export default function JobCards({ items, ctx, selected, headerCheck, groups, onToggle, emptyText, trees }: JobsTableProps) {
+export default function JobCards({ items, ctx, selected, headerCheck, groups, onToggle, emptyText, trees, heads }: JobsTableProps) {
+  const metricLabel = heads?.value?.label ?? ctx.metric;
   const slots = useTreeSlots(items ?? NO_ITEMS);
   return (
     <div className="lb-mcards-wrap">
       <div className="lb-mcards-head">
         <HeaderCheckbox {...headerCheck} />
-        {ctx.metric && <span className="lb-mcards-metric">{ctx.metric}</span>}
+        {metricLabel && <span className="lb-mcards-metric">{metricLabel}</span>}
       </div>
       {items === undefined ? (
         <p className="lb-mcards-loading" role="status">loading outer runs…</p>

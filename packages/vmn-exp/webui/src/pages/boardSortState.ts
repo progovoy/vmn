@@ -25,7 +25,7 @@ const isMetricSort = (col: string) =>
   !col.startsWith("tags.") && !HIGH_FIRST.has(col) && !COUNT_PREFIXES.some((p) => col.startsWith(p));
 
 /** *bestOf* overrides a column's best-first direction where it knows one
- *  (the Jobs view's `job:best` follows its metric's goal). */
+ *  (the Jobs view's `job:value` follows its aggregate's goal). */
 export function boardSortState(
   sort: string | null, order: Order | null | undefined, schema: Schema,
   clickSort: (col: string, best: Order) => void,

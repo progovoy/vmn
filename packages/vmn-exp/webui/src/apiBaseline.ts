@@ -2,7 +2,7 @@
  *  (the card) and `experiments-baselines?v=` (many outer runs' chips at once,
  *  a Jobs view page's). Index-backed: no per-run store reads. */
 import { appTag, get } from "./http";
-import type { PolicyMix, RunState } from "./types";
+import type { JobAggChoice, PolicyMix, RunState } from "./types";
 
 /** A value here and on the baseline, their change and whether it is an
  *  improvement (null: no direction, a value missing, or no change). */
@@ -41,6 +41,10 @@ export interface BaselineChipData {
   of: number | null;
   quantile: "p10" | "p90" | null;
   threshold: number | null;
+  /** The keys holding a value on both sides, of the keys the outer run
+   *  holds (plan 31 §2: a side without one leaves its key unpaired). */
+  paired?: number;
+  total?: number;
 }
 
 /** A chip with the run it compares against (the chips endpoint's). */
@@ -90,7 +94,12 @@ export interface BaselineCompare {
   pairs: BaselinePair[];
   pairs_total: number;
   chip: BaselineChipData | null;
+  /** The two outer runs' `rolled` (the app's default aggregate, plan 31 §2). */
+  rolled?: BaselineRolled | null;
 }
+
+/** The delta of both outer runs' Outer runs row aggregates. */
+export type BaselineRolled = JobAggChoice & BaselineDelta;
 
 const base = (ws: string, app: string) => `/workspaces/${ws}/apps/${appTag(app)}`;
 

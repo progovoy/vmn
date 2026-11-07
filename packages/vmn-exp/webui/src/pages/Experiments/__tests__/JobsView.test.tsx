@@ -24,7 +24,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../../api";
-import { job } from "../../../util/__tests__/jobFixture";
+import { job, rolled } from "../../../util/__tests__/jobFixture";
 import { jobsPage, location, notFound, renderExperiments, singleRow, topRow, selection, urlParams } from "./jobsHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -70,46 +70,49 @@ describe("a job's row", () => {
     expect(name.querySelectorAll(".job-bar-seg").length).toBeGreaterThan(0);
   });
 
-  it("shows the best run's value with the goal arrow and its @N linked", async () => {
+  it("shows the job's value (rolled) with the goal arrow, linked to the run holding it", async () => {
+    m.experimentsPaged.mockResolvedValue(jobsPage([
+      topRow(36, { name: "lr_layers_grid", job: job({ rolled: rolled() }) }),
+    ]));
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });
-    const best = cellOf("lr_layers_grid", "best") as HTMLElement;
-    expect(best.textContent).toContain("0.182");
-    expect(best.textContent).toContain("↓");
-    expect(within(best).getByRole("link", { name: "@1903" }))
+    const value = cellOf("lr_layers_grid", "value") as HTMLElement;
+    expect(value.textContent).toContain("0.182");
+    expect(value.textContent).toContain("↓");
+    expect(within(value).getByRole("link", { name: /0\.182/ }))
       .toHaveAttribute("href", `/ws/test/app/my-app/run/${encodeURIComponent("0.0.1-dev.t1903")}`);
   });
 
-  it("a job without a best (no goal declared) reads a dash that says why", async () => {
+  it("a job without a value (no goal declared) reads a dash that says why", async () => {
     m.metricsSchema.mockResolvedValue({});
     m.experimentsPaged.mockResolvedValue(jobsPage([
-      topRow(36, { name: "lr_layers_grid", job: job({ metric: "loss", goal: null, best: null, best_verstr: null, best_idx: null }) }),
+      topRow(36, { name: "lr_layers_grid", job: job({ rolled: rolled({ metric: "loss", goal: null, value: null, verstr: null }) }) }),
     ]));
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });
-    const dash = within(cellOf("lr_layers_grid", "best") as HTMLElement).getByText("—");
+    const dash = within(cellOf("lr_layers_grid", "value") as HTMLElement).getByText("—");
     expect(dash).toHaveAttribute("title", "no goal declared for loss — not ranked");
   });
 
-  it("follows the job's goal, not the schema: none reads (no goal) without an arrow (plan 32 F5)", async () => {
+  it("follows rolled's goal, not the schema: none reads (no goal) without an arrow (plan 32 F5)", async () => {
     m.experimentsPaged.mockResolvedValue(jobsPage([
-      topRow(36, { name: "lr_layers_grid", job: job({ goal: null, best: null, best_verstr: null, best_idx: null }) }),
+      topRow(36, { name: "lr_layers_grid", job: job({ rolled: rolled({ goal: null, value: null, verstr: null }) }) }),
     ]));
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });
-    const best = cellOf("lr_layers_grid", "best") as HTMLElement;
-    expect(best.textContent).toBe("— (no goal)");
-    expect(best.textContent).not.toContain("↓");
+    const value = cellOf("lr_layers_grid", "value") as HTMLElement;
+    expect(value.textContent).toBe("— (no goal)");
+    expect(value.textContent).not.toContain("↓");
   });
 
-  it("takes the best's arrow from the job's goal when the schema declares none", async () => {
+  it("takes the value's arrow from rolled's goal when the schema declares none", async () => {
     m.metricsSchema.mockResolvedValue({});
     m.experimentsPaged.mockResolvedValue(jobsPage([
-      topRow(36, { name: "lr_layers_grid", job: job({ metric: "fit_q", goal: "max" }) }),
+      topRow(36, { name: "lr_layers_grid", job: job({ rolled: rolled({ metric: "fit_q", goal: "max" }) }) }),
     ]));
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });
-    expect(cellOf("lr_layers_grid", "best").textContent).toContain("↑");
+    expect(cellOf("lr_layers_grid", "value").textContent).toContain("↑");
   });
 
   it("draws the spread and names what it shows", async () => {
@@ -129,13 +132,13 @@ describe("a job's row", () => {
     expect(cellOf("lr_layers_grid", "branch").textContent).toBe("feature-x");
   });
 
-  it("a single run reads its base (its branch is the Branch column's), and its own value as best", async () => {
+  it("a single run reads its base (its branch is the Branch column's), and its own value as value", async () => {
     renderExperiments();
     await screen.findByRole("link", { name: "solo" });
     expect(cellOf("solo", "name").textContent).toContain("0.3.0");
     expect(cellOf("solo", "name").textContent).not.toContain("main");
     expect(cellOf("solo", "branch").textContent).toBe("main");
-    expect(cellOf("solo", "best").textContent).toContain("0.4");
+    expect(cellOf("solo", "value").textContent).toContain("0.4");
     expect(cellOf("solo", "runs").textContent).toBe("");
   });
 });
@@ -207,9 +210,9 @@ describe("the Jobs view", () => {
     await waitFor(() => expect(urlParams().get("sort")).toBe("job:total"));
     expect(urlParams().get("order")).toBe("desc");
     await waitFor(() => expect(lastOpts()).toEqual(expect.objectContaining({ sort: "job:total", order: "desc" })));
-    fireEvent.click(screen.getByRole("button", { name: /sort by best/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sort by value/i }));
     // val_loss goes down: best first is ascending.
-    await waitFor(() => expect(urlParams().get("sort")).toBe("job:best"));
+    await waitFor(() => expect(urlParams().get("sort")).toBe("job:value"));
     expect(urlParams().get("order")).toBe("asc");
     expect(rowOf("lr_layers_grid").closest("table")!.querySelector('th[aria-sort="ascending"]')).not.toBeNull();
   });

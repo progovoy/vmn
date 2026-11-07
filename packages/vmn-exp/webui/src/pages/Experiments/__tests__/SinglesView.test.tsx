@@ -60,7 +60,7 @@ describe("the Single runs view", () => {
     renderExperiments("/ws/test/app/my-app?kind=singles");
     await screen.findByRole("link", { name: "solo_a" });
     const shown = headers();
-    for (const job of ["outer run · progress", "best", "spread", "rate", "ETA"]) {
+    for (const job of ["outer run · progress", "value", "spread", "rate", "ETA"]) {
       expect(shown.some((h) => h.startsWith(job))).toBe(false);
     }
     expect(shown.some((h) => h.startsWith("loss"))).toBe(true);

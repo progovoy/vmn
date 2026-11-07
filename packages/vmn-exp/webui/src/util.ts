@@ -118,6 +118,8 @@ export const goalOrder = (goal: Goal): "asc" | "desc" => (goal === "max" ? "desc
 
 /** Where a best would be, for a metric without a goal. */
 export const NO_GOAL = " (no goal)";
+/** Why a metric without a declared goal shows no value or best. */
+export const noGoalTitle = (metric: string | null) => `no goal declared for ${metric} — not ranked`;
 /** ... and for one whose runs declare different goals (the server's `goal_conflict`). */
 export const GOALS_DIFFER = "(goals differ)";
 

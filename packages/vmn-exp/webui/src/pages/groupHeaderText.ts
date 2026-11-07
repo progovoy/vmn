@@ -4,6 +4,7 @@ import { NO_GOAL, fmtCount, plural } from "../util";
 import { joinParts } from "../util/toneParts";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
 import { withMix } from "../util/metricPolicy";
+import { tailLabel } from "../util/jobAggregate";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "done";
 
@@ -47,12 +48,15 @@ export function barSegments(c: Omit<GroupCounts, "waiting">): { tone: CountTone;
   return BAR.filter((t) => c[t] > 0).map((t) => ({ tone: t, pct: Math.round((c[t] / c.total) * 10000) / 100 }));
 }
 
-/** `best` of a metric without a goal: it has none (plan 32 F6). */
-export const noGoalBest = (a: MetricAggregate, agg: GroupAggregate) => agg === "best" && !a.goal;
+const FOLLOWS_GOAL: readonly GroupAggregate[] = ["best", "best10", "worst10"];
 
-/** The aggregate's name as a header shows it: `best (no goal)` without a goal. */
+/** `best` or a tail of a metric without a goal: it has none (plan 32 F6). */
+export const noGoalBest = (a: MetricAggregate, agg: GroupAggregate) => FOLLOWS_GOAL.includes(agg) && !a.goal;
+
+/** The aggregate's name as a header shows it: `best (no goal)` without a
+ *  goal, a tail with its percentile, `best10 (p90)`. */
 export const aggregateName = (a: MetricAggregate, agg: GroupAggregate) =>
-  `${agg}${noGoalBest(a, agg) ? NO_GOAL : ""}`;
+  `${tailLabel(agg, a.goal)}${noGoalBest(a, agg) ? NO_GOAL : ""}`;
 
 /** A header's cell for one metric: *agg* of the group's values (`best` of a
  *  metric without a goal has none, never another aggregate); its title
@@ -62,7 +66,7 @@ export function aggregateCell(
   a: MetricAggregate | undefined, agg: GroupAggregate,
 ): { value: number | null; title: string | undefined } {
   if (!a || a.n === 0) return { value: null, title: undefined };
-  return { value: a[agg], title: withMix(`${agg} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}`, a.policies) };
+  return { value: a[agg] ?? null, title: withMix(`${tailLabel(agg, a.goal)} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}`, a.policies) };
 }
 
 /** A `+N more` row's text in each state of its load. */

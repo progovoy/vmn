@@ -7,6 +7,8 @@ import { useDismiss } from "../hooks/useDismiss";
 import { useMenuKeys } from "../hooks/useMenuKeys";
 import { AGGREGATES, NO_GROUP, groupLabel, type Aggregate, type GroupBy, type GroupOption } from "../util/groupBy";
 import { GROUP_SORTS } from "../util/groupCountSort";
+import { tailLabel } from "../util/jobAggregate";
+import type { Goal } from "../util";
 import "./GroupByMenu.css";
 
 function Choice({ label, checked, onPick }: { label: string; checked: boolean; onPick: () => void }) {
@@ -17,7 +19,7 @@ function Choice({ label, checked, onPick }: { label: string; checked: boolean; o
   );
 }
 
-function Section<V extends string | null>({ title, options, value, onPick }: {
+export function Section<V extends string | null>({ title, options, value, onPick }: {
   title: string; options: readonly { value: V; label: string }[]; value: V; onPick: (v: V) => void;
 }) {
   return (
@@ -31,7 +33,7 @@ function Section<V extends string | null>({ title, options, value, onPick }: {
 }
 
 export default function GroupByMenu({
-  value, links, fields, onChange, aggregate, onAggregate, groupSort, onGroupSort, viewGroup = NO_GROUP,
+  value, links, fields, onChange, aggregate, onAggregate, groupSort, onGroupSort, viewGroup = NO_GROUP, goal = null,
 }: {
   value: GroupBy;
   /** The grouping the view itself is (the Jobs view: parent run, plan 23
@@ -45,6 +47,8 @@ export default function GroupByMenu({
   /** The count the groups are sorted by (`c:<name>`), null for the aggregate. */
   groupSort: string | null;
   onGroupSort: (sort: string | null) => void;
+  /** The goal the tails' percentiles follow (`best10 (p90)`); none: unnamed. */
+  goal?: Goal;
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -84,7 +88,7 @@ export default function GroupByMenu({
               <Section title="Sort groups" value={groupSort} options={GROUP_SORTS} onPick={onGroupSort} />
               <Section
                 title="Aggregate" value={aggregate}
-                options={AGGREGATES.map((a) => ({ value: a, label: a }))}
+                options={AGGREGATES.map((a) => ({ value: a, label: tailLabel(a, goal) }))}
                 onPick={(a) => onAggregate(a as Aggregate)}
               />
             </div>

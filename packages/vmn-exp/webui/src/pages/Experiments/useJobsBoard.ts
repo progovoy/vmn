@@ -17,7 +17,7 @@ import { hasSearch, type SearchFilter } from "../../util/searchScope";
 import { combineQueries } from "../../util/searchQuery";
 import { BIG_GROUP } from "../../util/groupClause";
 import { boardSortState } from "../boardSortState";
-import { jobBestOrder } from "./jobColumns";
+import { jobValueOrder } from "./jobColumns";
 import type { TopRuns } from "../../types";
 import { PRESETS, type Preset } from "./presets";
 import { treeStatusQuery } from "./treeStatus";
@@ -49,6 +49,8 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   const { filter, filtered } = useBoardFilter(view, chosen, {
     top: top ?? true, matchSubtree: matchSubtree || undefined, topQuery,
     status: tree ? undefined : view.status || undefined,
+    jobAgg: view.jobAgg.agg ?? undefined, jobAggBy: view.jobAgg.by ?? undefined,
+    jobAggValue: view.jobAgg.value ?? undefined, jobAggMetric: view.jobAgg.metric ?? undefined,
   });
 
   const data = useBoardRows(ws, app, filter, {
@@ -59,16 +61,18 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   // The server's main metric, never one picked from the rows (plan 32 F10).
   const metric = data.main?.metric ?? null;
   const goal = data.main?.goal ?? null;
+  // The answered aggregate (plan 31 §2): one per board, so any row's names it.
+  const rolled = useMemo(() => rows.find((r) => r.job?.rolled)?.job?.rolled ?? null, [rows]);
   const running = useBoardLive({
     ws, app, scope: "top", paused, rows, serverRunning: data.running > 0, refresh, isRunning: treeRunning,
   });
 
   const selection = useBoardSelection(ws, app, filter, rows, view);
-  const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobBestOrder(s, goal));
+  const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobValueOrder(s, rolled ? rolled.goal : goal));
 
   return {
     data, rows, facets, group: chosen, selection, search: matchSubtree ? search : null,
-    metric, goal,
+    metric, goal, rolled,
     sort: { sort: filter.sort, order: sort.order ?? "desc", onSort: sort.onSort },
     live: { running, paused, setPaused },
     filtered: filtered || Boolean(fixed), topQuery,

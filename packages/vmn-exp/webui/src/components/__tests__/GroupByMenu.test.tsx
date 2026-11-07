@@ -74,11 +74,21 @@ describe("GroupByMenu (plan 22 G2, G10)", () => {
     open();
     const agg = screen.getByRole("group", { name: "Aggregate" });
     const choices = within(agg).getAllByRole("menuitemradio");
-    expect(choices.map((b) => b.textContent)).toEqual(["mean", "best", "median", "min", "max"]);
+    expect(choices.map((b) => b.textContent)).toEqual(["mean", "best", "median", "min", "max", "best10", "worst10"]);
     expect(within(agg).getByRole("menuitemradio", { name: "mean" })).toHaveAttribute("aria-checked", "true");
     fireEvent.click(within(agg).getByRole("menuitemradio", { name: "best" }));
     expect(onAggregate).toHaveBeenCalledWith("best");
     expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("offers the tails, named by the percentile the goal points at (plan 31 §2)", () => {
+    const { onAggregate } = setup("parent", { goal: "max" });
+    open();
+    const agg = screen.getByRole("group", { name: "Aggregate" });
+    expect(within(agg).getAllByRole("menuitemradio").map((b) => b.textContent))
+      .toEqual(["mean", "best", "median", "min", "max", "best10 (p90)", "worst10 (p10)"]);
+    fireEvent.click(within(agg).getByRole("menuitemradio", { name: "worst10 (p10)" }));
+    expect(onAggregate).toHaveBeenCalledWith("worst10");
   });
 
   it("offers no aggregate while ungrouped", () => {

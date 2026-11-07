@@ -29,6 +29,7 @@ import { kindNoun, kindQuery, type JobsKind, type JobsKindState } from "./jobsKi
 import type { Preset } from "./presets";
 import { useBaselineChips } from "./useBaselineChips";
 import { useJobsBoard } from "./useJobsBoard";
+import { jobsValueHead } from "./JobsValueHead";
 import { useAppStatus } from "../../shell/useShellData";
 import { DEFAULT_FAILED_PCT_THRESHOLD } from "../../shell/contracts";
 import ToggleChip from "../../components/ToggleChip";
@@ -150,7 +151,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
           <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "outer run" : "run"} onShow={data.showNew} />
           <StaleRows stale={data.stale} error={data.staleError}>
             <JobsTable
-              items={data.items} ctx={ctx} sort={board.sort} trees={{ ws, app }}
+              items={data.items} ctx={ctx} sort={board.sort} trees={{ ws, app }} heads={{ value: jobsValueHead(view, board) }}
               selected={view.selected} density={view.density}
               headerCheck={{ state: selection.headerCheck, onToggle: selection.toggleAll, label: "Select all visible outer runs" }}
               emptyText={emptyText(kind.kind, board.filtered)}

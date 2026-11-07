@@ -27,6 +27,11 @@ export interface RowsFilter {
   matchSubtree?: boolean;
   /** With `top`: a query the top-level runs pass by their own fields. */
   topQuery?: string;
+  /** With `top`: the Outer runs row's aggregate (plan 31 §2). */
+  jobAgg?: string;
+  jobAggBy?: string;
+  jobAggValue?: string;
+  jobAggMetric?: string;
 }
 export interface RowsData extends SubtreeMatches {
   rows: ExperimentRow[];

@@ -15,6 +15,16 @@ describe("the baseline chip", () => {
     expect(chip).toHaveAttribute("title", "vs @12 wf_41aa, the latest ended outer run alike");
   });
 
+  it("counts the pairs, `5 of 39 paired`, when some keys have no value on a side (plan 31 §2)", () => {
+    render(<BaselineChip chip={{ ...CHIP, paired: 5, total: 39 }} />);
+    expect(screen.getByText(/5 of 39 paired/)).toBeInTheDocument();
+  });
+
+  it("says nothing of the pairs when every key paired", () => {
+    render(<BaselineChip chip={{ ...CHIP, paired: 39, total: 39 }} />);
+    expect(screen.queryByText(/paired/)).toBeNull();
+  });
+
   it("says a pinned baseline is pinned, and is plain text without a link", () => {
     render(<BaselineChip chip={{ ...CHIP, state: "better", text: "▲ best_value" }} baseline={{ ...REF, source: "pinned" }} />);
     const chip = screen.getByText("▲ best_value");

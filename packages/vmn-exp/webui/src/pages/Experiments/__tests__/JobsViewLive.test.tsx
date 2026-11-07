@@ -24,11 +24,11 @@ import { api } from "../../../api";
 import { FakeSource, lastSource } from "../../../hooks/__tests__/fakeEventSource";
 import { dropFakeMedia, fakeMedia } from "../../../hooks/__tests__/fakeMedia";
 import { NARROW_QUERY } from "../../../hooks/useMediaQuery";
-import { job } from "../../../util/__tests__/jobFixture";
+import { job, rolled } from "../../../util/__tests__/jobFixture";
 import { jobsPage, notFound, renderExperiments, singleRow, topRow } from "./jobsHarness";
 
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
-const GRID = topRow(36, { name: "lr_layers_grid" });
+const GRID = topRow(36, { name: "lr_layers_grid", job: job({ rolled: rolled() }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -62,7 +62,7 @@ describe("the Jobs view, live", () => {
 });
 
 describe("the Jobs view on a phone", () => {
-  it("shows a card per job: name, status, progress and best", async () => {
+  it("shows a card per job: name, status, progress and value", async () => {
     fakeMedia([NARROW_QUERY]);
     renderExperiments();
     const link = await screen.findByRole("link", { name: "lr_layers_grid" });

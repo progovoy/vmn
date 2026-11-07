@@ -67,6 +67,13 @@ describe("a group header's aggregate cell (plan 22 G10)", () => {
     expect(aggregateCell(agg({ goal: null }), "mean").title).toBe("mean of 16");
   });
 
+  it("names a tail's percentile by the goal, and has none without a goal (plan 31 §2)", () => {
+    const tails = agg({ best10: 0.25, worst10: 0.8 });
+    expect(aggregateCell(tails, "best10")).toEqual({ value: 0.25, title: "best10 (p10) of 16" });
+    expect(aggregateCell(agg({ best10: 0.85, goal: "max" }), "best10")).toEqual({ value: 0.85, title: "best10 (p90) of 16" });
+    expect(aggregateCell(agg({ worst10: null, goal: null }), "worst10")).toEqual({ value: null, title: "worst10 of 16 (no goal)" });
+  });
+
   it("is empty when the group has no value of the metric", () => {
     expect(aggregateCell(undefined, "mean")).toEqual({ value: null, title: undefined });
     expect(aggregateCell(agg({ mean: null, n: 0 }), "mean")).toEqual({ value: null, title: undefined });

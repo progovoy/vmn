@@ -1,7 +1,7 @@
 /** The Jobs view's grid (plan 23 W1): virtualized like the board, its
  *  headers sorting by the job sort keys, the board's keys (useRowKeys) and
  *  density; grouped, a header row per group of jobs. Below 640px, cards. */
-import { useCallback, useMemo, useRef, type CSSProperties, type MutableRefObject } from "react";
+import { useCallback, useMemo, useRef, type CSSProperties, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
 import { useFillHeight } from "../../hooks/useFillHeight";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -70,7 +70,19 @@ export interface JobsTableProps {
   emptyText: string;
   /** Where an outer run's tree reads its children; none: rows have no expander. */
   trees?: { ws: string; app: string };
+  /** Headers the rows decide, by column id: the value column's aggregate
+   *  (`median · dates`) and its menu (plan 31 §2). */
+  heads?: Readonly<Record<string, ColumnHead>>;
 }
+
+/** A header's label in place of its column's (null: the column's), and a
+ *  widget after it whose clicks never sort. */
+export interface ColumnHead {
+  label: string | null;
+  menu?: ReactNode;
+}
+
+const noSort = (e: MouseEvent) => e.stopPropagation();
 
 export default function JobsTable(props: JobsTableProps) {
   const narrow = useMediaQuery(NARROW_QUERY);
@@ -84,12 +96,13 @@ export default function JobsTable(props: JobsTableProps) {
   return <JobCards {...props} />;
 }
 
-function Head({ sort, check }: { sort: JobsSort; check: HeaderCheckProps }) {
+function Head({ sort, check, heads }: { sort: JobsSort; check: HeaderCheckProps; heads?: JobsTableProps["heads"] }) {
   return (
     <thead>
       <tr>
         {JOB_COLUMNS.map((c, i) => {
           const sorted = c.sort === sort.sort;
+          const head = heads?.[c.id];
           return (
             <th
               key={c.id} data-col-id={c.id} style={HEAD_STYLES[i]}
@@ -99,9 +112,12 @@ function Head({ sort, check }: { sort: JobsSort; check: HeaderCheckProps }) {
             >
               {c.id === "check" ? <HeaderCheckbox {...check} />
                 : c.sort ? (
-                  <SortButton title={c.title} onSort={() => sort.onSort(c.sort!)}>
-                    {c.label}{sorted ? (sort.order === "asc" ? " ▴" : " ▾") : ""}
-                  </SortButton>
+                  <>
+                    <SortButton title={c.title} onSort={() => sort.onSort(c.sort!)}>
+                      {head?.label ?? c.label}{sorted ? (sort.order === "asc" ? " ▴" : " ▾") : ""}
+                    </SortButton>
+                    {head?.menu && <span onClick={noSort}>{head.menu}</span>}
+                  </>
                 ) : c.label}
             </th>
           );
@@ -113,7 +129,7 @@ function Head({ sort, check }: { sort: JobsSort; check: HeaderCheckProps }) {
 
 function JobsGrid({
   items, ctx, sort, selected, density, headerCheck, groups, hasMore, onNearEnd, visibleRef,
-  onToggle, onClearAnchor, emptyText, viewportRef, trees,
+  onToggle, onClearAnchor, emptyText, viewportRef, trees, heads,
 }: JobsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   useFillHeight(parentRef);
@@ -163,7 +179,7 @@ function JobsGrid({
           style={{ tableLayout: "fixed", width: JOBS_WIDTH }}
         >
           <colgroup>{JOB_COLUMNS.map((c, i) => <col key={c.id} style={COLUMN_STYLES[i]} />)}</colgroup>
-          <Head sort={sort} check={headerCheck} />
+          <Head sort={sort} check={headerCheck} heads={heads} />
           <tbody>
             {items === undefined && Array.from({ length: SKELETON_ROWS }, (_, i) => (
               <tr key={i} className="skeleton-row" style={{ height }}>

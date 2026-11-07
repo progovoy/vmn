@@ -11,9 +11,10 @@ import type { ExperimentRow, MainMetric, PolicyMix } from "./types";
 export type GroupLink = "parent" | "forked_from" | "rerun_of" | "code_verstr";
 export type GroupField = GroupLink | "branch" | "status" | "failure_sig" | `tags.${string}` | `params.${string}`;
 
-/** What orders groups by the sort metric; `best` follows the metric's goal
- *  (no value for a goal-less metric). */
-export const GROUP_AGGREGATES = ["mean", "best", "median", "min", "max"] as const;
+/** What orders groups by the sort metric; `best` and the tails (`best10`,
+ *  `worst10`: the p90/p10 the goal points at) follow the metric's goal (no
+ *  value for a goal-less metric). */
+export const GROUP_AGGREGATES = ["mean", "best", "median", "min", "max", "best10", "worst10"] as const;
 export type GroupAggregate = (typeof GROUP_AGGREGATES)[number];
 
 /** The key of the group of runs without a value, last, labelled `(none)`
@@ -43,6 +44,8 @@ export interface MetricAggregate extends PolicyMix {
   median: number | null;
   min: number | null;
   max: number | null;
+  best10?: number | null;
+  worst10?: number | null;
   n: number;
   goal: "min" | "max" | null;
 }

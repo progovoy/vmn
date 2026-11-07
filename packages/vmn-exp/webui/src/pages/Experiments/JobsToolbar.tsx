@@ -40,6 +40,7 @@ export default function JobsToolbar({ ws, app, view, board, onViewApplied, onAll
         aggregate={view.aggParam ?? data.aggregate ?? data.defaultAggregate ?? "mean"}
         onAggregate={(a) => view.setAggregate(a, data.defaultAggregate)}
         groupSort={groupSortOf(view.sort)} onGroupSort={view.setGroupSort}
+        goal={board.rolled?.goal ?? null}
       />
     </div>
   );

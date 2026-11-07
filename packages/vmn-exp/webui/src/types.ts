@@ -1,3 +1,5 @@
+import type { GroupAggregate } from "./apiGroups";
+
 export type Role = "viewer" | "editor" | "admin";
 
 export interface Workspace {
@@ -288,6 +290,36 @@ export interface MainMetric {
   goal: "min" | "max" | null;
 }
 
+/** `job_agg`: the group aggregates and the goal-following tails. */
+export type JobAggregate = GroupAggregate;
+/** `job_agg_value`: each unit's subtree best or its own metric (no fallback). */
+export type JobAggSource = "best" | "own";
+
+/** What picks an Outer runs row's aggregate (plan 31 §2): what the board
+ *  asks for and what `rolled` answers with. */
+export interface JobAggChoice {
+  agg: JobAggregate;
+  /** `children`, `runs`, `field:<params.k|tags.k>` or `kind:<tags.kind>`. */
+  by: string;
+  source: JobAggSource;
+  metric: string | null;
+  goal: "min" | "max" | null;
+  /** A tail's percentile (`p90`), else null. */
+  percentile: string | null;
+}
+
+/** An Outer runs row's aggregate: `value` (null without a goal or a unit
+ *  with one) of `n` of `of` units, `conflicts` duplicate field values left
+ *  out, `verstr` the unit holding it, `approx` a `runs` quantile. */
+export interface JobRolled extends JobAggChoice {
+  value: number | null;
+  n: number;
+  of: number;
+  conflicts: number;
+  verstr: string | null;
+  approx: boolean;
+}
+
 /** A job's compact rollup on its Jobs-view row (plan 23 §10). */
 /** `mixed`/`policies`: the main metric's runs overriding the schema's summary. */
 export interface JobRollup extends JobProgressFields, PolicyMix {
@@ -301,6 +333,8 @@ export interface JobRollup extends JobProgressFields, PolicyMix {
   spread: number[];
   /** Its runs per configured attention query key (plan 28 P1). */
   attention?: Record<string, number>;
+  /** The board's chosen aggregate (plan 31 §2); top-level rows only. */
+  rolled?: JobRolled | null;
   /** The time its row shows and `job:started` sorts on: the subtree's first
    *  start, else the outer run's own (`started`), else its creation (`created`). */
   when_at?: string | null;

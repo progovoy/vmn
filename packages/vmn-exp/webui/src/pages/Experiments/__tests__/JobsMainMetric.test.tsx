@@ -30,7 +30,7 @@ import { notFound, renderExperiments, singleRow } from "./jobsHarness";
 const m = api as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const SOLO = singleRow(12, { name: "solo", metrics: { val_loss: 0.4, acc: 0.9 } });
 const bestOf = (name: string) =>
-  screen.getByRole("link", { name }).closest("tr")!.querySelector('[data-col-id="best"]')!;
+  screen.getByRole("link", { name }).closest("tr")!.querySelector('[data-col-id="value"]')!;
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -1,5 +1,5 @@
 /** A Jobs-view row's compact job summary (plan 23 §10), for tests. */
-import type { JobRollup } from "../../types";
+import type { JobRolled, JobRollup } from "../../types";
 
 export function job(extra: Partial<JobRollup> = {}): JobRollup {
   return {
@@ -14,3 +14,13 @@ export function job(extra: Partial<JobRollup> = {}): JobRollup {
 }
 
 export const NO_COUNTS = { running: 0, waiting: 0, succeeded: 0, failed: 0, stuck: 0 };
+
+/** A job's `rolled` (plan 31 §2): by default the app default's, the best
+ *  of its children's subtree bests. */
+export function rolled(extra: Partial<JobRolled> = {}): JobRolled {
+  return {
+    agg: "best", by: "children", source: "best", metric: "val_loss", goal: "min", percentile: null,
+    value: 0.182, n: 16, of: 16, conflicts: 0, verstr: "0.0.1-dev.t1903", approx: false,
+    ...extra,
+  };
+}

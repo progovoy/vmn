@@ -1,8 +1,9 @@
 /** The outer run against its baseline (plan 28 N3): the Overview's card —
  *  the run it is compared with and how it was picked, the chip, the rollup
- *  deltas (goal metrics' best and median, failures, p90 duration, attention
- *  shares, the metrics both log themselves) and its direct children paired
- *  by key, the worse ones marked — and the header's chip. Both read one
+ *  deltas (the Outer runs row's aggregate, plan 31 §2, goal metrics' best
+ *  and median, failures, p90 duration, attention shares, the metrics both
+ *  log themselves) and its direct children paired by key, the worse ones
+ *  marked — and the header's chip. Both read one
  *  query, refetched as the outer run's done count moves, so the chip shows
  *  while matched children are still finishing. */
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -14,6 +15,7 @@ import { fleetLabel } from "../../components/fleetRows";
 import PolicyMixMark from "../../components/PolicyMixMark";
 import { Skeleton } from "../../components/ui";
 import { mixText } from "../../util/metricPolicy";
+import { rolledLabel } from "../../util/jobAggregate";
 import { withSignal } from "../../requestScope";
 import { NO_GOAL, appHref, fmtDuration, fmtPct, fmtVal, runHref } from "../../util";
 import { jobPrefix } from "./jobQueries";
@@ -71,6 +73,7 @@ function DeltaTable({ data }: { data: BaselineCompare }) {
     <table className="baseline-deltas" aria-label="Against the baseline">
       <thead><tr><th /><th scope="col">this</th><th scope="col">baseline</th><th scope="col">Δ</th></tr></thead>
       <tbody>
+        {data.rolled && <DeltaRow label={rolledLabel(data.rolled) + (data.rolled.goal ? "" : NO_GOAL)} d={data.rolled} />}
         {Object.entries(data.metrics).flatMap(([m, d]) => {
           const mix = sidesMixText(d.policies);
           return [

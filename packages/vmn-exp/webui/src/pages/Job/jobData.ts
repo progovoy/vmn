@@ -5,6 +5,7 @@ import type { FailureCluster, JobMetric, JobPageSummary, JobTimeline, TimelineBu
 import { vmnExpCommand } from "../../shell/cliCommands";
 import { NO_GOAL, fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal, plural } from "../../util";
 import { mixText } from "../../util/metricPolicy";
+import { coverageText, rolledLabel, rolledValueText } from "../../util/jobAggregate";
 import { eqClause } from "../../util/searchQuery";
 import { progressLead, unitSuffix } from "../../util/jobProgress";
 
@@ -120,7 +121,19 @@ export function jobKpis(s: JobPageSummary): KpiTile[] {
     { label: "median duration", value: fmtDuration(s.duration.p50) },
     { label: "p90 duration", value: fmtDuration(s.duration.p90) },
   ];
-  return [...tiles, bestTile(s)];
+  const rolled = rolledTile(s);
+  return [...tiles, bestTile(s), ...(rolled ? [rolled] : [])];
+}
+
+/** The Outer runs row's aggregate (plan 31 §2) beside the best, linked to
+ *  the unit holding it; none when it is the best tile again (the main
+ *  metric's best of subtree bests). */
+function rolledTile(s: JobPageSummary): KpiTile | null {
+  const r = s.rolled;
+  if (!r || (r.agg === "best" && r.source === "best" && r.metric === mainMetric(s))) return null;
+  const label = rolledLabel(r);
+  if (!r.goal) return { label, value: "—", sub: NO_GOAL.trim() };
+  return { label, value: rolledValueText(r), sub: coverageText(r), ...(r.verstr ? { href: r.verstr } : {}) };
 }
 
 /** The main metric's best, linked; a goal-less one has none (plan 32 F5),

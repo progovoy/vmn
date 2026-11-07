@@ -60,7 +60,7 @@ describe("the Group by vocabulary (plan 22 G2)", () => {
   });
 
   it("knows the five aggregates, mean first", () => {
-    expect(AGGREGATES).toEqual(["mean", "best", "median", "min", "max"]);
+    expect(AGGREGATES).toEqual(["mean", "best", "median", "min", "max", "best10", "worst10"]);
     expect(parseAggregate("best")).toBe("best");
     expect(parseAggregate("sum")).toBeNull();
     expect(parseAggregate(null)).toBeNull();

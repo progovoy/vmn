@@ -8,7 +8,8 @@ import type { Pivot, PivotCell } from "../../apiPivot";
 import PivotHeatmap from "../../components/PivotHeatmap";
 import { cellLabel } from "../../util/pivotCells";
 import type { ExperimentRow, JobRollup } from "../../types";
-import { BestValue } from "../Experiments/JobCells";
+import { BestValue, ValueCell } from "../Experiments/JobCells";
+import { rolled } from "../../util/__tests__/jobFixture";
 import { jobKpis } from "../Job/jobData";
 import { jobSummaryFixture } from "../Job/__tests__/jobFixture";
 import { compareFixture } from "../../components/__tests__/baselineFixture";
@@ -52,10 +53,14 @@ describe("a pivot cell over overrides", () => {
 const jobRow = (over: Partial<JobRollup> = {}) => ({
   idx: 1, verstr: "job", code_verstr: "job", timestamp: null, note: null, branch: null, base_version: null,
   metrics: {},
-  job: { metric: "loss", goal: "min", best: 0.2, best_verstr: "v7", best_idx: 7, spread: [], ...over },
+  job: {
+    metric: "loss", goal: "min", best: 0.2, best_verstr: "v7", best_idx: 7, spread: [],
+    rolled: rolled({ metric: "loss", value: 0.2, verstr: "v7" }), ...over,
+  },
 }) as unknown as ExperimentRow;
 
 const CTX = { runBase: "/ws/w/app/a", metric: "loss", goal: "min" as const };
+const TITLE = "best of 16 children's best loss";
 
 describe("a job's best over overrides", () => {
   it("carries a marker and says so in its title", () => {
@@ -67,6 +72,27 @@ describe("a job's best over overrides", () => {
   it("says nothing more without one", () => {
     render(<MemoryRouter><BestValue r={jobRow()} ctx={CTX} /></MemoryRouter>);
     expect(screen.getByTitle("best loss")).toBeInTheDocument();
+    expect(document.querySelector(".policy-mix-mark")).toBeNull();
+  });
+});
+
+describe("a job's value over overrides (its aggregate of the main metric)", () => {
+  it("carries a marker and says so in its title", () => {
+    render(<MemoryRouter><ValueCell r={jobRow({ mixed: true, policies: { min: 2 } })} ctx={CTX} /></MemoryRouter>);
+    expect(screen.getByTitle(`${TITLE} · 2 runs use min`)).toBeInTheDocument();
+    expect(screen.getByTitle("2 runs use min")).toHaveTextContent("*");
+  });
+
+  it("says nothing more without one", () => {
+    render(<MemoryRouter><ValueCell r={jobRow()} ctx={CTX} /></MemoryRouter>);
+    expect(screen.getByTitle(TITLE)).toBeInTheDocument();
+    expect(document.querySelector(".policy-mix-mark")).toBeNull();
+  });
+
+  it("claims no override of another metric's runs (the main metric's policies are not its)", () => {
+    const other = jobRow({ mixed: true, policies: { min: 2 }, rolled: rolled({ metric: "date.best_value", value: 0.6 }) });
+    render(<MemoryRouter><ValueCell r={other} ctx={CTX} /></MemoryRouter>);
+    expect(screen.getByTitle("best of 16 children's best date.best_value")).toBeInTheDocument();
     expect(document.querySelector(".policy-mix-mark")).toBeNull();
   });
 

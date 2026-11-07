@@ -6,6 +6,7 @@ import { NO_PINS, moveKey, togglePin as togglePinUtil } from "../util/columnOrde
 import { parseAggregate, parseGroup, type Aggregate, type GroupBy } from "../util/groupBy";
 import { parseDensity, rememberDensity, storedDensity, type Density } from "../util/density";
 import type { FilterValues } from "../util/filterTokens";
+import { JOB_AGG_PARAMS, parseJobAgg, type JobAggPart } from "../util/jobAggregate";
 
 export { DENSITY_KEY } from "../util/density";
 
@@ -69,6 +70,8 @@ export function useLeaderboardView() {
     /** `group=`/`agg=` when the board knows them; null = the default. */
     groupParam: parseGroup(params.get("group")),
     aggParam: parseAggregate(params.get("agg")),
+    /** `job_agg*`: the Outer runs row's aggregate (plan 31 §2); null parts are the app's default. */
+    jobAgg: parseJobAgg(params),
     /** `density=`, else the user's last pick (plan 23 W8). */
     density: parseDensity(params.get("density")) ?? storedDensity(),
   };
@@ -164,6 +167,10 @@ export function useLeaderboardView() {
       }),
     /** The aggregate a group header shows; `agg=` is left out at the default (when known). */
     setAggregate: (agg: Aggregate, dflt: Aggregate | undefined) => setParam("agg", agg === dflt ? "" : agg),
+    /** Pick one part of the Outer runs row's aggregate (plan 31 §2). */
+    setJobAgg: (part: JobAggPart, value: string) => setParam(JOB_AGG_PARAMS[part], value),
+    /** Back to the app's default aggregate: every `job_agg*` dropped. */
+    resetJobAgg: () => update((p) => { for (const k of Object.values(JOB_AGG_PARAMS)) p.delete(k); }),
     /** Sort the groups by a count (`c:<name>`, most first), or by the aggregate (null). */
     setGroupSort: (sort: string | null) =>
       update((p) => {

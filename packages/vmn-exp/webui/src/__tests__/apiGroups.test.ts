@@ -82,6 +82,6 @@ describe("apiGroups", () => {
   });
 
   it("names every aggregate the server takes, mean first (the default)", () => {
-    expect(GROUP_AGGREGATES).toEqual(["mean", "best", "median", "min", "max"]);
+    expect(GROUP_AGGREGATES).toEqual(["mean", "best", "median", "min", "max", "best10", "worst10"]);
   });
 });

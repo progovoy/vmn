@@ -14,7 +14,7 @@ import { runHref } from "../../util";
 import { jobWhen, jobWhenText, jobWhenTitle, type JobWhen } from "../../util/jobWhen";
 import { densityRowHeight, headStatus } from "../LeaderboardRow";
 import type { JobCell } from "../../util/jobProgress";
-import { AttentionChips, BaselineCell, BestValue, JobSubLine, SpreadCell, jobNumbers, type JobContext, type JobNumber } from "./JobCells";
+import { AttentionChips, BaselineCell, JobSubLine, SpreadCell, ValueCell, jobNumbers, type JobContext, type JobNumber } from "./JobCells";
 import { CELL_CLASSES, COLUMN_STYLES, JOB_COLUMNS } from "./jobColumns";
 
 function titleOf(id: string, when: JobWhen, numbers: Record<JobNumber, JobCell>): string | undefined {
@@ -75,7 +75,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, expand
         );
       case "name":
         return <NameCell r={r} href={href} compact={density === "compact"} ctx={ctx} expanded={expanded} onExpand={onExpand} />;
-      case "best": return <BestValue r={r} ctx={ctx} />;
+      case "value": return <ValueCell r={r} ctx={ctx} />;
       case "spread": return <SpreadCell r={r} />;
       case "runs": case "failed": case "rate": case "throughput": case "eta": return numbers[id].text;
       case "branch": return r.branch;

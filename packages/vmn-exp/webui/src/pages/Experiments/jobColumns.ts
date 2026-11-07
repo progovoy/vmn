@@ -20,7 +20,7 @@ export interface JobColumn {
 
 export const JOB_SORTS = {
   progress: "job:progress", failed: "job:failed_pct", rate: "job:rate", throughput: "job:throughput",
-  best: "job:best", total: "job:total", started: "job:started", attention: "job:attention",
+  value: "job:value", total: "job:total", started: "job:started", attention: "job:attention",
 } as const;
 
 export const JOB_COLUMNS: readonly JobColumn[] = [
@@ -28,7 +28,7 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
   { id: "idx", label: "#", width: 72, sort: IDX_SORT, title: "sort by run number (newest first)", numeric: true },
   { id: "status", label: "status", width: 124, sort: JOB_SORTS.attention, title: "sort by needs attention (worst first)" },
   { id: "name", label: "outer run · progress", width: 440, sort: JOB_SORTS.progress, title: "sort by progress (furthest first)" },
-  { id: "best", label: "best", width: 120, sort: JOB_SORTS.best, title: "sort by best (best first)", numeric: true },
+  { id: "value", label: "value", width: 140, sort: JOB_SORTS.value, title: "sort by value (best first)", numeric: true },
   { id: "spread", label: "spread", width: 84 },
   { id: "runs", label: "runs", width: 76, sort: JOB_SORTS.total, title: "sort by runs (most first)", numeric: true },
   { id: "failed", label: "failed", width: 72, sort: JOB_SORTS.failed, title: "sort by failed share (most first)", numeric: true },
@@ -51,9 +51,10 @@ const SHARED_CELL: Record<string, string> = { check: " check-cell", idx: " idx-c
 export const CELL_CLASSES: readonly string[] = JOB_COLUMNS.map((c) =>
   `jobs-cell-${c.id}${c.numeric ? " num" : ""}${SHARED_CELL[c.id] ?? ""}`);
 
-/** `job:best`'s best-first direction: toward its goal, ascending without
- *  one (plan 32 F4); null for every other column. */
-export function jobBestOrder(sort: string, goal: Goal): Order | null {
-  if (sort !== JOB_SORTS.best) return null;
+/** `job:value`'s best-first direction: toward its goal (the rows'
+ *  `rolled.goal`), ascending without one (plan 32 F4); null for every
+ *  other column. */
+export function jobValueOrder(sort: string, goal: Goal): Order | null {
+  if (sort !== JOB_SORTS.value) return null;
   return goalOrder(goal);
 }
