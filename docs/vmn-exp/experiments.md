@@ -1522,7 +1522,9 @@ tags: [baseline, transformer-v2]
 ```
 
 `params` are kept verbatim (strings and bools included; query them as
-`params.<name>`); finite numeric params also fold into `metrics`. `exp diff`
+`params.<name>`); finite numeric params also fold into `metrics`, but never
+over a metric the run logged under the same name: the logged metric keeps
+`metrics.<name>` and the row lists such names in `logged_params`. `exp diff`
 prints a `params:` delta next to the `metrics:` delta. The `hypothesis` of
 `create`/`run` (not `add -f`'s, whose `structured` entry is not matched) is
 matched as text by [`similar`](#similar), like an

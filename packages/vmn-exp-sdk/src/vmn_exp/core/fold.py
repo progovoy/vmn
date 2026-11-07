@@ -28,7 +28,7 @@ from vmn_exp.core.fold_facts import (  # noqa: F401  (fold_hypothesis: re-export
     fold_intent,
     intent_value,
 )
-from vmn_exp.core.metric_summary import note_param, summarize, track_extrema
+from vmn_exp.core.metric_summary import summarize, track_extrema
 from vmn_exp.core.note_sigs import apply_note
 from vmn_exp.core.rewind import is_rewound, rewind_step
 from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
@@ -194,9 +194,23 @@ def _apply_first_create(fold, entry, key):
             fold["hypothesis"] = hypothesis
 
 
+def _logged(fold, name):
+    """Whether *name* was logged as a metric (not only set as a param)."""
+    return name in fold.get("extrema", ())
+
+
+def take_from_param(fold, name):
+    """Before *name*'s first logged value folds in: drop the number a
+    same-named param put in ``metrics`` — a param never holds a logged
+    metric's place (plan 32 F8)."""
+    if not _logged(fold, name):
+        fold["metrics"].pop(name, None)
+
+
 def _apply_metric_values(fold, entry, key):
     metrics = fold["metrics"]
     for name, value in (entry.get("values") or {}).items():
+        take_from_param(fold, name)
         track_extrema(fold, name, value, key)
         _keep_latest(metrics, name, value, key)
 
@@ -237,8 +251,7 @@ def _apply(fold, entry, key):
     for name, value in entry_params(entry).items():
         _keep_latest(fold["params"], name, value, key)
         number = _foldable_param(value)
-        if number is not None:
-            note_param(fold, name, key)
+        if number is not None and not _logged(fold, name):
             _keep_latest(fold["metrics"], name, number, key)
     if etype == "metrics":
         _apply_metric_values(fold, entry, key)
@@ -306,6 +319,12 @@ def fold_metrics(fold, schema=None):
     )
 
 
+def logged_params(fold):
+    """The params *fold*'s run also logged as metrics, sorted — their
+    ``metrics`` entry is the logged one, not the param's."""
+    return sorted(name for name in fold["params"] if _logged(fold, name))
+
+
 def fold_tags(fold):
     """``{name: value}`` of the tags a fold holds (removed ones left out)."""
     return {
@@ -346,6 +365,8 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
     resolves — and is assigned before any sort so it sticks to the row.
     ``params`` carries every param verbatim; ``metrics`` stays numeric-only (with
     the numeric params folded in), because sorting and charting depend on that.
+    A param never takes a logged metric's place: ``logged_params`` (absent
+    when empty) names the params whose ``metrics`` entry is the logged metric.
     ``with_create_note`` adds the first ``create`` entry's note (what
     ``vmn-exp list`` shows for a run without a metadata note). Each metric's
     value is its summary policy's (see :mod:`vmn_exp.core.metric_summary`,
@@ -380,6 +401,9 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
         "author": author_display((fold_features(fold) or {}).get("author")),
         "has_intent": fold_intent(fold) is not None,
     }
+    logged = logged_params(fold)
+    if logged:
+        row["logged_params"] = logged
     planned = planned_trials(meta["sweep"]) if meta.get("sweep") else None
     if planned is not None:
         row["sweep_planned"] = planned

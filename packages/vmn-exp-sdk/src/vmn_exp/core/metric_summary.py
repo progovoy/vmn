@@ -99,17 +99,14 @@ def track_extrema(fold, name, value, key):
     holds, so most rows cost no more than before; the second value turns it
     into ``(min, max, n, *sums)`` and seeds ``firsts``. The bare value's key
     is the one its ``metrics`` entry (not yet updated with *value*) holds —
-    unless a same-named param holds that entry, in which case ``firsts`` got
-    the bare value when the param took it (see :func:`note_param`). Only
-    logged values count: a numeric param never widens the bounds.
+    a same-named param never holds it (see
+    :func:`~vmn_exp.core.fold.take_from_param`). Only logged values count: a
+    numeric param never widens the bounds.
     """
     extrema = fold.setdefault("extrema", {})
     seen = extrema.get(name)
     if seen is None:
         extrema[name] = value
-        held = _key_of(fold, name)
-        if held is not None and key < held:  # a later param holds metrics[name]
-            fold.setdefault("firsts", {})[name] = (value,) + key
         return
     firsts = fold.setdefault("firsts", {})
     if not _repeated(seen):
@@ -151,18 +148,6 @@ def _widen_by_summary(seen, finite):
         block_high if high is None or block_high > high else high,
         n + finite["n"],
     ) + partials
-
-
-def note_param(fold, name, key):
-    """Before a numeric param at fold *key* takes ``metrics[name]``: keep a
-    metric logged once so far (its value and key) in ``firsts``, which is
-    the only place its key would survive."""
-    seen = (fold.get("extrema") or {}).get(name)
-    if seen is None or _repeated(seen) or name in (fold.get("firsts") or {}):
-        return
-    held = _key_of(fold, name)
-    if held is not None and key >= held:
-        fold.setdefault("firsts", {})[name] = (seen,) + held
 
 
 def _summary_of(last, seen, first):

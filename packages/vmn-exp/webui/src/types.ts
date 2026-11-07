@@ -195,6 +195,9 @@ export interface ExperimentRow extends Partial<RunStatus> {
   /** The numeric fold: metrics plus any param that parses as a number.
    *  `null` is a non-finite value (NaN/inf) the server could not send. */
   metrics: Record<string, number | string | null>;
+  /** Params the run also logged as metrics: their `metrics` value is the
+   *  logged one (a param never overwrites it). Absent when none. */
+  logged_params?: string[];
   /** Human-readable run name; the verstr stands in when null/absent. */
   name?: string | null;
   tags?: Record<string, string>;

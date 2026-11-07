@@ -221,21 +221,30 @@ export function anyComments(rows: readonly ExperimentRow[] | undefined): boolean
 
 /** Metric columns: the schema's order first, then any other metric the rows
  *  (or, when given, the app-wide facets) carry, alphabetically. A key that
- *  is also a param (numeric params fold into `metrics` too — see
- *  CLAUDE.md) is left there instead: it's a hyperparameter, not something
- *  being optimized, so it stays a param column rather than showing up a
- *  second time as a metric. */
+ *  no loaded row logged as a metric but some row set as a param (numeric
+ *  params fold into `metrics` too) is left there instead: it's a
+ *  hyperparameter, so it stays a param column. A row's `logged_params`
+ *  names the params it also logged — those keep their metric column. */
 export function metricColumns(
   rows: readonly ExperimentRow[],
   schema: MetricsSchema | null,
   facetKeys?: readonly string[],
 ): string[] {
   const inData = new Set<string>(facetKeys ?? []);
-  rows.forEach((r) => Object.keys(r.metrics).forEach((k) => inData.add(k)));
-  const inParams = new Set<string>();
-  rows.forEach((r) => Object.keys(rowParams(r)).forEach((k) => inParams.add(k)));
-  const fromSchema = Object.keys(schema ?? {}).filter((k) => inData.has(k) && !inParams.has(k));
-  const extras = [...inData].filter((k) => !(schema ?? {})[k] && !inParams.has(k)).sort();
+  const logged = new Set<string>();
+  const asParam = new Set<string>();
+  rows.forEach((r) => {
+    const params = rowParams(r);
+    const alsoLogged = new Set(r.logged_params ?? []);
+    Object.keys(r.metrics).forEach((k) => {
+      inData.add(k);
+      if (!(k in params) || alsoLogged.has(k)) logged.add(k);
+    });
+    Object.keys(params).forEach((k) => { if (!alsoLogged.has(k)) asParam.add(k); });
+  });
+  const isMetric = (k: string) => inData.has(k) && (logged.has(k) || !asParam.has(k));
+  const fromSchema = Object.keys(schema ?? {}).filter(isMetric);
+  const extras = [...inData].filter((k) => !(schema ?? {})[k] && isMetric(k)).sort();
   return [...fromSchema, ...extras];
 }
 

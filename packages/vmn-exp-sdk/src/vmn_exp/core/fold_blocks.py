@@ -10,7 +10,7 @@ exactly. A block a known rewind may hide points of folds point by point
 instead (:func:`may_be_rewound`), from its decoded body.
 Pure: no storage.
 """
-from vmn_exp.core.fold import _apply, _keep_latest
+from vmn_exp.core.fold import _apply, _keep_latest, take_from_param
 from vmn_exp.core.metric_entries import points_to_entries
 from vmn_exp.core.metric_stream import base_key
 from vmn_exp.core.metric_summary import track_block, track_extrema
@@ -77,6 +77,7 @@ def _apply_key(fold, name, entry, writer, first_at, last_at):
     last_value, _, last_ts = entry["last"]
     first_key = (us_to_iso(first_ts), writer, first_at)
     last_key = (us_to_iso(last_ts), writer, last_at)
+    take_from_param(fold, name)
     if entry["n"] == 1:
         track_extrema(fold, name, first_value, first_key)
     else:

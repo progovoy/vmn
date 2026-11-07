@@ -1651,8 +1651,9 @@ base commit (a git-free run) answers `diff: null` with the reason in
 `metrics_delta` maps each key of the two runs' folded `metrics` whose value
 differs to `{from, to, goal, param}` (`from`/`to` are `null` on a run without
 the key). `param: true` marks a numeric param folded into `metrics`: every run
-holding the key holds it as a param with no `metric_summary` entry, so a param
-only one run set is still a param. The Compare *Code* tab and the run page's
+holding the key holds it as a param it never logged as a metric (a logged
+metric of a param's name keeps its place; rows list such names in
+`logged_params`), so a param only one run set is still a param. The Compare *Code* tab and the run page's
 *Changes* card list those under *Params changed*, the rest as metrics.
 
 `GET .../experiments/{verstr}/artifacts/{path}` downloads an artifact, and

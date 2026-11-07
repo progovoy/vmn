@@ -9,7 +9,9 @@ again), lets at most two diffs run at once, and the text is capped.
 import threading
 from types import SimpleNamespace
 
-from vmn_exp.core.fold import fold_definitions, fold_log, fold_metrics, fold_values
+from vmn_exp.core.fold import (
+    fold_definitions, fold_log, fold_metrics, fold_values, logged_params,
+)
 from vmn_exp.core.log import load_log
 from vmn_exp.core.metric_schema import effective_schema, metric_goal
 from vmn_exp.core.resolve_ref import RefError
@@ -79,16 +81,16 @@ def _record_key(storage, app_name, verstr):
 
 
 def _fold_side(log, schema):
-    """Fold a log and return ``(metrics, params, metric_summary, run_defs)``."""
+    """Fold a log and return ``(metrics, params, logged params, run_defs)``."""
     fold = fold_log(log)
-    metrics, metric_summary = fold_metrics(fold, schema)
+    metrics, _ = fold_metrics(fold, schema)
     params = fold_values(fold, "params")
     run_defs = fold_definitions(fold) if fold.get("metric_defs") else {}
-    return metrics, params, metric_summary, run_defs
+    return metrics, params, logged_params(fold), run_defs
 
 
 def _load_sides(storage, app_name, verstrs, read_log, schema=None, with_code=True):
-    """Each run's ``(meta, patches, metrics, params, metric_summary, run_defs)``;
+    """Each run's ``(meta, patches, metrics, params, logged params, run_defs)``;
     without *with_code* only ``metadata.yml`` is read (patches None)."""
     sides = []
     for verstr in verstrs:
@@ -99,25 +101,24 @@ def _load_sides(storage, app_name, verstrs, read_log, schema=None, with_code=Tru
         if meta is None:
             return None, RefError(f"Experiment {verstr} not found")
         log = read_log(storage, app_name, verstr)
-        metrics, params, metric_summary, run_defs = _fold_side(log, schema)
-        sides.append((meta, patches, metrics, params, metric_summary, run_defs))
+        sides.append((meta, patches, *_fold_side(log, schema)))
     return sides, None
 
 
-def _is_param_only(key, params, metric_summary):
-    """True when *key* came from a numeric param, not a ``metrics`` entry."""
-    return key in params and key not in metric_summary
+def _is_param_only(key, params, logged):
+    """True when *key* came from a numeric param, not a logged metric."""
+    return key in params and key not in logged
 
 
 def _is_param_key(key, sides):
     """True when every side holding *key* holds it as a param (D2).
 
-    *sides* are ``(metrics, params, metric_summary)``; a run that never set
+    *sides* are ``(metrics, params, logged params)``; a run that never set
     *key* has no say, so a param only one run set is still a param.
     """
     present = [side for side in sides if key in side[0]]
     return bool(present) and all(
-        _is_param_only(key, params, summary) for _, params, summary in present
+        _is_param_only(key, params, logged) for _, params, logged in present
     )
 
 
@@ -131,13 +132,13 @@ def _resolve_goal(key, run_defs1, run_defs2, schema):
 
 
 def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None):
-    params1, ms1, defs1 = side1_extra
-    params2, ms2, defs2 = side2_extra
+    params1, logged1, defs1 = side1_extra
+    params2, logged2, defs2 = side2_extra
     delta = {}
     for key in sorted(set(m1) | set(m2)):
         if m1.get(key) == m2.get(key):
             continue
-        is_param = _is_param_key(key, ((m1, params1, ms1), (m2, params2, ms2)))
+        is_param = _is_param_key(key, ((m1, params1, logged1), (m2, params2, logged2)))
         goal = None if is_param else _resolve_goal(key, defs1, defs2, schema)
         delta[key] = {
             "from": m1.get(key),
@@ -193,7 +194,7 @@ def _tree_diff(root_path, app_name, v1, side1, v2, side2):
 
 def _delta_from_sides(side1, side2, schema=None):
     """Build the ``metrics_delta`` dict from two loaded sides."""
-    # side = (meta, patches, metrics, params, metric_summary, run_defs)
+    # side = (meta, patches, metrics, params, logged params, run_defs)
     return _metrics_delta(
         side1[2], side2[2],
         (side1[3], side1[4], side1[5]),
@@ -277,8 +278,8 @@ def experiment_diff_from_snapshot(snap, v1, v2, schema=None):
     no_defs = {}
     delta = _metrics_delta(
         snap.metrics_of(v1), snap.metrics_of(v2),
-        (rows[0]["params"], snap.metric_summary(v1), no_defs),
-        (rows[1]["params"], snap.metric_summary(v2), no_defs),
+        (rows[0]["params"], rows[0].get("logged_params", ()), no_defs),
+        (rows[1]["params"], rows[1].get("logged_params", ()), no_defs),
         goals,
     )
     return _metrics_only([v1, v2], delta)
