@@ -70,7 +70,7 @@ def test_older_records_go_to_a_new_generation_leaving_the_old_file_untouched(
 
 def test_records_still_readable_are_copied_to_the_new_generation(tmp_path, monkeypatch):
     path = _old_file(tmp_path, n=7)
-    monkeypatch.setattr(index_store_schema, "COPYABLE_RECORDS", frozenset({10}))
+    monkeypatch.setattr(index_store_schema, "COPYABLE_RECORDS", {10: None})
     monkeypatch.setattr(index_store_upgrade, "COPY_CHUNK", 2)
     flips = _spy_flip(monkeypatch, path)
     store = SqliteStore(path)
@@ -84,6 +84,18 @@ def test_records_still_readable_are_copied_to_the_new_generation(tmp_path, monke
     conn = sqlite3.connect(target)
     assert conn.execute("SELECT key, idx FROM exp_rows ORDER BY idx").fetchall() == [
         (f"k{i}", i + 1) for i in range(7)]
+
+
+def test_records_older_than_the_copyable_ones_are_still_loaded_afresh(tmp_path):
+    path = _old_file(tmp_path)
+    conn = sqlite3.connect(path)
+    conn.execute("INSERT OR REPLACE INTO exp_index_meta (k, v) VALUES ('records', ?)",
+                 (f"17/{OLD_RECORDS}",))
+    conn.commit()
+    conn.close()
+    store = SqliteStore(path)
+    assert store.load(APP) == {}
+    assert not store.deriving(APP)
 
 
 def test_a_slow_open_of_one_index_file_never_holds_up_another(tmp_path, monkeypatch):

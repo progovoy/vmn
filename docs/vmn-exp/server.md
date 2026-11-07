@@ -148,7 +148,9 @@ versions:
   those bumps it. The live file is then left untouched: a new generation file
   is built beside it and the pointer flipped to it, as a rebuild does. Records
   still readable by the new version are copied over locally, so the store is
-  not read again. Otherwise the new file loads from storage like a first start.
+  not read again; when a change affects only some runs, just those are read
+  again (records 18 → 19: the runs with a param of the same name as a logged
+  metric). Otherwise the new file loads from storage like a first start.
 - The **derived** version covers the tables computed from those records: the
   board rows, side values (system metrics, outputs, features) and the
   similar-runs documents. A change there (most upgrades) is applied in place:

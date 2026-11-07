@@ -72,6 +72,7 @@ from vmn_exp.core.index_listing import ListingWatch
 from vmn_exp.core.index_pending import PendingSave
 from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_record import refresh_record, update_record
+from vmn_exp.core.index_reread import hint_unloaded
 from vmn_exp.core.index_unreadable import Unreadable
 from vmn_exp.core.index_remote_workers import RemoteLoaders, worker_count
 from vmn_exp.core.index_rows import adopted as _adopted
@@ -460,6 +461,8 @@ class ExperimentIndex:
                 if not self._lean and (placeholder or (
                         self._records and self._snapshot is None)):
                     self._publish_persisted()
+            hint_unloaded(self._io or self._store, self.app_name, self._records,
+                          self._sweep.hint)
         self._sweep.behind = self._io is None and self._remote()
         self._freshness.listing(self._listing_phase(started), self._records,
                                 self._listing_position())

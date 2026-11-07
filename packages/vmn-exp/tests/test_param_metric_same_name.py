@@ -95,15 +95,6 @@ def test_the_snapshot_compare_keeps_it_a_metric_too(tmp_path):
     assert delta["acc"] == {"from": 0.9, "to": 0.7, "goal": None, "param": False}
 
 
-def test_records_folded_before_the_change_are_read_again():
-    """A stored fold may hold a param's number over a logged metric: none is
-    trusted (nor copied over) after the change."""
-    from vmn_exp.core import index_store_schema
-
-    assert index_store_schema.RECORDS_VERSION >= 19
-    assert 18 not in index_store_schema.COPYABLE_RECORDS
-
-
 def test_a_streamed_metric_keeps_its_place_from_a_later_param(tmp_path):
     storage, v = LocalSnapshotStorage(str(tmp_path), area="runs"), META["verstr"]
     storage.save("app", v, META, {})

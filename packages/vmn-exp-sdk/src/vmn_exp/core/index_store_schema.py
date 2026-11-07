@@ -24,7 +24,10 @@ Two versions, so an upgrade never costs more than it must:
   touched: a new generation file is built beside it and flipped live
   (:mod:`vmn_exp.core.index_store_upgrade`), its records copied over when
   their version is in :data:`COPYABLE_RECORDS` (they still read right),
-  else loaded afresh from storage.
+  else loaded afresh from storage. A change that leaves most records right
+  lists the older version there with a predicate picking the others: they
+  alone are read again (records 18: only runs with a name both a param and a
+  logged metric).
 - :data:`DERIVED_VERSION` covers the tables derived purely from the records
   (``exp_rows``, ``exp_sides``, ``similar_*``). Bump it when what is derived
   changes (lean rows, side values, statuses, similar documents) or a derived
@@ -46,14 +49,26 @@ derived tables.
 import sqlite3
 
 from vmn_exp.core import similar_fts
+from vmn_exp.core.fold import logged_params
 from vmn_exp.core.index_store_kv import write_puts
 from vmn_exp.core.sqlite_conn import write_tx
 
 RECORDS_VERSION = 19  # 19: a param never overwrites a logged metric (plan 32 F8)
 DERIVED_VERSION = 20
 SCHEMA_VERSION = f"exp-index-{DERIVED_VERSION}"
-# Older records versions whose records still read right in this one.
-COPYABLE_RECORDS = frozenset()
+
+
+def _param_logged_too(fold):
+    """Whether *fold* has a name both a param and a logged metric: records 18
+    may hold the param's number over the metric (plan 32 F8); no other fold
+    changed."""
+    return bool(logged_params(fold))
+
+
+# Older records versions whose records still read right in this one, each with
+# None or a predicate of a record's fold: True when that record does not and
+# is read again from storage instead (see index_store_upgrade).
+COPYABLE_RECORDS = {18: _param_logged_too}
 _LEGACY_RECORDS = 18  # the newest records of a file with no "records" meta value
 NEW, DERIVED = "new", "derived"  # the upgrades ensure_schema makes
 DERIVE_SCOPE = "derive:"  # exp_index_kv scope prefix of an app left to re-derive

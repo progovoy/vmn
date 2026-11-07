@@ -9,10 +9,16 @@ Records whose version is in
 :data:`~vmn_exp.core.index_store_schema.COPYABLE_RECORDS` still read right:
 they are copied over first (:data:`COPY_CHUNK` rows per transaction), every
 app then left to re-derive from them (:mod:`vmn_exp.core.index_derive`) —
-local work instead of re-reading storage. Other records are not copied: the
-index loads afresh from storage.
+local work instead of re-reading storage. A record its version's predicate
+picks (it does not read right) is left out, with its run state, and listed
+to read again (:mod:`vmn_exp.core.index_reread`): only those runs cost
+storage reads. Other records are not copied: the index loads afresh from
+storage.
 """
-from vmn_exp.core import index_store_schema, sqlite_files
+import json
+
+from vmn_exp.core import index_reread, index_store_schema, sqlite_files
+from vmn_exp.core.index_store_kv import write_puts
 from vmn_exp.core.index_store_schema import RECORD_TABLES, mark_derive_pending
 from vmn_exp.core.sqlite_conn import connect, write_tx
 
@@ -28,7 +34,7 @@ def regenerate(path, old, found, connect_file):
     try:
         conn = connect_file(fresh)
         if found in index_store_schema.COPYABLE_RECORDS:
-            _copy_records(old, conn)
+            _copy_records(old, conn, index_store_schema.COPYABLE_RECORDS[found])
         sqlite_files.flip(path, fresh)
     except BaseException:
         if conn is not None:
@@ -38,26 +44,49 @@ def regenerate(path, old, found, connect_file):
     return conn, fresh
 
 
-def _copy_records(old, conn):
+def _copy_records(old, conn, stale):
     source = connect(old, readonly=True)
+    reread = set()  # the (app, key) of the records *stale* picks
     try:
-        for table in RECORD_TABLES:
-            _copy_table(source, conn, table)
+        for table in RECORD_TABLES:  # exp_index first: its picks filter exp_index_state
+            _copy_table(source, conn, table, _keeps(table, stale, reread))
         with write_tx(conn):
             mark_derive_pending(conn)
+            write_puts(conn, index_reread.puts(reread))
     finally:
         source.close()
+
+
+def _keeps(table, stale, reread):
+    """``keeps(row, columns)`` of *table*: whether the copy keeps it — not a
+    record whose fold *stale* (None: none) picks (its key joins *reread*),
+    nor the run state of one."""
+    if stale is None or table not in ("exp_index", "exp_index_state"):
+        return lambda row, columns: True
+    if table == "exp_index_state":
+        return lambda row, columns: (row[columns["app"]], row[columns["key"]]) not in reread
+
+    def keeps(row, columns):
+        data = row[columns["data"]]
+        if data is None or not stale(json.loads(data)):
+            return True
+        reread.add((row[columns["app"]], row[columns["key"]]))
+        return False
+
+    return keeps
 
 
 def _columns(conn, table):
     return [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
 
 
-def _copy_table(source, conn, table):
-    """*table*'s rows, the columns both files have, a chunk per transaction."""
+def _copy_table(source, conn, table, keeps):
+    """*table*'s rows *keeps* keeps, the columns both files have, a chunk per
+    transaction."""
     ours = set(_columns(conn, table))
     columns = [c for c in _columns(source, table) if c in ours]
     names, marks = ", ".join(columns), ", ".join("?" * len(columns))
+    at = {column: i for i, column in enumerate(columns)}
     after = 0
     while True:
         rows = source.execute(
@@ -65,7 +94,7 @@ def _copy_table(source, conn, table):
             (after, COPY_CHUNK)).fetchall()
         if not rows:
             return
+        kept = [row[1:] for row in rows if keeps(row[1:], at)]
         with write_tx(conn):
-            conn.executemany(f"INSERT OR REPLACE INTO {table} ({names}) VALUES ({marks})",
-                             [row[1:] for row in rows])
+            conn.executemany(f"INSERT OR REPLACE INTO {table} ({names}) VALUES ({marks})", kept)
         after = rows[-1][0]
