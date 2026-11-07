@@ -17,6 +17,7 @@ subtree best: the extremes of its subtree's tallies) and, for ``field:``/
 (base, live bucket, schema, aggregate) with no minute in the key, for the
 top-level jobs only (a tree row keeps its own values).
 """
+from bisect import bisect_left
 from collections import namedtuple
 
 from vmn_exp.core.app_settings import check_job_aggregate, job_aggregate_of
@@ -41,8 +42,7 @@ def job_agg_of(ui, agg=None, by=None, value=None, metric=None):
     given values over it; ValueError naming a bad one."""
     given = {k: v for k, v in dict(agg=agg, by=by, value=value, metric=metric).items()
              if v is not None}
-    check_job_aggregate(given, "job_agg")
-    return JobAgg(**{**job_aggregate_of(ui), **given})
+    return JobAgg(**{**job_aggregate_of(ui), **check_job_aggregate(given, "job_agg")})
 
 
 def board_job_agg(cache, snapshot):
@@ -71,19 +71,18 @@ def _payload(agg, metric, goal, **fields):
     return out
 
 
-def _holder(ordered, agg, goal):
-    """The verstr of sorted ``(value, verstr)`` *ordered* holding *agg*'s
-    value (a quantile's lower neighbour), None for the mean."""
+def _holder(ordered, agg, goal, value):
+    """The verstr of the unit of sorted ``(value, verstr)`` *ordered*
+    holding *agg*'s *value* (a quantile's lower neighbour), None for the
+    mean and an interpolated quantile no unit holds."""
     if agg == "best":
         agg = goal
-    if agg == "min":
-        return ordered[0][1]
-    if agg == "max":
-        top = ordered[-1][0]
-        return next(v for value, v in ordered if value == top)
     if agg == "mean":
         return None
-    return ordered[int(_quantile(agg, goal) * (len(ordered) - 1))][1]
+    if agg == "max":
+        return ordered[bisect_left(ordered, (value,))][1]
+    at = 0 if agg == "min" else int(_quantile(agg, goal) * (len(ordered) - 1))
+    return ordered[at][1] if ordered[at][0] == value else None
 
 
 def _of_units(units, value_of, agg, goal):
@@ -97,7 +96,7 @@ def _of_units(units, value_of, agg, goal):
               "conflicts": sum(1 for kept in keyed.values() if len(kept) > 1)}
     value = of_sorted([p[0] for p in ordered], agg, goal) if goal else None
     if value is not None:
-        fields.update(value=value, verstr=_holder(ordered, agg, goal))
+        fields.update(value=value, verstr=_holder(ordered, agg, goal, value))
     return fields
 
 
@@ -106,13 +105,15 @@ def _of_runs(parts, metric, agg, goal):
     quantile from the merged sketches (``approx``), the rest exact."""
     q = _quantile(agg, goal)
     fields = {"of": count_fields(parts)["total"], "approx": q is not None}
-    found = metric_fields(parts, metric, goal, bins=1, quantiles=q is not None)
+    # The extreme an exact agg reads is the best of that goal: its holder.
+    extreme = {"best": goal, "min": "min", "max": "max"}.get(agg)
+    found = metric_fields(parts, metric, extreme, bins=1, quantiles=q is not None)
     if found is None:
         return fields
     fields["n"] = found["n"]
     if goal is not None:
         fields["value"] = found[agg if q is None else _SKETCH[q]]
-        fields["verstr"] = found["best_verstr"] if agg == "best" else None
+        fields["verstr"] = found["best_verstr"]
     return fields
 
 
@@ -134,12 +135,12 @@ class JobAggregates:
     def one(self, snapshot, schema, verstr, agg=None):
         """*verstr*'s ``rolled`` (a job at any depth), None when it is not a job."""
         agg = agg or board_job_agg(self._cache, snapshot)
-        found = self.rolled(snapshot, schema, agg).get(verstr)
-        if found is not None:
-            return found
         base, bucket = self._cache._base(snapshot)
-        if verstr not in self._cache.jobs.tree(base).jobs:
+        tree = self._cache.jobs.tree(base)
+        if verstr not in tree.jobs:
             return None
+        if tree.is_top(verstr):
+            return self.rolled(snapshot, schema, agg)[verstr]
         key = (base.token, bucket, self._cache.schema_key(schema), agg, verstr)
         return self._answers.get(key, lambda: self._payload_of(snapshot, schema, agg)(verstr))
 

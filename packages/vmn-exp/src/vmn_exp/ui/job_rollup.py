@@ -117,10 +117,14 @@ class JobTree:
         self.nested = {job: [kid for kid in base.children_of[job] if kid in self.jobs]
                        for job in self.jobs}
         self._parent = {kid: job for job, kids in self.nested.items() for kid in kids}
-        self.top = [job for job in self.jobs if job not in self._parent]
+        self.top = [job for job in self.jobs if self.is_top(job)]
         self.archived = {job for job in self.jobs if base.rows[base.position[job]].get("archived")}
         self._counted = {job: [kid for kid in kids if kid not in self.archived]
                          for job, kids in self.nested.items()}
+
+    def is_top(self, job):
+        """Whether *job* is a top-level job (under no job)."""
+        return job in self.jobs and job not in self._parent
 
     def peers(self, job):
         """The jobs beside *job*: under its parent job, else the top-level ones."""

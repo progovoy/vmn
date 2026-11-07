@@ -327,28 +327,32 @@ _JOB_AGG_FIELDS = {
 
 
 def check_job_agg_by(by, where="ui.job_aggregate.by"):
-    """*by* when it names job units, else SettingsError."""
+    """*by* normalized (``kind: date`` is ``kind:date``) when it names job
+    units, else SettingsError."""
+    if by in JOB_AGG_BY:
+        return by
     kind, colon, rest = by.partition(":") if isinstance(by, str) else ("", "", "")
-    if by in JOB_AGG_BY or (colon and kind == "kind" and rest.strip()):
-        return by
+    rest = rest.strip()
+    if colon and kind == "kind" and rest:
+        return f"kind:{rest}"
     if colon and kind == "field":
-        check_field(rest, where)
-        return by
+        return f"field:{check_field(rest, where)}"
     raise SettingsError(f"invalid {where}: {by!r} "
                         "(children, runs, field:<params.k|tags.k> or kind:<tags.kind>)")
 
 
 def check_job_aggregate(conf, where="ui.job_aggregate"):
-    """*conf* (``{agg?, by?, value?, metric?}``) when valid, else SettingsError."""
+    """*conf* (``{agg?, by?, value?, metric?}``, its ``by`` normalized) when
+    valid, else SettingsError."""
     _check_mapping(conf, where)
     for key, value in conf.items():
         if key == "by":
-            check_job_agg_by(value, f"{where}.by")
-        elif key not in _JOB_AGG_FIELDS:
+            continue
+        if key not in _JOB_AGG_FIELDS:
             raise SettingsError(f"unknown field {where}.{key}; one of agg, by, value, metric")
-        elif not _JOB_AGG_FIELDS[key](value):
+        if not _JOB_AGG_FIELDS[key](value):
             raise SettingsError(f"invalid {where}.{key}: {value!r}")
-    return conf
+    return {**conf, "by": check_job_agg_by(conf["by"], f"{where}.by")} if "by" in conf else conf
 
 
 def job_aggregate_of(ui):
