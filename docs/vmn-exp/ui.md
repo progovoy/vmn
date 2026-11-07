@@ -983,7 +983,8 @@ Every row of `.../experiments` and the run detail carry:
 | `started_at` / `finished_at` | ISO-8601 timestamps |
 | `heartbeat` | last heartbeat refresh |
 | `stale_sec` | seconds since the last proof of life (the fresher of the heartbeat and the store's write time of `run_state.yml`) |
-| `duration_sec` | wall-clock run time once finished (elapsed while running) |
+| `duration_sec` | wall-clock run time once finished (elapsed while running: the `duration` column reads `10m (running)`); `null` for a run that stopped without a recorded end (stuck, failed unfinished), which then sorts after the known durations |
+| `duration_at_least_sec` | that run's lower bound: its last proof of life (as `stale_sec`) minus `started_at`, else `null`. The `duration` column reads `≥ 3h (stuck)` |
 | `queue_sec` | seconds from creation (`timestamp`) to `started_at`, never below 0; `null` until the run starts |
 | `duration_ratio` | board rows only: `duration_sec` over the median duration of its siblings, the finished (succeeded or failed), unarchived runs with the same parent and the same value of `experiment.ui.split_by` (none: the parent alone; the median at P3's rank as its sketches report it, within 1 %). A running run uses its elapsed time. `null` with fewer than 3 finished siblings (the run counted), without a parent, and for a waiting, stuck or end-less run. The board's `ratio` column reads `3.1× siblings`; `q=duration_ratio > 3` finds the outliers |
 | `pid` / `host` / `command` | what ran, where |

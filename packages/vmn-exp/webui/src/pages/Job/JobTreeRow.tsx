@@ -6,11 +6,12 @@ import { memo } from "react";
 import { Link } from "react-router-dom";
 import JobProgress from "../../components/JobProgress";
 import StatusPill from "../../components/StatusPill";
-import { fmtCount, fmtDuration, runHref } from "../../util";
+import { fmtCount, runHref } from "../../util";
 import { cellText, kindColumns, worstAttention, type TreeItem, type TreeNodeItem } from "../../util/treeItems";
 import TreeToggle from "../../components/TreeToggle";
 import { AttentionChip, BestValue, type JobContext } from "../Experiments/JobCells";
 import { durationText, headStatus } from "../LeaderboardRow";
+import { runDurationText } from "../../util/runDuration";
 
 export const TREE_ROW_HEIGHT = 40;
 const INDENT_PX = 18;
@@ -73,11 +74,12 @@ function AttentionCell({ it, ctx }: { it: TreeNodeItem; ctx: JobContext }) {
 }
 
 function DurationCell({ it }: { it: TreeNodeItem }) {
-  const { duration_sec: sec, duration_ratio: ratio } = it.row;
+  const ratio = it.row.duration_ratio;
   const [ratioText, ratioTitle] = durationText("duration_ratio", ratio);
+  const [text, title] = runDurationText(it.row);
   return (
     <span className="tree-duration">
-      {sec != null && <span>{fmtDuration(sec)}</span>}
+      {title && <span title={title}>{text}</span>}
       {ratio != null && <span className={`tree-ratio${ratio >= 2 ? " slow" : ""}`} title={ratioTitle}>{ratioText}</span>}
     </span>
   );

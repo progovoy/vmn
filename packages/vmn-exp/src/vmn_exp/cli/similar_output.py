@@ -14,6 +14,7 @@ leads with the best of the closest runs on their goal metric::
 import datetime
 import sys
 
+from vmn_exp.cli.duration_text import humanize_sec
 from vmn_exp.cli.views import dumps, format_number, plural
 from vmn_exp.core.status import parse_iso
 
@@ -29,11 +30,7 @@ def age(timestamp, now=None):
     if when is None:
         return "-"
     now = now or datetime.datetime.now(datetime.timezone.utc)
-    seconds = max(0, int((now - when).total_seconds()))
-    for size, unit in _AGE_UNITS:
-        if seconds >= size:
-            return f"{seconds // size}{unit} ago"
-    return f"{seconds}s ago"
+    return f"{humanize_sec(max(0, int((now - when).total_seconds())), _AGE_UNITS)} ago"
 
 
 def goal_text(goal):

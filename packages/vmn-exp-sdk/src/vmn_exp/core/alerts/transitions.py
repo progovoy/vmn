@@ -3,7 +3,8 @@
 Each run alerts once per transition: a delivered alert is recorded in the run's
 ``alerts_sent.yml`` (through the storage, so local and S3 alike), keyed by the
 transition — a failed run by its ``finished_at``, a stuck one by its last
-heartbeat, so a run that recovers and gets stuck again alerts again. An alert
+proof of life (:func:`~vmn_exp.core.status.last_alive_at`, what its stuck
+status is derived from), so a run that recovers and gets stuck again alerts again. An alert
 no sink accepted is not recorded, and the next watch retries it.
 """
 import datetime
@@ -14,7 +15,7 @@ from vmn_exp._base import VMN_LOGGER, now_iso, yaml_safe_load
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.alerts.dispatch import make_alert
 from vmn_exp.core.run_error import state_error_summary
-from vmn_exp.core.status import FAILED, STUCK, derive_status, parse_iso
+from vmn_exp.core.status import FAILED, STUCK, derive_status, last_alive_at, parse_iso
 
 ALERTS_FILE = "alerts_sent.yml"
 
@@ -46,20 +47,30 @@ def _mark_sent(storage, app_name, verstr, sent, key):
     save_sent(storage, app_name, verstr, dict(sent, **{key: now_iso()}))
 
 
-def transition_key(status, run_state):
+def transition_key(status, run_state, observed_at=None):
     if status == FAILED:
         return f"failed@{run_state.get('finished_at')}"
-    return f"stuck@{run_state.get('heartbeat') or run_state.get('started_at')}"
+    since = _transition_time(status, run_state, observed_at)
+    return f"stuck@{since.isoformat() if since else None}"
 
 
-def _transition_time(status, run_state):
-    ts = run_state.get("finished_at") if status == FAILED else (
-        run_state.get("heartbeat") or run_state.get("started_at")
-    )
-    return parse_iso(ts)
+def _transition_time(status, run_state, observed_at=None, now=None):
+    """When the run went *status*: a failed run's end, a stuck run's last
+    proof of life (the time its stuck status is derived from)."""
+    if status == FAILED:
+        return parse_iso(run_state.get("finished_at"))
+    return last_alive_at(run_state, now=now, observed_at=observed_at)
 
 
-def transition_alert(app_name, verstr, run_state, status, run_name=None, now=None):
+def _stuck_text(run_state, since, now):
+    age = int((_now(now) - since).total_seconds()) if since else None
+    lead = (f"no heartbeat since start ({age}s ago)" if run_state.get("heartbeat") is None
+            else f"no heartbeat for {age}s")
+    return f"{lead} (host {run_state.get('host')}, pid {run_state.get('pid')})"
+
+
+def transition_alert(app_name, verstr, run_state, status, run_name=None, now=None,
+                     observed_at=None):
     if status == FAILED:
         title = f"Run {verstr} failed"
         text = f"exit code {run_state.get('exit_code')}"
@@ -71,12 +82,8 @@ def transition_alert(app_name, verstr, run_state, status, run_name=None, now=Non
         level = "error"
     else:
         title = f"Run {verstr} is stuck"
-        since = _transition_time(status, run_state)
-        age = int((_now(now) - since).total_seconds()) if since else None
-        text = (
-            f"no heartbeat for {age}s (host {run_state.get('host')}, "
-            f"pid {run_state.get('pid')})"
-        )
+        since = _transition_time(status, run_state, observed_at, now)
+        text = _stuck_text(run_state, since, now)
         level = "warn"
     return make_alert(
         status, app_name, verstr, title, text, level,
@@ -85,13 +92,16 @@ def transition_alert(app_name, verstr, run_state, status, run_name=None, now=Non
 
 
 def alert_transition(storage, app_name, verstr, run_state, status, alerter,
-                     run_name=None, now=None):
-    """Alert *status* for this run unless already sent; True if delivered now."""
-    key = transition_key(status, run_state)
+                     run_name=None, now=None, observed_at=None):
+    """Alert *status* for this run unless already sent; True if delivered now.
+
+    *observed_at* (the store's write time of ``run_state.yml``) dates a stuck
+    transition the way :func:`derive_status` does."""
+    key = transition_key(status, run_state, observed_at)
     sent = load_sent(storage, app_name, verstr)
     if key in sent:
         return False
-    alert = transition_alert(app_name, verstr, run_state, status, run_name, now)
+    alert = transition_alert(app_name, verstr, run_state, status, run_name, now, observed_at)
     if not alerter.send(alert):
         return False
     _mark_sent(storage, app_name, verstr, sent, key)
@@ -123,7 +133,8 @@ def watch_app(storage, app_name, alerter, within_sec, now=None):
         name = (snap.row(verstr) or {}).get("name")
         try:
             sent = alert_transition(
-                storage, app_name, verstr, run_state, status, alerter, name, now
+                storage, app_name, verstr, run_state, status, alerter, name, now,
+                snap.run_state_observed_at.get(verstr),
             )
         except Exception:
             VMN_LOGGER.debug(f"Alert check of {verstr} failed", exc_info=True)
@@ -143,6 +154,6 @@ def _candidates(snap, wanted, within_sec, now):
         status = derive_status(run_state, now=now, observed_at=observed_at)
         if status not in wanted:
             continue
-        since = _transition_time(status, run_state)
+        since = _transition_time(status, run_state, observed_at, now)
         if since is not None and (now - since).total_seconds() <= within_sec:
             yield verstr, run_state, status

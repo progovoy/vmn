@@ -266,6 +266,16 @@ only when **both** the heartbeat timestamp and the store's write time of
 heartbeat is ignored. When the store time is unknown the heartbeat alone
 decides. (`vmn_exp.core.status.derive_status(state, observed_at=...)`.)
 
+The status fields' `duration_sec` is the recorded duration of a finished run,
+and the elapsed time of a `running` one. A run that stopped without a
+recorded end (`stuck`, or `failed` with no `finished_at`) has
+`duration_sec: null` and `duration_at_least_sec`: its last proof of life
+(that same fresher time) minus its start. `show` prints it `≥ 3h (stuck)`,
+`--sort duration_sec` puts it after the known durations, and a
+`duration_sec` query never matches it (use `duration_at_least_sec`). A stuck
+alert (`vmn-exp watch`) is dated from that time too, and says `no heartbeat
+since start` for a run that never beat.
+
 A process that is hung but alive keeps heartbeating and reads `running`;
 watch `last_metric_at` (UI/API) for "alive but not making progress".
 

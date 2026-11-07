@@ -99,10 +99,15 @@ def _age_sec(ts, now):
 def queue_sec(created, started):
     """Seconds a run waited from *created* to *started* (ISO stamps), never
     below 0; None until both are known (plan 28 N4)."""
-    created, started = parse_iso(created), parse_iso(started)
-    if created is None or started is None:
-        return None
-    return round(max((started - created).total_seconds(), 0.0), 3)
+    return _non_negative(_seconds_between(parse_iso(created), parse_iso(started)))
+
+
+def _seconds_between(start, end):
+    return None if start is None or end is None else round((end - start).total_seconds(), 3)
+
+
+def _non_negative(seconds):
+    return None if seconds is None else max(seconds, 0.0)
 
 
 def with_queue_sec(row, fields):
@@ -173,19 +178,17 @@ def observed_at_from_mtime(mtime):
     return datetime.datetime.fromtimestamp(seconds, tz=datetime.timezone.utc)
 
 
-def _writer_age_sec(run_state, now):
-    """Seconds since the writer's own clock last stamped a beat, or None.
+def _writer_alive_at(run_state):
+    """When the writer's own clock last stamped a beat, or None.
 
     Before the first beat lands, the start time stands in for it.
     """
-    age = _age_sec(run_state.get("heartbeat"), now)
-    if age is None and run_state.get("heartbeat") is None:
-        age = _age_sec(run_state.get("started_at"), now)
-    return age
+    field = "started_at" if run_state.get("heartbeat") is None else "heartbeat"
+    return parse_iso(run_state.get(field))
 
 
-def _liveness_age_sec(run_state, now, observed_at):
-    """Seconds since the freshest proof that the run is alive, or None.
+def last_alive_at(run_state, now=None, observed_at=None):
+    """When the freshest proof that the run is alive was made, or None.
 
     Two clocks can prove it: the writer's heartbeat timestamp and — when
     *observed_at* is known — the store's write time of ``run_state.yml``. The
@@ -193,13 +196,18 @@ def _liveness_age_sec(run_state, now, observed_at):
     dated in the future is the writer's clock running ahead and proves
     nothing the store's clock can check, so it is ignored then.
     """
-    writer_age = _writer_age_sec(run_state, now)
+    writer = _writer_alive_at(run_state or {})
     if observed_at is None:
-        return writer_age
-    store_age = (now - observed_at).total_seconds()
-    if writer_age is None or writer_age < 0:
-        return store_age
-    return min(writer_age, store_age)
+        return writer
+    if writer is None or writer > _now(now):
+        return observed_at
+    return max(writer, observed_at)
+
+
+def _liveness_age_sec(run_state, now, observed_at):
+    """Seconds since :func:`last_alive_at`, or None."""
+    alive = last_alive_at(run_state, now, observed_at)
+    return None if alive is None else (now - alive).total_seconds()
 
 
 def derive_status(run_state, now=None, observed_at=None):
@@ -228,22 +236,32 @@ def derive_status(run_state, now=None, observed_at=None):
     return RUNNING if age <= stale_after_sec(run_state) else STUCK
 
 
+def _durations(run_state, status, now, observed_at):
+    """``(duration_sec, duration_at_least_sec)`` of one run: the recorded or
+    finished duration, the elapsed time while running, else a lower bound."""
+    if run_state.get("duration_sec") is not None:
+        return run_state["duration_sec"], None
+    started = parse_iso(run_state.get("started_at"))
+    finished = parse_iso(run_state.get("finished_at"))
+    if finished is not None:
+        return _seconds_between(started, finished), None
+    if status == RUNNING:
+        return _seconds_between(started, now), None
+    return None, _non_negative(_seconds_between(started, last_alive_at(run_state, now, observed_at)))
+
+
 def status_fields(run_state, now=None, observed_at=None):
     """The full status payload for one run, ready to serialize.
 
     ``duration_sec`` is the recorded duration once the run finished, and the
-    elapsed wall time while it is still going.
+    elapsed wall time while it is still going. A run that is neither (stuck,
+    or failed without a recorded end) has no duration, only
+    ``duration_at_least_sec``: its last proof of life minus its start.
     """
     now = _now(now)
     run_state = run_state or {}
     status = derive_status(run_state, now=now, observed_at=observed_at)
-
-    duration = run_state.get("duration_sec")
-    if duration is None and run_state.get("started_at"):
-        end = parse_iso(run_state.get("finished_at")) or now
-        started = parse_iso(run_state.get("started_at"))
-        if started is not None:
-            duration = round((end - started).total_seconds(), 3)
+    duration, at_least = _durations(run_state, status, now, observed_at)
 
     if observed_at is not None:
         stale_sec = _liveness_age_sec(run_state, now, observed_at)
@@ -261,6 +279,7 @@ def status_fields(run_state, now=None, observed_at=None):
         "finished_at": run_state.get("finished_at"),
         "heartbeat": run_state.get("heartbeat"),
         "duration_sec": duration,
+        "duration_at_least_sec": at_least,
         "pid": run_state.get("pid"),
         "host": run_state.get("host"),
         "command": run_state.get("command"),

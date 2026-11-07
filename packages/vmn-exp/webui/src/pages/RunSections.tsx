@@ -4,6 +4,7 @@ import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus }
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import FleetTable from "../components/FleetTable";
 import { statusColor } from "../util/statusColors";
+import { runDurationText } from "../util/runDuration";
 import { fleetMetric, fleetRowsOf, varyingParams } from "../components/fleetRows";
 
 /** A single duration text (rounded seconds for short, ladder for longer),
@@ -19,6 +20,14 @@ export function Duration({ secs }: { secs: number | null | undefined }) {
   );
 }
 
+/** A final duration as {@link Duration}; else `runDurationText`'s marked
+ *  text (elapsed while running, a stuck run's lower bound). */
+function RunDuration({ st }: { st: RunStatus }) {
+  if (st.status !== "running" && st.duration_sec != null) return <Duration secs={st.duration_sec} />;
+  const [text, title] = runDurationText(st);
+  return <div title={title}>{text}</div>;
+}
+
 /** The run's status facts, for the Status details section (the pill itself
  *  heads the page: `RunHead`). */
 export function StatusFacts({ st, runUrl }: { st: RunStatus; runUrl: (v: string) => string }) {
@@ -30,7 +39,7 @@ export function StatusFacts({ st, runUrl }: { st: RunStatus; runUrl: (v: string)
           <><div className="k">exit code</div><div className="mono">{st.exit_code}</div></>
         )}
         <div className="k">duration</div>
-        <Duration secs={st.duration_sec} />
+        <RunDuration st={st} />
         {st.pid !== null && <><div className="k">pid</div><div className="mono">{st.pid}</div></>}
         {Boolean(st.host) && <><div className="k">host</div><div className="mono">{st.host}</div></>}
         {Boolean(st.heartbeat) && (

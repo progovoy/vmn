@@ -30,7 +30,7 @@ def _create(app_layout, capfd):
     return extract_dev_verstr(capfd.readouterr().out)
 
 
-def _age_run_state(app_layout, verstr, state):
+def _age_run_state(app_layout, verstr, state, hours=1):
     storage = _storage(app_layout)
     storage.save_file(
         app_layout.app_name, verstr, RUN_STATE_FILE, yaml.dump(state, sort_keys=False)
@@ -39,7 +39,7 @@ def _age_run_state(app_layout, verstr, state):
         app_layout.repo_path, ".vmn", "store", "runs", app_layout.app_name, verstr,
         RUN_STATE_FILE,
     )
-    old = (datetime.datetime.now() - datetime.timedelta(hours=1)).timestamp()
+    old = (datetime.datetime.now() - datetime.timedelta(hours=hours)).timestamp()
     os.utime(path, (old, old))
 
 
@@ -107,7 +107,8 @@ def test_watch_skips_triggers_that_are_not_opted_in(app_layout, capfd):
 def test_watch_ignores_transitions_older_than_the_window(app_layout, capfd):
     _bootstrap(app_layout)
     verstr = _create(app_layout, capfd)
-    _age_run_state(app_layout, verstr, _stuck_state("2020-01-01T00:00:00Z"))
+    # Both clocks the stuck status reads are old: the heartbeat and the store write.
+    _age_run_state(app_layout, verstr, _stuck_state("2020-01-01T00:00:00Z"), hours=24 * 365)
     with WebhookReceiver() as hook:
         alerter = _alerter(hook.url, ["stuck"])
         assert watch_app(_storage(app_layout), app_layout.app_name, alerter, 86400) == []

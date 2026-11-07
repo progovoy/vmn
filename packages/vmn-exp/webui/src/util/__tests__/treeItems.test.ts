@@ -86,3 +86,12 @@ describe("cellText", () => {
     expect(cellText(r, "m:missing")).toEqual(["missing", "—"]);
   });
 });
+
+describe("cellText duration (plan 32 F13)", () => {
+  it("marks a stuck run's lower bound and a running run's elapsed time", () => {
+    const stuck = row("s", { status: "stuck", duration_sec: null, duration_at_least_sec: 11000 });
+    expect(cellText(stuck, "c:duration")).toEqual(["duration", "≥ 3h (stuck)"]);
+    expect(cellText(row("r", { status: "running", duration_sec: 600 }), "c:duration"))
+      .toEqual(["duration", "10m (running)"]);
+  });
+});

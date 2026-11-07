@@ -24,6 +24,7 @@ from vmn_exp.cli.run import (  # noqa: F401
     experiment_run,
 )
 from vmn_exp.cli.define_metric_args import define_metric_entry
+from vmn_exp.cli.duration_text import duration_text
 from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
@@ -770,8 +771,9 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
     print(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
         print(f"  Exit code: {fields['exit_code']}")
-    if fields["duration_sec"] is not None:
-        print(f"  Duration:  {fields['duration_sec']}s")
+    duration = duration_text(fields)
+    if duration:
+        print(f"  Duration:  {duration}")
     if fields["pid"]:
         print(f"  Runner:    pid {fields['pid']} on {fields['host']}")
     if fields["status"] == STUCK:

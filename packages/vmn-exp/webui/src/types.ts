@@ -97,8 +97,11 @@ export interface RunStatus {
   started_at: string | null;
   finished_at: string | null;
   heartbeat: string | null;
-  /** Elapsed while running, final duration once finished. */
+  /** Elapsed while running, final duration once finished; null for a run
+   *  that stopped without a recorded end (stuck, failed unfinished). */
   duration_sec: number | null;
+  /** That run's lower bound: its last sign of life minus its start. */
+  duration_at_least_sec?: number | null;
   pid: number | null;
   host: string | null;
   command: string[] | null;

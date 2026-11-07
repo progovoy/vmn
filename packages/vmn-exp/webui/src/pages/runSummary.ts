@@ -48,6 +48,7 @@ function statusFromRow(r: ExperimentRow): RunStatus | null {
     finished_at: r.finished_at ?? null,
     heartbeat: r.heartbeat ?? null,
     duration_sec: r.duration_sec ?? null,
+    duration_at_least_sec: r.duration_at_least_sec ?? null,
     pid: r.pid ?? null,
     host: r.host ?? null,
     command: r.command ?? null,

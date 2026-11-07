@@ -14,6 +14,7 @@ import { sweepIncompleteLabel } from "../util/sweepProgress";
 import {
   DATE_SORT_OF, DURATION_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
+import { runDurationText } from "../util/runDuration";
 
 /** Everything a row needs that is the same for every row — kept as one
  *  memoized object so an unchanged row skips re-rendering entirely. */
@@ -95,9 +96,9 @@ function DateCell({ r, c, style }: { r: ExperimentRow; c: string; style: CSSProp
   );
 }
 
-/** A run's queue time, duration or duration against its siblings' median
- *  (`c:queue`/`c:duration`/`c:ratio`, plan 28 N4). */
-export function durationText(field: "queue_sec" | "duration_sec" | "duration_ratio", value: number | null | undefined):
+/** A run's queue time or duration against its siblings' median
+ *  (`c:queue`/`c:ratio`, plan 28 N4; `c:duration` is `runDurationText`). */
+export function durationText(field: "queue_sec" | "duration_ratio", value: number | null | undefined):
   [string, string | undefined] {
   if (value == null) return ["—", undefined];
   return field === "duration_ratio"
@@ -107,7 +108,7 @@ export function durationText(field: "queue_sec" | "duration_sec" | "duration_rat
 
 function DurationCell({ r, id, style }: { r: ExperimentRow; id: string; style: CSSProperties }) {
   const field = DURATION_SORT_OF[id];
-  const [text, title] = durationText(field, r[field]);
+  const [text, title] = field === "duration_sec" ? runDurationText(r) : durationText(field, r[field]);
   const c = id.slice(2);
   return (
     <td data-col={c} data-col-id={id} className={`num fleet-cell fleet-${c}`} style={style} title={title}>
