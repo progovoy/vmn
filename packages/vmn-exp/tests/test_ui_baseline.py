@@ -56,7 +56,8 @@ def _rollup(best, median, failed_pct, p90):
 
 def test_rollup_deltas_cover_metrics_failures_and_duration():
     out = rollup_deltas(_rollup(1.1, 0.9, 5.0, 300.0), _rollup(1.2, 0.8, 2.0, 600.0),
-                        {"best_value": True})
+                        {"best_value": "max"})
+    assert out["metrics"]["best_value"]["goal"] == "max"
     assert out["metrics"]["best_value"]["best"]["better"] is False
     assert out["metrics"]["best_value"]["median"]["better"] is True
     assert out["failed_pct"] == {"value": 5.0, "baseline": 2.0, "delta": 3.0, "better": False}

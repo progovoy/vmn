@@ -74,6 +74,16 @@ def test_metrics_schema_endpoint_keeps_the_conf_first(app_layout):
     assert schema == {"acc": {"goal": "min"}}
 
 
+def test_metrics_schema_endpoint_resolves_globs_for_logged_metrics(app_layout):
+    """Plan 32: each logged metric a glob gives a goal carries it by name."""
+    _bootstrap(app_layout)
+    _run(app_layout, 0.9)
+    _set_metrics(app_layout, {"grad_*": {"goal": "min"}, "acc": {"goal": "max"}})
+    schema = _client(app_layout).get(f"{_base(app_layout)}/metrics-schema").json()
+    assert schema == {"grad_*": {"goal": "min"}, "acc": {"goal": "max"},
+                      "grad_norm": {"goal": "min"}}
+
+
 @pytest.fixture
 def s3_client(tmp_path):
     moto = pytest.importorskip("moto")

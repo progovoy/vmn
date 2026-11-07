@@ -14,6 +14,7 @@ from vmn_exp.core.metric_schema import (
     effective_schema,
     hidden_metrics,
     metric_goal,
+    with_resolved_goals,
 )
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.reader import list_runs
@@ -62,6 +63,17 @@ def test_exact_goal_beats_a_glob_goal():
     schema = {"val_*": {"goal": "max"}, "val_loss": {"goal": "min"}}
     assert metric_goal(schema, "val_loss") == "min"
     assert metric_goal(schema, "other") is None
+
+
+def test_resolved_goals_put_a_glob_goal_on_each_named_metric():
+    """Plan 32: the web reads exact names only, so the server resolves globs."""
+    schema = {"val_*": {"goal": "max"}, "val_loss": {"goal": "min", "hidden": True},
+              "lr": {"hidden": True}}
+    assert with_resolved_goals(schema, ["val_acc", "val_loss", "lr", "other"]) == {
+        **schema, "val_acc": {"goal": "max"}}
+    assert with_resolved_goals({"*": {"goal": "min"}}, ["lr"])["lr"] == {"goal": "min"}
+    assert with_resolved_goals({"l*": {"goal": "min"}, "lr": {"hidden": True}}, ["lr"])[
+        "lr"] == {"hidden": True, "goal": "min"}
 
 
 def test_hidden_metrics_from_run_then_schema():

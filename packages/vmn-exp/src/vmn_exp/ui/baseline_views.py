@@ -173,7 +173,7 @@ class BaselineViews:
         base_row = self.views.row(snapshot, base_v)
         rollups = self.views.rollups
         ours, theirs = (rollups.job_rollup(snapshot, schema, v) for v in (verstr, base_v))
-        deltas = rollup_deltas(ours, theirs, spec.up)
+        deltas = rollup_deltas(ours, theirs, spec.goals)
         body.update(deltas, baseline=_ref(base_row, source), own=_own(row, base_row, schema))
         if by:
             body.update(self._paired(snapshot, schema, verstr, base_v, by, spec))

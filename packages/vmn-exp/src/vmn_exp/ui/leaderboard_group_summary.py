@@ -40,10 +40,11 @@ def of_sorted(ordered, agg, goal):
 
 
 def stats(ordered, goal):
-    """Every aggregate of sorted finite *ordered*; ``best`` follows *goal*."""
+    """Every aggregate of sorted finite *ordered* and the *goal* ``best``
+    follows (None: no best, no direction)."""
     return {"mean": of_sorted(ordered, "mean", goal), "best": of_sorted(ordered, "best", goal),
             "median": of_sorted(ordered, "median", goal), "min": of_sorted(ordered, "min", goal),
-            "max": of_sorted(ordered, "max", goal), "n": len(ordered)}
+            "max": of_sorted(ordered, "max", goal), "n": len(ordered), "goal": goal}
 
 
 class Summary:

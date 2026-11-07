@@ -79,6 +79,16 @@ def test_the_page_names_the_metric_and_goal_its_groups_sort_by():
     assert (page["metric"], page["goal"]) == ("loss", "min")
 
 
+def test_each_aggregate_names_its_metrics_goal():
+    """Plan 32: the web reads each aggregate's goal, never infers it from a null best."""
+    fleet = FLEET + [run(8, parent=5, metrics={"acc": 0.5})]
+    page = LeaderboardCache().groups(snapshot(fleet), {"loss": {"goal": "min"}}, "parent")
+    goals = {g["key"]: {m: a["goal"] for m, a in g["aggregates"].items()} for g in page["groups"]}
+    assert goals == {v(1): {"loss": "min"}, v(5): {"loss": "min", "acc": None}}
+    one = LeaderboardCache().groups(snapshot(fleet), {}, "parent", group_key=v(1))
+    assert one["aggregates"]["loss"]["goal"] is None
+
+
 def test_the_page_counts_the_running_rows_of_every_group():
     assert _groups(FLEET, "parent")["running"] == 1
     assert _groups(FLEET, "parent", limit=1, rows_per_group=1)["running"] == 1

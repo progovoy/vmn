@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from vmn_exp.core.app_conf import read_experiment_conf
-from vmn_exp.core.metric_schema import effective_schema
+from vmn_exp.core.metric_schema import effective_schema, with_resolved_goals
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.similar_search import conf_weights
 from vmn_exp.storage.areas import app_key
@@ -567,7 +567,9 @@ def create_app(
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/metrics-schema", dependencies=[require(VIEWER)])
     def app_metrics_schema(ws_name: str, app_tag: str):
-        return _leaderboard_inputs(ws_name, app_tag)[1]
+        snapshot, schema = _leaderboard_inputs(ws_name, app_tag)
+        names = leaderboards.facets(snapshot, archived=True)["metric_keys"]
+        return with_resolved_goals(schema, names)
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/versions", dependencies=[require(VIEWER)])
     def list_versions(ws_name: str, app_tag: str):

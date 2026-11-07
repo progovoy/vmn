@@ -1215,7 +1215,11 @@ The goal comes from the app's effective metrics schema,
 [store settings](server.md#app-settings), plus the `goal`/`hidden`/`chart` runs
 declare for names neither has (see
 [Metrics schema](experiments.md#metrics-schema-sorting--goals)); a store
-workspace has no conf.yml, only the settings and the runs' declarations. It also decides which metrics the
+workspace has no conf.yml, only the settings and the runs' declarations. Each
+metric the app's runs log that a glob (`val_*: {goal: max}`) gives a goal also
+appears under its own name with that goal, so a client reads goals by exact
+name. A metric with no goal there has none: the web never guesses one from
+its name. It also decides which metrics the
 dashboard hides by default (the column picker and a collapsed "hidden metrics"
 section on the run page show them).
 
@@ -1242,10 +1246,14 @@ tags or name regroups the runs below it.
              "target": {verstr, idx, name, status, tree_status, metrics} | null,
              "loose": false,
              "counts": {total, running, waiting, done, failed, stuck},
-             "aggregates": {"<metric>": {mean, best, median, min, max, n}},
+             "aggregates": {"<metric>": {mean, best, median, min, max, n, goal}},
              "rows": [...], "rows_total": 5, "rows_unfiltered": 16}],
- "total_groups": 3, "total_rows": 48, "running": 2, "aggregate": "mean"}
+ "total_groups": 3, "total_rows": 48, "running": 2, "aggregate": "mean",
+ "metric": "loss", "goal": "min"}
 ```
+
+- Each aggregate names its metric's `goal` (`null` without one: no `best`,
+  no direction).
 
 - `target` is the header run of a `parent`/`forked_from`/`rerun_of` group. A
   target missing from the index (pruned, another app) groups under its verstr
@@ -1441,7 +1449,8 @@ header and its Outer runs row.
  "baseline": {"verstr": "0.3.0-dev.def", "idx": 12, "name": "wf_41aa", "status": "succeeded",
               "source": "latest", "started_at": "…", "finished_at": "…"},
  "metric": "best_value", "goal": "max",
- "metrics": {"best_value": {"best": {"value": 1.21, "baseline": 1.3, "delta": -0.09, "better": false},
+ "metrics": {"best_value": {"goal": "max",
+                            "best": {"value": 1.21, "baseline": 1.3, "delta": -0.09, "better": false},
                             "median": {"value": 0.9, "baseline": 0.8, "delta": 0.1, "better": true}}},
  "failed_pct": {"value": 5.0, "baseline": 2.0, "delta": 3.0, "better": false},
  "duration_p90": {"value": 7200, "baseline": 3600, "delta": 3600, "better": false},

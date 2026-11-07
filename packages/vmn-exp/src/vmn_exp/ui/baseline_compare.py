@@ -6,6 +6,7 @@ chip, which counts the finished pairs worse than the baseline's worst
 decile (``p10`` of a higher-is-better metric, ``p90`` of a lower-is-better
 one) — so a regression shows as soon as the first matched children end.
 """
+from vmn_exp.core.metric_schema import higher_is_better
 from vmn_exp.core.settle import row_closes
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.baseline_choice import recency
@@ -38,14 +39,17 @@ def _metric(rollup, name, field):
     return ((rollup.get("metrics") or {}).get(name) or {}).get(field)
 
 
-def rollup_deltas(target, baseline, directions):
-    """The deltas of two job rollups: per metric of *directions* (``{name:
-    higher is better, None when goal-less}``) its best and median, then
-    ``failed_pct`` and ``duration_p90`` (lower is better)."""
-    metrics = {
-        name: {"best": delta(_metric(target, name, "best"), _metric(baseline, name, "best"), up),
-               "median": delta(_metric(target, name, "p50"), _metric(baseline, name, "p50"), up)}
-        for name, up in directions.items()}
+def _metric_deltas(target, baseline, name, goal):
+    up = higher_is_better(goal)
+    pair = lambda field: delta(_metric(target, name, field), _metric(baseline, name, field), up)  # noqa: E731
+    return {"goal": goal, "best": pair("best"), "median": pair("p50")}
+
+
+def rollup_deltas(target, baseline, goals):
+    """The deltas of two job rollups: per metric of *goals* (``{name: goal,
+    None when goal-less}``) its goal, best and median, then ``failed_pct``
+    and ``duration_p90`` (lower is better)."""
+    metrics = {name: _metric_deltas(target, baseline, name, goal) for name, goal in goals.items()}
     p90 = lambda rollup: (rollup.get("duration") or {}).get("p90")  # noqa: E731
     return {"metrics": metrics,
             "failed_pct": delta(target.get("failed_pct"), baseline.get("failed_pct"), False),

@@ -95,6 +95,17 @@ def metric_goal(schema, metric):
     return lookup(metric, schema or {}, _goal_of)
 
 
+def with_resolved_goals(schema, names):
+    """*schema* plus, on each of *names* without its own goal, the goal a glob
+    gives it — so a reader of exact names needs no glob matching."""
+    out = dict(schema or {})
+    for name in names:
+        goal = metric_goal(schema, name)
+        if goal and not _goal_of(out.get(name)):
+            out[name] = {**(out.get(name) or {}), "goal": goal}
+    return out
+
+
 def higher_is_better(goal):
     """A *goal*'s direction: True for ``max``, False for ``min``, None
     without one (no guessed direction, plan 32)."""

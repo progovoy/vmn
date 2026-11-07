@@ -152,6 +152,13 @@ def test_a_goal_less_main_metric_has_no_best_value_chip():
     assert _views().chips(snapshot(_specs()), GOAL_LESS, [v(3)])[v(3)] is None
 
 
+def test_each_tracked_metric_names_its_goal():
+    assert _views().baseline(snapshot(_specs()), SCHEMA, v(3))["metrics"]["best_value"][
+        "goal"] == "max"
+    assert _views().baseline(snapshot(_specs()), GOAL_LESS, v(3))["metrics"]["best_value"][
+        "goal"] is None
+
+
 def _next(snap, replace=None):
     replace = replace or {}
     rows = [replace.get(row["verstr"], row) for row in snap.rows]
