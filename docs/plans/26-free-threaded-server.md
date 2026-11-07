@@ -270,7 +270,7 @@ file. Units run in parallel unless marked *after*.
 ### F5. Free-threaded GC policy (decision 5; *after* F1, F2)
 - **Done ahead of F1/F2 (2026-10-30, a 705k-run ui on 3.15t paused 4-9 s per
   automatic collection, ten in 45 min):** `core/gc_policy.py` `GcPolicy`, from
-  `FREE_THREADED_LARGE_RECORDS` (= the gil_hint bound) on a free-threaded build,
+  `FREE_THREADED_LARGE_RECORDS` (200k) on a free-threaded build,
   switched on by the first refresher publish that large: automatic collection
   off (`gc_pause.set_automatic`, which a running `gc_paused` ends into) and a
   `vmn-gc` daemon thread that collects on its own clock, publish or not: the

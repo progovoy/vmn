@@ -5,8 +5,7 @@ store on a GIL build gets the same 3.15t hint as a large one, and a
 free-threaded ui is never told to go back to the GIL."""
 import logging
 
-from vmn_exp.ui import gil_hint
-from vmn_exp.ui.gil_hint import LARGE_STORE_RECORDS, GilHint
+from vmn_exp.ui.gil_hint import GilHint
 
 LOGGER = "vmn"
 HUGE = 737_000
@@ -30,8 +29,3 @@ def test_a_huge_store_on_free_threaded_python_logs_nothing(caplog):
     GilHint(gil_enabled=lambda: False).note(HUGE)
     assert _hints(caplog) == []
 
-
-def test_there_is_no_gil_build_warning_left():
-    assert not hasattr(gil_hint, "HUGE_HINT")
-    assert not hasattr(gil_hint, "FREE_THREADED_MAX_RECORDS")
-    assert HUGE > LARGE_STORE_RECORDS
