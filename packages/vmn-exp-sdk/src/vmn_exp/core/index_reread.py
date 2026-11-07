@@ -4,7 +4,8 @@
 An upgrade copying older records (:mod:`vmn_exp.core.index_store_upgrade`)
 leaves out those its version's predicate picks, with their run states, and
 lists their keys in the cache store's key-value table under
-``reread:<app>`` (fingerprint :data:`FINGERPRINT`). Left out, such a record
+``reread:<app>`` (fingerprint :data:`FINGERPRINT`), joining those an
+earlier upgrade listed and no load has read yet. Left out, such a record
 is no tombstone: a follower keeps it until its re-read is saved. An index
 loading its records hints those the list names and the records lack, so the
 next refresh lists and loads them like a journal-announced run — whether it
@@ -12,16 +13,21 @@ resumes from a journal mark (which never lists an unhinted record) or from a
 listing baseline. The list shrinks to what is still missing at each load, so
 a refresh that died before saving a re-read hints it again.
 """
+from vmn_exp.core.index_store_kv import read_payload
+
 SCOPE = "reread:"
 FINGERPRINT = "reread-1"
 
 
-def puts(keys):
-    """The kv puts listing *keys* (``(app, key)`` pairs) to read again."""
+def puts(conn, keys):
+    """The kv puts listing *keys* (``(app, key)`` pairs) to read again,
+    beside those *conn* lists already (an earlier upgrade's, not yet read)."""
     by_app = {}
     for app, key in keys:
-        by_app.setdefault(app, []).append(key)
-    return [(SCOPE + app, FINGERPRINT, sorted(names)) for app, names in by_app.items()]
+        by_app.setdefault(app, set()).add(key)
+    return [(SCOPE + app, FINGERPRINT,
+             sorted(names.union(read_payload(conn, SCOPE + app, FINGERPRINT) or ())))
+            for app, names in by_app.items()]
 
 
 def hint_unloaded(store, app_name, records, hint):

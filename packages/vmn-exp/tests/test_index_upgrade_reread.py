@@ -126,3 +126,34 @@ def test_only_records_18_carry_a_reread_filter():
     stale = index_store_schema.COPYABLE_RECORDS[18]
     assert stale({"params": {"acc": [3]}, "metrics": {"acc": [3]}, "extrema": {"acc": 0.9}})
     assert not stale({"params": {"lr": [0.1]}, "metrics": {"lr": [0.1]}, "extrema": {"loss": 0.5}})
+
+
+def _as_records(db, version):
+    """Mark *db*'s records version *version*."""
+    conn = sqlite3.connect(sqlite_files.live_path(db))
+    (schema,) = conn.execute("SELECT v FROM exp_index_meta WHERE k = 'schema'").fetchone()
+    conn.execute("UPDATE exp_index_meta SET v = ? WHERE k = 'records'", (f"{version}/{schema}",))
+    conn.commit()
+    conn.close()
+
+
+def test_a_later_upgrade_keeps_the_runs_an_earlier_one_left_to_read_again(
+        tmp_path, monkeypatch, journal, clock):
+    st = storage(tmp_path)
+    clash, clean = _runs(st)
+    spy = Spy(st, monkeypatch)
+    db = str(tmp_path / "i.sqlite")
+    _life(st, db, journal, clock, journaled=True)
+    keys = _keys_of(db)
+    _as_records_18(db, clash)
+    SqliteStore(db).close()  # upgrade 18 -> 19 lists clash; dies before re-reading it
+    _as_records(db, 19)
+    monkeypatch.setattr(index_store_schema, "RECORDS_VERSION", 20)
+    monkeypatch.setattr(index_store_schema, "COPYABLE_RECORDS",
+                        {19: lambda fold: "lr" in fold["params"]})  # picks clean
+
+    spy.reset()
+    index = _life(st, db, journal, clock, journaled=True)
+
+    assert _listed(spy) == {keys[clash], keys[clean]}
+    assert {r["verstr"] for r in index.rows()} == {clash, clean}

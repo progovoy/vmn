@@ -52,7 +52,7 @@ def _copy_records(old, conn, stale):
             _copy_table(source, conn, table, _keeps(table, stale, reread))
         with write_tx(conn):
             mark_derive_pending(conn)
-            write_puts(conn, index_reread.puts(reread))
+            write_puts(conn, index_reread.puts(conn, reread))
     finally:
         source.close()
 

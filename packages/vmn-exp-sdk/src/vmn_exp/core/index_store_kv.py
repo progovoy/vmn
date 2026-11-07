@@ -31,10 +31,7 @@ class KeyValues:
         return self._read(lambda: self._kv_payload(scope, fingerprint), None)
 
     def _kv_payload(self, scope, fingerprint):
-        row = self._conn.execute(
-            "SELECT fingerprint, payload FROM exp_index_kv WHERE scope = ?", (scope,)
-        ).fetchone()
-        return json.loads(row[1]) if row and row[0] == fingerprint else None
+        return read_payload(self._conn, scope, fingerprint)
 
     def kv_get_many(self, scopes, fingerprint):
         """``{scope: payload}`` of those of *scopes* stored with *fingerprint*."""
@@ -68,6 +65,15 @@ class KeyValues:
                 write_puts(conn, puts)
         except sqlite3.Error as exc:
             self._db.on_error(exc)  # corrupt: recovers; else debug
+
+
+def read_payload(conn, scope, fingerprint):
+    """The payload under *scope* on *conn* when stored with *fingerprint*,
+    else None."""
+    row = conn.execute(
+        "SELECT fingerprint, payload FROM exp_index_kv WHERE scope = ?", (scope,)
+    ).fetchone()
+    return json.loads(row[1]) if row and row[0] == fingerprint else None
 
 
 def write_puts(conn, puts):
