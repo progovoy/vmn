@@ -443,7 +443,10 @@ orchestrator never stopped: it still counts as running everywhere and keeps
 its own children open, and the UI flags it (a built-in `outlived` attention
 part, `running · outlived` on its pill); it turns `lost` once it goes stuck.
 Query them with `settled = "never_started"`, `settled = "lost"`, `settled =
-"outlived"` or `settled = null`.
+"outlived"` or `settled = null`. So the status counts' `stuck` (the stuck runs
+no ended outer run settled) is `status = "stuck" and settled != "lost"`, while
+`status = "stuck"` alone adds the `lost` ones: `!=` is true for a run with no
+`settled` at all.
 
 Every query surface (`vmn-exp list --query`, `prune`/`archive --query`, the
 SDK's `list_runs`, the UI's `q` and `top_q`) reads the subtree counts `live_below`,

@@ -27,6 +27,7 @@ from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.duration_text import duration_text
 from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
 from vmn_exp.cli.intent_arg import append_intent, read_intent
+from vmn_exp.cli.list_hints import print_query_hints
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     PATCH_MAX_BYTES,
@@ -733,6 +734,8 @@ def experiment_list(vcs, params, storage, args):
     )
     if args.top:
         rows = rows[: args.top]
+    if not matching and getattr(args, "query", None):
+        print_query_hints(storage, app_name, args.query, getattr(args, "archived", False))
 
     if as_json:
         print(dumps([row["meta"] for row in rows]))

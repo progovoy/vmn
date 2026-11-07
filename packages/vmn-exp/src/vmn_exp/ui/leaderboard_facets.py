@@ -37,12 +37,14 @@ class FacetCounts:
     param's values, and how many rows have a parent."""
 
     def __init__(self, branches=None, metric_keys=None, param_keys=None, total=0,
-                 tag_keys=None, param_values=None, parented=0, folded_params=None):
+                 tag_keys=None, param_values=None, parented=0, folded_params=None,
+                 tag_values=None):
         self.branches = branches or {}
         self.metric_keys = metric_keys or {}
         self.param_keys = param_keys or {}
         self.tag_keys = tag_keys or {}
         self.param_values = param_values or ParamValues()
+        self.tag_values = tag_values or ParamValues()
         self.parented = parented
         self.folded_params = folded_params or {}  # metric names a row also has as a param
         self.total = total
@@ -57,7 +59,7 @@ class FacetCounts:
             dict(self.branches), dict(self.metric_keys), dict(self.param_keys),
             self.total + len(joined) - len(left),
             dict(self.tag_keys), self.param_values.copy(), self.parented,
-            dict(self.folded_params),
+            dict(self.folded_params), self.tag_values.copy(),
         )
         for rows, by in ((left, -1), (joined, 1)):
             for row in rows:
@@ -71,10 +73,18 @@ class FacetCounts:
                        [m for m in metrics if is_folded_param(m, params, logged)], by)
                 _tally(out.param_keys, params, by)
                 out.param_values.move(params, by)
-                _tally(out.tag_keys, row.get("tags") or {}, by)
+                tags = row.get("tags") or {}
+                _tally(out.tag_keys, tags, by)
+                out.tag_values.move(tags, by)
                 if row.get("parent"):
                     out.parented += by
         return out
+
+    def may_carry(self, prefix, key, value):
+        """Whether some row's ``params``/``tags`` (*prefix*) *key* may be
+        *value*: it is, or the key has too many values to tell."""
+        values = self.param_values if prefix == "params" else self.tag_values
+        return values.may_hold(key, value)
 
     def payload(self):
         """What :func:`~vmn_exp.ui.readers.experiments.facets` answers."""

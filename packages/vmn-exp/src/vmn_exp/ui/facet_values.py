@@ -64,6 +64,13 @@ class ParamValues:
             self._own.add(key)
         return self._counts[key]
 
+    def may_hold(self, key, value):
+        """Whether a row's *key* is *value*, or may be (too many to tell)."""
+        if key not in self._counts:
+            return False
+        values = self._counts[key]
+        return values is None or value_key(value) in values
+
     def payload(self, keys):
         """Counts of the *keys* still carried by some row."""
         return {key: DISTINCT_CAP + 1 if values is None else distinct_count(values)

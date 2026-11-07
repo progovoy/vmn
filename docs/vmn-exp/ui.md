@@ -1205,6 +1205,19 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 `q` and `status` combine with **and**. Filtering happens before paging, so
 `total` counts matches. An invalid query is a 400 carrying the parser's
 message and offset (`unknown field 'statuz' at offset 0`).
+`status = "stuck"` matches a run's own status, so it also holds the runs an
+ended outer run left `lost`; `status = "stuck" and settled != "lost"` is the
+`stuck` that `experiments-status` counts (`!=` matches a run with no `settled`).
+
+A page (`limit` set, flat or grouped) that matches nothing carries `hints`
+when one of its `<row field> = <value>` terms (`q` or `top_q`, never under
+`not`) names a value some run holds as `tags.<field>` or `params.<field>`:
+`kind` is the built-in row kind, so `q=kind = "launch"` answers
+`"hints": ["kind = \"launch\" matches nothing; did you mean tags.kind?"]`. They
+come from the facet counts, never a pass over the rows; the web shows them
+under the query bar and `vmn-exp list --query` prints them to stderr. The web
+page's own URL parameters `view`, `kind`, `tab` and `sel` are a 400 here
+(`view is a web page parameter; use top=jobs or q=…`) instead of being ignored.
 
 ### Paging, sorting and order
 

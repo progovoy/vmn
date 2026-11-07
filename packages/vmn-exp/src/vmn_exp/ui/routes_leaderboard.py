@@ -36,6 +36,9 @@ carrying its ``job`` (attention over its own subtree, the app's split),
 every row an ``open`` hint, the page the app's ``tree_columns``; with
 ``match_subtree=1`` the status and ``q`` keep the children whose subtree holds
 a passing run, each carrying ``matched`` (:mod:`~vmn_exp.ui.leaderboard_tree_match`).
+A flat or grouped page matching nothing carries ``hints`` ("did you mean
+tags.kind?", :mod:`~vmn_exp.ui.query_hints`); the web page's own URL params
+(``view``, ``kind``, ``tab``, ``sel``) are a 400 (plan 31 §4.2).
 """
 from functools import partial
 
@@ -109,6 +112,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         children_of: str = None,
         top_q: str = None,
     ):
+        _refuse_web_params(request)
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
         top, q, top_q = _top(top), _pinned(q), _pinned(top_q)
@@ -144,15 +148,15 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
                           rows_per_group=rows_per_group, group_key=group_key)
             compute = (partial(groups_by_comments, cache, counts=counts) if by_comments
                        else cache.groups)
-            return _answer(request, _with_main(lambda s, sc, **p: joined_groups(
-                compute(s, sc, group, **p), counts), top),
+            return _answer(request, _with_hints(_with_main(lambda s, sc, **p: joined_groups(
+                compute(s, sc, group, **p), counts), top)),
                            snapshot, schema, params, comments=generation, group=group,
                            **clock)
         if by_comments:
             compute = partial(page_by_comments, cache, counts=counts)
         else:
             compute = partial(cache.page, match_subtree=match_subtree, attention=attention)
-        page = _with_main(lambda *a, **p: joined(compute(*a, **p), counts), top)
+        page = _with_hints(_with_main(lambda *a, **p: joined(compute(*a, **p), counts), top))
         return _answer(request, page, snapshot,
                        schema, dict(params, last=last, cursor=cursor), comments=generation,
                        match_subtree=match_subtree and not by_comments, attention=attention,
@@ -245,6 +249,19 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
             return dict(body, main=cache.jobs.main(snapshot, schema))
         return answer
 
+    def _with_hints(compute):
+        """*compute* whose page (a dict) matching no row carries ``hints``
+        when its queries name a row field a tag or param holds the value of
+        (plan 31 §4.2)."""
+        def answer(snapshot, schema, **params):
+            body = compute(snapshot, schema, **params)
+            if not isinstance(body, dict) or body.get("total", body.get("total_rows")) != 0:
+                return body
+            found = cache.query_hints(snapshot, (params.get("query"), params.get("top_query")),
+                                      params.get("archived"))
+            return dict(body, hints=found) if found else body
+        return answer
+
     def _top(top):
         try:
             return top_filter(top)
@@ -287,6 +304,17 @@ def grouped_page(limit, rows_per_group):
     groups = MAX_GROUPS if limit is None else max(1, min(int(limit), MAX_GROUPS))
     rows = max(1, min(int(rows_per_group), MAX_ROWS_PER_GROUP, MAX_GROUPED_ROWS // groups))
     return groups, rows
+
+
+# The web page's own URL params (``/experiments?view=jobs``): the API has
+# its own words for them, and ignoring one answers an unfiltered page.
+WEB_PAGE_PARAMS = ("view", "kind", "tab", "sel")
+
+
+def _refuse_web_params(request):
+    for name in WEB_PAGE_PARAMS:
+        if name in request.query_params:
+            raise HTTPException(400, f"{name} is a web page parameter; use top=jobs or q=…")
 
 
 def _check_tree(group, by_comments):
