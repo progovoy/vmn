@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { NO_GOAL, fmtVal, goalOrder, metricGoal } from "../util";
 import { isFiniteNumber } from "../util/stats";
+import { runText } from "../shell/crumbs";
 import type { ChartGroups } from "../util/chartGroups";
 import { useRunSelect } from "./chartHooks";
 
@@ -65,7 +66,7 @@ function MetricBarChart({ rows, metricCols, schema, groups, onSelect }: {
 
   const { data, total, maxAbs } = useMemo(() => {
     const all = rows
-      .map((r) => ({ label: r.idx ? `@${r.idx}` : r.verstr, value: r.metrics[metric], verstr: r.verstr }))
+      .map((r) => ({ label: runText({ verstr: r.verstr, idx: r.idx || null, name: null }), value: r.metrics[metric], verstr: r.verstr }))
       .filter((d): d is BarDatum => isFiniteNumber(d.value));
     // Best first toward the goal; ascending without one (plan 32 F4).
     const sign = goalOrder(goal) === "asc" ? 1 : -1;

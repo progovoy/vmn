@@ -5,6 +5,7 @@ import { useChartRows } from "../hooks/useChartRows";
 import type { ChartView } from "../hooks/useLeaderboardView";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { appHref, fmtParam, fmtVal, runHref } from "../util";
+import { runText } from "../shell/crumbs";
 import MetricBarChart from "../components/MetricBarChart";
 import MetricScatter from "../components/MetricScatter";
 import ParallelCoordinates from "../components/ParallelCoordinates";
@@ -51,7 +52,7 @@ function LeaderboardTable({ ws, app, rows, metricCols, paramCols }: Cols & {
       <tbody>
         {rows.map((r) => (
           <tr key={r.verstr}>
-            <td><Link to={runHref(appHref(ws, app), r.verstr)}>{r.idx ? `@${r.idx}` : r.verstr}</Link></td>
+            <td><Link to={runHref(appHref(ws, app), r.verstr)}>{runText({ verstr: r.verstr, idx: r.idx || null, name: null })}</Link></td>
             {metricCols.map((c) => <td key={`m.${c}`} className="mono">{fmtVal(r.metrics[c])}</td>)}
             {paramCols.map((c) => <td key={`p.${c}`} className="mono">{fmtParam(r.params?.[c] ?? "—")}</td>)}
           </tr>
