@@ -447,6 +447,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, drawn as failures (see [settled runs](experiments.md#nesting)).
   - An outer run whose own row carries finite metrics `progress` and `progress_total` (`run.set_progress(done, total, unit)`; the unit is the `progress_unit` param) declares its progress: the bar fills that share, the line leads with it and the runs follow (`41/60 dates · 1,415 runs · 3 failed · 20 dates/h · ETA 14m`), and the rate and ETA are the declared progress since the outer run started. Use it when the inner-run count grows as work gets planned. Metrics under other names count once `experiment.ui.progress: {done: <metric>, total: <metric>, unit: <label>}` (conf.yml or the [store settings](server.md#app-settings)) names them; a settings change shows at once.
   - the best run on the main metric, linked (`—` when the main metric has no goal), and a sparkline of the metric's spread.
+  - its **aggregate** (`rolled`): one value per unit, aggregated. Walk-forward needs the nested number (the best trial of each date, then the median across dates), not a median over every trial, which measures the search space. The board picks it once for every row (never mixed across rows): `job_agg` (`mean`, `best`, `median`, `min`, `max`, `best10`, `worst10`; the tails follow the metric's goal, so higher-is-better reads `best10 (p90)` / `worst10 (p10)` and lower-is-better flips them), `job_agg_by` (the units: `children`, the default, one per direct child; `field:<params.k|tags.k>`, the nearest run carrying the field on each branch, e.g. `field:params.trade_date`, two units with the same value a counted conflict left out: `median of 15/16 dates · 1 duplicate`; `kind:<tags.kind>`, a `tags.kind` match at any depth; `runs`, every run below from the merged sketch, labelled `≈`), `job_agg_value` (each unit's `best`, its subtree's best run, the default, or its `own` metric, with no fallback: a unit without it is missing, `median of 12/16 dates`) and `job_agg_metric` (default the main metric; e.g. date runs logging `date.best_value`). A metric without a declared goal has no value (`— (no goal)`). `job_agg=best` (the default) is the subtree's best for every `by`. Every unit with a value counts, finished or not; `n`/`of` is the coverage. The app's default is `experiment.ui.job_aggregate: {agg, by, value, metric}` (conf.yml or the [store settings](server.md#app-settings)), e.g. fgm's `{agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}`; the URL overrides it, and a team view per kind of outer run carries its own. Only top-level rows have one: a [tree](#the-tree) row keeps its own values.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
@@ -466,7 +467,7 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   filter, not a status. They travel in `top_q`, beside a preset's query, and
   the command line under the board shows them.
 
-  Every column sorts by what its cell shows (`job:progress`, `job:failed_pct`, `job:rate`, `job:throughput`, `job:best`, `job:total`, `job:started`): **rate** is a declared progress per minute since the outer run started (`declared_progress.rate_per_min`, `—` without one), **runs/min** the runs finished per minute over the last 10 minutes (`throughput_per_min`, always), and **when** the subtree's first start, else the outer run's own, else its creation labelled `created` (`when_at`, `when_source`). `progress`/`eta_sec` (and an ended row's ETA cell: `ended · 19 dates not done` or `ended · 180 never started`) come from the declared progress when there is one, else from the runs; `progress_source` (`declared`/`runs`) says which; the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
+  Every column sorts by what its cell shows (`job:progress`, `job:failed_pct`, `job:rate`, `job:throughput`, `job:value`, `job:total`, `job:started`): **value** is the row's aggregate (`rolled.value`, best-first by its metric's goal, ascending without one), **rate** is a declared progress per minute since the outer run started (`declared_progress.rate_per_min`, `—` without one), **runs/min** the runs finished per minute over the last 10 minutes (`throughput_per_min`, always), and **when** the subtree's first start, else the outer run's own, else its creation labelled `created` (`when_at`, `when_source`). `progress`/`eta_sec` (and an ended row's ETA cell: `ended · 19 dates not done` or `ended · 180 never started`) come from the declared progress when there is one, else from the runs; `progress_source` (`declared`/`runs`) says which; the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
 - **Live** and **Review** (`view=live|review`, a second switch `Live · Review`
   beside the first, shown when the app has outer runs) are presets of Outer
   runs, with everything above (attention strip, bars, tree expanders,
@@ -729,8 +730,9 @@ succeeded`; `5 of 16 runs · 5 succeeded` while a filter leaves part of the
 group, from K1's `rows_unfiltered`), then up to 10 of its rows and a
 `+N more` row that loads the rest (a refresh keeps each group as deep as it
 was loaded). Each metric column of a header shows the
-group's aggregate (`?agg=`, default conf `experiment.ui.group_aggregate`,
-else mean; the cell title says `mean of 16`, and `(no goal)` where `best`
+group's aggregate (`?agg=`: `mean`, `best`, `median`, `min`, `max`, `best10`,
+`worst10` — the tails the p90/p10 a goal points at —, default conf
+`experiment.ui.group_aggregate`, else mean; the cell title says `mean of 16`, and `(no goal)` where `best`
 has no goal and so no value), plus `own 0.91` when the target run logged the
 metric itself; the metric headers carry a small aggregate tag. `?collapse=`
 lists the closed groups. Sorting orders the groups (by the aggregate) and the rows within
@@ -894,14 +896,34 @@ message.
 - **`experiments?top=1|jobs|singles`** lists top-level runs only (all, those
   with children, those without). An outer run's row carries `job`: `{total, counts,
   done, expected, progress, failed_pct, throughput_per_min, eta_sec,
-  declared_progress, metric, goal, best, best_verstr, best_idx, spread}`
-  (`goal` the main metric's, `best` null without one, so `job:best` puts it
-  after the ranked ones). It takes
-  the `job:*` sorts. `declared_progress` is `{done, total, unit,
+  declared_progress, metric, goal, best, best_verstr, best_idx, spread,
+  rolled}` (`goal` the main metric's, `best` null without one). It takes
+  the `job:*` sorts; `job:value` sorts by `rolled.value`, best-first by
+  its goal, rows without one last.
+  - `rolled` is the row's [aggregate](#outer-runs-and-the-outer-runs-page):
+    `{agg, by, source, metric, goal, percentile, value, n, of, conflicts,
+    verstr, approx}`. `source` is the `job_agg_value`; `percentile` names a
+    tail's (`p90`, else null); `n` of `of` units have a value (`of` counts
+    distinct field values for `field:`, all runs for `runs`); `conflicts`
+    are the field values two units share (left out); `verstr` is the unit
+    holding the value (a quantile's lower neighbour; null for the mean, and
+    for `runs` but its `best`); `approx` is true for a `runs` quantile (the
+    merged sketch, ~1%). `value` is null without a goal or a unit with one.
+  - `job_agg`, `job_agg_by`, `job_agg_value`, `job_agg_metric` pick it
+    (`experiments?top=1&job_agg=median&job_agg_by=field:params.trade_date&job_agg_value=own&job_agg_metric=date.best_value`),
+    over the app's `experiment.ui.job_aggregate`; a bad value, or any of
+    them without `top` (a tree page included), is a 400. They key the ETag.
+    Grouped (`top` with `group`), a group's `job_aggregates` aggregate its
+    jobs' `rolled.value`. Computed from the rollups' per-parent tallies
+    (and, for `field:`/`kind:`, per-parent tallies of the runs carrying the
+    field, moved on by the index deltas like the rollups), per generation,
+    time bucket and aggregate: about 2 ms for 45 outer runs x 16 dates x
+    1000 trials after a delta. `declared_progress` is `{done, total, unit,
   rate_per_min}` when the outer run declares one (else null); `progress`
   and `eta_sec` are then its, while `done`/`expected`/`counts`/
   `throughput_per_min` stay run counts. The outer run's `summary` carries
-  the same. A paged answer (`limit`, flat or grouped) carries `main`:
+  the same, plus `rolled` by the app's default aggregate (the Overview's KPI
+  tile beside the best). A paged answer (`limit`, flat or grouped) carries `main`:
   `{metric, goal}`, the metric every `job` is of (the primary, else the
   alphabetically first metric with a goal), so a page of single runs names
   it too; the web's Best column reads only it.
@@ -1485,16 +1507,24 @@ header and its Outer runs row.
 - **Children.** With `children_by`, the two outer runs' direct children
   pair by that field's value (a retried value: its latest run), in key
   order (`pairs`, the first 200 listed, of `pairs_total` values the outer
-  run holds; the chip counts them all): per pair the
-  main metric (a child's own, else its subtree's best) on both sides, the
-  delta, and `done`.
+  run holds; the chip counts them all): per pair the child's value on both
+  sides, the delta, and `done`. The value is the Outer runs row's: the
+  app's `job_aggregate` metric (default the main one), each child's own or
+  its subtree's best by its `value` (default `best`), the same source on
+  both sides and never the other as a fallback. A value either side lacks
+  leaves the key unpaired; the chip's `paired` of `total` counts them (`5
+  of 39 paired`).
+- **Aggregate.** `rolled` is the delta of both outer runs' `rolled` (the
+  app's default aggregate) with its `agg`/`by`/`source`/`metric`/`goal`/
+  `percentile`.
 - **The chip** counts the finished pairs worse than the baseline's worst
   decile (its children's `p10` of a higher-is-better main metric, `p90` of a
   lower-is-better one): `▼ best_value from 2024-12 (5 of 41 trade_date values
   worse than the baseline's p10)` (`state` `worse`), `▲`/`=` when none is
   (`better`/`same` by the median delta), `pending` before any has finished,
   so it shows while the launch still runs. Without `children_by` it is the
-  best value's change (`▼ best_value 0.81 (baseline 0.92)`). A main metric
+  `rolled` value's change (`▼ best_value 0.81 (baseline 0.92)`, `▼ median
+  best_value 0.65 (baseline 1)` for another aggregate). A main metric
   without a goal (`goal: null`) has no chip: its pairs carry the deltas with
   `better: null` and no `worse` mark.
 

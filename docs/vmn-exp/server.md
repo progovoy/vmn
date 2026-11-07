@@ -468,6 +468,7 @@ metrics:
   "grad_*": {hidden: true}
 ui:
   group_aggregate: best
+  job_aggregate: {agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}
   stale_after_min: 30
   progress: {done: dates_done, total: dates_total, unit: dates}
   attention:
@@ -487,8 +488,12 @@ ui:
 
 - Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric, chart}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
-  `ui.*` (`group_aggregate`, `stale_after_min`, `failed_pct_threshold`, `progress`, `attention`,
-  `baseline`, `views`, `tree_columns` checked; other `ui` keys kept).
+  `ui.*` (`group_aggregate`, `job_aggregate`, `stale_after_min`, `failed_pct_threshold`,
+  `progress`, `attention`, `baseline`, `views`, `tree_columns` checked; other `ui` keys
+  kept). `ui.job_aggregate` is the Outer runs rows' default
+  [aggregate](ui.md#outer-runs-and-the-outer-runs-page): `agg` a group
+  aggregate, `by` `children`/`runs`/`field:<params.k|tags.k>`/`kind:<v>`,
+  `value` `best`/`own`, `metric` a name; each optional.
   `ui.tree_columns` maps a `tags.kind` value to the show keys
   (`m:`/`p:`/`t:`/`c:<name>`) the [tree](ui.md#the-tree) shows for runs of
   that kind. `ui.attention` lists at most 8
