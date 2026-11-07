@@ -37,9 +37,16 @@ def missing_s3_extra(uris):
     start, then answer 500 on the store's first read."""
     import importlib.util
 
-    if not any(uri and uri.startswith("s3://") for uri in uris):
+    if not any(_scheme(uri) == "s3" for uri in uris if uri):
         return None
     if importlib.util.find_spec("boto3") is not None:
         return None
     return ('An s3:// store needs boto3 (the "s3" extra). Install it with:\n\n'
             '  pip install "vmn-exp[ui,s3]"\n')
+
+
+def _scheme(uri):
+    try:
+        return parse_store_uri(uri).scheme
+    except ValueError:
+        return None
