@@ -12,6 +12,7 @@ Copies share the value lists until one is written (copy-on-write).
 import bisect
 import math
 
+from vmn_exp.core.app_settings import GROUP_AGGREGATES
 from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.metric_summary import count_policy, policy_mix
 from vmn_exp.core.settle import counted_status
@@ -24,9 +25,31 @@ def _median(ordered):
     return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
 
 
+TAILS = ("best10", "worst10")
+
+
+def tail_quantile(agg, goal):
+    """The quantile tail *agg* reads (``best10``: the p90 of a ``max`` goal,
+    the p10 of a ``min`` one; ``worst10`` the other), None without a goal."""
+    if goal not in ("min", "max"):
+        return None
+    return 0.9 if (agg == "best10") == (goal == "max") else 0.1
+
+
+def quantile(ordered, q):
+    """The *q* quantile of sorted *ordered*, linearly interpolated."""
+    at = q * (len(ordered) - 1)
+    low = int(at)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (at - low)
+
+
 def of_sorted(ordered, agg, goal):
-    """*agg* of sorted finite *ordered* (None when empty); ``best`` follows
-    *goal*, None without one (plan 32 F6)."""
+    """*agg* of sorted finite *ordered* (None when empty); ``best`` and the
+    tails follow *goal*, None without one (plan 32 F6)."""
+    if agg in TAILS:
+        q = tail_quantile(agg, goal)
+        return quantile(ordered, q) if ordered and q is not None else None
     if agg == "best":
         agg = goal if goal in ("min", "max") else None
     if not ordered or agg is None:
@@ -42,10 +65,9 @@ def of_sorted(ordered, agg, goal):
 
 def stats(ordered, goal):
     """Every aggregate of sorted finite *ordered* and the *goal* ``best``
-    follows (None: no best, no direction)."""
-    return {"mean": of_sorted(ordered, "mean", goal), "best": of_sorted(ordered, "best", goal),
-            "median": of_sorted(ordered, "median", goal), "min": of_sorted(ordered, "min", goal),
-            "max": of_sorted(ordered, "max", goal), "n": len(ordered), "goal": goal}
+    and the tails follow (None: no best, no direction)."""
+    return {**{agg: of_sorted(ordered, agg, goal) for agg in GROUP_AGGREGATES},
+            "n": len(ordered), "goal": goal}
 
 
 class Summary:

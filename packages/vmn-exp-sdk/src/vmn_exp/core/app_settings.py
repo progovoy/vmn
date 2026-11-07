@@ -4,8 +4,9 @@ The reader-facing subset of conf's ``experiment:`` block, kept in the store
 (:mod:`vmn_exp.core.app_settings_store`) so a store workspace, which has no
 checkout, reads it too: ``metrics.<name|glob>.{goal,summary,hidden,primary,
 step_metric,chart}`` and ``ui.*`` (``group_aggregate``, ``stale_after_min``,
-``failed_pct_threshold``, ``progress``, ``attention``, ``baseline``, ``views`` and ``tree_columns`` checked, other ``ui``
-keys kept as they are). A checkout's conf beats them, per metric name and per
+``failed_pct_threshold``, ``progress``, ``attention``, ``baseline``, ``views``,
+``tree_columns`` and ``job_aggregate`` checked, other ``ui`` keys kept as they are).
+A checkout's conf beats them, per metric name and per
 ``ui`` key; they beat what runs declare. Pure.
 """
 import re
@@ -17,7 +18,9 @@ from vmn_exp.core.metric_summary import GOALS, SUMMARIES
 from vmn_exp.core.query import QueryError, compile_query
 from vmn_exp.core.values import is_finite_number
 
-GROUP_AGGREGATES = ("mean", "best", "median", "min", "max")
+# ``best10``/``worst10``: the tails a goal points at (p90/p10 of a
+# higher-is-better metric, flipped for a lower-is-better one), plan 31 §2.
+GROUP_AGGREGATES = ("mean", "best", "median", "min", "max", "best10", "worst10")
 _TOP_KEYS = ("metrics", "ui")
 _METRIC_FIELDS = {
     "goal": lambda v: v in GOALS,
@@ -142,6 +145,8 @@ def _check_ui(ui):
         _check_baseline(ui["baseline"])
     if "views" in ui:
         _check_views(ui["views"])
+    if "job_aggregate" in ui:
+        check_job_aggregate(ui["job_aggregate"])
 
 
 def _check_attention(entries):
@@ -306,6 +311,53 @@ def tree_columns_of(ui):
     """*ui*'s ``tree_columns``, ``{}`` when it has none or they are invalid."""
     value = (ui or {}).get("tree_columns")
     return value if value and _tree_columns(value) else {}
+
+
+# ``ui.job_aggregate`` (plan 31 §2): the Outer runs row's aggregate ``agg``
+# of one value per unit (``by``: ``children``, ``runs``, ``field:<params.k|
+# tags.k>``, ``kind:<tags.kind>``), each its subtree's best or its own
+# ``metric`` (``value``).
+JOB_AGG_BY = ("children", "runs")
+JOB_AGG_VALUES = ("best", "own")
+_JOB_AGG_FIELDS = {
+    "agg": lambda v: v in GROUP_AGGREGATES,
+    "value": lambda v: v in JOB_AGG_VALUES,
+    "metric": lambda v: isinstance(v, str) and bool(v.strip()),
+}
+
+
+def check_job_agg_by(by, where="ui.job_aggregate.by"):
+    """*by* when it names job units, else SettingsError."""
+    kind, colon, rest = by.partition(":") if isinstance(by, str) else ("", "", "")
+    if by in JOB_AGG_BY or (colon and kind == "kind" and rest.strip()):
+        return by
+    if colon and kind == "field":
+        check_field(rest, where)
+        return by
+    raise SettingsError(f"invalid {where}: {by!r} "
+                        "(children, runs, field:<params.k|tags.k> or kind:<tags.kind>)")
+
+
+def check_job_aggregate(conf, where="ui.job_aggregate"):
+    """*conf* (``{agg?, by?, value?, metric?}``) when valid, else SettingsError."""
+    _check_mapping(conf, where)
+    for key, value in conf.items():
+        if key == "by":
+            check_job_agg_by(value, f"{where}.by")
+        elif key not in _JOB_AGG_FIELDS:
+            raise SettingsError(f"unknown field {where}.{key}; one of agg, by, value, metric")
+        elif not _JOB_AGG_FIELDS[key](value):
+            raise SettingsError(f"invalid {where}.{key}: {value!r}")
+    return conf
+
+
+def job_aggregate_of(ui):
+    """*ui*'s ``job_aggregate``, ``{}`` when it has none or it is invalid."""
+    conf = (ui or {}).get("job_aggregate") or {}
+    try:
+        return dict(check_job_aggregate(conf))
+    except SettingsError:
+        return {}
 
 
 def metrics_overlay(settings, conf_metrics):

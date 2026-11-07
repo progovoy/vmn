@@ -73,7 +73,9 @@ def test_group_answers_groups_sorted_by_the_mean(tmp_path, repo):
     assert body["total_rows"] == 7
     first = body["groups"][0]
     assert first["aggregates"]["loss"] == {"mean": 3.5, "best": 3.0, "median": 3.5,
-                                           "min": 3.0, "max": 4.0, "n": 2, "goal": "min"}
+                                           "min": 3.0, "max": 4.0, "n": 2, "goal": "min",
+                                           "best10": pytest.approx(3.1),
+                                           "worst10": pytest.approx(3.9)}
     assert first["target"]["verstr"] == runs[4]
 
 

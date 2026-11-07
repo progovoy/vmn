@@ -117,7 +117,7 @@ def _loss_group(schema=None):
 def test_aggregates_cover_the_finite_values_only():
     agg = _loss_group({"loss": {"goal": "min"}})["aggregates"]["loss"]
     assert agg == {"mean": 4.0, "best": 1.0, "median": 2.5, "min": 1.0, "max": 10.0, "n": 4,
-                   "goal": "min"}
+                   "goal": "min", "best10": pytest.approx(1.3), "worst10": pytest.approx(7.9)}
 
 
 def test_best_follows_the_goal_and_is_null_without_one():
