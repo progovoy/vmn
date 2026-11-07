@@ -810,8 +810,7 @@ G8), with no redirect: everything vmn links to is `compare-runs?tab=…`.
 
 OpenAPI docs are served at `/api/docs` (`/api/openapi.json`). All paths are
 under `/api/v1`; `{app}` is the app's tag form (`root_app-service1` for
-`root_app/service1`), `{ws}` the workspace name. `ws/{ws}/apps/{app}` below
-stands for `workspaces/{ws}/apps/{app}`.
+`root_app/service1`), `{ws}` the workspace name.
 
 | Method | Path | Answers |
 |---|---|---|
@@ -820,40 +819,40 @@ stands for `workspaces/{ws}/apps/{app}`.
 | `DELETE` | `/workspaces/{ws}` | Remove a workspace (204) |
 | `GET` | `/workspaces/{ws}/git` | [Branch, HEAD, dirty, store](#git-context) of a git workspace |
 | `GET` | `/workspaces/{ws}/apps` | Apps with experiments or versions |
-| `GET` | `ws/{ws}/apps/{app}/experiments` | Run rows ([paging](#paging-sorting-and-order), [query](#filtering-with-a-query)); with `group=`, [groups of runs](#grouped-runs) |
-| `GET` | `ws/{ws}/apps/{app}/experiments?children_of=<v>` | [A run's direct children](#outer-runs-scope-and-search) for the tree, each with its `job` and `open` |
-| `GET` | `ws/{ws}/apps/{app}/experiments/{verstr}` | [Run detail](#run-detail-is-bounded) (`latest`, `@N`, prefixes resolve) |
-| `GET` | `.../experiments/{verstr}/log?offset=&limit=` | A page of the log, `{"entries", "total"}`, oldest first |
-| `GET` | `.../experiments/{verstr}/artifacts/{path}` | [Artifact download](#diffs-and-artifacts) |
-| `GET` | `.../experiments/{verstr}/table/{path}` | A page of a logged [table](#media) |
-| `GET` | `.../experiments/{verstr}/histograms/{name}` | One histogram key's [steps](#media) |
-| `GET` | `.../experiments/{verstr}/lineage` | [Run lineage](#lineage) |
-| `GET` | `.../experiments/{verstr}/patch?max_bytes=` | [The run's patch and changed files](#run-code-patch-and-baselines) |
-| `GET` | `.../experiments/{verstr}/baselines` | [Runs to diff it against](#run-code-patch-and-baselines) |
-| `GET` | `.../experiments/{verstr}/sweep` | The sweep's spec, summary and trials ([sweeps.md](sweeps.md#status)) |
-| `GET` | `.../experiments/{verstr}/similar?top=&all_apps=&archived=&q=` | [Runs most like this one](#similar-runs) |
-| `GET` | `ws/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=&q=` | [Runs matching a text](#similar-runs) |
-| `GET` | `ws/{ws}/apps/{app}/experiments-columns` | [Whole-set chart columns](#columns-for-whole-set-charts) |
-| `GET` | `ws/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
-| `GET` | `ws/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
-| `GET` | `ws/{ws}/apps/{app}/experiments-pivot?rows=&cols=` | [Pivot heatmap](#pivot-heatmap) |
-| `GET` | `.../experiments/{verstr}/baseline?to=&match=&by=` | [An outer run against its baseline](#baseline-compare) |
-| `GET` | `ws/{ws}/apps/{app}/experiments-baselines?v=` | [Many outer runs' baseline chips](#baseline-compare) |
-| `GET` | `ws/{ws}/apps/{app}/experiments-status` | [Status counts and rollup](#status-counts-and-rollup) |
-| `GET` | `ws/{ws}/apps-status` | [Every app's status counts](#status-counts-and-rollup), one request |
-| `GET` | `ws/{ws}/apps/{app}/experiments-diff?v=&to=` | [Code diff of two runs](#diffs-and-artifacts) |
-| `POST` | `ws/{ws}/apps/{app}/series` | [Series of many runs](#series-for-many-runs) |
-| `GET` | `.../experiments/{verstr}/metric-keys?prefix=&offset=&limit=` | [A run's metric names, paged](#zoom-and-many-keys) |
-| `GET` | `ws/{ws}/apps/{app}/metrics-schema` | The [effective metrics schema](#paging-sorting-and-order) |
-| `GET` / `PUT` | `ws/{ws}/apps/{app}/settings` | The app's [store settings](server.md#app-settings) (`PUT {"text"}`: editor) |
-| `POST` | `ws/{ws}/apps/{app}/actions/{action}` | Start a [job](#actions) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments` | Run rows ([paging](#paging-sorting-and-order), [query](#filtering-with-a-query)); with `group=`, [groups of runs](#grouped-runs) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments?children_of=<v>` | [A run's direct children](#outer-runs-scope-and-search) for the tree, each with its `job` and `open` |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}` | [Run detail](#run-detail-is-bounded) (`latest`, `@N`, prefixes resolve) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/log?offset=&limit=` | A page of the log, `{"entries", "total"}`, oldest first |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/artifacts/{path}` | [Artifact download](#diffs-and-artifacts) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/table/{path}` | A page of a logged [table](#media) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/histograms/{name}` | One histogram key's [steps](#media) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/lineage` | [Run lineage](#lineage) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/patch?max_bytes=` | [The run's patch and changed files](#run-code-patch-and-baselines) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/baselines` | [Runs to diff it against](#run-code-patch-and-baselines) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/sweep` | The sweep's spec, summary and trials ([sweeps.md](sweeps.md#status)) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/similar?top=&all_apps=&archived=&q=` | [Runs most like this one](#similar-runs) |
+| `GET` | `/workspaces/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=&q=` | [Runs matching a text](#similar-runs) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments-columns` | [Whole-set chart columns](#columns-for-whole-set-charts) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments-pivot?rows=&cols=` | [Pivot heatmap](#pivot-heatmap) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/baseline?to=&match=&by=` | [An outer run against its baseline](#baseline-compare) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments-baselines?v=` | [Many outer runs' baseline chips](#baseline-compare) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments-status` | [Status counts and rollup](#status-counts-and-rollup) |
+| `GET` | `/workspaces/{ws}/apps-status` | [Every app's status counts](#status-counts-and-rollup), one request |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments-diff?v=&to=` | [Code diff of two runs](#diffs-and-artifacts) |
+| `POST` | `/workspaces/{ws}/apps/{app}/series` | [Series of many runs](#series-for-many-runs) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/metric-keys?prefix=&offset=&limit=` | [A run's metric names, paged](#zoom-and-many-keys) |
+| `GET` | `/workspaces/{ws}/apps/{app}/metrics-schema` | The [effective metrics schema](#paging-sorting-and-order) |
+| `GET` / `PUT` | `/workspaces/{ws}/apps/{app}/settings` | The app's [store settings](server.md#app-settings) (`PUT {"text"}`: editor) |
+| `POST` | `/workspaces/{ws}/apps/{app}/actions/{action}` | Start a [job](#actions) |
 | `GET` | `/jobs/{id}` | A job's status and log |
-| `GET` | `ws/{ws}/apps/{app}/versions` | Stamped versions (git workspaces) |
-| `GET` | `ws/{ws}/apps/{app}/tree` | Version DAG (git) |
-| `GET` | `ws/{ws}/apps/{app}/tree/root` | Root app's service topology per root version (git) |
-| `GET` | `ws/{ws}/apps/{app}/deps?v=&to=` | Dependency pins of `v` (default latest), or their drift to `to` (git) |
-| `GET` | `ws/{ws}/apps/{app}/changelog?v=&from=` | Conventional commits grouped between `from` (default: `v`'s previous version) and `v` (default latest) (git) |
-| `GET` | `ws/{ws}/apps/{app}/config?v=` | `{"conf", "text"}` of the app's `conf.yml`, from the working tree or as of version `v` (git) |
+| `GET` | `/workspaces/{ws}/apps/{app}/versions` | Stamped versions (git workspaces) |
+| `GET` | `/workspaces/{ws}/apps/{app}/tree` | Version DAG (git) |
+| `GET` | `/workspaces/{ws}/apps/{app}/tree/root` | Root app's service topology per root version (git) |
+| `GET` | `/workspaces/{ws}/apps/{app}/deps?v=&to=` | Dependency pins of `v` (default latest), or their drift to `to` (git) |
+| `GET` | `/workspaces/{ws}/apps/{app}/changelog?v=&from=` | Conventional commits grouped between `from` (default: `v`'s previous version) and `v` (default latest) (git) |
+| `GET` | `/workspaces/{ws}/apps/{app}/config?v=` | `{"conf", "text"}` of the app's `conf.yml`, from the working tree or as of version `v` (git) |
 | | `/workspaces/{ws}/models/...` | [Model registry](#model-registry-api) |
 
 Unknown `/api/...` paths are a JSON 404.
