@@ -75,6 +75,23 @@ describe("report publish", () => {
     expect(m.experiment).not.toHaveBeenCalled();
   });
 
+  it("a published panel asking for a query it did not capture says so, never queries", async () => {
+    m.experiment.mockRejectedValue(new Error("must not query"));
+    mr.getPanelData.mockResolvedValue({ ws: "w", app: "my_app", verstrs: [], media: [], queries: [] });
+    wrap(<Panel ws="w" spec={SPEC} published={{ rid: "r1", rev: 3 }} />);
+    expect(await screen.findByText("not published with this report")).toBeTruthy();
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(m.experiment).not.toHaveBeenCalled();
+  });
+
+  it("a published row panel missing its rows query says so", async () => {
+    mr.getPanelData.mockResolvedValue({ ws: "w", app: "my_app", verstrs: [], media: [], queries: [] });
+    const bar = { v: 1, id: "b", app: "my_app", type: "bar", runs: { query: "metrics.loss < 1" }, metric: "loss" };
+    wrap(<Panel ws="w" spec={bar} published={{ rid: "r1", rev: 3 }} />);
+    expect(await screen.findByText("not published with this report")).toBeTruthy();
+    expect(m.experimentsPaged).not.toHaveBeenCalled();
+  });
+
   it("shows a 'run pruned' placeholder for a missing run in a live panel", async () => {
     m.experiment.mockRejectedValue(Object.assign(new Error("Not found"), { status: 404 }));
     wrap(<Panel ws="w" spec={SPEC} />);

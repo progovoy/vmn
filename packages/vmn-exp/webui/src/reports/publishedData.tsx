@@ -2,7 +2,9 @@
  *  its own query cache, so Publish snapshots exactly what it fetched; a
  *  published panel renders from that snapshot under a frozen cache that
  *  never calls a query function. */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode,
+} from "react";
 import { QueryClient, QueryClientProvider, type QueryClientConfig, type QueryKey } from "@tanstack/react-query";
 import { createQueryClient } from "../queryClient";
 
@@ -80,24 +82,47 @@ function collectRefs(app: string, data: unknown, verstrs: Set<string>, media: Se
   for (const v of Array.isArray(data.verstrs) ? data.verstrs : []) if (typeof v === "string") verstrs.add(v);
 }
 
+/** What a frozen cache answers for a query the panel did not capture. */
+export class NotPublishedError extends Error {
+  constructor() {
+    super("not published with this report");
+  }
+}
+
 /** A cache that answers only from seeded data: queries never run their own
- *  function, and a refetch (polling) resolves to the cached value. */
+ *  function, a refetch (polling) resolves to the cached value, and a query
+ *  without seeded data fails with `NotPublishedError`. */
 class FrozenQueryClient extends QueryClient {
   constructor(config?: QueryClientConfig) {
     super(config);
-    const base = this.defaultQueryOptions.bind(this) as (o: unknown) => object;
-    const frozen = (options: unknown) => ({
-      ...base(options),
-      enabled: false,
-      staleTime: Infinity,
-      refetchInterval: false,
-      queryFn: ({ queryKey }: { queryKey: QueryKey }) => {
-        const data = this.getQueryData(queryKey);
-        return data === undefined ? new Promise(() => {}) : data;
-      },
-    });
+    const base = this.defaultQueryOptions.bind(this) as (o: unknown) => { queryKey: QueryKey; enabled?: unknown };
+    // Not getQueryData: it applies these very defaults.
+    const seeded = (queryKey: QueryKey) => this.getQueryCache().find({ queryKey, exact: true })?.state.data;
+    const frozen = (options: unknown) => {
+      const merged = base(options);
+      return {
+        ...merged,
+        // Only an unseeded query runs, and only when the panel asks for it.
+        enabled: seeded(merged.queryKey) === undefined ? merged.enabled ?? true : false,
+        retry: false,
+        staleTime: Infinity,
+        refetchInterval: false,
+        queryFn: ({ queryKey }: { queryKey: QueryKey }) => {
+          const data = seeded(queryKey);
+          return data === undefined ? Promise.reject(new NotPublishedError()) : data;
+        },
+      };
+    };
     this.defaultQueryOptions = frozen as unknown as QueryClient["defaultQueryOptions"];
   }
+}
+
+const unpublished = (client: QueryClient) =>
+  client.getQueryCache().getAll().some((q) => q.state.error instanceof NotPublishedError);
+
+/** Whether a frozen panel asked for a query it was not published with. */
+export function useUnpublished(client: QueryClient): boolean {
+  return useSyncExternalStore((onChange) => client.getQueryCache().subscribe(onChange), () => unpublished(client));
 }
 
 export function frozenClient(payload: PanelPayload): QueryClient {
