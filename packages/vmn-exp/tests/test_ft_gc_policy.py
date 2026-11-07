@@ -18,7 +18,6 @@ import pytest
 from vmn_exp.core.gc_pause import gc_paused, set_automatic
 from vmn_exp.core.gc_policy import (FREE_THREADED_LARGE_RECORDS, GC_MAX_INTERVAL_SEC,
                                     GC_MIN_INTERVAL_SEC, MUCH_GARBAGE, GcPolicy)
-from vmn_exp.ui.gil_hint import FREE_THREADED_MAX_RECORDS
 from vmn_exp.ui.refresher import Refresher
 
 LARGE = FREE_THREADED_LARGE_RECORDS
@@ -43,10 +42,6 @@ def _policy(free_threaded=True, garbage=0):
                       set_automatic=lambda on: calls.append(("automatic", on)),
                       start=started.append)
     return policy, calls, started
-
-
-def test_the_policy_starts_where_the_ui_stops_recommending_free_threaded():
-    assert FREE_THREADED_LARGE_RECORDS == FREE_THREADED_MAX_RECORDS
 
 
 def test_a_gil_build_serving_a_large_store_is_left_alone():

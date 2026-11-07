@@ -1,50 +1,37 @@
-"""Past a few hundred thousand runs free-threaded Python stops paying off:
-its allocator (mimalloc, per-thread heaps) keeps what each long-lived
-worker thread once allocated, and every automatic collection stops the
-whole process to scan the whole heap. A 486k-run server grew from 28 to
-250 GiB with two-minute stalls on 3.14t. So the ui recommends 3.14t only
-below :data:`FREE_THREADED_MAX_RECORDS` runs, and above it a free-threaded
-ui says once to run on a GIL build instead."""
+"""At every store size the ui recommends free-threaded Python. A 737k-run
+ui reached 112 GB RSS after a cold index on 3.14 (GIL) against 74 GB on
+3.14t, and 3.15.2t held 18 GB after 40 minutes (plan 31 D2). So a huge
+store on a GIL build gets the same 3.15t hint as a large one, and a
+free-threaded ui is never told to go back to the GIL."""
 import logging
 
-from vmn_exp.ui.gil_hint import FREE_THREADED_MAX_RECORDS, LARGE_STORE_RECORDS, GilHint
+from vmn_exp.ui import gil_hint
+from vmn_exp.ui.gil_hint import LARGE_STORE_RECORDS, GilHint
 
 LOGGER = "vmn"
+HUGE = 737_000
 
 
 def _hints(caplog):
     return [r for r in caplog.records if r.name == LOGGER]
 
 
-def test_the_bound_is_above_the_free_threaded_hint():
-    assert FREE_THREADED_MAX_RECORDS > LARGE_STORE_RECORDS
-
-
-def test_a_huge_store_with_the_gil_on_is_not_told_to_go_free_threaded(caplog):
+def test_a_huge_store_with_the_gil_on_is_told_to_go_free_threaded(caplog):
     caplog.set_level(logging.INFO, logger=LOGGER)
-    GilHint(gil_enabled=lambda: True).note(FREE_THREADED_MAX_RECORDS)
-    assert _hints(caplog) == []
-
-
-def test_a_huge_store_on_free_threaded_python_is_told_to_use_the_gil_build(caplog):
-    caplog.set_level(logging.INFO, logger=LOGGER)
-    GilHint(gil_enabled=lambda: False).note(FREE_THREADED_MAX_RECORDS)
+    GilHint(gil_enabled=lambda: True).note(HUGE)
     [hint] = _hints(caplog)
     assert hint.levelno == logging.WARNING
-    message = hint.getMessage()
-    assert "GIL" in message and "garbage collection" in message
-    assert "Large stores" in message
+    assert "uvx --python 3.15t" in hint.getMessage()
+    assert "Large stores" in hint.getMessage()
 
 
-def test_the_huge_store_warning_is_logged_once(caplog):
+def test_a_huge_store_on_free_threaded_python_logs_nothing(caplog):
     caplog.set_level(logging.INFO, logger=LOGGER)
-    hint = GilHint(gil_enabled=lambda: False)
-    for _ in range(3):
-        hint.note(FREE_THREADED_MAX_RECORDS * 2)
-    assert len(_hints(caplog)) == 1
-
-
-def test_a_store_below_the_bound_on_free_threaded_python_logs_nothing(caplog):
-    caplog.set_level(logging.INFO, logger=LOGGER)
-    GilHint(gil_enabled=lambda: False).note(FREE_THREADED_MAX_RECORDS - 1)
+    GilHint(gil_enabled=lambda: False).note(HUGE)
     assert _hints(caplog) == []
+
+
+def test_there_is_no_gil_build_warning_left():
+    assert not hasattr(gil_hint, "HUGE_HINT")
+    assert not hasattr(gil_hint, "FREE_THREADED_MAX_RECORDS")
+    assert HUGE > LARGE_STORE_RECORDS

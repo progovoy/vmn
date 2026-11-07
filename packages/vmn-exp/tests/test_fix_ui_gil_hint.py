@@ -1,7 +1,7 @@
 """`vmn-exp ui` on a large store is bound by the GIL: request threads and the
 refresher share one core (~26 rps at 100k runs on 3.9, ~300 rps on 3.14t).
 When a watched index is large and the GIL is on, the ui says once how to run
-it on a free-threaded Python."""
+it on a free-threaded Python (3.15t, at every size: plan 31 D2)."""
 import logging
 import threading
 from types import SimpleNamespace
@@ -24,8 +24,7 @@ def test_a_large_store_with_the_gil_on_logs_the_free_threaded_hint(caplog):
     GilHint(gil_enabled=lambda: True).note(LARGE_STORE_RECORDS)
     [hint] = _hints(caplog)
     assert hint.levelno == logging.WARNING
-    assert "3.14t" in hint.getMessage()
-    assert "uvx --python 3.14t" in hint.getMessage()
+    assert "uvx --python 3.15t" in hint.getMessage()
 
 
 def test_the_hint_is_logged_once_per_process(caplog):
