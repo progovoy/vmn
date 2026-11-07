@@ -67,11 +67,13 @@ const inFlight = (j: Progress) =>
 
 /** Where a job stands in time: runs in flight with the time *left*, or
  *  none finishing (stalled); ended short of the expected with *never* runs
- *  never started; or finished. */
+ *  never started, or a declared progress ended *left* short of its total
+ *  (plan 32 F3: read from what the bar shows); or finished. */
 export type JobTimeState =
   | { kind: "eta"; left: string }
   | { kind: "stalled" }
   | { kind: "ended"; never: number }
+  | { kind: "unfinished"; left: number; unit: string | null }
   | { kind: "finished" };
 
 export function jobTimeState(j: Progress): JobTimeState {
@@ -79,9 +81,14 @@ export function jobTimeState(j: Progress): JobTimeState {
     const left = etaText(j);
     return left ? { kind: "eta", left } : { kind: "stalled" };
   }
+  const d = j.declared_progress;
+  if (d) return d.done < d.total ? { kind: "unfinished", left: d.total - d.done, unit: d.unit } : { kind: "finished" };
   const never = j.expected - j.done - j.counts.stuck;
   return never > 0 ? { kind: "ended", never } : { kind: "finished" };
 }
+
+/** `19 dates not done`. */
+const notDone = (left: number, unit: string | null) => `${fmtCount(left)}${unitSuffix(unit)} not done`;
 
 /** The progress line's words for the time state: `ETA 14m`, `stalled`,
  *  `ended 21d ago · 180 never started`, `finished 2h ago`. */
@@ -92,6 +99,7 @@ function timeParts(j: Progress, eta: (left: string) => string): string[] {
     case "eta": return [eta(state.left)];
     case "stalled": return ["stalled"];
     case "ended": return [`ended${when}`, `${fmtCount(state.never)} never started`];
+    case "unfinished": return [`ended${when}`, notDone(state.left, state.unit)];
     case "finished": return when ? [`finished${when}`] : [];
   }
 }
@@ -150,6 +158,7 @@ export function jobEtaCell(j: Progress): JobCell {
     case "eta": return { text: state.left, title: `about ${state.left} left` };
     case "stalled": return { text: "stalled", title: STALLED_TITLE };
     case "ended": return { text: `ended · ${fmtCount(state.never)} never started`, title: "the outer run has ended" };
+    case "unfinished": return { text: `ended · ${notDone(state.left, state.unit)}`, title: "the outer run has ended" };
     case "finished": {
       const when = relTime(j.finished_at);
       return { text: when ? `finished ${when}` : "finished", title: j.finished_at ?? "the outer run has finished" };
@@ -157,11 +166,20 @@ export function jobEtaCell(j: Progress): JobCell {
   }
 }
 
-/** `41/min` (a declared progress's `20 dates/h`), else a dash saying why nothing completes. */
+/** A declared progress's rate (`20 dates/h`), a dash without one (plan 32 F2). */
 export function jobRateCell(j: Progress): JobCell {
-  const rate = throughputText(j);
   const d = j.declared_progress;
-  if (rate && d) return { text: rate, title: `${d.unit ?? "progress"} done since the outer run started` };
-  if (rate) return { text: rate, title: "runs finished a minute, over the last 10 minutes" };
+  if (!d) return { text: "—", title: "no declared progress" };
+  const what = d.unit ?? "progress";
+  if (!d.rate_per_min) return { text: "—", title: `no ${what} done yet` };
+  return { text: fmtRate(d.rate_per_min, d.unit), title: `${what} done since the outer run started` };
+}
+
+/** The runs finished a minute (`41/min`), declared progress or not; else a
+ *  dash saying why none finish. */
+export function jobThroughputCell(j: Progress): JobCell {
+  if (j.throughput_per_min > 0) {
+    return { text: fmtThroughput(j.throughput_per_min), title: "runs finished a minute, over the last 10 minutes" };
+  }
   return { text: "—", title: inFlight(j) ? STALLED_TITLE : "the outer run has ended" };
 }

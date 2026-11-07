@@ -9,7 +9,8 @@ import StatusPill from "../../components/StatusPill";
 import TreeToggle from "../../components/TreeToggle";
 import { useRowNavigate } from "../../hooks/useRowNavigate";
 import type { ExperimentRow } from "../../types";
-import { plural, relTime, runHref } from "../../util";
+import { plural, runHref } from "../../util";
+import { jobWhen, jobWhenText } from "../../util/jobWhen";
 import { isGroupItem, type BoardItem, type GroupHeaderItem } from "../../util/groupItems";
 import { HeaderCheckbox } from "../LeaderboardHeadParts";
 import { CardGroupMore } from "../LeaderboardCardGroup";
@@ -44,7 +45,7 @@ const JobCard = memo(function JobCard({ r, ctx, selected, onToggle, expanded, on
         </div>
         <div className="lb-mcard-sub"><JobSubLine r={r} /><AttentionChips r={r} ctx={ctx} /><BaselineCell r={r} ctx={ctx} /></div>
         <div className="lb-mcard-metric job-mcard-best"><BestValue r={r} ctx={ctx} /></div>
-        <div className="lb-mcard-foot mono">@{r.idx}{r.branch ? ` · ${r.branch}` : ""} · {relTime(r.started_at ?? r.timestamp)}</div>
+        <div className="lb-mcard-foot mono">@{r.idx}{r.branch ? ` · ${r.branch}` : ""} · {jobWhenText(jobWhen(r))}</div>
       </div>
     </li>
   );

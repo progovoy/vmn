@@ -238,8 +238,10 @@ export interface JobProgressFields {
   failed_pct: number;
   /** Completions per minute over the last 10 minutes. */
   throughput_per_min: number;
-  /** Seconds left at that throughput; null when nothing completes. */
+  /** Seconds left at the rate of the progress it is of; null when nothing completes. */
   eta_sec: number | null;
+  /** What `progress` and `eta_sec` are of: the declared progress, else the runs (plan 32 F3). */
+  progress_source?: "declared" | "runs";
   started_at?: string | null;
   finished_at?: string | null;
   /** What the outer run declares on itself (`progress`/`progress_total`,
@@ -267,6 +269,10 @@ export interface JobRollup extends JobProgressFields {
   spread: number[];
   /** Its runs per configured attention query key (plan 28 P1). */
   attention?: Record<string, number>;
+  /** The time its row shows and `job:started` sorts on: the subtree's first
+   *  start, else the outer run's own (`started`), else its creation (`created`). */
+  when_at?: string | null;
+  when_source?: "started" | "created";
 }
 
 /** Chosen columns over a whole filtered set (`/experiments-columns`):

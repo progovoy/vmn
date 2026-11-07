@@ -1,6 +1,6 @@
 /** A job's progress line and run bar (plan 23 W1, §3.1). */
 import { describe, it, expect } from "vitest";
-import { fmtThroughput, jobBarSegments, jobEtaCell, jobProgressParts, jobProgressText, jobRateCell, jobSpoken } from "../jobProgress";
+import { fmtThroughput, jobBarSegments, jobEtaCell, jobProgressParts, jobProgressText, jobSpoken, jobThroughputCell } from "../jobProgress";
 import { NO_COUNTS, job } from "./jobFixture";
 
 describe("jobProgressText", () => {
@@ -135,14 +135,14 @@ describe("the row's ETA cell and the job header agree (plan 23)", () => {
   });
 });
 
-describe("a Jobs-view row's rate cell", () => {
+describe("a Jobs-view row's throughput cell", () => {
   it("is the throughput while runs complete", () => {
-    expect(jobRateCell(job()).text).toBe("41/min");
+    expect(jobThroughputCell(job()).text).toBe("41/min");
   });
 
   it("is a dash saying why once nothing completes", () => {
-    expect(jobRateCell(ended())).toEqual({ text: "—", title: "the outer run has ended" });
-    const stalled = jobRateCell(job({ throughput_per_min: 0, eta_sec: null }));
+    expect(jobThroughputCell(ended())).toEqual({ text: "—", title: "the outer run has ended" });
+    const stalled = jobThroughputCell(job({ throughput_per_min: 0, eta_sec: null }));
     expect(stalled.text).toBe("—");
     expect(stalled.title).toMatch(/no run finished/);
   });

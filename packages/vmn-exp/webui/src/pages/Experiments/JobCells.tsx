@@ -10,7 +10,7 @@ import type { AttentionEntry } from "../../shell/contracts";
 import type { ExperimentRow } from "../../types";
 import { NO_GOAL, fmtCount, fmtPct, fmtVal, runHref } from "../../util";
 import type { SearchFilter } from "../../util/searchScope";
-import { jobEtaCell, jobRateCell, type JobCell } from "../../util/jobProgress";
+import { jobEtaCell, jobRateCell, jobThroughputCell, type JobCell } from "../../util/jobProgress";
 
 export interface JobContext {
   runBase: string;
@@ -99,16 +99,16 @@ export function SpreadCell({ r }: { r: ExperimentRow }) {
   return <Sparkline counts={j.spread} title={`distribution of ${j.metric} over ${fmtCount(n)} runs`} />;
 }
 
-export type JobNumber = "runs" | "failed" | "throughput" | "eta";
+export type JobNumber = "runs" | "failed" | "rate" | "throughput" | "eta";
 const EMPTY: JobCell = { text: "" };
 
 /** A job's number columns, with a tooltip where the text needs one; empty
  *  for a single run. */
 export function jobNumbers(r: ExperimentRow): Record<JobNumber, JobCell> {
   const j = r.job;
-  if (!j) return { runs: EMPTY, failed: EMPTY, throughput: EMPTY, eta: EMPTY };
+  if (!j) return { runs: EMPTY, failed: EMPTY, rate: EMPTY, throughput: EMPTY, eta: EMPTY };
   return {
     runs: { text: fmtCount(j.total) }, failed: { text: fmtPct(j.failed_pct) },
-    throughput: jobRateCell(j), eta: jobEtaCell(j),
+    rate: jobRateCell(j), throughput: jobThroughputCell(j), eta: jobEtaCell(j),
   };
 }

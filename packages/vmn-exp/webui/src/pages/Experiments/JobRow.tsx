@@ -10,17 +10,15 @@ import TreeToggle from "../../components/TreeToggle";
 import type { ExperimentRow } from "../../types";
 import type { Density } from "../../util/density";
 import { useRowNavigate } from "../../hooks/useRowNavigate";
-import { relTime, runHref } from "../../util";
+import { runHref } from "../../util";
+import { jobWhen, jobWhenText, jobWhenTitle } from "../../util/jobWhen";
 import { densityRowHeight, headStatus } from "../LeaderboardRow";
 import type { JobCell } from "../../util/jobProgress";
 import { AttentionChips, BaselineCell, BestValue, JobSubLine, SpreadCell, jobNumbers, type JobContext, type JobNumber } from "./JobCells";
 import { CELL_CLASSES, COLUMN_STYLES, JOB_COLUMNS } from "./jobColumns";
 
-/** When a top-level run started: its subtree's first start, else its own. */
-const startedAt = (r: ExperimentRow) => r.job?.started_at ?? r.started_at ?? r.timestamp;
-
 function titleOf(id: string, r: ExperimentRow, numbers: Record<JobNumber, JobCell>): string | undefined {
-  if (id === "when") return startedAt(r) ?? undefined;
+  if (id === "when") return jobWhenTitle(jobWhen(r));
   return numbers[id as JobNumber]?.title;
 }
 
@@ -78,9 +76,9 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, expand
         return <NameCell r={r} href={href} compact={density === "compact"} ctx={ctx} expanded={expanded} onExpand={onExpand} />;
       case "best": return <BestValue r={r} ctx={ctx} />;
       case "spread": return <SpreadCell r={r} />;
-      case "runs": case "failed": case "throughput": case "eta": return numbers[id].text;
+      case "runs": case "failed": case "rate": case "throughput": case "eta": return numbers[id].text;
       case "branch": return r.branch;
-      case "when": return relTime(startedAt(r));
+      case "when": return jobWhenText(jobWhen(r));
     }
     return null;
   };

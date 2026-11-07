@@ -20,7 +20,7 @@ export interface JobColumn {
 }
 
 export const JOB_SORTS = {
-  progress: "job:progress", failed: "job:failed_pct", throughput: "job:throughput",
+  progress: "job:progress", failed: "job:failed_pct", rate: "job:rate", throughput: "job:throughput",
   best: "job:best", total: "job:total", started: "job:started", attention: "job:attention",
 } as const;
 
@@ -33,7 +33,8 @@ export const JOB_COLUMNS: readonly JobColumn[] = [
   { id: "spread", label: "spread", width: 84 },
   { id: "runs", label: "runs", width: 76, sort: JOB_SORTS.total, title: "sort by runs (most first)", numeric: true },
   { id: "failed", label: "failed", width: 72, sort: JOB_SORTS.failed, title: "sort by failed share (most first)", numeric: true },
-  { id: "throughput", label: "rate", width: 80, sort: JOB_SORTS.throughput, title: "sort by throughput (fastest first)", numeric: true },
+  { id: "rate", label: "rate", width: 92, sort: JOB_SORTS.rate, title: "sort by declared rate (fastest first)", numeric: true },
+  { id: "throughput", label: "runs/min", width: 84, sort: JOB_SORTS.throughput, title: "sort by throughput, runs finished a minute (fastest first)", numeric: true },
   { id: "eta", label: "ETA", width: 132, numeric: true },
   { id: "branch", label: "branch", width: 120 },
   { id: "when", label: "started", width: 92, sort: JOB_SORTS.started, title: "sort by start (newest first)", numeric: true },
