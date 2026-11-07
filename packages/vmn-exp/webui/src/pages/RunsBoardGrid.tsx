@@ -41,7 +41,7 @@ export default function RunsBoardGrid({ board, view, flash = null, paused, onPau
         onClearAnchor={selection.clearAnchor}
       />
       <BoardCaption
-        sortLabel={board.sortLabel} reversed={sortState.reversed}
+        sortLabel={board.sortLabel} reversed={sortState.reversed} order={sortState.order} goal={sortState.goal}
         live={{ running: board.anyRunning, paused, updatedAt: data.updatedAt, onPaused, onRefresh: board.refresh }}
         tools={<BoardGridTools density={view.density} onDensity={view.setDensity} />}
       />

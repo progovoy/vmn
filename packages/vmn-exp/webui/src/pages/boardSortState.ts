@@ -17,9 +17,12 @@ type Schema = Parameters<typeof metricGoal>[0];
  *  goal: a metric without one sorts ascending (plan 32 F4). */
 const bestOrder = (schema: Schema, col: string): Order => {
   if (col.startsWith("tags.")) return "asc";
-  if (HIGH_FIRST.has(col) || COUNT_PREFIXES.some((p) => col.startsWith(p))) return "desc";
+  if (!isMetricSort(col)) return "desc";
   return goalOrder(metricGoal(schema, col));
 };
+
+const isMetricSort = (col: string) =>
+  !col.startsWith("tags.") && !HIGH_FIRST.has(col) && !COUNT_PREFIXES.some((p) => col.startsWith(p));
 
 /** *bestOf* overrides a column's best-first direction where it knows one
  *  (the Jobs view's `job:best` follows its metric's goal). */
@@ -33,6 +36,8 @@ export function boardSortState(
     sort,
     order: sort ? order ?? best(sort) : null,
     reversed: Boolean(sort && order && order !== best(sort)),
+    /** The sorted metric's goal (null without one); undefined for a non-metric sort. */
+    goal: sort && isMetricSort(sort) ? metricGoal(schema, sort) : undefined,
     onSort: (col: string) => clickSort(col, best(col)),
   };
 }

@@ -22,3 +22,20 @@ describe("BoardCaption, count sort (plan 22 F10)", () => {
     expect(sortText()).toBe("sorted by val_loss, best first");
   });
 });
+
+describe("BoardCaption, a metric without a goal (plan 32)", () => {
+  it("says low first, not best first", () => {
+    render(<BoardCaption sortLabel="grad_norm" reversed={false} order="asc" goal={null} live={live} />);
+    expect(sortText()).toBe("sorted by grad_norm, low first (no goal)");
+  });
+
+  it("says high first when sorted descending", () => {
+    render(<BoardCaption sortLabel="grad_norm" reversed={true} order="desc" goal={null} live={live} />);
+    expect(sortText()).toBe("sorted by grad_norm, high first (no goal)");
+  });
+
+  it("keeps best first for a metric with a goal", () => {
+    render(<BoardCaption sortLabel="cost" reversed={false} order="asc" goal="min" live={live} />);
+    expect(sortText()).toBe("sorted by cost, best first");
+  });
+});

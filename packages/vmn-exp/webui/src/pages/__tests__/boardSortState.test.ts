@@ -37,3 +37,19 @@ describe("boardSortState's first direction", () => {
     expect(s.reversed).toBe(false);
   });
 });
+
+describe("boardSortState's goal (plan 32: the caption names no best without one)", () => {
+  const goalOf = (sort: string) => boardSortState(sort, null, SCHEMA, vi.fn()).goal;
+
+  it("gives a metric sort its declared goal, null without one", () => {
+    expect(goalOf("cost")).toBe("min");
+    expect(goalOf("reward_sum")).toBe("max");
+    expect(goalOf("grad_norm")).toBeNull();
+  });
+
+  it("gives a non-metric sort no goal at all", () => {
+    expect(goalOf("tags.owner")).toBeUndefined();
+    expect(goalOf("idx")).toBeUndefined();
+    expect(goalOf("job:total")).toBeUndefined();
+  });
+});
