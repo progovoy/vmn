@@ -3,7 +3,7 @@
  *  around them. Pure. */
 import type { FailureCluster, JobMetric, JobPageSummary, JobTimeline, TimelineBucket } from "../../apiJob";
 import { vmnExpCommand } from "../../shell/cliCommands";
-import { fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal, plural } from "../../util";
+import { NO_GOAL, fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal, plural } from "../../util";
 import { eqClause } from "../../util/searchQuery";
 import { progressLead, unitSuffix } from "../../util/jobProgress";
 
@@ -124,8 +124,15 @@ export function jobKpis(s: JobPageSummary): KpiTile[] {
   ];
   const metric = mainMetric(s);
   const m = metric ? s.metrics[metric] : null;
-  if (metric && m && s.ranked !== false) tiles.push({ label: `best ${metric}`, value: fmtVal(m.best), href: m.best_verstr });
+  if (metric && m) tiles.push(bestTile(metric, m));
   return tiles;
+}
+
+/** The main metric's best, linked; a goal-less one has none (plan 32 F5). */
+function bestTile(metric: string, m: JobMetric): KpiTile {
+  const label = `best ${metric}`;
+  if (m.goal === null) return { label, value: "—", sub: NO_GOAL.trim() };
+  return { label, value: fmtVal(m.best), href: m.best_verstr ?? undefined };
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;

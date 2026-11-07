@@ -55,7 +55,7 @@ const jobRow = (): ExperimentRow => ({
   job: {
     total: 27000, counts: { running: 40, waiting: 548, succeeded: 26409, failed: 3, stuck: 0 },
     done: 26412, expected: 27000, progress: 0.978, failed_pct: 0.01, throughput_per_min: 41,
-    eta_sec: 840, metric: null, best: null, best_verstr: null, spread: [],
+    eta_sec: 840, metric: null, goal: null, best: null, best_verstr: null, spread: [],
   },
 } as ExperimentRow);
 

@@ -21,7 +21,7 @@ function columns(paramKeys: string[], metric: { name: string; goal: Goal } | nul
   for (const p of paramKeys) cols.push({ key: `p:${p}`, label: p, title: `sort by ${p}` });
   if (metric) {
     const arrow = metric.goal && <span className="goal">{metric.goal === "min" ? " ↓" : " ↑"}</span>;
-    const how = metric.goal ? "best first" : "high first";
+    const how = metric.goal ? "best first" : "no goal: low first";
     cols.push({ key: "value", label: <>{metric.name}{arrow}</>, title: `sort by ${metric.name} (${how})`, num: true });
   }
   if (progress) cols.push({ key: "progress", label: "progress", title: "sort by progress" });

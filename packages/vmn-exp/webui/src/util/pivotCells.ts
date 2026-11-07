@@ -4,7 +4,7 @@
  *  picked to read on the fill) and the board query it links to. Pure. */
 import type { Pivot, PivotCell, PivotKind } from "../apiPivot";
 import type { ExperimentFacets } from "../types";
-import { fmtCount, fmtVal, plural } from "../util";
+import { NO_GOAL, fmtCount, fmtVal, plural } from "../util";
 import { maxOf, minOf } from "./stats";
 
 /** The fill's share of the accent at the low and high ends. */
@@ -41,13 +41,23 @@ export function cellFill(value: number | null, [lo, hi]: [number | null, number 
   };
 }
 
+/** `best` of a metric without a goal: no cell has a value (plan 32 F6). */
+export const bestWithoutGoal = (pivot: Pivot) => pivot.cell === "agg" && pivot.agg === "best" && !pivot.goal;
+
+/** What the grid shows: `runs`, `share matching <q>`, `median loss`, `best loss (no goal)`. */
+export function pivotTitle(pivot: Pivot): string {
+  if (pivot.cell === "share") return `share matching ${pivot.match}`;
+  if (pivot.cell === "agg") return `${pivot.agg} ${pivot.metric}${bestWithoutGoal(pivot) ? NO_GOAL : ""}`;
+  return "runs";
+}
+
 function what(pivot: Pivot, cell: PivotCell): string {
   if (pivot.cell === "count") return plural(cell.n, "run");
   if (pivot.cell === "share") {
     return `${cellText(cell, "share")} match ${pivot.match} (${fmtCount(cell.hits ?? 0)} of ${plural(cell.n, "run")})`;
   }
   const value = cell.value === null ? "no value" : fmtVal(cell.value);
-  return `${pivot.agg} ${pivot.metric} ${value} (${plural(cell.n, "run")})`;
+  return `${pivotTitle(pivot)} ${value} (${plural(cell.n, "run")})`;
 }
 
 /** What a screen reader and the tooltip say of cell (*i*, *j*). */

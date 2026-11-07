@@ -42,7 +42,7 @@ describe("apiRunCode", () => {
 
   it("reads a run's baselines", async () => {
     const ref = { verstr: "v0", idx: 3, name: "good", status: "succeeded" };
-    const body: RunBaselines = { previous: ref, best: { ...ref, verstr: "v9" } };
+    const body: RunBaselines = { previous: ref, best: { ...ref, verstr: "v9", metric: "val_loss" } };
     fetchMock.mockImplementation(() => respond(body));
     expect(await fetchRunBaselines("w", "app", "v1")).toEqual(body);
     expect(urlOf(fetchMock.mock.calls[0]).pathname)

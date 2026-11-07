@@ -8,7 +8,7 @@ import JobProgress from "../../components/JobProgress";
 import Sparkline from "../../components/Sparkline";
 import type { AttentionEntry } from "../../shell/contracts";
 import type { ExperimentRow } from "../../types";
-import { fmtCount, fmtPct, fmtVal, runHref } from "../../util";
+import { NO_GOAL, fmtCount, fmtPct, fmtVal, runHref } from "../../util";
 import type { SearchFilter } from "../../util/searchScope";
 import { jobEtaCell, jobRateCell, type JobCell } from "../../util/jobProgress";
 
@@ -62,18 +62,23 @@ export function JobSubLine({ r, inline = false }: { r: ExperimentRow; inline?: b
 
 const arrow = (goal: JobContext["goal"]) => (goal === "min" ? "↓" : goal === "max" ? "↑" : "");
 
-/** A job's best run on the metric (its `@N` linked), a single run's own
- *  value; a dash for a job whose runs have the metric but no best (no goal
- *  declared: the server ranks nothing). */
+/** A job's best run on the metric (its `@N` linked, the arrow its rollup's
+ *  goal), a single run's own value; `— (no goal)` for a job whose runs have
+ *  the metric but no best (no goal declared: the server ranks nothing). */
 export function BestValue({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
   const j = r.job;
   const value = j ? j.best : ctx.metric ? r.metrics[ctx.metric] : null;
   if (value == null) {
-    if (!j?.metric || !j.spread?.some(Boolean)) return null;
-    return <span className="job-best muted" title={`no goal declared for ${j.metric} — not ranked`}>—</span>;
+    if (!j?.metric || j.goal !== null || !j.spread?.some(Boolean)) return null;
+    return (
+      <span className="job-best">
+        <span className="muted" title={`no goal declared for ${j.metric} — not ranked`}>—</span>
+        <span className="goal">{NO_GOAL}</span>
+      </span>
+    );
   }
   const metric = j?.metric ?? ctx.metric;
-  const goal = arrow(ctx.goal);
+  const goal = arrow(j ? j.goal : ctx.goal);
   return (
     <span className="job-best" title={metric ? `best ${metric}` : undefined}>
       <span className="metric">{fmtVal(value)}</span>

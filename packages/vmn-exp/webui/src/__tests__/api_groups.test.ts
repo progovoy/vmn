@@ -21,7 +21,7 @@ const K1: GroupedPage = {
     aggregates: { loss: { mean: 1, best: null, median: 1, min: 1, max: 1, n: 1 } },
     rows: [], rows_total: 1, rows_unfiltered: 1, clause: null,
   }],
-  total_groups: 2, total_rows: 3, aggregate: "mean", running: 1,
+  total_groups: 2, total_rows: 3, aggregate: "mean", running: 1, metric: null, goal: null,
 };
 
 describe("api.experimentGroups (plan 22 K1)", () => {

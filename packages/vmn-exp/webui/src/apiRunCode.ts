@@ -30,14 +30,14 @@ export interface BaselineRun {
 
 /** Each key only when it exists: `base` is the run itself when it captured a
  *  patch; `previous` the latest earlier run of its branch and command; `best`
- *  the best other run on the primary declared goal. */
+ *  the best other run on the primary declared goal, naming that `metric`. */
 export interface RunBaselines {
   base?: BaselineRun;
   parent?: BaselineRun;
   forked_from?: BaselineRun;
   rerun_of?: BaselineRun;
   previous?: BaselineRun;
-  best?: BaselineRun;
+  best?: BaselineRun & { metric: string };
 }
 
 /** A run's endpoint, its verstr encoded. */

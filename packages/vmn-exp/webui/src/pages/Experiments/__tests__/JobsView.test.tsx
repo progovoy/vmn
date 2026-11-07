@@ -83,12 +83,33 @@ describe("a job's row", () => {
   it("a job without a best (no goal declared) reads a dash that says why", async () => {
     m.metricsSchema.mockResolvedValue({});
     m.experimentsPaged.mockResolvedValue(jobsPage([
-      topRow(36, { name: "lr_layers_grid", job: job({ metric: "loss", best: null, best_verstr: null, best_idx: null }) }),
+      topRow(36, { name: "lr_layers_grid", job: job({ metric: "loss", goal: null, best: null, best_verstr: null, best_idx: null }) }),
     ]));
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });
     const dash = within(cellOf("lr_layers_grid", "best") as HTMLElement).getByText("—");
     expect(dash).toHaveAttribute("title", "no goal declared for loss — not ranked");
+  });
+
+  it("follows the job's goal, not the schema: none reads (no goal) without an arrow (plan 32 F5)", async () => {
+    m.experimentsPaged.mockResolvedValue(jobsPage([
+      topRow(36, { name: "lr_layers_grid", job: job({ goal: null, best: null, best_verstr: null, best_idx: null }) }),
+    ]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    const best = cellOf("lr_layers_grid", "best") as HTMLElement;
+    expect(best.textContent).toBe("— (no goal)");
+    expect(best.textContent).not.toContain("↓");
+  });
+
+  it("takes the best's arrow from the job's goal when the schema declares none", async () => {
+    m.metricsSchema.mockResolvedValue({});
+    m.experimentsPaged.mockResolvedValue(jobsPage([
+      topRow(36, { name: "lr_layers_grid", job: job({ metric: "fit_q", goal: "max" }) }),
+    ]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    expect(cellOf("lr_layers_grid", "best").textContent).toContain("↑");
   });
 
   it("draws the spread and names what it shows", async () => {

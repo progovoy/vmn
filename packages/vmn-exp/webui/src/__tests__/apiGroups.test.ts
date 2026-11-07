@@ -25,7 +25,7 @@ describe("apiGroups", () => {
 
   it("asks the list endpoint for groups with the board's filter", async () => {
     const page: GroupedPage = {
-      groups: [GROUP], total_groups: 1, total_rows: 16, aggregate: "best", running: 2,
+      groups: [GROUP], total_groups: 1, total_rows: 16, aggregate: "best", running: 2, metric: null, goal: null,
     };
     fetchMock.mockImplementation(() => respond(page));
     const got = await fetchGroups("w", "root/svc", {
@@ -65,7 +65,7 @@ describe("apiGroups", () => {
 
   it("reads the page's resolved aggregate, running count and each group's unfiltered size (plan 22 F1, F3, F4)", async () => {
     const page: GroupedPage = {
-      groups: [GROUP], total_groups: 1, total_rows: 16, aggregate: "median", running: 2,
+      groups: [GROUP], total_groups: 1, total_rows: 16, aggregate: "median", running: 2, metric: null, goal: null,
     };
     fetchMock.mockImplementation(() => respond(page));
     const got = await fetchGroups("w", "app", { group: "parent" });

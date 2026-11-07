@@ -100,6 +100,24 @@ describe("JobContextBar", () => {
     expect(await screen.findByRole("img", { name: "val_loss 0.25 among 1,409 runs of the outer run" })).toBeInTheDocument();
   });
 
+  it("never guesses the main metric's goal from where its best sits (plan 32 F5)", async () => {
+    const s = jobSummaryFixture({ ranked: undefined });
+    s.metrics.val_loss = { ...s.metrics.val_loss!, goal: null, best: null, best_verstr: null };
+    vi.mocked(jobSummary).mockResolvedValue(s);
+    m.metricsSchema.mockResolvedValue({});
+    renderBar(runContextSearch(ORDER, 5));
+    const bar = await screen.findByRole("navigation", { name: "Outer run context" });
+    await waitFor(() => expect(bar).toHaveTextContent("run 6 of 40"));
+    expect(bar).not.toHaveTextContent("rank");
+  });
+
+  it("ranks toward the summary's goal without a schema", async () => {
+    m.metricsSchema.mockResolvedValue({});
+    renderBar(runContextSearch(ORDER, 5));
+    const bar = await screen.findByRole("navigation", { name: "Outer run context" });
+    await waitFor(() => expect(bar).toHaveTextContent("rank 3 of 1,409 on val_loss"));
+  });
+
   it("ranks nothing when the job's metrics have no goal", async () => {
     vi.mocked(jobSummary).mockResolvedValue(jobSummaryFixture({ ranked: false }));
     renderBar(runContextSearch(ORDER, 5));

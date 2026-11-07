@@ -135,15 +135,15 @@ describe("the grouped board", () => {
     expect(document.querySelector('thead th[data-col-id="m:loss"] .agg-tag')?.textContent).toBe("mean");
   });
 
-  it("sends a chosen agg= and shows that aggregate, the mean for a metric without a goal", async () => {
+  it("sends a chosen agg= and shows that aggregate, a dash for a metric without a goal", async () => {
     renderBoard("/ws/test/app/my-app?agg=best&show=m:acc");
     await waitFor(() => expect(headerRows()).toHaveLength(1));
     expect(m.experimentGroups.mock.calls[0][2]).toMatchObject({ agg: "best" });
     const cell = (id: string) => header("sweep").querySelector(`td[data-col-id="${id}"]`) as HTMLElement;
     expect(cell("m:loss").querySelector(".group-agg")?.textContent).toBe("0.15");
     expect(cell("m:loss")).toHaveAttribute("title", "best of 3");
-    expect(cell("m:acc").querySelector(".group-agg")?.textContent).toBe("0.8");
-    expect(cell("m:acc")).toHaveAttribute("title", "mean of 3 (no goal)");
+    expect(cell("m:acc").querySelector(".group-agg")?.textContent).toBe("—");
+    expect(cell("m:acc")).toHaveAttribute("title", "best of 3 (no goal)");
   });
 
   it("puts each group's rows under its header, and the loose rows after the groups, with no header (plan 22 F12)", async () => {

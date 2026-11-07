@@ -6,7 +6,7 @@ import { memo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { Pivot, PivotCell } from "../apiPivot";
 import {
-  cellFill, cellLabel, cellQuery, cellText, pivotRange, scaleText, withQuery,
+  bestWithoutGoal, cellFill, cellLabel, cellQuery, cellText, pivotRange, pivotTitle, scaleText, withQuery,
 } from "../util/pivotCells";
 
 interface Props {
@@ -15,12 +15,6 @@ interface Props {
   colsField: string;
   hrefOf: (query: string) => string;
   baseQuery?: string;
-}
-
-function title(pivot: Pivot): string {
-  if (pivot.cell === "share") return `share matching ${pivot.match}`;
-  if (pivot.cell === "agg") return `${pivot.agg} ${pivot.metric}`;
-  return "runs";
 }
 
 type Href = (query: string) => string;
@@ -79,7 +73,7 @@ function PivotHeatmap(props: Props) {
   return (
     <div className="pivot">
       <div className="pivot-scroll">
-        <table className="pivot-table" aria-label={`${title(pivot)} by ${rowsField} × ${colsField}`}>
+        <table className="pivot-table" aria-label={`${pivotTitle(pivot)} by ${rowsField} × ${colsField}`}>
           <thead>
             <tr>
               <th scope="col" className="mono pivot-corner">{rowsField} \ {colsField}</th>
@@ -96,7 +90,9 @@ function PivotHeatmap(props: Props) {
           </tbody>
         </table>
       </div>
-      <Legend pivot={pivot} range={range} />
+      {bestWithoutGoal(pivot)
+        ? <p className="muted pivot-note">{`${pivotTitle(pivot)}: declare a goal for ${pivot.metric} to rank it`}</p>
+        : <Legend pivot={pivot} range={range} />}
       <CutNote pivot={pivot} rowsField={rowsField} colsField={colsField} />
     </div>
   );

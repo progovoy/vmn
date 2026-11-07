@@ -257,8 +257,9 @@ export interface DeclaredProgress {
 
 /** A job's compact rollup on its Jobs-view row (plan 23 §10). */
 export interface JobRollup extends JobProgressFields {
-  /** The main metric the best and spread are of. */
+  /** The main metric the best and spread are of, and its goal (null: no best). */
   metric: string | null;
+  goal: "min" | "max" | null;
   best: number | null;
   best_verstr: string | null;
   best_idx?: number | null;

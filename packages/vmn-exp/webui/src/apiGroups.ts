@@ -12,7 +12,7 @@ export type GroupLink = "parent" | "forked_from" | "rerun_of" | "code_verstr";
 export type GroupField = GroupLink | "branch" | "status" | "failure_sig" | `tags.${string}` | `params.${string}`;
 
 /** What orders groups by the sort metric; `best` follows the metric's goal
- *  (the mean for a goal-less metric). */
+ *  (no value for a goal-less metric). */
 export const GROUP_AGGREGATES = ["mean", "best", "median", "min", "max"] as const;
 export type GroupAggregate = (typeof GROUP_AGGREGATES)[number];
 
@@ -88,6 +88,9 @@ export interface GroupedPage {
   aggregate: GroupAggregate;
   /** Running rows across every group after the filters (plan 22 F4). */
   running: number;
+  /** The metric the groups sort by and its goal (null: none, `best` has no value). */
+  metric: string | null;
+  goal: "min" | "max" | null;
 }
 
 export interface GroupOpts extends Omit<PageOpts, "last"> {

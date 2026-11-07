@@ -7,21 +7,13 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { jobSummaryQuery } from "../pages/Job/jobQueries";
 import { mainMetric } from "../pages/Job/jobData";
-import { useMetricsSchema } from "../queries";
-import { metricGoal } from "../util";
 import { aheadClause, betterClause, decodeFrom, defaultOrder, type BoardOrder } from "../util/runContext";
-import type { JobMetric } from "../apiJob";
 
 const pageOpts = (o: BoardOrder) => ({ scope: o.scope, query: o.q, status: o.status, sort: o.sort, order: o.order });
 
 /** How many runs of *scope* match *query*. */
 const countOf = (ws: string, app: string, scope: string, query: string, extra: Partial<BoardOrder> = {}) =>
   api.experimentsPaged(ws, app, { scope, query, limit: 1, ...extra }).then((p) => p.total);
-
-/** The metric's goal: the schema's (or its name's), else where its best sits. */
-function goalOf(schema: Parameters<typeof metricGoal>[0], metric: string, m: JobMetric): "min" | "max" {
-  return metricGoal(schema, metric) ?? (m.best === m.max && m.max !== m.min ? "max" : "min");
-}
 
 export function useJobContext({ ws, app, verstr, idx, job, metrics }: {
   ws: string; app: string; verstr: string; idx: number | null; job: string;
@@ -30,7 +22,6 @@ export function useJobContext({ ws, app, verstr, idx, job, metrics }: {
   const client = useQueryClient();
   const [params] = useSearchParams();
   const summary = useQuery(jobSummaryQuery(ws, app, job), client).data;
-  const schema = useMetricsSchema(ws, app);
 
   const carried = decodeFrom(params.get("from"), job);
   const atParam = carried ? Number(params.get("at")) : NaN;
@@ -54,12 +45,13 @@ export function useJobContext({ ws, app, verstr, idx, job, metrics }: {
   const metric = summary ? mainMetric(summary) : null;
   const m = metric ? summary?.metrics[metric] : null;
   const value = metric ? metrics[metric] : null;
-  const better = summary?.ranked !== false && metric && m && typeof value === "number" && Number.isFinite(value)
-    ? betterClause(metric, value, goalOf(schema, metric, m)) : null;
+  // Ranked toward the summary's goal only, never a guessed one (plan 32 F5).
+  const better = summary?.ranked !== false && metric && m?.goal && typeof value === "number" && Number.isFinite(value)
+    ? betterClause(metric, value, m.goal) : null;
   const ahead = useQuery({
     queryKey: ["job-context", ws, app, job, "rank", better],
     queryFn: () => countOf(ws, app, job, better!),
-    enabled: !!better && schema !== null,
+    enabled: !!better,
   }, client);
 
   return {

@@ -171,6 +171,15 @@ describe("a grouped board below 640px", () => {
     expect(head("sweep").querySelector(".lb-mgroup-agg")).toHaveAttribute("title", "best of 3");
   });
 
+  it("reads a dash, best (no goal), for a goal-less metric's best (plan 32 F6)", async () => {
+    renderBoard("/ws/test/app/my-app?agg=best&sort=acc&show=m:acc");
+    await waitFor(() => expect(sections()).toHaveLength(1));
+    const a = head("sweep").querySelector(".lb-mgroup-agg") as HTMLElement;
+    expect(a.querySelector(".lb-mgroup-value")?.textContent).toBe("—");
+    expect(a.querySelector(".lb-mgroup-metric")?.textContent).toBe("acc best (no goal)");
+    expect(a).toHaveAttribute("title", "best of 3 (no goal)");
+  });
+
   it("folds a group shut and open again from its label, remembering it in collapse=", async () => {
     await shown();
     const fold = within(head("sweep")).getByRole("button", { name: "Collapse group sweep" });

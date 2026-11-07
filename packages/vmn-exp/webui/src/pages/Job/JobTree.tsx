@@ -17,9 +17,8 @@ import { useFillHeight } from "../../hooks/useFillHeight";
 import { useTreeChildren } from "../../hooks/useTreeChildren";
 import { useMetricsSchema } from "../../queries";
 import type { AttentionEntry } from "../../shell/contracts";
-import { metricGoal } from "../../util";
 import { itemKey, type TreeItem } from "../../util/treeItems";
-import { mainMetric } from "../Experiments/jobColumns";
+import { mainGoal, mainMetric } from "../Experiments/jobColumns";
 import type { JobContext } from "../Experiments/JobCells";
 import JobTreeRow, { TREE_COLUMNS, TREE_ROW_HEIGHT } from "./JobTreeRow";
 import "../leaderboardTable.css";
@@ -43,10 +42,10 @@ export default function JobTree({ ws, app, verstr, name, attention, embedded = f
   const tree = useTreeChildren(ws, app, verstr, filter);
   const schema = useMetricsSchema(ws, app);
   const metric = mainMetric(tree.rows, schema);
+  const goal = mainGoal(tree.rows, metric, schema);
   const ctx: JobContext = useMemo(() => ({
-    runBase: `/ws/${ws}/app/${appTag(app)}`, metric, goal: metric ? metricGoal(schema, metric) : null,
-    attention,
-  }), [ws, app, metric, schema, attention]);
+    runBase: `/ws/${ws}/app/${appTag(app)}`, metric, goal, attention,
+  }), [ws, app, metric, goal, attention]);
   const parentRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLTableSectionElement>(null);

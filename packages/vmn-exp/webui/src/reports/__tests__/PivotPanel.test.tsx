@@ -18,7 +18,7 @@ const PIVOT: Pivot = {
   rows: [{ key: "d1", label: "d1", n: 2, clause: 'tags.date = "d1"' }],
   cols: [{ key: "r", label: "r", n: 2, clause: 'root = "r"' }],
   cells: [[{ n: 2, value: 0.5, clause: 'tags.date = "d1" and root = "r"' }]],
-  total: 2, rows_total: 1, cols_total: 1, cell: "agg", match: null, metric: "loss", agg: "median",
+  total: 2, rows_total: 1, cols_total: 1, cell: "agg", match: null, metric: "loss", agg: "median", goal: "min",
 };
 
 const base = { v: 1, id: "p", app: "my_app", type: "pivot", rows: "tags.date", cols: "root" };

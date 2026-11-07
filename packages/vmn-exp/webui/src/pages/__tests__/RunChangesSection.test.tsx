@@ -43,7 +43,7 @@ beforeEach(() => {
   mockedApi.metricsSchema.mockResolvedValue({});
   mockedApi.experimentsDiff.mockResolvedValue({ from_verstr: "v-prev", to_verstr: RUN, metrics_delta: {}, diff: "" });
   (fetchRunBaselines as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-    previous: run("v-prev", 3), best: run("v-best", 7),
+    previous: run("v-prev", 3), best: { ...run("v-best", 7), metric: "val_loss" },
   });
 });
 
@@ -59,7 +59,7 @@ describe("Run page Changes card", () => {
     mockedApi.meta.mockResolvedValue({ read_only: false });
     renderRun(`/ws/test/app/my-app/run/${RUN}?baseline=v-good`);
     await waitFor(() => expect(mockedApi.experimentsDiff).toHaveBeenCalledWith("test", "my-app", "v-good", RUN));
-    fireEvent.click(await screen.findByRole("button", { name: "best @7" }));
+    fireEvent.click(await screen.findByRole("button", { name: "best on val_loss @7" }));
     expect(screen.getByTestId("search")).toHaveTextContent("?baseline=best");
   });
 

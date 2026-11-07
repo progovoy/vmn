@@ -13,12 +13,12 @@ export function jobSummaryFixture(over: Partial<JobPageSummary> = {}): JobPageSu
     metric: "val_loss",
     metrics: {
       val_loss: {
-        n: 1409, min: 0.182, max: 0.9, mean: 0.4, best: 0.182, best_verstr: "0.0.2-dev.t1903",
+        goal: "min", n: 1409, min: 0.182, max: 0.9, mean: 0.4, best: 0.182, best_verstr: "0.0.2-dev.t1903",
         hist: [{ lo: 0.182, hi: 0.5, count: 900 }, { lo: 0.5, hi: 0.9, count: 509 }],
         p10: 0.2, p50: 0.38, p90: 0.7,
       },
       acc: {
-        n: 1409, min: 0.1, max: 0.95, mean: 0.6, best: 0.95, best_verstr: "0.0.2-dev.t7",
+        goal: "max", n: 1409, min: 0.1, max: 0.95, mean: 0.6, best: 0.95, best_verstr: "0.0.2-dev.t7",
         hist: [{ lo: 0.1, hi: 0.95, count: 1409 }], p10: 0.3, p50: 0.6, p90: 0.9,
       },
     },

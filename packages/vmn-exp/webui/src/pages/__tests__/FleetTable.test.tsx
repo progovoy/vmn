@@ -91,6 +91,17 @@ describe("FleetCard table", () => {
     expect(runOrder()[0]).toBe("@12 trial-2");
   });
 
+  it("starts a goal-less metric low first and says it has no goal (plan 32 F4)", () => {
+    const grad = children.map((c, i) => ({ ...c, metrics: { grad: [0.7, 0.9, 0.8, 0.6][i] } }));
+    renderFleet(fleet(grad), { grad: { primary: true } });
+    const head = within(table()).getAllByRole("columnheader").find((th) => th.textContent?.startsWith("grad"))!;
+    const button = within(head).getByRole("button");
+    expect(button).toHaveAttribute("title", "sort by grad (no goal: low first)");
+    fireEvent.click(button);
+    expect(head).toHaveAttribute("aria-sort", "ascending");
+    expect(runOrder()[0]).toBe("@14 trial-4");
+  });
+
   it("does not uppercase identifiers in the header (D3)", () => {
     renderFleet();
     expect(table().closest(".fleet-table")).not.toBeNull();

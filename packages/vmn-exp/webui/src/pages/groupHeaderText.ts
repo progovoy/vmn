@@ -1,6 +1,6 @@
 /** What a group header row says (plan 22 G4, G10): its status count and,
  *  per metric, the aggregate the board shows. */
-import { fmtCount, plural } from "../util";
+import { NO_GOAL, fmtCount, plural } from "../util";
 import { joinParts } from "../util/toneParts";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
 
@@ -46,18 +46,21 @@ export function barSegments(c: Omit<GroupCounts, "waiting">): { tone: CountTone;
   return BAR.filter((t) => c[t] > 0).map((t) => ({ tone: t, pct: Math.round((c[t] / c.total) * 10000) / 100 }));
 }
 
-/** The aggregate shown for *agg*: the mean for `best` of a metric without a goal. */
-export const shownAggregate = (a: MetricAggregate, agg: GroupAggregate): GroupAggregate =>
-  agg === "best" && a.best === null ? "mean" : agg;
+/** `best` of a group's values with no best: the metric has no goal (plan 32 F6). */
+export const noGoalBest = (a: MetricAggregate, agg: GroupAggregate) => agg === "best" && a.best === null;
 
-/** A header's cell for one metric: *agg* of the group's values, the mean for
- *  `best` of a metric without a goal; its title names what it shows. */
+/** The aggregate's name as a header shows it: `best (no goal)` without a goal. */
+export const aggregateName = (a: MetricAggregate, agg: GroupAggregate) =>
+  `${agg}${noGoalBest(a, agg) ? NO_GOAL : ""}`;
+
+/** A header's cell for one metric: *agg* of the group's values (`best` of a
+ *  metric without a goal has none, never another aggregate); its title
+ *  names what it shows. */
 export function aggregateCell(
   a: MetricAggregate | undefined, agg: GroupAggregate,
 ): { value: number | null; title: string | undefined } {
   if (!a || a.n === 0) return { value: null, title: undefined };
-  const used = shownAggregate(a, agg);
-  return { value: a[used], title: `${used} of ${a.n}${used !== agg ? " (no goal)" : ""}` };
+  return { value: a[agg], title: `${agg} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}` };
 }
 
 /** A `+N more` row's text in each state of its load. */

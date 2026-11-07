@@ -87,8 +87,8 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
     () => groups.map((g) => ({
       group: g.group,
       count: g.count,
-      mean: g.stats[chartMetric]?.mean ?? 0,
-      std: g.stats[chartMetric]?.std ?? 0,
+      mean: g.stats[chartMetric]?.mean ?? null,
+      std: g.stats[chartMetric]?.std ?? null,
     })),
     [groups, chartMetric],
   );
@@ -157,7 +157,7 @@ function GroupedMetrics({ rows, metricCols, paramCols, schema, initialGroup }: {
                 <td className="num">{g.count}</td>
                 {metricCols.map((m) => {
                   const s = g.stats[m];
-                  if (!s) return <td key={m} className="num">--</td>;
+                  if (!s) return <td key={m} className="num">—</td>;
                   return (
                     <td key={m} className="num" style={{ fontFamily: "var(--mono)", fontSize: 12 }}>
                       {fmtVal(s.mean)} {"±"} {fmtVal(s.std)}

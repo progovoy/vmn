@@ -72,7 +72,7 @@ describe("RunChanges", () => {
       from_verstr: "v-prev", to_verstr: RUN, metrics_delta: {},
       diff: DIFF_TEXT.replace("a/train.py b/train.py", `a/v-prev/train.py b/${RUN}/train.py`),
     });
-    renderCard({ previous: run("v-prev", 3, "prev"), best: run("v-best", 7) });
+    renderCard({ previous: run("v-prev", 3, "prev"), best: { ...run("v-best", 7), metric: "val_loss" } });
     expect(await screen.findByText("train.py")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "previous @3 prev" })).toHaveAttribute("aria-pressed", "true");
     expect(diffMock).toHaveBeenCalledWith("test", "my-app", "v-prev", RUN);
@@ -80,11 +80,11 @@ describe("RunChanges", () => {
   });
 
   it("refetches when the baseline is switched", async () => {
-    renderCard({ previous: run("v-prev", 3), best: run("v-best", 7) });
+    renderCard({ previous: run("v-prev", 3), best: { ...run("v-best", 7), metric: "val_loss" } });
     await waitFor(() => expect(diffMock).toHaveBeenCalledWith("test", "my-app", "v-prev", RUN));
-    fireEvent.click(screen.getByRole("button", { name: "best @7" }));
+    fireEvent.click(screen.getByRole("button", { name: "best on val_loss @7" }));
     await waitFor(() => expect(diffMock).toHaveBeenCalledWith("test", "my-app", "v-best", RUN));
-    expect(screen.getByRole("button", { name: "best @7" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "best on val_loss @7" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows the top 5 goal metrics by |Δ|, the rest behind +N more, params apart", async () => {

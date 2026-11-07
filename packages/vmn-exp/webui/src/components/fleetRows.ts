@@ -2,9 +2,9 @@
  *  that vary among the children, its goal-metric value and progress, and
  *  how the table sorts them. Pure. */
 import type { Fleet, FleetChild, MetricsSchema, RunState } from "../types";
-import { metricGoal } from "../util";
+import { goalOrder, metricGoal, type Goal } from "../util";
 
-export type Goal = "min" | "max" | null;
+export type { Goal };
 
 export interface FleetRow {
   verstr: string;
@@ -109,10 +109,10 @@ export function bestOf(rows: FleetRow[], goal: Goal): string | null {
   return sortRows(scored, "value", goal === "min" ? "asc" : "desc")[0].verstr;
 }
 
-/** A header's first direction: a metric toward its goal (high first without
- *  one), anything else ascending. */
+/** A header's first direction: a metric toward its goal, anything else
+ *  (a goal-less metric too, plan 32 F4) ascending. */
 export const firstOrder = (key: SortKey, goal: Goal): Order =>
-  key === "value" ? (goal === "min" ? "asc" : "desc") : "asc";
+  (key === "value" ? goalOrder(goal) : "asc");
 
 /** A child's `@N` from the outer run's *fleet* (which details its first 50). */
 export function fleetIdxOf(fleet: Fleet | null | undefined): (verstr: string) => number | null {

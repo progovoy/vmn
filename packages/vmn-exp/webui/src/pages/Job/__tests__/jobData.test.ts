@@ -86,9 +86,11 @@ describe("jobKpis", () => {
     expect(byLabel["best val_loss"].href).toBe("0.0.2-dev.t1903");
   });
 
-  it("has no best tile when nothing is ranked (no goal declared)", () => {
-    const tiles = jobKpis(jobSummaryFixture({ ranked: false }));
-    expect(tiles.map((t) => t.label)).not.toContain("best val_loss");
+  it("reads a dash, (no goal), in the best tile of a goal-less main metric (plan 32 F5)", () => {
+    const s = jobSummaryFixture({ ranked: false });
+    s.metrics.val_loss = { ...s.metrics.val_loss!, goal: null, best: null, best_verstr: null };
+    const tile = jobKpis(s).find((t) => t.label === "best val_loss");
+    expect(tile).toEqual({ label: "best val_loss", value: "—", sub: "(no goal)" });
   });
 });
 

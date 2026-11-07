@@ -11,14 +11,16 @@ export interface HistBin {
   count: number;
 }
 
-/** One tracked metric over the subtree; `best` follows the metric's goal. */
+/** One tracked metric over the subtree; `best` follows the metric's goal
+ *  and is null without one (plan 32: no guessed direction). */
 export interface JobMetric {
+  goal: "min" | "max" | null;
   n: number;
   min: number;
   max: number;
   mean: number;
-  best: number;
-  best_verstr: string;
+  best: number | null;
+  best_verstr: string | null;
   hist: HistBin[];
   p10?: number | null;
   p50?: number | null;
@@ -84,7 +86,7 @@ export interface JobPageSummary extends JobProgressFields {
   /** The main metric's name, when the server names it (else the first of `metrics`). */
   metric?: string | null;
   metrics: Record<string, JobMetric | null>;
-  /** False when no tracked metric has a declared goal: `top` and `best` rank nothing. */
+  /** False when the main metric has no declared goal: `top` and its `best` rank nothing. */
   ranked?: boolean;
   duration: JobDuration;
   failures: { sig: string; label: string; count: number }[];

@@ -72,7 +72,7 @@ function headInfo(id: string, layout: RowLayout, aggregate?: GroupAggregate): { 
           {aggregate && <span className="agg-tag">{aggregate}</span>}
         </>
       ),
-      sort: name, title: hasGoal ? `sort by ${name} (best first)` : `sort by ${name} (high first)`,
+      sort: name, title: hasGoal ? `sort by ${name} (best first)` : `sort by ${name} (no goal: low first)`,
     };
   }
   if (id === "check") return { label: "", sort: null };

@@ -8,7 +8,7 @@ import type { GroupAggregate } from "../apiGroups";
 import { fmtVal, runHref } from "../util";
 import type { GroupHeaderItem, GroupMoreItem } from "../util/groupItems";
 import MoreButton from "../components/MoreButton";
-import { aggregateCell, shownAggregate } from "./groupHeaderText";
+import { aggregateCell, aggregateName } from "./groupHeaderText";
 import { GroupBar, GroupCountParts, GroupFold, groupCountsText, groupName, groupSpoken } from "./LeaderboardGroupRow";
 import { HeaderCheckbox, type HeaderCheckProps } from "./LeaderboardHeadParts";
 import type { RowLayout } from "./LeaderboardRow";
@@ -19,11 +19,11 @@ import "./leaderboardCardGroup.css";
 function Aggregate({ item, metric, agg }: { item: GroupHeaderItem; metric: string; agg: GroupAggregate }) {
   const a = item.group.aggregates[metric];
   const { value, title } = aggregateCell(a, agg);
-  if (value === null) return null;
+  if (!title) return null;
   return (
     <span className="lb-mgroup-agg" title={title}>
-      <span className="lb-mgroup-value metric">{fmtVal(value)}</span>
-      <span className="lb-mgroup-metric">{metric} {shownAggregate(a, agg)}</span>
+      <span className="lb-mgroup-value metric">{value === null ? "—" : fmtVal(value)}</span>
+      <span className="lb-mgroup-metric">{metric} {aggregateName(a, agg)}</span>
     </span>
   );
 }

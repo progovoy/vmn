@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import type { Pivot, PivotCell } from "../../apiPivot";
 import {
-  cellFill, cellLabel, cellQuery, cellText, defaultAxes, fieldOptions, pivotRange, withQuery,
+  cellFill, cellLabel, cellQuery, cellText, defaultAxes, fieldOptions, pivotRange, pivotTitle, withQuery,
 } from "../pivotCells";
 
 const cell = (over: Partial<PivotCell> = {}): PivotCell => ({ n: 4, value: 4, clause: 'tags.d = "x"', ...over });
@@ -13,7 +13,7 @@ function pivot(over: Partial<Pivot> = {}): Pivot {
     cols: [{ key: "g1", label: "g1", n: 4, clause: 'tags.group = "g1"' },
       { key: "g2", label: "g2", n: 2, clause: 'tags.group = "g2"' }],
     cells: [[cell({ n: 4, value: 4 }), cell({ n: 2, value: 2 })]],
-    total: 6, rows_total: 1, cols_total: 2, cell: "count", match: null, metric: null, agg: null,
+    total: 6, rows_total: 1, cols_total: 2, cell: "count", match: null, metric: null, agg: null, goal: null,
     ...over,
   };
 }
@@ -50,6 +50,17 @@ describe("pivot cells", () => {
     const agg = pivot({ cell: "agg", metric: "loss", agg: "median" });
     expect(cellLabel(agg, "tags.date", "tags.group", 0, 0, cell({ n: 3, value: 0.5 })))
       .toBe("tags.date d1, tags.group g1: median loss 0.5 (3 runs)");
+  });
+
+  it("names a goal-less metric's best (no goal), its cells without a value (plan 32 F6)", () => {
+    const best = pivot({ cell: "agg", metric: "loss", agg: "best", goal: null, cells: [[cell({ value: null }), null]] });
+    expect(pivotTitle(best)).toBe("best loss (no goal)");
+    expect(cellText(best.cells[0][0]!, "agg")).toBe("–");
+    expect(cellLabel(best, "tags.date", "tags.group", 0, 0, best.cells[0][0]!))
+      .toBe("tags.date d1, tags.group g1: best loss (no goal) no value (4 runs)");
+    expect(pivotTitle(pivot({ cell: "agg", metric: "loss", agg: "best", goal: "min" }))).toBe("best loss");
+    expect(pivotTitle(pivot({ cell: "agg", metric: "loss", agg: "mean", goal: null }))).toBe("mean loss");
+    expect(pivotTitle(pivot())).toBe("runs");
   });
 
   it("links a cell to its runs, a share cell to its matching ones, under the panel's query", () => {

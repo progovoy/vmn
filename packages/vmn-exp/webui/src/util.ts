@@ -122,6 +122,14 @@ export function metricGoal(
   return null;
 }
 
+export type Goal = "min" | "max" | null;
+
+/** A metric's best-first sort: toward its goal, ascending without one (plan 32 F4). */
+export const goalOrder = (goal: Goal): "asc" | "desc" => (goal === "max" ? "desc" : "asc");
+
+/** Where a best would be, for a metric without a goal. */
+export const NO_GOAL = " (no goal)";
+
 /** The Run page's path under an app's base path (`/ws/<ws>/app/<tag>`). */
 export const runHref = (base: string, verstr: string) => `${base}/run/${encodeURIComponent(verstr)}`;
 /** An app's experiments page: `/ws/<ws>/app/<tag>`. */

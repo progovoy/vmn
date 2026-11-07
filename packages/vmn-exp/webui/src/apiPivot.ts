@@ -36,6 +36,8 @@ export interface Pivot {
   match: string | null;
   metric: string | null;
   agg: GroupAggregate | null;
+  /** The metric's goal; null without one, when `best` has no value in any cell. */
+  goal: "min" | "max" | null;
 }
 
 export interface PivotParams {

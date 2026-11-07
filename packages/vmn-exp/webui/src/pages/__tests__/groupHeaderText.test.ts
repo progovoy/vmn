@@ -58,8 +58,8 @@ describe("a group header's aggregate cell (plan 22 G10)", () => {
     expect(aggregateCell(agg(), "best")).toEqual({ value: 0.2, title: "best of 16" });
   });
 
-  it("falls back to the mean for a metric without a goal, and says so", () => {
-    expect(aggregateCell(agg({ best: null }), "best")).toEqual({ value: 0.5, title: "mean of 16 (no goal)" });
+  it("has no best for a metric without a goal, and says so, never the mean (plan 32 F6)", () => {
+    expect(aggregateCell(agg({ best: null }), "best")).toEqual({ value: null, title: "best of 16 (no goal)" });
   });
 
   it("is empty when the group has no value of the metric", () => {

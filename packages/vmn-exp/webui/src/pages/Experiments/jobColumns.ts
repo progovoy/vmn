@@ -2,9 +2,9 @@
  *  contract (§10) their headers sort by. */
 import type { CSSProperties } from "react";
 import type { ExperimentRow, MetricsSchema } from "../../types";
-import { metricGoal } from "../../util";
 import type { Order } from "../../hooks/useLeaderboardView";
 import { IDX_SORT } from "../LeaderboardHead";
+import { goalOrder, type Goal } from "../../util";
 
 export type { Order };
 
@@ -60,9 +60,18 @@ export function mainMetric(rows: readonly ExperimentRow[], schema: MetricsSchema
   return entries.find(([, s]) => s.primary)?.[0] ?? entries.find(([, s]) => s.goal)?.[0] ?? null;
 }
 
-/** `job:best`'s best-first direction: its metric's (ascending for a metric
- *  that goes down); null for every other column. */
-export function jobBestOrder(sort: string, metric: string | null, schema: MetricsSchema | null | undefined): Order | null {
+/** The Best column's goal: the server's job rollup's (null: it ranks
+ *  nothing), else, with single runs only, the schema's declared one;
+ *  never guessed (plan 32 F5). */
+export function mainGoal(rows: readonly ExperimentRow[], metric: string | null, schema: MetricsSchema | null | undefined): Goal {
+  const job = rows.find((r) => r.job?.metric)?.job;
+  if (job) return job.goal;
+  return (metric && schema?.[metric]?.goal) || null;
+}
+
+/** `job:best`'s best-first direction: toward its goal, ascending without
+ *  one (plan 32 F4); null for every other column. */
+export function jobBestOrder(sort: string, goal: Goal): Order | null {
   if (sort !== JOB_SORTS.best) return null;
-  return metric && metricGoal(schema ?? null, metric) === "min" ? "asc" : "desc";
+  return goalOrder(goal);
 }

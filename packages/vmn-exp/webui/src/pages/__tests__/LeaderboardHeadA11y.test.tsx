@@ -67,6 +67,11 @@ describe("LeaderboardHead sorting (C3)", () => {
     expect(head("m:loss")).toHaveAttribute("aria-sort", "none");
   });
 
+  it("says a goal-less metric sorts low first, without a goal (plan 32 F4)", () => {
+    renderHead();
+    expect(sortButton("m:acc")).toHaveAttribute("title", "sort by acc (no goal: low first)");
+  });
+
   it("keeps the select-all checkbox and the resize grips", () => {
     const { onToggle } = renderHead();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all visible runs" }));

@@ -11,14 +11,13 @@ import { useBoardRows } from "../../hooks/useBoardRows";
 import { useBoardSelection } from "../../hooks/useBoardSelection";
 import type { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import type { ExperimentRow } from "../../types";
-import { metricGoal } from "../../util";
 import { NO_GROUP } from "../../util/groupBy";
 import { boardRows } from "../../util/groupItems";
 import { hasSearch, type SearchFilter } from "../../util/searchScope";
 import { combineQueries } from "../../util/searchQuery";
 import { BIG_GROUP } from "../../util/groupClause";
 import { boardSortState } from "../boardSortState";
-import { jobBestOrder, mainMetric } from "./jobColumns";
+import { jobBestOrder, mainGoal, mainMetric } from "./jobColumns";
 import type { TopRuns } from "../../types";
 import { PRESETS, type Preset } from "./presets";
 import { treeStatusQuery } from "./treeStatus";
@@ -63,11 +62,12 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   });
 
   const selection = useBoardSelection(ws, app, filter, rows, view);
-  const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobBestOrder(s, metric, schema));
+  const goal = mainGoal(rows, metric, schema);
+  const sort = boardSortState(filter.sort, view.order, schema, view.clickSort, (s) => jobBestOrder(s, goal));
 
   return {
     data, rows, facets, group: chosen, selection, search: matchSubtree ? search : null,
-    metric, goal: metric ? metricGoal(schema, metric) : null,
+    metric, goal,
     sort: { sort: filter.sort, order: sort.order ?? "desc", onSort: sort.onSort },
     live: { running, paused, setPaused },
     filtered: filtered || Boolean(fixed), topQuery,

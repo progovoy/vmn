@@ -56,6 +56,27 @@ describe("the baseline card", () => {
     expect(screen.getByText("3 of 4 trade_date values matched")).toBeInTheDocument();
   });
 
+  it("shows a goal-less main metric's deltas without a verdict, labelled (no goal) (plan 32 F5)", async () => {
+    const goalLess = compareFixture().pairs.map((p) => ({ ...p, better: null, worse: undefined }));
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
+      goal: null, chip: null, pairs: goalLess,
+      metrics: { best_value: {
+        best: { value: null, baseline: null, delta: null, better: null },
+        median: { value: 0.9, baseline: 0.8, delta: 0.1, better: null },
+      } },
+    }));
+    renderCard();
+    const table = await screen.findByRole("table", { name: "Against the baseline" });
+    const row = (name: string) => within(table).getByRole("row", { name: new RegExp(name) });
+    expect(row("best best_value")).toHaveTextContent("best best_value (no goal)");
+    expect(row("best best_value")).not.toHaveTextContent(/\d/);
+    expect(within(row("median best_value")).getByText("+0.1")).not.toHaveClass("delta-better");
+    expect(screen.getByText("best_value (no goal): no better or worse")).toBeInTheDocument();
+    const pairs = screen.getByRole("table", { name: "Per trade_date" });
+    expect(within(pairs).getByRole("columnheader", { name: "Δ best_value (no goal)" })).toBeInTheDocument();
+    expect(pairs.querySelector(".pair-worse")).toBeNull();
+  });
+
   it("says when no outer run alike has ended yet", async () => {
     vi.mocked(jobBaseline).mockResolvedValue(compareFixture({ baseline: null, chip: null, pairs: [], metrics: {} }));
     renderCard();

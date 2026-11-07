@@ -15,7 +15,7 @@ const PIVOT: Pivot = {
     { n: 1, value: 0, hits: 0, clause: 'tags.date = "d1" and tags.group = "g2"' }],
   [{ n: 1, value: 1, hits: 1, clause: 'tags.date = null and tags.group = "g1"' }, null]],
   total: 4, rows_total: 2, cols_total: 2, cell: "share", match: 'tags.health = "unstable"',
-  metric: null, agg: null,
+  metric: null, agg: null, goal: null,
 };
 
 const hrefOf = (q: string) => `/runs?q=${encodeURIComponent(q)}`;
@@ -55,6 +55,14 @@ describe("PivotHeatmap", () => {
     const legend = screen.getByRole("img", { name: "Scale: 0% to 100%" });
     expect(legend).toHaveTextContent("0%");
     expect(legend).toHaveTextContent("100%");
+  });
+
+  it("says a goal-less metric has no best instead of a legend (plan 32 F6)", () => {
+    const cells = PIVOT.cells.map((r) => r.map((c) => (c ? { ...c, value: null } : c)));
+    renderHeatmap({ ...PIVOT, cell: "agg", match: null, metric: "loss", agg: "best", goal: null, cells });
+    expect(screen.getByRole("table", { name: /^best loss \(no goal\) by/ })).toBeInTheDocument();
+    expect(screen.getByText("best loss (no goal): declare a goal for loss to rank it")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /^Scale/ })).toBeNull();
   });
 
   it("says which values were left out, and when no run is in it", () => {

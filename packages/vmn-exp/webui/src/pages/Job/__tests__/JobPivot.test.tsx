@@ -17,7 +17,7 @@ const PIVOT: Pivot = {
   rows: [{ key: "d1", label: "d1", n: 2, clause: 'tags.date = "d1"' }],
   cols: [{ key: "g1", label: "g1", n: 2, clause: 'tags.group = "g1"' }],
   cells: [[{ n: 2, value: 2, clause: 'tags.date = "d1" and tags.group = "g1"' }]],
-  total: 2, rows_total: 1, cols_total: 1, cell: "count", match: null, metric: null, agg: null,
+  total: 2, rows_total: 1, cols_total: 1, cell: "count", match: null, metric: null, agg: null, goal: null,
 };
 
 function renderPivot() {

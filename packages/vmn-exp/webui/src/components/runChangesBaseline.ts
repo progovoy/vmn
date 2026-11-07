@@ -42,10 +42,16 @@ const refId = (ref: string) => `ref:${ref}`;
 const isOther = (b: RunBaselines, requested: string | null): requested is string =>
   !!requested && !(requested in KEY_LABEL) && !existing(b).some(([, r]) => r.verstr === requested);
 
+/** `previous @3`; the best names the metric it is best on (plan 32 F7). */
+const choiceLabel = (b: RunBaselines, k: BaselineKey, r: BaselineRun) => {
+  if (k === "base") return KEY_LABEL.base;
+  return k === "best" ? `best on ${b.best!.metric} ${runText(r)}` : `${KEY_LABEL[k]} ${runText(r)}`;
+};
+
 export function baselineChoices(b: RunBaselines, requested: string | null): BaselineChoice[] {
   const choices: BaselineChoice[] = existing(b).map(([k, r]) => ({
     id: k,
-    label: k === "base" ? KEY_LABEL.base : `${KEY_LABEL[k]} ${runText(r)}`,
+    label: choiceLabel(b, k, r),
     verstr: k === "base" ? null : r.verstr,
   }));
   if (isOther(b, requested)) choices.push({ id: refId(requested), label: `vs ${requested}`, verstr: requested });

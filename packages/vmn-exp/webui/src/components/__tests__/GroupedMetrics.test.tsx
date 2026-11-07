@@ -107,6 +107,18 @@ describe("GroupedMetrics", () => {
     expect(cellTexts.some((t) => t?.includes("0.42"))).toBe(true);
   });
 
+  it("draws no bar for a group without the metric, a dash instead of 0 (plan 32 F12)", () => {
+    const rows = [row(1, "main", { loss: 0.4, acc: 0.8 }), row(2, "feat", { loss: 0.1 })];
+    const { container } = render(
+      <GroupedMetrics rows={rows} metricCols={["acc", "loss"]} paramCols={[]} schema={SCHEMA} />,
+    );
+    const bars = [...container.querySelectorAll('[data-testid="group-bar"]')].map((b) => b.getAttribute("data-group"));
+    expect(bars).toEqual(["main"]);
+    expect(screen.getByTestId("group-missing")).toHaveTextContent("—");
+    const feat = screen.getAllByRole("row").find((r) => r.textContent?.startsWith("feat")) as HTMLTableRowElement;
+    expect(feat.cells[2]).toHaveTextContent("—");
+  });
+
   it("handles empty data gracefully", () => {
     const { container } = render(
       <GroupedMetrics rows={[]} metricCols={["loss", "acc"]} paramCols={[]} schema={SCHEMA} />,

@@ -13,7 +13,7 @@ import { fmtDelta } from "../../components/diffDeltaTone";
 import { fleetLabel } from "../../components/fleetRows";
 import { Skeleton } from "../../components/ui";
 import { withSignal } from "../../requestScope";
-import { appHref, fmtDuration, fmtPct, fmtVal, runHref } from "../../util";
+import { NO_GOAL, appHref, fmtDuration, fmtPct, fmtVal, runHref } from "../../util";
 import { jobPrefix } from "./jobQueries";
 
 interface Props { ws: string; app: string; verstr: string; done: number }
@@ -56,13 +56,17 @@ function DeltaRow({ label, d, fmt = fmtVal, deltaFmt = fmt }: {
   );
 }
 
+const anyValue = (d: BaselineDelta) => d.value != null || d.baseline != null;
+/** A tracked metric without a goal: no best on either side while its median has one. */
+const noBest = (d: BaselineCompare["metrics"][string]) => !anyValue(d.best) && anyValue(d.median);
+
 function DeltaTable({ data }: { data: BaselineCompare }) {
   return (
     <table className="baseline-deltas" aria-label="Against the baseline">
       <thead><tr><th /><th scope="col">this</th><th scope="col">baseline</th><th scope="col">Δ</th></tr></thead>
       <tbody>
         {Object.entries(data.metrics).flatMap(([m, d]) => [
-          <DeltaRow key={`best ${m}`} label={`best ${m}`} d={d.best} />,
+          <DeltaRow key={`best ${m}`} label={`best ${m}${noBest(d) ? NO_GOAL : ""}`} d={d.best} />,
           <DeltaRow key={`median ${m}`} label={`median ${m}`} d={d.median} />,
         ])}
         <DeltaRow label="failed" d={data.failed_pct} fmt={fmtPct} deltaFmt={pts} />
@@ -86,7 +90,7 @@ function PairTable({ data, appBase }: { data: BaselineCompare; appBase: string }
       <p className="muted">{`${data.pairs.length} of ${data.pairs_total} ${noun} matched`}</p>
       <div className="baseline-pairs">
         <table aria-label={`Per ${fieldName(data.by)}`}>
-          <thead><tr><th scope="col">{fieldName(data.by)}</th><th scope="col">this</th><th scope="col">baseline</th><th scope="col">Δ {data.metric}</th><th /></tr></thead>
+          <thead><tr><th scope="col">{fieldName(data.by)}</th><th scope="col">this</th><th scope="col">baseline</th><th scope="col">Δ {data.metric}{data.goal ? "" : NO_GOAL}</th><th /></tr></thead>
           <tbody>
             {data.pairs.map((p) => (
               <tr key={p.key} className={p.worse ? "pair-worse" : undefined}>
@@ -122,6 +126,7 @@ export default function JobBaseline({ ws, app, verstr, done }: Props) {
         <span className="muted">{pickedText(data.baseline.source, data.match)}</span>
       </p>
       {data.chip && <p><BaselineChip chip={data.chip} /></p>}
+      {!data.goal && data.metric && <p className="muted">{`${data.metric}${NO_GOAL}: no better or worse`}</p>}
       <DeltaTable data={data} />
       <PairTable data={data} appBase={appBase} />
     </div>

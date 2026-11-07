@@ -8,7 +8,7 @@ const run = (verstr: string, idx: number | null = null, name: string | null = nu
   ({ verstr, idx, name, status: "succeeded" });
 
 const ALL: RunBaselines = {
-  best: run("v-best", 7, "best"),
+  best: { ...run("v-best", 7, "best"), metric: "val_loss" },
   previous: run("v-prev", 3),
   rerun_of: run("v-orig", 2),
   forked_from: run("v-fork", 1),
@@ -22,11 +22,11 @@ describe("defaultBaseline (D7)", () => {
   });
 
   it("is previous for a clean-tree run", () => {
-    expect(defaultBaseline({ previous: run("p"), parent: run("o"), best: run("b") })).toBe("previous");
+    expect(defaultBaseline({ previous: run("p"), parent: run("o"), best: { ...run("b"), metric: "val_loss" } })).toBe("previous");
   });
 
   it("falls back to the first baseline that exists, in D7 order", () => {
-    expect(defaultBaseline({ best: run("b"), rerun_of: run("r") })).toBe("rerun_of");
+    expect(defaultBaseline({ best: { ...run("b"), metric: "val_loss" }, rerun_of: run("r") })).toBe("rerun_of");
     expect(defaultBaseline({})).toBeNull();
   });
 });
@@ -38,7 +38,7 @@ describe("baselineChoices", () => {
       ["base", "parent", "forked_from", "rerun_of", "previous", "best"],
     );
     expect(choices.map((c) => c.label)).toEqual([
-      "base version", "parent @0 sweep", "forked from @1", "rerun of @2", "previous @3", "best @7 best",
+      "base version", "parent @0 sweep", "forked from @1", "rerun of @2", "previous @3", "best on val_loss @7 best",
     ]);
     expect(choices[0].verstr).toBeNull();
     expect(choices[4].verstr).toBe("v-prev");
@@ -56,7 +56,7 @@ describe("baselineChoices", () => {
 });
 
 describe("resolveBaseline", () => {
-  const b = { previous: run("v-prev", 3), best: run("v-best", 7) };
+  const b = { previous: run("v-prev", 3), best: { ...run("v-best", 7), metric: "val_loss" } };
 
   it("takes the requested key, else the baseline whose verstr was requested", () => {
     expect(resolveBaseline(b, "best")).toBe("best");
