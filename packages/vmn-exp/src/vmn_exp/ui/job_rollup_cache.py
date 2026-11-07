@@ -140,7 +140,9 @@ class JobRollupCache:
         return self.answer(snapshot, schema, verstr, answer,
                            lambda: self._compute(snapshot, schema, verstr, answer))
 
-    def _compute(self, snapshot, schema, verstr, answer):
+    def parts(self, snapshot, schema):
+        """``(base, tree, spec, job -> [tally])``: the static and live
+        tallies of a job's subtree, over *snapshot* for *schema*."""
         base, bucket = self._cache._base(snapshot)
         tree, schema_key = self.tree(base), self._cache.schema_key(schema)
         spec = self.spec(snapshot, schema)
@@ -150,8 +152,11 @@ class JobRollupCache:
         )
         live = self._overlays.get((base.token, bucket, schema_key),
                                   lambda: overlay(base, bucket, static.spec))
+        return base, tree, spec, _parts(tree, static, live)
+
+    def _compute(self, snapshot, schema, verstr, answer):
+        base, tree, spec, parts = self.parts(snapshot, schema)
         now = experiment_status._now()
-        parts = _parts(tree, static, live)
 
         def row(job):
             return base.rows[base.position[job]]
@@ -189,11 +194,12 @@ def _parts(tree, static, live):
 
 class _SplitRollups:
     """The split rollups (static per base, live per bucket, answers), in
-    LRUs of their own so a client's fields never evict the schema rollups."""
+    LRUs of their own so a client's fields never evict the schema rollups;
+    any per-parent tally keyed the same way (``spec_of(key)`` its spec)."""
 
-    def __init__(self, cache, size):
+    def __init__(self, cache, size, spec_of=SplitSpec):
         track = cache.generations.track
-        self._cache = cache
+        self._cache, self._spec_of = cache, spec_of
         self._static = track(LRU(size))
         self._latest = LRU(LATEST_SPLITS)
         self._overlays = track(LRU(size))
@@ -210,6 +216,6 @@ class _SplitRollups:
     def _static_of(self, app_name, base, field):
         last = self._latest.peek((app_name, field))
         static = (_moved(self._cache, last, base, last.spec) if last
-                  else StaticRollups.build(base, SplitSpec(field)))
+                  else StaticRollups.build(base, self._spec_of(field)))
         self._latest.put((app_name, field), static)
         return static

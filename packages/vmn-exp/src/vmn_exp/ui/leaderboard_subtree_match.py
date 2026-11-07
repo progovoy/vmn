@@ -42,7 +42,8 @@ class SubtreeMatch:
         cache = self._cache
         hits = self.hits(snapshot, f.query, f.archived)
         kept = self.ordered(snapshot, schema, f, last, attention)
-        out = cache.paged(snapshot, schema, kept, offset, limit, f.top, pager, attention)
+        out = cache.paged(snapshot, schema, kept, offset, limit, f.top, pager, attention,
+                          f.job_agg)
         for row in out if limit is None else out["rows"]:
             row["matched"] = hits[row["verstr"]]  # with_jobs' copies
         if limit is None:

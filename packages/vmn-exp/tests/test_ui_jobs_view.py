@@ -68,22 +68,24 @@ def test_job_sorts_rank_jobs_most_first_singles_last(board, sort, field):
     assert asc == sorted(values)
 
 
-def test_job_best_is_best_first_by_the_goal(board):
+def test_job_value_is_best_first_by_the_goal(board):
     fleet, jobs, _, cache = board
-    rows = _page(cache, fleet.snapshot(), sort="job:best")["rows"][:len(jobs)]
-    best = [r["job"]["best"] for r in rows]
+    rows = _page(cache, fleet.snapshot(), sort="job:value")["rows"][:len(jobs)]
+    best = [r["job"]["rolled"]["value"] for r in rows]
     assert best == sorted(best)  # loss: lower is better
+    assert best == [r["job"]["best"] for r in rows]  # job_agg=best: the subtree's best
 
 
-def test_job_best_on_a_goal_less_primary_ranks_nothing(board):
-    """Plan 32 F5: no goal, no best; ``job:best`` keeps the default order."""
+def test_job_value_on_a_goal_less_primary_ranks_nothing(board):
+    """Plan 32 F5: no goal, no best; ``job:value`` keeps the default order."""
     fleet, _, _, cache = board
     snap, schema = fleet.snapshot(), {"loss": {"primary": True, "hidden": False}}
-    ordered = cache.page(snap, schema, limit=100, top=True, sort="job:best")["rows"]
+    ordered = cache.page(snap, schema, limit=100, top=True, sort="job:value")["rows"]
     default = cache.page(snap, schema, limit=100, top=True)["rows"]
     assert [r["verstr"] for r in ordered] == [r["verstr"] for r in default]
     jobs = [r["job"] for r in ordered if r["job"]]
     assert jobs and all(j["best"] is None and j["goal"] is None for j in jobs)
+    assert all(j["rolled"]["value"] is None for j in jobs)
 
 
 def test_q_and_status_filter_the_top_rows_by_their_own_fields(board):

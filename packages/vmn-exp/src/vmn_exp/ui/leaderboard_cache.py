@@ -48,6 +48,7 @@ from vmn_exp.ui import search_prefilter
 from vmn_exp.ui.attention import AttentionCounts
 from vmn_exp.ui.failure_signature import signed
 from vmn_exp.ui.http_params import MAX_PAGE
+from vmn_exp.ui.job_aggregate import JobAggregates
 from vmn_exp.ui.job_rollup_cache import JobRollupCache
 from vmn_exp.ui.leaderboard_answers import IMPORTANCE_RESULTS, SetAnswers
 from vmn_exp.ui.leaderboard_children import TreeNodes
@@ -347,6 +348,7 @@ class LeaderboardCache(SetAnswers):
         self._importance = LRU(IMPORTANCE_RESULTS)
         self._groups = GroupCache(self, size)
         self.jobs = JobRollupCache(self, size)
+        self.job_aggregates = JobAggregates(self, size)
         self._search = SearchIndexes()
         self._job_view = JobsView(self, size)
         self._subtree = SubtreeMatch(self, size)
@@ -423,6 +425,7 @@ class LeaderboardCache(SetAnswers):
 
     def _ordered(self, snapshot, schema, last, f):
         """The rows passing the :class:`Filters` *f* in order (no ``job:*`` sort)."""
+        f = f._replace(job_agg=None)  # orders the rows, not their jobs
         if filters_read_below(f):
             return self._live_below.ordered(snapshot, schema, last, f)
         base, bucket = self._base(snapshot)
@@ -450,6 +453,7 @@ class LeaderboardCache(SetAnswers):
 
     def static_order(self, base, schema, filters):
         """*base*'s :class:`_Static` order for the :class:`Filters` *filters*."""
+        filters = filters._replace(job_agg=None)
         schema_key = _schema_key(schema)
         return self._orders_for(filters).static.get(
             (base.token, schema_key) + filters,
@@ -508,7 +512,7 @@ class LeaderboardCache(SetAnswers):
         self, snapshot, schema, sort=None, last=None, offset=0, limit=None,
         status=None, query=None, order=None, archived=False, scope=None, top=False,
         match_subtree=False, cursor=None, attention=(), children_of=None, split=None,
-        top_query=None,
+        top_query=None, job_agg=None,
     ):
         """What ``leaderboard`` answers for the same arguments, from the memo.
 
@@ -526,11 +530,17 @@ class LeaderboardCache(SetAnswers):
         status and query match their subtrees
         (:mod:`~vmn_exp.ui.leaderboard_tree_match`). *top_query* keeps the top
         rows passing it by their own fields (plan 28 §4.5; needs *top*).
+        *job_agg* (a :class:`~vmn_exp.ui.job_aggregate.JobAgg`, needs *top*;
+        None: the app's) is the aggregate each ``job`` carries as ``rolled``
+        and ``job:value`` sorts by (plan 31 §2).
         Raises ``QueryError`` on a
         bad *query*, :class:`~vmn_exp.ui.leaderboard_scope.UnknownScope` on an
         unknown *scope*.
         """
-        f = Filters(sort, status, query, order, archived, scope, top, children_of, top_query)
+        f = Filters(sort, status, query, order, archived, scope, top, children_of, top_query,
+                    job_agg)
+        if job_agg is not None and not top:
+            raise ValueError("job_agg needs top=1")
         if match_subtree and not (top or children_of is not None):
             raise ValueError("match_subtree needs top=1 or children_of")
         if top_query and not top:
@@ -551,7 +561,7 @@ class LeaderboardCache(SetAnswers):
             cut, after = pager.cut(rows, offset or 0, self.max_page if limit is None else limit)
             cut = self.tree_nodes.rows(snapshot, schema, cut, children_of, attention, split)
             return {"rows": cut, "total": len(rows), "next_cursor": after}
-        return self.paged(snapshot, schema, rows, offset, limit, top, pager, attention)
+        return self.paged(snapshot, schema, rows, offset, limit, top, pager, attention, job_agg)
 
     def pager(self, snapshot, schema, last, f, cursor, match_subtree=False, ordered=None,
               attention=()):
@@ -562,21 +572,24 @@ class LeaderboardCache(SetAnswers):
         return Pager(lambda projs: keyed(self, snapshot, schema, by_last, by, projs, attention),
                      fingerprint(f, last, match_subtree), cursor)
 
-    def paged(self, snapshot, schema, rows, offset, limit, top, pager, attention=()):
+    def paged(self, snapshot, schema, rows, offset, limit, top, pager, attention=(),
+              job_agg=None):
         """*rows* cut as :meth:`page` answers (carrying ``job`` when *top*)."""
         offset = offset or 0
+        with_jobs = self._job_view.with_jobs
         if limit is None:
             cut = rows[offset : offset + self.max_page]
-            return self._job_view.with_jobs(snapshot, schema, cut, attention) if top else cut
+            return with_jobs(snapshot, schema, cut, attention, job_agg) if top else cut
         cut, after = pager.cut(rows, offset, limit)
         if top:
-            cut = self._job_view.with_jobs(snapshot, schema, cut, attention)
+            cut = with_jobs(snapshot, schema, cut, attention, job_agg)
         return {"rows": cut, "total": len(rows), "next_cursor": after}
 
     def ordered(self, snapshot, schema, sort=None, status=None, order=None, archived=False,
-                scope=None, top=False, query=None, top_query=None):
+                scope=None, top=False, query=None, top_query=None, job_agg=None):
         """Every row passing the filters in :meth:`page`'s order, unpaged."""
-        f = Filters(sort, status, query, order, archived, scope, top, top_query=top_query)
+        f = Filters(sort, status, query, order, archived, scope, top, top_query=top_query,
+                    job_agg=job_agg)
         return self._job_view.ordered(snapshot, schema, None, f)
 
     def groups(self, snapshot, schema, group, **params):

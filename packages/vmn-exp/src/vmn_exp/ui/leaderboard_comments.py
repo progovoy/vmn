@@ -44,16 +44,17 @@ def groups_by_comments(cache, snapshot, schema, group, counts, query=None, **par
 
 def page_by_comments(cache, snapshot, schema, counts, sort=None, last=None, offset=0,
                      limit=None, status=None, query=None, order=None, archived=False,
-                     scope=None, top=False, cursor=None, top_query=None):
+                     scope=None, top=False, cursor=None, top_query=None, job_agg=None):
     """:meth:`LeaderboardCache.page` for a *query* reading ``comments``."""
-    f = Filters(sort, status, query, order, archived, scope, top, top_query=top_query)
+    f = Filters(sort, status, query, order, archived, scope, top, top_query=top_query,
+                job_agg=job_agg)
     # The rows are the unfiltered order's (no query, no last) narrowed.
     pager = cache.pager(snapshot, schema, last, f, cursor, ordered=(None, f._replace(query=None)))
     ordered = cache.ordered(snapshot, schema, sort, status, order, archived, scope, top,
-                            top_query=top_query)
+                            top_query=top_query, job_agg=job_agg)
     extra = {"comments": counts.get, **lean_extra(snapshot)}
     rows = filter_rows(ordered, query, extra=extra)
     if last:
         newest = set(sorted(row["idx"] for row in rows)[-int(last):])
         rows = [row for row in rows if row["idx"] in newest]
-    return cache.paged(snapshot, schema, rows, offset, limit, top, pager)
+    return cache.paged(snapshot, schema, rows, offset, limit, top, pager, job_agg=job_agg)

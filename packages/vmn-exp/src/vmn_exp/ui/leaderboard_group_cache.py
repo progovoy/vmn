@@ -30,14 +30,15 @@ class GroupCache:
     def groups(self, snapshot, schema, group, sort=None, status=None, query=None,
                order=None, archived=False, agg=DEFAULT_AGGREGATE, offset=0, limit=None,
                rows_per_group=10, group_key=None, rows_filter=None, scope=None, top=False,
-               top_query=None):
+               top_query=None, job_agg=None):
         """K1's payload (see :func:`~vmn_exp.ui.leaderboard_groups.groups_payload`).
         Raises ValueError on an unknown field or aggregate, ``QueryError`` on
         a bad *query*, LookupError on an unknown *group_key* or *scope*.
         *rows_filter* (rows -> rows) replaces *query*, uncached: a query
         reading comments. *scope*/*top*/*top_query* narrow the rows as for a page; with
         *top* each group sums its jobs' rollups (plan 23 S7,
-        :mod:`~vmn_exp.ui.leaderboard_group_jobs`). A *top_query* reading
+        :mod:`~vmn_exp.ui.leaderboard_group_jobs`; their aggregates of
+        ``rolled`` by *job_agg*, None: the app's). A *top_query* reading
         ``live_below`` groups uncached too (the top rows are few), as does a
         *query* reading one."""
         check_job_sort(sort, False)
@@ -60,7 +61,8 @@ class GroupCache:
             plain = GroupSpec(group, DEFAULT_AGGREGATE, schema, archived=archived, **where)
             unfiltered = (self._uncached(snapshot, schema, plain, list) if live_below
                           else self.grouping(snapshot, schema, plain))
-        extra = job_fields(grouping, self._cache.job_rollups(snapshot, schema)) if top else None
+        extra = job_fields(grouping, self._cache._job_view.summaries(
+            snapshot, schema, job_agg=job_agg)) if top else None
         return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
                               unfiltered, extra)
 

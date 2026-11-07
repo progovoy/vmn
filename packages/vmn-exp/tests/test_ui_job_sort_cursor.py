@@ -33,14 +33,14 @@ def _paged(cache, snap, limit, **params):
             return got
 
 
-@pytest.mark.parametrize("sort", ["job:total", "job:best", "job:progress"])
+@pytest.mark.parametrize("sort", ["job:total", "job:value", "job:progress"])
 @pytest.mark.parametrize("order", [None, "asc", "desc"])
 @pytest.mark.parametrize("limit", [1, 2, 3])
 def test_cursor_pages_match_job_sorted_with_ties_and_missing_values(board, sort, order, limit):
     snap, cache = board
     default = cache.page(snap, SCHEMA, limit=10**6, top=True)["rows"]
     want = [row["verstr"] for row in job_sorted(
-        default, cache.job_rollups(snap, SCHEMA), sort, order, SCHEMA)]
+        default, cache._job_view.summaries(snap, SCHEMA), sort, order, SCHEMA)]
     assert len(want) == 10
 
     assert _paged(cache, snap, limit, sort=sort, order=order) == want

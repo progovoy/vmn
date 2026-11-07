@@ -4,13 +4,12 @@ S7) adds: its jobs' rollups summed. ``job_counts``: the group's jobs, per
 tree status (the count names of plan 22); ``runs``: every job's ``total``
 (its subtree) plus the group's single runs; ``failed``: failed, stuck or
 lost runs among those; ``job_aggregates``: ``{metric: stats}`` over the group's jobs'
-``best`` of the rollups' main metric (mean/best/median/min/max of the
-bests, ``best`` by the metric's goal).
+``rolled`` values (plan 31 §2: the board's chosen aggregate per job, then
+every group aggregate of those, ``best`` and the tails by the metric's goal).
 
 Built once per grouping and job summaries (which follow the live bucket and the minute):
 O(jobs), not O(rows).
 """
-from vmn_exp.core.metric_schema import metric_goal
 from vmn_exp.core.settle import LOST
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_group_fields import COUNT_KEYS, COUNT_OF
@@ -21,7 +20,7 @@ FAILED = ("failed", "stuck")
 
 class JobGroups:
     def __init__(self, grouping, summaries):
-        self._grouping, self._schema = grouping, grouping.spec.schema
+        self._grouping = grouping
         spec = grouping.spec
         rows = [row for row in map(grouping.row_of, summaries) if row is not None]
         self._jobs = {}  # {group key: [(job row, summary)]}
@@ -56,12 +55,13 @@ class JobGroups:
             "job_aggregates": self._aggregates([s for _, s in jobs]),
         }
 
-    def _aggregates(self, summaries):
-        metric = next((s["metric"] for s in summaries if s.get("metric")), None)
-        bests = sorted(s["best"] for s in summaries if is_finite_number(s.get("best")))
-        if not bests:
+    @staticmethod
+    def _aggregates(summaries):
+        rolled = [s["rolled"] for s in summaries if s.get("rolled")]
+        values = sorted(r["value"] for r in rolled if is_finite_number(r["value"]))
+        if not values:
             return {}
-        return {metric: stats(bests, metric_goal(self._schema, metric))}
+        return {rolled[0]["metric"]: stats(values, rolled[0]["goal"])}
 
 
 def job_fields(grouping, summaries):

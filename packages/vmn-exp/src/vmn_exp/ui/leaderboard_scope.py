@@ -5,7 +5,8 @@ only, the Jobs view: ``True`` all of them, ``"jobs"`` those with children,
 ``children_of`` (a run's direct children, the tree's pages, plan 28 N6),
 ``top_query`` (a query the top-level rows pass by their own fields, beside a
 ``query`` that may match their subtrees: the Live/Review presets, plan 28
-§4.5), the status whitelist and the query language, as one hashable :class:`Filters`
+§4.5), the status whitelist and the query language, plus the Jobs view's
+``job_agg`` (plan 31 §2), as one hashable :class:`Filters`
 the cached orders are keyed by.
 
 A row is in a scope when the scope is on its parent chain (the snapshot's
@@ -49,8 +50,11 @@ class UnknownScope(LookupError):
     """A ``scope`` naming no run of the snapshot."""
 
 
-Filters = namedtuple("Filters", "sort status query order archived scope top children_of top_query",
-                     defaults=(None, None, None, None, False, None, False, None, None))
+# ``job_agg``: the aggregate a Jobs view's rows carry and ``job:value``
+# sorts by (plan 31 §2), never what rows pass.
+Filters = namedtuple("Filters",
+                     "sort status query order archived scope top children_of top_query job_agg",
+                     defaults=(None, None, None, None, False, None, False, None, None, None))
 
 
 def _child_of(row, parent):

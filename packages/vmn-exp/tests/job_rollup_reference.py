@@ -196,3 +196,99 @@ def timeline(events, minutes):
         counts[("started", "succeeded", "failed").index(kind)] += 1
         out[t] = tuple(counts)
     return out
+
+
+# -- plan 31 §2: a chosen aggregate over a job's units ----------------------
+
+def _quantile(ordered, q):
+    at = q * (len(ordered) - 1)
+    low = int(at)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (at - low)
+
+
+TAILS = {("best10", True): 0.9, ("best10", False): 0.1,
+         ("worst10", True): 0.1, ("worst10", False): 0.9}
+
+
+def aggregate(values, agg, up, rank=False):
+    """*agg* of the finite *values* (``best``/tails by *up*; None without
+    one); a quantile interpolated, or with *rank* the value at its rank (a
+    sketch's)."""
+    ordered = sorted(values)
+    if not ordered or up is None:
+        return None
+    if agg == "mean":
+        return math.fsum(ordered) / len(ordered)
+    if agg == "min":
+        return ordered[0]
+    if agg == "max":
+        return ordered[-1]
+    if agg == "best":
+        return ordered[-1] if up else ordered[0]
+    q = 0.5 if agg == "median" else TAILS[(agg, up)]
+    return exact_quantile(ordered, q) if rank else _quantile(ordered, q)
+
+
+def _carries(row, by):
+    kind, _, field = by.partition(":")
+    if kind == "kind":
+        return str((row.get("tags") or {}).get("kind")) == field
+    prefix, _, name = field.partition(".")
+    return (row.get(prefix) or {}).get(name) is not None
+
+
+def units_of(rows, verstr, by):
+    """Brute force: ``[(unit row, key)]`` of job *verstr*: its direct
+    children, or the nearest descendants carrying the field/kind per branch."""
+    shown = [row for row in rows if not row.get("archived")]
+    by_verstr, children = {row["verstr"]: row for row in shown}, children_by_parent(shown)
+    if by == "children":
+        return [(by_verstr[k], None) for k in children.get(verstr, ())
+                if k in by_verstr and k != verstr]
+    prefix, _, name = by.partition(":")[2].partition(".")
+    out, stack, seen = [], list(children.get(verstr, ())), {verstr}
+    while stack:
+        kid = stack.pop()
+        if kid in seen or kid not in by_verstr:
+            continue
+        seen.add(kid)
+        row = by_verstr[kid]
+        if _carries(row, by):
+            key = None if by.startswith("kind:") else str((row.get(prefix) or {}).get(name))
+            out.append((row, key))
+        else:
+            stack.extend(children.get(kid, ()))
+    return out
+
+
+def unit_value(rows, unit, metric, source, up):
+    """A unit's own *metric*, or (``best``) the best over it and its subtree."""
+    own = (unit.get("metrics") or {}).get(metric)
+    if source == "own":
+        return own if _finite(own) else None
+    below = [r["metrics"][metric] for r in members_of(rows, unit["verstr"])
+             if _finite((r.get("metrics") or {}).get(metric))]
+    values = below + ([own] if _finite(own) else [])
+    if up is None:  # only a lone value is its own best
+        return None if below else (own if _finite(own) else None)
+    return (max(values) if up else min(values)) if values else None
+
+
+def rolled(rows, verstr, by, source, metric, agg, up):
+    """``{value, n, of, conflicts}`` of job *verstr* (``runs``: every run below it)."""
+    if by == "runs":
+        members = members_of(rows, verstr)
+        values = [r["metrics"][metric] for r in members if _finite(r["metrics"].get(metric))]
+        return {"value": aggregate(values, agg, up, rank=True), "n": len(values),
+                "of": len(members),
+                "conflicts": 0}
+    keyed = {}
+    for row, key in units_of(rows, verstr, by):
+        keyed.setdefault(row["verstr"] if key is None else key, []).append(row)
+    conflicts = sum(1 for kept in keyed.values() if len(kept) > 1)
+    values = [unit_value(rows, kept[0], metric, source, up) for kept in keyed.values()
+              if len(kept) == 1]
+    values = [x for x in values if x is not None]
+    return {"value": aggregate(values, agg, up), "n": len(values), "of": len(keyed),
+            "conflicts": conflicts}

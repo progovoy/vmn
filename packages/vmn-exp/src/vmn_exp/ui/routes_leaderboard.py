@@ -30,6 +30,11 @@ the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
 A ``q`` (or ``top_q``) with ``ago()`` is pinned to the minute first (plan 28 P1,
 :func:`~vmn_exp.ui.attention.pinned`), so its ETag and orders follow the
 clock; a Jobs view page's ``job`` carries the app's attention counts.
+With ``top``, each row's ``job`` carries ``rolled``, the aggregate
+``job_agg``/``job_agg_by``/``job_agg_value``/``job_agg_metric`` name over the
+app's ``experiment.ui.job_aggregate`` (plan 31 §2,
+:mod:`~vmn_exp.ui.job_aggregate`), sortable by ``job:value``; a bad value,
+or one without ``top``, is a 400.
 ``children_of=<verstr>`` pages that run's direct children for the tree
 (plan 28 N6, :mod:`~vmn_exp.ui.leaderboard_children`): each with children
 carrying its ``job`` (attention over its own subtree, the app's split),
@@ -49,6 +54,7 @@ from vmn_exp.ui.attention import pinned, queries_of
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.http_params import clamp_page, key_list
+from vmn_exp.ui.job_aggregate import job_agg_of
 from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.leaderboard_comments import (
     groups_by_comments,
@@ -111,6 +117,10 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         cursor: str = None,
         children_of: str = None,
         top_q: str = None,
+        job_agg: str = None,
+        job_agg_by: str = None,
+        job_agg_value: str = None,
+        job_agg_metric: str = None,
     ):
         _refuse_web_params(request)
         snapshot, schema = inputs(ws_name, app_tag)
@@ -118,12 +128,14 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         top, q, top_q = _top(top), _pinned(q), _pinned(top_q)
         if top_q and not top:
             raise HTTPException(400, "top_q needs top=1")
+        aggregate = _job_agg(ws_name, app_tag, top, agg=job_agg, by=job_agg_by,
+                             value=job_agg_value, metric=job_agg_metric)
         tree = children_of is not None
         attention = queries_of(attention_of(ws_name, app_tag)) if top or tree else ()
         offset, limit = clamp_page(offset, limit, cache.max_page)
         params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
                       order=order, archived=archived, scope=_scope(scope), top=top,
-                      top_query=top_q)
+                      top_query=top_q, **aggregate)
         # A Jobs view's summaries (throughput, ETA) follow the minute; the
         # etag carries the live bucket already.
         clock = dict(minute=minute()) if top or tree else {}
@@ -261,6 +273,18 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
                                       params.get("archived"))
             return dict(body, hints=found) if found else body
         return answer
+
+    def _job_agg(ws_name, app_tag, top, **given):
+        """``{job_agg: JobAgg}`` of a Jobs view request (none without *top*,
+        400 when it names one anyway or a bad value)."""
+        if not top:
+            if any(value is not None for value in given.values()):
+                raise HTTPException(400, "job_agg needs top=1")
+            return {}
+        try:
+            return {"job_agg": job_agg_of(ui_of(ws_name, app_tag), **given)}
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     def _top(top):
         try:
