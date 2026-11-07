@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { ExperimentRow, MetricsSchema } from "../types";
 import { metricGoal, rowParams } from "../util";
+import { isFoldedParam } from "../util/paramKeys";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
 
 /** Default column widths (px) under `table-layout: fixed`, so a long value
@@ -234,14 +235,13 @@ export function metricColumns(
   const logged = new Set<string>();
   const asParam = new Set<string>();
   rows.forEach((r) => {
-    const params = rowParams(r);
-    const alsoLogged = new Set(r.logged_params ?? []);
     Object.keys(r.metrics).forEach((k) => {
       inData.add(k);
-      if (!(k in params) || alsoLogged.has(k)) logged.add(k);
+      if (!isFoldedParam(r, k)) logged.add(k);
     });
-    Object.keys(params).forEach((k) => { if (!alsoLogged.has(k)) asParam.add(k); });
+    Object.keys(rowParams(r)).forEach((k) => { if (isFoldedParam(r, k)) asParam.add(k); });
   });
+  // Logged by any row wins over a param of any row.
   const isMetric = (k: string) => inData.has(k) && (logged.has(k) || !asParam.has(k));
   const fromSchema = Object.keys(schema ?? {}).filter(isMetric);
   const extras = [...inData].filter((k) => !(schema ?? {})[k] && isMetric(k)).sort();

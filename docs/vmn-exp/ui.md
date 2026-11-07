@@ -1517,6 +1517,7 @@ Query params: `max_points` (default 2000, at most 20000), `keys=loss,acc`
 | `hidden_metrics` | the run's metrics marked hidden, sorted |
 | `metric_charts` | `{metric: "bars"\|"table"}` for the run's metrics whose `chart` hint is not a line (the run's `define_metric`, else the schema), absent when none; the run page draws them that way |
 | `metric_summary` | `{metric: {last, min, max, first, mean}}` for metrics logged more than once |
+| `logged_params` | the params the run also logged as metrics (their `metrics` value is the logged one); any other param in `metrics` is a folded param |
 | `outputs` | the run's outputs (see [Lineage](#lineage)) |
 | `rerun_of` | the run this one reruns, if any |
 | `patches` | which patch kinds the snapshot holds |

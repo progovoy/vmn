@@ -7,12 +7,14 @@ function makeDetail(opts: {
   params?: Record<string, unknown>;
   metrics?: ExperimentDetail["metrics"];
   metric_summary?: Record<string, { last: number | null; min: number | null; max: number | null }>;
+  logged_params?: string[];
 }): ExperimentDetail {
   return {
     metadata: { verstr: "0.0.1-dev.x" },
     params: opts.params ?? {},
     metrics: opts.metrics ?? {},
     metric_summary: opts.metric_summary,
+    logged_params: opts.logged_params,
     series: {},
     patches: {},
   };
@@ -56,12 +58,14 @@ describe("isParamOnly", () => {
     expect(isParamOnly("seed", d)).toBe(true);
   });
 
-  it("returns false when the key has a metric_summary even though it is also in params", () => {
-    // A numeric param that was also logged as a metric (rare but possible)
+  it("returns false when the key was also logged as a metric even though it is also in params", () => {
+    // A numeric param that was also logged as a metric (rare but possible);
+    // the server names it in logged_params (plan 32 F8)
     const d = makeDetail({
       params: { lr: 0.001 },
       metrics: { lr: 0.001 },
       metric_summary: { lr: { last: 0.001, min: 0.001, max: 0.001 } },
+      logged_params: ["lr"],
     });
     expect(isParamOnly("lr", d)).toBe(false);
   });

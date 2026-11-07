@@ -1,11 +1,18 @@
 import type { ExperimentDetail } from "../types";
 
-/** True when *key* is a parameter (present in `params`) and was never logged
- *  as a metric more than once (no `metric_summary` entry). Numeric params
- *  fold into the `metrics` dict on list rows, but they belong in the params
- *  card, not the metrics card. */
+/** What tells a folded param from a logged metric: a row or a run detail. */
+export interface ParamFoldSource {
+  params?: Record<string, unknown>;
+  logged_params?: readonly string[];
+}
+
+/** True when *key*'s `metrics` value is a numeric param's fold: *key* is a
+ *  param the run never logged as a metric (`logged_params`, plan 32 F8). */
+export function isFoldedParam(source: ParamFoldSource, key: string): boolean {
+  return Boolean(source.params && key in source.params) && !source.logged_params?.includes(key);
+}
+
+/** True when *key* belongs in the run's params card, not its metrics card. */
 export function isParamOnly(key: string, detail: ExperimentDetail): boolean {
-  if (!detail.params || !(key in detail.params)) return false;
-  if (detail.metric_summary && key in detail.metric_summary) return false;
-  return true;
+  return isFoldedParam(detail, key);
 }

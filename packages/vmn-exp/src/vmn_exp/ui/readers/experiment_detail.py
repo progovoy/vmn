@@ -300,6 +300,7 @@ def experiment_detail(
         "params": snapshot.params,
         "metrics": metrics,
         "metric_summary": metric_summary,
+        "logged_params": snapshot.logged_params,
         "series": series,
         "series_total": series_total,
         "step_metrics": snapshot.step_metrics(schema),

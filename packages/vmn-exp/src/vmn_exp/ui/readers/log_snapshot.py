@@ -9,6 +9,7 @@ from vmn_exp.core.fold import (
     fold_metrics,
     fold_rewinds,
     fold_values,
+    logged_params,
 )
 from vmn_exp.core.metric_schema import hidden_metrics, metric_charts
 from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
@@ -40,6 +41,7 @@ class LogSnapshot:
         self._counts = dict(parsed.counts)
         self.params = fold_values(parsed.fold, "params")
         self.metrics = fold_values(parsed.fold, "metrics")
+        self.logged_params = logged_params(parsed.fold)
         self._metric_fold = _metric_parts(parsed.fold)
         self.last_metric_at = fold_last_metric_at(parsed.fold)
         self.media = parsed.media_view

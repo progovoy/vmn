@@ -36,7 +36,7 @@ let lookup: ExperimentRow[] = [OUTER, PLAIN];
 
 const detail = (r: ExperimentRow): ExperimentDetail => ({
   metadata: { verstr: r.verstr }, idx: r.idx, name: r.name ?? null, params: r.params ?? {}, metrics: r.metrics,
-  series: {}, patches: {},
+  logged_params: r.logged_params, series: {}, patches: {},
   status: { kind: r.kind, children: r.children, fleet: { expected: 5, counts: { succeeded: r.children?.length ?? 0 } } },
 } as unknown as ExperimentDetail);
 
@@ -141,6 +141,14 @@ describe("an outer run without metrics of its own", () => {
 });
 
 describe("an outer run that logs its own metrics", () => {
+  it("counts a metric logged under a param's name (plan 32 F8)", async () => {
+    lookup = [{ ...OUTER, metrics: { folds: 0.9 }, logged_params: ["folds"] } as ExperimentRow, PLAIN];
+    renderPage("?sel=o&sel=b");
+    const chips = await screen.findByRole("list", { name: "selected runs" });
+    await within(chips).findByRole("link", { name: "outer · 5 runs" });
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+
   it("compares normally, with no note", async () => {
     lookup = [{ ...OUTER, metrics: { acc_mean: 0.9 } } as ExperimentRow, PLAIN];
     renderPage("?sel=o&sel=b");

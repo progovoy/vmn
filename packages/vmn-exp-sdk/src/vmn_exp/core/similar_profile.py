@@ -22,6 +22,7 @@ import re
 from collections import namedtuple
 
 from vmn_exp.core.features import AUTHOR_ONLY_VERSION
+from vmn_exp.core.fold import is_folded_param
 
 SYS_PREFIX = "sys_"
 # The diff part of a clean tree's dev verstr (version_stamp's snapshot identity).
@@ -89,12 +90,12 @@ def _named(value):
 
 
 def objective_names(row):
-    """The metric names a run optimises: its metrics minus its params (which
-    the fold copies into metrics) and the ``sys_*`` system metrics."""
-    params = _dict(row.get("params"))
+    """The metric names a run optimises: its metrics minus the params the
+    fold copies into metrics and the ``sys_*`` system metrics."""
+    params, logged = _dict(row.get("params")), row.get("logged_params", ())
     return frozenset(
         name for name in _named(row.get("metrics"))
-        if name not in params and not name.startswith(SYS_PREFIX)
+        if not is_folded_param(name, params, logged) and not name.startswith(SYS_PREFIX)
     )
 
 

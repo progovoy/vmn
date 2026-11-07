@@ -10,7 +10,7 @@ import threading
 from types import SimpleNamespace
 
 from vmn_exp.core.fold import (
-    fold_definitions, fold_log, fold_metrics, fold_values, logged_params,
+    fold_definitions, fold_log, fold_metrics, fold_values, is_folded_param, logged_params,
 )
 from vmn_exp.core.log import load_log
 from vmn_exp.core.metric_schema import metric_goal
@@ -105,11 +105,6 @@ def _load_sides(storage, app_name, verstrs, read_log, schema=None, with_code=Tru
     return sides, None
 
 
-def _is_param_only(key, params, logged):
-    """True when *key* came from a numeric param, not a logged metric."""
-    return key in params and key not in logged
-
-
 def _is_param_key(key, sides):
     """True when every side holding *key* holds it as a param (D2).
 
@@ -118,7 +113,7 @@ def _is_param_key(key, sides):
     """
     present = [side for side in sides if key in side[0]]
     return bool(present) and all(
-        _is_param_only(key, params, logged) for _, params, logged in present
+        is_folded_param(key, params, logged) for _, params, logged in present
     )
 
 

@@ -424,6 +424,8 @@ export interface ExperimentDetail {
   metrics: Record<string, number | string | null>;
   /** last/min/max of every metric logged more than once. */
   metric_summary?: Record<string, MetricSummary>;
+  /** Params the run also logged as metrics (see ExperimentRow). */
+  logged_params?: string[];
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
   /** Names may be nested paths (`plots/loss.png`). */

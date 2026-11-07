@@ -9,6 +9,7 @@ is the last one's counts minus the rows that left plus the rows that joined
 (found by identity, :func:`~vmn_exp.ui.leaderboard_delta.changed_slots`).
 """
 
+from vmn_exp.core.fold import is_folded_param
 from vmn_exp.core.traced_lock import TracedLock
 from vmn_exp.ui.facet_values import DISTINCT_CAP, ParamValues
 from vmn_exp.ui.leaderboard_delta import changed_slots, delta_limit, left_rows
@@ -65,7 +66,9 @@ class FacetCounts:
                 metrics = row.get("metrics") or {}
                 _tally(out.metric_keys, metrics, by)
                 params = row.get("params") or {}
-                _tally(out.folded_params, [m for m in metrics if m in params], by)
+                logged = row.get("logged_params", ())
+                _tally(out.folded_params,
+                       [m for m in metrics if is_folded_param(m, params, logged)], by)
                 _tally(out.param_keys, params, by)
                 out.param_values.move(params, by)
                 _tally(out.tag_keys, row.get("tags") or {}, by)

@@ -7,6 +7,7 @@ import { findCachedRow, runQuery } from "../../queries";
 import { runText } from "../../shell/crumbs";
 import { verstrInQuery } from "../../util/searchQuery";
 import { isOuterRun, outerRunCount } from "../../util/outerRun";
+import { isFoldedParam, type ParamFoldSource } from "../../util/paramKeys";
 import type { ExperimentDetail, ExperimentRow } from "../../types";
 
 export interface RunChipLabel {
@@ -26,8 +27,8 @@ export interface OuterInfo {
 }
 
 /** Metrics the run logged, not its numeric params' fold. */
-const logsMetrics = (metrics: Record<string, unknown> = {}, params: Record<string, unknown> = {}) =>
-  Object.keys(metrics).some((k) => !(k in params));
+const logsMetrics = (source: (ParamFoldSource & { metrics?: Record<string, unknown> }) | undefined) =>
+  Object.keys(source?.metrics ?? {}).some((k) => !isFoldedParam(source ?? {}, k));
 
 function outerOf(ref: string, d: ExperimentDetail | undefined, row: ExperimentRow | undefined): OuterInfo | null {
   const fields = d?.status ?? row;
@@ -36,7 +37,7 @@ function outerOf(ref: string, d: ExperimentDetail | undefined, row: ExperimentRo
   return {
     verstr, name: d?.name || row?.name || verstr,
     count: (row && outerRunCount(row)) ?? (d?.status ? outerRunCount(d.status) : null),
-    logsMetrics: logsMetrics(d?.metrics ?? row?.metrics, d?.params ?? row?.params),
+    logsMetrics: logsMetrics(d ?? row),
   };
 }
 

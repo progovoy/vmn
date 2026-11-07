@@ -208,9 +208,10 @@ def take_from_param(fold, name):
 
 
 def _apply_metric_values(fold, entry, key):
-    metrics = fold["metrics"]
+    metrics, extrema = fold["metrics"], fold.setdefault("extrema", {})
     for name, value in (entry.get("values") or {}).items():
-        take_from_param(fold, name)
+        if name not in extrema:  # take_from_param, inlined: once per value
+            metrics.pop(name, None)
         track_extrema(fold, name, value, key)
         _keep_latest(metrics, name, value, key)
 
@@ -323,6 +324,13 @@ def logged_params(fold):
     """The params *fold*'s run also logged as metrics, sorted — their
     ``metrics`` entry is the logged one, not the param's."""
     return sorted(name for name in fold["params"] if _logged(fold, name))
+
+
+def is_folded_param(name, params, logged=()):
+    """Whether a row's ``metrics[name]`` is a param's number, not a logged
+    metric: *name* is in its *params* but not its ``logged_params``
+    (*logged*)."""
+    return name in params and name not in logged
 
 
 def fold_tags(fold):
