@@ -32,14 +32,14 @@ def test_media_inlined_as_data_uris_up_to_the_cap(tmp_path):
     uris = ["vmn://root/svc/v1/media/i/1.png", "vmn://root/svc/v1/media/i/2.png", "vmn://root/svc/v1/media/gone.png"]
     media, skipped = rx.collect_media(storage, {"p": _payload(uris)}, cap_bytes=len(PNG) * 10)
     assert media == {uris[0]: "data:image/png;base64,iVBORw0KGgpmYWtl"}
-    assert skipped == uris[1:]
+    assert skipped == {uris[1]: "over_cap", uris[2]: "missing"}
 
 
 def test_zero_cap_inlines_nothing(tmp_path):
     f = tmp_path / "s.png"
     f.write_bytes(PNG)
     storage = FakeStorage({("a", "v1", "media/x.png"): str(f)})
-    assert rx.collect_media(storage, {"p": _payload(["vmn://a/v1/media/x.png"])}, 0) == ({}, ["vmn://a/v1/media/x.png"])
+    assert rx.collect_media(storage, {"p": _payload(["vmn://a/v1/media/x.png"])}, 0) == ({}, {"vmn://a/v1/media/x.png": "over_cap"})
 
 
 def test_html_is_self_contained_and_escapes_script_ends():

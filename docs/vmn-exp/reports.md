@@ -138,7 +138,8 @@ vmn-exp report export <rid> [--rev N] [-o report.html] [--max-media-mb 20]
 
 This writes one self-contained HTML file: the rendered markdown, the published
 panel data inlined as JSON, and a bundled renderer. Media is inlined as data
-URIs up to `--max-media-mb`, and anything skipped is listed on stderr. The
+URIs up to `--max-media-mb`. Anything skipped is listed on stderr, and the page
+shows it as "not included in export (over N MB)" or "(file missing)". The
 default revision is the published one, else the latest. An unpublished
 revision exports with empty panels and a warning. The file opens offline.
 

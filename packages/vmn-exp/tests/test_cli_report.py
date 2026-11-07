@@ -89,6 +89,20 @@ def test_export_published_revision_and_unknowns(store_dir, tmp_path, capsys):
     assert _run("report", "export", "rmissing", "-o", str(out), "--dir", store_dir) == 1
 
 
+def test_export_records_media_not_inlined_and_the_cap(store_dir, tmp_path, monkeypatch):
+    """Plan 32: the page says which images it left out and why."""
+    monkeypatch.setattr(rx, "load_bundle", lambda: ("", ""))
+    rid = _put_new(store_dir, tmp_path)["rid"]
+    gone = "vmn://a/v1/media/gone.png"
+    published.publish(_storage(store_dir), rid, 1, {"p1": {"app": "a", "verstrs": [], "media": [gone], "queries": []}})
+    out = tmp_path / "r.html"
+    assert _run("report", "export", rid, "--rev", "1", "-o", str(out), "--max-media-mb", "5", "--dir", store_dir) == 0
+    raw = out.read_text().split('id="vmn-report-data">')[1].split("</script>")[0]
+    data = json.loads(raw)
+    assert data["skipped"] == {gone: "missing"}
+    assert data["max_media_mb"] == 5
+
+
 def test_delete(store_dir, tmp_path):
     rid = _put_new(store_dir, tmp_path)["rid"]
     assert _run("report", "delete", rid, "--dir", store_dir) == 0

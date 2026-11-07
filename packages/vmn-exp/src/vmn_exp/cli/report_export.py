@@ -47,15 +47,16 @@ def _data_uri(path):
 
 
 def collect_media(storage, panels, cap_bytes):
-    """``({uri: data-uri}, skipped)``: every panel's media, in order, while
-    their total size stays within *cap_bytes*; missing or over-cap ones skip."""
-    media, skipped, total = {}, [], 0
+    """``({uri: data-uri}, {uri: "missing" | "over_cap"})``: every panel's
+    media, in order, while their total size stays within *cap_bytes*; the
+    rest skip, each with why."""
+    media, skipped, total = {}, {}, 0
     uris = dict.fromkeys(uri for p in panels.values() for uri in p.get("media") or ())
     for uri in uris:
         local = _local_path(storage, uri) if uri.startswith(VMN_SCHEME) else None
         size = os.path.getsize(local) if local else None
         if size is None or total + size > cap_bytes:
-            skipped.append(uri)
+            skipped[uri] = "missing" if size is None else "over_cap"
             continue
         total += size
         media[uri] = _data_uri(local)

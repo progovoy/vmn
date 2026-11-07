@@ -145,10 +145,22 @@ describe("exported report", () => {
     for (const fn of [...Object.values(m), mLineage]) expect(fn).not.toHaveBeenCalled();
   });
 
-  it("an image over the media cap renders without a source", async () => {
+  it.each([
+    ["over_cap", "not included in export (over 20 MB)"],
+    ["missing", "not included in export (file missing)"],
+  ] as const)("an image left out (%s) shows why, never a blank or live source", async (reason, note) => {
     const panels = await publishAll();
-    render(<ExportedReport data={{ ...exportData(panels), media: {} }} />);
-    expect(await screen.findByAltText("media/img/1.png")).not.toHaveAttribute("src", expect.stringMatching(/api/));
+    const uri = "vmn://my_app/a/media/img/1.png";
+    render(<ExportedReport data={{ ...exportData(panels), media: {}, skipped: { [uri]: reason }, max_media_mb: 20 }} />);
+    const src = (await screen.findByAltText("media/img/1.png")).getAttribute("src")!;
+    expect(src).toMatch(/^data:image\/svg\+xml,/);
+    expect(decodeURIComponent(src)).toContain(note);
+  });
+
+  it("a markdown image left out shows why", () => {
+    const uri = "vmn://my_app/a/media/img/2.png";
+    render(<ExportedReport data={{ ...exportData({}), body: `![pic](${uri})\n`, skipped: { [uri]: "over_cap" }, max_media_mb: 20 }} />);
+    expect(decodeURIComponent(screen.getByAltText("pic").getAttribute("src")!)).toContain("not included in export (over 20 MB)");
   });
 
   it("a panel without published data says so", () => {

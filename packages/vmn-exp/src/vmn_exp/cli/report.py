@@ -86,10 +86,10 @@ def _cmd_export(storage, args):
     if not panels:
         print(f"Revision {rev} is not published: panels will show no data", file=sys.stderr)
     media, skipped = report_export.collect_media(storage, panels, int(args.max_media_mb * 1024 * 1024))
-    for uri in skipped:
-        print(f"Not inlined (missing or over --max-media-mb): {uri}", file=sys.stderr)
+    for uri, why in skipped.items():
+        print(f"Not inlined ({'missing' if why == 'missing' else 'over --max-media-mb'}): {uri}", file=sys.stderr)
     data = {"title": report.get("title") or args.rid, "rev": rev, "body": revision["body"],
-            "panels": panels, "media": media}
+            "panels": panels, "media": media, "skipped": skipped, "max_media_mb": args.max_media_mb}
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(report_export.build_html(data, *report_export.load_bundle()))
     print(args.output)
