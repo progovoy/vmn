@@ -451,7 +451,9 @@ no ended outer run settled) is `status = "stuck" and settled != "lost"`, while
 Every query surface (`vmn-exp list --query`, `prune`/`archive --query`, the
 SDK's `list_runs`, the UI's `q` and `top_q`) reads the subtree counts `live_below`,
 `running_below` and `stuck_below` (the runs below a row still running,
-waiting or stuck; [query fields](sdk.md#the-query-language)) by the job
+waiting or stuck), `failed_below` (the failed and lost runs below it) and
+`failed_pct` (their share of the runs below it in percent, the rollup's
+`failed_pct`; [query fields](sdk.md#the-query-language)) by the job
 rollups' rule: a settled run counts nowhere, an archived run's subtree only
 in it, so `vmn-exp list --query 'running_below > 0'` lists the ended launches
 whose grandchildren still run, the same outer runs the UI's Outer runs page

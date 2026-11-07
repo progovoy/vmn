@@ -487,7 +487,7 @@ ui:
 
 - Keys: `metrics.<name|glob>.{goal, summary, hidden, primary, step_metric, chart}`
   (as in [conf.yml](experiments.md#metrics-schema-sorting--goals)) and
-  `ui.*` (`group_aggregate`, `stale_after_min`, `progress`, `attention`,
+  `ui.*` (`group_aggregate`, `stale_after_min`, `failed_pct_threshold`, `progress`, `attention`,
   `baseline`, `views`, `tree_columns` checked; other `ui` keys kept).
   `ui.tree_columns` maps a `tags.kind` value to the show keys
   (`m:`/`p:`/`t:`/`c:<name>`) the [tree](ui.md#the-tree) shows for runs of

@@ -458,8 +458,13 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   it or any run below it runs (`status = "running" or running_below > 0`),
   **stuck** likewise (`stuck_below`), and **failed**, **succeeded** and
   **created** match its `tree_status` (so a tree with a failed run reads
-  failed, and may still read running). They travel in `top_q`, beside a
-  preset's query, and the command line under the board shows them.
+  failed, and may still read running). Once **failed** is on, a
+  **≥ N% failed** chip beside it keeps only the trees whose failure share
+  is at least N instead (`failed_pct >= N`, URL `failed_pct=N`): one failed
+  run in 3,000 no longer reads like 40%. N is the app's
+  `experiment.ui.failed_pct_threshold` (default 5, `0 < N <= 100`). It is a
+  filter, not a status. They travel in `top_q`, beside a preset's query, and
+  the command line under the board shows them.
 
   Every column sorts by what its cell shows (`job:progress`, `job:failed_pct`, `job:rate`, `job:throughput`, `job:best`, `job:total`, `job:started`): **rate** is a declared progress per minute since the outer run started (`declared_progress.rate_per_min`, `—` without one), **runs/min** the runs finished per minute over the last 10 minutes (`throughput_per_min`, always), and **when** the subtree's first start, else the outer run's own, else its creation labelled `created` (`when_at`, `when_source`). `progress`/`eta_sec` (and an ended row's ETA cell: `ended · 19 dates not done` or `ended · 180 never started`) come from the declared progress when there is one, else from the runs; `progress_source` (`declared`/`runs`) says which; the status column sorts by `job:attention` (needs attention first: error-level matches, stuck runs included, then warn-level ones); the name column is headed `outer run · progress`.
 - **Live** and **Review** (`view=live|review`, a second switch `Live · Review`
@@ -593,8 +598,11 @@ rollup of its subtree:
 - the columns `experiment.ui.tree_columns` names for its `tags.kind` value
   (conf.yml or the [store settings](server.md#app-settings)), e.g.
   `tree_columns: {study: [m:best_value, p:group], refit: [t:health, c:ratio]}`:
-  show keys `m:<metric>`, `p:<param>`, `t:<tag>`, `c:duration|queue|ratio`
-  (or another row field), shown as `label value` chips.
+  show keys `m:<metric>`, `p:<param>`, `t:<tag>`, `c:duration|queue|ratio`,
+  `c:total` (`runs`) and `c:failed_pct` (`failed`), those two read from the
+  node's own subtree rollup (`—` on a run without children), or another row
+  field, shown as `label value` chips. A walk-forward's date rows, say:
+  `tree_columns: {date: [m:date.best_value, c:total, c:failed_pct]}`.
 
 Children load when a node opens, 100 at a time with a `+N more` row. A node
 the server marks `open` (attention in its subtree, or running or stuck runs
@@ -906,8 +914,10 @@ message.
     it is a 400. The Live and Review presets and the Outer runs' status
     chips send it. It reads `live_below`: the runs below the row
     still running, waiting or stuck (its rollup's `counts`, settled runs
-    left out; 0 for a single run), and `running_below`/`stuck_below`, those
-    running or stuck alone — the counts `vmn-exp list --query` and the SDK
+    left out; 0 for a single run), `running_below`/`stuck_below`, those
+    running or stuck alone, and `failed_below`/`failed_pct`, the failed and
+    lost runs below it and their share in percent (the rollup's
+    `failed_pct`) — the counts `vmn-exp list --query` and the SDK
     read too ([query fields](sdk.md#the-query-language)), so the command line
     under the board lists the same outer runs.
   - `experiments-facets` returns `jobs`/`singles` counts.
@@ -1120,6 +1130,10 @@ across reloads), so a page knows its default view at first paint:
 ```json
 "views": [{"name": "health", "page": "runs", "search": "?show=t%3Ahealth", "default": true}]
 ```
+
+Likewise `failed_pct_threshold`, the app's `experiment.ui.failed_pct_threshold`
+(the Outer runs failed chip's [≥ N% failed](#outer-runs-and-the-outer-runs-page)),
+present only when it is not the default 5.
 
 With background refresh (`vmn-exp ui`), the summary also carries how fresh
 the app's index is, read without I/O, so a dashboard or a load balancer sees

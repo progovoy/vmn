@@ -1173,7 +1173,9 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `archived = true` only matters with `include_archived=True`.
 - Subtree counts: `live_below` (the runs below a run still running, waiting
   or stuck), `running_below` and `stuck_below` (those running or stuck
-  alone); 0 for a run without children. They count by the job rollup's rule
+  alone), `failed_below` (the failed and lost runs below it) and `failed_pct`
+  (`100 * failed_below / runs below`, 2 decimals, the Jobs rollup's
+  `failed_pct`); 0 for a run without children. They count by the job rollup's rule
   ([experiments.md](experiments.md#outer--inner-jobs-sweeps)): settled runs
   never (an `outlived` one counts as running), an archived run's subtree
   only in it. `running_below > 0` finds an ended launch whose grandchild
