@@ -11,6 +11,7 @@ import { isOuterRun, outerRunCount } from "../util/outerRun";
 import { useRowNavigate } from "../hooks/useRowNavigate";
 import { tagLabel } from "../util/tags";
 import { sweepIncompleteLabel } from "../util/sweepProgress";
+import { policyTag } from "../util/metricPolicy";
 import {
   DATE_SORT_OF, DURATION_SORT_OF, cellId, columnIds, defaultColumnIds, isGapId, type ColMeta, type ColumnCell, type FleetCol,
 } from "./leaderboardColumns";
@@ -62,8 +63,10 @@ export const rowHeight = (layout: RowLayout) => densityRowHeight(layout.density)
 export const densityRowHeight = (density: Density | undefined) =>
   density === "compact" ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
 
-function MetricCell({ id, v, col, style, showBest }: {
+function MetricCell({ id, v, col, style, showBest, tag }: {
   id: string; v: number | string | null | undefined; col: ColMeta; style: CSSProperties; showBest: boolean;
+  /** The run's own summary policy, when it overrides the schema's. */
+  tag: string | null;
 }) {
   const isBest = showBest && typeof v === "number" && v === col.best;
   const isBar = col.isBar && typeof v === "number";
@@ -77,6 +80,7 @@ function MetricCell({ id, v, col, style, showBest }: {
     <td data-col-id={id} className={isBar ? "bar-cell" : ""} style={style}>
       {isBar && <span className="bar" style={{ width: `${8 + frac * 62}px` }} />}
       <span className={`metric${isBest ? " best" : ""}`}>{fmtVal(v)}</span>
+      {tag && <span className="policy-tag" title={`this run's ${tag} value`}>{tag}</span>}
     </td>
   );
 }
@@ -268,7 +272,10 @@ function Row({
     if (id.startsWith("c:")) return <DateCell key={id} r={r} c={name} style={style} />;
     if (id.startsWith("m:")) {
       return (
-        <MetricCell key={id} id={id} v={r.metrics[name]} col={colMeta[name]} style={style} showBest={layout.showBest} />
+        <MetricCell
+          key={id} id={id} v={r.metrics[name]} col={colMeta[name]} style={style} showBest={layout.showBest}
+          tag={policyTag(r, name)}
+        />
       );
     }
     return (

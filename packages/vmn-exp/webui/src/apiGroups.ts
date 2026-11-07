@@ -4,7 +4,7 @@
 import { setFilter } from "./api";
 import type { PageOpts } from "./api";
 import { appTag, get } from "./http";
-import type { ExperimentRow, MainMetric } from "./types";
+import type { ExperimentRow, MainMetric, PolicyMix } from "./types";
 
 /** Links between runs (the run pointed at heads the group; `code_verstr`:
  *  the code state) and row fields. */
@@ -37,7 +37,7 @@ export interface GroupCounts {
 
 /** A metric's finite values over a group; null when it has none (`best`:
  *  also without a goal). `goal` is the metric's (null: none, no best). */
-export interface MetricAggregate {
+export interface MetricAggregate extends PolicyMix {
   mean: number | null;
   best: number | null;
   median: number | null;

@@ -3,6 +3,7 @@ import type { ExperimentRow, MetricsSchema } from "../types";
 import { metricGoal, rowParams } from "../util";
 import { isFoldedParam } from "../util/paramKeys";
 import { finiteNumbers, maxOf, minOf } from "../util/stats";
+import { mixedPolicies } from "../util/metricPolicy";
 
 /** Default column widths (px) under `table-layout: fixed`, so a long value
  *  is clipped with an ellipsis instead of stretching its column. */
@@ -254,9 +255,13 @@ export interface ColMeta {
   isBar: boolean;
   min: number;
   max: number;
+  /** Whether a loaded row's run overrides the schema's summary policy
+   *  (plan 32 F1). */
+  mixed?: boolean;
 }
 
-/** Per metric column: its goal, best value and the span its bar scales over. */
+/** Per metric column: its goal, best value, the span its bar scales over
+ *  and whether its runs mix summary policies. */
 export function computeColMeta(
   rows: readonly ExperimentRow[],
   metricCols: readonly string[],
@@ -274,6 +279,7 @@ export function computeColMeta(
       best: goal !== null && vals.length ? (goal === "min" ? min : max) : null,
       isBar: m === primary && vals.length > 0,
       min, max,
+      mixed: mixedPolicies(rows, m),
     };
   });
   return meta;

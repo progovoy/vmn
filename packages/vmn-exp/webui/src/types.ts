@@ -23,11 +23,21 @@ export interface AppConfig {
   text: string | null;
 }
 
+/** A summary policy: which of a metric's values a run ranks on. */
+export type MetricPolicy = "min" | "max" | "last" | "first" | "mean";
+
+/** On an aggregate some of whose rows' runs override the schema's summary
+ *  policy (plan 32 F1): runs per override; the rest follow the schema. */
+export interface PolicyMix {
+  mixed?: boolean;
+  policies?: Partial<Record<MetricPolicy, number>>;
+}
+
 /** Per-metric leaderboard config from conf.yml (experiment.metrics). */
 export interface MetricSpec {
   goal?: "min" | "max";
   /** Which value the run ranks on; defaults from `goal` (else `last`). */
-  summary?: "min" | "max" | "last" | "first" | "mean";
+  summary?: MetricPolicy;
   primary?: boolean;
   /** Kept out of default columns and chart grids (conf.yml or a run's
    *  `define_metric(hidden=True)`); still sortable and queryable. */
@@ -198,6 +208,10 @@ export interface ExperimentRow extends Partial<RunStatus> {
   /** Params the run also logged as metrics: their `metrics` value is the
    *  logged one (a param never overwrites it). Absent when none. */
   logged_params?: string[];
+  /** The summary policy of each metric value the run's own `define_metric`
+   *  picked unlike the schema's (plan 32 F1); a value without one follows
+   *  the schema. Absent on a board row without any. */
+  metric_policy?: Record<string, MetricPolicy>;
   /** Human-readable run name; the verstr stands in when null/absent. */
   name?: string | null;
   tags?: Record<string, string>;
@@ -426,6 +440,8 @@ export interface ExperimentDetail {
   metric_summary?: Record<string, MetricSummary>;
   /** Params the run also logged as metrics (see ExperimentRow). */
   logged_params?: string[];
+  /** The run's overrides of the schema's summary policy (see ExperimentRow.metric_policy). */
+  metric_policy?: Record<string, MetricPolicy>;
   series: Record<string, SeriesPoint[]>;
   patches: Record<string, boolean>;
   /** Names may be nested paths (`plots/loss.png`). */
@@ -582,6 +598,9 @@ export interface DiffDelta {
   /** The two runs declare different goals: `goal` is null, `goals` names them. */
   goal_conflict?: true;
   goals?: ["min" | "max", "min" | "max"];
+  /** Each side's summary policy (its run's override, else the schema's); null for `last`. */
+  from_policy?: MetricPolicy | null;
+  to_policy?: MetricPolicy | null;
 }
 
 export interface DiffResult {

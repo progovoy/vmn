@@ -71,6 +71,11 @@ function headInfo(id: string, layout: RowLayout, aggregate?: GroupAggregate): { 
           {name}{" "}
           {hasGoal && meta.best !== null && <span className="goal">{meta.goal === "min" ? "↓" : "↑"}</span>}
           {!hasGoal && <span className="no-goal">{NO_GOAL.trim()}</span>}
+          {meta?.mixed && (
+            <span className="policy-mixed" title="runs here rank on different summaries (their own define_metric)">
+              · mixed
+            </span>
+          )}
           {aggregate && <span className="agg-tag">{aggregate}</span>}
         </>
       ),

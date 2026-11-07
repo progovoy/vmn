@@ -3,7 +3,7 @@
 import { api } from "./api";
 import { runBase } from "./apiRunCode";
 import { get } from "./http";
-import type { JobProgressFields, RunState } from "./types";
+import type { JobProgressFields, PolicyMix, RunState } from "./types";
 
 export interface HistBin {
   lo: number;
@@ -13,7 +13,7 @@ export interface HistBin {
 
 /** One tracked metric over the subtree; `best` follows the metric's goal
  *  and is null without one (plan 32: no guessed direction). */
-export interface JobMetric {
+export interface JobMetric extends PolicyMix {
   goal: "min" | "max" | null;
   n: number;
   min: number;

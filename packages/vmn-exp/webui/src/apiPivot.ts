@@ -2,6 +2,7 @@
  *  run's subtree (`scope`), crossed by two group fields. */
 import type { GroupAggregate } from "./apiGroups";
 import { appTag, get } from "./http";
+import type { PolicyMix } from "./types";
 
 export type PivotKind = "count" | "share" | "agg";
 
@@ -16,7 +17,7 @@ export interface PivotHeader {
 /** A cell's runs, its value (a count, a 0..1 share or an aggregate, null
  *  when no run carries the metric) and the clause selecting its runs;
  *  `hits`: the runs matching a share's query. */
-export interface PivotCell {
+export interface PivotCell extends PolicyMix {
   n: number;
   value: number | null;
   clause: string | null;

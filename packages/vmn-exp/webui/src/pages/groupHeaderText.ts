@@ -3,6 +3,7 @@
 import { NO_GOAL, fmtCount, plural } from "../util";
 import { joinParts } from "../util/toneParts";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
+import { mixText } from "../util/metricPolicy";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "done";
 
@@ -55,12 +56,14 @@ export const aggregateName = (a: MetricAggregate, agg: GroupAggregate) =>
 
 /** A header's cell for one metric: *agg* of the group's values (`best` of a
  *  metric without a goal has none, never another aggregate); its title
- *  names what it shows. */
+ *  names what it shows, and the runs overriding the schema's summary policy
+ *  (plan 32 F1). */
 export function aggregateCell(
   a: MetricAggregate | undefined, agg: GroupAggregate,
 ): { value: number | null; title: string | undefined } {
   if (!a || a.n === 0) return { value: null, title: undefined };
-  return { value: a[agg], title: `${agg} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}` };
+  const mix = mixText(a.policies);
+  return { value: a[agg], title: `${agg} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}${mix ? ` · ${mix}` : ""}` };
 }
 
 /** A `+N more` row's text in each state of its load. */
