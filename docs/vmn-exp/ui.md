@@ -1414,7 +1414,11 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
   the share of them matching the query (`hits` of `n`). `cell=agg&metric=<m>&agg=`
   `mean|best|median|min|max` (default the app's group aggregate): the aggregate of
   the metric's finite values, `null` when none carries it; `goal` is the
-  metric's, and `best` without one is `null` in every cell.
+  metric's, and `best` without one is `null` in every cell. A cell some of
+  whose runs override conf.yml's summary carries `mixed: true` and `policies`
+  (`{override: runs}`); the heatmap marks it `*`, its title adding `1 run uses
+  min`. The Jobs view's best, the job page's best tile and the baseline card's
+  metric rows say the same of a job rollup's runs.
 - Takes `scope`, `q`, `status`, `archived`. A bad field, cell or query is a 400.
 - Each axis keeps its 200 (rows) / 50 (cols) most common values, ordered by
   value (numbers before text, `(none)` last); `rows_total`/`cols_total` count

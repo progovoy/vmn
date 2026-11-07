@@ -4,6 +4,7 @@
 import type { FailureCluster, JobMetric, JobPageSummary, JobTimeline, TimelineBucket } from "../../apiJob";
 import { vmnExpCommand } from "../../shell/cliCommands";
 import { NO_GOAL, fmtCount, fmtDuration, fmtParam, fmtPct, fmtVal, plural } from "../../util";
+import { mixText } from "../../util/metricPolicy";
 import { eqClause } from "../../util/searchQuery";
 import { progressLead, unitSuffix } from "../../util/jobProgress";
 
@@ -131,7 +132,7 @@ function bestTile(s: JobPageSummary): KpiTile {
   const m = s.metrics[metric];
   if (!m) return { label, value: "—", sub: "(no values yet)" };
   if (m.goal === null) return { label, value: "—", sub: NO_GOAL.trim() };
-  return { label, value: fmtVal(m.best), href: m.best_verstr ?? undefined };
+  return { label, value: fmtVal(m.best), href: m.best_verstr ?? undefined, sub: mixText(m.policies) ?? undefined };
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;

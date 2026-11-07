@@ -16,8 +16,14 @@ export const mixedPolicies = (rows: readonly ExperimentRow[], m: string): boolea
   rows.some((r) => policyTag(r, m) !== null);
 
 /** `3 runs use min` per override of an aggregate's *policies*; null without one. */
-export function mixText(policies: PolicyMix["policies"]): string | null {
+export function mixText(policies: PolicyMix["policies"] | null): string | null {
   const parts = Object.entries(policies ?? {}).filter(([, n]) => n);
   if (!parts.length) return null;
   return parts.map(([p, n]) => `${plural(n!, "run")} ${n === 1 ? "uses" : "use"} ${p}`).join(", ");
+}
+
+/** *text* (an aggregate's title) adding its *policies*' `· 3 runs use min`. */
+export function withMix(text: string, policies: PolicyMix["policies"]): string {
+  const mix = mixText(policies);
+  return mix ? `${text} · ${mix}` : text;
 }

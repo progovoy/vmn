@@ -5,6 +5,7 @@
 import type { Pivot, PivotCell, PivotKind } from "../apiPivot";
 import type { ExperimentFacets } from "../types";
 import { NO_GOAL, fmtCount, fmtVal, plural } from "../util";
+import { withMix } from "./metricPolicy";
 import { maxOf, minOf } from "./stats";
 
 /** The fill's share of the accent at the low and high ends. */
@@ -57,7 +58,7 @@ function what(pivot: Pivot, cell: PivotCell): string {
     return `${cellText(cell, "share")} match ${pivot.match} (${fmtCount(cell.hits ?? 0)} of ${plural(cell.n, "run")})`;
   }
   const value = cell.value === null ? "no value" : fmtVal(cell.value);
-  return `${pivotTitle(pivot)} ${value} (${plural(cell.n, "run")})`;
+  return withMix(`${pivotTitle(pivot)} ${value} (${plural(cell.n, "run")})`, cell.policies);
 }
 
 /** What a screen reader and the tooltip say of cell (*i*, *j*). */

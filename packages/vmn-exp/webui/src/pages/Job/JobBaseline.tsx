@@ -11,7 +11,9 @@ import { jobBaseline, type BaselineCompare, type BaselineDelta } from "../../api
 import BaselineChip, { pickedText } from "../../components/BaselineChip";
 import { fmtDelta } from "../../components/diffDeltaTone";
 import { fleetLabel } from "../../components/fleetRows";
+import PolicyMixMark from "../../components/PolicyMixMark";
 import { Skeleton } from "../../components/ui";
+import { mixText } from "../../util/metricPolicy";
 import { withSignal } from "../../requestScope";
 import { NO_GOAL, appHref, fmtDuration, fmtPct, fmtVal, runHref } from "../../util";
 import { jobPrefix } from "./jobQueries";
@@ -40,15 +42,23 @@ const pts = (v: number) => `${fmtVal(v)} pts`;
 const share = (v: number) => fmtPct(v * 100);
 const sharePts = (v: number) => pts(Math.round(v * 1000) / 10);
 
-function DeltaRow({ label, d, fmt = fmtVal, deltaFmt = fmt }: {
-  label: string; d: BaselineDelta | null; fmt?: Format; deltaFmt?: Format;
+/** `this: 2 runs use min; baseline: 1 run uses max`: each side's runs
+ *  overriding the schema's summary (plan 32 F1); null without any. */
+function sidesMixText(policies: BaselineCompare["metrics"][string]["policies"]): string | null {
+  const sides = [["this", mixText(policies?.value ?? null)], ["baseline", mixText(policies?.baseline ?? null)]];
+  const parts = sides.filter(([, mix]) => mix).map(([side, mix]) => `${side}: ${mix}`);
+  return parts.length ? parts.join("; ") : null;
+}
+
+function DeltaRow({ label, d, fmt = fmtVal, deltaFmt = fmt, mix = null }: {
+  label: string; d: BaselineDelta | null; fmt?: Format; deltaFmt?: Format; mix?: string | null;
 }) {
   if (!d) return null;
   const shown = (v: number | null) => (v == null ? "—" : fmt(v));
   const tone = d.better == null ? "" : d.better ? "delta-better" : "delta-worse";
   return (
     <tr>
-      <th scope="row">{label}</th>
+      <th scope="row">{label}<PolicyMixMark text={mix} /></th>
       <td className="num">{shown(d.value)}</td>
       <td className="num">{shown(d.baseline)}</td>
       <td className="num"><span className={tone}>{d.delta == null ? "—" : signed(d.delta, deltaFmt)}</span></td>
@@ -61,10 +71,13 @@ function DeltaTable({ data }: { data: BaselineCompare }) {
     <table className="baseline-deltas" aria-label="Against the baseline">
       <thead><tr><th /><th scope="col">this</th><th scope="col">baseline</th><th scope="col">Δ</th></tr></thead>
       <tbody>
-        {Object.entries(data.metrics).flatMap(([m, d]) => [
-          <DeltaRow key={`best ${m}`} label={`best ${m}${d.goal ? "" : NO_GOAL}`} d={d.best} />,
-          <DeltaRow key={`median ${m}`} label={`median ${m}`} d={d.median} />,
-        ])}
+        {Object.entries(data.metrics).flatMap(([m, d]) => {
+          const mix = sidesMixText(d.policies);
+          return [
+            <DeltaRow key={`best ${m}`} label={`best ${m}${d.goal ? "" : NO_GOAL}`} d={d.best} mix={mix} />,
+            <DeltaRow key={`median ${m}`} label={`median ${m}`} d={d.median} mix={mix} />,
+          ];
+        })}
         <DeltaRow label="failed" d={data.failed_pct} fmt={fmtPct} deltaFmt={pts} />
         <DeltaRow label="p90 duration" d={data.duration_p90} fmt={fmtDuration} />
         {data.attention.map((a) => (

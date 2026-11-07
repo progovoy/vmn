@@ -3,7 +3,7 @@
 import { NO_GOAL, fmtCount, plural } from "../util";
 import { joinParts } from "../util/toneParts";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
-import { mixText } from "../util/metricPolicy";
+import { withMix } from "../util/metricPolicy";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "done";
 
@@ -62,8 +62,7 @@ export function aggregateCell(
   a: MetricAggregate | undefined, agg: GroupAggregate,
 ): { value: number | null; title: string | undefined } {
   if (!a || a.n === 0) return { value: null, title: undefined };
-  const mix = mixText(a.policies);
-  return { value: a[agg], title: `${agg} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}${mix ? ` · ${mix}` : ""}` };
+  return { value: a[agg], title: withMix(`${agg} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}`, a.policies) };
 }
 
 /** A `+N more` row's text in each state of its load. */

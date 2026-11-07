@@ -30,8 +30,9 @@ Follow-ups (not in this plan):
 - The board's shared `declared_schema` still merges run-declared goals with
   the latest run winning. Two runs that compare as "goals differ" (F9) can
   still be ranked by one goal on the board. This is a board-wide change.
-- F1's `mixed` flag on pivot cells and Jobs rollup metrics is sent by the
-  server but not yet shown by the web. CLI `compare` doesn't name policies.
+- ✓ F1's `mixed` flag on pivot cells, Jobs rollup metrics and the baseline
+  card is shown by the web (a `*` titled `2 runs use min`); CLI
+  `compare`/`diff` name policies and say `summaries differ: min vs last`.
 - The single runs' own-value column on the Jobs view is plan 31 §2's.
 Items marked ✓ were checked against the code by hand. The rest come from the
 audit and are re-checked when their test is written.

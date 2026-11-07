@@ -8,6 +8,8 @@ import type { Pivot, PivotCell } from "../apiPivot";
 import {
   bestWithoutGoal, cellFill, cellLabel, cellQuery, cellText, pivotRange, pivotTitle, scaleText, withQuery,
 } from "../util/pivotCells";
+import { mixText } from "../util/metricPolicy";
+import PolicyMixMark from "./PolicyMixMark";
 
 interface Props {
   pivot: Pivot;
@@ -37,6 +39,7 @@ function Cell({ props, href, i, j, cell, range }: {
     <td className="pivot-cell">
       <MaybeLink query={cellQuery(pivot, cell)} href={href} label={label} style={cellFill(cell.value, range)}>
         {cellText(cell, pivot.cell)}
+        <PolicyMixMark text={mixText(cell.policies)} />
       </MaybeLink>
     </td>
   );

@@ -285,7 +285,8 @@ export interface MainMetric {
 }
 
 /** A job's compact rollup on its Jobs-view row (plan 23 §10). */
-export interface JobRollup extends JobProgressFields {
+/** `mixed`/`policies`: the main metric's runs overriding the schema's summary. */
+export interface JobRollup extends JobProgressFields, PolicyMix {
   /** The main metric the best and spread are of, and its goal (null: no best). */
   metric: string | null;
   goal: "min" | "max" | null;

@@ -2,7 +2,7 @@
  *  (the card) and `experiments-baselines?v=` (many outer runs' chips at once,
  *  a Jobs view page's). Index-backed: no per-run store reads. */
 import { appTag, get } from "./http";
-import type { RunState } from "./types";
+import type { PolicyMix, RunState } from "./types";
 
 /** A value here and on the baseline, their change and whether it is an
  *  improvement (null: no direction, a value missing, or no change). */
@@ -77,8 +77,12 @@ export interface BaselineCompare {
   baseline: BaselineRef | null;
   metric: string | null;
   goal: "min" | "max" | null;
-  /** Each tracked metric's deltas and its goal (null: none, no best or verdict). */
-  metrics: Record<string, { goal: "min" | "max" | null; best: BaselineDelta; median: BaselineDelta }>;
+  /** Each tracked metric's deltas and its goal (null: none, no best or verdict);
+   *  `policies`: each side's runs overriding the schema's summary (plan 32 F1). */
+  metrics: Record<string, {
+    goal: "min" | "max" | null; best: BaselineDelta; median: BaselineDelta;
+    policies?: Record<"value" | "baseline", PolicyMix["policies"] | null>;
+  }>;
   failed_pct: BaselineDelta | null;
   duration_p90: BaselineDelta | null;
   attention: BaselineAttention[];

@@ -5,12 +5,14 @@ import { Link } from "react-router-dom";
 import type { BaselineChipEntry } from "../../apiBaseline";
 import BaselineChip from "../../components/BaselineChip";
 import JobProgress from "../../components/JobProgress";
+import PolicyMixMark from "../../components/PolicyMixMark";
 import Sparkline from "../../components/Sparkline";
 import type { AttentionEntry } from "../../shell/contracts";
 import type { ExperimentRow } from "../../types";
 import { NO_GOAL, fmtCount, fmtPct, fmtVal, runHref } from "../../util";
 import type { SearchFilter } from "../../util/searchScope";
 import { jobEtaCell, jobRateCell, jobThroughputCell, type JobCell } from "../../util/jobProgress";
+import { mixText, withMix } from "../../util/metricPolicy";
 
 export interface JobContext {
   runBase: string;
@@ -80,8 +82,9 @@ export function BestValue({ r, ctx }: { r: ExperimentRow; ctx: JobContext }) {
   const metric = j?.metric ?? ctx.metric;
   const goal = arrow(j ? j.goal : ctx.goal);
   return (
-    <span className="job-best" title={metric ? `best ${metric}` : undefined}>
+    <span className="job-best" title={metric ? withMix(`best ${metric}`, j?.policies) : undefined}>
       <span className="metric">{fmtVal(value)}</span>
+      <PolicyMixMark text={mixText(j?.policies)} />
       {goal && <span className="goal"> {goal}</span>}
       {j?.best_verstr && (
         <Link className="job-best-run mono" to={runHref(ctx.runBase, j.best_verstr)} title={j.best_verstr}>

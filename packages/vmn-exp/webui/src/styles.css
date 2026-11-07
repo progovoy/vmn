@@ -321,6 +321,8 @@ th .goal, th .no-goal, th .policy-mixed {
 th .no-goal, th .policy-mixed { font-size: 0.85em; }
 /* A value its run's own summary picked, unlike the schema's (plan 32 F1). */
 .policy-tag { margin-left: 4px; color: var(--text-3); font-size: 0.8em; }
+/* An aggregate over runs some of which override the schema's summary. */
+.policy-mix-mark { margin-left: 2px; opacity: 0.7; font-size: 0.85em; cursor: help; }
 th.num, td.num { text-align: right; }
 tr:last-child td { border-bottom: none; }
 tr.row { cursor: pointer; }
