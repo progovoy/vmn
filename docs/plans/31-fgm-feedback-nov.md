@@ -90,10 +90,23 @@ nested number: the best trial within each date, then the median across dates.
 - `job_agg_by`:
   - `children` (default): one value per direct child, aggregated across
     children. Shown as "median of 16 date bests".
-  - `kind:<tags.kind>`: the same per descendant whose `tags.kind` matches, for
-    trees where the date level sits deeper.
+  - `field:<params.k|tags.k>`: one unit per descendant carrying the field,
+    the nearest one on each branch (its own subtree isn't searched further).
+    This is fgm's layout: date runs are identified by `params.trade_date`,
+    not by depth or name (§2 client answers).
+    - Two units with the same field value (a rerun of a date) are a
+      conflict. They're left out of the aggregate and counted
+      ("median of 15/16 dates · 1 duplicate"), never silently picked.
+    - The field is the unit's own, so its deltas arrive with the unit itself.
+      The phase-2 rejection below is only about ancestor (`up.`) fields.
+  - `kind:<tags.kind>`: shorthand for a `tags.kind` match at any depth, e.g.
+    `kind:date` (fgm also tags date runs `tags.kind = "date"`).
   - `runs`: flat over all subtree runs, from the merged sketch. Opt-in, and
     labelled "≈ median of 16,384 runs".
+- `job_agg_metric` names the metric read on each unit. It defaults to the
+  board's main metric, but a unit can log a different one: fgm's date runs log
+  `date.best_value` while the board's main metric is `best_value`. The
+  metric's goal must be declared (plan 32), or the row shows `— (no goal)`.
 - `job_agg_value` picks where each child's value comes from. There is
   **no fallback**:
   - `best` (default): its subtree's best run. Every child with a scored run
@@ -105,7 +118,7 @@ nested number: the best trial within each date, then the median across dates.
   `job_agg=best`.
 - Every child with a value counts, finished or not; the coverage `n`/`of`
   says how many have one ("14/16").
-- **Top-level rows only (pending the client, §7 Q3).** `children_of` tree
+- **Top-level rows only (confirmed by the client).** `children_of` tree
   rows keep their own values. At a
   date row, `by=children` would silently mean "median over trials", the number
   this feature exists to avoid. The compute is generic per job, so it would be
@@ -124,6 +137,8 @@ nested number: the best trial within each date, then the median across dates.
   `experiment.ui.job_aggregate: {agg, by, value}` is the app's default. It
   lives in conf.yml or the store settings, validated in `core/app_settings.py`
   and resolved like `aggregate_of` (`ui/experiment_source.py`).
+  - `{agg, by, value, metric}`; fgm's would be
+    `{agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}`.
   - The URL overrides it.
   - Different kinds of outer run get their own aggregate through team views
     (a `tags.kind = "training"` view carrying its `job_agg`).
@@ -191,6 +206,11 @@ nested number: the best trial within each date, then the median across dates.
    - `children_of` rows carry no `rolled`;
    - archived children excluded;
    - `kind:` at depth 2;
+   - `field:params.trade_date` over fgm's shape: training → date (varying
+     names) → prep + study → pair studies → trials, with refit runs under
+     some trials and some trials directly under the study. Only date runs are
+     units, and a duplicate date is a counted conflict;
+   - `job_agg_metric` different from the main metric;
    - the sketch path within 1%;
    - `best` is the same for every `by`.
 2. Generation property test: random deltas give the same `rolled` after
@@ -216,12 +236,33 @@ nested number: the best trial within each date, then the median across dates.
 4. Strict: one aggregate per board; per-kind through team views.
 5. Baselines share the no-fallback value function.
 
-**Open (client, §7).**
-- Q1 layout: are dates child runs, or `params.trade_date` on flat trials? If
-  the latter, the `params.<k>` `by` (phase 2) is needed first.
-- Q2: do dates log their own metric, and under what name?
-- Q3: the aggregate on expanded tree rows too? Proposed: no (it would mean
-  "median over trials" there).
+**Client answers (2026-11-07).**
+1. *Layout.* It's the same for every walk-forward training down to the date:
+   training (`tags.kind=launch`) → date run (one per trade date, always
+   `params.trade_date`, now also `tags.kind = "date"`) → prep + study
+   (`tags.kind=study`) → pair studies (one per target×group, `best_value`) →
+   trials (`value`). Below the date it varies (refit expansion runs under
+   trials; some gbm trials sit directly under the study), and date run names
+   vary. → `by=field:params.trade_date` (or `kind:date`), never depth or name.
+2. *A date's own number.* Coming: every date run will log `date.best_value`,
+   the best `best_value` across its pair studies, and they'll backfill it for
+   all existing trainings. → `value=own`, `metric=date.best_value`; a date
+   without it is missing. Their training rows already log
+   `wf.best_value_median` / `wf.best_value_max` from these values: once
+   backfilled, our rolled median must equal theirs. That's the acceptance
+   test on real data (an integration test reproduces it on a synthetic tree).
+   - **Flag back to them (their own silent fallback):** regime models don't
+     log `best_value`, so for them `date.best_value` falls back to
+     `study.best_so_far`. Those are two measures under one name. Suggest
+     logging the source (e.g. `tags.best_value_source = "best_so_far"`, or a
+     separate metric name) so the date can be split or filtered.
+3. *Expanded rows.* Top-level rows only, or date rows showing their own
+   `date.best_value`; a median over trials would contradict the row above.
+   Trial count and failed share are more useful on date rows.
+   → Tree rows get no `rolled`. Date rows show `m:date.best_value` through
+   `experiment.ui.tree_columns: {date: [m:date.best_value, c:total, c:failed_pct]}`.
+   `c:total`/`c:failed_pct` are new tree-column keys read from the row's
+   rollup (§1 makes `failed_pct` a field).
 
 ## 3. Warm grouped team views (#3), on hold
 
@@ -329,24 +370,21 @@ Each worktree runs TDD; `/simplify` at the end.
    a default in settings, and sorting by it. Team views can give each kind of
    training its own aggregate.
 
-   Questions first:
-   - **Q1.** To build the per-date rollup we need to know how a training's
-     runs are laid out. Under one training, is each trade date its own run,
-     with that date's trials as its children (training → date → trials)? Or
-     do the trials sit directly under the training with the date as a param,
-     like `params.trade_date`? Is it the same layout across all walk-forward
-     trainings?
-   - **Q2.** If a date is its own run, does it log its own metric (for
-     example the out-of-sample score of the trial it selected), and under
-     what name? You'll choose whether a row aggregates each date's own metric
-     or its best trial. We never mix the two: a date without its own metric
-     shows as missing.
-   - **Q3.** The plan shows the chosen aggregate on top-level training rows
-     only. When you expand a training, would you want each date row to show
-     an aggregate over its trials as well (for example the median trial)?
-     That is the "median over trials" number, not "median of date bests", so
-     it means something different from the training row above it. Would it
-     help you, or confuse things?
+   Thanks for the layout answers. With them the training row will show
+   `median of 16/16 dates' own date.best_value` through
+   `{agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}`.
+   Date runs are found by `params.trade_date`, a date without
+   `date.best_value` shows as missing, and a duplicated date is counted as a
+   conflict, never silently picked. Once your backfill lands, our median
+   should equal your `wf.best_value_median`; we'll check against it. Date
+   rows in the tree get `date.best_value`, trial count and failed share.
+
+   One thing back: for regime models `date.best_value` falls back to
+   `study.best_so_far`, so one metric name carries two different measures.
+   We'd suggest recording which one a date used (e.g.
+   `tags.best_value_source`, or a separate metric), so a median can be split
+   or filtered by it. That's the same rule we just applied to vmn-exp
+   itself: a value never silently switches source.
 3. **Cold group-by.** Noted. Grouped views saved as *team* views can be
    warmed (personal ones live in your browser); we'll schedule it.
 4. **Stuck vs lost.** Both counts are right: lost runs are stuck runs under an
