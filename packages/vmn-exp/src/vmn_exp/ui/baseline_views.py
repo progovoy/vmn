@@ -190,14 +190,15 @@ class BaselineViews:
         """The children paired by *by* with their values' deltas (the
         board's value function); a goal-less metric pairs without a
         direction and has no chip."""
-        metric, value = self._cache.job_aggregates.value_of(snapshot, schema)
+        unit = self._cache.job_aggregates.value_of(snapshot, schema)
         kids = [self.views.children(snapshot, v) for v in (verstr, base_v)]
-        up = higher_is_better(metric_goal(schema, metric)) if metric else None
-        pairs, total = pair_children(*kids, by, value, up)
+        values = {row["verstr"]: unit.of_row(row) for side in kids for row in side}
+        value = lambda row: values[row["verstr"]]  # noqa: E731
+        pairs, total = pair_children(*kids, by, value, unit.up)
         keyed = value_of(by)
         base_values = [value(r) for r in kids[1] if keyed(r) is not None]
         return {"pairs": pairs[:MAX_PAIRS], "pairs_total": total,
-                "chip": chip(pairs, base_values, metric, up, by, total)}
+                "chip": chip(pairs, base_values, unit.metric, unit.up, by, total)}
 
     def _attention(self, snapshot, schema, body, entries, pinned_key):
         """Each attention query's share under both subtrees, per generation."""

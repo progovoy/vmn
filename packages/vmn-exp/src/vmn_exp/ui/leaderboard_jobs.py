@@ -18,6 +18,7 @@ its children by theirs (:mod:`~vmn_exp.ui.leaderboard_children`).
 from operator import itemgetter
 
 from vmn_exp.core.values import is_finite_number
+from vmn_exp.ui.job_aggregate import board_job_agg
 from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.leaderboard_live import Desc
 from vmn_exp.ui.memo import LRU
@@ -55,7 +56,8 @@ def job_descending(field, order, summaries, schema):
         return descending
     if field != JOB_SORTS[VALUE_SORT]:
         return True
-    return any((s.get("rolled") or {}).get("goal") == "max" for s in summaries.values())
+    rolled = next((s["rolled"] for s in summaries.values() if s.get("rolled")), None)
+    return bool(rolled) and rolled["goal"] == "max"
 
 
 def job_value(summaries, row, field):
@@ -81,6 +83,12 @@ def job_sorted(rows, summaries, sort, order, schema):
     keyed = [(job_key(job_value(summaries, row, field), descending, i), row)
              for i, row in enumerate(rows)]
     return [row for _, row in sorted(keyed, key=itemgetter(0))]
+
+
+def _with_rolled(summaries, rolled):
+    """*summaries* with ``rolled`` on the top-level jobs'."""
+    return {job: dict(summary, rolled=rolled[job]) if job in rolled else summary
+            for job, summary in summaries.items()}
 
 
 class JobsView:
@@ -110,22 +118,17 @@ class JobsView:
         queries or a ``job:attention`` *sort*; with *children_of*, its
         children's, each counted over its own subtree; else each top-level
         job's carrying ``rolled`` by *job_agg* (None: the app's)."""
+        cache = self._cache
         if children_of is not None:
-            return self._cache.tree_nodes.summaries(snapshot, schema, children_of, attention)
-        if attention or sort == ATTENTION_SORT:
-            found = self._cache.attention.summaries(snapshot, schema, attention)
-        else:
-            found = self._cache.job_rollups(snapshot, schema)
-        return self._with_rolled(snapshot, schema, found, job_agg)
-
-    def _with_rolled(self, snapshot, schema, summaries, job_agg):
-        """*summaries* with ``rolled`` on the top-level jobs', memoized per
-        both answers (each held by the entry, so their ids stay theirs)."""
-        rolled = self._cache.job_aggregates.rolled(snapshot, schema, job_agg)
-        token = self._cache._base(snapshot)[0].token
-        return self._rolled.get((token, id(summaries), id(rolled)), lambda: (summaries, rolled, {
-            job: dict(summary, rolled=rolled[job]) if job in rolled else summary
-            for job, summary in summaries.items()}))[2]
+            return cache.tree_nodes.summaries(snapshot, schema, children_of, attention)
+        counted = bool(attention or sort == ATTENTION_SORT)
+        job_agg = job_agg or board_job_agg(cache, snapshot)
+        base, bucket = cache._base(snapshot)
+        key = (base.token, bucket, minute(), cache.schema_key(schema), attention, counted, job_agg)
+        return self._rolled.get(key, lambda: _with_rolled(
+            cache.attention.summaries(snapshot, schema, attention) if counted
+            else cache.job_rollups(snapshot, schema),
+            cache.job_aggregates.rolled(snapshot, schema, job_agg)))
 
     def with_jobs(self, snapshot, schema, rows, attention=(), job_agg=None):
         """Copies of *rows* carrying ``job`` (with its *attention* counts and ``rolled``)."""

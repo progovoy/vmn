@@ -50,6 +50,13 @@ def board_job_agg(cache, snapshot):
     return job_agg_of(cache.conf_of(snapshot)[1])
 
 
+def _quantile(agg, goal):
+    """The quantile *agg* reads (median 0.5, a tail by *goal*), else None."""
+    if agg == "median":
+        return 0.5
+    return tail_quantile(agg, goal) if agg in TAILS else None
+
+
 def percentile(agg, goal):
     """A tail's percentile label (``p90``), else None."""
     q = tail_quantile(agg, goal) if agg in TAILS else None
@@ -76,8 +83,7 @@ def _holder(ordered, agg, goal):
         return next(v for value, v in ordered if value == top)
     if agg == "mean":
         return None
-    q = 0.5 if agg == "median" else tail_quantile(agg, goal)
-    return ordered[int(q * (len(ordered) - 1))][1]
+    return ordered[int(_quantile(agg, goal) * (len(ordered) - 1))][1]
 
 
 def _of_units(units, value_of, agg, goal):
@@ -98,9 +104,9 @@ def _of_units(units, value_of, agg, goal):
 def _of_runs(parts, metric, agg, goal):
     """``{value, n, of, verstr, approx}`` over every run of *parts*: a
     quantile from the merged sketches (``approx``), the rest exact."""
-    q = 0.5 if agg == "median" else (tail_quantile(agg, goal) if agg in TAILS else None)
+    q = _quantile(agg, goal)
     fields = {"of": count_fields(parts)["total"], "approx": q is not None}
-    found = metric_fields(parts, metric, goal, bins=1)
+    found = metric_fields(parts, metric, goal, bins=1, quantiles=q is not None)
     if found is None:
         return fields
     fields["n"] = found["n"]
@@ -123,7 +129,7 @@ class JobAggregates:
         agg = agg or board_job_agg(self._cache, snapshot)
         base, bucket = self._cache._base(snapshot)
         key = (base.token, bucket, self._cache.schema_key(schema), agg)
-        return self._answers.get(key, lambda: self._compute(snapshot, schema, agg, None))
+        return self._answers.get(key, lambda: self._all(snapshot, schema, agg))
 
     def one(self, snapshot, schema, verstr, agg=None):
         """*verstr*'s ``rolled`` (a job at any depth), None when it is not a job."""
@@ -135,35 +141,47 @@ class JobAggregates:
         if verstr not in self._cache.jobs.tree(base).jobs:
             return None
         key = (base.token, bucket, self._cache.schema_key(schema), agg, verstr)
-        return self._answers.get(key, lambda: self._compute(snapshot, schema, agg, verstr))
+        return self._answers.get(key, lambda: self._payload_of(snapshot, schema, agg)(verstr))
 
     def value_of(self, snapshot, schema, agg=None):
-        """``(metric, row -> its unit value)`` by *agg*'s source (the app's
-        default): the shared value function baselines pair by."""
+        """The :class:`~vmn_exp.ui.job_units.UnitValue` of *agg*'s source
+        (the app's default; ``of_row`` the value of a row, ``metric``/``up``
+        what it reads): the shared value function baselines pair by."""
         agg = agg or board_job_agg(self._cache, snapshot)
         metric, goal, (_, tree, _, parts) = self._inputs(snapshot, schema, agg)
-        value = UnitValue(agg.value, metric, higher_is_better(goal), parts, tree.jobs)
-        return metric, value.of_row
+        return UnitValue(agg.value, metric, higher_is_better(goal), parts, tree.jobs)
 
     def _inputs(self, snapshot, schema, agg):
-        metric = agg.metric or self._cache.jobs.spec(snapshot, schema).main
+        """``(metric, goal, parts)``: a metric the schema rollups do not track
+        (a glob's goal) gets rollups of the schema with its goal resolved."""
+        jobs = self._cache.jobs
+        spec = jobs.spec(snapshot, schema)
+        metric = agg.metric or spec.main
         goal = metric_goal(schema, metric) if metric else None
-        resolved = with_resolved_goals(schema, [metric]) if goal else schema
-        return metric, goal, self._cache.jobs.parts(snapshot, resolved)
+        if goal and metric not in spec.metrics:
+            schema = with_resolved_goals(schema, [metric])
+        return metric, goal, jobs.parts(snapshot, schema)
 
-    def _compute(self, snapshot, schema, agg, verstr):
+    def _all(self, snapshot, schema, agg):
+        payload = self._payload_of(snapshot, schema, agg)
+        return {job: payload(job) for job in self._cache.jobs.tree(
+            self._cache._base(snapshot)[0]).top}
+
+    def _payload_of(self, snapshot, schema, agg):
+        """``job -> rolled`` over *snapshot*."""
         metric, goal, (base, tree, _, parts) = self._inputs(snapshot, schema, agg)
-        if metric is None:
-            fields = lambda job: {}  # noqa: E731
-        elif agg.by == RUNS:
-            fields = lambda job: _of_runs(parts(job), metric, agg.agg, goal)  # noqa: E731
-        else:
+
+        def fields(job):
+            if metric is None:
+                return {}
+            if agg.by == RUNS:
+                return _of_runs(parts(job), metric, agg.agg, goal)
+            return _of_units(units(job), value, agg.agg, goal)
+
+        if metric is not None and agg.by != RUNS:
             value = UnitValue(agg.value, metric, higher_is_better(goal), parts, tree.jobs)
             units = self._units_of(snapshot, base, tree, agg, metric)
-            fields = lambda job: _of_units(units(job), value, agg.agg, goal)  # noqa: E731
-        if verstr is not None:
-            return _payload(agg, metric, goal, **fields(verstr))
-        return {job: _payload(agg, metric, goal, **fields(job)) for job in tree.top}
+        return lambda job: _payload(agg, metric, goal, **fields(job))
 
     def _units_of(self, snapshot, base, tree, agg, metric):
         """``job -> [(verstr, key, own)]``: its units by *agg*'s ``by``."""

@@ -13,6 +13,7 @@ from vmn_exp.core.settle import row_closes
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.baseline_choice import recency
 from vmn_exp.ui.leaderboard_group_fields import NONE, key_of, key_text, value_of
+from vmn_exp.ui.leaderboard_group_summary import quantile as interpolated
 from vmn_exp.ui.pivot import value_order
 
 WORSE, BETTER, SAME, PENDING = "worse", "better", "same", "pending"
@@ -108,16 +109,9 @@ def pair_children(target, baseline, field, value, higher_better):
     return pairs, len(ours)
 
 
-def _quantile(ordered, q):
-    at = q * (len(ordered) - 1)
-    low = int(at)
-    high = min(low + 1, len(ordered) - 1)
-    return ordered[low] + (ordered[high] - ordered[low]) * (at - low)
-
-
 def _median(values):
     ordered = sorted(values)
-    return _quantile(ordered, 0.5) if ordered else None
+    return interpolated(ordered, 0.5) if ordered else None
 
 
 def _noun(field):
@@ -134,7 +128,7 @@ def chip(pairs, baseline_values, metric, higher_better, field, total=None):
         return None
     ordered = sorted(v for v in baseline_values if is_finite_number(v))
     quantile = "p10" if higher_better else "p90"
-    threshold = _quantile(ordered, 0.1 if higher_better else 0.9) if ordered else None
+    threshold = interpolated(ordered, 0.1 if higher_better else 0.9) if ordered else None
     finished = [p for p in pairs if p["done"] and is_finite_number(p["value"])]
     for p in finished:
         p["worse"] = threshold is not None and (

@@ -17,10 +17,9 @@ A unit's value (:class:`UnitValue`) is its own metric (``own``, no
 fallback: missing is missing) or the best over it and its subtree
 (``best``), read off the schema rollups' per-parent extremes.
 """
-import operator
 
 from vmn_exp.core.values import is_finite_number
-from vmn_exp.ui.job_tally import _move, higher_first
+from vmn_exp.ui.job_tally import _move
 from vmn_exp.ui.leaderboard_group_fields import key_of, value_of
 
 FIELD, KIND = "field:", "kind:"
@@ -111,19 +110,16 @@ class UnitValue:
     def __init__(self, source, metric, up, parts, jobs):
         self.source, self.metric, self.up = source, metric, up
         self._parts, self._jobs = parts, jobs
-        self._better = higher_first if up else operator.lt
 
     def __call__(self, verstr, own):
         if self.source == "own":
             return own
-        best = None if own is None else (own, verstr)
-        for metric in self._below(verstr):
-            if self.up is None:
-                return None  # values to rank, no direction
-            edge = (metric.high if self.up else metric.low)[0]
-            if best is None or self._better(edge, best):
-                best = edge
-        return None if best is None else best[0]
+        below = self._below(verstr)
+        if self.up is None:
+            return None if below else own  # values to rank, no direction
+        values = [(m.high if self.up else m.low)[0][0] for m in below]
+        values += [] if own is None else [own]
+        return (max if self.up else min)(values) if values else None
 
     def _below(self, verstr):
         """The metric tallies of *verstr*'s subtree (none for a leaf)."""
