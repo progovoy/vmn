@@ -63,6 +63,8 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   const goal = data.main?.goal ?? null;
   // The answered aggregate (plan 31 §2): one per board, so any row's names it.
   const rolled = useMemo(() => rows.find((r) => r.job?.rolled)?.job?.rolled ?? null, [rows]);
+  // The groups' aggregate (`agg=`, else the server's answer): the toolbar's and the headers'.
+  const aggregate = view.aggParam ?? data.aggregate ?? data.defaultAggregate ?? "mean";
   const running = useBoardLive({
     ws, app, scope: "top", paused, rows, serverRunning: data.running > 0, refresh, isRunning: treeRunning,
   });
@@ -72,7 +74,7 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
 
   return {
     data, rows, facets, group: chosen, selection, search: matchSubtree ? search : null,
-    metric, goal, rolled,
+    metric, goal, rolled, aggregate,
     sort: { sort: filter.sort, order: sort.order ?? "desc", onSort: sort.onSort },
     live: { running, paused, setPaused },
     filtered: filtered || Boolean(fixed), topQuery,

@@ -5,7 +5,9 @@ import { useCallback, useMemo, useRef, type CSSProperties, type MouseEvent, type
 import { useFillHeight } from "../../hooks/useFillHeight";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import type { GroupAggregate } from "../../apiGroups";
 import type { HeaderCheck } from "../../hooks/useBoardSelection";
+import type { JobAggChoice } from "../../types";
 import type { BoardViewport } from "../../hooks/useLeaderboardRows";
 import { useHeldViewport } from "../../components/NewRowsBar";
 import { useRowKeys } from "../../hooks/useRowKeys";
@@ -45,6 +47,9 @@ export interface JobGroupActions {
   noun: string;
   /** A group too big to unfold opens as its clause (plan 23 §3.4). */
   asFilter?: GroupFilter;
+  /** The page's group aggregate and the rows' (plan 31 §2): a header's value. */
+  aggregate: GroupAggregate;
+  rolled: JobAggChoice | null;
   onFold: (key: string) => void;
   onMore: (key: string) => void;
   checkOf: (verstrs: readonly string[]) => HeaderCheck;
@@ -207,7 +212,7 @@ function JobsGrid({
                   : (
                     <JobGroupRow
                       key={gridItemKey(it)} item={it} index={v.index} isActive={active} height={height}
-                      onFold={groups.onFold} asFilter={groups.asFilter} noun={groups.noun} check={{ state: groups.checkOf(it.rows), onToggle: () => groups.onCheck(it.rows) }}
+                      groups={groups} check={{ state: groups.checkOf(it.rows), onToggle: () => groups.onCheck(it.rows) }}
                     />
                   );
               }

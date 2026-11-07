@@ -39,6 +39,7 @@
 }
 .tree-toggle:hover { color: var(--accent); }
 .jobs-table tr.jobs-tree-slot > td { padding: 4px 8px 12px 36px; vertical-align: top; }
+.lb-mcard-group { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .lb-mcard-group .fold-toggle { font-weight: 600; background: none; border: none; padding: 6px 0; }
 
 /* The value column's aggregate menu (plan 31 §2): a small trigger after the

@@ -56,6 +56,14 @@ def test_a_grouped_jobs_view_carries_job_fields_and_clauses(served):  # noqa: F8
     assert _verstrs(flat) == {runs[1]}
 
 
+def test_a_grouped_jobs_view_names_the_aggregate_its_headers_read(served):  # noqa: F811
+    client, _ = served
+    body = _get(client, group="status", top="jobs", agg="median")
+    assert body["aggregate"] == "median"
+    stats = body["groups"][0]["job_aggregates"]["loss"]
+    assert {"median", "best10", "worst10", "n", "goal"} <= set(stats)
+
+
 def test_group_parent_without_top_is_still_served(served):  # noqa: F811
     client, runs = served
     body = _get(client, group="parent")

@@ -56,7 +56,7 @@ export function unitNouns(by: string): { one: string; many: string } {
   return { one, many: pluralNoun(one) };
 }
 
-const possessive = (many: string) => (many.endsWith("s") ? `${many}'` : `${many}'s`);
+export const possessive = (many: string) => (many.endsWith("s") ? `${many}'` : `${many}'s`);
 /** The aggregate with the percentile the server named (`best10 (p90)`). */
 const aggName = (r: JobAggChoice) => (r.percentile ? `${r.agg} (${r.percentile})` : r.agg);
 
@@ -75,6 +75,11 @@ const ofUnits = (r: JobRolled) => `of ${coverage(r)} ${possessive(unitNouns(r.by
 /** `of 14/16 dates' own` (`of 9 runs`: every run is its own unit, no source). */
 export const coverageText = (r: JobRolled): string =>
   r.by === "runs" ? `of ${coverage(r)} runs` : `${ofUnits(r)} ${r.source}`;
+
+/** What every row's value is, without coverage: `median of dates' own
+ *  date.best_value` (`median of runs' loss`). */
+export const rolledBasis = (r: JobAggChoice) =>
+  `${aggName(r)} of ${possessive(unitNouns(r.by).many)}${r.by === "runs" ? "" : ` ${r.source}`} ${r.metric}`;
 
 /** The value as shown, `≈ 0.65` for an approximate quantile, `—` without one. */
 export const rolledValueText = (r: JobRolled) =>

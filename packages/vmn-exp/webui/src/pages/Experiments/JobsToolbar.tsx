@@ -37,7 +37,7 @@ export default function JobsToolbar({ ws, app, view, board, onViewApplied, onAll
       <GroupByMenu
         value={board.group} viewGroup={PARENT} links={JOB_LINKS} fields={fields}
         onChange={(g) => (g === NO_GROUP ? onAll() : view.setGroup(g === PARENT ? NO_GROUP : g, NO_GROUP))}
-        aggregate={view.aggParam ?? data.aggregate ?? data.defaultAggregate ?? "mean"}
+        aggregate={board.aggregate}
         onAggregate={(a) => view.setAggregate(a, data.defaultAggregate)}
         groupSort={groupSortOf(view.sort)} onGroupSort={view.setGroupSort}
         goal={board.rolled?.goal ?? null}

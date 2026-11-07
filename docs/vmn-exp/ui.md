@@ -544,6 +544,7 @@ Group by groups the rows of the view it is in: outer runs in Outer runs, runs
 across outer runs in All runs, and runs inside one outer run on its Runs tab.
 A group of more than 50 runs has no fold; its header button adds the group's
 clause as a filter.
+In grouped Outer runs, a group's header shows in the value column (beside the label on a phone) the page's aggregate (`agg`) of its outer runs' values (`job_aggregates`), `median 0.65` titled `median of 12 outer runs' median of dates' own date.best_value`, a tail with its percentile (`best10 (p90)`), `*` when runs override the summary policy, `— (no goal)` without a goal and `—` when none has a value.
 
 **The outer run's page** is what a run with children opens on (`?tab=`).
 - **The header** has the name, `@N`, the tree status, the `outer · N runs`

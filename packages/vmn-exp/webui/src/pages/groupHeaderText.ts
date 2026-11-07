@@ -1,10 +1,11 @@
 /** What a group header row says (plan 22 G4, G10): its status count and,
  *  per metric, the aggregate the board shows. */
-import { NO_GOAL, fmtCount, plural } from "../util";
+import { NO_GOAL, fmtCount, fmtVal, noGoalTitle, plural } from "../util";
 import { joinParts } from "../util/toneParts";
 import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
-import { withMix } from "../util/metricPolicy";
-import { tailLabel } from "../util/jobAggregate";
+import type { JobAggChoice } from "../types";
+import { mixText, withMix } from "../util/metricPolicy";
+import { possessive, rolledBasis, tailLabel } from "../util/jobAggregate";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "done";
 
@@ -67,6 +68,25 @@ export function aggregateCell(
 ): { value: number | null; title: string | undefined } {
   if (!a || a.n === 0) return { value: null, title: undefined };
   return { value: a[agg] ?? null, title: withMix(`${tailLabel(agg, a.goal)} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}`, a.policies) };
+}
+
+/** A grouped Outer runs header's value (plan 31 §2): *agg* of the group's
+ *  outer runs' *rolled* values, `median 0.65` titled `median of 12 outer
+ *  runs' median of dates' own date.best_value`; `— (no goal)` without a
+ *  goal, `—` when none of them has a value (plan 32). */
+export function jobGroupCell(a: MetricAggregate | undefined, agg: GroupAggregate, rolled: JobAggChoice): {
+  name: string | null; value: string; noGoal: boolean; mix: string | null; title: string;
+} {
+  const goal = a?.goal ?? rolled.goal;
+  if (!goal) return { name: null, value: "—", noGoal: true, mix: null, title: noGoalTitle(rolled.metric) };
+  const value = a?.[agg];
+  if (!a || a.n === 0 || value == null) {
+    return { name: null, value: "—", noGoal: false, mix: null, title: `no outer run of the group has a ${rolled.metric}` };
+  }
+  const name = tailLabel(agg, goal);
+  const mix = mixText(a.policies ?? null);
+  const title = `${name} of ${possessive(plural(a.n, "outer run"))} ${rolledBasis(rolled)}`;
+  return { name, value: fmtVal(value), noGoal: false, mix, title: mix ? `${title} · ${mix}` : title };
 }
 
 /** A `+N more` row's text in each state of its load. */

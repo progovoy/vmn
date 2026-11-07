@@ -17,6 +17,7 @@ import { CardGroupMore } from "../LeaderboardCardGroup";
 import { headStatus } from "../LeaderboardRow";
 import JobTree from "../Job/JobTree";
 import { AttentionChips, BaselineCell, JobSubLine, ValueCell, type JobContext } from "./JobCells";
+import { JobGroupValue } from "./JobGroupRows";
 import type { JobsTableProps } from "./JobsTable";
 import { isTreeSlot, useTreeSlots } from "./JobsTreeSlot";
 import "../leaderboardCards.css";
@@ -105,6 +106,7 @@ export default function JobCards({ items, ctx, selected, headerCheck, groups, on
             return (
               <li key={`group:${it.group.key}`} className="lb-mcard-group">
                 <CardGroupLabel item={it} groups={groups} />
+                <JobGroupValue group={it.group} groups={groups} />
               </li>
             );
           })}

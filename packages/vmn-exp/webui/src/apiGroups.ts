@@ -73,6 +73,9 @@ export interface RunGroup {
   loose: boolean;
   counts: GroupCounts;
   aggregates: Record<string, MetricAggregate>;
+  /** A grouped Outer runs page's (`top=`): `{rolled.metric: stats}` over its
+   *  outer runs' `rolled.value` (plan 31 §2); empty when none has one. */
+  job_aggregates?: Record<string, MetricAggregate>;
   rows: ExperimentRow[];
   rows_total: number;
   /** The group's size with the same `archived` setting but without
