@@ -85,7 +85,8 @@ export default function LeaderboardCharts({
   // The shown chart's picks, for "Add to report"; a pick of another view is stale.
   const picked = useRef<{ view: ChartView; choice: ChartChoice } | null>(null);
   const onChoice = useCallback((choice: ChartChoice) => { picked.current = { view, choice }; }, [view]);
-  const common = { rows, metricCols, schema, onChoice };
+  const common = { rows, metricCols, schema };
+  const chosen = { ...common, onChoice };
   const spec = () => leaderboardSpec({
     app: importance.app, view, filter: importance.filter, verstrs: rows.map((r) => r.verstr),
     metricCols, paramCols, defaultMetric: importance.defaultMetric,
@@ -101,11 +102,11 @@ export default function LeaderboardCharts({
       {groups && <ChartGroupLegend legend={groups.legend} />}
       <Suspense fallback={<ChartFallback />}>
         {view === "trend" && <ParamPlots {...common} />}
-        {view === "bar" && <MetricBarChart {...common} groups={groups} />}
-        {view === "scatter" && <MetricScatter {...common} paramCols={paramCols} groups={groups} />}
+        {view === "bar" && <MetricBarChart {...chosen} groups={groups} />}
+        {view === "scatter" && <MetricScatter {...chosen} paramCols={paramCols} groups={groups} />}
         {view === "parallel" && <ParallelCoordinates {...common} paramCols={paramCols} onBrush={onBrush} groups={groups} />}
-        {view === "grouped" && <GroupedMetrics {...common} paramCols={paramCols} />}
-        {view === "importance" && <ParamImportance {...common} {...importance} paramCols={paramCols} />}
+        {view === "grouped" && <GroupedMetrics {...chosen} paramCols={paramCols} />}
+        {view === "importance" && <ParamImportance {...chosen} {...importance} paramCols={paramCols} />}
       </Suspense>
     </>
   );

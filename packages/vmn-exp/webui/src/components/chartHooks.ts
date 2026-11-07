@@ -20,7 +20,6 @@ export interface ChartChoice { metric?: string; x?: string; y?: string; group?: 
 
 /** Tells *onChoice* the chart's picks whenever they change. */
 export function useChoiceReport(onChoice: ((c: ChartChoice) => void) | undefined, choice: ChartChoice) {
-  const key = JSON.stringify(choice);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- *key* is *choice*'s value
-  useEffect(() => onChoice?.(choice), [onChoice, key]);
+  const { metric, x, y, group } = choice;
+  useEffect(() => onChoice?.({ metric, x, y, group }), [onChoice, metric, x, y, group]);
 }

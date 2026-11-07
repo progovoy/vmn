@@ -119,12 +119,13 @@ export function jobKpis(s: JobPageSummary): KpiTile[] {
     { label: "median duration", value: fmtDuration(s.duration.p50) },
     { label: "p90 duration", value: fmtDuration(s.duration.p90) },
   ];
-  return [...tiles, bestTile(mainMetric(s), s)];
+  return [...tiles, bestTile(s)];
 }
 
 /** The main metric's best, linked; a goal-less one has none (plan 32 F5),
  *  nor does a job whose server names no main metric or which has no values. */
-function bestTile(metric: string | null, s: JobPageSummary): KpiTile {
+function bestTile(s: JobPageSummary): KpiTile {
+  const metric = mainMetric(s);
   if (!metric) return { label: "best", value: "—", sub: "(no main metric)" };
   const label = `best ${metric}`;
   const m = s.metrics[metric];

@@ -8,7 +8,8 @@ import OverlayChart from "../components/OverlayChart";
 import { AUTO_X } from "../util/xMetric";
 import { validate, type PanelSpec } from "./panelSpec";
 import { useQueryVerstrs } from "./panelData";
-import { frozenClient, LivePanelScope, useUnpublished, type PanelPayload } from "./publishedData";
+import ErrorBoundary from "../components/ErrorBoundary";
+import { frozenClient, LivePanelScope, type PanelPayload } from "./publishedData";
 import PivotPanel from "./PivotPanel";
 import { ROW_TYPES, RowPanel, type RowSpec } from "./RowPanels";
 import { RUN_TYPES, RunPanel, type RunSpec } from "./RunPanels";
@@ -70,12 +71,9 @@ const NoData = () => <div className="muted">No published data for this panel</di
 
 function FrozenBody({ ws, spec, payload }: { ws: string; spec: PanelSpec; payload: PanelPayload }) {
   const client = useMemo(() => frozenClient(payload), [payload]);
-  const unpublished = useUnpublished(client);
   return (
     <QueryClientProvider client={client}>
-      {unpublished && <div className="muted">not published with this report</div>}
-      {/* Kept mounted (hidden): its queries stay observed, so the verdict holds. */}
-      <div hidden={unpublished}>{body(ws, spec)}</div>
+      <ErrorBoundary fallback={(e) => <div className="muted">{e.message}</div>}>{body(ws, spec)}</ErrorBoundary>
     </QueryClientProvider>
   );
 }

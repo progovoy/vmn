@@ -4,7 +4,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
  *  A new *resetKey* (the route, say) clears it, so navigating away recovers
  *  without remounting everything below. */
 export default class ErrorBoundary extends Component<
-  { children: ReactNode; resetKey?: unknown },
+  { children: ReactNode; resetKey?: unknown; fallback?: (error: Error) => ReactNode },
   { error: Error | null }
 > {
   state = { error: null as Error | null };
@@ -26,6 +26,7 @@ export default class ErrorBoundary extends Component<
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+    if (this.props.fallback) return this.props.fallback(error);
     return (
       <div className="error" role="alert">
         <b>Something went wrong rendering this page.</b>

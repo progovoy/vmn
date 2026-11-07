@@ -50,10 +50,10 @@ export function leaderboardSpec(v: LeaderboardView): PanelSpec | null {
   switch (v.view) {
     case "bar": return { ...common, type: "bar", metric };
     case "scatter": {
-      if (c.x !== undefined && c.y !== undefined) return { ...common, type: "scatter", x: specKey(v, c.x), y: specKey(v, c.y) };
       // MetricScatter's own default axes.
-      const param = paramKeys(v.paramCols)[0];
-      return { ...common, type: "scatter", x: v.metricCols[0] ?? param ?? "", y: v.metricCols[1] ?? param ?? first };
+      const param = v.paramCols[0];
+      const x = c.x ?? v.metricCols[0] ?? param ?? "", y = c.y ?? v.metricCols[1] ?? param ?? first;
+      return { ...common, type: "scatter", x: specKey(v, x), y: specKey(v, y) };
     }
     case "parallel": return { ...common, type: "parallel", columns: [...v.metricCols, ...paramKeys(v.paramCols)] };
     case "grouped": return { ...common, type: "grouped", group_by: specKey(v, c.group ?? "branch"), metric };
