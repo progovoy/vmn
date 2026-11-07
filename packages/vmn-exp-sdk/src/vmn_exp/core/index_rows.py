@@ -4,13 +4,15 @@ refreshed record."""
 
 
 def row_copies(snap, with_create_note):
-    """Copies of *snap*'s rows with their ``sys_*`` metrics, ``metric_summary``
-    and ``outputs`` (and create note)."""
+    """Copies of *snap*'s rows with their ``sys_*`` metrics, ``metric_summary``,
+    ``metric_policy`` (``{}`` when the snapshot left it out) and ``outputs``
+    (and create note)."""
     rows = [
         dict(
             row,
             metrics=snap.metrics_of(row["verstr"]),
             metric_summary=snap.metric_summary(row["verstr"]),
+            metric_policy=dict(row.get("metric_policy") or {}),
             outputs=dict(snap.outputs_of(row["verstr"])),
         )
         for row in snap.rows

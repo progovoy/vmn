@@ -20,7 +20,9 @@ field, last write wins, so declaring a ``step_metric`` later keeps the summary.
 so writers may fold in any order. Non-finite values (NaN/inf) stay in the log
 and may be a metric's last or first value, but never its min, max or part of
 its mean. A ``min``/``max``/``mean`` policy on a metric without any finite
-value falls back to the last value, which then sorts last.
+value leaves the metric missing, never its last value. A row's
+``metric_policy`` names the policy of each value its run's own definition
+picked unlike the schema, so a column mixing runs' own summaries can say so.
 Pure: no storage, no clock beyond an entry's timestamp.
 """
 import math
@@ -160,11 +162,12 @@ def _summary_of(last, seen, first):
 
 
 def summarize(last_values, extrema, run_defs, schema, firsts=None):
-    """``(metrics, metric_summary)`` of a fold's metrics.
+    """``(metrics, metric_summary, metric_policy)`` of a fold's metrics.
 
     *metrics* maps each metric to its policy's value; *metric_summary* maps
     each metric seen more than once to ``{"last", "min", "max", "first",
-    "mean"}`` (*firsts* being the fold's earliest values).
+    "mean"}`` (*firsts* being the fold's earliest values); *metric_policy*
+    names each value its run's own definition picked unlike *schema* (see :func:`with_schema_policies`).
     """
     firsts = firsts or {}
     summary = {
@@ -172,7 +175,8 @@ def summarize(last_values, extrema, run_defs, schema, firsts=None):
         for name, seen in extrema.items()
         if _repeated(seen)
     }
-    return with_policies(last_values, summary, run_defs, schema), summary
+    metrics, policy = with_policies(last_values, summary, run_defs, schema)
+    return metrics, summary, policy
 
 
 def same_value(a, b):
@@ -200,36 +204,97 @@ class SchemaPolicies:
     def __bool__(self):
         return bool(self._schema)
 
-    def of(self, name, run_defs=None):
-        """*name*'s policy: *run_defs*' (exact, then glob), else the schema's."""
-        policy = lookup(name, run_defs, _policy_of) if run_defs else None
-        if policy:
-            return policy
+    def column(self, name):
+        """*name*'s policy under the schema alone (exact, then glob), else ``last``."""
         try:
             return self._memo[name]
         except KeyError:
-            policy = self._memo[name] = lookup(name, self._schema, _policy_of)
+            policy = self._memo[name] = lookup(name, self._schema, _policy_of) or "last"
             return policy
+
+    def of(self, name, run_defs=None):
+        """*name*'s policy: *run_defs*' (exact, then glob), else the schema's."""
+        own = lookup(name, run_defs, _policy_of) if run_defs else None
+        return own or self.column(name)
+
+
+def schema_policy(schema, name):
+    """*name*'s summary policy under the metrics *schema* alone, else ``last``."""
+    return SchemaPolicies(schema).column(name)
 
 
 def with_policies(metrics, summary, run_defs, schema):
-    """*metrics* with each metric of *summary* at its policy's value — the
-    run's definitions first, then *schema* (see :func:`with_schema_policies`)."""
+    """``(metrics, metric_policy)`` of :func:`with_schema_policies` — the
+    run's definitions first, then *schema*."""
     return with_schema_policies(metrics, summary, run_defs, SchemaPolicies(schema))
 
 
 def with_schema_policies(metrics, summary, run_defs, policies):
-    """*metrics* with each metric of *summary* at the value *policies* (a
-    :class:`SchemaPolicies`) picks. Only a metric logged more than once can
-    differ from its last value, so the rest are left as they are; *metrics*
-    itself comes back when no value changes."""
+    """``(metrics, metric_policy)``: *metrics* with each metric of *summary*
+    at the value *policies* (a :class:`SchemaPolicies`) picks, and
+    ``{metric: policy}`` of each value the run's own definition picked
+    unlike the schema (plan 32 decision 1: the override is shown) — a value
+    following the schema is not listed. A min/max/mean policy without a
+    finite value leaves the metric out (plan 32 rule 3: missing, never its
+    last value). Only a metric logged more than once can differ from its
+    last value, so the rest are left as they are; *metrics* itself comes
+    back when no value changes."""
     if not summary or not (run_defs or policies):
-        return metrics
-    picked = {}
+        return metrics, {}
+    picked, overrides, dropped = {}, {}, []
     for name, seen in summary.items():
+        column = policies.column(name)
         policy = policies.of(name, run_defs)
-        best = seen[policy] if policy in _BEST else None
-        value = seen["last"] if best is None else best
+        value = seen[policy]
+        if value is None:
+            if name in metrics:
+                dropped.append(name)
+            continue
+        if policy != column:
+            overrides[name] = policy
         if not same_value(value, metrics.get(name)):
             picked[name] = value
-    return {**metrics, **picked} if picked else metrics
+    return _changed(metrics, picked, dropped), overrides
+
+
+def _changed(metrics, picked, dropped):
+    """*metrics* with *picked* set and *dropped* left out; itself when neither."""
+    if not (picked or dropped):
+        return metrics
+    out = {**metrics, **picked}
+    for name in dropped:
+        del out[name]
+    return out
+
+
+def policy_of(row, name):
+    """The summary policy *row*'s run picked for *name* unlike the schema, or None."""
+    policy = row.get("metric_policy")
+    return policy.get(name) if policy else None
+
+
+def value_policy(overrides, name, policies):
+    """The summary policy behind *name*'s value: its run's override in
+    *overrides* (a row's ``metric_policy``), else *policies*' (a
+    :class:`SchemaPolicies`) — None for ``last``."""
+    policy = (overrides or {}).get(name) or policies.column(name)
+    return None if policy == "last" else policy
+
+
+def count_policy(counts, policy, by):
+    """*counts* ``{policy: rows}`` moved by *by* rows of *policy* (None: no
+    override, not counted); a count reaching 0 is dropped."""
+    if policy:
+        count = counts.get(policy, 0) + by
+        if count:
+            counts[policy] = count
+        else:
+            counts.pop(policy, None)
+
+
+def policy_mix(counts):
+    """``{"mixed": True, "policies": {policy: rows}}`` of an aggregate whose
+    rows' runs override the schema's policy (*counts*, see
+    :func:`count_policy`; the other rows follow the schema); ``{}`` without one."""
+    return {"mixed": True, "policies": dict(counts)} if counts else {}
+

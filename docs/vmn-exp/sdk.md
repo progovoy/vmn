@@ -332,7 +332,11 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
   `vmn-exp list --sort`, `prune --query`, the leaderboard);
   `row["metric_summary"][name]` holds `{"last", "min", "max", "first",
   "mean"}` for metrics logged more than once (non-finite values never count;
-  `mean` is `None` without a finite value).
+  `mean` is `None` without a finite value). `row["metric_policy"][name]`
+  names the summary of each value the run's own declaration picked unlike
+  the app schema (a value following the schema is not listed). A
+  `min`/`max`/`mean` summary without a finite value leaves the metric out of
+  `row["metrics"]`.
 - A run's `goal`, `hidden` and `chart` also count across runs for names
   conf.yml does not declare (the latest run wins): they set sort direction,
   the UI's hidden columns and chart kinds, never which value another run

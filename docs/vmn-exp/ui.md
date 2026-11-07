@@ -399,7 +399,10 @@ running, the leaderboard and the run page poll on their own and show
 nothing running they show a Refresh button instead. On the leaderboard this
 sits in the table's caption, under the board, with the "best in column" legend
 and the sort. A metric column without a declared goal reads `(no goal)` in its
-header (no arrow, no best, sorts low first), and one line under the caption
+header (no arrow, no best, sorts low first). A value its run's own summary
+picked, unlike the schema's (row `metric_policy`), carries a small muted tag
+(`min`), and the header reads `loss · mixed` while a loaded row does.
+One line under the caption
 counts those columns and points to conf.yml or the app's settings page to
 declare `goal: min|max`; below 640px, where the caption follows every card, the page head
 also shows `live · updated Ns ago` (or `paused`) as plain text after the run
@@ -1286,7 +1289,10 @@ tags or name regroups the runs below it.
 - `running` counts the running rows of every group after the filters, not
   only the page's, so a client can poll while any run is live.
 - `aggregates` cover each metric's finite values, by each run's summary
-  policy; `best` follows the metric's goal and is null without one.
+  policy; `best` follows the metric's goal and is null without one. When
+  some rows' runs override conf.yml's summary (a run's own `define_metric`
+  beats it), the aggregate carries `mixed: true` and `policies`
+  (`{override: runs}`), and the header cell's title adds `2 runs use min`.
 - `sort`/`order` order rows within a group as on the flat list. Groups order
   by `agg=mean|best|median|min|max` of the sort metric (`best` without a goal
   has no value; groups without a value after the others); the page names

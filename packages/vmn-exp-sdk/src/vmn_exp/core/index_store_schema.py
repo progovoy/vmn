@@ -54,7 +54,7 @@ from vmn_exp.core.index_store_kv import write_puts
 from vmn_exp.core.sqlite_conn import write_tx
 
 RECORDS_VERSION = 19  # 19: a param never overwrites a logged metric (plan 32 F8)
-DERIVED_VERSION = 20
+DERIVED_VERSION = 21  # 21: rows' metric_policy, an empty summary missing (plan 32 F1)
 SCHEMA_VERSION = f"exp-index-{DERIVED_VERSION}"
 
 

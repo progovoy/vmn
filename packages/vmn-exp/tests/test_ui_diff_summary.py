@@ -171,7 +171,8 @@ def test_diff_marks_a_param_only_the_later_run_set(tmp_path):
 
     delta = _pair(LocalSnapshotStorage(str(tmp_path), area="runs"), without, with_params)
 
-    assert delta["lr"] == {"from": None, "to": 0.001, "goal": None, "param": True}
+    assert delta["lr"] == {"from": None, "to": 0.001, "goal": None, "param": True,
+                           "from_policy": None, "to_policy": None}
 
 
 def test_diff_keeps_a_key_one_run_logs_as_a_metric_a_metric(tmp_path):

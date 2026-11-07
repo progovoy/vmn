@@ -307,7 +307,7 @@ def fold_definitions(fold):
 
 
 def fold_metrics(fold, schema=None):
-    """``(metrics, metric_summary)`` of a fold — see :func:`summarize`.
+    """``(metrics, metric_summary, metric_policy)`` of a fold — see :func:`summarize`.
 
     *schema* is the app's metrics schema; the run's own definitions beat it.
     """
@@ -379,11 +379,12 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
     ``vmn-exp list`` shows for a run without a metadata note). Each metric's
     value is its summary policy's (see :mod:`vmn_exp.core.metric_summary`,
     *schema* being the app's metrics schema); ``metric_summary`` has the
-    last/min/max of every metric logged more than once. ``author`` is who the
+    last/min/max of every metric logged more than once, ``metric_policy``
+    the policy of each value the run's own definition picked unlike *schema*. ``author`` is who the
     run's features name (:func:`author_display`), ``has_intent`` always a bool.
     A sweep outer whose spec plans a size carries it as ``sweep_planned``.
     """
-    metrics, metric_summary = fold_metrics(fold, schema)
+    metrics, metric_summary, metric_policy = fold_metrics(fold, schema)
     row = {
         "idx": idx,
         "verstr": meta["verstr"],
@@ -398,6 +399,7 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
         "params": fold_values(fold, "params"),
         "metrics": metrics,
         "metric_summary": metric_summary,
+        "metric_policy": metric_policy,
         "parent": meta.get("parent"),
         "last_metric_at": fold_last_metric_at(fold),
         "inputs": fold_inputs_dict(fold),

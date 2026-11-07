@@ -16,6 +16,7 @@ import heapq
 from collections import Counter, namedtuple
 
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.metric_summary import count_policy, policy_mix, policy_of
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_group_clause import value_clause
 from vmn_exp.ui.leaderboard_group_fields import (
@@ -92,6 +93,14 @@ def _cell_value(spec, members, hits, goal):
     return of_sorted(values, spec.agg, goal)
 
 
+def _policies(members, metric):
+    """:func:`~vmn_exp.core.metric_summary.policy_mix` of *members*' *metric*."""
+    counts = {}
+    for row in members:
+        count_policy(counts, policy_of(row, metric), 1)
+    return policy_mix(counts)
+
+
 def _clause(row, col):
     a, b = row["clause"], col["clause"]
     return a and b and f"{a} and {b}"
@@ -118,6 +127,8 @@ def build_pivot(snapshot, rows, spec, schema):
                 "clause": _clause(row_heads[i], col_heads[j])}
         if hits is not None:
             cell["hits"] = hits
+        if spec.cell == "agg":
+            cell.update(_policies(kept, spec.metric))
         cells[i][j] = cell
     return {"rows": row_heads, "cols": col_heads, "cells": cells, "total": len(rows),
             "rows_total": rows_total, "cols_total": cols_total, "cell": spec.cell,

@@ -72,7 +72,7 @@ def compact_row(row):
     """*row* (a lean row) made of shared keys and values: its own keys, its
     tags', params' and metrics' keys and str values (a numeric param folded
     into its metrics: the param's float), its str fields that repeat
-    (branch, parent, ...) and its ``env``."""
+    (branch, parent, ...), its ``env`` and its ``metric_policy``."""
     out = {STRINGS(k): v for k, v in row.items()}
     for name in ("tags", "params", "metrics"):
         if isinstance(out.get(name), dict):
@@ -82,8 +82,9 @@ def compact_row(row):
     for name in _ROW_STRINGS:
         if name in out:
             out[name] = _str(out[name])
-    if isinstance(out.get("env"), dict):
-        out["env"] = shared_dict(out["env"])
+    for name in ("env", "metric_policy"):
+        if isinstance(out.get(name), dict):
+            out[name] = shared_dict(out[name])
     return out
 
 

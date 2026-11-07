@@ -4,6 +4,7 @@ parts its subtree is split into (static rows and live overlay, per nested
 job): read side by side, never merged into one tally."""
 from collections import Counter
 
+from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.core.progress import DEFAULT_NAMES, declared_progress
 from vmn_exp.core.settle import LOST, NEVER_STARTED, SETTLED, row_closes
 from vmn_exp.core.status import _age_sec
@@ -178,6 +179,10 @@ def metric_fields(parts, name, goal, bins=HIST_BINS, quantiles=True):
     }
     if quantiles:
         fields.update(zip(("p10", "p50", "p90"), sketch.quantiles([0.1, 0.5, 0.9])))
+    overrides = Counter()
+    for tally in tallies:
+        overrides.update(tally.policies)
+    fields.update(policy_mix(overrides))
     return fields
 
 

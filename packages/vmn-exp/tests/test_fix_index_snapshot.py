@@ -45,9 +45,11 @@ def _seed(st):
 
 
 def _lean(rows):
-    """Row copies as the snapshot shares them: without ``metric_summary`` or
-    ``outputs``."""
-    return [{k: v for k, v in r.items() if k not in ("metric_summary", "outputs")} for r in rows]
+    """Row copies as the snapshot shares them: without ``metric_summary``,
+    ``outputs`` or an empty ``metric_policy``."""
+    return [{k: v for k, v in r.items()
+             if k not in ("metric_summary", "outputs") and (k != "metric_policy" or v)}
+            for r in rows]
 
 
 def _index(st, tmp_path):

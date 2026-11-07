@@ -14,6 +14,7 @@ from vmn_exp.core.fold import (
 )
 from vmn_exp.core.log import load_log
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.metric_summary import SchemaPolicies, value_policy
 from vmn_exp.core.resolve_ref import RefError
 from vmn_exp.snapshot import _resolve_verstr, render_tree_diff
 from vmn_exp.ui.memo import LRU
@@ -81,17 +82,19 @@ def _record_key(storage, app_name, verstr):
 
 
 def _fold_side(log, schema):
-    """Fold a log and return ``(metrics, params, logged params, run_defs)``."""
+    """Fold a log and return ``(metrics, params, logged params, run_defs,
+    metric_policy)``."""
     fold = fold_log(log)
-    metrics, _ = fold_metrics(fold, schema)
+    metrics, _, metric_policy = fold_metrics(fold, schema)
     params = fold_values(fold, "params")
     run_defs = fold_definitions(fold) if fold.get("metric_defs") else {}
-    return metrics, params, logged_params(fold), run_defs
+    return metrics, params, logged_params(fold), run_defs, metric_policy
 
 
 def _load_sides(storage, app_name, verstrs, read_log, schema=None, with_code=True):
-    """Each run's ``(meta, patches, metrics, params, logged params, run_defs)``;
-    without *with_code* only ``metadata.yml`` is read (patches None)."""
+    """Each run's ``(meta, patches, metrics, params, logged params, run_defs,
+    metric_policy)``; without *with_code* only ``metadata.yml`` is read
+    (patches None)."""
     sides = []
     for verstr in verstrs:
         if with_code:
@@ -131,15 +134,24 @@ def _goal_fields(key, run_defs, schema, declared):
 
 
 def _metrics_delta(m1, m2, side1_extra, side2_extra, schema=None, declared=None):
-    params1, logged1, defs1 = side1_extra
-    params2, logged2, defs2 = side2_extra
+    """Each *side_extra* is ``(params, logged params, run_defs,
+    metric_policy)``; a side's ``*_policy`` is its run's override, else
+    *schema*'s (its values are summarized under it), None for ``last`` and
+    for a param (plan 32 F1)."""
+    params1, logged1, defs1, policy1 = side1_extra
+    params2, logged2, defs2, policy2 = side2_extra
+    policies = SchemaPolicies(schema)
     delta = {}
     for key in sorted(set(m1) | set(m2)):
         if m1.get(key) == m2.get(key):
             continue
         is_param = _is_param_key(key, ((m1, params1, logged1), (m2, params2, logged2)))
         goal = {"goal": None} if is_param else _goal_fields(key, (defs1, defs2), schema, declared)
-        delta[key] = {"from": m1.get(key), "to": m2.get(key), **goal, "param": is_param}
+        delta[key] = {
+            "from": m1.get(key), "to": m2.get(key), **goal, "param": is_param,
+            "from_policy": None if is_param else value_policy(policy1, key, policies),
+            "to_policy": None if is_param else value_policy(policy2, key, policies),
+        }
     return delta
 
 
@@ -188,13 +200,8 @@ def _tree_diff(root_path, app_name, v1, side1, v2, side2):
 
 def _delta_from_sides(side1, side2, schema=None):
     """Build the ``metrics_delta`` dict from two loaded sides."""
-    # side = (meta, patches, metrics, params, logged params, run_defs)
-    return _metrics_delta(
-        side1[2], side2[2],
-        (side1[3], side1[4], side1[5]),
-        (side2[3], side2[4], side2[5]),
-        schema,
-    )
+    # side = (meta, patches, metrics, params, logged params, run_defs, metric_policy)
+    return _metrics_delta(side1[2], side2[2], side1[3:], side2[3:], schema)
 
 
 def experiment_diff(root_path, app_name, ref1, ref2, schema=None):
@@ -271,8 +278,13 @@ def experiment_diff_from_snapshot(snap, v1, v2, schema=None):
         return None
     delta = _metrics_delta(
         snap.metrics_of(v1), snap.metrics_of(v2),
-        (rows[0]["params"], rows[0].get("logged_params", ()), snap.declared_defs.get(v1)),
-        (rows[1]["params"], rows[1].get("logged_params", ()), snap.declared_defs.get(v2)),
+        _row_extra(snap, rows[0]), _row_extra(snap, rows[1]),
         schema, snap.declared_schema(),
     )
     return _metrics_only([v1, v2], delta)
+
+
+def _row_extra(snap, row):
+    """A snapshot row's side extra for :func:`_metrics_delta`."""
+    return (row["params"], row.get("logged_params", ()), snap.declared_defs.get(row["verstr"]),
+            row.get("metric_policy"))

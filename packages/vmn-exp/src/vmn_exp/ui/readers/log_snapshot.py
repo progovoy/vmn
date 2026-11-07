@@ -51,7 +51,7 @@ class LogSnapshot:
         self.memo = {}  # derived views (thinned series) of this exact snapshot
 
     def summarized_metrics(self, schema=None):
-        """``(metrics, metric_summary)`` under the metrics *schema* — see
+        """``(metrics, metric_summary, metric_policy)`` under the metrics *schema* — see
         :func:`~vmn_exp.core.fold.fold_metrics`."""
         return fold_metrics(self._metric_fold, schema)
 

@@ -96,7 +96,7 @@ def test_cli_show_prints_last_min_and_max(app_layout, capfd):
     assert _exp(app_layout.app_name, action="show", version=overfit) == 0
     line = next(l for l in capfd.readouterr().out.splitlines()
                 if l.strip().startswith("loss:"))
-    assert line.split() == ["loss:", "0.2", "(last", "0.9,", "min", "0.2,", "max", "1)"]
+    assert line.split() == ["loss:", "0.2", "(min)", "(last", "0.9,", "min", "0.2,", "max", "1)"]
 
 
 def test_cli_compare_shows_the_best_value(app_layout, capfd):

@@ -93,7 +93,7 @@ def _assert_readers_match(storage):
     from vmn_exp.core.series_reader import SeriesReader
     from vmn_exp.sdk.reader import get_run, list_runs
 
-    series, (folded, summary) = _expected()
+    series, (folded, summary, _) = _expected()
     run = get_run(APP, "r1", storage=storage)
     assert _norm(run["series"]) == _norm(series)
     assert _norm(run["metrics"]) == _norm(folded)

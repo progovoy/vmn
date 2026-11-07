@@ -39,7 +39,7 @@ def test_it_reads_like_the_dict_it_packs():
     assert len(packed) == len(SUMMARY) and "loss" in packed and "x" not in packed
     assert dict(packed.items())["loss"] == SUMMARY["loss"]
     assert packed.get("epoch") == SUMMARY["epoch"] and packed.get("x") is None
-    assert with_policies({"loss": 0.25}, packed, {"loss": {"goal": "min"}}, None)["loss"] == 0.1
+    assert with_policies({"loss": 0.25}, packed, {"loss": {"goal": "min"}}, None)[0]["loss"] == 0.1
 
 
 def test_it_round_trips_through_json_and_pickle():

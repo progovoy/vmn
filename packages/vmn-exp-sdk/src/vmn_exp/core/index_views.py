@@ -40,7 +40,7 @@ from vmn_exp.core.fold import (
     fold_intent,
     fold_row,
 )
-from vmn_exp.core.index_intern import compact_row, keyed
+from vmn_exp.core.index_intern import compact_row, keyed, shared_dict
 from vmn_exp.core.keyed_locks import KeyedLocks
 from vmn_exp.core.metric_pack import PackedSummary
 from vmn_exp.core.metric_schema import declared_fields, declared_schema
@@ -78,6 +78,9 @@ def lean_row(idx, meta, fold):
     note, summary = row.pop("create_note"), row.pop("metric_summary")
     outputs = row.pop("outputs") or None
     row["metrics"], system = split_system(row["metrics"])
+    policy = split_system(row.pop("metric_policy"))[0]
+    if policy:  # left out when empty: most rows follow the schema
+        row["metric_policy"] = policy
     summary, system_summary = split_system(summary)
     defs = _definitions(fold) or None
     return (
@@ -141,8 +144,20 @@ def summarized_row(row, parts, policies):
     :class:`~vmn_exp.core.metric_summary.SchemaPolicies`); *row* itself when
     unchanged."""
     summary, defs = parts
-    metrics = with_schema_policies(row["metrics"], summary, defs, policies)
-    return row if metrics is row["metrics"] else dict(row, metrics=metrics)
+    metrics, policy = with_schema_policies(row["metrics"], summary, defs, policies)
+    if metrics is row["metrics"] and policy == (row.get("metric_policy") or {}):
+        return row
+    return _with_summary(row, metrics, shared_dict(policy))
+
+
+def _with_summary(row, metrics, policy):
+    """A copy of *row* with *metrics* and *policy* (an already shared dict)
+    as its ``metric_policy``, left out when empty."""
+    out = dict(row, metrics=metrics)
+    out.pop("metric_policy", None)
+    if policy:
+        out["metric_policy"] = policy
+    return out
 
 
 class SchemaRows:
@@ -255,7 +270,7 @@ def _summarized(memo, row, parts, policies):
         if done is was:
             done = row
         elif was is not row:
-            done = dict(row, metrics=done["metrics"])
+            done = _with_summary(row, done["metrics"], done.get("metric_policy"))
     else:
         done = summarized_row(row, part, policies) if part else row
     memo[verstr] = (row, part, done)

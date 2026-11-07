@@ -21,6 +21,7 @@ from vmn_exp.core.code_store import CODE_MISSING
 from vmn_exp.core.fold import fold_features, fold_log, fold_row
 from vmn_exp.core.intent import cap_utf8
 from vmn_exp.core.media import media_counts
+from vmn_exp.core.metric_summary import value_policy
 from vmn_exp.core.provenance import no_code_reason
 from vmn_exp.core.record_format import record_format_version
 from vmn_exp.core.run_error import error_summary
@@ -214,12 +215,25 @@ def format_number(value):
     return f"{value:.4g}" if isinstance(value, float) else str(value)
 
 
-def format_metric_lines(metrics, summary):
-    """``name: value`` per metric, name-ordered; a metric whose last, min and
-    max differ adds them: ``loss: 0.2 (last 0.9, min 0.2, max 1)``."""
+def with_policy(text, policy):
+    """*text* (a metric value) naming the summary *policy* that picked it
+    (None: ``last``, left unnamed): ``0.2 (min)``."""
+    return f"{text} ({policy})" if policy else text
+
+
+def shown_policies(metrics, overrides, policies):
+    """``{metric: policy}`` behind each of *metrics*' values (None: ``last``),
+    see :func:`~vmn_exp.core.metric_summary.value_policy`."""
+    return {name: value_policy(overrides, name, policies) for name in metrics}
+
+
+def format_metric_lines(metrics, summary, policy):
+    """``name: value`` per metric, name-ordered, naming its *policy*
+    (:func:`shown_policies`) but ``last``; a metric whose last, min and max differ adds them:
+    ``loss: 0.2 (min) (last 0.9, min 0.2, max 1)``."""
     lines = []
     for name, value in sorted(metrics.items()):
-        line = f"{name}: {format_number(value)}"
+        line = f"{name}: {with_policy(format_number(value), policy.get(name))}"
         parts = summary.get(name)
         if parts and len({format_number(v) for v in parts.values()}) > 1:
             line += " (" + ", ".join(

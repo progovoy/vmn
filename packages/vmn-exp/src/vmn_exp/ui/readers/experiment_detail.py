@@ -248,8 +248,8 @@ def experiment_detail(
     *read_observed_at* is the run-state store write time loader. *x* joins
     the series on another metric (see :func:`thinned_series`);
     ``step_metrics`` lists what the run and the metrics *schema* declare;
-    ``metrics`` (each metric's summary value) and ``metric_summary`` follow
-    the run's and the *schema*'s summary policies. *step_range* (``(lo, hi)``)
+    ``metrics`` (each metric's summary value), ``metric_summary`` and
+    ``metric_policy`` follow the run's and the *schema*'s summary policies. *step_range* (``(lo, hi)``)
     keeps that range of each series, read from the metric objects (see
     :mod:`~vmn_exp.ui.readers.range_series`); ``compacted`` tells whether
     every metrics writer of the run has its ``.vmx``. ``idx`` / ``name`` come
@@ -288,7 +288,7 @@ def experiment_detail(
         )
     elif include_series:
         series, series_total = thinned_series(snapshot, keys, max_points, x=x)
-    metrics, metric_summary = snapshot.summarized_metrics(schema)
+    metrics, metric_summary, metric_policy = snapshot.summarized_metrics(schema)
     row = (read_child_row(verstr) if read_child_row else None) or {}
     detail = {
         "metadata": metadata,
@@ -300,6 +300,7 @@ def experiment_detail(
         "params": snapshot.params,
         "metrics": metrics,
         "metric_summary": metric_summary,
+        "metric_policy": metric_policy,
         "logged_params": snapshot.logged_params,
         "series": series,
         "series_total": series_total,

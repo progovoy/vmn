@@ -90,4 +90,6 @@ def test_the_store_route_answers_from_the_snapshot(tmp_path, monkeypatch):
 
     assert resp.status_code == 200, resp.text
     # V2 declares no goal for loss: its value is the last (as the storage path says)
-    assert resp.json()["metrics_delta"]["loss"] == {"from": 0.002, "to": 0.01, "goal": "min", "param": False}
+    assert resp.json()["metrics_delta"]["loss"] == {
+        "from": 0.002, "to": 0.01, "goal": "min", "param": False,
+        "from_policy": "min", "to_policy": None}

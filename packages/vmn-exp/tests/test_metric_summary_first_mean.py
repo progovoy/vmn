@@ -33,10 +33,10 @@ def test_mean_summary_ranks_on_the_mean_of_finite_values():
     assert row["metrics"]["loss"] == pytest.approx(3.0)
 
 
-def test_mean_without_a_finite_value_falls_back_to_the_last():
+def test_mean_without_a_finite_value_is_missing():
     log = [_m(0, {"loss": NAN}), _m(1, {"loss": INF})]
     row = _row(log, {"loss": {"summary": "mean"}})
-    assert row["metrics"]["loss"] == INF
+    assert "loss" not in row["metrics"]  # plan 32 rule 3: missing, not its last value
     assert row["metric_summary"]["loss"]["mean"] is None
 
 

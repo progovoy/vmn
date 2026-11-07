@@ -102,6 +102,7 @@
    "timestamp": "2026-01-01T00:00:00.000000Z",
    "verstr": "1.0.0-dev.a"
   },
+  "metric_policy": {},
   "metric_summary": {
    "loss": {
     "first": 1.0,
@@ -307,6 +308,7 @@
    "timestamp": "2026-01-01T00:00:10.000000Z",
    "verstr": "1.0.0-dev.a.r2"
   },
+  "metric_policy": {},
   "metric_summary": {
    "loss": {
     "first": 1.0,
@@ -494,6 +496,7 @@
    "timestamp": "2026-01-01T00:00:20.000000Z",
    "verstr": "1.0.0-dev.a.r3"
   },
+  "metric_policy": {},
   "metric_summary": {
    "loss": {
     "first": 1.0,

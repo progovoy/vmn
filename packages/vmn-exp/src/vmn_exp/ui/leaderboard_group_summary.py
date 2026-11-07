@@ -13,6 +13,7 @@ import bisect
 import math
 
 from vmn_exp.core.metric_schema import metric_goal
+from vmn_exp.core.metric_summary import count_policy, policy_mix
 from vmn_exp.core.settle import counted_status
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_group_fields import COUNT_KEYS, COUNT_OF
@@ -48,11 +49,13 @@ def stats(ordered, goal):
 
 
 class Summary:
-    __slots__ = ("_owned", "carriers", "size", "statuses", "values")
+    __slots__ = ("_owned", "carriers", "policies", "size", "statuses", "values")
 
-    def __init__(self, values=None, carriers=None, statuses=None, size=0):
+    def __init__(self, values=None, carriers=None, statuses=None, size=0, policies=None):
         self.values = values or {}  # {metric: sorted finite values}
         self.carriers = carriers or {}  # {metric: rows carrying it}
+        # {metric: {policy: rows}} of rows whose run overrides the schema's policy
+        self.policies = policies or {}
         self.statuses = statuses or {}
         self.size = size
         self._owned = set()
@@ -72,7 +75,9 @@ class Summary:
         return summary
 
     def copy(self):
-        return Summary(dict(self.values), dict(self.carriers), dict(self.statuses), self.size)
+        policies = {metric: dict(counts) for metric, counts in self.policies.items()}
+        return Summary(dict(self.values), dict(self.carriers), dict(self.statuses), self.size,
+                       policies)
 
     def _tally(self, row, by):
         self.size += by
@@ -80,6 +85,11 @@ class Summary:
         self.statuses[status] = self.statuses.get(status, 0) + by
         for metric in row["metrics"]:
             self.carriers[metric] = self.carriers.get(metric, 0) + by
+        for metric, policy in (row.get("metric_policy") or {}).items():
+            counts = self.policies.setdefault(metric, {})
+            count_policy(counts, policy, by)
+            if not counts:
+                del self.policies[metric]
 
     def _list(self, metric):
         if metric not in self._owned:
@@ -120,6 +130,9 @@ class Summary:
         return of_sorted(self.values.get(metric) or [], agg, goal)
 
     def aggregates(self, schema):
-        """``{metric: stats}`` for every metric a row of the group carries."""
-        return {metric: stats(self.values.get(metric) or [], metric_goal(schema, metric))
+        """``{metric: stats}`` for every metric a row of the group carries,
+        ``mixed``/``policies`` when some rows' runs override the schema's
+        summary policy (:func:`~vmn_exp.core.metric_summary.policy_mix`)."""
+        return {metric: {**stats(self.values.get(metric) or [], metric_goal(schema, metric)),
+                         **policy_mix(self.policies.get(metric))}
                 for metric, carrying in self.carriers.items() if carrying}

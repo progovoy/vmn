@@ -39,6 +39,8 @@ from vmn_exp.cli.views import (
     patch_payload,
     print_patch,
     show_payload,
+    shown_policies,
+    with_policy,
 )
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.field_sort import field_sort
@@ -74,6 +76,7 @@ from vmn_exp.core.log import (
 )
 from vmn_exp.core.metric_entries import is_metric_entry
 from vmn_exp.core.metric_schema import effective_schema
+from vmn_exp.core.metric_summary import SchemaPolicies
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.core.query import QueryError
 from vmn_exp.core.refs import (
@@ -676,11 +679,12 @@ def _metric_columns(schema, rows):
     return columns + sorted(k for k in keys if k not in columns)
 
 
-def _format_list_row(row, node, columns):
+def _format_list_row(row, node, columns, policies):
     meta, metrics = row["meta"], row["metrics"]
     note = meta.get("note") or meta.get("create_note") or ""
+    shown = shown_policies(metrics, meta.get("metric_policy"), policies)
     metric_str = "  ".join(
-        f"{k}={metrics[k]:.4g}" if isinstance(metrics[k], float) else f"{k}={metrics[k]}"
+        f"{k}={with_policy(format_number(metrics[k]), shown[k])}"
         for k in columns
         if k in metrics
     )
@@ -734,9 +738,9 @@ def experiment_list(vcs, params, storage, args):
         print(dumps([row["meta"] for row in rows]))
         return 0
 
-    columns = _metric_columns(schema, rows)
+    columns, policies = _metric_columns(schema, rows), SchemaPolicies(schema)
     for row in rows:
-        print(_format_list_row(row, row["meta"], columns))
+        print(_format_list_row(row, row["meta"], columns, policies))
     return 0
 
 
@@ -853,10 +857,11 @@ def experiment_show(vcs, params, storage, args):
         for ln in format_inputs_lines(inputs):
             print(f"  {ln}")
 
-    metrics, summary = fold_metrics(_fold, schema)
+    metrics, summary, overrides = fold_metrics(_fold, schema)
     if metrics:
         print("\n  Metrics:")
-        for line in format_metric_lines(metrics, summary):
+        shown = shown_policies(metrics, overrides, SchemaPolicies(schema))
+        for line in format_metric_lines(metrics, summary, shown):
             print(f"    {line}")
 
     media = media_lines(log)

@@ -16,6 +16,7 @@ import operator
 
 from vmn_exp.core.log import primary_metric
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal
+from vmn_exp.core.metric_summary import count_policy, policy_of
 from vmn_exp.core.progress import DEFAULT_NAMES
 from vmn_exp.core.settle import counted_status
 from vmn_exp.core.status import (
@@ -101,24 +102,27 @@ def higher_first(a, b):
 
 
 class MetricTally:
-    __slots__ = ("high", "low", "n", "sketch", "total")
+    __slots__ = ("high", "low", "n", "policies", "sketch", "total")
 
     def __init__(self):
         self.n, self.total = 0, 0.0
         self.low = self.high = None  # ((value, verstr), 1)
         self.sketch = QuantileSketch()
+        self.policies = {}  # {policy: values} of those a run override picked
 
     def copy(self):
         out = MetricTally()
         out.n, out.total, out.low, out.high = self.n, self.total, self.low, self.high
-        out.sketch = self.sketch.copy()
+        out.sketch, out.policies = self.sketch.copy(), dict(self.policies)
         return out
 
-    def add(self, value, verstr, by):
-        """Whether removing *value* left an extreme unknown."""
+    def add(self, value, verstr, by, policy=None):
+        """Whether removing *value* (picked by its run's override *policy*,
+        None: the schema's) left an extreme unknown."""
         self.n += by
         self.total += by * value
         self.sketch.add(value, by)
+        count_policy(self.policies, policy, by)
         self.low, low_gone = _extreme(self.low, (value, verstr), by, operator.lt)
         self.high, high_gone = _extreme(self.high, (value, verstr), by, higher_first)
         return low_gone or high_gone
@@ -233,17 +237,18 @@ class Tally:
         metrics = row.get("metrics") or {}
         for name in spec.metrics:
             if is_finite_number(metrics.get(name)):
-                unknown = self._add_metric(name, metrics[name], row["verstr"], by) or unknown
+                unknown = self._add_metric(name, metrics[name], row["verstr"], by,
+                                           policy_of(row, name)) or unknown
         sig = signature(row)
         if sig:
             _move(self.failures, sig, by)
         return unknown
 
-    def _add_metric(self, name, value, verstr, by):
+    def _add_metric(self, name, value, verstr, by, policy):
         metric = self.metrics.get(name)
         if metric is None:
             metric = self.metrics[name] = MetricTally()
-        unknown = metric.add(value, verstr, by)
+        unknown = metric.add(value, verstr, by, policy)
         if metric.n <= 0:
             del self.metrics[name]
             return False

@@ -1602,10 +1602,20 @@ value.
   `--query metrics.x`, `prune`, `compare`, `diff`, the UI, `list_runs()`.
   Every metric logged more than once also carries `metric_summary`
   (`{last, min, max, first, mean}`) in `list --json`/`show --json`, SDK rows
-  and the UI; `show` prints `loss: 0.2 (last 0.9, min 0.2, max 1)`.
+  and the UI; `show` prints `loss: 0.2 (min) (last 0.9, min 0.2, max 1)`.
 - **Precedence**: the run's own `define_metric` > conf.yml > `last`; in each,
   an exact name beats a glob. Another run's declaration never changes this
   run's summary.
+- **The value names its summary**: rows carry `metric_policy`
+  (`{metric: policy}` for every value the run's own `define_metric` picked
+  unlike conf.yml, an explicit `last` included), so one column can mix runs'
+  own summaries visibly. `list`/`show` print `loss=0.2 (min)` whenever the
+  value's summary isn't `last`; group, pivot and job-rollup aggregates with
+  such runs carry `mixed: true` and `policies` (`{override: runs}`; the rest
+  follow conf.yml); compare deltas carry `from_policy`/`to_policy` (null:
+  `last`).
+- A `min`/`max`/`mean` summary with no finite value leaves the metric
+  missing (`—`), never its last value.
 - **After the fact**: `vmn-exp add my_app -v <ref> --define-metric val_loss
   --goal min` (needs at least one of `--goal`/`--summary`/`--step-metric`/
   `--hidden`/`--chart`) — handy for a `vmn-exp run` whose child only wrote `key=value`

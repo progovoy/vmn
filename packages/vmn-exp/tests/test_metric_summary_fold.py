@@ -84,10 +84,10 @@ def test_non_finite_values_are_excluded_from_min_and_max():
     assert math.isnan(summary["last"])
 
 
-def test_an_all_nan_metric_keeps_its_last_value_and_sorts_last():
+def test_an_all_nan_metric_under_a_min_policy_is_missing_and_sorts_last():
     schema = {"loss": {"goal": "min"}}
     nan_row = _row(_losses(NAN, NAN), schema)
-    assert math.isnan(nan_row["metrics"]["loss"])
+    assert "loss" not in nan_row["metrics"]  # plan 32 rule 3: missing, not its last value
     assert nan_row["metric_summary"]["loss"]["min"] is None
     good = dict(_row(OVERFIT, schema), verstr="good")
     assert sort_by_metric([nan_row, good], schema, sort="loss")[0] is good
