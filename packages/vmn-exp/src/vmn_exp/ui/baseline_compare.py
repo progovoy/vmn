@@ -42,7 +42,11 @@ def _metric(rollup, name, field):
 def _metric_deltas(target, baseline, name, goal):
     up = higher_is_better(goal)
     pair = lambda field: delta(_metric(target, name, field), _metric(baseline, name, field), up)  # noqa: E731
-    return {"goal": goal, "best": pair("best"), "median": pair("p50")}
+    out = {"goal": goal, "best": pair("best"), "median": pair("p50")}
+    sides = {"value": _metric(target, name, "policies"), "baseline": _metric(baseline, name, "policies")}
+    if any(sides.values()):
+        out["policies"] = sides  # each side's overrides of the schema's summary (plan 32 F1)
+    return out
 
 
 def rollup_deltas(target, baseline, goals):

@@ -37,6 +37,7 @@ from vmn_exp.cli.views import (
     format_number,
     metrics_schema,
     patch_payload,
+    policy_conflict,
     print_patch,
     show_payload,
     shown_policies,
@@ -69,7 +70,6 @@ from vmn_exp.core.log import (
     IDX_SORT,
     effective_params,
     filter_archived,
-    summary_metrics,
     load_log,
     merged_log_view,
     sort_by_metric,
@@ -1010,6 +1010,17 @@ def _resolve_experiment_bundles(
     return bundles
 
 
+def _metrics_with_policies(log, schema, policies):
+    """A run's summary metrics and the policy behind each value (None: ``last``)."""
+    metrics, _, overrides = fold_metrics(fold_log(log), schema)
+    return metrics, shown_policies(metrics, overrides, policies)
+
+
+def _compare_cell(metrics, shown, key):
+    """A compare table's cell: ``0.2 (min)``, ``-`` without a value."""
+    return "-" if metrics.get(key) is None else with_policy(format_number(metrics[key]), shown[key])
+
+
 @measure_runtime_decorator
 def experiment_compare(vcs, params, storage, args):
     versions = getattr(args, "version", None) or []
@@ -1024,11 +1035,12 @@ def experiment_compare(vcs, params, storage, args):
 
     # Metrics comparison table
     schema = metrics_schema(vcs, storage, app_name)
+    policies = SchemaPolicies(schema)
     all_keys = set()
     exp_metrics = []
     for meta, patches, log in experiments:
-        m = summary_metrics(log, schema)
-        exp_metrics.append(m)
+        m, shown = _metrics_with_policies(log, schema, policies)
+        exp_metrics.append((m, shown))
         all_keys.update(m.keys())
 
     if schema:
@@ -1047,17 +1059,10 @@ def experiment_compare(vcs, params, storage, args):
         print("-" * len(header_line))
 
         for key in col_order:
-            vals = []
-            for m in exp_metrics:
-                v = m.get(key)
-                if v is None:
-                    vals.append("-")
-                elif isinstance(v, float):
-                    vals.append(f"{v:.4g}")
-                else:
-                    vals.append(str(v))
-            row = [key] + vals
-            print("  ".join(str(v).ljust(w) for v, w in zip(row, col_widths)))
+            row = [key] + [_compare_cell(m, shown, key) for m, shown in exp_metrics]
+            line = "  ".join(str(v).ljust(w) for v, w in zip(row, col_widths))
+            conflict = policy_conflict(shown[key] for m, shown in exp_metrics if m.get(key) is not None)
+            print(f"{line}  {conflict}" if conflict else line)
 
     if len(experiments) == 2:
         v1 = experiments[0][0]["verstr"]
@@ -1072,12 +1077,21 @@ def experiment_compare(vcs, params, storage, args):
 # ---------------------------------------------------------------------------
 
 
-def _print_delta_line(label, d1, d2):
+def _delta_text(key, a, b, p1, p2):
+    """``loss 0.2 (min) -> 0.9 (summaries differ: min vs last)``: each value
+    naming its policy (None: ``last``), the second side the conflict."""
+    if a is not None and b is not None:
+        p2 = policy_conflict((p1, p2)) or p2
+    return f"{key} {with_policy(format_number(a), p1)} -> {with_policy(format_number(b), p2)}"
+
+
+def _print_delta_line(label, d1, d2, policies=({}, {})):
+    p1, p2 = policies
     parts = []
     for k in sorted(set(d1) | set(d2)):
         a, b = d1.get(k), d2.get(k)
         if a != b:
-            parts.append(f"{k} {format_number(a)} -> {format_number(b)}")
+            parts.append(_delta_text(k, a, b, p1.get(k), p2.get(k)))
     if parts:
         print(f"{label}: " + "   ".join(parts))
 
@@ -1096,9 +1110,9 @@ def experiment_diff(vcs, params, storage, args):
     print(f"Comparing {v1} -> {v2}\n")
     _print_delta_line("params", effective_params(log1), effective_params(log2))
     schema = metrics_schema(vcs, storage, app_name)
-    _print_delta_line(
-        "metrics", summary_metrics(log1, schema), summary_metrics(log2, schema)
-    )
+    policies = SchemaPolicies(schema)
+    (m1, shown1), (m2, shown2) = (_metrics_with_policies(log, schema, policies) for log in (log1, log2))
+    _print_delta_line("metrics", m1, m2, (shown1, shown2))
 
     print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2)
     print()

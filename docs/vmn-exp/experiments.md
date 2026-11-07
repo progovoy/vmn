@@ -799,7 +799,9 @@ vmn-exp show my_app -v @3 --patch --json --max-bytes 50000
 Metric table across runs (default: the latest two; `--last N` for the N most
 recent; `-v` repeatable). Reads only metadata and logs, never code, so
 comparing many runs stays cheap. With two runs it prints the matching `diff`
-command.
+command. A value whose summary isn't `last` names it (`0.2 (min)`), and a row
+whose runs summarize the metric differently ends `summaries differ: min vs
+last` (a run's own `define_metric` beats conf.yml).
 
 ```sh
 vmn-exp compare my_app --last 3
@@ -811,7 +813,9 @@ vmn-exp compare my_app -v @1 -v @4 -v @7
 `params:`/`metrics:` delta lines, an inputs/provenance section, and a **real
 source diff** between two runs (default: the latest two). Uses `--tool`, else
 git's `diff.tool`, else a plain diff. For runs without code (e.g. MLflow
-imports) the deltas print and the code diff is refused (exit 1).
+imports) the deltas print and the code diff is refused (exit 1). Metric deltas
+name summaries like `compare`: `loss 0.2 (min) -> 0.9 (summaries differ: min
+vs last)`.
 
 ```sh
 vmn-exp diff my_app -v @1 -v @3 --tool delta
@@ -1613,8 +1617,10 @@ value.
   own summaries visibly. `list`/`show` print `loss=0.2 (min)` whenever the
   value's summary isn't `last`; group, pivot and job-rollup aggregates with
   such runs carry `mixed: true` and `policies` (`{override: runs}`; the rest
-  follow conf.yml); compare deltas carry `from_policy`/`to_policy` (null:
-  `last`).
+  follow conf.yml), and so do the Jobs view's job summaries and the
+  baseline card's metric deltas (`policies: {value, baseline}`); compare
+  deltas carry `from_policy`/`to_policy` (null: `last`). CLI
+  `compare`/`diff` name the policies and say when two runs' differ.
 - A `min`/`max`/`mean` summary with no finite value leaves the metric
   missing (`—`), never its last value.
 - **After the fact**: `vmn-exp add my_app -v <ref> --define-metric val_loss

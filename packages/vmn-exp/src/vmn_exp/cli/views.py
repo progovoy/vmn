@@ -227,6 +227,13 @@ def shown_policies(metrics, overrides, policies):
     return {name: value_policy(overrides, name, policies) for name in metrics}
 
 
+def policy_conflict(policies):
+    """``summaries differ: min vs last`` when the *policies* of values set
+    side by side (None: ``last``) differ, else None (plan 32 F1)."""
+    distinct = list(dict.fromkeys(p or "last" for p in policies))
+    return f"summaries differ: {' vs '.join(distinct)}" if len(distinct) > 1 else None
+
+
 def format_metric_lines(metrics, summary, policy):
     """``name: value`` per metric, name-ordered, naming its *policy*
     (:func:`shown_policies`) but ``last``; a metric whose last, min and max differ adds them:

@@ -7,7 +7,8 @@ from leaderboard_group_rows import run, snapshot, v
 from test_ui_diff_summary import _log_define_metric, _log_metrics, _save_exp
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import leaderboard_cache as lb
-from vmn_exp.ui.job_rollup_payload import job_payload
+from vmn_exp.ui.baseline_compare import rollup_deltas
+from vmn_exp.ui.job_rollup_payload import job_payload, job_summary
 from vmn_exp.ui.job_tally import RollupSpec, Tally
 from vmn_exp.ui.leaderboard_group_summary import Summary
 from vmn_exp.ui.pivot import pivot_spec
@@ -109,3 +110,24 @@ def test_compare_names_the_schemas_policy_too(tmp_path):
     result, _ = diff_reader.experiment_diff_from_storage(storage, "myapp", v1, v2, schema=SCHEMA)
     loss = result["metrics_delta"]["loss"]
     assert (loss["from_policy"], loss["to_policy"]) == ("min", "min")
+
+
+def test_a_jobs_view_summary_with_overrides_is_marked():
+    spec = RollupSpec(SCHEMA)
+    job = {"verstr": "job", "params": {}}
+    summary = job_summary(job, [Tally.of(MIXED, spec)], spec, T0)
+    assert summary["mixed"] is True and summary["policies"] == {"last": 2}
+    assert "mixed" not in job_summary(job, [Tally.of(PLAIN, spec)], spec, T0)
+
+
+def _rollup(policies=None):
+    loss = {"best": 0.2, "p50": 0.4}
+    if policies:
+        loss.update(mixed=True, policies=policies)
+    return {"metrics": {"loss": loss}, "failed_pct": 0, "duration": {"p90": 1}}
+
+
+def test_a_baseline_delta_names_each_sides_overrides():
+    loss = rollup_deltas(_rollup({"last": 2}), _rollup(), {"loss": "min"})["metrics"]["loss"]
+    assert loss["policies"] == {"value": {"last": 2}, "baseline": None}
+    assert "policies" not in rollup_deltas(_rollup(), _rollup(), {"loss": "min"})["metrics"]["loss"]

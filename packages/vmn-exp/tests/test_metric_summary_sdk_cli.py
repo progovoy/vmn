@@ -105,7 +105,7 @@ def test_cli_compare_shows_the_best_value(app_layout, capfd):
     capfd.readouterr()
     assert _exp(app_layout.app_name, action="compare", version=[overfit, steady]) == 0
     line = next(l for l in capfd.readouterr().out.splitlines() if l.startswith("loss"))
-    assert line.split()[1:3] == ["0.2", "0.5"], line
+    assert line.split()[1:5] == ["0.2", "(min)", "0.5", "(min)"], line
 
 
 def test_prune_query_selects_on_the_best_value(app_layout, capfd):

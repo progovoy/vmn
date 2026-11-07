@@ -214,8 +214,9 @@ def job_payload(job, parts, spec, now):
 
 def job_summary(job, parts, spec, now, idx_of=None):
     """The compact rollup a Jobs view sorts on: progress, plus the main
-    metric's best (its ``idx`` from *idx_of(verstr)*) and a spread
-    histogram (counts only)."""
+    metric's best (its ``idx`` from *idx_of(verstr)*), a spread
+    histogram (counts only) and its runs' overrides of the schema's summary
+    policy (plan 32 F1)."""
     main = spec.main and metric_fields(parts, spec.main, spec.goals[spec.main],
                                        bins=SPREAD_BINS, quantiles=False)
     main = main or {}
@@ -226,4 +227,5 @@ def job_summary(job, parts, spec, now, idx_of=None):
         "best_verstr": main.get("best_verstr"),
         "best_idx": idx_of(main["best_verstr"]) if idx_of and main.get("best_verstr") else None,
         "spread": [b["count"] for b in main.get("hist", ())],
+        **{k: main[k] for k in ("mixed", "policies") if k in main},
     }

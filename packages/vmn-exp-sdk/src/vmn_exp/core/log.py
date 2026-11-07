@@ -57,12 +57,6 @@ def latest_metrics(log):
     return fold_values(fold_log(log), "metrics")
 
 
-def summary_metrics(log, schema=None):
-    """Each metric's value under its summary policy — what rows rank on
-    (see :mod:`vmn_exp.core.metric_summary`)."""
-    return fold_metrics(fold_log(log), schema)[0]
-
-
 def metric_series(source):
     """Per-metric point lists for charting:
     ``{metric: [{"step": N|None, "ts": iso, "value": v}, ...]}`` in series order.
