@@ -33,6 +33,9 @@ vmn-exp diff <app_name>
 vmn-exp restore <app_name> --latest
 # For the best run instead: find it with `vmn-exp list --sort <metric>`, then
 # vmn-exp restore <app_name> -v <version>
+# "Best" needs a declared goal: run.define_metric("val_loss", goal="min") (or
+# conf.yml metrics.<name>.goal). Without one nothing is ranked or guessed from
+# the name: the UI shows "(no goal)" and sorts ascending.
 
 # Re-run a run's recorded command against its exact code, in a throwaway
 # workspace (the live checkout is untouched); the new run records rerun_of
@@ -277,12 +280,21 @@ ui:
        query: 'status = "created" and settled = null and timestamp < ago("1h")'}
   baseline: {match: [tags.target], children_by: tags.trade_date}  # compare with the last launch
   views: [{name: Live, page: jobs, search: "view=live", default: true}]
+  # each outer run row's value: one value per unit (here each date's own
+  # date.best_value), aggregated; agg mean|best|median|min|max|best10|worst10,
+  # by children|runs|field:<params.k|tags.k>|kind:<v>, value best|own
+  job_aggregate: {agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}
+  failed_pct_threshold: 5          # the board's "≥ N% failed" chip
 ```
 
-A save checks `ui.progress`/`ui.attention`/`ui.baseline`/`ui.views` (an
-attention query must compile). Queries (`vmn-exp list --query`, the UI's
-filter, `ui.attention`) can read an
-ancestor's fields: `up.params.<k>`, `up(tags.kind = "study").params.<k>`.
+A save checks `ui.progress`/`ui.attention`/`ui.baseline`/`ui.views`/
+`ui.job_aggregate`/`ui.failed_pct_threshold` (an attention query must
+compile). The URL's `job_agg`, `job_agg_by`, `job_agg_value` and
+`job_agg_metric` override `ui.job_aggregate` for one view. A tree's failure
+share is queryable: `failed_pct >= 5` (`100 * failed_below / runs below`;
+also `failed_below`, `live_below`, `running_below`, `stuck_below`).
+Queries (`vmn-exp list --query`, the UI's filter, `ui.attention`) can read
+an ancestor's fields: `up.params.<k>`, `up(tags.kind = "study").params.<k>`.
 `GET /metrics` serves Prometheus gauges per app and outer run (status counts,
 attention counts, progress, ETA, index freshness) for alerting.
 Full reference: `vmn_exp/cli/docs/server.md` (App settings).

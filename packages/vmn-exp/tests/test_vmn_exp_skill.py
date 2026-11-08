@@ -237,3 +237,13 @@ def test_vmn_exp_skill_waiting_rule_leaves_settled_runs_out(capfd):
     assert _skill() == 0
     out = capfd.readouterr().out
     assert 'status = "created" and settled = null and timestamp < ago("1h")' in out
+
+
+def test_vmn_exp_skill_covers_the_outer_runs_aggregate_goals_and_failed_share(capfd):
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    assert "job_aggregate: {agg: median" in out
+    assert "failed_pct_threshold" in out
+    assert "failed_pct >= 5" in out
+    assert "(no goal)" in out
+    assert 'define_metric("val_loss", goal="min")' in out
