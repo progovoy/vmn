@@ -259,6 +259,8 @@ def experiment_detail(
     is ``verstr -> {verstr, idx, name} | None``). *job_status*: see
     :func:`status_detail`. ``ranges``/``ranges_total`` are the run's marked
     step ranges, bounded (:mod:`vmn_exp.core.ranges`); absent when none.
+    ``step_restarts`` (absent when none) names each metric whose steps went
+    back without a rewind (:mod:`~vmn_exp.core.step_restart`).
     """
     verstr, err = _resolve_name(storage, app_name, verstr_ref, resolve)
     if err:
@@ -309,6 +311,7 @@ def experiment_detail(
         "artifacts": artifacts_read.result(),
         **detail_media(snapshot.media),
         **(snapshot.ranges if snapshot.ranges["ranges_total"] else {}),
+        **({"step_restarts": snapshot.step_restarts} if snapshot.step_restarts else {}),
         "status": status_detail(
             storage,
             app_name,

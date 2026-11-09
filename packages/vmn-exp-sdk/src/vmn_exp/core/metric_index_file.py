@@ -10,12 +10,14 @@ Each key's points are sorted on its axis (step, or timestamp for a step-less
 key) and stored as raw chunks of :data:`CHUNK_POINTS` points per column, each
 zlib-compressed alone, followed by its LOD levels (:mod:`metric_lod`). The
 footer maps every key to its byte ranges, so a reader reads the footer from
-the end and then only the slices it needs (:class:`MetricIndexReader`).
+the end and then only the slices it needs (:class:`MetricIndexReader`). A
+key's summary ``first``/``last`` are its first and last write, as a block
+header's are: the fold's latest value never depends on the sort.
 """
 import json
 import zlib
 
-from vmn_exp.core.metric_columns import Columns, key_summary, pack_deltas, pack_floats
+from vmn_exp.core.metric_columns import Columns, key_summary, pack_deltas, pack_floats, point
 from vmn_exp.core.metric_index_layout import CHUNK_POINTS, LOD_SIZES, MAGIC, VERSION, TAIL
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_lod import encode_buckets, level_buckets
@@ -68,7 +70,15 @@ def _write_lod(out, cols):
     return lod
 
 
+def _write_ends(cols):
+    """``{"first", "last"}`` points of *cols* in write order (timestamp, ties
+    in logging order) — never the step ends: a writer may restart its steps."""
+    order = sorted(range(len(cols)), key=cols.ts.__getitem__)
+    return {"first": point(cols, order[0]), "last": point(cols, order[-1])}
+
+
 def _write_key(out, name, cols):
+    ends = _write_ends(cols)
     cols = _sorted(cols)
     summary = key_summary(name, cols)
     raw = {}
@@ -81,7 +91,7 @@ def _write_key(out, name, cols):
         "has_step": cols.has_step,
         "s": summary["s"],
         "t": summary["t"],
-        "summary": {k: summary[k] for k in ("sum", "first", "last")},
+        "summary": {"sum": summary["sum"], **ends},
         "raw": raw,
         "lod": _write_lod(out, cols),
     }

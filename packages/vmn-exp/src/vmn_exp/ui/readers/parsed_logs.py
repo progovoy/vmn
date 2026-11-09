@@ -32,6 +32,7 @@ from vmn_exp.core.media import MediaIndex
 from vmn_exp.core.metric_files import is_indexed_file, is_metric_file
 from vmn_exp.core.ranges import RangeIndex
 from vmn_exp.core.series_reader import indexed_entries, stream_entries
+from vmn_exp.core.step_restart import StepRestarts
 from vmn_exp.core.streams import display_writer
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.files import flatten_logs
@@ -64,6 +65,7 @@ class _Parsed:
 
     def __init__(self):
         self.entries, self.series, self.counts = [], {}, {}
+        self.restarts = StepRestarts()
         self.fold = fold_log([])
         self.media = MediaIndex()
         self.media_view = self.media.view()
@@ -91,6 +93,7 @@ class _Parsed:
         for key, points in metric_series(new_entries).items():
             self.series.setdefault(key, []).extend(points)
             self.counts[key] = len(self.series[key])
+            self.restarts.add(key, points)
         self.snapshot = LogSnapshot(self)
         return self
 

@@ -39,6 +39,7 @@ class LogSnapshot:
         self.total = len(parsed.entries)
         self._series = parsed.series
         self._counts = dict(parsed.counts)
+        self.step_restarts = dict(parsed.restarts.found)
         self.params = fold_values(parsed.fold, "params")
         self.metrics = fold_values(parsed.fold, "metrics")
         self.logged_params = logged_params(parsed.fold)
