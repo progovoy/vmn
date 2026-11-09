@@ -96,9 +96,9 @@ def test_a_run_stuck_by_its_store_time_alerts_within_the_window(monkeypatch):
 def test_the_stuck_key_is_the_liveness_time():
     state, observed = _stuck(heartbeat_age=86400), _ago(600)
     assert tr.transition_key(st.STUCK, state, observed_at=observed) == (
-        f"stuck@{_ago(600).isoformat()}"
+        f"stuck@{_iso(_ago(600))}"
     )
-    assert tr.transition_key(st.STUCK, state) == f"stuck@{_ago(86400).isoformat()}"
+    assert tr.transition_key(st.STUCK, state) == f"stuck@{_iso(_ago(86400))}"
 
 
 def test_a_run_that_never_beat_says_so():

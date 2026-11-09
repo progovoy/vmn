@@ -51,7 +51,7 @@ def transition_key(status, run_state, observed_at=None, now=None):
     if status == FAILED:
         return f"failed@{run_state.get('finished_at')}"
     since = _transition_time(status, run_state, observed_at, now)
-    return f"stuck@{since.isoformat() if since else None}"
+    return f"stuck@{since.isoformat().replace('+00:00', 'Z') if since else None}"
 
 
 def _transition_time(status, run_state, observed_at=None, now=None):
