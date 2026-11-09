@@ -65,8 +65,27 @@ def _rows(index):
     return len(snap.rows) if snap is not None else 0
 
 
-def _loaded(index, n):
-    return _wait(lambda: _rows(index) == n and index.freshness()["phase"] == "idle")
+def _progress(index):
+    freshness = index.freshness()
+    return _rows(index), freshness["phase"], freshness.get("progress")
+
+
+def _loaded(index, n, stall_sec=20.0, most_sec=300.0):
+    """Whether all *n* rows publish and the index goes idle, moving on at
+    least every *stall_sec* (and done within *most_sec*): a busy machine
+    slows a 20k-record load past a short fixed deadline, a stalled load
+    fails."""
+    def done():
+        return _rows(index) == n and index.freshness()["phase"] == "idle"
+
+    deadline = time.monotonic() + most_sec
+    while time.monotonic() < deadline:
+        seen = _progress(index)
+        if not _wait(lambda: done() or _progress(index) != seen, stall_sec):
+            return False
+        if done():
+            return True
+    return False
 
 
 def test_the_first_chunk_publishes_after_two_chunks_of_listings_not_all(tmp_path, refreshing):
