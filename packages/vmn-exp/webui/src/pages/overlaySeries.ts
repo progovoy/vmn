@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchRunStatuses, fetchSeriesBatch } from "../apiSeries";
 import { usePolling } from "../hooks/usePolling";
 import { withSignal } from "../requestScope";
-import type { ExperimentRow, SeriesPoint } from "../types";
+import type { ExperimentRow, SeriesPoint, StepRestart } from "../types";
 import { pollIntervalMs } from "../util";
 import { runOrigin } from "../util/chartData";
 
@@ -25,6 +25,8 @@ export interface OverlayRunData {
   name?: string | null;
   kind?: ExperimentRow["kind"];
   children?: string[];
+  /** Its series whose steps went back (the `/series` answer's). */
+  restarts?: Record<string, StepRestart>;
 }
 
 export interface OverlayData {
@@ -42,10 +44,13 @@ function mergeStepMetrics(perRun: Record<string, Record<string, string>> = {}, r
   return merged;
 }
 
-function toRun(key: string, series: Series, row?: Partial<ExperimentRow> | null): OverlayRunData {
+function toRun(
+  key: string, series: Series, row?: Partial<ExperimentRow> | null, restarts?: Record<string, StepRestart>,
+): OverlayRunData {
   return {
     key,
     series,
+    restarts,
     origin: runOrigin(series, row?.started_at),
     status: row?.status ?? null,
     heartbeatSec: row?.heartbeat_interval_sec ?? null,
@@ -63,7 +68,8 @@ async function loadBatch(ws: string, app: string, runs: string[], maxPoints: num
     fetchRunStatuses(ws, app, runs).catch(() => ({} as Record<string, Partial<ExperimentRow>>)),
   ]);
   return {
-    runs: runs.filter((v) => batch.series[v]).map((v) => toRun(v, batch.series[v], statuses[v])),
+    runs: runs.filter((v) => batch.series[v])
+      .map((v) => toRun(v, batch.series[v], statuses[v], batch.step_restarts?.[v])),
     missing: batch.missing ?? [],
     stepMetrics: mergeStepMetrics(batch.step_metrics, runs),
   };

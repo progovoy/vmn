@@ -219,6 +219,9 @@ export interface ExperimentRow extends Partial<RunStatus> {
    *  picked unlike the schema's (plan 32 F1); a value without one follows
    *  the schema. Absent on a board row without any. */
   metric_policy?: Record<string, MetricPolicy>;
+  /** Metrics whose steps went back without a rewind (a restarted step
+   *  counter); their value is still the last write. Absent when none. */
+  step_restarts?: Record<string, StepRestart>;
   /** Human-readable run name; the verstr stands in when null/absent. */
   name?: string | null;
   tags?: Record<string, string>;
@@ -537,10 +540,11 @@ export interface ForkOrigin {
   step: number | null;
 }
 
-/** The *write*-th point of a metric (from 1) went back to step *to* from
- *  the highest earlier step *from*. */
+/** A metric's point went back to step *to* from the highest earlier step
+ *  *from*: its *write*-th (from 1) where known — the run page's; board rows
+ *  and `/series` answers carry no write. */
 export interface StepRestart {
-  write: number;
+  write?: number;
   from: number;
   to: number;
 }

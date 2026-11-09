@@ -10,6 +10,8 @@ import { metricCurves } from "../pages/overlayCoverage";
 import { expandKeys } from "../util/metricGlob";
 import { AUTO_X, xMetricLabel, xMetricMap, type XMap } from "../util/xMetric";
 import { OVERLAY_POINTS, useOverlaySeries, type OverlayData, type OverlayRunData } from "../pages/overlaySeries";
+import { runText } from "../shell/crumbs";
+import { overlayRestartNote } from "../util/stepRestart";
 import CurveChart from "./CurveChart";
 import LazyMount from "./LazyMount";
 
@@ -71,7 +73,7 @@ export default function OverlayChart({
       {error && <div className="error">{error.message}</div>}
       {keys.map((metric) => (
         <div key={metric} className="card" style={{ marginBottom: 16 }}>
-          <h2 className="section-title">{metric}</h2>
+          <h2 className="section-title">{metric}<RestartNote metric={metric} runs={loaded} /></h2>
           <LazyMount height={CHART_H}>
             <MetricOverlay
               metric={metric} runs={loaded} colorOf={colorOf} xMode={xMode}
@@ -82,6 +84,21 @@ export default function OverlayChart({
         </div>
       ))}
     </>
+  );
+}
+
+/** The runs whose *metric* steps went back, as the run page's chart notes it. */
+function RestartNote({ metric, runs }: { metric: string; runs: OverlayRunData[] }) {
+  const note = overlayRestartNote(runs.flatMap((r) => {
+    const restart = r.restarts?.[metric];
+    return restart ? [[runText({ verstr: r.key, idx: r.idx ?? null, name: r.name ?? null }), restart]] : [];
+  }));
+  if (!note) return null;
+  return (
+    <span data-testid={`overlay-restart-${metric}`} title={note.title}
+      style={{ color: "var(--text-3)", marginLeft: 8, fontWeight: "normal", fontSize: "0.85em" }}>
+      {note.text}
+    </span>
   );
 }
 

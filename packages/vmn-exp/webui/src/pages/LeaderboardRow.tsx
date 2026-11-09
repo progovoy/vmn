@@ -1,11 +1,12 @@
 import { memo, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import type { ExperimentRow } from "../types";
+import type { ExperimentRow, StepRestart } from "../types";
 import type { Density } from "../util/density";
 import type { MemberPlace } from "../util/groupItems";
 import { fmtDuration, fmtParam, fmtVal, relTime, rowParams, runHref } from "../util";
 import RowCheckbox from "../components/RowCheckbox";
 import StatusPill from "../components/StatusPill";
+import RestartTag from "../components/RestartTag";
 import OuterBadge from "../components/OuterBadge";
 import { isOuterRun, outerRunCount } from "../util/outerRun";
 import { useRowNavigate } from "../hooks/useRowNavigate";
@@ -63,10 +64,12 @@ export const rowHeight = (layout: RowLayout) => densityRowHeight(layout.density)
 export const densityRowHeight = (density: Density | undefined) =>
   density === "compact" ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
 
-function MetricCell({ id, v, col, style, showBest, tag }: {
+function MetricCell({ id, v, col, style, showBest, tag, restart }: {
   id: string; v: number | string | null | undefined; col: ColMeta; style: CSSProperties; showBest: boolean;
   /** The run's own summary policy, when it overrides the schema's. */
   tag: string | null;
+  /** Where the metric's steps went back, when they did. */
+  restart?: StepRestart;
 }) {
   const isBest = showBest && typeof v === "number" && v === col.best;
   const isBar = col.isBar && typeof v === "number";
@@ -81,6 +84,7 @@ function MetricCell({ id, v, col, style, showBest, tag }: {
       {isBar && <span className="bar" style={{ width: `${8 + frac * 62}px` }} />}
       <span className={`metric${isBest ? " best" : ""}`}>{fmtVal(v)}</span>
       {tag && <span className="policy-tag" title={`this run's ${tag} value`}>{tag}</span>}
+      <RestartTag restart={restart} />
     </td>
   );
 }
@@ -274,7 +278,7 @@ function Row({
       return (
         <MetricCell
           key={id} id={id} v={r.metrics[name]} col={colMeta[name]} style={style} showBest={layout.showBest}
-          tag={policyTag(r, name)}
+          tag={policyTag(r, name)} restart={r.step_restarts?.[name]}
         />
       );
     }

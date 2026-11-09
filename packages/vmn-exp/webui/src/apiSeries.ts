@@ -1,7 +1,7 @@
 /** Batched reads for the overlay: every run's series in one request, and the
  *  runs' status rows in another. Kept apart from api.ts so the pages whose
  *  tests mock `./api` still reach these through their own module. */
-import type { ExperimentRow, SeriesPoint } from "./types";
+import type { ExperimentRow, SeriesPoint, StepRestart } from "./types";
 import { appTag, get, post } from "./http";
 import { verstrInQuery } from "./util/searchQuery";
 
@@ -10,6 +10,8 @@ export interface SeriesBatch {
   series_total?: Record<string, Record<string, number>>;
   /** Per run: the metrics that declare an x-axis metric. */
   step_metrics?: Record<string, Record<string, string>>;
+  /** Per run (absent when none): its series whose steps went back. */
+  step_restarts?: Record<string, Record<string, StepRestart>>;
   /** Requested runs the server does not know. */
   missing?: string[];
 }

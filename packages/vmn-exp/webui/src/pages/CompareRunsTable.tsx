@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import type { ExperimentDetail, MetricsSchema } from "../types";
+import type { ExperimentDetail, MetricsSchema, StepRestart } from "../types";
 import { fmtVal, runHref } from "../util";
 import CopyRefButton from "../components/CopyRefButton";
+import RestartTag from "../components/RestartTag";
 import StatusPill from "../components/StatusPill";
 import { compareRows, runLabel, type CompareRow } from "./compareRunsData";
 
@@ -30,8 +31,10 @@ function RunHead({ verstr, detail, base }: {
   );
 }
 
-function Section({ title, kind, rows, width, note }: {
+function Section({ title, kind, rows, width, note, restartOf }: {
   title: string; kind: "params" | "metrics"; rows: CompareRow[]; width: number; note?: string;
+  /** Where the *i*-th run's metric *key* went back its steps, when it did. */
+  restartOf?: (i: number, key: string) => StepRestart | undefined;
 }) {
   if (rows.length === 0) return null;
   return (
@@ -51,6 +54,7 @@ function Section({ title, kind, rows, width, note }: {
               className={`mono${kind === "metrics" ? " metric" : ""}${r.best !== null && v === r.best ? " best" : ""}`}
             >
               {cellText(v, kind)}
+              <RestartTag restart={restartOf?.(i, r.key)} />
             </td>
           ))}
         </tr>
@@ -86,7 +90,8 @@ export default function CompareRunsTable({ verstrs, details, schema, base, onlyD
             </tr>
           </thead>
           <tbody>
-            <Section title="metrics" kind="metrics" rows={metrics} width={width} />
+            <Section title="metrics" kind="metrics" rows={metrics} width={width}
+              restartOf={(i, key) => details[i]?.step_restarts?.[key]} />
             <Section title="params" kind="params" rows={params} width={width}
               note={`${changed} of ${allParams.length} changed`} />
             {params.length + metrics.length === 0 && (
