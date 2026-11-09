@@ -27,6 +27,14 @@ _BUILTINS = {
     "az": "vmn_exp.storage.azure:open_azure_store",
 }
 
+# Each built-in remote scheme's third-party module (imported on first use)
+# and the extra that installs it.
+STORAGE_EXTRAS = {
+    "s3": ("boto3", "s3"),
+    "gs": ("google.cloud.storage", "gcs"),
+    "az": ("azure.storage.blob", "azure"),
+}
+
 _registered = {}
 _entry_points_loaded = False
 

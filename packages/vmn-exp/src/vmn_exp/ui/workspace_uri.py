@@ -6,6 +6,7 @@ connected, and an ``endpoint_url`` only when the server config allowlists it
 (``server.endpoint_allowlist``); ``file://`` and plugin schemes are refused.
 Single tenancy accepts any registered scheme, as before.
 """
+from vmn_exp.storage.registry import STORAGE_EXTRAS
 from vmn_exp.storage.uri import parse_store_uri
 
 MULTI_TENANT_SCHEMES = ("s3", "gs", "az")
@@ -29,14 +30,6 @@ def check_workspace_uri(uri, tenancy="single", endpoint_allowlist=()):
     if endpoint and endpoint.rstrip("/") not in {e.rstrip("/") for e in endpoint_allowlist}:
         return f"endpoint_url {endpoint} is not in the server's endpoint allowlist"
     return None
-
-
-# scheme -> (the package its storage plugin imports, the extra providing it)
-STORAGE_EXTRAS = {
-    "s3": ("boto3", "s3"),
-    "gs": ("google.cloud.storage", "gcs"),
-    "az": ("azure.storage.blob", "azure"),
-}
 
 
 def missing_storage_extra(uris):

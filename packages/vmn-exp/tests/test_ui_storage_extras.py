@@ -8,6 +8,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from test_ui_cli import _run_handle_ui  # noqa: E402
+from test_ui_s3_extra import _server_yml  # noqa: E402
 
 CASES = [
     ("gs://bkt/team", "google", 'pip install "vmn-exp[ui,gcs]"'),
@@ -30,32 +31,19 @@ def _hide(monkeypatch, top_level):
     monkeypatch.setattr(importlib.util, "find_spec", find_spec)
 
 
-def _server_yml(tmp_path, store):
-    path = tmp_path / "server.yml"
-    path.write_text(f"data_dir: {tmp_path / 'data'}\n"
-                    f"workspaces:\n  - name: team\n    store: {store}\n")
-    return str(path)
+ARGV = {
+    "--store": lambda tmp_path, store: ["--store", store],
+    "server.yml": lambda tmp_path, store: ["--config", _server_yml(tmp_path, store)],
+}
 
 
+@pytest.mark.parametrize("argv", ARGV.values(), ids=ARGV.keys())
 @pytest.mark.parametrize("store,top_level,hint", CASES)
 def test_a_store_without_its_package_refuses_to_start(
-        tmp_path, monkeypatch, capfd, store, top_level, hint):
+        tmp_path, monkeypatch, capfd, store, top_level, hint, argv):
     _hide(monkeypatch, top_level)
 
-    rc, calls = _run_handle_ui(tmp_path, monkeypatch, ["--store", store])
-
-    assert rc != 0
-    assert calls == []
-    assert hint in capfd.readouterr().err
-
-
-@pytest.mark.parametrize("store,top_level,hint", CASES)
-def test_a_server_yml_workspace_without_its_package_refuses_to_start(
-        tmp_path, monkeypatch, capfd, store, top_level, hint):
-    _hide(monkeypatch, top_level)
-
-    rc, calls = _run_handle_ui(
-        tmp_path, monkeypatch, ["--config", _server_yml(tmp_path, store)])
+    rc, calls = _run_handle_ui(tmp_path, monkeypatch, argv(tmp_path, store))
 
     assert rc != 0
     assert calls == []
