@@ -1256,6 +1256,14 @@ under the query bar and `vmn-exp list --query` prints them to stderr. The web
 page's own URL parameters `view`, `kind`, `tab` and `sel` are a 400 here
 (`view is a web page parameter; use top=jobs or q=…`) instead of being ignored.
 
+While the app's index is still loading (a cold load, an upgrade re-deriving
+its rows), every answer built from it (this list flat, `top=`, grouped or
+`children_of=`, and `experiments-columns`, `-facets` and `-pivot`) carries
+`"indexing": {"loaded": N, "total": M}` (`total` null before the store has
+named its runs), as `experiments-status` does: its rows are some of the app's,
+not all. Its ETag follows the load, so a cached loading answer never outlives
+it; the web shows `indexing N% — results incomplete` on the board.
+
 ### Paging, sorting and order
 
 - `offset` and `limit` (at most 1000) page the list; with `limit` the answer is
