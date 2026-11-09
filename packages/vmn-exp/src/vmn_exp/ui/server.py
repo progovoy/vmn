@@ -37,6 +37,7 @@ from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.metrics_feed import MetricsFeed
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
+from vmn_exp.ui.query_params import refuse_unknown_params
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.registry_snapshot import RegistrySnapshots
 from vmn_exp.ui.report_index import ReportIndexes
@@ -157,6 +158,7 @@ def create_app(
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         default_response_class=SafeJSONResponse,
+        dependencies=[refuse_unknown_params(API_PREFIX)],
     )
     app.state.manager = manager
     app.state.read_only = read_only

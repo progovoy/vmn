@@ -876,7 +876,9 @@ under `/api/v1`; `{app}` is the app's tag form (`root_app-service1` for
 | `GET` | `/workspaces/{ws}/apps/{app}/config?v=` | `{"conf", "text"}` of the app's `conf.yml`, from the working tree or as of version `v` (git) |
 | | `/workspaces/{ws}/models/...` | [Model registry](#model-registry-api) |
 
-Unknown `/api/...` paths are a JSON 404.
+Unknown `/api/...` paths are a JSON 404. A query parameter the route does not
+take is a 400 naming it (`Unknown query parameter 'limt'; did you mean 'limit'?`),
+never silently ignored; the web page's own URLs are not affected.
 
 Routes that resolve a run ref (run detail, its log page, `experiments-diff`)
 answer a ref they cannot resolve with `{"detail": "<message>", "code": "<code>"}`:
@@ -1256,7 +1258,7 @@ when one of its `<row field> = <value>` terms (`q` or `top_q`, never under
 `"hints": ["kind = \"launch\" matches nothing; did you mean tags.kind?"]`. They
 come from the facet counts, never a pass over the rows; the web shows them
 under the query bar and `vmn-exp list --query` prints them to stderr. The web
-page's own URL parameters `view`, `kind`, `tab` and `sel` are a 400 here
+page's own URL parameters `view`, `kind`, `tab` and `sel` are a 400 on any API route
 (`view is a web page parameter; use top=jobs or q=…`) instead of being ignored.
 
 While the app's index is still loading (a cold load, an upgrade re-deriving

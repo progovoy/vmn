@@ -122,7 +122,6 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         job_agg_value: str = None,
         job_agg_metric: str = None,
     ):
-        _refuse_web_params(request)
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
         top, q, top_q = _top(top), _pinned(q), _pinned(top_q)
@@ -328,17 +327,6 @@ def grouped_page(limit, rows_per_group):
     groups = MAX_GROUPS if limit is None else max(1, min(int(limit), MAX_GROUPS))
     rows = max(1, min(int(rows_per_group), MAX_ROWS_PER_GROUP, MAX_GROUPED_ROWS // groups))
     return groups, rows
-
-
-# The web page's own URL params (``/experiments?view=jobs``): the API has
-# its own words for them, and ignoring one answers an unfiltered page.
-WEB_PAGE_PARAMS = ("view", "kind", "tab", "sel")
-
-
-def _refuse_web_params(request):
-    for name in WEB_PAGE_PARAMS:
-        if name in request.query_params:
-            raise HTTPException(400, f"{name} is a web page parameter; use top=jobs or q=…")
 
 
 def _check_tree(group, by_comments):
