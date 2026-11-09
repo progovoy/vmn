@@ -76,11 +76,11 @@ def _commands_moved(conn, app, states):
 FILE_CHUNK = 500  # runs :func:`file_lean` files per write transaction
 
 
-def lean_entries(conn, app, lock=None):
+def lean_entries(conn, app, lock=contextlib.nullcontext()):
     """``({key: seqs}, entries, {key: command})`` of *app*'s runs, read from
     the lean tables in one transaction (under *lock*); *entries* yields their
     ``(key, doc)``, letting go of each run's lean row as it does."""
-    with lock or contextlib.nullcontext(), read_tx(conn):
+    with lock, read_tx(conn):
         keys, lean, _ = read_lean(conn, app)
         commands = {key: _command((json.loads(data) or {}).get("run_state")) for key, data in
                     conn.execute("SELECT key, data FROM exp_index_state WHERE app = ?", (app,))}
@@ -94,20 +94,19 @@ def lean_entries(conn, app, lock=None):
     return seqs, entries(), commands
 
 
-def file_lean(conn, app, lock=None):
+def file_lean(conn, app, lock=contextlib.nullcontext()):
     """Refile every run of *app* from the index's lean tables (``exp_rows``,
     ``exp_sides``, ``exp_index_state``), :data:`FILE_CHUNK` runs per write
     transaction — skipping a run saved since they were read (its save filed
     it) — then forget the documents of runs gone. *lock* (the connection's
     searches') is held per transaction, so searches go on between them."""
-    held = lock or contextlib.nullcontext()
     seqs, entries, commands = lean_entries(conn, app, lock)
     for chunk in iter(lambda: list(itertools.islice(entries, FILE_CHUNK)), []):
-        with held, write_tx(conn):
+        with lock, write_tx(conn):
             now = record_seqs(conn, app, [key for key, _ in chunk], with_state=True)
             similar_fts.file_docs(conn, app, [(key, doc) for key, doc in chunk
                                               if now.get(key) == seqs[key]], commands)
-    with held:
+    with lock:
         gone = similar_fts.gone(conn, app)
         if gone:
             with write_tx(conn):

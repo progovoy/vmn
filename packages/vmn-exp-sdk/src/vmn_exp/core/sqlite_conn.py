@@ -82,6 +82,17 @@ def wal_oversized(file):
         return False
 
 
+class KeyedLocks:
+    """A lock per key, made on first ask: ``locks(file, app)``."""
+
+    def __init__(self):
+        self._locks, self._guard = {}, threading.Lock()
+
+    def __call__(self, *key):
+        with self._guard:
+            return self._locks.setdefault(key, threading.Lock())
+
+
 def in_chunks(values, size=500):
     """``(chunk, marks)`` of *values*, *size* at a time (under SQLite's
     bound-parameter limit); *marks* the chunk's ``?, ?, ...`` placeholders."""

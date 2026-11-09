@@ -62,7 +62,6 @@ from vmn_exp.snapshot import (
     _restore_with_safety_net,
     get_git_difftool,
 )
-import vmn_exp.core.index as experiment_index
 import vmn_exp.core.index_list as index_list
 import vmn_exp.core.writer as experiment_writer
 from vmn_exp.core.from_snapshot import (

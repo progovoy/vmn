@@ -195,4 +195,3 @@ class SimilarCorpora:
             if scope is None or not scope.behind:
                 break
         return scope
-

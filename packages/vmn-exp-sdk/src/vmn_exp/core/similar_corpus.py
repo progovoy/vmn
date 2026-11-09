@@ -21,7 +21,7 @@ from vmn_exp.core.index_derive import pending_after
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.similar_filing import SnapshotFiler, file_lean
 from vmn_exp.core.similar_rows import SnapshotRows, StoreRows
-from vmn_exp.core.sqlite_conn import connect
+from vmn_exp.core.sqlite_conn import KeyedLocks, connect
 
 _APP = object()  # a scope's label defaults to its app
 
@@ -114,38 +114,28 @@ def filing_behind(conn, app):
     return pending_after(conn, app) is not None or similar_fts.any_behind(conn, app)
 
 
-def repaired(conn, app, lock=None):
-    """Refile *app* from the lean tables when :func:`needs_filing` (*lock*:
-    the connection's searches', held per transaction)."""
-    if needs_filing(conn, app):
-        file_lean(conn, app, lock)
-
-
-_CHECKED = OrderedDict()  # (file, app, generation) already checked by repaired()
-_FILING = {}  # (file, app) -> the lock its filers in this process take turns under
-_FILING_LOCK = threading.Lock()
-
-
-def _filing_lock(file, app):
-    with _FILING_LOCK:
-        return _FILING.setdefault((file, app), threading.Lock())
+_CHECKED = OrderedDict()  # (file, app, generation) already filed by _filed()
+_CHECKED_LOCK = threading.Lock()
+_filing_lock = KeyedLocks()  # (file, app) -> the lock its filers in this process take turns under
 
 
 def _filed(store, conn, lock, file, app):
-    """Finish *app*'s re-derive, then :func:`repaired`, once per index
-    generation unless :func:`filing_behind` (another process left documents
-    behind): one filer of *app* at a time, holding the search *lock* only
-    per transaction, so the file's other apps keep searching."""
+    """Finish *app*'s re-derive, then refile it from the lean tables when
+    :func:`needs_filing`, once per index generation unless
+    :func:`filing_behind` (another process left documents behind): one filer
+    of *app* at a time, holding the search *lock* only per transaction, so
+    the file's other apps keep searching."""
     with _filing_lock(file, app):
         with lock:
             key = (file, app, store.generation(app))
             if key in _CHECKED and not filing_behind(conn, app):
                 return
         store.derive(app)
-        repaired(conn, app, lock)
+        if needs_filing(conn, app):
+            file_lean(conn, app, lock)
         with lock:
             key = (file, app, store.generation(app))
-        with _FILING_LOCK:
+        with _CHECKED_LOCK:
             _CHECKED[key] = None
             while len(_CHECKED) > 64:
                 _CHECKED.popitem(last=False)

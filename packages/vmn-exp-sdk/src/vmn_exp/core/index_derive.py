@@ -17,18 +17,16 @@ app's index re-derives its rows before loading them.
 """
 import json
 import sqlite3
-import threading
 
 from vmn_exp.core import similar_fts
 from vmn_exp.core.index_lean_store import apply_numbers, leans_of, renumbered, write_lean
 from vmn_exp.core.index_store_kv import write_puts
 from vmn_exp.core.index_store_reads import RECORD_PARTS_SQL, record_seqs
 from vmn_exp.core.index_store_schema import DERIVE_SCOPE, SCHEMA_VERSION
-from vmn_exp.core.sqlite_conn import read_tx, write_tx
+from vmn_exp.core.sqlite_conn import KeyedLocks, read_tx, write_tx
 
 CHUNK = 500
-_LOCKS = {}  # (file, app) -> the lock its derivers in this process take turns under
-_LOCKS_LOCK = threading.Lock()
+_lock_of = KeyedLocks()  # (file, app) -> the lock its derivers in this process take turns under
 _CHUNK_SQL = f"{RECORD_PARTS_SQL} AND i.key > ? ORDER BY i.key LIMIT ?"
 
 
@@ -99,11 +97,6 @@ def _finish(conn, app):
             apply_numbers(conn, moves[i:i + CHUNK])
     with write_tx(conn):
         conn.execute("DELETE FROM exp_index_kv WHERE scope = ?", (DERIVE_SCOPE + app,))
-
-
-def _lock_of(file, app):
-    with _LOCKS_LOCK:
-        return _LOCKS.setdefault((file, app), threading.Lock())
 
 
 class Rederive:
