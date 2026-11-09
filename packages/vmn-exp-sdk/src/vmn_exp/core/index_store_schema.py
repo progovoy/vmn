@@ -26,8 +26,8 @@ Two versions, so an upgrade never costs more than it must:
   (they still read right), else builds a new generation file beside it,
   loaded afresh from storage. A change that leaves most records right lists
   the older version there with a predicate picking the others: they alone
-  are read again (records 18: only runs with a name both a param and a
-  logged metric).
+  are read again (records 19: only runs with a metric logged more than
+  once; 18: those and runs with a name both a param and a logged metric).
 - :data:`DERIVED_VERSION` covers the tables derived purely from the records
   (``exp_rows``, ``exp_sides``, ``similar_*``). Bump it when what is derived
   changes (lean rows, side values, statuses, similar documents) or a derived
@@ -51,24 +51,35 @@ import sqlite3
 from vmn_exp.core import similar_fts
 from vmn_exp.core.fold import logged_params
 from vmn_exp.core.index_store_kv import write_puts
+from vmn_exp.core.metric_summary import is_repeated
 from vmn_exp.core.sqlite_conn import write_tx
 
-RECORDS_VERSION = 19  # 19: a param never overwrites a logged metric (plan 32 F8)
+RECORDS_VERSION = 20  # 20: step restarts; a .vmx's first/last write (vmx_write_order)
 DERIVED_VERSION = 21  # 21: rows' metric_policy, an empty summary missing (plan 32 F1)
 SCHEMA_VERSION = f"exp-index-{DERIVED_VERSION}"
 
 
 def _param_logged_too(fold):
     """Whether *fold* has a name both a param and a logged metric: records 18
-    may hold the param's number over the metric (plan 32 F8); no other fold
-    changed."""
+    may hold the param's number over the metric (plan 32 F8)."""
     return bool(logged_params(fold))
+
+
+def _logged_twice(fold):
+    """Whether *fold* has a metric logged more than once: records 19 lack its
+    step restart and, folded from an older ``.vmx`` footer, may hold its
+    value at the highest step for its last write. A metric logged once has
+    neither (nor do the runs of params alone)."""
+    return any(is_repeated(seen) for seen in (fold.get("extrema") or {}).values())
 
 
 # Older records versions whose records still read right in this one, each with
 # None or a predicate of a record's fold: True when that record does not and
 # is read again from storage instead (see index_store_upgrade).
-COPYABLE_RECORDS = {18: _param_logged_too}
+COPYABLE_RECORDS = {
+    18: lambda fold: _param_logged_too(fold) or _logged_twice(fold),
+    19: _logged_twice,
+}
 _LEGACY_RECORDS = 18  # the newest records of a file with no "records" meta value
 NEW, DERIVED = "new", "derived"  # the upgrades ensure_schema makes
 DERIVE_SCOPE = "derive:"  # exp_index_kv scope prefix of an app left to re-derive

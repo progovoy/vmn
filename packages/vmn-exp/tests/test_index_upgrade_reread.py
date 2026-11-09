@@ -120,9 +120,9 @@ def test_a_record_left_to_read_again_is_not_copied_with_its_run_state(tmp_path, 
     assert conn.execute("SELECT key FROM exp_index_state").fetchall() == [(keys[clean],)]
 
 
-def test_only_records_18_carry_a_reread_filter():
-    assert index_store_schema.RECORDS_VERSION == 19
-    assert set(index_store_schema.COPYABLE_RECORDS) == {18}
+def test_records_18_carry_a_reread_filter():
+    assert index_store_schema.RECORDS_VERSION == 20
+    assert set(index_store_schema.COPYABLE_RECORDS) == {18, 19}
     stale = index_store_schema.COPYABLE_RECORDS[18]
     assert stale({"params": {"acc": [3]}, "metrics": {"acc": [3]}, "extrema": {"acc": 0.9}})
     assert not stale({"params": {"lr": [0.1]}, "metrics": {"lr": [0.1]}, "extrema": {"loss": 0.5}})

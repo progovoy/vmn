@@ -74,7 +74,7 @@ def _widen(seen, value):
     ) + _add_exact(seen[3:], value)
 
 
-def _repeated(seen):
+def is_repeated(seen):
     """Whether an extrema entry holds ``(min, max, n, *sums)``: the metric was
     logged twice."""
     return isinstance(seen, (list, tuple))
@@ -111,7 +111,7 @@ def track_extrema(fold, name, value, key):
         extrema[name] = value
         return
     firsts = fold.setdefault("firsts", {})
-    if not _repeated(seen):
+    if not is_repeated(seen):
         if name not in firsts:
             firsts[name] = (seen,) + _key_of(fold, name)
         seen = _widen(_EMPTY, seen)
@@ -129,7 +129,7 @@ def track_block(fold, name, first, first_key, finite):
     seen = extrema.get(name)
     if seen is None:
         seen = _EMPTY
-    elif not _repeated(seen):
+    elif not is_repeated(seen):
         if name not in firsts:
             firsts[name] = (seen,) + _key_of(fold, name)
         seen = _widen(_EMPTY, seen)
@@ -173,7 +173,7 @@ def summarize(last_values, extrema, run_defs, schema, firsts=None):
     summary = {
         name: _summary_of(last_values[name], seen, firsts.get(name))
         for name, seen in extrema.items()
-        if _repeated(seen)
+        if is_repeated(seen)
     }
     metrics, policy = with_policies(last_values, summary, run_defs, schema)
     return metrics, summary, policy

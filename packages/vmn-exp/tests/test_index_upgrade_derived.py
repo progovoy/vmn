@@ -118,7 +118,7 @@ def journal():
 
 
 def test_the_versions_split_records_from_what_is_derived_from_them():
-    assert (index_store_schema.RECORDS_VERSION, index_store_schema.DERIVED_VERSION) == (19, 21)
+    assert (index_store_schema.RECORDS_VERSION, index_store_schema.DERIVED_VERSION) == (20, 21)
     assert index_store_schema.SCHEMA_VERSION == "exp-index-21"
 
 
