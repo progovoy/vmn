@@ -146,12 +146,17 @@ versions:
 
 - The **records** version covers what was read from storage: the folded runs,
   their run states, the listing baselines and journal marks. Only a change to
-  those bumps it. The live file is then left untouched: a new generation file
-  is built beside it and the pointer flipped to it, as a rebuild does. Records
-  still readable by the new version are copied over locally, so the store is
-  not read again; when a change affects only some runs, just those are read
-  again (records 18 → 19: the runs with a param of the same name as a logged
-  metric). Otherwise the new file loads from storage like a first start.
+  those bumps it. When the older records still read right, the file is
+  upgraded in place, with no extra disk: when a change affects only some
+  runs, just those are deleted and read again from storage (records 18 → 19:
+  the runs with a param of the same name as a logged metric), and the rest
+  re-derive as below. Otherwise the live file is left untouched: a new
+  generation file is built beside it and the pointer flipped to it, as a
+  rebuild does, and it loads from storage like a first start. That needs free
+  disk about the size of the old file; without it the upgrade refuses, naming
+  the bytes and the path, and the server runs without the cache. Only one
+  process or thread upgrades a file at a time; the others wait and open its
+  result.
 - The **derived** version covers the tables computed from those records: the
   board rows, side values (system metrics, outputs, features) and the
   similar-runs documents. A change there (most upgrades) is applied in place:
@@ -166,7 +171,8 @@ versions:
   gets its version back). Until then a similar-runs request answers 503
   with `Retry-After` instead of results that miss runs.
 
-While an app re-derives, its board is empty and `experiments-status` reports
+While an app re-derives, its board is empty (after an in-place records
+upgrade it keeps its old rows, stale until re-derived) and `experiments-status` reports
 `indexing {loaded, total}` and freshness phase `migrating` with its
 `progress`. `/apps` and the status routes answer right away. Point reads and
 `vmn-exp list` read the records instead of the persisted rows until the

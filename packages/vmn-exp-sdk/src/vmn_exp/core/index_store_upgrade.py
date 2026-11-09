@@ -1,79 +1,153 @@
 #!/usr/bin/env python3
-"""A file of older records (:data:`~vmn_exp.core.index_store_schema.RECORDS_VERSION`)
-is never upgraded in place: dropping a live 13 GB file's tables holds its
-write lock for minutes. :func:`regenerate` builds a new generation file beside
-it (:mod:`vmn_exp.core.sqlite_files`) and flips the pointer to it; the old
-file is not written to, and goes once nothing holds it open (the sweep).
+"""Upgrading a file of older records
+(:data:`~vmn_exp.core.index_store_schema.RECORDS_VERSION`), one upgrader at a
+time: :func:`upgrade` holds the ``<path>.upgrade`` file lock (threads take
+turns under it too) and re-reads the pointer once it holds it, so one that
+waited opens what the one before it built (plan 33 §2.1).
 
 Records whose version is in
 :data:`~vmn_exp.core.index_store_schema.COPYABLE_RECORDS` still read right:
-they are copied over first (:data:`COPY_CHUNK` rows per transaction), every
-app then left to re-derive from them (:mod:`vmn_exp.core.index_derive`) —
-local work instead of re-reading storage. A record its version's predicate
-picks (it does not read right) is left out, with its run state, and listed
-to read again (:mod:`vmn_exp.core.index_reread`): only those runs cost
-storage reads. Other records are not copied: the index loads afresh from
-storage.
+the file is upgraded in place (plan 33 §2.3), which drops nothing and needs
+no extra disk. A read pass that takes no lock picks the records its version's
+predicate says do not; they are listed to read again
+(:mod:`vmn_exp.core.index_reread`) in one transaction, then deleted with their
+run states, rows and similar-runs documents, :data:`DELETE_CHUNK` per short
+write transaction. Last, one transaction picks (lists and deletes) the
+records saved since the read pass, marks every app to re-derive
+(:mod:`vmn_exp.core.index_derive`) and writes the records mark; the journal
+mark and listing baselines stay. Until that mark the file still reads as
+outdated, so an upgrade that died part way is finished by the next open. The
+kept rows are served, ``loading``, while the derive rewrites them.
+
+Other records cannot be trusted: :func:`regenerate` builds a new, empty
+generation file beside the old one (:mod:`vmn_exp.core.sqlite_files`), which
+loads afresh from storage, and flips the pointer to it; the old file is not
+written to, and goes once nothing holds it open (the sweep). It first checks
+the disk has room for a file as big as the old one, refusing (an OSError
+naming the bytes and the path) when not (plan 33 §2.4).
 """
-import contextlib
 import json
 import os
 import shutil
-import threading
 
-try:
-    import fcntl
-except ImportError:  # Windows: only this process's threads take turns
-    fcntl = None
+from filelock import FileLock
 
 from vmn_exp.core import index_reread, index_store_schema, sqlite_files
+from vmn_exp.core.index_lean_store import write_lean
 from vmn_exp.core.index_store_kv import write_puts
-from vmn_exp.core.index_store_schema import RECORD_TABLES, RecordsOutdated, mark_derive_pending
-from vmn_exp.core.sqlite_conn import connect, write_tx
+from vmn_exp.core.index_store_schema import RecordsOutdated, upgrade_derived
+from vmn_exp.core.similar_filing import file_records
+from vmn_exp.core.sqlite_conn import connect, in_chunks, write_tx
 
-COPY_CHUNK = 500
+SCAN_CHUNK = 500  # records the read pass reads per query
+DELETE_CHUNK = 500  # picked records deleted per transaction
 LOCK_SUFFIX = ".upgrade"
-_LOCKS = {}  # logical path -> the lock this process's upgraders of it take turns under
-_LOCKS_LOCK = threading.Lock()
 
 
 def upgrade(path, connect_file):
     """``(connection, file)`` of *path*'s live database opened through
-    *connect_file(file)*, a new generation built first when its records are
-    outdated — by one upgrader at a time: one that waited opens what the one
-    before it built."""
-    with _one_upgrader(path):
+    *connect_file(file)*, upgraded first when its records are outdated (see
+    the module)."""
+    with FileLock(path + LOCK_SUFFIX):  # one per open: threads take turns too
         file = sqlite_files.live_path(path)
         try:
             return connect_file(file), file
         except RecordsOutdated as exc:
-            return regenerate(path, file, exc.found, connect_file)
+            found = exc.found
+        if found not in index_store_schema.COPYABLE_RECORDS:
+            return regenerate(path, file, connect_file)
+        upgrade_in_place(file, index_store_schema.COPYABLE_RECORDS[found])
+        return connect_file(file), file
 
 
-@contextlib.contextmanager
-def _one_upgrader(path):
-    with _LOCKS_LOCK:
-        lock = _LOCKS.setdefault(path, threading.Lock())
-    with lock:
-        if fcntl is None:
-            yield
-            return
-        with open(path + LOCK_SUFFIX, "a") as held:  # closing it unlocks it
-            fcntl.flock(held, fcntl.LOCK_EX)
-            yield
+def upgrade_in_place(file, stale):
+    """Bring *file*'s records to this version in place, deleting those
+    *stale* (None: none) picks (see the module)."""
+    conn = connect(file)
+    try:
+        if stale is not None:
+            gens = dict(conn.execute("SELECT app, gen FROM exp_index_gen"))
+            picked = _picked(file, stale)
+            with write_tx(conn):  # listed first: a death part way loses none
+                _list_to_reread(conn, picked)
+            for chunk, _ in in_chunks(picked, DELETE_CHUNK):
+                _delete_picked(conn, chunk)
+        with write_tx(conn):
+            if stale is not None:
+                late = _saved_since(conn, stale, gens)
+                _list_to_reread(conn, late)
+                _delete(conn, late)
+            upgrade_derived(conn, kept=True)
+    finally:
+        conn.close()
 
 
-def regenerate(path, old, found, connect_file):
-    """``(connection, file)`` of a new generation of *path*'s database,
-    live, built beside its *old* file of records version *found* through
-    *connect_file(file)*; OSError when the disk has no room for it."""
+def _picked(file, stale):
+    """The ``(app, key)`` of *file*'s records *stale* picks, read a chunk per
+    query on a read-only connection: no lock is held across the pass."""
+    source = connect(file, readonly=True)
+    picked, after = [], 0
+    try:
+        while True:
+            rows = source.execute(
+                "SELECT rowid, app, key, data FROM exp_index WHERE rowid > ?"
+                " ORDER BY rowid LIMIT ?", (after, SCAN_CHUNK)).fetchall()
+            if not rows:
+                return picked
+            picked += [(app, key) for _, app, key, data in rows if _is_stale(stale, data)]
+            after = rows[-1][0]
+    finally:
+        source.close()
+
+
+def _saved_since(conn, stale, gens):
+    """The ``(app, key)`` of the records saved past *gens* (``{app: gen}``)
+    that *stale* picks."""
+    apps = [app for (app,) in conn.execute("SELECT app FROM exp_index_gen").fetchall()]
+    return [(app, key) for app in apps
+            for key, data in conn.execute(
+                "SELECT key, data FROM exp_index WHERE app = ? AND seq > ?",
+                (app, gens.get(app, 0)))
+            if _is_stale(stale, data)]
+
+
+def _is_stale(stale, data):
+    return data is not None and stale(json.loads(data))
+
+
+def _list_to_reread(conn, picked):
+    write_puts(conn, index_reread.puts(conn, picked))
+
+
+def _delete_picked(conn, picked):
+    """Delete *picked*, in one transaction."""
+    with write_tx(conn):
+        _delete(conn, picked)
+
+
+def _delete(conn, picked):
+    """Delete *picked* (``(app, key)``) records with all that is derived from
+    them."""
+    by_app = {}
+    for app, key in picked:
+        by_app.setdefault(app, []).append(key)
+    for app, keys in by_app.items():
+        pairs = [(app, key) for key in keys]
+        conn.executemany("DELETE FROM exp_index WHERE app = ? AND key = ?", pairs)
+        conn.executemany("DELETE FROM exp_index_state WHERE app = ? AND key = ?", pairs)
+        write_lean(conn, app, None, {}, keys, {}, {}, renumber=False)
+        file_records(conn, app, {}, keys)
+
+
+def regenerate(path, old, connect_file):
+    """``(connection, file)`` of a new, empty generation of *path*'s
+    database, live, built beside its *old* file through *connect_file(file)*;
+    OSError when the disk has no room for it."""
     _check_room(path, old)
     fresh = sqlite_files.new_generation(path)
     conn = None
     try:
         conn = connect_file(fresh)
-        if found in index_store_schema.COPYABLE_RECORDS:
-            _copy_records(old, conn, index_store_schema.COPYABLE_RECORDS[found])
         sqlite_files.flip(path, fresh)
     except BaseException:
         if conn is not None:
@@ -92,59 +166,3 @@ def _check_room(path, old):
     if free < needed:
         raise OSError(f"no room for a new generation of {path}: it needs {needed} bytes,"
                       f" {free} free in {folder}")
-
-
-def _copy_records(old, conn, stale):
-    source = connect(old, readonly=True)
-    reread = set()  # the (app, key) of the records *stale* picks
-    try:
-        for table in RECORD_TABLES:  # exp_index first: its picks filter exp_index_state
-            _copy_table(source, conn, table, _keeps(table, stale, reread))
-        with write_tx(conn):
-            mark_derive_pending(conn)
-            write_puts(conn, index_reread.puts(conn, reread))
-    finally:
-        source.close()
-
-
-def _keeps(table, stale, reread):
-    """``keeps(row, columns)`` of *table*: whether the copy keeps it — not a
-    record whose fold *stale* (None: none) picks (its key joins *reread*),
-    nor the run state of one."""
-    if stale is None or table not in ("exp_index", "exp_index_state"):
-        return lambda row, columns: True
-    if table == "exp_index_state":
-        return lambda row, columns: (row[columns["app"]], row[columns["key"]]) not in reread
-
-    def keeps(row, columns):
-        data = row[columns["data"]]
-        if data is None or not stale(json.loads(data)):
-            return True
-        reread.add((row[columns["app"]], row[columns["key"]]))
-        return False
-
-    return keeps
-
-
-def _columns(conn, table):
-    return [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
-
-
-def _copy_table(source, conn, table, keeps):
-    """*table*'s rows *keeps* keeps, the columns both files have, a chunk per
-    transaction."""
-    ours = set(_columns(conn, table))
-    columns = [c for c in _columns(source, table) if c in ours]
-    names, marks = ", ".join(columns), ", ".join("?" * len(columns))
-    at = {column: i for i, column in enumerate(columns)}
-    after = 0
-    while True:
-        rows = source.execute(
-            f"SELECT rowid, {names} FROM {table} WHERE rowid > ? ORDER BY rowid LIMIT ?",
-            (after, COPY_CHUNK)).fetchall()
-        if not rows:
-            return
-        kept = [row[1:] for row in rows if keeps(row[1:], at)]
-        with write_tx(conn):
-            conn.executemany(f"INSERT OR REPLACE INTO {table} ({names}) VALUES ({marks})", kept)
-        after = rows[-1][0]

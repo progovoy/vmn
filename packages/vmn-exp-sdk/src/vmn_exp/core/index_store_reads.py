@@ -11,6 +11,8 @@ from vmn_exp.core.index_intern import compact_state
 from vmn_exp.core.index_lazy import STATE_KEYS, LazyRecord, LazyRecords
 from vmn_exp.core.index_lean_first import read_first_rows
 from vmn_exp.core.index_lean_store import is_run, read_lean
+from vmn_exp.core.index_store_kv import read_payload
+from vmn_exp.core.index_store_schema import KEPT_SCOPE, SCHEMA_VERSION
 from vmn_exp.core.sqlite_conn import in_chunks, read_tx
 
 _CHUNK = 256  # records read per query, under SQLite's bound-parameter limit
@@ -33,12 +35,20 @@ class LeanReads:
         generation."""
         return self._read(lambda: self._warm(app_name), None)
 
-    def _warm(self, app_name):
+    def load_kept(self, app_name):
+        """:meth:`load_warm`'s answer while *app_name*'s rows are left to
+        re-derive after an in-place records upgrade (:data:`KEPT_SCOPE`):
+        the rows it kept, stale until re-derived; None when there are none
+        (another upgrade's re-derive, never saved, unavailable)."""
+        return self._read(lambda: self._warm(app_name, kept=True) if read_payload(
+            self._conn, KEPT_SCOPE, SCHEMA_VERSION) else None, None)
+
+    def _warm(self, app_name, kept=False):
         read = self._at_one_generation(app_name, lambda conn: (
             dict(conn.execute("SELECT key, seq FROM exp_index WHERE app = ?", (app_name,))),
             dict(self._select("exp_index_state", app_name)),
             read_lean(conn, app_name),
-        ))
+        ), kept=kept)
         if read is None:
             return None  # never saved: nothing to start warm from
         seqs, states, (keys, lean, stamps) = read
@@ -103,8 +113,10 @@ class LeanReads:
         when unavailable or the app was never saved."""
         return self._read(lambda: self._at_one_generation(app_name, read), None)
 
-    def _at_one_generation(self, app_name, read):
-        if not self.generation(app_name) or self.deriving(app_name):
+    def _at_one_generation(self, app_name, read, kept=False):
+        """*read(conn)* in one read transaction; None when never saved, or
+        left to re-derive unless *kept* (its stale rows will do)."""
+        if not self.generation(app_name) or (not kept and self.deriving(app_name)):
             return None  # never saved, or its rows are left to re-derive
         with read_tx(self._conn) as conn:
             return read(conn)

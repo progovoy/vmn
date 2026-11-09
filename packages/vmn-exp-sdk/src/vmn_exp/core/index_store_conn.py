@@ -6,8 +6,8 @@ opened lazily, retried, recovered, never fatal (plan 25 §2).
   use, with a backoff doubling up to :data:`MAX_BACKOFF_SEC`.
 - A file written by a newer schema is left alone: the store stays off for
   this process.
-- A file of older records is left untouched too: the store continues in a
-  new generation file (:mod:`vmn_exp.core.index_store_upgrade`).
+- A file of older records is upgraded, in place or into a new generation
+  file, by one upgrader at a time (:mod:`vmn_exp.core.index_store_upgrade`).
 - A corrupt file is rebuilt beside it: a new generation file, flipped live
   through the pointer (:mod:`vmn_exp.core.sqlite_files`); the corrupt one is
   removed once no connection holds it.
@@ -71,7 +71,7 @@ class StoreConnection:
             warn_once((file, "schema"), f"Experiment index {file} was written by a newer "
                       f"vmn-exp (schema {exc}); this process runs without it")
         except RecordsOutdated as exc:
-            self._regenerate(file, exc)
+            self._upgrade(file, exc)
         except (sqlite3.Error, OSError) as exc:
             if type(exc) is sqlite3.DatabaseError:
                 self.recover(exc)
@@ -85,7 +85,7 @@ class StoreConnection:
         self.conn, self.file, self._stamp = conn, file, stamp
         self._retry_at, self._backoff = None, FIRST_BACKOFF_SEC
 
-    def _regenerate(self, file, outdated):
+    def _upgrade(self, file, outdated):
         """*file* holds older records: upgrade it (one upgrader at a time,
         :func:`~vmn_exp.core.index_store_upgrade.upgrade`)."""
         if not sqlite_files.is_file_path(self.path):

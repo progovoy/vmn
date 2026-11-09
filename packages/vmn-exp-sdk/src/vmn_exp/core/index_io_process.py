@@ -264,7 +264,7 @@ class _Helper:
         return store.count(app) if store.deriving(app) else None
 
     def derive(self):
-        return self.index._derive_first()
+        return self.index._derive_first(serve_kept=False)
 
     def unreadable(self):
         return self.index._unreadable.summary()

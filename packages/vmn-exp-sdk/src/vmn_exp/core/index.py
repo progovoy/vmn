@@ -55,6 +55,7 @@ import logging
 import threading
 import time
 from contextlib import nullcontext
+from dataclasses import replace
 
 from vmn_exp.core.fold import fold_log, fold_row
 from vmn_exp.core.gc_pause import gc_paused
@@ -62,7 +63,7 @@ from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_bulk import BulkPublish, loading_snapshot
-from vmn_exp.core.index_first_rows import first_rows
+from vmn_exp.core.index_first_rows import first_rows, kept_rows
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_journal_mark import JournalMark
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
@@ -154,6 +155,7 @@ class ExperimentIndex:
         self._snapshot = None
         self._placeholder = None  # (expected, the empty snapshot saying so)
         self._first_rows = None  # a warm restart's newest rows, until its snapshot (snapshot_now)
+        self._kept = None  # the rows an upgrade kept, while it re-derives them (_derive_first)
         self._loaders = None  # a bulk load's worker processes (index_remote_workers)
         self._pool = LoadPool(_REMOTE_WORKERS, "vmn-index-load")  # kept across a bulk load's chunks
         self._rests = set()  # records a bulk load read rows-first, the rest to read
@@ -560,11 +562,13 @@ class ExperimentIndex:
             self._unread = 0
         self._refresh_part(chunk, removed, started, started)
 
-    def _derive_first(self):
+    def _derive_first(self, serve_kept=True):
         """Rows an upgrade left to re-derive are, from the persisted records
         (:mod:`~vmn_exp.core.index_derive`, no storage read), before they
-        load; meanwhile an empty snapshot ``loading`` the share done serves
-        (republished at most every MIGRATING_PUBLISH_SEC). Whether any were."""
+        load; meanwhile the rows the upgrade kept (stale) or else an empty
+        snapshot serve, ``loading`` the share done (republished at most every
+        MIGRATING_PUBLISH_SEC). *serve_kept* False: none (an I/O helper's
+        index, whose snapshots nobody reads). Whether any were."""
         if self._io is not None:  # the helper owns the files; no progress crosses
             total = self._io.deriving()
             if total is None:
@@ -575,7 +579,12 @@ class ExperimentIndex:
         deriving = getattr(self._store, "deriving", None)
         if deriving is None or not deriving(self.app_name):
             return False
-        self._store.derive(self.app_name, self._derived)
+        if serve_kept and not self._lean:
+            self._kept = kept_rows(self._store, self.app_name)
+        try:
+            self._store.derive(self.app_name, self._derived)
+        finally:
+            self._kept = None
         return True
 
     def _derived(self, done, total):
@@ -584,8 +593,12 @@ class ExperimentIndex:
                           and _monotonic() - self.published_at < MIGRATING_PUBLISH_SEC):
             return
         self.generation += 1
-        self._snapshot = self._rows.snapshot(
-            self.app_name, self.generation, [], {}, loading=(done, total))
+        if self._kept is not None:  # the kept rows, stale until re-derived
+            self._snapshot = replace(self._kept, generation=self.generation,
+                                     loading=(done, total))
+        else:
+            self._snapshot = self._rows.snapshot(
+                self.app_name, self.generation, [], {}, loading=(done, total))
         self.published_at = _monotonic()
         self._set_published()
 

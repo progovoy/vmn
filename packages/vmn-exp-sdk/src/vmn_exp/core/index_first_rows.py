@@ -14,6 +14,7 @@ from dataclasses import replace
 
 from vmn_exp.core.index_snapshot import (
     IndexSnapshot,
+    RowCache,
     _observed_at,
     new_side_tables,
     put_side_tables,
@@ -41,3 +42,17 @@ def first_rows(store, app_name, limit, max_rows):
         put_side_tables(sides, verstr, values)
     snap = IndexSnapshot.build(app_name, 0, rows, run_states, notes, observed, **sides)
     return replace(snap, loading=(len(rows), runs))
+
+
+def kept_rows(store, app_name):
+    """An :class:`IndexSnapshot` (generation 0) of the rows an upgrade kept
+    while *app_name*'s re-derive rewrites them (plan 33 §2.3), for it to
+    serve ``loading``; None when the store has none."""
+    load_kept = getattr(store, "load_kept", None)
+    kept = load_kept(app_name) if load_kept else None
+    if not kept or not kept[2]:
+        return None
+    records, order, lean, _ = kept
+    rows = RowCache()
+    rows.seed(lean)
+    return rows.snapshot(app_name, 0, order, records)

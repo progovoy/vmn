@@ -1,11 +1,11 @@
-"""An upgrade of the stored records (``RECORDS_VERSION``) never drops them in
-place on the live file: a new generation file is built beside it and the
-pointer flipped to it (the old file is left untouched until then, and swept
-once unused). Records still readable in the new format are copied over
-locally, a chunk per transaction, instead of being re-read from storage."""
+"""An upgrade of the stored records (``RECORDS_VERSION``) whose older records
+cannot be trusted never drops them in place on the live file: a new
+generation file is built beside it and the pointer flipped to it (the old file
+is left untouched until then, and swept once unused). Records still readable
+in the new format are upgraded in place instead of being re-read from storage."""
 import sqlite3
 
-from vmn_exp.core import index_store_schema, index_store_upgrade, sqlite_files
+from vmn_exp.core import index_store_schema, sqlite_files
 from vmn_exp.core.fold import fold_log
 from vmn_exp.core.index_store import SqliteStore
 
@@ -68,20 +68,19 @@ def test_older_records_go_to_a_new_generation_leaving_the_old_file_untouched(
     assert _state(target)[1] == index_store_schema.SCHEMA_VERSION
 
 
-def test_records_still_readable_are_copied_to_the_new_generation(tmp_path, monkeypatch):
+def test_records_still_readable_are_upgraded_in_place(tmp_path, monkeypatch):
     path = _old_file(tmp_path, n=7)
     monkeypatch.setattr(index_store_schema, "COPYABLE_RECORDS", {10: None})
-    monkeypatch.setattr(index_store_upgrade, "COPY_CHUNK", 2)
     flips = _spy_flip(monkeypatch, path)
     store = SqliteStore(path)
-    [(old_at_flip, target)] = flips
-    assert old_at_flip == (7, OLD_RECORDS)
+    assert flips == [] and sqlite_files.live_path(path) == path
+    assert store.connection()[1] == path
     assert sorted(store.load(APP)) == [f"k{i}" for i in range(7)]
     assert store.kv_get("journal-mark:app", "journal-mark-1") == {"ms": 5}
     assert store.deriving(APP)
     store.derive(APP)
     assert not store.deriving(APP)
-    conn = sqlite3.connect(target)
+    conn = sqlite3.connect(path)
     assert conn.execute("SELECT key, idx FROM exp_rows ORDER BY idx").fetchall() == [
         (f"k{i}", i + 1) for i in range(7)]
 

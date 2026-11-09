@@ -70,7 +70,7 @@ def test_an_opener_waits_for_another_process_upgrading_and_opens_its_generation(
         opener.start()
         opener.join(0.5)
         assert not opened and not sqlite_files._generations(path)
-        conn, fresh = index_store_upgrade.regenerate(path, path, 10, _connect)
+        conn, fresh = index_store_upgrade.regenerate(path, path, _connect)
         conn.close()
     opener.join(20)
 

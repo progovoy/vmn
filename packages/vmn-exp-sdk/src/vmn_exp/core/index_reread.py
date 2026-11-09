@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Records an upgrade left to read again from storage.
 
-An upgrade copying older records (:mod:`vmn_exp.core.index_store_upgrade`)
-leaves out those its version's predicate picks, with their run states, and
+An upgrade in place of older records (:mod:`vmn_exp.core.index_store_upgrade`)
+deletes those its version's predicate picks, with their run states, and
 lists their keys in the cache store's key-value table under
 ``reread:<app>`` (fingerprint :data:`FINGERPRINT`), joining those an
-earlier upgrade listed and no load has read yet. Left out, such a record
+earlier upgrade listed and no load has read yet. Deleted, such a record
 is no tombstone: a follower keeps it until its re-read is saved. An index
 loading its records hints those the list names and the records lack, so the
 next refresh lists and loads them like a journal-announced run — whether it

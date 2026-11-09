@@ -20,13 +20,13 @@ Two versions, so an upgrade never costs more than it must:
   run states, tombstones, generations and key-values (listing baselines,
   journal marks): re-reading them costs hours of S3 reads at 500k runs. Bump
   it when a record's shape, the fold's semantics or the run state change so
-  that an older record cannot be trusted. A file of older records is never
-  touched: a new generation file is built beside it and flipped live
-  (:mod:`vmn_exp.core.index_store_upgrade`), its records copied over when
-  their version is in :data:`COPYABLE_RECORDS` (they still read right),
-  else loaded afresh from storage. A change that leaves most records right
-  lists the older version there with a predicate picking the others: they
-  alone are read again (records 18: only runs with a name both a param and a
+  that an older record cannot be trusted. :func:`ensure_schema` refuses a
+  file of older records, writing nothing; :mod:`vmn_exp.core.index_store_upgrade`
+  upgrades it in place when their version is in :data:`COPYABLE_RECORDS`
+  (they still read right), else builds a new generation file beside it,
+  loaded afresh from storage. A change that leaves most records right lists
+  the older version there with a predicate picking the others: they alone
+  are read again (records 18: only runs with a name both a param and a
   logged metric).
 - :data:`DERIVED_VERSION` covers the tables derived purely from the records
   (``exp_rows``, ``exp_sides``, ``similar_*``). Bump it when what is derived
@@ -72,6 +72,9 @@ COPYABLE_RECORDS = {18: _param_logged_too}
 _LEGACY_RECORDS = 18  # the newest records of a file with no "records" meta value
 NEW, DERIVED = "new", "derived"  # the upgrades ensure_schema makes
 DERIVE_SCOPE = "derive:"  # exp_index_kv scope prefix of an app left to re-derive
+# exp_index_kv scope, fingerprint SCHEMA_VERSION: the re-derive at this schema
+# rewrites rows an in-place records upgrade kept, served (stale) meanwhile.
+KEPT_SCOPE = "kept-rows"
 
 RECORD_TABLES = {
     "exp_index": "app TEXT, key TEXT, seq INTEGER, head TEXT, data TEXT,"
@@ -170,9 +173,18 @@ def ensure_schema(conn):
         if upgrade == NEW:
             _create(conn)
         elif upgrade == DERIVED:
-            _create_derived(conn)
-            mark_derive_pending(conn)
-            _write_versions(conn)
+            upgrade_derived(conn)
+
+
+def upgrade_derived(conn, kept=False):
+    """In the caller's write transaction: bring the derived tables to this
+    version (each app marked to re-derive) and write the versions; *kept*:
+    the rows are kept to serve until re-derived (:data:`KEPT_SCOPE`)."""
+    _create_derived(conn)
+    mark_derive_pending(conn)
+    if kept:
+        write_puts(conn, [(KEPT_SCOPE, SCHEMA_VERSION, True)])
+    _write_versions(conn)
 
 
 def _create(conn):
