@@ -21,9 +21,10 @@ import weakref
 
 from vmn_exp.core import similar_fts
 from vmn_exp.core.index_lean_store import is_run, read_lean
+from vmn_exp.core.index_store_reads import record_seqs
 from vmn_exp.core.index_views import SIDE_TABLES, lean_row
 from vmn_exp.core.similar_doc import build_doc
-from vmn_exp.core.sqlite_conn import in_chunks, read_tx, write_tx
+from vmn_exp.core.sqlite_conn import read_tx, write_tx
 
 _FEATURES, _INTENTS, _HYPOTHESES = (SIDE_TABLES.index(k) for k in
                                     ("features", "intents", "hypotheses"))
@@ -73,19 +74,6 @@ def _commands_moved(conn, app, states):
 
 
 FILE_CHUNK = 500  # runs :func:`file_lean` files per write transaction
-_SEQS_SQL = ("SELECT i.key, i.seq, s.seq FROM exp_index i LEFT JOIN exp_index_state s"
-             " ON s.app = i.app AND s.key = i.key WHERE i.app = ?")
-
-
-def _seqs(conn, app, keys=None):
-    """``{key: (record seq, run state seq)}`` of *app*'s *keys* (None: all)."""
-    if keys is None:
-        return {key: seqs for key, *seqs in conn.execute(_SEQS_SQL, (app,))}
-    out = {}
-    for chunk, marks in in_chunks(keys):
-        out.update((key, seqs) for key, *seqs in conn.execute(
-            f"{_SEQS_SQL} AND i.key IN ({marks})", (app, *chunk)))
-    return out
 
 
 def lean_entries(conn, app, lock=None):
@@ -96,7 +84,7 @@ def lean_entries(conn, app, lock=None):
         keys, lean, _ = read_lean(conn, app)
         commands = {key: _command((json.loads(data) or {}).get("run_state")) for key, data in
                     conn.execute("SELECT key, data FROM exp_index_state WHERE app = ?", (app,))}
-        seqs = _seqs(conn, app)
+        seqs = record_seqs(conn, app, with_state=True)
 
     def entries():
         for key in keys:
@@ -116,7 +104,7 @@ def file_lean(conn, app, lock=None):
     seqs, entries, commands = lean_entries(conn, app, lock)
     for chunk in iter(lambda: list(itertools.islice(entries, FILE_CHUNK)), []):
         with held, write_tx(conn):
-            now = _seqs(conn, app, [key for key, _ in chunk])
+            now = record_seqs(conn, app, [key for key, _ in chunk], with_state=True)
             similar_fts.file_docs(conn, app, [(key, doc) for key, doc in chunk
                                               if now.get(key) == seqs[key]], commands)
     with held:

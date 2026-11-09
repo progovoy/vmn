@@ -22,6 +22,27 @@ RECORD_PARTS_SQL = (
     " LEFT JOIN exp_index_state s ON s.app = i.app AND s.key = i.key WHERE i.app = ?"
 )
 
+_SEQS_SQL = "SELECT i.key, i.seq FROM exp_index i WHERE i.app = ?"
+_STATE_SEQS_SQL = ("SELECT i.key, i.seq, s.seq FROM exp_index i LEFT JOIN exp_index_state s"
+                   " ON s.app = i.app AND s.key = i.key WHERE i.app = ?")
+
+
+def record_seqs(conn, app, keys=None, with_state=False):
+    """``{key: record seq}`` of *app*'s *keys* (None: all), or *with_state*
+    ``{key: (record seq, run state seq)}``: what tells a record saved again
+    since it was read."""
+    sql = _STATE_SEQS_SQL if with_state else _SEQS_SQL
+
+    def pairs(rows):
+        return ((key, tuple(seqs) if with_state else seqs[0]) for key, *seqs in rows)
+
+    if keys is None:
+        return dict(pairs(conn.execute(sql, (app,))))
+    out = {}
+    for chunk, marks in in_chunks(keys):
+        out.update(pairs(conn.execute(f"{sql} AND i.key IN ({marks})", (app, *chunk))))
+    return out
+
 
 class LeanReads:
     """Mixed into the store: uses its ``_read``, ``_conn`` and ``_select``."""

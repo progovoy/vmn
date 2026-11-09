@@ -22,9 +22,9 @@ import threading
 from vmn_exp.core import similar_fts
 from vmn_exp.core.index_lean_store import apply_numbers, leans_of, renumbered, write_lean
 from vmn_exp.core.index_store_kv import write_puts
-from vmn_exp.core.index_store_reads import RECORD_PARTS_SQL
+from vmn_exp.core.index_store_reads import RECORD_PARTS_SQL, record_seqs
 from vmn_exp.core.index_store_schema import DERIVE_SCOPE, SCHEMA_VERSION
-from vmn_exp.core.sqlite_conn import in_chunks, read_tx, write_tx
+from vmn_exp.core.sqlite_conn import read_tx, write_tx
 
 CHUNK = 500
 _LOCKS = {}  # (file, app) -> the lock its derivers in this process take turns under
@@ -72,7 +72,7 @@ def derive_chunk(conn, app):
     leans = leans_of(records)
     with write_tx(conn):
         if pending_after(conn, app) == after:  # else another deriver took this chunk
-            fresh = {key: records[key] for key, seq in _seqs(conn, app, seqs).items()
+            fresh = {key: records[key] for key, seq in record_seqs(conn, app, seqs).items()
                      if seq == seqs[key]}
             mine = {key: leans[key] for key in fresh if key in leans}
             write_lean(conn, app, _generation(conn, app), fresh, (), {}, mine, renumber=False)
@@ -80,14 +80,6 @@ def derive_chunk(conn, app):
                 similar_fts.mark_refile(conn, app, list(fresh))
             _move_marker(conn, app, max(seqs))
     return len(seqs)
-
-
-def _seqs(conn, app, keys):
-    out = {}
-    for chunk, marks in in_chunks(keys):
-        out.update(conn.execute(
-            f"SELECT key, seq FROM exp_index WHERE app = ? AND key IN ({marks})", (app, *chunk)))
-    return out
 
 
 def _generation(conn, app):
