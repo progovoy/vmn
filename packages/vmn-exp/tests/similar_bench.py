@@ -3,7 +3,7 @@
     indexed_store(n) -> (store dir, index file)
 
 builds the experiment index of :mod:`scale_store`'s *n*-run store once per
-(store version, index schema, profile version, n), cached next to the store,
+(store, index schema, profile version), kept in the store's root,
 and :func:`measure` runs one query in a fresh process against a copy-free,
 read-only use of that index file: *cold* is the process's first query, *warm*
 its second, with the extra resident memory the query took.
@@ -37,23 +37,20 @@ def _storage(store):
 
 
 def indexed_store(n):
-    """``(store root, index file)`` of the *n*-run store, the index built once."""
-    from vmn_exp.core.index import ExperimentIndex
+    """``(store root, index file)`` of the *n*-run store, the index built once
+    per store (:func:`scale_store.derived`)."""
     from vmn_exp.core.index_store_schema import SCHEMA_VERSION
     from vmn_exp.core.similar_doc import PROFILE_VERSION
 
-    store = scale_store.cached(n)
-    name = f"index-v{scale_store.VERSION}-{SCHEMA_VERSION}-p{PROFILE_VERSION}-n{n}.sqlite"
-    path = os.path.join(scale_store.cache_dir(), name)
-    if not os.path.exists(path):
-        building = tempfile.mkdtemp(prefix="index-", dir=scale_store.cache_dir())
-        built = os.path.join(building, "index.sqlite")
-        index = ExperimentIndex(_storage(store), APP, built, full_sweep_sec=0)
-        index.refresh()
-        index._store.close()
-        os.replace(built, path)
-        shutil.rmtree(building, ignore_errors=True)
-    return store, path
+    return scale_store.derived(n, f"index-{SCHEMA_VERSION}-p{PROFILE_VERSION}.sqlite", _build_index)
+
+
+def _build_index(store, path):
+    from vmn_exp.core.index import ExperimentIndex
+
+    index = ExperimentIndex(_storage(store), APP, path, full_sweep_sec=0)
+    index.refresh()
+    index._store.close()
 
 
 def target_verstr(store):

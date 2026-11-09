@@ -2,6 +2,7 @@
 
     generate(root, n) -> expected counts
     cached(n) -> root of a generated store, reused across test sessions
+    derived(n, name, build) -> (root, path) of a file built from that store
 
 writes ``<root>/.vmn/store/`` in store layout 2 (``store.yml`` + the ``runs/``
 area) with *n* format-2 runs of one app, sharded over worker processes. Each
@@ -16,6 +17,9 @@ reused from the cache, running runs read stuck once their heartbeat is stale).
     python packages/vmn-exp/tests/scale_store.py <n>   # prints the cached root
 """
 import collections
+import contextlib
+import fcntl
+import glob
 import itertools
 import json
 import multiprocessing
@@ -41,6 +45,7 @@ from vmn_exp.storage.store_marker import MARKER, new_marker
 VERSION = 1  # bump when the generated content changes: cached stores are keyed by it
 APP = "scaleapp"
 COMPLETE = ".scale-store-complete"
+DERIVED = "derived"  # files built from the store (an index), deleted with it
 BLOCK, INNER_PER_BLOCK = 100, 33
 VOCABULARY_SIZE, INTENT_WORDS, KEYWORDS = 20_000, 150, 5
 STEPS, METRICS = 20, ("loss", "acc", "val_loss")
@@ -199,18 +204,79 @@ def cache_dir():
 
 def cached(n, workers=None, progress=False):
     """The root of an *n*-run store, generated once per (``VERSION``, *n*)."""
+    with _locked(n) as root:
+        _ensure(root, n, workers, progress)
+    return root
+
+
+def derived(n, name, build, workers=None, progress=False):
+    """``(store root, path)`` of file *name* that ``build(root, path)``
+    derives from the *n*-run store: built once per store, deleted with it."""
+    with _locked(n) as root:
+        _ensure(root, n, workers, progress)
+        path = os.path.join(root, DERIVED, name)
+        if not os.path.exists(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            building = tempfile.mkdtemp(prefix=f"{name}.", dir=os.path.dirname(path))
+            try:
+                built = os.path.join(building, name)
+                build(root, built)
+                os.replace(built, path)
+            finally:
+                shutil.rmtree(building, ignore_errors=True)
+    return root, path
+
+
+@contextlib.contextmanager
+def _locked(n):
+    """The *n*-run store's root, its builders (processes, xdist workers)
+    taking turns: one generates, the others then find it whole."""
     root = os.path.join(cache_dir(), f"v{VERSION}-n{n}")
-    if os.path.exists(os.path.join(root, COMPLETE)):
-        return root
     os.makedirs(cache_dir(), exist_ok=True)
-    building = tempfile.mkdtemp(prefix=f"v{VERSION}-n{n}.", dir=cache_dir())
+    with open(root + ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield root
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _ensure(root, n, workers, progress):
+    """Build the store at *root* unless it is whole. It is built aside and
+    renamed in, its marker written last: a reader finds all of it or none.
+    What an interrupted build or a broken store left goes."""
+    _clear_aside(root)
+    if _is_whole(root, n):
+        return
+    building = tempfile.mkdtemp(prefix=os.path.basename(root) + ".", dir=cache_dir())
     expected = generate(building, n, workers=workers, progress=progress)
     _write(os.path.join(building, COMPLETE), json.dumps(expected))
+    if os.path.exists(root):  # a rename onto a non-empty directory fails
+        os.rename(root, building + ".old")
+    os.rename(building, root)
+    _clear_aside(root)
+
+
+def _clear_aside(root):
+    for stale in glob.glob(glob.escape(root) + ".*"):
+        if os.path.isdir(stale):
+            shutil.rmtree(stale, ignore_errors=True)
+
+
+def _is_whole(root, n):
+    """Whether *root* holds all *n* runs, each with its metadata and run
+    state: the OS's temp cleaner deletes old files and keeps directories."""
     try:
-        os.rename(building, root)
-    except OSError:  # another session finished first
-        shutil.rmtree(building, ignore_errors=True)
-    return root
+        with open(os.path.join(root, COMPLETE)) as f:
+            if json.load(f).get("total") != n:
+                return False
+        base = os.path.join(_store_root(root), "runs", APP)
+        runs = os.listdir(base)
+    except (OSError, ValueError):
+        return False
+    return len(runs) == n and all(
+        os.path.exists(os.path.join(base, run, name))
+        for run in runs for name in ("metadata.yml", "run_state.yml"))
 
 
 if __name__ == "__main__":
