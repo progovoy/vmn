@@ -88,8 +88,11 @@ changed (here: summary types, params sharing a metric's name) are the old
 ones until their row is re-derived.
 
 The next upgrade (records 19 → 20: a metric's last write from older `.vmx`
-footers, and the step-restart mark on rows) is in place too, but its
-predicate picks every run with a metric logged more than once. On a store of
-training runs that is nearly every run (all of them in the local load
-stores), so most runs are read again from storage in the background while
-the board serves their old rows; runs of params or one-off values are kept.
+footers, and the step-restart mark on rows) is in place too and reads no run
+again up front. It lists the runs with compacted metrics logged more than
+once (nearly every training run) for a background check that reads each
+one's `.vmx` footers (one ranged GET per file, 64 KB) and, for a footer an
+older vmn-exp wrote over 64 KB, its stepped keys' timestamps (one more GET per
+key and 65,536 points). Only the runs whose steps went back are read again.
+The status says `checking N / M compacted runs` meanwhile, the board serves
+its rows, and the check resumes after a restart.

@@ -28,9 +28,12 @@ export interface Freshness {
   stale_after_sec: number;
   /** Absent when none. */
   unreadable?: Unreadable;
+  /** An upgrade's background check of runs compacted by an older vmn-exp
+   *  (core/index_vmx_check.py); absent when none. */
+  checking?: { done: number; total: number };
 }
 
-import { fmtPct, humanizeSeconds } from "../util";
+import { fmtCount, fmtPct, humanizeSeconds } from "../util";
 
 export interface FreshnessBanner { kind: "stale" | "error"; text: string }
 
@@ -77,13 +80,26 @@ function unreadableText(u: Unreadable | undefined): string {
   return `${u.count} ${u.count === 1 ? "run" : "runs"} could not be read (${reason}); retrying.`;
 }
 
+/** `120,000 / 734,000` of an upgrade's check. */
+const checked = (c: NonNullable<Freshness["checking"]>, sep: string) =>
+  `${fmtCount(c.done)}${sep}${fmtCount(c.total)}`;
+
+function checkingText(c: Freshness["checking"]): string {
+  return c ? `Checking ${checked(c, " / ")} compacted runs written by an older vmn-exp; `
+    + "their rows show meanwhile." : "";
+}
+
 export function freshnessBanner(f: Freshness | undefined, now = Date.now()): FreshnessBanner | null {
   if (!f) return null;
-  const banner = ageBanner(f, now);
+  let banner = ageBanner(f, now);
   const unreadable = f.refresh_failing ? "" : unreadableText(f.unreadable);
-  if (!unreadable) return banner;
-  return banner ? { ...banner, text: `${banner.text} ${unreadable}` }
-    : { kind: "stale", text: `⚠ ${unreadable}` };
+  if (unreadable) {
+    banner = banner ? { ...banner, text: `${banner.text} ${unreadable}` }
+      : { kind: "stale", text: `⚠ ${unreadable}` };
+  }
+  const checking = checkingText(f.checking);
+  if (!checking) return banner;
+  return banner ? { ...banner, text: `${banner.text} ${checking}` } : { kind: "stale", text: checking };
 }
 
 function ageBanner(f: Freshness, now: number): FreshnessBanner | null {
@@ -113,6 +129,12 @@ function ageBanner(f: Freshness, now: number): FreshnessBanner | null {
 
 /** The boards' count-line form: `data 4 d old · syncing ~45%`; "" while fresh. */
 export function freshnessShort(f: Freshness | undefined, now = Date.now()): string {
+  const checking = f?.checking ? `checking ${checked(f.checking, "/")} compacted runs` : "";
+  const age = ageShort(f, now);
+  return age && checking ? `${age} · ${checking}` : age || checking;
+}
+
+function ageShort(f: Freshness | undefined, now: number): string {
   if (!f || !isOld(f, now)) return "";
   const old = `data ${ageText(ageSec(f, now)!)} old`;
   if (f.refresh_failing) return `${old} · refresh not completing`;

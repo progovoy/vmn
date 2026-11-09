@@ -26,8 +26,11 @@ Two versions, so an upgrade never costs more than it must:
   (they still read right), else builds a new generation file beside it,
   loaded afresh from storage. A change that leaves most records right lists
   the older version there with a predicate picking the others: they alone
-  are read again (records 19: only runs with a metric logged more than
-  once; 18: those and runs with a name both a param and a logged metric).
+  are read again (records 18: runs with a name both a param and a logged
+  metric). One whose records may be wrong but rarely are lists a predicate
+  in :data:`CHECKED_RECORDS`: those it picks are checked cheaply in the
+  background, read again only when they must be (records 18 and 19: runs
+  with compacted metrics logged more than once).
 - :data:`DERIVED_VERSION` covers the tables derived purely from the records
   (``exp_rows``, ``exp_sides``, ``similar_*``). Bump it when what is derived
   changes (lean rows, side values, statuses, similar documents) or a derived
@@ -51,6 +54,7 @@ import sqlite3
 from vmn_exp.core import similar_fts
 from vmn_exp.core.fold import logged_params
 from vmn_exp.core.index_store_kv import write_puts
+from vmn_exp.core.metric_files import is_indexed_file
 from vmn_exp.core.metric_summary import is_repeated
 from vmn_exp.core.sqlite_conn import write_tx
 
@@ -65,21 +69,25 @@ def _param_logged_too(fold):
     return bool(logged_params(fold))
 
 
-def _logged_twice(fold):
-    """Whether *fold* has a metric logged more than once: records 19 lack its
-    step restart and, folded from an older ``.vmx`` footer, may hold its
-    value at the highest step for its last write. A metric logged once has
-    neither (nor do the runs of params alone)."""
-    return any(is_repeated(seen) for seen in (fold.get("extrema") or {}).values())
+def _compacted_logged_twice(head, fold):
+    """Whether the record of *head* folded ``.vmx`` objects and its *fold* a
+    metric logged more than once: records 19 folded from an older ``.vmx``
+    footer may hold such a metric's value at its highest step for its last
+    write, and lack its step restart. The fold does not say which metric
+    came from which file; the head's metric objects say a ``.vmx`` was read."""
+    objects = ((head.get("metrics") or {}).get("objects") or {})
+    return (any(is_indexed_file(name) for name in objects)
+            and any(is_repeated(seen) for seen in (fold.get("extrema") or {}).values()))
 
 
 # Older records versions whose records still read right in this one, each with
 # None or a predicate of a record's fold: True when that record does not and
 # is read again from storage instead (see index_store_upgrade).
-COPYABLE_RECORDS = {
-    18: lambda fold: _param_logged_too(fold) or _logged_twice(fold),
-    19: _logged_twice,
-}
+COPYABLE_RECORDS = {18: _param_logged_too, 19: None}
+# Of those, the ones whose records may not read right, each with a predicate
+# of a record's head and fold: True when that record is checked in the
+# background (vmx_check, index_vmx_check), folded again only when it must be.
+CHECKED_RECORDS = {18: _compacted_logged_twice, 19: _compacted_logged_twice}
 _LEGACY_RECORDS = 18  # the newest records of a file with no "records" meta value
 NEW, DERIVED = "new", "derived"  # the upgrades ensure_schema makes
 DERIVE_SCOPE = "derive:"  # exp_index_kv scope prefix of an app left to re-derive

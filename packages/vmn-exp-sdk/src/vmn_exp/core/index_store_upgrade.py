@@ -12,7 +12,10 @@ no extra disk. A read pass that takes no lock picks the records its version's
 predicate says do not; they are listed to read again
 (:mod:`vmn_exp.core.index_reread`) in one transaction, then deleted with their
 run states, rows and similar-runs documents, :data:`DELETE_CHUNK` per short
-write transaction. Last, one transaction picks (lists and deletes) the
+write transaction. The kept records its version's
+:data:`~vmn_exp.core.index_store_schema.CHECKED_RECORDS` predicate picks
+are listed, in the same transaction, for a background check
+(:mod:`vmn_exp.core.index_vmx_check`). Last, one transaction picks (lists and deletes) the
 records saved since the read pass, marks every app to re-derive
 (:mod:`vmn_exp.core.index_derive`) and writes the records mark; the journal
 mark and listing baselines stay. Until that mark the file still reads as
@@ -32,7 +35,7 @@ import shutil
 
 from filelock import FileLock
 
-from vmn_exp.core import index_reread, index_store_schema, sqlite_files
+from vmn_exp.core import index_reread, index_store_schema, index_vmx_check, sqlite_files
 from vmn_exp.core.index_lean_store import write_lean
 from vmn_exp.core.index_store_kv import write_puts
 from vmn_exp.core.index_store_schema import RecordsOutdated, upgrade_derived
@@ -56,67 +59,79 @@ def upgrade(path, connect_file):
             found = exc.found
         if found not in index_store_schema.COPYABLE_RECORDS:
             return regenerate(path, file, connect_file)
-        upgrade_in_place(file, index_store_schema.COPYABLE_RECORDS[found])
+        upgrade_in_place(file, index_store_schema.COPYABLE_RECORDS[found],
+                         index_store_schema.CHECKED_RECORDS.get(found))
         return connect_file(file), file
 
 
-def upgrade_in_place(file, stale):
+def upgrade_in_place(file, stale, check=None):
     """Bring *file*'s records to this version in place, deleting those
-    *stale* (None: none) picks (see the module)."""
+    *stale* (None: none) picks and listing those *check* (None: none) picks
+    for the background check (see the module)."""
     conn = connect(file)
     try:
-        if stale is not None:
+        if stale is not None or check is not None:
             gens = dict(conn.execute("SELECT app, gen FROM exp_index_gen"))
-            picked = _picked(file, stale)
+            picked, checked = _picked(file, stale, check)
             with write_tx(conn):  # listed first: a death part way loses none
-                _list_to_reread(conn, picked)
+                _list(conn, picked, checked)
             for chunk, _ in in_chunks(picked, DELETE_CHUNK):
                 _delete_picked(conn, chunk)
         with write_tx(conn):
-            if stale is not None:
-                late = _saved_since(conn, stale, gens)
-                _list_to_reread(conn, late)
+            if stale is not None or check is not None:
+                late, late_checked = _saved_since(conn, stale, check, gens)
+                _list(conn, late, late_checked)
                 _delete(conn, late)
             upgrade_derived(conn, kept=True)
     finally:
         conn.close()
 
 
-def _picked(file, stale):
-    """The ``(app, key)`` of *file*'s records *stale* picks, read a chunk per
-    query on a read-only connection: no lock is held across the pass."""
+def _picked(file, stale, check):
+    """``(picked, checked)``: the ``(app, key)`` of *file*'s records *stale*
+    picks and of the others *check* picks, read a chunk per query on a
+    read-only connection: no lock is held across the pass."""
     source = connect(file, readonly=True)
-    picked, after = [], 0
+    picked, checked, after = [], [], 0
     try:
         while True:
             rows = source.execute(
-                "SELECT rowid, app, key, data FROM exp_index WHERE rowid > ?"
+                "SELECT rowid, app, key, head, data FROM exp_index WHERE rowid > ?"
                 " ORDER BY rowid LIMIT ?", (after, SCAN_CHUNK)).fetchall()
             if not rows:
-                return picked
-            picked += [(app, key) for _, app, key, data in rows if _is_stale(stale, data)]
+                return picked, checked
+            for _, app, key, head, data in rows:
+                _sort((app, key), head, data, stale, check, picked, checked)
             after = rows[-1][0]
     finally:
         source.close()
 
 
-def _saved_since(conn, stale, gens):
-    """The ``(app, key)`` of the records saved past *gens* (``{app: gen}``)
-    that *stale* picks."""
+def _saved_since(conn, stale, check, gens):
+    """``(picked, checked)`` of the records saved past *gens* (``{app: gen}``)."""
     apps = [app for (app,) in conn.execute("SELECT app FROM exp_index_gen").fetchall()]
-    return [(app, key) for app in apps
-            for key, data in conn.execute(
-                "SELECT key, data FROM exp_index WHERE app = ? AND seq > ?",
-                (app, gens.get(app, 0)))
-            if _is_stale(stale, data)]
+    picked, checked = [], []
+    for app in apps:
+        for key, head, data in conn.execute(
+                "SELECT key, head, data FROM exp_index WHERE app = ? AND seq > ?",
+                (app, gens.get(app, 0))):
+            _sort((app, key), head, data, stale, check, picked, checked)
+    return picked, checked
 
 
-def _is_stale(stale, data):
-    return data is not None and stale(json.loads(data))
+def _sort(item, head, data, stale, check, picked, checked):
+    """Put *item* in *picked* or *checked* as *stale* or *check* picks it."""
+    if data is None:
+        return
+    fold = json.loads(data)
+    if stale is not None and stale(fold):
+        picked.append(item)
+    elif check is not None and check(json.loads(head), fold):
+        checked.append(item)
 
 
-def _list_to_reread(conn, picked):
-    write_puts(conn, index_reread.puts(conn, picked))
+def _list(conn, picked, checked):
+    write_puts(conn, index_reread.puts(conn, picked) + index_vmx_check.puts(conn, checked))
 
 
 def _delete_picked(conn, picked):

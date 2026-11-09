@@ -16,6 +16,8 @@ is the age past which the dashboard warns (conf
 last_error}``, absent when none) counts the records the index set aside
 unread (:mod:`~vmn_exp.core.index_unreadable`): the refresh succeeds around
 them, a throttled store's included, so it is the dashboard's only sign.
+``checking`` (``{done, total}``, absent when none) is an upgrade's background
+check of compacted runs (:mod:`~vmn_exp.core.index_vmx_check`).
 """
 import datetime
 
@@ -40,8 +42,9 @@ def freshness(health, state, stale_after_min=DEFAULT_STALE_AFTER_MIN):
         "last_error": health["last_error"],
         "stale_after_sec": stale_after_min * 60,
     }
-    if state.get("unreadable"):
-        payload["unreadable"] = state["unreadable"]
+    for extra in ("unreadable", "checking"):
+        if state.get(extra):
+            payload[extra] = state[extra]
     return payload
 
 
@@ -56,6 +59,8 @@ def freshness_key(fresh, now):
     key = dict(fresh, as_of=as_of and as_of[:len("YYYY-MM-DDTHH:MM")],
                refresh_running_sec=None if running is None else running // 60,
                progress=None if progress is None else round(progress, 2))
+    if fresh.get("checking"):  # moves the dashboard by the thousand checked
+        key["checking"] = dict(fresh["checking"], done=fresh["checking"]["done"] // 1000)
     if as_of is not None and not fresh["refresh_failing"] and (
             now - datetime.datetime.fromisoformat(as_of).timestamp() <= fresh["stale_after_sec"]):
         for transient in ("refreshing", "refresh_running_sec", "phase", "progress"):

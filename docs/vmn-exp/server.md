@@ -151,7 +151,14 @@ versions:
   upgraded in place, with no extra disk: when a change affects only some
   runs, just those are deleted and read again from storage (records 18 → 19:
   the runs with a param of the same name as a logged metric), and the rest
-  re-derive as below. Otherwise the live file is left untouched: a new
+  re-derive as below. When a change may affect many runs but rarely does,
+  those runs are kept and checked cheaply in the background instead
+  (records 19 → 20: the runs with compacted metrics logged twice get their
+  `.vmx` footers read, and an older footer's timestamps; only those whose
+  last write or step restart reads differently are read again). The check
+  resumes after a restart, takes about a second every two seconds of the
+  refresh thread, and the status says `checking N / M compacted runs` until
+  it is done. Otherwise the live file is left untouched: a new
   generation file is built beside it and the pointer flipped to it, as a
   rebuild does, and it loads from storage like a first start. That needs free
   disk about the size of the old file; without it the upgrade refuses, naming

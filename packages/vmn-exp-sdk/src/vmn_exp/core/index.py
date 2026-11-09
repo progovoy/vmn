@@ -75,6 +75,7 @@ from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.index_record import refresh_record, update_record
 from vmn_exp.core.index_reread import hint_unloaded
 from vmn_exp.core.index_unreadable import Unreadable
+from vmn_exp.core.index_vmx_check import VmxCheck
 from vmn_exp.core.index_remote_workers import RemoteLoaders, worker_count
 from vmn_exp.core.index_rows import adopted as _adopted
 from vmn_exp.core.index_rows import row_copies as _row_copies
@@ -160,6 +161,7 @@ class ExperimentIndex:
         self._pool = LoadPool(_REMOTE_WORKERS, "vmn-index-load")  # kept across a bulk load's chunks
         self._rests = set()  # records a bulk load read rows-first, the rest to read
         self._unreadable = Unreadable(app_name, lambda: _monotonic())
+        self._vmx = VmxCheck(lambda: self._io or self._store, app_name)  # an upgrade's check
         self._io_unreadable = None  # the I/O helper's Unreadable.summary(), after its refresh
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
@@ -279,6 +281,9 @@ class ExperimentIndex:
         unreadable = self._io_unreadable if self._io is not None else self._unreadable.summary()
         if unreadable:
             state["unreadable"] = unreadable
+        checking = self._vmx.state()
+        if checking:
+            state["checking"] = checking
         return state
 
     def _reported_freshness(self):
@@ -429,6 +434,8 @@ class ExperimentIndex:
             with self._paused_unless_remote():
                 self._refresh_from_storage(started)
             self._sweep.applied()
+            if self._vmx.due():
+                self._check_step()
         except Exception:
             self._first_rows = None  # a failed first load: a retry serves them again
             # A listing's changes may have been taken but not applied: list
@@ -444,6 +451,33 @@ class ExperimentIndex:
             self._freshness.idle()
         self.last_refresh_at = started
         self._freshness.refreshed()
+
+    def _check_step(self, limit=None):
+        """A step of an upgrade's check (:mod:`~vmn_exp.core.index_vmx_check`):
+        its failure (a throttled store) is retried at the next step, never
+        the refresh's."""
+        try:
+            return self._vmx.step(self._storage, self._records, self._sweep.hint, limit)
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning("checking %s's compacted metrics failed; retried", self.app_name,
+                            exc_info=True)
+            return 0
+
+    def check_vmx(self, limit=None):
+        """Run an upgrade's check now: *limit* records, else all left; how
+        many were checked."""
+        with self._lock:
+            if self._records is None:
+                return 0
+            if limit is not None:
+                return self._check_step(limit)
+            checked = 0
+            while self._vmx.state() is not None:
+                done = self._check_step()
+                if not done:
+                    break
+                checked += done
+            return checked
 
     def _paused_unless_remote(self):
         """A local refresh is bulk work throughout, so collection pauses for
@@ -465,6 +499,8 @@ class ExperimentIndex:
                     self._publish_persisted()
             hint_unloaded(self._io or self._store, self.app_name, self._records,
                           self._sweep.hint)
+            for key in self._vmx.load():  # what the check found to fold again
+                self._sweep.hint(key)
         self._sweep.behind = self._io is None and self._remote()
         self._freshness.listing(self._listing_phase(started), self._records,
                                 self._listing_position())
@@ -534,11 +570,21 @@ class ExperimentIndex:
 
     def _load_listed(self, listing, removed, started):
         # Unfinished claims and deleted records' leftovers have no metadata.
+        refold = self._vmx.refold
         work = [
-            (key, names, self._records.get(key))
+            (key, names, self._listed_record(key))
             for key, names in listing.items()
             if METADATA_FILE in names
         ]
+        self._load_work(work, removed, started)
+        self._vmx.refolded({k for k in refold.intersection(listing) if k not in self._unreadable})
+
+    def _listed_record(self, key):
+        """The record a listing of *key* refreshes: None (read afresh, whole)
+        for one an upgrade's check found wrong (index_vmx_check)."""
+        return None if key in self._vmx.refold else self._records.get(key)
+
+    def _load_work(self, work, removed, started):
         unread = sum(record is None for _, _, record in work)
         self._freshness.loading(unread)
         if self._io is not None:  # the helper process persists them
@@ -621,11 +667,14 @@ class ExperimentIndex:
         """The queue's next chunk, a remote record not read yet cut to its
         row's files (:func:`first_objects`), its rest queued for later — during
         a bulk load behind serving, until its listing is over (then hinted)."""
-        chunk = [(key, names, self._records.get(key)) for key, names, _ in queue.take()]
+        chunk = [(key, names, self._listed_record(key)) for key, names, _ in queue.take()]
         if not self._remote():
             return chunk
         cut, rest = [], []
         for key, names, record in chunk:
+            if key in self._vmx.refold:  # whole, never rows-first: its row serves meanwhile
+                cut.append((key, names, record))
+                continue
             if record is None and queue.put_off(key):
                 continue  # its row's part was set aside unread: read when due
             first = first_objects(names) if record is None else None
