@@ -11,6 +11,7 @@ any v1 ``metrics`` entries. The payload is the parsed log's
 """
 from vmn_exp.core.fold import fold_definitions, fold_log
 from vmn_exp.core.step_metric import join_on, step_metrics, x_lookup
+from vmn_exp.core.step_restart import restart_point
 from vmn_exp.ui.readers.detail_reads import submit
 from vmn_exp.ui.readers.range_series import read_run
 from vmn_exp.ui.readers.series import downsample, points_per_metric
@@ -40,8 +41,12 @@ def _thin_all(storage, reader, names, per_metric):
     return {k: f.result() for k, f in futures.items()}
 
 
-def object_series(storage, app_name, verstr, keys, max_points, budget=None, x=None, schema=None):
-    """``(series, series_total, step_metrics)`` of a run, or None when it is gone."""
+def object_series(storage, app_name, verstr, keys, max_points, budget=None, x=None, schema=None,
+                  restarts=None):
+    """``(series, series_total, step_metrics)`` of a run, or None when it is
+    gone; *restarts* (a dict) gets ``{metric: {"from", "to"}}`` of the
+    series whose steps went back, as far as their reads tell
+    (:attr:`~vmn_exp.core.series_reader.SeriesReader.step_restarts`)."""
     found = read_run(storage, app_name, verstr)
     if found is None:
         return None
@@ -56,7 +61,11 @@ def object_series(storage, app_name, verstr, keys, max_points, budget=None, x=No
     totals = {k: counts[k] for k in series}
     lookups = {m: x_lookup(reader.series(m)) for m in set(joins.values())}
     for k, m in joins.items():
-        joined = join_on(reader.series(k), lookups[m])
+        own = reader.series(k)
+        reader.note_restart(k, restart_point(p["step"] for p in own))
+        joined = join_on(own, lookups[m])
         series[k], totals[k] = downsample(joined, per_metric), len(joined)
     declared = step_metrics(counts, fold_definitions(fold_log(log)), schema)
+    if restarts is not None:
+        restarts.update(reader.step_restarts)
     return {k: series[k] for k in names}, {k: totals[k] for k in names}, declared

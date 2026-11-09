@@ -16,11 +16,13 @@ from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_entries import is_metric_entry, points_to_entries
 from vmn_exp.core.metric_files import INDEXED_SUFFIX
+from vmn_exp.core.metric_index_layout import WRITE_ORDER
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_lod import emit, summarize
 from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited
 from vmn_exp.core.metric_time import iso_to_us, us_to_iso
 from vmn_exp.core.rewind import rewind_step
+from vmn_exp.core.step_restart import restart_point
 from vmn_exp.storage.fanout import fan_out
 
 LEGACY_WRITER = ""
@@ -227,6 +229,9 @@ class SeriesReader:
         self._sources = sorted(sources, key=lambda s: s[0])
         self._rewinds = list(rewinds)
         self._names = None
+        # {key: {"from", "to"}}: where a key :meth:`thinned` read went back
+        # (:mod:`~vmn_exp.core.step_restart`), from what it read anyway.
+        self.step_restarts = {}
 
     @classmethod
     def from_storage(cls, storage, app_name, verstr, log=None, rewinds=None, legacy=None):
@@ -294,12 +299,15 @@ class SeriesReader:
     def thinned(self, key, max_points, step_range=None):
         """At most about *max_points* min/max-thinned points, first and last kept.
         A key of one ``.vmx`` alone reads only the LOD slice or raw chunks the
-        range needs (plan 12 §3.2)."""
+        range needs (plan 12 §3.2); its footer says where its steps went back,
+        else the points read do (:attr:`step_restarts`)."""
         indexed = self._indexed_only(key, step_range)
         if indexed is not None:
+            self.note_restart(key, _footer_restart(indexed, key))
             lo, hi = step_range or (None, None)
             return [_iso(p) for p in indexed.series(key, max_points, lo, hi)]
         cols = self.points(key, step_range)
+        self.note_restart(key, restart_point(cols.steps))
         max_points = max(int(max_points), 2)
         if len(cols) <= max_points:
             return self.series(key, step_range)
@@ -311,6 +319,11 @@ class SeriesReader:
             kept += [_iso(p) for p in emit(summarize(_stepped(cols), start,
                                                       min(start + size, len(cols) - 1)))]
         return kept + [_point(cols, len(cols) - 1)]
+
+    def note_restart(self, key, restart):
+        """Keep *restart* (``[from, to]`` or None) as *key*'s."""
+        if restart is not None:
+            self.step_restarts[key] = {"from": restart[0], "to": restart[1]}
 
     def rows(self, keys=None):
         """``(writer, key, step, ts_us, value)`` of *keys* (default all), each
@@ -344,6 +357,14 @@ def _within(value, bounds):
     if value is None:
         return False
     return (lo is None or value >= lo) and (hi is None or value <= hi)
+
+
+def _footer_restart(reader, key):
+    """*key*'s ``r`` in *reader*'s footer; None when it went on rising or
+    the footer, an older vmn-exp's, does not say."""
+    if reader.footer.get("order") != WRITE_ORDER:
+        return None
+    return reader.footer["keys"][key].get("r")
 
 
 def _stepped(cols):

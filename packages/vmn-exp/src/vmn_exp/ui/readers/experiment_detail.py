@@ -377,17 +377,21 @@ def _thin(snapshot, names, x_of, per_metric):
 
 def run_series(
     storage, app_name, verstr, keys=None, max_points=DEFAULT_MAX_POINTS, budget=None,
-    x=None, schema=None,
+    x=None, schema=None, restarts=None,
 ):
     """``(series, series_total, step_metrics)`` of an existing run, or None
     when it is gone — read from its metric objects when the storage lists
-    them, else from its parsed log."""
+    them, else from its parsed log; *restarts* (a dict) gets the run's
+    ``step_restarts`` among them."""
     if readable(storage):
-        return object_series(storage, app_name, verstr, keys, max_points, budget, x, schema)
+        return object_series(storage, app_name, verstr, keys, max_points, budget, x, schema,
+                             restarts)
     if storage.load_metadata(app_name, verstr) is None:
         return None
     snapshot = _PARSED.get(storage, app_name, verstr, _load_log)
     series, totals = thinned_series(snapshot, keys, max_points, budget, x)
+    if restarts is not None:
+        restarts.update((k, r) for k, r in snapshot.step_restarts.items() if k in series)
     return series, totals, snapshot.step_metrics(schema)
 
 

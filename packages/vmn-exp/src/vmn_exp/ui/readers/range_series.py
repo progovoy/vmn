@@ -46,10 +46,13 @@ def read_run(storage, app_name, verstr):
     return log, SeriesReader.of(sources, log=log, legacy=legacy)
 
 
-def range_series(storage, app_name, verstr, keys, max_points, budget, step_range, schema=None):
+def range_series(storage, app_name, verstr, keys, max_points, budget, step_range, schema=None,
+                 restarts=None):
     """``(series, series_total, step_metrics)`` of *keys* (None: all) within
     *step_range* (``(lo, hi)``, either may be None), or None when the run is
-    gone. ``series_total`` counts each metric's whole series."""
+    gone. ``series_total`` counts each metric's whole series. *restarts*: as
+    :func:`~vmn_exp.ui.readers.object_series.object_series`'s (a key read
+    from its points alone: within the range)."""
     found = read_run(storage, app_name, verstr)
     if found is None:
         return None
@@ -59,6 +62,8 @@ def range_series(storage, app_name, verstr, keys, max_points, budget, step_range
     per_metric = points_per_metric(max_points, len(names), budget)
     series = {k: reader.thinned(k, per_metric, step_range) for k in names}
     declared = step_metrics(counts, fold_definitions(fold_log(log)), schema)
+    if restarts is not None:
+        restarts.update(reader.step_restarts)
     return series, {k: counts[k] for k in names}, declared
 
 

@@ -10,7 +10,10 @@ along. The body names the runs::
 
 and the answer is ``{"series": {verstr: {metric: [points]}}, "series_total":
 {verstr: {metric: n}}, "step_metrics": {verstr: {metric: x metric}},
-"missing": [verstr, ...]}`` with points shaped like the detail endpoint's.
+"step_restarts"?: {verstr: {metric: {"from", "to"}}}, "missing": [verstr, ...]}``
+with points shaped like the detail endpoint's; ``step_restarts`` (absent when none) lists the
+runs with a series whose steps went back (no rewind), as far as the reads
+tell (a ``.vmx`` key: its footer; else its points read).
 *x* joins every other metric (a name) or the mapped ones (a map) on an x
 metric: their points carry ``x`` and those without one are dropped.
 ``step_min``/``step_max`` (either optional, not with *x*) keep a step range —
@@ -101,13 +104,17 @@ def batch_series(storage, app_name, verstrs, keys, max_points, x=None, schema=No
     share the per-response points cap."""
     budget = max(series_reader.MAX_TOTAL_POINTS // max(len(verstrs), 1), 2)
 
+    restarts = {verstr: {} for verstr in verstrs}
+
     def one(verstr):
         if bounds is not None:
             return range_series.range_series(
-                storage, app_name, verstr, keys, max_points, budget, bounds, schema
+                storage, app_name, verstr, keys, max_points, budget, bounds, schema,
+                restarts=restarts[verstr],
             )
         return detail_reader.run_series(
-            storage, app_name, verstr, keys, max_points, budget, x=x, schema=schema
+            storage, app_name, verstr, keys, max_points, budget, x=x, schema=schema,
+            restarts=restarts[verstr],
         )
 
     payload = {"series": {}, "series_total": {}, "step_metrics": {}, "missing": []}
@@ -118,6 +125,8 @@ def batch_series(storage, app_name, verstrs, keys, max_points, x=None, schema=No
         series, totals, declared = found
         payload["series"][verstr], payload["series_total"][verstr] = series, totals
         payload["step_metrics"][verstr] = declared
+        if restarts[verstr]:
+            payload.setdefault("step_restarts", {})[verstr] = restarts[verstr]
     return payload
 
 
