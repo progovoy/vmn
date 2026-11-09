@@ -4,7 +4,10 @@ write's, e.g. a resumed writer that restarted its step counter.
 
 Read from a series in write order. A rewind is not a restart: the points it
 hides are gone from the series already (:mod:`~vmn_exp.core.rewind`), and a
-run continues past the rewound step. Step-less points never count. Pure.
+run continues past the rewound step. Step-less points never count. The run
+page marks the first write that went back (:class:`StepRestarts`); rows and
+file summaries mark a last write below the highest step, which folds in any
+order (:func:`restart_point`). Pure.
 """
 
 
@@ -21,14 +24,24 @@ def _first_back(steps, top=None):
 
 
 def restart_point(steps):
-    """``[from, to]`` of the first of *steps* (in write order; None: a
-    step-less key) not past every earlier one, *from* the highest earlier
-    step; None when none goes back."""
-    if steps is None:
-        return None
-    steps = list(steps)
-    i, top = _first_back(steps)
-    return None if i is None else [top, steps[i]]
+    """``[top, last]`` of *steps* (in write order; None: a step-less key)
+    whose last step is below their highest: they went back and stayed below
+    it, so the last write is not the value at the highest step. None
+    otherwise. Unlike :class:`StepRestarts` it depends on no order but the
+    last write's, so writers' chunks combine in any order (max and latest)."""
+    top = last = None
+    for step in steps or ():
+        if step is None:
+            continue
+        last = step
+        if top is None or step > top:
+            top = step
+    return ended_below(top, last)
+
+
+def ended_below(top, last):
+    """``[top, last]`` when the *last* write's step is below the *top* step."""
+    return [top, last] if top is not None and last is not None and last < top else None
 
 
 def with_restart(summary, restart):

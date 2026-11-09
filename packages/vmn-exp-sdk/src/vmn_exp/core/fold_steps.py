@@ -1,60 +1,43 @@
 #!/usr/bin/env python3
-"""The fold's step restarts: per metric, whether its steps went back without
-a rewind (:mod:`~vmn_exp.core.step_restart`), so index rows can mark it.
+"""The fold's step restarts: per metric, whether its last write's step is
+below its highest step — its steps went back without a rewind (a resumed
+writer restarting its counter) and stayed below, so the row's latest value
+is not the value at the highest step. Index rows mark it.
 
-Points fold in *chains*: a log entry's point, or a block header's (``.vmx``
-footer's, writer sums') key, whose steps rise in write order unless it says
-where they went back (``r``). The fold keeps a stepped metric's
-``steps[name] = [lowest, highest]`` while its chains rise, and on the first
-that goes back moves it to ``restarts[name] = [from, to]``. A chain is
-ordered against what the metric folded so far by fold key — the first and
-last keys the fold holds for it (``firsts``, ``metrics``) — so writers'
-chunks may fold in any order: a chain after them must start past the
-highest step, one before them end below the lowest, and one among them
-(two writers interleaving the metric) goes back. Step-less points never
-count; a rewind hides points before they fold. Pure.
+The fold keeps ``steps[name] = [highest step, last write's step]`` of each
+stepped metric: a max, and the step of the point holding the greatest fold
+key (the one ``metrics`` keeps), so writers' chunks fold in any order to
+what the merged log folds to. A chain — a log entry's point, a block
+header's (``.vmx`` footer's, writer sums') key — gives its highest step
+(its ``r[0]`` where it went back, else its last point's) and its last point.
+A step-less last write leaves the mark off; a rewind hides points before
+they fold. (The run page marks the first write that went back instead,
+:class:`~vmn_exp.core.step_restart.StepRestarts`.) Pure.
 """
-from vmn_exp.core.step_restart import restart_view
+from vmn_exp.core.step_restart import ended_below, restart_view
 
 
-def track_steps(fold, name, first, last, restart=None):
-    """Fold a chain of *name*'s points whose write-ordered ends are *first*
-    and *last* (``(step, fold key)``), rising unless *restart* (``[from,
-    to]``). Call it before the chain's values fold in."""
-    restarts = fold.get("restarts")
-    if first[0] is None or (restarts and name in restarts):
-        return
+def track_steps(fold, name, top, last, last_key):
+    """Fold a chain of *name*'s points whose highest step is *top* and whose
+    last write, at fold key *last_key*, is at step *last* (either None:
+    step-less). Call it before the chain's values fold in."""
+    current = fold["metrics"].get(name)
     steps = fold.setdefault("steps", {})
-    held = steps.get(name)
-    if restart is None and held is not None:
-        restart, merged = joined(held, _bounds(fold, name), first, last)
-    else:
-        merged = [first[0], last[0]]
-    if restart is None:
-        steps[name] = merged
-        return
-    steps.pop(name, None)
-    fold.setdefault("restarts", {})[name] = list(restart)
+    held = steps.get(name) or [None, None]
+    if top is not None and (held[0] is None or top > held[0]):
+        held[0] = top
+    if current is None or tuple(last_key) >= tuple(current[1:]):
+        held[1] = last
+    if held[0] is not None:
+        steps[name] = held
 
 
-def _bounds(fold, name):
-    """The first and last fold keys of *name*'s folded points."""
-    last = tuple(fold["metrics"][name][1:])
-    firsts = fold.get("firsts") or {}
-    return (tuple(firsts[name][1:]) if name in firsts else last), last
-
-
-def joined(held, bounds, first, last):
-    """``(restart, merged [lowest, highest])`` of a chain from *first* to
-    *last* joining the rising *held* steps folded between *bounds*."""
-    (low, high), (lo_key, hi_key) = held, bounds
-    if tuple(first[1]) > hi_key:
-        return ([high, first[0]] if first[0] <= high else None), [low, last[0]]
-    if tuple(last[1]) < lo_key:
-        return ([last[0], low] if low <= last[0] else None), [first[0], high]
-    return ([high, first[0]] if first[0] <= high else [last[0], low]), None
+def chain_top(entry):
+    """A header entry's highest step (see the module)."""
+    return entry["r"][0] if "r" in entry else entry["last"][1]
 
 
 def step_restarts(fold):
-    """``{metric: {"from", "to"}}`` of the restarts *fold* found."""
-    return {name: restart_view(r) for name, r in (fold.get("restarts") or {}).items()}
+    """``{metric: {"from": highest step, "to": last write's step}}``."""
+    found = ((name, ended_below(*held)) for name, held in (fold.get("steps") or {}).items())
+    return {name: restart_view(r) for name, r in found if r}

@@ -18,7 +18,7 @@ from vmn_exp.core.metric_index_reader import MetricIndexReader
 V = "1.0.0-dev.a"
 T0 = 1_700_000_000_000_001
 STEPS = list(range(121)) + list(range(6))
-RESTARTED = {"best": {"from": 120, "to": 0}}
+RESTARTED = {"best": {"from": 120, "to": 5}}
 
 
 def _ts(i):

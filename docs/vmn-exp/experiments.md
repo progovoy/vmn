@@ -725,8 +725,9 @@ vmn-exp list my_app --archived             # include archived runs, marked [arch
 ```
 
 Each row: `[N] <verstr> ['name'] [archived]  <status>  (<age>)  <metrics>
-- <note>`, inner runs indented. A metric whose steps went back without a
-rewind reads `best=0.989 (steps went back)`: its value is still the last write. `[N]` is the storage index `-v @N` resolves
+- <note>`, inner runs indented. A metric whose last write is below its highest
+step (its steps went back without a rewind) reads `best=0.989 (steps went
+back)`: its value is still the last write. `[N]` is the storage index `-v @N` resolves
 and never changes with `--sort`/`--top`/`--last`/`--query`. Metric columns are
 the [schema](#metrics-schema-sorting--goals)'s first, then the rest
 alphabetically. Without `--sort`, the schema's `primary` metric orders rows.
@@ -1947,8 +1948,8 @@ Metric values are not JSONL log lines. Each stream records them columnar
   of min/max buckets, and a footer indexing all of it, so a chart of any length
   reads the footer and one small slice (byte-range reads on object stores).
   The footer keeps each key's first and last write, true time bounds and
-  where its steps went back; a file an older vmn-exp wrote (its footer kept
-  the step ends) reads right too, its steps and timestamps read once by the
+  whether its last write is below its highest step; a file an older vmn-exp wrote (its footer kept
+  the step ends) reads right too, its timestamps read once by the
   index. Rewinds known at that time are applied; a later `rewind` rebuilds
   the file.
 - **Writers that died** keep their stream; it reads the same, just slower.

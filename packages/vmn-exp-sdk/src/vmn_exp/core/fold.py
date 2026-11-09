@@ -210,12 +210,11 @@ def take_from_param(fold, name):
 
 def _apply_metric_values(fold, entry, key):
     metrics, extrema = fold["metrics"], fold.setdefault("extrema", {})
-    at = (entry_step(entry), key)
+    step = entry_step(entry)
     for name, value in (entry.get("values") or {}).items():
         if name not in extrema:  # take_from_param, inlined: once per value
             metrics.pop(name, None)
-        if at[0] is not None:
-            track_steps(fold, name, at, at)
+        track_steps(fold, name, step, step, key)
         track_extrema(fold, name, value, key)
         _keep_latest(metrics, name, value, key)
 

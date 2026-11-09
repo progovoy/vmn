@@ -7,15 +7,15 @@ A writer's *sums* are ``{stream key: entry}``: a block header's key entry
 over every point the writer's folded blocks hold — ``n``, ``first``/``last``,
 the finite ``sum`` summary, ``s``/``t`` as the step and timestamp bounds (so
 :func:`~vmn_exp.core.fold_blocks.may_be_rewound` stays conservative), ``r``
-where its steps went back (:mod:`~vmn_exp.core.fold_steps`) — and ``p``,
+when its last step is below its highest (:mod:`~vmn_exp.core.fold_steps`) — and ``p``,
 the positions of its first and last points. Folding them
 (:func:`~vmn_exp.core.fold_blocks.apply_sums`) gives what the blocks gave, as
 a block's header gives what its points do. Pure: no I/O.
 """
-from vmn_exp.core.fold_steps import joined
+from vmn_exp.core.fold_steps import chain_top
 from vmn_exp.core.metric_columns import exact_parts
 from vmn_exp.core.metric_time import us_to_iso
-from vmn_exp.core.step_restart import with_restart
+from vmn_exp.core.step_restart import ended_below, with_restart
 
 
 def add_block(sums, base, header):
@@ -45,18 +45,10 @@ def _key(point, at):
     return us_to_iso(point[2]), at
 
 
-def _ends(entry):
-    """``((step, key), (step, key))`` of *entry*'s first and last points."""
-    return ((entry["first"][1], _key(entry["first"], entry["p"][0])),
-            (entry["last"][1], _key(entry["last"], entry["p"][1])))
-
-
-def _restart(held, new):
-    """Where *held* and *new* (one writer's) went back, or None."""
-    if held.get("r") or new.get("r") or not held.get("has_step"):
-        return held.get("r") or new.get("r")
-    (low, lo_key), (high, hi_key) = _ends(held)
-    return joined([low, high], (lo_key, hi_key), *_ends(new))[0]
+def _restart(held, new, last):
+    """``r`` of *held* and *new* combined, *last* the later one's last point."""
+    tops = [top for top in (chain_top(held), chain_top(new)) if top is not None]
+    return ended_below(max(tops, default=None), last[1])
 
 
 def _combined(held, new):
@@ -67,7 +59,7 @@ def _combined(held, new):
         "sum": _finite(held["sum"], new["sum"]), "has_step": held["has_step"],
         "s": _bounds(held["s"], new["s"]), "t": _bounds(held["t"], new["t"]),
         "p": [first["p"][0], last["p"][1]],
-    }, _restart(held, new))
+    }, _restart(held, new, last["last"]))
 
 
 def _bounds(a, b):

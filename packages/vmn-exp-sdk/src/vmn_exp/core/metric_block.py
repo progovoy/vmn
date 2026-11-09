@@ -7,7 +7,7 @@
              | u32 crc32(header + body) | header (JSON) | body (zlib)
 
 The header carries per-key summaries, so a fold reads headers only
-(:func:`read_headers`) — with ``r``, where a key's steps went back, when its
+(:func:`read_headers`) — with ``r`` (``[highest, last step]``, its steps ended below) when its
 ``order`` is :data:`~vmn_exp.core.metric_index_layout.WRITE_ORDER`; the body holds each key's delta int64 steps (absent
 for step-less keys), delta int64 ``ts_us`` and float64 values. A torn or
 CRC-bad tail ends the stream silently, like a torn last JSONL line.
@@ -59,7 +59,7 @@ def encode_block(keys, inherited=False):
 
 
 def _key_header(name, cols):
-    """A key's summary, with ``r`` where its steps went back."""
+    """A key's summary, with ``r`` when its last step is below its highest."""
     return with_restart(key_summary(name, cols), restart_point(cols.steps))
 
 

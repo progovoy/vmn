@@ -75,7 +75,7 @@ def test_t_bounds_ignore_the_step_order():
 
 def test_the_restart_point_is_written_at_compaction():
     keys = _reader(_data(Columns(STEPS, TS, VALUES))).footer["keys"]
-    assert keys["best"]["r"] == [120, 0]
+    assert keys["best"]["r"] == [120, 5]
     assert "r" not in keys["lr"]
 
 
@@ -91,7 +91,7 @@ def test_an_old_footer_reads_its_write_ends_from_its_columns():
     assert best["first"] == [0.5, 0, TS[0]]
     assert best["last"] == [0.989, 5, TS[-1]]
     assert best["t"] == [TS[0], TS[-1]]
-    assert best["r"] == [120, 0]
+    assert best["r"] == [120, 5]
     assert "r" not in _key(indexed_entries(reader), "lr")
 
 

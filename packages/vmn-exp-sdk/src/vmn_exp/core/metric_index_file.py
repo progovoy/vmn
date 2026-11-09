@@ -13,7 +13,8 @@ footer maps every key to its byte ranges, so a reader reads the footer from
 the end and then only the slices it needs (:class:`MetricIndexReader`). A
 key's summary ``first``/``last`` are its first and last write, as a block
 header's are: the fold's latest value never depends on the sort. Its ``t``
-is its true time bounds and its ``r``, when its steps went back, where
+is its true time bounds; its ``r``, ``[highest, last step]``, says its last
+write is below its highest step
 (:func:`~vmn_exp.core.step_restart.restart_point`). The footer's ``order``
 (:data:`WRITE_ORDER`) says so; an older footer's keys are read in write order
 from their columns (:mod:`~vmn_exp.core.vmx_write_order`).

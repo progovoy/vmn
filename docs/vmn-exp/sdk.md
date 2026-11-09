@@ -342,9 +342,11 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
   earlier write's without a rewind (e.g. a resumed writer restarting its
   step counter) is marked on the run page and its chart: *steps went back
   from 120 to 0 at write 122* (run detail `step_restarts`). Index rows
-  (`list_runs`, the board) carry `row["step_restarts"][name] = {"from",
-  "to"}` too (absent when none), marked ↺ on board and Compare cells and
-  noted on Compare's and an outer run's overlaid charts.
+  (`list_runs`, the board) carry `row["step_restarts"][name] = {"from":
+  highest step, "to": last write's step}` when the last write is below the
+  highest step (absent otherwise; it does not depend on the order writers
+  are read in), marked ↺ on board and Compare cells and noted on Compare's
+  and an outer run's overlaid charts.
 - A run's `goal`, `hidden` and `chart` also count across runs for names
   conf.yml does not declare (`hidden`/`chart`: the latest run wins; `goal`:
   the one goal the runs declare, none when they declare different goals —

@@ -14,7 +14,7 @@ from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.snapshot import LocalSnapshotStorage
 
 T0 = 1_700_000_000_000_001
-RESTARTED = {"best": {"from": 120, "to": 0}}
+RESTARTED = {"best": {"from": 120, "to": 5}}
 
 
 def _old_block(keys, inherited=False):
@@ -53,13 +53,13 @@ def test_an_old_footer_marks_its_restart_from_its_columns(tmp_path):
 
 def test_a_stream_marks_a_restart_inside_a_block(tmp_path):
     assert _row(_stream(tmp_path, [0, 1, 2, 0, 1]))["step_restarts"] == {
-        "best": {"from": 2, "to": 0}}
+        "best": {"from": 2, "to": 1}}
 
 
 def test_an_old_block_is_read_point_by_point(tmp_path, monkeypatch):
     monkeypatch.setattr(metric_stream, "encode_block", _old_block)
     assert _row(_stream(tmp_path, [0, 1, 2, 0, 1]))["step_restarts"] == {
-        "best": {"from": 2, "to": 0}}
+        "best": {"from": 2, "to": 1}}
 
 
 def test_monotone_streams_carry_no_mark(tmp_path):
