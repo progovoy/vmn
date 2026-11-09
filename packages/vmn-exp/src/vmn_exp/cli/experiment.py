@@ -2,6 +2,7 @@
 """Experiment tracking for reproducible research, built on snapshot infrastructure."""
 import os
 import shutil
+import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import List, Optional
@@ -61,6 +62,7 @@ from vmn_exp.snapshot import (
     _restore_with_safety_net,
     get_git_difftool,
 )
+import vmn_exp.core.index as experiment_index
 import vmn_exp.core.index_list as index_list
 import vmn_exp.core.writer as experiment_writer
 from vmn_exp.core.from_snapshot import (
@@ -76,6 +78,7 @@ from vmn_exp.core.log import (
     merged_log_view,
     sort_by_metric,
 )
+from vmn_exp.core.load_progress import incomplete_text
 from vmn_exp.core.metric_entries import is_metric_entry
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.core.metric_summary import SchemaPolicies
@@ -716,6 +719,13 @@ def _listed(storage, app_name, args, schema):
     return filter_archived(matching, archived), declared, any_runs
 
 
+def _still_loading(storage, app_name):
+    """The ``loading`` of the app's index snapshot a listing read, None when
+    it was whole (or the listing came from the persisted rows)."""
+    snap = experiment_index.shared_index(storage, app_name).published
+    return None if snap is None else snap.loading
+
+
 @measure_runtime_decorator
 def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
@@ -726,8 +736,12 @@ def experiment_list(vcs, params, storage, args):
         VMN_LOGGER.error(f"Invalid --query: {e}")
         return 1
     as_json = getattr(args, "json", False)
+    loading = _still_loading(storage, app_name)
+    if loading is not None:
+        print(incomplete_text(loading), file=sys.stderr)
     if not any_runs and not as_json:
-        print(f"No experiments found for {app_name}")
+        if loading is None:
+            print(f"No experiments found for {app_name}")
         return 0
 
     rows = _list_rows(

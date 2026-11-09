@@ -26,6 +26,7 @@ log folding it shares with the CLI and the ui lives in
 :mod:`vmn_exp.core.log`.
 """
 import os
+import warnings
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.app_conf import read_experiment_conf
@@ -40,6 +41,7 @@ from vmn_exp.core.log import (
     sort_by_metric,
 )
 from vmn_exp.core.lineage import DEFAULT_LIMIT
+from vmn_exp.core.load_progress import IndexingWarning, incomplete_text
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
@@ -116,12 +118,20 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None):
     if use_index:
         snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
         extra = store_extra(storage, app_name, snap)
+        _warn_loading(snap)
     else:
         snap = experiment_index.direct_snapshot(
             storage, app_name, schema, read_log=_load_log, read_run_state=load_run_state)
         extra = rows_extra(snap)
     rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at)
     return rows, snap.declared_schema(), extra
+
+
+def _warn_loading(snap):
+    """Warn :class:`IndexingWarning` when *snap*'s index is still loading:
+    its rows are some of the app's, not all."""
+    if snap.loading is not None:
+        warnings.warn(incomplete_text(snap.loading), IndexingWarning, stacklevel=4)
 
 
 # ---------------------------------------------------------------------------
