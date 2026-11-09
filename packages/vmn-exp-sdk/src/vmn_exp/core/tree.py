@@ -111,13 +111,12 @@ def ancestry_of(rows):
 
 def own_rollup_status(status, has_children, incomplete=False, settled=None):
     """What a run's own *status* adds to its tree's rollup: nothing (None)
-    for a container — an outer run that never ran itself — or a run that
-    never started under an ended outer, ``failed`` for one lost under it
-    (see :mod:`~vmn_exp.core.settle`), and ``created`` on top for an
-    *incomplete* sweep that has not ended (see :func:`sweep_incomplete`)."""
-    if settled == LOST:
-        return FAILED
-    if settled == NEVER_STARTED:
+    for a container — an outer run that never ran itself — or a run an
+    ended outer settled (never started or lost, see
+    :mod:`~vmn_exp.core.settle`: only a real failure makes a tree
+    ``failed``, plan 34 §3), and ``created`` on top for an *incomplete*
+    sweep that has not ended (see :func:`sweep_incomplete`)."""
+    if settled in SETTLED:
         return None
     own = None if has_children and status == CREATED else status
     return rollup_status((own, CREATED)) if _unclaimed(incomplete, status, settled) else own

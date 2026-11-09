@@ -74,7 +74,7 @@ def test_the_app_status_counts_settled_runs_apart(client):
 
 def test_the_outer_runs_summary_has_ended_with_nothing_waiting(client):
     body = _get(client, f"/experiments/{OUTER}/summary")
-    assert body["ended"] is True and body["tree_status"] == "failed"
+    assert body["ended"] is True and body["tree_status"] == "succeeded"
     assert (body["counts"]["waiting"], body["counts"]["stuck"]) == (0, 0)
     assert (body["never_started"], body["lost"], body["done"]) == (1, 1, 2)
     assert body["eta_sec"] == 0

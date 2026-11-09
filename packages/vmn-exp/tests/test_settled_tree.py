@@ -34,11 +34,11 @@ class TestAnnotate:
         assert [rows[k]["status"] for k in ("k1", "k2")] == [CREATED, STUCK]
         assert rows["o"]["settled"] is None
 
-    def test_lost_children_roll_up_as_failed_and_never_started_ones_not_at_all(self):
+    def test_lost_and_never_started_children_do_not_roll_up(self):
         assert _tree(*_kids(SUCCEEDED, SUCCEEDED, CREATED))["o"]["tree_status"] == SUCCEEDED
-        assert _tree(*_kids(SUCCEEDED, CREATED, STUCK))["o"]["tree_status"] == FAILED
+        assert _tree(*_kids(SUCCEEDED, CREATED, STUCK))["o"]["tree_status"] == SUCCEEDED
         rows = _tree(*_kids(SUCCEEDED, CREATED, STUCK))
-        assert (rows["k0"]["tree_status"], rows["k1"]["tree_status"]) == (None, FAILED)
+        assert (rows["k0"]["tree_status"], rows["k1"]["tree_status"]) == (None, None)
 
     def test_a_failed_or_stuck_outer_ends_too(self):
         assert _tree(*_kids(FAILED, CREATED))["k0"]["settled"] == NEVER
@@ -65,7 +65,7 @@ class TestAnnotate:
         rows = _tree(_row("top", SUCCEEDED), _row("mid", CREATED, parent="top"),
                      _row("leaf", CREATED, parent="mid"), _row("gone", STUCK, parent="mid"))
         assert [rows[v]["settled"] for v in ("mid", "leaf", "gone")] == [NEVER, NEVER, LOST]
-        assert rows["top"]["tree_status"] == FAILED
+        assert rows["top"]["tree_status"] == SUCCEEDED
 
     def test_a_running_sub_outer_keeps_its_own_children_open(self):
         rows = _tree(_row("top", SUCCEEDED), _row("mid", RUNNING, parent="top"),
@@ -89,7 +89,7 @@ class TestAnnotate:
     def test_the_cyclic_path_gives_the_same_answer(self):
         loop = [_row("a", SUCCEEDED, parent="b"), _row("b", SUCCEEDED, parent="a")]
         rows = _tree(*_kids(SUCCEEDED, CREATED, STUCK), *loop)
-        assert rows["o"]["tree_status"] == FAILED
+        assert rows["o"]["tree_status"] == SUCCEEDED
         assert rows["k0"]["settled"] == NEVER
 
 
@@ -128,7 +128,7 @@ class TestOneRun:
 
     def test_an_ended_outer_settles_its_subtree(self):
         status = run_status("o", self.PARENT_OF, self.STATES.get)
-        assert status["tree_status"] == FAILED  # c is lost
+        assert status["tree_status"] == SUCCEEDED  # c is lost: it adds nothing
         assert status["settled"] is None
 
     def test_a_child_reads_its_parent_to_know_it_is_settled(self):

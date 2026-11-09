@@ -161,7 +161,7 @@ def test_a_live_child_of_an_ended_outer_turns_lost_between_buckets(monkeypatch):
     rollup = cache.job_rollup(snap, {}, outer)
     assert (rollup["counts"]["running"], rollup["counts"]["stuck"], rollup[LOST]) == (0, 0, 1)
     rows = _rows(cache, snap)
-    assert rows[live] == ("stuck", LOST, "failed") and rows[outer][2] == "failed"
+    assert rows[live] == ("stuck", LOST, None) and rows[outer][2] == "succeeded"
 
 
 def test_the_run_detail_fleet_counts_settled_runs_apart(monkeypatch):

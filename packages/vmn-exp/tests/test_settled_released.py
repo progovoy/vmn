@@ -9,7 +9,7 @@ import os
 
 from leaderboard_fleet import T0, Fleet, finished, iso, running
 from vmn_exp.core.query import filter_rows
-from vmn_exp.core.status import CREATED, FAILED, SUCCEEDED, status_fields
+from vmn_exp.core.status import CREATED, SUCCEEDED, status_fields
 from vmn_exp.core.tree import annotate_tree, fleet_summary, subtree_status
 from vmn_exp.ui.job_rollup_payload import job_payload
 from vmn_exp.ui.job_tally import RollupSpec, Tally
@@ -50,7 +50,7 @@ class TestTree:
         rows = self._tree(SUCCEEDED)
         assert (rows["r"]["settled"], rows["w"]["settled"]) == (LOST, NEVER)
         assert rows["r"]["status"] == CREATED
-        assert rows["o"]["tree_status"] == FAILED
+        assert rows["o"]["tree_status"] == SUCCEEDED
         assert [r["verstr"] for r in filter_rows(list(rows.values()), 'settled = "lost"')] == ["r"]
 
     def test_a_released_run_under_a_running_outer_is_waiting(self):
@@ -71,7 +71,7 @@ def test_one_runs_subtree_settles_a_released_run_as_lost():
     _, tree = subtree_status("r", PARENT_OF, STATES.get)
     assert tree["settled"] == LOST
     _, outer = subtree_status("o", PARENT_OF, STATES.get)
-    assert outer["tree_status"] == FAILED
+    assert outer["tree_status"] == SUCCEEDED
 
 
 def test_the_fleet_counts_a_released_run_of_an_ended_outer_as_lost():

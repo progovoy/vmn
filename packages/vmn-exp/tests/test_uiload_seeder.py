@@ -69,12 +69,12 @@ def test_sweeps_link_inner_runs_to_their_outer(seeded):
         assert len(outer["children"]) == 5
         kids = [by_verstr[v] for v in outer["children"]]
         assert all(k["kind"] == "inner" and k["parent"] == outer["verstr"] for k in kids)
-        # A child an ended outer settled adds nothing (never started) or
-        # failed (lost) to the rollup (job_rollup_reference.settled_of).
+        # A child an ended outer settled (never started or lost) adds
+        # nothing to the rollup (job_rollup_reference.settled_of).
         kinds = [settled_of(k, by_verstr) for k in kids]
         assert [k["settled"] for k in kids] == kinds
         expected = rollup_status([outer["status"]] + [
-            {"lost": "failed", "never_started": None}.get(kind, k["status"])
+            {"lost": None, "never_started": None}.get(kind, k["status"])
             for k, kind in zip(kids, kinds)])
         assert outer["tree_status"] == expected
     assert collections.Counter(r["kind"] for r in rows)["inner"] == 10

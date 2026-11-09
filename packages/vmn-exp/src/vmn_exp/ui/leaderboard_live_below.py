@@ -4,7 +4,7 @@ or are stuck — its Jobs view rollup's counts (settled runs left out; 0 for
 a run without children) — and ``running_below``/``stuck_below``, those
 running or stuck alone (the outer runs' status chips), and
 ``failed_below``/``failed_pct`` (plan 31 §1: the rollup's failed and lost
-runs and ``failed_pct``): the core's
+runs and ``failed_pct``) and ``lost_below`` (plan 34 §3: its lost ones): the core's
 :mod:`~vmn_exp.core.query_below` counts, which ``vmn-exp list --query`` and
 the SDK read, taken here from the cached rollups (:func:`board_extra`). A
 ``query`` or ``top_query`` reading one (the Live/Review presets, a status
@@ -55,6 +55,10 @@ def _failed(summaries):
     return count
 
 
+def _lost(summaries):
+    return lambda verstr: (summaries().get(verstr) or {}).get(LOST) or 0
+
+
 def _failed_pct(summaries):
     return lambda verstr: (summaries().get(verstr) or {}).get("failed_pct", 0.0)
 
@@ -66,7 +70,8 @@ def board_extra(cache, snapshot, schema):
     summaries = once(lambda: cache.job_rollups(snapshot, schema))
     extra = dict(lean_extra(snapshot) or {})
     extra.update({field: _counter(summaries, states) for field, states in BELOW.items()})
-    extra.update(failed_below=_failed(summaries), failed_pct=_failed_pct(summaries))
+    extra.update(failed_below=_failed(summaries), failed_pct=_failed_pct(summaries),
+                 lost_below=_lost(summaries))
     return extra
 
 
