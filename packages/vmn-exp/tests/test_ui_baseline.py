@@ -132,3 +132,26 @@ def test_nothing_finished_yet_is_pending():
 
 def test_a_goal_less_metric_has_no_chip():
     assert chip(_pairs([0.1]), [1.0], "value", None, "params.trade_date") is None
+
+
+def _attempt(n, launch_id, **kw):
+    row = _launch(n, **kw)
+    if launch_id is not None:
+        row["tags"] = dict(row["tags"], launch_id=launch_id)
+    return row
+
+
+def test_a_differ_field_skips_peers_sharing_its_value():
+    """Plan 34 §2: the previous attempt of the same launch is no baseline."""
+    target = _attempt(9, "L2")
+    candidates = [_attempt(3, "L1"), _attempt(6, "L2"),
+                  _attempt(7, "L2", tags={"baseline": "true"})]
+    row, source = choose_baseline(target, candidates, MATCH, ["tags.launch_id"])
+    assert (row["verstr"], source) == ("v3", "latest")
+
+
+def test_a_missing_differ_value_is_never_different():
+    target = _attempt(9, "L2")
+    assert choose_baseline(target, [_attempt(4, None)], MATCH, ["tags.launch_id"]) == (None, None)
+    no_id = _attempt(9, None)
+    assert choose_baseline(no_id, [_attempt(4, "L1")], MATCH, ["tags.launch_id"]) == (None, None)

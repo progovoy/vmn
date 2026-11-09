@@ -62,3 +62,34 @@ def test_url_fields_are_a_comma_separated_list():
 def test_bad_url_fields_are_refused(text):
     with pytest.raises(SettingsError):
         baseline_fields(text)
+
+
+# Plan 34 §2: ``differ`` names the fields a peer must not share with the run.
+def test_differ_fields_are_kept_and_read():
+    from vmn_exp.core.app_settings import baseline_differ
+
+    settings = parse_settings("ui:\n  baseline:\n    match: [tags.target]\n"
+                              "    differ: [tags.launch_id]\n")
+    assert baseline_differ(settings["ui"]) == ["tags.launch_id"]
+
+
+@pytest.mark.parametrize("ui", [{}, {"baseline": {"match": ["params.a"]}},
+                                {"baseline": {"differ": "tags.launch_id"}}])
+def test_no_or_an_invalid_differ_reads_as_none(ui):
+    from vmn_exp.core.app_settings import baseline_differ
+
+    assert baseline_differ(ui) == []
+
+
+@pytest.mark.parametrize("baseline, words", [
+    ({"differ": "tags.launch_id"}, "list"),
+    ({"differ": ["status"]}, r"ui\.baseline\.differ\[0\]"),
+    ({"differ": ["tags.a", "tags.a"]}, "twice"),
+    ({"differ": [f"tags.k{i}" for i in range(MAX_BASELINE_MATCH + 1)]}, "at most"),
+    ({"match": ["tags.a"], "differ": ["tags.a"]}, "both"),
+])
+def test_invalid_differ_fields_are_refused_naming_the_key(baseline, words):
+    import yaml
+
+    with pytest.raises(SettingsError, match=words):
+        parse_settings(yaml.safe_dump({"ui": {"baseline": baseline}}))

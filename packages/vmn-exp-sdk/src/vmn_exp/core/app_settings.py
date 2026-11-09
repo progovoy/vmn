@@ -199,10 +199,11 @@ def attention_entries(ui):
 
 
 # ``ui.baseline`` (plan 28 N3): the fields an outer run's baseline shares
-# with it (``match``) and the field its direct children pair by
-# (``children_by``), each a ``params.<k>``/``tags.<k>``.
+# with it (``match``), the ones it must not share (``differ``, plan 34 §2)
+# and the field its direct children pair by (``children_by``), each a
+# ``params.<k>``/``tags.<k>``.
 MAX_BASELINE_MATCH = 8
-_BASELINE_KEYS = ("match", "children_by")
+_BASELINE_KEYS = ("match", "differ", "children_by")
 _FIELD_PREFIXES = ("params", "tags")
 
 
@@ -230,20 +231,38 @@ def _check_baseline(baseline):
     for key in baseline:
         if key not in _BASELINE_KEYS:
             raise SettingsError(f"unknown field ui.baseline.{key}; one of {', '.join(_BASELINE_KEYS)}")
-    _check_match(baseline.get("match", []), "ui.baseline.match")
+    match, differ = baseline.get("match", []), baseline.get("differ", [])
+    _check_match(match, "ui.baseline.match")
+    _check_match(differ, "ui.baseline.differ")
+    both = set(match) & set(differ)
+    if both:
+        raise SettingsError(f"ui.baseline names {', '.join(sorted(both))} in both match and differ")
     if baseline.get("children_by") is not None:
         check_field(baseline["children_by"], "ui.baseline.children_by")
 
 
-def baseline_conf(ui):
-    """*ui*'s ``baseline`` as ``{match: [fields], children_by: field|None}``;
-    no rule when it is invalid."""
+def baseline_rule(ui):
+    """*ui*'s ``baseline`` as ``{match: [fields], differ: [fields],
+    children_by: field|None}``; no rule when it is invalid."""
     baseline = (ui or {}).get("baseline") or {}
     try:
         _check_baseline(baseline)
     except SettingsError:
         baseline = {}
-    return {"match": list(baseline.get("match", [])), "children_by": baseline.get("children_by")}
+    return {"match": list(baseline.get("match", [])), "differ": list(baseline.get("differ", [])),
+            "children_by": baseline.get("children_by")}
+
+
+def baseline_conf(ui):
+    """:func:`baseline_rule` without ``differ``."""
+    rule = baseline_rule(ui)
+    return {"match": rule["match"], "children_by": rule["children_by"]}
+
+
+def baseline_differ(ui):
+    """:func:`baseline_rule`'s ``differ``: the fields a peer must not share
+    with the run (plan 34 §2)."""
+    return baseline_rule(ui)["differ"]
 
 
 def baseline_fields(text):

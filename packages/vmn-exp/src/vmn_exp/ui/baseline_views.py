@@ -19,8 +19,9 @@ aggregate's ``value``, the same source on both sides (plan 32); the chip
 without pairs compares the two jobs' ``rolled``.
 """
 import hashlib
+from typing import NamedTuple, Optional, Tuple
 
-from vmn_exp.core.app_settings import baseline_conf
+from vmn_exp.core.app_settings import baseline_rule
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal
 from vmn_exp.core.similar_profile import objective_names
 from vmn_exp.ui.job_aggregate import board_job_agg
@@ -36,6 +37,13 @@ SETTLED_PAIRS = 64
 MAX_OWN_METRICS = 20
 # Pairs a body lists (the chip counts them all): a pivot axis' worth.
 MAX_PAIRS = 200
+
+
+class Rule(NamedTuple):
+    """How a baseline is chosen and paired; a memo key part."""
+    match: Tuple[str, ...]
+    by: Optional[str]
+    differ: Tuple[str, ...]
 
 
 class UnknownBaseline(LookupError):
@@ -92,11 +100,11 @@ class BaselineViews:
         self._settled = SettledMemo(SETTLED_PAIRS, "settled baselines")
 
     def rule(self, snapshot, match=None, by=None):
-        """``(match fields, children_by)``: the request's, else the app's rule
-        (*by* ``""``: no pairing)."""
-        conf = baseline_conf(self._cache.conf_of(snapshot)[1])
-        fields = tuple(conf["match"] if match is None else match)
-        return fields, (conf["children_by"] if by is None else by or None)
+        """The :class:`Rule`: the request's *match*/*by*, else the app's
+        (*by* ``""``: no pairing); ``differ`` is always the app's."""
+        conf = baseline_rule(self._cache.conf_of(snapshot)[1])
+        return Rule(tuple(conf["match"] if match is None else match),
+                    conf["children_by"] if by is None else by or None, tuple(conf["differ"]))
 
     def answer(self, snapshot, schema, verstr, to=None, match=None, by=None, attention=None):
         """``(payload, ETag)`` of job *verstr* against its baseline
@@ -140,16 +148,16 @@ class BaselineViews:
                                  lambda: self._resolved(snapshot, schema, verstr, to, rule, key))
 
     def _resolved(self, snapshot, schema, verstr, to, rule, key):
-        chosen = self._choose(snapshot, verstr, rule[0], to)
+        chosen = self._choose(snapshot, verstr, rule, to)
         base = self._cache._base(snapshot)[0]
-        build = lambda: self._build(snapshot, schema, verstr, chosen, *rule)  # noqa: E731
+        build = lambda: self._build(snapshot, schema, verstr, chosen, rule)  # noqa: E731
         scopes = (verstr,) + ((chosen[0],) if chosen[0] else ())
         kept = self._settled.get(base, scopes, (snapshot.app_name, chosen) + key, build)
         if kept is not None:
             return kept
         return build(), self._cache.etag(snapshot, schema, route="baseline", key=key)
 
-    def _choose(self, snapshot, verstr, fields, to):
+    def _choose(self, snapshot, verstr, rule, to):
         """``(baseline verstr or None, source)``."""
         if to is not None:
             if to == verstr:
@@ -160,13 +168,14 @@ class BaselineViews:
         tree = self.views.rollups.tree(self._cache._base(snapshot)[0])
         target = self.views.row(snapshot, verstr)
         row, source = choose_baseline(target, self.views.rows_of(snapshot, tree.peers(verstr)),
-                                      fields)
+                                      rule.match, rule.differ)
         return (row["verstr"], source) if row else (None, None)
 
-    def _build(self, snapshot, schema, verstr, chosen, fields, by):
+    def _build(self, snapshot, schema, verstr, chosen, rule):
+        fields, by = rule.match, rule.by
         row = self.views.row(snapshot, verstr)
         spec = self.views.rollups.spec(snapshot, schema)
-        body = {"verstr": verstr, "match": list(fields), "by": by,
+        body = {"verstr": verstr, "match": list(fields), "differ": list(rule.differ), "by": by,
                 "values": {f: value_of(f)(row) for f in fields}, "baseline": None,
                 "metric": spec.main, "goal": spec.goals.get(spec.main),
                 "metrics": {}, "failed_pct": None, "duration_p90": None, "attention": [],

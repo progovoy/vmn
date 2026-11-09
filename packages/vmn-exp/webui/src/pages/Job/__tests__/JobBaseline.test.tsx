@@ -129,6 +129,23 @@ describe("the baseline card", () => {
     )).toBeInTheDocument();
   });
 
+  it("names the differ fields beside the match ones (plan 34 §2)", async () => {
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({ differ: ["tags.launch_id"] }));
+    renderCard();
+    expect(await screen.findByText(
+      "the latest ended outer run with the same params.table_name, params.model_type and a different tags.launch_id",
+    )).toBeInTheDocument();
+  });
+
+  it("says no outer run with a different differ field has ended yet", async () => {
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
+      match: [], differ: ["tags.launch_id"], baseline: null, chip: null, pairs: [], metrics: {} }));
+    renderCard();
+    expect(await screen.findByText(
+      "No ended outer run with a different tags.launch_id yet (tag one baseline=true to pin it).",
+    )).toBeInTheDocument();
+  });
+
   it("shows the server's error", async () => {
     vi.mocked(jobBaseline).mockRejectedValue(new Error("bad by"));
     renderCard();

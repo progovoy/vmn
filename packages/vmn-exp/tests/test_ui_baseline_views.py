@@ -219,3 +219,26 @@ def test_attention_parts_pair_by_key_when_a_built_in_shows_on_one_side():
     body = _views().baseline(snapshot(specs), SCHEMA, v(3), attention=entries)
     parts = {p["key"]: (p["count"], p["baseline_count"]) for p in body["attention"]}
     assert parts == {"outlived": (1, 0), "weak": (2, 0)}
+
+
+DIFFER = {"baseline": dict(RULE["baseline"], differ=["tags.launch_id"])}
+
+
+def _attempts():
+    """Launch 1 (L1), then launch 3 (L2) whose first attempt is launch 2."""
+    return (_launch(1, 10, [1.0, 1.0, 1.0, 1.0], tags={"launch_id": "L1"})
+            + _launch(2, 20, [9.0, 9.0, 9.0, 9.0], tags={"launch_id": "L2"})
+            + _launch(3, 30, [1.1, 0.2, 0.1, 1.2], tags={"launch_id": "L2"}))
+
+
+def test_differ_skips_the_previous_attempt_for_the_body_and_the_chips():
+    """Plan 34 §2: a peer differs on every ``differ`` field."""
+    views, snap = _views(DIFFER), snapshot(_attempts())
+    body = views.baseline(snap, SCHEMA, v(3))
+    assert body["baseline"]["verstr"] == v(1) and body["differ"] == ["tags.launch_id"]
+    assert views.chips(snap, SCHEMA, [v(3)])[v(3)]["baseline"]["verstr"] == v(1)
+    assert _views().baseline(snap, SCHEMA, v(3))["baseline"]["verstr"] == v(2)
+
+
+def test_without_differ_the_body_names_none():
+    assert _views().baseline(snapshot(_specs()), SCHEMA, v(3))["differ"] == []

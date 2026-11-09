@@ -6,12 +6,22 @@ import { Link } from "react-router-dom";
 import type { BaselineChipData, BaselineRef, BaselineSource } from "../apiBaseline";
 import { fleetLabel } from "./fleetRows";
 
-/** How the baseline was picked; *match* the fields it shares (unknown: "alike"). */
-export function pickedText(source: BaselineSource, match?: readonly string[]): string {
+/** ` with the same a, b and a different c` (plan 34 §2), empty for no fields. */
+export function ruleText(match: readonly string[], differ: readonly string[] = []): string {
+  const parts = [
+    match.length ? `the same ${match.join(", ")}` : "",
+    differ.length ? `a different ${differ.join(", ")}` : "",
+  ].filter(Boolean);
+  return parts.length ? ` with ${parts.join(" and ")}` : "";
+}
+
+/** How the baseline was picked; *match* the fields it shares and *differ*
+ *  the ones it does not (unknown: "alike"). */
+export function pickedText(source: BaselineSource, match?: readonly string[], differ?: readonly string[]): string {
   if (source === "pinned") return "pinned with the tag baseline=true";
   if (source === "to") return "chosen with to=";
   if (!match) return "the latest ended outer run alike";
-  return match.length ? `the latest ended outer run with the same ${match.join(", ")}` : "the latest ended outer run beside it";
+  return `the latest ended outer run${ruleText(match, differ) || " beside it"}`;
 }
 
 export const baselineTitle = (ref: BaselineRef) => `vs ${fleetLabel(ref)}, ${pickedText(ref.source)}`;

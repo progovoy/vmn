@@ -76,6 +76,8 @@ export interface BaselineAttention extends BaselineDelta {
 export interface BaselineCompare {
   verstr: string;
   match: string[];
+  /** Fields a peer must not share with the run (plan 34 §2). */
+  differ?: string[];
   by: string | null;
   values: Record<string, unknown>;
   baseline: BaselineRef | null;

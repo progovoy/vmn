@@ -9,7 +9,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { jobBaseline, type BaselineCompare, type BaselineDelta } from "../../apiBaseline";
-import BaselineChip, { pickedText } from "../../components/BaselineChip";
+import BaselineChip, { pickedText, ruleText } from "../../components/BaselineChip";
 import { fmtDelta } from "../../components/diffDeltaTone";
 import { fleetLabel } from "../../components/fleetRows";
 import PolicyMixMark from "../../components/PolicyMixMark";
@@ -120,9 +120,10 @@ function PairTable({ data, appBase }: { data: BaselineCompare; appBase: string }
   );
 }
 
-const noBaseline = (match: string[]) => (match.length
-  ? `No ended outer run with the same ${match.join(", ")} yet (tag one baseline=true to pin it).`
-  : "No earlier ended outer run beside it yet (tag one baseline=true to pin it).");
+const noBaseline = (match: string[], differ?: string[]) => {
+  const rule = ruleText(match, differ);
+  return `No ${rule ? `ended outer run${rule}` : "earlier ended outer run beside it"} yet (tag one baseline=true to pin it).`;
+};
 
 export default function JobBaseline({ ws, app, verstr, done }: Props) {
   const query = useJobBaseline(ws, app, verstr, done);
@@ -130,12 +131,12 @@ export default function JobBaseline({ ws, app, verstr, done }: Props) {
   if (query.isError) return <p className="error" role="alert">{query.error.message}</p>;
   const data = query.data;
   if (!data) return <Skeleton />;
-  if (!data.baseline) return <p className="muted">{noBaseline(data.match)}</p>;
+  if (!data.baseline) return <p className="muted">{noBaseline(data.match, data.differ)}</p>;
   return (
     <div className="job-baseline">
       <p>
         vs <Link to={runHref(appBase, data.baseline.verstr)}>{fleetLabel(data.baseline)}</Link>{" "}
-        <span className="muted">{pickedText(data.baseline.source, data.match)}</span>
+        <span className="muted">{pickedText(data.baseline.source, data.match, data.differ)}</span>
       </p>
       {data.chip && <p><BaselineChip chip={data.chip} /></p>}
       {!data.goal && data.metric && <p className="muted">{`${data.metric}${NO_GOAL}: no better or worse`}</p>}
