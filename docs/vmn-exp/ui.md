@@ -1839,7 +1839,8 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 - `{verstr}` is a full verstr (no `latest`/`@N`). `top` is 1..100; a blank
   `text` or one over 4 KB, a bad app or verstr: 400. An unknown run or
   workspace: 404. Viewer role; ETag/304. A request that cannot answer within
-  10 s (an app's index or its host-local FTS5 database still being filled)
+  10 s (an app's index or its FTS5 documents still being filled, as after
+  an upgrade's re-derive)
   gets a 503 with `Retry-After`; the filling goes on, so the retry is quick.
 - The run page shows a **similar runs** card beside lineage (loaded when
   scrolled near, with a *this app* / *all apps* choice): each run's link

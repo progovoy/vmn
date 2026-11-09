@@ -161,6 +161,10 @@ versions:
   them. Nothing is read from storage, and the journal mark and listing
   baselines are kept, so once it finishes the server picks up from the journal
   as usual. Decoding the records is the cost: about a minute per 100k runs.
+  The re-derive writes rows only: the similar-runs documents are refiled
+  afterwards, on a background thread (a document that did not change only
+  gets its version back). Until then a similar-runs request answers 503
+  with `Retry-After` instead of results that miss runs.
 
 While an app re-derives, its board is empty and `experiments-status` reports
 `indexing {loaded, total}` and freshness phase `migrating` with its
