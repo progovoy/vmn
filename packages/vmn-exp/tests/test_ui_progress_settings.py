@@ -92,6 +92,20 @@ def test_a_settings_change_reaches_the_rollups_without_a_new_generation(store):
     assert _summary(client, outer)["declared_progress"] is None
 
 
+def test_a_settings_change_reorders_a_job_progress_sort(store):
+    client, storage, first = store  # declares 20 of 60; its children all finished
+    second = _run(storage, 5, {"dates_done": 50, "dates_total": 60})
+    _run(storage, 6, {"loss": 1.0}, parent=second)
+
+    def order():
+        params = {"top": "jobs", "limit": 50, "sort": "job:progress"}
+        return [row["verstr"] for row in client.get(f"{BASE}/experiments", params=params).json()["rows"]]
+
+    assert order() == [first, second]  # both done by run count: the board's order
+    client.put(f"{BASE}/settings", json={"text": MAPPING})
+    assert order() == [second, first]  # 50/60 ahead of 20/60
+
+
 def test_a_settings_change_changes_the_etags(store):
     client, _, outer = store
     urls = [f"{BASE}/experiments/{outer}/summary", f"{BASE}/experiments?top=jobs&limit=50"]

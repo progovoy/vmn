@@ -6,7 +6,8 @@ null for a single run), and ordered by a rollup field with a ``job:*`` sort.
 The top-level rows are few (tens to thousands), so a ``job:*`` order is the
 board's default order of them stably sorted by the summaries, memoized per
 base, time bucket and minute (the summaries' throughput and ETA follow
-:func:`~vmn_exp.ui.job_rollup_cache.minute`). Rows without the value (single runs, a job without the metric)
+:func:`~vmn_exp.ui.job_rollup_cache.minute`) and the app's progress names
+(a settings change re-reads them). Rows without the value (single runs, a job without the metric)
 come last, ties keep the default order. ``job:value`` sorts by each
 top-level job's ``rolled`` (plan 31 §2, :mod:`~vmn_exp.ui.job_aggregate`;
 the :class:`~vmn_exp.ui.leaderboard_scope.Filters`' ``job_agg``, else the
@@ -106,7 +107,8 @@ class JobsView:
         if f.sort not in JOB_SORTS:
             return cache._ordered(snapshot, schema, last, f)
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema), last, attention) + f
+        key = (base.token, bucket, minute(), cache.schema_key(schema),
+               cache.jobs.progress_names(snapshot), last, attention) + f
         return self._orders.get(key, lambda: job_sorted(
             cache._ordered(snapshot, schema, last, f._replace(sort=None, order=None)),
             self.summaries(snapshot, schema, f.sort, attention, f.children_of, f.job_agg),
@@ -124,7 +126,8 @@ class JobsView:
         counted = bool(attention or sort == ATTENTION_SORT)
         job_agg = job_agg or board_job_agg(cache, snapshot)
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema), attention, counted, job_agg)
+        key = (base.token, bucket, minute(), cache.schema_key(schema),
+               cache.jobs.progress_names(snapshot), attention, counted, job_agg)
         return self._rolled.get(key, lambda: _with_rolled(
             cache.attention.summaries(snapshot, schema, attention) if counted
             else cache.job_rollups(snapshot, schema),
