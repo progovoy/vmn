@@ -16,6 +16,7 @@ from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_journal_mark import JournalMark
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.index_store_schema import ensure_schema
+from vmn_exp.core.similar_corpus import file_scope
 from vmn_exp.core.sqlite_conn import connect
 from vmn_exp.ui.journal_follow import WorkspaceJournal
 
@@ -137,6 +138,9 @@ def test_an_older_derived_version_is_rederived_from_the_records_without_storage(
     settle(index)
 
     assert st.calls == []
+    after = _derived(db)  # rows only: the similar-runs filer files the documents
+    assert (after["rows"], after["sides"]) == (expected["rows"], expected["sides"])
+    file_scope(APP, db)
     assert _derived(db) == expected
     assert _records(db) == records
     assert JournalMark(SqliteStore(db), APP).load() == mark
@@ -195,6 +199,9 @@ def test_the_rederive_takes_chunks_and_never_blocks_another_writer(tmp_path):
 
     assert statements.count("BEGIN IMMEDIATE") >= n // index_derive.CHUNK
     assert waits and max(waits) < 2.0
+    after = _derived(path)  # rows only: the similar-runs filer files the documents
+    assert (after["rows"], after["sides"]) == (expected["rows"], expected["sides"])
+    file_scope(APP, path)
     assert _derived(path) == expected
     assert not store.deriving(APP)
 

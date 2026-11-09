@@ -5,7 +5,8 @@ conf metrics schema.
 
 - :func:`file_scope`: the app's persisted index file, whose saves file every
   run (:mod:`vmn_exp.core.similar_filing`); refiled from its lean tables first
-  when documents are missing or another profile version filed them.
+  when documents are missing, another profile version filed them or a
+  re-derive (which files none) left them behind its rows.
 - :func:`snapshot_scope`: no index file (``VMN_INDEX_CACHE_DIR=none``, a
   hand-built snapshot): a ``:memory:`` database filled from the snapshot,
   kept while the snapshot lives — the same search, only slower to start.
@@ -19,7 +20,7 @@ from vmn_exp.core import similar_fts, sqlite_files
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.similar_filing import SnapshotFiler, file_lean
 from vmn_exp.core.similar_rows import SnapshotRows, StoreRows
-from vmn_exp.core.sqlite_conn import connect, write_tx
+from vmn_exp.core.sqlite_conn import connect
 
 _APP = object()  # a scope's label defaults to its app
 
@@ -95,13 +96,16 @@ def open_file(path):
     return (store, conn, lock, file) if found else None
 
 
-def repaired(conn, app):
-    """Refile *app* from the lean tables when its documents fall short of its
-    runs or another profile version filed some."""
+def needs_filing(conn, app):
+    """Whether *app*'s documents fall short of its runs or another profile
+    version filed some."""
     (runs,) = conn.execute("SELECT COUNT(*) FROM exp_rows WHERE app = ?", (app,)).fetchone()
-    if runs == similar_fts.doc_count(conn, app) and not similar_fts.stale_count(conn, app):
-        return
-    with write_tx(conn):
+    return runs != similar_fts.doc_count(conn, app) or bool(similar_fts.stale_count(conn, app))
+
+
+def repaired(conn, app):
+    """Refile *app* from the lean tables when :func:`needs_filing`."""
+    if needs_filing(conn, app):
         file_lean(conn, app)
 
 
@@ -111,7 +115,8 @@ _CHECKED = OrderedDict()  # (file, app, generation) already checked by repaired(
 def file_scope(app, path, schema=None, snapshot=None, repair=True):
     """A :class:`Scope` over the index file at *path* (rows read from
     *snapshot* when given, else point reads on the file), :func:`repaired`
-    first unless *repair* is False (once per index generation); None
+    first unless *repair* is False (once per index generation) — after
+    finishing a re-derive under way, which files no documents; None
     without one."""
     opened = open_file(path)
     if opened is None:
@@ -120,6 +125,7 @@ def file_scope(app, path, schema=None, snapshot=None, repair=True):
     with lock:
         key = (file, app, store.generation(app))
         if repair and key not in _CHECKED:
+            store.derive(app)
             repaired(conn, app)
             key = (file, app, store.generation(app))
             _CHECKED[key] = None

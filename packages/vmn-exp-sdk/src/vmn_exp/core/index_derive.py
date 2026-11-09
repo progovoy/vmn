@@ -19,11 +19,11 @@ import json
 import sqlite3
 import threading
 
+from vmn_exp.core import similar_fts
 from vmn_exp.core.index_lean_store import apply_numbers, leans_of, renumbered, write_lean
 from vmn_exp.core.index_store_kv import write_puts
 from vmn_exp.core.index_store_reads import RECORD_PARTS_SQL
 from vmn_exp.core.index_store_schema import DERIVE_SCOPE, SCHEMA_VERSION
-from vmn_exp.core.similar_filing import file_records
 from vmn_exp.core.sqlite_conn import in_chunks, read_tx, write_tx
 
 CHUNK = 500
@@ -76,7 +76,8 @@ def derive_chunk(conn, app):
                      if seq == seqs[key]}
             mine = {key: leans[key] for key in fresh if key in leans}
             write_lean(conn, app, _generation(conn, app), fresh, (), {}, mine, renumber=False)
-            file_records(conn, app, fresh, (), leans=mine)
+            if similar_fts.has_tables(conn):  # the filer refiles them (similar_corpus)
+                similar_fts.mark_refile(conn, app, list(fresh))
             _move_marker(conn, app, max(seqs))
     return len(seqs)
 

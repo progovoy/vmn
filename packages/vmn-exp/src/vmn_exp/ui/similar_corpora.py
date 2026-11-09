@@ -3,7 +3,12 @@
 
 An app whose experiment index persists in a SQLite file (a git workspace
 with ``<data_dir>/index``, a store workspace's SQLite cache) is searched in
-that file: every save of the index files its runs. Any other — a store
+that file: every save of the index files its runs, and what an upgrade's
+re-derive left unfiled is filed on a background thread, once per process,
+started by the app's first refresh or request
+(:func:`~vmn_exp.core.similar_corpus.file_scope`); a request waits for it up
+to its deadline, then :class:`~vmn_exp.core.similar.SimilarDeadlineExceeded`
+— never an answer from documents behind the runs. Any other — a store
 cached in Postgres, ``--no-index`` — gets a host-local database of its own
 (``<data_dir>/index/similar/``, or ``:memory:`` without a data dir) kept in
 step with the app's snapshots by a
@@ -81,12 +86,27 @@ def _run(corpus):
             _LOGGER.warning("Filing similar-runs documents failed", exc_info=True)
 
 
+def _left(deadline):
+    return None if deadline is None else deadline - time.monotonic()
+
+
+def _file_documents(app, path, done):
+    """File what *app*'s index file left unfiled, then set *done*."""
+    try:
+        file_scope(app, path)
+    except Exception:
+        _LOGGER.warning("Filing similar-runs documents failed", exc_info=True)
+    finally:
+        done.set()
+
+
 class SimilarCorpora:
     def __init__(self, db_dir=None):
         self._db_dir = db_dir
         self._indexes = {}  # key -> the index serving it
         self._keys = {}  # index -> (key, app)
         self._corpora = {}  # key -> _Corpus
+        self._filed = {}  # key -> an Event set once its index file's documents are filed
         self._lock = threading.Lock()
 
     def scoped(self, refresher, ws_name, app_name):
@@ -102,12 +122,27 @@ class SimilarCorpora:
         """*index* was refreshed to *snapshot*: sync its app's database."""
         with self._lock:
             found = self._keys.get(index)
-        if found is None or index_file(index):
+        if found is None:
+            return
+        path = index_file(index)
+        if path:
+            self._filing(*found, path)
             return
         try:
             self._corpus(*found).sync(snapshot)
         except Exception:
             _LOGGER.warning("Filing similar-runs documents failed", exc_info=True)
+
+    def _filing(self, key, app, path):
+        """The Event of *key*'s background filing (:func:`_file_documents`),
+        started on the first ask."""
+        with self._lock:
+            done = self._filed.get(key)
+            if done is None:
+                done = self._filed[key] = threading.Event()
+                threading.Thread(target=_file_documents, args=(app, path, done),
+                                 name="vmn-similar-file", daemon=True).start()
+        return done
 
     def _corpus(self, key, app):
         with self._lock:
@@ -132,6 +167,9 @@ class SimilarCorpora:
         with self._lock:
             path = index_file(self._indexes.get(key))
         if path:
+            # Once per process (an upgrade's filing); file_scope checks each generation.
+            if not self._filing(key, app_name, path).wait(_left(deadline)):
+                raise SimilarDeadlineExceeded
             scope = file_scope(app_name, path, schema, snapshot)
             if scope is not None:
                 scope.label = key
@@ -140,10 +178,9 @@ class SimilarCorpora:
         if not corpus.synced_to(snapshot):
             _start(corpus, snapshot)
             with corpus.cond:
-                left = None if deadline is None else deadline - time.monotonic()
                 # Synced to it, or done (to a later snapshot another request asked for).
                 if not corpus.cond.wait_for(
-                        lambda: corpus.synced_to(snapshot) or not corpus.syncing, left):
+                        lambda: corpus.synced_to(snapshot) or not corpus.syncing, _left(deadline)):
                     raise SimilarDeadlineExceeded
         return Scope(corpus.filer.app, corpus.filer.conn, SnapshotRows(snapshot), schema,
                      corpus.lock, label=key)

@@ -20,6 +20,9 @@ from vmn_exp.core.similar_doc import COLUMNS, PROFILE_VERSION, Doc
 from vmn_exp.core.sqlite_conn import in_chunks
 
 TABLES = ("similar_fts", "similar_vocab", "similar_doc")
+# The version of a document the re-derive left to refile (:func:`mark_refile`):
+# stale (:func:`stale_count`) until filed again.
+_TO_REFILE = f"refile:{PROFILE_VERSION}"
 _FTS5 = []  # [available] once checked
 
 
@@ -100,12 +103,16 @@ def file_docs(conn, app, entries, commands=None):
         return
     commands = commands or {}
     known = filed(conn, app, [key for key, _ in entries])
+    unchanged = []  # the ids of documents left to refile that did not change
     for key, doc in entries:
         data = json.dumps(doc.data(), sort_keys=True, default=str)
         sig = hashlib.sha1(f"{doc.verstr}\0{doc.rerun}\0{doc.text}\0{data}".encode(
             "utf-8", "replace")).hexdigest()[:16]
         old = known.get(key)
-        if old is not None and old[1:] == [sig, PROFILE_VERSION]:
+        if old is not None and old[1] == sig and old[2] == PROFILE_VERSION:
+            continue
+        if old is not None and old[1] == sig and old[2] == _TO_REFILE:
+            unchanged.append(old[0])
             continue
         if old is not None:
             conn.execute("DELETE FROM similar_fts WHERE rowid = ?", (old[0],))
@@ -119,12 +126,23 @@ def file_docs(conn, app, entries, commands=None):
             f"INSERT INTO similar_fts (rowid, app, verstr, {', '.join(COLUMNS)})"
             f" VALUES (?, ?, ?, {', '.join('?' * len(COLUMNS))})",
             (cur.lastrowid, app, doc.verstr, *doc.fts_values()))
+    for chunk, marks in in_chunks(unchanged):
+        conn.execute(f"UPDATE similar_doc SET version = ? WHERE id IN ({marks})",
+                     (PROFILE_VERSION, *chunk))
 
 
-def forget_except(conn, app, keep):
-    """Drop *app*'s documents whose keys are not in *keep*."""
-    forget(conn, app, [key for (key,) in conn.execute(
-        "SELECT key FROM similar_doc WHERE app = ?", (app,)) if key not in keep])
+def mark_refile(conn, app, keys):
+    """Leave *keys*' documents to refile: their runs' rows were re-derived."""
+    for chunk, marks in in_chunks(keys):
+        conn.execute(f"UPDATE similar_doc SET version = ? WHERE app = ? AND key IN ({marks})"
+                     " AND version = ?", (_TO_REFILE, app, *chunk, PROFILE_VERSION))
+
+
+def gone(conn, app):
+    """The keys of *app*'s documents whose runs have no row any more."""
+    return [key for (key,) in conn.execute(
+        "SELECT key FROM similar_doc d WHERE app = ? AND NOT EXISTS (SELECT 1 FROM exp_rows r"
+        " WHERE r.app = d.app AND r.key = d.key)", (app,))]
 
 
 def forget(conn, app, keys):

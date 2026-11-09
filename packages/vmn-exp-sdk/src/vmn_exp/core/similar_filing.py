@@ -7,7 +7,8 @@
   run whose run state now names another command refiled (the command lives
   in the run state, which a refresh may save on its own).
 - :func:`file_lean` — refiles an app from the index's lean tables, when
-  documents are missing or another profile version filed them.
+  documents are missing, another profile version filed them or the re-derive
+  left them to refile (:mod:`vmn_exp.core.index_derive` files none).
 - :class:`SnapshotFiler` — keeps a database (a ``:memory:`` one, or a
   server's host-local file) in step with a lineage of index snapshots,
   refiling the runs whose row or side values are other objects than at the
@@ -21,7 +22,7 @@ from vmn_exp.core import similar_fts
 from vmn_exp.core.index_lean_store import is_run, read_lean
 from vmn_exp.core.index_views import SIDE_TABLES, lean_row
 from vmn_exp.core.similar_doc import build_doc
-from vmn_exp.core.sqlite_conn import write_tx
+from vmn_exp.core.sqlite_conn import in_chunks, read_tx, write_tx
 
 _FEATURES, _INTENTS, _HYPOTHESES = (SIDE_TABLES.index(k) for k in
                                     ("features", "intents", "hypotheses"))
@@ -70,19 +71,55 @@ def _commands_moved(conn, app, states):
     return {key: states[key] for key, (cmd,) in filed.items() if cmd != named[key]}
 
 
+FILE_CHUNK = 500  # runs :func:`file_lean` files per write transaction
+_SEQS_SQL = ("SELECT i.key, i.seq, s.seq FROM exp_index i LEFT JOIN exp_index_state s"
+             " ON s.app = i.app AND s.key = i.key WHERE i.app = ?")
+
+
+def _seqs(conn, app, keys=None):
+    """``{key: (record seq, run state seq)}`` of *app*'s *keys* (None: all)."""
+    if keys is None:
+        return {key: seqs for key, *seqs in conn.execute(_SEQS_SQL, (app,))}
+    out = {}
+    for chunk, marks in in_chunks(keys):
+        out.update((key, seqs) for key, *seqs in conn.execute(
+            f"{_SEQS_SQL} AND i.key IN ({marks})", (app, *chunk)))
+    return out
+
+
+def lean_entries(conn, app):
+    """``({key: seqs}, entries, {key: command})`` of *app*'s runs, read from
+    the lean tables in one transaction; *entries* yields their ``(key, doc)``,
+    letting go of each run's lean row as it does."""
+    with read_tx(conn):
+        keys, lean, _ = read_lean(conn, app)
+        commands = {key: _command((json.loads(data) or {}).get("run_state")) for key, data in
+                    conn.execute("SELECT key, data FROM exp_index_state WHERE app = ?", (app,))}
+        seqs = _seqs(conn, app)
+
+    def entries():
+        for key in keys:
+            row, note, *sides = lean.pop(key)
+            yield key, lean_doc(row, note, sides, commands.get(key))
+
+    return seqs, entries(), commands
+
+
 def file_lean(conn, app):
     """Refile every run of *app* from the index's lean tables (``exp_rows``,
-    ``exp_sides``, ``exp_index_state``), forgetting documents of runs gone."""
-    keys, lean, _ = read_lean(conn, app)
-    states = {key: json.loads(data) for key, data in conn.execute(
-        "SELECT key, data FROM exp_index_state WHERE app = ?", (app,))}
-    entries, commands = [], {}
-    for key in keys:
-        row, note, *sides = lean[key]
-        commands[key] = _command((states.get(key) or {}).get("run_state"))
-        entries.append((key, lean_doc(row, note, sides, commands[key])))
-    similar_fts.forget_except(conn, app, set(keys))
-    similar_fts.file_docs(conn, app, entries, commands)
+    ``exp_sides``, ``exp_index_state``), :data:`FILE_CHUNK` runs per write
+    transaction — skipping a run saved since they were read (its save filed
+    it) — then forget the documents of runs gone."""
+    seqs, entries, commands = lean_entries(conn, app)
+    for chunk in iter(lambda: list(itertools.islice(entries, FILE_CHUNK)), []):
+        with write_tx(conn):
+            now = _seqs(conn, app, [key for key, _ in chunk])
+            similar_fts.file_docs(conn, app, [(key, doc) for key, doc in chunk
+                                              if now.get(key) == seqs[key]], commands)
+    gone = similar_fts.gone(conn, app)
+    if gone:
+        with write_tx(conn):
+            similar_fts.forget(conn, app, gone)
 
 
 def _snapshot_command(snapshot, row):
