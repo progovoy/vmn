@@ -160,7 +160,8 @@ function SingleRun({ indexRow }: { indexRow: ExperimentRow | undefined }) {
         <RunCards
           params={paramsVariedFirst(summary.params, cachedRows(client, ws, app))}
           metrics={(
-            <MetricsCard metrics={shownMetrics(summary.metrics, detail)} summary={summary.metricSummary} schema={schema}>
+            <MetricsCard metrics={shownMetrics(summary.metrics, detail)} summary={summary.metricSummary} schema={schema}
+              restarts={detail?.step_restarts}>
               {detail && (
                 <AppendMetrics key={summary.verstr} ws={ws} app={app} appName={appName} verstr={summary.verstr} onAdded={onMetricsAdded} />
               )}

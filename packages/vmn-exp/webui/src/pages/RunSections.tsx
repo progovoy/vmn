@@ -1,10 +1,11 @@
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus } from "../types";
+import type { ExperimentDetail, Fleet, MetricSummary, MetricsSchema, RunStatus, StepRestart } from "../types";
 import { fmtDuration, fmtVal, metricGoal, relTime } from "../util";
 import FleetTable from "../components/FleetTable";
 import { statusColor } from "../util/statusColors";
 import { runDurationText } from "../util/runDuration";
+import { restartText } from "../util/stepRestart";
 import { fleetMetric, fleetRowsOf, varyingParams } from "../components/fleetRows";
 
 /** A single duration text (rounded seconds for short, ladder for longer),
@@ -104,10 +105,11 @@ function SummaryLine({ metric, pairs }: { metric: string; pairs: string[] }) {
 
 /** Each metric's summary value (its best, per the metric's policy), with
  *  last/min/max beside it when they differ. */
-export function MetricsCard({ metrics, summary, schema, children }: {
+export function MetricsCard({ metrics, summary, schema, restarts, children }: {
   metrics: ExperimentDetail["metrics"];
   summary?: Record<string, MetricSummary>;
   schema: MetricsSchema | null;
+  restarts?: Record<string, StepRestart>;
   children?: ReactNode;
 }) {
   return (
@@ -126,6 +128,11 @@ export function MetricsCard({ metrics, summary, schema, children }: {
                   {k}{" "}
                   {goal !== null && (
                     <span className="metric-goal">{goal === "min" ? "↓" : "↑"}</span>
+                  )}
+                  {restarts?.[k] && (
+                    <span className="metric-goal" data-testid={`metric-restart-${k}`} title={restartText(restarts[k])}>
+                      step counter restarted
+                    </span>
                   )}
                 </span>
                 <span className="metric-values">

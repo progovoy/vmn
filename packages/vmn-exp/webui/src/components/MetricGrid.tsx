@@ -1,8 +1,9 @@
 import { memo, useMemo } from "react";
-import type { RunRange, SeriesPoint } from "../types";
+import type { RunRange, SeriesPoint, StepRestart } from "../types";
 import type { XMode } from "../util/chartData";
 import { withSmoothing } from "../util/curveOptions";
 import { toXY } from "../util/seriesArrays";
+import { restartText } from "../util/stepRestart";
 import { chartPoints, xMetricLabel, type XMap } from "../util/xMetric";
 import { spliceZoom } from "../util/zoomSeries";
 import { useZoomRefetch, type FetchRange } from "../hooks/useZoomRefetch";
@@ -23,7 +24,7 @@ export interface GridView {
 }
 
 const MetricCell = memo(function MetricCell({
-  name, points: coarse, xMetric, color, view, height, fetchRange,
+  name, points: coarse, xMetric, color, view, height, fetchRange, restart,
 }: {
   name: string;
   points: SeriesPoint[];
@@ -34,6 +35,7 @@ const MetricCell = memo(function MetricCell({
   height: number;
   /** Refetches a drag-zoomed step range at full resolution. */
   fetchRange?: FetchRange;
+  restart?: StepRestart;
 }) {
   const { origin, alpha, logY } = view;
   const xMode = xMetric ? "metric" : view.xMode;
@@ -52,6 +54,11 @@ const MetricCell = memo(function MetricCell({
       data-ranges={ranges?.length || undefined}>
       <div className="mono" style={{ fontSize: 12, color: "var(--text-2)", height: HEADER_H }}>
         {name}{xMetric && <span style={{ color: "var(--text-3)" }}> vs {xMetric}</span>}
+        {restart && (
+          <span data-testid={`chart-restart-${name}`} style={{ color: "var(--text-3)", marginLeft: 8 }}>
+            {restartText(restart)}
+          </span>
+        )}
       </div>
       <LazyMount height={height}>
         <CurveChart
@@ -70,7 +77,7 @@ const NO_JOINS: XMap = {};
  *  against their x metric once it has arrived. */
 function MetricGrid({
   metrics, series, colorOf, view, height = 180, minWidth = 320, joined = null, xMap = NO_JOINS,
-  fetchRange,
+  fetchRange, restarts,
 }: {
   metrics: string[];
   series: Record<string, SeriesPoint[]>;
@@ -81,6 +88,8 @@ function MetricGrid({
   height?: number;
   minWidth?: number;
   fetchRange?: FetchRange;
+  /** Metrics whose steps went back without a rewind, noted on their chart. */
+  restarts?: Record<string, StepRestart>;
 }) {
   return (
     <div style={{
@@ -91,7 +100,7 @@ function MetricGrid({
         return (
           <MetricCell
             key={m} name={m} points={points} xMetric={xMetric}
-            color={colorOf(m)} view={view} height={height} fetchRange={fetchRange}
+            color={colorOf(m)} view={view} height={height} fetchRange={fetchRange} restart={restarts?.[m]}
           />
         );
       })}

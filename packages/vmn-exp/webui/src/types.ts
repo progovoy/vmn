@@ -512,6 +512,9 @@ export interface ExperimentDetail {
   compacted?: boolean | null;
   /** Rewinds of this run, in log order: history past `step` was hidden. */
   rewinds?: RunRewind[];
+  /** Metrics whose steps went back without a rewind (a restarted step
+   *  counter), each at its first such write; absent when none. */
+  step_restarts?: Record<string, StepRestart>;
   /** Step ranges the run marked (`run.mark_range`): the first 100, in log order; absent when none. */
   ranges?: RunRange[];
   /** How many distinct ranges the run marked. */
@@ -529,6 +532,14 @@ export interface ExperimentDetail {
 export interface ForkOrigin {
   verstr: string;
   step: number | null;
+}
+
+/** The *write*-th point of a metric (from 1) went back to step *to* from
+ *  the highest earlier step *from*. */
+export interface StepRestart {
+  write: number;
+  from: number;
+  to: number;
 }
 
 export interface RunRewind {

@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, type ReactNode } from "react";
-import type { MetricChart, MetricSteps, RunRange, SeriesPoint } from "../types";
+import type { MetricChart, MetricSteps, RunRange, SeriesPoint, StepRestart } from "../types";
 import { seriesColor } from "../util";
 import { allTimestamped, runOrigin, splitSysMetrics } from "../util/chartData";
 import { filterMetrics } from "../util/seriesArrays";
@@ -33,6 +33,7 @@ export const SHOWN_BY_DEFAULT = 12;
  *  (`define_metric(hidden=True)` or conf.yml) get a collapsed section too;
  *  *metricCharts* (`define_metric(chart=...)`) draws some as bars or a table,
  *  from *metricSteps* (run detail's unthinned last value per step) when given.
+ *  A metric of *stepRestarts* (steps went back, no rewind) is noted on its chart.
  *  Smoothing, x mode, x metric and log scale follow *controls* when given.
  *  *fetchRange* refetches a drag-zoomed step range at full resolution; with
  *  more than MANY_KEYS metrics and *fetchKeys*, the charted ones are picked
@@ -41,7 +42,7 @@ export const SHOWN_BY_DEFAULT = 12;
  *  it matches in one chart (GlobOverlay). */
 function TrainingCurves({
   series, seriesTotal, startedAt, stepMetrics, fetchJoined, markStep, hiddenMetrics,
-  fetchRange, fetchKeys, ranges: givenRanges, rangesTotal, metricCharts, metricSteps, ...control
+  fetchRange, fetchKeys, ranges: givenRanges, rangesTotal, metricCharts, metricSteps, stepRestarts, ...control
 }: CurveControlProps & {
   series: Series;
   seriesTotal?: Record<string, number>;
@@ -52,6 +53,7 @@ function TrainingCurves({
   hiddenMetrics?: string[];
   metricCharts?: Record<string, MetricChart>;
   metricSteps?: Record<string, MetricSteps>;
+  stepRestarts?: Record<string, StepRestart>;
   fetchRange?: FetchRange;
   fetchKeys?: (q: MetricKeysQuery) => Promise<MetricKeysPage>;
   ranges?: RunRange[] | null;
@@ -138,11 +140,13 @@ function TrainingCurves({
       <HintedMetricGrid
         metrics={shownTraining} series={series} colorOf={trainColor} view={view}
         joined={joined} xMap={xMap} fetchRange={fetchRange} charts={metricCharts} steps={metricSteps}
+        restarts={stepRestarts}
       />
       <Collapsible title="Hidden metrics" label="hidden metrics" count={shownHidden.length}>
         <HintedMetricGrid
           metrics={shownHidden} series={series} colorOf={trainColor} view={view}
           joined={joined} xMap={xMap} fetchRange={fetchRange} charts={metricCharts} steps={metricSteps}
+          restarts={stepRestarts}
         />
       </Collapsible>
       <Collapsible title="System metrics" label="system metrics" count={system.length}>
