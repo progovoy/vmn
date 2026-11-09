@@ -45,8 +45,9 @@ lost (e.g. 1 of 20,591). Lost = stuck under an ended outer run.
 
 - `tree_status` reads `failed` only for real failures (an exit code other
   than 0) below. A tree whose only bad runs are lost reads its own status,
-  plus a `lost` count (e.g. `succeeded · 1 lost`). It gets a `lost` chip on
-  the board and in `q=`, e.g. `tree_status = "lost"` or `lost_below > 0`.
+  plus a `lost` count (e.g. `succeeded · 1 lost`). A new `lost_below`
+  field is queryable (`lost_below > 0`), and a **lost** chip beside
+  **failed** on the board filters by it.
 - `failed_below`/`failed_pct` keep counting lost runs: they measure what did
   not finish. Their docs say so.
 
