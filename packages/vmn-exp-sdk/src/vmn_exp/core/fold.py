@@ -28,9 +28,10 @@ from vmn_exp.core.fold_facts import (  # noqa: F401  (fold_hypothesis: re-export
     fold_intent,
     intent_value,
 )
+from vmn_exp.core.fold_steps import step_restarts, track_steps
 from vmn_exp.core.metric_summary import summarize, track_extrema
 from vmn_exp.core.note_sigs import apply_note
-from vmn_exp.core.rewind import is_rewound, rewind_step
+from vmn_exp.core.rewind import entry_step, is_rewound, rewind_step
 from vmn_exp.core.step_metric import DEFINE_METRIC, entry_definition
 from vmn_exp.core.sweep.spec import planned_trials
 
@@ -209,9 +210,12 @@ def take_from_param(fold, name):
 
 def _apply_metric_values(fold, entry, key):
     metrics, extrema = fold["metrics"], fold.setdefault("extrema", {})
+    at = (entry_step(entry), key)
     for name, value in (entry.get("values") or {}).items():
         if name not in extrema:  # take_from_param, inlined: once per value
             metrics.pop(name, None)
+        if at[0] is not None:
+            track_steps(fold, name, at, at)
         track_extrema(fold, name, value, key)
         _keep_latest(metrics, name, value, key)
 
@@ -375,6 +379,8 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
     the numeric params folded in), because sorting and charting depend on that.
     A param never takes a logged metric's place: ``logged_params`` (absent
     when empty) names the params whose ``metrics`` entry is the logged metric.
+    ``step_restarts`` (absent when none) marks each metric whose steps went
+    back without a rewind (:mod:`vmn_exp.core.fold_steps`).
     ``with_create_note`` adds the first ``create`` entry's note (what
     ``vmn-exp list`` shows for a run without a metadata note). Each metric's
     value is its summary policy's (see :mod:`vmn_exp.core.metric_summary`,
@@ -414,6 +420,9 @@ def fold_row(idx, meta, fold, with_create_note=False, schema=None):
     logged = logged_params(fold)
     if logged:
         row["logged_params"] = logged
+    restarts = step_restarts(fold)
+    if restarts:
+        row["step_restarts"] = restarts
     planned = planned_trials(meta["sweep"]) if meta.get("sweep") else None
     if planned is not None:
         row["sweep_planned"] = planned

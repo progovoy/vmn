@@ -6,11 +6,13 @@ without reading a segment (plan 12 §5.3).
 A writer's *sums* are ``{stream key: entry}``: a block header's key entry
 over every point the writer's folded blocks hold — ``n``, ``first``/``last``,
 the finite ``sum`` summary, ``s``/``t`` as the step and timestamp bounds (so
-:func:`~vmn_exp.core.fold_blocks.may_be_rewound` stays conservative) — and
-``p``, the positions of its first and last points. Folding them
+:func:`~vmn_exp.core.fold_blocks.may_be_rewound` stays conservative), ``r``
+where its steps went back (:mod:`~vmn_exp.core.fold_steps`) — and ``p``,
+the positions of its first and last points. Folding them
 (:func:`~vmn_exp.core.fold_blocks.apply_sums`) gives what the blocks gave, as
 a block's header gives what its points do. Pure: no I/O.
 """
+from vmn_exp.core.fold_steps import joined
 from vmn_exp.core.metric_columns import exact_parts
 from vmn_exp.core.metric_time import us_to_iso
 
@@ -31,26 +33,46 @@ def counts(sums):
 
 def _entry(entry, base):
     s = entry.get("s")
-    return {
+    return _with_restart({
         "n": entry["n"], "first": entry["first"], "last": entry["last"], "sum": entry["sum"],
         "has_step": entry.get("has_step"), "s": sorted(s) if s else None,
         "t": sorted(entry["t"]), "p": [base, base + entry["n"] - 1],
-    }
+    }, entry.get("r"))
+
+
+def _with_restart(entry, restart):
+    if restart is not None:
+        entry["r"] = restart
+    return entry
 
 
 def _key(point, at):
     return us_to_iso(point[2]), at
 
 
+def _ends(entry):
+    """``((step, key), (step, key))`` of *entry*'s first and last points."""
+    return ((entry["first"][1], _key(entry["first"], entry["p"][0])),
+            (entry["last"][1], _key(entry["last"], entry["p"][1])))
+
+
+def _restart(held, new):
+    """Where *held* and *new* (one writer's) went back, or None."""
+    if held.get("r") or new.get("r") or not held.get("has_step"):
+        return held.get("r") or new.get("r")
+    (low, lo_key), (high, hi_key) = _ends(held)
+    return joined([low, high], (lo_key, hi_key), *_ends(new))[0]
+
+
 def _combined(held, new):
     first = held if _key(held["first"], held["p"][0]) <= _key(new["first"], new["p"][0]) else new
     last = new if _key(new["last"], new["p"][1]) >= _key(held["last"], held["p"][1]) else held
-    return {
+    return _with_restart({
         "n": held["n"] + new["n"], "first": first["first"], "last": last["last"],
         "sum": _finite(held["sum"], new["sum"]), "has_step": held["has_step"],
         "s": _bounds(held["s"], new["s"]), "t": _bounds(held["t"], new["t"]),
         "p": [first["p"][0], last["p"][1]],
-    }
+    }, _restart(held, new))
 
 
 def _bounds(a, b):

@@ -7,7 +7,8 @@
              | u32 crc32(header + body) | header (JSON) | body (zlib)
 
 The header carries per-key summaries, so a fold reads headers only
-(:func:`read_headers`); the body holds each key's delta int64 steps (absent
+(:func:`read_headers`) — with ``r``, where a key's steps went back, when its
+``order`` is :data:`~vmn_exp.core.metric_index_layout.WRITE_ORDER`; the body holds each key's delta int64 steps (absent
 for step-less keys), delta int64 ``ts_us`` and float64 values. A torn or
 CRC-bad tail ends the stream silently, like a torn last JSONL line.
 """
@@ -24,6 +25,8 @@ from vmn_exp.core.metric_columns import (
     unpack_deltas,
     unpack_floats,
 )
+from vmn_exp.core.metric_index_layout import WRITE_ORDER
+from vmn_exp.core.step_restart import restart_point
 
 MAGIC = b"VMSB"
 VERSION = 1
@@ -43,8 +46,9 @@ class Block:
 def encode_block(keys, inherited=False):
     """One block of *keys* (``{name: Columns}``, each non-empty)."""
     header = {
-        "keys": [key_summary(name, cols) for name, cols in keys.items()],
+        "keys": [_key_header(name, cols) for name, cols in keys.items()],
         "inherited": bool(inherited),
+        "order": WRITE_ORDER,
     }
     body = b"".join(_pack_key(cols) for cols in keys.values())
     header_bytes = json.dumps(header, separators=(",", ":")).encode()
@@ -52,6 +56,21 @@ def encode_block(keys, inherited=False):
     crc = zlib.crc32(header_bytes + body_bytes)
     prefix = _PREFIX.pack(MAGIC, VERSION, len(header_bytes), len(body_bytes), crc)
     return prefix + header_bytes + body_bytes
+
+
+def _key_header(name, cols):
+    """A key's summary, with ``r`` where its steps went back."""
+    summary = key_summary(name, cols)
+    restart = restart_point(cols.steps) if cols.has_step else None
+    if restart is not None:
+        summary["r"] = restart
+    return summary
+
+
+def has_restart_points(header):
+    """Whether *header* says where its keys' steps went back (an older
+    vmn-exp's does not: :data:`WRITE_ORDER`)."""
+    return header.get("order") == WRITE_ORDER
 
 
 def _pack_key(cols):

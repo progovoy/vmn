@@ -4,8 +4,10 @@
 Like the JSONL logs (:mod:`index_logs`), a writer's ``.vms`` objects only
 grow at the end, so a grown stream costs its new blocks' **headers**: the
 prefix carries the header length, the body is never read (unless a known
-rewind may hide some of the block's points). A ``.vmx`` is folded from its
-footer. A synced segment never grows, so it is read whole in one GET, as is
+rewind may hide some of the block's points, or an older vmn-exp wrote it
+without restart points: its writer then keeps no sums). A ``.vmx`` is folded
+from its footer, an older one's stepped keys in write order from their
+columns (:mod:`~vmn_exp.core.vmx_write_order`). A synced segment never grows, so it is read whole in one GET, as is
 a remote store's base segment.
 
 The record state keeps, per writer folded from its first point on, what its
@@ -28,7 +30,7 @@ from vmn_exp.core.fold_blocks import (
 from vmn_exp.core.fold_sums import add_block
 from vmn_exp.core.index_metric_adopt import adopted, note_tail
 from vmn_exp.core.index_metric_reads import object_read
-from vmn_exp.core.metric_block import Block, decode_blocks, header_at
+from vmn_exp.core.metric_block import Block, decode_blocks, has_restart_points, header_at
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_files import (
     is_indexed_file,
@@ -36,6 +38,7 @@ from vmn_exp.core.metric_files import (
     metric_writer,
     stream_writer_and_seq,
 )
+from vmn_exp.core.metric_index_layout import WRITE_ORDER
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.vmx_write_order import indexed_entries
 from vmn_exp.storage.s3_base import parallel_map
@@ -197,9 +200,12 @@ def _fold_block(fold, state, writer, header, decoded):
     sums = state.setdefault("sums", {})
     if not base:
         sums[writer] = {}
+    whole = not has_restart_points(header)  # an older vmn-exp's: its points tell
+    if whole:
+        sums.pop(writer, None)
     if writer in sums:
         add_block(sums[writer], base, header)
-    if may_be_rewound(fold, header):
+    if whole or may_be_rewound(fold, header):
         for block in decoded():
             apply_block_points(fold, writer, base, block)
     else:
@@ -208,7 +214,7 @@ def _fold_block(fold, state, writer, header, decoded):
 
 
 def _fold_indexed(fold, state, writer, reader):
-    header = {"keys": indexed_entries(reader)}
+    header = {"keys": indexed_entries(reader), "order": WRITE_ORDER}
     keys = lambda: {k: _columns(reader, k) for k in reader.keys()}  # noqa: E731
     _fold_block(fold, state, writer, header, lambda: [Block(header, keys())])
 
