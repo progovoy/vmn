@@ -687,8 +687,10 @@ def _format_list_row(row, node, columns, policies):
     meta, metrics = row["meta"], row["metrics"]
     note = meta.get("note") or meta.get("create_note") or ""
     shown = shown_policies(metrics, meta.get("metric_policy"), policies)
+    went_back = meta.get("step_restarts") or {}
     metric_str = "  ".join(
         f"{k}={with_policy(format_number(metrics[k]), shown[k])}"
+        + (" (steps went back)" if k in went_back else "")
         for k in columns
         if k in metrics
     )
