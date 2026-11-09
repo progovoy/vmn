@@ -12,8 +12,9 @@ pip install "vmn-exp[ui]"
 ```
 
 Without the extra, `vmn-exp ui` prints an install hint and exits. An
-`s3://` store (`--store` or a `server.yml` workspace) also needs the `s3`
-extra, `pip install "vmn-exp[ui,s3]"`; without it the server refuses to start.
+`s3://`, `gs://` or `az://` store (`--store` or a `server.yml` workspace) also
+needs its storage extra (`s3`, `gcs` or `azure`, e.g.
+`pip install "vmn-exp[ui,s3]"`); without it the server refuses to start.
 
 ## Localhost
 

@@ -267,7 +267,7 @@ def handle_ui(args):
 
     from vmn_exp.ui import server_logging
     from vmn_exp.ui.config import ConfigError
-    from vmn_exp.ui.workspace_uri import missing_s3_extra
+    from vmn_exp.ui.workspace_uri import missing_storage_extra
 
     server_logging.install()
     try:
@@ -275,7 +275,7 @@ def handle_ui(args):
     except ConfigError as e:
         VMN_LOGGER.error(str(e))
         return 1
-    missing = missing_s3_extra(w.store for w in manager.list())
+    missing = missing_storage_extra(w.store for w in manager.list())
     if missing:
         VMN_LOGGER.error(missing)
         return 1

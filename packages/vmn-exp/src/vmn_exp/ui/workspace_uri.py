@@ -31,18 +31,33 @@ def check_workspace_uri(uri, tenancy="single", endpoint_allowlist=()):
     return None
 
 
-def missing_s3_extra(uris):
-    """The install hint when one of *uris* is an S3 store and boto3 (the
-    ``s3`` extra) is not installed, else None: without it the server would
-    start, then answer 500 on the store's first read."""
+# scheme -> (the package its storage plugin imports, the extra providing it)
+STORAGE_EXTRAS = {
+    "s3": ("boto3", "s3"),
+    "gs": ("google.cloud.storage", "gcs"),
+    "az": ("azure.storage.blob", "azure"),
+}
+
+
+def missing_storage_extra(uris):
+    """The install hint when one of *uris* is a store whose storage package
+    (its scheme's extra) is not installed, else None: without it the server
+    would start, then answer 500 on the store's first read."""
+    for scheme in {_scheme(uri) for uri in uris if uri} & STORAGE_EXTRAS.keys():
+        package, extra = STORAGE_EXTRAS[scheme]
+        if not _installed(package):
+            return (f'A {scheme}:// store needs {package} (the "{extra}" extra). '
+                    f'Install it with:\n\n  pip install "vmn-exp[ui,{extra}]"\n')
+    return None
+
+
+def _installed(module):
     import importlib.util
 
-    if not any(_scheme(uri) == "s3" for uri in uris if uri):
-        return None
-    if importlib.util.find_spec("boto3") is not None:
-        return None
-    return ('An s3:// store needs boto3 (the "s3" extra). Install it with:\n\n'
-            '  pip install "vmn-exp[ui,s3]"\n')
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:  # a parent package is missing
+        return False
 
 
 def _scheme(uri):
