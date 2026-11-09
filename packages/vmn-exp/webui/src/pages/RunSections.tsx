@@ -122,6 +122,7 @@ export function MetricsCard({ metrics, summary, schema, restarts, children }: {
           {Object.entries(metrics).map(([k, v]) => {
             const pairs = summaryPairs(summary?.[k]);
             const goal = typeof v === "number" ? metricGoal(schema, k) : null;
+            const restart = restarts?.[k];
             return (
               <div key={k} className="metric-line">
                 <span className="metric-name">
@@ -129,8 +130,8 @@ export function MetricsCard({ metrics, summary, schema, restarts, children }: {
                   {goal !== null && (
                     <span className="metric-goal">{goal === "min" ? "↓" : "↑"}</span>
                   )}
-                  {restarts?.[k] && (
-                    <span className="metric-goal" data-testid={`metric-restart-${k}`} title={restartText(restarts[k])}>
+                  {restart && (
+                    <span className="metric-goal" data-testid={`metric-restart-${k}`} title={restartText(restart)}>
                       step counter restarted
                     </span>
                   )}

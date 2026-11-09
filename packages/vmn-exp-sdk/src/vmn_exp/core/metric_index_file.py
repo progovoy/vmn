@@ -73,8 +73,10 @@ def _write_lod(out, cols):
 def _write_ends(cols):
     """``{"first", "last"}`` points of *cols* in write order (timestamp, ties
     in logging order) — never the step ends: a writer may restart its steps."""
-    order = sorted(range(len(cols)), key=cols.ts.__getitem__)
-    return {"first": point(cols, order[0]), "last": point(cols, order[-1])}
+    positions = range(len(cols))
+    first = min(positions, key=cols.ts.__getitem__)
+    last = max(reversed(positions), key=cols.ts.__getitem__)
+    return {"first": point(cols, first), "last": point(cols, last)}
 
 
 def _write_key(out, name, cols):
