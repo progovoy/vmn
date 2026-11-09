@@ -5,6 +5,7 @@ import { setFilter } from "./api";
 import type { PageOpts } from "./api";
 import { appTag, get } from "./http";
 import type { ExperimentRow, MainMetric, PolicyMix } from "./types";
+import type { Indexing } from "./util/indexing";
 
 /** Links between runs (the run pointed at heads the group; `code_verstr`:
  *  the code state) and row fields. */
@@ -102,6 +103,8 @@ export interface GroupedPage {
   main?: MainMetric;
   /** Why the query matched nothing (plan 31 §4.2). */
   hints?: string[];
+  /** The index the answer is from still loading (plan 33 §2.2). */
+  indexing?: Indexing;
 }
 
 export interface GroupOpts extends Omit<PageOpts, "last"> {

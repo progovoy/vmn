@@ -12,6 +12,14 @@ export function indexingText(indexing?: Indexing): string {
   return `indexing ${fmtCount(loaded)} / ${fmtCount(total)} runs`;
 }
 
+/** A board answer's own `indexing` (plan 33 §2.2): `indexing 16% — results incomplete`. */
+export function incompleteText(indexing?: Indexing): string {
+  if (!indexing) return "";
+  const { loaded, total } = indexing;
+  const share = total === null ? "" : ` ${total ? Math.floor((100 * loaded) / total) : 0}%`;
+  return `indexing${share} — results incomplete`;
+}
+
 /** An app tile's run count: the load's progress, else the status total, else
  *  the listed count (null on a store whose index holds none yet). */
 export function appRunsText(status: { total: number; indexing?: Indexing } | undefined,

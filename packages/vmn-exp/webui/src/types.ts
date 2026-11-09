@@ -1,4 +1,5 @@
 import type { GroupAggregate } from "./apiGroups";
+import type { Indexing } from "./util/indexing";
 
 export type Role = "viewer" | "editor" | "admin";
 
@@ -388,7 +389,9 @@ export type TopRuns = boolean | "jobs" | "singles";
 /** A page of leaderboard rows, with the server's count of every match. */
 /** `next_cursor`: the keyset cursor of the page after it (plan 23 S6), null at
  *  the end; absent from a server without keyset paging. */
-export type ExperimentPage = ExperimentRow[] & { total: number; next_cursor?: string | null; hints?: string[] };
+export type ExperimentPage = ExperimentRow[] & {
+  total: number; next_cursor?: string | null; hints?: string[]; indexing?: Indexing;
+};
 
 export interface SeriesPoint {
   step: number | null;

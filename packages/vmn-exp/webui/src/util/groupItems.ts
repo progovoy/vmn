@@ -4,6 +4,7 @@
  *  and `+N more` row follow the groups as no one's members. */
 import type { GroupAggregate, RunGroup } from "../apiGroups";
 import type { ExperimentRow, MainMetric } from "../types";
+import type { Indexing } from "./indexing";
 
 /** A group as the board caches it: its rows by verstr, so an edit to the
  *  app's cached rows (a note, tags) reaches it. */
@@ -22,6 +23,7 @@ export interface GroupedRows {
   /** A Jobs view page's main metric (`top=`). */
   main?: MainMetric;
   hints?: string[];
+  indexing?: Indexing;
 }
 
 export type MoreState = "idle" | "loading" | "error";

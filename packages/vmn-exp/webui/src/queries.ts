@@ -5,6 +5,7 @@ import { withSignal } from "./requestScope";
 import { fetchRunStatuses } from "./apiSeries";
 import type { HeldChange } from "./pages/leaderboardRefresh";
 import { SHARED_STALE_MS } from "./queryClient";
+import type { Indexing } from "./util/indexing";
 import type {
   AppRow, ExperimentFacets, ExperimentRow, MainMetric, Meta, MetricsSchema, TopRuns, Workspace,
 } from "./types";
@@ -44,6 +45,8 @@ export interface RowsData extends SubtreeMatches {
   main?: MainMetric;
   /** Why the query matched nothing (plan 31 §4.2): "did you mean tags.kind?". */
   hints?: string[];
+  /** The index the answer is from still loading (plan 33 §2.2). */
+  indexing?: Indexing;
 }
 
 /** Every cached leaderboard list of an app, whatever its filter. */

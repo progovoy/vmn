@@ -23,7 +23,7 @@ import { useAppStatus } from "../../shell/useShellData";
 import AttentionStrip from "../../components/AttentionStrip";
 import { LiveText } from "../../components/LiveStatus";
 import { NARROW_QUERY, useMediaQuery } from "../../hooks/useMediaQuery";
-import { indexingText, storeTotal, type Indexing } from "../../util/indexing";
+import { incompleteText, indexingText, storeTotal, type Indexing } from "../../util/indexing";
 
 /** The runs no other run launched (the subtitle's `N runs`). */
 const topLevel = (rows: readonly ExperimentRow[]) => rows.filter((r) => !r.depth).length;
@@ -120,8 +120,9 @@ export function AllRunsView({ ws, app, views, onJobs }: {
   const shownTop = all.length < data.total ? (tableRows ?? []).length : topLevel(tableRows ?? []);
   // Groups hold only their first rows: the facets count the board's runs.
   const wholeBoard = data.grouped && rows !== undefined && !filtered && facets !== null;
-  // A store still indexing: the board holds its newest runs, of the store's.
-  const indexing = status?.indexing;
+  // A store still indexing: the board holds some of its runs, the answer's
+  // own `indexing` saying so before the status poll does (plan 33 §2.2).
+  const indexing = data.indexing ?? status?.indexing;
   const total = filtered ? data.total : storeTotal(data.total, indexing);
 
   return (
@@ -134,7 +135,7 @@ export function AllRunsView({ ws, app, views, onJobs }: {
         } : {
           loading: rows === undefined, filtered, loaded: all.length, total,
           shownTop, loadedTop: topLevel(all),
-        }) + (indexing ? " · indexing" : "")}
+        }) + (data.indexing ? ` · ${incompleteText(data.indexing)}` : indexing ? " · indexing" : "")}
         live={narrow && anyRunning && <LiveText paused={paused} updatedAt={data.updatedAt} />}
         views={views}
         actions={!empty && (
