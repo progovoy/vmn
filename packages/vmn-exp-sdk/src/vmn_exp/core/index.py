@@ -63,7 +63,7 @@ from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_bulk import BulkPublish, loading_snapshot
-from vmn_exp.core.index_first_rows import first_rows, kept_rows
+from vmn_exp.core.index_first_rows import first_rows, kept_parts, kept_snapshot
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_journal_mark import JournalMark
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
@@ -567,22 +567,25 @@ class ExperimentIndex:
         (:mod:`~vmn_exp.core.index_derive`, no storage read), before they
         load; meanwhile the rows the upgrade kept (stale) or else an empty
         snapshot serve, ``loading`` the share done (republished at most every
-        MIGRATING_PUBLISH_SEC). *serve_kept* False: none (an I/O helper's
+        MIGRATING_PUBLISH_SEC; with an I/O helper, which owns the files and
+        sends no progress, once). *serve_kept* False: none (an I/O helper's
         index, whose snapshots nobody reads). Whether any were."""
-        if self._io is not None:  # the helper owns the files; no progress crosses
-            total = self._io.deriving()
-            if total is None:
+        io = self._io
+        if io is None:
+            deriving = getattr(self._store, "deriving", None)
+            if deriving is None or not deriving(self.app_name):
                 return False
-            self._derived(0, total)
-            self._io.derive()
-            return True
-        deriving = getattr(self._store, "deriving", None)
-        if deriving is None or not deriving(self.app_name):
+        elif (total := io.deriving()) is None:
             return False
         if serve_kept and not self._lean:
-            self._kept = kept_rows(self._store, self.app_name)
+            self._kept = kept_snapshot(self.app_name, io.kept() if io is not None
+                                       else kept_parts(self._store, self.app_name))
         try:
-            self._store.derive(self.app_name, self._derived)
+            if io is None:
+                self._store.derive(self.app_name, self._derived)
+            else:  # the helper owns the files; no progress crosses
+                self._derived(0, total)
+                io.derive()
         finally:
             self._kept = None
         return True

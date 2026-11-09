@@ -29,6 +29,7 @@ import sys
 import traceback
 
 from vmn_exp.core.gc_pause import gc_paused
+from vmn_exp.core.index_first_rows import kept_parts
 from vmn_exp.core.index_record import listed_unchanged
 from vmn_exp.core.index_store import decode_records
 from vmn_exp.core.index_workers import _can_spawn
@@ -184,6 +185,11 @@ class ProcessIO:
         """How many records an upgrade left this app to re-derive, or None."""
         return self.call("deriving")
 
+    def kept(self):
+        """The rows an upgrade kept for this app, the helper's
+        :func:`~vmn_exp.core.index_first_rows.kept_parts`."""
+        return self.call("kept")
+
     def derive(self):
         """Re-derive them (:mod:`~vmn_exp.core.index_derive`) in the helper."""
         return self.call("derive")
@@ -263,8 +269,11 @@ class _Helper:
         store, app = self.index._store, self.index.app_name
         return store.count(app) if store.deriving(app) else None
 
+    def kept(self):
+        return kept_parts(self.index._store, self.index.app_name)
+
     def derive(self):
-        return self.index._derive_first(serve_kept=False)
+        return self.index._derive_first(serve_kept=False)  # kept() sent them
 
     def unreadable(self):
         return self.index._unreadable.summary()
@@ -304,6 +313,6 @@ def main():
 def _handle(helper, op, args):
     """*helper*'s answer to *op*: bulk work, done with collection paused."""
     with gc_paused():
-        if op in ("load", "refresh", "kv_get", "kv_put", "deriving", "derive", "unreadable"):
+        if op in ("load", "refresh", "kv_get", "kv_put", "deriving", "kept", "derive", "unreadable"):
             return getattr(helper, op)(*args)
         return getattr(helper.watch, op)(*args)

@@ -12,6 +12,7 @@ runs as they will stay.
 """
 from dataclasses import replace
 
+from vmn_exp.core.index_lazy import STATE_KEYS
 from vmn_exp.core.index_snapshot import (
     IndexSnapshot,
     RowCache,
@@ -44,15 +45,25 @@ def first_rows(store, app_name, limit, max_rows):
     return replace(snap, loading=(len(rows), runs))
 
 
-def kept_rows(store, app_name):
-    """An :class:`IndexSnapshot` (generation 0) of the rows an upgrade kept
-    while *app_name*'s re-derive rewrites them (plan 33 §2.3), for it to
-    serve ``loading``; None when the store has none."""
+def kept_parts(store, app_name):
+    """``(keys, {key: lean_row tuple}, {key: run state fields})`` of the rows
+    an upgrade kept while *app_name*'s re-derive rewrites them (plan 33
+    §2.3), in order — plain values, so an I/O helper can hand them over;
+    None when the store has none."""
     load_kept = getattr(store, "load_kept", None)
     kept = load_kept(app_name) if load_kept else None
     if not kept or not kept[2]:
         return None
     records, order, lean, _ = kept
+    return order, lean, {key: {k: records[key][k] for k in STATE_KEYS} for key in order}
+
+
+def kept_snapshot(app_name, parts):
+    """An :class:`IndexSnapshot` (generation 0) of :func:`kept_parts`'
+    *parts*, for the re-derive to serve ``loading``; None for None."""
+    if parts is None:
+        return None
+    order, lean, states = parts
     rows = RowCache()
     rows.seed(lean)
-    return rows.snapshot(app_name, 0, order, records)
+    return rows.snapshot(app_name, 0, order, states)
