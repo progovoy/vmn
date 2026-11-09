@@ -5,11 +5,15 @@ tree status (the count names of plan 22); ``runs``: every job's ``total``
 (its subtree) plus the group's single runs; ``failed``: failed, stuck or
 lost runs among those; ``job_aggregates``: ``{metric: stats}`` over the group's jobs'
 ``rolled`` values (plan 31 §2: the board's chosen aggregate per job, then
-every group aggregate of those, ``best`` and the tails by the metric's goal).
+every group aggregate of those, ``best`` and the tails by the metric's goal;
+``mixed``/``policies`` summed over the jobs' ``rolled``, plan 32 F1).
 
 Built once per grouping and job summaries (which follow the live bucket and the minute):
 O(jobs), not O(rows).
 """
+from collections import Counter
+
+from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.core.settle import LOST
 from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.leaderboard_group_fields import COUNT_KEYS, COUNT_OF
@@ -58,10 +62,14 @@ class JobGroups:
     @staticmethod
     def _aggregates(summaries):
         rolled = [s["rolled"] for s in summaries if s.get("rolled")]
-        values = sorted(r["value"] for r in rolled if is_finite_number(r["value"]))
-        if not values:
+        valued = [r for r in rolled if is_finite_number(r["value"])]
+        if not valued:
             return {}
-        return {rolled[0]["metric"]: stats(values, rolled[0]["goal"])}
+        overrides = Counter()
+        for r in valued:
+            overrides.update(r.get("policies") or {})
+        values = sorted(r["value"] for r in valued)
+        return {rolled[0]["metric"]: {**stats(values, rolled[0]["goal"]), **policy_mix(overrides)}}
 
 
 def job_fields(grouping, summaries):

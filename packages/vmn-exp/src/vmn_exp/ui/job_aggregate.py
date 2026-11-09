@@ -22,8 +22,9 @@ from collections import namedtuple
 
 from vmn_exp.core.app_settings import check_job_aggregate, job_aggregate_of
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal, with_resolved_goals
+from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.ui.job_rollup_cache import _SplitRollups
-from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields
+from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields, policy_overrides
 from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, own_value
 from vmn_exp.ui.job_views import child_rows
 from vmn_exp.ui.leaderboard_group_summary import TAILS, of_sorted, tail_quantile
@@ -173,9 +174,9 @@ class JobAggregates:
         def fields(job):
             if metric is None:
                 return {}
-            if agg.by == RUNS:
-                return _of_runs(parts(job), metric, agg.agg, goal)
-            return _of_units(units(job), value, agg.agg, goal)
+            found = (_of_runs(parts(job), metric, agg.agg, goal) if agg.by == RUNS
+                     else _of_units(units(job), value, agg.agg, goal))
+            return {**found, **policy_mix(policy_overrides(parts(job), metric))}
 
         if metric is not None and agg.by != RUNS:
             value = UnitValue(agg.value, metric, higher_is_better(goal), parts, tree.jobs)

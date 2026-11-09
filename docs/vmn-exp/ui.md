@@ -910,12 +910,14 @@ message.
     holding the value (a quantile's lower neighbour; null for the mean, and
     for `runs` but its `best`); `approx` is true for a `runs` quantile (the
     merged sketch, ~1%). `value` is null without a goal or a unit with one.
+    `mixed`/`policies` (`{policy: runs}`) name the job's runs overriding the
+    schema's summary policy of the metric (plan 32 F1), absent without one.
   - `job_agg`, `job_agg_by`, `job_agg_value`, `job_agg_metric` pick it
     (`experiments?top=1&job_agg=median&job_agg_by=field:params.trade_date&job_agg_value=own&job_agg_metric=date.best_value`),
     over the app's `experiment.ui.job_aggregate`; a bad value, or any of
     them without `top` (a tree page included), is a 400. They key the ETag.
     Grouped (`top` with `group`), a group's `job_aggregates` aggregate its
-    jobs' `rolled.value`. Computed from the rollups' per-parent tallies
+    jobs' `rolled.value`, with `mixed`/`policies` summed over their `rolled`. Computed from the rollups' per-parent tallies
     (and, for `field:`/`kind:`, per-parent tallies of the runs carrying the
     field, moved on by the index deltas like the rollups), per generation,
     time bucket and aggregate: about 2 ms for 45 outer runs x 16 dates x

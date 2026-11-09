@@ -131,3 +131,28 @@ def test_a_baseline_delta_names_each_sides_overrides():
     loss = rollup_deltas(_rollup({"last": 2}), _rollup(), {"loss": "min"})["metrics"]["loss"]
     assert loss["policies"] == {"value": {"last": 2}, "baseline": None}
     assert "policies" not in rollup_deltas(_rollup(), _rollup(), {"loss": "min"})["metrics"]["loss"]
+
+
+def _grouped_jobs(override):
+    log = _define_min() if override else ()
+    snap = snapshot([
+        run(1, params={"opt": "a"}),
+        run(2, parent=1, metrics={"loss": 0.5}, log=log),
+        run(3, parent=1, metrics={"loss": 0.3}),
+        run(4, params={"opt": "a"}),
+        run(5, parent=4, metrics={"loss": 0.4}),
+    ])
+    (group,) = lb.LeaderboardCache().groups(snap, SCHEMA, "params.opt", top="jobs")["groups"]
+    return group["job_aggregates"]["loss"]
+
+
+def test_a_grouped_outer_runs_header_with_overrides_is_marked():
+    loss = _grouped_jobs(override=True)
+    assert loss["n"] == 2
+    assert loss["mixed"] is True and loss["policies"] == {"min": 1}
+
+
+def test_a_grouped_outer_runs_header_following_the_schema_is_not_marked():
+    loss = _grouped_jobs(override=False)
+    assert loss["n"] == 2
+    assert not {"mixed", "policies"} & set(loss)
