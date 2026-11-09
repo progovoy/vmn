@@ -466,18 +466,11 @@ class ExperimentIndex:
     def check_vmx(self, limit=None):
         """Run an upgrade's check now: *limit* records, else all left; how
         many were checked."""
+        state = self._vmx.state()
+        if state is None:
+            return 0
         with self._lock:
-            if self._records is None:
-                return 0
-            if limit is not None:
-                return self._check_step(limit)
-            checked = 0
-            while self._vmx.state() is not None:
-                done = self._check_step()
-                if not done:
-                    break
-                checked += done
-            return checked
+            return self._check_step(state["total"] - state["done"] if limit is None else limit)
 
     def _paused_unless_remote(self):
         """A local refresh is bulk work throughout, so collection pauses for

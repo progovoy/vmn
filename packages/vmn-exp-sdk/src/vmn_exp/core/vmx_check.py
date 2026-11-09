@@ -21,14 +21,19 @@ from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.vmx_write_order import indexed_entries
 
 
+def indexed_objects(record):
+    """``{name: size}`` of the ``.vmx`` objects *record* (or its head) folded."""
+    objects = (record.get("metrics") or {}).get("objects") or {}
+    return {name: size for name, size in objects.items() if is_indexed_file(name)}
+
+
 def needs_refold(storage, where, objects):
-    """Whether the record *where* (``(app, key)``), whose metric *objects*
-    (``{name: size}``) its fold read, must be folded again."""
+    """Whether the record *where* (``(app, key)``), whose ``.vmx`` *objects*
+    (``{name: size}``, :func:`indexed_objects`) its fold read, must be folded
+    again."""
     fold = new_fold()
     try:
         for name, size in sorted(objects.items()):
-            if not is_indexed_file(name):
-                continue
             reader = MetricIndexReader(object_read(storage, where, name), size)
             entries = indexed_entries(reader)
             if not has_restart_points(reader.footer) and entries != footer_entries(reader.footer):

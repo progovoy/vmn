@@ -22,12 +22,17 @@ FINGERPRINT = "reread-1"
 def puts(conn, keys):
     """The kv puts listing *keys* (``(app, key)`` pairs) to read again,
     beside those *conn* lists already (an earlier upgrade's, not yet read)."""
-    by_app = {}
-    for app, key in keys:
-        by_app.setdefault(app, set()).add(key)
     return [(SCOPE + app, FINGERPRINT,
              sorted(names.union(read_payload(conn, SCOPE + app, FINGERPRINT) or ())))
-            for app, names in by_app.items()]
+            for app, names in by_app(keys).items()]
+
+
+def by_app(keys):
+    """``{app: {key}}`` of ``(app, key)`` pairs."""
+    grouped = {}
+    for app, key in keys:
+        grouped.setdefault(app, set()).add(key)
+    return grouped
 
 
 def hint_unloaded(store, app_name, records, hint):

@@ -54,9 +54,9 @@ import sqlite3
 from vmn_exp.core import similar_fts
 from vmn_exp.core.fold import logged_params
 from vmn_exp.core.index_store_kv import write_puts
-from vmn_exp.core.metric_files import is_indexed_file
 from vmn_exp.core.metric_summary import is_repeated
 from vmn_exp.core.sqlite_conn import write_tx
+from vmn_exp.core.vmx_check import indexed_objects
 
 RECORDS_VERSION = 20  # 20: step restarts; a .vmx's first/last write (vmx_write_order)
 DERIVED_VERSION = 21  # 21: rows' metric_policy, an empty summary missing (plan 32 F1)
@@ -75,9 +75,8 @@ def _compacted_logged_twice(head, fold):
     footer may hold such a metric's value at its highest step for its last
     write, and lack its step restart. The fold does not say which metric
     came from which file; the head's metric objects say a ``.vmx`` was read."""
-    objects = ((head.get("metrics") or {}).get("objects") or {})
-    return (any(is_indexed_file(name) for name in objects)
-            and any(is_repeated(seen) for seen in (fold.get("extrema") or {}).values()))
+    return bool(indexed_objects(head)) and any(
+        is_repeated(seen) for seen in (fold.get("extrema") or {}).values())
 
 
 # Older records versions whose records still read right in this one, each with

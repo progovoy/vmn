@@ -68,18 +68,19 @@ def upgrade_in_place(file, stale, check=None):
     """Bring *file*'s records to this version in place, deleting those
     *stale* (None: none) picks and listing those *check* (None: none) picks
     for the background check (see the module)."""
+    sorts = stale is not None or check is not None
     conn = connect(file)
     try:
-        if stale is not None or check is not None:
+        if sorts:
             gens = dict(conn.execute("SELECT app, gen FROM exp_index_gen"))
-            picked, checked = _picked(file, stale, check)
+            picked, checked = _split(_rows(file), stale, check)
             with write_tx(conn):  # listed first: a death part way loses none
                 _list(conn, picked, checked)
             for chunk, _ in in_chunks(picked, DELETE_CHUNK):
                 _delete_picked(conn, chunk)
         with write_tx(conn):
-            if stale is not None or check is not None:
-                late, late_checked = _saved_since(conn, stale, check, gens)
+            if sorts:
+                late, late_checked = _split(_saved_since(conn, gens), stale, check)
                 _list(conn, late, late_checked)
                 _delete(conn, late)
             upgrade_derived(conn, kept=True)
@@ -87,47 +88,46 @@ def upgrade_in_place(file, stale, check=None):
         conn.close()
 
 
-def _picked(file, stale, check):
-    """``(picked, checked)``: the ``(app, key)`` of *file*'s records *stale*
-    picks and of the others *check* picks, read a chunk per query on a
-    read-only connection: no lock is held across the pass."""
+def _rows(file):
+    """``((app, key), head, data)`` of *file*'s records, read a chunk per
+    query on a read-only connection: no lock is held across the pass."""
     source = connect(file, readonly=True)
-    picked, checked, after = [], [], 0
+    after = 0
     try:
         while True:
             rows = source.execute(
                 "SELECT rowid, app, key, head, data FROM exp_index WHERE rowid > ?"
                 " ORDER BY rowid LIMIT ?", (after, SCAN_CHUNK)).fetchall()
             if not rows:
-                return picked, checked
-            for _, app, key, head, data in rows:
-                _sort((app, key), head, data, stale, check, picked, checked)
+                return
+            yield from (((app, key), head, data) for _, app, key, head, data in rows)
             after = rows[-1][0]
     finally:
         source.close()
 
 
-def _saved_since(conn, stale, check, gens):
-    """``(picked, checked)`` of the records saved past *gens* (``{app: gen}``)."""
+def _saved_since(conn, gens):
+    """``((app, key), head, data)`` of the records saved past *gens* (``{app: gen}``)."""
     apps = [app for (app,) in conn.execute("SELECT app FROM exp_index_gen").fetchall()]
-    picked, checked = [], []
-    for app in apps:
-        for key, head, data in conn.execute(
+    return [((app, key), head, data) for app in apps
+            for key, head, data in conn.execute(
                 "SELECT key, head, data FROM exp_index WHERE app = ? AND seq > ?",
-                (app, gens.get(app, 0))):
-            _sort((app, key), head, data, stale, check, picked, checked)
+                (app, gens.get(app, 0)))]
+
+
+def _split(rows, stale, check):
+    """``(picked, checked)``: the items of *rows* *stale* picks, and of the
+    others those *check* picks."""
+    picked, checked = [], []
+    for item, head, data in rows:
+        if data is None:
+            continue
+        fold = json.loads(data)
+        if stale is not None and stale(fold):
+            picked.append(item)
+        elif check is not None and check(json.loads(head), fold):
+            checked.append(item)
     return picked, checked
-
-
-def _sort(item, head, data, stale, check, picked, checked):
-    """Put *item* in *picked* or *checked* as *stale* or *check* picks it."""
-    if data is None:
-        return
-    fold = json.loads(data)
-    if stale is not None and stale(fold):
-        picked.append(item)
-    elif check is not None and check(json.loads(head), fold):
-        checked.append(item)
 
 
 def _list(conn, picked, checked):

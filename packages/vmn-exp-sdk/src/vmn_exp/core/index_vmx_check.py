@@ -18,39 +18,31 @@ resumes the cursor and hints the refolds left. The index's freshness says
 ``checking {done, total}`` until the list is done.
 """
 import time
-from concurrent.futures import ThreadPoolExecutor
 
+from vmn_exp.core.index_reread import by_app
 from vmn_exp.core.index_store_kv import read_payload
-from vmn_exp.core.metric_files import is_indexed_file
-from vmn_exp.core.vmx_check import needs_refold
+from vmn_exp.core.vmx_check import indexed_objects, needs_refold
+from vmn_exp.storage.fanout import fan_out
 
 FINGERPRINT = "vmx-check-1"
 KEYS, AT, REFOLD = "vmx-check:", "vmx-check-at:", "vmx-refold:"
 BACKGROUND = True  # refreshes run the check's steps (tests run them by hand)
 CHECK_EVERY_SEC = 2.0
 CHECK_BUDGET_SEC = 1.0
-CHECK_WORKERS = 8
+CHECK_WORKERS = 8  # reads at once, lent by the shared fan-out budget (storage.fanout)
+_CHUNK = 4 * CHECK_WORKERS
 
 
 def puts(conn, keys):
     """The kv puts listing *keys* (``(app, key)`` pairs) to check, beside
     those an earlier upgrade left unchecked, the cursor back at 0."""
-    by_app = {}
-    for app, key in keys:
-        by_app.setdefault(app, set()).add(key)
     out = []
-    for app, names in by_app.items():
+    for app, names in by_app(keys).items():
         listed = read_payload(conn, KEYS + app, FINGERPRINT) or []
         done = (read_payload(conn, AT + app, FINGERPRINT) or {}).get("done", 0)
         out += [(KEYS + app, FINGERPRINT, sorted(names.union(listed[done:]))),
                 (AT + app, FINGERPRINT, {"done": 0})]
     return out
-
-
-def indexed_objects(record):
-    """``{name: size}`` of the ``.vmx`` objects *record*'s fold read."""
-    objects = (record.get("metrics") or {}).get("objects") or {}
-    return {name: size for name, size in objects.items() if is_indexed_file(name)}
 
 
 class VmxCheck:
@@ -67,7 +59,7 @@ class VmxCheck:
         self._keys = kv.kv_get(KEYS + self._app, FINGERPRINT) or []
         self.done = (kv.kv_get(AT + self._app, FINGERPRINT) or {}).get("done", 0)
         self.refold = set(kv.kv_get(REFOLD + self._app, FINGERPRINT) or ())
-        return set(self.refold)
+        return self.refold
 
     def state(self):
         """``{done, total}`` while keys are left to check, else None."""
@@ -81,37 +73,39 @@ class VmxCheck:
         """Check keys from the cursor — *limit* of them, else for about
         :data:`CHECK_BUDGET_SEC` — reading *records* (``{key: record}``);
         *hint* each one to fold again. How many were checked."""
-        started, checked = self._clock(), 0
-        with ThreadPoolExecutor(CHECK_WORKERS, thread_name_prefix="vmn-vmx-check") as pool:
-            while self.state() is not None and (limit is None or checked < limit):
-                if limit is None and self._clock() - started >= CHECK_BUDGET_SEC:
-                    break
-                size = CHECK_WORKERS if limit is None else min(CHECK_WORKERS, limit - checked)
-                chunk = self._keys[self.done:self.done + size]
-                # A lazy record reads its stored head here, never on the pool's threads.
-                objects = [indexed_objects(records.get(key) or {}) for key in chunk]
-                found = list(pool.map(lambda item: self._wrong(storage, *item), zip(chunk, objects)))
-                self._advance(len(chunk), [k for k, wrong in zip(chunk, found) if wrong], hint)
-                checked += len(chunk)
+        deadline = None if limit is not None else self._clock() + CHECK_BUDGET_SEC
+        end = len(self._keys) if limit is None else min(len(self._keys), self.done + limit)
+        start, wrong = self.done, []
+        while self.done < end and (deadline is None or self._clock() < deadline):
+            chunk = self._keys[self.done:min(self.done + _CHUNK, end)]
+            # A lazy record reads its stored head here, never on the readers' threads.
+            items = [(key, indexed_objects(records.get(key) or {})) for key in chunk]
+            found = fan_out(lambda item: self._wrong(storage, *item), items, CHECK_WORKERS,
+                            "vmn-vmx-check")
+            wrong += [key for key, bad in zip(chunk, found) if bad]
+            self.done += len(chunk)
+        checked = self.done - start
+        self._save(wrong)
+        for key in wrong:
+            hint(key)
         self._due = self._clock() + CHECK_EVERY_SEC
         return checked
 
     def _wrong(self, storage, key, objects):
         return bool(objects) and needs_refold(storage, (self._app, key), objects)
 
-    def _advance(self, count, wrong, hint):
+    def _save(self, wrong):
+        """Persist a step, its refolds listed before the cursor moves past them."""
         kv = self._kv()
-        if wrong:  # listed before the cursor moves past them
+        if wrong:
             self.refold.update(wrong)
             kv.kv_put(REFOLD + self._app, FINGERPRINT, sorted(self.refold))
-        self.done += count
-        kv.kv_put(AT + self._app, FINGERPRINT, {"done": self.done})
-        if self.state() is None:
-            kv.kv_put(KEYS + self._app, FINGERPRINT, None)
-            self._keys, self.done = [], 0
-            kv.kv_put(AT + self._app, FINGERPRINT, None)
-        for key in wrong:
-            hint(key)
+        if self.done < len(self._keys):
+            kv.kv_put(AT + self._app, FINGERPRINT, {"done": self.done})
+            return
+        kv.kv_put(KEYS + self._app, FINGERPRINT, None)
+        kv.kv_put(AT + self._app, FINGERPRINT, None)
+        self._keys, self.done = [], 0
 
     def refolded(self, keys):
         """*keys* were folded afresh and saved: off the refold list."""

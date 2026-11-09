@@ -91,15 +91,15 @@ function checkingText(c: Freshness["checking"]): string {
 
 export function freshnessBanner(f: Freshness | undefined, now = Date.now()): FreshnessBanner | null {
   if (!f) return null;
-  let banner = ageBanner(f, now);
   const unreadable = f.refresh_failing ? "" : unreadableText(f.unreadable);
-  if (unreadable) {
-    banner = banner ? { ...banner, text: `${banner.text} ${unreadable}` }
-      : { kind: "stale", text: `⚠ ${unreadable}` };
-  }
   const checking = checkingText(f.checking);
-  if (!checking) return banner;
-  return banner ? { ...banner, text: `${banner.text} ${checking}` } : { kind: "stale", text: checking };
+  return withText(withText(ageBanner(f, now), unreadable, `⚠ ${unreadable}`), checking, checking);
+}
+
+/** *banner* with *text* after it; *alone* (stale) when there is no banner. */
+function withText(banner: FreshnessBanner | null, text: string, alone: string): FreshnessBanner | null {
+  if (!text) return banner;
+  return banner ? { ...banner, text: `${banner.text} ${text}` } : { kind: "stale", text: alone };
 }
 
 function ageBanner(f: Freshness, now: number): FreshnessBanner | null {
