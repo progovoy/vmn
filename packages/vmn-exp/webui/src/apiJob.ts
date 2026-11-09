@@ -4,6 +4,7 @@ import { api } from "./api";
 import { runBase } from "./apiRunCode";
 import { get } from "./http";
 import type { JobProgressFields, JobRolled, PolicyMix, RunState } from "./types";
+import type { Indexing } from "./util/indexing";
 
 export interface HistBin {
   lo: number;
@@ -98,6 +99,8 @@ export interface JobPageSummary extends JobProgressFields {
   by?: JobSplitEntry[] | null;
   /** The Outer runs row's aggregate by the app's default (plan 31 §2). */
   rolled?: JobRolled | null;
+  /** The app's index still loading (plan 33 §2.2): the rollup is of the runs so far. */
+  indexing?: Indexing;
 }
 
 export interface FailureCluster {

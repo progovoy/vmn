@@ -12,7 +12,7 @@ import { useRunsBoard } from "../../hooks/useRunsBoard";
 import { Link } from "react-router-dom";
 import { useAppStatus } from "../../shell/useShellData";
 import { plural } from "../../util";
-import { indexingText } from "../../util/indexing";
+import { boardIndexingText } from "../../util/indexing";
 import { allRunsHref, hasSearch } from "../../util/searchScope";
 import { BIG_GROUP } from "../../util/groupClause";
 import { useTrayBoard } from "../SelectionTrayHost";
@@ -37,6 +37,7 @@ export default function JobRuns({ ws, app, verstr, name, paused, onPaused, onLiv
   });
   const { data, cols, selection, facets } = board;
   const indexing = useAppStatus(ws, app).data?.indexing;
+  const indexingNote = boardIndexingText(data.indexing, indexing);
   useTrayBoard({
     total: data.total, showUnarchive: view.archived, onSelectAll: () => void selection.selectAll(data.total),
     matching: selection.matching, uncapped: selection.uncapped, onArchived: board.refresh,
@@ -55,7 +56,7 @@ export default function JobRuns({ ws, app, verstr, name, paused, onPaused, onLiv
         <div className="job-runs-head">
           <p className="page-sub job-runs-count">
             {board.rows === undefined ? "loading runs…" : plural(data.total, "run")}
-            {indexing && <> · {indexingText(indexing)}</>}
+            {indexingNote && <> · {indexingNote}</>}
             {hasSearch(view) && <> · <Link to={allRunsHref(board.base, view)}>search all runs</Link></>}
           </p>
           <LeaderboardToolbar

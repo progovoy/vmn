@@ -17,6 +17,7 @@ import { useLiveOrPoll } from "../../hooks/useLiveOrPoll";
 import { runQuery } from "../../queries";
 import AddToReport from "../../reports/AddToReport";
 import { runSpec } from "../../reports/viewSpecs";
+import { incompleteText } from "../../util/indexing";
 import type { ExperimentDetail, ExperimentRow } from "../../types";
 import { RunChangesSection } from "../RunLayout";
 import { JobBaselineChip } from "./JobBaseline";
@@ -107,6 +108,8 @@ export default function JobPage({ ws, app, runRef, verstr: v, row, summary }: {
         )}
       />
       <AttentionStrip status={scopedStatus} from={onTabSearch(search, "runs")} onFollow={() => setFollowed((n) => n + 1)} />
+      {/* The Runs tab says its own list's. */}
+      {tab !== "runs" && data?.indexing && <p className="page-sub job-indexing">{incompleteText(data.indexing)}</p>}
       <JobTabs tab={tab} onTab={setTab} />
       <div role="tabpanel" id={JOB_PANEL_ID} aria-labelledby={jobTabId(tab)} className="job-panel">
         {/* A followed part rewrites the Runs tab's filters: it re-reads the URL. */}
