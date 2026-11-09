@@ -5,10 +5,10 @@ Like the JSONL logs (:mod:`index_logs`), a writer's ``.vms`` objects only
 grow at the end, so a grown stream costs its new blocks' **headers**: the
 prefix carries the header length, the body is never read (unless a known
 rewind may hide some of the block's points, or an older vmn-exp wrote it
-without restart points: its writer then keeps no sums). A ``.vmx`` is folded
+without restart points: they are taken from its body). A ``.vmx`` is folded
 from its footer, an older one's stepped keys in write order from their
-columns (:mod:`~vmn_exp.core.vmx_write_order`). A synced segment never grows, so it is read whole in one GET, as is
-a remote store's base segment.
+columns (:mod:`~vmn_exp.core.vmx_write_order`). A synced segment never
+grows, so it is read whole in one GET, as is a remote store's base segment.
 
 The record state keeps, per writer folded from its first point on, what its
 points add up to (:mod:`~vmn_exp.core.fold_sums`): a ``.vmx`` replacing
@@ -40,6 +40,7 @@ from vmn_exp.core.metric_files import (
 )
 from vmn_exp.core.metric_index_layout import WRITE_ORDER
 from vmn_exp.core.metric_index_reader import MetricIndexReader
+from vmn_exp.core.step_restart import restart_point, with_restart
 from vmn_exp.core.vmx_write_order import indexed_entries
 from vmn_exp.storage.s3_base import parallel_map
 
@@ -200,17 +201,24 @@ def _fold_block(fold, state, writer, header, decoded):
     sums = state.setdefault("sums", {})
     if not base:
         sums[writer] = {}
-    whole = not has_restart_points(header)  # an older vmn-exp's: its points tell
-    if whole:
-        sums.pop(writer, None)
+    if not has_restart_points(header):  # an older vmn-exp's: its points tell
+        blocks = decoded()
+        header, decoded = _with_restart_points(header, blocks), lambda: blocks
     if writer in sums:
         add_block(sums[writer], base, header)
-    if whole or may_be_rewound(fold, header):
+    if may_be_rewound(fold, header):
         for block in decoded():
             apply_block_points(fold, writer, base, block)
     else:
         apply_header(fold, writer, base, header)
     state["points"][writer] = base + block_points(header)
+
+
+def _with_restart_points(header, blocks):
+    """An older block's *header* with each key's ``r`` from its decoded *blocks*."""
+    cols = {name: c for block in blocks for name, c in block.keys.items()}
+    keys = [with_restart(dict(e), restart_point(cols[e["k"]].steps)) for e in header["keys"]]
+    return dict(header, keys=keys, order=WRITE_ORDER)
 
 
 def _fold_indexed(fold, state, writer, reader):

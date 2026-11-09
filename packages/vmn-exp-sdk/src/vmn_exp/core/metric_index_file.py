@@ -32,7 +32,7 @@ from vmn_exp.core.metric_index_layout import (
 )
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_lod import encode_buckets, level_buckets
-from vmn_exp.core.step_restart import restart_point
+from vmn_exp.core.step_restart import restart_point, with_restart
 
 __all__ = ["CHUNK_POINTS", "LOD_SIZES", "MAGIC", "MetricIndexReader", "build_index"]
 
@@ -93,7 +93,7 @@ def _write_ends(cols):
 
 def _write_key(out, name, cols):
     ends = _write_ends(cols)
-    restart = restart_point(cols.steps) if cols.has_step else None
+    restart = restart_point(cols.steps)
     cols = _sorted(cols)
     summary = key_summary(name, cols)
     raw = {}
@@ -101,18 +101,15 @@ def _write_key(out, name, cols):
         raw["steps"] = _write_column(out, cols, "steps", pack_deltas)
     raw["ts"] = _write_column(out, cols, "ts", pack_deltas)
     raw["values"] = _write_column(out, cols, "values", pack_floats)
-    meta = {
+    return with_restart({
         "n": len(cols),
         "has_step": cols.has_step,
         "s": summary["s"],
-        "t": [min(cols.ts), max(cols.ts)],
+        "t": [ends["first"][2], ends["last"][2]],
         "summary": {"sum": summary["sum"], **ends},
         "raw": raw,
         "lod": _write_lod(out, cols),
-    }
-    if restart is not None:
-        meta["r"] = restart
-    return meta
+    }, restart)
 
 
 def build_index(writer, keys, rewinds_applied=False, stream_bytes=None):

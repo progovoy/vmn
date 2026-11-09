@@ -16,13 +16,12 @@ from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_entries import is_metric_entry, points_to_entries
 from vmn_exp.core.metric_files import INDEXED_SUFFIX
-from vmn_exp.core.metric_index_layout import WRITE_ORDER
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_lod import emit, summarize
 from vmn_exp.core.metric_stream import base_key, inherited_twin, is_inherited
 from vmn_exp.core.metric_time import iso_to_us, us_to_iso
 from vmn_exp.core.rewind import rewind_step
-from vmn_exp.core.step_restart import restart_point
+from vmn_exp.core.step_restart import restart_point, restart_view
 from vmn_exp.storage.fanout import fan_out
 
 LEGACY_WRITER = ""
@@ -303,7 +302,7 @@ class SeriesReader:
         else the points read do (:attr:`step_restarts`)."""
         indexed = self._indexed_only(key, step_range)
         if indexed is not None:
-            self.note_restart(key, _footer_restart(indexed, key))
+            self.note_restart(key, indexed.footer["keys"][key].get("r"))  # an old one has none
             lo, hi = step_range or (None, None)
             return [_iso(p) for p in indexed.series(key, max_points, lo, hi)]
         cols = self.points(key, step_range)
@@ -323,7 +322,7 @@ class SeriesReader:
     def note_restart(self, key, restart):
         """Keep *restart* (``[from, to]`` or None) as *key*'s."""
         if restart is not None:
-            self.step_restarts[key] = {"from": restart[0], "to": restart[1]}
+            self.step_restarts[key] = restart_view(restart)
 
     def rows(self, keys=None):
         """``(writer, key, step, ts_us, value)`` of *keys* (default all), each
@@ -357,14 +356,6 @@ def _within(value, bounds):
     if value is None:
         return False
     return (lo is None or value >= lo) and (hi is None or value <= hi)
-
-
-def _footer_restart(reader, key):
-    """*key*'s ``r`` in *reader*'s footer; None when it went on rising or
-    the footer, an older vmn-exp's, does not say."""
-    if reader.footer.get("order") != WRITE_ORDER:
-        return None
-    return reader.footer["keys"][key].get("r")
 
 
 def _stepped(cols):

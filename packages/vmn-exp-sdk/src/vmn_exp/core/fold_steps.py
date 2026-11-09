@@ -14,6 +14,7 @@ highest step, one before them end below the lowest, and one among them
 (two writers interleaving the metric) goes back. Step-less points never
 count; a rewind hides points before they fold. Pure.
 """
+from vmn_exp.core.step_restart import restart_view
 
 
 def track_steps(fold, name, first, last, restart=None):
@@ -56,4 +57,4 @@ def joined(held, bounds, first, last):
 
 def step_restarts(fold):
     """``{metric: {"from", "to"}}`` of the restarts *fold* found."""
-    return {name: {"from": r[0], "to": r[1]} for name, r in (fold.get("restarts") or {}).items()}
+    return {name: restart_view(r) for name, r in (fold.get("restarts") or {}).items()}

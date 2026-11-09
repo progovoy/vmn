@@ -26,7 +26,7 @@ from vmn_exp.core.metric_columns import (
     unpack_floats,
 )
 from vmn_exp.core.metric_index_layout import WRITE_ORDER
-from vmn_exp.core.step_restart import restart_point
+from vmn_exp.core.step_restart import restart_point, with_restart
 
 MAGIC = b"VMSB"
 VERSION = 1
@@ -60,15 +60,11 @@ def encode_block(keys, inherited=False):
 
 def _key_header(name, cols):
     """A key's summary, with ``r`` where its steps went back."""
-    summary = key_summary(name, cols)
-    restart = restart_point(cols.steps) if cols.has_step else None
-    if restart is not None:
-        summary["r"] = restart
-    return summary
+    return with_restart(key_summary(name, cols), restart_point(cols.steps))
 
 
 def has_restart_points(header):
-    """Whether *header* says where its keys' steps went back (an older
+    """Whether *header* (or a ``.vmx`` footer) says where its keys' steps went back (an older
     vmn-exp's does not: :data:`WRITE_ORDER`)."""
     return header.get("order") == WRITE_ORDER
 
