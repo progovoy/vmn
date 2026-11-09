@@ -17,6 +17,8 @@ storage.
 """
 import contextlib
 import json
+import os
+import shutil
 import threading
 
 try:
@@ -64,7 +66,8 @@ def _one_upgrader(path):
 def regenerate(path, old, found, connect_file):
     """``(connection, file)`` of a new generation of *path*'s database,
     live, built beside its *old* file of records version *found* through
-    *connect_file(file)*."""
+    *connect_file(file)*; OSError when the disk has no room for it."""
+    _check_room(path, old)
     fresh = sqlite_files.new_generation(path)
     conn = None
     try:
@@ -78,6 +81,17 @@ def regenerate(path, old, found, connect_file):
         sqlite_files.remove_if_unused(fresh)
         raise
     return conn, fresh
+
+
+def _check_room(path, old):
+    """Refuse a new generation the disk has no room for: it grows as big as
+    *old* (with its WAL) while *old* stays until swept."""
+    needed = sum(os.path.getsize(f) for f in (old, old + "-wal") if os.path.exists(f))
+    folder = os.path.dirname(os.path.abspath(path))
+    free = shutil.disk_usage(folder).free
+    if free < needed:
+        raise OSError(f"no room for a new generation of {path}: it needs {needed} bytes,"
+                      f" {free} free in {folder}")
 
 
 def _copy_records(old, conn, stale):
