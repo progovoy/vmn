@@ -17,6 +17,7 @@ import weakref
 from collections import OrderedDict
 
 from vmn_exp.core import similar_fts, sqlite_files
+from vmn_exp.core.index_derive import pending_after
 from vmn_exp.core.index_point import shared_store
 from vmn_exp.core.similar_filing import SnapshotFiler, file_lean
 from vmn_exp.core.similar_rows import SnapshotRows, StoreRows
@@ -29,12 +30,15 @@ class Scope:
     """One app's search inputs: its documents are filed under *app* in *conn*
     (*lock* serializes its use); its results carry *label* (default *app*)."""
 
-    def __init__(self, app, conn, rows, schema=None, lock=None, label=_APP, cache_key=None):
+    def __init__(self, app, conn, rows, schema=None, lock=None, label=_APP, cache_key=None,
+                 behind=False):
         self.app, self.conn, self.rows, self.schema = app, conn, rows, schema or {}
         self.lock = lock or threading.Lock()
         self.label = app if label is _APP else label
         # What the documents are at (None: unknown): equal keys, equal rankings.
         self.cache_key = cache_key
+        # Some documents are behind the runs (:func:`filing_behind`): fewer may match.
+        self.behind = behind
 
 
 def memory_conn(path=":memory:"):
@@ -103,33 +107,63 @@ def needs_filing(conn, app):
     return runs != similar_fts.doc_count(conn, app) or bool(similar_fts.stale_count(conn, app))
 
 
-def repaired(conn, app):
-    """Refile *app* from the lean tables when :func:`needs_filing`."""
+def filing_behind(conn, app):
+    """Whether *app*'s documents may be behind its runs: a re-derive under
+    way, or :func:`~vmn_exp.core.similar_fts.any_behind` — point reads and
+    index seeks, cheap enough for any budget (:func:`needs_filing` counts)."""
+    return pending_after(conn, app) is not None or similar_fts.any_behind(conn, app)
+
+
+def repaired(conn, app, lock=None):
+    """Refile *app* from the lean tables when :func:`needs_filing` (*lock*:
+    the connection's searches', held per transaction)."""
     if needs_filing(conn, app):
-        file_lean(conn, app)
+        file_lean(conn, app, lock)
 
 
 _CHECKED = OrderedDict()  # (file, app, generation) already checked by repaired()
+_FILING = {}  # (file, app) -> the lock its filers in this process take turns under
+_FILING_LOCK = threading.Lock()
+
+
+def _filing_lock(file, app):
+    with _FILING_LOCK:
+        return _FILING.setdefault((file, app), threading.Lock())
+
+
+def _filed(store, conn, lock, file, app):
+    """Finish *app*'s re-derive, then :func:`repaired`, once per index
+    generation unless :func:`filing_behind` (another process left documents
+    behind): one filer of *app* at a time, holding the search *lock* only
+    per transaction, so the file's other apps keep searching."""
+    with _filing_lock(file, app):
+        with lock:
+            key = (file, app, store.generation(app))
+            if key in _CHECKED and not filing_behind(conn, app):
+                return
+        store.derive(app)
+        repaired(conn, app, lock)
+        with lock:
+            key = (file, app, store.generation(app))
+        with _FILING_LOCK:
+            _CHECKED[key] = None
+            while len(_CHECKED) > 64:
+                _CHECKED.popitem(last=False)
 
 
 def file_scope(app, path, schema=None, snapshot=None, repair=True):
     """A :class:`Scope` over the index file at *path* (rows read from
-    *snapshot* when given, else point reads on the file), :func:`repaired`
-    first unless *repair* is False (once per index generation) — after
-    finishing a re-derive under way, which files no documents; None
-    without one."""
+    *snapshot* when given, else point reads on the file), :func:`_filed`
+    first unless *repair* is False, and ``behind`` when its documents are
+    (:func:`filing_behind`); None without one."""
     opened = open_file(path)
     if opened is None:
         return None
     store, conn, lock, file = opened
+    if repair:
+        _filed(store, conn, lock, file, app)
     with lock:
         key = (file, app, store.generation(app))
-        if repair and key not in _CHECKED:
-            store.derive(app)
-            repaired(conn, app)
-            key = (file, app, store.generation(app))
-            _CHECKED[key] = None
-            while len(_CHECKED) > 64:
-                _CHECKED.popitem(last=False)
+        behind = filing_behind(conn, app)
     rows = SnapshotRows(snapshot) if snapshot is not None else StoreRows(conn, app)
-    return Scope(app, conn, rows, schema, lock, cache_key=key)
+    return Scope(app, conn, rows, schema, lock, cache_key=key, behind=behind)

@@ -133,12 +133,12 @@ class SimilarCorpora:
         except Exception:
             _LOGGER.warning("Filing similar-runs documents failed", exc_info=True)
 
-    def _filing(self, key, app, path):
+    def _filing(self, key, app, path, again=False):
         """The Event of *key*'s background filing (:func:`_file_documents`),
-        started on the first ask."""
+        started on the first ask — and, *again*, once the last one is done."""
         with self._lock:
             done = self._filed.get(key)
-            if done is None:
+            if done is None or (again and done.is_set()):
                 done = self._filed[key] = threading.Event()
                 threading.Thread(target=_file_documents, args=(app, path, done),
                                  name="vmn-similar-file", daemon=True).start()
@@ -167,10 +167,7 @@ class SimilarCorpora:
         with self._lock:
             path = index_file(self._indexes.get(key))
         if path:
-            # Once per process (an upgrade's filing); file_scope checks each generation.
-            if not self._filing(key, app_name, path).wait(_left(deadline)):
-                raise SimilarDeadlineExceeded
-            scope = file_scope(app_name, path, schema, snapshot)
+            scope = self._file_scope(key, app_name, path, schema, snapshot, deadline)
             if scope is not None:
                 scope.label = key
                 return scope
@@ -184,3 +181,18 @@ class SimilarCorpora:
                     raise SimilarDeadlineExceeded
         return Scope(corpus.filer.app, corpus.filer.conn, SnapshotRows(snapshot), schema,
                      corpus.lock, label=key)
+
+    def _file_scope(self, key, app_name, path, schema, snapshot, deadline):
+        """:func:`file_scope` of *key*'s index file, its documents filed on the
+        background thread (first once per process, then whenever another
+        process left them behind again): the request waits for it up to its
+        deadline, never files itself; still behind after a second filing, the
+        scope says so (``behind``)."""
+        for again in (False, True):
+            if not self._filing(key, app_name, path, again).wait(_left(deadline)):
+                raise SimilarDeadlineExceeded
+            scope = file_scope(app_name, path, schema, snapshot, repair=False)
+            if scope is None or not scope.behind:
+                break
+        return scope
+

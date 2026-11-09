@@ -25,7 +25,10 @@ with the app. It is never computed for inner runs (``--parent``, an
 enclosing run's ``VMN_EXPERIMENT_ID``, sweep trials), with ``--no-similar``
 or with conf ``experiment.similar.hint: false``. Errors are logged at debug
 and never touch the run. ``vmn-exp similar <app> -v <verstr>`` shows the
-rest — from a refreshed index.
+rest — from a refreshed index. When the index file's documents are behind its
+runs (a re-derive left them to refile, no server or ``vmn-exp similar`` filed
+them yet: :func:`~vmn_exp.core.similar_corpus.filing_behind`, a few index
+seeks), the hint says its results are incomplete.
 """
 import os
 import sys
@@ -47,6 +50,9 @@ from vmn_exp.storage.cached import local_side
 
 BUDGET_SEC = 0.3
 HINT_TOP = 3
+# The documents are behind the runs (a re-derive left them to refile): say so.
+BEHIND_NOTE = ("similar runs: the search is still filing runs — results incomplete"
+               " (`vmn-exp similar` files them)")
 # Set in an enclosing run's children (VMN_EXPERIMENT_ID) and in sweep trials.
 INNER_RUN_ENVS = ("VMN_EXPERIMENT_ID", "VMN_SWEEP_TRIAL")
 # The search's clock (time.monotonic): the deadline handed to it is read off this.
@@ -100,4 +106,4 @@ def _lines(local, app_name, verstr, exp_conf, path, deadline, command):
     items = search(local, app_name, scope, target, schema=schema, top=HINT_TOP,
                    weights=conf_weights(exp_conf), deadline=deadline)
     _check(deadline)
-    return hint_lines(items)
+    return hint_lines(items) + ([BEHIND_NOTE] if scope.behind else [])

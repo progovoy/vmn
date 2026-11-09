@@ -166,6 +166,20 @@ def stale_count(conn, app):
         (app, PROFILE_VERSION)).fetchone()[0]
 
 
+_BEHIND_SQL = (
+    "SELECT EXISTS (SELECT 1 FROM similar_doc WHERE app = ?1 AND version < ?2)"
+    " OR EXISTS (SELECT 1 FROM similar_doc WHERE app = ?1 AND version > ?2)"
+    " OR EXISTS (SELECT 1 FROM similar_doc WHERE app = ?1 AND version IS NULL)"
+    " OR (EXISTS (SELECT 1 FROM exp_rows WHERE app = ?1)"
+    "     AND NOT EXISTS (SELECT 1 FROM similar_doc WHERE app = ?1))")
+
+
+def any_behind(conn, app):
+    """Whether some of *app*'s documents are another profile version's (or
+    left to refile), or its runs have none at all: index seeks, no count."""
+    return bool(conn.execute(_BEHIND_SQL, (app, PROFILE_VERSION)).fetchone()[0])
+
+
 def document_frequencies(conn, terms):
     """``{(column, term): documents holding it}`` of *terms* ``{column: [term]}``
     (stemmed text terms; words for the structured columns); absent terms are

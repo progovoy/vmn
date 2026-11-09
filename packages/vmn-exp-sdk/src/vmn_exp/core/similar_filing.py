@@ -14,6 +14,7 @@
   refiling the runs whose row or side values are other objects than at the
   last sync.
 """
+import contextlib
 import itertools
 import json
 import weakref
@@ -87,11 +88,11 @@ def _seqs(conn, app, keys=None):
     return out
 
 
-def lean_entries(conn, app):
+def lean_entries(conn, app, lock=None):
     """``({key: seqs}, entries, {key: command})`` of *app*'s runs, read from
-    the lean tables in one transaction; *entries* yields their ``(key, doc)``,
-    letting go of each run's lean row as it does."""
-    with read_tx(conn):
+    the lean tables in one transaction (under *lock*); *entries* yields their
+    ``(key, doc)``, letting go of each run's lean row as it does."""
+    with lock or contextlib.nullcontext(), read_tx(conn):
         keys, lean, _ = read_lean(conn, app)
         commands = {key: _command((json.loads(data) or {}).get("run_state")) for key, data in
                     conn.execute("SELECT key, data FROM exp_index_state WHERE app = ?", (app,))}
@@ -105,21 +106,24 @@ def lean_entries(conn, app):
     return seqs, entries(), commands
 
 
-def file_lean(conn, app):
+def file_lean(conn, app, lock=None):
     """Refile every run of *app* from the index's lean tables (``exp_rows``,
     ``exp_sides``, ``exp_index_state``), :data:`FILE_CHUNK` runs per write
     transaction — skipping a run saved since they were read (its save filed
-    it) — then forget the documents of runs gone."""
-    seqs, entries, commands = lean_entries(conn, app)
+    it) — then forget the documents of runs gone. *lock* (the connection's
+    searches') is held per transaction, so searches go on between them."""
+    held = lock or contextlib.nullcontext()
+    seqs, entries, commands = lean_entries(conn, app, lock)
     for chunk in iter(lambda: list(itertools.islice(entries, FILE_CHUNK)), []):
-        with write_tx(conn):
+        with held, write_tx(conn):
             now = _seqs(conn, app, [key for key, _ in chunk])
             similar_fts.file_docs(conn, app, [(key, doc) for key, doc in chunk
                                               if now.get(key) == seqs[key]], commands)
-    gone = similar_fts.gone(conn, app)
-    if gone:
-        with write_tx(conn):
-            similar_fts.forget(conn, app, gone)
+    with held:
+        gone = similar_fts.gone(conn, app)
+        if gone:
+            with write_tx(conn):
+                similar_fts.forget(conn, app, gone)
 
 
 def _snapshot_command(snapshot, row):
