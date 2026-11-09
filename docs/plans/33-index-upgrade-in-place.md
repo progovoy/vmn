@@ -11,7 +11,7 @@
 > Paths: `core/` = `packages/vmn-exp-sdk/src/vmn_exp/core/`; `ui/` =
 > `packages/vmn-exp/src/vmn_exp/ui/`; tests in `packages/vmn-exp/tests/`.
 
-Status: **in progress** (2026-11-09). Found by a code read plus a local
+Status: **done** (2026-11-09). Found by a code read plus a local
 measurement (20k synthetic runs, ~22 KB/run).
 
 ## 1. What happened
