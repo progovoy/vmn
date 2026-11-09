@@ -17,8 +17,8 @@ from vmn_exp.core.app_settings import SettingsError, baseline_fields, check_fiel
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.baseline_views import UnknownBaseline
+from vmn_exp.ui.indexing import indexed_response
 from vmn_exp.ui.memo import LRU
-from vmn_exp.ui.responses import memoized_json_response
 
 ENCODED_BODIES = 64
 MAX_CHIPS = 200
@@ -60,7 +60,7 @@ def register(app, prefix, leaderboard_inputs, baselines, segment, attention_of):
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        return memoized_json_response(request, etag, lambda: body, bodies)
+        return indexed_response(request, etag, snapshot, lambda: body, bodies)
 
     @app.get(f"{base}/experiments-baselines", dependencies=[require(VIEWER)])
     def experiment_baselines(request: Request, ws_name: str, app_tag: str,
@@ -73,5 +73,5 @@ def register(app, prefix, leaderboard_inputs, baselines, segment, attention_of):
         fields, by = _rule_args(match, by)
         snapshot, schema = leaderboard_inputs(ws_name, app_tag)
         etag = baselines.chips_etag(snapshot, schema, v, match=fields, by=by)
-        return memoized_json_response(request, etag, lambda: {
+        return indexed_response(request, etag, snapshot, lambda: {
             "chips": baselines.chips(snapshot, schema, v, match=fields, by=by)}, bodies)

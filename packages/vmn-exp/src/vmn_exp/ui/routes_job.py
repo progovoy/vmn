@@ -14,8 +14,8 @@ from fastapi import HTTPException, Request
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.job_split import check_split
+from vmn_exp.ui.indexing import indexed_response
 from vmn_exp.ui.memo import LRU
-from vmn_exp.ui.responses import memoized_json_response
 
 ENCODED_BODIES = 64
 MAX_CLUSTERS = 100
@@ -45,8 +45,8 @@ def register(app, prefix, leaderboard_inputs, views, segment, default_split):
         if not views.is_job(snapshot, verstr):
             raise HTTPException(404, f"{verstr} is not a job (it has no runs under it)")
         etag = views.etag(snapshot, schema, verstr, route=route, **params)
-        return memoized_json_response(
-            request, etag, lambda: compute(snapshot, schema, verstr, **params), bodies)
+        return indexed_response(
+            request, etag, snapshot, lambda: compute(snapshot, schema, verstr, **params), bodies)
 
     @app.get(f"{base}/summary", dependencies=[require(VIEWER)])
     def job_summary(request: Request, ws_name: str, app_tag: str, verstr: str,

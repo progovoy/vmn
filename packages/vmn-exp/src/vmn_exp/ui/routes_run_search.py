@@ -12,8 +12,8 @@ bucket and parameters) is known before any search, so a repeat is a ``304``.
 from fastapi import Request
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
+from vmn_exp.ui.indexing import indexed_response
 from vmn_exp.ui.memo import LRU
-from vmn_exp.ui.responses import memoized_json_response
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 50
@@ -32,5 +32,5 @@ def register(app, api_prefix, snapshot_of, cache):
         snapshot = snapshot_of(ws_name, app_tag)
         params = dict(text=text, limit=max(1, min(limit, MAX_LIMIT)), archived=archived)
         etag = cache.search_etag(snapshot, **params)
-        return memoized_json_response(
-            request, etag, lambda: cache.search(snapshot, **params), bodies)
+        return indexed_response(
+            request, etag, snapshot, lambda: cache.search(snapshot, **params), bodies)
