@@ -42,7 +42,7 @@ class _Loading:
             if self.state is None:
                 return snap
             key = (id(snap), self.state)
-            if key not in self._copies:
+            if key not in self._copies:  # holding snap keeps its id from being reused
                 self._copies[key] = (snap, dataclasses.replace(snap, loading=self.state))
             return self._copies[key][1]
 

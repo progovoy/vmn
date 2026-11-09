@@ -704,26 +704,22 @@ def _format_list_row(row, node, columns, policies):
 
 
 def _listed(storage, app_name, args, schema):
-    """``(rows, declared schema, app has runs)``: the annotated runs the
-    query and archived filter keep, in storage order — from the persisted
-    index (only ``--last``'s without a query), else from a snapshot."""
+    """``(rows, declared schema, app has runs, loading)``: the annotated runs
+    the query and archived filter keep, in storage order — from the persisted
+    index (only ``--last``'s without a query), else from a snapshot, whose
+    ``loading`` is the last (None when whole or from the persisted rows)."""
     query, archived = getattr(args, "query", None), getattr(args, "archived", False)
     view = index_list.list_view(
         storage, app_name, query, archived, getattr(args, "last", None), schema
     )
     if view is not None:
-        return view
+        return (*view, None)
     matching, declared, any_runs = index_list.snapshot_listing(
         storage, app_name, query, schema, with_create_note=True
     )
-    return filter_archived(matching, archived), declared, any_runs
-
-
-def _still_loading(storage, app_name):
-    """The ``loading`` of the app's index snapshot a listing read, None when
-    it was whole (or the listing came from the persisted rows)."""
     snap = experiment_index.shared_index(storage, app_name).published
-    return None if snap is None else snap.loading
+    loading = None if snap is None else snap.loading
+    return filter_archived(matching, archived), declared, any_runs, loading
 
 
 @measure_runtime_decorator
@@ -731,12 +727,11 @@ def experiment_list(vcs, params, storage, args):
     app_name = _app_name(vcs, args)
     schema = metrics_schema(vcs, storage, app_name)
     try:
-        matching, declared, any_runs = _listed(storage, app_name, args, schema)
+        matching, declared, any_runs, loading = _listed(storage, app_name, args, schema)
     except QueryError as e:
         VMN_LOGGER.error(f"Invalid --query: {e}")
         return 1
     as_json = getattr(args, "json", False)
-    loading = _still_loading(storage, app_name)
     if loading is not None:
         print(incomplete_text(loading), file=sys.stderr)
     if not any_runs and not as_json:

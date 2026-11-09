@@ -35,7 +35,7 @@ import { DEFAULT_FAILED_PCT_THRESHOLD } from "../../shell/contracts";
 import ToggleChip from "../../components/ToggleChip";
 import type { RunState } from "../../types";
 import { freshnessShort } from "../../util/freshness";
-import { incompleteText, indexingText, soFar } from "../../util/indexing";
+import { boardIndexingText, soFar } from "../../util/indexing";
 
 /** `20 jobs`, `19,580 single runs`; listing every top-level run, `14 jobs ·
  *  3 single runs` once every row is loaded, else the total. */
@@ -115,7 +115,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
       <BoardHead
         title={appName}
         count={[countText(loading, rows, data.total, kind.kind) + (loading ? "" : soFar({ indexing })),
-          data.indexing ? incompleteText(data.indexing) : indexingText(indexing), freshnessShort(status?.freshness)]
+          boardIndexingText(data.indexing, status?.indexing), freshnessShort(status?.freshness)]
           .filter(Boolean).join(" · ")}
         views={views}
         actions={!empty && <JobsToolbar ws={ws} app={app} view={view} board={board} onViewApplied={resetFilter} onAll={onAll} />}

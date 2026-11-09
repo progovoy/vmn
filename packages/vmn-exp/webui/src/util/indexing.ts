@@ -20,6 +20,10 @@ export function incompleteText(indexing?: Indexing): string {
   return `indexing${share} — results incomplete`;
 }
 
+/** A board's indexing note: its answer's own, else the status poll's. */
+export const boardIndexingText = (answer?: Indexing, polled?: Indexing): string =>
+  (answer ? incompleteText(answer) : indexingText(polled));
+
 /** An app tile's run count: the load's progress, else the status total, else
  *  the listed count (null on a store whose index holds none yet). */
 export function appRunsText(status: { total: number; indexing?: Indexing } | undefined,
