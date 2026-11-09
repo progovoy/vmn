@@ -118,16 +118,21 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
         return decode_records(*self._raw(app_name))
 
     def _read(self, query, default):
-        if self._db.get() is None:
+        """*query()* on the connection, taking turns with the other threads'
+        reads and transactions on it (macOS's SQLite does not serialize two
+        threads on one connection); *default* when unavailable or failed."""
+        conn = self._db.get()
+        if conn is None:
             return default
-        try:
-            return query()
-        except sqlite3.Error as exc:
-            self._db.on_error(exc)  # corrupt (e.g. replaced since opened): recovers
-            return default
-        except ValueError:
-            _LOGGER.debug("Could not decode the experiment index", exc_info=True)
-            return default
+        with conn.tx_lock:
+            try:
+                return query()
+            except sqlite3.Error as exc:
+                self._db.on_error(exc)  # corrupt (e.g. replaced since opened): recovers
+                return default
+            except ValueError:
+                _LOGGER.debug("Could not decode the experiment index", exc_info=True)
+                return default
 
     def count(self, app_name):
         """How many records are persisted for *app_name*, without reading
