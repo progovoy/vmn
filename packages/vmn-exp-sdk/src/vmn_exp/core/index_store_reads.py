@@ -58,9 +58,9 @@ class LeanReads:
 
     def load_kept(self, app_name):
         """:meth:`load_warm`'s answer while *app_name*'s rows are left to
-        re-derive after an in-place records upgrade (:data:`KEPT_SCOPE`):
-        the rows it kept, stale until re-derived; None when there are none
-        (another upgrade's re-derive, never saved, unavailable)."""
+        re-derive after an in-place upgrade (:data:`KEPT_SCOPE`): the rows
+        it kept, stale until re-derived; None when there are none (never
+        saved, unavailable)."""
         return self._read(lambda: self._warm(app_name, kept=True) if read_payload(
             self._conn, KEPT_SCOPE, SCHEMA_VERSION) else None, None)
 

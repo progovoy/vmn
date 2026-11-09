@@ -34,8 +34,8 @@ Two versions, so an upgrade never costs more than it must:
   table gains a column. An older file is upgraded in place by one short
   transaction — missing tables created, each app marked to re-derive
   (:mod:`vmn_exp.core.index_derive`) — never a drop: its records, journal
-  mark and baselines stay, and each app's index re-derives its rows locally
-  before serving them. A new derived column is an ``ALTER TABLE ... ADD
+  mark and baselines stay, and each app's index re-derives its rows locally,
+  serving the old ones meanwhile, ``loading`` (:data:`KEPT_SCOPE`). A new derived column is an ``ALTER TABLE ... ADD
   COLUMN`` there; a dropped or retyped one needs a new table name.
 
 A records bump bumps :data:`DERIVED_VERSION` too. The ``schema`` meta value
@@ -73,7 +73,7 @@ _LEGACY_RECORDS = 18  # the newest records of a file with no "records" meta valu
 NEW, DERIVED = "new", "derived"  # the upgrades ensure_schema makes
 DERIVE_SCOPE = "derive:"  # exp_index_kv scope prefix of an app left to re-derive
 # exp_index_kv scope, fingerprint SCHEMA_VERSION: the re-derive at this schema
-# rewrites rows an in-place records upgrade kept, served (stale) meanwhile.
+# rewrites rows an in-place upgrade kept, served (stale) meanwhile.
 KEPT_SCOPE = "kept-rows"
 
 RECORD_TABLES = {
@@ -173,7 +173,7 @@ def ensure_schema(conn):
         if upgrade == NEW:
             _create(conn)
         elif upgrade == DERIVED:
-            upgrade_derived(conn)
+            upgrade_derived(conn, kept=True)
 
 
 def upgrade_derived(conn, kept=False):

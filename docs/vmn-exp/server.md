@@ -163,8 +163,8 @@ versions:
   similar-runs documents. A change there (most upgrades) is applied in place:
   opening the file creates any missing table and marks each app to re-derive,
   in one short transaction, and drops nothing. Each app's index then rebuilds
-  its rows from the persisted records, 500 per transaction, before it serves
-  them. Nothing is read from storage, and the journal mark and listing
+  its rows from the persisted records, 500 per transaction, serving the old
+  ones meanwhile (see below). Nothing is read from storage, and the journal mark and listing
   baselines are kept, so once it finishes the server picks up from the journal
   as usual. Decoding the records is the cost: about a minute per 100k runs.
   The re-derive writes rows only: the similar-runs documents are refiled
@@ -174,8 +174,9 @@ versions:
   another process (a CLI's upgrade) leaves documents behind: the background
   thread refiles them, never the request.
 
-While an app re-derives, its board is empty (after an in-place records
-upgrade it keeps its old rows, stale until re-derived) and `experiments-status` reports
+While an app re-derives, its board serves the rows it kept (after an
+in-place records upgrade, those not picked to read again), stale until
+re-derived, and every board answer and `experiments-status` report
 `indexing {loaded, total}` and freshness phase `migrating` with its
 `progress`. `/apps` and the status routes answer right away. Point reads and
 `vmn-exp list` read the records instead of the persisted rows until the

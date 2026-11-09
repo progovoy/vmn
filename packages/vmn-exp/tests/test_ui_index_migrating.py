@@ -111,13 +111,15 @@ def test_apps_and_status_answer_while_the_index_rederives(tmp_path, held_derive,
                       lambda b: (b.get("freshness") or {}).get("phase") == "migrating")
         assert body["freshness"]["phase"] == "migrating"
         assert body["freshness"]["progress"] == 0
+        assert body["total"] == 3  # the kept rows, served while they re-derive
         assert [a["name"] for a in _get_in_time(client, f"{API}/apps")] == [APP]
         assert _get_in_time(client, f"{API}/apps-status")[APP]["freshness"]["phase"] == "migrating"
 
         held_derive.set()
-        body = _until(lambda: _get_in_time(client, STATUS), lambda b: b["total"] == 3)
-        assert body["total"] == 3
+        body = _until(lambda: _get_in_time(client, STATUS),
+                      lambda b: b["freshness"]["phase"] != "migrating")
         assert body["freshness"]["phase"] != "migrating"
+        assert body["total"] == 3
     finally:
         app.state.refresher.stop()
 
