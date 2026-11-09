@@ -28,7 +28,8 @@ def _purge_files(root):
 def _is_whole(root):
     runs = os.listdir(_runs_dir(root))
     return len(runs) == N and all(
-        os.path.exists(os.path.join(_runs_dir(root), run, "metadata.yml")) for run in runs)
+        os.path.exists(os.path.join(_runs_dir(root), run, name))
+        for run in runs for name in ("metadata.yml", "run_state.yml"))
 
 
 @pytest.fixture

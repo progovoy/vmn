@@ -18,7 +18,6 @@ reused from the cache, running runs read stuck once their heartbeat is stale).
 """
 import collections
 import contextlib
-import fcntl
 import glob
 import itertools
 import json
@@ -32,6 +31,7 @@ import time
 from array import array
 
 import yaml
+from filelock import FileLock
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -233,12 +233,8 @@ def _locked(n):
     taking turns: one generates, the others then find it whole."""
     root = os.path.join(cache_dir(), f"v{VERSION}-n{n}")
     os.makedirs(cache_dir(), exist_ok=True)
-    with open(root + ".lock", "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            yield root
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+    with FileLock(root + ".lock"):
+        yield root
 
 
 def _ensure(root, n, workers, progress):
@@ -251,10 +247,8 @@ def _ensure(root, n, workers, progress):
     building = tempfile.mkdtemp(prefix=os.path.basename(root) + ".", dir=cache_dir())
     expected = generate(building, n, workers=workers, progress=progress)
     _write(os.path.join(building, COMPLETE), json.dumps(expected))
-    if os.path.exists(root):  # a rename onto a non-empty directory fails
-        os.rename(root, building + ".old")
+    shutil.rmtree(root, ignore_errors=True)  # a rename onto a non-empty directory fails
     os.rename(building, root)
-    _clear_aside(root)
 
 
 def _clear_aside(root):
@@ -266,15 +260,12 @@ def _clear_aside(root):
 def _is_whole(root, n):
     """Whether *root* holds all *n* runs, each with its metadata and run
     state: the OS's temp cleaner deletes old files and keeps directories."""
+    base = os.path.join(_store_root(root), "runs", APP)
     try:
-        with open(os.path.join(root, COMPLETE)) as f:
-            if json.load(f).get("total") != n:
-                return False
-        base = os.path.join(_store_root(root), "runs", APP)
         runs = os.listdir(base)
-    except (OSError, ValueError):
+    except OSError:
         return False
-    return len(runs) == n and all(
+    return os.path.exists(os.path.join(root, COMPLETE)) and len(runs) == n and all(
         os.path.exists(os.path.join(base, run, name))
         for run in runs for name in ("metadata.yml", "run_state.yml"))
 

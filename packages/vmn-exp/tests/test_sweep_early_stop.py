@@ -84,3 +84,10 @@ def test_a_check_judges_the_steps_logged_since_the_last_one():
     others = [_curve([1.0, 0.9, 0.8, 0.7]), _curve([1.1, 1.0, 0.9, 0.8])]
     assert _stopper().should_stop(_curve([9.0] * 6), others)
 
+
+
+def test_a_step_the_peers_reach_after_a_check_is_judged_by_the_next():
+    stopper = _stopper()
+    own = _curve([9.0] * 6)
+    assert not stopper.should_stop(own, [_curve([1.0])] * 2)  # peers not at step 2 yet
+    assert stopper.should_stop(own, [_curve([1.0] * 6)] * 2)

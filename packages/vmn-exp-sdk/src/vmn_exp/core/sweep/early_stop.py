@@ -1,13 +1,12 @@
 """Median stopping: end a trial whose best-so-far trails its peers' median.
 
-At the trial's latest step ``s`` (once ``s >= min_iter``), compare its best
+At each step ``s`` the trial logged (from ``min_iter`` on), compare its best
 value of the target metric up to ``s`` with the median of the other trials'
 best values up to ``s`` — counting only trials that reached ``s``, and only when
-at least ``min_trials`` did. Strictly worse than that median: stop.
-
-A polled check judges every step logged since the previous check, not only
-the latest: a slow poll that lands past the steps its peers reached must
-not let the trial off.
+at least ``min_trials`` did. Strictly worse than that median at any of
+them: stop. Judging every step, not only the latest, keeps the verdict
+from hanging on when a polled check lands (past the steps its peers
+stopped at, or before they reached its own).
 """
 import bisect
 import itertools
@@ -26,11 +25,9 @@ def step_points(points):
     ]
 
 
-def median_should_stop(own, others, goal, min_iter=1, min_trials=1, after=None):
-    """Whether the trial with points *own* should stop (see module docstring):
-    judged at its latest step or, given *after*, at each of its steps past it."""
+def median_should_stop(own, others, goal, min_iter=1, min_trials=1):
+    """Whether the trial with points *own* should stop (see module docstring)."""
     steps = sorted({s for s, _ in own if s >= min_iter})
-    steps = steps[-1:] if after is None else [s for s in steps if s > after]
     if not steps:
         return False
     pick = min if goal == "min" else max
@@ -65,7 +62,6 @@ class MedianStopper:
         self.goal = spec["metric"]["goal"]
         self.rule = spec["early_terminate"]
         self._next = None
-        self._judged = float("-inf")  # the latest step a check judged
 
     def due(self, now):
         if self._next is None:
@@ -80,10 +76,7 @@ class MedianStopper:
         return bool(own) and max(s for s, _ in own) >= self.rule["min_iter"]
 
     def should_stop(self, own, others):
-        """Whether any step of *own* logged since the last check trails."""
-        stop = median_should_stop(
-            own, others, self.goal, min_iter=self.rule["min_iter"],
-            min_trials=self.rule["min_trials"], after=self._judged,
+        return median_should_stop(
+            own, others, self.goal,
+            min_iter=self.rule["min_iter"], min_trials=self.rule["min_trials"],
         )
-        self._judged = max([self._judged] + [s for s, _ in own])
-        return stop
