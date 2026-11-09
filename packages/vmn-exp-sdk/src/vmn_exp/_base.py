@@ -106,11 +106,14 @@ def valid_app_path(app_name):
     )
 
 
+def iso_z(moment):
+    """Aware *moment* as the UTC ``...Z`` ISO string every vmn record is timestamped with."""
+    return moment.astimezone(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def now_iso():
     """UTC now as the ``...Z`` ISO string every vmn record is timestamped with."""
-    return (
-        datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-    )
+    return iso_z(datetime.datetime.now(datetime.timezone.utc))
 
 
 def sha256_file(abs_path):

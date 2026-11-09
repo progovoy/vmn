@@ -22,9 +22,8 @@ from collections import namedtuple
 
 from vmn_exp.core.app_settings import check_job_aggregate, job_aggregate_of
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal, with_resolved_goals
-from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.ui.job_rollup_cache import _SplitRollups
-from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields, policy_overrides
+from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields, policy_fields
 from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, own_value
 from vmn_exp.ui.job_views import child_rows
 from vmn_exp.ui.leaderboard_group_summary import TAILS, of_sorted, tail_quantile
@@ -102,8 +101,9 @@ def _of_units(units, value_of, agg, goal):
 
 
 def _of_runs(parts, metric, agg, goal):
-    """``{value, n, of, verstr, approx}`` over every run of *parts*: a
-    quantile from the merged sketches (``approx``), the rest exact."""
+    """``{value, n, of, verstr, approx}`` (plus ``mixed``/``policies``) over
+    every run of *parts*: a quantile from the merged sketches (``approx``),
+    the rest exact."""
     q = _quantile(agg, goal)
     fields = {"of": count_fields(parts)["total"], "approx": q is not None}
     # The extreme an exact agg reads is the best of that goal: its holder.
@@ -112,6 +112,7 @@ def _of_runs(parts, metric, agg, goal):
     if found is None:
         return fields
     fields["n"] = found["n"]
+    fields.update({k: found[k] for k in ("mixed", "policies") if k in found})
     if goal is not None:
         fields["value"] = found[agg if q is None else _SKETCH[q]]
         fields["verstr"] = found["best_verstr"]
@@ -174,9 +175,9 @@ class JobAggregates:
         def fields(job):
             if metric is None:
                 return {}
-            found = (_of_runs(parts(job), metric, agg.agg, goal) if agg.by == RUNS
-                     else _of_units(units(job), value, agg.agg, goal))
-            return {**found, **policy_mix(policy_overrides(parts(job), metric))}
+            if agg.by == RUNS:
+                return _of_runs(parts(job), metric, agg.agg, goal)
+            return {**_of_units(units(job), value, agg.agg, goal), **policy_fields(parts(job), metric)}
 
         if metric is not None and agg.by != RUNS:
             value = UnitValue(agg.value, metric, higher_is_better(goal), parts, tree.jobs)

@@ -11,7 +11,7 @@ import datetime
 
 import yaml
 
-from vmn_exp._base import VMN_LOGGER, now_iso, yaml_safe_load
+from vmn_exp._base import VMN_LOGGER, iso_z, now_iso, yaml_safe_load
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.alerts.dispatch import make_alert
 from vmn_exp.core.run_error import state_error_summary
@@ -51,7 +51,7 @@ def transition_key(status, run_state, observed_at=None, now=None):
     if status == FAILED:
         return f"failed@{run_state.get('finished_at')}"
     since = _transition_time(status, run_state, observed_at, now)
-    return f"stuck@{since.isoformat().replace('+00:00', 'Z') if since else None}"
+    return f"stuck@{iso_z(since) if since else None}"
 
 
 def _transition_time(status, run_state, observed_at=None, now=None):

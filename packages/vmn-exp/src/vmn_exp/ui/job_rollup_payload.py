@@ -180,17 +180,21 @@ def metric_fields(parts, name, goal, bins=HIST_BINS, quantiles=True):
     }
     if quantiles:
         fields.update(zip(("p10", "p50", "p90"), sketch.quantiles([0.1, 0.5, 0.9])))
-    fields.update(policy_mix(policy_overrides(parts, name)))
+    fields.update(_policy_fields(tallies))
     return fields
 
 
-def policy_overrides(parts, name):
-    """``{policy: runs}`` of the runs of *parts* overriding the schema's
-    summary policy of *name* (plan 32 F1)."""
+def _policy_fields(tallies):
     overrides = Counter()
-    for tally in _metric_parts(parts, name):
+    for tally in tallies:
         overrides.update(tally.policies)
-    return overrides
+    return policy_mix(overrides)
+
+
+def policy_fields(parts, name):
+    """``mixed``/``policies`` of the runs of *parts* overriding the schema's
+    summary policy of *name* (plan 32 F1), {} without one."""
+    return _policy_fields(_metric_parts(parts, name))
 
 
 def failure_counts(parts):

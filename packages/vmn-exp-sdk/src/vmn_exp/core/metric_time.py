@@ -4,6 +4,8 @@ streams store (plan 12 D5), and back — losslessly for every timestamp vmn
 writes (:func:`vmn_exp._base.now_iso`)."""
 import datetime
 
+from vmn_exp._base import iso_z
+
 _EPOCH = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 _US = datetime.timedelta(microseconds=1)
 
@@ -24,4 +26,4 @@ def iso_to_us(iso):
 def us_to_iso(ts_us):
     """The ``...Z`` ISO string of *ts_us*, formatted as ``now_iso`` does."""
     moment = _EPOCH + datetime.timedelta(microseconds=int(ts_us))
-    return moment.isoformat().replace("+00:00", "Z")
+    return iso_z(moment)
