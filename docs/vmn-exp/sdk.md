@@ -341,7 +341,10 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
   charts still plot by step. A metric whose step went back to or below an
   earlier write's without a rewind (e.g. a resumed writer restarting its
   step counter) is marked on the run page and its chart: *steps went back
-  from 120 to 0 at write 122* (run detail `step_restarts`).
+  from 120 to 0 at write 122* (run detail `step_restarts`). Index rows
+  (`list_runs`, the board) carry `row["step_restarts"][name] = {"from",
+  "to"}` too (absent when none), marked ↺ on board and Compare cells and
+  noted on Compare's and an outer run's overlaid charts.
 - A run's `goal`, `hidden` and `chart` also count across runs for names
   conf.yml does not declare (`hidden`/`chart`: the latest run wins; `goal`:
   the one goal the runs declare, none when they declare different goals —

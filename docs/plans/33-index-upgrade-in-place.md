@@ -86,3 +86,10 @@ The next upgrade in place needs no extra disk. The board keeps its rows,
 marked "indexing N%", until the derive finishes. Values that the bump
 changed (here: summary types, params sharing a metric's name) are the old
 ones until their row is re-derived.
+
+The next upgrade (records 19 → 20: a metric's last write from older `.vmx`
+footers, and the step-restart mark on rows) is in place too, but its
+predicate picks every run with a metric logged more than once. On a store of
+training runs that is nearly every run (all of them in the local load
+stores), so most runs are read again from storage in the background while
+the board serves their old rows; runs of params or one-off values are kept.
