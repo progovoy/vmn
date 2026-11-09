@@ -170,7 +170,9 @@ versions:
   The re-derive writes rows only: the similar-runs documents are refiled
   afterwards, on a background thread (a document that did not change only
   gets its version back). Until then a similar-runs request answers 503
-  with `Retry-After` instead of results that miss runs.
+  with `Retry-After` instead of results that miss runs — again whenever
+  another process (a CLI's upgrade) leaves documents behind: the background
+  thread refiles them, never the request.
 
 While an app re-derives, its board is empty (after an in-place records
 upgrade it keeps its old rows, stale until re-derived) and `experiments-status` reports

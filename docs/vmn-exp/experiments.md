@@ -1313,6 +1313,10 @@ one). Cheap or nothing, and never affecting the run:
   queries are interrupted at the deadline and nothing is printed. It reads
   the FTS table and the few runs it shows by verstr, so its cost does not
   grow with the number of runs (there is no run-count cutoff).
+- While the index file's similar-runs documents are behind its runs (an
+  upgrade's re-derive left them to refile, and neither `vmn-exp similar` nor a
+  server has filed them yet), it adds `the search is still filing runs —
+  results incomplete`; the next `vmn-exp similar` files them.
 - Never for inner runs (`--parent`, an enclosing run's `VMN_EXPERIMENT_ID`,
   sweep trials).
 - Off with `--no-similar` or conf `experiment.similar.hint: false`. The SDK
