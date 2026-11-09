@@ -204,6 +204,8 @@ describe("the Jobs view", () => {
   });
 
   it("sorts by a header: the job sort keys of the contract", async () => {
+    // The server always answers a job's `rolled`, with its aggregate's goal.
+    m.experimentsPaged.mockResolvedValue(jobsPage([{ ...GRID, job: job({ rolled: rolled() }) }, SOLO]));
     renderExperiments();
     await screen.findByRole("link", { name: "lr_layers_grid" });
     fireEvent.click(screen.getByRole("button", { name: /sort by runs/i }));
