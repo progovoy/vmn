@@ -37,6 +37,9 @@ ran other dates ("0 of N paired").
   A peer must equal the run on every `match` field and differ on every
   `differ` field. A run missing a `differ` field is no peer (missing is
   missing). Checked on save (`core/app_settings.py`).
+- Done: `baseline_differ` (a field in both lists is refused),
+  `choose_baseline(..., differ)` for the card, chip and experiments-baselines,
+  the body's `differ`, and the card's "with the same … and a different …".
 
 ## 3. Lost runs and tree status (decided: lost is its own state)
 

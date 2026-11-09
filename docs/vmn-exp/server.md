@@ -498,6 +498,7 @@ ui:
        query: 'status = "created" and settled = null and timestamp < ago("1h")'}
   baseline:
     match: [params.table_name, params.model_type]
+    differ: [tags.launch_id]
     children_by: params.trade_date
   views:
     - {name: health, page: runs, search: '?show=t:health&show=t:state', default: true}
@@ -528,7 +529,9 @@ ui:
   it as a whole (a bad list there reads as none).
   `ui.baseline` is how an outer run finds the one it is
   [compared with](ui.md#baseline-compare): `match` (at most 8 distinct
-  `params.<k>`/`tags.<k>` fields the baseline must share; none: any) and
+  `params.<k>`/`tags.<k>` fields the baseline must share; none: any),
+  `differ` (at most 8 such fields, none also in `match`, on which the
+  baseline must hold another value; a run or peer missing one is no pair) and
   `children_by` (one such field the two outer runs' direct children pair
   by; none: no pairing). A checkout's conf.yml `experiment.ui.baseline`
   beats it as a whole (a bad one there reads as none).

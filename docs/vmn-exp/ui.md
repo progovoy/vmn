@@ -1512,7 +1512,11 @@ header and its Outer runs row.
   conf/[settings](server.md#app-settings) `experiment.ui.baseline: {match:
   [<field>...], children_by: <field>}` (fields `params.<k>`/`tags.<k>`);
   `?match=params.a,params.b` (empty: match nothing) and `?by=<field>`
-  (empty: no pairing) override it.
+  (empty: no pairing) override it. The rule's `differ: [<field>...]`
+  (plan 34 §2) also skips every peer equal to the run on one of those fields
+  or missing one (as does a run missing one: missing is never different), so
+  a relaunch is not compared with the earlier attempt of the same launch; the
+  body names them in `differ`.
 - **What.** Per goal metric of the rollup (the primary included) its `best`
   and `median`, then `failed_pct`, `duration_p90`, each attention query's
   share of the subtree (`attention`, with both counts), and the metrics
@@ -1545,7 +1549,7 @@ header and its Outer runs row.
   `better: null` and no `worse` mark.
 
 ```json
-{"verstr": "0.4.0-dev.abc", "match": ["params.table_name", "params.model_type"],
+{"verstr": "0.4.0-dev.abc", "match": ["params.table_name", "params.model_type"], "differ": [],
  "by": "params.trade_date", "values": {"params.table_name": "fx", "params.model_type": "nn"},
  "baseline": {"verstr": "0.3.0-dev.def", "idx": 12, "name": "wf_41aa", "status": "succeeded",
               "source": "latest", "started_at": "…", "finished_at": "…"},
