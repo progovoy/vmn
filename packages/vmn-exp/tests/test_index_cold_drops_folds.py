@@ -58,7 +58,10 @@ def _warm(root, db, **kwargs):
 
 
 def _reachable(obj):
-    """gc-tracked objects reachable from *obj* (classes and functions aside)."""
+    """gc-tracked objects reachable from *obj* (classes and functions aside),
+    as a collection leaves them: one untracks the tuples and dicts holding
+    only atoms, so without it the count hung on whether one ran since."""
+    gc.collect()
     seen, stack = set(), [obj]
     while stack:
         o = stack.pop()
