@@ -15,14 +15,50 @@ to read again (:mod:`vmn_exp.core.index_reread`): only those runs cost
 storage reads. Other records are not copied: the index loads afresh from
 storage.
 """
+import contextlib
 import json
+import threading
+
+try:
+    import fcntl
+except ImportError:  # Windows: only this process's threads take turns
+    fcntl = None
 
 from vmn_exp.core import index_reread, index_store_schema, sqlite_files
 from vmn_exp.core.index_store_kv import write_puts
-from vmn_exp.core.index_store_schema import RECORD_TABLES, mark_derive_pending
+from vmn_exp.core.index_store_schema import RECORD_TABLES, RecordsOutdated, mark_derive_pending
 from vmn_exp.core.sqlite_conn import connect, write_tx
 
 COPY_CHUNK = 500
+LOCK_SUFFIX = ".upgrade"
+_LOCKS = {}  # logical path -> the lock this process's upgraders of it take turns under
+_LOCKS_LOCK = threading.Lock()
+
+
+def upgrade(path, connect_file):
+    """``(connection, file)`` of *path*'s live database opened through
+    *connect_file(file)*, a new generation built first when its records are
+    outdated — by one upgrader at a time: one that waited opens what the one
+    before it built."""
+    with _one_upgrader(path):
+        file = sqlite_files.live_path(path)
+        try:
+            return connect_file(file), file
+        except RecordsOutdated as exc:
+            return regenerate(path, file, exc.found, connect_file)
+
+
+@contextlib.contextmanager
+def _one_upgrader(path):
+    with _LOCKS_LOCK:
+        lock = _LOCKS.setdefault(path, threading.Lock())
+    with lock:
+        if fcntl is None:
+            yield
+            return
+        with open(path + LOCK_SUFFIX, "a") as held:  # closing it unlocks it
+            fcntl.flock(held, fcntl.LOCK_EX)
+            yield
 
 
 def regenerate(path, old, found, connect_file):

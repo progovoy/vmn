@@ -28,7 +28,7 @@ import time
 from vmn_exp.core import sqlite_files
 from vmn_exp.core.best_effort import warn_once
 from vmn_exp.core.index_store_schema import RecordsOutdated, SchemaTooNew
-from vmn_exp.core.index_store_upgrade import regenerate
+from vmn_exp.core.index_store_upgrade import upgrade
 from vmn_exp.core.sqlite_conn import checkpoint, wal_oversized
 
 FIRST_BACKOFF_SEC = 1.0
@@ -86,17 +86,19 @@ class StoreConnection:
         self._retry_at, self._backoff = None, FIRST_BACKOFF_SEC
 
     def _regenerate(self, file, outdated):
-        """*file* holds older records: continue in a new generation beside it."""
+        """*file* holds older records: upgrade it (one upgrader at a time,
+        :func:`~vmn_exp.core.index_store_upgrade.upgrade`)."""
         if not sqlite_files.is_file_path(self.path):
             self._failed(file, outdated)
             return
         try:
-            conn, fresh = regenerate(self.path, file, outdated.found, self._connect)
+            conn, fresh = upgrade(self.path, self._connect)
         except (sqlite3.Error, OSError, SchemaTooNew, RecordsOutdated) as exc:
             self._failed(file, exc)
             return
-        warn_once((file, "records"), f"Experiment index {file} holds records of an older "
-                  f"vmn-exp ({outdated}); continuing in {fresh}")
+        if fresh != file:
+            warn_once((file, "records"), f"Experiment index {file} holds records of an older "
+                      f"vmn-exp ({outdated}); continuing in {fresh}")
         self._opened(conn, fresh, sqlite_files.pointer_stamp(self.path))
         sqlite_files.sweep(self.path)
 
