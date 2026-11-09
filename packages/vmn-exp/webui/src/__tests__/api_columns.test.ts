@@ -34,6 +34,14 @@ describe("api.experimentsColumns", () => {
     const url = urlOf(fetchMock.mock.calls[0]);
     expect([...url.searchParams.keys()]).toEqual(["keys"]);
   });
+
+  it("leaves the Outer runs aggregate off: the endpoint does not take it", async () => {
+    await api.experimentsColumns("w", "app", [], {
+      top: true, jobAgg: "median", jobAggBy: "field:params.d", jobAggValue: "own", jobAggMetric: "m",
+    });
+    const url = urlOf(fetchMock.mock.calls[0]);
+    expect([...url.searchParams.keys()]).toEqual(["keys", "top"]);
+  });
 });
 
 describe("archived rows in the list", () => {

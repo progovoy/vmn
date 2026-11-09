@@ -147,8 +147,10 @@ export const api = {
   experimentsColumns: (
     ws: string, app: string, keys: string[], opts: Omit<PageOpts, "offset" | "last"> = {},
   ) => {
+    // The Outer runs aggregate only shapes the board's job rows.
+    const { jobAgg, jobAggBy, jobAggValue, jobAggMetric, ...filter } = opts;
     const p = new URLSearchParams({ keys: keys.join(",") });
-    setFilter(p, opts);
+    setFilter(p, filter);
     return get<ExperimentColumns>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-columns?${p}`);
   },
   /** Which params drive *metric* over the filtered runs, most important first. */
