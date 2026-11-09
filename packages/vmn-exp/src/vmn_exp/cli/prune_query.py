@@ -20,7 +20,7 @@ def query_candidates(storage, app_name, metas, query_text, schema=None):
     empty or syntactically invalid query.  Callers must catch it.
     """
     compile_query(query_text)  # raises QueryError on bad input, an empty one too
-    rows, _, _ = snapshot_listing(storage, app_name, query_text, schema)
+    rows = snapshot_listing(storage, app_name, query_text, schema)[0]
     matching = {row["verstr"] for row in rows}
     return [m for m in metas if m["verstr"] in matching]
 

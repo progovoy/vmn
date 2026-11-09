@@ -89,12 +89,13 @@ def list_view(storage, app_name, query=None, archived=False, last=None, schema=N
 
 
 def snapshot_listing(storage, app_name, query=None, schema=None, with_create_note=False):
-    """``(rows, declared schema, app has runs)`` — the annotated runs *query*
-    keeps, in storage order — from an up-to-date snapshot of the app: what
-    a listing :func:`list_view` cannot answer, and ``prune --query``, read."""
+    """``(rows, declared schema, app has runs, loading)`` — the annotated
+    runs *query* keeps, in storage order — from an up-to-date snapshot of the
+    app, whose ``loading`` it is (None when whole): what a listing
+    :func:`list_view` cannot answer, and ``prune --query``, read."""
     snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
     rows, tree = _matching(storage, app_name, snap, query, with_create_note)
-    return rows, snap.declared_schema(), bool(tree)
+    return rows, snap.declared_schema(), bool(tree), snap.loading
 
 
 def _matching(storage, app_name, snap, query, with_create_note):

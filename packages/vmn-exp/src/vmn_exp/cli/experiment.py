@@ -707,18 +707,16 @@ def _listed(storage, app_name, args, schema):
     """``(rows, declared schema, app has runs, loading)``: the annotated runs
     the query and archived filter keep, in storage order — from the persisted
     index (only ``--last``'s without a query), else from a snapshot, whose
-    ``loading`` is the last (None when whole or from the persisted rows)."""
+    ``loading`` it is (None when whole or from the persisted rows)."""
     query, archived = getattr(args, "query", None), getattr(args, "archived", False)
     view = index_list.list_view(
         storage, app_name, query, archived, getattr(args, "last", None), schema
     )
     if view is not None:
         return (*view, None)
-    matching, declared, any_runs = index_list.snapshot_listing(
+    matching, declared, any_runs, loading = index_list.snapshot_listing(
         storage, app_name, query, schema, with_create_note=True
     )
-    snap = experiment_index.shared_index(storage, app_name).published
-    loading = None if snap is None else snap.loading
     return filter_archived(matching, archived), declared, any_runs, loading
 
 

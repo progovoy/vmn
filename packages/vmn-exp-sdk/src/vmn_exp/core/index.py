@@ -967,7 +967,7 @@ class ExperimentIndex:
         with persisted records answers them as soon as they are read and
         refreshes them from storage in the background; a cold index answers
         once its first load is done."""
-        snap = self._snapshot
+        snap = self.published
         if snap is not None:
             return snap
         if self._cache_gen is not None:
