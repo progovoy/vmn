@@ -26,6 +26,7 @@ from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.freshness import freshness_key
 from vmn_exp.ui.git_context import git_context
+from vmn_exp.ui.indexing import with_indexing
 from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.memo import LRU, TTLCache
 from vmn_exp.ui.responses import json_response
@@ -64,7 +65,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         hour = int(now.timestamp() // 3600)
         etag = leaderboards.etag(snapshot, schema if scope else None, kind="status",
                                  hour=hour, scope=scope)
-        payload = summaries.get(etag, lambda: _with_indexing(
+        payload = summaries.get(etag, lambda: with_indexing(
             leaderboards.status_summary(snapshot, now) if scope is None
             else leaderboards.jobs.status_summary(snapshot, schema, scope), snapshot))
         if entries:
@@ -124,15 +125,6 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
         return json_response(payload, etag=_digest(etags), request=request)
 
     return contexts.pop
-
-
-def _with_indexing(payload, snapshot):
-    """*payload* with ``indexing`` ``{loaded, total}`` while *snapshot*'s
-    index is still loading chunk by chunk."""
-    if snapshot.loading is None:
-        return payload
-    loaded, total = snapshot.loading
-    return dict(payload, indexing={"loaded": loaded, "total": total})
 
 
 def _digest(text):

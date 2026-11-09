@@ -54,6 +54,7 @@ from vmn_exp.ui.attention import pinned, queries_of
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.http_params import clamp_page, key_list
+from vmn_exp.ui.indexing import indexed_response
 from vmn_exp.ui.job_aggregate import job_agg_of
 from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.leaderboard_comments import (
@@ -67,7 +68,6 @@ from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE, UnknownGroup
 from vmn_exp.ui.leaderboard_scope import UnknownScope, top_filter
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import ORDERS, split_by_of
-from vmn_exp.ui.responses import memoized_json_response
 from vmn_exp.ui.security import safe_segment
 
 # Encoded bodies kept per ETag (pages, chart columns): a few generations' worth.
@@ -228,8 +228,8 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         where = dict(archived=archived, scope=_scope(scope), query=_pinned(q), status=status)
         etag = cache.etag(snapshot, None, route="facets", **where)
         try:
-            return memoized_json_response(
-                request, etag, lambda: cache.facets_payload(snapshot, **where), bodies)
+            return indexed_response(
+                request, etag, snapshot, lambda: cache.facets_payload(snapshot, **where), bodies)
         except UnknownScope as e:
             raise HTTPException(404, str(e))
         except QueryError as e:
@@ -311,8 +311,8 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         # A query that will not compile (or an unknown column) is the caller's
         # typo: answer 400 with the message (a query's carries the offset).
         try:
-            return memoized_json_response(
-                request, etag, lambda: compute(snapshot, schema, **params), bodies
+            return indexed_response(
+                request, etag, snapshot, lambda: compute(snapshot, schema, **params), bodies
             )
         except (UnknownGroup, UnknownScope) as e:
             raise HTTPException(404, str(e))

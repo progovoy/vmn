@@ -15,11 +15,11 @@ from vmn_exp.core.query import QueryError
 from vmn_exp.ui.attention import pinned
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
+from vmn_exp.ui.indexing import indexed_response
 from vmn_exp.ui.leaderboard_scope import UnknownScope
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.pivot import pivot_spec
 from vmn_exp.ui.pivot_cache import PivotCache
-from vmn_exp.ui.responses import memoized_json_response
 from vmn_exp.ui.security import safe_segment
 
 ENCODED_BODIES = 32
@@ -47,8 +47,8 @@ def register(app, api_prefix, inputs, cache, aggregate_of):
                               agg or aggregate_of(ws_name, app_tag), status, pinned(q), archived,
                               scope)
             etag = pivots.etag(snapshot, schema, spec)
-            return memoized_json_response(
-                request, etag, lambda: pivots.pivot(snapshot, schema, spec), bodies)
+            return indexed_response(
+                request, etag, snapshot, lambda: pivots.pivot(snapshot, schema, spec), bodies)
         except UnknownScope as e:
             raise HTTPException(404, str(e))
         except (QueryError, ValueError) as e:
