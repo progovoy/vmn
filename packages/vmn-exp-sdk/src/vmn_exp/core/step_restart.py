@@ -8,6 +8,19 @@ run continues past the rewound step. Step-less points never count. Pure.
 """
 
 
+def restart_point(steps):
+    """``[from, to]`` of the first of *steps* (in write order) not past every
+    earlier one, *from* the highest earlier step; None when none goes back."""
+    top = None
+    for step in steps:
+        if step is None:
+            continue
+        if top is not None and step <= top:
+            return [top, step]
+        top = step
+    return None
+
+
 class StepRestarts:
     """Per metric, the first write whose step went back, fed point lists as
     the series grows: ``found[metric] = {"write": n, "from": s, "to": t}``

@@ -12,15 +12,27 @@ zlib-compressed alone, followed by its LOD levels (:mod:`metric_lod`). The
 footer maps every key to its byte ranges, so a reader reads the footer from
 the end and then only the slices it needs (:class:`MetricIndexReader`). A
 key's summary ``first``/``last`` are its first and last write, as a block
-header's are: the fold's latest value never depends on the sort.
+header's are: the fold's latest value never depends on the sort. Its ``t``
+is its true time bounds and its ``r``, when its steps went back, where
+(:func:`~vmn_exp.core.step_restart.restart_point`). The footer's ``order``
+(:data:`WRITE_ORDER`) says so; an older footer's keys are read in write order
+from their columns (:mod:`~vmn_exp.core.vmx_write_order`).
 """
 import json
 import zlib
 
 from vmn_exp.core.metric_columns import Columns, key_summary, pack_deltas, pack_floats, point
-from vmn_exp.core.metric_index_layout import CHUNK_POINTS, LOD_SIZES, MAGIC, VERSION, TAIL
+from vmn_exp.core.metric_index_layout import (
+    CHUNK_POINTS,
+    LOD_SIZES,
+    MAGIC,
+    TAIL,
+    VERSION,
+    WRITE_ORDER,
+)
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_lod import encode_buckets, level_buckets
+from vmn_exp.core.step_restart import restart_point
 
 __all__ = ["CHUNK_POINTS", "LOD_SIZES", "MAGIC", "MetricIndexReader", "build_index"]
 
@@ -81,6 +93,7 @@ def _write_ends(cols):
 
 def _write_key(out, name, cols):
     ends = _write_ends(cols)
+    restart = restart_point(cols.steps) if cols.has_step else None
     cols = _sorted(cols)
     summary = key_summary(name, cols)
     raw = {}
@@ -88,15 +101,18 @@ def _write_key(out, name, cols):
         raw["steps"] = _write_column(out, cols, "steps", pack_deltas)
     raw["ts"] = _write_column(out, cols, "ts", pack_deltas)
     raw["values"] = _write_column(out, cols, "values", pack_floats)
-    return {
+    meta = {
         "n": len(cols),
         "has_step": cols.has_step,
         "s": summary["s"],
-        "t": summary["t"],
+        "t": [min(cols.ts), max(cols.ts)],
         "summary": {"sum": summary["sum"], **ends},
         "raw": raw,
         "lod": _write_lod(out, cols),
     }
+    if restart is not None:
+        meta["r"] = restart
+    return meta
 
 
 def build_index(writer, keys, rewinds_applied=False, stream_bytes=None):
@@ -107,6 +123,7 @@ def build_index(writer, keys, rewinds_applied=False, stream_bytes=None):
     footer = {
         "writer": writer,
         "format": VERSION,
+        "order": WRITE_ORDER,
         "rows": sum(len(cols) for cols in keys.values()),
         "keys": {name: _write_key(out, name, cols) for name, cols in keys.items()},
         "rewinds_applied": bool(rewinds_applied),

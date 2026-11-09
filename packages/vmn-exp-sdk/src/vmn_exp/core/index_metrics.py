@@ -23,7 +23,6 @@ from vmn_exp.core.fold_blocks import (
     apply_header,
     apply_sums,
     block_points,
-    footer_entries,
     may_be_rewound,
 )
 from vmn_exp.core.fold_sums import add_block
@@ -38,6 +37,7 @@ from vmn_exp.core.metric_files import (
     stream_writer_and_seq,
 )
 from vmn_exp.core.metric_index_reader import MetricIndexReader
+from vmn_exp.core.vmx_write_order import indexed_entries
 from vmn_exp.storage.s3_base import parallel_map
 
 # An unread part of an object past this is folded from its block headers.
@@ -208,7 +208,7 @@ def _fold_block(fold, state, writer, header, decoded):
 
 
 def _fold_indexed(fold, state, writer, reader):
-    header = {"keys": footer_entries(reader.footer)}
+    header = {"keys": indexed_entries(reader)}
     keys = lambda: {k: _columns(reader, k) for k in reader.keys()}  # noqa: E731
     _fold_block(fold, state, writer, header, lambda: [Block(header, keys())])
 

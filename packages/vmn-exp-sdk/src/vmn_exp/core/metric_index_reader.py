@@ -57,6 +57,13 @@ class MetricIndexReader:
         p0, p1 = self._bounds(meta, lo, hi)
         return _as_points(self._columns(meta, p0, p1 + 1))
 
+    def column(self, key, column, start=0, end=None):
+        """Positions ``[start, end)`` (default all) of *key*'s *column*
+        (``steps``, ``ts`` or ``values``; None for a step-less key's steps),
+        reading that column's chunks alone."""
+        meta = self.footer["keys"][key]
+        return self._column(meta, column, start, meta["n"] if end is None else end)
+
     def series(self, key, max_points, lo=None, hi=None, level=None):
         """At most about *max_points* min/max-thinned points of the range,
         its first and last points kept; *level* forces a LOD bucket size."""
