@@ -1,5 +1,5 @@
 """The median stopping rule, on synthetic metric series."""
-from vmn_exp.core.sweep.early_stop import median_should_stop, step_points
+from vmn_exp.core.sweep.early_stop import MedianStopper, median_should_stop, step_points
 
 
 def _curve(values, start=1):
@@ -71,3 +71,16 @@ def test_best_so_far_is_what_is_compared():
     others = [_curve([1.0, 0.8, 0.6]), _curve([1.0, 0.8, 0.6])]
     own = _curve([0.9, 0.5, 4.0])
     assert not median_should_stop(own, others, goal="min", min_iter=3)
+
+
+def _stopper(min_iter=2, min_trials=1):
+    return MedianStopper({"metric": {"goal": "min"}, "early_terminate": {
+        "min_iter": min_iter, "min_trials": min_trials, "check_interval_sec": 1}})
+
+
+def test_a_check_judges_the_steps_logged_since_the_last_one():
+    # Peers ended at step 4; the first check landed at step 6 (a slow poll).
+    # A check at steps 2-4 would have stopped the trial: so does this one.
+    others = [_curve([1.0, 0.9, 0.8, 0.7]), _curve([1.1, 1.0, 0.9, 0.8])]
+    assert _stopper().should_stop(_curve([9.0] * 6), others)
+

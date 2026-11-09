@@ -4,7 +4,13 @@ At the trial's latest step ``s`` (once ``s >= min_iter``), compare its best
 value of the target metric up to ``s`` with the median of the other trials'
 best values up to ``s`` — counting only trials that reached ``s``, and only when
 at least ``min_trials`` did. Strictly worse than that median: stop.
+
+A polled check judges every step logged since the previous check, not only
+the latest: a slow poll that lands past the steps its peers reached must
+not let the trial off.
 """
+import bisect
+import itertools
 import statistics
 
 from vmn_exp.core.values import is_finite_number
@@ -20,24 +26,34 @@ def step_points(points):
     ]
 
 
-def median_should_stop(own, others, goal, min_iter=1, min_trials=1):
-    """Whether the trial with points *own* should stop (see module docstring)."""
-    if not own:
+def median_should_stop(own, others, goal, min_iter=1, min_trials=1, after=None):
+    """Whether the trial with points *own* should stop (see module docstring):
+    judged at its latest step or, given *after*, at each of its steps past it."""
+    steps = sorted({s for s, _ in own if s >= min_iter})
+    steps = steps[-1:] if after is None else [s for s in steps if s > after]
+    if not steps:
         return False
-    step = max(s for s, _ in own)
-    if step < min_iter:
-        return False
-    peers = [_best_until(points, step, goal) for points in others
-             if points and max(s for s, _ in points) >= step]
-    if len(peers) < min_trials:
-        return False
-    own_best, median = _best_until(own, step, goal), statistics.median(peers)
-    return own_best > median if goal == "min" else own_best < median
+    pick = min if goal == "min" else max
+    own_best, peers = _bests(own, pick), [_bests(points, pick) for points in others if points]
+    for step in steps:
+        reached = [_best_until(peer, step) for peer in peers if peer[0][0] <= step <= peer[0][-1]]
+        if len(reached) < min_trials:
+            continue
+        mine, median = _best_until(own_best, step), statistics.median(reached)
+        if (mine > median) if goal == "min" else (mine < median):
+            return True
+    return False
 
 
-def _best_until(points, step, goal):
-    values = [v for s, v in points if s <= step]
-    return min(values) if goal == "min" else max(values)
+def _bests(points, pick):
+    """``(steps, best value up to each)`` of *points*, in step order."""
+    ordered = sorted(points)
+    return [s for s, _ in ordered], list(itertools.accumulate((v for _, v in ordered), pick))
+
+
+def _best_until(bests, step):
+    steps, values = bests
+    return values[bisect.bisect_right(steps, step) - 1]
 
 
 class MedianStopper:
@@ -49,6 +65,7 @@ class MedianStopper:
         self.goal = spec["metric"]["goal"]
         self.rule = spec["early_terminate"]
         self._next = None
+        self._judged = float("-inf")  # the latest step a check judged
 
     def due(self, now):
         if self._next is None:
@@ -63,7 +80,10 @@ class MedianStopper:
         return bool(own) and max(s for s, _ in own) >= self.rule["min_iter"]
 
     def should_stop(self, own, others):
-        return median_should_stop(
-            own, others, self.goal,
-            min_iter=self.rule["min_iter"], min_trials=self.rule["min_trials"],
+        """Whether any step of *own* logged since the last check trails."""
+        stop = median_should_stop(
+            own, others, self.goal, min_iter=self.rule["min_iter"],
+            min_trials=self.rule["min_trials"], after=self._judged,
         )
+        self._judged = max([self._judged] + [s for s, _ in own])
+        return stop
