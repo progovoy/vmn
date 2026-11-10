@@ -5,7 +5,7 @@
  *  that share alone. */
 import type { JobProgressFields } from "../types";
 import { fmtCount, humanizeSeconds, relTime } from "../util";
-import { barSegments } from "../pages/groupHeaderText";
+import { barSegments, lostParts } from "../pages/groupHeaderText";
 import { joinParts } from "./toneParts";
 
 /** Whole from 10, one decimal below. */
@@ -111,8 +111,7 @@ function timeParts(j: Progress, eta: (left: string) => string): string[] {
 function parts(j: Progress, done: string[], eta: (left: string) => string): ProgressPart[] {
   const troubles = (["failed", "stuck"] as const)
     .filter((t) => j.counts[t] > 0).map((t): ProgressPart => ({ text: `${fmtCount(j.counts[t])} ${t}`, tone: t }));
-  // Stuck under an outer run that ended: they never report, a failure.
-  const lost: ProgressPart[] = j.lost ? [{ text: `${fmtCount(j.lost)} lost`, tone: "failed" }] : [];
+  const lost: ProgressPart[] = lostParts(j.lost);
   const rate = throughputText(j);
   return [...done.map((text) => ({ text })), ...troubles, ...lost, ...(rate ? [{ text: rate }] : []),
     ...timeParts(j, eta).map((text) => ({ text }))];

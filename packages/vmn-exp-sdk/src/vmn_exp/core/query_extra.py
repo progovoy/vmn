@@ -97,14 +97,15 @@ def snapshot_extra(snapshot, scope_of=None):
     }
 
 
-def rows_extra(snapshot, scope_of=None):
+def rows_extra(snapshot, scope_of=None, annotated=None):
     """:func:`snapshot_extra` with ``notes``, the ``up`` reader and the
-    ``*_below`` counts (None without a snapshot)."""
+    ``*_below`` counts (None without a snapshot), over *annotated* (the
+    snapshot's rows annotated already) when given."""
     extra = snapshot_extra(snapshot, scope_of)
     if extra is not None:
         extra[NOTES] = lambda verstr: note_texts(snapshot.notes_of(verstr))
         extra[UP] = lambda verstr: ancestor_fields(snapshot).of(verstr)
-        extra.update(lazy_below_extra(lambda: annotate_rows(
+        extra.update(lazy_below_extra(lambda: annotated if annotated is not None else annotate_rows(
             snapshot.rows, snapshot.run_states, snapshot.run_state_observed_at)))
     return extra
 
@@ -124,8 +125,8 @@ def reads_off_row(text):
     return bool(OFF_ROW_FIELDS & query_roots(text)) or reads_system_metrics(text)
 
 
-def store_extra(storage, app_name, snapshot):
-    """:func:`rows_extra`, ``similar()`` searching *app_name*'s persisted index file in *storage* when it has
+def store_extra(storage, app_name, snapshot, annotated=None):
+    """:func:`rows_extra` (*annotated* as there), ``similar()`` searching *app_name*'s persisted index file in *storage* when it has
     one, else the snapshot's ``:memory:`` database."""
 
     def scope_of(snap):
@@ -134,4 +135,4 @@ def store_extra(storage, app_name, snapshot):
         path = index_path(storage, app_name)
         return (file_scope(app_name, path, snapshot=snap) if path else None) or _memory_scope(snap)
 
-    return rows_extra(snapshot, scope_of)
+    return rows_extra(snapshot, scope_of, annotated)

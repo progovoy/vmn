@@ -5,18 +5,17 @@ import type { BoardGroup, GroupedRows } from "./groupItems";
 
 const boardGroup = ({ rows, ...g }: RunGroup): BoardGroup => ({ ...g, verstrs: rows.map((r) => r.verstr) });
 
+/** The page-level fields a cached grouped payload keeps from its latest page. */
+const pageFields = ({ aggregate, running, main, job_agg, hints, indexing }: GroupedPage) =>
+  ({ aggregate, running, main, job_agg, hints, indexing });
+
 export function cacheOf(page: GroupedPage): GroupedRows {
   return {
     rows: page.groups.flatMap((g) => g.rows),
     total: page.total_rows,
     groups: page.groups.map(boardGroup),
     total_groups: page.total_groups,
-    aggregate: page.aggregate,
-    running: page.running,
-    main: page.main,
-    job_agg: page.job_agg,
-    hints: page.hints,
-    indexing: page.indexing,
+    ...pageFields(page),
   };
 }
 
@@ -29,12 +28,7 @@ export function withGroups(cur: GroupedRows, next: GroupedPage): GroupedRows {
     total: next.total_rows,
     groups: [...cur.groups, ...fresh.map(boardGroup)],
     total_groups: next.total_groups,
-    aggregate: next.aggregate,
-    running: next.running,
-    main: next.main,
-    job_agg: next.job_agg,
-    hints: next.hints,
-    indexing: next.indexing,
+    ...pageFields(next),
   };
 }
 

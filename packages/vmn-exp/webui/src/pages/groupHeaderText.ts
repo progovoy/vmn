@@ -104,7 +104,11 @@ function attemptCounts(c: JobCounts): GroupCounts {
 /** `46 runs · 2 failed · 1 lost`: the summed counts, then the outer runs'
  *  *lost* runs as their rows name them (plan 34 §3). */
 export const attemptCountsText = (c: JobCounts, lost?: number) =>
-  joinParts([...countParts(attemptCounts(c)), ...(lost ? [{ text: `${fmtCount(lost)} lost`, tone: "failed" as const }] : [])]);
+  joinParts([...countParts(attemptCounts(c)), ...lostParts(lost)]);
+
+/** `2 lost`, a failure: runs stuck under an outer run that ended (plan 34 §3). */
+export const lostParts = (lost?: number | null) =>
+  lost ? [{ text: `${fmtCount(lost)} lost`, tone: "failed" as const }] : [];
 
 /** A `+N more` row's text in each state of its load. */
 export const MORE_TEXT = {
