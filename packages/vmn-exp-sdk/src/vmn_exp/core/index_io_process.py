@@ -185,10 +185,10 @@ class ProcessIO:
         """The index store's step of an upgrade's check's listing."""
         return self.call("vmx_list", app_name)
 
-    def first_rows(self, limit, max_rows, kept=False):
+    def first_rows(self, limit, max_rows):
         """The newest persisted rows, the helper store's ``load_newest``
         (plain parts, for :func:`~vmn_exp.core.index_first_rows.first_rows_of`)."""
-        return self.call("first_rows", limit, max_rows, kept)
+        return self.call("first_rows", limit, max_rows)
 
     def deriving(self):
         """How many records an upgrade left this app to re-derive, or None."""
@@ -277,8 +277,8 @@ class _Helper:
     def vmx_list(self, app_name):
         return self.index._store.vmx_list(app_name)
 
-    def first_rows(self, limit, max_rows, kept):
-        return self.index._store.load_newest(self.index.app_name, limit, max_rows, kept)
+    def first_rows(self, limit, max_rows):
+        return self.index._store.load_newest(self.index.app_name, limit, max_rows)
 
     def deriving(self):
         store, app = self.index._store, self.index.app_name

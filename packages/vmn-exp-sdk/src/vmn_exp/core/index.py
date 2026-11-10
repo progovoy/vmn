@@ -453,13 +453,10 @@ class ExperimentIndex:
         self._freshness.refreshed()
 
     def _check_step(self, limit=None):
-        """A step of an upgrade's check (:mod:`~vmn_exp.core.index_vmx_check`),
-        its listing's while one is left: its failure (a throttled store) is
-        retried at the next step, never the refresh's."""
+        """A step of an upgrade's check (:mod:`~vmn_exp.core.index_vmx_check`):
+        its failure (a throttled store) is retried at the next step, never
+        the refresh's."""
         try:
-            if self._vmx.listing:
-                self._vmx.list_step()
-                return 0
             return self._vmx.step(self._storage, self._records, self._sweep.hint, limit)
         except Exception:  # noqa: BLE001
             _LOGGER.warning("checking %s's compacted metrics failed; retried", self.app_name,
@@ -472,8 +469,7 @@ class ExperimentIndex:
         if self._vmx.state() is None:
             return 0
         with self._lock:
-            while self._vmx.listing and self._vmx.list_step():
-                pass
+            self._vmx.list_all()
             state = self._vmx.state()
             if state is None:
                 return 0
@@ -488,8 +484,8 @@ class ExperimentIndex:
 
     def _refresh_from_storage(self, started):
         if self._records is None:
-            placeholder = self._derive_first()
             self._serve_first_rows()
+            placeholder = self._derive_first()
             if self._keeps_baseline():  # read before the records it vouches for
                 self._baseline.load(self._sweep, started)
             with gc_paused():
@@ -519,7 +515,8 @@ class ExperimentIndex:
             self._drop_folds()
 
     def _serve_first_rows(self):
-        """Before reading the persisted rows back (O(runs)), let
+        """Before reading the persisted rows back (O(runs)) — or the rows an
+        upgrade kept, before re-deriving them (plan 34 §4) — let
         :meth:`snapshot_now` serve the newest FIRST_ROWS of them and the trees
         around them (:mod:`~vmn_exp.core.index_lean_first`)."""
         if self._lean or self._snapshot is not None:
@@ -528,18 +525,10 @@ class ExperimentIndex:
         if self._first_rows is not None:
             self._servable.set()
 
-    def _serve_before_kept(self, total):
-        """Before the rows an upgrade kept are read back (O(runs)): let
-        :meth:`snapshot_now` serve the newest of them, else none ``loading``
-        their *total* (None: the store's count) (plan 34 §4)."""
-        self._first_rows = self._newest_rows(kept=True) or loading_snapshot(
-            self.app_name, self._store.count(self.app_name) if total is None else total)
-        self._servable.set()
-
-    def _newest_rows(self, kept=False):
+    def _newest_rows(self):
         if self._io is not None:  # the helper owns the files
-            return first_rows_of(self.app_name, self._io.first_rows(FIRST_ROWS, FIRST_ROWS_MAX, kept))
-        return first_rows(self._store, self.app_name, FIRST_ROWS, FIRST_ROWS_MAX, kept=kept)
+            return first_rows_of(self.app_name, self._io.first_rows(FIRST_ROWS, FIRST_ROWS_MAX))
+        return first_rows(self._store, self.app_name, FIRST_ROWS, FIRST_ROWS_MAX)
 
     def _set_published(self):
         self._published.set()
@@ -637,7 +626,10 @@ class ExperimentIndex:
         elif (total := io.deriving()) is None:
             return False
         if serve_kept and not self._lean:
-            self._serve_before_kept(None if io is None else total)
+            if self._first_rows is None:  # none of the newest: their total, at once
+                self._first_rows = loading_snapshot(self.app_name, total if io is not None
+                                                    else self._store.count(self.app_name))
+                self._servable.set()
             with gc_paused():
                 self._kept = kept_snapshot(self.app_name, io.kept() if io is not None
                                            else kept_parts(self._store, self.app_name))

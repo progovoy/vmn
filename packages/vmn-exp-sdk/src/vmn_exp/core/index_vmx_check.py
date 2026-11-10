@@ -75,8 +75,8 @@ def list_chunk(conn, app):
         mark = read_payload(conn, LIST + app, FINGERPRINT)
         if mark is None:
             return 0, 0, True  # another lister finished it
-        rows = conn.execute(
-            "SELECT rowid, key, head, data FROM exp_index WHERE app = ? AND rowid > ?"
+        rows = conn.execute(  # +app: a rowid range scan, never the (app, seq) index
+            "SELECT rowid, key, head, data FROM exp_index WHERE +app = ? AND rowid > ?"
             " AND rowid <= ? ORDER BY rowid LIMIT ?",
             (app, mark["after"], mark["until"], LIST_CHUNK)).fetchall()
     check = index_store_schema.CHECKED_RECORDS[mark["records"]]
@@ -156,10 +156,19 @@ class VmxCheck:
         self._due = self._clock() + CHECK_EVERY_SEC
         return read
 
+    def list_all(self):
+        """List what is left to list now."""
+        while self.listing and self.list_step():
+            pass
+
     def step(self, storage, records, hint, limit=None):
         """Check keys from the cursor — *limit* of them, else for about
         :data:`CHECK_BUDGET_SEC` — reading *records* (``{key: record}``);
-        *hint* each one to fold again. How many were checked."""
+        *hint* each one to fold again. How many were checked: none while
+        keys are left to list (a step of that instead)."""
+        if self.listing:
+            self.list_step()
+            return 0
         deadline = None if limit is not None else self._clock() + CHECK_BUDGET_SEC
         end = len(self._keys) if limit is None else min(len(self._keys), self.done + limit)
         start, wrong = self.done, []

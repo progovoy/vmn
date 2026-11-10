@@ -91,15 +91,15 @@ class LeanReads:
         }
         return records, keys, lean, stamps
 
-    def load_newest(self, app_name, limit, max_rows, kept=False):
+    def load_newest(self, app_name, limit, max_rows):
         """``(runs, {key: lean_row tuple}, {key: run state fields})`` of
         *app_name*'s *limit* newest runs and the trees around them, at most
         *max_rows* (see :mod:`~vmn_exp.core.index_lean_first`), read at one
         generation; None when unavailable, never saved or left to re-derive
-        — unless *kept* and an upgrade kept its rows (:meth:`load_kept`)."""
+        with no rows kept (:meth:`load_kept`)."""
         return self._read(lambda: self._at_one_generation(
             app_name, lambda conn: self._first_rows(conn, app_name, limit, max_rows),
-            kept=kept and self._keeps()), None)
+            kept=self._keeps()), None)
 
     def _first_rows(self, conn, app_name, limit, max_rows):
         runs, lean = read_first_rows(conn, app_name, limit, max_rows)

@@ -21,14 +21,15 @@ from vmn_exp.core.index_snapshot import (
 )
 
 
-def first_rows(store, app_name, limit, max_rows, kept=False):
+def first_rows(store, app_name, limit, max_rows):
     """An :class:`IndexSnapshot` (generation 0) of *store*'s *limit* newest
     persisted runs of *app_name* and the trees around them (at most
-    *max_rows*), ``loading`` ``(rows, persisted runs)``;
-    None when the store has none to serve (never saved, re-deriving unless
-    *kept* and an upgrade kept its rows, unavailable, or not a SQLite store)."""
+    *max_rows*), ``loading`` ``(rows, persisted runs)``; while re-deriving,
+    of the rows an upgrade kept. None when the store has none to serve
+    (never saved, re-deriving with none kept, unavailable, or not a SQLite
+    store)."""
     newest_of = getattr(store, "load_newest", None)
-    return first_rows_of(app_name, newest_of(app_name, limit, max_rows, kept) if newest_of else None)
+    return first_rows_of(app_name, newest_of(app_name, limit, max_rows) if newest_of else None)
 
 
 def first_rows_of(app_name, newest):

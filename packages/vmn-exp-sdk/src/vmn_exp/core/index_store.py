@@ -138,14 +138,7 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
     def vmx_list(self, app_name):
         """A step of an upgrade's check's listing
         (:func:`~vmn_exp.core.index_vmx_check.list_chunk`); None when unavailable."""
-        conn = self._db.get()
-        if conn is None:
-            return None
-        try:
-            return list_chunk(conn, app_name)
-        except sqlite3.Error as exc:
-            self._db.on_error(exc)
-            return None
+        return self._read(lambda: list_chunk(self._conn, app_name), None)
 
     def count(self, app_name):
         """How many records are persisted for *app_name*, without reading
