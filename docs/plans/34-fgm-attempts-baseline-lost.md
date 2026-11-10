@@ -68,6 +68,11 @@ lost (e.g. 1 of 20,591). Lost = stuck under an ended outer run.
   query time from the rollups' existing `lost` tally (no index version bump).
   A lost run's pill reads `stuck · lost`, an outer run's `succeeded · 1 lost`;
   the run bar already showed `· N lost` apart from `· N failed`.
+- Follow-ups (2026-11-10): a grouped Outer runs page names its aggregate
+  (page-level `job_agg`), so a one-row header with no valued unit reads `—`
+  or `— (no goal)`; a group's `lost` (outside `run_counts`) reads
+  `· 1 lost` in the one-row header; `vmn-exp list`/`show` print
+  `succeeded · 1 lost` (an outer row's `lost_below`).
 
 ## 4. The empty board after the upgrade
 
