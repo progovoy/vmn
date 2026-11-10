@@ -50,7 +50,7 @@ def test_a_grouped_jobs_view_carries_job_fields_and_clauses(served):  # noqa: F8
     (group,) = body["groups"]
     assert group["job_counts"]["total"] == 1
     assert group["runs"] == 3
-    assert group["job_aggregates"]["loss"]["n"] == 1
+    assert group["job_aggregates"]["loss"]["n"] == 2  # job 1's children, pooled
     assert group["clause"] == 'status = "succeeded"'
     flat = _get(client, q=group["clause"], top="jobs", limit=50)
     assert _verstrs(flat) == {runs[1]}

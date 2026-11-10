@@ -62,7 +62,8 @@ class GroupCache:
             unfiltered = (self._uncached(snapshot, schema, plain, list) if live_below
                           else self.grouping(snapshot, schema, plain))
         extra = job_fields(grouping, self._cache._job_view.summaries(
-            snapshot, schema, job_agg=job_agg)) if top else None
+            snapshot, schema, job_agg=job_agg), self._cache.job_aggregates.pool(
+            snapshot, schema, job_agg)) if top else None
         return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
                               unfiltered, extra)
 

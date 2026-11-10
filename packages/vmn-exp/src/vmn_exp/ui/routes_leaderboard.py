@@ -25,7 +25,8 @@ summaries are of (plan 32 F10);
 fields, beside ``q``, flat or grouped: the Live/Review presets (plan 28 §4.5).
 A flat page carries ``next_cursor``; ``cursor=`` asks for the page after it
 (keyset paging, plan 23 S6, :mod:`~vmn_exp.ui.leaderboard_cursor`).
-Grouped with ``top``, each group sums its jobs' rollups; every group carries
+Grouped with ``top``, each group sums its jobs' rollups and pools their units
+(plan 34 §1; ``collapse_all=1``: the headers alone); every group carries
 the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
 A ``q`` (or ``top_q``) with ``ago()`` is pinned to the minute first (plan 28 P1,
 :func:`~vmn_exp.ui.attention.pinned`), so its ETag and orders follow the
@@ -121,12 +122,15 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         job_agg_by: str = None,
         job_agg_value: str = None,
         job_agg_metric: str = None,
+        collapse_all: bool = False,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
         _check_order(order)
         top, q, top_q = _top(top), _pinned(q), _pinned(top_q)
         if top_q and not top:
             raise HTTPException(400, "top_q needs top=1")
+        if collapse_all and not (top and group is not None):
+            raise HTTPException(400, "collapse_all needs group and top")
         aggregate = _job_agg(ws_name, app_tag, top, agg=job_agg, by=job_agg_by,
                              value=job_agg_value, metric=job_agg_metric)
         tree = children_of is not None
@@ -155,6 +159,8 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
                 raise HTTPException(400, "last and cursor cannot be combined with group")
             if group_key is None:
                 params["limit"], rows_per_group = grouped_page(limit, rows_per_group)
+                # One row per group (plan 34 §1): the headers alone.
+                rows_per_group = 0 if collapse_all else rows_per_group
             params.update(agg=agg or aggregate_of(ws_name, app_tag),
                           rows_per_group=rows_per_group, group_key=group_key)
             compute = (partial(groups_by_comments, cache, counts=counts) if by_comments

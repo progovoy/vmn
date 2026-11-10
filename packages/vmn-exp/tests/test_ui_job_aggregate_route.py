@@ -98,4 +98,6 @@ def test_a_grouped_jobs_view_aggregates_the_rolled_values(tmp_path):
     client, runs = _served(tmp_path)
     body = _get(client, top="jobs", group="status", job_agg="median").json()
     loss = body["groups"][0]["job_aggregates"]["loss"]
-    assert loss["n"] == 2 and loss["mean"] == pytest.approx((0.5 + 0.35) / 2)
+    # pooled: the children of jobs 1 and 5
+    assert loss["n"] == 5 and loss["mean"] == pytest.approx((0.9 + 0.5 + 0.1 + 0.4 + 0.3) / 5)
+    assert loss["value"] == pytest.approx(0.4)

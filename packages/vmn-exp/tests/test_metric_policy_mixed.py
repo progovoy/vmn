@@ -148,11 +148,11 @@ def _grouped_jobs(override):
 
 def test_a_grouped_outer_runs_header_with_overrides_is_marked():
     loss = _grouped_jobs(override=True)
-    assert loss["n"] == 2
+    assert loss["n"] == 3  # the jobs' children, pooled
     assert loss["mixed"] is True and loss["policies"] == {"min": 1}
 
 
 def test_a_grouped_outer_runs_header_following_the_schema_is_not_marked():
     loss = _grouped_jobs(override=False)
-    assert loss["n"] == 2
+    assert loss["n"] == 3
     assert not {"mixed", "policies"} & set(loss)

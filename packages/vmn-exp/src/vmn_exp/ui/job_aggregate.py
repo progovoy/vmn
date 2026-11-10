@@ -18,15 +18,16 @@ subtree best: the extremes of its subtree's tallies) and, for ``field:``/
 top-level jobs only (a tree row keeps its own values).
 """
 from bisect import bisect_left
-from collections import namedtuple
+from collections import Counter, namedtuple
 
 from vmn_exp.core.app_settings import check_job_aggregate, job_aggregate_of
+from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal, with_resolved_goals
 from vmn_exp.ui.job_rollup_cache import _SplitRollups
 from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields, policy_fields
 from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, own_value
 from vmn_exp.ui.job_views import child_rows
-from vmn_exp.ui.leaderboard_group_summary import TAILS, of_sorted, tail_quantile
+from vmn_exp.ui.leaderboard_group_summary import TAILS, of_sorted, stats, tail_quantile
 from vmn_exp.ui.memo import LRU
 
 JobAgg = namedtuple("JobAgg", "agg by value metric",
@@ -85,13 +86,26 @@ def _holder(ordered, agg, goal, value):
     return ordered[at][1] if ordered[at][0] == value else None
 
 
-def _of_units(units, value_of, agg, goal):
-    """``{value, n, of, conflicts, verstr}`` of ``(verstr, key, own)`` *units*."""
+def _valued(units, value):
+    """``{unit key: [(verstr, value)]}`` of ``(verstr, key, own)`` *units*
+    (a unit without a key is its own): a lone unit's *value(verstr, own)*;
+    a conflict's units are left unvalued (None), never read."""
     keyed = {}
     for verstr, key, own in units:
         keyed.setdefault(verstr if key is None else key, []).append((verstr, own))
-    pairs = [(value_of(*kept[0]), kept[0][0]) for kept in keyed.values() if len(kept) == 1]
-    ordered = sorted(p for p in pairs if p[0] is not None)
+    return {key: [(kept[0][0], value(*kept[0]))] if len(kept) == 1 else
+            [(verstr, None) for verstr, _ in kept] for key, kept in keyed.items()}
+
+
+def _ordered(keyed):
+    """The sorted ``(value, verstr)`` of *keyed*'s lone units with a value."""
+    return sorted((kept[0][1], kept[0][0]) for kept in keyed.values()
+                  if len(kept) == 1 and kept[0][1] is not None)
+
+
+def _of_units(keyed, ordered, agg, goal):
+    """``{value, n, of, conflicts, verstr}`` of *keyed* units (:func:`_valued`),
+    *ordered* their :func:`_ordered`."""
     fields = {"n": len(ordered), "of": len(keyed),
               "conflicts": sum(1 for kept in keyed.values() if len(kept) > 1)}
     value = of_sorted([p[0] for p in ordered], agg, goal) if goal else None
@@ -119,6 +133,73 @@ def _of_runs(parts, metric, agg, goal):
     return fields
 
 
+class Pool:
+    """One aggregate's answer over a snapshot: each job's ``rolled`` and the
+    pooled header of a group of jobs (plan 34 §1). Per job it keeps plain
+    data only: its valued units and its runs' policy overrides (``runs``:
+    its tallies), read once by *entry(job)*, dropped by :meth:`freeze`."""
+
+    def __init__(self, agg, metric, goal, entry):
+        self.agg, self.metric, self.goal = agg, metric, goal
+        self._entry, self._jobs = entry, {}
+        self.top = {}  # {top-level job: rolled}
+
+    def rolled(self, job):
+        if self.metric is not None and job not in self._jobs:
+            self._jobs[job] = self._entry(job)
+        return _payload(self.agg, self.metric, self.goal, **self._fields([job])[0])
+
+    def freeze(self):
+        """Keep the jobs read so far, and nothing *entry* holds (base, tree, overlays)."""
+        self._entry = None
+        return self
+
+    def pooled(self, jobs):
+        """The header of *jobs* (the latest attempt first): their pooled
+        units' ``rolled`` fields, every aggregate of their values and
+        ``from_earlier``; a unit key the jobs share counts from the first
+        job carrying it. {} when no unit has a value."""
+        fields, ordered, earlier = self._fields(jobs)
+        if not fields.get("n"):
+            return {}
+        extra = {"from_earlier": 0} if ordered is None else {
+            **stats([p[0] for p in ordered], self.goal), "from_earlier": earlier}
+        return {**extra, **_payload(self.agg, self.metric, self.goal, **fields)}
+
+    def _fields(self, jobs):
+        """``(fields, ordered values, units from a later job)`` of *jobs*
+        (latest first) pooled; ``runs`` orders no units (None)."""
+        if self.metric is None:
+            return {}, None, 0
+        read = [self._jobs[job] for job in jobs]
+        if self.agg.by == RUNS:
+            parts = [part for tallies, _ in read for part in tallies]
+            return _of_runs(parts, self.metric, self.agg.agg, self.goal), None, 0
+        keyed, earlier = _latest_wins([units for units, _ in read])
+        ordered = _ordered(keyed)
+        overrides = Counter()
+        for _, policies in read:
+            overrides.update(policies)
+        fields = {**_of_units(keyed, ordered, self.agg.agg, self.goal), **policy_mix(overrides)}
+        return fields, ordered, sum(1 for key in earlier if len(keyed[key]) == 1)
+
+
+def _latest_wins(attempts):
+    """``(keyed, earlier)``: the keyed units of *attempts* (latest first),
+    each key from the first attempt carrying it, and the keys taken from a
+    later one."""
+    if len(attempts) == 1:
+        return attempts[0], set()
+    keyed, earlier = {}, set()
+    for i, units in enumerate(attempts):
+        for key, kept in units.items():
+            if key not in keyed:
+                keyed[key] = kept
+                if i:
+                    earlier.add(key)
+    return keyed, earlier
+
+
 class JobAggregates:
     """``rolled`` per top-level job, memoized per (base, bucket, schema, aggregate)."""
 
@@ -129,6 +210,11 @@ class JobAggregates:
 
     def rolled(self, snapshot, schema, agg=None):
         """``{top-level job: rolled}`` (*agg* None: the app's default)."""
+        return self.pool(snapshot, schema, agg).top
+
+    def pool(self, snapshot, schema, agg=None):
+        """The memoized :class:`Pool` of *agg* (None: the app's default)
+        over *snapshot*: the top-level jobs' ``rolled`` and what pools them."""
         agg = agg or board_job_agg(self._cache, snapshot)
         base, bucket = self._cache._base(snapshot)
         key = (base.token, bucket, self._cache.schema_key(schema), agg)
@@ -142,7 +228,7 @@ class JobAggregates:
         if verstr not in tree.jobs:
             return None
         key = (base.token, bucket, self._cache.schema_key(schema), agg, verstr)
-        return self._answers.get(key, lambda: self._payload_of(snapshot, schema, agg)(verstr))
+        return self._answers.get(key, lambda: self._payload_of(snapshot, schema, agg).rolled(verstr))
 
     def value_of(self, snapshot, schema, agg=None):
         """The :class:`~vmn_exp.ui.job_units.UnitValue` of *agg*'s source
@@ -164,25 +250,23 @@ class JobAggregates:
         return metric, goal, jobs.parts(snapshot, schema)
 
     def _all(self, snapshot, schema, agg):
-        payload = self._payload_of(snapshot, schema, agg)
-        return {job: payload(job) for job in self._cache.jobs.tree(
+        pool = self._payload_of(snapshot, schema, agg)
+        pool.top = {job: pool.rolled(job) for job in self._cache.jobs.tree(
             self._cache._base(snapshot)[0]).top}
+        return pool.freeze()
 
     def _payload_of(self, snapshot, schema, agg):
-        """``job -> rolled`` over *snapshot*."""
+        """The unfrozen :class:`Pool` of *agg* over *snapshot*."""
         metric, goal, (base, tree, _, parts) = self._inputs(snapshot, schema, agg)
-
-        def fields(job):
-            if metric is None:
-                return {}
-            if agg.by == RUNS:
-                return _of_runs(parts(job), metric, agg.agg, goal)
-            return {**_of_units(units(job), value, agg.agg, goal), **policy_fields(parts(job), metric)}
-
-        if metric is not None and agg.by != RUNS:
+        entry = None
+        if metric is not None and agg.by == RUNS:
+            entry = lambda job: (list(parts(job)), None)  # noqa: E731
+        elif metric is not None:
             value = UnitValue(agg.value, metric, higher_is_better(goal), parts, tree.jobs)
-            units = self._units_of(snapshot, base, tree, agg, metric)
-        return lambda job: _payload(agg, metric, goal, **fields(job))
+            found = self._units_of(snapshot, base, tree, agg, metric)
+            entry = lambda job: (_valued(found(job), value),  # noqa: E731
+                                 policy_fields(parts(job), metric).get("policies") or {})
+        return Pool(agg, metric, goal, entry)
 
     def _units_of(self, snapshot, base, tree, agg, metric):
         """``job -> [(verstr, key, own)]``: its units by *agg*'s ``by``."""

@@ -1,11 +1,12 @@
 """Plan 23 S7: a grouped Jobs view (``top=1|jobs|singles``) groups top-level
 rows; each group sums its jobs' rollups: ``job_counts`` (its jobs, per tree
 status), ``runs`` (the jobs' runs plus its single runs), ``failed`` (failed
-or stuck among those) and ``job_aggregates`` (each job's best of the main
-metric, aggregated over the group's jobs)."""
+or stuck among those) and ``job_aggregates`` (the best of the main metric
+of every child of the group's jobs, pooled: plan 34 §1)."""
 import statistics
 
 import pytest
+from job_rollup_reference import annotated, unit_value, units_of
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_group_fields import COUNT_KEYS, COUNT_OF
@@ -41,8 +42,9 @@ def _expected(cache, snap, rows):
     runs = sum(summaries[j["verstr"]]["total"] for j in jobs) + len(singles)
     failed = sum(sum(summaries[j["verstr"]]["counts"][s] for s in FAILED) for j in jobs)
     failed += sum(1 for s in singles if s["status"] in FAILED)
-    bests = sorted(summaries[j["verstr"]]["best"] for j in jobs
-                   if summaries[j["verstr"]]["best"] is not None)
+    every = annotated(snap)
+    bests = sorted(value for j in jobs for unit, _ in units_of(every, j["verstr"], "children")
+                   if (value := unit_value(every, unit, "loss", "best", False)) is not None)
     return counts, runs, failed, bests
 
 
