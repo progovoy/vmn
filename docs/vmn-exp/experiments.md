@@ -429,9 +429,12 @@ gets a derived `settled` field (never stored; a run's own `status` stays): a
 finished) `lost`. The nearest started
 ancestor decides: a container that never ran passes its parent's verdict on,
 a still-running sub-outer keeps its own children open. Rollups then count
-them apart: a never-started run adds nothing to `tree_status` and a lost one
-adds `failed`, so an orchestrator whose pending trials were deleted reads its
-own final status instead of `created`/`stuck` forever; the job rollups, fleet
+them apart: neither a never-started nor a lost run adds anything to
+`tree_status` (lost is its own state: only a run that exited non-zero below
+makes a tree `failed`, so a launch that exited 0 with 1 of 20,591 trials lost
+reads `succeeded · 1 lost`), so an orchestrator whose pending trials were
+deleted reads its own final status instead of `created`/`stuck` forever; the
+lost runs below a row are `lost_below`; the job rollups, fleet
 counts and the app's status counts carry them as `never_started`/`lost` next
 to the status counts (see [ui.md](ui.md#status-counts-and-rollup)). An ended
 sweep short of its plan reads its own final status (its unclaimed slots never
@@ -451,9 +454,11 @@ no ended outer run settled) is `status = "stuck" and settled != "lost"`, while
 Every query surface (`vmn-exp list --query`, `prune`/`archive --query`, the
 SDK's `list_runs`, the UI's `q` and `top_q`) reads the subtree counts `live_below`,
 `running_below` and `stuck_below` (the runs below a row still running,
-waiting or stuck), `failed_below` (the failed and lost runs below it) and
+waiting or stuck), `failed_below` (the failed and lost runs below it: they
+did not finish, though a lost one never makes the tree `failed`),
 `failed_pct` (their share of the runs below it in percent, the rollup's
-`failed_pct`; [query fields](sdk.md#the-query-language)) by the job
+`failed_pct`, lost runs included) and `lost_below` (the lost ones alone;
+[query fields](sdk.md#the-query-language)) by the job
 rollups' rule: a settled run counts nowhere, an archived run's subtree only
 in it, so `vmn-exp list --query 'running_below > 0'` lists the ended launches
 whose grandchildren still run, the same outer runs the UI's Outer runs page

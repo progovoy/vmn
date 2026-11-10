@@ -110,7 +110,9 @@ resolve once per call; prefixes are not resolved (None).
 Once an outer run has ended, what is left under it settles (derived, never
 written, query it as `settled`): `never_started` (still `created`, but no
 longer waiting or live; adds nothing to the counts), `lost`
-(stuck; counted as failed) or `outlived` (still beating; counted as running
+(stuck; its own state: it never makes `tree_status` read `failed`, only a
+non-zero exit does; `lost_below` counts it, `failed_below`/`failed_pct` count
+it as not finished) or `outlived` (still beating; counted as running
 and flagged). For runs lasting hours, slow the beat with
 `VMN_EXP_HEARTBEAT_SEC=120` (stuck after 6 min) and the log sync with
 `VMN_EXP_SYNC_SEC`; a heartbeat that changes nothing skips its write.
@@ -282,8 +284,9 @@ A save checks `ui.progress`/`ui.attention`/`ui.baseline`/`ui.views`/
 `ui.job_aggregate`/`ui.failed_pct_threshold` (an attention query must
 compile). The URL's `job_agg`, `job_agg_by`, `job_agg_value` and
 `job_agg_metric` override `ui.job_aggregate` for one view. A tree's failure
-share is queryable: `failed_pct >= 5` (`100 * failed_below / runs below`;
-also `failed_below`, `live_below`, `running_below`, `stuck_below`).
+share is queryable: `failed_pct >= 5` (`100 * failed_below / runs below`,
+lost runs included; also `failed_below`, `lost_below`, `live_below`,
+`running_below`, `stuck_below`).
 Queries (`vmn-exp list --query`, the UI's filter, `ui.attention`) can read
 an ancestor's fields: `up.params.<k>`, `up(tags.kind = "study").params.<k>`.
 `GET /metrics` serves Prometheus gauges per app and outer run (status counts,

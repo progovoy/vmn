@@ -445,7 +445,7 @@ the URL still say *job*: `view=jobs`, `kind=jobs`, the `job` row field and the
 to the app name has `Outer runs (N)`, `Single runs (N)` and `All runs`. The
 last view is remembered per app, and `view=`/`kind=` in the URL win.
 - **Outer runs** has one row per top-level outer run. Each row shows:
-  - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, drawn as failures (see [settled runs](experiments.md#nesting)).
+  - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, apart from `N failed` (only those make the tree status `failed`; the bar draws both in its failed share, what did not finish), and the status reads `succeeded · 1 lost` (see [settled runs](experiments.md#nesting)). A lost run's own pill reads `stuck · lost`, on the board, in the tree and on its page.
   - An outer run whose own row carries finite metrics `progress` and `progress_total` (`run.set_progress(done, total, unit)`; the unit is the `progress_unit` param) declares its progress: the bar fills that share, the line leads with it and the runs follow (`41/60 dates · 1,415 runs · 3 failed · 20 dates/h · ETA 14m`), and the rate and ETA are the declared progress since the outer run started. Use it when the inner-run count grows as work gets planned. Metrics under other names count once `experiment.ui.progress: {done: <metric>, total: <metric>, unit: <label>}` (conf.yml or the [store settings](server.md#app-settings)) names them; a settings change shows at once.
   - a sparkline of the main metric's spread.
   - its **aggregate** (`rolled`) in the **value** column: the header names it (`median · dates`), the cell reads `0.65` (`≈ 0.65` for an approximate quantile), linked to the unit holding it, its title the source and coverage (`median of 14/16 dates' own date.best_value · 1 duplicate date left out`), `— (no goal)` without a goal. The header's `▾` picks the aggregate, the units (children, runs, a param or tag field), each unit's value (`best`/`own`) and the metric, into the URL's `job_agg*` (`app default` drops them). A single run's cell is its own main metric. One value per unit, aggregated. Walk-forward needs the nested number (the best trial of each date, then the median across dates), not a median over every trial, which measures the search space. The board picks it once for every row (never mixed across rows): `job_agg` (`mean`, `best`, `median`, `min`, `max`, `best10`, `worst10`; the tails follow the metric's goal, so higher-is-better reads `best10 (p90)` / `worst10 (p10)` and lower-is-better flips them), `job_agg_by` (the units: `children`, the default, one per direct child; `field:<params.k|tags.k>`, the nearest run carrying the field on each branch, e.g. `field:params.trade_date`, two units with the same value a counted conflict left out: `median of 15/16 dates · 1 duplicate`; `kind:<tags.kind>`, a `tags.kind` match at any depth; `runs`, every run below from the merged sketch, labelled `≈`), `job_agg_value` (each unit's `best`, its subtree's best run, the default, or its `own` metric, with no fallback: a unit without it is missing, `median of 12/16 dates`) and `job_agg_metric` (default the main metric; e.g. date runs logging `date.best_value`). A metric without a declared goal has no value (`— (no goal)`). `job_agg=best` (the default) is the subtree's best for every `by`. Every unit with a value counts, finished or not; `n`/`of` is the coverage. The app's default is `experiment.ui.job_aggregate: {agg, by, value, metric}` (conf.yml or the [store settings](server.md#app-settings)), e.g. fgm's `{agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}`; the URL overrides it, and a team view per kind of outer run carries its own. Only top-level rows have one: a [tree](#the-tree) row keeps its own values.
@@ -460,7 +460,9 @@ last view is remembered per app, and `view=`/`kind=` in the URL win.
   it or any run below it runs (`status = "running" or running_below > 0`),
   **stuck** likewise (`stuck_below`), and **failed**, **succeeded** and
   **created** match its `tree_status` (so a tree with a failed run reads
-  failed, and may still read running). Once **failed** is on, a
+  failed, and may still read running; a lost run never makes it failed).
+  A **lost** chip beside **failed** keeps the trees with lost runs below
+  them (`lost_below > 0`, URL `lost=1`). Once **failed** is on, a
   **≥ N% failed** chip beside it keeps only the trees whose failure share
   is at least N instead (`failed_pct >= N`, URL `failed_pct=N`): one failed
   run in 3,000 no longer reads like 40%. N is the app's
@@ -943,9 +945,10 @@ message.
     chips send it. It reads `live_below`: the runs below the row
     still running, waiting or stuck (its rollup's `counts`, settled runs
     left out; 0 for a single run), `running_below`/`stuck_below`, those
-    running or stuck alone, and `failed_below`/`failed_pct`, the failed and
+    running or stuck alone, `failed_below`/`failed_pct`, the failed and
     lost runs below it and their share in percent (the rollup's
-    `failed_pct`) — the counts `vmn-exp list --query` and the SDK
+    `failed_pct`: what did not finish), and `lost_below`, the lost ones
+    (the rollup's `lost`) — the counts `vmn-exp list --query` and the SDK
     read too ([query fields](sdk.md#the-query-language)), so the command line
     under the board lists the same outer runs.
   - `experiments-facets` returns `jobs`/`singles` counts.
@@ -1045,7 +1048,7 @@ Every row of `.../experiments` and the run detail carry:
 | `kind` | `outer`, `inner` or `single` |
 | `depth` | nesting depth, for indenting the list |
 | `settled` | `never_started` (created), `lost` (stuck, or released) or `outlived` (running, counted as running) for a run under an outer run that ended, else `null`: derived, the run's own `status` stays |
-| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created` and a `never_started` run are left out, a `lost` run adds `failed`, an incomplete sweep that has not ended adds `created` |
+| `tree_status` | rollup over the run and its subtree (`failed > stuck > running > created > succeeded`); a container outer's own `created`, a `never_started` and a `lost` run are left out (only a non-zero exit makes it `failed`; `lost_below` counts the lost ones), an incomplete sweep that has not ended adds `created` |
 | `sweep_planned` / `sweep_trials` | a sweep outer's planned trials (grid size, else `run_cap`) and the trial slots its inner runs fill; absent for other runs and uncapped random/bayes sweeps. While `sweep_trials < sweep_planned` the UI reads `16/20 · incomplete`, and the detail's `status.fleet.expected` is the planned size |
 | `signal` / `end_reason` | the signal that ended (or released) the run (`SIGTERM`); `stopped` for an early-stopped sweep trial, `released` for a run handed back unfinished (`run.release()`, status `created`) |
 | `released_at` / `resume_count` | the run's last release (kept once it is reopened) and how many times it was reopened (`start_run(run_id=)`), else `null` |

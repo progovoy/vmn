@@ -53,6 +53,12 @@ lost (e.g. 1 of 20,591). Lost = stuck under an ended outer run.
   **failed** on the board filters by it.
 - `failed_below`/`failed_pct` keep counting lost runs: they measure what did
   not finish. Their docs say so.
+- **Done** (2026-11-10): `own_rollup_status` leaves a lost run out like a
+  never-started one, so every path (annotate, one run's subtree, the board's
+  builds, derived generations, live buckets) agrees; `lost_below` is read at
+  query time from the rollups' existing `lost` tally (no index version bump).
+  A lost run's pill reads `stuck · lost`, an outer run's `succeeded · 1 lost`;
+  the run bar already showed `· N lost` apart from `· N failed`.
 
 ## 4. The empty board after the upgrade
 

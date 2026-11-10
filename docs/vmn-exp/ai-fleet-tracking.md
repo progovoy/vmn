@@ -138,8 +138,10 @@ row["tree_status"]    # rollup: failed > stuck > running > created > succeeded
 Once the outer run has ended (succeeded, failed, or stuck because the
 orchestrator died), the pods it registered but never started are settled
 `never_started` and its stuck pods `lost` (a row's `settled` field; their own
-`status` and `child_counts` stay): `tree_status` leaves the never-started ones
-out and counts a lost one as `failed`, and the waiting/stuck counts drop them.
+`status` and `child_counts` stay): `tree_status` leaves both out (only a pod
+that exited non-zero makes it `failed`; `lost_below` counts the lost ones,
+`failed_below`/`failed_pct` count them as not finished), and the waiting/stuck
+counts drop them.
 A pod still heart-beating then is `outlived`: it counts as running, and the
 UI's attention strip flags it (`settled = "outlived"`).
 No terminal state needs writing for pods the orchestrator deleted.
