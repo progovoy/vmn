@@ -247,3 +247,8 @@ def test_vmn_exp_skill_covers_the_outer_runs_aggregate_goals_and_failed_share(ca
     assert "failed_pct >= 5" in out
     assert "(no goal)" in out
     assert 'define_metric("val_loss", goal="min")' in out
+
+
+def test_vmn_exp_skill_shows_baseline_peers_that_must_differ(capfd):
+    assert _skill() == 0
+    assert "differ: [tags.launch_id]" in capfd.readouterr().out

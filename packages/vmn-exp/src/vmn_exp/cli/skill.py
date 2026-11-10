@@ -280,7 +280,8 @@ ui:
     - {key: unstable, query: 'tags.health = "unstable"', level: error}
     - {key: slow_start, level: warn,  # settled = null: not what an ended outer run left
        query: 'status = "created" and settled = null and timestamp < ago("1h")'}
-  baseline: {match: [tags.target], children_by: tags.trade_date}  # compare with the last launch
+  baseline: {match: [tags.target], differ: [tags.launch_id], children_by: tags.trade_date}
+  # compare with the last launch of the same target from another training
   views: [{name: Live, page: jobs, search: "view=live", default: true}]
   # each outer run row's value: one value per unit (here each date's own
   # date.best_value), aggregated; agg mean|best|median|min|max|best10|worst10,
