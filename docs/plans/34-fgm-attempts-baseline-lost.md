@@ -62,4 +62,12 @@ lost (e.g. 1 of 20,591). Lost = stuck under an ended outer run.
 
 ## 4. The empty board after the upgrade
 
-Under investigation; the fix lands here.
+Fixed (2026-11-10): an upgrade that deletes nothing (records 19) reads no
+record on open; the check lists its candidates a chunk per step (resumable,
+`core/index_vmx_check.py`). Before the kept rows are read back, the board
+serves the newest of them (the first page, at most `FIRST_ROWS_MAX`), else an
+empty snapshot with the known total. The kept read runs with GC paused and
+builds no lazy records. An I/O helper serves the first rows too, and the
+health probe starts no rebuild while the upgrade lock is held. Guard: on 20k
+runs the first rows publish in well under 0.5 s
+(`test_index_upgrade_first_publish_bench.py`).

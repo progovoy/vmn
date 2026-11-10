@@ -531,8 +531,9 @@ class ExperimentIndex:
     def _serve_before_kept(self, total):
         """Before the rows an upgrade kept are read back (O(runs)): let
         :meth:`snapshot_now` serve the newest of them, else none ``loading``
-        their *total* (plan 34 §4)."""
-        self._first_rows = self._newest_rows(kept=True) or loading_snapshot(self.app_name, total)
+        their *total* (None: the store's count) (plan 34 §4)."""
+        self._first_rows = self._newest_rows(kept=True) or loading_snapshot(
+            self.app_name, self._store.count(self.app_name) if total is None else total)
         self._servable.set()
 
     def _newest_rows(self, kept=False):
@@ -636,7 +637,7 @@ class ExperimentIndex:
         elif (total := io.deriving()) is None:
             return False
         if serve_kept and not self._lean:
-            self._serve_before_kept(self._store.count(self.app_name) if io is None else total)
+            self._serve_before_kept(None if io is None else total)
             with gc_paused():
                 self._kept = kept_snapshot(self.app_name, io.kept() if io is not None
                                            else kept_parts(self._store, self.app_name))
