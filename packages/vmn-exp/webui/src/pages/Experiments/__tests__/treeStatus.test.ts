@@ -26,4 +26,11 @@ describe("the outer runs' status chips", () => {
     expect(treeStatusQuery("stuck,failed", 12.5)).toBe('status = "stuck" or stuck_below > 0 or failed_pct >= 12.5');
     expect(treeStatusQuery("running", 5)).toBe('status = "running" or running_below > 0');
   });
+
+  // Plan 34 §3: the lost chip keeps the trees with lost runs below them.
+  it("add the lost chip's trees", () => {
+    expect(treeStatusQuery("", null, true)).toBe("lost_below > 0");
+    expect(treeStatusQuery("failed", 5, true)).toBe("failed_pct >= 5 or lost_below > 0");
+    expect(treeStatusQuery("running", null, false)).toBe('status = "running" or running_below > 0');
+  });
 });

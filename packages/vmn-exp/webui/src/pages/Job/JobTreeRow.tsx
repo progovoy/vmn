@@ -64,7 +64,7 @@ function StatusCell({ it }: { it: TreeNodeItem }) {
   const status = headStatus(r);
   return status ? (
     <StatusPill status={status} exitCode={r.exit_code} durationSec={r.duration_sec}
-      staleSec={r.stale_sec} errorSummary={r.error_summary} />
+      staleSec={r.stale_sec} errorSummary={r.error_summary} settled={r.settled} />
   ) : null;
 }
 

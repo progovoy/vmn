@@ -42,7 +42,7 @@ const JobCard = memo(function JobCard({ r, ctx, selected, onToggle, expanded, on
           <Link className={`lb-mcard-name run-link${r.name ? " run-name" : " mono"}`} to={href} title={r.verstr}>
             {r.name || r.verstr}
           </Link>
-          {status && <StatusPill status={status} exitCode={r.exit_code} durationSec={r.duration_sec} staleSec={r.stale_sec} errorSummary={r.error_summary} />}
+          {status && <StatusPill status={status} exitCode={r.exit_code} durationSec={r.duration_sec} staleSec={r.stale_sec} errorSummary={r.error_summary} lost={r.job?.lost} />}
         </div>
         <div className="lb-mcard-sub"><JobSubLine r={r} /><AttentionChips r={r} ctx={ctx} /><BaselineCell r={r} ctx={ctx} /></div>
         <div className="lb-mcard-metric job-mcard-best"><ValueCell r={r} ctx={ctx} /></div>

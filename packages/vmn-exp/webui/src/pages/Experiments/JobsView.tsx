@@ -58,16 +58,23 @@ const listQuery = (kind: JobsKind | null, topQuery?: string) =>
   topQuery ? `${kindQuery(kind)} and (${topQuery})` : kindQuery(kind);
 
 /** After the failed chip, once on, its "≥ N% failed" (plan 31 §1): the
- *  URL's N, else the app's threshold. */
-function failedShareChip(view: ReturnType<typeof useLeaderboardView>, threshold = DEFAULT_FAILED_PCT_THRESHOLD) {
+ *  URL's N, else the app's threshold; then the lost chip (plan 34 §3). */
+function failedChips(view: ReturnType<typeof useLeaderboardView>, threshold = DEFAULT_FAILED_PCT_THRESHOLD) {
   const pct = view.failedPct ?? threshold;
-  return (s: RunState, pressed: boolean) => s === "failed" && pressed && (
-    <ToggleChip
-      pressed={view.failedPct !== null} title="outer runs with at least this share of failed runs"
-      onChange={(on) => view.setFailedPct(on ? pct : null)}
-    >
-      ≥ {pct}% failed
-    </ToggleChip>
+  return (s: RunState, pressed: boolean) => s === "failed" && (
+    <>
+      {pressed && (
+        <ToggleChip
+          pressed={view.failedPct !== null} title="outer runs with at least this share of failed runs"
+          onChange={(on) => view.setFailedPct(on ? pct : null)}
+        >
+          ≥ {pct}% failed
+        </ToggleChip>
+      )}
+      <ToggleChip pressed={view.lost} title="outer runs with runs lost when they ended" onChange={view.setLost}>
+        lost
+      </ToggleChip>
+    </>
   );
 }
 
@@ -147,7 +154,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
             queryHints={data.hints}
             archived={view.archived}
             onArchivedChange={view.setArchived}
-            afterChip={kind.top === "jobs" ? failedShareChip(view, status?.failed_pct_threshold) : undefined}
+            afterChip={kind.top === "jobs" ? failedChips(view, status?.failed_pct_threshold) : undefined}
           />
           <JobsMatchLine matches={data.matches} appBase={base} search={board.search} />
           <NewRowsBar pending={data.pending} noun={kind.kind === "jobs" ? "outer run" : "run"} onShow={data.showNew} />

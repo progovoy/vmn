@@ -60,6 +60,8 @@ export function useLeaderboardView() {
     status: read("status"),
     /** `failed_pct=`: the Outer runs failed chip's "≥ N% failed" (plan 31 §1). */
     failedPct: parsePercent(params.get("failed_pct")),
+    /** `lost=1`: the Outer runs lost chip (plan 34 §3). */
+    lost: params.get("lost") === "1",
     query: read("q"),
     search: read("search"),
     branch: read("branch"),
@@ -120,6 +122,7 @@ export function useLeaderboardView() {
   const setters = useMemo(() => ({
     setStatus: (csv: string) => setParam("status", csv),
     setFailedPct: (pct: number | null) => setParam("failed_pct", pct === null ? "" : String(pct)),
+    setLost: (on: boolean) => setParam("lost", on ? "1" : ""),
     setQuery: (q: string) => setParam("q", q),
     setSearch: (s: string) => setParam("search", s),
     setBranch: (b: string) => setParam("branch", b),

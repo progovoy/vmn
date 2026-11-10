@@ -70,7 +70,7 @@ function JobRow({ r, index, isActive, isSelected, density, ctx, onToggle, expand
         return status && (
           <StatusPill
             status={status} exitCode={r.exit_code} durationSec={r.duration_sec}
-            staleSec={r.stale_sec} errorSummary={r.error_summary}
+            staleSec={r.stale_sec} errorSummary={r.error_summary} lost={r.job?.lost}
           />
         );
       case "name":

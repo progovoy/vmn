@@ -1,5 +1,5 @@
 import type { RunState } from "../types";
-import { fmtDuration, relTime } from "../util";
+import { fmtCount, fmtDuration, relTime } from "../util";
 
 /** Extra detail worth carrying in the pill's accessible label — the numbers
  *  that explain *why* a run is in this state. */
@@ -33,8 +33,9 @@ function describe(
  *  warning glyph so a dead runner never reads as a live one; a waiting run
  *  its process handed back (`released_at`, plan 28 API2) says so, and so
  *  does a running one its ended outer run left behind (`settled =
- *  "outlived"`, plan 28 T2b). */
-export default function StatusPill({ status, exitCode, durationSec, staleSec, errorSummary, releasedAt, settled }: {
+ *  "outlived"`, plan 28 T2b) and one it lost (`settled = "lost"`, plan 34
+ *  §3). An outer run's *lost* runs follow its status: `succeeded · 1 lost`. */
+export default function StatusPill({ status, exitCode, durationSec, staleSec, errorSummary, releasedAt, settled, lost }: {
   status: RunState;
   exitCode?: number | null;
   durationSec?: number | null;
@@ -43,16 +44,21 @@ export default function StatusPill({ status, exitCode, durationSec, staleSec, er
   errorSummary?: string | null;
   /** The run's last release; shown only while it waits. */
   releasedAt?: string | null;
-  /** What an ended outer run made of the run (core/settle.py); only
-   *  `outlived` is shown, while it runs. */
+  /** What an ended outer run made of the run (core/settle.py): `outlived`
+   *  is shown while it runs, `lost` always. */
   settled?: string | null;
+  /** The lost runs below an outer run (its rollup's `lost`). */
+  lost?: number | null;
 }) {
   const released = status === "created" && !!releasedAt;
   const outlived = status === "running" && settled === "outlived";
+  const isLost = settled === "lost";
   const described = released
     ? `waiting — released ${relTime(releasedAt)}`
     : describe(status, exitCode, durationSec, staleSec);
-  const base = outlived ? `${described} · outlived its outer run` : described;
+  const lostBelow = lost ? ` · ${fmtCount(lost)} lost` : "";
+  const settledText = outlived ? " · outlived its outer run" : isLost ? " · lost: its outer run ended" : "";
+  const base = described + settledText + lostBelow;
   const label = status === "failed" && errorSummary ? `${base} — ${errorSummary}` : base;
   return (
     <span className={`status-pill ${status}`} title={label} aria-label={label}>
@@ -61,6 +67,8 @@ export default function StatusPill({ status, exitCode, durationSec, staleSec, er
       {status}
       {released && " · released"}
       {outlived && " · outlived"}
+      {isLost && " · lost"}
+      {lostBelow}
     </span>
   );
 }
