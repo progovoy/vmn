@@ -7,7 +7,7 @@
 > Paths: `core/` = `packages/vmn-exp-sdk/src/vmn_exp/core/`; `ui/` =
 > `packages/vmn-exp/src/vmn_exp/ui/`; web = `packages/vmn-exp/webui/src`.
 
-Status: **in progress** (2026-11-10).
+Status: **done** (2026-11-10).
 
 ## 1. Grouping attempts of one training (decided: pool, latest wins)
 
