@@ -317,6 +317,7 @@ def subtree_status(
         "settled": settled[verstr],
         "tree_status": rollup_status([own, *below]),
         "child_counts": count_statuses(statuses[c] for c in children),
+        "lost_below": sum(1 for v in order[1:] if settled[v] == LOST),
         **sweep,
     }
     return states[verstr], tree

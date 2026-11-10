@@ -656,7 +656,13 @@ def _status_token(node):
     token = f"{status}/{tree_status}" if tree_status and tree_status != status else status
     if tree_status == CREATED and sweep_incomplete(node):
         token += f" ({node['sweep_trials']}/{node['sweep_planned']} incomplete)"
-    return token
+    return token + _lost_text(node)
+
+
+def _lost_text(tree):
+    """`` · 2 lost``: an outer run's lost runs (plan 34 §3), else empty."""
+    lost = tree.get("lost_below")
+    return f" · {lost} lost" if lost else ""
 
 
 def _list_rows(index_rows, last, sort, schema):
@@ -807,8 +813,8 @@ def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
     if not tree["children"]:
         return  # no children: nothing to roll up
     print(f"  Children:  {', '.join(tree['children'])}")
-    if tree["tree_status"] and tree["tree_status"] != fields["status"]:
-        print(f"  Subtree:   {tree['tree_status']}")
+    if tree["tree_status"] and (tree["tree_status"] != fields["status"] or tree["lost_below"]):
+        print(f"  Subtree:   {tree['tree_status']}{_lost_text(tree)}")
 
 
 @measure_runtime_decorator

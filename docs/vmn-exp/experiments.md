@@ -406,6 +406,10 @@ outer row as `<own status>/<subtree status>` when they differ:
   [3] 1.6.0-dev.a1b2c3d.1122334  failed  (1s ago)  - lr=0.1
 ```
 
+An outer run with lost runs below (stuck once it ended, plan 34 §3) adds their
+count: `succeeded · 2 lost` (`list --json` carries it as an outer row's
+`lost_below`).
+
 An outer run that never ran itself (no run state, own status `created`) is a
 container: its own `created` is left out of the rollup, so 16 succeeded trials
 make it read `succeeded`. A sweep outer (`vmn-exp sweep create`) also knows its
@@ -472,7 +476,7 @@ null`). A rule for runs waiting too long counts only the open ones with
 started.
 
 `exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
-it differs) on the outer run.
+it differs or has lost runs, `Subtree:   succeeded · 2 lost`) on the outer run.
 
 **Forks are not children.** `create`/`run --fork-from <ref> [--fork-step N]`
 (or `<ref>?_step=N`) starts a new run seeded with the source's params and

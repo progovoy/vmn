@@ -28,6 +28,7 @@ from vmn_exp.core.index_snapshot import put_side_tables
 from vmn_exp.core.index_views import runs_declared_schema
 from vmn_exp.core.log import filter_archived
 from vmn_exp.core.query import filter_rows, parse_query
+from vmn_exp.core.query_below import LOST_BELOW, failed_counts
 from vmn_exp.core.query_extra import store_extra
 from vmn_exp.core.status import RUNNING, STUCK
 from vmn_exp.core.tree import annotate_rows
@@ -101,10 +102,17 @@ def snapshot_listing(storage, app_name, query=None, schema=None, with_create_not
 def _matching(storage, app_name, snap, query, with_create_note):
     """``(rows *query* keeps, all rows)`` of *snap*, annotated: status and
     tree fields span every run, so depth, tree_status and the query see the
-    whole tree whatever subset is kept."""
+    whole tree whatever subset is kept. A kept outer run adds ``lost_below``
+    (plan 34 §3), the query's count."""
     tree = annotate_rows(row_copies(snap, with_create_note), snap.run_states,
                          snap.run_state_observed_at)
-    return filter_rows(tree, query, extra=store_extra(storage, app_name, snap)), tree
+    kept = filter_rows(tree, query, extra=store_extra(storage, app_name, snap))
+    outer = [row for row in kept if row["children"]]
+    if outer:
+        lost = failed_counts(tree)[LOST_BELOW]
+        for row in outer:
+            row["lost_below"] = lost.get(row["verstr"], 0)
+    return kept, tree
 
 
 def _read(conn, app, where, params, last):
