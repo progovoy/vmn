@@ -3,7 +3,7 @@
  *  group (a link grouping's runs with no link, F12) has no header: its rows
  *  and `+N more` row follow the groups as no one's members. */
 import type { GroupAggregate, RunGroup } from "../apiGroups";
-import type { ExperimentRow, MainMetric } from "../types";
+import type { ExperimentRow, JobAggChoice, MainMetric } from "../types";
 import type { Indexing } from "./indexing";
 
 /** A group as the board caches it: its rows by verstr, so an edit to the
@@ -22,6 +22,8 @@ export interface GroupedRows {
   running?: number;
   /** A Jobs view page's main metric (`top=`). */
   main?: MainMetric;
+  /** A grouped Outer runs page's aggregate (`top=`). */
+  job_agg?: JobAggChoice;
   hints?: string[];
   indexing?: Indexing;
 }

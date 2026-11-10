@@ -4,7 +4,7 @@
 import { setFilter } from "./api";
 import type { PageOpts } from "./api";
 import { appTag, get } from "./http";
-import type { ExperimentRow, JobCounts, JobRolled, MainMetric, PolicyMix } from "./types";
+import type { ExperimentRow, JobAggChoice, JobCounts, JobRolled, MainMetric, PolicyMix } from "./types";
 import type { Indexing } from "./util/indexing";
 
 /** Links between runs (the run pointed at heads the group; `code_verstr`:
@@ -88,6 +88,8 @@ export interface RunGroup {
   job_aggregates?: Record<string, PooledAggregate>;
   /** Its outer runs' run `counts`, summed (`top=`). */
   run_counts?: JobCounts;
+  /** Its outer runs' lost runs, outside `run_counts` (`top=`, plan 34 §3). */
+  lost?: number;
   rows: ExperimentRow[];
   rows_total: number;
   /** The group's size with the same `archived` setting but without
@@ -112,6 +114,9 @@ export interface GroupedPage {
   goal: "min" | "max" | null;
   /** A Jobs view page's main metric (`top=`). */
   main?: MainMetric;
+  /** A grouped Outer runs page's (`top=`) aggregate, named even when no
+   *  header has a value (plan 32 §0). */
+  job_agg?: JobAggChoice;
   /** Why the query matched nothing (plan 31 §4.2). */
   hints?: string[];
   /** The index the answer is from still loading (plan 33 §2.2). */

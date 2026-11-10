@@ -96,10 +96,15 @@ export function jobGroupCell(a: PooledAggregate | undefined, rolled: JobAggChoic
 
 /** A collapsed group's status counts (plan 34 §1): its outer runs' run
  *  counts summed, as a header counts them (`done` the succeeded). */
-export function attemptCounts(c: JobCounts): GroupCounts {
+function attemptCounts(c: JobCounts): GroupCounts {
   const total = c.running + c.waiting + c.succeeded + c.failed + c.stuck;
   return { total, running: c.running, waiting: c.waiting, done: c.succeeded, failed: c.failed, stuck: c.stuck };
 }
+
+/** `46 runs · 2 failed · 1 lost`: the summed counts, then the outer runs'
+ *  *lost* runs as their rows name them (plan 34 §3). */
+export const attemptCountsText = (c: JobCounts, lost?: number) =>
+  joinParts([...countParts(attemptCounts(c)), ...(lost ? [{ text: `${fmtCount(lost)} lost`, tone: "failed" as const }] : [])]);
 
 /** A `+N more` row's text in each state of its load. */
 export const MORE_TEXT = {

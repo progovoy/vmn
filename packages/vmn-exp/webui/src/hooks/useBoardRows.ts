@@ -38,7 +38,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
     const remaining = flat.total - (flat.rows?.length ?? 0);
     return {
       ...flat, items, grouped, loadGroup: groups.loadGroup,
-      aggregate: undefined, defaultAggregate: undefined, running: 0,
+      aggregate: undefined, defaultAggregate: undefined, running: 0, jobAgg: undefined,
       moreLabel: remaining > 0 ? `Load more (${remaining} remaining)` : "Load more",
     };
   }
@@ -46,7 +46,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
   return {
     rows: data?.rows, total: data ? Math.max(data.total, data.rows.length) : 0, items, grouped,
     matches: undefined,
-    groups: data?.groups, main: data?.main, hints: data?.hints, indexing: data?.indexing,
+    groups: data?.groups, main: data?.main, jobAgg: data?.job_agg, hints: data?.hints, indexing: data?.indexing,
     aggregate: data?.aggregate, defaultAggregate: groups.defaultAggregate, running: data?.running ?? 0,
     stale: groups.stale, staleError: groups.staleError,
     queryError: groups.queryError, pageError: groups.pageError, missing: false, moreError: groups.moreError,

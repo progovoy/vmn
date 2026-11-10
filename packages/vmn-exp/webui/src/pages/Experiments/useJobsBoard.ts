@@ -73,9 +73,11 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   const metric = data.main?.metric ?? null;
   const goal = data.main?.goal ?? null;
   // The answered aggregate (plan 31 §2): one per board, so any row's names
-  // it; with one row per group, any header's (plan 34 §1).
+  // it; with one row per group, any header's, else the page's (plan 32 §0:
+  // no header has a value, yet the cell reads `—`).
   const rolled = useMemo(() => rows.find((r) => r.job?.rolled)?.job?.rolled
-    ?? data.groups?.flatMap((g) => Object.values(g.job_aggregates ?? {}))[0] ?? null, [rows, data.groups]);
+    ?? data.groups?.flatMap((g) => Object.values(g.job_aggregates ?? {}))[0]
+    ?? data.jobAgg ?? null, [rows, data.groups, data.jobAgg]);
   // The groups' aggregate (`agg=`, else the server's answer): the toolbar's and the headers'.
   const aggregate = view.aggParam ?? data.aggregate ?? data.defaultAggregate ?? "mean";
   const running = useBoardLive({

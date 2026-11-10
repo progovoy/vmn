@@ -8,7 +8,7 @@ import PolicyMixMark from "../../components/PolicyMixMark";
 import { NO_GOAL, plural } from "../../util";
 import type { RunGroup } from "../../apiGroups";
 import type { BoardGroup, GroupHeaderItem, GroupMoreItem } from "../../util/groupItems";
-import { attemptCounts, countsText, jobGroupCell } from "../groupHeaderText";
+import { attemptCountsText, jobGroupCell } from "../groupHeaderText";
 import { GroupBar, GroupFold } from "../LeaderboardGroupRow";
 import { HeaderCheckbox, type HeaderCheckProps } from "../LeaderboardHeadParts";
 import { JOB_COLUMNS } from "./jobColumns";
@@ -37,10 +37,10 @@ export function JobGroupValue({ group, groups }: { group: BoardGroup; groups: Jo
   );
 }
 
-/** One row per group: the run counts summed over its outer runs. */
-export function JobGroupCounts({ group }: { group: Pick<RunGroup, "run_counts"> }) {
+/** One row per group: the run counts summed over its outer runs, and their lost runs. */
+export function JobGroupCounts({ group }: { group: Pick<RunGroup, "run_counts" | "lost"> }) {
   if (!group.run_counts) return null;
-  return <span className="group-counts">{countsText(attemptCounts(group.run_counts))}</span>;
+  return <span className="group-counts">{attemptCountsText(group.run_counts, group.lost)}</span>;
 }
 
 export function JobGroupRow({ item, index, isActive, height, groups, check }: {
