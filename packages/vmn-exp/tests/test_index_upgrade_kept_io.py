@@ -51,11 +51,13 @@ def upgraded(live_store, db, io, outdate):
     return index, want
 
 
-def _mid_derive_snapshot(index):
+def _mid_derive_snapshot(index, want):
+    """The first ``loading`` snapshot holding every kept row (the newest
+    page of them may serve before: plan 34 §4)."""
     deadline, snap = time.monotonic() + 10, None
     while time.monotonic() < deadline:
         snap = index.snapshot_now(wait_sec=0.1)
-        if snap is not None and snap.loading is not None and snap.rows:
+        if snap is not None and snap.loading is not None and len(snap.rows) >= len(want):
             break
         time.sleep(0.05)
     return snap
@@ -67,7 +69,7 @@ def serves_kept_rows_mid_derive(index, want, release):
     refresh = threading.Thread(target=index.refresh)
     refresh.start()
     try:
-        snap = _mid_derive_snapshot(index)
+        snap = _mid_derive_snapshot(index, want)
         assert snap is not None and snap.loading is not None
         assert snap.loading[1] == len(want)
         assert verstrs(snap) == want

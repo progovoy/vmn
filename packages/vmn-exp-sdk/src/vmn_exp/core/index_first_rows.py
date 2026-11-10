@@ -12,7 +12,6 @@ runs as they will stay.
 """
 from dataclasses import replace
 
-from vmn_exp.core.index_lazy import STATE_KEYS
 from vmn_exp.core.index_snapshot import (
     IndexSnapshot,
     RowCache,
@@ -22,14 +21,19 @@ from vmn_exp.core.index_snapshot import (
 )
 
 
-def first_rows(store, app_name, limit, max_rows):
+def first_rows(store, app_name, limit, max_rows, kept=False):
     """An :class:`IndexSnapshot` (generation 0) of *store*'s *limit* newest
     persisted runs of *app_name* and the trees around them (at most
     *max_rows*), ``loading`` ``(rows, persisted runs)``;
-    None when the store has none to serve (never saved, re-deriving,
-    unavailable, or not a SQLite store)."""
+    None when the store has none to serve (never saved, re-deriving unless
+    *kept* and an upgrade kept its rows, unavailable, or not a SQLite store)."""
     newest_of = getattr(store, "load_newest", None)
-    newest = newest_of(app_name, limit, max_rows) if newest_of else None
+    return first_rows_of(app_name, newest_of(app_name, limit, max_rows, kept) if newest_of else None)
+
+
+def first_rows_of(app_name, newest):
+    """:func:`first_rows`' snapshot of *newest*, the store's ``load_newest``
+    answer (plain values: an I/O helper's too); None for none."""
     if not newest or not newest[1]:
         return None
     runs, lean, states = newest
@@ -52,10 +56,7 @@ def kept_parts(store, app_name):
     None when the store has none."""
     load_kept = getattr(store, "load_kept", None)
     kept = load_kept(app_name) if load_kept else None
-    if not kept or not kept[2]:
-        return None
-    records, order, lean, _ = kept
-    return order, lean, {key: {k: records[key][k] for k in STATE_KEYS} for key in order}
+    return kept if kept and kept[1] else None
 
 
 def kept_snapshot(app_name, parts):

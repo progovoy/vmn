@@ -32,6 +32,7 @@ from vmn_exp.core.index_lean_store import apply_numbers, leans_of, renumbered, w
 from vmn_exp.core.index_store_conn import StoreConnection
 from vmn_exp.core.index_store_kv import KeyValues, joining
 from vmn_exp.core.index_store_reads import LeanReads
+from vmn_exp.core.index_vmx_check import list_chunk
 from vmn_exp.core.index_store_schema import SCHEMA_VERSION, ensure_schema  # noqa: F401
 from vmn_exp.core.similar_filing import file_records as file_similar
 from vmn_exp.core.sqlite_conn import connect, in_chunks, write_tx
@@ -133,6 +134,18 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
             except ValueError:
                 _LOGGER.debug("Could not decode the experiment index", exc_info=True)
                 return default
+
+    def vmx_list(self, app_name):
+        """A step of an upgrade's check's listing
+        (:func:`~vmn_exp.core.index_vmx_check.list_chunk`); None when unavailable."""
+        conn = self._db.get()
+        if conn is None:
+            return None
+        try:
+            return list_chunk(conn, app_name)
+        except sqlite3.Error as exc:
+            self._db.on_error(exc)
+            return None
 
     def count(self, app_name):
         """How many records are persisted for *app_name*, without reading

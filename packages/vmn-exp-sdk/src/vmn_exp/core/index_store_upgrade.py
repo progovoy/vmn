@@ -8,15 +8,17 @@ waited opens what the one before it built (plan 33 §2.1).
 Records whose version is in
 :data:`~vmn_exp.core.index_store_schema.COPYABLE_RECORDS` still read right:
 the file is upgraded in place (plan 33 §2.3), which drops nothing and needs
-no extra disk. A read pass that takes no lock picks the records its version's
-predicate says do not; they are listed to read again
-(:mod:`vmn_exp.core.index_reread`) in one transaction, then deleted with their
-run states, rows and similar-runs documents, :data:`DELETE_CHUNK` per short
-write transaction. The kept records its version's
-:data:`~vmn_exp.core.index_store_schema.CHECKED_RECORDS` predicate picks
-are listed, in the same transaction, for a background check
-(:mod:`vmn_exp.core.index_vmx_check`). Last, one transaction picks (lists and deletes) the
-records saved since the read pass, marks every app to re-derive
+no extra disk. A version with a stale predicate gets a read pass that takes
+no lock: it picks the records that predicate says do not read right; they
+are listed to read again (:mod:`vmn_exp.core.index_reread`) in one
+transaction, then deleted with their run states, rows and similar-runs
+documents, :data:`DELETE_CHUNK` per short write transaction. The kept records
+its version's :data:`~vmn_exp.core.index_store_schema.CHECKED_RECORDS`
+predicate picks are listed, in the same transaction, for a background check
+(:mod:`vmn_exp.core.index_vmx_check`). A version with none reads no record
+here (at ~734k runs on S3 the pass held the board empty for minutes, plan 34
+§4): the check lists its own, a chunk per step. Last, one transaction picks
+(lists and deletes) the records saved since any read pass, marks every app to re-derive
 (:mod:`vmn_exp.core.index_derive`) and writes the records mark; the journal
 mark and listing baselines stay. Until that mark the file still reads as
 outdated, so an upgrade that died part way is finished by the next open. The
@@ -59,19 +61,21 @@ def upgrade(path, connect_file):
             found = exc.found
         if found not in index_store_schema.COPYABLE_RECORDS:
             return regenerate(path, file, connect_file)
-        upgrade_in_place(file, index_store_schema.COPYABLE_RECORDS[found],
-                         index_store_schema.CHECKED_RECORDS.get(found))
+        upgrade_in_place(file, found)
         return connect_file(file), file
 
 
-def upgrade_in_place(file, stale, check=None):
-    """Bring *file*'s records to this version in place, deleting those
-    *stale* (None: none) picks and listing those *check* (None: none) picks
-    for the background check (see the module)."""
-    sorts = stale is not None or check is not None
+def upgrade_in_place(file, found):
+    """Bring *file*'s records (version *found*) to this version in place,
+    deleting those its stale predicate picks and listing those its check
+    predicate picks for the background check (see the module). With no
+    stale predicate nothing is read here: the check lists its own, a chunk
+    per step (:func:`~vmn_exp.core.index_vmx_check.list_later`)."""
+    stale = index_store_schema.COPYABLE_RECORDS[found]
+    check = index_store_schema.CHECKED_RECORDS.get(found)
     conn = connect(file)
     try:
-        if sorts:
+        if stale is not None:
             gens = dict(conn.execute("SELECT app, gen FROM exp_index_gen"))
             picked, checked = _split(_rows(file), stale, check)
             with write_tx(conn):  # listed first: a death part way loses none
@@ -79,10 +83,12 @@ def upgrade_in_place(file, stale, check=None):
             for chunk, _ in in_chunks(picked, DELETE_CHUNK):
                 _delete_picked(conn, chunk)
         with write_tx(conn):
-            if sorts:
+            if stale is not None:
                 late, late_checked = _split(_saved_since(conn, gens), stale, check)
                 _list(conn, late, late_checked)
                 _delete(conn, late)
+            elif check is not None:
+                write_puts(conn, index_vmx_check.list_later(conn, found))
             upgrade_derived(conn, kept=True)
     finally:
         conn.close()

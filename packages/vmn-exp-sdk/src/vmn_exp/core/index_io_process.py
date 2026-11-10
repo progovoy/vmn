@@ -181,6 +181,15 @@ class ProcessIO:
     def kv_put(self, scope, fingerprint, payload):
         self.call("kv_put", scope, fingerprint, payload)
 
+    def vmx_list(self, app_name):
+        """The index store's step of an upgrade's check's listing."""
+        return self.call("vmx_list", app_name)
+
+    def first_rows(self, limit, max_rows, kept=False):
+        """The newest persisted rows, the helper store's ``load_newest``
+        (plain parts, for :func:`~vmn_exp.core.index_first_rows.first_rows_of`)."""
+        return self.call("first_rows", limit, max_rows, kept)
+
     def deriving(self):
         """How many records an upgrade left this app to re-derive, or None."""
         return self.call("deriving")
@@ -265,6 +274,12 @@ class _Helper:
     def kv_put(self, scope, fingerprint, payload):
         self.index._store.kv_put(scope, fingerprint, payload)
 
+    def vmx_list(self, app_name):
+        return self.index._store.vmx_list(app_name)
+
+    def first_rows(self, limit, max_rows, kept):
+        return self.index._store.load_newest(self.index.app_name, limit, max_rows, kept)
+
     def deriving(self):
         store, app = self.index._store, self.index.app_name
         return store.count(app) if store.deriving(app) else None
@@ -313,6 +328,7 @@ def main():
 def _handle(helper, op, args):
     """*helper*'s answer to *op*: bulk work, done with collection paused."""
     with gc_paused():
-        if op in ("load", "refresh", "kv_get", "kv_put", "deriving", "kept", "derive", "unreadable"):
+        if op in ("load", "refresh", "kv_get", "kv_put", "vmx_list", "first_rows", "deriving",
+                  "kept", "derive", "unreadable"):
             return getattr(helper, op)(*args)
         return getattr(helper.watch, op)(*args)

@@ -16,16 +16,30 @@ hinted: its next refresh folds it afresh from storage, and only once that is
 saved does it leave the list. A death part way loses nothing: the next load
 resumes the cursor and hints the refolds left. The index's freshness says
 ``checking {done, total}`` until the list is done.
+
+An upgrade that deletes nothing reads no record to list them (plan 34 §4):
+it leaves ``vmx-list:<app>`` (:func:`list_later`), a rowid cursor, and the
+steps list them first, :data:`LIST_CHUNK` records per transaction. Each
+chunk's picks are written as a page (``vmx-list-page:<app>:<n>``) with the
+cursor, so a restart resumes and a step that dies lists nothing twice; the
+last chunk joins the pages into ``vmx-check:<app>``. The steps list whether
+or not the check runs in the background, ``checking`` counting the picks so
+far.
 """
+import json
 import time
 
+from vmn_exp.core import index_store_schema
 from vmn_exp.core.index_reread import by_app
-from vmn_exp.core.index_store_kv import read_payload
+from vmn_exp.core.index_store_kv import read_payload, write_puts
+from vmn_exp.core.sqlite_conn import read_tx, write_tx
 from vmn_exp.core.vmx_check import indexed_objects, needs_refold
 from vmn_exp.storage.fanout import fan_out
 
 FINGERPRINT = "vmx-check-1"
 KEYS, AT, REFOLD = "vmx-check:", "vmx-check-at:", "vmx-refold:"
+LIST, PAGE = "vmx-list:", "vmx-list-page:"
+LIST_CHUNK = 500  # records a listing step reads per transaction
 BACKGROUND = True  # refreshes run the check's steps (tests run them by hand)
 CHECK_EVERY_SEC = 2.0
 CHECK_BUDGET_SEC = 1.0
@@ -45,12 +59,58 @@ def puts(conn, keys):
     return out
 
 
+def list_later(conn, found):
+    """The kv puts leaving each app's records (version *found*) to list for
+    the check, a chunk per step: those saved by now, by rowid."""
+    (until,) = conn.execute("SELECT MAX(rowid) FROM exp_index").fetchone()
+    mark = {"after": 0, "until": until or 0, "records": found, "pages": 0, "listed": 0}
+    return [(LIST + app, FINGERPRINT, mark)
+            for (app,) in conn.execute("SELECT app FROM exp_index_gen").fetchall()]
+
+
+def list_chunk(conn, app):
+    """List the next :data:`LIST_CHUNK` of *app*'s records left to list:
+    ``(records read, picks listed so far, finished)``."""
+    with read_tx(conn):
+        mark = read_payload(conn, LIST + app, FINGERPRINT)
+        if mark is None:
+            return 0, 0, True  # another lister finished it
+        rows = conn.execute(
+            "SELECT rowid, key, head, data FROM exp_index WHERE app = ? AND rowid > ?"
+            " AND rowid <= ? ORDER BY rowid LIMIT ?",
+            (app, mark["after"], mark["until"], LIST_CHUNK)).fetchall()
+    check = index_store_schema.CHECKED_RECORDS[mark["records"]]
+    picked = [key for _, key, head, data in rows
+              if data is not None and check(json.loads(head), json.loads(data))]
+    finished = len(rows) < LIST_CHUNK
+    with write_tx(conn):
+        if read_payload(conn, LIST + app, FINGERPRINT) != mark:
+            return 0, mark["listed"], False  # another lister took this chunk
+        write_puts(conn, _chunk_puts(conn, app, mark, rows, picked, finished))
+    return len(rows), mark["listed"] + len(picked), finished
+
+
+def _chunk_puts(conn, app, mark, rows, picked, finished):
+    """A listed chunk's puts: its page and the cursor past it; for the last,
+    every page joined into the check's keys, the pages and cursor gone."""
+    pages = [f"{PAGE}{app}:{n}" for n in range(mark["pages"])]
+    if finished:
+        keys = picked + [key for page in pages for key in read_payload(conn, page, FINGERPRINT)]
+        return puts(conn, [(app, key) for key in keys]) + [
+            (scope, FINGERPRINT, None) for scope in pages + [LIST + app]]
+    page = [(f"{PAGE}{app}:{mark['pages']}", FINGERPRINT, picked)] if picked else []
+    return page + [(LIST + app, FINGERPRINT, dict(
+        mark, after=rows[-1][0], pages=mark["pages"] + len(page),
+        listed=mark["listed"] + len(picked)))]
+
+
 class VmxCheck:
     """One app's check: *kv()* the store (or I/O helper) holding its lists."""
 
     def __init__(self, kv, app_name, clock=time.monotonic):
         self._kv, self._app, self._clock = kv, app_name, clock
         self._keys, self.done, self.refold = [], 0, set()
+        self._listing = None  # while list_later's are listed: the picks so far
         self._due = 0.0
 
     def load(self):
@@ -59,15 +119,42 @@ class VmxCheck:
         self._keys = kv.kv_get(KEYS + self._app, FINGERPRINT) or []
         self.done = (kv.kv_get(AT + self._app, FINGERPRINT) or {}).get("done", 0)
         self.refold = set(kv.kv_get(REFOLD + self._app, FINGERPRINT) or ())
+        listing = kv.kv_get(LIST + self._app, FINGERPRINT)
+        self._listing = None if listing is None else listing["listed"]
         return self.refold
 
     def state(self):
-        """``{done, total}`` while keys are left to check, else None."""
-        total = len(self._keys)
-        return {"done": self.done, "total": total} if self.done < total else None
+        """``{done, total}`` while keys are left to list or check, else None."""
+        total = len(self._keys) + (self._listing or 0)
+        if not self.listing and self.done >= total:
+            return None
+        return {"done": self.done, "total": total}
+
+    @property
+    def listing(self):
+        return self._listing is not None
 
     def due(self):
-        return BACKGROUND and self.state() is not None and self._clock() >= self._due
+        """Whether a step is due: a listing's, else (in the background) a check's."""
+        ready = self.listing or (BACKGROUND and self.state() is not None)
+        return ready and self._clock() >= self._due
+
+    def list_step(self, limit=None):
+        """List keys from the cursor: *limit* chunks of them, else for about
+        :data:`CHECK_BUDGET_SEC`; how many records were read (0 once all are)."""
+        deadline = None if limit is not None else self._clock() + CHECK_BUDGET_SEC
+        read = chunks = 0
+        while self.listing and (limit is None or chunks < limit) and (
+                deadline is None or self._clock() < deadline):
+            listed = self._kv().vmx_list(self._app)
+            chunks += 1
+            if listed is None:
+                break  # unavailable: the next step resumes
+            read, self._listing = read + listed[0], listed[1]
+            if listed[2]:
+                self.load()
+        self._due = self._clock() + CHECK_EVERY_SEC
+        return read
 
     def step(self, storage, records, hint, limit=None):
         """Check keys from the cursor — *limit* of them, else for about

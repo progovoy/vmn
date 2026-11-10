@@ -57,19 +57,30 @@ class LeanReads:
         return self._read(lambda: self._warm(app_name), None)
 
     def load_kept(self, app_name):
-        """:meth:`load_warm`'s answer while *app_name*'s rows are left to
-        re-derive after an in-place upgrade (:data:`KEPT_SCOPE`): the rows
-        it kept, stale until re-derived; None when there are none (never
-        saved, unavailable)."""
-        return self._read(lambda: self._warm(app_name, kept=True) if read_payload(
-            self._conn, KEPT_SCOPE, SCHEMA_VERSION) else None, None)
+        """``(keys, {key: lean_row tuple}, {key: run state fields})`` of the
+        rows kept while *app_name*'s rows are left to re-derive after an
+        in-place upgrade (:data:`KEPT_SCOPE`), stale until re-derived, the
+        keys in storage order; None when there are none (never saved,
+        unavailable). Builds no lazy record: nothing holds them."""
+        return self._read(lambda: self._kept(app_name) if self._keeps() else None, None)
 
-    def _warm(self, app_name, kept=False):
+    def _keeps(self):
+        return read_payload(self._conn, KEPT_SCOPE, SCHEMA_VERSION)
+
+    def _kept(self, app_name):
+        read = self._at_one_generation(app_name, lambda conn: (
+            dict(self._select("exp_index_state", app_name)), read_lean(conn, app_name)), kept=True)
+        if read is None:
+            return None
+        states, (keys, lean, _) = read
+        return keys, lean, {key: _state_from(states.get(key)) for key in keys}
+
+    def _warm(self, app_name):
         read = self._at_one_generation(app_name, lambda conn: (
             dict(conn.execute("SELECT key, seq FROM exp_index WHERE app = ?", (app_name,))),
             dict(self._select("exp_index_state", app_name)),
             read_lean(conn, app_name),
-        ), kept=kept)
+        ))
         if read is None:
             return None  # never saved: nothing to start warm from
         seqs, states, (keys, lean, stamps) = read
@@ -80,13 +91,15 @@ class LeanReads:
         }
         return records, keys, lean, stamps
 
-    def load_newest(self, app_name, limit, max_rows):
+    def load_newest(self, app_name, limit, max_rows, kept=False):
         """``(runs, {key: lean_row tuple}, {key: run state fields})`` of
         *app_name*'s *limit* newest runs and the trees around them, at most
         *max_rows* (see :mod:`~vmn_exp.core.index_lean_first`), read at one
-        generation; None when unavailable, never saved or left to re-derive."""
+        generation; None when unavailable, never saved or left to re-derive
+        — unless *kept* and an upgrade kept its rows (:meth:`load_kept`)."""
         return self._read(lambda: self._at_one_generation(
-            app_name, lambda conn: self._first_rows(conn, app_name, limit, max_rows)), None)
+            app_name, lambda conn: self._first_rows(conn, app_name, limit, max_rows),
+            kept=kept and self._keeps()), None)
 
     def _first_rows(self, conn, app_name, limit, max_rows):
         runs, lean = read_first_rows(conn, app_name, limit, max_rows)

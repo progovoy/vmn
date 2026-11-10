@@ -63,7 +63,7 @@ from vmn_exp.core import index_freshness
 from vmn_exp.core.index_follower import apply_delta
 from vmn_exp.core.index_baseline import ListingBaseline
 from vmn_exp.core.index_bulk import BulkPublish, loading_snapshot
-from vmn_exp.core.index_first_rows import first_rows, kept_parts, kept_snapshot
+from vmn_exp.core.index_first_rows import first_rows, first_rows_of, kept_parts, kept_snapshot
 from vmn_exp.core.index_io_process import IOProcessError, start_io_process  # noqa: F401
 from vmn_exp.core.index_journal_mark import JournalMark
 from vmn_exp.core.index_lean_store import sort_timestamp as _timestamp
@@ -453,10 +453,13 @@ class ExperimentIndex:
         self._freshness.refreshed()
 
     def _check_step(self, limit=None):
-        """A step of an upgrade's check (:mod:`~vmn_exp.core.index_vmx_check`):
-        its failure (a throttled store) is retried at the next step, never
-        the refresh's."""
+        """A step of an upgrade's check (:mod:`~vmn_exp.core.index_vmx_check`),
+        its listing's while one is left: its failure (a throttled store) is
+        retried at the next step, never the refresh's."""
         try:
+            if self._vmx.listing:
+                self._vmx.list_step()
+                return 0
             return self._vmx.step(self._storage, self._records, self._sweep.hint, limit)
         except Exception:  # noqa: BLE001
             _LOGGER.warning("checking %s's compacted metrics failed; retried", self.app_name,
@@ -464,12 +467,16 @@ class ExperimentIndex:
             return 0
 
     def check_vmx(self, limit=None):
-        """Run an upgrade's check now: *limit* records, else all left; how
-        many were checked."""
-        state = self._vmx.state()
-        if state is None:
+        """Run an upgrade's check now (its listing first): *limit* records,
+        else all left; how many were checked."""
+        if self._vmx.state() is None:
             return 0
         with self._lock:
+            while self._vmx.listing and self._vmx.list_step():
+                pass
+            state = self._vmx.state()
+            if state is None:
+                return 0
             return self._check_step(state["total"] - state["done"] if limit is None else limit)
 
     def _paused_unless_remote(self):
@@ -515,11 +522,23 @@ class ExperimentIndex:
         """Before reading the persisted rows back (O(runs)), let
         :meth:`snapshot_now` serve the newest FIRST_ROWS of them and the trees
         around them (:mod:`~vmn_exp.core.index_lean_first`)."""
-        if self._lean or self._io is not None or self._snapshot is not None:
+        if self._lean or self._snapshot is not None:
             return
-        self._first_rows = first_rows(self._store, self.app_name, FIRST_ROWS, FIRST_ROWS_MAX)
+        self._first_rows = self._newest_rows()
         if self._first_rows is not None:
             self._servable.set()
+
+    def _serve_before_kept(self, total):
+        """Before the rows an upgrade kept are read back (O(runs)): let
+        :meth:`snapshot_now` serve the newest of them, else none ``loading``
+        their *total* (plan 34 §4)."""
+        self._first_rows = self._newest_rows(kept=True) or loading_snapshot(self.app_name, total)
+        self._servable.set()
+
+    def _newest_rows(self, kept=False):
+        if self._io is not None:  # the helper owns the files
+            return first_rows_of(self.app_name, self._io.first_rows(FIRST_ROWS, FIRST_ROWS_MAX, kept))
+        return first_rows(self._store, self.app_name, FIRST_ROWS, FIRST_ROWS_MAX, kept=kept)
 
     def _set_published(self):
         self._published.set()
@@ -617,8 +636,10 @@ class ExperimentIndex:
         elif (total := io.deriving()) is None:
             return False
         if serve_kept and not self._lean:
-            self._kept = kept_snapshot(self.app_name, io.kept() if io is not None
-                                       else kept_parts(self._store, self.app_name))
+            self._serve_before_kept(self._store.count(self.app_name) if io is None else total)
+            with gc_paused():
+                self._kept = kept_snapshot(self.app_name, io.kept() if io is not None
+                                           else kept_parts(self._store, self.app_name))
         try:
             if io is None:
                 self._store.derive(self.app_name, self._derived)
