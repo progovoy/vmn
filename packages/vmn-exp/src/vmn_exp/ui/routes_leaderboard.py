@@ -26,7 +26,8 @@ fields, beside ``q``, flat or grouped: the Live/Review presets (plan 28 §4.5).
 A flat page carries ``next_cursor``; ``cursor=`` asks for the page after it
 (keyset paging, plan 23 S6, :mod:`~vmn_exp.ui.leaderboard_cursor`).
 Grouped with ``top``, each group sums its jobs' rollups and pools their units
-(plan 34 §1; ``collapse_all=1``: the headers alone); every group carries
+(plan 34 §1; ``collapse_all=1``: the headers alone), and the page names the
+aggregate (``job_agg``) even when no header has a value; every group carries
 the ``clause`` selecting it (:mod:`~vmn_exp.ui.leaderboard_group_clause`).
 A ``q`` (or ``top_q``) with ``ago()`` is pinned to the minute first (plan 28 P1,
 :func:`~vmn_exp.ui.attention.pinned`), so its ETag and orders follow the

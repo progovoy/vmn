@@ -4,6 +4,7 @@ S7) adds: its jobs' rollups summed. ``job_counts``: the group's jobs, per
 tree status (the count names of plan 22); ``runs``: every job's ``total``
 (its subtree) plus the group's single runs; ``failed``: failed, stuck or
 lost runs among those; ``run_counts``: the jobs' ``counts`` summed;
+``lost``: their lost runs (plan 34 §3, outside ``run_counts``);
 ``job_aggregates``: ``{metric: header}``, the units of all the group's jobs
 pooled under the board's chosen aggregate (plan 34 §1: the jobs are the
 attempts of one training; a unit key in several counts from the latest,
@@ -60,6 +61,7 @@ class JobGroups:
             "failed": singles_failed + sum(
                 sum(s["counts"][f] for f in FAILED) + s[LOST] for _, s in jobs),
             "run_counts": _summed(s["counts"] for _, s in jobs),
+            LOST: sum(s[LOST] for _, s in jobs),
             "job_aggregates": self._aggregates([row for row, _ in jobs]),
         }
 

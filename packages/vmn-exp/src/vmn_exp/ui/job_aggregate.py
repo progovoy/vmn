@@ -64,9 +64,14 @@ def percentile(agg, goal):
     return None if q is None else f"p{round(q * 100)}"
 
 
+def _choice(agg, metric, goal):
+    """What names *agg*: ``{agg, by, source, metric, goal, percentile}``."""
+    return {"agg": agg.agg, "by": agg.by, "source": agg.value, "metric": metric, "goal": goal,
+            "percentile": percentile(agg.agg, goal)}
+
+
 def _payload(agg, metric, goal, **fields):
-    out = {"agg": agg.agg, "by": agg.by, "source": agg.value, "metric": metric, "goal": goal,
-           "percentile": percentile(agg.agg, goal), "value": None, "n": 0, "of": 0,
+    out = {**_choice(agg, metric, goal), "value": None, "n": 0, "of": 0,
            "conflicts": 0, "verstr": None, "approx": False}
     out.update(fields)
     return out
@@ -148,6 +153,10 @@ class Pool:
         if self.metric is not None and job not in self._jobs:
             self._jobs[job] = self._entry(job)
         return _payload(self.agg, self.metric, self.goal, **self._fields([job])[0])
+
+    def choice(self):
+        """The aggregate's name (:func:`_choice`): a grouped page's ``job_agg``."""
+        return _choice(self.agg, self.metric, self.goal)
 
     def freeze(self):
         """Keep the jobs read so far, and nothing *entry* holds (base, tree, overlays)."""

@@ -23,6 +23,12 @@ def test_a_collapsed_grouped_page_carries_headers_without_rows(served):  # noqa:
     assert sum(group["run_counts"].values()) == 3
 
 
+def test_a_grouped_outer_runs_page_names_its_aggregate(served):  # noqa: F811
+    client, _ = served
+    page = _get(client, group="status", top="jobs", collapse_all="1", job_agg="median").json()
+    assert (page["job_agg"]["agg"], page["job_agg"]["metric"]) == ("median", "loss")
+
+
 def test_collapse_all_keys_the_etag(served):  # noqa: F811
     client, _ = served
     tags = {_get(client, group="status", top="jobs", **extra).headers["etag"]

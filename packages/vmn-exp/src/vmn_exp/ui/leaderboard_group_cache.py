@@ -38,7 +38,8 @@ class GroupCache:
         reading comments. *scope*/*top*/*top_query* narrow the rows as for a page; with
         *top* each group sums its jobs' rollups (plan 23 S7,
         :mod:`~vmn_exp.ui.leaderboard_group_jobs`; their aggregates of
-        ``rolled`` by *job_agg*, None: the app's). A *top_query* reading
+        ``rolled`` by *job_agg*, None: the app's, which a page of groups names
+in ``job_agg``). A *top_query* reading
         ``live_below`` groups uncached too (the top rows are few), as does a
         *query* reading one."""
         check_job_sort(sort, False)
@@ -61,11 +62,16 @@ class GroupCache:
             plain = GroupSpec(group, DEFAULT_AGGREGATE, schema, archived=archived, **where)
             unfiltered = (self._uncached(snapshot, schema, plain, list) if live_below
                           else self.grouping(snapshot, schema, plain))
+        if not top:
+            return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
+                                  unfiltered)
+        pool = self._cache.job_aggregates.pool(snapshot, schema, job_agg)
         extra = job_fields(grouping, self._cache._job_view.summaries(
-            snapshot, schema, job_agg=job_agg), self._cache.job_aggregates.pool(
-            snapshot, schema, job_agg)) if top else None
-        return groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
-                              unfiltered, extra)
+            snapshot, schema, job_agg=job_agg), pool)
+        out = groups_payload(grouping, offset or 0, limit, rows_per_group, group_key,
+                             unfiltered, extra)
+        # A page names its aggregate even when no header has a value (plan 32 §0).
+        return out if group_key is not None else dict(out, job_agg=pool.choice())
 
     def _uncached(self, snapshot, schema, spec, rows_filter):
         base, bucket = self._cache._base(snapshot)
