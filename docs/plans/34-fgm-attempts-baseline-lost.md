@@ -22,11 +22,20 @@ header that aggregates each outer run's value (a median of medians).
   creation). The title names it: `median of 16 dates' own date.best_value · 3
   from earlier attempts`. A duplicate inside one attempt stays a conflict, as
   today.
-- A **one row per group** toggle (URL `collapse=1`, also in team views)
+- A **one row per group** toggle (URL `collapse_all=1`, also in team views)
   collapses each group to its header row: the pooled value, its coverage
   (`n/of`), and status counts summed over the attempts.
 - `job_aggregates` in the grouped answer carries the pooled stats plus
   `from_earlier` (the units taken from earlier attempts).
+- **Done (2026-11-10).** `ui/job_aggregate.py` `Reader` keeps each outer
+  run's valued units with the rows' `rolled` (one memo per generation,
+  bucket and aggregate), and `Reader.pooled` pools a group's latest-first;
+  `ui/leaderboard_group_jobs.py` orders the attempts and adds `run_counts`.
+  `by=runs` pools the merged sketches (no latest-wins). The API's
+  `collapse_all=1` (needs `group` and `top`) answers headers without rows;
+  the web's toggle sits beside Group by (`JobGroupRows.tsx`,
+  `JobCards.tsx`). No `RECORDS_VERSION`/`DERIVED_VERSION` change. Docs:
+  [ui.md](../vmn-exp/ui.md#outer-runs-and-the-outer-runs-page).
 
 ## 2. Baseline peers that must differ (decided: `baseline.differ`)
 

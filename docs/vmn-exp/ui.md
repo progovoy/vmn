@@ -547,7 +547,8 @@ Group by groups the rows of the view it is in: outer runs in Outer runs, runs
 across outer runs in All runs, and runs inside one outer run on its Runs tab.
 A group of more than 50 runs has no fold; its header button adds the group's
 clause as a filter.
-In grouped Outer runs, a group's header shows in the value column (beside the label on a phone) the page's aggregate (`agg`) of its outer runs' values (`job_aggregates`), `median 0.65` titled `median of 12 outer runs' median of dates' own date.best_value`, a tail with its percentile (`best10 (p90)`), `*` when runs override the summary policy, `— (no goal)` without a goal and `—` when none has a value.
+In grouped Outer runs (e.g. `group=tags.launch_id`, the attempts of one resumed training), a group's header shows in the value column (beside the label on a phone) the rows' [aggregate](#outer-runs-and-the-outer-runs-page) over the units of all its outer runs pooled (`job_aggregates`): the same `job_agg`, `by`, `value` and `metric` as the rows, never the page's `agg`. A unit found in several attempts (a date rerun by a later launch) counts once, from the latest attempt (the outer run's start, else its creation), and the title names how many came from earlier ones: `median 0.65` titled `median of 16 dates' own date.best_value · 3 from earlier attempts`. A duplicate inside one attempt stays a conflict, left out as on a row (an earlier attempt's copy never fills it in). With `by=runs` the header pools every run of every attempt (the merged sketches); latest-wins does not apply to runs, so nothing is from an earlier attempt. A tail shows its percentile (`best10 (p90)`), `*` marks runs overriding the summary policy, `— (no goal)` without a goal and `—` when no unit has a value.
+**One row per group** (the toolbar's toggle, `collapse_all=1` in the URL, so saved and team views keep it; changing the grouping drops it) shows each group as its header row alone: the label, the pooled value with its coverage (`median 0.65 14/16`) and the run counts summed over its outer runs (`1,412 runs · 3 running · 2 failed`), on a phone one card per group. The per-group fold (`collapse=<key>`) is separate.
 
 **The outer run's page** is what a run with children opens on (`?tab=`).
 - **The header** has the name, `@N`, the tree status, the `outer · N runs`
@@ -921,8 +922,8 @@ message.
     (`experiments?top=1&job_agg=median&job_agg_by=field:params.trade_date&job_agg_value=own&job_agg_metric=date.best_value`),
     over the app's `experiment.ui.job_aggregate`; a bad value, or any of
     them without `top` (a tree page included), is a 400. They key the ETag.
-    Grouped (`top` with `group`), a group's `job_aggregates` aggregate its
-    jobs' `rolled.value`, with `mixed`/`policies` summed over their `rolled`. Computed from the rollups' per-parent tallies
+    Grouped (`top` with `group`), a group's `job_aggregates` pool its
+    outer runs' units (see **Grouped answers** below). Computed from the rollups' per-parent tallies
     (and, for `field:`/`kind:`, per-parent tallies of the runs carrying the
     field, moved on by the index deltas like the rollups), per generation,
     time bucket and aggregate: about 2 ms for 45 outer runs x 16 dates x
@@ -987,8 +988,22 @@ message.
     notes), absent when they logged none. The Runs tab's facet sidebar lists
     them under Notes; a click adds `notes ~ "<sig>"`.
 - **Grouped answers** give every group a `clause`, the filter text that
-  selects exactly it. With `top=`, groups add `job_counts`, `runs`, `failed`
-  and `job_aggregates` (over the outer runs' `rolled.value`).
+  selects exactly it. With `top=`, groups add `job_counts`, `runs`, `failed`,
+  `run_counts` (their outer runs' `counts`, summed) and `job_aggregates`:
+  `{metric: pooled}`, the units of all the group's outer runs pooled under
+  the rows' aggregate (plan 34 §1). `pooled` has a row's `rolled` fields
+  (`agg`, `by`, `source`, `metric`, `goal`, `percentile`, `value`, `n`,
+  `of`, `conflicts`, `verstr`, `approx`, `mixed`/`policies`), plus
+  `from_earlier` and every group aggregate of the pooled values (`mean`,
+  `median`, `best`, `min`, `max`, `best10`, `worst10`). `from_earlier` counts
+  the units taken from an attempt other than the group's latest. A unit key
+  found in several outer runs counts from the latest by start, else
+  creation. `by=runs` pools the merged sketches of every attempt: no
+  latest-wins, `from_earlier` 0 and no other aggregates. `{}` when no unit
+  has a value. The pool reads each outer run's unit list kept with the
+  rows' `rolled`, per generation, bucket and aggregate: no subtree walk per
+  request. `collapse_all=1` (with `group` and `top`, else a 400) answers the
+  headers without rows (one row per group).
 - **`experiments/{v}/summary`** is the outer run's rollup: counts, `expected`,
   `ended` (its own status succeeded/failed/stuck), `never_started` and `lost`
   (its settled runs, never in `counts`; `done` takes the lost ones, an ended
