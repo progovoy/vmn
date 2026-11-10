@@ -2,11 +2,7 @@
 
 # Claude Code instructions
 
-When generating commit messages, pull request text, patches, or any code-related output, never include this line:
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
-
-Omit any Claude co-author trailer unless I explicitly ask for it.
+When generating commit messages, pull request text, patches, or any code-related output, omit any Claude co-author trailer unless I explicitly ask for it.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -34,8 +30,23 @@ If you see API timeouts, split the current task into smaller parallel worktrees 
 - Keep functions small and single-purpose; prefer clear names over comments.
 - Don't add abstractions, config flags, or error handling for cases that can't happen — match the scope of the change to what was actually asked.
 - Reuse existing helpers/patterns in the codebase instead of duplicating logic.
-- Keep diffs minimal and focused; don't refactor unrelated code in the same change.
+- Keep diffs minimal and focused; don't refactor unrelated code in the same change — unrelated improvements go through the boy scout rule below.
 - Run the relevant tests (see Running Tests) before considering a change done.
+
+## Boy scout rule
+Whenever you notice a problem or an opportunity to improve the code (a bug, duplication, a misleading name, dead code, a missing test, direct IO that should be injected), fix it even when it is not part of the task you are working on.
+- Do it in a separate subagent in its own worktree, so the fix lands as its own commit and never mixes into the task's diff.
+- The subagent follows TDD and the worktree hygiene rules like any other change.
+- If the fix is too big or risky to do on the side, report it at the end of the task instead of dropping it.
+
+## IO behind interfaces (dependency injection)
+All IO goes through an interface that the caller receives; logic never reaches for it directly. IO means: time (`time.time`/`monotonic`/`sleep`, `datetime.now`), sockets and HTTP, subprocesses, the filesystem, environment variables, SQLite, git, randomness/uuid, stdin/stdout.
+- Production wires the real implementations in the entry point (`version_stamp.cli:main`, `vmn_exp.cli.main:main`, the `vmn-exp ui` app factory) and passes them down. Tests construct the same code with fakes.
+- Logic takes its IO as constructor/function parameters (`clock`, `sleep`, `fs`, `http`, `run_process`, `env`, ...). Don't call `time.time()`, `subprocess.run()`, `open()`, `os.environ` etc. inside logic, and don't hide a real implementation in a default argument (`clock=time.time`) in new code — the real one is chosen in main.
+- Fakes are small in-memory classes kept with the tests (e.g. a `FakeClock` you advance by hand). Prefer them over `monkeypatch`/`mock.patch` of module globals.
+- The goal is that most code is covered by unit tests that run in milliseconds with no Docker, no git repo, no network and no real sleeping. Keep the Docker/real-git tests for the thin real implementations and a few end-to-end flows.
+- An interface for IO is never a "needless abstraction" under the Code practices rule above.
+- Existing code is only partly there (many `clock=time.time` defaults, direct `subprocess`/`open`/`os.environ` calls). New code must comply; migrate old code when you touch it or via the boy scout rule, test first.
 
 ## Test-driven development (required)
 All feature work and bug fixes must follow strict TDD:
