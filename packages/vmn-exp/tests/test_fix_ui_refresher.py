@@ -89,7 +89,9 @@ def test_a_request_after_idle_restarts_the_refresher(refresher):
 def test_a_failing_refresh_keeps_serving_the_last_snapshot(refresher, caplog):
     index = FakeIndex(fail_after=2)
     refresher.snapshot(index)
-    assert _wait_for(lambda: index.refreshes >= 6)
+    # Keep asking, as a reader would: the failures' backoff (0.02 s doubling)
+    # could otherwise outlast idle_sec under load and end the thread first.
+    assert _wait_for(lambda: refresher.snapshot(index) and index.refreshes >= 6)
 
     assert refresher.snapshot(index) == ("snapshot", 2)
     assert refresher.watching(index)  # errors never kill the thread
