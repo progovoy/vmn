@@ -58,6 +58,7 @@ Rules:
 - Never edit a test to force a passing result — if the test seems wrong, stop and ask before touching it.
 - Do not write implementation code before its test exists.
 - Each new behavior gets a test asserting it before any code implements it.
+- A new behavior's first test is a unit test that uses fakes (see IO behind interfaces): no Docker, no real git repo, no network, no real sleeping. Docker/real-git tests are only for the real IO implementations and end-to-end flows.
 
 ## Project Overview
 
