@@ -5,9 +5,10 @@ Checked every tick, cheaply: a ``problem()`` of None means healthy, else a
 short reason that starts a background rebuild. SQLite: the live file (the
 one its pointer names, :mod:`vmn_exp.core.sqlite_files`) was deleted,
 replaced (another inode, or another process flipped the pointer), is
-unreadable, or holds older records (``RECORDS_VERSION``; a newer version
-belongs to a newer server sharing the file: rebuilding over it would
-ping-pong). Older derived tables (``DERIVED_VERSION``) are ``derived``: no
+unreadable, or holds older records (``RECORDS_VERSION``) unless an upgrader
+holds its ``<path>.upgrade`` lock (it is upgrading them: plan 34 §4). A newer
+version belongs to a newer server sharing the file: rebuilding over it would
+ping-pong. Older derived tables (``DERIVED_VERSION``) are ``derived``: no
 rebuild, a re-derive from the file's own records (see
 :mod:`vmn_exp.core.index_store_schema`).
 Postgres: the cache tables were truncated (a scope's generation went
@@ -26,6 +27,7 @@ from vmn_exp.core.index_store_schema import (
     records_version,
     upgrade_of,
 )
+from vmn_exp.core.index_store_upgrade import upgrading
 from vmn_exp.core.sqlite_conn import connect
 from vmn_exp.core.sqlite_files import live_path
 
@@ -86,7 +88,7 @@ class SqliteHealth:
         except SchemaTooNew:
             return None
         except RecordsOutdated:
-            return "schema"
+            return None if upgrading(self.path) else "schema"
         except sqlite3.OperationalError as exc:
             return None if "locked" in str(exc) else "corrupt"
         except sqlite3.DatabaseError:

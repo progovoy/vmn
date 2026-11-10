@@ -35,7 +35,7 @@ import json
 import os
 import shutil
 
-from filelock import FileLock
+from filelock import FileLock, Timeout
 
 from vmn_exp.core import index_reread, index_store_schema, index_vmx_check, sqlite_files
 from vmn_exp.core.index_lean_store import write_lean
@@ -63,6 +63,17 @@ def upgrade(path, connect_file):
             return regenerate(path, file, connect_file)
         upgrade_in_place(file, found)
         return connect_file(file), file
+
+
+def upgrading(path):
+    """Whether an upgrader holds *path*'s upgrade lock now (never waits)."""
+    lock = FileLock(path + LOCK_SUFFIX, timeout=0)
+    try:
+        lock.acquire()
+    except Timeout:
+        return True
+    lock.release()
+    return False
 
 
 def upgrade_in_place(file, found):
