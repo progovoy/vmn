@@ -48,15 +48,13 @@ def _counter(summaries, states):
     return count
 
 
-def _failed(summaries):
-    def count(verstr):
-        rollup = summaries().get(verstr) or {}
-        return (rollup.get("counts") or {}).get("failed", 0) + (rollup.get(LOST) or 0)
-    return count
-
-
 def _lost(summaries):
     return lambda verstr: (summaries().get(verstr) or {}).get(LOST) or 0
+
+
+def _failed(summaries):
+    failed, lost = _counter(summaries, ("failed",)), _lost(summaries)
+    return lambda verstr: failed(verstr) + lost(verstr)
 
 
 def _failed_pct(summaries):

@@ -56,9 +56,9 @@ export default function StatusPill({ status, exitCode, durationSec, staleSec, er
   const described = released
     ? `waiting — released ${relTime(releasedAt)}`
     : describe(status, exitCode, durationSec, staleSec);
-  const lostBelow = lost ? ` · ${fmtCount(lost)} lost` : "";
+  const lostCountText = lost ? ` · ${fmtCount(lost)} lost` : "";
   const settledText = outlived ? " · outlived its outer run" : isLost ? " · lost: its outer run ended" : "";
-  const base = described + settledText + lostBelow;
+  const base = described + settledText + lostCountText;
   const label = status === "failed" && errorSummary ? `${base} — ${errorSummary}` : base;
   return (
     <span className={`status-pill ${status}`} title={label} aria-label={label}>
@@ -68,7 +68,7 @@ export default function StatusPill({ status, exitCode, durationSec, staleSec, er
       {released && " · released"}
       {outlived && " · outlived"}
       {isLost && " · lost"}
-      {lostBelow}
+      {lostCountText}
     </span>
   );
 }
