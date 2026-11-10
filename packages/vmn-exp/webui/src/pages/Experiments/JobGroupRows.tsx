@@ -1,16 +1,18 @@
 /** The grouped Jobs view's header and `+N more` rows (plan 23 §3.4): a
  *  group of jobs spans the table, its fold (over 50 runs, its Filter to
  *  button), label, the jobs' status bar and their count, and in the value
- *  column the group's aggregate of its jobs' values (plan 31 §2). */
+ *  column the rows' aggregate of its jobs' units pooled (plan 34 §1). One
+ *  row per group: no fold, the value's coverage and the jobs' run counts. */
 import MoreButton from "../../components/MoreButton";
 import PolicyMixMark from "../../components/PolicyMixMark";
 import { NO_GOAL, plural } from "../../util";
+import type { RunGroup } from "../../apiGroups";
 import type { BoardGroup, GroupHeaderItem, GroupMoreItem } from "../../util/groupItems";
-import { jobGroupCell } from "../groupHeaderText";
+import { attemptCounts, countsText, jobGroupCell } from "../groupHeaderText";
 import { GroupBar, GroupFold } from "../LeaderboardGroupRow";
 import { HeaderCheckbox, type HeaderCheckProps } from "../LeaderboardHeadParts";
 import { JOB_COLUMNS } from "./jobColumns";
-import type { JobGroupActions } from "./JobsTable";
+import { foldable, type JobGroupActions } from "./JobsTable";
 
 const SPAN = JOB_COLUMNS.length - 1;
 const VALUE_AT = JOB_COLUMNS.findIndex((c) => c.id === "value");
@@ -18,19 +20,27 @@ const VALUE_AT = JOB_COLUMNS.findIndex((c) => c.id === "value");
 const BEFORE_VALUE = VALUE_AT - 1;
 const AFTER_VALUE = JOB_COLUMNS.length - VALUE_AT - 1;
 
-/** `median 0.65` of the group's jobs' values, titled by both aggregates;
- *  `— (no goal)`, `—`; nothing before the rows name their aggregate. */
+/** `median 0.65` of the group's jobs' units pooled, titled like a row's;
+ *  `— (no goal)`, `—`; nothing before the board names its aggregate. One
+ *  row per group adds the coverage, `median 0.65 14/16`. */
 export function JobGroupValue({ group, groups }: { group: BoardGroup; groups: JobGroupActions }) {
   if (!groups.rolled) return null;
-  const c = jobGroupCell(group.job_aggregates?.[groups.rolled.metric ?? ""], groups.aggregate, groups.rolled);
+  const c = jobGroupCell(group.job_aggregates?.[groups.rolled.metric ?? ""], groups.rolled);
   return (
     <span className="job-best" title={c.title}>
       {c.name && <span className="muted">{c.name} </span>}
       <span className={c.name ? "metric" : "muted"}>{c.value}</span>
       <PolicyMixMark text={c.mix} />
       {c.noGoal && <span className="goal">{NO_GOAL}</span>}
+      {groups.oneRow && c.coverage && <span className="muted"> {c.coverage}</span>}
     </span>
   );
+}
+
+/** One row per group: the run counts summed over its outer runs. */
+export function JobGroupCounts({ group }: { group: Pick<RunGroup, "run_counts"> }) {
+  if (!group.run_counts) return null;
+  return <span className="group-counts">{countsText(attemptCounts(group.run_counts))}</span>;
 }
 
 export function JobGroupRow({ item, index, isActive, height, groups, check }: {
@@ -49,11 +59,14 @@ export function JobGroupRow({ item, index, isActive, height, groups, check }: {
         <div className="group-head">
           <div className="nest">
             {/* A group over 50 runs opens as its clause instead of unfolding. */}
-            <GroupFold item={item} name={group.label} onFold={groups.onFold} asFilter={groups.asFilter} noun={groups.noun} />
+            {foldable(groups, item) && (
+              <GroupFold item={item} name={group.label} onFold={groups.onFold} asFilter={groups.asFilter} noun={groups.noun} />
+            )}
             <span className="group-label" title={group.label}>{group.label}</span>
             <span className="group-sub">
               <GroupBar group={group} />
               <span className="group-counts">{size}</span>
+              {groups.oneRow && <JobGroupCounts group={group} />}
             </span>
           </div>
         </div>

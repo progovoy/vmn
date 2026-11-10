@@ -74,6 +74,8 @@ export function useLeaderboardView() {
     aggParam: parseAggregate(params.get("agg")),
     /** `job_agg*`: the Outer runs row's aggregate (plan 31 §2); null parts are the app's default. */
     jobAgg: parseJobAgg(params),
+    /** `collapse_all=1`: one row per group, every group its header row (plan 34 §1). */
+    collapseAll: params.get("collapse_all") === "1",
     /** `density=`, else the user's last pick (plan 23 W8). */
     density: parseDensity(params.get("density")) ?? storedDensity(),
   };
@@ -142,7 +144,7 @@ export function useLeaderboardView() {
           ["status", values.status], ["q", values.query], ["search", values.search], ["branch", values.branch],
         ];
         for (const [k, v] of params) { if (v) p.set(k, v); else p.delete(k); }
-        if (ungroup) { p.delete("group"); p.delete("collapse"); }
+        if (ungroup) { p.delete("group"); p.delete("collapse"); p.delete("collapse_all"); }
       }, { push: ungroup }), // leaving the grouping is a step Back undoes (plan 23 §3.4)
     openCreate: (open: boolean) => setParam("new", open ? "1" : ""),
     toggleHidden: (col: string) => toggleIn("hide", col),
@@ -167,6 +169,7 @@ export function useLeaderboardView() {
         if (group === dflt) p.delete("group");
         else p.set("group", group);
         p.delete("collapse");
+        p.delete("collapse_all");
       }),
     /** The aggregate a group header shows; `agg=` is left out at the default (when known). */
     setAggregate: (agg: Aggregate, dflt: Aggregate | undefined) => setParam("agg", agg === dflt ? "" : agg),
@@ -181,6 +184,8 @@ export function useLeaderboardView() {
       }),
     /** Close or reopen a group (all start open, so `collapse=` lists the shut ones). */
     toggleCollapsed: (key: string) => toggleIn("collapse", key),
+    /** One row per group, or the groups' rows back (plan 34 §1). */
+    setCollapseAll: (on: boolean) => setParam("collapse_all", on ? "1" : ""),
     setArchived: (on: boolean) => setParam("archived", on ? "1" : ""),
     setDensity: (d: Density) => { rememberDensity(d); setParam("density", d); },
     setOrder: (keys: readonly string[]) => setAll("col", keys),

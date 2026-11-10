@@ -5,7 +5,6 @@ import { useCallback, useMemo, useRef, type CSSProperties, type MouseEvent, type
 import { useFillHeight } from "../../hooks/useFillHeight";
 import { useNavigate } from "react-router-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { GroupAggregate } from "../../apiGroups";
 import type { HeaderCheck } from "../../hooks/useBoardSelection";
 import type { JobAggChoice } from "../../types";
 import type { BoardViewport } from "../../hooks/useLeaderboardRows";
@@ -48,14 +47,19 @@ export interface JobGroupActions {
   noun: string;
   /** A group too big to unfold opens as its clause (plan 23 §3.4). */
   asFilter?: GroupFilter;
-  /** The page's group aggregate and the rows' (plan 31 §2): a header's value. */
-  aggregate: GroupAggregate;
+  /** The rows' aggregate (plan 31 §2): a header pools its outer runs' units by it (plan 34 §1). */
   rolled: JobAggChoice | null;
+  /** One row per group (plan 34 §1): a header has no fold, and names its coverage and run counts. */
+  oneRow?: boolean;
   onFold: (key: string) => void;
   onMore: (key: string) => void;
   checkOf: (verstrs: readonly string[]) => HeaderCheck;
   onCheck: (verstrs: readonly string[]) => void;
 }
+
+/** Whether a header shows its fold: one row per group folds nothing, but a
+ *  big group still opens as its filter. */
+export const foldable = (g: JobGroupActions, item: { asFilter?: boolean }) => !g.oneRow || Boolean(item.asFilter);
 
 export interface JobsTableProps {
   items: BoardItem[] | undefined;

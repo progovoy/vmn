@@ -4,7 +4,7 @@
 import { setFilter } from "./api";
 import type { PageOpts } from "./api";
 import { appTag, get } from "./http";
-import type { ExperimentRow, MainMetric, PolicyMix } from "./types";
+import type { ExperimentRow, JobCounts, JobRolled, MainMetric, PolicyMix } from "./types";
 import type { Indexing } from "./util/indexing";
 
 /** Links between runs (the run pointed at heads the group; `code_verstr`:
@@ -51,6 +51,15 @@ export interface MetricAggregate extends PolicyMix {
   goal: "min" | "max" | null;
 }
 
+/** A grouped Outer runs header's aggregate (plan 34 §1): the rows'
+ *  aggregate over the units of all the group's outer runs (its attempts)
+ *  pooled, a unit in several from the latest attempt; `from_earlier` the
+ *  units taken from earlier ones (0 for `runs`). The other aggregates of
+ *  the pooled values ride along (none for `runs`). */
+export type PooledAggregate = JobRolled & PolicyMix & Partial<Omit<MetricAggregate, "n" | "goal">> & {
+  from_earlier: number;
+};
+
 /** A link group's header run (`parent`/`forked_from`/`rerun_of`). */
 export interface GroupTarget {
   verstr: string;
@@ -74,9 +83,11 @@ export interface RunGroup {
   loose: boolean;
   counts: GroupCounts;
   aggregates: Record<string, MetricAggregate>;
-  /** A grouped Outer runs page's (`top=`): `{rolled.metric: stats}` over its
-   *  outer runs' `rolled.value` (plan 31 §2); empty when none has one. */
-  job_aggregates?: Record<string, MetricAggregate>;
+  /** A grouped Outer runs page's (`top=`): `{rolled.metric: pooled}`, the
+   *  units of all its outer runs pooled (plan 34 §1); empty when none has a value. */
+  job_aggregates?: Record<string, PooledAggregate>;
+  /** Its outer runs' run `counts`, summed (`top=`). */
+  run_counts?: JobCounts;
   rows: ExperimentRow[];
   rows_total: number;
   /** The group's size with the same `archived` setting but without
@@ -114,12 +125,15 @@ export interface GroupOpts extends Omit<PageOpts, "last"> {
   /** Rows per group (server default 10), clamped to 1..100; the server
    *  pages at most 50 groups and 5000 rows (plan 22 F5). */
   rowsPerGroup?: number;
+  /** One row per group (plan 34 §1): the headers alone. */
+  collapseAll?: boolean;
 }
 
 function groupParams(opts: GroupOpts): URLSearchParams {
   const p = new URLSearchParams({ group: opts.group, offset: String(opts.offset ?? 0) });
   setFilter(p, opts);
   if (opts.agg) p.set("agg", opts.agg);
+  if (opts.collapseAll) p.set("collapse_all", "1");
   return p;
 }
 

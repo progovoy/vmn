@@ -54,11 +54,14 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   // The outer runs match a status by their trees, beside the preset's query.
   const tree = top === "jobs" ? treeStatusQuery(view.status, view.failedPct, view.lost) : "";
   const topQuery = combineQueries(fixed?.query ?? "", tree || null) || undefined;
+  // One row per group (plan 34 §1): the server sends the headers alone.
+  const collapseAll = chosen !== NO_GROUP && view.collapseAll;
   const { filter, filtered } = useBoardFilter(view, chosen, {
     top: top ?? true, matchSubtree: matchSubtree || undefined, topQuery,
     status: tree ? undefined : view.status || undefined,
     jobAgg: view.jobAgg.agg ?? undefined, jobAggBy: view.jobAgg.by ?? undefined,
     jobAggValue: view.jobAgg.value ?? undefined, jobAggMetric: view.jobAgg.metric ?? undefined,
+    collapseAll: collapseAll || undefined,
   });
 
   const data = useBoardRows(ws, app, filter, {
@@ -69,8 +72,10 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
   // The server's main metric, never one picked from the rows (plan 32 F10).
   const metric = data.main?.metric ?? null;
   const goal = data.main?.goal ?? null;
-  // The answered aggregate (plan 31 §2): one per board, so any row's names it.
-  const rolled = useMemo(() => rows.find((r) => r.job?.rolled)?.job?.rolled ?? null, [rows]);
+  // The answered aggregate (plan 31 §2): one per board, so any row's names
+  // it; with one row per group, any header's (plan 34 §1).
+  const rolled = useMemo(() => rows.find((r) => r.job?.rolled)?.job?.rolled
+    ?? data.groups?.flatMap((g) => Object.values(g.job_aggregates ?? {}))[0] ?? null, [rows, data.groups]);
   // The groups' aggregate (`agg=`, else the server's answer): the toolbar's and the headers'.
   const aggregate = view.aggParam ?? data.aggregate ?? data.defaultAggregate ?? "mean";
   const running = useBoardLive({
@@ -83,7 +88,7 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
 
   return {
     data, rows, facets, group: chosen, selection, search: matchSubtree ? search : null,
-    metric, goal, rolled, aggregate,
+    metric, goal, rolled, aggregate, collapseAll,
     sort: { sort: filter.sort, order: sort.order, onSort: sort.onSort },
     live: { running, paused, setPaused },
     filtered: filtered || Boolean(fixed), topQuery,

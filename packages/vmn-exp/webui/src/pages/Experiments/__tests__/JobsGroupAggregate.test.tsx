@@ -1,7 +1,8 @@
-/** Plan 31 §2, plan 32: a grouped Outer runs header shows, in the value
- *  column (a phone's group label), the group's aggregate of its outer runs'
- *  `rolled` values (`job_aggregates`), titled by both aggregates; `— (no
- *  goal)` without a goal, `—` when none has a value. */
+/** Plan 34 §1, plan 32: a grouped Outer runs header shows, in the value
+ *  column (a phone's group label), the rows' aggregate of the units of all
+ *  its outer runs pooled (`job_aggregates`), titled like a row's plus the
+ *  units from earlier attempts; `— (no goal)` without a goal, `—` when no
+ *  unit has a value. */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 
@@ -26,7 +27,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 import { api } from "../../../api";
-import type { MetricAggregate } from "../../../apiGroups";
+import type { PooledAggregate } from "../../../apiGroups";
 import { dropFakeMedia, fakeMedia } from "../../../hooks/__tests__/fakeMedia";
 import { NARROW_QUERY } from "../../../hooks/useMediaQuery";
 import type { JobRolled } from "../../../types";
@@ -38,12 +39,13 @@ const DATES: Partial<JobRolled> = {
   agg: "median", by: "field:params.trade_date", source: "own", metric: "date.best_value", goal: "max",
   value: 0.65, n: 14, of: 16, verstr: "0.0.1-dev.d7",
 };
-const STATS: MetricAggregate = {
-  mean: 0.6, best: 0.7, median: 0.65, min: 0.5, max: 0.7, best10: 0.7, worst10: 0.5, n: 12, goal: "max",
-};
-const TITLE = "median of 12 outer runs' median of dates' own date.best_value";
+const pooled = (r: Partial<JobRolled> = DATES, extra: Partial<PooledAggregate> = {}): PooledAggregate => ({
+  ...rolled(r), mean: 0.6, best: 0.7, median: 0.65, min: 0.5, max: 0.7, best10: 0.7, worst10: 0.5, from_earlier: 3,
+  ...extra,
+});
+const TITLE = "median of 14/16 dates' own date.best_value · 3 from earlier attempts";
 
-function grouped(r: Partial<JobRolled>, aggregates: Record<string, MetricAggregate>) {
+function grouped(r: Partial<JobRolled>, aggregates: Record<string, PooledAggregate>) {
   const grid = topRow(36, { name: "lr_layers_grid", branch: "feature-x", job: job({ rolled: rolled(r) }) });
   m.experimentGroups.mockResolvedValue({
     groups: [{
@@ -70,23 +72,24 @@ beforeEach(() => {
 });
 
 describe("a grouped Outer runs header's value", () => {
-  it("shows the group's aggregate of its outer runs' values, titled by both", async () => {
-    grouped(DATES, { "date.best_value": STATS });
+  it("shows the rows' aggregate of its outer runs' units pooled, titled with the earlier attempts' share", async () => {
+    grouped(DATES, { "date.best_value": pooled() });
     renderExperiments(PAGE);
     const cell = await headerValue();
     expect(cell.textContent).toBe("median 0.65");
     expect(cell.querySelector("[title]")).toHaveAttribute("title", TITLE);
   });
 
-  it("follows the page's aggregate, a tail with its percentile", async () => {
-    grouped(DATES, { "date.best_value": STATS });
-    renderExperiments(`${PAGE}&agg=best10`);
+  it("follows the rows' job_agg, a tail with its percentile, not the page's agg", async () => {
+    const tail = { ...DATES, agg: "best10" as const, percentile: "p90", value: 0.7 };
+    grouped(tail, { "date.best_value": pooled(tail) });
+    renderExperiments(`${PAGE}&job_agg=best10&agg=median`);
     const cell = await headerValue();
     await waitFor(() => expect(cell.textContent).toBe("best10 (p90) 0.7"));
   });
 
   it("marks the runs overriding the schema's summary policy", async () => {
-    grouped(DATES, { "date.best_value": { ...STATS, mixed: true, policies: { min: 3 } } });
+    grouped(DATES, { "date.best_value": pooled(DATES, { mixed: true, policies: { min: 3 } }) });
     renderExperiments(PAGE);
     const cell = await headerValue();
     expect(cell.textContent).toBe("median 0.65*");
@@ -101,7 +104,7 @@ describe("a grouped Outer runs header's value", () => {
     expect(cell.querySelector("[title]")).toHaveAttribute("title", "no goal declared for date.best_value — not ranked");
   });
 
-  it("reads `—` when none of the group's outer runs has a value", async () => {
+  it("reads `—` when no unit of the group's outer runs has a value", async () => {
     grouped({ ...DATES, value: null, n: 0 }, {});
     renderExperiments(PAGE);
     const cell = await headerValue();
@@ -114,8 +117,8 @@ describe("a grouped Outer runs card label's value", () => {
   beforeEach(() => fakeMedia([NARROW_QUERY]));
   afterEach(dropFakeMedia);
 
-  it("shows the group's aggregate beside its fold", async () => {
-    grouped(DATES, { "date.best_value": STATS });
+  it("shows the pooled aggregate beside its fold", async () => {
+    grouped(DATES, { "date.best_value": pooled() });
     renderExperiments(PAGE);
     await screen.findByRole("link", { name: "lr_layers_grid" });
     const label = document.querySelector(".lb-mcard-group") as HTMLElement;

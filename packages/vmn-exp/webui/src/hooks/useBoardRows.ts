@@ -19,15 +19,20 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
   filterOver?: number;
 }) {
   const { group, aggregateInUrl, collapsed, keep, filterOver } = grouping;
+  // One row per group (plan 34 §1): every group folded to its header row.
+  const { collapseAll } = filter;
   const grouped = group !== null && group !== NO_GROUP;
   const flat = useLeaderboardRows(ws, app, filter, group === NO_GROUP);
   const groups = useGroupedRows(ws, app, filter, grouped ? group : null, aggregateInUrl ?? undefined);
   const data = groups.data;
 
   const items = useMemo<BoardItem[] | undefined>(() => {
-    if (grouped) return data && groupItems(data, collapsed, groups.more, keep, filterOver);
+    if (grouped) {
+      const shut = collapseAll && data ? new Set(data.groups.map((g) => g.key)) : collapsed;
+      return data && groupItems(data, shut, groups.more, keep, filterOver);
+    }
     return flat.rows && (keep ? flat.rows.filter(keep) : flat.rows);
-  }, [grouped, data, group, collapsed, groups.more, keep, filterOver, flat.rows]);
+  }, [grouped, data, group, collapsed, collapseAll, groups.more, keep, filterOver, flat.rows]);
 
   if (!grouped) {
     const remaining = flat.total - (flat.rows?.length ?? 0);

@@ -17,8 +17,8 @@ import { CardGroupMore } from "../LeaderboardCardGroup";
 import { headStatus } from "../LeaderboardRow";
 import JobTree from "../Job/JobTree";
 import { AttentionChips, BaselineCell, JobSubLine, ValueCell, type JobContext } from "./JobCells";
-import { JobGroupValue } from "./JobGroupRows";
-import type { JobsTableProps } from "./JobsTable";
+import { JobGroupCounts, JobGroupValue } from "./JobGroupRows";
+import { foldable, type JobsTableProps } from "./JobsTable";
 import { isTreeSlot, useTreeSlots } from "./JobsTreeSlot";
 import "../leaderboardCards.css";
 
@@ -105,8 +105,11 @@ export default function JobCards({ items, ctx, selected, headerCheck, groups, on
             if (it.item === "more") return <CardGroupMore key={`more:${it.key}`} item={it} onMore={groups.onMore} />;
             return (
               <li key={`group:${it.group.key}`} className="lb-mcard-group">
-                <CardGroupLabel item={it} groups={groups} />
+                {foldable(groups, it)
+                  ? <CardGroupLabel item={it} groups={groups} />
+                  : <span className="group-label">{it.group.label}</span>}
                 <JobGroupValue group={it.group} groups={groups} />
+                {groups.oneRow && <JobGroupCounts group={it.group} />}
               </li>
             );
           })}

@@ -166,7 +166,7 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
               emptyText={emptyText(kind.kind, board.filtered)}
               groups={{
                 noun: kind.kind === "jobs" ? "outer run" : "run", asFilter,
-                aggregate: board.aggregate, rolled: board.rolled,
+                rolled: board.rolled, oneRow: board.collapseAll,
                 onFold: view.toggleCollapsed, onMore: data.loadGroup,
                 checkOf: selection.checkOf, onCheck: selection.toggleRows,
               }}

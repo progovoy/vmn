@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 import GroupByMenu from "../../components/GroupByMenu";
 import BoardViews from "../../components/BoardViews";
+import ToggleChip from "../../components/ToggleChip";
 import type { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { useCanCreateRun } from "../../shell/useAppExists";
 import { LINK_GROUPS, NO_GROUP, groupFields } from "../../util/groupBy";
@@ -42,6 +43,12 @@ export default function JobsToolbar({ ws, app, view, board, onViewApplied, onAll
         groupSort={groupSortOf(view.sort)} onGroupSort={view.setGroupSort}
         goal={board.rolled?.goal ?? null}
       />
+      {data.grouped && (
+        <ToggleChip pressed={view.collapseAll} onChange={view.setCollapseAll}
+          title="each group as one row: its outer runs' units pooled">
+          one row per group
+        </ToggleChip>
+      )}
     </div>
   );
 }

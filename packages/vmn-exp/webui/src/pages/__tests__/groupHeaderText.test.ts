@@ -106,44 +106,49 @@ describe("a group header's run bar (plan 22 F13)", () => {
   });
 });
 
-describe("a grouped Outer runs header's value (plan 31 §2, plan 32)", () => {
+describe("a grouped Outer runs header's value (plan 34 §1, plan 32)", () => {
   const DATES = rolled({ agg: "median", by: "field:params.trade_date", source: "own", metric: "date.best_value", goal: "max" });
-  const jobs = (extra = {}) => agg({ median: 0.65, best10: 0.8, goal: "max" as const, n: 12, ...extra });
+  // The group's attempts' units pooled: the rows' aggregate, from_earlier beside it.
+  const pooled = (extra = {}) => ({ ...agg({ median: 0.65, goal: "max" as const }), ...DATES,
+    value: 0.65, n: 14, of: 16, from_earlier: 3, ...extra });
 
-  it("names the group's aggregate of its outer runs' aggregate", () => {
-    expect(jobGroupCell(jobs(), "median", DATES)).toEqual({
-      name: "median", value: "0.65", noGoal: false, mix: null,
-      title: "median of 12 outer runs' median of dates' own date.best_value",
+  it("names the rows' aggregate of the pooled units and the ones from earlier attempts", () => {
+    expect(jobGroupCell(pooled(), DATES)).toEqual({
+      name: "median", value: "0.65", coverage: "14/16", noGoal: false, mix: null,
+      title: "median of 14/16 dates' own date.best_value · 3 from earlier attempts",
     });
-    expect(jobGroupCell(jobs({ n: 1 }), "median", DATES).title).toBe("median of 1 outer run's median of dates' own date.best_value");
-    expect(jobGroupCell(jobs(), "mean", rolled()).title).toBe("mean of 12 outer runs' best of children's best val_loss");
-    expect(jobGroupCell(jobs(), "mean", rolled({ by: "runs", agg: "median" })).title).toBe("mean of 12 outer runs' median of runs' val_loss");
+    expect(jobGroupCell(pooled({ n: 16, from_earlier: 0 }), DATES).title).toBe("median of 16 dates' own date.best_value");
+    expect(jobGroupCell(pooled({ from_earlier: 1 }), DATES).title).toBe("median of 14/16 dates' own date.best_value · 1 from an earlier attempt");
+    const runs = rolled({ by: "runs", agg: "median" });
+    expect(jobGroupCell(pooled({ ...runs, value: 0.4, n: 9, of: 9, approx: true, from_earlier: 0 }), runs))
+      .toMatchObject({ value: "≈ 0.4", coverage: "9", title: "≈ median of 9 runs' val_loss" });
   });
 
-  it("names a tail's percentile, the rows' too", () => {
+  it("names a tail's percentile", () => {
     const tails = rolled({ ...DATES, agg: "best10", percentile: "p90" });
-    const cell = jobGroupCell(jobs(), "best10", tails);
+    const cell = jobGroupCell(pooled({ ...tails, value: 0.8, n: 14, of: 16 }), tails);
     expect(cell.name).toBe("best10 (p90)");
     expect(cell.value).toBe("0.8");
-    expect(cell.title).toBe("best10 (p90) of 12 outer runs' best10 (p90) of dates' own date.best_value");
+    expect(cell.title).toBe("best10 (p90) of 14/16 dates' own date.best_value · 3 from earlier attempts");
   });
 
   it("reads `— (no goal)` without a goal, never a value", () => {
     const noGoal = rolled({ ...DATES, goal: null, value: null });
-    expect(jobGroupCell(undefined, "median", noGoal)).toEqual({
-      name: null, value: "—", noGoal: true, mix: null, title: "no goal declared for date.best_value — not ranked",
+    expect(jobGroupCell(undefined, noGoal)).toEqual({
+      name: null, value: "—", coverage: null, noGoal: true, mix: null,
+      title: "no goal declared for date.best_value — not ranked",
     });
   });
 
-  it("reads `—` when none of the group's outer runs has a value", () => {
-    const none = { name: null, value: "—", noGoal: false, mix: null, title: "no outer run of the group has a date.best_value" };
-    expect(jobGroupCell(undefined, "median", DATES)).toEqual(none);
-    expect(jobGroupCell(jobs({ n: 0, median: null }), "median", DATES)).toEqual(none);
+  it("reads `—` when no unit of the group's outer runs has a value", () => {
+    const none = { name: null, value: "—", coverage: null, noGoal: false, mix: null, title: "no outer run of the group has a date.best_value" };
+    expect(jobGroupCell(undefined, DATES)).toEqual(none);
+    expect(jobGroupCell(pooled({ n: 0, value: null }), DATES)).toEqual(none);
   });
 
   it("marks the runs overriding the schema's summary policy", () => {
-    const cell = jobGroupCell(jobs({ mixed: true, policies: { min: 3 } }), "median", DATES);
+    const cell = jobGroupCell(pooled({ mixed: true, policies: { min: 3 } }), DATES);
     expect(cell.mix).toBe("3 runs use min");
-    expect(cell.title).toBe("median of 12 outer runs' median of dates' own date.best_value · 3 runs use min");
+    expect(cell.title).toBe("median of 14/16 dates' own date.best_value · 3 from earlier attempts · 3 runs use min");
   });
 });

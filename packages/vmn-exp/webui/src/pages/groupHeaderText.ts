@@ -1,11 +1,11 @@
 /** What a group header row says (plan 22 G4, G10): its status count and,
  *  per metric, the aggregate the board shows. */
-import { NO_GOAL, fmtCount, fmtVal, noGoalTitle, plural } from "../util";
+import { NO_GOAL, fmtCount, noGoalTitle, plural } from "../util";
 import { joinParts } from "../util/toneParts";
-import type { GroupAggregate, GroupCounts, MetricAggregate } from "../apiGroups";
-import type { JobAggChoice } from "../types";
+import type { GroupAggregate, GroupCounts, MetricAggregate, PooledAggregate } from "../apiGroups";
+import type { JobAggChoice, JobCounts } from "../types";
 import { mixText, withMix } from "../util/metricPolicy";
-import { possessive, rolledBasis, tailLabel } from "../util/jobAggregate";
+import { coverageCount, rolledTitle, rolledValueText, tailLabel } from "../util/jobAggregate";
 
 export type CountTone = "total" | "running" | "waiting" | "stuck" | "failed" | "done";
 
@@ -70,23 +70,35 @@ export function aggregateCell(
   return { value: a[agg] ?? null, title: withMix(`${tailLabel(agg, a.goal)} of ${a.n}${noGoalBest(a, agg) ? NO_GOAL : ""}`, a.policies) };
 }
 
-/** A grouped Outer runs header's value (plan 31 §2): *agg* of the group's
- *  outer runs' *rolled* values, `median 0.65` titled `median of 12 outer
- *  runs' median of dates' own date.best_value`; `— (no goal)` without a
- *  goal, `—` when none of them has a value (plan 32). */
-export function jobGroupCell(a: MetricAggregate | undefined, agg: GroupAggregate, rolled: JobAggChoice): {
-  name: string | null; value: string; noGoal: boolean; mix: string | null; title: string;
+/** A grouped Outer runs header's value (plan 34 §1): the rows' aggregate
+ *  of the units of all the group's outer runs pooled (*a*), `median 0.65`
+ *  over `14/16`, titled like a row's plus `· 3 from earlier attempts`; `—
+ *  (no goal)` without a goal, `—` when no unit has a value (plan 32). */
+export function jobGroupCell(a: PooledAggregate | undefined, rolled: JobAggChoice): {
+  name: string | null; value: string; coverage: string | null; noGoal: boolean; mix: string | null; title: string;
 } {
   const goal = a?.goal ?? rolled.goal;
-  if (!goal) return { name: null, value: "—", noGoal: true, mix: null, title: noGoalTitle(rolled.metric) };
-  const value = a?.[agg];
-  if (!a || a.n === 0 || value == null) {
-    return { name: null, value: "—", noGoal: false, mix: null, title: `no outer run of the group has a ${rolled.metric}` };
+  const none = { name: null, value: "—", coverage: null, mix: null };
+  if (!goal) return { ...none, noGoal: true, title: noGoalTitle(rolled.metric) };
+  if (!a || a.n === 0 || a.value == null) {
+    return { ...none, noGoal: false, title: `no outer run of the group has a ${rolled.metric}` };
   }
-  const name = tailLabel(agg, goal);
   const mix = mixText(a.policies ?? null);
-  const title = `${name} of ${possessive(plural(a.n, "outer run"))} ${rolledBasis(rolled)}`;
-  return { name, value: fmtVal(value), noGoal: false, mix, title: mix ? `${title} · ${mix}` : title };
+  const earlier = a.from_earlier
+    ? ` · ${a.from_earlier === 1 ? "1 from an earlier attempt" : `${fmtCount(a.from_earlier)} from earlier attempts`}`
+    : "";
+  const title = `${rolledTitle(a)}${earlier}`;
+  return {
+    name: tailLabel(a.agg, goal), value: rolledValueText(a), coverage: coverageCount(a), noGoal: false, mix,
+    title: mix ? `${title} · ${mix}` : title,
+  };
+}
+
+/** A collapsed group's status counts (plan 34 §1): its outer runs' run
+ *  counts summed, as a header counts them (`done` the succeeded). */
+export function attemptCounts(c: JobCounts): GroupCounts {
+  const total = c.running + c.waiting + c.succeeded + c.failed + c.stuck;
+  return { total, running: c.running, waiting: c.waiting, done: c.succeeded, failed: c.failed, stuck: c.stuck };
 }
 
 /** A `+N more` row's text in each state of its load. */

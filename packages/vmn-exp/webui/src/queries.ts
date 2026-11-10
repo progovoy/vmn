@@ -33,6 +33,8 @@ export interface RowsFilter {
   jobAggBy?: string;
   jobAggValue?: string;
   jobAggMetric?: string;
+  /** Grouped, with `top`: one row per group, the headers alone (plan 34 §1). */
+  collapseAll?: boolean;
 }
 export interface RowsData extends SubtreeMatches {
   rows: ExperimentRow[];
