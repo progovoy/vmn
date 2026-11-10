@@ -119,7 +119,7 @@ def test_an_outer_that_ends_settles_its_children_once(monkeypatch):
     assert (rollup["counts"]["waiting"], rollup["counts"]["stuck"]) == (0, 0)
     assert (rollup[NEVER], rollup[LOST], rollup["done"], rollup["ended"]) == (3, 1, 3, True)
     rows = _rows(cache, snap)
-    assert rows[outer][2] == "failed"  # the lost run
+    assert rows[outer][2] == "failed"  # the finished(1) child; the lost run fails nothing
     assert [rows[k][1] for k in kids] == [NEVER, NEVER, NEVER, LOST, None, None]
     _same_as_a_fresh_build(cache, snap, [outer])
 
