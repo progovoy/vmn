@@ -252,3 +252,13 @@ def test_vmn_exp_skill_covers_the_outer_runs_aggregate_goals_and_failed_share(ca
 def test_vmn_exp_skill_shows_baseline_peers_that_must_differ(capfd):
     assert _skill() == 0
     assert "differ: [tags.launch_id]" in capfd.readouterr().out
+
+
+def test_vmn_exp_skill_groups_one_trainings_attempts(capfd):
+    """Plan 34 §1: grouping by the launch id pools a training's attempts
+    (the latest attempt wins), ``collapse_all=1`` one row per training."""
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    assert "group=tags.launch_id" in out
+    assert "latest attempt wins" in out
+    assert "collapse_all=1" in out

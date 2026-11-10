@@ -293,7 +293,10 @@ ui:
 A save checks `ui.progress`/`ui.attention`/`ui.baseline`/`ui.views`/
 `ui.job_aggregate`/`ui.failed_pct_threshold` (an attention query must
 compile). The URL's `job_agg`, `job_agg_by`, `job_agg_value` and
-`job_agg_metric` override `ui.job_aggregate` for one view. A tree's failure
+`job_agg_metric` override `ui.job_aggregate` for one view. A resumed
+training's attempts share a tag: `group=tags.launch_id` (on the Outer runs
+view) pools their units under that aggregate, the latest attempt wins a
+unit they share; `collapse_all=1` shows one row per training. A tree's failure
 share is queryable: `failed_pct >= 5` (`100 * failed_below / runs below`,
 lost runs included; also `failed_below`, `lost_below`, `live_below`,
 `running_below`, `stuck_below`).
