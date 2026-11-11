@@ -6,8 +6,9 @@ reproduce the good one, recover from the bad ones, and ship a model. Each step
 is a short snippet with a link to the reference ([experiments.md](experiments.md),
 [sdk.md](sdk.md), [sweeps.md](sweeps.md), [ui.md](ui.md), [models.md](models.md)).
 
-- [The five ideas you need](#the-five-ideas-you-need)
 - [1. Install](#1-install)
+- [Your first run](#your-first-run)
+- [The five ideas you need](#the-five-ideas-you-need)
 - [2. Choose where runs live](#2-choose-where-runs-live)
 - [3. Submit: an outer run with inner jobs](#3-submit-an-outer-run-with-inner-jobs)
 - [4. Inside the job: the SDK](#4-inside-the-job-the-sdk)
@@ -17,25 +18,7 @@ is a short snippet with a link to the reference ([experiments.md](experiments.md
 - [8. Resume, rewind, fork](#8-resume-rewind-fork)
 - [9. Models](#9-models)
 - [10. Clean up](#10-clean-up)
-
----
-
-## The five ideas you need
-
-1. **A run is code state plus a log.** Every run snapshots the working tree
-   (base commit, uncommitted diff, untracked files) and gets a verstr such as
-   `1.6.0-dev.a1b2c3d.e4f5g6h`. Metrics, params, notes, artifacts and tags are
-   appended to its log. Nothing in the log is ever rewritten.
-2. **Code is stored once per code identity.** Twenty trials of an unchanged
-   tree share one stored code object, so the extra runs cost almost nothing.
-3. **Status is derived, never stored.** `created`, `running`, `stuck`,
-   `succeeded`, `failed` come from the run's heartbeat and exit code. A job
-   whose node vanished shows up as `stuck`; nobody has to mark it.
-4. **Nesting is automatic.** A run created while `VMN_EXPERIMENT_ID` is set
-   (which `vmn-exp run` and an open `start_run()` export) becomes an inner job
-   of that run. A sweep is one outer run with its trials under it.
-5. **A ref names a run**: a full verstr, a unique prefix, `@N` (the `[N]`
-   `vmn-exp list` prints) or `latest`. Most commands take `-v <ref>`.
+- [Terms](#terms)
 
 ---
 
@@ -66,7 +49,58 @@ repo one person pushes the baseline (`git push --follow-tags`).
 
 ---
 
+## Your first run
+
+The [quickstart](README.md#quickstart) records one run in under a minute.
+Inside a git repo with one commit, save this as `train.py`:
+
+```python
+from vmn_exp.sdk import start_run
+
+with start_run("my_app") as run:
+    for step in range(5):
+        run.log_metric("loss", 1.0 / (step + 1), step=step)
+    print(run.id)
+```
+
+```sh
+python train.py                    # prints the run's id
+vmn-exp show my_app --latest       # its code state, status and metrics
+```
+
+The ideas below explain what you just saw.
+
+---
+
+## The five ideas you need
+
+1. **A run is code state plus a log.** The id `train.py` printed is a
+   verstr, such as `1.6.0-dev.a1b2c3d.e4f5g6h`: every run snapshots the
+   working tree (base commit, uncommitted diff, untracked files such as
+   `train.py` itself) and is named after it. The `loss` values were appended
+   to its log, as are params, notes, artifacts and tags. Nothing in the log is
+   ever rewritten.
+2. **Code is stored once per code identity.** Run `train.py` again without
+   editing anything and the new run shares the first one's stored code (its
+   id gets a `.r2`), so twenty trials of an unchanged tree cost almost nothing.
+3. **Status is derived, never stored.** The status `show` printed comes from
+   the run's heartbeat and exit code: `created`, `running`, `stuck`,
+   `succeeded`, `failed`. A job whose node vanished shows up as `stuck`;
+   nobody has to mark it.
+4. **Nesting is automatic.** A run created while `VMN_EXPERIMENT_ID` is set
+   (which `vmn-exp run` and an open `start_run()` export) becomes an inner job
+   of that run. A sweep is one outer run with its trials under it.
+5. **A ref names a run**: `--latest` in the `show` above is one; so are a
+   full verstr, a unique prefix and `@N` (the `[N]` `vmn-exp list` prints).
+   Most commands take `-v <ref>`.
+
+---
+
 ## 2. Choose where runs live
+
+The default needs no action: your first run is already in this checkout's
+`.vmn/store/`. Choose another place only when other machines or people must
+see the runs.
 
 | Where | Set | Good for |
 |---|---|---|
@@ -563,3 +597,17 @@ a bucket lifecycle rule expires it); `-v` never does, and with a full
 verstr it touches only that run, however large the store. Outside a git
 checkout, name the store with `--store` or `VMN_EXPERIMENT_STORE`. See
 [`prune`](experiments.md#prune).
+
+---
+
+## Terms
+
+| Term | Means |
+|---|---|
+| verstr | a run's id, named after its code state: `<base version>-dev.<commit>.<diff hash>` ([Mental model](experiments.md#mental-model)) |
+| ref | how a command names a run: a verstr, a unique prefix, `@N` or `latest` ([Addressing experiments](experiments.md#addressing-experiments)) |
+| outer, inner, single run | a run's `kind`: it has children, it has a parent, or neither ([Outer & inner jobs](experiments.md#outer--inner-jobs-sweeps)) |
+| store | where run records live: this checkout's `.vmn/store/`, a shared directory or a bucket ([Storage](experiments.md#storage-local-s3-gcs-azure-plugins)) |
+| writer id | the name of the process that appends to a run's log stream, the host name by default ([How records are stored](experiments.md#how-records-are-stored)) |
+| git mode, git-free (snapshot) mode | a run recorded from a git checkout, or from an exported tree that carries `vmn_metadata.yml` ([Git-free mode](experiments.md#git-free-mode), [Runs without a git checkout](sdk.md#runs-without-a-git-checkout-containers)) |
+| tree_status | an outer run's status rolled up over its subtree, `failed > stuck > running > created > succeeded` ([Outer & inner jobs](experiments.md#outer--inner-jobs-sweeps)) |
