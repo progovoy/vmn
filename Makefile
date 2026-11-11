@@ -5,7 +5,7 @@ NAME=vmn
 DIST=${PWD}/dist
 TWINE=twine
 
-.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _build_ui _run_black
+.PHONY: build upload dist check docs major _major minor _minor patch _patch rc _rc _build _build_ui _test_ui _run_black
 
 build: check _build
 
@@ -13,6 +13,10 @@ _build_ui:
 	@echo "Building web UI"
 	npm install --prefix ${PWD}/packages/vmn-exp/webui
 	npm run build --prefix ${PWD}/packages/vmn-exp/webui
+
+# The web client's unit tests, with a JUnit report for the CI stage.
+_test_ui:
+	npm test --prefix ${PWD}/packages/vmn-exp/webui -- --reporter=default --reporter=junit --outputFile.junit=${PWD}/reports/tests_webui.xml
 
 # Builds at the version `vmn show ${NAME}` reports (the release after a
 # `vmn release`, not the rc the stamp wrote into the files); see build_dist.sh.

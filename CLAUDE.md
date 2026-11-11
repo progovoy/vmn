@@ -123,6 +123,7 @@ active interpreter's `coverage`/`pytest`, and the release-notes tests need the
 source ./venv/bin/activate
 ./tests/run_pytest.sh                        # core suite (= --suite core)
 ./packages/vmn-exp/tests/run_pytest.sh       # exp suite (= tests/run_pytest.sh --suite exp)
+make _test_ui                                # web client vitest suite (CI stage tests_webui; needs npm)
 ```
 
 Run a specific test:

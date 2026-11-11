@@ -141,7 +141,9 @@ def tests_core(ctx):
         "reports/tests_exp_serial.xml",
         "reports/tests_exp_serial.html",
     ],
-    after=["tests_core"],  # one 29-worker suite at a time
+    # One 29-worker suite at a time; tests_webui first, as both run
+    # `make _build_ui` and two npm installs in one tree race.
+    after=["tests_core", "tests_webui"],
 )
 def tests_exp(ctx):
     # The web bundle is build output, not committed: the dashboard/export tests
@@ -150,6 +152,20 @@ def tests_exp(ctx):
     _pytest(ctx, "packages/vmn-exp/tests", "tests_exp", marker="not serial")
     # Timing benchmarks, alone: under 29 busy workers they measure contention.
     _pytest(ctx, "packages/vmn-exp/tests", "tests_exp_serial", workers=(), marker="serial")
+
+
+# The web client's vitest suite. Blocking: ctx.run's check=True fails the
+# stage on a test failure.
+# `make _build_ui` installs the node modules and type-checks (tsc -b).
+@stage(
+    requires=REQUIRES,
+    deterministic=True,
+    inputs=["packages/vmn-exp/webui"],
+    outputs=["reports/tests_webui.xml"],
+)
+def tests_webui(ctx):
+    ctx.run(["make", "_build_ui"])
+    ctx.run(["make", "_test_ui"])
 
 
 @stage(requires=REQUIRES)
@@ -187,7 +203,7 @@ def _make(ctx, target):
 
 @stage(
     requires=REQUIRES,
-    after=["tests_core", "tests_exp"],
+    after=["tests_core", "tests_exp", "tests_webui"],
     when=lambda c: bool(c.params.get("stamp")),
     params=[
         Param(
@@ -229,6 +245,6 @@ def upload(ctx):
 
 pipeline = Pipeline(
     "vmn-ci",
-    stages=[lint, tests_core, tests_exp, typecheck, stamp, build, upload],
+    stages=[lint, tests_core, tests_webui, tests_exp, typecheck, stamp, build, upload],
     workspace="..",
 )
