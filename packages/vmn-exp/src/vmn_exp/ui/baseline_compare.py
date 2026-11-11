@@ -116,8 +116,12 @@ def _median(values):
     return interpolated(ordered, 0.5) if ordered else None
 
 
+def _name(field):
+    return field.partition(".")[2]
+
+
 def _noun(field):
-    return f"{field.partition('.')[2]} values"
+    return f"{_name(field)} values"
 
 
 def chip(pairs, baseline_values, metric, higher_better, field, total=None, pooled=False):
@@ -145,9 +149,8 @@ def chip(pairs, baseline_values, metric, higher_better, field, total=None, poole
 def _state(out, finished, higher_better, field, pooled):
     metric, noun = out["metric"], _noun(field)
     if not out["total"]:
-        name = field.partition(".")[2]
-        whose = (f"this training has no {name} runs in any attempt" if pooled
-                 else f"this attempt has no {name} runs of its own")
+        whose = (f"this training has no {_name(field)} runs in any attempt" if pooled
+                 else f"this attempt has no {_name(field)} runs of its own")
         return {"state": NONE_OWN, "text": f"{metric}: {whose}"}
     if not finished:
         return {"state": PENDING, "text": f"{metric}: no {noun[:-1]} finished yet"}

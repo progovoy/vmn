@@ -66,12 +66,16 @@ class JobGroups:
         }
 
     def _aggregates(self, rows):
-        latest_first = [row["verstr"] for row in sorted(rows, key=attempt_order, reverse=True)]
-        pooled = self._pool.pooled(latest_first)
+        pooled = self._pool.pooled(latest_first(rows))
         return {pooled["metric"]: pooled} if pooled else {}
 
 
-def attempt_order(row):
+def latest_first(rows):
+    """The verstrs of attempt *rows*, the latest first (:func:`_attempt_order`)."""
+    return tuple(row["verstr"] for row in sorted(rows, key=_attempt_order, reverse=True))
+
+
+def _attempt_order(row):
     """An attempt's place among its group's: its start, else its creation
     (then its creation and verstr, for a tie)."""
     created = parse_iso(row.get("timestamp")) or _EPOCH

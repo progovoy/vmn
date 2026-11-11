@@ -162,9 +162,14 @@ class Pool:
         self.top = {}  # {top-level job: rolled}
 
     def rolled(self, job):
-        if self.metric is not None and job not in self._jobs:
-            self._jobs[job] = self._entry(job)
+        self.read([job])
         return _payload(self.agg, self.metric, self.goal, **self._fields([job])[0])
+
+    def read(self, jobs):
+        """Read the entries of *jobs* not read yet (an unfrozen pool only)."""
+        for job in jobs:
+            if self.metric is not None and job not in self._jobs:
+                self._jobs[job] = self._entry(job)
 
     def choice(self):
         """The aggregate's name (:func:`_choice`): a grouped page's ``job_agg``."""
@@ -270,8 +275,7 @@ class JobAggregates:
         pool = self.pool(snapshot, schema, agg)
         if any(job not in pool.top for job in jobs):
             pool = self._payload_of(snapshot, schema, agg)
-            for job in jobs:
-                pool.rolled(job)
+            pool.read(jobs)
         return pool.pooled(jobs) or _payload(pool.agg, pool.metric, pool.goal)
 
     def value_of(self, snapshot, schema, agg=None):

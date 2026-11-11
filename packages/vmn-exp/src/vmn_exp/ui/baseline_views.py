@@ -20,7 +20,7 @@ without pairs compares the two jobs' ``rolled``.
 
 With ``pool_by`` (plan 35 §3, e.g. ``tags.launch_id``) a run is compared
 through its training: the outer runs beside it sharing its value, the latest
-attempt first (:func:`~vmn_exp.ui.leaderboard_group_jobs.attempt_order`).
+attempt first (:func:`~vmn_exp.ui.leaderboard_group_jobs.latest_first`).
 The baseline is another training, chosen on each training's latest attempt;
 both sides' children pair by key with the latest attempt holding a key
 winning it, and ``rolled`` is both trainings' pooled units (the grouped
@@ -40,7 +40,7 @@ from vmn_exp.ui.attention import attention_key, attention_payload
 from vmn_exp.ui.baseline_choice import choose_baseline
 from vmn_exp.ui.baseline_compare import best_chip, chip, delta, pair_children, rollup_deltas
 from vmn_exp.ui.leaderboard_group_fields import NONE, key_of, value_of
-from vmn_exp.ui.leaderboard_group_jobs import attempt_order
+from vmn_exp.ui.leaderboard_group_jobs import latest_first
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.settled_subtree import SettledMemo
 
@@ -98,24 +98,20 @@ def _count_of(part):
     return 0 if part is None else part["count"]
 
 
-def _latest_first(rows):
-    return tuple(row["verstr"] for row in sorted(rows, key=attempt_order, reverse=True))
-
-
-def _trainings(rows, field):
-    """``{key: (verstr, ...)}``: *rows* by their *field*, the latest attempt
-    first; rows without it are in none."""
-    key_in, out = key_of(field), {}
+def _trainings(rows, key_in):
+    """``{key: [row, ...]}``: *rows* by *key_in*, the latest attempt first;
+    rows without a key are in none."""
+    out = {}
     for row in rows:
         key = key_in(row)
         if key != NONE:
             out.setdefault(key, []).append(row)
-    return {key: _latest_first(kept) for key, kept in out.items()}
+    by_verstr = {row["verstr"]: row for row in rows}
+    return {key: [by_verstr[v] for v in latest_first(kept)] for key, kept in out.items()}
 
 
-def _training(trainings, field, row):
-    """*row*'s attempts in *trainings* (by *field*), else *row* alone."""
-    return trainings.get(key_of(field)(row), (row["verstr"],))
+def _verstrs(rows):
+    return tuple(row["verstr"] for row in rows)
 
 
 def _pooled_children(sides, field):
@@ -209,27 +205,35 @@ class BaselineViews:
                 raise ValueError("an outer run is not its own baseline")
             if not self.views.is_job(snapshot, to):
                 raise UnknownBaseline(f"{to} is not an outer run of this app")
-        tree = self.views.rollups.tree(self._cache._base(snapshot)[0])
-        target = self.views.row(snapshot, verstr)
-        peers = self.views.rows_of(snapshot, tree.peers(verstr))
-        trainings = _trainings(peers, rule.pool_by) if rule.pool_by else {}
-        ours = _training(trainings, rule.pool_by, target) if rule.pool_by else (verstr,)
-        if to is not None:
-            theirs = (_training(trainings, rule.pool_by, self.views.row(snapshot, to))
-                      if rule.pool_by else (to,))
-            return (to, "to"), (ours, theirs)
         if rule.pool_by:
-            mine = key_of(rule.pool_by)(target)
-            if mine == NONE:
-                return (None, None), (ours, ())
-            target = self.views.row(snapshot, ours[0])
-            peers = [self.views.row(snapshot, kept[0]) for key, kept in trainings.items()
-                     if key != mine]
-        row, source = choose_baseline(target, peers, rule.match, rule.differ)
+            return self._choose_pooled(snapshot, verstr, rule, to)
+        if to is not None:
+            return (to, "to"), ((verstr,), (to,))
+        row, source = choose_baseline(self.views.row(snapshot, verstr),
+                                      self._peer_rows(snapshot, verstr), rule.match, rule.differ)
+        return ((row["verstr"], source), ((verstr,), (row["verstr"],))) if row else (
+            (None, None), ((verstr,), ()))
+
+    def _choose_pooled(self, snapshot, verstr, rule, to):
+        """:meth:`_choose` among the trainings beside *verstr* (``pool_by``)."""
+        key_in = key_of(rule.pool_by)
+        trainings = _trainings(self._peer_rows(snapshot, verstr), key_in)
+        mine = key_in(self.views.row(snapshot, verstr))
+        ours = _verstrs(trainings[mine]) if mine in trainings else (verstr,)
+        if to is not None:
+            theirs = trainings.get(key_in(self.views.row(snapshot, to)))
+            return (to, "to"), (ours, _verstrs(theirs) if theirs else (to,))
+        if mine not in trainings:
+            return (None, None), (ours, ())
+        latest = [kept[0] for key, kept in trainings.items() if key != mine]
+        row, source = choose_baseline(trainings[mine][0], latest, rule.match, rule.differ)
         if row is None:
             return (None, None), (ours, ())
-        theirs = trainings[key_of(rule.pool_by)(row)] if rule.pool_by else (row["verstr"],)
-        return (row["verstr"], source), (ours, theirs)
+        return (row["verstr"], source), (ours, _verstrs(trainings[key_in(row)]))
+
+    def _peer_rows(self, snapshot, verstr):
+        tree = self.views.rollups.tree(self._cache._base(snapshot)[0])
+        return self.views.rows_of(snapshot, tree.peers(verstr))
 
     def _build(self, snapshot, schema, verstr, chosen, rule, sides):
         fields, by = rule.match, rule.by
