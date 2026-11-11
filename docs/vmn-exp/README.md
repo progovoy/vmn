@@ -58,6 +58,8 @@ tags the baseline `my_app_0.0.0` in your local repo; nothing is pushed.
   restarts, and what the snapshot captures.
 - [Migrating from MLflow](migrating-from-mlflow.md) and
   [vmn-exp vs MLflow](vmn-vs-mlflow.md).
+- [vmn-exp vs Weights & Biases](vmn-vs-wandb.md) — features, an API mapping,
+  and which gaps are planned.
 - [Driving the UI fleet counts](ai-fleet-tracking.md) — for AI agents
   orchestrating pods.
 - [AI agent skill](agent-skill.md) — what `vmn-exp skill` prints; install it
