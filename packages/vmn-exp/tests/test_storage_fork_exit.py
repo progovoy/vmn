@@ -134,7 +134,7 @@ def puts_by(pid):
     return [key for who, key in rows if who == str(pid)]
 
 
-storage = journaled(LocalSnapshotStorage(os.path.join(ROOT, "store"), "runs"), sink=Sink())
+storage = journaled(LocalSnapshotStorage(os.path.join(ROOT, "store"), "runs"), sink=Sink(), clock=time.time)
 storage.save("app", "v", {"verstr": "v"}, {})
 state = storage._journal_state
 state.pending.append("parent-queued")   # a put that failed: retried later

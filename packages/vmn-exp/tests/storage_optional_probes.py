@@ -105,7 +105,7 @@ OTHER_PROBES = {
     'model_name': 5, 'name': 2, 'new_app': 1, 'no_trim_journal': 1, 'num_fds': 1,
     'number_later': 1, 'of_verstrs': 1, 'older_than': 2, 'optimizer': 1, 'org_id': 1,
     'output': 1, 'output_cap_mb': 1, 'output_dir': 1, 'overflowed': 1, 'parent': 2, 'patch': 2,
-    'path': 4, 'pid': 1, 'precision': 1, 'prefetch': 1, 'prefix': 4, 'principal': 4,
+    'path': 4, 'pid': 1, 'precision': 1, 'prefetch': 1, 'prefix': 4, 'principal': 3,
     'process_cpu_count': 1, 'protect_tag': 2, 'published': 1, 'published_at': 1, 'pytorch': 1,
     'query': 7, 'read': 1, 'record_count': 1, 'recording': 1, 'refresh_features': 1,
     'refreshing': 1, 'refs': 2, 'register_at_fork': 4, 'remove': 2, 'repo': 2, 'repo_lock': 4,
