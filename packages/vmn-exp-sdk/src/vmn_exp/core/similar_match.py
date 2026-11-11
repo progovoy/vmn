@@ -38,15 +38,20 @@ class SimilarDeadlineExceeded(Exception):
 
 
 @contextlib.contextmanager
-def deadline(conn, at):
-    """Interrupt *conn*'s statements once :func:`time.monotonic` passes *at*
-    (none when None), raising :class:`SimilarDeadlineExceeded`."""
+def deadline(conn, at, clock=None):
+    """Interrupt *conn*'s statements once the monotonic *clock* (the one
+    that computed *at*; None: this module's ``_clock``, read at call time)
+    passes *at* (none when None), raising :class:`SimilarDeadlineExceeded`."""
     if at is None:
         yield
         return
-    conn.set_progress_handler(lambda: 1 if _clock() >= at else 0, PROGRESS_OPS)
+
+    def passed():
+        return (clock or _clock)() >= at
+
+    conn.set_progress_handler(lambda: 1 if passed() else 0, PROGRESS_OPS)
     try:
-        if _clock() >= at:
+        if passed():
             raise SimilarDeadlineExceeded
         yield
     except sqlite3.OperationalError as exc:

@@ -85,11 +85,11 @@ def _key(root, name):
     return f"{root}/{name}" if root else name
 
 
-def _is_live(tree, record):
+def _is_live(tree, record, now=None):
     if record.area != areas.RUNS or RUN_STATE_FILE not in record.names:
         return False
     state = yaml.safe_load(tree.read(f"{record.src}/{RUN_STATE_FILE}") or b"")
-    return isinstance(state, dict) and derive_status(state) in (RUNNING, STUCK)
+    return isinstance(state, dict) and derive_status(state, now=now) in (RUNNING, STUCK)
 
 
 def _migrate(tree, root, records, dry_run, skip_live):

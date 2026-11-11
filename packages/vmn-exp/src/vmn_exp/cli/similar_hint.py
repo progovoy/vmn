@@ -59,10 +59,13 @@ INNER_RUN_ENVS = ("VMN_EXPERIMENT_ID", "VMN_SWEEP_TRIAL")
 _clock = time.monotonic
 
 
-def print_hint(storage, app_name, verstr, args, exp_conf, command=None):
+def print_hint(storage, app_name, verstr, args, exp_conf, command=None, clock=None):
     """Print the hint for the new run *verstr* (running *command*, an argv),
-    when wanted and found within :data:`BUDGET_SEC`."""
-    deadline = _clock() + BUDGET_SEC
+    when wanted and found within :data:`BUDGET_SEC` on *clock*'s monotonic
+    time (a :class:`~vmn_exp.core.ports.Clock`, also the search's; None:
+    this module's ``_clock``, read at call time)."""
+    monotonic = clock.monotonic if clock else (lambda: _clock())
+    deadline = monotonic() + BUDGET_SEC
     try:
         if not _wanted(args, exp_conf):
             return
@@ -70,7 +73,8 @@ def print_hint(storage, app_name, verstr, args, exp_conf, command=None):
         path = index_path(storage, app_name)
         if local is None or not path or not os.path.isfile(path):
             return
-        lines = _lines(local, app_name, verstr, exp_conf, path, deadline, command)
+        lines = _lines(local, app_name, verstr, exp_conf, path, (deadline, monotonic), command,
+                       clock)
     except SimilarDeadlineExceeded:
         VMN_LOGGER.debug("No similar-runs hint: past its time budget")
         return
@@ -88,22 +92,23 @@ def _wanted(args, exp_conf):
         os.environ.get(name) for name in INNER_RUN_ENVS)
 
 
-def _check(deadline):
+def _check(deadline, monotonic):
     """Raise :class:`SimilarDeadlineExceeded` once *deadline* has passed."""
-    if _clock() >= deadline:
+    if monotonic() >= deadline:
         raise SimilarDeadlineExceeded
 
 
-def _lines(local, app_name, verstr, exp_conf, path, deadline, command):
+def _lines(local, app_name, verstr, exp_conf, path, budget, command, clock):
+    deadline, monotonic = budget
     target = record_target(local, app_name, verstr, command=command)
     if target["row"].get("parent"):
         return None
-    _check(deadline)
+    _check(deadline, monotonic)
     schema = conf_schema(exp_conf)
     scope = file_scope(app_name, path, schema, repair=False)
     if scope is None:
         return None
     items = search(local, app_name, scope, target, schema=schema, top=HINT_TOP,
-                   weights=conf_weights(exp_conf), deadline=deadline)
-    _check(deadline)
+                   weights=conf_weights(exp_conf), deadline=deadline, clock=clock)
+    _check(deadline, monotonic)
     return hint_lines(items) + ([BEHIND_NOTE] if scope.behind else [])

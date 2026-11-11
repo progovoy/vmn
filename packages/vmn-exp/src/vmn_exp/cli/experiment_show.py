@@ -41,7 +41,7 @@ from vmn_exp.core.tree import subtree_status
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, relative_timestamp
 
 
-def _subtree(storage, app_name, verstr, metadata, snapshot=None):
+def _subtree(storage, app_name, verstr, metadata, snapshot=None, now=None):
     """``(run_state, tree fields, observed_at)`` of *verstr*: the parent/child
     links come from the experiment index (point reads once it is persisted),
     and run state (with its store write time) is read for the run's subtree
@@ -58,14 +58,15 @@ def _subtree(storage, app_name, verstr, metadata, snapshot=None):
         children_of=children_of,
         observed_at=observed_at,
         row_of=snapshot.row,
+        now=now,
     )
     return run_state, tree, observed_at(verstr)
 
 
-def _print_status_block(storage, app_name, verstr, metadata, out, snapshot=None):
-    """Derived run status, runner identity and the experiment's nesting."""
-    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
-    fields = status_fields(run_state, observed_at=observed_at)
+def _print_status_block(storage, app_name, verstr, metadata, out, snapshot=None, now=None):
+    """Derived run status (as of *now*), runner identity and the experiment's nesting."""
+    run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot, now)
+    fields = status_fields(run_state, now=now, observed_at=observed_at)
     out(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
         out(f"  Exit code: {fields['exit_code']}")

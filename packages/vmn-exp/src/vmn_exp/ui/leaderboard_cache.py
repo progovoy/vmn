@@ -104,24 +104,27 @@ BASE_APPS = 8
 _NONCE = os.urandom(8).hex()
 
 
-def _status(snapshot, row):
-    """*row*'s status fields, judged with the store's write time too."""
+def _status(snapshot, row, now=None):
+    """*row*'s status fields at *now*, judged with the store's write time too."""
     verstr = row["verstr"]
     return with_queue_sec(row, status_fields(
-        snapshot.run_states.get(verstr),
+        snapshot.run_states.get(verstr), now=now,
         observed_at=snapshot.run_state_observed_at.get(verstr),
     ))
 
 
-def _restated(snapshot, row):
-    """A copy of *row* with its status fields as of now."""
-    return signed({**row, **_status(snapshot, row)}, snapshot.notes_of(row["verstr"]))
+def _restated(snapshot, row, now=None):
+    """A copy of *row* with its status fields as of *now*."""
+    return signed({**row, **_status(snapshot, row, now)}, snapshot.notes_of(row["verstr"]))
 
 
 class _Base:
-    """One snapshot's rows with their status and tree fields."""
+    """One snapshot's rows with their status and tree fields; *now_of()*
+    is the time a build or a time bucket's re-derivation reads, once."""
 
-    def __init__(self, snapshot, token, bucket, rows, position, patch, tree, siblings):
+    def __init__(self, snapshot, token, bucket, rows, position, patch, tree, siblings,
+                 now_of=experiment_status.now_from):
+        self.now_of = now_of
         self.snapshot = snapshot
         self.siblings = siblings  # the duration_ratio medians (sibling_durations)
         self.token = token
@@ -144,22 +147,24 @@ class _Base:
         self.built_bucket = bucket
 
     @classmethod
-    def build(cls, snapshot, token, bucket, split=None):
+    def build(cls, snapshot, token, bucket, split=None, now_of=experiment_status.now_from):
         """From scratch: O(N) — a copy of every row, so with collection
         paused (see :mod:`~vmn_exp.core.gc_pause`). *split*: the field
         ``duration_ratio`` compares siblings by (none: the parent alone)."""
-        states = snapshot.run_states
+        states, now = snapshot.run_states, now_of()
         with gc_paused():
-            live = [i for i, row in enumerate(snapshot.rows) if is_live(snapshot, row["verstr"])]
+            live = [i for i, row in enumerate(snapshot.rows)
+                    if is_live(snapshot, row["verstr"], now)]
             rows = [signed(row, snapshot.notes_of(row["verstr"])) for row in
-                    annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at)]
+                    annotate_rows(snapshot.rows, states, snapshot.run_state_observed_at, now)]
             siblings = SiblingDurations.stamping(rows, split)
             position = {row["verstr"]: i for i, row in enumerate(rows)}
             patch = LivePatch.of_rows(rows, live, position)
-            return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows), siblings)
+            return cls(snapshot, token, bucket, rows, position, patch, tree_index(rows), siblings,
+                       now_of)
 
     @classmethod
-    def derived(cls, prev, snapshot, token, bucket, delta=None):
+    def derived(cls, prev, snapshot, token, bucket, delta=None, now_of=experiment_status.now_from):
         """From *prev*'s base, re-deriving only what changed (*delta*:
         ``(storage indexes, verstrs gone)``, else found), its ratios against
         siblings by *prev*'s split; None when the delta is large, a verstr
@@ -172,11 +177,11 @@ class _Base:
         position = prev.position if snapshot is prev.snapshot else dict(prev.position)
         for verstr in gone:
             del position[verstr]
-        fresh = {}
+        fresh, now = {}, now_of()
         for i in fresh_at:
             verstr = snapshot.rows[i]["verstr"]
             position[verstr] = i
-            fresh[verstr] = _restated(snapshot, snapshot.rows[i])
+            fresh[verstr] = _restated(snapshot, snapshot.rows[i], now)
         tree = derive_tree(prev, snapshot, fresh, gone, position)
         if tree is None:
             return None
@@ -184,10 +189,10 @@ class _Base:
         was = [prev.rows[prev.position[v]] for v in (*fresh, *gone) if v in prev.position]
         siblings, regrouped = prev.siblings.advanced(was, fresh.values())
         copied = restamped(rows, position, children_of, siblings, regrouped, fresh, rebuilt)
-        live = sorted(position[v] for v in fresh if is_live(snapshot, v))
+        live = sorted(position[v] for v in fresh if is_live(snapshot, v, now))
         patch = LivePatch.from_counts(rows, live, position, snapshot.edges, counts)
         base = cls(snapshot, token, bucket, rows, position, patch, (children_of, counts),
-                   siblings)
+                   siblings, now_of)
         base.delta = (prev.token,) + static_moves(prev, base, rebuilt | gone | copied, copied)
         base.up_moved = ancestors_changed(prev, fresh, gone, children_of)
         return base
@@ -224,7 +229,8 @@ class _Base:
         return out
 
     def _rederive_live(self):
-        fresh = {i: _restated(self.snapshot, self.rows[i]) for i in self.patch.live}
+        now = self.now_of()
+        fresh = {i: _restated(self.snapshot, self.rows[i], now) for i in self.patch.live}
         stamped(fresh.values(), self.siblings)
         return self.patch.rolled_up(self.rows, fresh)
 
@@ -311,11 +317,15 @@ def _no_conf(snapshot):
 
 class LeaderboardCache(SetAnswers):
     def __init__(self, max_page=MAX_PAGE, bucket_sec=BUCKET_SEC, size=32,
-                 base_wait_sec=BASE_WAIT_SEC, conf_of=_no_conf):
+                 base_wait_sec=BASE_WAIT_SEC, conf_of=_no_conf, now=None):
         """*conf_of(snapshot)* -> ``(metrics schema, experiment.ui)`` of the
         app whose index published *snapshot* (its conf over its store
         settings): what the board warm-up sorts by, job rollups read
-        their progress names from and ``duration_ratio`` its split by."""
+        their progress names from and ``duration_ratio`` its split by.
+        *now()* is the aware UTC time statuses are derived at, read once
+        per build or time bucket (None: :func:`~vmn_exp.core.status._now`,
+        read at call time)."""
+        self._clock_now = now
         self.conf_of = conf_of
         self.max_page = max_page
         self.bucket_sec = bucket_sec
@@ -363,8 +373,12 @@ class LeaderboardCache(SetAnswers):
 
     schema_key = staticmethod(_schema_key)
 
+    def now(self):
+        """The time statuses are derived at now."""
+        return experiment_status.now_from(self._clock_now)
+
     def _bucket(self):
-        return int(experiment_status._now().timestamp() // self.bucket_sec)
+        return int(self.now().timestamp() // self.bucket_sec)
 
     def _base(self, snapshot):
         """``(base, bucket)``; the bucket is None while nothing is live.
@@ -399,10 +413,10 @@ class LeaderboardCache(SetAnswers):
         stuck): derived like a new generation, else built."""
         token, bucket = next(self._tokens), self._bucket()
         live = (sorted(prev.patch.live), set())  # nothing else changed
-        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live)
+        base = _Base.derived(prev, prev.snapshot, token, bucket, delta=live, now_of=self.now)
         if base:
             self._deltas.add(base)
-        base = base or _Base.build(prev.snapshot, token, bucket, prev.siblings.split)
+        base = base or _Base.build(prev.snapshot, token, bucket, prev.siblings.split, self.now)
         self.generations.advance(prev.snapshot.app_name, token)
         return base
 
@@ -412,11 +426,11 @@ class LeaderboardCache(SetAnswers):
         prev = self._latest_base(snapshot.app_name)
         prev = prev and latest(prev, bucket)
         same_split = prev and prev.siblings.split == split
-        base = same_split and _Base.derived(prev, snapshot, token, bucket)
+        base = same_split and _Base.derived(prev, snapshot, token, bucket, now_of=self.now)
         if base:
             self._deltas.add(base)
         else:
-            base = _Base.build(snapshot, token, bucket, split)
+            base = _Base.build(snapshot, token, bucket, split, self.now)
             # A whole board's new rows; a derived base's few are not worth a
             # freeze, which keeps every cycle alive now for good.
             freeze_long_lived()
@@ -489,7 +503,7 @@ class LeaderboardCache(SetAnswers):
     def search(self, snapshot, text, limit, archived=False):
         """``{"results"}``: ⌘K "go to run" over every run (plan 23 S8)."""
         index = self._search.get(snapshot)
-        return {"results": results(snapshot, index.ranked(text, limit, archived))}
+        return {"results": results(snapshot, index.ranked(text, limit, archived), self.now())}
 
     def warm(self, snapshot):
         """Build or move *snapshot*'s board base, search index, facets and

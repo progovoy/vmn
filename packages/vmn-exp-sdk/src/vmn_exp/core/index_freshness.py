@@ -40,13 +40,19 @@ class Freshness:
     """One index's ``as_of`` (persisted in ``store()``'s key-value table) and
     refresh phase."""
 
-    def __init__(self, store, app_name):
+    def __init__(self, store, app_name, wall=None):
+        """*wall*: epoch seconds now (None: this module's ``_wall``, read at
+        call time)."""
         self._store, self._scope = store, f"as_of:{app_name}"
+        self._clock = wall
         self._as_of = self._persisted_at = self._read_at = self._started = None
         self.phase = IDLE
         self._keys, self._position, self._sorted = None, None, False  # a full listing's
         self._new, self._read = 0, 0  # new records to read, read
         self._moved = (None, None)  # ((phase, progress) last reported, wall time it changed)
+
+    def _wall(self):
+        return (self._clock or _wall)()
 
     @property
     def as_of(self):
@@ -56,24 +62,24 @@ class Freshness:
 
     def load(self):
         """Read ``as_of`` from the store now."""
-        self._read_at = _wall()
+        self._read_at = self._wall()
         payload = self._store().kv_get(self._scope, _FORMAT)
         self._as_of = self._persisted_at = (payload or {}).get("as_of")
 
     def reload(self):
         """Read ``as_of`` again when next asked, at most every
         PERSIST_EVERY_SEC (a follower's, which its leader writes)."""
-        if self._read_at is not None and _wall() - self._read_at >= PERSIST_EVERY_SEC:
+        if self._read_at is not None and self._wall() - self._read_at >= PERSIST_EVERY_SEC:
             self._read_at = None
 
     def started(self):
         """A refresh starts now."""
-        self._started = _wall()
+        self._started = self._wall()
         self._moved = (None, self._started)
 
     def stalled_sec(self, phase, progress):
         """Seconds the refresh has reported this *phase* and *progress*."""
-        now, (seen, since) = _wall(), self._moved
+        now, (seen, since) = self._wall(), self._moved
         if (phase, progress) != seen or since is None:
             self._moved, since = ((phase, progress), now), now
         return now - since

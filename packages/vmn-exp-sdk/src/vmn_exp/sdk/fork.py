@@ -29,7 +29,8 @@ def seed(storage, app_name, verstr, source, step):
     return next_step(seed_fork(storage, app_name, verstr, source, step)["step"])
 
 
-def rewind(storage, app_name, verstr, prior_state, step):
-    """Hide *verstr*'s history past *step*; returns the step it continues from."""
-    rewind_run(storage, app_name, verstr, step, prior_state)
+def rewind(storage, app_name, verstr, prior_state, step, now=None):
+    """Hide *verstr*'s history past *step* (refused while it runs at *now*);
+    returns the step it continues from."""
+    rewind_run(storage, app_name, verstr, step, prior_state, now)
     return next_step(step)

@@ -32,11 +32,11 @@ _FRESH, _OURS = "fresh", "ours"
 _MAX_CLAIM_ATTEMPTS = 20
 
 
-def local_status(local, app_name, verstr):
-    """The derived status of a local run."""
+def local_status(local, app_name, verstr, now=None):
+    """The derived status of a local run at *now*."""
     state = load_run_state(local, app_name, verstr)
     observed_at = run_state_observed_at(local, app_name, verstr)
-    return derive_status(state, observed_at=observed_at)
+    return derive_status(state, now=now, observed_at=observed_at)
 
 
 def push_or_rename(local, target, app_name, verstr, ledger, code,

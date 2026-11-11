@@ -80,7 +80,7 @@ def _latest_memoized(snap):
     return resolve
 
 
-def _open_journal(ws, storage, cache_path, clock):
+def _open_journal(ws, storage, cache_path, clock, index_clock=None):
     from vmn_exp.storage.journal_sinks import journal_list_fn
     from vmn_exp.ui.journal_follow import WorkspaceJournal
 
@@ -88,12 +88,17 @@ def _open_journal(ws, storage, cache_path, clock):
         list_fn = journal_list_fn(storage)
     except AttributeError:  # a backend without a journal sink
         return None
-    return WorkspaceJournal(list_fn, SqliteStore(cache_path), ws.name, wall_seconds(clock))
+    return WorkspaceJournal(list_fn, SqliteStore(cache_path, clock=index_clock), ws.name,
+                            wall_seconds(clock))
 
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None, store_upkeep=None, *, clock, processes):
+                 search_rows=None, store_upkeep=None, *, clock, processes, index_clock=None):
+        """*index_clock*: the indexes' and their caches' (see
+        :class:`~vmn_exp.core.index.ExperimentIndex`; None: their modules'
+        own clocks)."""
+        self._index_clock = index_clock
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -128,7 +133,9 @@ class ExperimentSource:
         """The git workspace's read cache (in memory only with ``--no-index``)."""
         with self._lock:
             if ws.name not in self._indexes:
-                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir, processes=self._processes, clock=self._clock)
+                self._indexes[ws.name] = ui_index.WorkspaceIndex(
+                    ws.path, self._ws_db_dir, processes=self._processes, clock=self._clock,
+                    index_clock=self._index_clock)
             return self._indexes[ws.name]
 
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):
@@ -169,9 +176,10 @@ class ExperimentSource:
             snap = ui_index.app_snapshot(
                 s3_storage, app_name, cache_path, refresher, schema,
                 self._journal(ws, s3_storage, cache_path), ws.reconcile_sec,
+                index_clock=self._index_clock,
             )
             self._heal(ws, app_name, s3_storage, cache_path, lambda: experiment_index.shared_index(
-                s3_storage, app_name, cache_path))
+                s3_storage, app_name, cache_path, clock=self._index_clock))
             return snap
         index = self.workspace_index(ws)
         snap = index.snapshot(app_name, refresher, schema)
@@ -235,7 +243,7 @@ class ExperimentSource:
         """A rebuild renamed a new file over *cache_path*: reconnect to it."""
         journal = self._journals.get(ws_name)
         if journal is not None:
-            journal.use_cache(SqliteStore(cache_path))
+            journal.use_cache(SqliteStore(cache_path, clock=self._index_clock))
         if ws_name in self._indexes:
             self._indexes[ws_name].reopen()
 
@@ -251,7 +259,7 @@ class ExperimentSource:
             return None
         with self._lock:
             if ws.name not in self._journals:
-                journal = _open_journal(ws, storage, cache_path, self._clock)
+                journal = _open_journal(ws, storage, cache_path, self._clock, self._index_clock)
                 if journal is not None:
                     journal.on_settings(lambda key: self._settings.forget(ws.name, key))
                 self._journals[ws.name] = journal
@@ -273,7 +281,8 @@ class ExperimentSource:
         if self._pg is not None:
             self._pg.index(ws, app_name, s3_storage).refresh()
             return
-        ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws))
+        ui_index.refresh_app(s3_storage, app_name, ui_index.s3_cache_path(self._db_dir, ws),
+                             index_clock=self._index_clock)
 
     def owner_of(self, snapshot):
         """``(workspace, app name)`` of the app *snapshot* was served or

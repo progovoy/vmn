@@ -100,7 +100,8 @@ def _metrics_schema(storage, root_path, app_name):
 # ---------------------------------------------------------------------------
 
 
-def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplete=None):
+def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplete=None,
+                       clock=None):
     """``(rows, declared schema, extra)``: every run of an app,
     status-annotated, in storage order (oldest first); the goals/hidden flags
     the runs declare (:mod:`vmn_exp.core.metric_schema`) and what a query
@@ -113,16 +114,20 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplet
     *incomplete* ``"warn"`` warns it at the public reader's caller
     (:func:`~vmn_exp.sdk.reader_select.check_loading`).
     Asking about a single run goes through :func:`_subtree_row` instead.
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the
+    statuses' (None: the modules' own clocks).
     """
     if use_index:
-        snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
+        snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema,
+                                                 clock=clock)
         extra = store_extra(storage, app_name, snap)
     else:
         snap = experiment_index.direct_snapshot(
             storage, app_name, schema, read_log=_load_log, read_run_state=load_run_state)
         extra = rows_extra(snap)
     check_loading(snap.loading, incomplete, stacklevel=3)
-    rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at)
+    rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at,
+                         clock.now() if clock else None)
     return rows, snap.declared_schema(), extra
 
 

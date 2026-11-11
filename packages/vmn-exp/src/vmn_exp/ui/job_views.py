@@ -109,7 +109,7 @@ class JobViews:
     def etag(self, snapshot, schema, verstr, **params):
         """Changes whenever an answer for *verstr* could: generation, time
         bucket, and the minute (throughput and ETA count back from now)."""
-        return self.cache.etag(snapshot, schema, job=verstr, minute=minute(), **params)
+        return self.cache.etag(snapshot, schema, job=verstr, minute=minute(self.cache.now()), **params)
 
     def row(self, snapshot, verstr):
         """*verstr*'s row as of now."""

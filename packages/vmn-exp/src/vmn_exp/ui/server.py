@@ -174,7 +174,7 @@ def build_app(
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
-                              store_upkeep=upkeep, clock=deps.io.clock, processes=deps.io.processes)
+                              store_upkeep=upkeep, clock=deps.io.clock, processes=deps.io.processes, index_clock=deps.status_clock)
     # Looked up at call time, so a test's patch of this module or of
     # storage_access/storage.open still applies.
     ctx = ServerContext(
@@ -184,7 +184,7 @@ def build_app(
         probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random),
         app_exists=lambda *args: app_exists(*args), clock=deps.io.clock,
     )
-    leaderboards = LeaderboardCache(conf_of=ctx.board_conf)
+    leaderboards = LeaderboardCache(conf_of=ctx.board_conf, now=deps.status_clock and deps.status_clock.now)
     if refresher.background:  # requests after a refresh pay no base or search build
         refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)

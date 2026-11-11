@@ -50,10 +50,10 @@ def is_run(record):
     return record.get("meta") is not None and record.get("fold") is not None
 
 
-def run_status(record):
-    """*record*'s derived status, or None when its run state cannot say."""
+def run_status(record, now=None):
+    """*record*'s derived status at *now*, or None when its run state cannot say."""
     try:
-        return derive_status(record.get("run_state"),
+        return derive_status(record.get("run_state"), now=now,
                              observed_at=_observed_at(record.get("rs_sig")))
     except (TypeError, ValueError):  # a hand-edited, unparseable exit code
         return None
@@ -65,21 +65,23 @@ def leans_of(records):
             for key, record in records.items() if is_run(record)}
 
 
-def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True, defer=False):
+def write_lean(conn, app, seq, changed, removed, states, leans, renumber=True, defer=False,
+               now=None):
     """Bring *app*'s lean tables in line with a save of *changed* records
     (*leans* their runs' :func:`leans_of`), *removed* keys and the run states
     of *states* (see :meth:`~vmn_exp.core.index_store.SqliteStore.save`);
     whether every row's ``idx`` is its rank now. *renumber* False leaves
     ``idx`` to a later :func:`renumbered`; with *defer* only a renumbering of
-    the app is left (new rows sorting after every other are numbered on)."""
+    the app is left (new rows sorting after every other are numbered on).
+    Statuses are derived at *now*."""
     runs = {key: changed[key] for key in leans}
     gone = set(removed) | {key for key in changed if key not in runs}
     before = _existing(conn, app, sorted(set(runs) | gone))
     _delete(conn, app, gone)
-    _upsert(conn, app, seq, runs, leans)
+    _upsert(conn, app, seq, runs, leans, now)
     conn.executemany(
         "UPDATE exp_rows SET status = ? WHERE app = ? AND key = ?",
-        [(run_status(r), app, key) for key, r in states.items() if key not in runs],
+        [(run_status(r, now), app, key) for key, r in states.items() if key not in runs],
     )
     numbered = renumber and _renumber(conn, app, runs, gone, before, defer)
     moved = [key for key, record in runs.items()
@@ -107,13 +109,13 @@ def _delete(conn, app, keys):
     conn.executemany("DELETE FROM exp_sides WHERE app = ? AND key = ?", gone)
 
 
-def _upsert(conn, app, seq, runs, leans):
+def _upsert(conn, app, seq, runs, leans, now=None):
     rows, sides = [], []
     for key, record in runs.items():
         meta = record["meta"]
         row, note, *values = leans[key]
         rows.append((
-            app, key, meta["verstr"], run_status(record), row.get("parent"),
+            app, key, meta["verstr"], run_status(record, now), row.get("parent"),
             sort_timestamp(meta), row.get("name"), int(row["archived"]), seq, _dumps(row),
         ))
         if note is not None:

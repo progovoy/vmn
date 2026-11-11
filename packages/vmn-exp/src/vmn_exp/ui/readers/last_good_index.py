@@ -38,10 +38,11 @@ def _command_key(state):
     return _frozen((state or {}).get("command"))
 
 
-def _succeeded_command(row, run_states):
-    """*row*'s run's command when it succeeded unarchived, else :data:`_NOT`."""
+def _succeeded_command(row, run_states, now=None):
+    """*row*'s run's command when it succeeded unarchived (its status
+    derived at *now*), else :data:`_NOT`."""
     state = run_states.get(row["verstr"])
-    if row.get("archived") or derive_status(state) != SUCCEEDED:
+    if row.get("archived") or derive_status(state, now=now) != SUCCEEDED:
         return _NOT
     return _command_key(state)
 

@@ -245,13 +245,13 @@ def event_log(log):
 
 def show_payload(
     idx, metadata, patches, log, run_state, tree, log_tail=None, observed_at=None,
-    schema=None,
+    schema=None, now=None,
 ):
     """The ``show --json`` object; *log_tail* keeps only the newest entries.
-    *schema* is the app's metrics schema."""
+    *schema* is the app's metrics schema; the status is derived at *now*."""
     fold = fold_log(log)
     run = fold_row(idx, metadata, fold, schema=schema)
-    run.update(status_fields(run_state, observed_at=observed_at))
+    run.update(status_fields(run_state, now=now, observed_at=observed_at))
     run.update(tree)
     run["base_commit"] = metadata.get("base_commit")
     run["format_version"] = record_format_version(metadata)

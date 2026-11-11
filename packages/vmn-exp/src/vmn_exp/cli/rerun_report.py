@@ -100,13 +100,13 @@ def _warnings(storage, source, env):
     yield from _env_warnings(storage, source, env)
 
 
-def _still_running(storage, source):
+def _still_running(storage, source, now=None):
     state = source.run_state
     # Only a run claiming to run needs the store's write time to tell running from stuck.
     if not state or state.get("state") != "running" or state.get("exit_code") is not None:
         return False
     observed = run_state_observed_at(storage, source.app_name, source.verstr)
-    return derive_status(state, observed_at=observed) == RUNNING
+    return derive_status(state, now=now, observed_at=observed) == RUNNING
 
 
 def _env_warnings(storage, source, env):

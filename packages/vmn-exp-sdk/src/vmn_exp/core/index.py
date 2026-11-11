@@ -95,6 +95,7 @@ from vmn_exp.core.index_load_pool import LoadPool
 from vmn_exp.core.index_views import lean_row
 from vmn_exp.core.index_workers import load_new_records
 from vmn_exp.core.log import load_log
+from vmn_exp.core.ports import wall_seconds
 from vmn_exp.core.status import load_run_state, observed_at_by_verstr
 from vmn_exp.core.traced_lock import TracedLock
 
@@ -131,19 +132,26 @@ def _listed_at(work_item):
 
 
 class ExperimentIndex:
-    """Incrementally maintained rows for one app of one storage backend."""
+    """Incrementally maintained rows for one app of one storage backend.
+
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`) times its refreshes,
+    sweeps, freshness and store; None reads the modules' own clocks
+    (``_monotonic`` here) at call time."""
 
     def __init__(
         self, storage, app_name, cache_path=None, full_sweep_sec=DEFAULT_FULL_SWEEP_SEC,
-        cache_store=None,
+        cache_store=None, *, clock=None,
     ):
+        self._clock = clock
         self._storage = storage
         self.app_name = app_name
         self._cache_path = cache_path
-        self._store = cache_store or IndexStore(cache_path)
+        self._store = cache_store or IndexStore(cache_path, clock=clock)
         self._unsaved = PendingSave()  # what a failed save left to persist
-        self._freshness = index_freshness.Freshness(lambda: self._io or self._store, app_name)
-        self._sweep = Sweep(storage, app_name, full_sweep_sec)
+        self._freshness = index_freshness.Freshness(
+            lambda: self._io or self._store, app_name,
+            wall=wall_seconds(clock) if clock else None)
+        self._sweep = Sweep(storage, app_name, full_sweep_sec, clock=clock)
         self._baseline = ListingBaseline(self._store, app_name)
         self._mark = JournalMark(self._store, app_name)
         self._io = None  # the I/O helper process, once use_io_process() started it
@@ -152,7 +160,7 @@ class ExperimentIndex:
         self._stamps = None  # their timestamps, for bisecting new keys in
         self._reorder = ((), False)  # (new keys, whether one was re-described)
         self._rows = RowCache()
-        self._bulk = BulkPublish()
+        self._bulk = BulkPublish(clock.monotonic if clock else None)
         self._snapshot = None
         self._placeholder = None  # (expected, the empty snapshot saying so)
         self._first_rows = None  # a warm restart's newest rows, until its snapshot (snapshot_now)
@@ -160,8 +168,9 @@ class ExperimentIndex:
         self._loaders = None  # a bulk load's worker processes (index_remote_workers)
         self._pool = LoadPool(_REMOTE_WORKERS, "vmn-index-load")  # kept across a bulk load's chunks
         self._rests = set()  # records a bulk load read rows-first, the rest to read
-        self._unreadable = Unreadable(app_name, lambda: _monotonic())
-        self._vmx = VmxCheck(lambda: self._io or self._store, app_name, clock=time.monotonic)  # an upgrade's check
+        self._unreadable = Unreadable(app_name, self._monotonic)
+        self._vmx = VmxCheck(lambda: self._io or self._store, app_name,
+                             clock=clock.monotonic if clock else time.monotonic)  # an upgrade's check
         self._io_unreadable = None  # the I/O helper's Unreadable.summary(), after its refresh
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed
@@ -178,11 +187,14 @@ class ExperimentIndex:
         self._cold = False  # records loaded whole, their folds held until saved (_drop_folds)
         self.drops_folds = True  # False: whoever adopts this index drops them (a rebuild)
 
+    def _monotonic(self):
+        return self._clock.monotonic() if self._clock else _monotonic()
+
     @classmethod
-    def follower(cls, cache_store, scope):
+    def follower(cls, cache_store, scope, *, clock=None):
         """An index that never reads storage: each refresh applies
         *cache_store*'s ``load_since`` deltas, which a leader saves."""
-        index = cls(None, scope)
+        index = cls(None, scope, clock=clock)
         index._store = cache_store
         index._cache_gen = 0
         return index
@@ -303,7 +315,7 @@ class ExperimentIndex:
 
     def full_listing_due(self):
         """Whether the next refresh lists storage fully (diagnostics)."""
-        return self._sweep._full_due(_monotonic())
+        return self._sweep._full_due(self._monotonic())
 
     def reconcile(self):
         """Make the next refresh a full listing."""
@@ -333,7 +345,7 @@ class ExperimentIndex:
 
     def _lean_copy(self):
         lean = ExperimentIndex(self._storage, self.app_name, self._cache_path,
-                               self.full_sweep_sec, self._store)
+                               self.full_sweep_sec, self._store, clock=self._clock)
         lean._lean = True
         return lean
 
@@ -352,7 +364,7 @@ class ExperimentIndex:
         if (max_age_sec or 0) <= 0:
             return snap
         fresh_at = self.last_refresh_at  # None: persisted rows not revalidated yet
-        if fresh_at is not None and _monotonic() - fresh_at < max_age_sec:
+        if fresh_at is not None and self._monotonic() - fresh_at < max_age_sec:
             return snap
         if not self._lock.acquire(blocking=False):
             return snap
@@ -421,7 +433,7 @@ class ExperimentIndex:
             self._snapshot = self._build_snapshot()
 
     def _refresh_locked(self):
-        started = _monotonic()
+        started = self._monotonic()
         self._freshness.started()
         if self._cache_gen is not None:
             self._refresh_from_cache()
@@ -504,7 +516,7 @@ class ExperimentIndex:
         self._unreadable.forget(self._sweep.listed_gone)
         self._load_listed(listing, removed, started)
         while self._more_relisted(started):
-            self._load_listed(*self._sweep.next_relisted(self._records, _monotonic()), started)
+            self._load_listed(*self._sweep.next_relisted(self._records, self._monotonic()), started)
         if self._snapshot is None and not self._lean:  # a refresh ends with one
             self._publish_pending()
         if self._rests and self._sweep.relisted_new() is False:
@@ -555,7 +567,7 @@ class ExperimentIndex:
         is waited for, up to BEHIND_REFRESH_SEC into the refresh — unless a
         journal hint waits for the next refresh."""
         while True:
-            left = BEHIND_REFRESH_SEC - (_monotonic() - started)
+            left = BEHIND_REFRESH_SEC - (self._monotonic() - started)
             if left <= 0 or self._sweep.hints_waiting():
                 return False
             if self._sweep.relisted_ready():
@@ -646,7 +658,7 @@ class ExperimentIndex:
     def _derived(self, done, total):
         self._freshness.migrating(done, total)
         if self._lean or (self._snapshot is not None
-                          and _monotonic() - self.published_at < MIGRATING_PUBLISH_SEC):
+                          and self._monotonic() - self.published_at < MIGRATING_PUBLISH_SEC):
             return
         self.generation += 1
         if self._kept is not None:  # the kept rows, stale until re-derived
@@ -655,7 +667,7 @@ class ExperimentIndex:
         else:
             self._snapshot = self._rows.snapshot(
                 self.app_name, self.generation, [], {}, loading=(done, total))
-        self.published_at = _monotonic()
+        self.published_at = self._monotonic()
         self._set_published()
 
     def _listing_phase(self, now):
@@ -764,7 +776,7 @@ class ExperimentIndex:
         self._publish_pending()
 
     def _publish_pending(self):
-        bulk, snap, started = self._bulk, self._snapshot, _monotonic()
+        bulk, snap, started = self._bulk, self._snapshot, self._monotonic()
         new, resort, touched = bulk.take()
         # Only a new, removed or re-described record can move in the order.
         if new or resort or self._order is None:
@@ -993,7 +1005,7 @@ class ExperimentIndex:
 
     def _build_snapshot(self, touched=None):
         order = self._order or []
-        self.published_at = _monotonic()
+        self.published_at = self._monotonic()
         return self._rows.snapshot(
             self.app_name, self.generation, order, self._records, touched,
             self._loading(len(order)),
@@ -1079,21 +1091,23 @@ _SHARED = {}
 _SHARED_LOCK = threading.Lock()
 
 
-def shared_index(storage, app_name, cache_path=None, full_sweep_sec=None):
+def shared_index(storage, app_name, cache_path=None, full_sweep_sec=None, *, clock=None):
     """The process-wide index for *storage*'s *app_name* data.
 
     Keyed by the backend's ``cache_identity()`` so equivalent storage objects
     share one warm index. Persisted at *cache_path* when given (the ui keeps its
     own under the server data dir), else at the backend's ``index_cache_path``.
     A *full_sweep_sec* other than None sets that index's sweep interval.
+    A new index runs on *clock* (see :class:`ExperimentIndex`); the first
+    caller's clock is the one a shared index keeps.
     """
-    index = _process_index(storage, app_name, cache_path)
+    index = _process_index(storage, app_name, cache_path, clock)
     if full_sweep_sec is not None:
         index.full_sweep_sec = full_sweep_sec
     return index
 
 
-def _process_index(storage, app_name, cache_path):
+def _process_index(storage, app_name, cache_path, clock=None):
     # The storage's own index file is the one point reads, listings and
     # similar searches read: the process's one store of it. A caller's file
     # (the ui's, one per workspace) keeps a store per index.
@@ -1104,13 +1118,13 @@ def _process_index(storage, app_name, cache_path):
     identity_of = getattr(storage, "cache_identity", None)
     identity = identity_of() if identity_of else None
     if identity is None:
-        return ExperimentIndex(storage, app_name, cache_path, cache_store=store)
+        return ExperimentIndex(storage, app_name, cache_path, cache_store=store, clock=clock)
     key = (identity, app_name, cache_path)
     with _SHARED_LOCK:
         index = _SHARED.get(key)
         if index is None:
             index = _SHARED[key] = ExperimentIndex(storage, app_name, cache_path,
-                                                   cache_store=store)
+                                                   cache_store=store, clock=clock)
         return index
 
 
@@ -1184,6 +1198,8 @@ def indexed_snapshot(
     wait=False,
     fallback=direct_snapshot,
     schema=None,
+    *,
+    clock=None,
 ):
     """The shared index's :class:`IndexSnapshot`, refreshed when older than a
     positive *max_age_sec* (the default 0 takes a loaded index as it is: see
@@ -1192,9 +1208,9 @@ def indexed_snapshot(
     :func:`shared_index`. Rows follow the metrics *schema* the caller passes
     (:meth:`IndexSnapshot.summarized`), none by default. If the index fails,
     ``fallback(storage, app_name, schema)`` answers instead; a None
-    *fallback* returns None."""
+    *fallback* returns None. *clock*: see :func:`shared_index`."""
     try:
-        index = shared_index(storage, app_name, cache_path, full_sweep_sec)
+        index = shared_index(storage, app_name, cache_path, full_sweep_sec, clock=clock)
         snap = index.refresh().snapshot() if wait else index.refresh_if_stale(max_age_sec)
         return snap.summarized(schema)
     except Exception:
@@ -1203,13 +1219,13 @@ def indexed_snapshot(
 
 
 def indexed_status_rows(
-    storage, app_name, with_create_note=False, cache_path=None, schema=None
+    storage, app_name, with_create_note=False, cache_path=None, schema=None, *, clock=None
 ):
     """``(rows, run_states, observed_at)`` from an up-to-date snapshot — fresh
     row copies (see :meth:`ExperimentIndex.rows`), the run states and
     ``{verstr: run_state.yml store write time}``, the ``observed_at`` a status
-    derivation takes. *schema*: see :func:`indexed_snapshot`."""
-    snap = indexed_snapshot(storage, app_name, cache_path, wait=True, schema=schema)
+    derivation takes. *schema*, *clock*: see :func:`indexed_snapshot`."""
+    snap = indexed_snapshot(storage, app_name, cache_path, wait=True, schema=schema, clock=clock)
     return (
         _row_copies(snap, with_create_note),
         dict(snap.run_states),

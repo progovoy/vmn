@@ -53,15 +53,17 @@ def _listed_snapshot(storage, app_name, schema):
     return IndexSnapshot.build(app_name, 0, rows, {})
 
 
-def placement_snapshot(storage, app_name, snapshot=None):
+def placement_snapshot(storage, app_name, snapshot=None, clock=None):
     """*snapshot*, else the index's refreshed now (``latest`` right after a
-    create resolves to it), else one built from a metadata-only listing."""
+    create resolves to it; *clock*: see
+    :func:`~vmn_exp.core.index.shared_index`), else one built from a
+    metadata-only listing."""
     if snapshot:
         return snapshot
     import vmn_exp.core.index as experiment_index
 
     return experiment_index.indexed_snapshot(
-        storage, app_name, wait=True, fallback=_listed_snapshot
+        storage, app_name, wait=True, fallback=_listed_snapshot, clock=clock
     )
 
 

@@ -160,10 +160,10 @@ class IndexSnapshot:
         seen last, or None. Shared: copy before changing."""
         return self.note_sigs.get(verstr)
 
-    def status_of(self, verstr):
-        """*verstr*'s derived status, its run state's store write time
-        (:attr:`run_state_observed_at`) as *observed_at*."""
-        return derive_status(self.run_states.get(verstr),
+    def status_of(self, verstr, now=None):
+        """*verstr*'s derived status at *now*, its run state's store write
+        time (:attr:`run_state_observed_at`) as *observed_at*."""
+        return derive_status(self.run_states.get(verstr), now=now,
                              observed_at=self.run_state_observed_at.get(verstr))
 
     def declared_schema(self):

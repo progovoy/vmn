@@ -38,9 +38,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class StoreConnection:
-    """*path*'s connection, opened through *connect_file(file)*."""
+    """*path*'s connection, opened through *connect_file(file)*; a failed
+    open is retried after a backoff on *monotonic* (None: this module's
+    ``_monotonic``, read at call time)."""
 
-    def __init__(self, path, connect_file):
+    def __init__(self, path, connect_file, monotonic=None):
+        self._clock = monotonic
         self.path = path
         self._connect = connect_file
         self.conn = None
@@ -49,13 +52,16 @@ class StoreConnection:
         self._retry_at = None  # math.inf: a newer schema owns the file
         self._backoff = FIRST_BACKOFF_SEC
 
+    def _monotonic(self):
+        return (self._clock or _monotonic)()
+
     def get(self):
         """The live connection, or None while unavailable."""
         if self.path is None:
             return None
         if self.conn is not None and sqlite_files.pointer_stamp(self.path) == self._stamp:
             return self.conn
-        if self.conn is None and self._retry_at is not None and _monotonic() < self._retry_at:
+        if self.conn is None and self._retry_at is not None and self._monotonic() < self._retry_at:
             return None
         self.close()
         self._open()
@@ -104,7 +110,7 @@ class StoreConnection:
 
     def _failed(self, file, exc):
         self.conn = None
-        self._retry_at = _monotonic() + self._backoff
+        self._retry_at = self._monotonic() + self._backoff
         self._backoff = min(self._backoff * 2, MAX_BACKOFF_SEC)
         warn_once((file, "open"), f"Experiment index {file} unavailable ({exc}); "
                   "running without it, retrying later")

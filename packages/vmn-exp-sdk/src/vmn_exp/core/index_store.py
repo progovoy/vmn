@@ -54,12 +54,20 @@ def _connect(path):
 
 
 class SqliteStore(LeanReads, KeyValues, Rederive):
-    """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None."""
+    """A :class:`CacheStore` in one SQLite file; a no-op when *path* is None.
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`) stamps tombstones and
+    times the reconnect backoff (None: the modules' own clocks, read at call
+    time)."""
 
-    def __init__(self, path):
-        self._db = StoreConnection(path or None, _connect)
+    def __init__(self, path, *, clock=None):
+        self._clock = clock
+        self._db = StoreConnection(path or None, _connect, clock.monotonic if clock else None)
         self._db.get()
         self._later, self._unnumbered = set(), set()  # apps (see number_later)
+
+    def wall(self):
+        """Epoch seconds now on the store's clock."""
+        return self._clock.now().timestamp() if self._clock else _now()
 
     def number_later(self, app_name, later):
         """While *later*, a save that would renumber *app_name*'s rows (one
@@ -237,7 +245,8 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
         self._forget(app_name, seq, removed)
         leans = leans_of(changed)
         if not write_lean(conn, app_name, seq, changed, removed, states, leans,
-                          defer=app_name in self._later):
+                          defer=app_name in self._later,
+                          now=self._clock.now() if self._clock else None):
             self._unnumbered.add(app_name)
         file_similar(conn, app_name, changed, removed, states, leans)
         conn.executemany(
@@ -277,11 +286,11 @@ class SqliteStore(LeanReads, KeyValues, Rederive):
         self._conn.executemany(
             "INSERT OR REPLACE INTO exp_index_tombstones (app, key, seq, ts)"
             " VALUES (?, ?, ?, ?)",
-            [(app_name, key, seq, _now()) for key in removed],
+            [(app_name, key, seq, self.wall()) for key in removed],
         )
 
     def _trim_tombstones(self, app_name):
-        cutoff = (app_name, _now() - TOMBSTONE_TTL_SEC)
+        cutoff = (app_name, self.wall() - TOMBSTONE_TTL_SEC)
         (newest,) = self._conn.execute(
             "SELECT MAX(seq) FROM exp_index_tombstones WHERE app = ? AND ts < ?", cutoff
         ).fetchone()

@@ -89,6 +89,12 @@ def _now(now=None):
     return now or datetime.datetime.now(datetime.timezone.utc)
 
 
+def now_from(clock_now=None):
+    """*clock_now()* (an aware UTC datetime), or this module's ``_now()``,
+    read at call time, when no clock is given."""
+    return clock_now() if clock_now is not None else _now()
+
+
 def _age_sec(ts, now):
     parsed = parse_iso(ts)
     if parsed is None:

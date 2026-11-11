@@ -12,35 +12,36 @@ from vmn_exp.core.status import load_run_state, run_state_observed_at, status_fi
 from vmn_exp.storage.s3_base import parallel_map
 
 
-def read_run_states(storage, app_name, refs):
-    """``{ref: entry or None}`` for *refs* of *app_name* in *storage*."""
+def read_run_states(storage, app_name, refs, now=None):
+    """``{ref: entry or None}`` for *refs* of *app_name* in *storage*, their
+    statuses as of *now*."""
     verstrs = _resolve_refs(storage, app_name, refs)
     wanted = sorted({v for v in verstrs.values() if v})
     entries = dict(zip(wanted, parallel_map(
-        lambda v: run_state_entry(storage, app_name, v), wanted)))
+        lambda v: run_state_entry(storage, app_name, v, now), wanted)))
     return {ref: entries.get(verstr) for ref, verstr in verstrs.items()}
 
 
-def run_state_entry(storage, app_name, verstr):
+def run_state_entry(storage, app_name, verstr, now=None):
     """Run *verstr*'s ``run_state.yml`` fields, its derived status fields, the
     raw ``run_state`` (None before the run started), its store write time
     ``observed_at`` and ``verstr`` — or None when there is no such run."""
-    read = read_run_state(storage, app_name, verstr)
+    read = read_run_state(storage, app_name, verstr, now)
     if read is None:
         return None
     state, observed, fields = read
     return dict(fields, run_state=state, observed_at=observed, verstr=verstr)
 
 
-def read_run_state(storage, app_name, verstr):
+def read_run_state(storage, app_name, verstr, now=None):
     """``(run_state, observed_at, fields)`` of run *verstr* — *fields* its
-    ``run_state.yml`` plus derived status fields — or None when there is no
-    such run."""
+    ``run_state.yml`` plus status fields derived at *now* — or None when
+    there is no such run."""
     state = load_run_state(storage, app_name, verstr)
     if state is None and not storage.exists(app_name, verstr):
         return None
     observed = run_state_observed_at(storage, app_name, verstr) if state else None
-    return state, observed, dict(state or {}, **status_fields(state, observed_at=observed))
+    return state, observed, dict(state or {}, **status_fields(state, now=now, observed_at=observed))
 
 
 def _resolve_refs(storage, app_name, refs):

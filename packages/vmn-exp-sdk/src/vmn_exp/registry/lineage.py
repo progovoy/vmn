@@ -75,15 +75,18 @@ class RegistryLinks:
         return read_uses(self.storage, name).get(n, [])
 
 
-def app_indexes(storage):
+def app_indexes(storage, clock=None):
     """``index_for(app)`` over *storage*'s status-annotated index rows,
-    each app's index built once."""
+    each app's index built once; *clock* (a
+    :class:`~vmn_exp.core.ports.Clock`): the indexes' and the statuses'."""
     indexes = {}
 
     def index_for(app):
         if app not in indexes:
-            rows, states, observed = experiment_index.indexed_status_rows(storage, app)
-            indexes[app] = LineageIndex(annotate_rows(rows, states, observed))
+            rows, states, observed = experiment_index.indexed_status_rows(
+                storage, app, clock=clock)
+            now = clock.now() if clock else None
+            indexes[app] = LineageIndex(annotate_rows(rows, states, observed, now))
         return indexes[app]
 
     return index_for

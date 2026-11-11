@@ -94,8 +94,9 @@ def status_detail(
     read_observed_at=run_state_observed_at,
     read_child_row=None,
     job_status=None,
+    now=None,
 ):
-    """Status payload with the run's place in the tree.
+    """Status payload with the run's place in the tree, statuses as of *now*.
 
     Reads the run state of the subtree only; *metadata* and *log* (a list or
     a :class:`LogSnapshot`) come from the caller, which already loaded both.
@@ -110,7 +111,7 @@ def status_detail(
     job = job_status(verstr) if job_status else None
     if job is not None:
         return _job_detail(storage, app_name, verstr, metadata, log, job,
-                           read_run_state, read_observed_at)
+                           read_run_state, read_observed_at, now)
     edges_of = edges(storage, app_name)
     parent_of = edges_of
     if verstr not in edges_of:  # not indexed yet: overlay, never copy the rest
@@ -128,6 +129,7 @@ def status_detail(
         observed_at=observed_at_fn,
         children_of=children_of,
         row_of=read_child_row,
+        now=now,
     )
     detail["parent"] = metadata.get("parent")
     detail["error"] = _full_error(storage, app_name, verstr, own_state)
@@ -144,7 +146,7 @@ def status_detail(
         fleet = fleet_summary(
             verstr, children_of, read_state_fn,
             observed_at=observed_at_fn, expected=expected,
-            closed=row_closes(detail),
+            closed=row_closes(detail), now=now,
         )
         detail["fleet"] = fleet and {k: v for k, v in fleet.items() if k != "children"}
     else:
@@ -154,9 +156,10 @@ def status_detail(
 
 
 def _job_detail(storage, app_name, verstr, metadata, log, job, read_run_state,
-                read_observed_at):
+                read_observed_at, now=None):
     own_state = read_run_state(storage, app_name, verstr)
-    detail = status_fields(own_state, observed_at=read_observed_at(storage, app_name, verstr))
+    detail = status_fields(own_state, now=now,
+                           observed_at=read_observed_at(storage, app_name, verstr))
     detail.update(job, parent=metadata.get("parent"),
                   error=_full_error(storage, app_name, verstr, own_state),
                   last_metric_at=_last_metric_at(log))

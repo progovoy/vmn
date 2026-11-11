@@ -104,7 +104,7 @@ def _read_state(storage, app_name, verstr):
     )
 
 
-def _live_runs(storage, app_name, candidates, snapshot):
+def _live_runs(storage, app_name, candidates, snapshot, now=None):
     """``{verstr: status}`` of the *candidates* that may still be running.
 
     The index *snapshot* supplies run states and their store write times when
@@ -118,7 +118,7 @@ def _live_runs(storage, app_name, candidates, snapshot):
         observed = snapshot.run_state_observed_at
         states = [(snapshot.run_states.get(v), observed.get(v)) for v in verstrs]
     statuses = zip(
-        verstrs, (derive_status(state, observed_at=at) for state, at in states)
+        verstrs, (derive_status(state, now=now, observed_at=at) for state, at in states)
     )
     return {v: status for v, status in statuses if status in _LIVE}
 
@@ -151,12 +151,12 @@ def _local_view(storage):
     return getattr(storage, "_local", None) or storage
 
 
-def _metas_and_snapshot(storage, app_name):
+def _metas_and_snapshot(storage, app_name, clock=None):
     """``(metas oldest first, index snapshot or None)`` — through the experiment
     index when the storage can be indexed, so selecting among 10k runs does not
     read every record's metadata and run state; directly otherwise."""
     if hasattr(storage, "list_files"):
-        snapshot = indexed_snapshot(storage, app_name, wait=True, fallback=None)
+        snapshot = indexed_snapshot(storage, app_name, wait=True, fallback=None, clock=clock)
         if snapshot is not None:
             metas = [
                 {"verstr": r["verstr"], "timestamp": r.get("timestamp"),

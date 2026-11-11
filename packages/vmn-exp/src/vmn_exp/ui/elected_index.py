@@ -11,14 +11,16 @@ from vmn_exp.core.index import ExperimentIndex
 
 
 class ElectedIndex:
-    def __init__(self, storage, app_name, cache_store, election, workspace_id=0, org_id=None):
+    def __init__(self, storage, app_name, cache_store, election, workspace_id=0, org_id=None,
+                 *, clock=None):
+        """*clock*: both indexes' (see :class:`~vmn_exp.core.index.ExperimentIndex`)."""
         self.app_name = app_name
         self.workspace_id = workspace_id
         self.org_id = org_id
         self._election = election
         self._cache_store = cache_store
-        self._leader = ExperimentIndex(storage, app_name, cache_store=cache_store)
-        self._follower = ExperimentIndex.follower(cache_store, app_name)
+        self._leader = ExperimentIndex(storage, app_name, cache_store=cache_store, clock=clock)
+        self._follower = ExperimentIndex.follower(cache_store, app_name, clock=clock)
         self.leading = False
 
     @property

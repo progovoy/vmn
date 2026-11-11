@@ -92,7 +92,7 @@ class TreeNodes:
         if not queries:
             return {}
         base, bucket = self._cache._base(snapshot)
-        texts, root = pinned_texts(queries), tree_root(base, parent)
+        texts, root = pinned_texts(queries, self._cache.now()), tree_root(base, parent)
         return self._counts.get(
             (base.token, bucket, texts, root),
             lambda: _counted(self._cache.attention.matches(snapshot, schema, queries).get(root, ()),

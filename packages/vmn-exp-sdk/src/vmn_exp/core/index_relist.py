@@ -102,9 +102,10 @@ class Relisting:
     """One listing of an app's records, *files* or names alone, compared
     with the *known* keys; :meth:`take` hands it over a chunk at a time."""
 
-    def __init__(self, watch, known, files=True):
+    def __init__(self, watch, known, files=True, wall=None):
+        """*wall*: epoch seconds now (None: this module's ``_wall``)."""
         self.files = files
-        self.started_at = _wall()
+        self.started_at = (wall or _wall)()
         self._watch, self._known = watch, frozenset(known)
         self._lock = threading.Lock()
         self._changed = threading.Condition(self._lock)  # notified as records are listed

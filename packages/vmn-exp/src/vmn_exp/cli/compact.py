@@ -17,11 +17,15 @@ FINISHED = (SUCCEEDED, FAILED)
 DEAD = (FAILED, STUCK)
 
 
-def runs_with_status(storage, app_name, statuses):
-    """The verstrs of *app_name*'s runs whose derived status is in *statuses*."""
-    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True)
+def runs_with_status(storage, app_name, statuses, clock=None):
+    """The verstrs of *app_name*'s runs whose derived status is in *statuses*;
+    *clock* (a :class:`~vmn_exp.core.ports.Clock`): the index's and the
+    statuses' (None: the modules' own)."""
+    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, clock=clock)
+    now = clock.now() if clock else None
     return sorted(v for v, state in snap.run_states.items()
-                  if derive_status(state, observed_at=snap.run_state_observed_at.get(v))
+                  if derive_status(state, now=now,
+                                   observed_at=snap.run_state_observed_at.get(v))
                   in statuses)
 
 

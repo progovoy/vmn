@@ -120,15 +120,15 @@ def _rewind_step(step):
     return operator.index(step)
 
 
-def rewind_run(storage, app_name, verstr, step, prior_state):
+def rewind_run(storage, app_name, verstr, step, prior_state, now=None):
     """Hide *verstr*'s history past *step* (*prior_state*: its ``run_state``).
 
-    Refused while the run is live elsewhere: its writer would keep logging
-    steps the rewind is about to hide.
+    Refused while the run is live elsewhere (its status derived at *now*):
+    its writer would keep logging steps the rewind is about to hide.
     """
     step = _rewind_step(step)
     observed = run_state_observed_at(storage, app_name, verstr)
-    if prior_state and derive_status(prior_state, observed_at=observed) == RUNNING:
+    if prior_state and derive_status(prior_state, now=now, observed_at=observed) == RUNNING:
         raise RuntimeError(
             f"Run '{verstr}' is running (host {prior_state.get('host')}, pid "
             f"{prior_state.get('pid')}); finish it before rewinding it."

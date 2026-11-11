@@ -50,4 +50,4 @@ class RunAlerts:
         alerter = self._alerter()
         alerter.drain(timeout)
         alert_if_failed(self._storage, self.app_name, self.id, self._state,
-                        alerter, run_name=self.name)
+                        alerter, run_name=self.name, now=self._clock.now())

@@ -49,9 +49,9 @@ class ReopenRefusedError(RunRefusedError):
     ``exit_code`` its result) without ``reopen=True``."""
 
 
-def check_reopenable(app_name, verstr, prior_state, reopen, from_env):
+def check_reopenable(app_name, verstr, prior_state, reopen, from_env, now=None):
     """:class:`ReopenRefusedError` when *verstr* has finished and reopening it
-    was not asked for."""
+    was not asked for (its status derived at *now*)."""
     if reopen or prior_state.get("state") != "finished":
         return
     how = f"{REOPEN_ENV}=1" if from_env else "start_run(..., reopen=True)"
@@ -60,7 +60,7 @@ def check_reopenable(app_name, verstr, prior_state, reopen, from_env):
         f"Run '{verstr}' of '{app_name}' has finished (exit code "
         f"{exit_code}); reopening it clears that result. "
         f"Pass {how} to reopen it anyway.",
-        FINISHED, derive_status(prior_state), exit_code, verstr,
+        FINISHED, derive_status(prior_state, now=now), exit_code, verstr,
     )
 
 

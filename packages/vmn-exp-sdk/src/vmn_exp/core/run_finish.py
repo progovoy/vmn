@@ -67,13 +67,14 @@ class FinishRefusedError(RunRefusedError):
 
 
 def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None,
-               force=False, *, random):
+               force=False, *, random, now=None):
     """Write *verstr*'s final run state; False when there is no such record.
 
     *error* — a message or an exception — becomes the state's ``error`` and an
     ``error`` log entry. *force* is False, ``"live"`` or True (see the module
     doc). Raises :class:`FinishRefusedError` and ValueError for an
-    *exit_code* that is not an int or an unknown *force*.
+    *exit_code* that is not an int or an unknown *force*. The prior status
+    is derived at *now*.
     """
     exit_code = checked_exit_code(exit_code)
     overridden = checked_force(force)
@@ -82,7 +83,7 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
     observed_at = run_state_observed_at(storage, app_name, verstr)
 
     def finishable(prior):
-        _refuse_unfinishable(prior, observed_at, verstr, overridden)
+        _refuse_unfinishable(prior, observed_at, verstr, overridden, now)
         return prior
 
     finishable(load_run_state(storage, app_name, verstr) or {})
@@ -138,10 +139,10 @@ def checked_force(force):
     raise ValueError(f"force must be False, 'live' or True, got {force!r}")
 
 
-def _refuse_unfinishable(prior, observed_at, verstr, overridden):
+def _refuse_unfinishable(prior, observed_at, verstr, overridden, now=None):
     if overridden == _FORCE_OVERRIDES[True]:
         return  # nothing left to refuse: the prior state is not even read
-    status = derive_status(prior, observed_at=observed_at)
+    status = derive_status(prior, now=now, observed_at=observed_at)
     exit_code = prior.get("exit_code")
     if status == RUNNING and LIVE not in overridden:
         raise FinishRefusedError(

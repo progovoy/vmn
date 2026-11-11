@@ -69,23 +69,24 @@ def experiment_similar_backfill(storage, app_name, args):
     return 1 if counts[FAILED] else 0
 
 
-def backfill_app(storage, app_name, dry_run=False):
+def backfill_app(storage, app_name, dry_run=False, clock=None):
     """``(verstr, status, detail)`` per run of *app_name*, in storage order;
-    *dry_run* derives every entry and appends none."""
-    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True)
+    *dry_run* derives every entry and appends none. *clock* (a
+    :class:`~vmn_exp.core.ports.Clock`): the index's (None: its modules')."""
+    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, clock=clock)
     code = _CodeFeatures(storage, app_name)
     appended = []
     try:
         yield from _backfill_rows(storage, app_name, snap, code, dry_run, appended)
     finally:
-        _refile(storage, app_name, appended)
+        _refile(storage, app_name, appended, clock)
 
 
-def _refile(storage, app_name, verstrs):
+def _refile(storage, app_name, verstrs, clock=None):
     """Refresh *verstrs* into the app's index: their documents are refiled."""
     if not verstrs:
         return
-    index = experiment_index.shared_index(storage, app_name)
+    index = experiment_index.shared_index(storage, app_name, clock=clock)
     for verstr in verstrs:
         index.hint(verstr)
     try:
@@ -115,13 +116,13 @@ def _backfill_rows(storage, app_name, snap, code, dry_run, appended):
         yield verstr, status, detail
 
 
-def _skip_reason(snap, row):
+def _skip_reason(snap, row, now=None):
     verstr = row["verstr"]
     if is_current(snap.features_of(verstr)):
         return "up to date"
     if row.get("imported_from"):
         return "imported"
-    status = snap.status_of(verstr)
+    status = snap.status_of(verstr, now)
     return status if status in (RUNNING, STUCK) else None
 
 

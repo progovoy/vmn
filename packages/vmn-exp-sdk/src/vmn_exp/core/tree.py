@@ -272,7 +272,7 @@ TREE_FIELDS = ("children", "kind", "depth", "settled", "tree_status", "child_cou
 
 
 def subtree_status(
-    verstr, parent_of, read_state, children_of=None, observed_at=None, row_of=None,
+    verstr, parent_of, read_state, children_of=None, observed_at=None, row_of=None, now=None,
 ):
     """``(run_state, tree_fields)`` for one run, reading its subtree's states only.
 
@@ -288,7 +288,7 @@ def subtree_status(
     *row_of(verstr)*, when given, returns a run's index row (or None): a sweep
     row's ``sweep_planned`` and its trials' tags make an incomplete sweep
     ``created`` (see :func:`sweep_incomplete`) and add ``sweep_planned`` /
-    ``sweep_trials`` to the tree fields.
+    ``sweep_trials`` to the tree fields. Statuses are derived at *now*.
     """
     if children_of is None:
         children_of = children_by_parent(
@@ -300,7 +300,7 @@ def subtree_status(
     parent = parent_of.get(verstr)
 
     def status_of(v, state):
-        return derive_status(state, observed_at=observed_at(v) if observed_at else None)
+        return derive_status(state, now, observed_at(v) if observed_at else None)
 
     statuses = {v: status_of(v, state) for v, state in states.items()}
     chain = ancestors(verstr, parent_of)
@@ -332,7 +332,7 @@ def _sweep_fields(verstr, children, row_of):
     return {"sweep_planned": planned, "sweep_trials": sweep_trial_count(rows)}
 
 
-def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None, row_of=None):
+def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None, row_of=None, now=None):
     """One run's status fields plus its tree fields, reading its subtree only.
 
     Arguments as for :func:`subtree_status`; *observed_at(verstr)* weighs the
@@ -340,9 +340,9 @@ def run_status(verstr, parent_of, read_state, observed_at=None, children_of=None
     """
     run_state, tree = subtree_status(
         verstr, parent_of, read_state, children_of=children_of, observed_at=observed_at,
-        row_of=row_of,
+        row_of=row_of, now=now,
     )
-    status = status_fields(run_state, observed_at=observed_at(verstr) if observed_at else None)
+    status = status_fields(run_state, now, observed_at(verstr) if observed_at else None)
     status.update(tree)
     return status
 
@@ -376,7 +376,7 @@ def _child_row_fields(row):
 
 
 def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=None,
-                  read_child_row=None, closed=False):
+                  read_child_row=None, closed=False, now=None):
     """Fleet status for an outer run: per-child status counts and progress.
 
     Returns None when *verstr* has no children. *expected* is the declared
@@ -397,7 +397,7 @@ def fleet_summary(verstr, children_of, read_state, observed_at=None, expected=No
     for child in children:
         state = read_state(child)
         obs = observed_at(child) if observed_at else None
-        status = derive_status(state, observed_at=obs)
+        status = derive_status(state, now=now, observed_at=obs)
         counted.append(counted_as(status, settled_as(_settle_key(status, state), closed)))
 
         if len(child_details) < FLEET_MAX_CHILDREN_DETAIL:

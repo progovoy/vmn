@@ -72,21 +72,24 @@ def conf_schema_of(root):
     return lambda app: conf_schema(read_experiment_conf(app, root))
 
 
-def app_snapshot(storage, app_name, schema=None):
-    """An up-to-date index snapshot of *app_name* under the metrics *schema*."""
-    return indexed_snapshot(storage, app_name, wait=True, fallback=direct_snapshot, schema=schema)
+def app_snapshot(storage, app_name, schema=None, clock=None):
+    """An up-to-date index snapshot of *app_name* under the metrics *schema*;
+    *clock*: the index's (see :func:`~vmn_exp.core.index.shared_index`)."""
+    return indexed_snapshot(storage, app_name, wait=True, fallback=direct_snapshot, schema=schema,
+                            clock=clock)
 
 
-def app_scope(storage, app_name, schema=None, with_snapshot=False):
+def app_scope(storage, app_name, schema=None, with_snapshot=False, clock=None):
     """The :class:`~vmn_exp.core.similar_corpus.Scope` *app_name* is searched
     in (see the module docstring); *with_snapshot* reads its rows from a
-    refreshed snapshot (what a query filters)."""
+    refreshed snapshot (what a query filters). *clock*: the index's."""
     path = index_path(storage, app_name)
-    if path and not with_snapshot and _synced(storage, app_name):
+    if path and not with_snapshot and _synced(storage, app_name, clock):
         scope = file_scope(app_name, path, schema)
         if scope is not None:
             return scope
-    snapshot = app_snapshot(storage, app_name, schema)
+    snapshot = (app_snapshot(storage, app_name, schema) if clock is None
+                else app_snapshot(storage, app_name, schema, clock))
     scope = file_scope(app_name, path, schema, snapshot) if path else None
     return scope or snapshot_scope(app_name, snapshot, schema)
 
@@ -103,11 +106,11 @@ def _placement(storage, app_name, scope):
         return None
 
 
-def _synced(storage, app_name):
+def _synced(storage, app_name, clock=None):
     """Whether the persisted index now holds *app_name*'s runs as they are
     (:meth:`~vmn_exp.core.index.ExperimentIndex.sync`)."""
     try:
-        return shared_index(storage, app_name).sync()
+        return shared_index(storage, app_name, clock=clock).sync()
     except Exception:
         VMN_LOGGER.debug("Experiment index sync failed", exc_info=True)
         return False
@@ -148,7 +151,7 @@ def text_target(context):
 
 def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, query=None,
            all_apps=False, schema_of=None, weights=None, include_archived=False, deadline=None,
-           with_features=True):
+           with_features=True, clock=None):
     """The *top* runs most like *target*: :func:`item_payload` items, best first.
 
     *source* is *app_name*'s :class:`~vmn_exp.core.similar_corpus.Scope`
@@ -156,7 +159,9 @@ def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, q
     scopes (each labelling its results); with *all_apps* every
     other app of *storage* joins under ``schema_of(app)``. Raises
     ``QueryError`` on a bad *query*, ``SimilarDeadlineExceeded`` past a
-    *deadline* (:func:`~vmn_exp.core.similar.similar_runs_multi`).
+    *deadline* (:func:`~vmn_exp.core.similar.similar_runs_multi`), a
+    monotonic time on *clock* (a :class:`~vmn_exp.core.ports.Clock`, also the
+    indexes' and the query's statuses'; None: the modules' own clocks).
     """
     if isinstance(source, list):
         scopes = list(source)
@@ -165,16 +170,17 @@ def search(storage, app_name, source, target, *, schema=None, top=DEFAULT_TOP, q
                   else snapshot_scope(app_name, source, schema or {})]
     query = _query(query)
     if all_apps:
-        scopes += _other_scopes(storage, app_name, schema_of, bool(query))
-    keep = candidate_filter(scopes, query, include_archived)
+        scopes += _other_scopes(storage, app_name, schema_of, bool(query), clock)
+    keep = candidate_filter(scopes, query, include_archived, clock.now() if clock else None)
     items = similar_runs_multi(scopes, target, top=top, rows_filter=keep, weights=weights,
-                               deadline=deadline)
+                               deadline=deadline, monotonic=clock.monotonic if clock else None)
     rows_of = {scope.label: scope.rows for scope in scopes}
     for label, rows in rows_of.items():
         prefetch = getattr(rows, "prefetch", None)  # facts read for all shown at once
         if prefetch is not None:
             prefetch([item["row"] for item in items if item["app"] == label])
-    return [item_payload(item, rows_of[item["app"]], with_features) for item in items]
+    now = clock.now() if clock else None
+    return [item_payload(item, rows_of[item["app"]], with_features, now) for item in items]
 
 
 def _query(query):
@@ -182,7 +188,7 @@ def _query(query):
     return (query or "").strip() or None
 
 
-def _other_scopes(storage, app_name, schema_of, with_snapshot):
+def _other_scopes(storage, app_name, schema_of, with_snapshot, clock=None):
     """The other apps' scopes, in app order; their indexes are brought up to
     date side by side."""
     # Lazily: the thread pool's module stays off the SDK reader's import path.
@@ -190,15 +196,17 @@ def _other_scopes(storage, app_name, schema_of, with_snapshot):
 
     apps = [app for app in storage.list_apps() if app_key(app) != app_key(app_name)]
     schemas = [(schema_of(app) if schema_of else None) or {} for app in apps]
-    return parallel_map(lambda pair: app_scope(storage, *pair, with_snapshot=with_snapshot),
+    return parallel_map(lambda pair: app_scope(storage, *pair, with_snapshot=with_snapshot,
+                                               clock=clock),
                         list(zip(apps, schemas)))
 
 
-def candidate_filter(scopes, query, include_archived):
+def candidate_filter(scopes, query, include_archived, now=None):
     """A ``rows_filter(label, row)`` keeping archived rows only with
     *include_archived* and, with a *query*, the rows it matches — over
     status- and tree-annotated snapshot rows, like ``list --query`` (each
-    scope's rows then come from a snapshot); None when it keeps everything."""
+    scope's rows then come from a snapshot, their statuses as of *now*);
+    None when it keeps everything."""
     matched = None
     query = _query(query)
     if query:
@@ -206,7 +214,7 @@ def candidate_filter(scopes, query, include_archived):
         for scope in scopes:
             snap = scope.rows.snapshot if isinstance(scope.rows, SnapshotRows) else None
             rows = snap.rows if snap is not None else ()
-            matched[scope.label] = {r["verstr"] for r in _matching(scope, snap, rows, query)}
+            matched[scope.label] = {r["verstr"] for r in _matching(scope, snap, rows, query, now)}
     elif include_archived:
         return None
 
@@ -216,24 +224,24 @@ def candidate_filter(scopes, query, include_archived):
     return keep
 
 
-def _matching(scope, snap, rows, query):
+def _matching(scope, snap, rows, query, now=None):
     """*rows* of *snap* matching *query*, its ``similar()`` searching *scope*."""
-    annotated = annotate_rows(list(rows), snap.run_states, snap.run_state_observed_at)
+    annotated = annotate_rows(list(rows), snap.run_states, snap.run_state_observed_at, now)
     return filter_rows(annotated, query, extra=lean_extra(snap, lambda _: scope))
 
 
 def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, query=None,
          context=None, text_only=False, all_apps=False, schema_of=None, target=None,
-         include_archived=False):
+         include_archived=False, clock=None):
     """:func:`search` for run *ref* of *app_name* (the latest when None),
     or — *ref* None with *text_only* — for the *context* text alone, or for
     a ready *target* (the CLI's working tree), under the app's
     ``experiment`` conf *exp_conf* (schema, weights). ValueError for an
-    unknown ref or *text_only* without a *context*."""
+    unknown ref or *text_only* without a *context*. *clock*: see :func:`search`."""
     if text_only and not (context or "").strip():
         raise ValueError("A text-only search needs a context text")
     schema = conf_schema(exp_conf)
-    scope = app_scope(storage, app_name, schema, with_snapshot=bool(_query(query)))
+    scope = app_scope(storage, app_name, schema, with_snapshot=bool(_query(query)), clock=clock)
     if target is None and ref is None and text_only:
         target = text_target(context)
     elif target is None:
@@ -241,4 +249,4 @@ def find(storage, app_name, ref="latest", exp_conf=None, *, top=DEFAULT_TOP, que
                             text_only=text_only, placement=_placement(storage, app_name, scope))
     return search(storage, app_name, scope, target, schema=schema, top=top, query=query,
                   all_apps=all_apps, schema_of=schema_of, weights=conf_weights(exp_conf),
-                  include_archived=include_archived)
+                  include_archived=include_archived, clock=clock)

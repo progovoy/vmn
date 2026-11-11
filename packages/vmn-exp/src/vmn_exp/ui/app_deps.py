@@ -22,6 +22,10 @@ class ServerDeps:
     audit: Any  # AuditLog, or None without a control plane
     token_service: Any  # TokenService, or None without a control plane
     event_sleep: Any  # async sleep(sec) between a live-event stream's ticks
+    # The Clock run statuses are derived at and the indexes run on; None:
+    # their modules' own clocks, read at call time (what real_deps passes
+    # until plan 44 G11 Part B moves it onto io.clock).
+    status_clock: Any = None
 
 
 def real_deps(io, control_plane, background_refresh, read_only, keep_warm):

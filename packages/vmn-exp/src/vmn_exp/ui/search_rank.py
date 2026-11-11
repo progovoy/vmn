@@ -67,8 +67,9 @@ def _root(snapshot, verstr):
     return root
 
 
-def results(snapshot, hits):
-    """The route's payload rows for *hits* ``[(slot, field)]``."""
+def results(snapshot, hits, now=None):
+    """The route's payload rows for *hits* ``[(slot, field)]``, their
+    statuses as of *now*."""
     out = []
     for slot, field in hits:
         row = snapshot.rows[slot]
@@ -76,7 +77,7 @@ def results(snapshot, hits):
         root = _root(snapshot, verstr)
         out.append({
             "verstr": verstr, "idx": row.get("idx"), "name": row.get("name"),
-            "status": derive_status(snapshot.run_states.get(verstr),
+            "status": derive_status(snapshot.run_states.get(verstr), now=now,
                                     observed_at=snapshot.run_state_observed_at.get(verstr)),
             "root": root, "root_name": root and snapshot.row(root).get("name"),
             "match": field,

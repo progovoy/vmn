@@ -100,10 +100,11 @@ class _Apps:
     def index_for(self, app_name):
         return lineage_index(self.snapshot(app_name))
 
-    def status_of(self, app_name, verstr):
+    def status_of(self, app_name, verstr, now=None):
         snap = self.snapshot(app_name)
         return derive_status(
-            snap.run_states.get(verstr), observed_at=snap.run_state_observed_at.get(verstr)
+            snap.run_states.get(verstr), now=now,
+            observed_at=snap.run_state_observed_at.get(verstr),
         )
 
 

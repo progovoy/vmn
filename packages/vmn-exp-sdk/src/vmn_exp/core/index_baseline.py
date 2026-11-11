@@ -23,7 +23,6 @@ re-reads.
 """
 import zlib
 
-from vmn_exp.core import index_sweep
 
 FORMAT = "listing-baseline-2"
 # Small shards: a refresh that moved a few records spread over the app
@@ -73,7 +72,7 @@ class ListingBaseline:
         names = {key: e[0] for shard in shards for key, e in shard.items()}
         prints = {key: e[1] for shard in shards for key, e in shard.items() if e[1] is not None}
         sweep.watch.restore(names, prints)
-        sweep.restore_state(head["sweep"], names, now, index_sweep._wall())
+        sweep.restore_state(head["sweep"], names, now, sweep.wall())
         self._shards, self._head = shards, head
 
     def _shards_stored(self, count):
@@ -109,7 +108,7 @@ class ListingBaseline:
         dirty = self._apply(moved, names, prints, count)
         puts = [(f"{self._scope}:{i}", _tag(count), self._shards[i])
                 for i in (range(count) if rewrite else sorted(dirty))]
-        head = {"shards": count, "sweep": sweep.export_state(now, index_sweep._wall())}
+        head = {"shards": count, "sweep": sweep.export_state(now, sweep.wall())}
         if dirty or rewrite or head != self._head:  # an idle refresh writes nothing
             puts.append((self._scope, FORMAT, head))  # last: it vouches for the shards
             self._head = head

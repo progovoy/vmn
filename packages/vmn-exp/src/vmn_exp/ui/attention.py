@@ -33,21 +33,23 @@ def queries_of(entries):
     return tuple(AttentionQuery(e["key"], e["query"], e["level"]) for e in entries)
 
 
-def pinned(query):
-    """*query* with its ``ago()`` pinned to the current minute."""
-    now = experiment_status._now().replace(second=0, microsecond=0)
+def pinned(query, now=None):
+    """*query* with its ``ago()`` pinned to *now*'s minute (None:
+    :func:`~vmn_exp.core.status._now`'s)."""
+    now = (now or experiment_status._now()).replace(second=0, microsecond=0)
     return pin_ago(query, now=now)
 
 
-def attention_key(entries):
+def attention_key(entries, now=None):
     """*entries* as the caches key them: each query pinned (as given when it
-    does not compile), so an ``ago()`` one moves with the minute."""
-    return [(e["key"], e["label"], e["level"], _pinned_or_raw(e["query"])) for e in entries]
+    does not compile) to *now*, so an ``ago()`` one moves with the minute."""
+    return [(e["key"], e["label"], e["level"], _pinned_or_raw(e["query"], now))
+            for e in entries]
 
 
-def _pinned_or_raw(query):
+def _pinned_or_raw(query, now=None):
     try:
-        return pinned(query)
+        return pinned(query, now)
     except QueryError:
         return query
 
@@ -72,7 +74,8 @@ def attention_payload(cache, snapshot, schema, entries, scope=None):
 def _count(cache, snapshot, schema, entry, scope):
     if is_built_in(entry["key"]):
         return built_in_count(cache, snapshot, entry["key"], scope)
-    return len(cache.ordered(snapshot, schema, query=pinned(entry["query"]), scope=scope))
+    return len(cache.ordered(snapshot, schema, query=pinned(entry["query"], cache.now()),
+                             scope=scope))
 
 
 def severity(summary, counts, queries):
@@ -94,9 +97,10 @@ def with_attention(summary, counts, queries):
     return dict(summary, **extra)
 
 
-def pinned_texts(queries):
-    """Each of *queries*' text pinned (as given when it does not compile)."""
-    return tuple(_pinned_or_raw(q.query) for q in queries)
+def pinned_texts(queries, now=None):
+    """Each of *queries*' text pinned to *now* (as given when it does not
+    compile)."""
+    return tuple(_pinned_or_raw(q.query, now) for q in queries)
 
 
 class AttentionCounts:
@@ -116,7 +120,7 @@ class AttentionCounts:
         ``attention_rank`` (:func:`severity`)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        key = (base.token, bucket, minute(), cache.schema_key(schema),
+        key = (base.token, bucket, minute(cache.now()), cache.schema_key(schema),
                cache.jobs.progress_names(snapshot), queries)
         return self._summaries.get(key, lambda: self._merged(snapshot, schema, queries))
 
@@ -131,7 +135,7 @@ class AttentionCounts:
         """``{top-level verstr: {key: n}}``: each query's matching runs per tree."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        texts = pinned_texts(queries)
+        texts = pinned_texts(queries, cache.now())
         key = (base.token, bucket, cache.schema_key(schema), texts)
         return self._by_root.get(key, lambda: self._per_root(base, snapshot, schema, queries))
 
@@ -145,7 +149,7 @@ class AttentionCounts:
         time bucket and pinned query texts (the tree counts nodes from it too)."""
         cache = self._cache
         base, bucket = cache._base(snapshot)
-        texts = pinned_texts(queries)
+        texts = pinned_texts(queries, cache.now())
         key = (base.token, bucket, cache.schema_key(schema), texts)
         return self._matches.get(key, lambda: self._grouped(snapshot, schema, queries, texts))
 

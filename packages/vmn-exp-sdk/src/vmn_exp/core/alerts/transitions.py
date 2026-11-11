@@ -121,26 +121,28 @@ def alert_transition(storage, app_name, verstr, run_state, status, alerter,
     return True
 
 
-def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None):
+def alert_if_failed(storage, app_name, verstr, run_state, alerter, run_name=None, now=None):
     """The run just finished: alert when it failed and ``failed`` is opted in."""
     if not run_state or not alerter.wants(FAILED):
         return False
-    if derive_status(run_state) != FAILED:
+    if derive_status(run_state, now=now) != FAILED:
         return False
-    return alert_transition(storage, app_name, verstr, run_state, FAILED, alerter, run_name)
+    return alert_transition(storage, app_name, verstr, run_state, FAILED, alerter, run_name,
+                            now)
 
 
-def watch_app(storage, app_name, alerter, within_sec, now=None):
+def watch_app(storage, app_name, alerter, within_sec, now=None, clock=None):
     """Alert every run of *app_name* that went failed/stuck in the last
     *within_sec* seconds and has not alerted it yet. ``[(verstr, status)]``.
 
     Statuses come from the app's index snapshot; only the candidates' alert
-    markers are read."""
+    markers are read. *clock* (a :class:`~vmn_exp.core.ports.Clock`): the
+    index's, and *now* when none is given."""
     wanted = {s for s in (FAILED, STUCK) if alerter.wants(s)}
     if not wanted:
         return []
-    now = _now(now)
-    snap = _experiment_index().indexed_snapshot(storage, app_name, wait=True)
+    now = _now(now or (clock.now() if clock else None))
+    snap = _experiment_index().indexed_snapshot(storage, app_name, wait=True, clock=clock)
     fired = []
     for verstr, run_state, status in _candidates(snap, wanted, within_sec, now):
         name = (snap.row(verstr) or {}).get("name")

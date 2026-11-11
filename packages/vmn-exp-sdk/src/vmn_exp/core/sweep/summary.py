@@ -22,24 +22,26 @@ RETRYABLE = (FAILED, STUCK)
 _CHILDREN = weakref.WeakKeyDictionary()  # IndexSnapshot -> {parent: [child]}
 
 
-def trial_rows(storage, app_name, sweep_verstr, spec, wait=True, max_age_sec=0):
+def trial_rows(storage, app_name, sweep_verstr, spec, wait=True, max_age_sec=0, clock=None):
     """Every run of the sweep (retries included), status-annotated, with the
     target metric attributed (see :func:`attribute_metric`). *wait*: refresh
     the app's index first; False takes the current snapshot, refreshed first
-    only when older than a positive *max_age_sec*."""
+    only when older than a positive *max_age_sec*. *clock* (a
+    :class:`~vmn_exp.core.ports.Clock`): the index's and the statuses'."""
     snap = experiment_index.indexed_snapshot(
-        storage, app_name, max_age_sec=max_age_sec, wait=wait
+        storage, app_name, max_age_sec=max_age_sec, wait=wait, clock=clock
     )
-    return snapshot_trials(spec, sweep_verstr, snap)
+    return snapshot_trials(spec, sweep_verstr, snap, clock.now() if clock else None)
 
 
-def snapshot_trials(spec, sweep_verstr, snap):
-    """:func:`trial_rows` off an index snapshot. Only the sweep's subtree is
-    copied and annotated; the snapshot's parent map is built once per snapshot."""
+def snapshot_trials(spec, sweep_verstr, snap, now=None):
+    """:func:`trial_rows` off an index snapshot, statuses as of *now*. Only
+    the sweep's subtree is copied and annotated; the snapshot's parent map is
+    built once per snapshot."""
     members = (snap.row(v) for v in subtree_verstrs(sweep_verstr, snapshot_children(snap)))
     annotated = annotate_rows(
         [row for row in members if row is not None],
-        snap.run_states, snap.run_state_observed_at,
+        snap.run_states, snap.run_state_observed_at, now,
     )
     trials = [r for r in annotated if r.get("parent") == sweep_verstr]
     return attribute_metric(spec, trials, annotated)

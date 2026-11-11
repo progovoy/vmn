@@ -17,9 +17,9 @@ ORIGINS = ("parent", "forked_from", "rerun_of")
 _GLOB = frozenset("*?[")
 
 
-def status_of(snapshot, verstr):
+def status_of(snapshot, verstr, now=None):
     return derive_status(
-        snapshot.run_states.get(verstr),
+        snapshot.run_states.get(verstr), now=now,
         observed_at=snapshot.run_state_observed_at.get(verstr),
     )
 

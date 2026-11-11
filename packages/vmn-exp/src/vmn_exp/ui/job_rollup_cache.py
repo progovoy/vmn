@@ -30,10 +30,11 @@ LATEST_SPLITS = 8
 ANSWERS = 256
 
 
-def minute():
+def minute(now=None):
     """The clock job answers follow besides the live bucket: throughput and
-    ETA count completions per minute back from now."""
-    return int(experiment_status._now().timestamp() // 60)
+    ETA count completions per minute back from *now* (None:
+    :func:`~vmn_exp.core.status._now`)."""
+    return int((now or experiment_status._now()).timestamp() // 60)
 
 
 def _payload(job, parts, spec, now, idx_of):
@@ -80,7 +81,7 @@ class JobRollupCache:
         found = self._rolled_up(snapshot, schema, verstr, _status_summary)
         if found is None:
             check_scope(self._cache._base(snapshot)[0], verstr)
-            found = tallied_summary((), experiment_status._now())
+            found = tallied_summary((), self._cache.now())
         return found
 
     def split_rollup(self, snapshot, field, verstr):
@@ -132,7 +133,7 @@ class JobRollupCache:
         base, bucket = cache._base(snapshot)
         if verstr is not None and verstr not in self.tree(base).jobs:
             return None
-        key = (base.token, bucket, minute(), cache.schema_key(schema),
+        key = (base.token, bucket, minute(cache.now()), cache.schema_key(schema),
                self.progress_names(snapshot), verstr, kind)
         return self._answers.get(key, build)
 
@@ -156,7 +157,7 @@ class JobRollupCache:
 
     def _compute(self, snapshot, schema, verstr, answer):
         base, tree, spec, parts = self.parts(snapshot, schema)
-        now = experiment_status._now()
+        now = self._cache.now()
 
         def row(job):
             return base.rows[base.position[job]]
