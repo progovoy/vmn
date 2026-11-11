@@ -348,8 +348,9 @@ Full layout: [experiments.md](experiments.md).
 
 `vmn-exp ui` folds every run into one row (params, metric summaries, tags,
 status) and keeps those rows in an index cache, so the leaderboard answers
-from memory even at 100k runs. Logs, series, artifacts and code are read from
-the store on demand. The cache can be deleted at any time and is rebuilt
+from memory; measured sizes and their memory cost are in
+[ui.md](ui.md#large-stores-run-the-ui-on-free-threaded-python). Logs, series,
+artifacts and code are read from the store on demand. The cache can be deleted at any time and is rebuilt
 from the store.
 
 ```mermaid

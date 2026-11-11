@@ -17,7 +17,7 @@ backed by a database, with artifacts in blob storage.
 *snapshot* plus an append-only log: vmn captures the exact working tree the run
 executed against — committed or not — assigns it a deterministic version string,
 and records metrics against that. No server or database is required
-([server.md](server.md) is an optional cache); storage is files, locally or in S3. `vmn-exp ui` is a reader you start when you want to look at
+([server.md](server.md) is an optional cache); storage is files, locally or in an object store (S3, GCS, Azure). `vmn-exp ui` is a reader you start when you want to look at
 them.
 
 That difference in origin explains most of what follows. vmn is stronger on
@@ -32,7 +32,7 @@ stronger on everything downstream of a finished run.
 | --- | --- | --- |
 | Params / metrics / notes / artifacts | Yes | Yes |
 | Per-step metric series + charts | Yes | Yes |
-| Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`) | Broader (incl. spark, statsmodels, prophet, LLM libs) |
+| Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`) | Broader (incl. lightgbm, spark, statsmodels, paddle, LLM libs) |
 | Optuna / Ray Tune integration | `start_study_run` + `StudyTracker`; `TuneRecorder` + `VmnTuneCallback` (driver-side) — see `vmn_exp.integrations.*` | Optuna/Ray callbacks available |
 | System metrics (CPU/mem/GPU) | Yes, on by default, sampled on the heartbeat (GPU with `pynvml`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
@@ -44,16 +44,16 @@ stronger on everything downstream of a finished run.
 | Source diff between two runs | `vmn-exp diff` / the Compare page | Not possible — the diff was never stored |
 | Import from MLflow | **`vmn-exp import-mlflow`** — FileStore (no deps) or tracking server (`mlflow-skinny`) | — |
 | Multi-repo / dependency versions | Built-in (`deps` in conf.yml, `vmn goto`) | Not available |
-| Backing store | Files: local filesystem, S3, GCS or Azure Blob | DB-backed tracking server (a local file store exists, but not for teams) |
-| Server required | No — `vmn-exp ui` is optional and read-mostly | Yes, for any real deployment |
+| Backing store | Files: local filesystem, S3, GCS or Azure Blob | A database (SQLite by default; MySQL, PostgreSQL, SQL Server) behind a tracking server for shared use; the local file store is in maintenance mode |
+| Server required | No — `vmn-exp ui` is optional and read-mostly | Tracking server + database for shared use; a local store for one user |
 | Remote logging over HTTP | **No** — clients write to the store directly; nodes without access record offline and `vmn-exp push` later | Yes, the tracking server's REST API |
-| Multi-user / permissions | Standalone: one bearer token, all-or-nothing. Configured server: OIDC sign-in, API tokens, per-workspace `viewer`/`editor`/`admin` roles ([server.md](server.md#roles)) | Users, experiment permissions, auth plugins |
+| Multi-user / permissions | Standalone: one bearer token, all-or-nothing. Configured server: OIDC sign-in, API tokens, per-workspace `viewer`/`editor`/`admin` roles ([server.md](server.md#roles)) | Built-in basic auth: users, roles, per-experiment and per-model permissions; auth plugins |
 | Model registry (versions, aliases, deprecation) | **Yes** — `vmn-exp model register\|alias\|list\|show\|…`; SDK `register_model`/`set_alias`/`download_model`; UI Models page — see [models.md](models.md) | Yes — a core feature; also has stages approval workflow |
 | Model serving / packaging | **Absent** | `mlflow models serve`, pyfunc flavors, SageMaker/Docker targets |
 | Artifact rendering in the UI | Logged images, tables and histograms inline; other artifacts download | Inline images, plots, tables, HTML |
 | `evaluate()`, LLM/prompt tracing, Projects | **Absent** | Yes |
-| Plugin ecosystem | None | Extensive |
-| Scale | Cached SQLite index; the UI stays fast at ~100k runs per app | DB-backed; scales with the database |
+| Plugin ecosystem | Storage backends through the `vmn_exp.storage` entry point ([experiments.md](experiments.md#storage-backends-plugins)); no wider ecosystem | Extensive: tracking, artifact and registry stores, auth, deployment, evaluation |
+| Scale | Cached SQLite index; measured at 100k runs and on one 737k-run store, at a memory cost that grows with the store ([ui.md](ui.md#large-stores-run-the-ui-on-free-threaded-python)) | DB-backed; scales with the database |
 
 ---
 
@@ -165,10 +165,11 @@ download link. MLflow renders images, plots, tables and HTML artifacts inline.
 
 ### Scale, and breadth of integrations
 
-vmn's cached index keeps dashboard reads in milliseconds at ~100k runs per app,
-but it is not a database, and we have not tested at the run counts a DB-backed
-MLflow serves. MLflow also autologs more frameworks and has a real plugin
-ecosystem.
+vmn's cached index is not a database: it holds every run's row in the UI's
+memory, so the cost grows with the store. The measured sizes, page times and
+memory (a 100k-run load harness and one 737k-run S3 store) are in
+[ui.md](ui.md#large-stores-run-the-ui-on-free-threaded-python). MLflow also
+autologs more frameworks and has a wider plugin ecosystem.
 
 ---
 
@@ -208,3 +209,13 @@ and the differences to know before porting a script.
 - [Migrating from MLflow](migrating-from-mlflow.md)
 - [vmn-exp ui](ui.md)
 - [MLflow documentation](https://mlflow.org/docs/latest/index.html)
+
+## Sources
+
+The MLflow column was checked against MLflow 3.18.0's documentation on
+2026-11-11:
+
+- [Backend stores](https://mlflow.org/docs/latest/self-hosting/architecture/backend-store/): SQLite by default, SQL databases through SQLAlchemy, the file store in maintenance mode.
+- [Authentication](https://mlflow.org/docs/latest/self-hosting/security/basic-http-auth/): users, roles and per-resource permissions.
+- [Plugins](https://mlflow.org/docs/latest/ml/plugins/): store, auth, deployment and evaluation plugin types.
+- [Autologging](https://mlflow.org/docs/latest/ml/tracking/autolog/): the supported libraries.

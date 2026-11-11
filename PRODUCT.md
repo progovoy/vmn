@@ -27,7 +27,7 @@ Every run is a reproducible snapshot of your code in plain git tags and files yo
 
 - Started with `vmn-exp ui` (default `127.0.0.1:8265`, opens a browser) from inside a checkout, or with `--repo`/`--store`/`--config` from anywhere. A workspace is either a git checkout or a read-only store URI.
 - Users move between the dashboard and the terminal: `vmn-exp run/list/show/compare/restore/rerun`, `vmn goto`, and the SDK in training scripts. UI mutations run as real `vmn`/`vmn-exp` subprocesses.
-- Watched apps can be large: the UI is built to stay fast at ~100k runs (paged, server-sorted lists, ETag/304, downsampled series).
+- Watched apps can be large: measured at 100k runs in the load harness and on one 737k-run store (docs/vmn-exp/ui.md), at a memory cost that grows with the store (paged, server-sorted lists, ETag/304, downsampled series).
 - Live runs heartbeat while users watch. Status (`created`/`running`/`stuck`/`succeeded`/`failed`) is derived, never stored.
 - Read-only deployments (`--read-only`, store workspaces) are normal, so many views have no edit affordances.
 
@@ -55,7 +55,7 @@ Every run is a reproducible snapshot of your code in plain git tags and files yo
 1. **Storage is the truth.** Everything the UI shows comes from files the user owns, and every cache is disposable. Never design a view that implies data lives in the server.
 2. **Every number traces to code.** A metric, curve or model on screen should lead back to the run, its code diff, and the way to restore or rerun it.
 3. **Solo first, team-ready.** Team features (sharing, reports, roles) layer on the local dashboard without adding setup or friction for one person on localhost.
-4. **Scale is the normal case.** Thousands to 100k runs and live fleets of jobs are expected, so views must stay scannable and fast at that size.
+4. **Scale is the normal case.** Thousands to hundreds of thousands of runs and live fleets of jobs are expected, so views must stay scannable and fast at that size.
 5. **Same words as the CLI.** The UI is another window onto the CLI's model and must never rename or hide its concepts.
 
 ## Accessibility & Inclusion
