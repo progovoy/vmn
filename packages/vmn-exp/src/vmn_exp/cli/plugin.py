@@ -184,7 +184,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                            "VMN_EXP_HEARTBEAT_SEC, else conf heartbeat_interval_sec, else 30).")
     pexp.add_argument("--kill-grace-sec", type=float, default=None,
                       help="Seconds a child gets to exit after a forwarded signal "
-                           "before it is killed during 'run'.")
+                           "before it is killed during 'run' (default: "
+                           "VMN_EXP_KILL_GRACE_SEC, else 15).")
     pexp.add_argument("--no-capture-output", dest="capture_output", action="store_false",
                       default=True,
                       help="run: don't keep the command's stdout/stderr as the output.log "

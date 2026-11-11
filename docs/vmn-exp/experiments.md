@@ -305,8 +305,13 @@ after the resumer read the state wins.
 ### Preemption and signals
 
 `SIGTERM` (Slurm `scancel`, Kubernetes eviction, spot reclaim), `SIGINT` and
-`SIGHUP` to `vmn-exp run` are forwarded to the command, which gets
-`--kill-grace-sec` (> `$VMN_EXP_KILL_GRACE_SEC` > 30) to exit before SIGKILL.
+`SIGHUP` to `vmn-exp run` are forwarded to the command, which gets 15 s to
+exit before SIGKILL; the final uploads then get what is left of 25 s from the
+signal, so the whole ending fits a pod's default 30 s grace period
+(`terminationGracePeriodSeconds`). An explicit `--kill-grace-sec`
+(> `$VMN_EXP_KILL_GRACE_SEC`) replaces the 15 s, and the uploads then get 10 s
+after it: give the pod at least that grace plus 15 s. A stop vmn requests
+itself (a sweep's early stop) waits `--kill-grace-sec` or 30 s.
 A second signal kills it at once; a Ctrl-C the terminal already delivered to
 the command is not re-sent. The final state is **always** written, so a
 preempted run reads `failed`, never `stuck`:
@@ -321,7 +326,16 @@ received_signal: SIGTERM  # present when vmn itself was signalled
 A command that traps SIGTERM and exits 0 keeps its exit code. Only a SIGKILL
 of `vmn-exp run` itself leaves a run claiming `running` (it then derives
 `stuck`). Failing heartbeat writes, bad metric lines or hung syncs never end
-supervision: vmn warns and keeps watching.
+supervision: vmn warns and keeps watching. With a remote store the run state
+is written locally on every beat and uploaded by a background worker, so the
+remote copy of a heartbeat may lag the local one by one upload, and a hung
+upload never stalls metric ingestion or the kill of a command past its grace.
+The final log sync and the final state's upload are retried, without a signal
+for up to 60 s in all; one that did not land is a warning
+(`Experiment run: the final log sync was not uploaded: <reason>`,
+`Experiment <run>: the final run state was not uploaded: <reason>`), which in
+a checkout ends with ``run `vmn-exp push` to upload it``
+([push](#offline-recording-and-push)).
 
 When the command fails (non-zero exit, not a sweep's `stopped`) and its
 output is captured, the final state also records `error`, parsed from
@@ -588,7 +602,7 @@ Takes every `create` flag except `--metrics`, plus:
 | Flag | Default | Description |
 |---|---|---|
 | `--heartbeat-interval <sec>` | `$VMN_EXP_HEARTBEAT_SEC`, conf `heartbeat_interval_sec`, `30` | heartbeat period ([status](#run-status-did-my-job-die)) |
-| `--kill-grace-sec <sec>` | `$VMN_EXP_KILL_GRACE_SEC` or `30` | time a [signalled](#preemption-and-signals) command gets before SIGKILL |
+| `--kill-grace-sec <sec>` | `$VMN_EXP_KILL_GRACE_SEC`, or `15` after a signal and `30` after a sweep's stop | time a [signalled](#preemption-and-signals) command gets before SIGKILL |
 | `--sync-interval <sec>` | `$VMN_EXP_SYNC_SEC`, conf `sync_interval_sec`, `30` | remote sync period for the log and `output.log` (`0` disables periodic sync) |
 | `--output-cap-mb <mb>` | `$VMN_EXP_OUTPUT_CAP_MB` or `10` | [`output.log`](#console-output-outputlog) cap |
 | `--no-capture-output` | capture on | don't keep `output.log`; the command inherits the terminal |

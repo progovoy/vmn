@@ -3,6 +3,7 @@
 """
 import argparse
 import os
+import threading
 
 import pytest
 from exp_helpers import _PY, _bootstrap, _exec_script, _exp, _storage
@@ -138,7 +139,7 @@ def test_supervision_cwd_param_overrides_child_cwd(app_layout, tmp_path):
     probe = "import os; open('where.txt', 'w').write(os.getcwd())"
 
     sup = _Supervision(storage, app_layout.app_name, verstr, args,
-                       cwd=str(child_dir), root=str(root))
+                       cwd=str(child_dir), root=str(root), wait=threading.Event().wait)
     assert sup.run([_PY, "-c", probe]) == 0
 
     where = (child_dir / "where.txt").read_text()
@@ -152,7 +153,8 @@ def test_supervision_without_root_records_null_cwd(app_layout):
     from vmn_exp.cli.run import _Supervision
 
     storage, verstr, args = _created_run(app_layout)
-    assert _Supervision(storage, app_layout.app_name, verstr, args).run([_PY, "-c", "0"]) == 0
+    assert _Supervision(storage, app_layout.app_name, verstr, args,
+                        wait=threading.Event().wait).run([_PY, "-c", "0"]) == 0
     assert load_run_state(storage, app_layout.app_name, verstr)["cwd"] is None
 
 
@@ -163,7 +165,8 @@ def test_supervision_extra_env_none_removes_the_variable(app_layout, tmp_path, m
     monkeypatch.setenv("VMN_RESUME_RUN_ID", "stale")
     probe = "import os; open('env.txt', 'w').write(repr(os.environ.get('VMN_RESUME_RUN_ID')))"
     sup = _Supervision(storage, app_layout.app_name, verstr, args,
-                       extra_env={"VMN_RESUME_RUN_ID": None}, cwd=str(tmp_path))
+                       extra_env={"VMN_RESUME_RUN_ID": None}, cwd=str(tmp_path),
+                       wait=threading.Event().wait)
     assert sup.run([_PY, "-c", probe]) == 0
     assert (tmp_path / "env.txt").read_text() == "None"
 

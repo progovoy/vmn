@@ -4,6 +4,7 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
+from supervisor_fakes import FakeWait
 
 from vmn_exp.cli import supervisor
 from vmn_exp.cli.supervisor import BackgroundSync
@@ -95,3 +96,73 @@ def test_a_slow_final_sync_times_out(logger):
     assert sync.calls == 1
     assert _warnings(logger) == ["Experiment run: final sync timed out after 0.2s"]
     sync.release.set()
+
+
+# -- the final sync is retried within its budget (plan 40 C15) ------------------
+
+
+class _FailingSync:
+    def __init__(self, failures):
+        self.failures = failures
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+        if self.failures:
+            self.failures -= 1
+            raise OSError("bucket down")
+
+
+def test_a_final_sync_that_fails_once_is_retried_and_lands(logger):
+    final_sync = _FailingSync(failures=1)
+    wait = FakeWait()
+    worker = BackgroundSync(_Sync(), final_sync, wait)
+
+    assert worker.final(5) is True
+
+    assert final_sync.calls == 2
+    assert wait.delays == [0.5]
+    assert _warnings(logger) == []
+
+
+def test_final_reports_a_sync_that_never_landed_with_its_error(logger):
+    final_sync = _FailingSync(failures=100)
+    worker = BackgroundSync(_Sync(), final_sync, FakeWait(abandon_at=3))
+
+    assert worker.final(5) is False
+
+    assert final_sync.calls == 3
+    assert _warnings(logger) == [
+        "Experiment run: the final log sync was not uploaded: bucket down"
+    ]
+
+
+def test_final_returns_true_when_the_final_sync_landed(logger):
+    periodic = _Sync()
+    final_sync = _FailingSync(failures=0)
+    worker = BackgroundSync(periodic, final_sync, FakeWait())
+
+    assert worker.final(5) is True
+
+    assert (periodic.calls, final_sync.calls) == (0, 1)
+
+
+def test_a_failing_periodic_sync_is_not_retried_in_place(logger):
+    periodic = _FailingSync(failures=100)
+    wait = FakeWait()
+    worker = BackgroundSync(lambda: _swallow(periodic), _FailingSync(0), wait)
+
+    worker.request()
+    assert _wait_for(lambda: periodic.calls == 1)
+    worker.final(5)
+
+    assert periodic.calls == 1
+    assert wait.delays == []
+
+
+def _swallow(sync):
+    """What the supervisor's guard does with a failing periodic sync."""
+    try:
+        sync()
+    except OSError:
+        pass

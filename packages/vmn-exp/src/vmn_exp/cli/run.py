@@ -11,6 +11,7 @@ import os
 import socket
 import subprocess
 import tempfile
+import threading
 import time
 
 from vmn_exp.cli import fork
@@ -24,6 +25,13 @@ from vmn_exp.cli.supervisor import (
     shell_exit_code,
     signal_name,
     supervision_guard,
+)
+from vmn_exp.cli.supervisor_state import (
+    SIGNAL_CHILD_GRACE_SEC,
+    StateUploads,
+    final_upload_deadline,
+    finish_uploads,
+    not_uploaded_warning,
 )
 from vmn_exp.core.alerts import Alerter, alert_if_failed, load_alert_config
 from vmn_exp.core.app_conf import experiment_conf
@@ -39,7 +47,6 @@ from vmn_exp.core.writer import (
     append_to_log,
     create_log_entry,
     own_stream,
-    save_run_state,
     sync_to_remote,
 )
 from version_stamp.api import VMN_LOGGER, measure_runtime_decorator, now_iso
@@ -127,16 +134,22 @@ def _child_cwd():
     return os.environ.get("VMN_WORKING_DIR") or os.getcwd()
 
 
-def _kill_grace_sec(args):
-    """Seconds a signalled child gets to exit before it is killed."""
+def _kill_graces(args, env):
+    """Seconds a child gets to exit before it is killed: ``(after a stop the
+    supervisor requests, after a signal it received)``. An explicit
+    ``--kill-grace-sec`` or *env*'s ``VMN_EXP_KILL_GRACE_SEC`` sets both;
+    by default a signal leaves the child less, so that it and the final
+    uploads fit the signal budget."""
     value = getattr(args, "kill_grace_sec", None)
     if value is None:
-        value = os.environ.get(KILL_GRACE_ENV)
+        value = env.get(KILL_GRACE_ENV)
     try:
-        return max(0.0, float(value)) if value is not None else DEFAULT_KILL_GRACE_SEC
+        if value is not None:
+            grace = max(0.0, float(value))
+            return grace, grace
     except ValueError:
         VMN_LOGGER.warning(f"Ignoring invalid {KILL_GRACE_ENV}={value!r}")
-        return DEFAULT_KILL_GRACE_SEC
+    return DEFAULT_KILL_GRACE_SEC, SIGNAL_CHILD_GRACE_SEC
 
 
 def _detect_python_exe(run_cmd):
@@ -262,7 +275,7 @@ def run_supervision(storage, app_name, verstr, args, exp_conf, root, env):
     """The supervision of ``vmn-exp run``: it offers the run to its child
     unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in *env* turn that off."""
     return _Supervision(storage, app_name, verstr, args, exp_conf, root=root,
-                        adopt=adopt_requested(args, env))
+                        adopt=adopt_requested(args, env), wait=threading.Event().wait)
 
 
 class _Supervision:
@@ -273,11 +286,13 @@ class _Supervision:
     *extra_env* is applied last; a None value removes the variable.
     *state_extra* adds fields to ``run_state.yml``.
     *adopt* offers the run to the direct child (``supervised_env``).
+    *wait(delay)* is the pause between retries of the final uploads
+    (``threading.Event().wait``); it reports whether they were abandoned.
     """
 
     def __init__(self, storage, app_name, verstr, args, exp_conf=None,
                  extra_env=None, on_tick=None, cwd=None, root=None, state_extra=None,
-                 *, adopt=False):
+                 *, adopt=False, wait):
         self.storage = storage
         self.adopt = adopt
         self.state_extra = state_extra or {}
@@ -292,8 +307,10 @@ class _Supervision:
         self.verstr = verstr
         self.args = args
         self.guard = supervision_guard()
-        self.sync = BackgroundSync(self._sync_once)
-        self.forwarder = SignalForwarder(_kill_grace_sec(args))
+        self.wait = wait
+        self.sync = BackgroundSync(self._sync_once, self._sync_final, wait)
+        self.state_uploads = StateUploads(storage, app_name, verstr, wait, self.guard)
+        self.forwarder = SignalForwarder(*_kill_graces(args, os.environ))
         self.output = output_artifact(storage, app_name, verstr, args)
         self.tee = None
 
@@ -372,6 +389,7 @@ class _Supervision:
             **self.state_extra,
         }
         self._publish("run state")
+        self._defer_ships()
 
         from vmn_exp.sdk import sysmetrics  # exp's __init__ imports the CLI
 
@@ -421,7 +439,7 @@ class _Supervision:
         self.forwarder.enforce_grace()
         try:
             proc.terminate()
-            proc.wait(timeout=_kill_grace_sec(self.args))
+            proc.wait(timeout=self.forwarder.grace_sec)
         except (OSError, subprocess.TimeoutExpired):
             proc.kill()
         proc.wait()
@@ -430,7 +448,8 @@ class _Supervision:
         """Record how the run ended; every step is best-effort but attempted."""
         returncode = proc.returncode
         exit_code = shell_exit_code(returncode)
-        duration = round(time.monotonic() - self.start, 3)
+        ended = time.monotonic()
+        duration = round(ended - self.start, 3)
         self.guard("metrics ingestion", self._ingest_new)
         self._record_output()
 
@@ -451,6 +470,10 @@ class _Supervision:
             if error:
                 final["error"] = error
         self._publish_final(final)
+        deadline = final_upload_deadline(
+            ended, _FINAL_SYNC_TIMEOUT_SEC,
+            self.forwarder.signalled_at, self.forwarder.signal_grace_sec,
+        )
 
         self.guard(
             "run log entry",
@@ -462,10 +485,14 @@ class _Supervision:
                 "run", command=run_cmd, exit_code=exit_code, duration_sec=duration
             ),
         )
-        self.sync.final(_FINAL_SYNC_TIMEOUT_SEC)
+        # A request after this would be a periodic sync replacing the final one.
+        self._undefer_ships()
+        self._finish_uploads(deadline)
+        if self.forwarder.signalled_at is None:
+            deadline = time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC
         self.guard("metric compaction", compact_by, self.storage, self.app_name,
                    self.verstr, own_stream(self.storage, self.app_name, self.verstr),
-                   time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC)
+                   deadline)
         self.guard("failure alert", self._alert_if_failed)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
@@ -493,33 +520,43 @@ class _Supervision:
         )
 
     def _publish(self, what, **updates):
-        self.guard(
-            what,
-            save_run_state,
-            self.storage,
-            self.app_name,
-            self.verstr,
-            self.run_state,
-            **updates,
-        )
+        self.run_state.update(updates)
+        self.guard(what, self.state_uploads.publish, self.run_state)
 
     def _publish_final(self, final):
         """The final state is what separates ``failed`` from ``stuck``: retry it."""
         if not hasattr(self, "run_state"):
             return  # the child never got as far as a published run
+        self.run_state.update(final)
         for attempt in range(_FINAL_STATE_ATTEMPTS):
             try:
-                save_run_state(
-                    self.storage, self.app_name, self.verstr, self.run_state, **final
-                )
+                self.state_uploads.publish(self.run_state, final=True)
                 return
             except Exception:
                 VMN_LOGGER.debug("Final run state write failed", exc_info=True)
                 if attempt + 1 < _FINAL_STATE_ATTEMPTS:
-                    time.sleep(1)
+                    self.wait(1)
         VMN_LOGGER.warning(
             f"Experiment {self.verstr}: could not record the final run state"
         )
+
+    def _finish_uploads(self, deadline):
+        """The final log sync, then the final state's upload, by *deadline*."""
+        if not finish_uploads(self.sync, self.state_uploads, deadline, time.monotonic):
+            VMN_LOGGER.warning(not_uploaded_warning(
+                self.verstr, self.state_uploads.last_error, self.storage))
+
+    def _defer_ships(self):
+        """Due ships of a direct-to-bucket log buffer become requests to the
+        sync worker, never uploads on the supervise loop."""
+        defer = getattr(self.storage, "defer_ships", None)
+        if defer is not None:
+            defer(self.app_name, self.verstr, self.sync.request)
+
+    def _undefer_ships(self):
+        undefer = getattr(self.storage, "undefer_ships", None)
+        if undefer is not None:
+            undefer(self.app_name, self.verstr)
 
     def _alert_if_failed(self):
         alerter = Alerter(load_alert_config(self.app_name, self.exp_conf))
@@ -546,3 +583,10 @@ class _Supervision:
         )
         if self.output is not None:
             self.guard("output log upload", self.output.upload)
+
+    def _sync_final(self):
+        """The last sync, unguarded: a failure reaches the final retry. Both
+        steps resume from what the remote holds, so a retry repeats nothing."""
+        sync_to_remote(self.storage, self.app_name, self.verstr)
+        if self.output is not None:
+            self.output.upload()

@@ -381,3 +381,9 @@ def local_side(storage):
     if isinstance(storage, CachedSnapshotStorage):
         return storage._local
     return None if getattr(storage, "is_remote", lambda: False)() else storage
+
+
+def is_log_buffer(storage):
+    """Whether *storage*'s local side is a direct-to-bucket log buffer: it
+    holds what this process appended, not a replica of the record."""
+    return isinstance(storage, CachedSnapshotStorage) and not storage._local_is_replica

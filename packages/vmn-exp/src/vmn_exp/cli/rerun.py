@@ -10,6 +10,7 @@ Nothing is created when the run can't be rerun faithfully. Like ``run``, the
 repo lock is held only until the record is claimed.
 """
 import os
+import threading
 from dataclasses import dataclass
 from typing import Optional
 
@@ -161,6 +162,7 @@ def _execute(vcs, params, storage, args, source, repo_lock):
             extra_env=core.child_env(cwd, experiment_dir(vcs, params), source.sweep_params),
             cwd=cwd, root=workdir.app_root,
             state_extra={"workdir": workdir.root} if args.keep_worktree else None,
+            wait=threading.Event().wait,
         )
         return supervision.run(_argv(vcs, source, workdir))
     finally:

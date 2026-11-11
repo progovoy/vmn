@@ -34,7 +34,7 @@ KNOWN_IO = {
     'vmn_exp.cli.rerun_report': {'console': 13},
     'vmn_exp.cli.rerun_workdir': {'fs': 16},
     'vmn_exp.cli.rewind': {'console': 1},
-    'vmn_exp.cli.run': {'console': 1, 'env': 5, 'fs': 3, 'process_self': 2, 'subprocess': 1, 'time': 7},
+    'vmn_exp.cli.run': {'console': 1, 'env': 5, 'fs': 3, 'process_self': 2, 'subprocess': 1, 'time': 6},
     'vmn_exp.cli.run_disabled': {'console': 4, 'env': 1, 'fs': 1, 'subprocess': 1},
     'vmn_exp.cli.settings': {'console': 10},
     'vmn_exp.cli.similar_backfill': {'console': 3},
