@@ -262,3 +262,13 @@ def test_vmn_exp_skill_groups_one_trainings_attempts(capfd):
     assert "group=tags.launch_id" in out
     assert "latest attempt wins" in out
     assert "collapse_all=1" in out
+
+
+def test_vmn_exp_skill_covers_nested_carriers_and_pooled_baselines(capfd):
+    """Plan 35 §2/§3: ``nested: true`` counts carriers at any depth;
+    ``pool_by`` compares a training's pooled attempts."""
+    assert _skill() == 0
+    out = capfd.readouterr().out
+    assert "nested: true" in out
+    assert "job_agg_nested=1" in out
+    assert "pool_by: tags.launch_id" in out

@@ -500,6 +500,7 @@ ui:
     match: [params.table_name, params.model_type]
     differ: [tags.launch_id]
     children_by: params.trade_date
+    pool_by: tags.launch_id
   views:
     - {name: health, page: runs, search: '?show=t:health&show=t:state', default: true}
     - {name: by kind, page: job, search: '?tab=runs&group=tags.kind', default: true}
@@ -515,7 +516,8 @@ ui:
   kept). `ui.job_aggregate` is the Outer runs rows' default
   [aggregate](ui.md#outer-runs-and-the-outer-runs-page): `agg` a group
   aggregate, `by` `children`/`runs`/`field:<params.k|tags.k>`/`kind:<v>`,
-  `value` `best`/`own`, `metric` a name; each optional.
+  `value` `best`/`own`, `metric` a name, `nested` a boolean (count
+  `field:`/`kind:` carriers at any depth, plan 35 §2); each optional.
   `ui.tree_columns` maps a `tags.kind` value to the show keys
   (`m:`/`p:`/`t:`/`c:<name>`) the [tree](ui.md#the-tree) shows for runs of
   that kind. `ui.attention` lists at most 8
@@ -533,7 +535,9 @@ ui:
   `differ` (at most 8 such fields, none also in `match`, on which the
   baseline must hold another value; a run or peer missing one is no pair) and
   `children_by` (one such field the two outer runs' direct children pair
-  by; none: no pairing). A checkout's conf.yml `experiment.ui.baseline`
+  by; none: no pairing) and `pool_by` (one such field, never a `match` one,
+  whose value groups a training's attempts: a run is compared through its
+  training's pooled units, the latest attempt winning, plan 35 §3). A checkout's conf.yml `experiment.ui.baseline`
   beats it as a whole (a bad one there reads as none).
   `ui.views` lists at most 20 team views `{name, page, search, default}`
   ([ui.md](ui.md#saved-and-team-views)): `page` `jobs`, `runs` or `job`, a

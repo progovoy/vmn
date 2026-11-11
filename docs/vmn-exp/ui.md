@@ -450,7 +450,7 @@ The last view is remembered per app, and `view=`/`kind=` in the URL win.
   - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, apart from `N failed` (only those make the tree status `failed`; the bar draws both in its failed share, what did not finish), and the status reads `succeeded · 1 lost` (see [settled runs](experiments.md#nesting)). A lost run's own pill reads `stuck · lost`, on the board, in the tree and on its page.
   - An outer run whose own row carries finite metrics `progress` and `progress_total` (`run.set_progress(done, total, unit)`; the unit is the `progress_unit` param) declares its progress: the bar fills that share, the line leads with it and the runs follow (`41/60 dates · 1,415 runs · 3 failed · 20 dates/h · ETA 14m`), and the rate and ETA are the declared progress since the outer run started. Use it when the inner-run count grows as work gets planned. Metrics under other names count once `experiment.ui.progress: {done: <metric>, total: <metric>, unit: <label>}` (conf.yml or the [store settings](server.md#app-settings)) names them; a settings change shows at once.
   - a sparkline of the main metric's spread.
-  - its **aggregate** (`rolled`) in the **value** column: the header names it (`median · dates`), the cell reads `0.65` (`≈ 0.65` for an approximate quantile), linked to the unit holding it, its title the source and coverage (`median of 14/16 dates' own date.best_value · 1 duplicate date left out`), `— (no goal)` without a goal. The header's `▾` picks the aggregate, the units (children, runs, a param or tag field), each unit's value (`best`/`own`) and the metric, into the URL's `job_agg*` (`app default` drops them). A single run's cell is its own main metric. One value per unit, aggregated. Walk-forward needs the nested number (the best trial of each date, then the median across dates), not a median over every trial, which measures the search space. The board picks it once for every row (never mixed across rows): `job_agg` (`mean`, `best`, `median`, `min`, `max`, `best10`, `worst10`; the tails follow the metric's goal, so higher-is-better reads `best10 (p90)` / `worst10 (p10)` and lower-is-better flips them), `job_agg_by` (the units: `children`, the default, one per direct child; `field:<params.k|tags.k>`, the nearest run carrying the field on each branch, e.g. `field:params.trade_date`, two units with the same value a counted conflict left out: `median of 15/16 dates · 1 duplicate`; `kind:<tags.kind>`, a `tags.kind` match at any depth; `runs`, every run below from the merged sketch, labelled `≈`), `job_agg_value` (each unit's `best`, its subtree's best run, the default, or its `own` metric, with no fallback: a unit without it is missing, `median of 12/16 dates`) and `job_agg_metric` (default the main metric; e.g. date runs logging `date.best_value`). A metric without a declared goal has no value (`— (no goal)`). `job_agg=best` (the default) is the subtree's best for every `by`. Every unit with a value counts, finished or not; `n`/`of` is the coverage. The app's default is `experiment.ui.job_aggregate: {agg, by, value, metric}` (conf.yml or the [store settings](server.md#app-settings)), e.g. fgm's `{agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}`; the URL overrides it, and a team view per kind of outer run carries its own. Only top-level rows have one: a [tree](#the-tree) row keeps its own values.
+  - its **aggregate** (`rolled`) in the **value** column: the header names it (`median · dates`), the cell reads `0.65` (`≈ 0.65` for an approximate quantile), linked to the unit holding it, its title the source and coverage (`median of 14/16 dates' own date.best_value · 1 duplicate date left out`), `— (no goal)` without a goal. The header's `▾` picks the aggregate, the units (children, runs, a param or tag field), each unit's value (`best`/`own`) and the metric, into the URL's `job_agg*` (`app default` drops them). A single run's cell is its own main metric. One value per unit, aggregated. Walk-forward needs the nested number (the best trial of each date, then the median across dates), not a median over every trial, which measures the search space. The board picks it once for every row (never mixed across rows): `job_agg` (`mean`, `best`, `median`, `min`, `max`, `best10`, `worst10`; the tails follow the metric's goal, so higher-is-better reads `best10 (p90)` / `worst10 (p10)` and lower-is-better flips them), `job_agg_by` (the units: `children`, the default, one per direct child; `field:<params.k|tags.k>`, the nearest run carrying the field on each branch, e.g. `field:params.trade_date`, two units with the same value a counted conflict left out: `median of 15/16 dates · 1 duplicate`, and a carrier nested under another one left out and named: `median of 11 dates · 3 nested under another date, not counted`; `job_agg_nested=1` (`experiment.ui.job_aggregate.nested: true`, the menu's **Nested** `at any depth`) counts carriers at any depth instead, the same value twice still a conflict (plan 35 §2); `kind:<tags.kind>`, a `tags.kind` match at any depth; `runs`, every run below from the merged sketch, labelled `≈`), `job_agg_value` (each unit's `best`, its subtree's best run, the default, or its `own` metric, with no fallback: a unit without it is missing, `median of 12/16 dates`) and `job_agg_metric` (default the main metric; e.g. date runs logging `date.best_value`). A metric without a declared goal has no value (`— (no goal)`). `job_agg=best` (the default) is the subtree's best for every `by`. Every unit with a value counts, finished or not; `n`/`of` is the coverage. The app's default is `experiment.ui.job_aggregate: {agg, by, value, metric, nested}` (conf.yml or the [store settings](server.md#app-settings)), e.g. fgm's `{agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}`; the URL overrides it, and a team view per kind of outer run carries its own. Only top-level rows have one: a [tree](#the-tree) row keeps its own values.
   - runs, failed %, rate, ETA, branch and start.
 
   - its non-zero attention counts as chips (`2 unstable`), the runs of its tree each attention query matches.
@@ -922,7 +922,12 @@ message.
     merged sketch, ~1%). `value` is null without a goal or a unit with one.
     `mixed`/`policies` (`{policy: runs}`) name the job's runs overriding the
     schema's summary policy of the metric (plan 32 F1), absent without one.
-  - `job_agg`, `job_agg_by`, `job_agg_value`, `job_agg_metric` pick it
+  - For `field:`/`kind:` units `rolled` also carries `nested` (whether
+    carriers at any depth count) and `nested_skipped`: the distinct keys of
+    carriers found only under another carrier, left out of `n`/`of` (0 with
+    `nested`; plan 35 §2).
+  - `job_agg`, `job_agg_by`, `job_agg_value`, `job_agg_metric`,
+    `job_agg_nested` (`1`/`0`) pick it
     (`experiments?top=1&job_agg=median&job_agg_by=field:params.trade_date&job_agg_value=own&job_agg_metric=date.best_value`),
     over the app's `experiment.ui.job_aggregate`; a bad value, or any of
     them without `top` (a tree page included), is a 400. They key the ETag.
@@ -998,8 +1003,9 @@ message.
   `{metric: pooled}`, the units of all the group's outer runs pooled under
   the rows' aggregate (plan 34 §1). `pooled` has a row's `rolled` fields
   (`agg`, `by`, `source`, `metric`, `goal`, `percentile`, `value`, `n`,
-  `of`, `conflicts`, `verstr`, `approx`, `mixed`/`policies`), plus
-  `from_earlier` and every group aggregate of the pooled values (`mean`,
+  `of`, `conflicts`, `verstr`, `approx`, `mixed`/`policies`, and for
+  `field:`/`kind:` `nested`/`nested_skipped`: a key nested in every attempt
+  holding it), plus `from_earlier` and every group aggregate of the pooled values (`mean`,
   `median`, `best`, `min`, `max`, `best10`, `worst10`). `from_earlier` counts
   the units taken from an attempt other than the group's latest. A unit key
   found in several outer runs counts from the latest by start, else
@@ -1544,6 +1550,21 @@ header and its Outer runs row.
   or missing one (as does a run missing one: missing is never different), so
   a relaunch is not compared with the earlier attempt of the same launch; the
   body names them in `differ`.
+- **Trainings.** The rule's `pool_by: <field>` (plan 35 §3, e.g.
+  `tags.launch_id`) compares a run through its training: the outer runs
+  beside it sharing its value, the latest attempt first (by start, else
+  creation), as a [grouped header](#outer-runs-and-the-outer-runs-page) pools them. The
+  peers are the other trainings, chosen by `match`/`differ`, pin and "ended
+  before" on each training's latest attempt; `baseline` is the chosen
+  training's latest attempt. The children pair over each side's attempts,
+  a key taken from the latest attempt holding it, and `rolled` compares both
+  trainings' pooled units; the rollup deltas stay the two latest attempts'.
+  So a finalise-only attempt, with no dates of its own, still gets its
+  training's dates compared. A run without the field has no baseline
+  (missing is missing). The body adds `pool_by` (always) and `pool: {by,
+  attempts, baseline_attempts}` (both sides' verstrs, the latest first); the
+  chip carries `pool_by` and the web adds `· pooled by tags.launch_id`, the
+  card `pooled by tags.launch_id (2 attempts vs 3)`.
 - **What.** Per goal metric of the rollup (the primary included) its `best`
   and `median`, then `failed_pct`, `duration_p90`, each attention query's
   share of the subtree (`attention`, with both counts), and the metrics
@@ -1569,7 +1590,10 @@ header and its Outer runs row.
   lower-is-better one): `▼ best_value from 2024-12 (5 of 41 trade_date values
   worse than the baseline's p10)` (`state` `worse`), `▲`/`=` when none is
   (`better`/`same` by the median delta), `pending` before any has finished,
-  so it shows while the launch still runs. Without `children_by` it is the
+  so it shows while the launch still runs. An outer run holding no
+  `children_by` run at all is `none`: `best_value: this attempt has no
+  trade_date runs of its own` (with `pool_by`: `this training has no
+  trade_date runs in any attempt`), never "no value finished yet". Without `children_by` it is the
   `rolled` value's change (`▼ best_value 0.81 (baseline 0.92)`, `▼ median
   best_value 0.65 (baseline 1)` for another aggregate). A main metric
   without a goal (`goal: null`) has no chip: its pairs carry the deltas with

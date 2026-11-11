@@ -280,22 +280,28 @@ ui:
     - {key: unstable, query: 'tags.health = "unstable"', level: error}
     - {key: slow_start, level: warn,  # settled = null: not what an ended outer run left
        query: 'status = "created" and settled = null and timestamp < ago("1h")'}
-  baseline: {match: [tags.target], differ: [tags.launch_id], children_by: tags.trade_date}
-  # compare with the last launch of the same target from another training
+  baseline: {match: [tags.target], differ: [tags.launch_id], children_by: tags.trade_date,
+             pool_by: tags.launch_id}
+  # compare with the last launch of the same target from another training;
+  # pool_by: each side is a training's attempts pooled (latest attempt wins
+  # a date), so a finalise-only attempt still compares its training's dates
   views: [{name: Live, page: jobs, search: "view=live", default: true}]
   # each outer run row's value: one value per unit (here each date's own
   # date.best_value), aggregated; agg mean|best|median|min|max|best10|worst10,
-  # by children|runs|field:<params.k|tags.k>|kind:<v>, value best|own
+  # by children|runs|field:<params.k|tags.k>|kind:<v>, value best|own;
+  # by field/kind takes the nearest carrier per branch and names the ones
+  # nested under another ("3 nested under another date, not counted");
+  # nested: true counts carriers at any depth
   job_aggregate: {agg: median, by: "field:params.trade_date", value: own, metric: date.best_value}
   failed_pct_threshold: 5          # the board's "≥ N% failed" chip
 ```
 
 A save checks `ui.progress`/`ui.attention`/`ui.baseline`/`ui.views`/
 `ui.job_aggregate`/`ui.failed_pct_threshold` (an attention query must
-compile). The URL's `job_agg`, `job_agg_by`, `job_agg_value` and
-`job_agg_metric` override `ui.job_aggregate` for one view. A resumed
-training's attempts share a tag: `group=tags.launch_id` (on the Outer runs
-view) pools their units under that aggregate, the latest attempt wins a
+compile). The URL's `job_agg`, `job_agg_by`, `job_agg_value`,
+`job_agg_metric` and `job_agg_nested=1` override `ui.job_aggregate` for one
+view. A resumed training's attempts share a tag: `group=tags.launch_id` (on
+the Outer runs view) pools their units under that aggregate, the latest attempt wins a
 unit they share; `collapse_all=1` shows one row per training. A tree's failure
 share is queryable: `failed_pct >= 5` (`100 * failed_below / runs below`,
 lost runs included; also `failed_below`, `lost_below`, `live_below`,

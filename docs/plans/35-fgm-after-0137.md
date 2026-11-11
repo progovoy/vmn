@@ -34,6 +34,14 @@ Status: **in progress** (2026-11-11).
   any depth. The same value twice is still a conflict.
 - By default, the title names the carriers left out:
   `median of 11/14 dates · 3 nested under another date, not counted`.
+- **Done (2026-11-11).** `JobAgg.nested` (settings, `job_agg_nested=1`, the
+  menu's Nested section). `ui/job_units.py` `carriers_below` returns the
+  units and the skipped carriers, walking only the jobs above a unit tally
+  (`jobs_above`, from the memoized tallies). `rolled` of `field:`/`kind:`
+  units adds `nested` and `nested_skipped` (distinct keys found only under
+  another carrier, outside `n`/`of`, so the title reads `median of 11
+  dates · 3 nested under another date, not counted`); pooled headers drop a
+  key some attempt counts. No `RECORDS_VERSION`/`DERIVED_VERSION` change.
 
 ## 3. A finalise-only attempt's baseline (decided: honest text plus a training pool)
 
@@ -44,3 +52,12 @@ Status: **in progress** (2026-11-11).
   training's pooled units, the latest attempt winning (as in plan 34 §1). A
   finalise-only attempt then gets a baseline from its training's dates. Its
   peers are other trainings (`differ` applies to the pooled group).
+- **Done (2026-11-11).** The chip's state `none` ("this attempt has no
+  trade_date runs of its own"; pooled: "this training has no trade_date runs
+  in any attempt"). `ui.baseline.pool_by` (checked on save, never a `match`
+  field): `ui/baseline_views.py` groups the peers by it, chooses among the
+  other trainings' latest attempts, pairs children latest-attempt-first and
+  compares `JobAggregates.pooled` (the grouped header's memoized pool). The
+  body adds `pool_by`/`pool`, the chip `pool_by`; the web names the rule
+  (`· pooled by tags.launch_id`, `(2 attempts vs 3)`). Docs: ui.md, server.md,
+  the skill.
