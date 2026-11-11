@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Request hardening for vmn-exp ui.
 
-Three independent guards the server wires in:
+Three independent guards the server wires in. The first two cover
+``GUARDED_PREFIXES`` (/api, /metrics, /auth); the JSON body rule is /api-only
+(``POST /auth/logout`` carries no body):
 
 * **Host allowlist** — without a token the API is open to anything that can
   reach the port, and a DNS-rebinding page reaches ``127.0.0.1`` under its own
@@ -27,6 +29,11 @@ LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 TEST_CLIENT_HOST = "testserver"
 # A wildcard bind says nothing about the name clients will use.
 _WILDCARD_BINDS = ("0.0.0.0", "::", "")
+
+# Paths that carry data or sessions. The SPA shell and bundle stay open on
+# purpose: they hold no data, and a Host check on "/" would 403 the health
+# probes that reach a token-less server by pod IP.
+GUARDED_PREFIXES = ("/api", "/metrics", "/auth")
 
 MUTATING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 BODY_METHODS = ("POST", "PUT", "PATCH")
@@ -93,14 +100,16 @@ class RequestGuard:
 
     def reject_reason(self, method, path, headers):
         """``(status, detail)`` when a request must be refused, else None."""
-        if not path.startswith("/api"):
+        if not path.startswith(GUARDED_PREFIXES):
             return None
         if not self.token_required and not self.host_allowed(headers.get("host")):
             return 403, "Host not allowed"
         if method in MUTATING_METHODS and self.cross_site(headers):
             return 403, "Cross-site request refused"
-        if method in BODY_METHODS and not is_json_content_type(
-            headers.get("content-type")
+        if (
+            path.startswith("/api")
+            and method in BODY_METHODS
+            and not is_json_content_type(headers.get("content-type"))
         ):
             return 415, "Content-Type must be application/json"
         return None

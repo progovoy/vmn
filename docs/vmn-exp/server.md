@@ -342,8 +342,9 @@ journal partitions older than 2 days (not `prune -v`, nor with
 
 ## Prometheus metrics
 
-`GET /metrics` (viewer; with a token, scrape with `Authorization: Bearer`)
-serves Prometheus text (0.0.4), so Grafana can alert on a fleet with nobody
+`GET /metrics` (viewer; with a token, scrape with `Authorization: Bearer`;
+without one, scrape by a name the [Host allowlist](ui.md#remote-deployment) accepts,
+e.g. `--allowed-host <pod-ip>`, or get 403) serves Prometheus text (0.0.4), so Grafana can alert on a fleet with nobody
 watching the UI. Besides `vmn_cache_drift_total` (counter, per `workspace`),
 every app carries these gauges, labelled `workspace` and `app`:
 

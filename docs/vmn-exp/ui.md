@@ -96,14 +96,15 @@ vmn-exp ui --host 0.0.0.0 --token "$VMN_UI_TOKEN" --data-dir /srv/vmn-ui
   the port.
 - **TLS and users**: put a reverse proxy (nginx, Caddy) in front; vmn does not
   terminate TLS or manage accounts.
-- **Host allowlist** (no token only): `/api` answers only a `Host` of
-  `localhost`, `127.0.0.1`, `[::1]`, a non-wildcard `--host`, or an
-  `--allowed-host`; anything else is 403. This stops DNS-rebinding pages
-  reaching a token-less server on your machine.
-- **Cross-site writes**: a POST/PUT/PATCH/DELETE whose `Origin` (or `Referer`)
-  names another site than `Host` is 403 unless that site is an
-  `--allowed-host`, and mutating requests must send
-  `Content-Type: application/json` (415 otherwise). curl and scripts that send
+- **Host allowlist** (no token only): `/api`, `/metrics` and `/auth` answer
+  only a `Host` of `localhost`, `127.0.0.1`, `[::1]`, a non-wildcard `--host`,
+  or an `--allowed-host`; anything else is 403. This stops DNS-rebinding pages
+  reaching a token-less server on your machine. The web page and its bundle
+  hold no data and stay open, so health probes by pod IP still get 200.
+- **Cross-site writes**: a POST/PUT/PATCH/DELETE to `/api`, `/metrics` or
+  `/auth` whose `Origin` (or `Referer`) names another site than `Host` is 403
+  unless that site is an `--allowed-host`, and mutating `/api` requests must
+  send `Content-Type: application/json` (415 otherwise). curl and scripts that send
   neither header are unaffected.
 - **Paths**: URL app names, verstrs and artifact paths are validated (400 on
   `..` and the like); the SPA fallback serves only files inside `static/`.

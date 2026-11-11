@@ -200,7 +200,15 @@ def test_rebound_host_is_rejected_without_a_token(layout):
     assert r.status_code == 403
 
 
-@pytest.mark.parametrize("host", ["localhost:8265", "127.0.0.1:8265", "[::1]:8265"])
+def test_metrics_403_for_rebound_host(layout):
+    _, manager = layout
+    client = TestClient(create_app(manager))
+    assert client.get("/metrics").status_code == 200
+    r = client.get("/metrics", headers={"Host": "attacker.example"})
+    assert r.status_code == 403
+
+
+@pytest.mark.parametrize("host",["localhost:8265", "127.0.0.1:8265", "[::1]:8265"])
 def test_loopback_hosts_are_allowed(layout, host):
     _, manager = layout
     client = TestClient(create_app(manager))
