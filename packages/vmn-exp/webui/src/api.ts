@@ -40,7 +40,7 @@ export interface PageOpts {
   jobAggBy?: string;
   jobAggValue?: string;
   jobAggMetric?: string;
-  /** Carriers at any depth (plan 35 §2); unset: the app's. */
+  /** Carriers at any depth (plan 36 §2); unset: the app's. */
   jobAggNested?: boolean;
 }
 

@@ -1,4 +1,4 @@
-# Plan 35: fgm after 0.1.37
+# Plan 36: fgm after 0.1.37
 
 > fgm's 0.1.37 report (2026-11-11). Grouping, `differ`, lost vs failed and
 > the instant board work for them. Their log showed no "cache schema;

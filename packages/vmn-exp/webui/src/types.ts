@@ -310,7 +310,7 @@ export interface JobAggChoice {
   goal: "min" | "max" | null;
   /** A tail's percentile (`p90`), else null. */
   percentile: string | null;
-  /** `field:`/`kind:` units only: whether carriers at any depth count (plan 35 §2). */
+  /** `field:`/`kind:` units only: whether carriers at any depth count (plan 36 §2). */
   nested?: boolean;
 }
 
@@ -325,7 +325,7 @@ export interface JobRolled extends JobAggChoice {
   verstr: string | null;
   approx: boolean;
   /** `field:`/`kind:` units only, without `nested`: the carriers left out
-   *  under another carrier (plan 35 §2), outside `n`/`of`. */
+   *  under another carrier (plan 36 §2), outside `n`/`of`. */
   nested_skipped?: number;
 }
 

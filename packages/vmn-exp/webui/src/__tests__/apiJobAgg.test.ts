@@ -23,7 +23,7 @@ describe("the job_agg request params", () => {
   });
 });
 
-describe("job_agg_nested (plan 35 §2)", () => {
+describe("job_agg_nested (plan 36 §2)", () => {
   it("travels as 1 or 0, left out when unset", () => {
     expect(query({ top: true, jobAggNested: true })).toEqual({ top: "1", job_agg_nested: "1" });
     expect(query({ top: true, jobAggNested: false })).toEqual({ top: "1", job_agg_nested: "0" });

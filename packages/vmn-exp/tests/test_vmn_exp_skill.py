@@ -265,7 +265,7 @@ def test_vmn_exp_skill_groups_one_trainings_attempts(capfd):
 
 
 def test_vmn_exp_skill_covers_nested_carriers_and_pooled_baselines(capfd):
-    """Plan 35 §2/§3: ``nested: true`` counts carriers at any depth;
+    """Plan 36 §2/§3: ``nested: true`` counts carriers at any depth;
     ``pool_by`` compares a training's pooled attempts."""
     assert _skill() == 0
     out = capfd.readouterr().out

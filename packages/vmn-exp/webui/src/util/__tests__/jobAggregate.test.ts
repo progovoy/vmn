@@ -103,7 +103,7 @@ describe("the URL's job_agg values", () => {
   });
 });
 
-describe("nested carriers (plan 35 §2)", () => {
+describe("nested carriers (plan 36 §2)", () => {
   it("names the carriers left out under another one", () => {
     expect(rolledTitle(rolled({ agg: "median", ...DATES, n: 11, of: 14, nested: false, nested_skipped: 3 })))
       .toBe("median of 11/14 dates' own date.best_value · 3 nested under another date, not counted");

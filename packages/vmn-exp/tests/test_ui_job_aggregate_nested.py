@@ -1,4 +1,4 @@
-"""Plan 35 §2: carriers nested under another carrier. By default
+"""Plan 36 §2: carriers nested under another carrier. By default
 ``by=field:<k>``/``kind:<v>`` counts the nearest carrier on each branch and
 names the ones it leaves out apart from its ``n``/``of`` (``nested_skipped``:
 "median of 11 dates · 3 nested under another date, not counted"); with

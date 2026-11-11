@@ -188,7 +188,7 @@ describe("the value column's menu", () => {
   });
 });
 
-describe("the menu's nesting toggle (plan 35 §2)", () => {
+describe("the menu's nesting toggle (plan 36 §2)", () => {
   it("checks the answered nesting and writes a pick to the URL and the request", async () => {
     m.experimentsPaged.mockResolvedValue(jobsPage([gridWith({ ...DATES, nested: false, nested_skipped: 3 })]));
     renderExperiments();

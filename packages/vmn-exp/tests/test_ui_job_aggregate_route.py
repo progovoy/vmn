@@ -104,7 +104,7 @@ def test_a_grouped_jobs_view_aggregates_the_rolled_values(tmp_path):
 
 
 def test_job_agg_nested_is_a_known_parameter(tmp_path):
-    """Plan 35 §2: ``job_agg_nested=1`` is accepted, in the ETag, and needs ``top``."""
+    """Plan 36 §2: ``job_agg_nested=1`` is accepted, in the ETag, and needs ``top``."""
     client, _ = _served(tmp_path)
     by = "field:params.missing"
     flat = _get(client, top="1", job_agg_by=by).headers["etag"]

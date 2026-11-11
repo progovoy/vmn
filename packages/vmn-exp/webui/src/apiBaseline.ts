@@ -26,7 +26,7 @@ export interface BaselineRef {
   finished_at: string | null;
 }
 
-/** `none`: the outer run (or its training) holds no `children_by` run (plan 35 §3). */
+/** `none`: the outer run (or its training) holds no `children_by` run (plan 36 §3). */
 export type ChipState = "worse" | "better" | "same" | "pending" | "none";
 
 /** `▼ best_value from 2024-12 (5 of 41 trade_date values worse than the
@@ -46,7 +46,7 @@ export interface BaselineChipData {
    *  holds (plan 31 §2: a side without one leaves its key unpaired). */
   paired?: number;
   total?: number;
-  /** The field the comparison pools each training's attempts by (plan 35 §3). */
+  /** The field the comparison pools each training's attempts by (plan 36 §3). */
   pool_by?: string;
 }
 
@@ -101,7 +101,7 @@ export interface BaselineCompare {
   chip: BaselineChipData | null;
   /** The two outer runs' `rolled` (the app's default aggregate, plan 31 §2). */
   rolled?: BaselineRolled | null;
-  /** The app's `ui.baseline.pool_by` (plan 35 §3): each side is a training,
+  /** The app's `ui.baseline.pool_by` (plan 36 §3): each side is a training,
    *  `pool` its attempts and the baseline's, the latest first. */
   pool_by?: string | null;
   pool?: { by: string; attempts: string[]; baseline_attempts: string[] } | null;

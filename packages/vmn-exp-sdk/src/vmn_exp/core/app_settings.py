@@ -201,7 +201,7 @@ def attention_entries(ui):
 # ``ui.baseline`` (plan 28 N3): the fields an outer run's baseline shares
 # with it (``match``), the ones it must not share (``differ``, plan 34 §2),
 # the field its direct children pair by (``children_by``) and the field its
-# training's attempts share (``pool_by``, plan 35 §3: never a ``match``
+# training's attempts share (``pool_by``, plan 36 §3: never a ``match``
 # field), each a ``params.<k>``/``tags.<k>``.
 MAX_BASELINE_MATCH = 8
 _BASELINE_KEYS = ("match", "differ", "children_by", "pool_by")
@@ -342,7 +342,7 @@ def tree_columns_of(ui):
 # of one value per unit (``by``: ``children``, ``runs``, ``field:<params.k|
 # tags.k>``, ``kind:<tags.kind>``), each its subtree's best or its own
 # ``metric`` (``value``); ``nested`` counts carriers at any depth, not only
-# the nearest on each branch (plan 35 §2).
+# the nearest on each branch (plan 36 §2).
 JOB_AGG_BY = ("children", "runs")
 JOB_AGG_VALUES = ("best", "own")
 _JOB_AGG_FIELDS = {

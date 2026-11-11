@@ -9,7 +9,7 @@ skipped and counted apart (``nested_skipped``) —, ``kind:<tags.kind>``
 or ``runs``, every run below from the merged sketches, ``approx``),
 ``value`` (each unit's subtree best or its ``own`` metric, no fallback),
 ``metric`` (default the board's main metric) and ``nested`` (carriers at
-any depth are units, plan 35 §2). A metric without a declared
+any depth are units, plan 36 §2). A metric without a declared
 goal has no value (plan 32). The app's ``experiment.ui.job_aggregate`` is
 the default, a URL's values override it (:func:`job_agg_of`).
 
@@ -74,7 +74,7 @@ def _carried(agg):
 
 def _choice(agg, metric, goal):
     """What names *agg*: ``{agg, by, source, metric, goal, percentile}``,
-    plus ``nested`` for carried units (plan 35 §2)."""
+    plus ``nested`` for carried units (plan 36 §2)."""
     out = {"agg": agg.agg, "by": agg.by, "source": agg.value, "metric": metric, "goal": goal,
            "percentile": percentile(agg.agg, goal)}
     return {**out, "nested": agg.nested} if _carried(agg) else out
@@ -275,7 +275,7 @@ class JobAggregates:
     def pooled(self, snapshot, schema, jobs, agg=None):
         """The ``rolled`` fields of *jobs* (the latest attempt first) pooled
         (:meth:`Pool.pooled`; with no unit valued, an empty ``rolled``): a
-        baseline's training (plan 35 §3). Top-level jobs read the memoized
+        baseline's training (plan 36 §3). Top-level jobs read the memoized
         pool, others an unfrozen one."""
         agg = agg or board_job_agg(self._cache, snapshot)
         pool = self.pool(snapshot, schema, agg)

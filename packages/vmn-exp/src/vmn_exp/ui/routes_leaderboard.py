@@ -34,7 +34,7 @@ A ``q`` (or ``top_q``) with ``ago()`` is pinned to the minute first (plan 28 P1,
 clock; a Jobs view page's ``job`` carries the app's attention counts.
 With ``top``, each row's ``job`` carries ``rolled``, the aggregate
 ``job_agg``/``job_agg_by``/``job_agg_value``/``job_agg_metric``/
-``job_agg_nested`` (plan 35 §2) name over the
+``job_agg_nested`` (plan 36 §2) name over the
 app's ``experiment.ui.job_aggregate`` (plan 31 §2,
 :mod:`~vmn_exp.ui.job_aggregate`), sortable by ``job:value``; a bad value,
 or one without ``top``, is a 400.

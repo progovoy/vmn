@@ -517,7 +517,7 @@ ui:
   [aggregate](ui.md#outer-runs-and-the-outer-runs-page): `agg` a group
   aggregate, `by` `children`/`runs`/`field:<params.k|tags.k>`/`kind:<v>`,
   `value` `best`/`own`, `metric` a name, `nested` a boolean (count
-  `field:`/`kind:` carriers at any depth, plan 35 §2); each optional.
+  `field:`/`kind:` carriers at any depth, plan 36 §2); each optional.
   `ui.tree_columns` maps a `tags.kind` value to the show keys
   (`m:`/`p:`/`t:`/`c:<name>`) the [tree](ui.md#the-tree) shows for runs of
   that kind. `ui.attention` lists at most 8
@@ -537,7 +537,7 @@ ui:
   `children_by` (one such field the two outer runs' direct children pair
   by; none: no pairing) and `pool_by` (one such field, never a `match` one,
   whose value groups a training's attempts: a run is compared through its
-  training's pooled units, the latest attempt winning, plan 35 §3). A checkout's conf.yml `experiment.ui.baseline`
+  training's pooled units, the latest attempt winning, plan 36 §3). A checkout's conf.yml `experiment.ui.baseline`
   beats it as a whole (a bad one there reads as none).
   `ui.views` lists at most 20 team views `{name, page, search, default}`
   ([ui.md](ui.md#saved-and-team-views)): `page` `jobs`, `runs` or `job`, a

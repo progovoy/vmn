@@ -34,7 +34,7 @@ describe("the baseline chip", () => {
   });
 });
 
-describe("a finalise-only attempt's chip (plan 35 §3)", () => {
+describe("a finalise-only attempt's chip (plan 36 §3)", () => {
   it("says the attempt has no runs of its own, uncoloured", () => {
     const text = "best_value: this attempt has no trade_date runs of its own";
     render(<BaselineChip chip={{ ...CHIP, state: "none", text, paired: 0, total: 0 }} />);

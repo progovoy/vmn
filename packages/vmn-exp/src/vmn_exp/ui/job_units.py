@@ -12,7 +12,7 @@ overlay per time bucket. The field is the unit's own, so a change to it is a
 delta of the unit itself. A removal never loses anything (nothing is an
 extreme), so these tallies are never rebuilt. Finding a job's units walks
 only the jobs above a tally (:func:`carriers_below`), never its leaf rows;
-a carrier under another one is a unit only with ``nested`` (plan 35 §2),
+a carrier under another one is a unit only with ``nested`` (plan 36 §2),
 else it is skipped and counted.
 
 A unit's value (:class:`UnitValue`) is its own metric (``own``, no
@@ -88,7 +88,7 @@ def carriers_below(job, tree, sources, nested=False, above=None):
     below *job* carrying the field, from the per-parent tallies in
     *sources*, walking down the (unarchived) jobs on the way to a tally
     (*above*: :func:`jobs_above`). The nearest carrier on each branch is a
-    unit; one under another carrier is a unit too when *nested* (plan 35
+    unit; one under another carrier is a unit too when *nested* (plan 36
     §2), else it is skipped."""
     above = jobs_above(tree, sources) if above is None else above
     units, skipped = [], []

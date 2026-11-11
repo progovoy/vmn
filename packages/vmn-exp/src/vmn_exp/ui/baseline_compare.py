@@ -7,7 +7,7 @@ unpaired, never filled from another source: plan 32), and the
 chip, which counts the finished pairs worse than the baseline's worst
 decile (``p10`` of a higher-is-better metric, ``p90`` of a lower-is-better
 one) — so a regression shows as soon as the first matched children end. An
-outer run holding no key says so (``none``, plan 35 §3), never "no value
+outer run holding no key says so (``none``, plan 36 §3), never "no value
 finished yet".
 """
 from vmn_exp.core.metric_schema import higher_is_better

@@ -146,7 +146,7 @@ describe("the baseline card", () => {
     )).toBeInTheDocument();
   });
 
-  it("names the pool rule and both trainings' attempts (plan 35 §3)", async () => {
+  it("names the pool rule and both trainings' attempts (plan 36 §3)", async () => {
     vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
       match: ["tags.target"], differ: ["tags.launch_id"], pool_by: "tags.launch_id",
       pool: { by: "tags.launch_id", attempts: ["a2", "a1"], baseline_attempts: ["b3", "b2", "b1"] },

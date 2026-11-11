@@ -18,7 +18,7 @@ app's ``job_aggregate`` metric, its own or its subtree's best by the
 aggregate's ``value``, the same source on both sides (plan 32); the chip
 without pairs compares the two jobs' ``rolled``.
 
-With ``pool_by`` (plan 35 §3, e.g. ``tags.launch_id``) a run is compared
+With ``pool_by`` (plan 36 §3, e.g. ``tags.launch_id``) a run is compared
 through its training: the outer runs beside it sharing its value, the latest
 attempt first (:func:`~vmn_exp.ui.leaderboard_group_jobs.latest_first`).
 The baseline is another training, chosen on each training's latest attempt;

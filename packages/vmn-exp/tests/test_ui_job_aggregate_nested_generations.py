@@ -1,4 +1,4 @@
-"""Plan 35 §2 across index generations: with ``nested`` every carrier below
+"""Plan 36 §2 across index generations: with ``nested`` every carrier below
 a job is a unit, without it the ones under another carrier are counted in
 ``nested_skipped``; both answer what a fresh brute-force walk of the same
 snapshot answers after random deltas (re-dated runs, re-links, removals)."""

@@ -63,7 +63,7 @@ def test_the_tails_are_group_aggregates_that_follow_the_goal():
 
 
 def test_nested_is_a_boolean_job_aggregate_field():
-    """Plan 35 §2: ``nested: true`` counts carriers at any depth."""
+    """Plan 36 §2: ``nested: true`` counts carriers at any depth."""
     ui = parse_settings("ui:\n  job_aggregate: {by: 'kind:date', nested: true}\n")["ui"]
     assert job_aggregate_of(ui)["nested"] is True
     with pytest.raises(SettingsError, match="job_aggregate.nested"):

@@ -17,7 +17,7 @@ export function ruleText(match: readonly string[], differ: readonly string[] = [
 
 /** How the baseline was picked; *match* the fields it shares and *differ*
  *  the ones it does not (unknown: "alike"); *pool* the attempts of both
- *  trainings when they are pooled (plan 35 §3). */
+ *  trainings when they are pooled (plan 36 §3). */
 export function pickedText(
   source: BaselineSource, match?: readonly string[], differ?: readonly string[], pool?: BaselineCompare["pool"],
 ): string {

@@ -1,4 +1,4 @@
-"""Plan 35 §3: a finalise-only attempt's baseline. A run with no
+"""Plan 36 §3: a finalise-only attempt's baseline. A run with no
 ``children_by`` runs of its own says so ("this attempt has no trade_date runs
 of its own", never "no value finished yet"). With ``ui.baseline.pool_by``
 (``tags.launch_id``) a run is compared through its training's pooled units:

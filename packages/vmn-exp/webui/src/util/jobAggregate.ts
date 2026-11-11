@@ -16,7 +16,7 @@ export interface JobAggParams {
   by: string | null;
   value: JobAggSource | null;
   metric: string | null;
-  /** Carriers at any depth (plan 35 §2); undefined: the app's default. */
+  /** Carriers at any depth (plan 36 §2); undefined: the app's default. */
   nested?: boolean;
 }
 export type JobAggPart = keyof JobAggParams;
@@ -90,7 +90,7 @@ export const rolledValueText = (r: JobRolled) =>
 export const carriedBy = (by: string | null) => !!by && by !== "children" && by !== "runs";
 
 /** ` · 3 nested under another date, not counted`, or ` · nested dates
- *  counted` (plan 35 §2); nothing for other units or none left out. */
+ *  counted` (plan 36 §2); nothing for other units or none left out. */
 function nestedText(r: JobRolled, one: string, many: string): string {
   if (r.nested) return ` · nested ${many} counted`;
   return r.nested_skipped ? ` · ${fmtCount(r.nested_skipped)} nested under another ${one}, not counted` : "";
