@@ -42,7 +42,12 @@ class RealEnv(Mapping):
 
 class RealProcesses:
     def run(self, cmd, **kwargs):
-        return subprocess.run(cmd, **kwargs)
+        try:
+            return subprocess.run(cmd, **kwargs)
+        except FileNotFoundError as err:
+            if err.filename != kwargs.get("executable", cmd[0]):
+                raise  # a missing cwd, not a missing binary
+            return None
 
     def popen(self, cmd, **kwargs):
         return subprocess.Popen(cmd, **kwargs)

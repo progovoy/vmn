@@ -5,26 +5,25 @@ HANG = object()  # a scripted command that never finishes: its timeout expires
 
 class FakeProcesses:
     """Answers each command from a script, ``{tuple(cmd): CompletedProcess | HANG}``;
-    an unscripted command is a missing binary. Every call is kept in ``calls``."""
+    an unscripted command is a missing binary (``run`` returns None, ``popen``
+    raises FileNotFoundError). Every call is kept in ``calls``."""
 
     def __init__(self, script=None):
         self._script = dict(script or {})
         self.calls = []
 
     def run(self, cmd, **kwargs):
-        result = self._answer(cmd, kwargs)
+        self.calls.append((list(cmd), kwargs))
+        result = self._script.get(tuple(cmd))
         if result is HANG:
             raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
         return result
 
     def popen(self, cmd, **kwargs):
-        return FakePopen(self._answer(cmd, kwargs))
-
-    def _answer(self, cmd, kwargs):
         self.calls.append((list(cmd), kwargs))
         if tuple(cmd) not in self._script:
             raise FileNotFoundError(2, "No such file or directory", cmd[0])
-        return self._script[tuple(cmd)]
+        return FakePopen(self._script[tuple(cmd)])
 
 
 class FakePopen:

@@ -59,8 +59,13 @@ def test_processes_contract(side):
     assert (done.returncode, done.stdout) == (0, "hi\n")
     with pytest.raises(subprocess.TimeoutExpired):
         processes.run(SLOW, timeout=0.05)
+    assert processes.run(MISSING) is None
+
+
+@pytest.mark.real_io
+def test_real_processes_missing_cwd_still_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
-        processes.run(MISSING)
+        real_io.RealProcesses().run(OK, cwd=tmp_path / "gone")
 
 
 def test_processes_popen_contract(side):

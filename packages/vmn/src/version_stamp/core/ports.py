@@ -38,9 +38,9 @@ class Env(Protocol):
 
 
 class Processes(Protocol):
-    def run(self, cmd: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
-        """Like ``subprocess.run``: a missing binary raises FileNotFoundError and
-        an expired ``timeout`` raises subprocess.TimeoutExpired."""
+    def run(self, cmd: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess | None:
+        """Like ``subprocess.run``, except that a missing binary returns None.
+        An expired ``timeout`` raises subprocess.TimeoutExpired."""
 
 
 class Random(Protocol):

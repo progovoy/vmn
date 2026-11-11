@@ -44,6 +44,17 @@ def test_shared_ports_have_the_same_methods_and_signatures_in_both_packages():
         assert shared == vmn_methods, port
 
 
+def test_shared_ports_take_plan_35s_shapes():
+    """docs/plans/35-core-io-behind-interfaces.md, Design 1."""
+    for module in (vmn_ports, exp_ports):
+        assert set(_methods(module.Clock)) == {"now", "monotonic", "sleep"}
+        assert str(inspect.signature(module.Clock.sleep)) == "(self, sec: 'float') -> 'None'"
+        assert str(inspect.signature(module.Processes.run)) == (
+            "(self, cmd: 'Sequence[str]', **kwargs: 'Any') -> 'subprocess.CompletedProcess | None'"
+        )
+        assert set(_methods(module.Console)) == {"out", "err", "read_line"}
+
+
 def _outermost(names):
     return {name for name in names if name.split(".")[0] == name or name.split(".")[0] not in names}
 
