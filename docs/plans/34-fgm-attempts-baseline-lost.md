@@ -36,6 +36,13 @@ header that aggregates each outer run's value (a median of medians).
   the web's toggle sits beside Group by (`JobGroupRows.tsx`,
   `JobCards.tsx`). No `RECORDS_VERSION`/`DERIVED_VERSION` change. Docs:
   [ui.md](../vmn-exp/ui.md#outer-runs-and-the-outer-runs-page).
+- 0.1.37 follow-ups: a grouped Outer runs board takes a `job:*` sort (each
+  group's attempts by it, groups by their first attempt: `job:started`, by
+  the latest attempt's start; `Grouping.in_order`); one row per group counts
+  `14 groups · 44 outer runs`; under a filter the view switch counts the
+  shown board's total and no number on the other side; a link to the bare
+  page applies the default team view every time (a push), other landings
+  once per tab.
 
 ## 2. Baseline peers that must differ (decided: `baseline.differ`)
 

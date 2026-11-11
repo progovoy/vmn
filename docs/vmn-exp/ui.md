@@ -443,7 +443,9 @@ the URL still say *job*: `view=jobs`, `kind=jobs`, the `job` row field and the
 
 **The experiments page** opens on **Outer runs** (`view=jobs`). Its switch next
 to the app name has `Outer runs (N)`, `Single runs (N)` and `All runs`. The
-last view is remembered per app, and `view=`/`kind=` in the URL win.
+counts are the app's; under a filter (`q`, status, a search or a preset) the
+shown side counts what its board matches and the other side shows no number.
+The last view is remembered per app, and `view=`/`kind=` in the URL win.
 - **Outer runs** has one row per top-level outer run. Each row shows:
   - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, apart from `N failed` (only those make the tree status `failed`; the bar draws both in its failed share, what did not finish), and the status reads `succeeded · 1 lost` (see [settled runs](experiments.md#nesting)). A lost run's own pill reads `stuck · lost`, on the board, in the tree and on its page.
   - An outer run whose own row carries finite metrics `progress` and `progress_total` (`run.set_progress(done, total, unit)`; the unit is the `progress_unit` param) declares its progress: the bar fills that share, the line leads with it and the runs follow (`41/60 dates · 1,415 runs · 3 failed · 20 dates/h · ETA 14m`), and the rate and ETA are the declared progress since the outer run started. Use it when the inner-run count grows as work gets planned. Metrics under other names count once `experiment.ui.progress: {done: <metric>, total: <metric>, unit: <label>}` (conf.yml or the [store settings](server.md#app-settings)) names them; a settings change shows at once.
@@ -548,7 +550,7 @@ across outer runs in All runs, and runs inside one outer run on its Runs tab.
 A group of more than 50 runs has no fold; its header button adds the group's
 clause as a filter.
 In grouped Outer runs (e.g. `group=tags.launch_id`, the attempts of one resumed training), a group's header shows in the value column (beside the label on a phone) the rows' [aggregate](#outer-runs-and-the-outer-runs-page) over the units of all its outer runs pooled (`job_aggregates`): the same `job_agg`, `by`, `value` and `metric` as the rows, never the page's `agg`. A unit found in several attempts (a date rerun by a later launch) counts once, from the latest attempt (the outer run's start, else its creation), and the title names how many came from earlier ones: `median 0.65` titled `median of 16 dates' own date.best_value · 3 from earlier attempts`. A duplicate inside one attempt stays a conflict, left out as on a row (an earlier attempt's copy never fills it in). With `by=runs` the header pools every run of every attempt (the merged sketches); latest-wins does not apply to runs, so nothing is from an earlier attempt. A tail shows its percentile (`best10 (p90)`), `*` marks runs overriding the summary policy, `— (no goal)` without a goal and `—` when no unit has a value.
-**One row per group** (the toolbar's toggle, `collapse_all=1` in the URL, so saved and team views keep it; changing the grouping drops it) shows each group as its header row alone: the label, the pooled value with its coverage (`median 0.65 14/16`) and the run counts summed over its outer runs and their lost runs (`1,412 runs · 3 running · 2 failed · 1 lost`), on a phone one card per group. The per-group fold (`collapse=<key>`) is separate.
+**One row per group** (the toolbar's toggle, `collapse_all=1` in the URL, so saved and team views keep it; changing the grouping drops it) shows each group as its header row alone: the label, the pooled value with its coverage (`median 0.65 14/16`) and the run counts summed over its outer runs and their lost runs (`1,412 runs · 3 running · 2 failed · 1 lost`), on a phone one card per group; the board's count names the groups beside the outer runs (`14 groups · 44 outer runs`). The per-group fold (`collapse=<key>`) is separate. A column's `job:*` sort (e.g. `sort=job:started`) orders each group's outer runs by it and the groups by their first outer run under it: by **when**, newest first, a group comes by its latest attempt's start; with `order=asc` by its earliest. Groups without the value (no outer run with it) come after, then `(none)`.
 
 **The outer run's page** is what a run with children opens on (`?tab=`).
 - **The header** has the name, `@N`, the tree status, the `outer · N runs`
@@ -667,9 +669,11 @@ views** (plan 28 P4): conf.yml/[settings](server.md#app-settings)
 outer run's Runs tab) — read-only there. Applying one keeps the page's own
 `view=`/`kind=`/`tab=` when its search leaves them out. A page's `default:
 true` view is applied when you land on it with no view params in the URL
-(only `view`/`kind`/`tab`/`sel`), once per page per browser tab (per outer
-run for `job`), so it never undoes what you changed since; the URL then
-shows its params. An editor gets **Save for team** (optionally as the page's
+(only `view`/`kind`/`tab`/`sel`): on every link to the bare page (the
+sidebar, a crumb), and on any other landing (a reload, Back, a typed URL)
+once per page per browser tab (per outer run for `job`). What you do on the
+page sticks: cleared filters or a bare URL left in place stay bare until
+the next link; the URL then shows the view's params. An editor gets **Save for team** (optionally as the page's
 default, which takes it from the page's other views): the web reads the
 settings, adds or replaces the view by page and name, and writes the file
 back through the settings `PUT` — rewritten from its parsed form, so YAML
@@ -1006,7 +1010,9 @@ message.
   `— (no goal)`, never blank (plan 32 §0). The pool reads each outer run's unit list kept with the
   rows' `rolled`, per generation, bucket and aggregate: no subtree walk per
   request. `collapse_all=1` (with `group` and `top`, else a 400) answers the
-  headers without rows (one row per group).
+  headers without rows (one row per group). A `job:*` `sort` needs `top`
+  (else a 400): each group's rows take the Jobs order and groups order by
+  their first row (`job:started`: the latest attempt's start, newest first).
 - **`experiments/{v}/summary`** is the outer run's rollup: counts, `expected`,
   `ended` (its own status succeeded/failed/stuck), `never_started` and `lost`
   (its settled runs, never in `counts`; `done` takes the lost ones, an ended
