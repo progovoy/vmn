@@ -90,6 +90,27 @@ def test_real_wired_entries_name_existing_names_and_carry_a_reason():
     assert not bad
 
 
+# The entry points CLAUDE.md names: `vmn-exp` main and the `vmn-exp ui` app factory.
+ENTRY_POINTS = {"vmn_exp.cli.main", "vmn_exp.ui.cli"}
+
+
+def _calls_real_io(path):
+    return any(
+        isinstance(node, ast.Call)
+        and (getattr(node.func, "id", None) == "real_io" or getattr(node.func, "attr", None) == "real_io")
+        for node in ast.walk(ast.parse(path.read_text()))
+    )
+
+
+def test_only_entry_points_and_listed_modules_call_real_io():
+    allowed = ENTRY_POINTS | REAL_IO.keys() | {module for module, _ in REAL_WIRED.values()}
+    callers = {module for module, path in _module_paths().items() if _calls_real_io(path)}
+    assert callers <= allowed, (
+        "real_io() is built only in an entry point or a module listed in REAL_IO/REAL_WIRED; "
+        f"take an `io` parameter instead: {sorted(callers - allowed)}"
+    )
+
+
 def _regen():
     lines = [
         f"# AUTO-GENERATED (KNOWN_IO) by: {REGEN}",

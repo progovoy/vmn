@@ -1,7 +1,7 @@
 # AUTO-GENERATED (KNOWN_IO) by: python packages/vmn-exp/tests/test_io_boundary.py --regen
 # KNOWN_IO only shrinks. REAL_IO and REAL_WIRED are hand-kept and survive --regen.
 
-REAL_IO = {'vmn_exp.storage.buffer_owner': "a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.buffer_host': "finds, locks and removes this host's log buffer dirs: the real local implementation (plan 40 C6)", 'vmn_exp.cli.buffers_cmd': "run_buffers is the `vmn-exp buffers` entry point: it builds the command's real IO (plan 40 C6)", 'vmn_exp.storage.host_dirs': 'resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)'}
+REAL_IO = {'vmn_exp.core.real_io': 'the thin stdlib classes behind vmn_exp.core.ports and real_io(), which entry points build (plan 44 G2)', 'vmn_exp.storage.buffer_owner': "a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.buffer_host': "finds, locks and removes this host's log buffer dirs: the real local implementation (plan 40 C6)", 'vmn_exp.cli.buffers_cmd': "run_buffers is the `vmn-exp buffers` entry point: it builds the command's real IO (plan 40 C6)", 'vmn_exp.storage.host_dirs': 'resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)'}
 REAL_WIRED = {}
 
 KNOWN_IO = {
@@ -83,6 +83,7 @@ KNOWN_IO = {
     'vmn_exp.core.metric_stream': {'real_default': 1},
     'vmn_exp.core.output_log': {'env': 1, 'fs': 2, 'real_default': 1},
     'vmn_exp.core.panel_spec': {'console': 1},
+    'vmn_exp.core.real_io': {'console': 4, 'env': 3, 'process_self': 2, 'random': 4, 'subprocess': 2, 'time': 3},
     'vmn_exp.core.record_files': {'fs': 3},
     'vmn_exp.core.rerun': {'fs': 2},
     'vmn_exp.core.similar_corpus': {'fs': 1},
