@@ -57,3 +57,33 @@ def test_patching_sync_to_remote_on_the_run_module_reaches_the_sync_worker(
     run, storage = _run(tmp_path)
     run.finish()
     assert (storage, APP, VERSTR) in synced
+
+
+def test_patching_error_from_exception_on_the_run_module_reaches_record_error(
+    tmp_path, monkeypatch
+):
+    converted = []
+
+    def convert(exc):
+        converted.append(exc)
+        return {"message": str(exc), "traceback": ""}
+
+    monkeypatch.setattr(run_module, "error_from_exception", convert)
+    run, _ = _run(tmp_path)
+    error = ValueError("x")
+    run.finish(exit_code=1, error=error)
+    assert converted == [error]
+
+
+def _methods(cls):
+    return {name for name, value in vars(cls).items()
+            if callable(value) or isinstance(value, (staticmethod, classmethod, property))}
+
+
+def test_no_run_method_is_defined_by_two_bases():
+    owners = {}
+    for cls in (run_module.Run, *run_module.Run.__bases__):
+        for name in _methods(cls):
+            owners.setdefault(name, []).append(cls.__name__)
+    shared = {name: classes for name, classes in owners.items() if len(classes) > 1}
+    assert shared == {}

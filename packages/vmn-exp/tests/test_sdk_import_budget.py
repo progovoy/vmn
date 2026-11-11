@@ -24,7 +24,7 @@ FORBIDDEN = (
     "vmn_exp.core.sqlite",
     "vmn_exp.core.journal_reader",
 )
-BUDGET = 144
+BUDGET = 146
 
 
 def _path_of(module):
