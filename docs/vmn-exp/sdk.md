@@ -80,7 +80,7 @@ non-zero to fail the run). See [Nesting](#nesting).
 One difference: an SDK run records `sys.argv` as its command, with `runner:
 sdk`. So [`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out
 (`vmn-exp rerun my_app -v <ref> -- python train.py`), and the script's
-`start_run()` then opens an inner run of the rerun record.
+`start_run()` then records into the rerun record.
 
 ---
 
@@ -899,7 +899,7 @@ restore or re-export anything), so subprocesses don't see it; nested runs in
 the same context still find it.
 
 One exception to the `$VMN_EXPERIMENT_ID` rule: in the process `vmn-exp run`
-started itself (its direct child, not a process further down, such as the
+(or `vmn-exp rerun`, or a sweep agent for a trial) started itself (its direct child, not a process further down, such as the
 workers of a shell launcher), the first `start_run()` that names no
 `parent=`, `nested=` or `fork_from=` records into the supervisor's run
 instead of opening an inner one. It appends to its own stream and writes no

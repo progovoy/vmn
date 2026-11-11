@@ -18,6 +18,7 @@ from vmn_exp.cli import rerun_report as report
 from vmn_exp.cli.rerun_workdir import exit_on_termination, plan_workdir, prepare_workdir
 from vmn_exp.cli.rewind import _ref
 from vmn_exp.cli.run import _Supervision, _detect_python_exe
+from vmn_exp.cli.supervised_env import adopt_requested
 from vmn_exp.core import rerun as core
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.code_store import (
@@ -157,16 +158,26 @@ def _execute(vcs, params, storage, args, source, repo_lock):
                 return err
         if repo_lock is not None:
             repo_lock.release()
-        supervision = _Supervision(
-            storage, source.app_name, verstr, args, experiment_conf(vcs),
-            extra_env=core.child_env(cwd, experiment_dir(vcs, params), source.sweep_params),
-            cwd=cwd, root=workdir.app_root,
-            state_extra={"workdir": workdir.root} if args.keep_worktree else None,
-            wait=threading.Event().wait,
+        supervision = rerun_supervision(
+            storage, source, verstr, args, experiment_conf(vcs), cwd, workdir,
+            experiment_dir(vcs, params), os.environ,
         )
         return supervision.run(_argv(vcs, source, workdir))
     finally:
         _release_workdir(workdir, args.keep_worktree)
+
+
+def rerun_supervision(storage, source, verstr, args, exp_conf, cwd, workdir, exp_dir, env):
+    """The rerun's supervision: its child runs in the restored workspace and
+    records into the rerun unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in *env*
+    turn that off."""
+    return _Supervision(
+        storage, source.app_name, verstr, args, exp_conf,
+        extra_env=core.child_env(cwd, exp_dir, source.sweep_params),
+        cwd=cwd, root=workdir.app_root,
+        state_extra={"workdir": workdir.root} if args.keep_worktree else None,
+        adopt=adopt_requested(args, env), wait=threading.Event().wait,
+    )
 
 
 def _child_dir(workdir, rel_cwd):

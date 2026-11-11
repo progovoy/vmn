@@ -443,8 +443,10 @@ such as the workers a shell script launches) records into the run `exp run`
 created, so `vmn-exp run my_app -- python train.py` with `start_run()` in
 `train.py` is one run. The script appends to a stream of its own (see
 Streams below) and the supervisor still records the exit code, the `run`
-entry and the final state. `--no-adopt` (or `VMN_EXP_ADOPT=0`) keeps the
-older shape, an outer run with the script's run inside it.
+entry and the final state. [`rerun`](#rerun) and sweep trials
+([sweeps.md](sweeps.md#inside-a-trial)) do the same. `--no-adopt` (or
+`VMN_EXP_ADOPT=0`) keeps the older shape, an outer run with the script's run
+inside it.
 
 Each run has a `kind`: `outer` (has children), `inner` (has a parent) or
 `single`. An outer job's **`tree_status`** rolls up its subtree with
@@ -1129,13 +1131,16 @@ vmn-exp rerun my_app -v @3 --print [--json]                # what a cluster job 
   restored app root, overrides); `-- <cmd>` replaces the recorded command;
   absolute paths into the live repo are pointed into the workspace. Supervision
   is exactly [`run`](#run)'s, and `run`'s flags apply (`--note`, `--name`,
-  `--parent`, `--input`, `-f`, `--no-env`, the supervision flags); `--fork-from`
-  is refused.
+  `--parent`, `--input`, `-f`, `--no-env`, `--no-adopt`, the supervision
+  flags); `--fork-from` is refused.
 - **Record**: `rerun_of: <verstr>`, sharing the original's code object under
   the same code verstr (so it keeps that code alive through `prune`). Create
   params are copied (tags and inputs are not); a sweep trial's params are
   re-exported as `VMN_SWEEP_PARAMS`. The child's `VMN_EXPERIMENT_DIR` is the
-  original store, so runs it creates land there as inner runs.
+  original store, so the first plain `start_run()` in the command records
+  into the rerun, as under [`run`](#outer--inner-jobs-sweeps), and later runs
+  it creates land there as inner runs. `--no-adopt` (or `VMN_EXP_ADOPT=0`)
+  makes that first one an inner run too.
   `list --query 'rerun_of = "<verstr>"'` lists reruns.
 - **Warnings**: a differing environment, untracked files too large to have
   been captured, a source still `running`, a sweep trial.

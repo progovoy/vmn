@@ -58,3 +58,7 @@ def _add_supervision_flags(p):
                    help="agent: size cap of each trial's output.log")
     p.add_argument("--no-system-metrics", dest="system_metrics", action="store_false",
                    default=None, help="agent: don't record sys_* metrics of trials")
+    p.add_argument("--no-adopt", dest="adopt_run", action="store_false", default=True,
+                   help="agent: a start_run() in a trial's command opens a run nested "
+                        "under the trial instead of recording into it. Same as "
+                        "VMN_EXP_ADOPT=0.")

@@ -12,6 +12,7 @@ import threading
 import time
 
 from vmn_exp.cli.run import _create_experiment, _Supervision
+from vmn_exp.cli.supervised_env import adopt_requested
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.status import FAILED, SUCCEEDED
@@ -96,15 +97,25 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
            SWEEP_PARAMS_ENV: json.dumps(params)}
     check = _EarlyStopCheck(spec, storage, vcs.name, sweep, verstr) \
         if spec.get("early_terminate") else None
-    supervision = _Supervision(storage, vcs.name, verstr, trial_args,
-                               experiment_conf(vcs), extra_env=env, on_tick=check,
-                               root=vcs.vmn_root_path, wait=threading.Event().wait)
+    supervision = trial_supervision(storage, vcs.name, verstr, trial_args,
+                                    experiment_conf(vcs), env, check, vcs.vmn_root_path,
+                                    os.environ)
     try:
         supervision.run(trial_args.run_cmd)
     finally:
         if check is not None:
             check.close()
     return supervision
+
+
+def trial_supervision(storage, app_name, verstr, trial_args, exp_conf, sweep_env,
+                      on_tick, root, env):
+    """A trial's supervision: its command records into the trial run unless
+    ``--no-adopt`` or ``VMN_EXP_ADOPT`` in *env* turn that off."""
+    return _Supervision(storage, app_name, verstr, trial_args, exp_conf,
+                        extra_env=sweep_env, on_tick=on_tick, root=root,
+                        adopt=adopt_requested(trial_args, env),
+                        wait=threading.Event().wait)
 
 
 class _EarlyStopCheck:
@@ -138,8 +149,9 @@ class _EarlyStopCheck:
         self._worker.close(timeout=0)
 
     def _check(self, _item):
-        # Compare the runs that carry the metric: a trial's own, or the run a
-        # start_run() inside it nested under it. The rows are as fresh as the
+        # Compare the runs that carry the metric: a trial's own (an adopting
+        # start_run() records there), or the run a start_run() nested under it
+        # (older sweeps, --no-adopt, launchers that spawn). The rows are as fresh as the
         # check interval asks; a refresh in between is not waited for.
         interval = self._spec["early_terminate"]["check_interval_sec"]
         rows = trial_rows(self._storage, self._app_name, self._sweep, self._spec,

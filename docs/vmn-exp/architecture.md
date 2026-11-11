@@ -269,8 +269,8 @@ stateDiagram-v2
 
 A run created while `VMN_EXPERIMENT_ID` is set becomes an inner run of that
 run, so nesting falls out of how you launch jobs. The one exception is the
-first plain `start_run()` in the process `vmn-exp run` started itself (its
-direct child): it records into the supervisor's run, in a stream of its own
+first plain `start_run()` in the process `vmn-exp run`, `vmn-exp rerun` or a
+sweep agent's trial started itself (its direct child): it records into the supervisor's run, in a stream of its own
 (`<writer>-sdk~<owner>`), instead of opening an inner run; the supervisor
 still writes the run's state. `--no-adopt` or `VMN_EXP_ADOPT=0` turn that off.
 An outer run's `tree_status` rolls up its subtree (`failed > stuck > running >

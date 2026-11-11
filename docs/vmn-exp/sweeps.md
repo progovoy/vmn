@@ -100,7 +100,12 @@ Each trial is supervised exactly like [`vmn-exp run`](experiments.md#run)
 (heartbeat, `output.log`, signal forwarding, alerts). Besides
 `VMN_EXPERIMENT_ID` / `VMN_APP_NAME` / `VMN_METRICS_FILE` the child gets
 `VMN_SWEEP_PARAMS` (the params as JSON), `VMN_SWEEP_ID` (the sweep's verstr)
-and `VMN_SWEEP_TRIAL` (the trial index).
+and `VMN_SWEEP_TRIAL` (the trial index), and the adoption token
+(`VMN_EXP_ADOPT_RUN_ID` / `VMN_EXP_ADOPT_PID`): the first plain `start_run()`
+in the trial's command records into the trial run, as under
+[`vmn-exp run`](experiments.md#outer--inner-jobs-sweeps). `--no-adopt` (or
+`VMN_EXP_ADOPT=0`) makes it a run nested under the trial instead; a command
+run through a shell (`sh -c ...`) or a launcher that spawns it nests too.
 
 Report the target metric with a step, so early stopping can compare. With the
 SDK ([`sweep_params()`](sdk.md#sweep-trials-sweep_params)):
@@ -109,7 +114,7 @@ SDK ([`sweep_params()`](sdk.md#sweep-trials-sweep_params)):
 from vmn_exp.sdk import start_run, sweep_params
 
 params = sweep_params()              # {} outside a sweep
-with start_run() as run:             # nests under the trial run
+with start_run() as run:             # records into the trial run
     for step in range(1, params["epochs"] + 1):
         run.log_metric("loss", train_one_epoch(params["lr"]), step=step)
 ```
@@ -215,3 +220,4 @@ that is not a sweep), which answers `{sweep, spec, summary, trials}`:
 | `--kill-grace-sec` | agent | Seconds a stopped trial gets before SIGKILL |
 | `--no-capture-output`, `--output-cap-mb` | agent | Trial `output.log` capture |
 | `--no-system-metrics`, `--no-env` | agent | Skip `sys_*` metrics / environment capture on trials |
+| `--no-adopt` | agent | A trial's `start_run()` opens a run nested under the trial instead of recording into it (also `VMN_EXP_ADOPT=0`) |
