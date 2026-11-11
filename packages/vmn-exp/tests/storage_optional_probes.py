@@ -110,7 +110,7 @@ OTHER_PROBES = {
     'refreshing': 1, 'refs': 2, 'register_at_fork': 4, 'remove': 2, 'repo': 2, 'repo_lock': 4,
     'response': 2, 'resume_journal': 1, 'role_mappings': 4, 'router': 2, 'rows': 1,
     'run_cmd': 5, 'run_name': 3, 'run_state': 2, 'save': 1, 'savefig': 1,
-    'sched_getaffinity': 1, 'schema_less': 1, 'scope': 2, 'score': 1, 'select': 1,
+    'sched_getaffinity': 1, 'schema_less': 1, 'scope': 2, 'score': 1,
     'server_side_start_after': 2, 'shape': 2, 'similar_hint': 1, 'skip_artifacts': 1,
     'snapshot_now': 1, 'statfs$INODE64': 1, 'status_code': 5, 'step': 1, 'store': 6,
     'sync_interval': 1, 'system_metrics': 1, 'tenancy': 1, 'to_dict': 3, 'token': 2,
