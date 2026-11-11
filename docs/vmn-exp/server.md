@@ -217,6 +217,11 @@ the per-workspace SQLite files, so several replicas can share one cache:
   reconciles fully first).
 - A save sends `NOTIFY vmn_gen`; followers `LISTEN` and refresh at once,
   falling back to their once-a-second tick.
+- A job (what `POST .../actions/{action}` starts) lives in the memory of the
+  replica that started it. Several replicas need sticky routing (session
+  affinity) for `POST .../actions/{action}` and `GET /api/v1/jobs/{id}`, or
+  one replica that takes every mutation. Without it a poll can answer 404 for
+  a job that is running; a restart forgets its jobs the same way.
 - Every Postgres store (cache, control plane, search) uses a connection pool per
   DSN with these defaults:
   - 1 to 10 connections, checked when taken from the pool;
