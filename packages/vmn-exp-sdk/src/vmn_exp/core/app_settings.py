@@ -199,11 +199,12 @@ def attention_entries(ui):
 
 
 # ``ui.baseline`` (plan 28 N3): the fields an outer run's baseline shares
-# with it (``match``), the ones it must not share (``differ``, plan 34 §2)
-# and the field its direct children pair by (``children_by``), each a
-# ``params.<k>``/``tags.<k>``.
+# with it (``match``), the ones it must not share (``differ``, plan 34 §2),
+# the field its direct children pair by (``children_by``) and the field its
+# training's attempts share (``pool_by``, plan 35 §3: never a ``match``
+# field), each a ``params.<k>``/``tags.<k>``.
 MAX_BASELINE_MATCH = 8
-_BASELINE_KEYS = ("match", "differ", "children_by")
+_BASELINE_KEYS = ("match", "differ", "children_by", "pool_by")
 _FIELD_PREFIXES = ("params", "tags")
 
 
@@ -237,20 +238,25 @@ def _check_baseline(baseline):
     both = set(match) & set(differ)
     if both:
         raise SettingsError(f"ui.baseline names {', '.join(sorted(both))} in both match and differ")
-    if baseline.get("children_by") is not None:
-        check_field(baseline["children_by"], "ui.baseline.children_by")
+    for key in ("children_by", "pool_by"):
+        if baseline.get(key) is not None:
+            check_field(baseline[key], f"ui.baseline.{key}")
+    if baseline.get("pool_by") in match:
+        raise SettingsError(f"ui.baseline.pool_by {baseline['pool_by']} is also a match field: "
+                            "its trainings would never be peers")
 
 
 def baseline_rule(ui):
     """*ui*'s ``baseline`` as ``{match: [fields], differ: [fields],
-    children_by: field|None}``; no rule when it is invalid."""
+    children_by: field|None, pool_by: field|None}``; no rule when it is
+    invalid."""
     baseline = (ui or {}).get("baseline") or {}
     try:
         _check_baseline(baseline)
     except SettingsError:
         baseline = {}
     return {"match": list(baseline.get("match", [])), "differ": list(baseline.get("differ", [])),
-            "children_by": baseline.get("children_by")}
+            "children_by": baseline.get("children_by"), "pool_by": baseline.get("pool_by")}
 
 
 def baseline_conf(ui):

@@ -261,6 +261,19 @@ class JobAggregates:
         key = (base.token, bucket, self._cache.schema_key(schema), agg, verstr)
         return self._answers.get(key, lambda: self._payload_of(snapshot, schema, agg).rolled(verstr))
 
+    def pooled(self, snapshot, schema, jobs, agg=None):
+        """The ``rolled`` fields of *jobs* (the latest attempt first) pooled
+        (:meth:`Pool.pooled`; with no unit valued, an empty ``rolled``): a
+        baseline's training (plan 35 §3). Top-level jobs read the memoized
+        pool, others an unfrozen one."""
+        agg = agg or board_job_agg(self._cache, snapshot)
+        pool = self.pool(snapshot, schema, agg)
+        if any(job not in pool.top for job in jobs):
+            pool = self._payload_of(snapshot, schema, agg)
+            for job in jobs:
+                pool.rolled(job)
+        return pool.pooled(jobs) or _payload(pool.agg, pool.metric, pool.goal)
+
     def value_of(self, snapshot, schema, agg=None):
         """The :class:`~vmn_exp.ui.job_units.UnitValue` of *agg*'s source
         (the app's default; ``of_row`` the value of a row, ``metric``/``up``

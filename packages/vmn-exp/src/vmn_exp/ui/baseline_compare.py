@@ -6,7 +6,9 @@ the delta of their value per pair (a key either side lacks a value for is
 unpaired, never filled from another source: plan 32), and the
 chip, which counts the finished pairs worse than the baseline's worst
 decile (``p10`` of a higher-is-better metric, ``p90`` of a lower-is-better
-one) — so a regression shows as soon as the first matched children end.
+one) — so a regression shows as soon as the first matched children end. An
+outer run holding no key says so (``none``, plan 35 §3), never "no value
+finished yet".
 """
 from vmn_exp.core.metric_schema import higher_is_better
 from vmn_exp.core.settle import row_closes
@@ -16,7 +18,7 @@ from vmn_exp.ui.leaderboard_group_fields import NONE, key_of, key_text, value_of
 from vmn_exp.ui.leaderboard_group_summary import quantile as interpolated
 from vmn_exp.ui.pivot import value_order
 
-WORSE, BETTER, SAME, PENDING = "worse", "better", "same", "pending"
+WORSE, BETTER, SAME, PENDING, NONE_OWN = "worse", "better", "same", "pending", "none"
 MARKS = {WORSE: "▼", BETTER: "▲", SAME: "="}
 # A delta's ``better`` as a chip state.
 STATES = {True: BETTER, False: WORSE, None: SAME}
@@ -118,12 +120,12 @@ def _noun(field):
     return f"{field.partition('.')[2]} values"
 
 
-def chip(pairs, baseline_values, metric, higher_better, field, total=None):
+def chip(pairs, baseline_values, metric, higher_better, field, total=None, pooled=False):
     """The chip of *pairs* (marking each finished one ``worse`` or not):
     ``{state, text, metric, from, worse, of, quantile, threshold, paired,
-    total}`` (*total*: the keys the target holds, paired or not), None for
-    a goal-less *metric*. *baseline_values*: the value of every baseline
-    child holding a key."""
+    total}`` (*total*: the keys the target holds, paired or not; *pooled*:
+    over its training's attempts), None for a goal-less *metric*.
+    *baseline_values*: the value of every baseline child holding a key."""
     if higher_better is None or metric is None:
         return None
     ordered = sorted(v for v in baseline_values if is_finite_number(v))
@@ -137,11 +139,16 @@ def chip(pairs, baseline_values, metric, higher_better, field, total=None):
     out = {"metric": metric, "from": worse[0]["label"] if worse else None, "worse": len(worse),
            "of": len(finished), "quantile": quantile, "threshold": threshold,
            "paired": len(pairs), "total": len(pairs) if total is None else total}
-    return dict(out, **_state(out, finished, higher_better, field))
+    return dict(out, **_state(out, finished, higher_better, field, pooled))
 
 
-def _state(out, finished, higher_better, field):
+def _state(out, finished, higher_better, field, pooled):
     metric, noun = out["metric"], _noun(field)
+    if not out["total"]:
+        name = field.partition(".")[2]
+        whose = (f"this training has no {name} runs in any attempt" if pooled
+                 else f"this attempt has no {name} runs of its own")
+        return {"state": NONE_OWN, "text": f"{metric}: {whose}"}
     if not finished:
         return {"state": PENDING, "text": f"{metric}: no {noun[:-1]} finished yet"}
     tail = f"{noun} worse than the baseline's {out['quantile']})"

@@ -6,7 +6,8 @@
 }
 .baseline-chip.baseline-worse { color: var(--st-bad, var(--bad)); }
 .baseline-chip.baseline-better { color: var(--st-good, var(--good)); }
-.baseline-chip.baseline-pending { color: var(--text-3); }
+.baseline-chip.baseline-pending,
+.baseline-chip.baseline-none { color: var(--text-3); }
 .job-baseline .baseline-chip { margin-left: 0; white-space: normal; }
 .baseline-deltas, .baseline-pairs table { border-collapse: collapse; font-size: 12px; }
 .baseline-deltas th, .baseline-deltas td, .baseline-pairs th, .baseline-pairs td {

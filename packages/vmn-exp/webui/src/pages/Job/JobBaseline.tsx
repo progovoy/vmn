@@ -120,9 +120,10 @@ function PairTable({ data, appBase }: { data: BaselineCompare; appBase: string }
   );
 }
 
-const noBaseline = (match: string[], differ?: string[]) => {
+const noBaseline = (match: string[], differ?: string[], poolBy?: string | null) => {
   const rule = ruleText(match, differ);
-  return `No ${rule ? `ended outer run${rule}` : "earlier ended outer run beside it"} yet (tag one baseline=true to pin it).`;
+  const what = poolBy ? `training (pooled by ${poolBy})` : "outer run";
+  return `No ${rule ? `ended ${what}${rule}` : `earlier ended ${what} beside it`} yet (tag one baseline=true to pin it).`;
 };
 
 export default function JobBaseline({ ws, app, verstr, done }: Props) {
@@ -131,12 +132,12 @@ export default function JobBaseline({ ws, app, verstr, done }: Props) {
   if (query.isError) return <p className="error" role="alert">{query.error.message}</p>;
   const data = query.data;
   if (!data) return <Skeleton />;
-  if (!data.baseline) return <p className="muted">{noBaseline(data.match, data.differ)}</p>;
+  if (!data.baseline) return <p className="muted">{noBaseline(data.match, data.differ, data.pool_by)}</p>;
   return (
     <div className="job-baseline">
       <p>
         vs <Link to={runHref(appBase, data.baseline.verstr)}>{fleetLabel(data.baseline)}</Link>{" "}
-        <span className="muted">{pickedText(data.baseline.source, data.match, data.differ)}</span>
+        <span className="muted">{pickedText(data.baseline.source, data.match, data.differ, data.pool)}</span>
       </p>
       {data.chip && <p><BaselineChip chip={data.chip} /></p>}
       {!data.goal && data.metric && <p className="muted">{`${data.metric}${NO_GOAL}: no better or worse`}</p>}

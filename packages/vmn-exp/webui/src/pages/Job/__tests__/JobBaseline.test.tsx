@@ -146,6 +146,28 @@ describe("the baseline card", () => {
     )).toBeInTheDocument();
   });
 
+  it("names the pool rule and both trainings' attempts (plan 35 §3)", async () => {
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
+      match: ["tags.target"], differ: ["tags.launch_id"], pool_by: "tags.launch_id",
+      pool: { by: "tags.launch_id", attempts: ["a2", "a1"], baseline_attempts: ["b3", "b2", "b1"] },
+    }));
+    renderCard();
+    expect(await screen.findByText(
+      "the latest ended training with the same tags.target and a different tags.launch_id, "
+      + "pooled by tags.launch_id (2 attempts vs 3)",
+    )).toBeInTheDocument();
+  });
+
+  it("says no other training has ended yet under a pool rule", async () => {
+    vi.mocked(jobBaseline).mockResolvedValue(compareFixture({
+      match: ["tags.target"], differ: [], pool_by: "tags.launch_id", pool: null,
+      baseline: null, chip: null, pairs: [], metrics: {} }));
+    renderCard();
+    expect(await screen.findByText(
+      "No ended training (pooled by tags.launch_id) with the same tags.target yet (tag one baseline=true to pin it).",
+    )).toBeInTheDocument();
+  });
+
   it("shows the server's error", async () => {
     vi.mocked(jobBaseline).mockRejectedValue(new Error("bad by"));
     renderCard();

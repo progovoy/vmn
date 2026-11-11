@@ -17,6 +17,16 @@ the Outer runs row's (plan 31 §2, :mod:`~vmn_exp.ui.job_aggregate`): the
 app's ``job_aggregate`` metric, its own or its subtree's best by the
 aggregate's ``value``, the same source on both sides (plan 32); the chip
 without pairs compares the two jobs' ``rolled``.
+
+With ``pool_by`` (plan 35 §3, e.g. ``tags.launch_id``) a run is compared
+through its training: the outer runs beside it sharing its value, the latest
+attempt first (:func:`~vmn_exp.ui.leaderboard_group_jobs.attempt_order`).
+The baseline is another training, chosen on each training's latest attempt;
+both sides' children pair by key with the latest attempt holding a key
+winning it, and ``rolled`` is both trainings' pooled units (the grouped
+header's :meth:`~vmn_exp.ui.job_aggregate.JobAggregates.pooled`). The
+rollup deltas stay the two latest attempts'. A run without the field has no
+baseline (missing is missing).
 """
 import hashlib
 from typing import NamedTuple, Optional, Tuple
@@ -29,7 +39,8 @@ from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.attention import attention_key, attention_payload
 from vmn_exp.ui.baseline_choice import choose_baseline
 from vmn_exp.ui.baseline_compare import best_chip, chip, delta, pair_children, rollup_deltas
-from vmn_exp.ui.leaderboard_group_fields import value_of
+from vmn_exp.ui.leaderboard_group_fields import NONE, key_of, value_of
+from vmn_exp.ui.leaderboard_group_jobs import attempt_order
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.settled_subtree import SettledMemo
 
@@ -44,6 +55,7 @@ class Rule(NamedTuple):
     match: Tuple[str, ...]
     by: Optional[str]
     differ: Tuple[str, ...]
+    pool_by: Optional[str] = None
 
 
 class UnknownBaseline(LookupError):
@@ -86,6 +98,37 @@ def _count_of(part):
     return 0 if part is None else part["count"]
 
 
+def _latest_first(rows):
+    return tuple(row["verstr"] for row in sorted(rows, key=attempt_order, reverse=True))
+
+
+def _trainings(rows, field):
+    """``{key: (verstr, ...)}``: *rows* by their *field*, the latest attempt
+    first; rows without it are in none."""
+    key_in, out = key_of(field), {}
+    for row in rows:
+        key = key_in(row)
+        if key != NONE:
+            out.setdefault(key, []).append(row)
+    return {key: _latest_first(kept) for key, kept in out.items()}
+
+
+def _training(trainings, field, row):
+    """*row*'s attempts in *trainings* (by *field*), else *row* alone."""
+    return trainings.get(key_of(field)(row), (row["verstr"],))
+
+
+def _pooled_children(sides, field):
+    """The children of each attempt of *sides* (the latest first) holding a
+    *field* key no later attempt holds: a key from the latest attempt with it."""
+    key_in, taken, out = key_of(field), set(), []
+    for kids in sides:
+        keys = {key_in(row) for row in kids} - {NONE}
+        out += [row for row in kids if key_in(row) in keys - taken]
+        taken |= keys
+    return out
+
+
 def _tag(*parts):
     return hashlib.blake2b(repr(parts).encode(), digest_size=16).hexdigest()
 
@@ -104,7 +147,8 @@ class BaselineViews:
         (*by* ``""``: no pairing); ``differ`` is always the app's."""
         conf = baseline_rule(self._cache.conf_of(snapshot)[1])
         return Rule(tuple(conf["match"] if match is None else match),
-                    conf["children_by"] if by is None else by or None, tuple(conf["differ"]))
+                    conf["children_by"] if by is None else by or None, tuple(conf["differ"]),
+                    conf["pool_by"])
 
     def answer(self, snapshot, schema, verstr, to=None, match=None, by=None, attention=None):
         """``(payload, ETag)`` of job *verstr* against its baseline
@@ -148,30 +192,46 @@ class BaselineViews:
                                  lambda: self._resolved(snapshot, schema, verstr, to, rule, key))
 
     def _resolved(self, snapshot, schema, verstr, to, rule, key):
-        chosen = self._choose(snapshot, verstr, rule, to)
+        chosen, sides = self._choose(snapshot, verstr, rule, to)
         base = self._cache._base(snapshot)[0]
-        build = lambda: self._build(snapshot, schema, verstr, chosen, rule)  # noqa: E731
-        scopes = (verstr,) + ((chosen[0],) if chosen[0] else ())
+        build = lambda: self._build(snapshot, schema, verstr, chosen, rule, sides)  # noqa: E731
+        scopes = sides[0] + sides[1]
         kept = self._settled.get(base, scopes, (snapshot.app_name, chosen) + key, build)
         if kept is not None:
             return kept
         return build(), self._cache.etag(snapshot, schema, route="baseline", key=key)
 
     def _choose(self, snapshot, verstr, rule, to):
-        """``(baseline verstr or None, source)``."""
+        """``((baseline verstr or None, source), (our attempts, theirs))``,
+        the attempts latest first: the two runs alone without ``pool_by``."""
         if to is not None:
             if to == verstr:
                 raise ValueError("an outer run is not its own baseline")
             if not self.views.is_job(snapshot, to):
                 raise UnknownBaseline(f"{to} is not an outer run of this app")
-            return to, "to"
         tree = self.views.rollups.tree(self._cache._base(snapshot)[0])
         target = self.views.row(snapshot, verstr)
-        row, source = choose_baseline(target, self.views.rows_of(snapshot, tree.peers(verstr)),
-                                      rule.match, rule.differ)
-        return (row["verstr"], source) if row else (None, None)
+        peers = self.views.rows_of(snapshot, tree.peers(verstr))
+        trainings = _trainings(peers, rule.pool_by) if rule.pool_by else {}
+        ours = _training(trainings, rule.pool_by, target) if rule.pool_by else (verstr,)
+        if to is not None:
+            theirs = (_training(trainings, rule.pool_by, self.views.row(snapshot, to))
+                      if rule.pool_by else (to,))
+            return (to, "to"), (ours, theirs)
+        if rule.pool_by:
+            mine = key_of(rule.pool_by)(target)
+            if mine == NONE:
+                return (None, None), (ours, ())
+            target = self.views.row(snapshot, ours[0])
+            peers = [self.views.row(snapshot, kept[0]) for key, kept in trainings.items()
+                     if key != mine]
+        row, source = choose_baseline(target, peers, rule.match, rule.differ)
+        if row is None:
+            return (None, None), (ours, ())
+        theirs = trainings[key_of(rule.pool_by)(row)] if rule.pool_by else (row["verstr"],)
+        return (row["verstr"], source), (ours, theirs)
 
-    def _build(self, snapshot, schema, verstr, chosen, rule):
+    def _build(self, snapshot, schema, verstr, chosen, rule, sides):
         fields, by = rule.match, rule.by
         row = self.views.row(snapshot, verstr)
         spec = self.views.rollups.spec(snapshot, schema)
@@ -179,35 +239,45 @@ class BaselineViews:
                 "values": {f: value_of(f)(row) for f in fields}, "baseline": None,
                 "metric": spec.main, "goal": spec.goals.get(spec.main),
                 "metrics": {}, "failed_pct": None, "duration_p90": None, "attention": [],
-                "own": {}, "pairs": [], "pairs_total": 0, "chip": None}
+                "own": {}, "pairs": [], "pairs_total": 0, "chip": None,
+                "pool_by": rule.pool_by, "pool": None}
         base_v, source = chosen
         if base_v is None:
             return body
         base_row = self.views.row(snapshot, base_v)
         rollups, aggregates = self.views.rollups, self._cache.job_aggregates
         ours, theirs = (rollups.job_rollup(snapshot, schema, v) for v in (verstr, base_v))
-        rolled = [aggregates.one(snapshot, schema, v) for v in (verstr, base_v)]
+        if rule.pool_by:
+            rolled = [aggregates.pooled(snapshot, schema, side) for side in sides]
+            body["pool"] = {"by": rule.pool_by, "attempts": list(sides[0]),
+                            "baseline_attempts": list(sides[1])}
+        else:
+            rolled = [aggregates.one(snapshot, schema, v) for v in (verstr, base_v)]
         deltas = rollup_deltas(ours, theirs, spec.goals, rolled)
         body.update(deltas, baseline=_ref(base_row, source), own=_own(row, base_row, schema))
         if by:
-            body.update(self._paired(snapshot, schema, verstr, base_v, by))
+            body.update(self._paired(snapshot, schema, sides, by, rule.pool_by))
         else:
             body["chip"] = best_chip(deltas)
+        if body["chip"] and rule.pool_by:
+            body["chip"]["pool_by"] = rule.pool_by
         return body
 
-    def _paired(self, snapshot, schema, verstr, base_v, by):
-        """The children paired by *by* with their values' deltas (the
-        board's value function); a goal-less metric pairs without a
-        direction and has no chip."""
+    def _paired(self, snapshot, schema, sides, by, pool_by):
+        """The children of both *sides* (each its attempts, the latest
+        first) paired by *by* with their values' deltas (the board's value
+        function); a goal-less metric pairs without a direction and has no
+        chip."""
         unit = self._cache.job_aggregates.value_of(snapshot, schema)
-        kids = [self.views.children(snapshot, v) for v in (verstr, base_v)]
+        kids = [_pooled_children([self.views.children(snapshot, v) for v in side], by)
+                for side in sides]
         values = {row["verstr"]: unit.of_row(row) for side in kids for row in side}
         value = lambda row: values[row["verstr"]]  # noqa: E731
         pairs, total = pair_children(*kids, by, value, unit.up)
         keyed = value_of(by)
         base_values = [value(r) for r in kids[1] if keyed(r) is not None]
         return {"pairs": pairs[:MAX_PAIRS], "pairs_total": total,
-                "chip": chip(pairs, base_values, unit.metric, unit.up, by, total)}
+                "chip": chip(pairs, base_values, unit.metric, unit.up, by, total, bool(pool_by))}
 
     def _attention(self, snapshot, schema, body, entries, pinned_key):
         """Each attention query's share under both subtrees, per generation."""
