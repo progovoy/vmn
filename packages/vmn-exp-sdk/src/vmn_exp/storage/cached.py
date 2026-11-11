@@ -383,6 +383,10 @@ def local_side(storage):
     return None if getattr(storage, "is_remote", lambda: False)() else storage
 
 
+# What a log buffer whose contents did not all reach the remote says.
+SHIP_LATER_HINT = "ship it later with: vmn-exp buffers ship"
+
+
 def is_log_buffer(storage):
     """Whether *storage*'s local side is a direct-to-bucket log buffer: it
     holds what this process appended, not a replica of the record."""

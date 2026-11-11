@@ -1,12 +1,13 @@
 # AUTO-GENERATED (KNOWN_IO) by: python packages/vmn-exp/tests/test_io_boundary.py --regen
 # KNOWN_IO only shrinks. REAL_IO and REAL_WIRED are hand-kept and survive --regen.
 
-REAL_IO = {'vmn_exp.storage.buffer_owner': "a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.host_dirs': 'resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)'}
+REAL_IO = {'vmn_exp.storage.buffer_owner': "a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.buffer_host': "finds, locks and removes this host's log buffer dirs: the real local implementation (plan 40 C6)", 'vmn_exp.cli.buffers_cmd': "run_buffers is the `vmn-exp buffers` entry point: it builds the command's real IO (plan 40 C6)", 'vmn_exp.storage.host_dirs': 'resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)'}
 REAL_WIRED = {}
 
 KNOWN_IO = {
     'vmn_exp._base': {'env': 2, 'fs': 6, 'time': 1},
     'vmn_exp.cli.backfill_children': {'console': 3},
+    'vmn_exp.cli.buffers_cmd': {'console': 1, 'env': 1, 'time': 1},
     'vmn_exp.cli.comment': {'console': 4},
     'vmn_exp.cli.compact': {'console': 1},
     'vmn_exp.cli.experiment': {'console': 42, 'env': 5, 'fs': 7},
@@ -135,6 +136,7 @@ KNOWN_IO = {
     'vmn_exp.sdk.sysmetrics_gpu': {'env': 1},
     'vmn_exp.storage.azure': {'env': 2, 'fs': 2},
     'vmn_exp.storage.base': {'fs': 2},
+    'vmn_exp.storage.buffer_host': {'fs': 7, 'process_self': 1},
     'vmn_exp.storage.buffer_owner': {'fs': 3, 'process_self': 2},
     'vmn_exp.storage.buffered': {'fs': 1, 'process_self': 4, 'random': 1, 'time': 4},
     'vmn_exp.storage.child_markers': {'fs': 4},

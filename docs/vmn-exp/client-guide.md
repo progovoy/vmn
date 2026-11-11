@@ -254,7 +254,11 @@ With a bucket store a pod appends its logs to a local buffer under
 `VMN_EXP_CACHE_DIR` and ships it to the bucket. Put that dir on a volume that
 outlives the pod (a ReadWriteOnce PersistentVolumeClaim or a hostPath, not an
 `emptyDir`): a buffer kept after a store outage or a kill is then still on
-disk for another pod to ship.
+disk for another pod to ship. To ship it, run `vmn-exp buffers ship --store
+s3://bucket` from a pod that mounts the same volume at the same
+`VMN_EXP_CACHE_DIR`; it ships only buffers whose owning process is gone
+(`vmn-exp buffers list` shows them; see
+[Kept log buffers](experiments.md#kept-log-buffers)).
 
 Many runs of one code version: each new pod lists that code version's run
 names once to pick its `.rN`, so a fleet or sweep of thousands of pods does

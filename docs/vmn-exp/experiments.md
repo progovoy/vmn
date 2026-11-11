@@ -2017,7 +2017,10 @@ so a new optional method needs a row here.
   id `<writer>-sdk` (`<writer>-sdk~<owner>`), so the supervisor and the
   script never append to the same stream; each compacts only the streams it
   appended to. Without a local copy (straight to a bucket) the owner is
-  the process's. Displays (log `_writer`, UI writer columns,
+  the process's. The one exception is `vmn-exp buffers ship`: it ships a log
+  buffer's streams after taking that buffer's owner lock, which it can only
+  when the owning process is gone or has given the buffer up. A live owner's
+  buffer is never shipped from outside. Displays (log `_writer`, UI writer columns,
   `export-metrics`, authors) show the writer id only.
 - **Incremental log sync**: a local copy is the only source of its streams,
   so a sync ships what the remote lacks of each of them as the next segment
@@ -2044,7 +2047,8 @@ so a new optional method needs a row here.
   bucket never received are uploaded once more (only over a state of the
   same attempt that is not final); when that upload fails the buffer is kept,
   and the warning names its directory and the runs whose final state it
-  holds.
+  holds, and ends with `ship it later with: vmn-exp buffers ship`
+  ([Kept log buffers](#kept-log-buffers)).
 - **Caching**: immutable files fetched from a remote (metadata, patches) are
   cached locally; `run_state.yml` and logs never are, so another host's run
   shows its live status.
@@ -2199,6 +2203,38 @@ compacted `metrics/<writer>@000000-000000.vmx` (rewinds applied) and the record 
 `format_version: 2`. Record by record, so a killed migration resumes on rerun. Running or
 stuck runs stop it with a list unless `--skip-live` (rerun later for those).
 `--dry-run` prints the plan and changes nothing.
+
+### Kept log buffers
+
+A direct-to-bucket log buffer outlives its process when a ship failed at
+exit (the store was out of reach: the warning names the directory) or the
+process was killed (at most one flush interval of lines). Nothing ships it
+automatically and `vmn-exp push` does not read a buffer. From the same host,
+or a pod that mounts the same `VMN_EXP_CACHE_DIR` volume:
+
+```sh
+vmn-exp buffers list                       # every buffer on this host
+vmn-exp buffers ship --store s3://bucket   # ship the ones no live process owns
+```
+
+`list` prints each buffer's directory, `live` / `orphaned` / `unknown`, age,
+host, pid, store, runs and size; it is read-only and takes no repo lock.
+`ship` (`--store`, default `$VMN_EXPERIMENT_STORE`) takes each buffer's owner
+lock before it touches it and holds it until it is done, so it ships only a
+buffer whose process is gone or gave it up; two `ship`s exclude each other
+the same way. It resumes each stream from what the bucket holds, then
+uploads a final `run_state.yml` only the buffer holds (over a state of the
+same attempt that is not final), and removes the directory once everything
+landed (`--keep` leaves it). A run killed before it ended keeps its state:
+it reads `stuck` until `vmn-exp finish`; nothing invents an exit code. One
+line per buffer: `shipped`, `failed: <error>` (the directory stays), or a
+skip: `live` (its owner lock is held), `unknown` (no `buffer.json` or lock
+file: kept by an older release, or not a buffer), `another store`, or
+`no-lock` (no `fcntl` here, so no buffer is shipped). On a network
+filesystem a buffer whose `buffer.json` names another host counts as live,
+since a lock may not exclude across hosts there. Exit codes: 0, also when
+buffers were skipped; 1 when a buffer it locked could not be shipped; 2 for
+a usage error (no store).
 
 ---
 

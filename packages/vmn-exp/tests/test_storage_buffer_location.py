@@ -13,6 +13,7 @@ from s3_helpers import entry, meta
 
 from vmn_exp.storage import buffer_owner, buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
+from vmn_exp.storage.local import LocalSnapshotStorage
 
 fcntl = pytest.importorskip("fcntl")
 
@@ -141,3 +142,18 @@ def test_a_forked_child_closes_the_inherited_owner_lock(pod):
     finally:
         os.close(parents_fd)
     assert _lockable(root)
+
+
+def test_reopen_takes_the_existing_streams_without_a_new_owner_or_lock(monkeypatch, pod,
+                                                                        bucket):
+    root = _keep(monkeypatch, pod)
+    kept_streams = set(LocalSnapshotStorage(root, "runs").log_sizes(APP, V))
+
+    reopened = BufferedRemoteStorage.reopen(root, bucket, "runs")
+    reopened.sync_log_to_remote(APP, V, W)
+
+    assert set(bucket.log_sizes(APP, V)) == kept_streams
+    assert [e["values"]["i"] for e in bucket.load_merged_log(APP, V)] == [0, 1]
+    assert reopened not in buffered._PENDING
+    assert _lockable(root)
+    assert os.path.isdir(root)  # its shipper decides when it goes

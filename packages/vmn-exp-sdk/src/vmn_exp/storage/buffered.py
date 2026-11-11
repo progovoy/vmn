@@ -30,9 +30,11 @@ from vmn_exp.core.status import run_finished
 from vmn_exp.core.streams import new_owner, owner_of
 from vmn_exp.storage import buffer_owner
 from vmn_exp.storage.areas import RUNS
+from vmn_exp.storage.buffer_reopen import ReopenedBuffer
 from vmn_exp.storage.buffer_state import unpublished_final_states
-from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.storage.cached import SHIP_LATER_HINT, CachedSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
+from vmn_exp.storage.local import LocalSnapshotStorage
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5
 
@@ -72,6 +74,12 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._buffers_dir = buffers_dir
         self._flush_interval_sec = flush_interval_sec
         self._start_buffer(remote, area)
+
+    @classmethod
+    def reopen(cls, root, remote, area):
+        """The kept or orphaned buffer dir *root* of *remote*'s *area*, to
+        ship what it holds; its caller holds the dir's owner lock."""
+        return ReopenedBuffer(LocalSnapshotStorage(root, area), remote)
 
     def _start_buffer(self, remote, area):
         """A new buffer of this process: its dir (created on the first write,
@@ -286,7 +294,8 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         states = f", with the final state of {', '.join(unpublished)}" if unpublished else ""
         VMN_LOGGER.warning(
             f"What did not ship is kept in the log buffer {self._buffer_root}{states}; "
-            "nothing ships it automatically (`vmn-exp push` does not read a buffer)"
+            "nothing ships it automatically (`vmn-exp push` does not read a buffer); "
+            f"{SHIP_LATER_HINT}"
         )
         self._local.release()
         self._start_buffer(self._remote, self._local.area)

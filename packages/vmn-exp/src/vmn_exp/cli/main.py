@@ -17,7 +17,8 @@ ROOT_FLAGS = ("--debug",)
 EPILOG = (
     f"A bare action runs as 'vmn-exp exp <action>': {', '.join(EXPERIMENT_ACTIONS)}. "
     "Also: 'vmn-exp skill' (the AI-agent skill block), 'vmn-exp migrate' "
-    "(upgrade a store's layout), 'vmn-exp login' (a server API token)."
+    "(upgrade a store's layout), 'vmn-exp login' (a server API token), "
+    "'vmn-exp buffers list|ship' (this host's kept log buffers)."
 )
 
 
@@ -54,6 +55,10 @@ def run_argv(argv, read_version):
         from vmn_exp.cli.login import run_login
 
         return run_login(argv[1:]), None
+    if argv and argv[0] == "buffers":
+        from vmn_exp.cli.buffers_cmd import run_buffers
+
+        return run_buffers(argv[1:]), None
     register_all()
     command = argv[_root_flag_count(argv):][:1]
     if command and command[0] in VMN_ARGS and command[0] not in EXPERIMENT_ACTIONS:

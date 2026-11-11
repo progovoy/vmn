@@ -675,7 +675,10 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _not_uploaded(self, what, error):
         if error is None:
             return f"vmn: the final {what} of run {self.id} is still uploading"
-        return f"vmn: the final {what} of run {self.id} was not uploaded: {error}"
+        from vmn_exp.storage.cached import SHIP_LATER_HINT, is_log_buffer
+
+        hint = f"; {SHIP_LATER_HINT}" if is_log_buffer(self._storage) else ""
+        return f"vmn: the final {what} of run {self.id} was not uploaded: {error}{hint}"
 
     def _defer_ships(self):
         """Due ships of a direct-to-bucket storage go to the run's sync
