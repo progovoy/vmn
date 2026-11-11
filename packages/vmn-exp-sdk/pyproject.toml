@@ -10,7 +10,20 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE.txt"]
 authors = [{ name = "Pavel Rogovoy", email = "p.rogovoy@gmail.com" }]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+keywords = ["experiment tracking", "mlops", "machine learning", "metrics logging", "model registry"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "PyYAML>=5.4.1",
     "filelock>=3.2.0",
@@ -19,16 +32,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-s3 = ["boto3"]
+s3 = ["boto3>=1.37"]
 # runs_dataframe() / get_metric_history()
-pandas = ["pandas"]
+pandas = ["pandas>=2.0"]
 gcs = ["google-cloud-storage>=2.7"]
-azure = ["azure-storage-blob>=12.14", "azure-identity"]
+azure = ["azure-storage-blob>=12.14", "azure-identity>=1.21"]
 # GPU metrics need pynvml, which stays out of every extra: it is useless
 # without a driver and would break installs on CPU-only hosts.
 
 [project.urls]
 Homepage = "https://github.com/progovoy/vmn"
+Documentation = "https://github.com/progovoy/vmn/blob/master/docs/vmn-exp/sdk.md"
+Changelog = "https://github.com/progovoy/vmn/blob/master/packages/vmn-exp/CHANGELOG.md"
+Issues = "https://github.com/progovoy/vmn/issues"
+Source = "https://github.com/progovoy/vmn/tree/master/packages/vmn-exp-sdk"
 
 [tool.setuptools.packages.find]
 where = ["src"]

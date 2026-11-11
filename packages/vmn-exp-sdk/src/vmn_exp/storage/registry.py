@@ -100,10 +100,7 @@ def _resolve(target):
 
 
 def _storage_entry_points():
-    found = entry_points()
-    if hasattr(found, "select"):
-        return list(found.select(group=ENTRY_POINT_GROUP))
-    return list(found.get(ENTRY_POINT_GROUP, []))  # Python < 3.10
+    return list(entry_points(group=ENTRY_POINT_GROUP))
 
 
 def _load_entry_points():

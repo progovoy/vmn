@@ -6,6 +6,7 @@ it, for the registry versions registered there.
 
 Pure: no storage, no clock.
 """
+from bisect import bisect_right
 from operator import itemgetter
 
 from vmn_exp.registry.names import absolute_artifact_path, parse_registry_uri
@@ -120,7 +121,7 @@ class LineageIndex:
         added = [entry for _, of_row in sorted(new.values(), key=itemgetter(0)) for entry in of_row]
         if kept and added and self._idx(added[0]) < self._idx(kept[-1]):
             for entry in added:
-                kept.insert(self._after(kept, self._idx(entry)), entry)
+                kept.insert(bisect_right(kept, self._idx(entry), key=self._idx), entry)
         else:
             kept += added
         if kept:
@@ -130,18 +131,6 @@ class LineageIndex:
 
     def _idx(self, entry):
         return self.rows[entry[0]]["idx"]
-
-    def _after(self, entries, idx):
-        """Where an entry of row *idx* goes in *entries* (in row order): after
-        every entry of a row up to *idx* (a bisect; 3.8's has no ``key``)."""
-        lo, hi = 0, len(entries)
-        while lo < hi:
-            mid = (lo + hi) // 2
-            if self._idx(entries[mid]) <= idx:
-                lo = mid + 1
-            else:
-                hi = mid
-        return lo
 
 
 def _changes(old, new):

@@ -238,3 +238,50 @@ def test_vmn_exp_needs_a_vmn_with_the_split():
     assert not vmn.specifier.contains("1.0.0")
     # The workspace's own vmn must satisfy it, or editable installs conflict.
     assert vmn.specifier.contains(_project("vmn")["version"], prereleases=True)
+
+
+EXP_DISTS = ("vmn-exp-sdk", "vmn-exp")
+
+
+def _requires_python(dist):
+    from packaging.specifiers import SpecifierSet
+
+    return SpecifierSet(_project(dist)["requires-python"])
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_both_exp_distributions_require_python_3_10_or_newer(dist):
+    assert not _requires_python(dist).contains("3.9.18")
+    assert _requires_python(dist).contains("3.10.0")
+
+
+def _python_minors(classifiers):
+    prefix = "Programming Language :: Python :: 3."
+    return [int(c[len(prefix):]) for c in classifiers
+            if c.startswith(prefix) and c[len(prefix):].isdigit()]
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_python_classifiers_match_requires_python(dist):
+    minors = _python_minors(_project(dist).get("classifiers", []))
+    assert 10 in minors
+    assert [m for m in minors if not _requires_python(dist).contains(f"3.{m}.0")] == []
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_the_exp_distributions_declare_classifiers_keywords_and_urls(dist):
+    project = _project(dist)
+    assert project.get("keywords")
+    assert any(c.startswith("Development Status ::") for c in project.get("classifiers", []))
+    assert {"Documentation", "Changelog", "Issues", "Source"} <= set(project["urls"])
+
+
+@pytest.mark.parametrize("dist", EXP_DISTS)
+def test_every_exp_extra_requirement_has_a_lower_bound(dist):
+    from packaging.requirements import Requirement
+
+    extras = _project(dist).get("optional-dependencies", {})
+    reqs = [Requirement(r) for reqs in extras.values() for r in reqs]
+    unbounded = [str(r) for r in reqs if r.name not in EXP_DISTS  # vmn-exp-sdk[s3] is exempt
+                 and not any(s.operator in (">=", ">", "~=", "==") for s in r.specifier)]
+    assert unbounded == []

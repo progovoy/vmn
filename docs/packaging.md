@@ -195,13 +195,17 @@ the PyPI release.
 
 ### PyPI
 
-- `vmn` is on PyPI (0.10.1 is the last release before the split). `vmn-exp`
-  and `vmn-exp-sdk` are claimed by placeholder `0.0.1` releases (uploaded
-  2026-09-28), which contain nothing usable.
-- Release order for the split: first a vmn newer than 0.10.2rc9 (the last
-  version with its own `vmn exp`), since vmn-exp requires `vmn>0.10.2rc9,<1`;
-  then vmn-exp and vmn-exp-sdk together (`make minor NAME=vmn_exp`, giving
-  0.1.0 — 0.0.1 is taken by the placeholder).
+State checked on 2026-11-11:
+
+- `vmn` is on PyPI up to 0.11.2 (`requires-python >=3.8`); 0.10.1 is the last
+  release before the split, and every release from 0.10.2 on leaves `vmn exp`
+  to vmn-exp.
+- `vmn-exp` and `vmn-exp-sdk` are released together at one version, from
+  0.1.0 up to 0.1.37 (a few patch numbers were never uploaded). Releases up to
+  0.1.37 declare `requires-python >=3.8`; later ones `>=3.10`, so pip on 3.8
+  or 3.9 stops at 0.1.37 ([vmn-exp/upgrading.md](vmn-exp/upgrading.md)).
+  Both projects were first claimed by an empty `0.0.1` placeholder
+  (2026-09-28), which is why the first real release was 0.1.0.
 - A project is created by its first upload, which needs an account-wide token.
   After that, switch to per-project tokens.
 

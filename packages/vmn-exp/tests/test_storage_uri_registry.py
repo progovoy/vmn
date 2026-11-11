@@ -10,6 +10,8 @@ import pytest
 from vmn_exp.storage import registry
 from vmn_exp.storage.uri import parse_store_uri, s3_uri
 
+_REAL_STORAGE_ENTRY_POINTS = registry._storage_entry_points  # the fixture below replaces it
+
 
 @pytest.fixture(autouse=True)
 def _fresh_registry(monkeypatch):
@@ -111,6 +113,20 @@ def test_broken_entry_point_is_reported_with_its_target(monkeypatch):
     with pytest.raises(ImportError) as err:
         registry.open_store("mem://bkt")
     assert "no.such.module_xyz:make" in str(err.value)
+
+
+def test_plugin_schemes_are_read_from_the_entry_point_group_only(monkeypatch):
+    calls = []
+
+    def recording_entry_points(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    monkeypatch.setattr(registry, "_storage_entry_points", _REAL_STORAGE_ENTRY_POINTS)
+    monkeypatch.setattr(registry, "entry_points", recording_entry_points)
+
+    assert registry._storage_entry_points() == []
+    assert calls == [{"group": registry.ENTRY_POINT_GROUP}]
 
 
 def _hide_modules(monkeypatch, *prefixes):
