@@ -9,9 +9,9 @@ from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
 from vmn_exp.registry.names import HEADER_RECORD
 from vmn_exp.registry.store import (
-    artifact_uri_of, get_version, header_kind, list_versions, load_header,
+    artifact_uri_of, complete_records, get_version, get_versions, header_kind, list_versions,
+    load_header, registry_storage,
 )
-from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.s3_base import parallel_map
 from vmn_exp.ui.registry_snapshot import read_models
 
@@ -92,7 +92,7 @@ def model_detail_response(storage, model_name: str) -> tuple:
     fold = fold_registry(entries)
 
     # Load each version's raw metadata once, reuse in both version list and audit.
-    version_metas = dict(zip(ns, parallel_map(lambda n: get_version(storage, model_name, n), ns)))
+    version_metas = get_versions(storage, model_name, ns)
 
     alias_by_version: dict = {}
     for alias, ver_n in fold["aliases"].items():
@@ -119,7 +119,7 @@ class _ModelRow:
 
     def __init__(self, storage, name, files):
         self.files = files
-        records = {r for r, f in files.items() if METADATA_FILE in f}
+        records = complete_records(files)
         if HEADER_RECORD not in records:
             self.row = None
             return
@@ -149,7 +149,12 @@ class ModelListing:
     @classmethod
     def read(cls, storage, previous=None):
         """*storage*'s listing, reusing *previous*'s unchanged models."""
-        return cls(read_models(storage, previous._models if previous is not None else {}, _ModelRow))
+        return cls(read_models(storage, previous and previous._models, _ModelRow))
+
+    def with_model(self, storage, name):
+        """This listing with *name* re-read (after a write to it)."""
+        files = registry_storage(storage).list_files(name)
+        return ModelListing({**self._models, name: _ModelRow(storage, name, files)})
 
     def response(self, kind=None) -> dict:
         """``{"models": [ModelRow ...]}``, name-ordered, only *kind*

@@ -25,7 +25,7 @@ def register(app, api_prefix, any_exp_storage, listings):
     *any_exp_storage(ws_name)* — callable returning the experiment storage
     for a workspace, raising HTTPException(404) when the workspace is unknown.
     *listings* — the :class:`~vmn_exp.ui.readers.models.ModelListing` of a
-    storage (``get``), refreshed at once after a write here (``refresh``).
+    storage (``get``), its model re-read at once after a write here (``refresh_model``).
     """
     base = f"{api_prefix}/workspaces/{{ws_name}}/models"
 
@@ -95,7 +95,7 @@ def register(app, api_prefix, any_exp_storage, listings):
             except Exception:
                 pass
 
-        listings.refresh(storage)
+        listings.refresh_model(storage, model_name)
         return {"version": n}
 
     @app.post(f"{base}/{{model_name}}/aliases", status_code=200, dependencies=[require(EDITOR)])
@@ -119,7 +119,7 @@ def register(app, api_prefix, any_exp_storage, listings):
         except ValueError as exc:
             # expect mismatch → 409; invalid input caught earlier
             raise HTTPException(409, str(exc))
-        listings.refresh(storage)
+        listings.refresh_model(storage, model_name)
         return {}
 
     @app.delete(f"{base}/{{model_name}}/aliases/{{alias}}", status_code=200, dependencies=[require(EDITOR)])
@@ -132,7 +132,7 @@ def register(app, api_prefix, any_exp_storage, listings):
             remove_alias(storage, model_name, alias)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
-        listings.refresh(storage)
+        listings.refresh_model(storage, model_name)
         return {}
 
     @app.post(f"{base}/{{model_name}}/versions/{{version_n}}/status", status_code=200, dependencies=[require(EDITOR)])
@@ -148,5 +148,5 @@ def register(app, api_prefix, any_exp_storage, listings):
             set_version_status(storage, model_name, version_n, status)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
-        listings.refresh(storage)
+        listings.refresh_model(storage, model_name)
         return {}

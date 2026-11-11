@@ -18,6 +18,7 @@ list_versions(storage, model, records=None) -> [int]
 list_models(storage, kind=None, listing=None) -> [str]
 model_records(storage, model) / registry_listing(storage) -> the listings they read
 get_version(storage, model, n) -> metadata dict | None
+get_versions(storage, model, ns) -> {n: metadata dict | None}
 artifact_uri_of(storage, version metadata) -> str | None
 
 Timestamps come from ``vmn_exp.registry.fold.now_iso``; vmn_exp modules may
@@ -165,10 +166,13 @@ def register_version(
 
 
 def model_records(storage, model) -> dict:
-    """``{record: files}`` of *model*'s complete records (those holding their
-    metadata) — one listing."""
-    return {name: files for name, files in registry_storage(storage).list_files(model).items()
-            if METADATA_FILE in files}
+    """``{record: files}`` of *model*'s complete records — one listing."""
+    return complete_records(registry_storage(storage).list_files(model))
+
+
+def complete_records(files) -> dict:
+    """The records of a model's *files* listing that hold their metadata."""
+    return {name: found for name, found in files.items() if METADATA_FILE in found}
 
 
 def registry_listing(storage) -> dict:
@@ -193,6 +197,12 @@ def list_models(storage, kind=None, listing=None) -> list:
     if kind is None:
         return names
     return [name for name in names if model_kind(storage, name) == kind]
+
+
+def get_versions(storage, model, ns) -> dict:
+    """``{n: get_version(...)}`` of versions *ns* of *model*, read concurrently."""
+    ns = list(ns)
+    return dict(zip(ns, parallel_map(lambda n: get_version(storage, model, n), ns)))
 
 
 def get_version(storage, model, n) -> dict | None:

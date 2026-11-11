@@ -23,10 +23,10 @@ from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries, read_uses
 from vmn_exp.registry.names import HEADER_RECORD, USES_RECORD, valid_model_name
 from vmn_exp.registry.store import (
-    get_version, header_kind, list_versions, load_header, registry_storage, run_of,
+    complete_records, get_versions, header_kind, list_versions, load_header, registry_storage,
+    run_of,
 )
 from vmn_exp.registry.view import version_entry
-from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.s3_base import parallel_map
 
 REFRESH_SEC = 30.0
@@ -40,19 +40,19 @@ class _Model:
     __slots__ = ("files", "header", "fold", "versions", "uses")
 
     def __init__(self, storage, name, files):
-        records = {r for r, f in files.items() if METADATA_FILE in f}
+        records = complete_records(files)
         self.files = files
         self.header = load_header(storage, name) if HEADER_RECORD in records else None
         self.fold = fold_registry(read_entries(storage, name) if HEADER_RECORD in records else [])
         self.uses = read_uses(storage, name) if USES_RECORD in records else {}
-        ns = list_versions(storage, name, records)
-        self.versions = dict(zip(ns, parallel_map(lambda n: get_version(storage, name, n), ns)))
+        self.versions = get_versions(storage, name, list_versions(storage, name, records))
 
 
 def read_models(storage, old, build):
     """``{model: build(storage, name, files)}`` of every model of *storage*'s
     registry (*files*: its listing), each built concurrently; an entry of
-    *old* whose ``files`` still match is kept, not rebuilt."""
+    *old* (a dict like it, or None) whose ``files`` still match is kept."""
+    old = old or {}
     reg = registry_storage(storage)
     names = [name for name in reg.list_apps() if valid_model_name(name)]
     listings = parallel_map(reg.list_files, names)
@@ -76,7 +76,7 @@ class RegistrySnapshot:
     @classmethod
     def read(cls, storage, previous=None):
         """*storage*'s registry, reusing *previous*'s unchanged models."""
-        return cls(read_models(storage, previous._models if previous is not None else {}, _Model))
+        return cls(read_models(storage, previous and previous._models, _Model))
 
     def models_of(self, app, verstr):
         return self._run_models.get((app, verstr), ())
@@ -142,11 +142,14 @@ class RegistrySnapshots:
         self._refresh_when_due(storage, entry)
         return entry.snapshot
 
-    def refresh(self, storage):
-        """Refresh *storage*'s snapshot now (after a write of this server's)."""
+    def refresh_model(self, storage, name):
+        """Re-read model *name* of *storage*'s snapshot now (after this
+        server wrote to it); without background refresh, the next ``get``
+        reads it anyway."""
         entry = self._entry(storage)
         with entry.lock:
-            self._refresh(storage, entry)
+            if self._background and entry.snapshot is not None:
+                entry.snapshot = entry.snapshot.with_model(storage, name)
 
     def _entry(self, storage):
         with self._lock:

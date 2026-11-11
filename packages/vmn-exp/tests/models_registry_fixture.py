@@ -14,7 +14,8 @@ from vmn_exp.storage.areas import REGISTRY
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 MODELS = "/api/v1/workspaces/st/models"
-READS = ("list_apps", "list_files", "list_record_names", "load_file", "load_logs_by_writer")
+READS = ("list_apps", "list_files", "list_record_names", "load_file", "load_logs_by_writer",
+         "load_record")
 T0 = "2026-01-01T00:00:00Z"
 
 
