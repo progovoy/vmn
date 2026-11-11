@@ -81,6 +81,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
         self._metrics_flushed_at = {}
+        self._unshipped_metrics = set()  # (app, verstr, writer), as _unshipped
 
     @property
     def _local(self):
@@ -188,7 +189,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._flushed_at[key] = time.monotonic()
         super().sync_log_to_remote(app_name, verstr, writer_id)
         self._unshipped.discard(key)
-        if self._unshipped:
+        if self._unshipped or self._unshipped_metrics:
             return
         _PENDING.discard(self)
         # Nothing left to ship, and the run is done: no atexit safety net is
@@ -203,6 +204,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
             return False
         key = (app_name, verstr, writer_id)
         last = self._metrics_flushed_at.get(key)
+        self._unshipped_metrics.add(key)
         _PENDING.add(self)
         if last is None or time.monotonic() - last >= self._flush_interval_sec:
             try:
@@ -213,8 +215,10 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
 
     def sync_metrics_to_remote(self, app_name, verstr, writer_id):
         self._this_process()
-        self._metrics_flushed_at[(app_name, verstr, writer_id)] = time.monotonic()
+        key = (app_name, verstr, writer_id)
+        self._metrics_flushed_at[key] = time.monotonic()
         super().sync_metrics_to_remote(app_name, verstr, writer_id)
+        self._unshipped_metrics.discard(key)
 
     def _cleanup_buffer(self):
         """Drop the buffer dir: a later append starts a fresh buffer, under a
@@ -224,8 +228,18 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         shutil.rmtree(self._buffer_root, ignore_errors=True)
         self._owner = new_owner()
 
+    def _keep_buffer(self):
+        """Leave the buffer dir on disk, the only copy of what did not ship,
+        and move on to a fresh buffer: a later append never touches it."""
+        VMN_LOGGER.warning(
+            f"What did not ship is kept in {self._buffer_root}: nothing ships "
+            "it later (`vmn-exp push` does not read a buffer), recover it by hand"
+        )
+        self._start_buffer(self._remote, self._local.area)
+
     def close(self):
-        """Ship whatever is still buffered and drop the buffer."""
+        """Ship whatever is still buffered and drop the buffer — or keep it,
+        when some of it could not be shipped."""
         self._this_process()
         self._final_flush = True
         try:
@@ -234,25 +248,30 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
             self._final_flush = False
 
     def _close(self):
-        for app_name, verstr, writer_id in list(self._flushed_at):
-            try:
-                self.sync_log_to_remote(app_name, verstr, writer_id)
-            except Exception:
-                VMN_LOGGER.warning(
-                    f"Experiment {verstr}: could not ship the last log lines"
-                )
-                VMN_LOGGER.debug("Final log flush failed", exc_info=True)
-        for app_name, verstr, writer_id in list(self._metrics_flushed_at):
-            try:
-                self.sync_metrics_to_remote(app_name, verstr, writer_id)
-            except Exception:
-                VMN_LOGGER.warning(
-                    f"Experiment {verstr}: could not ship the last metric blocks"
-                )
-                VMN_LOGGER.debug("Final metric flush failed", exc_info=True)
-        self._metrics_flushed_at.clear()
+        shipped = [
+            self._ship_last(sync, key, what)
+            for sync, keys, what in (
+                (self.sync_log_to_remote, self._flushed_at, "log lines"),
+                (self.sync_metrics_to_remote, self._metrics_flushed_at, "metric blocks"),
+            )
+            for key in list(keys)
+        ]
+        _PENDING.discard(self)
+        if not all(shipped):
+            return self._keep_buffer()
         # A later append starts a fresh buffer, under a new owner.
+        self._metrics_flushed_at.clear()
         self._flushed_at.clear()
         self._unshipped.clear()
-        _PENDING.discard(self)
+        self._unshipped_metrics.clear()
         self._cleanup_buffer()
+
+    def _ship_last(self, sync, key, what):
+        """Whether the final *sync* of *key* went through (warns if not)."""
+        try:
+            sync(*key)
+        except Exception:
+            VMN_LOGGER.warning(f"Experiment {key[1]}: could not ship the last {what}")
+            VMN_LOGGER.debug(f"Final flush of the {what} failed", exc_info=True)
+            return False
+        return True
