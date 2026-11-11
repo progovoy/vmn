@@ -117,12 +117,19 @@ def test_stats_say_how_often_how_long_and_how_much_it_collected():
     assert stats["last_at"] is not None and stats["last_ms"] >= 0 and stats["total_ms"] >= 0
 
 
-def test_the_real_collect_does_not_freeze():
+def _freeze_count_after(collect):
     gc.unfreeze()
+    collect()
+    return gc.get_freeze_count()
+
+
+def test_the_real_collect_does_not_freeze():
+    """CPython 3.12 reports a non-zero freeze count after any plain
+    gc.collect() (3.14 reports 0), so compare against that, not 0."""
     policy = GcPolicy(free_threaded=lambda: True, set_automatic=lambda on: None,
                       start=lambda target: None)
-    policy.collect_now()
-    assert gc.get_freeze_count() == 0
+    plain = _freeze_count_after(gc.collect)
+    assert _freeze_count_after(policy.collect_now) == plain
 
 
 def test_automatic_collection_turned_off_inside_a_pause_stays_off_after_it():
