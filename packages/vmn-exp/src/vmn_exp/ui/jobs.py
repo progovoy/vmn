@@ -56,10 +56,16 @@ def _metric_args(metrics):
     """Validate a {name: value} mapping and render it as ``--metrics k=v ...``.
 
     Returns (args, error_message_or_None); ``([], None)`` when there are none.
+    A name starting with ``-`` would parse as a flag of its own, not a metric.
     """
     metrics = metrics or {}
     for key in metrics:
-        if not key or "=" in key or any(c.isspace() for c in key):
+        if (
+            not key
+            or key.startswith("-")
+            or "=" in key
+            or any(c.isspace() for c in key)
+        ):
             return None, f"Invalid metric name '{key}'"
     if not metrics:
         return [], None
