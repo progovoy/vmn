@@ -153,12 +153,14 @@ class S3Base:
     scheme = "s3"
 
     def __init__(self, bucket, prefix="vmn/snapshots", endpoint_url=None, client=None,
-                 client_factory=None):
+                 client_factory=None, options=None):
         """*client_factory* builds *client* again in a forked child; without
-        one an injected *client* refuses use there."""
+        one an injected *client* refuses use there. *options*: the store
+        URI's query options (:meth:`uri_options`)."""
         self.bucket = bucket
         self.prefix = prefix
         self.endpoint_url = endpoint_url
+        self._options = dict(options or {})
         # Not another object store's adapter.
         self._own_client = client is None and client_factory is None
         if self._own_client:
@@ -169,6 +171,9 @@ class S3Base:
         # Area clones share it: one client and connection pool per process.
         self._clients = PerProcess(client_factory or functools.partial(_injected, os.getpid()),
                                    value=client)
+
+    def uri_options(self, scheme):
+        return dict(self._options) if scheme == self.scheme else {}
 
     @property
     def _s3(self):

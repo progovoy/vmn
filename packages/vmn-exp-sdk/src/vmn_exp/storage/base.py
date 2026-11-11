@@ -257,6 +257,12 @@ class SnapshotStorage(ABC):
         path = artifact_file_path(record_dir, name) if record_dir else None
         return path if path and os.path.isfile(path) else None
 
+    def uri_options(self, scheme):
+        """The query options of the URI this store was opened from (an
+        ``endpoint_url``, an ``account_url``) when it is a *scheme* store, so
+        an absolute ``artifact_path`` of that scheme reaches the same service."""
+        return {}
+
     def object_local_path(self, key):
         """A local copy of object *key* of the backend's bucket, or None when
         it is missing (``download_model`` of an absolute ``artifact_path``)."""

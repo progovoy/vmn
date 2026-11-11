@@ -226,6 +226,9 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
         path_of = getattr(self._remote, "index_cache_path", None)
         return path_of(app_name) if path_of else None
 
+    def uri_options(self, scheme):
+        return self._remote.uri_options(scheme) if self._remote else {}
+
     def cache_identity(self):
         remote = self._remote.cache_identity() if self._remote else None
         return ("cached", self._local.cache_identity(), remote)

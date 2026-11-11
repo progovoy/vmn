@@ -219,7 +219,7 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
         )
 
     if absolute_artifact_path(artifact_path):
-        local = location_local_path(artifact_path)
+        local = location_local_path(artifact_path, store=storage)
         if local is None:
             raise FileNotFoundError(f"Artifact {artifact_path!r} not found.")
     else:

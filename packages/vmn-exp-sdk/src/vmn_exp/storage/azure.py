@@ -98,12 +98,12 @@ class AzureSnapshotStorage(S3SnapshotStorage):
     scheme = "az"
 
     def __init__(self, container_name, prefix="vmn/snapshots", container=None,
-                 if_not_modified=None, client_factory=None):
+                 if_not_modified=None, client_factory=None, options=None):
         """*client_factory* (an :class:`AzureObjectClient` builder, used
         instead of *container*) builds the client again in a forked child."""
         client = None if client_factory else AzureObjectClient(container, if_not_modified)
         super().__init__(container_name, prefix=prefix, client=client,
-                         client_factory=client_factory)
+                         client_factory=client_factory, options=options)
 
 
 def _sdk():
@@ -147,4 +147,4 @@ def open_azure_store(uri, area):
     factory = functools.partial(_default_adapter, uri.location,
                                 uri.options.get("account_url"))
     return AzureSnapshotStorage(uri.location, prefix=default_prefix(uri, area),
-                                client_factory=factory)
+                                client_factory=factory, options=uri.options)

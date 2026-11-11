@@ -69,15 +69,17 @@ def open_store(uri, area=RUNS):
     return _factory(parsed.scheme)(parsed, area=area)
 
 
-def location_local_path(uri):
+def location_local_path(uri, store=None):
     """A local path to the object at absolute *uri*, or None when it is
     missing: a file (a path or ``file://``) is its own path; an object of
     another scheme is downloaded through that scheme's backend, which says
-    which extra to install when its package is missing."""
+    which extra to install when its package is missing. A *store* of the
+    same scheme lends its URI options (``endpoint_url``...); *uri*'s win."""
     parsed = parse_store_uri(uri)
     if parsed.scheme == "file":
         return parsed.path if os.path.isfile(parsed.path) else None
-    bucket = StoreURI(parsed.scheme, parsed.location, "", parsed.options)
+    options = {**store.uri_options(parsed.scheme), **parsed.options} if store else parsed.options
+    bucket = StoreURI(parsed.scheme, parsed.location, "", options)
     return open_store(bucket).object_local_path(parsed.path)
 
 
@@ -146,4 +148,5 @@ def open_s3_store(uri, area):
         uri.location,
         prefix=default_prefix(uri, area),
         endpoint_url=uri.options.get("endpoint_url"),
+        options=uri.options,
     )
