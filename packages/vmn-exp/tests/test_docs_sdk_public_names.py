@@ -30,12 +30,22 @@ def test_public_names_extracts_the_backticked_list():
     assert public_names(text) == {"start_run", "Run", "set_alias", "use_model"}
 
 
-def test_sdk_md_public_names_equal_dunder_all():
+def _sdk_md():
     path = os.path.join(_PROJECT_ROOT, "docs", "vmn-exp", "sdk.md")
     with open(path, encoding="utf-8") as f:
-        documented = public_names(f.read())
+        return f.read()
+
+
+def test_sdk_md_public_names_equal_dunder_all():
+    documented = public_names(_sdk_md())
     exported = set(vmn_exp.sdk.__all__)
     assert documented == exported, {
         "missing from sdk.md": sorted(exported - documented),
         "not in __all__": sorted(documented - exported),
     }
+
+
+def test_sdk_md_does_not_send_users_to_core_storage_resolve():
+    text = _sdk_md()
+    assert "vmn_exp.core.storage_resolve" not in text
+    assert "vmn_exp.sdk.resolve_storage" in text

@@ -42,10 +42,16 @@ app `vmn_examples`.
 Public names in `vmn_exp.sdk`: `start_run`, `create_run`, `create_runs`, `Run`, `NoOpRun`, `current_run`,
 `RunExistsError`, `install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`,
 the fork-safety helpers `pause_background`, `resume_background`,
-`background_paused`, and the
+`background_paused`, the
 registry functions `register_model`, `set_alias`, `remove_alias`,
 `get_model_version`, `list_models`, `download_model`, `register_dataset`,
-`get_dataset_version`, `use_model`, `use_dataset`. Readers live in
+`get_dataset_version`, `use_model`, `use_dataset`, the readers `list_runs`,
+`get_run`, `get_run_state`, `get_run_states`, `get_lineage`, `similar_runs`,
+`runs_dataframe`, `get_metric_history`, `param_importance`, and
+`resolve_storage`, which builds a `storage=` for any of them. Registry and
+reader names load on first use, so `import vmn_exp.sdk` stays light; a
+`from vmn_exp.sdk import *` loads them all and binds names such as `list_runs`
+over your own. Readers live in
 `vmn_exp.sdk.reader`, run management in `vmn_exp.sdk.manage`, integrations in
 `vmn_exp.integrations.*`.
 
@@ -103,7 +109,7 @@ keyword-only, so `start_run("my_app", "baseline")` raises `TypeError` (write
 | `parent` | parent run, in any [addressing form](experiments.md#addressing-experiments) (verstr, unique prefix, `@N`, `latest`); an unknown one raises `ValueError` |
 | `nested` | parent to the calling context's open run (see [Nesting](#nesting)) |
 | `heartbeat_interval_sec` | beat cadence; also the `sys_*` sampling interval. Not given: `$VMN_EXP_HEARTBEAT_SEC`, else conf `experiment.heartbeat_interval_sec`, else 30 s. On S3/GCS/Azure a beat after this attempt's own write is one conditional PUT, with no read first ([status](experiments.md#run-status-did-my-job-die)) |
-| `storage` | a storage backend; default the app's configured one. Build one with `vmn_exp.core.storage_resolve.resolve_experiment_storage(store="s3://…")` (also takes `dir=`, `bucket=`, `prefix=`, `endpoint_url=`) |
+| `storage` | a storage backend; default the app's configured one. Build one with `vmn_exp.sdk.resolve_storage(store="s3://…")` (also takes `dir=`, `bucket=`, `prefix=`, `endpoint_url=`) |
 | `system_metrics` | `None`: sample `sys_*` unless opted out (below); `False`: off; `True`: on despite conf.yml, still off under `VMN_SYSTEM_METRICS=0` |
 | `sync_interval_sec` | push new log lines to the remote store at most this often, off the heartbeat thread, so a killed job still leaves its metrics remotely. `None`/`0`: only at `finish()`. Not given: `$VMN_EXP_SYNC_SEC`, else conf `experiment.sync_interval_sec`, else 30 s. Failed syncs are retried on a later beat |
 | `run_id` | reopen an existing run instead of creating one; falls back to `$VMN_RESUME_RUN_ID`. See [Resuming](#resuming-a-preempted-run) |
@@ -1070,7 +1076,7 @@ best = get_run("my_app", ref="latest")
 Without `storage=` readers read where `start_run()` records:
 `VMN_EXPERIMENT_DIR`, else the checkout found from the cwd (or
 `$VMN_WORKING_DIR`), fronting `VMN_EXPERIMENT_STORE`/the bucket shorthand —
-`vmn_exp.core.storage_resolve.resolve_experiment_storage()`, which also takes
+`vmn_exp.sdk.resolve_storage()`, which also takes
 `dir=`/`store=` explicitly. No checkout is needed. `app_name=None` resolves like
 `start_run()`: `VMN_APP_NAME`, then the app of `VMN_SNAPSHOT_METADATA`, then
 the sole app with runs in that storage. The conf.yml metrics schema applies

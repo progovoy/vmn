@@ -153,3 +153,8 @@ print(sorted(m for m in ("sqlite3", "asyncio") if m in sys.modules))
 
 def test_import_sdk_loads_no_sqlite3_or_asyncio():
     assert _run(_HEAVY_STDLIB) == "[]"
+
+
+def test_import_sdk_does_not_import_reader():
+    lazy = {"vmn_exp.sdk.reader", "vmn_exp.sdk.store_resolve"}
+    assert lazy & sdk_closure() == set()

@@ -51,9 +51,23 @@ from vmn_exp.sdk.fork_safety import (  # noqa: E402
     resume_background,
 )
 
-# Registry names load on first use: their modules pull in the registry store,
-# which a metrics-only job never needs (plan 41 D2).
+# Registry and reader names load on first use: their modules pull in the
+# registry store and the index, which a metrics-only job never needs (plan 41
+# D2, D10). vmn_exp.sdk.reader stays the readers' canonical module.
+_READERS = (
+    "get_lineage",
+    "get_metric_history",
+    "get_run",
+    "get_run_state",
+    "get_run_states",
+    "list_runs",
+    "param_importance",
+    "runs_dataframe",
+    "similar_runs",
+)
 _LAZY = {
+    **dict.fromkeys(_READERS, "vmn_exp.sdk.reader"),
+    "resolve_storage": "vmn_exp.sdk.store_resolve",
     "download_model": "vmn_exp.sdk.models",
     "get_model_version": "vmn_exp.sdk.models",
     "list_models": "vmn_exp.sdk.models",
@@ -98,10 +112,12 @@ __all__ = [
     "register_dataset",
     "register_model",
     "remove_alias",
+    "resolve_storage",
     "resume_background",
     "set_alias",
     "start_run",
     "sweep_params",
     "use_dataset",
     "use_model",
+    *_READERS,
 ]
