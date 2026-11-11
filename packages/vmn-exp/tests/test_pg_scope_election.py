@@ -75,7 +75,7 @@ def _until(cond, timeout=3.0):
 
 def test_wake_scope_wakes_only_the_matching_workspace():
     one, two = _Counting(f"1:{APP}"), _Counting(f"2:{APP}")
-    refresher = Refresher(interval_sec=30)
+    refresher = Refresher(interval_sec=30, clock=time.monotonic)
     try:
         refresher.snapshot(one)
         refresher.snapshot(two)

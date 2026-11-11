@@ -1,6 +1,7 @@
 """OIDC authorization code + PKCE login against a minimal fake IdP."""
 import base64
 import hashlib
+import time
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -83,7 +84,8 @@ def _client(tmp_path, idp):
         {"group": "everyone", "workspace": "*", "role": VIEWER},
     ]
     store = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
-    oidc = OIDCAuthenticator(config, store, JwksVerifier(idp, lambda: 0.0), http=idp)
+    oidc = OIDCAuthenticator(config, store, JwksVerifier(idp, lambda: 0.0), http=idp,
+                            clock=time.time)
     app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), auth=AuthenticatorChain([oidc]),
                      role_mappings=mappings)
 
@@ -210,7 +212,8 @@ def test_loopback_http_issuer_is_allowed():
     config = OIDCConfig(issuer=issuer, client_id="vmn-exp",
                         redirect_uri="http://localhost:8265/auth/callback")
     idp = LoopbackIdP()
-    meta = OIDCAuthenticator(config, None, JwksVerifier(idp, lambda: 0.0), http=idp).metadata()
+    meta = OIDCAuthenticator(config, None, JwksVerifier(idp, lambda: 0.0), http=idp,
+                             clock=time.time).metadata()
     assert meta["token_endpoint"] == f"{issuer}/token"
 
 

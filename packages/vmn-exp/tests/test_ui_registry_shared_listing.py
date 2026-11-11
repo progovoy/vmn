@@ -4,6 +4,8 @@ listing per refresh. A listing younger than ``REFRESH_SEC`` is reused, a
 write through the UI drops it, and a snapshot built from a reused listing is
 as old as it (its next refresh lists anew). Without background refresh each
 request still lists, so it sees every write."""
+import time
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -41,9 +43,9 @@ def test_without_background_refresh_each_request_lists(tmp_path, monkeypatch):
 
 
 def _pair(storage):
-    listings = RegistryListings()
-    return (listings, RegistrySnapshots(True, RegistrySnapshot.read, listings),
-            RegistrySnapshots(True, ModelListing.read, listings))
+    listings = RegistryListings(time.monotonic)
+    return (listings, RegistrySnapshots(True, RegistrySnapshot.read, listings, clock=time.monotonic),
+            RegistrySnapshots(True, ModelListing.read, listings, clock=time.monotonic))
 
 
 def test_a_write_through_the_ui_drops_the_shared_listing(tmp_path, monkeypatch):
@@ -62,7 +64,7 @@ def test_a_write_through_the_ui_drops_the_shared_listing(tmp_path, monkeypatch):
 
 def test_a_listing_a_write_dropped_while_in_flight_is_taken_again(tmp_path, monkeypatch):
     storage = store_storage(tmp_path)
-    listings = RegistryListings()
+    listings = RegistryListings(time.monotonic)
     taken = iter([{"old": {}}, {"new": {}}])
 
     def list_registry(storage):

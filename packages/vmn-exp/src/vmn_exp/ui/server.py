@@ -28,7 +28,7 @@ from vmn_exp.ui.api_errors import (
 )
 from vmn_exp.ui.app_presence import app_exists
 from vmn_exp.ui.attention_built_in import with_built_in
-from vmn_exp.ui.app_deps import real_deps
+from vmn_exp.ui.app_deps import real_deps, wall_seconds
 from vmn_exp.ui.audit import install_audit_middleware
 from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.auth.authz import can_read_job, require, require_action
@@ -48,7 +48,7 @@ from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.query_params import refuse_unknown_params
 from vmn_exp.ui.readers.contained_reads import ContainedReads
 from vmn_exp.ui.readers.models import ModelListing
-from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshots
+from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshot, RegistrySnapshots
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -178,14 +178,13 @@ def build_app(
         dependencies=[refuse_unknown_params(API_PREFIX)],
     )
     app.router.on_startup.append(install_default_limiter)  # first: before any thread runs
-    app.state.manager = manager
-    app.state.read_only = read_only
+    app.state.manager, app.state.read_only = manager, read_only
     app.state.role_mappings = list(role_mappings)
     jobs = app.state.jobs = deps.jobs
     app.state.control_plane = control_plane
-    app.state.audit = deps.audit
+    app.state.audit, app.state.token_service = deps.audit, deps.token_service
     if control_plane:
-        control_plane_sweep.install(app, control_plane, audit_retention_days)
+        control_plane_sweep.install(app, control_plane, audit_retention_days, wall_seconds(deps.io.clock))
     extra = list(auth.authenticators) if auth else []
     if deps.token_service:
         extra.append(ApiTokenAuthenticator(deps.token_service))
@@ -207,7 +206,7 @@ def build_app(
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
-                              store_upkeep=upkeep)
+                              store_upkeep=upkeep, clock=deps.io.clock)
     def _board_conf(snapshot):
         """``(metrics schema, experiment.ui)`` of *snapshot*'s app, as a request reads them."""
         owner = source.owner_of(snapshot)
@@ -763,7 +762,7 @@ def build_app(
     def _checkout(ws_name, app_tag):
         return _git_workspace(ws_name).path, _app_name(app_tag)
 
-    routes_admin.register(app, API_PREFIX)
+    routes_admin.register(app, API_PREFIX, wall_seconds(deps.io.clock))
 
     def _cache_of(ws_name):
         ws = _experiment_workspace(ws_name)
@@ -789,10 +788,10 @@ def build_app(
 
     def _events_reader(ws_name, app_tag):
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
-        store_storage = _exp_storage_for(ws)
-        return lambda: source.snapshot(ws, app_name, store_storage)
+        return partial(source.snapshot, ws, app_name, _exp_storage_for(ws))
 
-    routes_events.register(app, API_PREFIX, _events_reader, refresher.background, _segment)
+    routes_events.register(app, API_PREFIX, _events_reader, refresher.background, _segment,
+                           deps.io.clock.monotonic, deps.event_sleep)
     def _freshness(ws_name, app_tag):
         ws, app_name = _experiment_workspace(ws_name), _app_name(app_tag)
         return source.freshness(ws_name, app_name,
@@ -804,8 +803,10 @@ def build_app(
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
-    listings = RegistryListings()  # one registry listing per refresh for both snapshots
-    registries = RegistrySnapshots(refresher.background, listings=listings)
+    listings = RegistryListings(deps.io.clock.monotonic)  # one listing per refresh for both
+    registries, model_lists = (RegistrySnapshots(refresher.background, read, listings,
+                                                 clock=deps.io.clock.monotonic)
+                               for read in (RegistrySnapshot.read, ModelListing.read))
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment, registries.get)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs,
                                             registries.get)
@@ -821,8 +822,7 @@ def build_app(
     def _ws_storage(ws_name):
         return _any_exp_storage(_experiment_workspace(ws_name))
 
-    routes_models.register(app, API_PREFIX, _ws_storage,
-                           RegistrySnapshots(refresher.background, ModelListing.read, listings))
+    routes_models.register(app, API_PREFIX, _ws_storage, model_lists)
     routes_reports.register(app, API_PREFIX, _ws_storage, _report_index)
     routes_comments.register(app, API_PREFIX, _ws_storage)
 

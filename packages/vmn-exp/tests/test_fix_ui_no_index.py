@@ -2,6 +2,7 @@
 no on-disk cache."""
 import os
 
+from vmn_exp.core.real_io import real_io
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.files import INDEX_CACHE_FILE
 from vmn_exp.ui.experiment_source import ExperimentSource
@@ -15,7 +16,7 @@ def _setup(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
     storage = open_storage(root=local_store_root(str(root)), area="runs")
-    source = ExperimentSource(str(tmp_path / "data"), use_index=False)
+    source = ExperimentSource(str(tmp_path / "data"), use_index=False, clock=real_io().clock)
     return Workspace(name="ws", path=str(root)), storage, source
 
 

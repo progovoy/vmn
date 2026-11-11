@@ -28,7 +28,6 @@ and every replica routes those to its own watched indexes and report index
 with :meth:`WorkspaceJournal.receive`. A new leader resumes from the shared cursor.
 """
 import threading
-import time
 
 from vmn_exp.core.journal_reader import JournalReader
 from vmn_exp.storage.areas import COMMENTS, REPORTS, RUNS, SETTINGS, app_key
@@ -43,7 +42,7 @@ _REPORT_AREAS = (REPORTS, COMMENTS)
 
 
 class WorkspaceJournal:
-    def __init__(self, list_fn, cache, scope, clock=time.time, election=None, relay=None,
+    def __init__(self, list_fn, cache, scope, clock, election=None, relay=None,
                  retain_sec=JOURNAL_MAX_AGE_SEC, **reader_kw):
         self._cache, self._scope = cache, f"journal:{scope}"
         self._election, self._relay, self._leading = election, relay, False

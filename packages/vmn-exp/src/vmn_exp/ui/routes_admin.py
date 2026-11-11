@@ -7,7 +7,6 @@ from fastapi.responses import StreamingResponse
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN
 from vmn_exp.ui.auth.sessions import SessionService
-from vmn_exp.ui.auth.tokens import TokenService
 from vmn_exp.ui.http_params import clamp_page, page_of
 
 
@@ -35,9 +34,11 @@ def _token_body(body):
     return name.strip(), roles, ttl
 
 
-def register(app, api_prefix):
+def register(app, api_prefix, wall_clock):
+    """The routes; *wall_clock* (epoch seconds) times the sessions they close."""
     def _tokens():
-        return TokenService(_control_plane(app))
+        _control_plane(app)
+        return app.state.token_service
 
     @app.get(f"{api_prefix}/tokens", dependencies=[require(ADMIN)])
     def list_tokens(response: Response, offset: int = 0, limit: int = None):
@@ -69,7 +70,7 @@ def register(app, api_prefix):
         if not owner:
             raise HTTPException(422, "Query parameter 'owner' is required")
         return {"tokens": _tokens().revoke_owner(owner),
-                "sessions": SessionService(_control_plane(app)).close_principal(owner)}
+                "sessions": SessionService(_control_plane(app), wall_clock).close_principal(owner)}
 
     @app.get(f"{api_prefix}/audit", dependencies=[require(ADMIN)])
     def audit_page(offset: int = 0, limit: int = 100):

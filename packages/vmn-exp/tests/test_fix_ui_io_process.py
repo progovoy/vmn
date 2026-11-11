@@ -3,6 +3,7 @@ an I/O helper process (see vmn_exp.core.index_io_process): under request load
 a refresh doing its own stat/open calls starved on the GIL and new runs never
 showed up. Stopping the refresher stops the helpers."""
 import os
+import time
 
 import pytest
 
@@ -33,7 +34,7 @@ def _alive(pid):
 
 def test_a_background_watched_index_uses_a_helper_until_stopped(tmp_path):
     index = ExperimentIndex(_seed(tmp_path), APP, cache_path=str(tmp_path / "idx.sqlite"))
-    refresher = Refresher(interval_sec=0.02, idle_sec=60)
+    refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
     snap = refresher.snapshot(index)
     assert len(snap.rows) == 3
     helper = index._io._proc.pid

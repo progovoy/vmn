@@ -57,7 +57,7 @@ def test_the_first_watch_of_a_loading_index_answers_at_once(held_store, tmp_path
     load = threading.Thread(target=index.refresh, daemon=True)
     load.start()
     _wait_for(lambda: index.refreshing)
-    refresher = Refresher(interval_sec=0.02, idle_sec=60)
+    refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
     answer = []
     try:
         request = threading.Thread(target=lambda: answer.append(refresher.snapshot(index)),

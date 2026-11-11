@@ -2,6 +2,8 @@
 top view's newest-first first page (``top=jobs|singles|1`` and All runs, as
 the web client asks for them) and the app's facets, so the first browser
 request is a memo hit. A generation already superseded is not warmed."""
+import time
+
 import pytest
 from leaderboard_fleet import T0, Fleet
 from test_fix_ui_refresher import _wait_for
@@ -80,7 +82,7 @@ def test_after_a_refresh_publishes_the_default_singles_request_is_a_memo_hit(fro
 
     cache = LeaderboardCache()
     warmed = []
-    refresher = Refresher(interval_sec=0.02, idle_sec=5,
+    refresher = Refresher(interval_sec=0.02, idle_sec=5, clock=time.monotonic,
                           on_refresh=lambda s: cache.warm(s) or warmed.append(s))
     index = FleetIndex()
     try:

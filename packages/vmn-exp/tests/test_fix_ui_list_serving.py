@@ -278,7 +278,7 @@ def test_latest_is_found_once_per_snapshot(tmp_path, monkeypatch):
         return real(self, kind)
 
     monkeypatch.setattr(IndexSnapshot, "_latest", counted)
-    source = ExperimentSource(str(tmp_path))
+    source = ExperimentSource(str(tmp_path), clock=real_io().clock)
     ws = Workspace(name="ws", path=str(tmp_path))
 
     for _ in range(3):

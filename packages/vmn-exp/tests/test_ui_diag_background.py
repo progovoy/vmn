@@ -58,7 +58,7 @@ class _Index:
 
 def test_an_index_refresh_records_its_failure():
     app = _unique("app")
-    refresher = Refresher(interval_sec=0.01)
+    refresher = Refresher(interval_sec=0.01, clock=time.monotonic)
     try:
         refresher.snapshot(_Index(app, RuntimeError("bucket gone")))
         found = _wait_for("index refresh", app)
@@ -87,7 +87,7 @@ def test_a_journal_tick_is_recorded_per_journal():
             ticked.set()
 
     journal = Journal()
-    refresher = Refresher(interval_sec=0.01)
+    refresher = Refresher(interval_sec=0.01, clock=time.monotonic)
     try:
         refresher.snapshot(_Index(_unique("app")), journal)
         assert ticked.wait(5)
@@ -109,7 +109,7 @@ def test_a_report_index_refresh_is_recorded_per_workspace(monkeypatch):
 def test_a_store_upkeep_pass_is_recorded_per_app():
     app = _unique("app")
     index = _Index(app)
-    upkeep = StoreUpkeep(interval_sec=0)
+    upkeep = StoreUpkeep(interval_sec=0, clock=time.monotonic)
     upkeep.note(index, None, app)
     upkeep._apps[index] = types.SimpleNamespace(
         run=lambda snapshot, budget: {"marked": 0, "compacted": 0, "failed": 0})

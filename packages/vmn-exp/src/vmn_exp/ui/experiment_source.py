@@ -23,6 +23,7 @@ from vmn_exp.core.query_extra import bind_similar_scope
 from vmn_exp.core.status import run_state_observed_at
 from vmn_exp.storage.areas import app_key
 from vmn_exp.ui import index as ui_index
+from vmn_exp.ui.app_deps import wall_seconds
 from vmn_exp.ui.cache_health import SqliteHealth
 from vmn_exp.ui.cache_resync import WorkspaceCache
 from vmn_exp.ui.freshness import DEFAULT_STALE_AFTER_MIN, freshness
@@ -79,7 +80,7 @@ def _latest_memoized(snap):
     return resolve
 
 
-def _open_journal(ws, storage, cache_path):
+def _open_journal(ws, storage, cache_path, clock):
     from vmn_exp.storage.journal_sinks import journal_list_fn
     from vmn_exp.ui.journal_follow import WorkspaceJournal
 
@@ -87,12 +88,12 @@ def _open_journal(ws, storage, cache_path):
         list_fn = journal_list_fn(storage)
     except AttributeError:  # a backend without a journal sink
         return None
-    return WorkspaceJournal(list_fn, SqliteStore(cache_path), ws.name)
+    return WorkspaceJournal(list_fn, SqliteStore(cache_path), ws.name, wall_seconds(clock))
 
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None, store_upkeep=None):
+                 search_rows=None, store_upkeep=None, *, clock):
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -105,10 +106,9 @@ class ExperimentSource:
         self._schemas = MetricsSchemaCache()
         self._conf_uis = MetricsSchemaCache(read=exp_reader.conf_ui, path=app_conf_path)
         # Inline refreshes see every write made before the request.
-        self._settings = SettingsCache(SETTINGS_RECHECK_SEC if self.refresher.background else 0)
+        self._settings = SettingsCache(SETTINGS_RECHECK_SEC if self.refresher.background else 0, clock.monotonic)
         self._lock = threading.Lock()
-        self._search_rows = search_rows
-        self._upkeep = store_upkeep
+        self._search_rows, self._upkeep, self._clock = search_rows, store_upkeep, clock
         self._owners = SnapshotOwners()
         self.refresher.add_listener(self._owners.refreshed)
         if store_upkeep is not None:
@@ -224,7 +224,7 @@ class ExperimentSource:
             cache_path = self._indexes[ws.name].db_path if ws.name in self._indexes else None
         health = SqliteHealth(cache_path) if cache_path else None
         # Inline refreshes check on every request, background ones per tick.
-        cache = WorkspaceCache(ws.name, cache_path, health,
+        cache = WorkspaceCache(ws.name, cache_path, health, clock=self._clock.monotonic,
                                journal_of=lambda: self._journals.get(ws.name),
                                check_sec=getattr(self.refresher, "interval_sec", 0))
         if cache_path:
@@ -251,7 +251,7 @@ class ExperimentSource:
             return None
         with self._lock:
             if ws.name not in self._journals:
-                journal = _open_journal(ws, storage, cache_path)
+                journal = _open_journal(ws, storage, cache_path, self._clock)
                 if journal is not None:
                     journal.on_settings(lambda key: self._settings.forget(ws.name, key))
                 self._journals[ws.name] = journal

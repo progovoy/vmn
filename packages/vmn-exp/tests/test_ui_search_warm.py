@@ -1,6 +1,8 @@
 """Plan 23 S8b: the background refresher warms the search index after a new
 generation, so the first search after a restart does not pay the build; a
 schema view of a snapshot shares its search index."""
+import time
+
 import pytest
 from leaderboard_fleet import T0
 from search_fleet import TextFleet
@@ -48,7 +50,8 @@ def test_a_schema_view_shares_its_snapshots_index(snap, monkeypatch):
 
 def test_the_refresher_hands_each_refreshed_snapshot_on():
     seen = []
-    refresher = Refresher(interval_sec=0.02, idle_sec=0.3, on_refresh=seen.append)
+    refresher = Refresher(interval_sec=0.02, idle_sec=0.3, on_refresh=seen.append,
+                          clock=time.monotonic)
     try:
         index = FakeIndex()
         refresher.snapshot(index)
@@ -61,7 +64,7 @@ def test_the_refresher_hands_each_refreshed_snapshot_on():
 def test_a_failing_hand_on_keeps_refreshing():
     def boom(snapshot):
         raise RuntimeError("warm failed")
-    refresher = Refresher(interval_sec=0.02, idle_sec=0.3, on_refresh=boom)
+    refresher = Refresher(interval_sec=0.02, idle_sec=0.3, on_refresh=boom, clock=time.monotonic)
     try:
         index = FakeIndex()
         refresher.snapshot(index)

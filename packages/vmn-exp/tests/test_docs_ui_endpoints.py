@@ -6,6 +6,7 @@ Its paths are under ``/api/v1`` (written without it); a route outside
 ``/api/v1`` (``/metrics``, ``/auth/*``) is written with its full path."""
 import os
 import re
+import time
 
 import pytest
 
@@ -129,7 +130,7 @@ def _all_routes(tmp_path):
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     config = OIDCConfig(issuer="https://idp.example", client_id="vmn-exp",
                         redirect_uri="https://vmn.example/auth/callback")
-    oidc = OIDCAuthenticator(config, cp, object(), http=object())
+    oidc = OIDCAuthenticator(config, cp, object(), http=object(), clock=time.time)
     plain = create_app(WorkspaceManager(str(tmp_path / "plain")), io=real_io())
     with_auth = create_app(WorkspaceManager(str(tmp_path / "auth")), io=real_io(),
                            auth=AuthenticatorChain([oidc]), control_plane=cp)

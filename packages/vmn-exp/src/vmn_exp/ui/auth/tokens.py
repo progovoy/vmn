@@ -12,7 +12,6 @@ are revoked by id or all of one owner's at once.
 import hashlib
 import hmac
 import secrets
-import time
 from dataclasses import asdict, dataclass
 
 from vmn_exp.ui.auth.principal import Principal, check_roles
@@ -54,7 +53,7 @@ def parse_token(token):
 
 
 class TokenService:
-    def __init__(self, store, clock=time.time):
+    def __init__(self, store, clock):
         self.store = store
         self.clock = clock
 

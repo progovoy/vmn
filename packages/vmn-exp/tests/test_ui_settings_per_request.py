@@ -1,5 +1,7 @@
 """Plan 28 A0 follow-up: an inline-refresh server reads an app's store
 settings once per request, however many read paths ask for them."""
+import time
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -56,7 +58,7 @@ def test_an_inline_refresh_request_reads_the_settings_once(tmp_path, reads):
 
 def test_a_zero_window_cache_reads_once_per_request_scope(tmp_path, reads):
     storage = LocalSnapshotStorage(str(tmp_path / "store"), "runs")
-    cache = SettingsCache(recheck_sec=0)
+    cache = SettingsCache(recheck_sec=0, clock=time.monotonic)
     with request_scope():
         cache.get("ws", storage, APP)
         write_settings(storage, APP, "ui: {stale_after_min: 2}\n")

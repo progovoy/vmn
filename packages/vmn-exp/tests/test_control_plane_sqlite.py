@@ -2,6 +2,7 @@
 cross-process atomic ``pop``, numbered schema steps and rowid-keeping upserts."""
 import multiprocessing
 import sqlite3
+import time
 
 from vmn_exp.ui.control_plane import SQLiteControlPlane
 
@@ -86,7 +87,7 @@ def test_revoking_a_token_does_not_reorder_the_token_list(tmp_path):
     from vmn_exp.ui.auth.principal import VIEWER
     from vmn_exp.ui.auth.tokens import TokenService
 
-    tokens = TokenService(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")))
+    tokens = TokenService(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")), time.time)
     ids = [tokens.create(name, {"ml": VIEWER})[1].id for name in ("one", "two", "three")]
     tokens.revoke(ids[0])
     assert [t.id for t in tokens.list()] == ids

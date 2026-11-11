@@ -30,7 +30,6 @@ not retried before the server restarts.
 """
 import logging
 import threading
-import time
 from collections import defaultdict
 
 from vmn_exp.core.activity import activity
@@ -53,7 +52,7 @@ _LOGGER = logging.getLogger(__name__)
 class AppUpkeep:
     """One app's upkeep state across passes."""
 
-    def __init__(self, storage, app_name, clock=time.monotonic):
+    def __init__(self, storage, app_name, clock):
         self._storage, self._app, self._clock = storage, app_name, clock
         self._listed = set()  # parents whose markers were listed
         self._marked = set()  # (parent, child) known to be marked
@@ -157,8 +156,10 @@ class AppUpkeep:
 class StoreUpkeep:
     """Runs :class:`AppUpkeep` passes for the noted indexes on one thread."""
 
-    def __init__(self, interval_sec=UPKEEP_INTERVAL_SEC, budget_sec=PASS_BUDGET_SEC):
-        self.interval_sec, self.budget_sec = interval_sec, budget_sec
+    def __init__(self, interval_sec=UPKEEP_INTERVAL_SEC, budget_sec=PASS_BUDGET_SEC, *, clock):
+        """Passes are spaced on *clock* (monotonic seconds), which each
+        :class:`AppUpkeep` budgets its compaction on too."""
+        self.interval_sec, self.budget_sec, self._clock = interval_sec, budget_sec, clock
         self._apps = {}  # index -> AppUpkeep
         self._pending = {}  # index -> the newest snapshot not passed over yet
         self._last_pass = {}  # index -> monotonic time of its last pass
@@ -171,7 +172,7 @@ class StoreUpkeep:
         """*index* serves *app_name* of the store *storage*."""
         with self._lock:
             if index not in self._apps:
-                self._apps[index] = AppUpkeep(storage, app_name)
+                self._apps[index] = AppUpkeep(storage, app_name, self._clock)
 
     def refreshed(self, index, snapshot):
         with self._lock:
@@ -207,7 +208,7 @@ class StoreUpkeep:
                 if index is None:
                     continue
                 snapshot = self._pending.pop(index)
-                self._last_pass[index] = time.monotonic()
+                self._last_pass[index] = self._clock()
                 self._busy = True
             try:
                 self._pass(index, snapshot)
@@ -217,7 +218,7 @@ class StoreUpkeep:
                     self._lock.notify_all()
 
     def _due(self):
-        now = time.monotonic()
+        now = self._clock()
         for index in self._pending:
             if now - self._last_pass.get(index, -self.interval_sec) >= self.interval_sec:
                 return index

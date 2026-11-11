@@ -38,7 +38,7 @@ def _wait_for(predicate, timeout=5.0):
 
 @pytest.fixture
 def refresher():
-    r = Refresher(interval_sec=0.01, idle_sec=60)
+    r = Refresher(interval_sec=0.01, idle_sec=60, clock=time.monotonic)
     yield r
     r.stop()
 

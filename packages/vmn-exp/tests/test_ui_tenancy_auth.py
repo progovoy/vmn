@@ -1,6 +1,8 @@
 """Credentials resolve their own org under row-level security (plan 11 §6.3):
 auth runs before a request's org is known, so a token or session id is
 looked up across orgs and the request then runs in the credential's org."""
+import time
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -24,24 +26,24 @@ def cp(pg_rls_dsn):
 
 def _token(cp, org, name):
     with org_context(org):
-        return TokenService(cp).create(name, {"*": "admin"})[0]
+        return TokenService(cp, time.time).create(name, {"*": "admin"})[0]
 
 
 def test_a_token_resolves_its_own_org(cp):
     token = _token(cp, 2, "t2")
     assert current_org() is None
-    principal = TokenService(cp).verify(token)
+    principal = TokenService(cp, time.time).verify(token)
     assert principal is not None and principal.org_id == 2
 
 
 def test_an_unknown_token_is_refused(cp):
     _token(cp, 2, "t2")
-    assert TokenService(cp).verify("vmnx_0000000000000000_nope") is None
+    assert TokenService(cp, time.time).verify("vmnx_0000000000000000_nope") is None
 
 
 def test_a_session_resolves_its_own_org(cp):
-    session_id = SessionService(cp).open(Principal("oidc:a", "a", {"*": "admin"}, org_id=2))
-    principal = SessionService(cp).principal(session_id)
+    session_id = SessionService(cp, time.time).open(Principal("oidc:a", "a", {"*": "admin"}, org_id=2))
+    principal = SessionService(cp, time.time).principal(session_id)
     assert principal is not None and principal.org_id == 2
     with org_context(2):
         assert len(cp.list("session")) == 1

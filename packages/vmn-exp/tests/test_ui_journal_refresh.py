@@ -49,7 +49,8 @@ def _write(store, app, verstr):
 
 
 def _journal(list_fn, cache=None, **kw):
-    return WorkspaceJournal(list_fn, cache or SqliteStore(":memory:"), "ws", **kw)
+    return WorkspaceJournal(list_fn, cache or SqliteStore(":memory:"), "ws",
+                            **{"clock": time.time, **kw})
 
 
 def test_entries_are_routed_to_the_watched_scope_only(store, lists):
@@ -143,7 +144,7 @@ def test_the_refresher_shows_a_new_run_through_the_journal(tmp_path):
     reader = open_storage(None, root, area="runs", writer=False)
     index = ExperimentIndex(reader, "app", full_sweep_sec=3600)
     journal = _journal(journal_list_fn(reader))
-    refresher = Refresher(interval_sec=0.02, idle_sec=60)
+    refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)
     try:
         assert len(refresher.snapshot(index, journal).rows) == 1
         names = []

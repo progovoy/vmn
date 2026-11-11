@@ -18,7 +18,6 @@ import hashlib
 import ipaddress
 import json
 import secrets
-import time
 from dataclasses import asdict, dataclass, field, is_dataclass
 from urllib.parse import urlencode, urlsplit
 
@@ -98,7 +97,7 @@ def roles_for_groups(groups, mappings):
 
 
 class OIDCAuthenticator:
-    def __init__(self, config, store, verifier, http=None, clock=time.time,
+    def __init__(self, config, store, verifier, http=None, *, clock,
                  session_ttl_sec=SESSION_TTL_SEC, login_token_ttl_sec=LOGIN_TOKEN_TTL_SEC):
         """*verifier* checks the id_token signature (:class:`jwks.JwksVerifier`)."""
         self.config = config

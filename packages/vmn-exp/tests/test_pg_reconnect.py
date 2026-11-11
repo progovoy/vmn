@@ -1,6 +1,7 @@
 """Control plane, search, election and LISTEN survive a killed backend
 (plan 25 F4); pooled stores serve concurrent requests concurrently."""
 import threading
+import time
 
 import pytest
 
@@ -131,7 +132,7 @@ class _CountingIndex:
 
 
 def test_refresher_wake_all_refreshes_every_watch_at_once():
-    refresher = Refresher(interval_sec=60)
+    refresher = Refresher(interval_sec=60, clock=time.monotonic)
     indexes = [_CountingIndex(), _CountingIndex()]
     try:
         for index in indexes:

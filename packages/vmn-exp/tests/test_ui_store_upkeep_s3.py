@@ -3,6 +3,7 @@ one log object per stream and its metrics on a ``.vmx`` is never read again,
 in this process or the next one."""
 import datetime
 import json
+import time
 
 import pytest
 import yaml
@@ -73,10 +74,10 @@ def test_compacted_dead_runs_are_not_read_again_in_this_or_the_next_process(stor
     for _ in range(3):
         _dead_run(storage)
     snap = experiment_index.indexed_snapshot(storage, APP, wait=True)
-    assert AppUpkeep(storage, APP).run(snap)["compacted"] == 3
+    assert AppUpkeep(storage, APP, time.monotonic).run(snap)["compacted"] == 3
 
     calls.clear()
-    counts = AppUpkeep(storage, APP).run(snap)  # a restarted server
+    counts = AppUpkeep(storage, APP, time.monotonic).run(snap)  # a restarted server
 
     assert _log_gets(calls) == []
     assert _misses(calls) == []
@@ -86,10 +87,10 @@ def test_compacted_dead_runs_are_not_read_again_in_this_or_the_next_process(stor
 def test_a_restarted_upkeep_lists_each_compacted_run_at_most_twice(storage, calls):
     verstrs = [_dead_run(storage) for _ in range(2)]
     snap = experiment_index.indexed_snapshot(storage, APP, wait=True)
-    AppUpkeep(storage, APP).run(snap)
+    AppUpkeep(storage, APP, time.monotonic).run(snap)
 
     calls.clear()
-    AppUpkeep(storage, APP).run(snap)
+    AppUpkeep(storage, APP, time.monotonic).run(snap)
 
     reads = [c for c in calls if c.operation in ("GetObject", "HeadObject")]
     assert reads == []

@@ -1,5 +1,6 @@
 """Authorization: a role per route, enforced from request.state.principal."""
 import tempfile
+import time
 
 import pytest
 
@@ -220,7 +221,7 @@ def test_removed_role_mapping_drops_role_of_live_session(tmp_path):
 def test_login_token_role_follows_current_mappings(tmp_path):
     from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 
-    tokens = TokenService(_cp(tmp_path))
+    tokens = TokenService(_cp(tmp_path), time.time)
     secret, _ = tokens.create("login", {}, owner="oidc:u1", groups=("ml",))
     bearer = {"Authorization": f"Bearer {secret}"}
     authenticator = ApiTokenAuthenticator(tokens)

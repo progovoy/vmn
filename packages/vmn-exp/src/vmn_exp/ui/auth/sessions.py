@@ -8,7 +8,6 @@ derived from its groups on each request (:mod:`authz`).
 """
 import hashlib
 import secrets
-import time
 from dataclasses import asdict, replace
 
 from vmn_exp.ui.auth.principal import Principal
@@ -22,7 +21,7 @@ def _key(session_id):
 
 
 class SessionService:
-    def __init__(self, store, clock=time.time, ttl_sec=SESSION_TTL_SEC):
+    def __init__(self, store, clock, ttl_sec=SESSION_TTL_SEC):
         self.store = store
         self.clock = clock
         self.ttl_sec = ttl_sec

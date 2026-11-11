@@ -97,13 +97,13 @@ def test_an_experiment_index_lock_is_named_with_its_app(tmp_path):
 
 
 def test_the_refresher_lock_is_traced():
-    refresher = Refresher()
+    refresher = Refresher(clock=time.monotonic)
     _assert_named_holder(refresher._lock, "refresher")
     assert refresher.watched() == []
 
 
 def test_the_store_upkeep_lock_is_traced():
-    upkeep = StoreUpkeep()
+    upkeep = StoreUpkeep(clock=time.monotonic)
     _assert_named_holder(upkeep._lock, "store upkeep")
     assert upkeep.wait_idle(1)
 

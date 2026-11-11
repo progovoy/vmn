@@ -11,7 +11,6 @@ export streams.
 """
 import json
 import secrets
-import time
 
 from fastapi.routing import APIRoute
 from starlette.concurrency import run_in_threadpool
@@ -28,7 +27,7 @@ def audit_key(ts):
 
 
 class AuditLog:
-    def __init__(self, store, clock=time.time):
+    def __init__(self, store, clock):
         self.store = store
         self.clock = clock
 

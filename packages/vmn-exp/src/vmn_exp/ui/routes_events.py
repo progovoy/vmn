@@ -36,10 +36,11 @@ class EventStreamResponse(StreamingResponse):
             self._release()
 
 
-def register(app, prefix, reader_for, background, segment):
+def register(app, prefix, reader_for, background, segment, clock, sleep):
     """Add the route; *reader_for(ws_name, app_tag)* → a blocking callable
     answering the app's current snapshot (raising 4xx for a bad workspace
-    or app); *background*: whether a background refresher serves them."""
+    or app); *background*: whether a background refresher serves them; a
+    stream ticks on *clock* (monotonic) with the async *sleep*."""
     slots = live_events.StreamSlots(live_events.MAX_STREAMS)
     app.state.event_slots = slots
 
@@ -57,5 +58,6 @@ def register(app, prefix, reader_for, background, segment):
             return JSONResponse(error_body("Too many live streams", TOO_MANY_STREAMS,
                                            reason=TOO_MANY_STREAMS),
                                 status_code=503, headers={"Retry-After": "30"})
-        stream = live_events.event_stream(lambda: run_in_threadpool(read), scope)
+        stream = live_events.event_stream(lambda: run_in_threadpool(read), scope,
+                                          clock=clock, sleep=sleep)
         return EventStreamResponse(stream, slots.release)

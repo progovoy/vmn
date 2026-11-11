@@ -105,7 +105,7 @@ def test_the_cache_tick_checkpoints_a_wal_no_write_came_to_cut(tmp_path):
     reader.close()
     assert _wal_size(path) > LIMIT
 
-    cache = WorkspaceCache("ws", path, check_sec=0)
+    cache = WorkspaceCache("ws", path, check_sec=0, clock=time.monotonic)
     cache.tick()
     cache.tidy.wait(10)
     assert _wal_size(path) <= LIMIT

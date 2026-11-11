@@ -1,5 +1,7 @@
 """Plan 28 A0: the server's cache of apps' store settings re-reads them
 after its window, or at once when the journal says they changed."""
+import time
+
 from vmn_exp.core.app_settings import parse_settings
 from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.local import LocalSnapshotStorage
@@ -29,7 +31,7 @@ def test_the_cache_rereads_after_its_window_or_when_told(tmp_path):
 
 def test_a_zero_window_cache_reads_every_time(tmp_path):
     storage = _store(tmp_path)
-    cache = SettingsCache(recheck_sec=0)
+    cache = SettingsCache(recheck_sec=0, clock=time.monotonic)
     assert cache.get("ws", storage, APP) == {}
     write_settings(storage, APP, TEXT)
     assert cache.get("ws", storage, APP) == parse_settings(TEXT)

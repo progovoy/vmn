@@ -52,7 +52,7 @@ def _rederive(path):
 
 class WorkspaceCache:
     def __init__(self, name, cache_path=None, health=None, journal_of=None,
-                 check_sec=CHECK_SEC, target_of=None, clock=time.monotonic):
+                 check_sec=CHECK_SEC, target_of=None, *, clock):
         self.name = name
         self._path = cache_path
         self._health = health

@@ -3,6 +3,7 @@ thread: a slow warm (a 486k-run board) must not hold back publishing the
 next snapshot, and a busy warmer skips to the newest generation instead of
 queueing every one it missed."""
 import threading
+import time
 
 from test_fix_ui_refresher import FakeIndex, _wait_for
 from vmn_exp.ui.latest_worker import LatestWorker
@@ -17,7 +18,8 @@ def test_a_blocked_warm_never_holds_back_publishing():
         threads.append(threading.current_thread().name)
         release.wait(5)
 
-    refresher = Refresher(interval_sec=0.01, idle_sec=5, on_refresh=warm)
+    refresher = Refresher(interval_sec=0.01, idle_sec=5, on_refresh=warm,
+                          clock=time.monotonic)
     index = FakeIndex()
     try:
         refresher.snapshot(index)
@@ -37,7 +39,8 @@ def test_after_a_blocked_warm_the_newest_snapshot_is_warmed():
         calls.append(snapshot)
         release.wait(5)
 
-    refresher = Refresher(interval_sec=0.01, idle_sec=5, on_refresh=warm)
+    refresher = Refresher(interval_sec=0.01, idle_sec=5, on_refresh=warm,
+                          clock=time.monotonic)
     index = FakeIndex()
     try:
         refresher.snapshot(index)

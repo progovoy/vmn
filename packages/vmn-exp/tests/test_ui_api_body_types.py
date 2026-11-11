@@ -8,6 +8,7 @@ store workspace. Jobs are recorded, never run; a store action's in-process
 call runs inline, and a TypeError or AttributeError from it fails the sweep.
 """
 import os
+import time
 
 import pytest
 
@@ -121,7 +122,7 @@ def _app(tmp_path):
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     config = OIDCConfig(issuer=ISSUER, client_id="vmn-exp",
                         redirect_uri="https://vmn.example/auth/callback")
-    oidc = OIDCAuthenticator(config, cp, object(), http=_IdP())
+    oidc = OIDCAuthenticator(config, cp, object(), http=_IdP(), clock=time.time)
     return create_app(_manager(tmp_path), io=real_io(), token=TOKEN,
                       auth=AuthenticatorChain([oidc]), control_plane=cp)
 

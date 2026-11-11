@@ -17,10 +17,8 @@ The client treats an event as "revalidate what is on screen": the payload
 only says how much moved (``rows``) and, when it is cheap, which top-level
 jobs (``jobs``, left out past ``MAX_JOBS``).
 """
-import asyncio
 import json
 import threading
-import time
 from itertools import compress
 from operator import is_not
 
@@ -148,8 +146,7 @@ def _event(kind, data):
     return f"event: {kind}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
-async def event_stream(read, scope=None, clock=time.monotonic, sleep=asyncio.sleep,
-                       max_sec=None):
+async def event_stream(read, scope=None, *, clock, sleep, max_sec=None):
     """The stream's chunks; *read* is an async callable answering the app's
     current snapshot."""
     max_sec = MAX_STREAM_SEC if max_sec is None else max_sec

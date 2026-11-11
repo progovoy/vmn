@@ -6,13 +6,12 @@ WARNING with the traceback at the streak's start, again at most every
 once it recovers (INFO would not reach the default stderr handler, and the
 recovery closes the warnings an operator saw)."""
 import threading
-import time
 
 LOG_EVERY_SEC = 600
 
 
 class FailureStreak:
-    def __init__(self, what, logger, clock=time.monotonic, every_sec=LOG_EVERY_SEC, subject=None):
+    def __init__(self, what, logger, clock, every_sec=LOG_EVERY_SEC, subject=None):
         """*what* failed ``for`` *subject* (when given), says each message."""
         self.what = what
         self._for = "" if subject is None else f" for {subject}"

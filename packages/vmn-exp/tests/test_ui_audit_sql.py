@@ -1,6 +1,7 @@
 """Audit pages, counts and exports in SQL; retention and the expiry sweep
 (plan 25 F5)."""
 import json
+import time
 
 import pytest
 
@@ -48,7 +49,7 @@ def _client(tmp_path, cp):
 
 
 def test_page_and_count_never_list_every_entry(cp, monkeypatch):
-    log = AuditLog(cp)
+    log = AuditLog(cp, time.time)
     for i in range(5):
         log.record(actor="u", action=str(i))
     _no_full_list(monkeypatch, cp)
@@ -57,7 +58,7 @@ def test_page_and_count_never_list_every_entry(cp, monkeypatch):
 
 
 def test_a_page_query_carries_its_limit(cp):
-    log = AuditLog(cp)
+    log = AuditLog(cp, time.time)
     for i in range(50):
         log.record(actor="u", action=str(i))
     seen = []
@@ -71,7 +72,7 @@ def test_a_page_query_carries_its_limit(cp):
 
 
 def test_audit_api_pages_and_counts_in_sql(tmp_path, cp, monkeypatch):
-    log = AuditLog(cp)
+    log = AuditLog(cp, time.time)
     for i in range(3):
         log.record(actor="u", action=str(i))
     client = _client(tmp_path, cp)
@@ -81,7 +82,7 @@ def test_audit_api_pages_and_counts_in_sql(tmp_path, cp, monkeypatch):
 
 
 def test_export_streams_every_entry_oldest_first(tmp_path, cp, monkeypatch):
-    log = AuditLog(cp)
+    log = AuditLog(cp, time.time)
     for i in range(1200):
         log.record(actor="u", action=str(i))
     client = _client(tmp_path, cp)
@@ -108,7 +109,7 @@ def test_sweep_applies_audit_retention_and_expiry(cp):
 
 def test_the_sweeper_runs_at_start_and_stops(cp):
     cp.put("login", "gone", {}, expires_at=1)
-    sweeper = ControlPlaneSweeper(cp, interval_sec=3600)
+    sweeper = ControlPlaneSweeper(cp, clock=time.time, interval_sec=3600)
     sweeper.start()
     sweeper.stop()
     assert cp.get("login", "gone") is None

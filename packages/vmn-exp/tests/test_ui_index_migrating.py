@@ -130,7 +130,7 @@ def test_the_health_check_rederives_an_older_derived_version_in_place(tmp_path):
     db = str(tmp_path / "cache.sqlite")
     ExperimentIndex(st, APP, db).refresh()
     _older_derived(db)
-    cache = WorkspaceCache("ws", db, SqliteHealth(db), check_sec=0)
+    cache = WorkspaceCache("ws", db, SqliteHealth(db), check_sec=0, clock=time.monotonic)
     cache.note(APP, st, lambda: None)
 
     assert cache.tick() == "derived"

@@ -2,6 +2,8 @@
 listener hears each refresh (none clobbers another), a noting refresher notes
 the index it is asked about, and an inline snapshot lists fully without
 changing the shared index's sweep interval."""
+import time
+
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.refresher import InlineRefresher, NotingRefresher, Refresher
@@ -31,7 +33,7 @@ def test_every_listener_hears_an_inline_refresh():
 
 
 def test_every_listener_hears_a_background_refresh():
-    refresher, heard = Refresher(interval_sec=60, idle_sec=60), []
+    refresher, heard = Refresher(interval_sec=60, idle_sec=60, clock=time.monotonic), []
     refresher.add_listener(lambda index, snap: heard.append("a"))
     refresher.add_listener(lambda index, snap: heard.append("b"))
     refresher._refresh(_Index(), type("W", (), {"failing": False})())

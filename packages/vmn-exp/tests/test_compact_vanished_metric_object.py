@@ -6,6 +6,7 @@ the one the listing named; ``read_range`` answered None for it and
 subscriptable`` from store upkeep. The read raises ``MetricObjectGone``; a
 compaction lists the stream again once, and a chart read reads the run again."""
 import random
+import time
 
 import pytest
 from test_series_reader import APP, V, _entries, _storage, _write
@@ -88,7 +89,7 @@ def test_store_upkeep_counts_a_vanished_vmx_as_no_failure(tmp_path):
     snapshot = _snap(local)
     storage.stale = 2  # compact_record's listing and compact_writer's
 
-    counts = AppUpkeep(storage, "my_app").run(snapshot)
+    counts = AppUpkeep(storage, "my_app", time.monotonic).run(snapshot)
 
     assert counts["failed"] == 0 and counts["compacted"] == 1
     assert all(is_indexed_file(n) for objs in local.metric_objects("my_app", failed).values()

@@ -48,7 +48,6 @@ the GIL behind busy request threads, which starved refreshes under load.
 """
 import logging
 import threading
-import time
 
 from vmn_exp.core.activity import activity
 from vmn_exp.core.gc_policy import POLICY
@@ -129,7 +128,7 @@ class Refresher(_Listeners):
     keep_warm = None
 
     def __init__(self, interval_sec=REFRESH_INTERVAL_SEC, idle_sec=IDLE_SEC, on_refresh=None,
-                 clock=time.monotonic, keep_warm=None):
+                 *, clock, keep_warm=None):
         self.interval_sec = interval_sec
         self.idle_sec = idle_sec
         self.keep_warm = keep_warm  # None: the indexes of a journal (a store's)

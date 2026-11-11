@@ -4,6 +4,7 @@ listed object's size, its token from the listed ETag. So the UI's store
 upkeep skips a flagged app with no read of the flag, even in a new process,
 while a dropped flag is still seen as not complete and ``prune -v`` still
 reads the flag itself before trusting it."""
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -115,13 +116,13 @@ def test_a_write_of_the_flag_is_seen_without_a_read(s3, calls):
 def test_a_restarted_upkeep_skips_a_flagged_app_without_reading_the_flag(s3, calls):
     outer = _run(s3)
     _run(s3, parent=outer)
-    AppUpkeep(s3, APP).run(_snap(s3))
+    AppUpkeep(s3, APP, time.monotonic).run(_snap(s3))
     assert s3.children_complete(APP)
 
     restarted = _restarted()
     snapshot = _snap(restarted)
     calls.clear()
-    AppUpkeep(restarted, APP).run(snapshot)
+    AppUpkeep(restarted, APP, time.monotonic).run(snapshot)
 
     assert _reads(calls) == []
 
@@ -134,7 +135,7 @@ def test_upkeep_reflags_a_listed_drop_without_reading_the_flag(s3, calls):
     restarted = _restarted()
     snapshot = _snap(restarted)
     calls.clear()
-    AppUpkeep(restarted, APP).run(snapshot)
+    AppUpkeep(restarted, APP, time.monotonic).run(snapshot)
 
     assert _flag_reads(calls) == []
     assert s3.children_complete(APP)
@@ -159,7 +160,7 @@ def test_upkeep_does_not_flag_over_a_drop_during_its_check(s3, monkeypatch):
         return names
 
     monkeypatch.setattr(restarted, "list_verstrs", listing)
-    AppUpkeep(restarted, APP).run(snapshot)
+    AppUpkeep(restarted, APP, time.monotonic).run(snapshot)
 
     assert not s3.children_complete(APP)
 

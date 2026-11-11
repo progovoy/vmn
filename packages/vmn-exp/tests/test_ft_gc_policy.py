@@ -12,6 +12,7 @@ find little garbage, and halves when one finds much, so cyclic garbage stays
 bounded. A GIL build, or a smaller store, is left alone."""
 import gc
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -158,7 +159,7 @@ def test_automatic_collection_turned_back_on_inside_a_pause_resumes_after_it():
 
 def test_the_refresher_hands_each_publish_to_the_policy():
     noted = []
-    refresher = Refresher(interval_sec=0.01, idle_sec=5)
+    refresher = Refresher(interval_sec=0.01, idle_sec=5, clock=time.monotonic)
     refresher.gc_policy = SimpleNamespace(after_publish=noted.append)
     refresher._after_refresh(object(), SimpleNamespace(rows=[1, 2, 3]))
     assert noted == [3]
