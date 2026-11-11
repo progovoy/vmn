@@ -80,7 +80,7 @@ def _poll(server, start, post_json, sleep):
     return None, "expired_token"
 
 
-def login(server, post_json=urllib_post_json, sleep=time.sleep, say=print):
+def login(server, post_json=urllib_post_json, sleep=time.sleep, *, say):
     server = _server_key(server)
     status, start = post_json(f"{server}/auth/device/start", {})
     if status != 200:

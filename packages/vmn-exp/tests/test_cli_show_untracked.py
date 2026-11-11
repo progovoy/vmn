@@ -5,6 +5,7 @@ import io
 import tarfile
 
 from vmn_exp.cli.experiment import experiment_show
+from vmn_exp.core.real_io import RealConsole
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 APP = "app"
@@ -26,7 +27,7 @@ def _show(tmp_path, capsys, metadata, patches):
     meta = dict({"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, **metadata)
     storage.save(APP, VERSTR, meta, patches)
     args = argparse.Namespace(name=APP, version=[VERSTR], json=False)
-    assert experiment_show(None, None, storage, args) == 0
+    assert experiment_show(None, None, storage, args, RealConsole()) == 0
     return capsys.readouterr().out
 
 

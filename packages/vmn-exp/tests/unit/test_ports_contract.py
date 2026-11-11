@@ -137,6 +137,16 @@ def test_console_contract(side, monkeypatch, capsys):
     assert console.read_line() == ""
 
 
+def test_real_console_writes_to_the_current_sys_stdout(monkeypatch):
+    console = real_io.RealConsole()
+    out, err = io.StringIO(), io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    monkeypatch.setattr(sys, "stderr", err)
+    console.out("a")
+    console.err("b")
+    assert (out.getvalue(), err.getvalue()) == ("a\n", "b\n")
+
+
 def test_real_io_bundles_the_real_implementations():
     bundle = real_io.real_io()
     assert isinstance(bundle, ports.IO)

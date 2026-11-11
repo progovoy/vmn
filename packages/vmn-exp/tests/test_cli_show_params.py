@@ -6,6 +6,7 @@ import argparse
 from similar_seed import seed, verstr
 from vmn_exp.cli.experiment import experiment_compare, experiment_show
 from vmn_exp.cli.views import split_params
+from vmn_exp.core.real_io import RealConsole
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 APP = "app"
@@ -38,7 +39,7 @@ def _args(*versions):
 
 
 def _show(storage, capsys, v):
-    assert experiment_show(None, None, storage, _args(v)) == 0
+    assert experiment_show(None, None, storage, _args(v), RealConsole()) == 0
     return capsys.readouterr().out
 
 
@@ -81,7 +82,7 @@ def test_compare_lists_params_in_their_own_table(tmp_path, capsys):
     storage = _storage(tmp_path)
     a = seed(storage, APP, verstr(1), params={"lr": 0.1}, metrics={"loss": 0.5})
     b = seed(storage, APP, verstr(2), params={"lr": 0.2}, metrics={"loss": 0.4})
-    assert experiment_compare(None, None, storage, _args(a, b)) == 0
+    assert experiment_compare(None, None, storage, _args(a, b), RealConsole()) == 0
     lines = capsys.readouterr().out.splitlines()
     metric_head = next(i for i, line in enumerate(lines) if line.startswith("metric "))
     param_head = next(i for i, line in enumerate(lines) if line.startswith("param "))

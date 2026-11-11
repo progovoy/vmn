@@ -12,7 +12,7 @@ from vmn_exp.cli.compare_view import compare_payload
 from vmn_exp.cli.experiment import experiment_compare
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.storage.local import LocalSnapshotStorage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealConsole, real_io
 
 APP = "app"
 
@@ -61,7 +61,7 @@ def test_compare_json_prints_strict_json_and_no_table(tmp_path, capsys):
     a = seed(storage, APP, verstr(1), params={"lr": 0.1}, metrics={"loss": 0.5})
     b = seed(storage, APP, verstr(2), params={"lr": 0.2}, metrics={"loss": float("nan")})
     args = argparse.Namespace(name=APP, version=[a, b], json=True)
-    assert experiment_compare(None, None, storage, args) == 0
+    assert experiment_compare(None, None, storage, args, RealConsole()) == 0
     out = capsys.readouterr().out
     payload = json.loads(out, parse_constant=lambda c: (_ for _ in ()).throw(ValueError(c)))
     assert [r["verstr"] for r in payload["runs"]] == [a, b]

@@ -10,7 +10,6 @@ Non-finite metrics are written as ``null`` so the output is strict JSON.
 import argparse
 import json
 import math
-import sys
 import tarfile
 import zlib
 
@@ -224,17 +223,18 @@ def _patch_stderr_note(verstr, metadata, payload):
     return None
 
 
-def print_patch(verstr, metadata, patches, max_bytes=PATCH_MAX_BYTES):
-    """``show --patch``'s text: the patches, and a one-line note on stderr
-    when there is no text or untracked files were captured beside it."""
+def print_patch(verstr, metadata, patches, max_bytes=PATCH_MAX_BYTES, *, out, err):
+    """``show --patch``'s text to *out*: the patches, and a one-line note to
+    *err* when there is no text or untracked files were captured beside it."""
     payload = patch_payload(metadata, patches, max_bytes)
-    if payload["text"] is not None:
-        print("\n" + payload["text"], end="")
-        if payload["truncated"]:
-            print(f"\n[patch truncated at {max_bytes} bytes; raise --max-bytes to see more]")
+    text = payload["text"]
+    if text is not None and payload["truncated"]:
+        out(f"\n{text}\n[patch truncated at {max_bytes} bytes; raise --max-bytes to see more]")
+    elif text is not None:
+        out(f"\n{text}".removesuffix("\n"))  # out() adds the newline the text ends with
     note = _patch_stderr_note(verstr, metadata, payload)
     if note:
-        print(note, file=sys.stderr)
+        err(note)
 
 
 def event_log(log):

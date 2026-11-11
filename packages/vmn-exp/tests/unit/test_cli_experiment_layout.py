@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from fakes.console import FakeConsole
 from similar_seed import seed, verstr
 from version_stamp.cli.args import parse_user_commands
 from version_stamp.core.logging import init_stamp_logger
@@ -59,7 +60,8 @@ def test_patching_resolve_experiment_version_on_the_experiment_module_reaches_sh
     calls = []
     monkeypatch.setattr(experiment, "_resolve_experiment_version",
                         lambda *a, **kw: calls.append(a) or (None, "patched"))
-    assert getattr(experiment, action)(None, {}, _storage(tmp_path), _args(**extra)) == 1
+    console = (FakeConsole(),) if action in ("experiment_show", "experiment_export") else ()
+    assert getattr(experiment, action)(None, {}, _storage(tmp_path), _args(**extra), *console) == 1
     assert len(calls) == 1
 
 
@@ -70,7 +72,9 @@ def test_patching_resolve_experiment_bundles_reaches_compare_and_diff(
     calls = []
     monkeypatch.setattr(experiment, "_resolve_experiment_bundles",
                         lambda *a, **kw: calls.append(a))
-    assert getattr(experiment, action)(None, {}, _storage(tmp_path), _args(last=None)) == 1
+    assert getattr(experiment, action)(
+        None, {}, _storage(tmp_path), _args(last=None), FakeConsole()
+    ) == 1
     assert len(calls) == 1
 
 
@@ -81,7 +85,7 @@ def test_patching_load_run_state_on_the_experiment_module_reaches_show(
     v = seed(storage, APP, verstr(1))
     reads = []
     monkeypatch.setattr(experiment, "load_run_state", lambda s, a, run: reads.append(run))
-    experiment._print_status_block(storage, APP, v, storage.load_metadata(APP, v))
+    experiment._print_status_block(storage, APP, v, storage.load_metadata(APP, v), print)
     assert reads == [v]
     assert "Status:" in capsys.readouterr().out
 
@@ -104,5 +108,6 @@ def test_dispatch_resolves_handlers_through_the_experiment_module(monkeypatch, a
     monkeypatch.setattr(experiment, "_open_checked_storage", lambda *a, **k: "storage")
     monkeypatch.setattr(experiment, handler, lambda *a, **k: got.append(a[2]) or 7)
     args = parse_user_commands(["exp", action, "my_app"])
-    assert experiment.handle_experiment(SimpleNamespace(vcs=None, args=args), None) == 7
+    io = SimpleNamespace(console=FakeConsole())
+    assert experiment.handle_experiment(SimpleNamespace(vcs=None, args=args), io) == 7
     assert got == ["storage"]

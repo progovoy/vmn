@@ -30,12 +30,12 @@ def seed(storage, app_name, verstr, source):
         seed_fork(storage, app_name, verstr, *source)
 
 
-def print_lineage(metadata, log):
-    """``show``'s rerun and fork origin and rewind lines."""
+def print_lineage(metadata, log, out):
+    """``show``'s rerun and fork origin and rewind lines, to *out*."""
     if metadata.get("rerun_of"):
-        print(f"  Rerun of: {metadata['rerun_of']}")
+        out(f"  Rerun of: {metadata['rerun_of']}")
     origin = metadata.get("forked_from")
     if origin:
-        print(f"  Forked from: {origin.get('verstr')} @ step {origin.get('step')}")
+        out(f"  Forked from: {origin.get('verstr')} @ step {origin.get('step')}")
     for rewind in rewinds_of(log):
-        print(f"  Rewound to step {rewind['step']} at {rewind['timestamp']}")
+        out(f"  Rewound to step {rewind['step']} at {rewind['timestamp']}")

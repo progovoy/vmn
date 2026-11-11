@@ -55,5 +55,5 @@ def test_model_resolve_keeps_an_absolute_uri(tmp_path, capsys):
     from vmn_exp.cli.model_cmd import _cmd_resolve
 
     storage = _registered(tmp_path, ABSOLUTE[0])
-    assert _cmd_resolve(storage, SimpleNamespace(model_name="clf@1", json=True)) == 0
+    assert _cmd_resolve(storage, SimpleNamespace(model_name="clf@1", json=True), print) == 0
     assert json.loads(capsys.readouterr().out)["artifact_uri"] == ABSOLUTE[0]

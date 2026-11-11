@@ -37,7 +37,7 @@ def experiment_restore(vcs, params, storage, args):
 
 
 @measure_runtime_decorator
-def experiment_export(vcs, params, storage, args):
+def experiment_export(vcs, params, storage, args, console):
     from vmn_exp.cli import experiment as _exp
 
     verstr, err = _exp._resolve_experiment_version(storage, vcs, args, default_latest=True)
@@ -76,7 +76,7 @@ def experiment_export(vcs, params, storage, args):
     )
     if err:
         return err
-    print(output_path)
+    console.out(output_path)
     return 0
 
 

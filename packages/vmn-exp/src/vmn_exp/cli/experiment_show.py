@@ -2,7 +2,8 @@
 
 Helpers that tests patch on :mod:`vmn_exp.cli.experiment`
 (``_resolve_experiment_version``, ``load_run_state``) are looked up there at
-call time, so such a patch still reaches this module (plan 44 G15)."""
+call time, so such a patch still reaches this module (plan 44 G15). Its text
+goes to the given console (plan 44 G16)."""
 from vmn_exp.cli import fork
 from vmn_exp.cli.duration_text import duration_text
 from vmn_exp.cli.list_layout import _lost_text
@@ -61,41 +62,41 @@ def _subtree(storage, app_name, verstr, metadata, snapshot=None):
     return run_state, tree, observed_at(verstr)
 
 
-def _print_status_block(storage, app_name, verstr, metadata, snapshot=None):
+def _print_status_block(storage, app_name, verstr, metadata, out, snapshot=None):
     """Derived run status, runner identity and the experiment's nesting."""
     run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
     fields = status_fields(run_state, observed_at=observed_at)
-    print(f"  Status:    {fields['status']}")
+    out(f"  Status:    {fields['status']}")
     if fields["exit_code"] is not None:
-        print(f"  Exit code: {fields['exit_code']}")
+        out(f"  Exit code: {fields['exit_code']}")
     duration = duration_text(fields)
     if duration:
-        print(f"  Duration:  {duration}")
+        out(f"  Duration:  {duration}")
     if fields["pid"]:
-        print(f"  Runner:    pid {fields['pid']} on {fields['host']}")
+        out(f"  Runner:    pid {fields['pid']} on {fields['host']}")
     if fields["status"] == STUCK:
-        print(f"  Heartbeat: last seen {relative_timestamp(fields['heartbeat'])}")
+        out(f"  Heartbeat: last seen {relative_timestamp(fields['heartbeat'])}")
     error = error_lines((run_state or {}).get("error"))
     if error:
-        print(f"  Error:     {error[0]}")
+        out(f"  Error:     {error[0]}")
         for line in error[1:]:
-            print(f"  {line}")
+            out(f"  {line}")
 
     if metadata.get("parent"):
-        print(f"  Parent:    {metadata['parent']}")
+        out(f"  Parent:    {metadata['parent']}")
 
     if not tree["children"]:
         return  # no children: nothing to roll up
-    print(f"  Children:  {', '.join(tree['children'])}")
+    out(f"  Children:  {', '.join(tree['children'])}")
     if tree["tree_status"] and (tree["tree_status"] != fields["status"] or tree["lost_below"]):
-        print(f"  Subtree:   {tree['tree_status']}{_lost_text(tree)}")
+        out(f"  Subtree:   {tree['tree_status']}{_lost_text(tree)}")
 
 
 @measure_runtime_decorator
-def _print_output_log(storage, app_name, verstr):
+def _print_output_log(storage, app_name, verstr, out):
     for artifact in storage.list_artifacts(app_name, verstr):
         if artifact["name"] == OUTPUT_LOG_PATH:
-            print(f"  Output:    {OUTPUT_LOG_PATH} ({artifact['size']} bytes)")
+            out(f"  Output:    {OUTPUT_LOG_PATH} ({artifact['size']} bytes)")
 
 
 def _split_fold_params(fold, metrics):
@@ -103,7 +104,7 @@ def _split_fold_params(fold, metrics):
     return split_params(metrics, fold_values(fold, "params"), logged_params(fold))
 
 
-def experiment_show(vcs, params, storage, args):
+def experiment_show(vcs, params, storage, args, console):
     from vmn_exp.cli import experiment as _exp
 
     app_name = _exp._app_name(vcs, args)
@@ -120,62 +121,64 @@ def experiment_show(vcs, params, storage, args):
         VMN_LOGGER.error(f"Experiment {verstr} not found")
         return 1
 
+    out = console.out
     log = load_log(storage, app_name, verstr)
     schema = metrics_schema(vcs, storage, app_name)
     if getattr(args, "json", False):
         return _print_show_json(
-            storage, app_name, verstr, metadata, patches, log, args, snapshot, schema
+            storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out
         )
 
-    print(f"Experiment: {verstr}")
-    print(f"  Branch:    {metadata.get('branch') or '?'}")
-    print(f"  {base_line(metadata)}")
-    print(f"  Created:   {metadata.get('timestamp', '?')}")
+    out(f"Experiment: {verstr}")
+    out(f"  Branch:    {metadata.get('branch') or '?'}")
+    out(f"  {base_line(metadata)}")
+    out(f"  Created:   {metadata.get('timestamp', '?')}")
     if metadata.get("note"):
-        print(f"  Note:      {metadata['note']}")
+        out(f"  Note:      {metadata['note']}")
     if metadata.get("has_dep_patches"):
-        print("  Deps:      patches captured")
+        out("  Deps:      patches captured")
     env_summary = metadata.get("env")
     if env_summary:
-        print(f"  Env:       {format_env_oneliner(env_summary)}")
-    _print_output_log(storage, app_name, verstr)
-    _print_status_block(storage, app_name, verstr, metadata, snapshot)
-    fork.print_lineage(metadata, log)
+        out(f"  Env:       {format_env_oneliner(env_summary)}")
+    _print_output_log(storage, app_name, verstr, out)
+    _print_status_block(storage, app_name, verstr, metadata, out, snapshot)
+    fork.print_lineage(metadata, log, out)
 
     for line in patch_stat_lines(metadata, patches):
-        print(f"  {line}")
+        out(f"  {line}")
 
     # Fold log once for both inputs and metrics
     _fold = fold_log(log)
     inputs = fold_inputs_dict(_fold)
     if inputs:
-        print("\n  Inputs:")
+        out("\n  Inputs:")
         for ln in format_inputs_lines(inputs):
-            print(f"  {ln}")
+            out(f"  {ln}")
 
     metrics, summary, overrides = fold_metrics(_fold, schema)
     metrics, run_params = _split_fold_params(_fold, metrics)
     if run_params:
-        print("\n  Params:")
+        out("\n  Params:")
         for name, value in sorted(run_params.items()):
-            print(f"    {name}: {value}")
+            out(f"    {name}: {value}")
     if metrics:
-        print("\n  Metrics:")
+        out("\n  Metrics:")
         shown = shown_policies(metrics, overrides, SchemaPolicies(schema))
         for line in format_metric_lines(metrics, summary, shown):
-            print(f"    {line}")
+            out(f"    {line}")
 
     media = media_lines(log)
     if media:
-        print("\n  Media:")
+        out("\n  Media:")
         for line in media:
-            print(f"    {line}")
+            out(f"    {line}")
 
     events = event_log(log)
     if events:
-        _print_log(events, getattr(args, "full_log", False))
+        _print_log(events, getattr(args, "full_log", False), out)
     if getattr(args, "patch", False):
-        print_patch(verstr, metadata, patches, getattr(args, "max_bytes", PATCH_MAX_BYTES))
+        print_patch(verstr, metadata, patches, getattr(args, "max_bytes", PATCH_MAX_BYTES),
+                    out=out, err=console.err)
     return 0
 
 
@@ -183,7 +186,7 @@ SHOW_LOG_TAIL = 50
 
 
 def _print_show_json(
-    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema
+    storage, app_name, verstr, metadata, patches, log, args, snapshot, schema, out
 ):
     run_state, tree, observed_at = _subtree(storage, app_name, verstr, metadata, snapshot)
     idx = storage_index(storage, app_name, verstr, snapshot)
@@ -195,21 +198,21 @@ def _print_show_json(
     if getattr(args, "patch", False):
         payload["patch"] = patch_payload(
             metadata, patches, getattr(args, "max_bytes", PATCH_MAX_BYTES))
-    print(dumps(payload))
+    out(dumps(payload))
     return 0
 
 
-def _print_log(log, full):
-    """The log, newest ``SHOW_LOG_TAIL`` entries unless *full*."""
-    print(f"\n  Log ({len(log)} entries):")
+def _print_log(log, full, out):
+    """The log to *out*, newest ``SHOW_LOG_TAIL`` entries unless *full*."""
+    out(f"\n  Log ({len(log)} entries):")
     offset = 0 if full else max(len(log) - SHOW_LOG_TAIL, 0)
     shown = merged_log_view(log, offset)["entries"]
     hidden = offset
     if hidden:
-        print(f"    ({hidden} earlier entries hidden, use --full-log)")
+        out(f"    ({hidden} earlier entries hidden, use --full-log)")
     for entry in shown:
         ts = relative_timestamp(entry.get("timestamp", ""))
-        print(f"    [{ts}] {_describe_log_entry(entry)}")
+        out(f"    [{ts}] {_describe_log_entry(entry)}")
 
 
 def _describe_log_entry(entry):

@@ -3,7 +3,8 @@
 
 ``_resolve_experiment_bundles`` and ``_resolve_experiment_version`` are looked
 up on :mod:`vmn_exp.cli.experiment` at call time, so a test's patch there
-still reaches these commands (plan 44 G15)."""
+still reaches these commands (plan 44 G15). Their text goes to the given
+console (plan 44 G16)."""
 from vmn_exp.cli.provenance import print_provenance_diff_section, refuse_no_code
 from vmn_exp.cli.views import (
     dumps,
@@ -188,7 +189,7 @@ def _metrics_with_policies(log, schema, policies):
 
 
 @measure_runtime_decorator
-def experiment_compare(vcs, params, storage, args):
+def experiment_compare(vcs, params, storage, args, console):
     from vmn_exp.cli import experiment as _exp
 
     versions = getattr(args, "version", None) or []
@@ -202,9 +203,9 @@ def experiment_compare(vcs, params, storage, args):
         return 1
 
     payload = compare_payload(experiments, metrics_schema(vcs, storage, app_name))
-    out = dumps(payload) if args.json else compare_text(payload, app_name)
-    if out:
-        print(out)
+    text = dumps(payload) if args.json else compare_text(payload, app_name)
+    if text:
+        console.out(text)
     return 0
 
 
@@ -216,7 +217,7 @@ def _delta_text(key, a, b, p1, p2):
     return f"{key} {with_policy(format_number(a), p1)} -> {with_policy(format_number(b), p2)}"
 
 
-def _print_delta_line(label, d1, d2, policies=({}, {})):
+def _print_delta_line(out, label, d1, d2, policies=({}, {})):
     p1, p2 = policies
     parts = []
     for k in sorted(set(d1) | set(d2)):
@@ -224,11 +225,11 @@ def _print_delta_line(label, d1, d2, policies=({}, {})):
         if a != b:
             parts.append(_delta_text(k, a, b, p1.get(k), p2.get(k)))
     if parts:
-        print(f"{label}: " + "   ".join(parts))
+        out(f"{label}: " + "   ".join(parts))
 
 
 @measure_runtime_decorator
-def experiment_diff(vcs, params, storage, args):
+def experiment_diff(vcs, params, storage, args, console):
     """Show a real code diff between two experiments, with a params/metrics delta."""
     from vmn_exp.cli import experiment as _exp
 
@@ -240,15 +241,16 @@ def experiment_diff(vcs, params, storage, args):
     v1, v2 = meta1["verstr"], meta2["verstr"]
     app_name = _exp._app_name(vcs, args)
 
-    print(f"Comparing {v1} -> {v2}\n")
-    _print_delta_line("params", effective_params(log1), effective_params(log2))
+    out = console.out
+    out(f"Comparing {v1} -> {v2}\n")
+    _print_delta_line(out, "params", effective_params(log1), effective_params(log2))
     schema = metrics_schema(vcs, storage, app_name)
     policies = SchemaPolicies(schema)
     (m1, shown1), (m2, shown2) = (_metrics_with_policies(log, schema, policies) for log in (log1, log2))
-    _print_delta_line("metrics", m1, m2, (shown1, shown2))
+    _print_delta_line(out, "metrics", m1, m2, (shown1, shown2))
 
-    print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2)
-    print()
+    print_provenance_diff_section(storage, app_name, v1, meta1, v2, meta2, out)
+    out("")
 
     # Refuse code diff for runs with no code snapshot (e.g. MLflow imports)
     for meta in (meta1, meta2):

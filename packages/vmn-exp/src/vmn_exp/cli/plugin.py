@@ -135,13 +135,14 @@ def _exp_run_without_repo(args):
         experiment_storage_params,
     )
 
+    io = real_io()
     dispatch = {
         "create": experiment_create,
-        "run": functools.partial(experiment_run, io=real_io()),
+        "run": functools.partial(experiment_run, io=io),
         "add": experiment_add,
-        "list": experiment_list,
-        "show": experiment_show,
-        "compare": experiment_compare,
+        "list": functools.partial(experiment_list, console=io.console),
+        "show": functools.partial(experiment_show, console=io.console),
+        "compare": functools.partial(experiment_compare, console=io.console),
         "prune": experiment_prune,
         "compact": experiment_compact,
         "rewind": experiment_rewind,

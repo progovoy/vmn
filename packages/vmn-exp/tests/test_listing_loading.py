@@ -10,6 +10,7 @@ import vmn_exp.core.index as experiment_index
 import vmn_exp.core.index_list as index_list
 from vmn_exp.cli.experiment import experiment_list
 from vmn_exp.core.index import ExperimentIndex
+from vmn_exp.core.real_io import RealConsole
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 APP = "app"
@@ -37,7 +38,8 @@ def _listed_snapshots(monkeypatch, listed, published):
 
 def _list(storage):
     return experiment_list(None, None, storage, SimpleNamespace(
-        name=APP, query=None, archived=False, last=None, sort=None, top=None, json=False))
+        name=APP, query=None, archived=False, last=None, sort=None, top=None, json=False),
+        RealConsole())
 
 
 def test_snapshot_listing_returns_the_listed_snapshots_loading(storage, monkeypatch):

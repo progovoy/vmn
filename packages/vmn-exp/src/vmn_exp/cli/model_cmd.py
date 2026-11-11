@@ -53,7 +53,7 @@ def _get_storage(args):
 # Individual command handlers
 # ---------------------------------------------------------------------------
 
-def _cmd_register(storage, args):
+def _cmd_register(storage, args, out):
     model_name = getattr(args, "model_name", None)
     if not model_name or not valid_model_name(model_name):
         _LOG.error("Invalid model name: %r", model_name)
@@ -76,7 +76,7 @@ def _cmd_register(storage, args):
     if alias_name is not None:
         _set_alias(storage, model_name, alias_name, n)
 
-    print(f"Registered {model_name} version {n} ({origin})")
+    out(f"Registered {model_name} version {n} ({origin})")
     return 0
 
 
@@ -115,7 +115,7 @@ def _register_version(storage, model_name, args):
     return n, f"run_ref={verstr!r}"
 
 
-def _cmd_alias(storage, args):
+def _cmd_alias(storage, args, out):
     model_name = getattr(args, "model_name", None)
     alias = getattr(args, "alias", None)
     remove = getattr(args, "remove", False)
@@ -131,7 +131,7 @@ def _cmd_alias(storage, args):
     try:
         if remove:
             _remove_alias(storage, model_name, alias, expect=expect)
-            print(f"Removed alias {alias!r} from {model_name}")
+            out(f"Removed alias {alias!r} from {model_name}")
         else:
             version_raw = getattr(args, "alias_version", None)
             if not version_raw:
@@ -143,7 +143,7 @@ def _cmd_alias(storage, args):
                 _LOG.error("Version must be an integer, got %r", version_raw)
                 return 1
             _set_alias(storage, model_name, alias, version, expect=expect)
-            print(f"Alias {alias!r} -> {model_name} version {version}")
+            out(f"Alias {alias!r} -> {model_name} version {version}")
     except ValueError as exc:
         _LOG.error("%s", exc)
         return 1
@@ -151,17 +151,17 @@ def _cmd_alias(storage, args):
     return 0
 
 
-def _cmd_list(storage, args):
+def _cmd_list(storage, args, out):
     models = list_models(storage, kind=getattr(args, "kind", None))
     if getattr(args, "json", False):
-        print(json.dumps(models))
+        out(json.dumps(models))
     else:
         for m in models:
-            print(m)
+            out(m)
     return 0
 
 
-def _cmd_show(storage, args):
+def _cmd_show(storage, args, out):
     model_name = getattr(args, "model_name", None)
     if not model_name:
         _LOG.error("Missing model name")
@@ -172,13 +172,13 @@ def _cmd_show(storage, args):
         _LOG.error("Cannot show model %r: %s", model_name, exc)
         return 1
     if getattr(args, "json", False):
-        print(json.dumps(state))
+        out(json.dumps(state))
     else:
-        _print_model_state(model_name, state)
+        _print_model_state(model_name, state, out)
     return 0
 
 
-def _cmd_resolve(storage, args):
+def _cmd_resolve(storage, args, out):
     ref = getattr(args, "model_name", None)
     if not ref:
         _LOG.error("Missing model ref")
@@ -200,7 +200,7 @@ def _cmd_resolve(storage, args):
         artifact_uri = None
 
     if getattr(args, "json", False):
-        print(json.dumps({
+        out(json.dumps({
             "model": model,
             "n": meta.get("n"),
             "app": app,
@@ -212,22 +212,22 @@ def _cmd_resolve(storage, args):
             "digest": meta.get("digest"),
         }))
     else:
-        print(f"model:    {model}")
+        out(f"model:    {model}")
         if app:
-            print(f"app:      {app}")
+            out(f"app:      {app}")
         if verstr:
-            print(f"verstr:   {verstr}")
+            out(f"verstr:   {verstr}")
         if artifact_path:
-            print(f"artifact: {artifact_path}")
+            out(f"artifact: {artifact_path}")
         uri = artifact_uri or meta.get("uri")
         if uri:
-            print(f"uri:      {uri}")
+            out(f"uri:      {uri}")
         if meta.get("digest"):
-            print(f"digest:   {meta['digest']}")
+            out(f"digest:   {meta['digest']}")
     return 0
 
 
-def _cmd_set_status(storage, args, status: str):
+def _cmd_set_status(storage, args, status: str, out):
     """Shared body for deprecate and delete."""
     model_name = getattr(args, "model_name", None)
     version_raw = getattr(args, "version_ref", None)
@@ -241,16 +241,16 @@ def _cmd_set_status(storage, args, status: str):
     except (ValueError, KeyError) as exc:
         _LOG.error("%s", exc)
         return 1
-    print(f"{status.capitalize()}d {model_name} version {version}")
+    out(f"{status.capitalize()}d {model_name} version {version}")
     return 0
 
 
-def _cmd_deprecate(storage, args):
-    return _cmd_set_status(storage, args, "deprecated")
+def _cmd_deprecate(storage, args, out):
+    return _cmd_set_status(storage, args, "deprecated", out)
 
 
-def _cmd_delete(storage, args):
-    rc = _cmd_set_status(storage, args, "deleted")
+def _cmd_delete(storage, args, out):
+    rc = _cmd_set_status(storage, args, "deleted", out)
     if rc == 0:
         _warn_consumers(storage, args.model_name, int(args.version_ref))
     return rc
@@ -291,7 +291,7 @@ def model_run_without_repo(args, io):
     if handler is None:
         _LOG.error("Unknown model action: %r", getattr(args, "action", None))
         return 1
-    return handler(storage, args)
+    return handler(storage, args, io.console.out)
 
 
 # ---------------------------------------------------------------------------
@@ -330,17 +330,17 @@ def _parse_expect(raw):
         return raw
 
 
-def _print_model_state(model_name, state):
-    """Human-readable model state output."""
+def _print_model_state(model_name, state, out):
+    """Human-readable model state, to *out*."""
     header = state.get("header") or {}
     desc = header.get("description")
-    print(f"Model: {model_name}")
-    print(f"  Kind: {state.get('kind') or 'model'}")
+    out(f"Model: {model_name}")
+    out(f"  Kind: {state.get('kind') or 'model'}")
     if desc:
-        print(f"  Description: {desc}")
-    print(f"  Versions: {len(state['versions'])}")
+        out(f"  Description: {desc}")
+    out(f"  Versions: {len(state['versions'])}")
     for v in state["versions"]:
         aliases_str = f"  aliases={v['aliases']}" if v["aliases"] else ""
-        print(f"    v{v['n']}  status={v['status']}{aliases_str}")
+        out(f"    v{v['n']}  status={v['status']}{aliases_str}")
     if state["aliases"]:
-        print(f"  Aliases: {state['aliases']}")
+        out(f"  Aliases: {state['aliases']}")

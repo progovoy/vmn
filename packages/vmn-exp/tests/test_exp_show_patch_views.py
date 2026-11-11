@@ -9,6 +9,7 @@ from vmn_exp.cli.views import (
     patch_payload,
     print_patch,
 )
+from vmn_exp.core.real_io import RealConsole
 
 WORKING = "diff --git a/f b/f\n-old\n+new\n"
 COMMITS = "From 0123 Mon Sep 17 00:00:00 2001\nSubject: [PATCH] try it\n"
@@ -191,7 +192,7 @@ def test_a_text_patch_without_a_tarball_has_no_untracked_keys():
 def test_print_patch_notes_untracked_files_on_stderr(capsys):
     names = ["a.py", "b.py", "c.py", "d.py", "e.py"]
     patches = {"working_tree": WORKING, "untracked_files": _tarball(*names)}
-    print_patch("v", {}, patches)
+    print_patch("v", {}, patches, out=RealConsole().out, err=RealConsole().err)
     out, err = capsys.readouterr()
     assert "=== working_tree ===" in out and "a.py" not in out
     assert err.count("\n") == 1

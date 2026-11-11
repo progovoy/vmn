@@ -340,7 +340,7 @@ class _Supervision:
         finally:
             self.forwarder.restore()
             _safe_unlink(self.metrics_path)
-        print(self.verstr)
+        self.io.console.out(self.verstr)
         return exit_code
 
     def _start(self, run_cmd):

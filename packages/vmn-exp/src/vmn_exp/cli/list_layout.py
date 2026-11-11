@@ -1,8 +1,8 @@
 """``vmn-exp list``: its rows, their layout (plan 39 B3) and their text.
 
 The sort warning goes through :mod:`vmn_exp.cli.experiment`'s ``VMN_LOGGER``
-at call time, so a test's patch there still reaches it (plan 44 G15)."""
-import sys
+at call time, so a test's patch there still reaches it (plan 44 G15).
+Its text goes to the given console (plan 44 G16)."""
 from types import SimpleNamespace
 
 import vmn_exp.core.index_list as index_list
@@ -120,7 +120,7 @@ def _listed(storage, app_name, args, schema):
 
 
 @measure_runtime_decorator
-def experiment_list(vcs, params, storage, args):
+def experiment_list(vcs, params, storage, args, console):
     from vmn_exp.cli import experiment as _exp
 
     app_name = _exp._app_name(vcs, args)
@@ -132,10 +132,10 @@ def experiment_list(vcs, params, storage, args):
         return 1
     as_json = getattr(args, "json", False)
     if loading is not None:
-        print(incomplete_text(loading), file=sys.stderr)
+        console.err(incomplete_text(loading))
     if not any_runs and not as_json:
         if loading is None:
-            print(f"No experiments found for {app_name}")
+            console.out(f"No experiments found for {app_name}")
         return 0
 
     rows = _list_rows(
@@ -145,13 +145,15 @@ def experiment_list(vcs, params, storage, args):
         rows = rows[: args.top]
     if not matching and getattr(args, "query", None):
         every = SimpleNamespace(archived=getattr(args, "archived", False))
-        print_query_hints(args.query, lambda: _listed(storage, app_name, every, schema)[0])
+        print_query_hints(
+            args.query, lambda: _listed(storage, app_name, every, schema)[0], console.err
+        )
 
     if as_json:
-        print(dumps([row["meta"] for row in rows]))
+        console.out(dumps([row["meta"] for row in rows]))
         return 0
 
     columns, policies = _metric_columns(schema, rows), SchemaPolicies(schema)
     for row, (indent, parent_label) in zip(rows, list_layout(rows)):
-        print(_format_list_row(row, row["meta"], columns, policies, indent, parent_label))
+        console.out(_format_list_row(row, row["meta"], columns, policies, indent, parent_label))
     return 0

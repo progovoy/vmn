@@ -328,17 +328,17 @@ def handle_experiment(vmn_ctx, io):
     elif action == "add":
         return experiment_add(vcs, params, storage, args)
     elif action == "list":
-        return experiment_list(vcs, params, storage, args)
+        return experiment_list(vcs, params, storage, args, io.console)
     elif action == "show":
-        return experiment_show(vcs, params, storage, args)
+        return experiment_show(vcs, params, storage, args, io.console)
     elif action == "compare":
-        return experiment_compare(vcs, params, storage, args)
+        return experiment_compare(vcs, params, storage, args, io.console)
     elif action == "diff":
-        return experiment_diff(vcs, params, storage, args)
+        return experiment_diff(vcs, params, storage, args, io.console)
     elif action == "restore":
         return experiment_restore(vcs, params, storage, args)
     elif action == "export":
-        return experiment_export(vcs, params, storage, args)
+        return experiment_export(vcs, params, storage, args, io.console)
     elif action == "prune":
         return experiment_prune(vcs, params, storage, args)
     elif action == "importance":
