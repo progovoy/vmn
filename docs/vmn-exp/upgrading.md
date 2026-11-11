@@ -41,7 +41,8 @@ says what an operator or a user has to know.
    - *Upgrade order*: the server and CLI first, job images after. A reader
      reads every older record of its layout and record format; a record of a
      newer format is skipped with a warning that says to upgrade vmn-exp, and
-     a store of an unknown layout is refused.
+     a store of an unknown layout is refused. The SDK/server contract behind
+     this is in [packaging.md](../packaging.md#compatibility).
 5. **1.0 is not promised.** Nothing here is a stability guarantee beyond
    these rules.
 

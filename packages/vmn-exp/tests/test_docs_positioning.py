@@ -8,7 +8,9 @@ import os
 import re
 
 from exp_helpers import _PROJECT_ROOT
+from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
 from vmn_exp.storage.registry import ENTRY_POINT_GROUP, STORAGE_EXTRAS
+from vmn_exp.storage.store_marker import LAYOUT
 
 DOCS_INDEX = "docs/vmn-exp/README.md"
 STORAGE_RULE = "storage is the source of truth; training never depends on a server"
@@ -25,6 +27,7 @@ SPEED_PROMISES = (
 )
 MLFLOW_COMPARISON = "docs/vmn-exp/vmn-vs-mlflow.md"
 OBJECT_STORE_PRODUCTS = {"s3": "S3", "gs": "GCS", "az": "Azure"}
+PACKAGING = "docs/packaging.md"
 
 
 def _flat(text):
@@ -110,3 +113,15 @@ def test_the_mlflow_comparison_names_every_built_in_object_store():
 
 def test_the_mlflow_comparison_names_the_storage_entry_point_group():
     assert ENTRY_POINT_GROUP in _read(MLFLOW_COMPARISON)
+
+
+def _section(text, heading):
+    start = text.index(f"\n{heading}\n")
+    end = text.find("\n## ", start + 1)
+    return text[start:] if end < 0 else text[start:end]
+
+
+def test_packaging_md_compatibility_names_the_current_layout_and_record_format():
+    section = _flat(_section(_read(PACKAGING), "## Compatibility"))
+    assert f"store layout {LAYOUT}" in section
+    assert f"record format {RECORD_FORMAT_VERSION}" in section

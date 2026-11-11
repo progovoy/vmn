@@ -158,8 +158,8 @@ the PyPI release.
 ## Versioning and release
 
 - Two vmn apps: `vmn` (for the `vmn` distribution) and `vmn_exp` (a shared
-  version for `vmn-exp` and `vmn-exp-sdk`, so the dashboard and the job writer
-  always agree on the record format).
+  version for `vmn-exp` and `vmn-exp-sdk`, which pin each other exactly; see
+  [Compatibility](#compatibility) for what holds across machines).
 - Each app's `version_backends` (`generic_selectors` in
   `.vmn/vmn/conf.yml` and `.vmn/vmn_exp/conf.yml`) writes the new version into
   `project.version`, into `version_stamp/version.py` (vmn), and into vmn-exp's
@@ -208,6 +208,33 @@ State checked on 2026-11-11:
   (2026-09-28), which is why the first real release was 0.1.0.
 - A project is created by its first upload, which needs an account-wide token.
   After that, switch to per-project tokens.
+
+## Compatibility
+
+**In one environment**, vmn-exp and vmn-exp-sdk are always the same version:
+vmn-exp pins `vmn-exp-sdk==` its own version, and the pin stays exact. vmn-exp
+imports many of the SDK distribution's modules (`vmn_exp.core`, `storage`,
+`sdk`, `registry`, `_base`), some by private name, and both share the
+`vmn_exp` namespace, so a mismatched pair can fail at import. The pin binds
+only an environment where vmn-exp is installed: a job image with the SDK
+alone is free to stay on an older release.
+
+**Across machines** the contract is the store, versioned by its store layout
+(`store.yml`) and each record's record format (`format_version` in
+`metadata.yml`). Today that is store layout 2 and record format 2. The
+promise: a server or CLI reads the records written by any older SDK of the
+same store layout and record format. A record of a newer format is skipped
+with a warning to upgrade vmn-exp; a store of an unknown layout is refused.
+So upgrade the server and CLI first, and job images at leisure. Nothing is
+promised the other way round beyond this: a log entry of a type the reader
+does not know adds nothing of its own to the run (only the `params` a `create`
+or `params` entry carries are folded).
+
+Each record format the reader accepts keeps one golden record, frozen as the
+SDK that wrote it laid it out, under `packages/vmn-exp/tests/golden/` and
+checked by `packages/vmn-exp/tests/test_record_compat.py`; a format bump adds
+the next one and keeps the older ones green. Format changes follow the rules
+in [vmn-exp/upgrading.md](vmn-exp/upgrading.md#rules).
 
 ## Migration
 

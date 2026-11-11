@@ -30,6 +30,10 @@ def test_each_distribution_is_named_after_its_folder(dist):
 
 
 def test_the_exp_packages_share_one_version_and_pin_each_other():
+    # The == pin stays exact: vmn-exp imports SDK-internal modules (some by
+    # private name) from the shared vmn_exp namespace, so a mismatched pair can
+    # fail at import. It binds only where vmn-exp is installed; across machines
+    # the contract is the store (docs/packaging.md#compatibility).
     sdk_version = _project("vmn-exp-sdk")["version"]
     assert _project("vmn-exp")["version"] == sdk_version
     assert f"vmn-exp-sdk=={sdk_version}" in _project("vmn-exp")["dependencies"]

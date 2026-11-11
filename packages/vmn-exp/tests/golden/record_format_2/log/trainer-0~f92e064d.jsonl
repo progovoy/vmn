@@ -1,0 +1,15 @@
+{"timestamp": "2026-11-11T14:03:07.215126Z", "type": "create", "note": "first note", "params": {"lr": 0.1, "layers": 3, "optimizer": "adam"}}
+{"timestamp": "2026-11-11T14:03:07.215126Z", "type": "features", "features_version": 0, "source": "export", "author": {"writer": "trainer-0", "git_user_email": "dev@example.com", "os_user": "dev", "source": "git"}}
+{"timestamp": "2026-11-11T14:03:07.217593Z", "type": "tags", "set": {"team": "vision"}}
+{"timestamp": "2026-11-11T14:03:07.217653Z", "type": "define_metric", "name": "val_*", "goal": "min", "step_metric": "epoch"}
+{"timestamp": "2026-11-11T14:03:07.217659Z", "type": "params", "params": {"batch": 32, "lr": 0.05}}
+{"timestamp": "2026-11-11T14:03:07.217696Z", "type": "tags", "set": {"stage": "eval"}}
+{"timestamp": "2026-11-11T14:03:07.217699Z", "type": "tags", "set": {"owner": "ml"}}
+{"timestamp": "2026-11-11T14:03:07.217702Z", "type": "tags", "set": {}, "remove": ["owner"]}
+{"timestamp": "2026-11-11T14:03:07.217704Z", "type": "note", "text": "second note"}
+{"type": "input", "uri": "s3://bucket/data/train.csv", "name": "train", "digest": "abc123", "kind": "dataset", "ts": "2026-11-11T14:03:07.217706Z"}
+{"timestamp": "2026-11-11T14:03:07.218181Z", "type": "artifact", "path": "artifacts/weights.bin", "size": 3, "sha256": "ae4b3280e56e2faf83f414a6e3dabe9d5fbe18976544c05fed121accb85b53fc"}
+{"timestamp": "2026-11-11T14:03:07.218735Z", "type": "intent", "text": "golden record for the format 2 compatibility test", "keywords": ["golden"], "source": "user"}
+{"timestamp": "2026-11-11T14:03:07.218741Z", "type": "range", "name": "warmup", "start_step": 0, "end_step": 1}
+{"timestamp": "2026-11-11T14:03:07.218661Z", "type": "table", "name": "preds", "step": 2, "path": "outputs/tables/preds/2.json", "sha256": "583bfe8e341ac17bbee4b67c35a50723e7e441b0e68c31743f858583b03b7172", "size": 141, "rows": 2, "columns": ["id", "p"]}
+{"timestamp": "2026-11-11T14:03:07.219540Z", "type": "run", "command": ["/job/train.py", "/data/store"], "exit_code": 0, "duration_sec": 0.003}

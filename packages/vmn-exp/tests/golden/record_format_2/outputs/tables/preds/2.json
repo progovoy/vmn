@@ -1,0 +1,1 @@
+{"columns": [{"name": "id", "type": "number"}, {"name": "p", "type": "number"}], "data": [[1, 2], [0.9, 0.1]], "rows": 2, "truncated": false}
