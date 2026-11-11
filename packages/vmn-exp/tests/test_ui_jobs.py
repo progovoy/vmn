@@ -362,12 +362,12 @@ def test_ui_workspace_isolation_on_stamp(app_layout, capfd):
     assert not os.path.exists(os.path.join(second, "iso.txt"))
 
 
-@pytest.mark.parametrize("keep", [-1, -5, "-1", "5", True, "5 --dry-run", 1.5])
-def test_ui_prune_keep_must_be_non_negative_int(keep):
+@pytest.mark.parametrize("keep", [0, -1, -5, "-1", "5", True, "5 --dry-run", 1.5])
+def test_ui_prune_keep_must_be_positive_int(keep):
     from vmn_exp.ui.jobs import build_command
 
     assert build_command("prune", "my_app", {"keep": keep})[0] is None
-    for ok in (0, 5):
+    for ok in (1, 5):
         assert build_command("prune", "my_app", {"keep": ok}) == (
             ["vmn-exp", "experiment", "prune", "my_app", f"--keep={ok}"], None)
 

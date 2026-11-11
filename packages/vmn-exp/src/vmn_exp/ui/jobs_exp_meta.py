@@ -100,8 +100,8 @@ def exp_restore_command(app_name, body):
 def exp_prune_command(app_name, body):
     keep, older_than = body.get("keep"), body.get("older_than")
     if keep is not None:
-        if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
-            return None, "keep must be an integer >= 0"
+        if isinstance(keep, bool) or not isinstance(keep, int) or keep < 1:
+            return None, "keep must be an integer >= 1"
         return _exp("prune", app_name, opt("--keep", str(keep))), None
     if older_than:
         if not isinstance(older_than, str) or not _DURATION.match(older_than):

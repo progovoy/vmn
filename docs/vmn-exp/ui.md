@@ -167,7 +167,7 @@ a bad one answers `400`:
 
 - `verstr`, `verstrs`: run versions (one path component, not starting with `-`).
 - `release_mode`: `major`, `minor`, `patch` or `hotfix`; `prerelease`: a printable string.
-- `keep`: an integer `>= 0` (`0` deletes every run, as on the CLI); `older_than`: `<N>d`, `<N>w` or `<N>h`.
+- `keep`: an integer `>= 1` (the CLI still takes `--keep 0`); `older_than`: `<N>d`, `<N>w` or `<N>h`.
 - `note`: a string of at most 16 KiB; it may start with `-`.
 - `metrics`: an object; names as on the CLI (not starting with `-`, no `=` or
   whitespace), values numbers or strings.
