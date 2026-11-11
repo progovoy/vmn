@@ -181,7 +181,7 @@ def build_app(
         manager, source, TTLCache(APPS_TTL_SEC),
         open_workspace_storage=lambda ws: workspace_storage(ws),
         open_edit_storage=lambda uri: open_storage(uri, area=RUNS, buffer_logs=True),
-        probe_store=lambda uri: storage_access.probe_store(uri),
+        probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random),
         app_exists=lambda *args: app_exists(*args),
     )
     leaderboards = LeaderboardCache(conf_of=ctx.board_conf)
@@ -278,7 +278,7 @@ def build_app(
     def _checkout(ws_name, app_tag):
         return ctx.git_workspace(ws_name).path, ctx.app_name(app_tag)
 
-    routes_admin.register(app, API_PREFIX, wall_seconds(deps.io.clock))
+    routes_admin.register(app, API_PREFIX, wall_seconds(deps.io.clock), deps.io.random)
 
     def _cache_of(ws_name):
         ws = ctx.workspace(ws_name)
@@ -332,8 +332,8 @@ def build_app(
     routes_run_code.register(app, API_PREFIX, _series_storage, leaderboard_inputs,
                              leaderboards, ctx.segment)
     routes_models.register(app, API_PREFIX, ctx.ws_storage, model_lists)
-    routes_reports.register(app, API_PREFIX, ctx.ws_storage, _report_index)
-    routes_comments.register(app, API_PREFIX, ctx.ws_storage)
+    routes_reports.register(app, API_PREFIX, ctx.ws_storage, _report_index, deps.io.random)
+    routes_comments.register(app, API_PREFIX, ctx.ws_storage, deps.io.random)
 
     def _settings_target(ws_name, app_tag):
         app_name = ctx.app_name(app_tag)

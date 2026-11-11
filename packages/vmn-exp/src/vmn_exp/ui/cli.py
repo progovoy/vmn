@@ -146,7 +146,7 @@ def build_server(args, env=None):
     return manager, cfg, control_plane
 
 
-def _oidc_chain(cfg, control_plane, env):
+def _oidc_chain(cfg, control_plane, env, random):
     from vmn_exp.ui.auth import AuthenticatorChain
     from vmn_exp.ui.auth.jwks import JwksVerifier
     from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
@@ -170,11 +170,11 @@ def _oidc_chain(cfg, control_plane, env):
     http = UrllibHttp()
     return AuthenticatorChain([OIDCAuthenticator(
         config, control_plane, JwksVerifier(http, time.time), http=http, clock=time.time,
-        session_ttl_sec=oidc.session_ttl_hours * 3600,
+        random=random, session_ttl_sec=oidc.session_ttl_hours * 3600,
         login_token_ttl_sec=oidc.login_token_ttl_days * 24 * 3600)])
 
 
-def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):
+def server_app(manager, cfg, control_plane, args, *, io, env=None, token=None, **kwargs):
     """The FastAPI app for *manager*, with *cfg*'s auth wired in."""
     from vmn_exp.core.writer import set_default_writer_id
     from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
@@ -185,13 +185,13 @@ def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs
     # The server's own log writes match the edit policy's log/vmn-server*.
     set_default_writer_id(SERVER_WRITER_ID)
     dsn = postgres_dsn(cfg)
-    auth = _oidc_chain(cfg, control_plane, env) if cfg else None
+    auth = _oidc_chain(cfg, control_plane, env, io.random) if cfg else None
     host = cfg.server.host if cfg else args.host
     keep_warm = cfg.server.keep_warm if cfg else getattr(args, "keep_warm", None)
     ended_hours = (cfg.server.metrics_ended_hours if cfg
                    else getattr(args, "metrics_ended_hours", None) or DEFAULT_METRICS_ENDED_HOURS)
     app = create_app(
-        manager,
+        manager, io=io,
         token=token,
         read_only=args.read_only,
         use_index=not args.no_index,

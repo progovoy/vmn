@@ -84,7 +84,7 @@ def test_alias_and_model_names_must_be_strs(name):
 
 @pytest.mark.parametrize("device_code", WRONG)
 def test_device_code_must_be_a_str(device_code):
-    flow = DeviceFlow(SimpleNamespace(store=None, clock=None))
+    flow = DeviceFlow(SimpleNamespace(store=None, clock=None, random=None))
 
     with pytest.raises(DeviceFlowError) as caught:
         flow.poll(device_code)

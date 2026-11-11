@@ -139,7 +139,7 @@ def _exp_run_without_repo(args):
     dispatch = {
         "create": experiment_create,
         "run": functools.partial(experiment_run, io=io),
-        "add": experiment_add,
+        "add": functools.partial(experiment_add, random=io.random),
         "list": functools.partial(experiment_list, console=io.console),
         "show": functools.partial(experiment_show, console=io.console),
         "compare": functools.partial(experiment_compare, console=io.console),

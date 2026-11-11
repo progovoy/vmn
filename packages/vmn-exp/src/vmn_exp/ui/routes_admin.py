@@ -34,7 +34,7 @@ def _token_body(body):
     return name.strip(), roles, ttl
 
 
-def register(app, api_prefix, wall_clock):
+def register(app, api_prefix, wall_clock, random):
     """The routes; *wall_clock* (epoch seconds) times the sessions they close."""
     def _tokens():
         _control_plane(app)
@@ -70,7 +70,7 @@ def register(app, api_prefix, wall_clock):
         if not owner:
             raise HTTPException(422, "Query parameter 'owner' is required")
         return {"tokens": _tokens().revoke_owner(owner),
-                "sessions": SessionService(_control_plane(app), wall_clock).close_principal(owner)}
+                "sessions": SessionService(_control_plane(app), wall_clock, random).close_principal(owner)}
 
     @app.get(f"{api_prefix}/audit", dependencies=[require(ADMIN)])
     def audit_page(offset: int = 0, limit: int = 100):

@@ -150,7 +150,7 @@ def _experiment_create_core(
 
 
 @measure_runtime_decorator
-def experiment_add(vcs, params, storage, args):
+def experiment_add(vcs, params, storage, args, random):
     from vmn_exp.cli import experiment as _exp
 
     verstr, err = _exp._resolve_experiment_version(storage, vcs, args, default_latest=True)
@@ -210,4 +210,4 @@ def experiment_add(vcs, params, storage, args):
     # One-shot command: nothing else will flush this to the remote later.
     flush_log(storage, app_name, verstr)
 
-    return apply_finish(storage, app_name, verstr, args)
+    return apply_finish(storage, app_name, verstr, args, random)

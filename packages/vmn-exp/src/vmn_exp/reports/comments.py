@@ -8,7 +8,6 @@ wins on ``(ts, writer, pos)``, and a delete is a tombstone that keeps replies.
 from __future__ import annotations
 
 import base64
-import os
 
 from vmn_exp.core.record_format import stamped
 from vmn_exp.core.writer import claim_record, flush_log, get_writer_id, own_stream
@@ -40,12 +39,17 @@ def thread(storage, target):
     return fold(_entries(area, scope, name))
 
 
-def add(storage, target, text, reply_to=None, anchor=None, author=None):
+def new_comment_id(random):
+    """``c`` and 16 lowercase base32 characters (80 random bits)."""
+    return "c" + base64.b32encode(random.token_bytes(10)).decode().lower()
+
+
+def add(storage, target, text, reply_to=None, anchor=None, author=None, *, random):
     """Post a comment on *target*; returns its id."""
     area, scope, name, target_dict = _location(storage, target)
     header = {"verstr": name, "type": "comment_thread", "target": target_dict, "timestamp": now_iso()}
     claim_record(area, scope, name, stamped(header))  # losing the race is fine
-    comment_id = "c" + base64.b32encode(os.urandom(10)).decode().lower()
+    comment_id = new_comment_id(random)
     _append(area, scope, name, "comment", id=comment_id, text=text,
             reply_to=reply_to, anchor=anchor,
             author=author if author is not None else actor_identity())

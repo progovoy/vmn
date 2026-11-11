@@ -67,7 +67,7 @@ class FinishRefusedError(RunRefusedError):
 
 
 def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None,
-               force=False):
+               force=False, *, random):
     """Write *verstr*'s final run state; False when there is no such record.
 
     *error* — a message or an exception — becomes the state's ``error`` and an
@@ -92,7 +92,7 @@ def finish_run(storage, app_name, verstr, exit_code, error=None, end_reason=None
                       create_log_entry("error", message=recorded["message"]))
         flush_log(storage, app_name, verstr)
     _save_final(storage, app_name, verstr, lambda prior: final_state(
-        finishable(prior), exit_code, recorded, end_reason))
+        finishable(prior), exit_code, recorded, end_reason, random=random))
     return True
 
 
@@ -107,7 +107,7 @@ def _save_final(storage, app_name, verstr, update):
         save_run_state(inline, app_name, verstr, state)
 
 
-def final_state(prior, exit_code, error=None, end_reason=None):
+def final_state(prior, exit_code, error=None, end_reason=None, *, random):
     """*prior* (a run state, maybe empty) ended with *exit_code*."""
     state = {k: v for k, v in prior.items() if k not in _ENDING_FIELDS}
     finished_at = now_iso()
@@ -116,7 +116,7 @@ def final_state(prior, exit_code, error=None, end_reason=None):
         exit_code=exit_code,
         finished_at=finished_at,
         duration_sec=_duration(prior.get("started_at"), finished_at),
-        attempt=new_attempt_id(),
+        attempt=new_attempt_id(random),
     )
     if error is not None:
         state["error"] = error

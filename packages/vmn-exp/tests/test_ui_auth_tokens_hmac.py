@@ -9,6 +9,7 @@ import pytest
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.auth.tokens import TokenService
 from vmn_exp.ui.control_plane import ControlPlaneStore, SQLiteControlPlane
+from vmn_exp.core.real_io import RealRandom
 
 
 class _DictStore(ControlPlaneStore):
@@ -41,7 +42,7 @@ def _no_kdf(monkeypatch):
 
 def test_round_trip_runs_no_kdf(tmp_path, monkeypatch):
     _no_kdf(monkeypatch)
-    tokens = TokenService(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")), time.time)
+    tokens = TokenService(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")), time.time, random=RealRandom())
     secret, record = tokens.create("ci", {"ml": VIEWER})
     assert record.secret_hash.startswith("hmac-sha256$")
     assert tokens.verify(secret).id == f"token:{record.id}"
@@ -50,14 +51,14 @@ def test_round_trip_runs_no_kdf(tmp_path, monkeypatch):
 def test_a_token_from_another_server_key_fails(tmp_path):
     ours = SQLiteControlPlane(str(tmp_path / "a.sqlite3"))
     theirs = SQLiteControlPlane(str(tmp_path / "b.sqlite3"))
-    secret, record = TokenService(theirs, time.time).create("ci", {"ml": VIEWER})
+    secret, record = TokenService(theirs, time.time, random=RealRandom()).create("ci", {"ml": VIEWER})
     ours.put("token", record.id, asdict(record))
-    assert TokenService(ours, time.time).verify(secret) is None
-    assert TokenService(theirs, time.time).verify(secret) is not None
+    assert TokenService(ours, time.time, random=RealRandom()).verify(secret) is None
+    assert TokenService(theirs, time.time, random=RealRandom()).verify(secret) is not None
 
 
 def test_ten_thousand_verifications_are_fast():
-    tokens = TokenService(_DictStore(), time.time)
+    tokens = TokenService(_DictStore(), time.time, random=RealRandom())
     secret, _ = tokens.create("ci", {"ml": VIEWER})
     start = time.perf_counter()
     for _ in range(10_000):
@@ -68,7 +69,7 @@ def test_ten_thousand_verifications_are_fast():
 @pytest.mark.parametrize("stored", ["", "hmac-sha256$", "scrypt$1,2,3$x$y", "garbage"])
 def test_a_malformed_stored_hash_never_matches(stored):
     store = _DictStore()
-    tokens = TokenService(store, time.time)
+    tokens = TokenService(store, time.time, random=RealRandom())
     secret, record = tokens.create("ci", {"ml": VIEWER})
     store.put("token", record.id, {**asdict(record), "secret_hash": stored})
     assert tokens.verify(secret) is None

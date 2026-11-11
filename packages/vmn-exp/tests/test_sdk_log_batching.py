@@ -19,6 +19,7 @@ from deferred_ship_fakes import WAIT_SEC, FakeBucket
 from exp_helpers import _SRC_PATH, _PY
 
 from vmn_exp.core.metric_block import read_headers
+from vmn_exp.core.real_io import RealRandom
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
@@ -60,7 +61,7 @@ def storage(tmp_path):
 
 
 def _open_run(storage, heartbeat=60):
-    run = Run(storage, APP, VERSTR, heartbeat)
+    run = Run(storage, APP, VERSTR, heartbeat, random=RealRandom())
     run._open()
     return run
 
@@ -142,9 +143,10 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
 from vmn_exp.sdk.run import Run
+from vmn_exp.core.real_io import RealRandom
 log_buffer.FLUSH_INTERVAL_SEC = 3600
 st = CachedSnapshotStorage(LocalSnapshotStorage(sys.argv[1], area="runs"))
-run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600)
+run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600, random=RealRandom())
 run._open()
 for step in range(25):
     run.log_metric("loss", 0.5, step=step)

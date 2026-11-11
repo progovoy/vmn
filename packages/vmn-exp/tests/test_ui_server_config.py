@@ -5,6 +5,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from vmn_exp.ui.config import ConfigError, load_config, resolve_config
+from vmn_exp.core.real_io import RealRandom
 
 FULL = """
 server:
@@ -172,15 +173,15 @@ def test_public_url_must_be_https_with_oidc():
     from vmn_exp.ui.cli import _oidc_chain
 
     with pytest.raises(ConfigError) as e:
-        _oidc_chain(_oidc_config(public_url="http://vmn.example"), None, env={})
+        _oidc_chain(_oidc_config(public_url="http://vmn.example"), None, env={}, random=RealRandom())
     assert "server.public_url" in str(e.value)
-    assert _oidc_chain(_oidc_config(public_url="http://localhost:8265"), None, env={})
+    assert _oidc_chain(_oidc_config(public_url="http://localhost:8265"), None, env={}, random=RealRandom())
 
 
 def test_oidc_chain_wires_a_jwks_verifier_on_the_authenticators_http():
     from vmn_exp.ui.auth.jwks import JwksVerifier
     from vmn_exp.ui.cli import _oidc_chain
 
-    (oidc,) = _oidc_chain(_oidc_config(), None, env={}).authenticators
+    (oidc,) = _oidc_chain(_oidc_config(), None, env={}, random=RealRandom()).authenticators
     assert isinstance(oidc.verifier, JwksVerifier)
     assert oidc.verifier.http is oidc.http

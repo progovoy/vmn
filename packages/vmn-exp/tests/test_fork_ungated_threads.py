@@ -80,6 +80,7 @@ from vmn_exp.core.alerts import Alerter
 from vmn_exp.core.alerts.config import AlertConfig
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 
 class SlowSink:
@@ -91,7 +92,7 @@ class SlowSink:
 
 storage = LocalSnapshotStorage(sys.argv[1], area="runs")
 storage.save("app", "0.0.1-dev.a.b", {"verstr": "0.0.1-dev.a.b"}, {})
-run = Run(storage, "app", "0.0.1-dev.a.b", 60)
+run = Run(storage, "app", "0.0.1-dev.a.b", 60, random=RealRandom())
 run._open()
 run._alerter_instance = Alerter(AlertConfig(sinks=[SlowSink()], on=["alert"]))
 assert run.alert("loss exploded") is True

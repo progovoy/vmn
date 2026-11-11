@@ -13,7 +13,6 @@ outlives its transaction.
 """
 import contextlib
 import contextvars
-import secrets
 from dataclasses import dataclass
 
 SINGLE_TENANT_ORG = 0
@@ -87,9 +86,9 @@ def bind_org(conn, org_id):
     conn.execute("SELECT set_config('app.org_id', %s, true)", (str(int(org_id)),))
 
 
-def create_org(conn, name):
+def create_org(conn, name, random):
     """A new org with a fresh external id (the AssumeRole confused-deputy guard)."""
-    external_id = f"vmn-{secrets.token_hex(16)}"
+    external_id = f"vmn-{random.token_hex(16)}"
     (org_id,) = conn.execute(
         "INSERT INTO vmn_orgs (name, external_id) VALUES (%s, %s) RETURNING id",
         (name, external_id),

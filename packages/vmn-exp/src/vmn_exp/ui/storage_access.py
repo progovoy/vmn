@@ -5,7 +5,6 @@ area) and ``edit`` (a conditional write of a probe key under its own
 ``server`` area). A role that can also delete is flagged in multi-tenant
 deployments; for now that is a warning, not a refusal.
 """
-import uuid
 from dataclasses import dataclass, field
 from typing import List
 
@@ -32,8 +31,8 @@ def _can_read(uri, opener):
         return False
 
 
-def _claim_probe_key(store):
-    key = f"probe-{uuid.uuid4().hex}"
+def _claim_probe_key(store, random):
+    key = f"probe-{random.hex_id()}"
     if not store.create_exclusive(PROBE_SCOPE, key, {"probe": True}, {}):
         raise RuntimeError("probe key already taken")
     return key
@@ -47,7 +46,7 @@ def _deleted(store, key):
         return False
 
 
-def probe_store(uri, tenancy="single", opener=open_store):
+def probe_store(uri, random, tenancy="single", opener=open_store):
     """The capabilities the server has on the store *uri*."""
     probe = Probe()
     if not _can_read(uri, opener):
@@ -56,7 +55,7 @@ def probe_store(uri, tenancy="single", opener=open_store):
     probe.capabilities.append(READ)
     store = opener(uri, SERVER_AREA)
     try:
-        key = _claim_probe_key(store)
+        key = _claim_probe_key(store, random)
     except Exception as exc:
         probe.warnings.append(f"no edit access (probe write failed: {exc})")
         return probe

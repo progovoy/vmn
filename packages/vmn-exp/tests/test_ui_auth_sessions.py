@@ -8,6 +8,7 @@ pytest.importorskip("fastapi")
 from vmn_exp.ui.auth.principal import ADMIN, Principal
 from vmn_exp.ui.auth.sessions import SessionService
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import RealRandom
 
 
 class _Clock:
@@ -24,7 +25,7 @@ def cp(tmp_path):
 
 
 def _sessions(cp, clock, **kw):
-    return SessionService(cp, clock=clock, **kw)
+    return SessionService(cp, clock=clock, **kw, random=RealRandom())
 
 
 def test_close_principal_closes_only_that_principals_sessions(cp):

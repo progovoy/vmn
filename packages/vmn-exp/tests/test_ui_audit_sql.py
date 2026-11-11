@@ -15,7 +15,7 @@ from vmn_exp.ui.auth.sessions import SessionService
 from vmn_exp.ui.config import ConfigError, parse_config
 from vmn_exp.ui.control_plane import SQLiteControlPlane
 from vmn_exp.ui.control_plane_sweep import ControlPlaneSweeper
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 DAY = 86400.0
 ADMIN_HDR = {"Authorization": "Bearer a"}
@@ -49,7 +49,7 @@ def _client(tmp_path, cp):
 
 
 def test_page_and_count_never_list_every_entry(cp, monkeypatch):
-    log = AuditLog(cp, time.time)
+    log = AuditLog(cp, time.time, random=RealRandom())
     for i in range(5):
         log.record(actor="u", action=str(i))
     _no_full_list(monkeypatch, cp)
@@ -58,7 +58,7 @@ def test_page_and_count_never_list_every_entry(cp, monkeypatch):
 
 
 def test_a_page_query_carries_its_limit(cp):
-    log = AuditLog(cp, time.time)
+    log = AuditLog(cp, time.time, random=RealRandom())
     for i in range(50):
         log.record(actor="u", action=str(i))
     seen = []
@@ -72,7 +72,7 @@ def test_a_page_query_carries_its_limit(cp):
 
 
 def test_audit_api_pages_and_counts_in_sql(tmp_path, cp, monkeypatch):
-    log = AuditLog(cp, time.time)
+    log = AuditLog(cp, time.time, random=RealRandom())
     for i in range(3):
         log.record(actor="u", action=str(i))
     client = _client(tmp_path, cp)
@@ -82,7 +82,7 @@ def test_audit_api_pages_and_counts_in_sql(tmp_path, cp, monkeypatch):
 
 
 def test_export_streams_every_entry_oldest_first(tmp_path, cp, monkeypatch):
-    log = AuditLog(cp, time.time)
+    log = AuditLog(cp, time.time, random=RealRandom())
     for i in range(1200):
         log.record(actor="u", action=str(i))
     client = _client(tmp_path, cp)
@@ -97,7 +97,7 @@ def test_export_streams_every_entry_oldest_first(tmp_path, cp, monkeypatch):
 def test_sweep_applies_audit_retention_and_expiry(cp):
     now = 1_000 * DAY
     stamps = iter([now - 40 * DAY, now - 10 * DAY])
-    log = AuditLog(cp, clock=lambda: next(stamps))
+    log = AuditLog(cp, clock=lambda: next(stamps), random=RealRandom())
     log.record(actor="u", action="old")
     log.record(actor="u", action="recent")
     cp.put("session", "gone", {}, expires_at=now - 1)
@@ -128,7 +128,7 @@ def test_the_server_sweeps_hourly_from_startup(tmp_path, cp):
 
 def test_a_login_sweeps_expired_sessions(cp):
     cp.put("session", "stale", {}, expires_at=5)
-    SessionService(cp, clock=lambda: 10.0).open(Principal("u:a", "A", {}))
+    SessionService(cp, clock=lambda: 10.0, random=RealRandom()).open(Principal("u:a", "A", {}))
     assert cp.get("session", "stale") is None
 
 

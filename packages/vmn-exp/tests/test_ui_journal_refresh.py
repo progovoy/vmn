@@ -11,6 +11,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.journal_follow import WorkspaceJournal
 from vmn_exp.ui.refresher import Refresher
+from vmn_exp.core.real_io import RealRandom
 
 FINISHED = "state: finished\nexit_code: 0\n"
 
@@ -196,8 +197,8 @@ def test_reports_and_comments_scopes_feed_the_reports_index(store, lists):
     journal.watch(FakeIndex("app"))
     reports = FakeReports()
     journal.feed_reports(reports)
-    rid = rstore.create(store, "T", "")
-    comments.add(store, ("run", "trainer", "0.1.0-dev.a"), "hi")
+    rid = rstore.create(store, "T", "", random=RealRandom())
+    comments.add(store, ("run", "trainer", "0.1.0-dev.a"), "hi", random=RealRandom())
     _write(store, "app", "1.0.0-dev.a")
     journal.tick()
     [(entries, overflow, cursor)] = reports.feeds

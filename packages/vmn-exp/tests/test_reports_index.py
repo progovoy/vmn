@@ -9,6 +9,7 @@ from vmn_exp.reports.index import ReportIndex
 from vmn_exp.reports.panels import panel_refs
 from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 PINNED = """# A
 ```vmn-panel
@@ -64,7 +65,7 @@ def test_panel_refs_skips_bad_yaml_and_missing_app():
 
 
 def test_index_lists_reports_and_reverse_map(storage, clock):
-    rid = rstore.create(storage, "T", PINNED)
+    rid = rstore.create(storage, "T", PINNED, random=RealRandom())
     index = _index(storage, clock)
     index.refresh()
     [row] = index.reports()
@@ -81,7 +82,7 @@ def test_journal_entries_refresh_without_full_sweep(storage, clock, monkeypatch)
     index.refresh()
     monkeypatch.setattr(rstore, "list_reports", lambda s: pytest.fail("full listing"))
     clock.now += 2
-    rid = rstore.create(storage, "New", PINNED)
+    rid = rstore.create(storage, "New", PINNED, random=RealRandom())
     clock.now += 1
     index.refresh()
     assert [r["rid"] for r in index.reports()] == [rid]
@@ -99,11 +100,11 @@ def test_comment_counts_from_journal(storage, clock):
     index = _index(storage, clock)
     index.refresh()
     target = ("run", "trainer", "0.1.0-dev.a")
-    first = comments.add(storage, target, "one")
-    comments.add(storage, target, "reply", reply_to=first)
-    second = comments.add(storage, target, "two")
+    first = comments.add(storage, target, "one", random=RealRandom())
+    comments.add(storage, target, "reply", reply_to=first, random=RealRandom())
+    second = comments.add(storage, target, "two", random=RealRandom())
     comments.resolve(storage, target, second)
-    gone = comments.add(storage, target, "oops")
+    gone = comments.add(storage, target, "oops", random=RealRandom())
     comments.delete(storage, target, gone)
     clock.now += 1
     index.refresh()
@@ -112,7 +113,7 @@ def test_comment_counts_from_journal(storage, clock):
 
 
 def test_full_build_counts_existing_threads(storage, clock):
-    comments.add(storage, ("run", "root/svc", "0.0.1"), "x")
+    comments.add(storage, ("run", "root/svc", "0.0.1"), "x", random=RealRandom())
     index = _index(storage, clock)
     index.refresh()
     assert index.comment_counts("root/svc") == {"0.0.1": {"total": 1, "unresolved": 1}}
@@ -125,7 +126,7 @@ def test_generation_moves_on_change_only(storage, clock):
     clock.now += 1
     index.refresh()
     assert index.generation == before
-    comments.add(storage, ("run", "trainer", "0.0.1"), "x")
+    comments.add(storage, ("run", "trainer", "0.0.1"), "x", random=RealRandom())
     clock.now += 1
     index.refresh()
     assert index.generation > before
@@ -133,7 +134,7 @@ def test_generation_moves_on_change_only(storage, clock):
 
 def test_state_persists_in_cache_kv(storage, clock, tmp_path, monkeypatch):
     cache = SqliteStore(str(tmp_path / "cache.sqlite"))
-    rid = rstore.create(storage, "T", PINNED)
+    rid = rstore.create(storage, "T", PINNED, random=RealRandom())
     _index(storage, clock, cache).refresh()
     monkeypatch.setattr(rstore, "list_reports", lambda s: pytest.fail("full listing"))
     again = _index(storage, clock, cache)
@@ -147,7 +148,7 @@ def test_storage_without_journal_rebuilds_each_sweep(tmp_path, clock):
     plain = LocalSnapshotStorage(str(tmp_path / "plain"), "runs")
     index = _index(plain, clock, full_sweep_sec=0)
     index.refresh()
-    rid = rstore.create(plain, "T", "")
+    rid = rstore.create(plain, "T", "", random=RealRandom())
     index.refresh()
     assert [r["rid"] for r in index.reports()] == [rid]
 
@@ -170,7 +171,7 @@ def test_a_persisted_state_older_than_a_sweep_rebuilds_instead_of_replaying(
     from vmn_exp.reports import index as report_index
 
     cache = SqliteStore(str(tmp_path / "cache.sqlite"))
-    rid = rstore.create(storage, "T", PINNED)
+    rid = rstore.create(storage, "T", PINNED, random=RealRandom())
     _index(storage, clock, cache, full_sweep_sec=300).refresh()
     clock.now += 3600
     listed = []

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.authz import ACTION_ROLES, effective_role, route_role
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER, Principal
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 ADMIN_ROUTES = {
     ("POST", "/api/v1/workspaces"),
@@ -221,7 +221,7 @@ def test_removed_role_mapping_drops_role_of_live_session(tmp_path):
 def test_login_token_role_follows_current_mappings(tmp_path):
     from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 
-    tokens = TokenService(_cp(tmp_path), time.time)
+    tokens = TokenService(_cp(tmp_path), time.time, random=RealRandom())
     secret, _ = tokens.create("login", {}, owner="oidc:u1", groups=("ml",))
     bearer = {"Authorization": f"Bearer {secret}"}
     authenticator = ApiTokenAuthenticator(tokens)

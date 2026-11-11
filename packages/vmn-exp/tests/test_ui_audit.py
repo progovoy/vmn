@@ -13,7 +13,7 @@ from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.authz import route_role
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER, Principal
 from vmn_exp.ui.control_plane import SQLiteControlPlane
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 JSON = {"Content-Type": "application/json"}
 ADMIN_P = Principal("u:admin", "Ada", {"*": ADMIN})
@@ -37,7 +37,7 @@ def cp(request, tmp_path):
 
 def test_audit_log_appends_in_order(cp):
     clock = iter([10.0, 20.0, 30.0])
-    log = AuditLog(cp, clock=lambda: next(clock))
+    log = AuditLog(cp, clock=lambda: next(clock), random=RealRandom())
     for action in ("a", "b", "c"):
         log.record(actor="u1", action=action)
     entries = log.entries()
@@ -47,7 +47,7 @@ def test_audit_log_appends_in_order(cp):
 
 
 def test_audit_entries_page_newest_first(tmp_path):
-    log = AuditLog(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")), time.time)
+    log = AuditLog(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")), time.time, random=RealRandom())
     for i in range(5):
         log.record(actor="u", action=str(i))
     assert [e["action"] for e in log.page(offset=1, limit=2)] == ["3", "2"]
@@ -87,7 +87,7 @@ def test_every_mutating_route_emits_an_audit_entry(tmp_path):
     for method, path in routes:
         client.request(method, _concrete(path), json={},
                        headers={**JSON, "Authorization": "Bearer a"})
-    entries = AuditLog(cp, time.time).entries()
+    entries = AuditLog(cp, time.time, random=RealRandom()).entries()
     seen = {e["action"] for e in entries}
     for method, path in routes:
         assert f"{method} {path}" in seen, (method, path)
@@ -102,14 +102,14 @@ def test_reads_are_not_audited_and_refusals_are(tmp_path):
     client = TestClient(_app(tmp_path, cp))
     client.get("/api/v1/workspaces", headers={"Authorization": "Bearer a"})
     client.post("/api/v1/workspaces", json={}, headers={**JSON, "Authorization": "Bearer v"})
-    entries = AuditLog(cp, time.time).entries()
+    entries = AuditLog(cp, time.time, random=RealRandom()).entries()
     assert [(e["action"], e["status"], e["actor"]) for e in entries] == [
         ("POST /api/v1/workspaces", 403, "u:viewer")]
 
 
 def test_audit_api_is_admin_and_exports_jsonl(tmp_path):
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
-    AuditLog(cp, time.time).record(actor="u1", action="login")
+    AuditLog(cp, time.time, random=RealRandom()).record(actor="u1", action="login")
     client = TestClient(_app(tmp_path, cp))
     viewer = {"Authorization": "Bearer v"}
     admin = {"Authorization": "Bearer a"}

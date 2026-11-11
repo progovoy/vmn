@@ -13,6 +13,7 @@ from vmn_exp.sdk import NoOpRun, start_run
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -35,7 +36,7 @@ def storage(tmp_path):
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, VERSTR, 60)
+    run = Run(storage, APP, VERSTR, 60, random=RealRandom())
     run._open()
     yield run
     run.finish()

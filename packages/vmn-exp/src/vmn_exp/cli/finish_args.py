@@ -31,13 +31,13 @@ def finish_flags_error(args):
     return None
 
 
-def apply_finish(storage, app_name, verstr, args):
+def apply_finish(storage, app_name, verstr, args, random):
     """Finish *verstr* when ``--finish`` asks to; 1 when refused, else 0."""
     if args.finish is None:
         return 0
     try:
         finish_run(storage, app_name, verstr, args.finish, error=args.finish_error,
-                   end_reason=args.end_reason, force=_force(args))
+                   end_reason=args.end_reason, force=_force(args), random=random)
     except FinishRefusedError as exc:
         VMN_LOGGER.error(str(exc))
         return 1

@@ -7,7 +7,6 @@ principal's sessions. Roles are never read back from a session: they are
 derived from its groups on each request (:mod:`authz`).
 """
 import hashlib
-import secrets
 from dataclasses import asdict, replace
 
 from vmn_exp.ui.auth.principal import Principal
@@ -21,14 +20,15 @@ def _key(session_id):
 
 
 class SessionService:
-    def __init__(self, store, clock, ttl_sec=SESSION_TTL_SEC):
+    def __init__(self, store, clock, random, ttl_sec=SESSION_TTL_SEC):
         self.store = store
         self.clock = clock
+        self.random = random
         self.ttl_sec = ttl_sec
 
     def open(self, principal):
         """A new session id (the cookie value) for *principal*."""
-        session_id = secrets.token_urlsafe(32)
+        session_id = self.random.token_urlsafe(32)
         now = self.clock()
         self.store.sweep_expired(now)
         expires = now + self.ttl_sec

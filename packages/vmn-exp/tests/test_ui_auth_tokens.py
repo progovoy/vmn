@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.control_plane import SQLiteControlPlane
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 
 class _Clock:
@@ -24,7 +24,7 @@ class _Clock:
 def svc(tmp_path):
     clock = _Clock()
     path = tmp_path / "cp.sqlite3"
-    return TokenService(SQLiteControlPlane(str(path)), clock=clock), clock, path
+    return TokenService(SQLiteControlPlane(str(path)), clock=clock, random=RealRandom()), clock, path
 
 
 def test_create_returns_prefixed_secret_and_verifies(svc):
@@ -82,7 +82,7 @@ def test_rejects_unknown_role(svc):
 def test_tokens_persist_across_store_instances(svc):
     tokens, clock, path = svc
     secret, _ = tokens.create("ci", {"ml": VIEWER})
-    again = TokenService(SQLiteControlPlane(str(path)), clock=clock)
+    again = TokenService(SQLiteControlPlane(str(path)), clock=clock, random=RealRandom())
     assert again.verify(secret) is not None
 
 

@@ -5,6 +5,7 @@ from s3_helpers import mocked_bucket, s3_storage
 from vmn_exp.reports import store as rstore
 from vmn_exp.storage.areas import REPORTS
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +30,7 @@ def _abandon(storage, rid, n):
 
 
 def test_abandoned_v1_does_not_block_first_save(storage):
-    rid = rstore.create(storage, "t", "lost")
+    rid = rstore.create(storage, "t", "lost", random=RealRandom())
     _abandon(storage, rid, 1)
     report = rstore.get(storage, rid)
     assert report["rev"] == 0
@@ -41,7 +42,7 @@ def test_abandoned_v1_does_not_block_first_save(storage):
 
 
 def test_abandoned_later_claim_does_not_block_save(storage):
-    rid = rstore.create(storage, "t", "one")
+    rid = rstore.create(storage, "t", "one", random=RealRandom())
     assert rstore.save(storage, rid, 1, "two") == 2
     rstore.save(storage, rid, 2, "lost")
     _abandon(storage, rid, 3)
@@ -54,7 +55,7 @@ def test_abandoned_later_claim_does_not_block_save(storage):
 
 
 def test_complete_revision_past_abandoned_claim_is_a_conflict(storage):
-    rid = rstore.create(storage, "t", "one")
+    rid = rstore.create(storage, "t", "one", random=RealRandom())
     _abandon(storage, rid, 1)
     winner = rstore.save(storage, rid, 0, "theirs")
     result = rstore.save(storage, rid, 0, "mine")

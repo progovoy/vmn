@@ -7,7 +7,6 @@ only: a conditional put of a probe key under ``<prefix>/server/``), and
 ``no_delete`` (a delete must answer ``AccessDenied``; a role that can delete is
 refused outright). A missing journal lifecycle rule is a warning.
 """
-import uuid
 from dataclasses import dataclass, field
 from typing import List
 
@@ -65,17 +64,17 @@ def _read_one(s3, bucket, prefix):
     return objects[0]["Key"]
 
 
-def _probe_key(prefix):
-    return f"{prefix}/{SERVER_AREA}/probe-{uuid.uuid4().hex}"
+def _probe_key(prefix, random):
+    return f"{prefix}/{SERVER_AREA}/probe-{random.hex_id()}"
 
 
-def _write(s3, bucket, prefix):
-    s3.put_object(Bucket=bucket, Key=_probe_key(prefix), Body=b"probe", IfNoneMatch="*")
+def _write(s3, bucket, prefix, random):
+    s3.put_object(Bucket=bucket, Key=_probe_key(prefix, random), Body=b"probe", IfNoneMatch="*")
 
 
-def _cannot_delete(s3, bucket, prefix):
+def _cannot_delete(s3, bucket, prefix, random):
     try:
-        s3.delete_object(Bucket=bucket, Key=_probe_key(prefix))
+        s3.delete_object(Bucket=bucket, Key=_probe_key(prefix, random))
     except Exception as e:
         if _code(e) == "AccessDenied":
             return "delete refused"
@@ -103,7 +102,7 @@ def _default_client(creds):
     return boto3.client("s3", **creds)
 
 
-def probe_role(role_arn, external_id, bucket, prefix, edits=False, sts=None,
+def probe_role(role_arn, external_id, bucket, prefix, *, random, edits=False, sts=None,
                client_for=_default_client):
     """Run every onboarding check of *role_arn* on ``s3://bucket/prefix``."""
     if sts is None:
@@ -122,8 +121,8 @@ def probe_role(role_arn, external_id, bucket, prefix, edits=False, sts=None,
     readable = _try(probe, "list", lambda: s3.list_objects_v2(
         Bucket=bucket, Prefix=f"{prefix}/", MaxKeys=1) and None)
     readable = _try(probe, "read", lambda: _read_one(s3, bucket, prefix)) and readable
-    writable = edits and _try(probe, "write", lambda: _write(s3, bucket, prefix))
-    if not _try(probe, "no_delete", lambda: _cannot_delete(s3, bucket, prefix)):
+    writable = edits and _try(probe, "write", lambda: _write(s3, bucket, prefix, random))
+    if not _try(probe, "no_delete", lambda: _cannot_delete(s3, bucket, prefix, random)):
         probe.refused = True
         return probe
     if not _has_journal_rule(s3, bucket, prefix):

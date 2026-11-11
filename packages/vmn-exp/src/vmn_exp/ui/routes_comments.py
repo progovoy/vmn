@@ -30,8 +30,9 @@ def parse_target(raw):
     raise HTTPException(400, f"Invalid comment target {raw!r}")
 
 
-def register(app, api_prefix, any_exp_storage):
-    """*any_exp_storage(ws_name)* returns the workspace's experiment storage."""
+def register(app, api_prefix, any_exp_storage, random):
+    """*any_exp_storage(ws_name)* returns the workspace's experiment storage;
+    *random* draws new comment ids."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/comments"
 
     def _require_rw():
@@ -57,7 +58,8 @@ def register(app, api_prefix, any_exp_storage):
             raise HTTPException(400, "text must be a non-empty string")
         reply_to, anchor = comment_links(body)
         comment_id = comments.add(any_exp_storage(ws_name), target, text,
-                                  reply_to=reply_to, anchor=anchor, author=author_of(request))
+                                  reply_to=reply_to, anchor=anchor, author=author_of(request),
+                                  random=random)
         return {"id": comment_id}
 
     @app.patch(f"{base}/{{target:path}}/{{comment_id}}", dependencies=[require(EDITOR)])

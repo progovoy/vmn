@@ -103,13 +103,14 @@ def _title_of(body, path):
     return os.path.splitext(os.path.basename(path))[0]
 
 
-def _cmd_put(storage, args):
+def _cmd_put(storage, args, random):
     if args.new == bool(args.rid):
         return _error("Give a report id or --new (not both)")
     with open(args.file, encoding="utf-8") as f:
         body = f.read()
     if args.new:
-        rid = store.create(storage, args.title or _title_of(body, args.file), body)
+        rid = store.create(storage, args.title or _title_of(body, args.file), body,
+                           random=random)
         print(f"{rid}  v1")
         return 0
     if store.get(storage, args.rid) is None:
@@ -128,9 +129,11 @@ def _cmd_delete(storage, args):
     return 0
 
 
-_DISPATCH = {"list": _cmd_list, "show": _cmd_show, "export": _cmd_export,
-             "put": _cmd_put, "delete": _cmd_delete}
+_DISPATCH = {"list": _cmd_list, "show": _cmd_show, "export": _cmd_export, "delete": _cmd_delete}
 
 
 def report_run_without_repo(args, io):
-    return _DISPATCH[args.action](_get_storage(args), args)
+    storage = _get_storage(args)
+    if args.action == "put":
+        return _cmd_put(storage, args, io.random)
+    return _DISPATCH[args.action](storage, args)

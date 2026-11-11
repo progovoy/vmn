@@ -42,7 +42,7 @@ def _conflict(rev, body, author):
     return JSONResponse({"rev": rev, "body": body, "author": author or {}}, status_code=409)
 
 
-def register(app, api_prefix, any_exp_storage, report_index):
+def register(app, api_prefix, any_exp_storage, report_index, random):
     """*any_exp_storage(ws_name)* returns the workspace's experiment storage,
     *report_index(ws_name)* its refreshed :class:`ReportIndex`."""
     base = f"{api_prefix}/workspaces/{{ws_name}}/reports"
@@ -92,7 +92,8 @@ def register(app, api_prefix, any_exp_storage, report_index):
         title, text = (body or {}).get("title"), (body or {}).get("body", "")
         if not isinstance(title, str) or not title.strip() or not isinstance(text, str):
             raise HTTPException(400, "title (non-empty) and body must be strings")
-        rid = store.create(any_exp_storage(ws_name), title, text, actor=author_of(request))
+        rid = store.create(any_exp_storage(ws_name), title, text, random=random,
+                           actor=author_of(request))
         return {"rid": rid, "rev": 1}
 
     @app.get(f"{base}/{{rid}}", dependencies=[require(VIEWER)])

@@ -7,8 +7,8 @@ revision is the highest ``v<N>`` that exists.
 """
 from __future__ import annotations
 
+import base64
 import re
-import secrets
 import time
 from dataclasses import dataclass
 
@@ -18,7 +18,6 @@ from vmn_exp.registry.log import actor_identity
 from vmn_exp.reports.log import HEADER, fold_header, read_header_entries, reports_area, set_title
 
 BODY_FILE = "report.md"
-_B32 = "abcdefghijklmnopqrstuvwxyz234567"
 _SETTLE_SEC = 5
 _REVISION_RE = re.compile(r"^v([1-9][0-9]*)$")
 
@@ -32,17 +31,18 @@ class Conflict:
     author: dict
 
 
-def new_rid():
-    return "r" + "".join(secrets.choice(_B32) for _ in range(12))
+def new_rid(random):
+    """``r`` and 12 lowercase base32 characters (60 random bits)."""
+    return "r" + base64.b32encode(random.token_bytes(10)).decode().lower()[-12:]
 
 
-def create(storage, title, body, *, actor=None):
+def create(storage, title, body, *, random, actor=None):
     """Claim a new report's header and v1; return its rid."""
     area = reports_area(storage)
     actor = actor or actor_identity()
-    rid = new_rid()
+    rid = new_rid(random)
     while not area.create_exclusive(rid, HEADER, _header_metadata(actor), {}):
-        rid = new_rid()
+        rid = new_rid(random)
     set_title(storage, rid, title, actor=actor)
     _claim_revision(area, rid, 1, 0, body, "", actor)
     return rid

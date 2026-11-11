@@ -7,6 +7,7 @@ psycopg = pytest.importorskip("psycopg")
 
 from vmn_exp.ui import migrations, tenancy  # noqa: E402
 from vmn_exp.ui.cache_pg import PostgresControlPlane, PostgresStore  # noqa: E402
+from vmn_exp.core.real_io import RealRandom  # noqa: E402
 
 
 @pytest.fixture
@@ -63,8 +64,8 @@ def test_rls_is_forced_on_every_org_table(pg_dsn):
 def test_orgs_and_membership_resolve_a_principal_org(pg_dsn):
     with psycopg.connect(pg_dsn, autocommit=True) as conn:
         migrations.apply_migrations(conn)
-        org = tenancy.create_org(conn, "acme")
+        org = tenancy.create_org(conn, "acme", random=RealRandom())
         tenancy.add_member(conn, org.id, "oidc:alice", "admin")
         assert tenancy.org_of(conn, "oidc:alice") == org.id
         assert tenancy.org_of(conn, "oidc:bob") is None
-        assert org.external_id and tenancy.create_org(conn, "b").external_id != org.external_id
+        assert org.external_id and tenancy.create_org(conn, "b", random=RealRandom()).external_id != org.external_id

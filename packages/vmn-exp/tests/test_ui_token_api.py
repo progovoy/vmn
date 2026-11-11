@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, Principal
 from vmn_exp.ui.control_plane import SQLiteControlPlane
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 JSON = {"Content-Type": "application/json"}
 A = {**JSON, "Authorization": "Bearer a"}
@@ -72,9 +72,9 @@ def _control_plane(client):
 def test_delete_tokens_by_owner_is_admin_only(client):
     from vmn_exp.ui.auth.tokens import TokenService
 
-    secret, _ = TokenService(_control_plane(client), time.time).create("login", {}, owner="oidc:al")
+    secret, _ = TokenService(_control_plane(client), time.time, random=RealRandom()).create("login", {}, owner="oidc:al")
     assert client.delete("/api/v1/tokens?owner=oidc:al", headers=E).status_code == 403
-    assert TokenService(_control_plane(client), time.time).verify(secret) is not None
+    assert TokenService(_control_plane(client), time.time, random=RealRandom()).verify(secret) is not None
     assert client.delete("/api/v1/tokens", headers=A).status_code == 422
     assert client.delete("/api/v1/tokens?owner=", headers=A).status_code == 422
 
@@ -84,7 +84,7 @@ def test_delete_tokens_by_owner_closes_sessions(client):
     from vmn_exp.ui.auth.tokens import TokenService
 
     cp = _control_plane(client)
-    tokens, sessions = TokenService(cp, time.time), SessionService(cp, time.time)
+    tokens, sessions = TokenService(cp, time.time, random=RealRandom()), SessionService(cp, time.time, random=RealRandom())
     mine, _ = tokens.create("login", {}, owner="oidc:al", groups=("ml",))
     other, _ = tokens.create("login", {}, owner="oidc:bo", groups=("ml",))
     sid, bob_sid = sessions.open(Principal("oidc:al", "Al")), sessions.open(

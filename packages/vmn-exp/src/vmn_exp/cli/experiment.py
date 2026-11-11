@@ -326,7 +326,7 @@ def handle_experiment(vmn_ctx, io):
             vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None), io=io
         )
     elif action == "add":
-        return experiment_add(vcs, params, storage, args)
+        return experiment_add(vcs, params, storage, args, io.random)
     elif action == "list":
         return experiment_list(vcs, params, storage, args, io.console)
     elif action == "show":

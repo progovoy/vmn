@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from exp_helpers import _PROJECT_ROOT
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 ENDPOINT_DOC = "docs/vmn-exp/ui-api.md"
 API_PREFIX = "/api/v1"
@@ -130,7 +130,7 @@ def _all_routes(tmp_path):
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     config = OIDCConfig(issuer="https://idp.example", client_id="vmn-exp",
                         redirect_uri="https://vmn.example/auth/callback")
-    oidc = OIDCAuthenticator(config, cp, object(), http=object(), clock=time.time)
+    oidc = OIDCAuthenticator(config, cp, object(), http=object(), clock=time.time, random=RealRandom())
     plain = create_app(WorkspaceManager(str(tmp_path / "plain")), io=real_io())
     with_auth = create_app(WorkspaceManager(str(tmp_path / "auth")), io=real_io(),
                            auth=AuthenticatorChain([oidc]), control_plane=cp)

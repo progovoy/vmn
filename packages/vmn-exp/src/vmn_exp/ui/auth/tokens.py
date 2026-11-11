@@ -11,7 +11,6 @@ are revoked by id or all of one owner's at once.
 """
 import hashlib
 import hmac
-import secrets
 from dataclasses import asdict, dataclass
 
 from vmn_exp.ui.auth.principal import Principal, check_roles
@@ -53,13 +52,14 @@ def parse_token(token):
 
 
 class TokenService:
-    def __init__(self, store, clock):
+    def __init__(self, store, clock, random):
         self.store = store
         self.clock = clock
+        self.random = random
 
     def create(self, name, roles, owner="", ttl_sec=None, groups=()):
         """``(plaintext, record)``; the plaintext is shown once, never stored."""
-        token_id, secret = secrets.token_hex(8), secrets.token_urlsafe(32)
+        token_id, secret = self.random.token_hex(8), self.random.token_urlsafe(32)
         now = self.clock()
         record = TokenRecord(
             id=token_id, name=name, roles=check_roles(roles), owner=owner,

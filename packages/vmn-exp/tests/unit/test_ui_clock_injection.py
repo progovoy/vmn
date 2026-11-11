@@ -98,7 +98,7 @@ class RecordingTokens(TokenService):
 def test_admin_routes_use_the_app_token_service(tmp_path):
     clock, cp = FakeClock(), _cp(tmp_path)
     deps = real_deps(_io(clock), control_plane=cp, **SERVER)
-    tokens = RecordingTokens(cp, clock=_wall(clock))
+    tokens = RecordingTokens(cp, clock=_wall(clock), random=FakeRandom())
     deps = ServerDeps(**{**deps.__dict__, "token_service": tokens})
     secret, _ = tokens.create("admin", {"*": "admin"})
     client = TestClient(build_app(WorkspaceManager(str(tmp_path / "data")), deps,
@@ -112,7 +112,7 @@ def test_admin_routes_use_the_app_token_service(tmp_path):
 
 def test_session_expires_when_the_fake_clock_passes_the_ttl(tmp_path):
     clock = FakeClock()
-    sessions = SessionService(_cp(tmp_path), clock=_wall(clock), ttl_sec=60)
+    sessions = SessionService(_cp(tmp_path), clock=_wall(clock), ttl_sec=60, random=FakeRandom())
     session_id = sessions.open(Principal("oidc:a", "a", {}))
 
     clock.advance(59)

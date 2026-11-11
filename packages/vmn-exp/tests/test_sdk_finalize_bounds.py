@@ -21,6 +21,7 @@ from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealRandom
 
 TIMEOUT = 0.5
 RUNS = 3
@@ -220,7 +221,7 @@ def local_runs(tmp_path, monkeypatch):
 
     def make(verstr):
         local.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
-        made.append(Run(local, APP, verstr, 3600))
+        made.append(Run(local, APP, verstr, 3600, random=RealRandom()))
         return made[-1]
 
     try:

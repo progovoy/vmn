@@ -17,6 +17,7 @@ from vmn_exp.core.writer import (
 )
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 APP = "app"
 V = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -93,7 +94,7 @@ def test_flush_log_ships_metric_blocks_too(tmp_path):
 
 def test_sdk_log_metrics_reach_the_stream_not_the_jsonl(tmp_path):
     storage = _storage(tmp_path)
-    run = Run(storage, APP, V, 60, system_metrics=False)
+    run = Run(storage, APP, V, 60, system_metrics=False, random=RealRandom())
     run._open()
     run.log_metrics({"loss": 0.5})
     run.log_metric("loss", 0.25)

@@ -15,7 +15,7 @@ from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.control_plane import SQLiteControlPlane
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 ISSUER = "https://idp.example"
 
@@ -85,7 +85,7 @@ def _client(tmp_path, idp):
     ]
     store = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     oidc = OIDCAuthenticator(config, store, JwksVerifier(idp, lambda: 0.0), http=idp,
-                            clock=time.time)
+                            clock=time.time, random=RealRandom())
     app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), auth=AuthenticatorChain([oidc]),
                      role_mappings=mappings)
 
@@ -213,7 +213,7 @@ def test_loopback_http_issuer_is_allowed():
                         redirect_uri="http://localhost:8265/auth/callback")
     idp = LoopbackIdP()
     meta = OIDCAuthenticator(config, None, JwksVerifier(idp, lambda: 0.0), http=idp,
-                             clock=time.time).metadata()
+                             clock=time.time, random=RealRandom()).metadata()
     assert meta["token_endpoint"] == f"{issuer}/token"
 
 

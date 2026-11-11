@@ -11,6 +11,7 @@ from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.ship_state import FINALIZING_WAIT_SEC
+from vmn_exp.core.real_io import RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -30,7 +31,7 @@ def _note(text):
 
 def test_the_sigterm_finalizer_records_a_run_whose_append_was_interrupted(tmp_path):
     storage = _storage(tmp_path)
-    run = Run(storage, APP, VERSTR, 60)
+    run = Run(storage, APP, VERSTR, 60, random=RealRandom())
     run._open()
     run.log_note("before")
     run._log_buffer.flush()  # the frozen append below is the next storage append

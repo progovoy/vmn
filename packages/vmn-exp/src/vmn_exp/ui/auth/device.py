@@ -7,8 +7,6 @@ device_code stays server-side under an opaque handle. On approval the server
 checks the id_token like the browser flow and mints an API token carrying
 the user's groups; its roles follow the server's role mappings per request.
 """
-import secrets
-
 from vmn_exp.ui.auth.oidc import LOGIN_TOKEN_TTL_SEC, OIDCError
 from vmn_exp.ui.auth.tokens import TokenService
 
@@ -28,7 +26,7 @@ class DeviceFlowError(Exception):
 class DeviceFlow:
     def __init__(self, oidc, ttl_sec=LOGIN_TOKEN_TTL_SEC):
         self.oidc = oidc
-        self.tokens = TokenService(oidc.store, clock=oidc.clock)
+        self.tokens = TokenService(oidc.store, clock=oidc.clock, random=oidc.random)
         self.ttl_sec = ttl_sec
 
     def start(self):
@@ -43,7 +41,7 @@ class DeviceFlow:
             raise OIDCError("device authorization failed") from exc
         if "device_code" not in grant:
             raise OIDCError(f"device authorization failed: {grant.get('error')}")
-        handle = secrets.token_urlsafe(32)
+        handle = self.oidc.random.token_urlsafe(32)
         expires_in = int(grant.get("expires_in") or 600)
         self.oidc.store.put("login", _KEY + handle, {"device_code": grant["device_code"]},
                             self.oidc.clock() + expires_in)

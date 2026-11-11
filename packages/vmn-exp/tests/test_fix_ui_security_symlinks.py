@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.sdk.run import Run
 from vmn_exp.storage.local import LocalSnapshotStorage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 APP = "app"
 V = "1.0.0-dev.sym"
@@ -32,7 +32,7 @@ def _record(store_dir, tmp_path):
     storage = LocalSnapshotStorage(str(store_dir), area="runs")
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z",
                           "note": PLACEHOLDER.decode()}, {})
-    run = Run(storage, APP, V, 60)
+    run = Run(storage, APP, V, 60, random=RealRandom())
     run._open()
     run.log_metrics({"k_PLACEHOLDER0": 1.0}, step=0)
     run.log_histogram("h_PLACEHOLDER0", {"bins": [0, 1], "counts": [3]}, step=0)

@@ -10,7 +10,6 @@ An entry's id starts with its zero-padded microsecond timestamp
 export streams.
 """
 import json
-import secrets
 
 from fastapi.routing import APIRoute
 from starlette.concurrency import run_in_threadpool
@@ -27,13 +26,14 @@ def audit_key(ts):
 
 
 class AuditLog:
-    def __init__(self, store, clock):
+    def __init__(self, store, clock, random):
         self.store = store
         self.clock = clock
+        self.random = random
 
     def record(self, actor, action, actor_name="", **fields):
         ts = self.clock()
-        entry_id = f"{audit_key(ts)}-{secrets.token_hex(4)}"
+        entry_id = f"{audit_key(ts)}-{self.random.token_hex(4)}"
         entry = {"id": entry_id, "ts": ts, "actor": actor, "actor_name": actor_name,
                  "action": action, **fields}
         self.store.put("audit", entry_id, entry)

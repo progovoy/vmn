@@ -49,7 +49,7 @@ def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
         refresher=refresher,
         upkeep=(StoreUpkeep(clock=io.clock.monotonic)
                 if background_refresh and not read_only else None),
-        audit=AuditLog(control_plane, clock=wall) if control_plane else None,
-        token_service=TokenService(control_plane, clock=wall) if control_plane else None,
+        audit=AuditLog(control_plane, clock=wall, random=io.random) if control_plane else None,
+        token_service=TokenService(control_plane, clock=wall, random=io.random) if control_plane else None,
         event_sleep=asyncio.sleep,
     )

@@ -22,6 +22,7 @@ take a query instead and return every verstr they changed. Archived runs are hid
 from vmn_exp.core import run_finish
 from vmn_exp.core.manage import set_archived, tag_run
 from vmn_exp.core.query import compile_query
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.refs import needs_listing, point_placement, resolve_experiment
 from vmn_exp.core.run_finish import FinishRefusedError, RunRefusedError  # noqa: F401
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
@@ -101,7 +102,8 @@ def finish_run(app_name, ref, exit_code, *, error=None, end_reason=None, force=F
     heartbeats are then dropped.
     """
     app_name, storage, verstr = _target(app_name, ref, storage)
-    return _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force)
+    return _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force,
+                       real_io().random)
 
 
 def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force=False,
@@ -116,13 +118,14 @@ def finish_runs(app_name, refs, exit_code, *, error=None, end_reason=None, force
     run_finish.checked_force(force)
     app_name, storage, _ = _resolve(app_name, storage)
     refs = list(dict.fromkeys(refs))
+    random = real_io().random
 
     def finish(target):
         if isinstance(target, ValueError):
             return target
         try:
             return _finish_one(storage, app_name, target, exit_code, error,
-                               end_reason, force)
+                               end_reason, force, random)
         except ValueError as exc:
             return exc
 
@@ -147,9 +150,9 @@ def _targets(storage, app_name, refs):
     return targets
 
 
-def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force):
+def _finish_one(storage, app_name, verstr, exit_code, error, end_reason, force, random):
     done = run_finish.finish_run(storage, app_name, verstr, exit_code, error=error,
-                                 end_reason=end_reason, force=force)
+                                 end_reason=end_reason, force=force, random=random)
     return _changed(done, app_name, verstr)
 
 

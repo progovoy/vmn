@@ -19,6 +19,7 @@ from vmn_exp.sdk import manage
 from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -142,7 +143,7 @@ def test_finish_refuses_a_finished_run(storage):
 
 
 def test_force_finishes_a_live_run_and_its_heartbeats_stop(storage):
-    run = Run(storage, APP, VERSTR, 60)
+    run = Run(storage, APP, VERSTR, 60, random=RealRandom())
     run._open()
     try:
         manage.finish_run(APP, VERSTR, 143, end_reason="evicted", force=True,

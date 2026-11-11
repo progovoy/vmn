@@ -26,7 +26,7 @@ KNOWN_OVERSIZED = {
     'vmn_exp.sdk.autolog': 387,
     'vmn_exp.sdk.create': 302,
     'vmn_exp.sdk.reader': 402,
-    'vmn_exp.sdk.run': 756,
+    'vmn_exp.sdk.run': 755,
     'vmn_exp.sdk.sysmetrics': 351,
     'vmn_exp.storage.base': 322,
     'vmn_exp.storage.buffered': 341,

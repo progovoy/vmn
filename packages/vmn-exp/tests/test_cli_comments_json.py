@@ -8,6 +8,7 @@ from similar_seed import seed, verstr
 from vmn_exp.cli.comment import comment_run, comments_run
 from vmn_exp.reports import comments
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import RealRandom
 
 APP = "app"
 AUTHOR = {"name": "ann"}
@@ -29,8 +30,8 @@ def _json_out(capsys):
 def test_comments_json_lists_the_thread(tmp_path, capsys):
     storage, v = _seeded(tmp_path)
     target = ("run", APP, v)
-    first = comments.add(storage, target, "hello", author=AUTHOR)
-    second = comments.add(storage, target, "re", reply_to=first, author=AUTHOR)
+    first = comments.add(storage, target, "hello", author=AUTHOR, random=RealRandom())
+    second = comments.add(storage, target, "re", reply_to=first, author=AUTHOR, random=RealRandom())
     assert comments_run(storage, _args(v)) == 0
     thread = _json_out(capsys)
     assert [(c["id"], c["text"], c["reply_to"]) for c in thread] == [
@@ -41,7 +42,7 @@ def test_comments_json_lists_the_thread(tmp_path, capsys):
 
 def test_comment_json_prints_the_new_id(tmp_path, capsys):
     storage, v = _seeded(tmp_path)
-    assert comment_run(storage, _args(v, text="hi")) == 0
+    assert comment_run(storage, _args(v, text="hi"), random=RealRandom()) == 0
     out = _json_out(capsys)
     assert list(out) == ["id"]
     assert [c["id"] for c in comments.thread(storage, ("run", APP, v))] == [out["id"]]
@@ -50,7 +51,7 @@ def test_comment_json_prints_the_new_id(tmp_path, capsys):
 def test_a_deleted_comment_keeps_its_flag_and_no_text(tmp_path, capsys):
     storage, v = _seeded(tmp_path)
     target = ("run", APP, v)
-    cid = comments.add(storage, target, "oops", author=AUTHOR)
+    cid = comments.add(storage, target, "oops", author=AUTHOR, random=RealRandom())
     comments.delete(storage, target, cid)
     assert comments_run(storage, _args(v)) == 0
     (c,) = _json_out(capsys)

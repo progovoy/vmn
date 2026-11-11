@@ -383,7 +383,7 @@ class _Supervision:
             "pid": proc.pid,
             "host": self.io.host.hostname(),
             # One schema with the SDK's: this process's attempt at the run.
-            "attempt": new_attempt_id(),
+            "attempt": new_attempt_id(self.io.random),
             "started_at": started_at,
             "heartbeat": started_at,
             # Bumped every beat: a liveness signal that needs no clock.

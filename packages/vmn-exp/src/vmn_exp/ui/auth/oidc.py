@@ -17,7 +17,6 @@ import base64
 import hashlib
 import ipaddress
 import json
-import secrets
 from dataclasses import asdict, dataclass, field, is_dataclass
 from urllib.parse import urlencode, urlsplit
 
@@ -73,8 +72,8 @@ def _b64url(raw):
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
 
-def pkce_pair():
-    verifier = secrets.token_urlsafe(48)
+def pkce_pair(random):
+    verifier = random.token_urlsafe(48)
     return verifier, _b64url(hashlib.sha256(verifier.encode()).digest())
 
 
@@ -97,7 +96,7 @@ def roles_for_groups(groups, mappings):
 
 
 class OIDCAuthenticator:
-    def __init__(self, config, store, verifier, http=None, *, clock,
+    def __init__(self, config, store, verifier, http=None, *, clock, random,
                  session_ttl_sec=SESSION_TTL_SEC, login_token_ttl_sec=LOGIN_TOKEN_TTL_SEC):
         """*verifier* checks the id_token signature (:class:`jwks.JwksVerifier`)."""
         self.config = config
@@ -105,7 +104,8 @@ class OIDCAuthenticator:
         self.verifier = verifier
         self.http = http or UrllibHttp()
         self.clock = clock
-        self.sessions = SessionService(store, clock=clock, ttl_sec=session_ttl_sec)
+        self.random = random
+        self.sessions = SessionService(store, clock=clock, random=random, ttl_sec=session_ttl_sec)
         self.login_token_ttl_sec = login_token_ttl_sec
         self._metadata = None
 
@@ -128,8 +128,8 @@ class OIDCAuthenticator:
 
     def login_url(self):
         """The IdP authorize URL; its state/nonce/verifier are kept server-side."""
-        state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
-        verifier, challenge = pkce_pair()
+        state, nonce = self.random.token_urlsafe(24), self.random.token_urlsafe(24)
+        verifier, challenge = pkce_pair(self.random)
         expires = self.clock() + LOGIN_STATE_TTL_SEC
         self.store.put("login", state, {"nonce": nonce, "verifier": verifier}, expires)
         query = {

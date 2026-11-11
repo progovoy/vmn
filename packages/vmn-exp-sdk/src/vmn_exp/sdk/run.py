@@ -25,13 +25,10 @@ from vmn_exp._base import ensure_logger, now_iso
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.intent import build_intent_entry
 from vmn_exp.core.metric_compact import compact_by
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.rerun import RUNNER_SDK, repo_relative_cwd
 from vmn_exp.core.run_error import error_from_exception
-from vmn_exp.core.run_intervals import (
-    DEFAULT_SYNC_INTERVAL_SEC,
-    resolve_heartbeat_sec,
-    resolve_sync_sec,
-)
+from vmn_exp.core.run_intervals import DEFAULT_SYNC_INTERVAL_SEC, resolve_heartbeat_sec, resolve_sync_sec
 from vmn_exp.core.state_cas import new_attempt_id
 from vmn_exp.core.status import positive_env_sec
 from vmn_exp.core.storage_resolve import try_repo_root
@@ -295,6 +292,7 @@ def start_run(
         sigterm_exit=sigterm_exit,
         export_env=export_env,
         install_hooks=_real_process_hooks(),
+        random=real_io().random,
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -373,6 +371,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         export_env=True,
         install_hooks=_PROCESS_HOOKS_DEFAULT,
         writer=None,
+        *, random,
     ):
         self._storage = storage
         # The writer id of this run's own streams; None: the process's.
@@ -408,7 +407,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._last_sync = self._monotonic_start
         self._ctx_prev = None
 
-        self._state = self._initial_state(heartbeat_interval_sec, prior_state)
+        self._state = self._initial_state(heartbeat_interval_sec, prior_state, random)
         # A resumed run's duration spans every attempt, from the first start.
         self._elapsed_before = (
             resume.elapsed_before(self._state) if prior_state is not None else 0.0
@@ -443,7 +442,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         )
 
     @staticmethod
-    def _initial_state(heartbeat_interval_sec, prior_state):
+    def _initial_state(heartbeat_interval_sec, prior_state, random):
         started_at = now_iso()
         state = {
             "state": "running",
@@ -456,7 +455,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             "host": socket.gethostname(),
             # This process's attempt at the run: a duplicate attempt's
             # heartbeats never reopen a run another attempt finished.
-            "attempt": new_attempt_id(),
+            "attempt": new_attempt_id(random),
             "started_at": started_at,
             "heartbeat": started_at,
             # Bumped every beat: a liveness signal that needs no clock.

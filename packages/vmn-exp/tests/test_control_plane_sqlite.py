@@ -5,6 +5,7 @@ import sqlite3
 import time
 
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import RealRandom
 
 KEYS = 300
 STEPS = ["0002_identity.sql", "0003_audit.sql", "0006_control_plane_queries.sql"]
@@ -87,7 +88,7 @@ def test_revoking_a_token_does_not_reorder_the_token_list(tmp_path):
     from vmn_exp.ui.auth.principal import VIEWER
     from vmn_exp.ui.auth.tokens import TokenService
 
-    tokens = TokenService(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")), time.time)
+    tokens = TokenService(SQLiteControlPlane(str(tmp_path / "cp.sqlite3")), time.time, random=RealRandom())
     ids = [tokens.create(name, {"ml": VIEWER})[1].id for name in ("one", "two", "three")]
     tokens.revoke(ids[0])
     assert [t.id for t in tokens.list()] == ids

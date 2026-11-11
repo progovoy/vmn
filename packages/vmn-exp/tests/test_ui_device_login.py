@@ -17,7 +17,7 @@ from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR
 from vmn_exp.ui.control_plane import SQLiteControlPlane
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealRandom, real_io
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 SERVER = "https://vmn.example"
@@ -65,7 +65,7 @@ def _server(tmp_path, idp, **oidc_kw):
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     config = OIDCConfig(issuer=ISSUER, client_id="vmn-exp",
                         redirect_uri=f"{SERVER}/auth/callback")
-    oidc = OIDCAuthenticator(config, cp, JwksVerifier(idp, lambda: 0.0), http=idp, clock=time.time, **oidc_kw)
+    oidc = OIDCAuthenticator(config, cp, JwksVerifier(idp, lambda: 0.0), http=idp, clock=time.time, **oidc_kw, random=RealRandom())
     app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(),
                      auth=AuthenticatorChain([oidc]), control_plane=cp,
                      role_mappings=ML_TEAM_EDITOR)
@@ -97,7 +97,7 @@ def test_login_writes_a_0600_credentials_file_with_a_working_token(tmp_path, mon
     r = client.get("/api/v1/workspaces", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert login_cli.load_token(SERVER) == token
-    logins = [e for e in AuditLog(cp, time.time).entries() if e["action"] == "login"]
+    logins = [e for e in AuditLog(cp, time.time, random=RealRandom()).entries() if e["action"] == "login"]
     assert logins and logins[-1]["actor"] == "oidc:u1"
 
 
@@ -110,7 +110,7 @@ def test_login_token_carries_groups_not_roles(tmp_path, monkeypatch):
     from vmn_exp.ui.auth.tokens import TokenService
 
     token = login_cli.load_token(SERVER)
-    principal = TokenService(cp, time.time).verify(token)
+    principal = TokenService(cp, time.time, random=RealRandom()).verify(token)
     assert principal.roles == {} and principal.groups == ("ml-team",)
     assert principal.id.startswith("token:")
     assert effective_role(principal, "ml", ML_TEAM_EDITOR) == EDITOR
@@ -146,7 +146,7 @@ auth:
                          login_token_ttl_sec=oidc.login_token_ttl_sec)
     assert login_cli.login(SERVER, post_json=_transport(client),
                            sleep=lambda s: None, say=lambda m: None) == 0
-    (record,) = TokenService(cp, time.time).list()
+    (record,) = TokenService(cp, time.time, random=RealRandom()).list()
     assert record.expires_at - record.created_at == 7 * 24 * 3600
 
 
@@ -245,4 +245,4 @@ def test_device_poll_refuses_unsigned_id_token(tmp_path):
     assert r.status_code == 400 and r.json()["error"] == "invalid_grant"
     from vmn_exp.ui.auth.tokens import TokenService
 
-    assert TokenService(cp, time.time).list() == []
+    assert TokenService(cp, time.time, random=RealRandom()).list() == []
