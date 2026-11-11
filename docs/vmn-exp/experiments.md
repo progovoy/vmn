@@ -524,6 +524,13 @@ leading `exp`/`experiment` is accepted (`vmn-exp exp list my_app`, or
 `vmn-exp settings` ([store settings](#store-settings-vmn-exp-settings)),
 `vmn-exp ui` ([ui.md](ui.md)).
 
+`vmn-exp --help` lists only these commands (vmn's own, such as `stamp`, stay
+with `vmn`; `vmn-exp stamp` exits 2 and says so) and names `skill`, `migrate`
+and `login`. `vmn-exp --version` prints vmn-exp's own version, for example
+`0.1.38` (`unknown` when the package metadata is missing); `vmn --version`
+prints vmn's. A root flag may precede a bare action:
+`vmn-exp --debug run my_app -- python train.py`.
+
 Read-only actions — `list`, `show`, `compare`, `diff`, `export`, `watch`,
 `importance`, `lineage`, `similar`, `export-metrics` (and `import-mlflow`) —
 take no repo lock. `list`, `show`, `compare`, `similar` and ref resolution
