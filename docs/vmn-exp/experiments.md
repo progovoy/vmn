@@ -2030,6 +2030,13 @@ pushed 2, up-to-date 1, renamed 1, skipped 0, failed 0
   `put_indexed`, which drops the remote segments it covers, else the local
   stream's blocks past the remote ones as its next segment), and missing or resized artifacts. `archived`/`note` merge three-way
   against what was last pushed; on conflict the remote wins, with a warning.
+- **`run_state.yml` changed on the remote**: kept, with a warning (`not
+  overwritten`), except when the remote state is unfinished and the local one
+  is that same attempt's final state (the remote's `attempt` matches or is
+  absent; a local state without an `attempt` never matches): a run written
+  live whose final state upload was lost. Then push writes the final state
+  by a conditional write on the remote's version token, so a finisher racing
+  it wins. It never ends another attempt that is alive on the remote.
 - **Resumable**: a per-host ledger per remote (user state dir,
   `$XDG_STATE_HOME/vmn-exp/push/...`, or under `$VMN_EXP_CACHE_DIR`) records
   what was sent, so an

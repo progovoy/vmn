@@ -3,8 +3,9 @@
 - Metric objects go by :mod:`vmn_exp.core.push_metrics`, not here.
 - Top-level files (``env.yml``, ``run_state.yml``, ``alerts_sent.yml``, ...) go by sha256 against the ledger. ``run_state.yml``
   is never clobbered when the remote copy changed since this host last pushed
-  it (its ETag differs from the ledger's); ``alerts_sent.yml`` is merged as a
-  set union on both sides.
+  it (its ETag differs from the ledger's), except by the same attempt's final
+  state over an unfinished one (a live run whose final upload was lost);
+  ``alerts_sent.yml`` is merged as a set union on both sides.
 - Stored files (``artifacts/`` and ``outputs/``) go when missing remotely or
   of a different size.
 - The mutable metadata fields ``archived``/``note`` merge three-way against
@@ -13,8 +14,10 @@
 """
 import hashlib
 
+from vmn_exp import _base
 from vmn_exp.core.alerts.transitions import ALERTS_FILE, load_sent, save_sent
 from vmn_exp.core.metric_files import is_metric_file
+from vmn_exp.core.state_cas import publish_final_if_unfinished
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.files import METADATA_FILE, PATCH_FILES, is_log_file
 
@@ -62,6 +65,8 @@ class _FilePusher:
         if name == ALERTS_FILE:
             return {"sha256": _sha(self._merge_alerts())}
         if name == RUN_STATE_FILE and self._changed_elsewhere(name, data, base):
+            if self._publish_final(data):
+                return {"sha256": _sha(data)}
             self.warnings.append(
                 f"{RUN_STATE_FILE} changed on the remote since the last push: "
                 "not overwritten"
@@ -80,6 +85,14 @@ class _FilePusher:
         if sig is None or (base and base.get("etag") == sig[2]):
             return False
         return self._target.load_file(*self._at, name) != data
+
+    def _publish_final(self, data):
+        """A live run's remote state that never got its final one: repaired
+        when the local final state is of the same attempt."""
+        local_state = _base.yaml_safe_load(data)
+        return isinstance(local_state, dict) and publish_final_if_unfinished(
+            self._target, *self._at, local_state
+        )
 
     def _merge_alerts(self):
         mine = load_sent(self._local, *self._at)
