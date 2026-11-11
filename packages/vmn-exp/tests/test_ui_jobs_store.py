@@ -4,6 +4,7 @@ Each action, run as a store job, must leave the store exactly as the CLI
 leaves an identical store (timestamps and writer ids aside).
 """
 import argparse
+import threading
 import time
 from types import SimpleNamespace
 
@@ -17,7 +18,7 @@ from vmn_exp.registry.cli_parser import add_model_parser
 from vmn_exp.registry.log import read_entries
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
-from vmn_exp.ui.jobs import JobRunner
+from vmn_exp.ui.jobs import MAX_ARCHIVE_BATCH, JobRunner
 from vmn_exp.ui.jobs_store import STORE_ACTIONS, build_store_action
 
 APP = "my_app"
@@ -157,6 +158,89 @@ def test_failed_action_marks_the_job_failed(tmp_path):
     assert err is None
     done = _wait(runner, submitted["id"])
     assert done["status"] == "failed" and "not found" in done["log"]
+
+
+def _held_call(gate, entered=None):
+    """A store call that hangs until *gate* is set (at most 30 s)."""
+    def call():
+        if entered is not None:
+            entered.set()
+        gate.wait(30)
+        return "late"
+    return call
+
+
+def test_an_in_process_job_past_the_timeout_reads_failed():
+    gate, runner = threading.Event(), JobRunner(timeout_sec=0)
+    try:
+        submitted, err = runner.submit_call("ws", ["note"], _held_call(gate))
+        assert err is None
+        done = _wait(runner, submitted["id"])
+        assert done["status"] == "failed" and done["exit_code"] == -1
+        assert "Job timed out after 0s" in done["log"]
+        assert "the store did not answer" in done["log"]
+    finally:
+        gate.set()
+
+
+def test_the_workspace_slot_stays_taken_until_the_call_returns():
+    gate, runner = threading.Event(), JobRunner(timeout_sec=0)
+    submitted, _ = runner.submit_call("ws", ["note"], _held_call(gate))
+    _wait(runner, submitted["id"])
+    assert runner.submit_call("ws", ["note"], lambda: "ok")[1] is not None
+    gate.set()
+    job = _submit_when_free(runner, "ws", lambda: "ok")
+    assert _wait(runner, job["id"])["status"] == "succeeded"
+
+
+def test_a_submit_behind_a_timed_out_call_says_the_store_is_slow():
+    gate, runner = threading.Event(), JobRunner(timeout_sec=0)
+    try:
+        submitted, _ = runner.submit_call("ws", ["note"], _held_call(gate))
+        _wait(runner, submitted["id"])
+        _, err = runner.submit_call("ws", ["note"], lambda: "ok")
+        assert err == "The previous action is still waiting for the store"
+    finally:
+        gate.set()
+
+
+def test_a_bulk_job_bounds_each_batch_and_stops_after_a_timed_out_one():
+    gate, entered, runner, acted = threading.Event(), threading.Event(), JobRunner(timeout_sec=0), []
+
+    def act(batch):
+        acted.append(batch[0])
+        return _held_call(gate, entered)()
+
+    verstrs = [f"v{i}" for i in range(2 * MAX_ARCHIVE_BATCH)]
+    submitted, _ = runner.submit_bulk("ws", ["exp_archive", APP], lambda: verstrs, act)
+    done = _wait(runner, submitted["id"])
+    assert done["status"] == "failed" and "Job timed out after 0s" in done["log"]
+    assert entered.wait(30)
+    gate.set()
+    _submit_when_free(runner, "ws", lambda: "ok")
+    assert acted == ["v0"]
+    assert done["progress"] == {"done": 0, "total": 2 * MAX_ARCHIVE_BATCH}
+
+
+def test_a_bulk_job_of_many_quick_batches_is_not_timed_out_as_a_whole():
+    # Run inline: every batch has returned before its bound is checked, so
+    # only a bound on the whole job (0 s, long passed) could fail it.
+    runner = JobRunner(timeout_sec=0, start_thread=lambda target, *args: target(*args))
+    verstrs = [f"v{i}" for i in range(3 * MAX_ARCHIVE_BATCH)]
+    submitted, _ = runner.submit_bulk("ws", ["exp_archive", APP], lambda: verstrs, lambda b: "ok")
+    done = runner.get(submitted["id"])
+    assert done["status"] == "succeeded", done["log"]
+    assert done["progress"] == {"done": 3 * MAX_ARCHIVE_BATCH, "total": 3 * MAX_ARCHIVE_BATCH}
+
+
+def _submit_when_free(runner, workspace, call, timeout=30):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        job, err = runner.submit_call(workspace, ["note"], call)
+        if err is None:
+            return job
+        time.sleep(0.01)
+    raise AssertionError("the workspace slot was never released")
 
 
 def _wait(runner, job_id, timeout=30):

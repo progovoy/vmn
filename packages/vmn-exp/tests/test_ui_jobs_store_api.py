@@ -1,5 +1,6 @@
 """Store-workspace actions over HTTP: gated on the probed ``edit`` capability."""
 import os
+import threading
 import time
 
 import pytest
@@ -73,3 +74,46 @@ def test_a_failed_read_probe_is_not_kept(tmp_path, monkeypatch):
     r = client.post(f"{BASE}/actions/exp_tag", json={"verstr": V, "set": {"k": "v"}})
     assert r.status_code == 403
     assert manager.get("ws").capabilities is None
+
+
+class _HangingStorage:
+    """The edit storage with every call held until *gate* is set (at most 5 s,
+    so code that calls the store inline fails here instead of hanging)."""
+
+    def __init__(self, storage, gate, entered):
+        self._storage, self._gate, self._entered = storage, gate, entered
+
+    def __getattr__(self, name):
+        attr = getattr(self._storage, name)
+        if not callable(attr):
+            return attr
+
+        def held(*args, **kwargs):
+            self._entered.set()
+            self._gate.wait(5)
+            return attr(*args, **kwargs)
+
+        return held
+
+
+def test_a_store_action_request_returns_while_the_store_hangs(tmp_path, monkeypatch):
+    import vmn_exp.storage.open as storage_open
+
+    gate, entered = threading.Event(), threading.Event()
+    real_open = storage_open.open_storage
+
+    def open_edit_storage(uri, **kwargs):
+        storage = real_open(uri, **kwargs)
+        return _HangingStorage(storage, gate, entered) if kwargs.get("buffer_logs") else storage
+
+    monkeypatch.setattr(storage_open, "open_storage", open_edit_storage)
+    client, _ = _setup(tmp_path, capabilities=["read", "edit"])
+    try:
+        r = client.post(f"{BASE}/actions/exp_tag", json={"verstr": V, "set": {"k": "v"}})
+        assert r.status_code == 202, r.text
+        assert r.json()["status"] == "running"
+        assert entered.wait(5) and not gate.is_set()
+        assert client.get(f"/api/v1/jobs/{r.json()['id']}").json()["status"] == "running"
+    finally:
+        gate.set()
+    assert _wait(client, r.json()["id"])["status"] == "succeeded"

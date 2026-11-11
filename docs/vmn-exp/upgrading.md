@@ -54,6 +54,7 @@ Newest first.
 
 | Version | Date | What changed | What to do | Plan item |
 |---|---|---|---|---|
+| 0.1.38 | 2026-11-11 | A store workspace's edit job whose store call does not return within the job timeout (30 minutes; for a bulk action, per batch of 500) now fails with exit code `-1` and `Job timed out after 1800s: the store did not answer`, instead of reading `running` for as long as the store hangs. Until the late call returns, a new action on that workspace answers `409` `The previous action is still waiting for the store` (was `Another action is already running in this workspace`) | Retry the action once the store answers again; a client that matched the old `409` text matches the new one too | [40 C16](../plans/40-vmn-exp-sdk-write-path.md#c16) |
 | 0.1.38 | 2026-11-11 | SDK: under SIGTERM the final uploads are waited for 25 s, not 60 s (`finish()` and exit keep 60 s), and media files still uploading get at most half of that | A job whose scheduler grants more than 30 s and that needs the longer wait sets `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (it sets both waits) | [40 C7](../plans/40-vmn-exp-sdk-write-path.md#c7) |
 | 0.1.38 | 2026-11-11 | With authentication on, `GET /api/v1/jobs/{id}` answers `404 Job not found` unless the caller is a viewer of the job's workspace in the job's org; before, any role in any workspace could read any job | Poll a job with a token or session that has a role in the workspace that ran it | [42 E6](../plans/42-vmn-exp-server-security-api.md#e6) |
 

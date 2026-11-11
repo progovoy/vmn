@@ -191,6 +191,14 @@ and fails after 30 minutes; the server keeps the last 200 jobs and the last
 1 MB of each log. A restore or goto over a dirty tree auto-saves the work
 first, and the job log names the `vmn goto` that brings it back.
 
+A store workspace's edits ([server.md](server.md#edits-on-store-workspaces))
+run in the server process, also as jobs: the request answers `202` at once,
+whatever the store does. A store call (a bulk action: each batch of 500) that
+does not return within the same 30 minutes fails its job with exit code `-1`
+and `Job timed out after 1800s: the store did not answer`. That call is not
+cancelled, so the workspace takes no new action until it returns: meanwhile
+a submit answers `409` `The previous action is still waiting for the store`.
+
 There is no Rerun action: [`vmn-exp rerun`](experiments.md#rerun) supervises
 its command for as long as it runs. The run header's **Reproduce** menu copies
 the `vmn-exp restore`, `rerun` (runs that recorded a command) and `export`

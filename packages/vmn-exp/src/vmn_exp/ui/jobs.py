@@ -15,6 +15,7 @@ import uuid
 from collections import OrderedDict
 
 from vmn_exp.ui.job_argv import ACTIONS, opt, positional, switch
+from vmn_exp.ui.job_calls import CallTimedOut, call_bounded
 from vmn_exp.ui.jobs_exp_meta import (  # noqa: F401  (_metric_args: tests)
     MAX_ARCHIVE_BATCH,
     _metric_args,
@@ -51,6 +52,10 @@ def _tail(text):
     return _TRUNCATED_MARKER + raw[-MAX_JOB_LOG_BYTES:].decode(
         "utf-8", errors="ignore"
     )
+
+
+def _start_daemon(target, *args):
+    threading.Thread(target=target, args=args, daemon=True).start()
 
 
 def _as_text(output):
@@ -167,12 +172,16 @@ class JobRunner:
     finished first) and the size of each job's captured log.
     """
 
-    def __init__(self, timeout_sec=DEFAULT_JOB_TIMEOUT_SEC, max_jobs=MAX_JOBS):
+    def __init__(self, timeout_sec=DEFAULT_JOB_TIMEOUT_SEC, max_jobs=MAX_JOBS, *,
+                 start_thread=_start_daemon):
         self._jobs = OrderedDict()
         self._lock = threading.Lock()
         self._active_workspaces = set()
+        # Their timed-out store call has not returned yet (plan 40 C16).
+        self._waiting_workspaces = set()
         self._timeout_sec = timeout_sec
         self._max_jobs = max_jobs
+        self._start_thread = start_thread
 
     def get(self, job_id):
         with self._lock:
@@ -202,7 +211,7 @@ class JobRunner:
         """Start an in-process job: *call()* returns its log text; raising
         fails the job with the exception's message as its log."""
         job = Job(uuid.uuid4().hex, command, None)
-        return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, call))
+        return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, self._bounded(call)))
 
     def submit_bulk(self, workspace_name, command, resolve, act):
         """Start a bulk job (plan 23 S4): *resolve()* names its runs when it
@@ -217,7 +226,7 @@ class JobRunner:
             logs = []
             for at in range(0, len(verstrs), MAX_ARCHIVE_BATCH):
                 batch = verstrs[at : at + MAX_ARCHIVE_BATCH]
-                logs.append(str(act(batch) or ""))
+                logs.append(str(self._bounded(lambda: act(batch))() or ""))
                 job.progress["done"] += len(batch)
             return "\n".join(logs)
 
@@ -247,6 +256,8 @@ class JobRunner:
         # The org the submitting request is bound to (0 in single tenancy).
         job.workspace, job.org_id = workspace_name, effective_org(SINGLE_TENANT_ORG)
         with self._lock:
+            if workspace_name in self._waiting_workspaces:
+                return None, "The previous action is still waiting for the store"
             if workspace_name in self._active_workspaces:
                 return None, "Another action is already running in this workspace"
             self._jobs[job.id] = job
@@ -254,19 +265,34 @@ class JobRunner:
             self._active_workspaces.add(workspace_name)
             submitted = job.to_dict()
 
-        thread = threading.Thread(target=target, args=(workspace_name, job), daemon=True)
-        thread.start()
+        self._start_thread(target, workspace_name, job)
         return submitted, None
+
+    def _bounded(self, call):
+        """*call* bounded by the job timeout (plan 40 C16)."""
+        return lambda: call_bounded(call, self._timeout_sec, self._start_thread)
+
+    def _timed_out(self):
+        return f"Job timed out after {self._timeout_sec}s"
 
     def _call(self, workspace_name, job, call):
         try:
             job.log = _tail(str(call() or ""))
             job.exit_code, job.status = 0, "succeeded"
+        except CallTimedOut as e:
+            # The store is not safe for two actions at once: the slot stays
+            # taken until the late call really returns.
+            with self._lock:
+                self._waiting_workspaces.add(workspace_name)
+            job.log = f"{self._timed_out()}: {e}"
+            job.exit_code, job.status = -1, "failed"
+            e.returned.wait()
         except Exception as e:
             job.log = _tail(str(e))
             job.exit_code, job.status = 1, "failed"
         finally:
             with self._lock:
+                self._waiting_workspaces.discard(workspace_name)
                 self._active_workspaces.discard(workspace_name)
 
     def _run(self, workspace_name, job):
@@ -276,7 +302,7 @@ class JobRunner:
             job.status = "succeeded" if job.exit_code == 0 else "failed"
         except subprocess.TimeoutExpired as e:
             output = _as_text(e.stdout) + _as_text(e.stderr)
-            job.log = _tail(output + f"\nJob timed out after {self._timeout_sec}s")
+            job.log = _tail(output + f"\n{self._timed_out()}")
             job.exit_code = -1
             job.status = "failed"
         except Exception as e:  # pragma: no cover - defensive
