@@ -107,7 +107,7 @@ OTHER_PROBES = {
     'path': 4, 'pid': 1, 'precision': 1, 'prefetch': 1, 'prefix': 4, 'principal': 4,
     'process_cpu_count': 1, 'protect_tag': 2, 'published': 1, 'published_at': 1, 'pytorch': 1,
     'query': 7, 'read': 1, 'record_count': 1, 'recording': 1, 'refresh_features': 1,
-    'refreshing': 1, 'refs': 2, 'register_at_fork': 3, 'remove': 2, 'repo': 2, 'repo_lock': 4,
+    'refreshing': 1, 'refs': 2, 'register_at_fork': 4, 'remove': 2, 'repo': 2, 'repo_lock': 4,
     'response': 2, 'resume_journal': 1, 'role_mappings': 4, 'router': 2, 'rows': 1,
     'run_cmd': 5, 'run_name': 3, 'run_state': 2, 'save': 1, 'savefig': 1,
     'sched_getaffinity': 1, 'schema_less': 1, 'scope': 2, 'score': 1, 'select': 1,
