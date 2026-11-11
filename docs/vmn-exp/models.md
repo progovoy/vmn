@@ -115,7 +115,8 @@ using ([Using versions](#using-versions)) succeeds but warns
 `... was used by K runs`: their lineage still names it.
 
 `resolve --json` prints `{model, n, app, verstr, artifact_path, artifact_uri,
-kind, uri, digest}`.
+kind, uri, digest}`. `artifact_uri` is an absolute `artifact_path` (`s3://…`, any
+other scheme, or an absolute path) as is, a relative one in the run's record.
 
 ---
 

@@ -18,11 +18,14 @@ list_versions(storage, model, records=None) -> [int]
 list_models(storage, kind=None, listing=None) -> [str]
 model_records(storage, model) / registry_listing(storage) -> the listings they read
 get_version(storage, model, n) -> metadata dict | None
+artifact_uri_of(storage, version metadata) -> str | None
 
 Timestamps come from ``vmn_exp.registry.fold.now_iso``; vmn_exp modules may
 not import ``version_stamp.*`` except ``version_stamp.api`` (rule 11).
 """
 from __future__ import annotations
+
+import re
 
 from vmn_exp._base import yaml_safe_load
 from vmn_exp.core.record_format import readable, stamped
@@ -39,6 +42,7 @@ from vmn_exp.registry.names import (
 )
 
 _MAX_REGISTER_RETRIES = 200
+_ABSOLUTE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
 
 
 def registry_storage(storage):
@@ -91,6 +95,19 @@ def run_of(meta) -> tuple | None:
     if isinstance(run_ref, dict) and run_ref.get("app") and run_ref.get("verstr"):
         return run_ref["app"], run_ref["verstr"]
     return None
+
+
+def artifact_uri_of(storage, meta) -> str | None:
+    """Where a version record's ``artifact_path`` is: an absolute one (a URI
+    of any scheme, or an absolute path) as is, a relative one in its run's
+    record; None without one (or, relative, without a run)."""
+    path = (meta or {}).get("artifact_path")
+    if not path:
+        return None
+    if _ABSOLUTE_URI.match(path) or path.startswith("/"):
+        return path
+    run = run_of(meta)
+    return storage.artifact_uri(*run, path) if run else None
 
 
 def register_version(

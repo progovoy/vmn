@@ -25,7 +25,9 @@ from vmn_exp.registry.log import remove_alias as _remove_alias
 from vmn_exp.registry.datasets import copied_fields, reference_fields, register_dataset_version
 from vmn_exp.registry.log import read_uses, set_version_status
 from vmn_exp.registry.names import valid_model_name, valid_alias_name, parse_ref
-from vmn_exp.registry.store import ensure_model, list_models, model_kind, register_version
+from vmn_exp.registry.store import (
+    artifact_uri_of, ensure_model, list_models, model_kind, register_version,
+)
 from vmn_exp.registry.view import model_state, resolve_ref
 from vmn_exp.registry.cli_parser import add_model_parser  # noqa: F401  (re-exported)
 
@@ -192,13 +194,10 @@ def _cmd_resolve(storage, args):
     app = run_ref.get("app") if isinstance(run_ref, dict) else None
     verstr = run_ref.get("verstr") if isinstance(run_ref, dict) else None
     artifact_path = meta.get("artifact_path")
-    artifact_uri = None
-
-    if artifact_path and app and verstr:
-        try:
-            artifact_uri = storage.artifact_uri(app, verstr, artifact_path)
-        except Exception:
-            pass
+    try:
+        artifact_uri = artifact_uri_of(storage, meta)
+    except Exception:
+        artifact_uri = None
 
     if getattr(args, "json", False):
         print(json.dumps({

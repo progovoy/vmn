@@ -8,7 +8,9 @@ from __future__ import annotations
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
 from vmn_exp.registry.names import HEADER_RECORD
-from vmn_exp.registry.store import get_version, header_kind, list_versions, load_header
+from vmn_exp.registry.store import (
+    artifact_uri_of, get_version, header_kind, list_versions, load_header,
+)
 from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.s3_base import parallel_map
 from vmn_exp.ui.registry_snapshot import read_models
@@ -19,12 +21,6 @@ def _actor_str(actor) -> str:
     if isinstance(actor, dict):
         return actor.get("writer") or actor.get("git_user_email") or "unknown"
     return str(actor) if actor else "unknown"
-
-
-def _artifact_uri(storage, run: dict, artifact_path):
-    if not artifact_path or not run["verstr"]:
-        return None
-    return storage.artifact_uri(run["app"], run["verstr"], artifact_path)
 
 
 def _version_detail(storage, meta: dict, fold: dict, alias_by_version: dict, n: int) -> dict:
@@ -44,7 +40,7 @@ def _version_detail(storage, meta: dict, fold: dict, alias_by_version: dict, n: 
         "status": fold["status"].get(n, "active"),
         "run": run,
         "artifact_path": artifact_path,
-        "artifact_uri": _artifact_uri(storage, run, artifact_path),
+        "artifact_uri": artifact_uri_of(storage, meta),
         "aliases": sorted(alias_by_version.get(n, [])),
         "created": (meta or {}).get("timestamp"),
         "description": (meta or {}).get("description"),
