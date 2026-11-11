@@ -404,8 +404,9 @@ vmn-exp run my_app --parent @3 -- python train.py   # explicit parent (any ref f
 Each run has a `kind`: `outer` (has children), `inner` (has a parent) or
 `single`. An outer job's **`tree_status`** rolls up its subtree with
 precedence `failed > stuck > running > created > succeeded`, so one failed
-trial makes the sweep read failed. `exp list` indents inner runs and shows an
-outer row as `<own status>/<subtree status>` when they differ:
+trial makes the sweep read failed. `exp list` indents inner runs (in storage order; a
+sorted listing is flat, each inner run marked `^[N]` with its parent's row)
+and shows an outer row as `<own status>/<subtree status>` when they differ:
 
 ```
 [1] 1.6.0-dev.a1b2c3d.9f8e7d6  succeeded/failed  (3s ago)  - lr sweep
@@ -748,7 +749,10 @@ vmn-exp list my_app --archived             # include archived runs, marked [arch
 ```
 
 Each row: `[N] <verstr> ['name'] [archived]  <status>  (<age>)  <metrics>
-- <note>`, inner runs indented. A metric whose last write is below its highest
+- <note>`. In storage order (no `--sort` and no schema `primary` metric)
+inner runs are indented under their parents; in any other order rows are flat
+and an inner run names its parent after its name: `^[N]` when the parent is
+listed, else `^<parent verstr>`. A metric whose last write is below its highest
 step (its steps went back without a rewind) reads `best=0.989 (steps went
 back)`: its value is still the last write. `[N]` is the storage index `-v @N` resolves
 and never changes with `--sort`/`--top`/`--last`/`--query`. Metric columns are

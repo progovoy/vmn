@@ -30,6 +30,7 @@ from vmn_exp.cli.duration_text import duration_text
 from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.list_hints import print_query_hints
+from vmn_exp.cli.list_layout import list_layout
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     PATCH_MAX_BYTES,
@@ -711,7 +712,7 @@ def _metric_columns(schema, rows):
     return columns + sorted(k for k in keys if k not in columns)
 
 
-def _format_list_row(row, node, columns, policies):
+def _format_list_row(row, node, columns, policies, indent, parent_label):
     meta, metrics = row["meta"], row["metrics"]
     note = meta.get("note") or meta.get("create_note") or ""
     shown = shown_policies(metrics, meta.get("metric_policy"), policies)
@@ -725,8 +726,9 @@ def _format_list_row(row, node, columns, policies):
     note_str = f" - {note}" if note else ""
     name_str = f" '{meta['name']}'" if meta.get("name") else ""
     archived_str = " [archived]" if meta.get("archived") else ""
+    parent_str = f" {parent_label}" if parent_label else ""
     return (
-        f"{'  ' * node['depth']}[{row['idx']}] {meta['verstr']}{name_str}{archived_str}  "
+        f"{'  ' * indent}[{row['idx']}] {meta['verstr']}{name_str}{archived_str}{parent_str}  "
         f"{_status_token(node)}  ({relative_timestamp(meta['timestamp'])})  "
         f"{metric_str}{note_str}"
     )
@@ -780,8 +782,8 @@ def experiment_list(vcs, params, storage, args):
         return 0
 
     columns, policies = _metric_columns(schema, rows), SchemaPolicies(schema)
-    for row in rows:
-        print(_format_list_row(row, row["meta"], columns, policies))
+    for row, (indent, parent_label) in zip(rows, list_layout(rows)):
+        print(_format_list_row(row, row["meta"], columns, policies, indent, parent_label))
     return 0
 
 
