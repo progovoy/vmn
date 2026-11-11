@@ -309,6 +309,41 @@ New package `cli/exp_parser/` with small files: `flags_select.py` (-v, --latest,
 
 **Evidence.** `packages/vmn-exp/src/vmn_exp/cli/plugin.py:32-45 (25 EXPERIMENT_ACTIONS)`; `packages/vmn-exp/src/vmn_exp/cli/plugin.py:48-253 (_add_experiment_parser: one flat parser, prefixed help strings)`; `packages/vmn-exp/src/vmn_exp/cli/plugin.py:165-166 (`--json` help lists list/show/importance/push/similar; lineage.py:62 and rerun.py:60 also honour it)`; `packages/vmn-exp/src/vmn_exp/cli/experiment.py:327-416 (dispatch; handlers read args.sort, args.top, getattr(args, ...) directly)`; `grep: `_add_experiment_parser` is referenced only in plugin.py (no test imports it)`
 
+**Audit (done).** What each handler reads off its args, at cd551c97 (after B6, plan 38 A4/A12 and plan 42 E1). Every action also owns the store flags (`--store`, `--bucket`, `--prefix`, `--endpoint-url`, `--experiment-dir`, `--writer-id`) and `--from-snapshot`; they are left out of the rows. The table as data is `cli/exp_parser/actions.py`.
+
+| Action | Flags it owns |
+|---|---|
+| create | `--name`, `--new-app`, `--note`, `--file`, `--metrics`, `--input`, `--no-env`, `--parent`, `--fork-from`, `--fork-step`, `--intent`, `--intent-file`, `--no-similar` |
+| run | `--name`, `--new-app`, `--note`, `--file`, `--input`, `--no-env`, `--parent`, `--fork-from`, `--fork-step`, `--intent`, `--intent-file`, `--no-similar`, `--heartbeat-interval`, `--kill-grace-sec`, `--no-adopt`, `--no-capture-output`, `--no-system-metrics`, `--output-cap-mb`, `--sync-interval` |
+| add | `--version`, `--latest`, `--note`, `--file`, `--metrics`, `--attach`, `--input`, `--force`, `--chart`, `--define-metric`, `--goal`, `--hidden`, `--step-metric`, `--summary`, `--end-reason`, `--error`, `--finish`, `--force-live`, `--intent`, `--intent-file` |
+| list | `--archived`, `--last`, `--query`, `--json`, `--sort`, `--top` |
+| show | `--version`, `--latest`, `--json`, `--full-log`, `--max-bytes`, `--patch` |
+| compare | `--version`, `--last`, `--top`, `--json` |
+| diff | `--version`, `--tool` |
+| restore | `--version`, `--latest`, `--force` |
+| export | `--version`, `--latest`, `--output` |
+| prune | `--version`, `--query`, `--keep`, `--local-only`, `--no-trim-journal`, `--older-than`, `--protect-tag`, `--yes`, `--dry-run`, `--force` |
+| tag | `--version`, `--latest`, `--remove` |
+| archive, unarchive | `--version`, `--latest`, `--query`, `--dry-run` |
+| import-mlflow | `--experiment`, `--include-deleted`, `--mlruns`, `--refresh-features`, `--repo`, `--skip-artifacts`, `--tracking-uri`, `--workers`, `--dry-run` |
+| watch | `--compact`, `--interval`, `--within` |
+| lineage | `--version`, `--json`, `--depth` |
+| importance | `--archived`, `--query`, `--json`, `--metric` |
+| rewind | `--version`, `--latest`, `--step` |
+| rerun | `--version`, `--latest`, `--dry-run`, `--json`, `--cwd`, `--keep-worktree`, `--print`, `--worktree-dir`, `--fork-from`, `--fork-step`, `--name`, `--note`, `--file`, `--input`, `--no-env`, `--parent`, `--heartbeat-interval`, `--kill-grace-sec`, `--no-adopt`, `--no-capture-output`, `--no-system-metrics`, `--output-cap-mb`, `--sync-interval` |
+| push | `--version`, `--dry-run`, `--json`, `--adopt` |
+| compact | `--version`, `--all-finished` |
+| export-metrics | `--version`, `--output`, `--format`, `--keys` |
+| similar | `--version`, `--latest`, `--archived`, `--query`, `--json`, `--top`, `--all-apps`, `--context`, `--context-file`, `--text-only` |
+| similar-backfill | `--all-apps`, `--dry-run` |
+| backfill-children | `--dry-run` |
+
+Where the audit departs from the help prefixes, for B5b to weigh:
+- `compare`, `list` and `export-metrics` do not read `--latest` (compare's help names it; compare with no `-v` already takes the latest runs).
+- `rerun` reads `--fork-from`/`--fork-step` only to refuse them with its own message (exit 1); it owns them so B5b keeps that message.
+- `import-mlflow` never reads `--from-snapshot` (it is git-free before that check); it owns it by the every-store rule.
+- `--note`, `-f`, `--input`, `--no-env`, `--name` and the supervision flags are read by `rerun` too, not only by create/run.
+
 <a id="b5b"></a>
 ### B5b. Reject flags an experiment action does not own (exit 2), on the unchanged flat parser; ships with B5d
 
