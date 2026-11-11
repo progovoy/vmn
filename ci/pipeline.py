@@ -149,9 +149,22 @@ def tests_exp(ctx):
     # The web bundle is build output, not committed: the dashboard/export tests
     # and the wheel test need it.
     ctx.run(["make", "_build_ui"])
-    _pytest(ctx, "packages/vmn-exp/tests", "tests_exp", marker="not serial")
+    _pytest(ctx, "packages/vmn-exp/tests", "tests_exp", marker="not serial and not emulator")
     # Timing benchmarks, alone: under 29 busy workers they measure contention.
     _pytest(ctx, "packages/vmn-exp/tests", "tests_exp_serial", workers=(), marker="serial")
+
+
+# The storage conformance kit against fake-gcs-server and Azurite containers
+# (marker "emulator"): the GCS/Azure fakes in tests_exp are checked against
+# emulators of the real services. One process: the containers are per session.
+@stage(
+    requires=REQUIRES,
+    deterministic=True,
+    inputs=["packages", "tests", "pyproject.toml"],
+    outputs=["reports/tests_storage_emulators.xml", "reports/tests_storage_emulators.html"],
+)
+def tests_storage_emulators(ctx):
+    _pytest(ctx, "packages/vmn-exp/tests", "tests_storage_emulators", workers=(), marker="emulator")
 
 
 # The web client's vitest suite, then ESLint (rules-of-hooks, exhaustive-deps).
@@ -204,7 +217,7 @@ def _make(ctx, target):
 
 @stage(
     requires=REQUIRES,
-    after=["tests_core", "tests_exp", "tests_webui"],
+    after=["tests_core", "tests_exp", "tests_webui", "tests_storage_emulators"],
     when=lambda c: bool(c.params.get("stamp")),
     params=[
         Param(
@@ -246,6 +259,6 @@ def upload(ctx):
 
 pipeline = Pipeline(
     "vmn-ci",
-    stages=[lint, tests_core, tests_webui, tests_exp, typecheck, stamp, build, upload],
+    stages=[lint, tests_core, tests_webui, tests_exp, tests_storage_emulators, typecheck, stamp, build, upload],
     workspace="..",
 )

@@ -330,3 +330,26 @@ def test_pipeline_declares_release_params(mod):
     assert not spec["stamp"].required  # unset = skip
     assert spec["build"].type == "bool"
     assert spec["upload"].type == "bool"
+
+
+# ---- tests_storage_emulators -------------------------------------------
+# The storage conformance kit against fake-gcs-server and Azurite (plan 41
+# D15 stage 2): Docker tests under the `emulator` marker, in their own stage.
+
+
+def test_the_pipeline_runs_the_storage_emulator_stage(mod):
+    assert "tests_storage_emulators" in {s.name for s in mod.pipeline.topological_order()}
+    ctx = FakeCtx()
+    mod.tests_storage_emulators(ctx)
+    cmd = ctx.calls[0][0]
+    assert cmd[:2] == ["pytest", "packages/vmn-exp/tests"]
+    assert cmd[cmd.index("-m") + 1] == "emulator"
+    assert "--junitxml=reports/tests_storage_emulators.xml" in cmd
+    spec = mod.pipeline.get_stage("tests_storage_emulators")
+    assert spec.deterministic is True and spec.outputs
+
+    exp = FakeCtx()
+    mod.tests_exp(exp)
+    markers = [cmd[cmd.index("-m") + 1] for cmd, _ in exp.calls if "-m" in cmd]
+    assert markers == ["not serial and not emulator", "serial"]
+    assert "tests_storage_emulators" in mod.pipeline.get_stage("stamp").after

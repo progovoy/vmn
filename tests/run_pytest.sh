@@ -127,8 +127,9 @@ if [ "$(uname)" = "Darwin" ]; then
 	fi
 fi
 # Timing benchmarks (marker "serial") run in a second, one-process pass:
-# under 29 busy workers they measure the contention, not the code.
-cmd='${PYTHON} -m coverage run -m pytest  -n 29 -m "not serial" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
+# under 29 busy workers they measure the contention, not the code. Storage
+# emulator tests (marker "emulator") run only in CI's tests_storage_emulators.
+cmd='${PYTHON} -m coverage run -m pytest  -n 29 -m "not serial and not emulator" --html=report_${html_report_suffix}.html --self-contained-html -vv ${COVERAGE} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee ${OUT_PATH}/tests_output.log'
 serial_cmd='${PYTHON} -m coverage run -a -m pytest -m serial --html=report_${html_report_suffix}_serial.html --self-contained-html -vv ${COVERAGE:+${COVERAGE} --cov-append} ${COLOR} "${K_ARGS[@]}" ${module_name} | tee -a ${OUT_PATH}/tests_output.log'
 
 # pytest exits 5 when a filter leaves a pass nothing to run; only both empty fails.
