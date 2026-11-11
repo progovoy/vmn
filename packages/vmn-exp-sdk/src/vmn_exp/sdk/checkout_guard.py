@@ -9,8 +9,9 @@ def not_a_checkout(cwd):
     return (
         f"'{cwd}' is not inside a git checkout, and a run records the code it "
         "ran from one. Either make it a checkout "
-        "(`git init && git commit --allow-empty -m init`), or record against "
-        "an exported tree by setting VMN_SNAPSHOT_METADATA (see sdk.md, "
+        "(`git init && git commit --allow-empty -m init`), record against "
+        "an exported tree by setting VMN_SNAPSHOT_METADATA, or record no code "
+        "with start_run(code=False) / VMN_EXP_CODE=none (see sdk.md, "
         "'Runs without a git checkout')."
     )
 

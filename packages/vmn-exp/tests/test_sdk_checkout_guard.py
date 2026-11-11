@@ -19,6 +19,13 @@ def test_require_checkout_raises_runtime_error_naming_the_directory_and_the_ways
     assert "VMN_SNAPSHOT_METADATA" in message
 
 
+def test_the_message_names_the_codeless_option():
+    with pytest.raises(RuntimeError) as exc:
+        require_checkout(None, "/data/plain")
+    assert "code=False" in str(exc.value)
+    assert "VMN_EXP_CODE=none" in str(exc.value)
+
+
 def test_the_message_never_mentions_vmn_logger():
     with pytest.raises(RuntimeError) as exc:
         require_checkout(None, "/data/plain")

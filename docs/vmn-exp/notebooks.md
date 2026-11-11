@@ -12,6 +12,7 @@ run a restarted kernel left open. The cells below run as written, in order
 - [After a kernel restart](#after-a-kernel-restart)
 - [Reading runs back into a DataFrame](#reading-runs-back-into-a-dataframe)
 - [The kernel's directory must be in a git checkout](#the-kernels-directory-must-be-in-a-git-checkout)
+- [Without a git checkout](#without-a-git-checkout)
 
 ## One run across cells
 
@@ -108,13 +109,31 @@ Needs `pip install "vmn-exp-sdk[pandas]"`. Every reader and its columns are in
 ## The kernel's directory must be in a git checkout
 
 A run records the code it ran from, so the kernel's working directory (or
-`VMN_WORKING_DIR`) must be inside a git checkout. Front ends differ in which
+`VMN_WORKING_DIR`) must be inside a git checkout, unless you ask for a run
+without code ([below](#without-a-git-checkout)). Front ends differ in which
 directory they start the kernel in; check with `import os; os.getcwd()`.
 Outside a checkout `start_run()` raises:
 
 ```text
-RuntimeError: '/home/me/scratch' is not inside a git checkout, and a run records the code it ran from one. Either make it a checkout (`git init && git commit --allow-empty -m init`), or record against an exported tree by setting VMN_SNAPSHOT_METADATA (see sdk.md, 'Runs without a git checkout').
+RuntimeError: '/home/me/scratch' is not inside a git checkout, and a run records the code it ran from one. Either make it a checkout (`git init && git commit --allow-empty -m init`), record against an exported tree by setting VMN_SNAPSHOT_METADATA, or record no code with start_run(code=False) / VMN_EXP_CODE=none (see sdk.md, 'Runs without a git checkout').
 ```
 
 The first run in a checkout vmn does not track yet initializes vmn there and
 tags a `0.0.0` baseline locally (see [Starting a run](sdk.md#starting-a-run)).
+
+## Without a git checkout
+
+A kernel with no checkout to start in (a hosted notebook, a scratch
+directory) can log metrics if you ask for a run without code. Name the app
+and the store; vmn-exp-sdk alone is enough:
+
+```python
+import os
+os.environ["VMN_EXPERIMENT_DIR"] = "/content/runs"  # or VMN_EXPERIMENT_STORE
+run = start_run("my_app", code=False)  # or set VMN_EXP_CODE=none
+```
+
+The run is named `0.0.0-nocode`, then `0.0.0-nocode.r2`, and so on. It
+records no code, so it cannot be rerun, restored, exported or diffed, and
+`vmn-exp show` prints `Code: none`. Everything else in this guide applies.
+See [Runs without code](sdk.md#runs-without-code-codefalse).

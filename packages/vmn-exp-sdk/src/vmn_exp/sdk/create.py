@@ -4,7 +4,8 @@ and ``create_runs()``.
 
 Two modes, as with the CLI: a git checkout (cold-start if needed, snapshot the
 tree) and a container built from ``vmn-exp export`` (no git; record against
-the exported code's identity). Either is first a :data:`RecordSource` — what
+the exported code's identity) — plus, only on request, no code at all
+(:mod:`vmn_exp.sdk.codeless`). Each is first a :data:`RecordSource` — what
 every run recorded from it shares — then a claim per run under its lock. The
 checkout mode lives in :mod:`vmn_exp.gitmode.checkout`, which only the full
 vmn-exp package ships.
@@ -14,7 +15,7 @@ import contextlib
 import os
 
 import yaml
-from vmn_exp._base import ensure_logger, working_dir
+from vmn_exp._base import ensure_logger, now_iso, working_dir
 from vmn_exp.core import create_batch
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.env import (
@@ -30,6 +31,9 @@ from vmn_exp.sdk import _resolve_app_name, context
 from vmn_exp.sdk.context import current_run
 
 SNAPSHOT_METADATA_ENV = "VMN_SNAPSHOT_METADATA"
+CODE_ENV = "VMN_EXP_CODE"
+# Where a new run's code comes from (:func:`source_kind`).
+SNAPSHOT, CODELESS, CHECKOUT = "snapshot", "codeless", "checkout"
 GIT_MODE_MISSING = (
     "This run needs a git checkout, and git mode is not installed: "
     "`pip install vmn-exp` for it, or record git-free by setting "
@@ -106,17 +110,18 @@ def create_runs(
 
 def create_record(
     app_name, note, params, parent, nested, storage, name=None,
-    capture_env=None, python_exe=None,
+    capture_env=None, python_exe=None, code=None,
 ):
     """Create a new run's record; ``(app_name, storage, verstr, exp_conf)``.
 
-    *exp_conf* is the checkout's ``experiment:`` conf (``{}`` without one).
+    *exp_conf* is the checkout's ``experiment:`` conf (``{}`` without one);
+    ``code=False`` records no code (:func:`source_kind`).
     """
     _reject_reentry_without_nesting(nested)
     # Same shape as the CLI's `-f file` params, so latest_metrics and
     # `exp diff` pick them up unchanged.
     create_data = {"params": dict(params)} if params else None
-    source = record_source(app_name, parent, nested, storage, capture_env, python_exe)
+    source = record_source(app_name, parent, nested, storage, capture_env, python_exe, code)
     with source.lock():
         verstr = record_run(
             source.storage, source.app_name, source.code_verstr,
@@ -126,15 +131,46 @@ def create_record(
     return source.app_name, source.storage, verstr, source.exp_conf
 
 
-def record_source(app_name, parent, nested, storage, capture_env, python_exe=None):
-    """The :data:`RecordSource` new runs record from: the export
-    ``VMN_SNAPSHOT_METADATA`` names, else the checkout."""
-    meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
-    if meta_path:
-        return snapshot_source(app_name, meta_path, parent, nested, storage, capture_env)
+def record_source(app_name, parent, nested, storage, capture_env, python_exe=None,
+                  code=None):
+    """The :data:`RecordSource` new runs record from (see :func:`source_kind`)."""
+    env = os.environ
+    kind = source_kind(code, env)
+    if kind == SNAPSHOT:
+        return snapshot_source(app_name, env[SNAPSHOT_METADATA_ENV], parent, nested, storage,
+                               capture_env)
+    if kind == CODELESS:
+        from vmn_exp.sdk.codeless import codeless_source
+
+        return codeless_source(app_name, parent, nested, storage, capture_env, env,
+                               _codeless_io())
     require_checkout_here()
     return gitmode().checkout_source(
         app_name, parent, nested, storage, capture_env=capture_env, python_exe=python_exe)
+
+
+def source_kind(code, env):
+    """Where a new run's code comes from: the export ``VMN_SNAPSHOT_METADATA``
+    names, else nothing when asked (``code=False``, or ``VMN_EXP_CODE=none``
+    with *code* not given), else the checkout. Never code-less by default."""
+    if env.get(SNAPSHOT_METADATA_ENV):
+        return SNAPSHOT
+    if code is not None:
+        return CHECKOUT if code else CODELESS
+    value = env.get(CODE_ENV)
+    if not value:
+        return CHECKOUT
+    if value == "none":
+        return CODELESS
+    raise ValueError(f"{CODE_ENV}={value!r}: its one value is 'none' (record no code)")
+
+
+def _codeless_io():
+    from vmn_exp.sdk.codeless import CodelessIO
+
+    return CodelessIO(snapshot_mode_storage, pick_parent,
+                      lambda capture: _maybe_capture_env(None, capture), now_iso,
+                      _shared_dir_lock)
 
 
 def require_checkout_here():

@@ -34,6 +34,7 @@ from vmn_exp.cli.list_layout import list_layout
 from vmn_exp.cli.media_view import describe_media_entry, media_lines
 from vmn_exp.cli.views import (
     PATCH_MAX_BYTES,
+    base_line,
     dumps,
     error_lines,
     event_log,
@@ -873,8 +874,7 @@ def experiment_show(vcs, params, storage, args):
 
     print(f"Experiment: {verstr}")
     print(f"  Branch:    {metadata.get('branch') or '?'}")
-    base_commit = (metadata.get("base_commit") or "?")[:7]
-    print(f"  Base:      {metadata.get('base_version') or '?'} ({base_commit})")
+    print(f"  {base_line(metadata)}")
     print(f"  Created:   {metadata.get('timestamp', '?')}")
     if metadata.get("note"):
         print(f"  Note:      {metadata['note']}")

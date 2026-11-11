@@ -155,6 +155,7 @@ def start_run(
     sigterm_exit=None,
     reopen=False,
     export_env=True,
+    code=None,
 ):
     """Create an experiment (or reopen one), mark it running and return the ``Run``.
 
@@ -165,6 +166,12 @@ def start_run(
     With ``VMN_SNAPSHOT_METADATA`` set (a container built from ``vmn-exp
     export``) no git checkout is needed: the run records against that snapshot
     into ``VMN_EXPERIMENT_DIR`` (or *storage*), exactly like the CLI.
+
+    ``code=False`` (or ``VMN_EXP_CODE=none`` when *code* is not given) records
+    no code at all — a notebook or a scratch directory: the app must be named
+    (*app_name* or ``VMN_APP_NAME``) and the store given as above. The run is
+    ``0.0.0-nocode[.rN]`` and is never rerun, restored or diffed. Never a
+    fallback: without it, a directory outside a checkout is an error.
 
     System metrics — this process's CPU and memory (and GPU, with ``pynvml``) —
     are recorded as ``sys_*`` metrics on every heartbeat unless opted out:
@@ -271,7 +278,7 @@ def start_run(
             )
         app_name, storage, verstr, exp_conf = create_record(
             app_name, note, params, parent, nested, storage, name,
-            capture_env=capture_env,
+            capture_env=capture_env, code=code,
         )
         if fork_from:
             start_step = fork.seed(storage, app_name, verstr, source, fork_step)

@@ -205,10 +205,40 @@ runs (see [Reading runs back](#reading-runs-back)).
 Without `VMN_SNAPSHOT_METADATA`, a run records the git checkout it starts in.
 `start_run()` (also with `run_id=`), `create_run()` and `create_runs()` in a
 directory that is not inside one (looked up from `VMN_WORKING_DIR`, else the
-cwd) raise `RuntimeError` naming the directory and the two ways out: make it a
-checkout (`git init && git commit --allow-empty -m init`), or set
-`VMN_SNAPSHOT_METADATA`. This comes before the app name is resolved and
-before the slim-install check below, since neither would help there.
+cwd) raise `RuntimeError` naming the directory and the three ways out: make it a
+checkout (`git init && git commit --allow-empty -m init`), set
+`VMN_SNAPSHOT_METADATA`, or record no code (below). This comes before the app
+name is resolved and before the slim-install check below, since neither would
+help there.
+
+### Runs without code (`code=False`)
+
+A notebook on a hosted kernel, a scratch directory or an evaluation script
+with no checkout can still log metrics, by asking for it: `start_run(...,
+code=False)`, or `VMN_EXP_CODE=none` in the environment (an explicit
+`code=` wins over it). It is never a fallback: without one of them a
+directory outside a checkout is the error above. It works with
+vmn-exp-sdk alone.
+
+```python
+# VMN_EXPERIMENT_DIR=/mnt/runs  (or VMN_EXPERIMENT_STORE=s3://bucket/runs)
+with start_run("my_app", code=False) as run:
+    run.log_metric("loss", 0.25)
+```
+
+- The app must be named: `app_name` or `VMN_APP_NAME`.
+- The store comes from `storage=` or the variables in the list above;
+  neither is `ValueError`.
+- Every code-less run of an app is a run of the code version `0.0.0-nocode`:
+  `0.0.0-nocode`, `0.0.0-nocode.r2`, ... (or `0.0.0-nocode.<writer id>` with
+  `VMN_WRITER_ID`). Refer to them by their exact name or `@N`.
+- The record has no base commit and carries `codeless: true`. `vmn-exp show`
+  prints `Code: none (recorded with code=False)`; `rerun`, `restore`,
+  `export` and `diff` refuse it with `recorded with code=False; no code
+  snapshot`. Metrics, params, tags, artifacts, nesting (`parent=`,
+  `VMN_EXPERIMENT_ID`) and the readers work as for any run.
+- With `VMN_SNAPSHOT_METADATA` set the run records the export, whatever
+  `code=` says.
 
 ---
 
@@ -1555,6 +1585,7 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_EXPERIMENT_ID` | parent of new runs; exported while a run is open |
 | `VMN_EXP_ADOPT_RUN_ID` / `VMN_EXP_ADOPT_PID` | set by `vmn-exp run` for its direct child: the first plain `start_run()` there records into that run (consumed when used) |
 | `VMN_SNAPSHOT_METADATA` | git-free mode against an exported snapshot |
+| `VMN_EXP_CODE` | `none`: new runs record no code, as `start_run(code=False)` ([Runs without code](#runs-without-code-codefalse)); any other value raises `ValueError` |
 | `VMN_EXPERIMENT_DIR` | local experiment root |
 | `VMN_EXPERIMENT_STORE` | remote store URI |
 | `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | `s3://` shorthand (prefix default `vmn`) |

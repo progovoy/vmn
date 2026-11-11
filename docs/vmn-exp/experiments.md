@@ -2289,6 +2289,7 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_EXPERIMENT_BUCKET` / `_PREFIX` / `_ENDPOINT_URL` | fallbacks for the `s3://` shorthand flags |
 | `VMN_EXPERIMENT_DIR` | local experiment root (`--experiment-dir`) |
 | `VMN_SNAPSHOT_METADATA` | [git-free mode](#git-free-mode) (`--from-snapshot`) |
+| `VMN_EXP_CODE` | SDK only: `none` makes new runs record no code, as `start_run(code=False)` ([sdk.md](sdk.md#runs-without-code-codefalse)) |
 | `VMN_EXP_OFFLINE` | `1`/`true`/`yes`/`on`: [record locally only](#offline-recording-and-push) |
 | `VMN_WRITER_ID` | writer id (`--writer-id`) |
 | `VMN_WORKING_DIR` | the directory `run` starts the command in |

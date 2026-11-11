@@ -188,6 +188,15 @@ def _untracked_beside_text_note(payload):
     )
 
 
+def base_line(metadata):
+    """``show``'s line for the code a run started from: its base version and
+    commit, or none for a run recorded with ``code=False``."""
+    if metadata.get("codeless"):
+        return "Code:      none (recorded with code=False)"
+    base_commit = (metadata.get("base_commit") or "?")[:7]
+    return f"Base:      {metadata.get('base_version') or '?'} ({base_commit})"
+
+
 def no_patch_note(verstr, metadata, untracked=None):
     """One line on why *verstr* has no patch to show; *untracked* are the
     paths of a run whose code is untracked files only ([] when its tarball
