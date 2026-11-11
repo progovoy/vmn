@@ -20,3 +20,8 @@ def patch_presence(storage, app_name, verstr, metadata):
         return {kind: bool(metadata[flag]) for kind, flag in _PATCH_FLAGS.items()}
     _, patches = storage.load(app_name, verstr)
     return {kind: bool((patches or {}).get(kind)) for kind in _PATCH_FLAGS}
+
+
+def has_own_code(presence):
+    """Whether a run captured any code of its own (untracked files alone count)."""
+    return any(presence.values())

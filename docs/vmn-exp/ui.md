@@ -1747,7 +1747,7 @@ only when it exists, each `{verstr, idx, name, status}`:
 
 | Key | Run |
 |---|---|
-| `base` | the run itself, when it captured a working-tree or local-commits patch |
+| `base` | the run itself, when it captured any code of its own: a working-tree or local-commits patch, or untracked files alone |
 | `parent` / `forked_from` / `rerun_of` | its origins, when indexed |
 | `previous` | the latest earlier unarchived run on the same `branch` with the same `command` |
 | `best` | the best other run on the primary declared goal (`primary: true` with a goal, else the first exactly named schema metric with one), with the `metric` it is best on; absent without a declared goal |
@@ -1758,7 +1758,8 @@ reads with a body-digest ETag.
 The run page's **Changes** card (`#changes`, below the training curves, in
 read-only workspaces too) offers these baselines as a picker. It defaults to
 `base` when present, else `previous`, else the first that exists. `base` shows
-the `/patch` files and text. Any other baseline is diffed through
+the `/patch` files and text, or the untracked file list of a run that captured
+only untracked files. Any other baseline is diffed through
 `experiments-diff` (baseline → this run): it shows the top 5 metrics by |Δ|
 (goal metrics first, then "+N more"), a *Params changed* block (count + one
 row per param), the changed files and the diff behind *Show diff*, with *Open in Compare →*

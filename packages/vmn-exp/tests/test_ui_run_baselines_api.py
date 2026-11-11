@@ -105,3 +105,17 @@ def test_the_etag_repeats(app_layout):
     url = run_url(app_layout, "0.0.1-dev.r4", "/baselines")
     etag = api.get(url).headers["etag"]
     assert api.get(url, headers={"If-None-Match": etag}).status_code == 304
+
+
+def test_base_exists_for_a_run_with_only_untracked_files(app_layout):
+    """Plan 39 B4c: untracked files alone are the run's own code."""
+    seed_run(app_layout, "0.0.1-dev.r1", 1, finished_state(0, TRAIN), has_untracked_files=True)
+    assert _baselines(app_layout, "0.0.1-dev.r1")["base"]["verstr"] == "0.0.1-dev.r1"
+
+
+def test_base_exists_for_an_untracked_only_run_that_has_a_previous_run(app_layout):
+    _seed_fleet(app_layout)
+    seed_run(app_layout, "0.0.1-dev.r5", 5, finished_state(0, TRAIN), has_untracked_files=True)
+    body = _baselines(app_layout, "0.0.1-dev.r5")
+    assert body["base"]["verstr"] == "0.0.1-dev.r5"
+    assert body["previous"]["verstr"] == "0.0.1-dev.r4"
