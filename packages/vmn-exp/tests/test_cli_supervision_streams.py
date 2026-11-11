@@ -12,6 +12,7 @@ from stream_fakes import APP, V, StreamRecorder
 from vmn_exp.cli import run as runmod
 from vmn_exp.cli import supervisor
 from vmn_exp.cli.run import _Supervision
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.writer import set_default_writer_id
 
 
@@ -39,7 +40,7 @@ class _NoMetrics:
 
 def _supervision(storage):
     args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
-    sup = _Supervision(storage, APP, V, args, wait=threading.Event().wait)
+    sup = _Supervision(storage, APP, V, args, wait=threading.Event().wait, io=real_io())
     sup.start, sup.tailer = 0.0, _NoMetrics()
     return sup
 

@@ -14,6 +14,7 @@ from supervisor_fakes import APP, V, FakeWait
 from vmn_exp.cli import run as runmod
 from vmn_exp.cli import supervisor
 from vmn_exp.cli.run import _Supervision
+from vmn_exp.core.real_io import real_io
 from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 
@@ -61,7 +62,7 @@ class _Sync:
 def _supervision(bucket):
     pod = BufferedRemoteStorage(bucket, bucket.root + "-buffers", area="runs")
     args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
-    sup = _Supervision(pod, APP, V, args, wait=FakeWait())
+    sup = _Supervision(pod, APP, V, args, wait=FakeWait(), io=real_io())
     sup.sync = _Sync(pod, bucket)
     sup._defer_ships()
     return sup

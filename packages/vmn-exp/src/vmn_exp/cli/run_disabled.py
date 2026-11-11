@@ -30,6 +30,7 @@ def exec_if_disabled(args):
     sys.stderr.flush()
     from vmn_exp.cli.run import _child_cwd  # the supervisor stack, only when needed
 
-    os.chdir(_child_cwd())
-    os.execvpe(run_cmd[0], run_cmd, dict(os.environ, VMN_METRICS_FILE=os.devnull))
+    env = os.environ
+    os.chdir(_child_cwd(env))
+    os.execvpe(run_cmd[0], run_cmd, dict(env, VMN_METRICS_FILE=os.devnull))
     return 0  # only reached when execvpe is stubbed out

@@ -29,7 +29,7 @@ from version_stamp.api import VMN_LOGGER
 _FINISHED = (SUCCEEDED, FAILED)  # a finished trial's points never change
 
 
-def run_agent(vcs, storage, args, sweep, spec, repo_lock=None):
+def run_agent(vcs, storage, args, sweep, spec, repo_lock=None, *, io):
     # Checked before claiming: a claim without a run would waste its slot.
     require_command(spec, getattr(args, "run_cmd", None))
     if repo_lock is not None:
@@ -41,7 +41,8 @@ def run_agent(vcs, storage, args, sweep, spec, repo_lock=None):
         claim = _next_claim(storage, vcs.name, sweep, spec, agent, args.retry_failed)
         if claim is None:
             break
-        supervision = _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock)
+        supervision = _run_trial(vcs, storage, args, sweep, spec, claim, base_name,
+                                 repo_lock, io)
         if supervision is None:
             return 1
         ran += 1
@@ -71,7 +72,7 @@ def _next_claim(storage, app_name, sweep, spec, agent, retry_failed):
                             history=lambda: history(spec, current_rows()))
 
 
-def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
+def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock, io):
     trial, attempt, params = claim["trial"], claim["attempt"], claim["params"]
     trial_args = copy.copy(args)
     trial_args.run_cmd = trial_command(spec, params, override=getattr(args, "run_cmd", None))
@@ -83,7 +84,8 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
         repo_lock.acquire()
     try:
         _, verstr, err = _create_experiment(
-            vcs, storage, trial_args, extra_create_data={"params": params, "tags": tags}
+            vcs, storage, trial_args, extra_create_data={"params": params, "tags": tags},
+            env=io.env,
         )
     finally:
         if repo_lock is not None:
@@ -99,7 +101,7 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
         if spec.get("early_terminate") else None
     supervision = trial_supervision(storage, vcs.name, verstr, trial_args,
                                     experiment_conf(vcs), env, check, vcs.vmn_root_path,
-                                    os.environ)
+                                    io)
     try:
         supervision.run(trial_args.run_cmd)
     finally:
@@ -109,13 +111,13 @@ def _run_trial(vcs, storage, args, sweep, spec, claim, base_name, repo_lock):
 
 
 def trial_supervision(storage, app_name, verstr, trial_args, exp_conf, sweep_env,
-                      on_tick, root, env):
+                      on_tick, root, io):
     """A trial's supervision: its command records into the trial run unless
-    ``--no-adopt`` or ``VMN_EXP_ADOPT`` in *env* turn that off."""
+    ``--no-adopt`` or ``VMN_EXP_ADOPT`` in ``io.env`` turn that off."""
     return _Supervision(storage, app_name, verstr, trial_args, exp_conf,
                         extra_env=sweep_env, on_tick=on_tick, root=root,
-                        adopt=adopt_requested(trial_args, env),
-                        wait=threading.Event().wait)
+                        adopt=adopt_requested(trial_args, io.env),
+                        wait=threading.Event().wait, io=io)
 
 
 class _EarlyStopCheck:

@@ -12,7 +12,6 @@ import os
 import signal
 import sys
 import threading
-import time
 
 from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort
@@ -175,12 +174,14 @@ class SignalForwarder:
     a grace period (*signal_grace_sec*; *grace_sec* for a stop the supervisor
     requests itself), after which a child that is still alive is killed. A
     second signal kills it at once. Handlers are only installable from the
-    main thread; elsewhere the forwarder is inert.
+    main thread; elsewhere the forwarder is inert. *clock* is a monotonic
+    callable that times the grace.
     """
 
-    def __init__(self, grace_sec, signal_grace_sec):
+    def __init__(self, grace_sec, signal_grace_sec, clock):
         self.received = None
-        # When the first signal arrived (time.monotonic), None before one.
+        self._clock = clock
+        # When the first signal arrived (on *clock*), None before one.
         self.signalled_at = None
         self.grace_sec = grace_sec
         self.signal_grace_sec = signal_grace_sec
@@ -220,14 +221,14 @@ class SignalForwarder:
     def _start_grace(self, grace_sec):
         """Start a grace period; one already running is never extended.
         Returns when it started."""
-        now = time.monotonic()
+        now = self._clock()
         deadline = now + grace_sec
         self._kill_at = deadline if self._kill_at is None else min(self._kill_at, deadline)
         return now
 
     def enforce_grace(self):
         """Kill a child that outlived the grace period of a forwarded signal."""
-        if self._kill_at is not None and time.monotonic() >= self._kill_at:
+        if self._kill_at is not None and self._clock() >= self._kill_at:
             self._kill()
 
     def _handle(self, signum, _frame):

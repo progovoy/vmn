@@ -2,6 +2,7 @@
 reach the remote is warned about, within one budget (plan 40 C15). Driven
 without a child process: a stub with a return code stands in for it."""
 import argparse
+import dataclasses
 import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -13,6 +14,7 @@ from vmn_exp.cli import run as runmod
 from vmn_exp.cli import supervisor
 from vmn_exp.cli.run import _Supervision
 from vmn_exp.cli.supervisor_state import finish_uploads, not_uploaded_warning
+from vmn_exp.core.real_io import real_io
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 
 
@@ -35,7 +37,7 @@ class _NoMetrics:
 
 def _finish(storage, wait):
     args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
-    sup = _Supervision(storage, APP, V, args, wait=wait)
+    sup = _Supervision(storage, APP, V, args, wait=wait, io=real_io())
     sup.start, sup.tailer = 0.0, _NoMetrics()
     sup.run_state = {"state": "running", "attempt": "a1", "exit_code": None}
     return sup._finish(SimpleNamespace(returncode=0), ["train"])
@@ -133,10 +135,10 @@ class _Published(_StateUploads):
 def _clocked(tmp_path, monkeypatch):
     """A supervision whose clock is a fake and whose final uploads land at once."""
     clock = _Clock()
-    monkeypatch.setattr(runmod, "time", SimpleNamespace(monotonic=clock))
+    io = dataclasses.replace(real_io(), clock=SimpleNamespace(monotonic=clock))
     args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
     sup = _Supervision(local_first(tmp_path, FakeRemote(str(tmp_path / "remote"))),
-                       APP, V, args, wait=FakeWait())
+                       APP, V, args, wait=FakeWait(), io=io)
     sup.start, sup.tailer = clock.now, _SlowMetrics(clock)
     sup.sync, sup.state_uploads = _FinalSync(), _Published()
     sup.run_state = {"state": "running", "attempt": "a1", "exit_code": None}

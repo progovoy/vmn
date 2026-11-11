@@ -3,6 +3,7 @@ together fit 25 s, a pod's default grace period; without one the uploads keep
 their long budget (plan 40 C15, owner answer of 2026-11-11)."""
 import argparse
 import signal
+import time
 
 from vmn_exp.cli.run import _kill_graces
 from vmn_exp.cli.supervisor import SignalForwarder
@@ -38,7 +39,7 @@ def test_an_explicit_kill_grace_is_honoured_after_a_signal():
 
 
 def test_a_received_signal_starts_the_signal_grace_not_the_stop_grace():
-    forwarder = SignalForwarder(30, signal_grace_sec=15)
+    forwarder = SignalForwarder(30, signal_grace_sec=15, clock=time.monotonic)
 
     forwarder._handle(signal.SIGTERM, None)
 
@@ -46,7 +47,7 @@ def test_a_received_signal_starts_the_signal_grace_not_the_stop_grace():
 
 
 def test_a_stop_request_keeps_the_kill_grace():
-    forwarder = SignalForwarder(30, signal_grace_sec=15)
+    forwarder = SignalForwarder(30, signal_grace_sec=15, clock=time.monotonic)
 
     forwarder.request_stop()
 

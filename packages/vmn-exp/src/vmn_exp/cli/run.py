@@ -8,11 +8,9 @@ claiming ``running`` — and the stale heartbeat then reports it ``stuck``.
 """
 
 import os
-import socket
 import subprocess
 import tempfile
 import threading
-import time
 
 from vmn_exp.cli import fork
 from vmn_exp.cli.intent_arg import append_intent, read_intent
@@ -127,13 +125,13 @@ def _safe_unlink(path):
         pass
 
 
-def _child_cwd():
-    """Where the user invoked vmn: ``$VMN_WORKING_DIR`` when set, else the cwd.
+def _child_cwd(env):
+    """Where the user invoked vmn: *env*'s ``VMN_WORKING_DIR`` when set, else the cwd.
 
     Not the repo root: ``cd src && vmn-exp run app -- python train.py`` must
     find ``src/train.py``.
     """
-    return os.environ.get("VMN_WORKING_DIR") or os.getcwd()
+    return env.get("VMN_WORKING_DIR") or os.getcwd()
 
 
 def _kill_graces(args, env):
@@ -176,16 +174,15 @@ def _detect_python_exe(run_cmd):
     return None
 
 
-def _create_experiment(vcs, storage, args, extra_create_data=None):
+def _create_experiment(vcs, storage, args, extra_create_data=None, *, env):
     """Create the run's experiment record. Returns ``(app_name, verstr, err)``.
 
-    *extra_create_data* (params, tags, ...) wins over what ``--file`` holds.
+    *extra_create_data* (params, tags, ...) wins over what ``--file`` holds;
+    without ``--from-snapshot``, *env*'s ``VMN_SNAPSHOT_METADATA`` names one.
     """
     import vmn_exp.cli.experiment as cli
 
-    from_snapshot = getattr(args, "from_snapshot", None) or os.environ.get(
-        "VMN_SNAPSHOT_METADATA"
-    )
+    from_snapshot = getattr(args, "from_snapshot", None) or env.get("VMN_SNAPSHOT_METADATA")
     extra = {}
     if getattr(args, "file", None):
         notes_data = cli._parse_notes_file(args.file)
@@ -248,7 +245,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None, *, io):
     if err is not None:
         return err
 
-    app_name, verstr, err = _create_experiment(vcs, storage, args)
+    app_name, verstr, err = _create_experiment(vcs, storage, args, env=io.env)
     if err is not None:
         return err
     if intent:
@@ -269,15 +266,16 @@ def experiment_run(vcs, params, storage, args, repo_lock=None, *, io):
     print_hint(storage, app_name, verstr, args, exp_conf, command=run_cmd)
     return run_supervision(
         storage, app_name, verstr, args, exp_conf,
-        getattr(vcs, "vmn_root_path", None), os.environ,
+        getattr(vcs, "vmn_root_path", None), io,
     ).run(run_cmd)
 
 
-def run_supervision(storage, app_name, verstr, args, exp_conf, root, env):
+def run_supervision(storage, app_name, verstr, args, exp_conf, root, io):
     """The supervision of ``vmn-exp run``: it offers the run to its child
-    unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in *env* turn that off."""
+    unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in ``io.env`` turn that off."""
     return _Supervision(storage, app_name, verstr, args, exp_conf, root=root,
-                        adopt=adopt_requested(args, env), wait=threading.Event().wait)
+                        adopt=adopt_requested(args, io.env), wait=threading.Event().wait,
+                        io=io)
 
 
 class _Supervision:
@@ -290,15 +288,18 @@ class _Supervision:
     *adopt* offers the run to the direct child (``supervised_env``).
     *wait(delay)* is the pause between retries of the final uploads
     (``threading.Event().wait``); it reports whether they were abandoned.
+    *io* gives the clock, the child's base env, its start and the host.
     """
 
     def __init__(self, storage, app_name, verstr, args, exp_conf=None,
                  extra_env=None, on_tick=None, cwd=None, root=None, state_extra=None,
-                 *, adopt=False, wait):
+                 *, adopt=False, wait, io):
         self.storage = storage
+        self.io = io
+        self.clock = io.clock.monotonic
         self.adopt = adopt
         self.state_extra = state_extra or {}
-        self.cwd = cwd or _child_cwd()
+        self.cwd = cwd or _child_cwd(io.env)
         self.root = root
         self.extra_env = extra_env or {}
         # Called with this supervision on every poll while the child lives.
@@ -312,7 +313,7 @@ class _Supervision:
         self.wait = wait
         self.sync = BackgroundSync(self._sync_once, self._sync_final, wait)
         self.state_uploads = StateUploads(storage, app_name, verstr, wait, self.guard)
-        self.forwarder = SignalForwarder(*_kill_graces(args, os.environ))
+        self.forwarder = SignalForwarder(*_kill_graces(args, io.env), self.clock)
         self.output = output_artifact(storage, app_name, verstr, args)
         self.tee = None
         # Every stream the metrics were appended to: an adopted child that
@@ -330,7 +331,7 @@ class _Supervision:
             proc = self._start(run_cmd)
             if proc is None:
                 return 1
-            self.start = time.monotonic()
+            self.start = self.clock()
             try:
                 self._supervise(proc, run_cmd)
             finally:
@@ -348,10 +349,10 @@ class _Supervision:
         self.samples_tree = sysmetrics.enabled(
             getattr(self.args, "system_metrics", None), self.exp_conf
         )
-        env = self._child_env(dict(os.environ), os.getpid())
+        env = self._child_env(dict(self.io.env), self.io.host.pid())
         try:
             stdio = popen_kwargs(env) if self.output else {"env": env}
-            proc = subprocess.Popen(run_cmd, cwd=self.cwd, **stdio)
+            proc = self.io.processes.popen(run_cmd, cwd=self.cwd, **stdio)
         except FileNotFoundError:
             VMN_LOGGER.error("Command not found: " + run_cmd[0])
             return None
@@ -380,7 +381,7 @@ class _Supervision:
             "runner": RUNNER_CLI,
             "cwd": repo_relative_cwd(self.cwd, self.root),
             "pid": proc.pid,
-            "host": socket.gethostname(),
+            "host": self.io.host.hostname(),
             # One schema with the SDK's: this process's attempt at the run.
             "attempt": new_attempt_id(),
             "started_at": started_at,
@@ -408,9 +409,9 @@ class _Supervision:
         sync_interval = resolve_sync_sec(
             getattr(self.args, "sync_interval", None), self.exp_conf
         )
-        tick = self._tick(sampler, sync_interval, heartbeat_interval, time.monotonic())
+        tick = self._tick(sampler, sync_interval, heartbeat_interval, self.clock())
         watch(lambda: proc.poll() is not None, popen_waiter(proc), tick,
-              time.monotonic, _METRICS_TAIL_INTERVAL)
+              self.clock, _METRICS_TAIL_INTERVAL)
 
     def _tick(self, sampler, sync_interval, heartbeat_interval, started):
         """One poll while the child lives: ingest, sync, beat, hook, grace."""
@@ -461,7 +462,7 @@ class _Supervision:
         """Record how the run ended; every step is best-effort but attempted."""
         returncode = proc.returncode
         exit_code = shell_exit_code(returncode)
-        duration = round(time.monotonic() - self.start, 3)
+        duration = round(self.clock() - self.start, 3)
         self.guard("metrics ingestion", self._ingest_new)
         self._record_output()
 
@@ -497,7 +498,7 @@ class _Supervision:
         deadline = self._finish_uploads()
         signalled = self.forwarder.signalled_at is not None
         if not signalled:
-            deadline = time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC
+            deadline = self.clock() + _FINAL_SYNC_TIMEOUT_SEC
         for stream in sorted(self.appended_streams | {self._own_stream()}):
             self.guard("metric compaction", compact_by, self.storage, self.app_name,
                        self.verstr, stream, deadline)
@@ -551,12 +552,11 @@ class _Supervision:
     def _finish_uploads(self):
         """The final log sync, then the final state's upload, in one budget
         that starts now, with the final state submitted; the deadline."""
-        clock = time.monotonic
         deadline = final_upload_deadline(
-            clock(), _FINAL_SYNC_TIMEOUT_SEC,
+            self.clock(), _FINAL_SYNC_TIMEOUT_SEC,
             self.forwarder.signalled_at, self.forwarder.signal_grace_sec,
         )
-        if not finish_uploads(self.sync, self.state_uploads, deadline, clock):
+        if not finish_uploads(self.sync, self.state_uploads, deadline, self.clock):
             VMN_LOGGER.warning(not_uploaded_warning(
                 self.verstr, self.state_uploads.last_error, self.storage))
         return deadline
@@ -580,7 +580,7 @@ class _Supervision:
 
         if deadline is None:
             alert()
-        elif not finish_by(deadline, time.monotonic, alert):
+        elif not finish_by(deadline, self.clock, alert):
             VMN_LOGGER.warning(
                 f"Experiment {self.verstr}: the failure alert did not finish in time")
 

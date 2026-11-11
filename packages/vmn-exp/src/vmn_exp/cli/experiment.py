@@ -390,7 +390,7 @@ def handle_experiment(vmn_ctx, io):
         from vmn_exp.cli.rerun import experiment_rerun
 
         return experiment_rerun(
-            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
+            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None), io=io
         )
     elif action == "add":
         return experiment_add(vcs, params, storage, args)

@@ -53,7 +53,7 @@ class Source:
         return core.code_verstr_of(self.metadata)
 
 
-def experiment_rerun(vcs, params, storage, args, repo_lock=None):
+def experiment_rerun(vcs, params, storage, args, repo_lock=None, *, io):
     source, err = load_source(storage, vcs.name, args)
     if err:
         VMN_LOGGER.error(err)
@@ -63,7 +63,7 @@ def experiment_rerun(vcs, params, storage, args, repo_lock=None):
         return 0
     if args.dry_run:
         return _dry_run(vcs, storage, source, args)
-    return _execute(vcs, params, storage, args, source, repo_lock)
+    return _execute(vcs, params, storage, args, source, repo_lock, io)
 
 
 def load_source(storage, app_name, args):
@@ -141,7 +141,7 @@ def _dry_run(vcs, storage, source, args):
     return 0
 
 
-def _execute(vcs, params, storage, args, source, repo_lock):
+def _execute(vcs, params, storage, args, source, repo_lock, io):
     with exit_on_termination():
         workdir, err = prepare_workdir(vcs, source.metadata, source.patches,
                                        args.worktree_dir)
@@ -160,23 +160,23 @@ def _execute(vcs, params, storage, args, source, repo_lock):
             repo_lock.release()
         supervision = rerun_supervision(
             storage, source, verstr, args, experiment_conf(vcs), cwd, workdir,
-            experiment_dir(vcs, params), os.environ,
+            experiment_dir(vcs, params), io,
         )
         return supervision.run(_argv(vcs, source, workdir))
     finally:
         _release_workdir(workdir, args.keep_worktree)
 
 
-def rerun_supervision(storage, source, verstr, args, exp_conf, cwd, workdir, exp_dir, env):
+def rerun_supervision(storage, source, verstr, args, exp_conf, cwd, workdir, exp_dir, io):
     """The rerun's supervision: its child runs in the restored workspace and
-    records into the rerun unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in *env*
-    turn that off."""
+    records into the rerun unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in
+    ``io.env`` turn that off."""
     return _Supervision(
         storage, source.app_name, verstr, args, exp_conf,
         extra_env=core.child_env(cwd, exp_dir, source.sweep_params),
         cwd=cwd, root=workdir.app_root,
         state_extra={"workdir": workdir.root} if args.keep_worktree else None,
-        adopt=adopt_requested(args, env), wait=threading.Event().wait,
+        adopt=adopt_requested(args, io.env), wait=threading.Event().wait, io=io,
     )
 
 

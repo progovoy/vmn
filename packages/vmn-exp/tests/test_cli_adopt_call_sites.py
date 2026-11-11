@@ -1,6 +1,7 @@
 """Every ``_Supervision`` a run handler builds offers the run to its child
 unless adoption is turned off (plan 38 A4; rerun and sweep trials, A12)."""
 import argparse
+import dataclasses
 import threading
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ from vmn_exp.cli.rerun import rerun_supervision
 from vmn_exp.cli.run import _Supervision, run_supervision
 from vmn_exp.cli.sweep.agent import trial_supervision
 from vmn_exp.cli.supervised_env import ADOPT_PID_ENV, ADOPT_RUN_ID_ENV
+from vmn_exp.core.real_io import real_io
 
 VERSTR = "1.0.0-dev.abc.r1"
 
@@ -18,25 +20,29 @@ def _args(**over):
     return argparse.Namespace(capture_output=False, kill_grace_sec=1, **over)
 
 
+def _io(env):
+    return dataclasses.replace(real_io(), env=env)
+
+
 def test_run_supervision_adopts_by_default():
-    sup = run_supervision(EmptyStorage(), "app", VERSTR, _args(), None, "/repo", {})
+    sup = run_supervision(EmptyStorage(), "app", VERSTR, _args(), None, "/repo", _io({}))
     assert sup.adopt is True
     assert sup.root == "/repo"
 
 
 def test_run_supervision_with_no_adopt_does_not():
     flag_off = run_supervision(
-        EmptyStorage(), "app", VERSTR, _args(adopt_run=False), None, "/repo", {}
+        EmptyStorage(), "app", VERSTR, _args(adopt_run=False), None, "/repo", _io({})
     )
     env_off = run_supervision(
-        EmptyStorage(), "app", VERSTR, _args(), None, "/repo", {"VMN_EXP_ADOPT": "0"}
+        EmptyStorage(), "app", VERSTR, _args(), None, "/repo", _io({"VMN_EXP_ADOPT": "0"})
     )
     assert flag_off.adopt is False and env_off.adopt is False
 
 
 def _supervision(adopt):
     sup = _Supervision(EmptyStorage(), "app", VERSTR, _args(), cwd="/work", adopt=adopt,
-                       wait=threading.Event().wait)
+                       wait=threading.Event().wait, io=real_io())
     sup.metrics_path = "/tmp/metrics"
     sup.samples_tree = False
     return sup
@@ -53,7 +59,7 @@ def test_supervision_child_env_carries_the_token_only_when_adopting():
 
 def test_supervision_does_not_adopt_unless_asked():
     sup = _Supervision(EmptyStorage(), "app", VERSTR, _args(), None, None, None, "/work",
-                       wait=threading.Event().wait)
+                       wait=threading.Event().wait, io=real_io())
     assert sup.adopt is False
 
 
@@ -62,7 +68,7 @@ def _rerun_supervision(env, **over):
     workdir = SimpleNamespace(root="/ws", app_root="/ws/app")
     return rerun_supervision(EmptyStorage(), source, VERSTR,
                              _args(keep_worktree=True, **over), None, "/ws/app/sub",
-                             workdir, "/repo/.vmn/exp", env)
+                             workdir, "/repo/.vmn/exp", _io(env))
 
 
 def test_rerun_supervision_adopts_and_keeps_the_rerun_env():
@@ -83,7 +89,7 @@ def test_rerun_supervision_with_no_adopt_does_not():
 def _trial_supervision(env):
     sweep_env = {"VMN_SWEEP_ID": "sw", "VMN_SWEEP_TRIAL": "3"}
     return trial_supervision(EmptyStorage(), "app", VERSTR, _args(), None, sweep_env,
-                             print, "/repo", env)
+                             print, "/repo", _io(env))
 
 
 def test_trial_supervision_adopts_and_keeps_the_sweep_env():

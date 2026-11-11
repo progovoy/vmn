@@ -31,7 +31,8 @@ def handle_sweep(vmn_ctx, io):
             return sweep_status(storage, vcs.name, sweep, spec, args)
         from vmn_exp.cli.sweep.agent import run_agent
 
-        return run_agent(vcs, storage, args, sweep, spec, getattr(vmn_ctx, "repo_lock", None))
+        return run_agent(vcs, storage, args, sweep, spec, getattr(vmn_ctx, "repo_lock", None),
+                         io=io)
     except SpecError as exc:
         VMN_LOGGER.error(f"Sweep: {exc}")
         return 1
