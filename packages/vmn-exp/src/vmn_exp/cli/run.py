@@ -460,8 +460,7 @@ class _Supervision:
         """Record how the run ended; every step is best-effort but attempted."""
         returncode = proc.returncode
         exit_code = shell_exit_code(returncode)
-        ended = time.monotonic()
-        duration = round(ended - self.start, 3)
+        duration = round(time.monotonic() - self.start, 3)
         self.guard("metrics ingestion", self._ingest_new)
         self._record_output()
 
@@ -482,11 +481,6 @@ class _Supervision:
             if error:
                 final["error"] = error
         self._publish_final(final)
-        deadline = final_upload_deadline(
-            ended, _FINAL_SYNC_TIMEOUT_SEC,
-            self.forwarder.signalled_at, self.forwarder.signal_grace_sec,
-        )
-
         self.guard(
             "run log entry",
             append_to_log,
@@ -499,7 +493,7 @@ class _Supervision:
         )
         # A request after this would be a periodic sync replacing the final one.
         self._undefer_ships()
-        self._finish_uploads(deadline)
+        deadline = self._finish_uploads()
         if self.forwarder.signalled_at is None:
             deadline = time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC
         for stream in sorted(self.appended_streams | {self._own_stream()}):
@@ -552,11 +546,18 @@ class _Supervision:
             f"Experiment {self.verstr}: could not record the final run state"
         )
 
-    def _finish_uploads(self, deadline):
-        """The final log sync, then the final state's upload, by *deadline*."""
-        if not finish_uploads(self.sync, self.state_uploads, deadline, time.monotonic):
+    def _finish_uploads(self):
+        """The final log sync, then the final state's upload, in one budget
+        that starts now, with the final state submitted; the deadline."""
+        clock = time.monotonic
+        deadline = final_upload_deadline(
+            clock(), _FINAL_SYNC_TIMEOUT_SEC,
+            self.forwarder.signalled_at, self.forwarder.signal_grace_sec,
+        )
+        if not finish_uploads(self.sync, self.state_uploads, deadline, clock):
             VMN_LOGGER.warning(not_uploaded_warning(
                 self.verstr, self.state_uploads.last_error, self.storage))
+        return deadline
 
     def _defer_ships(self):
         """Due ships of a direct-to-bucket log buffer become requests to the

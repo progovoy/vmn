@@ -108,6 +108,42 @@ def test_the_final_sync_and_the_final_state_share_one_budget():
     assert (sync.given, state.given) == (60.0, 20.0)
 
 
+class _SlowMetrics:
+    """The child's last metrics, whose ingestion takes 50 of the clock's seconds."""
+
+    def __init__(self, clock):
+        self.clock = clock
+
+    def poll(self):
+        self.clock.now += 50
+        return []
+
+
+class _FinalSync(_StateUploads):
+    def final(self, timeout):
+        self.given = timeout
+
+
+class _Published(_StateUploads):
+    def publish(self, run_state, final=False):
+        pass
+
+
+def test_the_final_upload_budget_starts_when_the_final_state_is_submitted(tmp_path, monkeypatch, logger):
+    clock = _Clock()
+    monkeypatch.setattr(runmod, "time", SimpleNamespace(monotonic=clock))
+    args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
+    sup = _Supervision(local_first(tmp_path, FakeRemote(str(tmp_path / "remote"))),
+                       APP, V, args, wait=FakeWait())
+    sup.start, sup.tailer = clock.now, _SlowMetrics(clock)
+    sup.sync, sup.state_uploads = _FinalSync(), _Published()
+    sup.run_state = {"state": "running", "attempt": "a1", "exit_code": None}
+
+    sup._finish(SimpleNamespace(returncode=0), ["train"])
+
+    assert sup.sync.given == runmod._FINAL_SYNC_TIMEOUT_SEC
+
+
 def test_a_log_buffer_gets_no_push_hint(tmp_path):
     buffer = BufferedRemoteStorage(FakeRemote(str(tmp_path / "remote")), str(tmp_path / "buffers"))
 
