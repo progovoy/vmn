@@ -54,6 +54,41 @@ Fifteen items. Two more are dropped: B5c (absorbed into plan 42 E1) and B9c (mea
 
 **Git processes, counted (B9a, at 286c7b4e, in-process on a bootstrapped app; `packages/vmn-exp/tests/test_exp_run_git_budget.py`).** `vmn-exp run app -- true`: 16. SDK `start_run`: 16. A second `start_run` in the same process: 16. Bounds are these plus 2. The `start_run` calls by subcommand: 3 remote, 3 diff, 2 rev-parse, 2 cat-file, 2 tag, 1 each of ls-files, rev-list, format-patch, config (`git config user.email`, a plain `subprocess.run`, also counted because the patched `git_cmd.subprocess` is the `subprocess` module itself). `remote get-url --all origin` three times and `tag --points-at HEAD` twice are the first candidates for B9d.
 
+**Re-measured after plan 38 A5 and A12 (B9d, at 6346fe19, same tests plus `test_an_adopted_start_run_costs_at_most_N_git_processes`).**
+
+| Case (in-process, bootstrapped app, median of 5) | Git processes before B9d | After B9d | Wall after |
+|---|---|---|---|
+| `vmn-exp run app -- true` | 16 | 14 | 0.28 s |
+| SDK `start_run`, unsupervised (and a second one) | 16 | 14 | 0.26 s |
+| SDK `start_run` that adopts the offered run | 7 | 6 | 0.12 s |
+
+The CLI wall-clock table above was not re-taken: these are in-process timings from the test fixture, without interpreter start. The git argv of one unsupervised `start_run` before B9d, as `git_budget.summarize` prints it, with the step that issues each call:
+
+```
+3 remote / 3 diff / 2 rev-parse / 2 cat-file / 2 tag / 1 rev-list / 1 ls-files / 1 format-patch / 1 config
+git rev-parse --abbrev-ref --symbolic-full-name main@{u}   build_vcs (active branch)
+git remote get-url --all origin                            build_vcs (stamper's own dep)
+git cat-file --batch-check                                 build_vcs (last user changeset)
+git cat-file --batch                                       build_vcs (last user changeset)
+git tag --points-at <HEAD>                                 build_vcs (last user changeset: HEAD is vmn's commit)
+git remote get-url --all origin                            build_vcs (actual deps state)       REDUNDANT, removed
+git tag --points-at <HEAD>                                 build_vcs (version info of the conf's verstr)
+git diff --cached --abbrev=40 --full-index --raw           repo_status (pending changes)
+git diff --abbrev=40 --full-index --raw                    repo_status (pending changes)
+git rev-parse --verify origin/main                         repo_status (outgoing changes)
+git rev-list --max-count=1 origin/main..main --            repo_status (outgoing changes)
+git ls-files -z --others --exclude-standard                capture_snapshot (untracked files)
+git diff --binary HEAD                                     capture_snapshot (patches)
+git format-patch --stdout origin/main..main                capture_snapshot (patches)
+git config user.email                                      capture_features (author)
+git remote get-url --all origin                            record_template (record's remote)  REDUNDANT, removed
+```
+
+- **Removed:** the second and third `remote get-url`. `GitBackend.remote()` now asks git once per backend (`version_stamp/backends/git_history.py`); its `selected_remote` was already fixed at construction. Core change, its own commit, unit test in core `tests/test_backend_remote_once.py`. It also saves the calls in `vmn stamp`, `show` and `snapshot`. The budget bounds are now the counts after B9d plus 1 (15, 15, 7), so the old count of 16 fails them.
+- **Kept:** the second `tag --points-at`. It repeats the first only when HEAD is vmn's own commit and the conf's version is tagged on it (the bootstrapped case measured here; a user commit at HEAD skips the first). Caching tags by commit would need invalidation on every tag, delete, fetch and pull, and in long-lived processes on other writers; not worth one process.
+- **Not redundant:** the two `diff --raw` (index and work tree), the two `rev-parse` (upstream name and its commit), the two `cat-file` (GitPython's persistent batch readers, started once per repo object).
+- **Adopted run:** 6 processes, all of them the stamper `resume.locate` builds to resolve the store and the app's experiment conf. None repeats another; dropping them means reading the conf without a stamper, which is not this item.
+
 **New bug found while measuring:** `vmn-exp --debug run app -- true` fails with `usage: vmn ... invalid choice: 'run'`, because `_to_vmn_argv` passes any argv starting with `-` through unchanged. Folded into B1.
 
 **Order.** B9a, B9b, B1, B2, B4a, B4b, B4c, B6, B3, B5a, B5b with B5d (one release), B8, B7, B9d. Constraints from other plans:

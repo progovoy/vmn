@@ -2,7 +2,10 @@
 initialised app, so the wrapper's cost cannot grow unnoticed (plan 39 B9a).
 Bounds are the measured counts plus a small margin; a failure prints
 git_budget.summarize. Measured in-process, outside a supervisor, so plan 38
-A5's adoption does not change what these count."""
+A5's adoption does not change what these count; the adopted case grants the
+offer by hand (plan 39 B9d)."""
+import os
+
 import git
 import pytest
 from exp_helpers import _bootstrap, _exp
@@ -12,14 +15,18 @@ from version_stamp.core import git_cmd
 from vmn_exp.sdk import start_run
 
 # Measured at 286c7b4e: 16 git processes for each case (a second start_run too).
-MARGIN = 2
-RUN_NOOP_BUDGET = 16 + MARGIN
-START_RUN_BUDGET = 16 + MARGIN
+# B9d: the backend asks for its remote URL once (3 -> 1), so 14; an adopted
+# start_run builds a stamper only to find the store and its conf: 6.
+MARGIN = 1
+RUN_NOOP_BUDGET = 14 + MARGIN
+START_RUN_BUDGET = 14 + MARGIN
+ADOPTED_START_RUN_BUDGET = 6 + MARGIN
 
 
 @pytest.fixture(autouse=True)
 def _clean_experiment_env(monkeypatch):
-    for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME"):
+    for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", "VMN_EXP_ADOPT_RUN_ID",
+                "VMN_EXP_ADOPT_PID"):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -76,3 +83,17 @@ def test_a_second_start_run_costs_no_more_than_the_first(app_layout, git_calls):
     second = _start_run_counted(app_layout, git_calls)
 
     assert len(second) <= len(first), summarize(second)
+
+
+def test_an_adopted_start_run_costs_at_most_N_git_processes(app_layout, git_calls,
+                                                            monkeypatch):
+    _bootstrap(app_layout)
+    with start_run(app_layout.app_name) as offered:
+        pass
+    monkeypatch.setenv("VMN_EXP_ADOPT_RUN_ID", offered.id)
+    monkeypatch.setenv("VMN_EXP_ADOPT_PID", str(os.getppid()))
+
+    calls = _start_run_counted(app_layout, git_calls)
+
+    assert "VMN_EXP_ADOPT_RUN_ID" not in os.environ  # the offer was taken
+    assert len(calls) <= ADOPTED_START_RUN_BUDGET, summarize(calls)
