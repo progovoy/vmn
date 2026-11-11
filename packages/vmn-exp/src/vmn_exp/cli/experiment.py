@@ -41,6 +41,7 @@ from vmn_exp.cli.views import (
     format_number,
     metrics_schema,
     patch_payload,
+    patch_stat_lines,
     policy_conflict,
     print_patch,
     show_payload,
@@ -886,11 +887,8 @@ def experiment_show(vcs, params, storage, args):
     _print_status_block(storage, app_name, verstr, metadata, snapshot)
     fork.print_lineage(metadata, log)
 
-    # Patch stats
-    for ptype in ("working_tree", "local_commits"):
-        if patches.get(ptype):
-            lines = patches[ptype].count("\n")
-            print(f"  {ptype}: {lines} lines")
+    for line in patch_stat_lines(metadata, patches):
+        print(f"  {line}")
 
     # Fold log once for both inputs and metrics
     _fold = fold_log(log)

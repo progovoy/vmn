@@ -32,6 +32,8 @@ PATCH_TYPES = ("working_tree", "local_commits")
 PATCH_MAX_BYTES = 200000
 # ``show --patch``'s reason for a run whose code is untracked files only.
 UNTRACKED_ONLY = "untracked_only"
+# At most this many untracked paths are listed beside a text patch.
+UNTRACKED_NAMES_CAP = 200
 # Log entries that record facts about the run rather than events in it.
 FACT_ENTRY_TYPES = frozenset({"features"})
 
@@ -51,6 +53,15 @@ def metrics_schema(vcs, storage, app_name):
 def patch_lines(patches):
     """``{patch type: line count}`` for the patches present."""
     return {p: patches[p].count("\n") for p in PATCH_TYPES if (patches or {}).get(p)}
+
+
+def patch_stat_lines(metadata, patches):
+    """Plain ``show``'s patch stats: ``<type>: N lines`` per text patch, then
+    ``untracked_files: captured`` when the run captured untracked files."""
+    lines = [f"{ptype}: {n} lines" for ptype, n in patch_lines(patches).items()]
+    if metadata.get("has_untracked_files") or (patches or {}).get("untracked_files"):
+        lines.append("untracked_files: captured")
+    return lines
 
 
 def _patch_sources(patches):
@@ -120,26 +131,60 @@ def _no_text_payload(metadata, patches):
     return {"text": None, "reason": "no_code"}
 
 
+def _has_tarball(patches):
+    return any(source.get("untracked_files") for _, source in _patch_sources(patches))
+
+
+def _untracked_beside_text(patches):
+    """The untracked keys of a text payload: ``untracked_files`` (capped at
+    :data:`UNTRACKED_NAMES_CAP`) and ``untracked_total``, or ``[]`` with
+    ``untracked_unreadable`` when a tarball cannot be read."""
+    names = _untracked_names(patches)
+    if names is None:
+        return {"untracked_files": [], "untracked_unreadable": True}
+    return {"untracked_files": names[:UNTRACKED_NAMES_CAP], "untracked_total": len(names)}
+
+
 def patch_payload(metadata, patches, max_bytes=PATCH_MAX_BYTES):
-    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*.
-    A run without a text patch gets
+    """``show --patch``'s ``{"text", "truncated"}``, capped at *max_bytes*,
+    plus the untracked keys (:func:`_untracked_beside_text`) when the run
+    captured an untracked tarball. A run without a text patch gets
     ``{"text": None, "reason"}``: ``code_missing``, ``untracked_only`` (plus
     the ``untracked_files`` paths, unless a tarball cannot be read) or ``no_code``."""
-    sections = _text_patches(patches or {})
+    patches = patches or {}
+    sections = _text_patches(patches)
     if not sections:
-        return _no_text_payload(metadata or {}, patches or {})
+        return _no_text_payload(metadata or {}, patches)
     text = "".join(_section(*s) for s in sections)
     text, truncated = cap_utf8(text, max_bytes)
-    return {"text": text, "truncated": truncated}
+    payload = {"text": text, "truncated": truncated}
+    if _has_tarball(patches):
+        payload.update(_untracked_beside_text(patches))
+    return payload
+
+
+def _first_names(names, total=None):
+    """``a, b, c, +N more`` of *names* (``total`` of them in all)."""
+    total = len(names) if total is None else total
+    return ", ".join(names[:3]) + (f", +{total - 3} more" if total > 3 else "")
 
 
 def _untracked_only_note(names):
     if not names:
         return "only untracked files were captured, in a tarball that cannot be read"
-    shown = ", ".join(names[:3]) + (f", +{len(names) - 3} more" if len(names) > 3 else "")
     return (
-        f"only untracked files were captured ({shown}), which are not printed; "
+        f"only untracked files were captured ({_first_names(names)}), which are not printed; "
         "vmn-exp export or vmn-exp restore brings them back"
+    )
+
+
+def _untracked_beside_text_note(payload):
+    if payload.get("untracked_unreadable"):
+        return "untracked files captured, in a tarball that cannot be read"
+    shown = _first_names(payload["untracked_files"], payload["untracked_total"])
+    return (
+        f"untracked files captured, not printed: {shown} "
+        "(vmn-exp export or restore brings them back)"
     )
 
 
@@ -158,17 +203,29 @@ def no_patch_note(verstr, metadata, untracked=None):
     return f"{verstr} has no patch to show: {reason}"
 
 
-def print_patch(verstr, metadata, patches, max_bytes=PATCH_MAX_BYTES):
-    """``show --patch``'s text: the patches, or a one-line note on stderr."""
-    payload = patch_payload(metadata, patches, max_bytes)
+def _patch_stderr_note(verstr, metadata, payload):
+    """``show --patch``'s one stderr line, or None: why there is no text, or
+    the untracked files captured beside it."""
     if payload["text"] is None:
         untracked = (payload.get("untracked_files", [])
                      if payload["reason"] == UNTRACKED_ONLY else None)
-        print(no_patch_note(verstr, metadata, untracked), file=sys.stderr)
-        return
-    print("\n" + payload["text"], end="")
-    if payload["truncated"]:
-        print(f"\n[patch truncated at {max_bytes} bytes; raise --max-bytes to see more]")
+        return no_patch_note(verstr, metadata, untracked)
+    if "untracked_files" in payload:
+        return _untracked_beside_text_note(payload)
+    return None
+
+
+def print_patch(verstr, metadata, patches, max_bytes=PATCH_MAX_BYTES):
+    """``show --patch``'s text: the patches, and a one-line note on stderr
+    when there is no text or untracked files were captured beside it."""
+    payload = patch_payload(metadata, patches, max_bytes)
+    if payload["text"] is not None:
+        print("\n" + payload["text"], end="")
+        if payload["truncated"]:
+            print(f"\n[patch truncated at {max_bytes} bytes; raise --max-bytes to see more]")
+    note = _patch_stderr_note(verstr, metadata, payload)
+    if note:
+        print(note, file=sys.stderr)
 
 
 def event_log(log):

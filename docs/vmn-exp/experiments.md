@@ -824,11 +824,22 @@ vmn-exp show my_app -v @3 --patch --json --max-bytes 50000
   stderr and exits 0: an MLflow import, a clean tree, a run recorded from an
   exported tree, a pruned code object, or untracked files only (it names up to
   three and points at `export`/`restore`).
+- A run with text and untracked files prints, after the text, one stderr line
+  `untracked files captured, not printed: a.py, b.py, +N more (vmn-exp export
+  or restore brings them back)`.
 - With `--json` the object gains `patch`: `{"text", "truncated"}`, or `{"text":
   null, "reason"}` with `reason` `no_code`, `code_missing` (the run's code
   object is gone from the store) or `untracked_only` (plus `untracked_files`,
   the tarball's paths, deps under `deps/<dep>/`, unless the tarball cannot be
-  read). Without `--patch` there is no `patch` key.
+  read). Beside text, a run that captured an untracked tarball adds
+  `untracked_files` (at most 200 paths, deps under `deps/<dep>/`) and
+  `untracked_total`; a tarball that cannot be read gives `untracked_files: []`
+  with `untracked_unreadable: true` instead, never silence. Without a tarball
+  the object stays `{"text", "truncated"}`. Without `--patch` there is no
+  `patch` key.
+- Plain `show` lists `untracked_files: captured` among its patch stats (after
+  `working_tree`/`local_commits` line counts) when the run captured untracked
+  files; it does not list them.
 
 ### `compare`
 

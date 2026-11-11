@@ -1737,7 +1737,12 @@ appended since the last one. Detail and log carry an `ETag` and
 `files` counts each path's hunk lines in the served (possibly truncated) text,
 summed over its sections; dep paths read `deps/<dep>/<path>`. Without text it
 is `{"text": null, "reason": "no_code"|"code_missing"|"untracked_only", "files": []}`
-(`untracked_only` adds `untracked_files`). `max_bytes` must be >= 1 (400) and is
+(`untracked_only` adds `untracked_files`). With text, a run that captured
+untracked files also carries `untracked_files` (at most 200 paths) and
+`untracked_total`, or `untracked_files: []` with `untracked_unreadable: true`
+when its tarball cannot be read; without a tarball these keys are absent.
+Listing the names reads the tarball on each uncached request; the ETag makes
+later ones 304. `max_bytes` must be >= 1 (400) and is
 capped at 10 MB. The ETag is the run's code identity, so a 304 never loads the
 code object (none on `code_missing`, whose object may still be pushed).
 
