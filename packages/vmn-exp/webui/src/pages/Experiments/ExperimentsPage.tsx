@@ -4,10 +4,13 @@
  *  Single runs (19,580) · All runs`, or `Runs · All runs` for an app
  *  without jobs, then the Outer runs view's presets `Live · Review` (plan 28
  *  §4.5). Switching app starts from a clean slate; the views not
- *  shown have their first page prefetched (useViewPrefetch). */
-import { useCallback } from "react";
+ *  shown have their first page prefetched (useViewPrefetch). The switch
+ *  counts each side from the facets; under a filter (or a preset) the shown
+ *  side counts what its board answered and the other side shows no number. */
+import { useCallback, useState } from "react";
 import { useParams } from "react-router-dom";
 import Segmented from "../../components/Segmented";
+import { boardFiltered } from "../../hooks/useBoardFilter";
 import { useLeaderboardView } from "../../hooks/useLeaderboardView";
 import { fmtCount } from "../../util";
 import { AllRunsView } from "./AllRunsView";
@@ -24,11 +27,13 @@ const PRESET_OPTIONS = (Object.keys(PRESETS) as Preset[]).map((p) => [p, PRESETS
 
 const counted = (text: string, n: number | undefined) => (n === undefined ? text : `${text} (${fmtCount(n)})`);
 
-function viewOptions(kind: JobsKindState): [ViewOption, string][] {
+type SideCounts = Partial<Record<JobsKind, number>> | null;
+
+function viewOptions(kind: JobsKindState, counts: SideCounts): [ViewOption, string][] {
   if (!kind.kind) return [["jobs", "Runs"], ["all", "All runs"]];
   return [
-    ["jobs", counted("Outer runs", kind.counts?.jobs)],
-    ["singles", counted("Single runs", kind.counts?.singles)],
+    ["jobs", counted("Outer runs", counts?.jobs)],
+    ["singles", counted("Single runs", counts?.singles)],
     ["all", "All runs"],
   ];
 }
@@ -42,17 +47,25 @@ function AppExperiments({ ws, app }: { ws: string; app: string }) {
   const { view, setView } = useExperimentsView(ws, app);
   const kind = useJobsKind(ws, app);
   const preset = isPreset(view) ? view : undefined;
-  useViewPrefetch(ws, app, useLeaderboardView(), view === "all" ? "all" : preset ?? kind.kind ?? "top", kind);
+  const board = useLeaderboardView();
+  useViewPrefetch(ws, app, board, view === "all" ? "all" : preset ?? kind.kind ?? "top", kind);
+  // The shown board's total, for the switch's count under a filter.
+  const [totals, setTotals] = useState<SideCounts>(null);
+  const onJobsTotal = useCallback((jobs?: number) => setTotals({ jobs }), []);
+  const onSinglesTotal = useCallback((singles?: number) => setTotals({ singles }), []);
   const onJobs = useCallback(() => setView("jobs"), [setView]);
   const onAll = useCallback(() => setView("all"), [setView]);
   const onPick = useCallback((v: ViewOption) => (v === "all" ? setView("all") : setView("jobs", v)), [setView]);
   const onPreset = useCallback((v: Preset) => setView(v), [setView]);
   // A preset lists outer runs: the Outer runs side, whatever `kind=` says.
   const shownKind = preset && kind.kind ? { ...kind, kind: "jobs" as const, top: "jobs" as const } : kind;
+  const shownSide = view === "all" ? null : shownKind.kind;
+  const counts = !(boardFiltered(board) || preset) ? kind.counts
+    : shownSide && { [shownSide]: totals?.[shownSide] };
   const views = (
     <span className="board-views">
       <Segmented
-        label="Experiments view" options={viewOptions(kind)}
+        label="Experiments view" options={viewOptions(kind, counts)}
         value={view === "all" ? "all" : shownKind.kind ?? "jobs"} onChange={onPick}
       />
       {kind.kind && (
@@ -65,6 +78,6 @@ function AppExperiments({ ws, app }: { ws: string; app: string }) {
   );
   if (view === "all") return <AllRunsView ws={ws} app={app} views={views} onJobs={onJobs} />;
   return shownKind.kind === "singles"
-    ? <SinglesView ws={ws} app={app} views={views} onJobs={onJobs} />
-    : <JobsView ws={ws} app={app} views={views} kind={shownKind} preset={preset} onAll={onAll} />;
+    ? <SinglesView ws={ws} app={app} views={views} onJobs={onJobs} onTotal={onSinglesTotal} />
+    : <JobsView ws={ws} app={app} views={views} kind={shownKind} preset={preset} onAll={onAll} onTotal={onJobsTotal} />;
 }

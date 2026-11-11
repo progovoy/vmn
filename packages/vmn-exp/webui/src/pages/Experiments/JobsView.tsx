@@ -4,7 +4,7 @@
  *  by the board's filter bar, sorted by the job sort keys and grouped into
  *  groups of jobs, a group over 50 opening as a filter (§3.4); under a
  *  *preset* (Live, Review, plan 28 §4.5) narrowed and sorted by it. */
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { appName as toAppName } from "../../api";
 import AttentionStrip from "../../components/AttentionStrip";
@@ -78,10 +78,12 @@ function failedChips(view: ReturnType<typeof useLeaderboardView>, threshold = DE
   );
 }
 
-export default function JobsView({ ws, app, views, kind, preset, onAll }: {
+export default function JobsView({ ws, app, views, kind, preset, onAll, onTotal }: {
   ws: string; app: string; views?: ReactNode; kind: JobsKindState; preset?: Preset;
   /** Open the All runs view. */
   onAll: () => void;
+  /** The board's total once answered (undefined while loading). */
+  onTotal?: (total: number | undefined) => void;
 }) {
   const appName = toAppName(app);
   const view = useLeaderboardView();
@@ -110,9 +112,10 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
     total: data.total, showUnarchive: view.archived, onSelectAll: () => void selection.selectAll(),
     onArchived: data.refresh,
   });
+  const loading = data.items === undefined;
+  useEffect(() => onTotal?.(loading ? undefined : data.total), [onTotal, loading, data.total]);
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;
-  const loading = data.items === undefined;
   // With the switch shown the app has jobs: an empty side is no empty app.
   // Grouped, a group opened as a filter holds no rows: the total counts it.
   const empty = !loading && rows.length === 0 && data.total === 0 && !board.filtered && !kind.kind;
@@ -121,7 +124,8 @@ export default function JobsView({ ws, app, views, kind, preset, onAll }: {
     <>
       <BoardHead
         title={appName}
-        count={[countText(loading, rows, data.total, kind.kind) + (loading ? "" : soFar({ indexing })),
+        count={[board.collapseAll && !loading && data.totalGroups !== undefined && plural(data.totalGroups, "group"),
+          countText(loading, rows, data.total, kind.kind) + (loading ? "" : soFar({ indexing })),
           boardIndexingText(data.indexing, status?.indexing), freshnessShort(status?.freshness)]
           .filter(Boolean).join(" · ")}
         views={views}

@@ -2,7 +2,7 @@
  *  (`top=singles`), on the All runs board's table and default columns
  *  (status, experiment, goal metrics, varying params, when) — a single run
  *  has no progress, best or spread to show. Newest first unless sorted. */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { appName as toAppName } from "../../api";
 import LeaderboardFilter from "../../components/LeaderboardFilter";
 import NewExperiment from "../../components/NewExperiment";
@@ -22,10 +22,12 @@ import { kindNoun, kindQuery } from "./jobsKind";
 
 const NOUN = kindNoun("singles");
 
-export default function SinglesView({ ws, app, views, onJobs }: {
+export default function SinglesView({ ws, app, views, onJobs, onTotal }: {
   ws: string; app: string; views?: ReactNode;
   /** Picking the "parent run" grouping opens the Outer runs view. */
   onJobs: () => void;
+  /** The board's total once answered (undefined while loading). */
+  onTotal?: (total: number | undefined) => void;
 }) {
   const appName = toAppName(app);
   const view = useLeaderboardView();
@@ -40,9 +42,10 @@ export default function SinglesView({ ws, app, views, onJobs }: {
     total: data.total, showUnarchive: view.archived, onSelectAll: () => void board.selection.selectAll(),
     onArchived: board.refresh,
   });
+  const loading = rows === undefined;
+  useEffect(() => onTotal?.(loading ? undefined : data.total), [onTotal, loading, data.total]);
 
   if (data.pageError) return <div className="error">{data.pageError}</div>;
-  const loading = rows === undefined;
   const count = loading ? `loading ${NOUN}s…` : plural(data.total, NOUN);
 
   return (
