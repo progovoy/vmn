@@ -29,7 +29,7 @@ from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.metrics_feed import MetricsFeed
-from vmn_exp.ui.middleware import SelectiveGZipMiddleware
+from vmn_exp.ui.middleware import RequestGate, SelectiveGZipMiddleware
 from vmn_exp.ui.query_params import refuse_unknown_params
 from vmn_exp.ui.readers.models import ModelListing
 from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshot, RegistrySnapshots
@@ -206,27 +206,27 @@ def build_app(
             return diag_routes.authenticate(chain, request)
         return run_in_threadpool(chain.authenticate, request)
 
-    @app.middleware("http")
-    async def _authenticate(request: Request, call_next):
+    async def _authenticate(request: Request):
         # Off the event loop: API token and session checks hit the control plane.
         principal = await _principal(request) if chain else None
         request.state.principal = principal
         if chain and principal is None and request.url.path.startswith("/api"):
             return JSONResponse(error_body("Unauthorized", "unauthorized", auth=auth_hints(chain)),
                                 status_code=401, headers={"WWW-Authenticate": "Bearer"})
-        return await call_next(request)
+        return None
+    app.add_middleware(RequestGate, check=_authenticate)
 
-    # Registered after the token check, so it runs first: a rebound or
+    # Added after the token check, so it runs first: a rebound or
     # cross-site request is refused before anything else looks at it.
-    @app.middleware("http")
-    async def _request_guard(request: Request, call_next):
+    async def _request_guard(request: Request):
         refused = guard.reject_reason(
             request.method, request.url.path, request.headers
         )
         if refused:
             status, detail = refused
             return JSONResponse(error_body(detail, status_code_name(status)), status_code=status)
-        return await call_next(request)
+        return None
+    app.add_middleware(RequestGate, check=_request_guard)
 
     app.add_middleware(
         SelectiveGZipMiddleware, minimum_size=GZIP_MIN_BYTES, compresslevel=GZIP_LEVEL
