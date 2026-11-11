@@ -27,8 +27,8 @@ from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal, with_resolved_goals
 from vmn_exp.ui.job_rollup_cache import _SplitRollups
 from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields, policy_fields
-from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, jobs_above, own_value
-from vmn_exp.ui.job_views import child_rows
+from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, jobs_above
+from vmn_exp.ui.job_views import child_values
 from vmn_exp.ui.leaderboard_group_summary import TAILS, of_sorted, stats, tail_quantile
 from vmn_exp.ui.memo import LRU
 
@@ -36,6 +36,7 @@ JobAgg = namedtuple("JobAgg", "agg by value metric nested",
                     defaults=("best", "children", "best", None, False))
 CHILDREN, RUNS = "children", "runs"
 ANSWERS = 64
+CHILD_VALUES = 4  # a summary's top and rolled read them back to back
 # ``runs``: the merged sketch's quantile fields (:func:`metric_fields`).
 _SKETCH = {0.5: "p50", 0.9: "p90", 0.1: "p10"}
 
@@ -106,11 +107,15 @@ def _valued(units, value):
     """``{unit key: [(verstr, value)]}`` of ``(verstr, key, own)`` *units*
     (a unit without a key is its own): a lone unit's *value(verstr, own)*;
     a conflict's units are left unvalued (None), never read."""
-    keyed = {}
+    lone, shared = {}, {}  # no list per unit: most keys (every child) are lone
     for verstr, key, own in units:
-        keyed.setdefault(verstr if key is None else key, []).append((verstr, own))
-    return {key: [(kept[0][0], value(*kept[0]))] if len(kept) == 1 else
-            [(verstr, None) for verstr, _ in kept] for key, kept in keyed.items()}
+        key = verstr if key is None else key
+        if key in lone:
+            shared.setdefault(key, [lone[key][0]]).append(verstr)
+        else:
+            lone[key] = (verstr, own)
+    return {key: [(verstr, None) for verstr in shared[key]] if key in shared else
+            [(unit[0], value(*unit))] for key, unit in lone.items()}
 
 
 def _ordered(keyed):
@@ -242,6 +247,7 @@ class JobAggregates:
     def __init__(self, cache, size=32):
         self._cache = cache
         self._answers = cache.generations.track(LRU(ANSWERS, name="job aggregates"))
+        self._children = cache.generations.track(LRU(CHILD_VALUES, name="job child values"))
         self._units = _SplitRollups(cache, size, spec_of=lambda key: UnitSpec.of(*key))
 
     def rolled(self, snapshot, schema, agg=None):
@@ -277,6 +283,15 @@ class JobAggregates:
             pool = self._payload_of(snapshot, schema, agg)
             pool.read(jobs)
         return pool.pooled(jobs) or _payload(pool.agg, pool.metric, pool.goal)
+
+    def child_values(self, snapshot, verstr, metric):
+        """:func:`~vmn_exp.ui.job_views.child_values` of *verstr* as of now,
+        memoized: a job summary's ``top`` and ``rolled`` share one pass."""
+        return self._child_values(*self._cache._base(snapshot), verstr, metric)
+
+    def _child_values(self, base, bucket, verstr, metric):
+        return self._children.get((base.token, bucket, verstr, metric), lambda: child_values(
+            base, base.patched(bucket), verstr, metric))
 
     def value_of(self, snapshot, schema, agg=None):
         """The :class:`~vmn_exp.ui.job_units.UnitValue` of *agg*'s source
@@ -325,9 +340,8 @@ class JobAggregates:
         ``by`` and the carriers it skips as nested."""
         bucket = self._cache._base(snapshot)[1]
         if agg.by == CHILDREN:
-            patched = base.patched(bucket)
-            return lambda job: ([(row["verstr"], None, own_value(row, metric))
-                                 for row in child_rows(base, patched, job)], ())
+            return lambda job: ([(verstr, None, own) for verstr, own, _ in
+                                 self._child_values(base, bucket, job, metric)], ())
         static, live = self._units.sources(snapshot.app_name, base, bucket, (agg.by, metric))
         sources = (static.tallies, live)
         above = jobs_above(tree, sources)

@@ -115,9 +115,21 @@ def _positions(base, key, verstrs):
     return found
 
 
+def is_flat(children_of, scope):
+    """Whether no child of *scope* has children: its subtree is its children."""
+    return not any(map(children_of.get, children_of.get(scope, ())))
+
+
+def _below(scope, children_of):
+    """*scope*'s subtree without it."""
+    if is_flat(children_of, scope):
+        return dict.fromkeys(children_of.get(scope, ()))
+    return subtree_verstrs(scope, children_of)[1:]
+
+
 def scope_positions(base, scope):
     """Storage indexes of *scope*'s subtree without it, in storage order."""
-    return _positions(base, scope, lambda: subtree_verstrs(scope, base.children_of)[1:])
+    return _positions(base, scope, lambda: _below(scope, base.children_of))
 
 
 def children_positions(base, parent):

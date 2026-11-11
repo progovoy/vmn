@@ -4,20 +4,19 @@
 S1 rollup, the job's own row fields, its top 10 on the main metric), the
 failure clusters, and the run detail's tree fields and fleet counts — none
 of it reading a run state. Each answer shares the rollups' memo
-(:meth:`~vmn_exp.ui.job_rollup_cache.JobRollupCache.answer`); the top 10 is
-a slice of the job's scoped order, the clusters one pass over the subtree's
-rows, the rest is the rollup's.
+(:meth:`~vmn_exp.ui.job_rollup_cache.JobRollupCache.answer`); the top 10 and
+the clusters are each one pass over the subtree's rows, the rest is the
+rollup's.
 """
 import heapq
 from operator import itemgetter
 
-from vmn_exp.core.log import primary_metric
 from vmn_exp.core.settle import LOST, NEVER_STARTED, split_slots
-from vmn_exp.core.values import is_finite_number
 from vmn_exp.ui.job_failures import failure_clusters
 from vmn_exp.ui.job_rollup_cache import minute
 from vmn_exp.ui.leaderboard_facets import visible
-from vmn_exp.ui.leaderboard_scope import Filters, scope_positions
+from vmn_exp.ui.job_units import own_value
+from vmn_exp.ui.leaderboard_scope import children_positions, is_flat, scope_positions
 
 TOP = 10
 TREE_FIELDS = ("children", "kind", "depth", "settled", "tree_status", "child_counts",
@@ -29,13 +28,25 @@ def _top_entry(row, metric):
             "status": row.get("status"), "value": row["metrics"][metric]}
 
 
+def best_rows(values, descending, count=TOP):
+    """The rows of the best *count* ``(verstr, value or None, row)``
+    *values* (ties: the lowest verstr, then the first), best first."""
+    sign = -1 if descending else 1
+    scored = ((sign * value, verstr, i) for i, (verstr, value, _) in enumerate(values)
+              if value is not None)
+    return [values[i][2] for _, _, i in heapq.nsmallest(count, scored)]
+
+
+def own_values(rows, metric):
+    """``[(verstr, own value or None, row)]`` of *rows* (:func:`own_value`)."""
+    return [(row["verstr"], own_value(row, metric), row) for row in rows]
+
+
 def top_rows(rows, metric, descending, count=TOP):
     """The best *count* of *rows* on *metric* (ties: the lowest verstr)."""
     if metric is None:
         return []
-    sign = -1 if descending else 1
-    scored = (r for r in rows if is_finite_number(r["metrics"].get(metric)))
-    best = heapq.nsmallest(count, scored, key=lambda r: (sign * r["metrics"][metric], r["verstr"]))
+    best = best_rows(own_values(rows, metric), descending, count)
     return [_top_entry(row, metric) for row in best]
 
 
@@ -59,24 +70,6 @@ def _is_sweep(row, first_child):
     return row.get("sweep_planned") is not None or "sweep_trial" in tags
 
 
-def _leading(order, metric, count=TOP):
-    """The first rows of *order* (ranked on *metric*, rows without a finite
-    value last) holding its best *count* scored ones and any tied with the
-    last of them, read a slice at a time."""
-    out, scored, chunk = [], [], 2 * count
-    value = lambda row: row["metrics"][metric]  # noqa: E731
-    while len(out) < len(order):
-        rows = order[len(out):len(out) + chunk]
-        out += rows
-        scored += [r for r in rows if is_finite_number(r["metrics"].get(metric))]
-        if len(scored) < len(out):  # the unscored tail began
-            break
-        if len(scored) > count and value(scored[-1]) != value(scored[count - 1]):
-            break
-        chunk *= 2
-    return scored
-
-
 def visible_rows(base, patched, verstrs):
     """The visible rows of the present *verstrs*, as of the bucket *patched* is of."""
     at = (base.position[v] for v in verstrs if v in base.position)
@@ -86,6 +79,17 @@ def visible_rows(base, patched, verstrs):
 def child_rows(base, patched, verstr):
     """The visible rows right under *verstr*, as of the bucket *patched* is of."""
     return visible_rows(base, patched, base.children_of.get(verstr, ()))
+
+
+def child_values(base, patched, verstr, metric):
+    """:func:`own_values` of the visible rows right under *verstr* in
+    storage order, as of the bucket *patched* is of: one pass over them."""
+    rows, out = base.rows, []
+    for i in children_positions(base, verstr):
+        row = patched.get(i, rows[i])
+        if not row.get("archived"):
+            out.append((row["verstr"], own_value(row, metric), row))
+    return out
 
 
 class JobViews:
@@ -149,24 +153,25 @@ class JobViews:
         }
 
     def _top(self, snapshot, schema, verstr):
-        """The job's best :data:`TOP` on the main metric: the head of its
-        scoped static order (moved across generations, not rebuilt) and
-        its rows a time bucket changes."""
+        """The job's best :data:`TOP` on the main metric: one pass over its
+        subtree's rows as of now, no order built; a job of leaves reads the
+        children values its ``rolled`` reads too."""
         spec = self.rollups.spec(snapshot, schema)
         main = spec.main if spec.ranked else None
         if main is None:
             return []
-        base, patched = self._view(snapshot)
-        sort = None if main == primary_metric(schema) else main
-        static = self.cache.static_order(base, schema, Filters(sort=sort, scope=verstr))
-        live = [patched[i] for i in scope_positions(base, verstr) if i in patched]
-        rows = _leading(static.sorted, main) + visible(live, False)
-        return top_rows(rows, main, spec.up[main])
+        base, _ = self.cache._base(snapshot)
+        if is_flat(base.children_of, verstr):
+            values = self.cache.job_aggregates.child_values(snapshot, verstr, main)
+        else:
+            values = own_values(self.subtree_rows(snapshot, verstr), main)
+        up = spec.up[main]
+        return top_rows(best_rows(values, up), main, up)
 
     def _first_child(self, snapshot, verstr):
         base, _ = self.cache._base(snapshot)
-        kids = [k for k in base.children_of.get(verstr, ()) if k in base.position]
-        return self.row(snapshot, kids[0]) if kids else None
+        first = next((k for k in base.children_of.get(verstr, ()) if k in base.position), None)
+        return None if first is None else self.row(snapshot, first)
 
     def failures(self, snapshot, schema, verstr, limit=20):
         """``{total_failed, clusters}`` of the job, or None."""

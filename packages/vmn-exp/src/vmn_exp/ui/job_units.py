@@ -131,8 +131,8 @@ class UnitValue:
         self._parts, self._jobs = parts, jobs
 
     def __call__(self, verstr, own):
-        if self.source == "own":
-            return own
+        if self.source == "own" or verstr not in self._jobs:
+            return own  # a leaf's best is its own value
         below = self._below(verstr)
         if self.up is None:
             return None if below else own  # values to rank, no direction
@@ -141,9 +141,7 @@ class UnitValue:
         return (max if self.up else min)(values) if values else None
 
     def _below(self, verstr):
-        """The metric tallies of *verstr*'s subtree (none for a leaf)."""
-        if verstr not in self._jobs:
-            return ()
+        """The metric tallies of job *verstr*'s subtree."""
         tallies = (part.metrics.get(self.metric) for part in self._parts(verstr))
         return [metric for metric in tallies if metric is not None]
 
