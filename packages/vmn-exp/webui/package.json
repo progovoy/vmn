@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && vite build -c vite.export.config.ts",
+    "build": "tsc -b && vite build && vite build -c vite.export.config.ts && node scripts/check-bundle.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint ."

@@ -2027,3 +2027,7 @@ standard library; NaN/inf become `null` either way) and
 gzipped when the client accepts it. The web bundle (`/assets/*`, `index.html`
 and client routes) is served `Cache-Control: no-cache` with ETags, so an
 upgrade never serves a stale chunk and a reload revalidates to a bodiless 304.
+Library code (React, the router, TanStack) is its own chunk, `vendor.js`,
+which changes only with a dependency bump, so after an app upgrade it still
+answers 304; `npm run build` fails when the app's entry chunk
+(`assets/index.js`) outgrows its budget in `webui/scripts/check-bundle.mjs`.
