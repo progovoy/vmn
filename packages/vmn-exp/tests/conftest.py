@@ -35,6 +35,18 @@ def _reset_experiment_writer_id():
 
 
 @pytest.fixture(autouse=True)
+def _no_open_run_outlives_its_test():
+    """A run a test opened and never finished stays the thread's active run
+    (``context._CURRENT``) for the next test in the worker, which then fails
+    ``start_run`` with "already active on this thread". Unregister it."""
+    yield
+    context = sys.modules.get("vmn_exp.sdk.context")
+    if context is not None:
+        for run in context.open_runs():
+            context.unregister(run)
+
+
+@pytest.fixture(autouse=True)
 def _vmn_exp_commands_registered():
     """In-process tests parse `ui`/`exp`/`model` with vmn's parser, as `vmn-exp`
     does; register vmn-exp's commands the way its entry point would. (`vmn`
