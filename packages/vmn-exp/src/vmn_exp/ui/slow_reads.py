@@ -20,6 +20,7 @@ from fastapi import Request
 from fastapi.responses import Response
 
 from vmn_exp.ui.diag.requests import note_worker_start
+from vmn_exp.ui.thread_limiters import capacity_limiter
 
 SLOW_READ_THREADS = 24
 
@@ -36,7 +37,7 @@ def slow_read_limiter():
     try:
         return _LIMITER.get()
     except LookupError:
-        limiter = CapacityLimiter(SLOW_READ_THREADS)
+        limiter = capacity_limiter(SLOW_READ_THREADS)
         _LIMITER.set(limiter)
         return limiter
 

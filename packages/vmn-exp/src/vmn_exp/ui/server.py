@@ -54,6 +54,7 @@ from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
 from vmn_exp.ui.slow_reads import slow_read
 from vmn_exp.ui.static_files import mount_static
 from vmn_exp.ui.tenancy import install_org_middleware
+from vmn_exp.ui.thread_limiters import install_default_limiter
 from vmn_exp.ui.workspaces import WorkspaceError, workspace_storage
 
 from vmn_exp.ui import (
@@ -161,6 +162,7 @@ def create_app(
         default_response_class=SafeJSONResponse,
         dependencies=[refuse_unknown_params(API_PREFIX)],
     )
+    app.router.on_startup.append(install_default_limiter)  # first: before any thread runs
     app.state.manager = manager
     app.state.read_only = read_only
     app.state.role_mappings = list(role_mappings)
