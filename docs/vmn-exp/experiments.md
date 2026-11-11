@@ -14,7 +14,7 @@ config sweeps, benchmarks, load tests, pipeline outputs. If you can print a
 
 New here? [client-guide.md](client-guide.md) walks through a project end to
 end. This page is the CLI reference. Elsewhere: the Python SDK
-([sdk.md](sdk.md)), the web UI and HTTP API ([ui.md](ui.md)), the model and
+([sdk.md](sdk.md)), the web UI ([ui.md](ui.md)) and HTTP API ([ui-api.md](ui-api.md)), the model and
 dataset registry ([models.md](models.md)), sweeps ([sweeps.md](sweeps.md)),
 `vmn snapshot` ([snapshots.md](../snapshots.md)).
 
@@ -495,7 +495,7 @@ reads `succeeded · 1 lost`), so an orchestrator whose pending trials were
 deleted reads its own final status instead of `created`/`stuck` forever; the
 lost runs below a row are `lost_below`; the job rollups, fleet
 counts and the app's status counts carry them as `never_started`/`lost` next
-to the status counts (see [ui.md](ui.md#status-counts-and-rollup)). An ended
+to the status counts (see [ui-api.md](ui-api.md#status-counts-and-rollup)). An ended
 sweep short of its plan reads its own final status (its unclaimed slots never
 start, the UI says `ended · 4 never started`); `created (16/20 incomplete)` is
 for a sweep that has not ended. A settled run that starts after all (writes a
@@ -1305,7 +1305,7 @@ vmn-exp similar my_app -v @7 --query 'status = "succeeded" and author ~ "alice"'
   working tree needs a checkout). A bad `--query` exits 1. SDK:
   `reader.similar_runs`, `run.similar()` ([sdk.md](sdk.md#similar-runs)); UI:
   the run page's similar runs card and the leaderboard's similar mode
-  ([ui.md](ui.md#similar-runs)).
+  ([ui-api.md](ui-api.md#similar-runs)).
 
 **How runs are ranked.** Every save of the index files each run as one
 document in a SQLite FTS5 table of that index file, one column per signal,
@@ -2326,5 +2326,5 @@ the final-upload wait, 25 s under SIGTERM and 60 s otherwise unless set; raise
 `vmn-exp ui` (`pip install "vmn-exp[ui]"`) serves a dashboard over the same
 files: a sortable board of runs grouped by parent run, fork, rerun, code or a field, live
 curves from `step=` series, compare with a real code diff, an Importance view,
-artifacts, media and lineage. Deployment, workspaces, job actions and the
-HTTP API are in [ui.md](ui.md).
+artifacts, media and lineage. Deployment, workspaces and job actions are in [ui.md](ui.md), the
+HTTP API in [ui-api.md](ui-api.md).

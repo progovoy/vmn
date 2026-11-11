@@ -152,7 +152,7 @@ Over HTTP, `GET /api/v1/workspaces/{ws}/apps/{app}/experiments` returns the same
 `children`/`child_counts`. The detail endpoint `.../experiments/{verstr}` adds
 `fleet`: `expected`, `counts` (per status, plus `waiting`) and, once the outer
 run ended, `never_started` (its never-started pods and slots) and `lost`. See
-[ui.md](ui.md#api).
+[ui-api.md](ui-api.md#api).
 
 ## Checklist for an agent
 

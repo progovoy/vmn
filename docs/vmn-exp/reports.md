@@ -101,7 +101,7 @@ Types (`*` = single-run types, which take pinned `runs` only):
 | `lineage`* | `depth` |
 | `run`* | none |
 
-A `pivot` panel is the [pivot heatmap](ui.md#pivot-heatmap) of its runs (a
+A `pivot` panel is the [pivot heatmap](ui-api.md#pivot-heatmap) of its runs (a
 query as the pivot's `q`, pinned verstrs as `verstr in (...)`), each cell a
 link to the board (with `scope`: the outer run's Runs tab) filtered to its
 runs. Across launches, `rows: tags.trade_date` x `cols: root` compares them

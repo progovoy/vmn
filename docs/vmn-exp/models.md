@@ -276,7 +276,7 @@ badge (a segmented all kinds / models / datasets filter), its description
 linked to their runs, and a **lineage** card with the picked version's
 producer and consumers. A **Register** button on a run page's Artifacts panel
 registers a version from the browser. With `--read-only` the page is
-read-only. The HTTP routes are in [ui.md](ui.md#model-registry-api).
+read-only. The HTTP routes are in [ui-api.md](ui-api.md#model-registry-api).
 
 ---
 

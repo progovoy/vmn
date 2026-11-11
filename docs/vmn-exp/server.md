@@ -247,7 +247,7 @@ the per-workspace SQLite files, so several replicas can share one cache:
   Postgres-backed server, filed from the same index refreshes), never from the
   synced rows (they carry no features or intent); items name their
   `workspace`. Parameters, limits and the item shape are in
-  [ui.md](ui.md#similar-runs).
+  [ui-api.md](ui-api.md#similar-runs).
 - Git workspaces keep their SQLite cache under `<data_dir>/index/`, per replica.
 
 Server-side edits (rewind, notes) write log segments under the writer id
@@ -567,7 +567,7 @@ ui:
   `ui.tree_columns` maps a `tags.kind` value to the show keys
   (`m:`/`p:`/`t:`/`c:<name>`) the [tree](ui.md#the-tree) shows for runs of
   that kind. `ui.attention` lists at most 8
-  attention queries `{key, label, query, level}` ([ui.md](ui.md#status-counts-and-rollup)):
+  attention queries `{key, label, query, level}` ([ui-api.md](ui-api.md#status-counts-and-rollup)):
   `key` letters, digits, `_`, `-` (unique, not the built-in
   `stuck`/`failed`/`running`/`outlived`),
   `label` defaulting to the key, `level` `warn` (default) or `error`. Saving
@@ -576,7 +576,7 @@ ui:
   vmn's back is reported on its part (`error`). A checkout's conf.yml `experiment.ui.attention` beats
   it as a whole (a bad list there reads as none).
   `ui.baseline` is how an outer run finds the one it is
-  [compared with](ui.md#baseline-compare): `match` (at most 8 distinct
+  [compared with](ui-api.md#baseline-compare): `match` (at most 8 distinct
   `params.<k>`/`tags.<k>` fields the baseline must share; none: any),
   `differ` (at most 8 such fields, none also in `match`, on which the
   baseline must hold another value; a run or peer missing one is no pair) and

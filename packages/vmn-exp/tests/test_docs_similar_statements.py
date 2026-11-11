@@ -46,7 +46,7 @@ def _section(relpath, heading):
 
 
 def test_the_docs_say_the_target_apps_weights_score_every_app_searched():
-    ui = _section("docs/vmn-exp/ui.md", "### Similar runs")
+    ui = _section("docs/vmn-exp/ui-api.md", "### Similar runs")
     sdk = _section("docs/vmn-exp/sdk.md", "### Similar runs")
     cli = _section(EXPERIMENTS, "### `similar`")
     for text in (ui, sdk, cli, _flat(similar_runs.__doc__)):
@@ -113,7 +113,7 @@ def test_the_similar_docs_no_longer_describe_the_in_memory_index():
         assert stale not in cli, stale
     server = _flat(_read("docs/vmn-exp/server.md"))
     assert "scored in Python from each app's index snapshot" not in server
-    ui = _section("docs/vmn-exp/ui.md", "### Similar runs")
+    ui = _section("docs/vmn-exp/ui-api.md", "### Similar runs")
     assert "Scored from the apps' index snapshots" not in ui
 
 

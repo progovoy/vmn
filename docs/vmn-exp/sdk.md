@@ -385,7 +385,7 @@ run.log_metrics({"val_loss": vl, "val_acc": va, "epoch": epoch}, step=step)
 - `get_run(...)["step_metrics"]` maps each declaring metric to its x;
   `get_run(..., x="epoch")["series"]` joins every other metric on `epoch`
   (points `{"step", "ts", "value", "x"}`). The UI picks the declared x by
-  default ([ui.md](ui.md#custom-x-axis)).
+  default ([ui-api.md](ui-api.md#custom-x-axis)).
 
 ### Metric goals and summaries
 
@@ -848,7 +848,7 @@ none unless its index is rebuilt.
 - `vmn-exp ui`: scoped or filtered `experiments-facets` list the top 20
   signatures, an outer run's timeline counts them per minute, and a failed
   run without an `error_summary` clusters by its latest one
-  ([ui.md](ui.md#outer-runs-scope-and-search)).
+  ([ui-api.md](ui-api.md#outer-runs-scope-and-search)).
 
 ### Forking a run
 
@@ -1272,7 +1272,7 @@ similar_runs("my_app", ref=None, context="label smoothing", text_only=True, all_
 
 One expression language filters rows for `list_runs(query=)`, `vmn-exp list
 --query` ([experiments.md](experiments.md#list)), `prune --query` and the
-[REST API / UI](ui.md#filtering-with-a-query):
+[REST API / UI](ui-api.md#filtering-with-a-query):
 
 ```
 metrics.loss < 0.5 and status = "succeeded"
@@ -1317,7 +1317,7 @@ case-sensitive**, and an unknown field is a `QueryError`, not an empty result.
   `imported_from`, `forked_from`, `forked_from_step`, `rerun_of`,
   `end_reason`, `error_summary`, `signal`, `released_at`, `resume_count`,
   `queue_sec`, `duration_ratio`, `author`, `has_intent`, `intent`,
-  `keywords` (see [ui.md](ui.md#experiment-status-fields)). `queue_sec` is
+  `keywords` (see [ui-api.md](ui-api.md#experiment-status-fields)). `queue_sec` is
   creation to start (`null` until started); `duration_ratio` (duration over
   the siblings' median) is only on `vmn-exp ui` board rows, so elsewhere a
   comparison with it is false. `author` is who

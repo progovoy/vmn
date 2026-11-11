@@ -396,7 +396,7 @@ flowchart LR
   API tokens, roles and an optional Postgres cache shared by replicas
   ([server.md](server.md)). Jobs still write only to the store.
 
-See [ui.md](ui.md) for the flags and the HTTP API.
+See [ui.md](ui.md) for the flags and [ui-api.md](ui-api.md) for the HTTP API.
 
 ### CLI and SDK reads: the per-host index
 

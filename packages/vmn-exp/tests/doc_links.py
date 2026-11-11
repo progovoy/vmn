@@ -1,6 +1,6 @@
 """Pure checks over markdown text: heading slugs the way GitHub makes them,
-relative links whose file or ``#anchor`` is missing, and docs an index does
-not link. No markdown parser: fenced blocks and inline code are skipped,
+relative links whose file or ``#anchor`` is missing, docs an index does
+not link, and headings a table of contents leaves out. No markdown parser: fenced blocks and inline code are skipped,
 absolute URLs are never followed."""
 import posixpath
 import re
@@ -77,3 +77,12 @@ def unlinked_docs(index_text, filenames):
     the index itself, ``README.md``, is left out."""
     linked = {target.partition("#")[0] for _, target in _relative_links(index_text)}
     return [name for name in sorted(filenames) if name != "README.md" and name not in linked]
+
+
+def missing_toc_entries(text, level):
+    """Slugs of the level-*level* headings of *text* that no ``(#slug)`` link
+    in it points at."""
+    linked = {target[1:] for _, target in _relative_links(text) if target.startswith("#")}
+    prefix = "#" * level + " "
+    headings = [_HEADING.match(line).group(1) for _, line in _unfenced_lines(text) if line.startswith(prefix)]
+    return [slug for slug in map(_slug, headings) if slug not in linked]

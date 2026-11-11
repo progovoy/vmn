@@ -1,9 +1,10 @@
 """Relative links in the vmn-exp docs point at files and headings that exist,
-and the docs index links every vmn-exp doc (plan 43 F4)."""
+the docs index links every vmn-exp doc (plan 43 F4), and ui.md and
+ui-api.md carry a table of contents (plan 43 F5)."""
 import glob
 import os
 
-from doc_links import broken_links, heading_slugs, unlinked_docs
+from doc_links import broken_links, heading_slugs, missing_toc_entries, unlinked_docs
 from exp_helpers import _PROJECT_ROOT
 
 DOCS_INDEX = "docs/vmn-exp/README.md"
@@ -86,3 +87,21 @@ def test_a_doc_missing_from_the_index_is_reported():
 def test_the_docs_index_links_every_vmn_exp_doc():
     names = [os.path.basename(p) for p in glob.glob(os.path.join(_PROJECT_ROOT, "docs/vmn-exp/*.md"))]
     assert unlinked_docs(_read(DOCS_INDEX), names) == []
+
+
+def test_a_toc_missing_a_heading_is_reported():
+    text = (
+        "# Doc\n\n- [Install](#install)\n- [`run` flags](#run-flags)\n\n"
+        "## Install\n### Sub\n## `run` flags\n## Keyboard\n"
+        "```sh\n## fenced\n```\n"
+    )
+    assert missing_toc_entries(text, 2) == ["keyboard"]
+    assert missing_toc_entries(text, 3) == ["sub"]
+
+
+def test_ui_md_lists_every_h2_in_its_toc():
+    assert missing_toc_entries(_read("docs/vmn-exp/ui.md"), 2) == []
+
+
+def test_ui_api_md_lists_every_api_section_in_its_toc():
+    assert missing_toc_entries(_read("docs/vmn-exp/ui-api.md"), 3) == []

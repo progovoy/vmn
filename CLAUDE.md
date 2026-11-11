@@ -212,7 +212,8 @@ Full flag reference: README.md `<details>` blocks and `vmn <cmd> --help`.
 |---|---|
 | CLI reference, status/alerts, nesting, storage + plugin contract, offline/push, streams, env vars | `experiments.md` |
 | Python SDK (`start_run`, logging, autolog, readers, query language) | `sdk.md` |
-| `vmn-exp ui` + HTTP API, boards, outer runs, pivots, baselines | `ui.md` |
+| `vmn-exp ui`, boards, outer runs, pivots, baselines | `ui.md` |
+| HTTP API | `ui-api.md` |
 | Central server, settings, journal, auth | `server.md`, `byo-bucket.md` |
 | Model/dataset registry, sweeps, reports | `models.md`, `sweeps.md`, `reports.md` |
 
@@ -243,7 +244,7 @@ Core vmn and vmn-exp are documented separately (vmn-exp will become a separate p
   - `client-guide.md`: task walkthrough (store choice, submit/sweep, Kubernetes git-free recipe, in-job SDK, watch, compare, restore/goto/rerun/export, resume/rewind/fork, models, prune).
   - `experiments.md`: `vmn-exp` CLI reference, status/alerts, nesting, storage + plugin contract, offline + `push`, env vars.
   - `sdk.md`: the `vmn_exp.sdk` Python SDK (`start_run`, logging, autolog, readers, query language, integrations).
-  - `ui.md`: `vmn-exp ui` deployment + HTTP API. `models.md`: model/dataset registry. `sweeps.md`: sweeps.
+  - `ui.md`: `vmn-exp ui` deployment and the dashboard. `ui-api.md`: the HTTP API. `models.md`: model/dataset registry. `sweeps.md`: sweeps.
   - `server.md`: `vmn-exp ui` as a central server (`server.yml`, SQLite cache, change journal, resync/rebuild, OIDC/API tokens/roles). `byo-bucket.md`: store areas, the server's permission sets, journal lifecycle rule. `reports.md`: reports, panels, publish/export, comments.
   - `upgrading.md`: patch-only release rules (no deprecation period: old forms go at once), and the Behaviour changes / Formats tables. A behaviour change, removals included, adds its row; a format version bump adds a Formats row (`packages/vmn-exp/tests/test_upgrading_md.py` ratchets it).
   - `notebooks.md`: the SDK in Jupyter (one run across cells, re-run cells, kernel restarts, the snapshot); its numbered cells are run by `packages/vmn-exp/tests/test_docs_notebook_cells.py`.

@@ -71,7 +71,8 @@ tags the baseline `my_app_0.0.0` in your local repo; nothing is pushed.
 |---|---|
 | [experiments.md](experiments.md) | the `vmn-exp` CLI, run status and alerts, nesting, similar runs and intents, storage, offline recording and `push` |
 | [sdk.md](sdk.md) | the `vmn_exp.sdk` Python SDK: `start_run`, logging, autolog, readers, query language, integrations |
-| [ui.md](ui.md) | `vmn-exp ui`: deployment and the HTTP API |
+| [ui.md](ui.md) | `vmn-exp ui`: deployment, the index, the boards |
+| [ui-api.md](ui-api.md) | the HTTP API |
 | [models.md](models.md) | the model and dataset registry |
 | [sweeps.md](sweeps.md) | `vmn-exp sweep`: grid/random/bayes search |
 | [server.md](server.md) | `vmn-exp ui` as a team server: `server.yml`, cache, change journal, resync/rebuild, OIDC, API tokens, roles |
