@@ -16,6 +16,7 @@ import time
 from vmn_exp.cli import fork
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.output_tee import OutputTee, output_artifact, popen_kwargs
+from vmn_exp.cli.supervised_env import adopt_requested, supervised_env
 from vmn_exp.cli.supervisor import (
     BackgroundSync,
     MetricsTailer,
@@ -251,10 +252,17 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
 
     exp_conf = experiment_conf(vcs)
     print_hint(storage, app_name, verstr, args, exp_conf, command=run_cmd)
-    return _Supervision(
+    return run_supervision(
         storage, app_name, verstr, args, exp_conf,
-        root=getattr(vcs, "vmn_root_path", None),
+        getattr(vcs, "vmn_root_path", None), os.environ,
     ).run(run_cmd)
+
+
+def run_supervision(storage, app_name, verstr, args, exp_conf, root, env):
+    """The supervision of ``vmn-exp run``: it offers the run to its child
+    unless ``--no-adopt`` or ``VMN_EXP_ADOPT`` in *env* turn that off."""
+    return _Supervision(storage, app_name, verstr, args, exp_conf, root=root,
+                        adopt=adopt_requested(args, env))
 
 
 class _Supervision:
@@ -264,11 +272,14 @@ class _Supervision:
     records that cwd relative to *root* (the repo root; None records null).
     *extra_env* is applied last; a None value removes the variable.
     *state_extra* adds fields to ``run_state.yml``.
+    *adopt* offers the run to the direct child (``supervised_env``).
     """
 
     def __init__(self, storage, app_name, verstr, args, exp_conf=None,
-                 extra_env=None, on_tick=None, cwd=None, root=None, state_extra=None):
+                 extra_env=None, on_tick=None, cwd=None, root=None, state_extra=None,
+                 *, adopt=False):
         self.storage = storage
+        self.adopt = adopt
         self.state_extra = state_extra or {}
         self.cwd = cwd or _child_cwd()
         self.root = root
@@ -315,15 +326,7 @@ class _Supervision:
         self.samples_tree = sysmetrics.enabled(
             getattr(self.args, "system_metrics", None), self.exp_conf
         )
-        env = dict(os.environ)
-        env["VMN_EXPERIMENT_ID"] = self.verstr
-        env["VMN_APP_NAME"] = self.app_name or ""
-        env["VMN_METRICS_FILE"] = self.metrics_path
-        if self.samples_tree:
-            # An SDK run in the child must not sample the tree a second time.
-            env[sysmetrics.SUPERVISOR_SAMPLES_ENV] = "1"
-        env.update(self.extra_env)
-        env = {k: v for k, v in env.items() if v is not None}
+        env = self._child_env(dict(os.environ), os.getpid())
         try:
             stdio = popen_kwargs(env) if self.output else {"env": env}
             proc = subprocess.Popen(run_cmd, cwd=self.cwd, **stdio)
@@ -337,6 +340,12 @@ class _Supervision:
         if self.output:
             self.tee = OutputTee(proc, self.output.write)
         return proc
+
+    def _child_env(self, base_env, pid):
+        return supervised_env(
+            base_env, self.verstr, self.app_name, self.metrics_path,
+            self.samples_tree, self.extra_env, pid if self.adopt else None,
+        )
 
     def _supervise(self, proc, run_cmd):
         heartbeat_interval = resolve_heartbeat_sec(

@@ -197,6 +197,10 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
                       help="run: don't record the child process tree's CPU/memory/GPU as "
                            "sys_* metrics. Overrides VMN_SYSTEM_METRICS and conf "
                            "system_metrics settings.")
+    pexp.add_argument("--no-adopt", dest="adopt_run", action="store_false", default=True,
+                      help="run: don't offer this run to the command; a start_run() "
+                           "in it opens a run nested under this one. Same as "
+                           "VMN_EXP_ADOPT=0.")
     pexp.add_argument("--interval", type=float, default=None,
                       help="watch: re-check every N seconds (default: check once, for cron)")
     pexp.add_argument("--within", default=None,
