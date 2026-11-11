@@ -20,6 +20,7 @@ from vmn_exp.core.index_sweep import Sweep  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.freshness import STUCK_REFRESH_SEC, freshness, freshness_key  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 STATUS = f"/api/v1/workspaces/ws/apps/{APP}/experiments-status"
@@ -46,7 +47,7 @@ def _client(tmp_path, background_refresh=True):
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     if "ws" not in {w.name for w in manager.list()}:
         manager.add_store("ws", uri)
-    app = create_app(manager, background_refresh=background_refresh)
+    app = create_app(manager, io=real_io(), background_refresh=background_refresh)
     return app, TestClient(app)
 
 

@@ -9,6 +9,7 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.sdk import start_run  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 
 def _run(app_layout, losses):
@@ -33,7 +34,7 @@ def _client(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _seed(app_layout):

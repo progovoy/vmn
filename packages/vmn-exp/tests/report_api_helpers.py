@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.principal import Principal
+from vmn_exp.core.real_io import real_io
 
 WS = "/api/v1/workspaces/main"
 
@@ -29,7 +30,7 @@ def make_client(tmp_path, read_only=False, auth=False):
     if manager.get("main") is None:
         manager.attach_path("main", str(tmp_path))
     chain = AuthenticatorChain([HeaderAuth()]) if auth else None
-    return TestClient(create_app(manager, read_only=read_only, auth=chain))
+    return TestClient(create_app(manager, io=real_io(), read_only=read_only, auth=chain))
 
 
 def user(uid, role):

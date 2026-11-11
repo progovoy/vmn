@@ -15,6 +15,7 @@ from vmn_exp.ui import leaderboard_cache as lb
 from vmn_exp.ui import schema_cache
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -34,7 +35,7 @@ def _app(tmp_path):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager)), storage, root
+    return TestClient(create_app(manager, io=real_io())), storage, root
 
 
 @pytest.fixture

@@ -14,6 +14,7 @@ import yaml
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.core.real_io import real_io
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -58,7 +59,7 @@ def _client(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager, use_index=False))
+    return TestClient(create_app(manager, io=real_io(), use_index=False))
 
 
 # ---------------------------------------------------------------------------

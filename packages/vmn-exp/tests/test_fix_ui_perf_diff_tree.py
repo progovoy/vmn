@@ -14,6 +14,7 @@ from vmn_exp.ui.readers import tree as tree_reader
 from vmn_exp.ui.server import create_app
 from vmn_exp.ui.workspaces import WorkspaceManager
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 DIFF = f"/api/v1/workspaces/ws/apps/{APP}/experiments-diff"
@@ -33,7 +34,7 @@ def ws(tmp_path):
     storage = open_storage(root=local_store_root(str(root)), area="runs")
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager)), storage, root
+    return TestClient(create_app(manager, io=real_io())), storage, root
 
 
 def _records(storage, base_commit="abc"):

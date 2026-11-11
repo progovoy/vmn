@@ -6,6 +6,7 @@ import time
 import pytest
 
 from vmn_exp.ui.refresher import Refresher
+from vmn_exp.core.real_io import real_io
 
 
 class FakeIndex:
@@ -142,5 +143,5 @@ def test_create_app_refreshes_inline_unless_asked_otherwise(tmp_path):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    app = create_app(WorkspaceManager(str(tmp_path / "data")))
+    app = create_app(WorkspaceManager(str(tmp_path / "data")), io=real_io())
     assert isinstance(app.state.refresher, InlineRefresher)

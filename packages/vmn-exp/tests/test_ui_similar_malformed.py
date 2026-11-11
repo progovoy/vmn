@@ -4,6 +4,7 @@ import os
 
 import pytest
 from similar_ui_fixture import TARGET, write_run
+from vmn_exp.core.real_io import real_io
 
 pytest.importorskip("fastapi")
 
@@ -33,7 +34,7 @@ def client(request, tmp_path):
         ], second=second)
     manager = WorkspaceManager(str(tmp_path / "ui_data"))
     manager.attach_path("ws1", root)
-    return TestClient(create_app(manager, use_index=request.param))
+    return TestClient(create_app(manager, io=real_io(), use_index=request.param))
 
 
 def _intents(response):

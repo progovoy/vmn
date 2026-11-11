@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import real_io
 
 
 class _Clock:
@@ -93,7 +94,7 @@ def test_api_token_authenticates_requests(tmp_path, svc):
     tokens, _, _ = svc
     secret, _ = tokens.create("ci", {"ml": VIEWER})
     chain = AuthenticatorChain([ApiTokenAuthenticator(tokens)])
-    client = TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), auth=chain))
+    client = TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), auth=chain))
     assert client.get("/api/v1/workspaces").status_code == 401
     r = client.get("/api/v1/workspaces", headers={"Authorization": f"Bearer {secret}"})
     assert r.status_code == 200

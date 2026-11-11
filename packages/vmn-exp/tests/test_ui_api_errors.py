@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.files import safe_verstr  # noqa: E402
 from vmn_exp.ui import api_errors  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 
 def _client():
@@ -115,7 +116,7 @@ def _server(tmp_path, ws_path, **opts):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(ws_path))
-    return TestClient(create_app(manager, **opts))
+    return TestClient(create_app(manager, io=real_io(), **opts))
 
 
 def _repo(tmp_path, head="ref: refs/heads/main\n"):

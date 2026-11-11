@@ -8,6 +8,7 @@ import yaml
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -109,7 +110,7 @@ def _client(app_layout, use_index=True):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager, use_index=use_index))
+    return TestClient(create_app(manager, io=real_io(), use_index=use_index))
 
 
 def _index(app_layout):
@@ -482,7 +483,7 @@ def test_indexed_and_direct_rows_agree(app_layout):
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
     url = f"{API}/{app_layout.app_name}/experiments"
-    direct = TestClient(create_app(manager, use_index=False)).get(url).json()
-    indexed = TestClient(create_app(manager)).get(url).json()
+    direct = TestClient(create_app(manager, io=real_io(), use_index=False)).get(url).json()
+    indexed = TestClient(create_app(manager, io=real_io())).get(url).json()
     assert [r["status"] for r in indexed] == [r["status"] for r in direct]
     assert [r["verstr"] for r in indexed] == [r["verstr"] for r in direct]

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import leaderboard_cache
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 RUNS = 5000
@@ -79,7 +80,7 @@ def test_warm_list_polls_do_no_per_record_work(tmp_path, listed, pipeline):
     _seed(str(root))
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     client = TestClient(app)
     try:
         # A cold index answers at once ("indexing"); wait for it like the web does.

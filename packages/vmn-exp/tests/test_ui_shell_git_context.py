@@ -9,6 +9,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.ui import git_context  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 GIT_ENV = {
     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -52,7 +53,7 @@ def _client(tmp_path, paths, stores=()):
         manager.attach_path(name, str(path))
     for name in stores:
         manager.add_store(name, f"file://{tmp_path}/{name}-store")
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _context(client, ws="ws"):

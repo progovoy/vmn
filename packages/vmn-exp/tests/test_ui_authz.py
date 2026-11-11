@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.authz import ACTION_ROLES, effective_role, route_role
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER, Principal
+from vmn_exp.core.real_io import real_io
 
 ADMIN_ROUTES = {
     ("POST", "/api/v1/workspaces"),
@@ -56,7 +57,7 @@ def _app(path, principals=None, **kw):
     from vmn_exp.ui.server import create_app
 
     auth = AuthenticatorChain([_Fixed(principals)]) if principals else None
-    return create_app(_manager(path), auth=auth, **kw)
+    return create_app(_manager(path), io=real_io(), auth=auth, **kw)
 
 
 def _api_routes(app):
@@ -172,7 +173,7 @@ def _cp(tmp_path):
 def _get_as(tmp_path, authenticator, mappings, headers):
     from vmn_exp.ui.server import create_app
 
-    app = create_app(_manager(tmp_path), auth=AuthenticatorChain([authenticator]),
+    app = create_app(_manager(tmp_path), io=real_io(), auth=AuthenticatorChain([authenticator]),
                      role_mappings=mappings)
     return TestClient(app, base_url="https://testserver").get(WS_APPS, headers=headers)
 
@@ -230,7 +231,7 @@ def test_login_token_role_follows_current_mappings(tmp_path):
 def test_static_token_is_admin_everywhere(tmp_path):
     from vmn_exp.ui.server import create_app
 
-    client = TestClient(create_app(_manager(tmp_path), token="t"))
+    client = TestClient(create_app(_manager(tmp_path), io=real_io(), token="t"))
     headers = {**JSON, "Authorization": "Bearer t"}
     assert client.post("/api/v1/workspaces", json={}, headers=headers).status_code == 422
 
@@ -282,7 +283,7 @@ def test_job_of_other_org_is_404_in_same_named_workspace(tmp_path):
     principals = {"Bearer o1": Principal("o1", "o1", {"ws": VIEWER}, org_id=1),
                   "Bearer o2": Principal("o2", "o2", {"ws": VIEWER}, org_id=2)}
     manager = WorkspaceManager(str(tmp_path), tenancy="multi")
-    app = create_app(manager, auth=AuthenticatorChain([_Fixed(principals)]))
+    app = create_app(manager, io=real_io(), auth=AuthenticatorChain([_Fixed(principals)]))
     client, url = TestClient(app), _job_in(app, "ws", org_id=1)
     assert _call(client, "o1", "GET", url).status_code == 200
     assert _call(client, "o2", "GET", url).status_code == 404

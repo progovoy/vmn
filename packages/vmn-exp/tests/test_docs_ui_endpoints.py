@@ -12,6 +12,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from exp_helpers import _PROJECT_ROOT
+from vmn_exp.core.real_io import real_io
 
 ENDPOINT_DOC = "docs/vmn-exp/ui-api.md"
 API_PREFIX = "/api/v1"
@@ -129,8 +130,8 @@ def _all_routes(tmp_path):
     config = OIDCConfig(issuer="https://idp.example", client_id="vmn-exp",
                         redirect_uri="https://vmn.example/auth/callback")
     oidc = OIDCAuthenticator(config, cp, object(), http=object())
-    plain = create_app(WorkspaceManager(str(tmp_path / "plain")))
-    with_auth = create_app(WorkspaceManager(str(tmp_path / "auth")),
+    plain = create_app(WorkspaceManager(str(tmp_path / "plain")), io=real_io())
+    with_auth = create_app(WorkspaceManager(str(tmp_path / "auth")), io=real_io(),
                            auth=AuthenticatorChain([oidc]), control_plane=cp)
     return _app_routes(plain) | _app_routes(with_auth)
 

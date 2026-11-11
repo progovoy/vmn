@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.ui.auth import AuthenticatorChain  # noqa: E402
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER, Principal  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 PRINCIPALS = {
     "Bearer ws-viewer": Principal("u1", "Uma", {"ml": VIEWER}),
@@ -38,7 +39,7 @@ def _manager(tmp_path, names=()):
 def _app(tmp_path, names=(), **kw):
     from vmn_exp.ui.server import create_app
 
-    return create_app(_manager(tmp_path, names), **kw)
+    return create_app(_manager(tmp_path, names), io=real_io(), **kw)
 
 
 def _get(app, path, who=None):

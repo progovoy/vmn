@@ -19,6 +19,7 @@ from vmn_exp.storage.areas import local_store_root  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.job_argv import ACTIONS  # noqa: E402
 from vmn_exp.ui.jobs_store import STORE_ACTIONS  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 TOKEN = "t"
 ISSUER = "https://idp.example"
@@ -121,7 +122,7 @@ def _app(tmp_path):
     config = OIDCConfig(issuer=ISSUER, client_id="vmn-exp",
                         redirect_uri="https://vmn.example/auth/callback")
     oidc = OIDCAuthenticator(config, cp, object(), http=_IdP())
-    return create_app(_manager(tmp_path), token=TOKEN,
+    return create_app(_manager(tmp_path), io=real_io(), token=TOKEN,
                       auth=AuthenticatorChain([oidc]), control_plane=cp)
 
 

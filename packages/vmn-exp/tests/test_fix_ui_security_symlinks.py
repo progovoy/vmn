@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.core.output_log import OUTPUT_LOG_PATH
 from vmn_exp.sdk.run import Run
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 V = "1.0.0-dev.sym"
@@ -66,7 +67,7 @@ def _client(tmp_path, store_dir):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", f"file://{os.path.abspath(store_dir)}")
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 GETS = [

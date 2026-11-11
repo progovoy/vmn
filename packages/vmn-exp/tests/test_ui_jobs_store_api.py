@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"
@@ -27,7 +28,7 @@ def _setup(tmp_path, capabilities=None):
     manager.add_store("ws", uri)
     if capabilities is not None:
         manager.set_capabilities("ws", capabilities)
-    return TestClient(create_app(manager)), manager
+    return TestClient(create_app(manager, io=real_io())), manager
 
 
 def _wait(client, job_id, timeout=30):

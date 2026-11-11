@@ -15,6 +15,7 @@ from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.store_upkeep import AppUpkeep, StoreUpkeep
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -184,8 +185,8 @@ def test_a_read_only_server_does_no_upkeep(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "data"))
-    assert create_app(manager, read_only=True).state.store_upkeep is None
-    assert create_app(manager, background_refresh=True).state.store_upkeep is not None
+    assert create_app(manager, io=real_io(), read_only=True).state.store_upkeep is None
+    assert create_app(manager, io=real_io(), background_refresh=True).state.store_upkeep is not None
 
 
 def test_a_served_store_workspace_gets_its_markers_back(tmp_path):
@@ -203,7 +204,7 @@ def test_a_served_store_workspace_gets_its_markers_back(tmp_path):
     store.unmark_child(APP, outer, kid)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     try:
         client = TestClient(app)
         deadline = time.monotonic() + 20

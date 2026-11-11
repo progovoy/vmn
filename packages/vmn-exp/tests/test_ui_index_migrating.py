@@ -21,6 +21,7 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui import index as ui_index  # noqa: E402
 from vmn_exp.ui.cache_health import SqliteHealth  # noqa: E402
 from vmn_exp.ui.cache_resync import WorkspaceCache  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 API = "/api/v1/workspaces/ws"
@@ -104,7 +105,7 @@ def test_apps_and_status_answer_while_the_index_rederives(tmp_path, held_derive,
     ExperimentIndex(st, APP, db).refresh()
     _older_derived(db)
 
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     client = TestClient(app)
     try:
         body = _until(lambda: _get_in_time(client, STATUS),

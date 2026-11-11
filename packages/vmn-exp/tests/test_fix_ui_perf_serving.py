@@ -14,6 +14,7 @@ from vmn_exp.ui import server as server_mod
 from vmn_exp.ui.server import create_app
 from vmn_exp.ui.workspaces import WorkspaceManager
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -39,7 +40,7 @@ def test_local_artifacts_are_not_gzipped(ws):
     src = tmp_path / "model.json"
     src.write_text('{"w": 1}' * 1000)
     storage.save_artifact_file(APP, V, str(src))
-    r = TestClient(create_app(manager)).get(
+    r = TestClient(create_app(manager, io=real_io())).get(
         f"{ART}/model.json", headers={"Accept-Encoding": "gzip"}
     )
     assert r.status_code == 200
@@ -56,7 +57,7 @@ def test_streamed_artifacts_use_rfc5987_filenames(ws, monkeypatch, name):
         return iter([data]), len(data)
 
     monkeypatch.setattr(CachedSnapshotStorage, "open_artifact", open_artifact, raising=False)
-    r = TestClient(create_app(manager)).get(
+    r = TestClient(create_app(manager, io=real_io())).get(
         f"{ART}/{quote(name)}", headers={"Accept-Encoding": "gzip"}
     )
     assert r.status_code == 200
@@ -71,7 +72,7 @@ def test_json_api_responses_are_still_gzipped(ws):
     manager, storage, _ = ws
     for i in range(40):
         storage.save(APP, f"1.0.0-dev.r{i}", {"verstr": f"1.0.0-dev.r{i}", "timestamp": "t"}, {})
-    r = TestClient(create_app(manager)).get(
+    r = TestClient(create_app(manager, io=real_io())).get(
         f"/api/v1/workspaces/ws/apps/{APP}/experiments", headers={"Accept-Encoding": "gzip"}
     )
     assert r.headers.get("content-encoding") == "gzip"
@@ -79,14 +80,14 @@ def test_json_api_responses_are_still_gzipped(ws):
 
 def test_gzip_uses_a_moderate_level(ws):
     manager, _, _ = ws
-    app = create_app(manager)
+    app = create_app(manager, io=real_io())
     levels = [m.kwargs.get("compresslevel") for m in app.user_middleware if "GZip" in m.cls.__name__]
     assert levels and all(3 <= level <= 6 for level in levels)
 
 
 def test_unknown_api_paths_are_json_404s(ws):
     manager, _, _ = ws
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     for path in ("/api/v1/nope", "/api/nope/deeper", "/api"):
         r = client.get(path)
         assert r.status_code == 404, path
@@ -121,7 +122,7 @@ def test_the_bundle_is_named_by_chunk_not_by_content_hash():
 def test_stable_assets_revalidate(ws):
     # Stable names mean a browser must not keep a chunk across an upgrade.
     manager, _, _ = ws
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     asset = _bundle_asset()
     r = client.get(f"/assets/{asset}")
     assert r.status_code == 200
@@ -135,7 +136,7 @@ def test_stable_assets_revalidate(ws):
 def test_the_spa_shell_is_revalidated(ws):
     manager, _, _ = ws
     _bundle_asset()
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     for path in ("/", "/workspaces/ws/apps/app", "/index.html"):
         r = client.get(path)
         assert r.status_code == 200
@@ -154,7 +155,7 @@ def test_token_check_is_constant_time(ws, monkeypatch):
         return real(a, b)
 
     monkeypatch.setattr(hmac, "compare_digest", spy)
-    client = TestClient(create_app(manager, token="s3cret"))
+    client = TestClient(create_app(manager, io=real_io(), token="s3cret"))
     assert client.get("/api/v1/workspaces").status_code == 401
     assert client.get("/api/v1/workspaces", headers={"Authorization": "Bearer nope"}).status_code == 401
     ok = client.get("/api/v1/workspaces", headers={"Authorization": "Bearer s3cret"})

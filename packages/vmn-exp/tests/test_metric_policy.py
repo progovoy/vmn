@@ -17,6 +17,7 @@ from vmn_exp.core.metric_summary import summary_fields
 from vmn_exp.core.step_metric import create_define_metric_entry
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.reader import list_runs
+from vmn_exp.core.real_io import real_io
 
 META = {"verstr": "0.0.1-dev.aaa.bbb", "timestamp": "2026-01-01T00:00:00Z"}
 NAN = float("nan")
@@ -142,7 +143,7 @@ def _client(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _api(app_layout):

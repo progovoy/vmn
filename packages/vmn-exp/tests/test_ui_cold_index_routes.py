@@ -13,6 +13,7 @@ import boto3  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 WS = "/api/v1/workspaces/ws"
@@ -85,7 +86,7 @@ def cold(tmp_path, monkeypatch):
 
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_store("ws", "s3://vmn-bucket/st")
-        app = create_app(manager, background_refresh=True)
+        app = create_app(manager, io=real_io(), background_refresh=True)
         with TestClient(app) as client:
             try:
                 yield client, release

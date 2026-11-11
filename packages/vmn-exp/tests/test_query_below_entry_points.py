@@ -13,6 +13,7 @@ from exp_helpers import _bootstrap, _exp, _storage
 from similar_seed import seed, verstr
 
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.real_io import real_io
 
 TOP = "depth = 0 and "
 QUERIES = {
@@ -119,7 +120,7 @@ def test_the_board_top_q_and_the_cli_keep_the_same_outer_runs(app_layout, capfd)
     app, _ = _seed(app_layout)
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     url = f"/api/v1/workspaces/main/apps/{app}/experiments"
     for query, numbers in TOP_QUERIES.items():
         body = client.get(url, params={"top": 1, "top_q": query, "limit": 50})
@@ -138,7 +139,7 @@ def test_the_board_q_and_the_cli_keep_the_same_runs(app_layout, capfd):
     app, _ = _seed(app_layout)
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     url = f"/api/v1/workspaces/main/apps/{app}/experiments"
     for query, numbers in QUERIES.items():
         body = client.get(url, params={"q": query, "limit": 50})

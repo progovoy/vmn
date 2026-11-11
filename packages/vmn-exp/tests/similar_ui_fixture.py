@@ -9,6 +9,7 @@ import json
 import os
 
 import yaml
+from vmn_exp.core.real_io import real_io
 
 TARGET = "0.0.1-dev.target"
 TWIN = "0.0.1-dev.twin"
@@ -104,4 +105,4 @@ def client_for(tmp_path, auth=None, **kw):
     manager = WorkspaceManager(str(tmp_path / "ui_data"))
     for ws, root in make_workspaces(tmp_path).items():
         manager.attach_path(ws, root)
-    return TestClient(create_app(manager, auth=auth, **kw))
+    return TestClient(create_app(manager, io=real_io(), auth=auth, **kw))

@@ -15,6 +15,7 @@ from exp_helpers import (
     _storage,
     extract_dev_verstr,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _client(app_layout, read_only=False, extra=None):
@@ -25,7 +26,7 @@ def _client(app_layout, read_only=False, extra=None):
     manager.attach_path("main", app_layout.repo_path)
     for name, path in (extra or {}).items():
         manager.attach_path(name, path)
-    return TestClient(create_app(manager, read_only=read_only))
+    return TestClient(create_app(manager, io=real_io(), read_only=read_only))
 
 
 def _wait_job(client, job_url, timeout=60):

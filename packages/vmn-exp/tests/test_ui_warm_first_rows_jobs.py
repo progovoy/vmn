@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 import vmn_exp.core.index as index_module  # noqa: E402
 from vmn_exp.core.index_store import SqliteStore  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 FIRST, TRIALS = 5, 8
@@ -58,7 +59,7 @@ def restart(tmp_path, monkeypatch):
                 app.state.refresher.stop()
             monkeypatch.setattr(index_module, "_SHARED", {})
             gc.collect()
-            apps.append(create_app(WorkspaceManager(str(tmp_path / "data")),
+            apps.append(create_app(WorkspaceManager(str(tmp_path / "data")), io=real_io(),
                                    background_refresh=True))
             return TestClient(apps[-1])
 

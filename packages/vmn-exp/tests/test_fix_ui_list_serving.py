@@ -16,6 +16,7 @@ from vmn_exp.core import index as experiment_index
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import leaderboard_cache
 from vmn_exp.ui.readers import experiments as exp_reader
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -35,7 +36,7 @@ def _app(tmp_path, **opts):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return create_app(manager, **opts), storage
+    return create_app(manager, io=real_io(), **opts), storage
 
 
 @pytest.fixture
@@ -208,7 +209,7 @@ def s3_workspace(tmp_path, monkeypatch):
         data_dir = str(tmp_path / "data")
         manager = WorkspaceManager(data_dir)
         manager.add_store("ws", "s3://vmn-bucket/persisted")
-        yield (lambda: TestClient(create_app(manager))), S3SnapshotStorage(
+        yield (lambda: TestClient(create_app(manager, io=real_io()))), S3SnapshotStorage(
             "vmn-bucket", prefix="persisted/runs"
         ), data_dir
 

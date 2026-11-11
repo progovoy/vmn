@@ -14,6 +14,7 @@ from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import real_io
 
 ISSUER = "https://idp.example"
 
@@ -83,7 +84,7 @@ def _client(tmp_path, idp):
     ]
     store = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     oidc = OIDCAuthenticator(config, store, JwksVerifier(idp, lambda: 0.0), http=idp)
-    app = create_app(WorkspaceManager(str(tmp_path / "ui")), auth=AuthenticatorChain([oidc]),
+    app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), auth=AuthenticatorChain([oidc]),
                      role_mappings=mappings)
 
     @app.get("/api/v1/_whoami")

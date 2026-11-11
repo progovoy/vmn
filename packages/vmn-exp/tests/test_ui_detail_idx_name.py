@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -33,7 +34,7 @@ def client(tmp_path):
         storage.save(APP, v, meta, {})
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _detail(client, ref):

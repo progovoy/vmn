@@ -16,6 +16,7 @@ from vmn_exp.core.app_settings import SettingsError, parse_settings  # noqa: E40
 from vmn_exp.core.app_settings_store import write_settings  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -65,7 +66,7 @@ def store(tmp_path):
         storage.save_file(APP, _v(n), "run_state.yml", yaml.dump(state()))
     manager = WorkspaceManager(os.path.join(tmp_path, "ui_data"))
     manager.add_store("ws", uri)
-    return storage, lambda: TestClient(create_app(manager))
+    return storage, lambda: TestClient(create_app(manager, io=real_io()))
 
 
 def _get(client, path, **params):

@@ -10,6 +10,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -42,7 +43,7 @@ def _manager(tmp_path, matching=3, other=2, archived=()):
 def _client(tmp_path, **kw):
     from vmn_exp.ui.server import create_app
 
-    return TestClient(create_app(_manager(tmp_path, **kw)))
+    return TestClient(create_app(_manager(tmp_path, **kw), io=real_io()))
 
 
 def _wait(client, job_id, timeout=60):
@@ -163,7 +164,7 @@ def test_an_unknown_scope_is_a_404(tmp_path):
 def test_read_only_refuses_even_a_preview(tmp_path):
     from vmn_exp.ui.server import create_app
 
-    client = TestClient(create_app(_manager(tmp_path), read_only=True))
+    client = TestClient(create_app(_manager(tmp_path), io=real_io(), read_only=True))
     r = client.post(f"{BASE}/actions/exp_archive", json={**QUERY, "dry_run": True})
     assert r.status_code == 403
 
@@ -180,7 +181,7 @@ def test_a_viewer_is_refused(tmp_path):
         def authenticate(self, request):
             return people.get(request.headers.get("Authorization", ""))
 
-    client = TestClient(create_app(_manager(tmp_path), auth=AuthenticatorChain([Fixed()])))
+    client = TestClient(create_app(_manager(tmp_path), io=real_io(), auth=AuthenticatorChain([Fixed()])))
     url = f"{BASE}/actions/exp_archive"
     body = {**QUERY, "dry_run": True}
     assert client.post(url, json=body, headers={"Authorization": "Bearer v"}).status_code == 403

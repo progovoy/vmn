@@ -14,6 +14,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from vmn_exp.ui.thread_limiters import capacity_limiter
+from vmn_exp.core.real_io import real_io
 
 
 async def _borrowed_after_a_newcomer_races_a_woken_waiter(limiter):
@@ -84,6 +85,6 @@ def test_the_serving_loops_pools_never_lend_past_their_size(tmp_path, pool):
         return limiter.total_tokens, await _borrowed_after_a_newcomer_races_a_woken_waiter(
             limiter)
 
-    with TestClient(create_app(_manager(tmp_path))) as client:
+    with TestClient(create_app(_manager(tmp_path), io=real_io())) as client:
         total, borrowed = client.portal.call(race)
     assert borrowed == total

@@ -10,6 +10,7 @@ from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 
@@ -62,7 +63,7 @@ def test_the_server_lists_through_the_helper(tmp_path):
     _seed(root)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     try:
         with TestClient(app) as client:
             body = client.get(f"/api/v1/workspaces/ws/apps/{APP}/experiments?limit=10").json()

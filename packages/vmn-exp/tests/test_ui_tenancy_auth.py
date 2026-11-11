@@ -12,6 +12,7 @@ from vmn_exp.ui.auth.principal import Principal  # noqa: E402
 from vmn_exp.ui.auth.sessions import SessionService  # noqa: E402
 from vmn_exp.ui.auth.tokens import TokenService  # noqa: E402
 from vmn_exp.ui.tenancy import current_org, org_context  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture
@@ -53,7 +54,7 @@ def _client(tmp_path, cp, token):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     manager = WorkspaceManager(str(tmp_path / "ui"), tenancy="multi")
-    app = create_app(manager, control_plane=cp)
+    app = create_app(manager, io=real_io(), control_plane=cp)
     return TestClient(app, headers={"Authorization": f"Bearer {token}"})
 
 

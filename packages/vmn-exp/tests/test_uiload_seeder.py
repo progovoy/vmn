@@ -12,6 +12,7 @@ from vmn_exp.core.tree import rollup_status
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "loadapp"
 STATUSES = ("succeeded", "failed", "stuck", "created")
@@ -132,7 +133,7 @@ def test_ui_api_lists_all_seeded_runs(seeded):
     root, counts, _, _ = seeded
     manager = WorkspaceManager(os.path.join(os.path.dirname(root), "uidata"))
     manager.attach_path("ws", root)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     base = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
     page = client.get(f"{base}?limit=1000&archived=1").json()
     assert page["total"] == 60

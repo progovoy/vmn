@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, Principal
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import real_io
 
 JSON = {"Content-Type": "application/json"}
 A = {**JSON, "Authorization": "Bearer a"}
@@ -26,7 +27,7 @@ def client(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
-    return TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")),
+    return TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(),
                                  auth=AuthenticatorChain([_Fixed()]), control_plane=cp))
 
 

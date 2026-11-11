@@ -11,6 +11,7 @@ from vmn_exp.core.app_settings import SettingsError, parse_settings  # noqa: E40
 from vmn_exp.core.app_settings_store import write_settings  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -44,7 +45,7 @@ def store(tmp_path):
     outer = _run(storage, 1, {"dates_done": 20, "dates_total": 60})
     for n in (2, 3, 4):
         _run(storage, n, {"loss": float(n)}, parent=outer)
-    return TestClient(create_app(manager)), storage, outer
+    return TestClient(create_app(manager, io=real_io())), storage, outer
 
 
 def _summary(client, outer):
@@ -131,5 +132,5 @@ def test_a_git_workspaces_conf_names_them_too(tmp_path):
         {"conf": {"experiment": {"ui": yaml.safe_load(MAPPING)["ui"]}}}))
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    body = _summary(TestClient(create_app(manager)), outer)
+    body = _summary(TestClient(create_app(manager, io=real_io())), outer)
     assert body["declared_progress"]["unit"] == "dates" and body["progress"] == 0.5

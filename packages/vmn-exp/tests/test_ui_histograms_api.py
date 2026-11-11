@@ -9,6 +9,7 @@ from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers.histograms import INLINE_HISTOGRAM_ITEMS
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 V = "1.0.0-dev.hist"
@@ -39,7 +40,7 @@ def client(tmp_path, storage):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(tmp_path / "repo"))
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _log_many(run, names, steps):

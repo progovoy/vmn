@@ -10,6 +10,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.sdk import start_run  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 
@@ -29,7 +30,7 @@ def _client(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _base(app_layout):
@@ -100,7 +101,7 @@ def s3_client(tmp_path):
 
         manager = WorkspaceManager(str(tmp_path / "data"))
         manager.add_store("ws", "s3://vmn-bucket/exps")
-        yield TestClient(create_app(manager)), S3SnapshotStorage("vmn-bucket", prefix="exps/runs")
+        yield TestClient(create_app(manager, io=real_io())), S3SnapshotStorage("vmn-bucket", prefix="exps/runs")
 
 
 def _store_run(storage, verstr, sec, entries):

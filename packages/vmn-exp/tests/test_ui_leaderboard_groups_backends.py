@@ -15,6 +15,7 @@ import yaml
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 from vmn_exp.ui.leaderboard_group_fields import NONE
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -117,7 +118,7 @@ def _client(tmp_path, repo, backend, dsn=None, replica=""):
         manager.attach_path("ws", root)
     elif manager.get("ws") is None:
         manager.add_store("ws", f"file://{store}")
-    app = create_app(manager, use_index=backend != "git-memory",
+    app = create_app(manager, io=real_io(), use_index=backend != "git-memory",
                      cache_dsn=dsn if backend == "store-postgres" else None)
     return TestClient(app)
 

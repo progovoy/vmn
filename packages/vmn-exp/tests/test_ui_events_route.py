@@ -13,6 +13,7 @@ from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.open import open_storage
 
 from vmn_exp.ui import live_events
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 EVENTS = f"/api/v1/workspaces/ws/apps/{APP}/events"
@@ -28,7 +29,7 @@ def _app(tmp_path, **opts):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return create_app(manager, **opts), storage
+    return create_app(manager, io=real_io(), **opts), storage
 
 
 def _run(storage, i):

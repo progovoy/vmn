@@ -6,6 +6,7 @@ from test_ui_board_warm import DEFAULT, TOPS, _Builds, _fleet, frozen  # noqa: F
 from vmn_exp.core.metric_schema import effective_schema
 from vmn_exp.ui.job_rollup_cache import JobRollupCache
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
+from vmn_exp.core.real_io import real_io
 
 SCHEMA = {"loss": {"goal": "min"}, "acc": {"goal": "max"}}
 UI = {"progress": {"done": "acc", "total": "loss"}}
@@ -60,7 +61,7 @@ def test_a_servers_startup_warm_up_sorts_a_store_app_by_its_settings(tmp_path, m
                         lambda s, base, key, *a: built.append(key) or static_of(s, base, key, *a))
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("st", f"file://{tmp_path / 'store'}")
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     try:
         with TestClient(app):
             assert app.state.warmed.wait(30)

@@ -9,6 +9,7 @@ import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
+from vmn_exp.core.real_io import real_io
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +30,7 @@ def _client(tmp_path, read_only=False):
     manager = WorkspaceManager(str(data_dir))
     if manager.get("main") is None:
         manager.attach_path("main", str(tmp_path))
-    return TestClient(create_app(manager, read_only=read_only))
+    return TestClient(create_app(manager, io=real_io(), read_only=read_only))
 
 
 def _register(client, model, run_app="myapp", run_verstr="1.0.0-dev.abc"):

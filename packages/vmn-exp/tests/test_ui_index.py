@@ -13,6 +13,7 @@ from exp_helpers import (
     _stamp_app,
     extract_dev_verstr,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _make_dirty(app_layout, filename, content):
@@ -51,7 +52,7 @@ def _clients(app_layout):
 
     manager = WorkspaceManager(os.path.join(app_layout.base_dir, "ui_data"))
     manager.attach_path("main", app_layout.repo_path)
-    return TestClient(create_app(manager)), TestClient(create_app(manager, use_index=False))
+    return TestClient(create_app(manager, io=real_io())), TestClient(create_app(manager, io=real_io(), use_index=False))
 
 
 def test_index_experiments_parity(app_layout, capfd):

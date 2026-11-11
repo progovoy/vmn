@@ -15,6 +15,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 
 from report_api_helpers import HeaderAuth, user  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -45,7 +46,7 @@ def _runs(storage):
 def _create(manager, auth=None, read_only=False):
     from vmn_exp.ui.server import create_app
 
-    return TestClient(create_app(manager, auth=auth, read_only=read_only))
+    return TestClient(create_app(manager, io=real_io(), auth=auth, read_only=read_only))
 
 
 @pytest.fixture

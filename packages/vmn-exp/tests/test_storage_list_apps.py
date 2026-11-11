@@ -10,6 +10,7 @@ from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 REAL_APPS = ["my_app", "root/svc"]
 
@@ -71,7 +72,7 @@ def test_file_store_workspace_lists_its_apps(tmp_path):
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", f"file://{os.path.abspath(store_dir)}")
 
-    rows = TestClient(create_app(manager)).get("/api/v1/workspaces/ws/apps").json()
+    rows = TestClient(create_app(manager, io=real_io())).get("/api/v1/workspaces/ws/apps").json()
 
     assert [(r["name"], r["experiments"]) for r in rows] == [
         ("my_app", 1),

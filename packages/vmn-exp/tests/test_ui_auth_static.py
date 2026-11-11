@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.ui.auth.principal import ADMIN, Principal
 from vmn_exp.ui.auth.static import StaticTokenAuthenticator
+from vmn_exp.core.real_io import real_io
 
 
 class _Req:
@@ -18,7 +19,7 @@ def _app(tmp_path, **kw):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    app = create_app(WorkspaceManager(str(tmp_path / "ui")), **kw)
+    app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(), **kw)
 
     @app.get("/api/v1/_whoami")
     def _whoami(request: fastapi.Request):

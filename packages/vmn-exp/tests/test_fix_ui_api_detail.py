@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -40,7 +41,7 @@ def ws(tmp_path):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager)), storage
+    return TestClient(create_app(manager, io=real_io())), storage
 
 
 def test_detail_carries_a_bounded_log_tail_and_the_total(ws):

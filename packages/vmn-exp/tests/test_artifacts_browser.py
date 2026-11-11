@@ -8,6 +8,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.ui.readers import experiments as exp_reader
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -129,7 +130,7 @@ def _make_client(tmp_path):
     data_dir = os.path.join(str(tmp_path), "ui_data")
     manager = WorkspaceManager(data_dir)
     manager.attach_path("test", str(tmp_path))
-    app = create_app(manager, use_index=False)
+    app = create_app(manager, io=real_io(), use_index=False)
     return TestClient(app)
 
 

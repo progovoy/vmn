@@ -7,6 +7,7 @@ import pytest
 from exp_helpers import _bootstrap, _exp, _snapshot
 from vmn_exp.storage import store_marker
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +55,6 @@ def test_ui_store_workspace_on_missing_store(tmp_path):
     uri = f"file://{tmp_path / 'typo'}"
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    resp = TestClient(create_app(manager)).get("/api/v1/workspaces/ws/apps/app/experiments")
+    resp = TestClient(create_app(manager, io=real_io())).get("/api/v1/workspaces/ws/apps/app/experiments")
     assert resp.status_code == 404
     assert f"no vmn store at {uri}" in resp.text

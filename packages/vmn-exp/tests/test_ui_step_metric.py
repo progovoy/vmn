@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -43,7 +44,7 @@ def ws(tmp_path):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager)), storage, root
+    return TestClient(create_app(manager, io=real_io())), storage, root
 
 
 def test_detail_x_param_joins_every_series_on_the_x_metric(ws):

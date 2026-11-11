@@ -11,6 +11,7 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER, Principal
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 DIAG = "/api/v1/diag"
@@ -46,7 +47,7 @@ def test_diag_is_admin_only(tmp_path):
         "Bearer v": Principal("v", "v", {"*": VIEWER}),
         "Bearer a": Principal("a", "a", {"*": ADMIN}),
     })])
-    with TestClient(create_app(_manager(tmp_path), auth=auth)) as client:
+    with TestClient(create_app(_manager(tmp_path), io=real_io(), auth=auth)) as client:
         assert client.get(DIAG).status_code == 401
         assert client.get(DIAG, headers={"Authorization": "Bearer v"}).status_code == 403
         answer = client.get(DIAG, headers={"Authorization": "Bearer a"})
@@ -73,7 +74,7 @@ def test_diag_answers_while_the_default_pool_is_saturated(tmp_path, monkeypatch)
 
     monkeypatch.setattr(server, "meta_payload", blocked_meta)
     headers = {"Authorization": f"Bearer {TOKEN}"}
-    with TestClient(server.create_app(_manager(tmp_path), token=TOKEN)) as client:
+    with TestClient(server.create_app(_manager(tmp_path), io=real_io(), token=TOKEN)) as client:
         slow = [threading.Thread(target=_call_quietly, args=(client, "/api/v1/meta", headers),
                                  daemon=True) for _ in range(BLOCKED)]
         try:
@@ -107,7 +108,7 @@ def test_the_pools_section_carries_the_slow_read_limiter(tmp_path):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.slow_reads import SLOW_READ_THREADS
 
-    with TestClient(create_app(_manager(tmp_path))) as client:
+    with TestClient(create_app(_manager(tmp_path), io=real_io())) as client:
         pools = client.get(DIAG).json()["sections"]["pools"]
     assert pools["slow_read"]["total"] == SLOW_READ_THREADS
     assert pools["slow_read"]["borrowed"] == 0
@@ -116,7 +117,7 @@ def test_the_pools_section_carries_the_slow_read_limiter(tmp_path):
 def test_the_indexes_section_reports_each_watched_app(tmp_path):
     from vmn_exp.ui.server import create_app
 
-    app = create_app(_manager(tmp_path), background_refresh=True)
+    app = create_app(_manager(tmp_path), io=real_io(), background_refresh=True)
     with TestClient(app) as client:
         assert client.get(f"/api/v1/workspaces/ws/apps/{APP}/experiments").status_code == 200
         deadline = time.monotonic() + 10

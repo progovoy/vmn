@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 API = "/api/v1"
 BASE = f"{API}/workspaces/ws/apps/my_app"
@@ -23,7 +24,7 @@ def client(tmp_path):
     open_storage(uri, area=RUNS).save("my_app", v, {"verstr": v}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager, background_refresh=False))
+    return TestClient(create_app(manager, io=real_io(), background_refresh=False))
 
 
 def test_an_unknown_param_is_refused_with_a_suggestion(client):

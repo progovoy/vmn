@@ -16,6 +16,7 @@ from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import real_io
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 SERVER = "https://vmn.example"
@@ -64,7 +65,7 @@ def _server(tmp_path, idp, **oidc_kw):
     config = OIDCConfig(issuer=ISSUER, client_id="vmn-exp",
                         redirect_uri=f"{SERVER}/auth/callback")
     oidc = OIDCAuthenticator(config, cp, JwksVerifier(idp, lambda: 0.0), http=idp, **oidc_kw)
-    app = create_app(WorkspaceManager(str(tmp_path / "ui")),
+    app = create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(),
                      auth=AuthenticatorChain([oidc]), control_plane=cp,
                      role_mappings=ML_TEAM_EDITOR)
     return TestClient(app, base_url=SERVER), cp

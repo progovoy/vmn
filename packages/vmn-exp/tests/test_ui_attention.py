@@ -16,6 +16,7 @@ from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -87,7 +88,7 @@ def store(tmp_path):
     storage = open_storage(uri, area=RUNS)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return (lambda: TestClient(create_app(manager))), storage
+    return (lambda: TestClient(create_app(manager, io=real_io()))), storage
 
 
 def _client(store, settings=SETTINGS):
@@ -218,7 +219,7 @@ def test_a_checkout_conf_names_attention_queries_too(tmp_path, clock):
         yaml.dump({"conf": {"experiment": {"ui": {"attention": attention}}}}, f)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    assert _counts(_status(TestClient(create_app(manager)))) == {"failing": 1}
+    assert _counts(_status(TestClient(create_app(manager, io=real_io())))) == {"failing": 1}
 
 
 

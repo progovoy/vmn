@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -92,7 +93,7 @@ def server(tmp_path, clock):
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return lambda **kw: TestClient(create_app(manager, **kw))
+    return lambda **kw: TestClient(create_app(manager, io=real_io(), **kw))
 
 
 def _status(client):
@@ -246,7 +247,7 @@ def _server_with(tmp_path, extra):
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def test_the_built_in_outlived_part_is_a_gauge_zero_included(server, tmp_path, clock):

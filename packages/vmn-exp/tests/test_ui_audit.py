@@ -12,6 +12,7 @@ from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.authz import route_role
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER, Principal
 from vmn_exp.ui.control_plane import SQLiteControlPlane
+from vmn_exp.core.real_io import real_io
 
 JSON = {"Content-Type": "application/json"}
 ADMIN_P = Principal("u:admin", "Ada", {"*": ADMIN})
@@ -55,7 +56,7 @@ def _app(tmp_path, cp):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    return create_app(WorkspaceManager(str(tmp_path / "ui")),
+    return create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(),
                       auth=AuthenticatorChain([_Fixed()]), control_plane=cp)
 
 
@@ -124,6 +125,6 @@ def test_audit_routes_without_control_plane_are_unavailable(tmp_path):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    client = TestClient(create_app(WorkspaceManager(str(tmp_path))))
+    client = TestClient(create_app(WorkspaceManager(str(tmp_path)), io=real_io()))
     assert client.get("/api/v1/audit").status_code == 503
     assert client.get("/api/v1/tokens").status_code == 503

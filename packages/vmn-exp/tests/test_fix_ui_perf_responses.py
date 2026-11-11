@@ -14,6 +14,7 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.ui import responses
 from vmn_exp.ui.responses import SafeJSONResponse, json_response
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -127,7 +128,7 @@ def ws(tmp_path):
 
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 @pytest.mark.parametrize("path", ["/1.0.0-dev.a", "/1.0.0-dev.a/log"])

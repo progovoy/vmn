@@ -13,6 +13,7 @@ from vmn_exp.core.app_settings_store import write_settings  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -44,7 +45,7 @@ def store(tmp_path):
     _run(storage, 1)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return (lambda: TestClient(create_app(manager))), storage
+    return (lambda: TestClient(create_app(manager, io=real_io()))), storage
 
 
 def _status(client, **params):
@@ -98,5 +99,5 @@ def test_a_checkout_conf_names_team_views_too(tmp_path):
         yaml.dump({"conf": {"experiment": {"ui": {"views": views}}}}, f)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    assert _status(TestClient(create_app(manager))).json()["views"] == [
+    assert _status(TestClient(create_app(manager, io=real_io()))).json()["views"] == [
         {"name": "failed", "page": "jobs", "search": "?status=failed", "default": False}]

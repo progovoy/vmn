@@ -7,6 +7,7 @@ from test_ui_diff_summary import _log_define_metric, _log_metrics, _log_params, 
 from vmn_exp.core import index as experiment_index
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.readers import diffs as diff_reader
+from vmn_exp.core.real_io import real_io
 
 V1, V2 = "1.0.0-dev.aaa.bbb", "1.0.0-dev.ccc.ddd"
 
@@ -82,7 +83,7 @@ def test_the_store_route_answers_from_the_snapshot(tmp_path, monkeypatch):
     _second(store, V2)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    client = TestClient(create_app(manager))
+    client = TestClient(create_app(manager, io=real_io()))
     monkeypatch.setattr(diff_reader, "experiment_diff_from_storage",
                         lambda *a, **k: pytest.fail("read the runs from storage"))
 

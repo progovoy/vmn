@@ -13,6 +13,7 @@ from vmn_exp.storage.areas import REGISTRY
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 MODELS = "/api/v1/workspaces/main/models"
 READS = ("list_apps", "list_files", "list_record_names", "load_file", "load_merged_log",
@@ -32,7 +33,7 @@ def background(app_layout):
     register_version(storage, "clf", {"app": app_layout.app_name, "verstr": "0.0.1-exp.train"},
                      artifact_path="model.pkl")
     record_use(storage, "clf", 1, app_layout.app_name, "0.0.1-exp.eval")
-    app = create_app(manager, background_refresh=True)
+    app = create_app(manager, io=real_io(), background_refresh=True)
     yield TestClient(app)
     app.state.refresher.stop()
 

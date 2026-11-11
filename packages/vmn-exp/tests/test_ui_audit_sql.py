@@ -14,6 +14,7 @@ from vmn_exp.ui.auth.sessions import SessionService
 from vmn_exp.ui.config import ConfigError, parse_config
 from vmn_exp.ui.control_plane import SQLiteControlPlane
 from vmn_exp.ui.control_plane_sweep import ControlPlaneSweeper
+from vmn_exp.core.real_io import real_io
 
 DAY = 86400.0
 ADMIN_HDR = {"Authorization": "Bearer a"}
@@ -42,7 +43,7 @@ def _client(tmp_path, cp):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
-    return TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")),
+    return TestClient(create_app(WorkspaceManager(str(tmp_path / "ui")), io=real_io(),
                                  auth=AuthenticatorChain([_Admin()]), control_plane=cp))
 
 

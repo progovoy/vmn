@@ -19,6 +19,7 @@ from vmn_exp.sdk.reader import list_runs
 from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.ui.readers.diffs import experiment_diff_from_snapshot
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -66,7 +67,7 @@ def served(tmp_path):
     _seed(storage)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    return TestClient(create_app(manager))
+    return TestClient(create_app(manager, io=real_io()))
 
 
 def _index(tmp_path, name="idx.sqlite"):

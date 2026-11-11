@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -73,7 +74,7 @@ def client(tmp_path, monkeypatch):
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    test_client = TestClient(create_app(manager))
+    test_client = TestClient(create_app(manager, io=real_io()))
     test_client.storage = storage
     return test_client
 
