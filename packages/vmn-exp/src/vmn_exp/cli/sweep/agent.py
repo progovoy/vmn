@@ -18,7 +18,7 @@ from vmn_exp.core.background import Coalescing
 from vmn_exp.core.status import FAILED, SUCCEEDED
 from vmn_exp.core.sweep.claims import attach_run, claim_next_trial, claim_retry
 from vmn_exp.core.sweep.command import require_command, trial_command
-from vmn_exp.core.sweep.early_stop import MedianStopper
+from vmn_exp.core.sweep.early_stop import stopper_for
 from vmn_exp.core.sweep.peer_points import PeerPoints
 from vmn_exp.core.sweep.spec import metric_definition
 from vmn_exp.core.sweep.summary import history, retry_slots, trial_rows
@@ -119,7 +119,7 @@ def trial_supervision(storage, app_name, verstr, trial_args, exp_conf, sweep_env
 
 
 class _EarlyStopCheck:
-    """The median rule for one trial, as a supervision hook.
+    """The spec's early-termination rule for one trial, as a supervision hook.
 
     The check reads storage (the sweep's rows, the siblings' logs), so it runs
     on a background worker: the supervision loop only schedules it and acts on
@@ -129,7 +129,7 @@ class _EarlyStopCheck:
 
     def __init__(self, spec, storage, app_name, sweep, verstr):
         self._spec = spec
-        self._stopper = MedianStopper(spec)
+        self._stopper = stopper_for(spec)
         self._points = PeerPoints(storage, app_name, spec["metric"]["name"])
         self._storage, self._app_name = storage, app_name
         self._sweep, self._verstr = sweep, verstr
@@ -140,7 +140,8 @@ class _EarlyStopCheck:
         if supervision.stopped_early:
             return
         if self._verdict.is_set():
-            VMN_LOGGER.info(f"Sweep {self._sweep}: stopping {self._verstr} early (median rule)")
+            rule = self._spec["early_terminate"]["type"]
+            VMN_LOGGER.info(f"Sweep {self._sweep}: stopping {self._verstr} early ({rule} rule)")
             supervision.request_stop()
         elif self._stopper.due(time.monotonic()):
             self._worker.submit()

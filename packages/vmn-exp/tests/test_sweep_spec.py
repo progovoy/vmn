@@ -79,6 +79,22 @@ def test_median_early_terminate_defaults():
     assert spec["early_terminate"]["check_interval_sec"] > 0
 
 
+def test_asha_early_terminate_defaults_to_eta_3():
+    spec = _spec(early_terminate={"type": "asha"})
+    assert spec["early_terminate"] == {
+        "type": "asha", "min_iter": 3, "eta": 3, "check_interval_sec": 10.0}
+
+
+def test_an_asha_eta_below_2_is_refused():
+    with pytest.raises(SpecError, match="eta"):
+        _spec(early_terminate={"type": "asha", "eta": 1})
+
+
+def test_an_unknown_early_terminate_type_names_both_rules():
+    with pytest.raises(SpecError, match="must be median or asha, got 'hyperband'"):
+        _spec(early_terminate={"type": "hyperband"})
+
+
 # ---------------------------------------------------------------------------
 # grid
 # ---------------------------------------------------------------------------

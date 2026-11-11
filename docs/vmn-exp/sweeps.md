@@ -33,9 +33,10 @@ parameters:
 run_cap: 50               # at most 50 trials (grid: at most the grid size)
 seed: 0                   # default 0; random/bayes draws are seeded by (seed, trial index)
 early_terminate:          # optional
-  type: median
-  min_iter: 3             # default 3: never stop before step 3
-  min_trials: 1           # default 1: peers needed at the same step to compare
+  type: median            # median | asha
+  min_iter: 3             # default 3: never stop before step 3 (asha: the first rung)
+  min_trials: 1           # median only, default 1: peers needed at the same step to compare
+  # eta: 3                # asha only, default 3 (>= 2): rung growth; keep the best 1/eta
   check_interval_sec: 10  # default 10: how often the agent checks
 program: train.py
 command: ["${env}", "${interpreter}", "${program}", "${args}"]
@@ -160,22 +161,47 @@ Trial runs are created under the repo lock (they snapshot the checkout, like
 * A signal to the agent (Slurm preemption, `kill`) is forwarded to the running
   trial; the agent then exits instead of claiming more.
 
-## Early termination (median rule)
+## Early termination
 
-With `early_terminate: {type: median}` the agent checks its running trial every
-`check_interval_sec`: at the trial's latest step `s >= min_iter`, if its best
-value up to `s` is strictly worse than the median of the other trials' best
-values up to `s` (over at least `min_trials` trials that reached `s`), the
-agent stops it: SIGTERM through the supervisor, SIGKILL after
+With `early_terminate` set, the agent checks its running trial every
+`check_interval_sec` against the rule `type` names, and stops a trial the
+rule rejects: SIGTERM through the supervisor, SIGKILL after
 `--kill-grace-sec`. The check runs on a background thread, so slow storage
 never delays the heartbeat. Steps are the metric lines' `step=` values (else
-the line's position).
+the line's position); a trial's value at a step is its best value up to that
+step.
 
 A stopped trial keeps the child's real `exit_code` and gets
 `end_reason: stopped` in its `run_state.yml`; its status derives as
 **succeeded**, and `end_reason` is a row field
-(`vmn-exp list --query 'end_reason = "stopped"'`). `hyperband` is not
-supported.
+(`vmn-exp list --query 'end_reason = "stopped"'`).
+
+### Median rule
+
+`early_terminate: {type: median}`: at each step `s >= min_iter` the trial
+logged, if its best value up to `s` is strictly worse than the median of the
+other trials' best values up to `s` (over at least `min_trials` trials that
+reached `s`), the agent stops it.
+
+### ASHA
+
+`early_terminate: {type: asha}` is the stopping variant of asynchronous
+successive halving. Rungs are the steps `min_iter * eta**k` (with the
+defaults 3, 9, 27, ...). A check judges the trial at the highest rung it
+reached: its best value up to that rung against the same of every trial that
+reached it (a trial that started logging past the rung does not count). With
+`n` trials there, its own included, the trial keeps running when `n < eta`
+(it never waits for peers), and otherwise only when it is among the best
+`n // eta`; a tie at the cut keeps it. A trial that passed a rung is never
+stopped later for that rung. ASHA cannot pause and resume a trial, so there
+is no promotion queue: a trial that is not stopped just keeps running.
+
+Two consequences: the first `eta - 1` trials to reach a rung are never
+stopped there, and a check that lands after the trial passed a rung judges
+it at the new rung only, so a long `check_interval_sec` with short rungs
+stops fewer trials than textbook ASHA (it errs toward keeping them).
+`min_trials` does not apply (`eta` is the minimum). Full Hyperband (several
+brackets) is not supported; `asha` is one bracket.
 
 ## Status
 
