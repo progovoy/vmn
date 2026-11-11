@@ -2,7 +2,9 @@
 server, no database" headline: a team server with a cache exists, it is just
 never required (plan 43 F1). Scale is stated as measured facts with their
 cost, never as a speed promise at a run count, and the MLflow comparison
-matches the storage code (plan 43 F2)."""
+matches the storage code (plan 43 F2). experiments.md names commands
+`vmn-exp <action>` and is the one doc that spells out the stuck window
+(plan 43 F6)."""
 import glob
 import os
 import re
@@ -125,3 +127,42 @@ def test_packaging_md_compatibility_names_the_current_layout_and_record_format()
     section = _flat(_section(_read(PACKAGING), "## Compatibility"))
     assert f"store layout {LAYOUT}" in section
     assert f"record format {RECORD_FORMAT_VERSION}" in section
+
+
+EXPERIMENTS_MD = "docs/vmn-exp/experiments.md"
+BARE_EXP_COMMAND = re.compile(r"(?<![\w-])exp\s+(?:create|run|add|list|show|diff)\b")
+ALIAS_PREFIXES = ("vmn-exp ", "vmn ", "runner: ")
+STUCK_FORMULA = re.compile(r"max\(3 .{1,40}60", re.DOTALL)
+
+
+def bare_exp_commands(text):
+    return [
+        match.group(0)
+        for match in BARE_EXP_COMMAND.finditer(text)
+        if not text[: match.start()].endswith(ALIAS_PREFIXES)
+    ]
+
+
+def test_bare_exp_commands_are_reported():
+    assert bare_exp_commands("so `exp run` a benchmark, then `exp add` one") == [
+        "exp run",
+        "exp add",
+    ]
+    assert bare_exp_commands("in `exp\nlist` and `exp diff`") == ["exp\nlist", "exp diff"]
+    for allowed in (
+        "`vmn-exp run my_app -- python train.py`",
+        "a leading `exp` is accepted (`vmn-exp exp list my_app`)",
+        "or `vmn exp list my_app` with vmn-exp installed",
+        "runner: exp run         # stored value",
+        "the experiment list and the exp sweep",
+    ):
+        assert bare_exp_commands(allowed) == []
+
+
+def test_experiments_md_uses_vmn_exp_command_names():
+    assert bare_exp_commands(_read(EXPERIMENTS_MD)) == []
+
+
+def test_the_stuck_formula_is_spelled_out_only_in_experiments_md():
+    offending = _vmn_exp_docs_offending(STUCK_FORMULA.findall)
+    assert set(offending) == {EXPERIMENTS_MD}

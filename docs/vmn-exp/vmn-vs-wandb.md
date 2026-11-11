@@ -79,8 +79,7 @@ a baseline you pick, and a failed run links to what changed *since last good*.
 W&B marks a run crashed when the service stops hearing its heartbeats. vmn gets
 the same answer with no service: status is derived from the run's heartbeat and
 the store's write time, never stored, so any reader of the store, the CLI
-included, says **`stuck`** once the heartbeat is older than
-`max(3 × interval, 60s)`. Nested
+included, says **`stuck`** once the heartbeat is past its stuck window. Nested
 jobs roll up into the outer job's `tree_status`, so one row tells you a sweep
 has a problem ([experiments.md](experiments.md#run-status-did-my-job-die)).
 

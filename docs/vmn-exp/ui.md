@@ -27,11 +27,9 @@ subprocesses.
 
 ## Install
 
-```sh
-pip install "vmn-exp[ui]"
-```
-
-Without the extra, `vmn-exp ui` prints an install hint and exits. An
+The dashboard is the `ui` extra, `pip install "vmn-exp[ui]"` (see
+[client-guide.md](client-guide.md#1-install)). Without the extra, `vmn-exp ui`
+prints an install hint and exits. An
 `s3://`, `gs://` or `az://` store (`--store` or a `server.yml` workspace) also
 needs its storage extra (`s3`, `gcs` or `azure`, e.g.
 `pip install "vmn-exp[ui,s3]"`); without it the server refuses to start.

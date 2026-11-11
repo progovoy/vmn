@@ -20,7 +20,7 @@ dataset registry ([models.md](models.md)), sweeps ([sweeps.md](sweeps.md)),
 
 - [Mental model](#mental-model)
 - [Recording an experiment](#recording-an-experiment)
-- [With a command: `exp run` and the metrics file](#with-a-command-exp-run-and-the-metrics-file)
+- [With a command: `vmn-exp run` and the metrics file](#with-a-command-vmn-exp-run-and-the-metrics-file)
 - [Run status: did my job die?](#run-status-did-my-job-die)
 - [Outer & inner jobs (sweeps)](#outer--inner-jobs-sweeps)
 - [Addressing experiments](#addressing-experiments)
@@ -112,7 +112,7 @@ thousands of runs, use one of the two names that need no such listing:
 | Log from inside your own Python process | `start_run(...)` — see [sdk.md](sdk.md) |
 
 All four snapshot the tree (dirty or clean) and produce the same kind of run,
-so they mix freely: `exp run` a benchmark, then `exp add` a hand-measured
+so they mix freely: `vmn-exp run` a benchmark, then `vmn-exp add` a hand-measured
 number to it.
 
 A run records the git remote URL of the app and of each dep (`remote`,
@@ -149,9 +149,9 @@ the read API — all documented in [sdk.md](sdk.md).
 
 ---
 
-## With a command: `exp run` and the metrics file
+## With a command: `vmn-exp run` and the metrics file
 
-`exp run` snapshots the tree, runs **any** command, and records its exit code,
+`vmn-exp run` snapshots the tree, runs **any** command, and records its exit code,
 duration and a `run` log entry:
 
 ```sh
@@ -216,7 +216,7 @@ Each line appended to `$VMN_METRICS_FILE` is one metrics entry:
 - A leading `step=N` builds a per-step series (a curve); without it the
   values are step-less scalars — the file is never auto-stepped (unlike the
   SDK's `log_metrics`, see [sdk.md](sdk.md#steps)).
-- The file is **tailed live**, so metrics show in `exp show` and the UI while
+- The file is **tailed live**, so metrics show in `vmn-exp show` and the UI while
   the command runs.
 
 ```sh
@@ -234,7 +234,7 @@ with open(os.environ["VMN_METRICS_FILE"], "a") as f:
 
 ## Run status: did my job die?
 
-While the command lives, `exp run` keeps a `run_state.yml` next to the run's
+While the command lives, `vmn-exp run` keeps a `run_state.yml` next to the run's
 `metadata.yml` (same key prefix on S3) with a **heartbeat**:
 
 ```yaml
@@ -280,7 +280,7 @@ current time:
 
 | Status | Means |
 |---|---|
-| `created` | waiting: no command was ever started (e.g. `exp create`), or the SDK run was handed back unfinished (`state: released`, [`run.release()`](sdk.md#handing-a-run-back-release)) for a retry to reopen |
+| `created` | waiting: no command was ever started (e.g. `vmn-exp create`), or the SDK run was handed back unfinished (`state: released`, [`run.release()`](sdk.md#handing-a-run-back-release)) for a retry to reopen |
 | `running` | the heartbeat is fresh |
 | `stuck` | claims running, no exit code, and the heartbeat is stale |
 | `succeeded` | finished with exit code 0 (or `end_reason: stopped`, a sweep's early stop) |
@@ -370,7 +370,7 @@ it (`start_run(on_sigterm="release")`: `state: released`, no exit code, reads
 queries carry the one-line `error_summary` (`Type: message`); a failure alert's
 text ends with it too.
 
-`exp list` shows a status per row; `exp show` prints `Status:`, exit code,
+`vmn-exp list` shows a status per row; `vmn-exp show` prints `Status:`, exit code,
 duration, `Runner: pid … on <host>`, the heartbeat age when `stuck`, and an
 `Error:` block (`Type: message`, then the traceback or output tail) for a run
 with an `error`; `show --json` carries the full `error`.
@@ -421,7 +421,7 @@ For a managed search (grid/random/bayes, many agents, early stopping) use
 [`vmn-exp sweep`](sweeps.md). This is the underlying nesting mechanism.
 
 An experiment created **while `VMN_EXPERIMENT_ID` is set** records it as its
-`parent`. `exp run` exports it to its child, so a script that calls
+`parent`. `vmn-exp run` exports it to its child, so a script that calls
 `vmn-exp run` (or `start_run()`) per trial yields one **outer** job with
 **inner** jobs:
 
@@ -437,9 +437,9 @@ vmn-exp run my_app --note "lr sweep" -- ./sweep.sh
 vmn-exp run my_app --parent @3 -- python train.py   # explicit parent (any ref form)
 ```
 
-The command `exp run` starts itself is the exception: the first plain
+The command `vmn-exp run` starts itself is the exception: the first plain
 `start_run()` in that process (its direct child; not a process further down,
-such as the workers a shell script launches) records into the run `exp run`
+such as the workers a shell script launches) records into the run `vmn-exp run`
 created, so `vmn-exp run my_app -- python train.py` with `start_run()` in
 `train.py` is one run. The script appends to a stream of its own (see
 Streams below) and the supervisor still records the exit code, the `run`
@@ -451,7 +451,7 @@ inside it.
 Each run has a `kind`: `outer` (has children), `inner` (has a parent) or
 `single`. An outer job's **`tree_status`** rolls up its subtree with
 precedence `failed > stuck > running > created > succeeded`, so one failed
-trial makes the sweep read failed. `exp list` indents inner runs (in storage order; a
+trial makes the sweep read failed. `vmn-exp list` indents inner runs (in storage order; a
 sorted listing is flat, each inner run marked `^[N]` with its parent's row)
 and shows an outer row as `<own status>/<subtree status>` when they differ:
 
@@ -471,7 +471,7 @@ make it read `succeeded`. A sweep outer (`vmn-exp sweep create`) also knows its
 planned size — the grid size (capped by `run_cap`), else `run_cap`; an uncapped
 random/bayes sweep has none. While its trials (a retried trial counts once)
 number fewer than that, `created` joins the rollup: a sweep whose 16 trials all
-finished out of 20 planned reads `created`, and `exp list` says so:
+finished out of 20 planned reads `created`, and `vmn-exp list` says so:
 
 ```
 [1] 1.6.0-dev.a1b2c3d.9f8e7d6 'sw'  created (16/20 incomplete)  (3s ago)
@@ -530,7 +530,7 @@ null`). A rule for runs waiting too long counts only the open ones with
 `status = "created"` also counts every run an ended outer run never
 started.
 
-`exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
+`vmn-exp show` prints `Parent:` on a trial, and `Children:` (plus `Subtree:` when
 it differs or has lost runs, `Subtree:   succeeded · 2 lost`) on the outer run.
 
 **Forks are not children.** `create`/`run --fork-from <ref> [--fork-step N]`
@@ -1641,7 +1641,7 @@ tags: [baseline, transformer-v2]
 `params` are kept verbatim (strings and bools included; query them as
 `params.<name>`); finite numeric params also fold into `metrics`, but never
 over a metric the run logged under the same name: the logged metric keeps
-`metrics.<name>` and the row lists such names in `logged_params`. `exp diff`
+`metrics.<name>` and the row lists such names in `logged_params`. `vmn-exp diff`
 prints a `params:` delta next to the `metrics:` delta. The `hypothesis` of
 `create`/`run` (not `add -f`'s, whose `structured` entry is not matched) is
 matched as text by [`similar`](#similar), like an

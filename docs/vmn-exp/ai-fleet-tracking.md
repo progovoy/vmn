@@ -27,7 +27,7 @@ its lifecycle. The one exception is the bar's lead number: an outer run can
 Under a filter, a group's counts cover only its inner runs that match.
 
 Status is derived from `run_state.yml`; a run is `stuck` once its heartbeat is
-older than `max(3 × heartbeat interval, 60s)` with no exit code (see
+past its stuck window with no exit code (see
 [experiments.md](experiments.md#run-status-did-my-job-die)).
 
 **total** on the group header is the number of inner runs. The run detail's

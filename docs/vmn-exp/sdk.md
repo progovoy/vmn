@@ -1092,7 +1092,7 @@ flush or sync call in flight and starts no other until resumed; it returns
 (or yields) `True` if none was left in flight. Logging keeps working — entries
 queue in memory and are written once resumed. Pauses nest (each needs its
 resume); `finish()` ends them, so a paused run still finalizes completely. A
-run paused past its stuck window (`max(3 * heartbeat interval, 60s)`) reads
+run paused past its [stuck window](experiments.md#run-status-did-my-job-die) reads
 `stuck` until it resumes. `NoOpRun` has the same methods as no-ops. Alert
 sends (`run.alert`) and the one-off system-metrics setup thread are not paused.
 
@@ -1625,14 +1625,10 @@ handlers. To see its debug output: `logging.basicConfig(level=logging.DEBUG)`.
 
 ## Slim install
 
-For recording-only environments (containers, CI workers, air-gapped jobs):
-
-```sh
-pip install vmn-exp-sdk    # + [s3]/[gcs]/[azure] for a bucket, [pandas] for DataFrames; pynvml for GPU metrics
-```
-
-`vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and record helpers it
-needs: no vmn, no GitPython, no git binary. Creating a run from a git checkout
+For recording-only environments (containers, CI workers, air-gapped jobs),
+install `vmn-exp-sdk` alone ([client-guide.md](client-guide.md#1-install) lists
+its extras). `vmn-exp-sdk` is `vmn_exp.sdk` plus the storage, registry and
+record helpers it needs: no vmn, no GitPython, no git binary. Creating a run from a git checkout
 needs `vmn-exp`; in a slim install `start_run()` in a checkout raises a
 `RuntimeError` pointing at `pip install vmn-exp` or the git-free variables
 ([Runs without a git checkout](#runs-without-a-git-checkout-containers));

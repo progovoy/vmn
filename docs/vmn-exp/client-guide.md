@@ -530,8 +530,8 @@ with start_run("my_app", run_id=prior, on_sigterm="release",
 
 The preempted attempt was released on SIGTERM (`released`, no exit code), so
 the resumed attempt can reopen and rewind it at once. If the old process died without
-finalizing (a SIGKILL), it reads `running` until its heartbeat goes stale
-(`max(3 x heartbeat interval, 60s)`); until then the rewind raises
+finalizing (a SIGKILL), it reads `running` until its heartbeat is past its
+[stuck window](experiments.md#run-status-did-my-job-die); until then the rewind raises
 `RuntimeError`, so requeue with a delay.
 
 ### Example: a divergent loss, rewound to step 800

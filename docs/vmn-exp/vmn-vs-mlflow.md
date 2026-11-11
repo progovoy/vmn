@@ -98,8 +98,8 @@ changed since.
 
 Status in vmn is derived, never stored. `vmn-exp run` and the SDK publish a
 heartbeat into `run_state.yml`; a run that claims to be running, has no exit
-code, and whose heartbeat (and the store's write time of that file) is older
-than `max(3 × interval, 60s)` is reported as **`stuck`**. Kill
+code, and whose heartbeat (and the store's write time of that file) is past
+its [stuck window](experiments.md#run-status-did-my-job-die) is reported as **`stuck`**. Kill
 the node, pull the power, `kill -9` the trainer — the dashboard says stuck.
 
 MLflow writes a terminal status on clean exit, so a run that dies without one sits
