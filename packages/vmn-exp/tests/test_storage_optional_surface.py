@@ -4,8 +4,12 @@ Callers find optional storage methods by ``hasattr(x, "name")`` or
 ``getattr(x, "name", default)``. Every such probe in the two vmn_exp src roots
 is counted and compared with storage_optional_probes.py: a new name or a
 higher count fails, and so does a stale entry, so the table only shrinks.
+docs/vmn-exp/experiments.md's "Optional methods" table names exactly the
+storage probes.
 """
 import ast
+import os
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -14,6 +18,8 @@ from storage_optional_probes import OTHER_PROBES, STORAGE_PROBES
 
 SRC_ROOTS = [Path(_PROJECT_ROOT) / "packages" / dist / "src" / "vmn_exp"
              for dist in ("vmn-exp-sdk", "vmn-exp")]
+DOC_START = "#### Optional methods"
+DOC_END = "\n### "
 
 
 def probes(source):
@@ -49,6 +55,15 @@ def _known_probes():
     return {**STORAGE_PROBES, **OTHER_PROBES}
 
 
+def documented_names(markdown_text):
+    """The backticked first-column names of the "Optional methods" table."""
+    start = markdown_text.find(DOC_START)
+    assert start >= 0, f"experiments.md must keep the heading {DOC_START!r}"
+    end = markdown_text.find(DOC_END, start)
+    section = markdown_text[start:end if end >= 0 else None]
+    return set(re.findall(r"^\| `(\w+)`", section, flags=re.MULTILINE))
+
+
 def test_probe_scanner_finds_hasattr_and_three_argument_getattr():
     source = (
         "def f(storage, name):\n"
@@ -60,6 +75,15 @@ def test_probe_scanner_finds_hasattr_and_three_argument_getattr():
         "    storage.hasattr(storage, 'x')\n"
     )
     assert probes(source) == Counter({"is_remote": 2, "direct_files": 1})
+
+
+def test_documented_names_reads_the_optional_methods_table():
+    text = (
+        "#### Optional methods\n\n| Method | Without it |\n|---|---|\n"
+        "| `is_remote` | local |\n| `direct_files` | itself |\n\n"
+        "Text `not_a_row`.\n\n### Next\n\n| `later` | x |\n"
+    )
+    assert documented_names(text) == {"is_remote", "direct_files"}
 
 
 def test_no_new_optional_storage_probes():
@@ -79,3 +103,12 @@ def test_probe_table_has_no_stale_entries():
              for name, count in _known_probes().items() if actual.get(name, 0) < count}
     assert not stale, f"lower (or drop) these in storage_optional_probes.py: {stale}"
 
+
+def test_experiments_md_optional_table_matches_the_code_table():
+    path = os.path.join(_PROJECT_ROOT, "docs", "vmn-exp", "experiments.md")
+    with open(path, encoding="utf-8") as f:
+        documented = documented_names(f.read())
+    assert documented == set(STORAGE_PROBES), {
+        "missing from experiments.md": sorted(set(STORAGE_PROBES) - documented),
+        "not in STORAGE_PROBES": sorted(documented - set(STORAGE_PROBES)),
+    }

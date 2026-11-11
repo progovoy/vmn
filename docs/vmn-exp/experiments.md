@@ -1878,6 +1878,68 @@ Each call of the factory must return an empty store. Passing the race check
 does not prove a check-then-save `create_exclusive` safe (it can pass by
 luck); only a conditional create is.
 
+#### Optional methods
+
+Callers look these up with `hasattr`/`getattr` and take a fallback when a
+store lacks them. "Base" marks a name `SnapshotStorage` already defines: a
+subclass gets that default, and only a duck-typed store (one that does not
+subclass it) reaches the fallback. The list is closed:
+`packages/vmn-exp/tests/test_storage_optional_surface.py` fails on a new probe,
+so a new optional method needs a row here.
+
+| Name | A store without it gets | Cost |
+|---|---|---|
+| `append_log_entries` | one `append_log_entry` per entry | one write per entry in a batch |
+| `cache_identity` | Base (None); caches keyed by the object's `id` | the index and hint caches are not shared between two opens of the same store |
+| `compact_log_segments` | log segments are never merged | readers fetch every segment of a long-running stream |
+| `compacting` | no hold while a metric stream is compacted | none on a single writer; a concurrent ship may race the compaction |
+| `create_exclusive` | Base (abstract); a duck-typed store gets check-then-save | two hosts can claim the same run id |
+| `create_log_segment` | plain `save_file` of each log segment | safe only while one process ships a record copy at a time |
+| `defer_ships` | due log ships run on the appending thread | a `log_metric` or heartbeat waits on an upload |
+| `direct_files` | the store itself does the index's per-file reads | none for a plain store; a wrapping store reads through its wrapper |
+| `has_pending` | no buffered UI edits | none |
+| `in_area` | Base; a duck-typed store has no settings, comments or other areas | app settings and comment threads are off for it |
+| `index_cache_path` | Base (None): no persistent index | every UI or CLI start lists the store again |
+| `io_process_args` | the index reads records in-process | no separate index IO process on a large local root |
+| `is_remote` | Base (False): treated as the local root | reads are not parallelized; a network store is slow to index |
+| `list_artifacts` | Base: the files under `local_record_dir` | none for a local root; an object store lists nothing |
+| `list_files` | Base (empty); `prune` reads every record without the index | the index never refreshes incrementally; `prune` is slow on many runs |
+| `list_files_between` | `list_files` per record | one LIST per record instead of one per ~1000 objects |
+| `list_record_keys` | `list_record_names` (signed per record) | a stat per record on each sync |
+| `list_record_names` | no name listing: the index cannot see moves, `prune` skips the registry guard | full relistings; a registered run can be pruned |
+| `list_run_verstrs` | `list_verstrs`, then `list_snapshots` | a new run id scans the whole app |
+| `list_verstrs` | Base (from `list_snapshots`) | every ref lookup loads every record's metadata |
+| `listing_position` | no progress on a long first listing | the UI cannot show how far the walk is |
+| `load_file_with_token` | `load_file` and no token | run-state writes are last-writer-wins, not compare-and-swap |
+| `load_logs_by_writer` | an empty log (rewinds, range series, import checks) | rewinds are not applied when compacting; imports cannot tell an earlier import |
+| `load_merged_log` | `load_log` | none |
+| `local_record_dir` | Base (abstract); the journal mover skips the store | no journal moves for it |
+| `log_object_groups` | Base (empty); a cache's remote: one `log_objects` per stream | one LIST per stream |
+| `metric_objects` | Base (empty): no metric objects | metric streams are invisible: no metrics in the index, the UI or compaction |
+| `metric_objects_listed` | `metric_objects` per record | one LIST per record on each index refresh |
+| `mirror_record` | code records are not mirrored to the remote | a run created on another host can point at code it lacks |
+| `open_artifact` | the UI serves artifacts from `local_record_dir` | an object store's artifacts are not served |
+| `plain_record_dir` | the index reads through the store | no parallel plain-file reads of a local root |
+| `presign_artifact` | no redirect: the UI proxies the download | downloads go through the server |
+| `read_class` | the store's own class | none |
+| `record_files` | no per-file signatures | status cannot use the run-state mtime; sweep peers read log sizes |
+| `record_name_pages` | all names in one page | a first listing of a huge app is not streamed |
+| `record_names_sig` | a listing on each sync | a sync of an unchanged app still lists it |
+| `remote_for` | log compaction targets the store itself | none for a plain store |
+| `save_file_if_match` | Base: an unconditional write with no token | concurrent run-state writers can overwrite each other |
+| `stream_files` | `record_files` | the UI segment cache is off without either |
+| `stream_owner` | Base (None): this process owns its streams | none outside a guest run |
+| `undefer_ships` | nothing to undo | none |
+| `worker_spec` | the index loads remote records in this process | no worker processes for a large remote index |
+| `root` | with `area`: the store marker is at `<root>`; else it is looked up as an object store | `vmn-exp migrate` and the layout check do not know the store |
+| `area` | see `root` | see `root` |
+| `endpoint_url` | the default endpoint for the store marker | a custom-endpoint object store's marker is checked on the wrong service |
+| `_local` | the store is its own local side | `--local-only` prune and journal moves treat it as local |
+| `_remote` | the store is not a local+remote pair | none |
+| `_s3` | not an object store: no store marker | `vmn-exp migrate` and the layout check skip it |
+| `_journal_sink` | no journal sink | the central server does not see its writes in the change journal |
+| `_format_warned` | vmn sets it on the store (a warn-once set) | a store that refuses new attributes warns on every read of a newer-format record |
+
 ### How records are stored
 
 - **One directory (or key prefix) per run**: `metadata.yml`, `run_state.yml`,
