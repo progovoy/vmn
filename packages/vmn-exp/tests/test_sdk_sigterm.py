@@ -16,6 +16,7 @@ import pytest
 from exp_helpers import _SRC_PATH, _PY, _bootstrap, _storage
 
 from vmn_exp.core.status import derive_status, load_run_state
+from vmn_exp.sdk import signals
 
 JOIN_TIMEOUT = 120
 
@@ -244,3 +245,19 @@ def test_sigterm_records_the_signal_that_ended_the_run(app_layout):
 
     state = load_run_state(_storage(app_layout), app_layout.app_name, verstr)
     assert state["signal"] == "SIGTERM", state
+
+
+def test_sigterm_with_no_work_chains_without_a_finalizer_thread(monkeypatch):
+    # The handler stays installed from import on, so a process that never
+    # opens a run must not pay a finalizer thread (and its join) per SIGTERM.
+    finalized, chained = [], []
+    monkeypatch.setattr(signals, "_STATE", {
+        "previous": lambda signum, frame: chained.append(signum),
+        "finalize": finalized.append, "timeout": lambda: 5, "raises": lambda: False,
+        "has_work": lambda: False, "finalizing": False,
+    })
+
+    signals._handle(signal.SIGTERM, None)
+
+    assert chained == [signal.SIGTERM]
+    assert finalized == []

@@ -72,6 +72,7 @@ from vmn_exp.sdk.log_sync import LogSync
 from vmn_exp.sdk.metric_defs import MetricDefinitions
 from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
+from vmn_exp.sdk.process_hooks import ProcessHooks
 from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
@@ -115,18 +116,14 @@ ABANDONED_EXIT_CODE = 1
 # ``sys.excepthook`` (CPython special-cases it before running atexit
 # handlers), so a bare ``sys.exit(N)`` outside a context-managed run stays
 # indistinguishable from a clean exit here — the same as it would be for any
-# other process without our instrumentation.
+# other process without our instrumentation. The hook is chained at the first
+# run open (``_PROCESS_HOOKS``), not on import.
 _uncaught_exception = None
-_prev_excepthook = sys.excepthook
 
 
-def _note_uncaught_exception(exc_type, exc_value, tb):
+def _note_uncaught_exception(exc_value):
     global _uncaught_exception
     _uncaught_exception = exc_value
-    _prev_excepthook(exc_type, exc_value, tb)
-
-
-sys.excepthook = _note_uncaught_exception
 
 
 def start_run(
@@ -278,6 +275,9 @@ def start_run(
         on_sigterm=on_sigterm,
         sigterm_exit=sigterm_exit,
         export_env=export_env,
+        install_hooks=functools.partial(
+            _PROCESS_HOOKS.install_once, sys, atexit, _finalize_open_runs,
+            _note_uncaught_exception),
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -335,8 +335,12 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         on_sigterm=release.FAIL,
         sigterm_exit=release.KILL,
         export_env=True,
+        install_hooks=None,
     ):
         self._storage = storage
+        # Installs the process's excepthook and atexit finalizer at open;
+        # start_run passes it, a Run built by hand installs none.
+        self._install_hooks = install_hooks
         self._export_env = export_env
         self._on_sigterm = on_sigterm
         self._sigterm_exit = sigterm_exit
@@ -428,6 +432,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     # -- lifecycle ---------------------------------------------------------
 
     def _open(self):
+        if self._install_hooks is not None:
+            self._install_hooks()
         self._publish()
         context.register(self)
         self._defer_ships()
@@ -936,7 +942,7 @@ def install_signal_handlers():
     when the SDK is first imported from a worker thread.
     """
     signals.install(_finalize_signaled, timeout=sigterm_timeout_sec,
-                    raises=_sigterm_raises)
+                    raises=_sigterm_raises, has_work=_has_open_runs)
 
 
 def _sigterm_raises():
@@ -944,5 +950,9 @@ def _sigterm_raises():
     return any(run._sigterm_exit == release.RAISE for run in context.open_runs())
 
 
-atexit.register(_finalize_open_runs)
+def _has_open_runs():
+    return bool(context.open_runs())
+
+
+_PROCESS_HOOKS = ProcessHooks(os.getpid)
 install_signal_handlers()

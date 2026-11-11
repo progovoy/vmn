@@ -634,7 +634,9 @@ yourself when a `with` block doesn't fit. It is idempotent.
   the process exits 143 after its `finally` blocks. The handler is installed when `vmn_exp.sdk` is imported on the main
   thread (never over `SIG_IGN`). If you install your own SIGTERM handler later,
   or first import the SDK from a worker thread, call
-  `install_signal_handlers()` from the main thread to chain it.
+  `install_signal_handlers()` from the main thread to chain it. With no open
+  run it is inert: it puts the previous handler back and hands the signal on
+  at once. See [What importing the SDK changes](#what-importing-the-sdk-changes).
 
 ### Steps
 
@@ -948,6 +950,22 @@ run, else `None`.
   through; after the fork the parent resumes them and the child starts with
   fresh SDK locks and none of the parent's threads. `subprocess` without
   `preexec_fn` execs at once and runs no fork handlers.
+
+#### What importing the SDK changes
+
+`import vmn_exp.sdk` on the main thread installs one SIGTERM handler, chained
+to the one that was current (never over `SIG_IGN`), and nothing else: a
+process that only reads runs keeps its `sys.excepthook` and gets no atexit
+handler. Without an open run the SIGTERM handler finalizes nothing; it puts
+the previous handler back and hands the signal on. To undo it, set your own
+handler after the import (`signal.signal(signal.SIGTERM, signal.SIG_DFL)`, or
+yours); runs then are not finalized on SIGTERM.
+
+The first `start_run()` of a process chains `sys.excepthook` (an uncaught
+exception marks an abandoned run failed) and registers the atexit finalizer
+that finishes runs left open. Because it registers after the run's storage
+was imported, it runs before that storage's own exit flush (a bucket's log
+buffer, a local journal), which then ships what the finalizer wrote.
 
 ### Pausing background threads
 
