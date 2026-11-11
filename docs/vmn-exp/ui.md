@@ -1764,7 +1764,10 @@ The run page's **Changes** card (`#changes`, below the training curves, in
 read-only workspaces too) offers these baselines as a picker. It defaults to
 `base` when present, else `previous`, else the first that exists. `base` shows
 the `/patch` files and text, or the untracked file list of a run that captured
-only untracked files. Any other baseline is diffed through
+only untracked files. Beside a text patch it also lists the run's untracked
+files (each tagged `untracked`, "+N more" past the 200 listed, or one line
+when their tarball cannot be read), noting that they are not in the diff and
+that restore or export brings them back. Any other baseline is diffed through
 `experiments-diff` (baseline → this run): it shows the top 5 metrics by |Δ|
 (goal metrics first, then "+N more"), a *Params changed* block (count + one
 row per param), the changed files and the diff behind *Show diff*, with *Open in Compare →*

@@ -140,6 +140,47 @@ describe("RunChanges", () => {
     expect(screen.queryByRole("button", { name: "Show diff" })).toBeNull();
   });
 
+  const TRACKED = {
+    text: "=== working_tree ===\n" + DIFF_TEXT,
+    files: [{ path: "train.py", added: 2, removed: 1 }],
+  };
+
+  it("lists untracked files beside the tracked diff", async () => {
+    patchMock.mockResolvedValue({ ...TRACKED, untracked_files: ["train2.py", "data/x.csv"], untracked_total: 2 });
+    renderCard({ base: run(RUN, 4) });
+    const list = await screen.findByRole("list", { name: "Untracked files" });
+    expect(within(list).getByText("train2.py")).toBeInTheDocument();
+    expect(within(list).getByText("data/x.csv")).toBeInTheDocument();
+    expect(within(list).getAllByText("untracked")).toHaveLength(2);
+    expect(screen.getByText("train.py")).toBeInTheDocument();
+    expect(screen.getByText(/not in the diff.*restore or export brings them back/i)).toBeInTheDocument();
+    expect(screen.queryByText(/more untracked/)).toBeNull();
+  });
+
+  it("says more untracked files exist than listed", async () => {
+    patchMock.mockResolvedValue({ ...TRACKED, untracked_files: ["a.py", "b.py"], untracked_total: 250 });
+    renderCard({ base: run(RUN, 4) });
+    const list = await screen.findByRole("list", { name: "Untracked files" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("+248 more untracked files")).toBeInTheDocument();
+  });
+
+  it("says the untracked tarball could not be read", async () => {
+    patchMock.mockResolvedValue({ ...TRACKED, untracked_files: [], untracked_unreadable: true });
+    renderCard({ base: run(RUN, 4) });
+    expect(await screen.findByText(/untracked files were captured.*could not be read/i)).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Untracked files" })).toBeNull();
+    expect(screen.getByText("train.py")).toBeInTheDocument();
+  });
+
+  it("shows no untracked block for a tracked-only patch", async () => {
+    patchMock.mockResolvedValue(TRACKED);
+    renderCard({ base: run(RUN, 4) });
+    expect(await screen.findByText("train.py")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Untracked files" })).toBeNull();
+    expect(screen.queryByText(/untracked/i)).toBeNull();
+  });
+
   it("gives the diff's reason when a run's code can't be materialised", async () => {
     diffMock.mockRejectedValue(Object.assign(new Error("HTTP 422"), {
       status: 422, body: { reason: "no_code", detail: "x", verstr: "v-prev" },

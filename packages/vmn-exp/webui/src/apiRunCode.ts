@@ -11,12 +11,16 @@ export interface PatchFile {
 
 /** `vmn-exp show --patch --json`'s `patch`, plus `files`. Without text,
  *  `reason` says why: `no_code` (clean tree), `code_missing` (its code object
- *  is gone) or `untracked_only` (with the paths, unless the tarball is unreadable). */
+ *  is gone) or `untracked_only` (with the paths, unless the tarball is unreadable).
+ *  With text, a run that captured untracked files adds `untracked_files` (at
+ *  most 200) and `untracked_total`, or `[]` with `untracked_unreadable`. */
 export interface RunPatch {
   text: string | null;
   truncated?: boolean;
   reason?: "no_code" | "code_missing" | "untracked_only";
   untracked_files?: string[];
+  untracked_total?: number;
+  untracked_unreadable?: boolean;
   files: PatchFile[];
 }
 

@@ -7,7 +7,7 @@ import { fetchRunPatch } from "../apiRunCode";
 import type { HttpError } from "../http";
 import { withSignal } from "../requestScope";
 import { diffFiles } from "./diffFiles";
-import { DiffToggle, FilesList, MetricDelta } from "./RunChangesParts";
+import { DiffToggle, FilesList, MetricDelta, UntrackedList } from "./RunChangesParts";
 import ParamDeltaBlock from "./ParamDeltaBlock";
 
 const PATCH_REASON: Record<string, string> = {
@@ -42,6 +42,9 @@ export function PatchChanges({ ws, app, verstr }: { ws: string; app: string; ver
   return (
     <>
       <FilesList files={p.files} />
+      {p.untracked_files && (
+        <UntrackedList files={p.untracked_files} total={p.untracked_total} unreadable={p.untracked_unreadable} />
+      )}
       <DiffToggle text={p.text} truncated={p.truncated} />
     </>
   );
