@@ -90,3 +90,22 @@ def test_delete_tokens_by_owner_closes_sessions(client):
     assert r.status_code == 200 and r.json() == {"tokens": 1, "sessions": 1}
     assert tokens.verify(mine) is None and sessions.principal(sid) is None
     assert tokens.verify(other) is not None and sessions.principal(bob_sid) is not None
+
+
+def _mint(client, *names):
+    for name in names:
+        assert client.post("/api/v1/tokens", json={"name": name}, headers=A).status_code == 201
+
+
+def test_tokens_limit_offset_with_total_header(client):
+    _mint(client, "t0", "t1", "t2")
+    r = client.get("/api/v1/tokens", params={"offset": 1, "limit": 1}, headers=A)
+    assert [t["name"] for t in r.json()] == ["t1"]
+    assert r.headers["X-Total-Count"] == "3"
+
+
+def test_tokens_without_limit_is_the_full_list(client):
+    _mint(client, "t0", "t1", "t2")
+    r = client.get("/api/v1/tokens", headers=A)
+    assert [t["name"] for t in r.json()] == ["t0", "t1", "t2"]
+    assert "X-Total-Count" not in r.headers

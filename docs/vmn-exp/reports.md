@@ -191,7 +191,7 @@ All under `/api/v1/workspaces/{ws}`. Writes need `editor`, except delete
 (`admin`), and are refused with `403` on a `--read-only` server.
 
 ```
-GET    /reports[?archived=true]                list
+GET    /reports[?archived=true][&offset=&limit=]   list; with offset/limit one page plus "total"
 POST   /reports {"title", "body"}              create -> {"rid", "rev": 1}
 GET    /reports/{rid}                          header + latest revision
 GET    /reports/{rid}/revisions/{n}            one revision

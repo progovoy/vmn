@@ -1148,7 +1148,7 @@ Under `/api/v1/workspaces/{ws}/models` (concepts and rules in
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/models[?kind=model\|dataset]` | `{"models": [row...]}`, each row with its `kind`; any other `kind` is a 400 |
+| `GET` | `/models[?kind=model\|dataset][&offset=&limit=]` | `{"models": [row...]}`, name-ordered, each row with its `kind`; any other `kind` is a 400; with `offset`/`limit` one page plus `"total"` (after the `kind` filter) |
 | `GET` | `/models/{name}` | `{name, kind, description, versions, aliases, audit}` |
 | `GET` | `/models/{name}/versions/{n}/lineage` | Producer and consumer runs ([Lineage](#lineage)) |
 | `POST` | `/models/{name}/versions` | Register a run-backed version; body `{"run": {"app", "verstr"}, "artifact_path"?, "alias"?, "description"?}` → `201 {"version": N}` |

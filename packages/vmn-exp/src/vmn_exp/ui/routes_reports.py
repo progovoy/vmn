@@ -13,6 +13,7 @@ from vmn_exp.reports import published, store
 from vmn_exp.reports.log import set_archived, set_pinned, set_title
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER
+from vmn_exp.ui.http_params import page_of
 from vmn_exp.ui.security import safe_app_name
 from vmn_exp.ui.reports_publish import validate_publish
 from vmn_exp.ui.request_author import author_of
@@ -67,9 +68,12 @@ def register(app, api_prefix, any_exp_storage, report_index):
         return storage, found
 
     @app.get(base, dependencies=[require(VIEWER)])
-    def list_reports_route(ws_name: str, archived: bool = False):
-        rows = report_index(ws_name).reports()
-        return {"reports": [r for r in rows if bool(r.get("archived")) == archived]}
+    def list_reports_route(ws_name: str, archived: bool = False, offset: int = 0,
+                           limit: int = None):
+        rows = [r for r in report_index(ws_name).reports()
+                if bool(r.get("archived")) == archived]
+        page, total = page_of(rows, offset, limit)
+        return {"reports": page} if total is None else {"reports": page, "total": total}
 
     @app.get(f"{api_prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/reports",
              dependencies=[require(VIEWER)])

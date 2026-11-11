@@ -1,14 +1,14 @@
 """Admin routes on the control plane: API tokens and the audit log."""
 from dataclasses import asdict
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN
 from vmn_exp.ui.auth.sessions import SessionService
 from vmn_exp.ui.auth.tokens import TokenService
-from vmn_exp.ui.http_params import clamp_page
+from vmn_exp.ui.http_params import clamp_page, page_of
 
 
 def public_record(record):
@@ -40,8 +40,11 @@ def register(app, api_prefix):
         return TokenService(_control_plane(app))
 
     @app.get(f"{api_prefix}/tokens", dependencies=[require(ADMIN)])
-    def list_tokens():
-        return [public_record(r) for r in _tokens().list()]
+    def list_tokens(response: Response, offset: int = 0, limit: int = None):
+        page, total = page_of(_tokens().list(), offset, limit)
+        if total is not None:
+            response.headers["X-Total-Count"] = str(total)
+        return [public_record(r) for r in page]
 
     @app.post(f"{api_prefix}/tokens", status_code=201, dependencies=[require(ADMIN)])
     def create_token(request: Request, body: dict):

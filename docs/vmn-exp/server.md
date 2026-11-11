@@ -470,7 +470,8 @@ are deleted at startup, hourly and on every login. Admins manage tokens through
 the API:
 
 ```
-GET    /api/v1/tokens                       list (no secrets)
+GET    /api/v1/tokens[?offset=&limit=]      list (no secrets); a page carries
+                                            the total in X-Total-Count
 POST   /api/v1/tokens  {"name", "roles": {"<ws>|*": "<role>"}, "ttl_sec"?}
                                             -> {"token", "record"}; the secret is shown once
 DELETE /api/v1/tokens/{id}                  revoke

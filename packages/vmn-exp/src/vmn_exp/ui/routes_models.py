@@ -48,10 +48,10 @@ def register(app, api_prefix, any_exp_storage, listings):
     # ------------------------------------------------------------------
 
     @app.get(f"{base}", dependencies=[require(VIEWER)])
-    def list_models_route(ws_name: str, kind: str = None):
+    def list_models_route(ws_name: str, kind: str = None, offset: int = 0, limit: int = None):
         if kind is not None and kind not in KINDS:
             raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
-        return listings.get(any_exp_storage(ws_name)).response(kind)
+        return listings.get(any_exp_storage(ws_name)).response(kind, offset, limit)
 
     @app.get(f"{base}/{{model_name}}", dependencies=[require(VIEWER)])
     def get_model_route(ws_name: str, model_name: str):
