@@ -10,13 +10,18 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 
 import pytest
+from deferred_ship_fakes import WAIT_SEC, FakeBucket
 from exp_helpers import _SRC_PATH, _PY
 
 from vmn_exp.core.metric_block import read_headers
 from vmn_exp.snapshot import LocalSnapshotStorage
+from vmn_exp.storage import buffered
+from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
 from vmn_exp.sdk.run import Run
@@ -286,3 +291,48 @@ def test_logging_to_a_deleted_run_warns_once(storage, monkeypatch, caplog):
     assert warnings == [f"vmn: run {run.id} no longer exists in the store; "
                         "1 entries were not recorded"]
     run._log_buffer.discard()
+
+
+@pytest.fixture
+def hung_bucket(tmp_path, monkeypatch):
+    """A direct-to-bucket store whose segment creates hang until released."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    hold = threading.Event()
+    bucket = FakeBucket(str(tmp_path / "bucket"), hold=hold)
+    bucket.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    yield BufferedRemoteStorage(bucket, area="runs"), hold
+    hold.set()
+    buffered.close_all()
+
+
+def test_log_metric_does_not_block_on_a_hung_bucket(hung_bucket):
+    storage, hold = hung_bucket
+    run = _open_run(storage, heartbeat=3600)
+    done = threading.Event()
+
+    def log_and_beat():
+        for step in range(1500):
+            run.log_metric("loss", 0.5, step=step)
+        run._beat()
+        done.set()
+
+    threading.Thread(target=log_and_beat, daemon=True).start()
+    try:
+        assert done.wait(WAIT_SEC)
+        assert storage._remote.creating.wait(WAIT_SEC)  # the worker is the one hung
+    finally:
+        hold.set()
+        run.finish()
+
+
+def test_a_finished_run_no_longer_receives_ship_requests(hung_bucket):
+    storage, hold = hung_bucket
+    hold.set()
+    run = _open_run(storage, heartbeat=3600)
+    run.log_metric("loss", 0.5, step=1)
+    run.finish()
+    shipped = storage._remote.creates
+
+    storage.append_log_entry(APP, VERSTR, "late", {"type": "note", "text": "late"})
+
+    assert storage._remote.creates == shipped + 1  # inline: no closed worker asked

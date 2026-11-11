@@ -229,6 +229,12 @@ finished sees everything it logged). A reader never sees half a line, and live
 readers (`vmn-exp show`, the UI) see a metric within about a second. A write
 after `finish()` goes straight to the store; a forked child writing through an
 inherited `Run` writes nothing (see [Threads, forks](#threads-forks-and-current_run)).
+Direct to a bucket (no `VMN_EXPERIMENT_DIR`), those writes are local appends
+to the run's log buffer: shipping it to the bucket (its first lines at once,
+then at most every 5 s) is left to the run's `vmn-exp-sync` thread, so a hung
+store never stalls `log_metric` or the heartbeat. A run opened with a raw
+remote store as `start_run(storage=...)` still writes to it from the caller's
+thread.
 
 **Metrics are not JSONL lines.** `log_metric`/`log_metrics` values go to the
 record copy's columnar metric stream (`metrics/<writer>~<owner>.vms`, one

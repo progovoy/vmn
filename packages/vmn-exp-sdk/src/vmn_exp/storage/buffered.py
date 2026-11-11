@@ -82,6 +82,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
         self._metrics_flushed_at = {}
         self._unshipped_metrics = set()  # (app, verstr, writer), as _unshipped
+        self._requesters = {}  # (app, verstr) -> asks its owner to ship it
 
     @property
     def _local(self):
@@ -169,7 +170,8 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         # unshipped instead; close() (or a later due check) retries them.
         key = (app_name, verstr, writer_id)
         last = self._flushed_at.get(key)
-        if last is not None and time.monotonic() - last < self._flush_interval_sec:
+        due = last is None or time.monotonic() - last >= self._flush_interval_sec
+        if not due or self._request_ship(app_name, verstr):
             self._mark_unshipped(key)
             return True
         try:
@@ -177,6 +179,26 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         except Exception:
             VMN_LOGGER.debug("Eager log ship failed; retrying later", exc_info=True)
             self._mark_unshipped(key)
+        return True
+
+    def defer_ships(self, app_name, verstr, request):
+        """Hand *verstr*'s due ships to its owner: *request* (called with no
+        arguments, never waited on) asks it to ship off the appending thread.
+        A forked child's buffer starts with none."""
+        self._this_process()
+        self._requesters[(app_name, verstr)] = request
+
+    def undefer_ships(self, app_name, verstr):
+        """*verstr*'s due ships go inline again."""
+        self._this_process()
+        self._requesters.pop((app_name, verstr), None)
+
+    def _request_ship(self, app_name, verstr):
+        """Whether *verstr*'s owner was asked to ship it."""
+        request = self._requesters.get((app_name, verstr))
+        if request is None:
+            return False
+        request()
         return True
 
     def _mark_unshipped(self, key):
@@ -206,7 +228,8 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         last = self._metrics_flushed_at.get(key)
         self._unshipped_metrics.add(key)
         _PENDING.add(self)
-        if last is None or time.monotonic() - last >= self._flush_interval_sec:
+        due = last is None or time.monotonic() - last >= self._flush_interval_sec
+        if due and not self._request_ship(app_name, verstr):
             try:
                 self.sync_metrics_to_remote(app_name, verstr, writer_id)
             except Exception:

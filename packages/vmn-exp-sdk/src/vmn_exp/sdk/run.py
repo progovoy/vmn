@@ -430,6 +430,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _open(self):
         self._publish()
         context.register(self)
+        self._defer_ships()
         install_signal_handlers()
         if self._output is not None:
             self._chore_guard("output capture", self._output.start)
@@ -480,6 +481,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         try:
             self._stop_background(_final_upload_deadline())
         finally:
+            self._undefer_ships()
             context.unregister(self)
 
     def _stop_background(self, deadline):
@@ -574,6 +576,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
             self._record_guard("final state", self._publish, final_state, final=True)
+            # A later request would replace the final sync with a periodic one.
+            self._undefer_ships()
             self._log_sync.submit(final=True)
             if alerts:
                 self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
@@ -609,6 +613,18 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         if error is None:
             return f"vmn: the final {what} of run {self.id} is still uploading"
         return f"vmn: the final {what} of run {self.id} was not uploaded: {error}"
+
+    def _defer_ships(self):
+        """Due ships of a direct-to-bucket storage go to the run's sync
+        worker, never the appending thread (a heartbeat, a log_metric call)."""
+        defer = getattr(self._storage, "defer_ships", None)
+        if defer is not None:
+            defer(self.app_name, self.id, self._log_sync.submit)
+
+    def _undefer_ships(self):
+        undefer = getattr(self._storage, "undefer_ships", None)
+        if undefer is not None:
+            undefer(self.app_name, self.id)
 
     def _sync_log(self):
         # sync_to_remote is looked up here, at call time: tests patch it on
