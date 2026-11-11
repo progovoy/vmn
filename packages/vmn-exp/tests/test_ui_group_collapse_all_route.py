@@ -41,3 +41,9 @@ def test_collapse_all_keys_the_etag(served):  # noqa: F811
 def test_collapse_all_needs_a_grouped_outer_runs_page(served, params):  # noqa: F811
     client, _ = served
     assert "collapse_all" in _get(client, 400, **params).json()["detail"]
+
+
+def test_a_collapsed_grouped_page_takes_a_job_sort(served):  # noqa: F811
+    client, _ = served
+    page = _get(client, group="status", top="jobs", collapse_all="1", sort="job:started").json()
+    assert page["groups"] and page["groups"][0]["rows"] == []

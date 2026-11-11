@@ -11,7 +11,7 @@ from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE
 from vmn_exp.ui.leaderboard_group_jobs import job_fields
 from vmn_exp.ui.leaderboard_group_spec import GroupSpec
 from vmn_exp.ui.leaderboard_groups import Grouping, groups_payload
-from vmn_exp.ui.leaderboard_jobs import check_job_sort
+from vmn_exp.ui.leaderboard_jobs import JOB_SORTS, check_job_sort
 from vmn_exp.ui.leaderboard_live_below import board_extra, reads_below
 from vmn_exp.ui.leaderboard_scope import check_scope
 from vmn_exp.ui.memo import LRU
@@ -41,8 +41,14 @@ class GroupCache:
         ``rolled`` by *job_agg*, None: the app's, which a page of groups
         names in ``job_agg``). A *top_query* reading
         ``live_below`` groups uncached too (the top rows are few), as does a
-        *query* reading one."""
-        check_job_sort(sort, False)
+        *query* reading one. A ``job:*`` sort (needs *top*) groups uncached
+        from the Jobs view's memoized order: each group's rows keep it, and
+        groups order by their first row (``job:started``: by the latest
+        attempt's start)."""
+        check_job_sort(sort, top)
+        job_sort = None
+        if sort in JOB_SORTS:
+            job_sort, sort, order = (sort, order, job_agg), None, None
         check_scope(self._cache._base(snapshot)[0], scope)
         if top_query and not top:
             raise ValueError("top_q needs top=1")
@@ -51,12 +57,13 @@ class GroupCache:
         if live_below and rows_filter is None:
             below = board_extra(self._cache, snapshot, schema)
             rows_filter = lambda rows: filter_rows(rows, query, extra=below)  # noqa: E731
-        if rows_filter is None:
+        if rows_filter is None and not job_sort:
             spec = GroupSpec(group, agg, schema, sort, order, status, query, archived, **where)
             grouping = self.grouping(snapshot, schema, spec)
         else:
-            spec = GroupSpec(group, agg, schema, sort, order, status, None, archived, **where)
-            grouping = self._uncached(snapshot, schema, spec, rows_filter)
+            kept = query if rows_filter is None else None  # else rows_filter reads it
+            spec = GroupSpec(group, agg, schema, sort, order, status, kept, archived, **where)
+            grouping = self._uncached(snapshot, schema, spec, rows_filter or list, job_sort)
         unfiltered = None
         if status or query or rows_filter is not None:
             plain = GroupSpec(group, DEFAULT_AGGREGATE, schema, archived=archived, **where)
@@ -72,12 +79,18 @@ class GroupCache:
             out["job_agg"] = pool.choice()
         return out
 
-    def _uncached(self, snapshot, schema, spec, rows_filter):
+    def _uncached(self, snapshot, schema, spec, rows_filter, job_sort=None):
+        """*rows_filter* over the ordered rows grouped; with *job_sort*
+        ``(sort, order, job_agg)`` the rows keep that order."""
         base, bucket = self._cache._base(snapshot)
         live = base.patched(bucket)
         f = spec.flat
-        rows = rows_filter(self._cache.ordered(snapshot, schema, f.sort, f.status, f.order,
-                                               f.archived, f.scope, f.top, top_query=f.top_query))
+        sort, order, job_agg = job_sort or (f.sort, f.order, None)
+        rows = rows_filter(self._cache.ordered(snapshot, schema, sort, f.status, order,
+                                               f.archived, f.scope, f.top, f.query,
+                                               f.top_query, job_agg))
+        if job_sort:
+            return Grouping.in_order(base, spec, rows, live)
         return Grouping.of_rows(base, spec, rows, live)
 
     def grouping(self, snapshot, schema, spec):

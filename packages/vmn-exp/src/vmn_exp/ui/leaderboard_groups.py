@@ -77,6 +77,14 @@ class Grouping:
         return cls._of_sorted(base, spec, sorted(rows, key=key), key, ranked, with_metric, live)
 
     @classmethod
+    def in_order(cls, base, spec, rows, live=None):
+        """From filtered *rows* already in order (a ``job:*`` sort's): kept
+        as given, groups by their first row."""
+        rank = {row["verstr"]: i for i, row in enumerate(rows)}
+        return cls._of_sorted(base, spec, rows, lambda row: rank[row["verstr"]], False,
+                              spec.carrying(rows), live)
+
+    @classmethod
     def _of_sorted(cls, base, spec, rows, key, ranked, with_metric, live):
         members = _partition(rows, spec.key_of(base.snapshot))
         summaries = {group: Summary.of(kept) for group, kept in members.items()}
