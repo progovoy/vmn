@@ -129,13 +129,13 @@ export function AllRunsView({ ws, app, views, onJobs }: {
     <>
       <BoardHead
         title={appName}
-        count={runCountText(wholeBoard ? {
+        count={(data.counting ? "counting runs…" : runCountText(wholeBoard ? {
           loading: false, filtered, loaded: data.total, total,
           shownTop, loadedTop: Math.max(0, data.total - facets.parented),
         } : {
           loading: rows === undefined, filtered, loaded: all.length, total,
           shownTop, loadedTop: topLevel(all),
-        }) + (data.indexing ? ` · ${incompleteText(data.indexing)}` : indexing ? " · indexing" : "")}
+        })) + (data.indexing ? ` · ${incompleteText(data.indexing)}` : indexing ? " · indexing" : "")}
         live={narrow && anyRunning && <LiveText paused={paused} updatedAt={data.updatedAt} />}
         views={views}
         actions={!empty && (

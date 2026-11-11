@@ -52,7 +52,7 @@ export function useGroupedRows(
     structuralSharing: false,
   }, client);
 
-  const { data, stale, queryError, pageError, staleError } = useShownList(query, group !== null, client, key);
+  const { data, stale, counting, queryError, pageError, staleError } = useShownList(query, group !== null, client, key);
   // The aggregate an answer to no `agg=` names: the app's default (F3).
   const answeredDefault = useRef<GroupAggregate>();
   if (!agg && query.data?.aggregate) answeredDefault.current = query.data.aggregate;
@@ -107,7 +107,7 @@ export function useGroupedRows(
 
   return {
     data,
-    stale, queryError, pageError, staleError,
+    stale, counting, queryError, pageError, staleError,
     moreError, more, loadMore, loadGroup, refresh,
     defaultAggregate: answeredDefault.current,
     updatedAt: query.dataUpdatedAt,

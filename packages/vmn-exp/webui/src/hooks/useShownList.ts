@@ -38,6 +38,9 @@ export function useShownList<T>(
   return {
     data,
     stale: data !== undefined && (query.data === undefined || revalidating),
+    /** The rows shown are another filter's, this one's answer still on its
+     *  way: their total is not this filter's count. */
+    counting: data !== undefined && query.data === undefined && !err,
     queryError: err?.status === 400 ? err.message : null,
     pageError: data ? null : failed,
     /** The page failed as not found (404): e.g. a scope a loading index does not hold yet. */
