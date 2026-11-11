@@ -21,7 +21,7 @@ Which commit of each one actually shipped? Without vmn, that is an afternoon of
 CI logs and container tags. With vmn:
 
 ```sh
-vmn goto -v 2.1.0 my_platform   # every repo back at the commit that shipped
+vmn goto -v 2.1.0 my_app   # every repo back at the commit that shipped
 ```
 
 vmn stores release metadata as readable YAML in annotated Git tags: the
@@ -30,15 +30,15 @@ version, and release context. There is no vmn server and no external metadata
 database.
 
 > Developed continuously since 2019, vmn is used in daily production workflows
-> by teams at large companies managing multi-repository products. vmn versions
-> its own releases. The repository contains more than 400 tests, including
-> Docker-backed multi-repository, recovery, and compatibility scenarios.
+> by teams managing multi-repository products. vmn versions its own releases.
+> The repository contains more than 700 tests, including Docker-backed
+> multi-repository, recovery, and compatibility scenarios.
 
-If vmn saves you an afternoon, a ⭐ helps other teams find it.
-
-[Quick start](#quick-start) · [Why vmn](#why-vmn) ·
+[Why vmn](#why-vmn) · [Quick start](#quick-start) ·
+[60-second demo](#try-it-in-60-seconds-local-only) ·
 [Multi-repository recovery](#multi-repository-recovery) ·
-[Release models](#release-models) · [Configuration](#configuration) ·
+[Release models](#release-models) · [Islands](#islands-app-and-deps-side-by-side) ·
+[Configuration](#configuration) ·
 [Operations](#production-operation) · [Commands](#command-reference) ·
 [Documentation](#documentation)
 
@@ -102,6 +102,54 @@ git cat-file -p my_app_0.1.0
 vmn show --verbose my_app
 ```
 
+The tag message is the whole record (trimmed here):
+
+```yaml
+stamping:
+  app:
+    name: my_app
+    _version: 0.1.0
+    previous_version: 0.0.1
+    release_mode: minor
+    prerelease: release
+    stamped_on_branch: main
+    changesets:
+      .:
+        hash: e37201b656ff70785077b388e592122fc87e72e6
+        remote: git@github.com:acme/my_app.git
+        vcs_type: git
+```
+
+Each dependency repository adds one more entry under `changesets`.
+
+## Try it in 60 seconds (local only)
+
+`demo.sh` creates throwaway repos in a temp dir. Local bare repos act as the
+remotes, and vmn is installed into a temp venv. Nothing touches your real
+remotes.
+
+```sh
+curl -O https://raw.githubusercontent.com/progovoy/vmn/master/demo/demo.sh
+bash demo.sh
+```
+
+What it shows:
+
+```sh
+vmn stamp -r patch platform/auth        # 0.0.1   (auto-initializes vmn and the app)
+vmn stamp -r minor platform/billing     # 0.1.0
+vmn show --root platform                # 3: every service stamp, including first-use init, bumps the root
+
+# platform/auth declares ../lib_core as a dependency in .vmn/platform/auth/conf.yml
+vmn stamp -r minor platform/auth        # 0.1.0, root 4
+git cat-file -p platform-auth_0.1.0     # YAML: commit + remote of the app repo and ../lib_core
+
+# ...more commits in both repos...
+vmn goto -v 0.1.0 platform/auth         # app repo and lib_core back to the stamped commits
+vmn goto platform/auth                  # back to the branch tip
+vmn goto --root -v 4 platform           # root version 4, services as they were at that stamp
+```
+
 ## Multi-repository recovery
 
 Declare dependency repositories in `.vmn/my_app/conf.yml`, keyed by their
@@ -147,29 +195,6 @@ credential helper, or vmn's per-command push credentials.
 
 </details>
 
-### Islands: app and deps side by side
-
-`vmn wt` (alias of `vmn worktrees`) builds an *island*: git worktrees for the
-application and every dependency, laid out like the originals, plus an
-`island.json` manifest. Each checkout starts on a private
-`island/<name>/<branch>` branch that follows its source branch but cannot be
-pushed; stamping is refused on it.
-
-```sh
-vmn wt create my_app --island-name feat                   # from the current commits
-vmn wt create my_app --island-name feat --carry-changes   # ...plus uncommitted work
-vmn wt pull                                               # rebase onto the source branches
-vmn wt freeze my_app                                      # pin deps to the branches they are on
-vmn wt remove feat
-```
-
-To share the work, check out a real branch in each repo you changed
-(`git checkout -b feature/x && git push -u origin feature/x`) and run
-`vmn wt freeze` in the application. It pins those dependency branches in the
-current branch's conf, so a colleague who checks out `feature/x` and runs
-`vmn wt create` gets the same dependency state. `-fv 2.1.0` builds an island at
-a recorded version instead.
-
 ## Release models
 
 ```text
@@ -192,42 +217,37 @@ Modes from 2 and 3 are applied as `--orm` or `-r` per `release_mode_policy`
 (`optional` by default, or `strict`). During a prerelease sequence, `vmn stamp
 --pr rc my_app` needs no mode at all.
 
-For independently deployed services, use a root app:
+For independently deployed services, use a root app: name each service
+`<root>/<service>` (`platform/auth`, `platform/billing`). Services keep their
+own versions, and every service stamp bumps the root's integer version, so
+`vmn goto --root -v <N> platform` puts every service back as it was at that
+stamp. The [demo above](#try-it-in-60-seconds-local-only) walks through it.
+
+Tags for `platform/auth` are named `platform-auth_<version>` (the `/` becomes
+`-`), and root versions are tagged `platform_<N>`.
+
+## Islands: app and deps side by side
+
+`vmn wt` (alias of `vmn worktrees`) builds an *island*: git worktrees for the
+application and every dependency, laid out like the originals, plus an
+`island.json` manifest. Each checkout starts on a private
+`island/<name>/<branch>` branch that follows its source branch but cannot be
+pushed; stamping is refused on it.
 
 ```sh
-vmn stamp -r patch platform/auth       # auth 0.0.1
-vmn stamp -r minor platform/billing    # billing 0.1.0
-vmn show --root platform               # 3 on a fresh repo: every service stamp, including each service's first-use init, bumps the root
-vmn goto --root -v 3 platform          # root version 3, with each service as it was at that stamp
+vmn wt create my_app --island-name feat                   # from the current commits
+vmn wt create my_app --island-name feat --carry-changes   # ...plus uncommitted work
+vmn wt pull                                               # rebase onto the source branches
+vmn wt freeze my_app                                      # pin deps to the branches they are on
+vmn wt remove feat
 ```
 
-Tags for `platform/auth` are named `platform-auth_<version>` (the `/` becomes `-`), and root versions are tagged `platform_<N>`.
-
-## Try it in 60 seconds (local only)
-
-`demo.sh` creates throwaway repos in a temp dir. Local bare repos act as the remotes, and vmn is installed into a temp venv. Nothing touches your real remotes.
-
-```sh
-curl -O https://raw.githubusercontent.com/progovoy/vmn/master/demo/demo.sh
-bash demo.sh
-```
-
-What it shows (vmn 0.11.2):
-
-```sh
-vmn stamp -r patch platform/auth        # 0.0.1   (auto-initializes vmn and the app)
-vmn stamp -r minor platform/billing     # 0.1.0
-vmn show --root platform                # 3: every service stamp, including first-use init, bumps the root
-
-# platform/auth declares ../lib_core as a dependency in .vmn/platform/auth/conf.yml
-vmn stamp -r minor platform/auth        # 0.1.0, root 4
-git cat-file -p platform-auth_0.1.0     # YAML: commit + remote of the app repo and ../lib_core
-
-# ...more commits in both repos...
-vmn goto -v 0.1.0 platform/auth         # app repo and lib_core back to the stamped commits
-vmn goto platform/auth                  # back to the branch tip
-vmn goto --root -v 4 platform           # root version 4, services as they were at that stamp
-```
+To share the work, check out a real branch in each repo you changed
+(`git checkout -b feature/x && git push -u origin feature/x`) and run
+`vmn wt freeze` in the application. It pins those dependency branches in the
+current branch's conf, so a colleague who checks out `feature/x` and runs
+`vmn wt create` gets the same dependency state. `-fv 2.1.0` builds an island at
+a recorded version instead.
 
 ## Configuration
 
@@ -334,14 +354,7 @@ the branch name become directories; root apps use `root_conf.yml`). Legacy
 - `--dry-run` previews a stamp without committing or tagging.
 - Dirty, detached, outgoing, and dependency states are checked before release.
 - Detached CI checkouts work as they are: vmn never creates or switches branches
-  as a side effect. `stamp` and `release --stamp` check out the real branch
-  whose remote tip is HEAD (`git checkout -b <branch> --track origin/<branch>`);
-  `release` and `add` push only their tag and stay detached. When several
-  branches qualify, the CI's branch variable decides (`BRANCH_NAME`,
-  `GIT_BRANCH`, `GITHUB_HEAD_REF`/`GITHUB_REF_NAME`, `CI_COMMIT_REF_NAME`,
-  `BUILDKITE_BRANCH`, `CIRCLE_BRANCH`, `BITBUCKET_BRANCH`); otherwise vmn warns
-  and picks the first alphabetically. Leftover `vmn_tracking_remote__*` branches
-  from older versions are treated as their upstream and deleted once unused.
+  as a side effect (details below).
 - A per-repository lock prevents concurrent local vmn operations.
 - Release-branch allowlists restrict stable stamps to configured branches.
 - `--pull` fetches remote state and retries version conflicts.
@@ -350,6 +363,23 @@ the branch name become directories; root apps use `root_conf.yml`). Legacy
   authenticate the push through an ephemeral HTTPS URL; the remote config is
   never modified.
 - No internet access is required when an internal or local Git remote is used.
+
+<details>
+<summary><strong>Detached HEAD in CI</strong></summary>
+
+`stamp` and `release --stamp` check out the real branch whose remote tip is
+HEAD (`git checkout -b <branch> --track origin/<branch>`); `release` and `add`
+push only their tag and stay detached.
+
+When several branches qualify, the CI's branch variable decides: `BRANCH_NAME`,
+`GIT_BRANCH`, `GITHUB_HEAD_REF`/`GITHUB_REF_NAME`, `CI_COMMIT_REF_NAME`,
+`BUILDKITE_BRANCH`, `CIRCLE_BRANCH`, `BITBUCKET_BRANCH`. Otherwise vmn warns
+and picks the first alphabetically.
+
+Leftover `vmn_tracking_remote__*` branches from older versions are treated as
+their upstream and deleted once unused.
+
+</details>
 
 For GitHub Actions, use [vmn-action](https://github.com/marketplace/actions/automated-versioning):
 
@@ -509,7 +539,8 @@ default) takes `--island-name`, `-fv, --from-version`, `-fb, --from-branch`,
 `--base-path` (default `../vmn-islands`), `--shallow-deps`, `--carry-changes`.
 
 **`vmn init-app <app>`**: `-v <version>` (start from, default `0.0.0`),
-`--dry-run`, `--orm optional|strict` (sets `release_mode_policy`).
+`--dry-run`, `--orm optional|strict` (sets `release_mode_policy`; also spelled
+`--release-mode-policy` or `--default-release-mode`).
 
 **`vmn snapshot`**: see [docs/snapshots.md](https://github.com/progovoy/vmn/blob/master/docs/snapshots.md#actions).
 
@@ -550,3 +581,5 @@ vmn is open source under the [MIT License](https://github.com/progovoy/vmn/blob/
 Issues, questions, and pull requests are welcome; see the
 [contributing guide](https://github.com/progovoy/vmn/blob/master/CONTRIBUTING.md) and the
 [issue tracker](https://github.com/progovoy/vmn/issues).
+
+If vmn saves you an afternoon, a ⭐ helps other teams find it.
