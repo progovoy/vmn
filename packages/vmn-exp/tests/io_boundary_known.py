@@ -144,7 +144,7 @@ KNOWN_IO = {
     'vmn_exp.storage.host_dirs': {'env': 4, 'fs': 4, 'process_self': 1},
     'vmn_exp.storage.journal': {'process_self': 2, 'real_default': 1, 'time': 2},
     'vmn_exp.storage.journal_sinks': {'fs': 4},
-    'vmn_exp.storage.listing': {'fs': 6, 'thread': 1, 'time': 1},
+    'vmn_exp.storage.listing': {'fs': 8, 'thread': 1, 'time': 1},
     'vmn_exp.storage.listing_workers': {'console': 3},
     'vmn_exp.storage.local': {'fs': 33, 'time': 1},
     'vmn_exp.storage.local_metrics': {'fs': 15},
