@@ -18,6 +18,7 @@ import pytest
 
 _EXPECTED_ALL = [
     "CommandSpec",
+    "Frontend",
     "register_command",
     "find_command",
     "register_dev_version_loader",
