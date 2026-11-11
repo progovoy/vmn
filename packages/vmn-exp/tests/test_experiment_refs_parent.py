@@ -8,6 +8,7 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.core.refs import resolve_parent
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 RUN = "0.0.1-dev.aaaa111.bbbb222"
@@ -23,7 +24,7 @@ def _storage_with_run(tmp_path):
     os.makedirs(path)
     with open(os.path.join(path, "metadata.yml"), "w") as f:
         yaml.dump({"format_version": 1, **{"verstr": RUN, "timestamp": "2026-09-21T12:00:01Z"}}, f)
-    return open_storage(root=local_store_root(str(tmp_path)), area="runs")
+    return open_storage(root=local_store_root(str(tmp_path)), area="runs", clock=RealClock())
 
 
 def test_no_ref_means_no_parent(tmp_path):

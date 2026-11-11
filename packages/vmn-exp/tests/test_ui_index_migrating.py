@@ -21,7 +21,7 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui import index as ui_index  # noqa: E402
 from vmn_exp.ui.cache_health import SqliteHealth  # noqa: E402
 from vmn_exp.ui.cache_resync import WorkspaceCache  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 API = "/api/v1/workspaces/ws"
@@ -32,7 +32,7 @@ FINISHED = "state: finished\nexit_code: 0\n"
 
 def _seed(tmp_path, n=3):
     uri = f"file://{tmp_path}/store"
-    st = open_storage(uri, area=RUNS)
+    st = open_storage(uri, area=RUNS, clock=RealClock())
     for i in range(n):
         v = f"0.0.1-dev.0000abcd.{i}"
         st.save(APP, v, {"verstr": v, "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})

@@ -11,6 +11,7 @@ from vmn_exp.sdk import start_run
 from vmn_exp.sdk.adoption import ADOPT_PID_ENV, ADOPT_RUN_ID_ENV
 from vmn_exp.sdk.guest_run import GuestRun
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 
@@ -31,7 +32,7 @@ def container(tmp_path, monkeypatch):
 
 
 def _store(root):
-    return open_storage(root=str(root), area="runs")
+    return open_storage(root=str(root), area="runs", clock=RealClock())
 
 
 def _wrapper_run(monkeypatch, store_dir):

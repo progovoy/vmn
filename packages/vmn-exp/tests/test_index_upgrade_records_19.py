@@ -15,6 +15,7 @@ from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.metric_compact import compact_writer
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.ui.journal_follow import WorkspaceJournal
+import time
 
 T0 = 1_700_000_000_000_001
 
@@ -40,7 +41,7 @@ def _log(st, verstr, sec, entry):
 
 def _compacted(st, i, steps):
     verstr = make(st, i)
-    w = MetricWriter(st, APP, verstr, "w")
+    w = MetricWriter(st, APP, verstr, "w", clock=time.time)
     for n, step in enumerate(steps):
         w.add("loss", 1.0 + n, step=step, ts_us=T0 + n)
     w.flush()

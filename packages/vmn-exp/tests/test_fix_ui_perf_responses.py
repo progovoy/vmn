@@ -14,7 +14,7 @@ from vmn_exp.snapshot import open_storage
 from vmn_exp.ui import responses
 from vmn_exp.ui.responses import SafeJSONResponse, json_response
 from vmn_exp.storage.areas import local_store_root
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -112,7 +112,7 @@ def test_body_is_not_gzipped_when_not_accepted():
 def ws(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
     storage.save(APP, "1.0.0-dev.a", {"verstr": "1.0.0-dev.a", "timestamp": "t"}, {})
     for i in range(30):
         storage.append_log_entry(

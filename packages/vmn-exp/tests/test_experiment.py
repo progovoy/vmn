@@ -18,7 +18,7 @@ from exp_helpers import (
     _stamp_app,
 )
 from vmn_exp.storage.areas import local_store_root
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 
 def _make_dirty(app_layout, filename="dirty.txt", content="dirty"):
@@ -536,7 +536,7 @@ def _exp_log(app_layout, verstr):
     """Load an experiment's merged log (per-writer JSONL + legacy log.yml)."""
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(root=local_store_root(app_layout.repo_path), area="runs")
+    storage = open_storage(root=local_store_root(app_layout.repo_path), area="runs", clock=RealClock())
     return storage.load_merged_log(app_layout.app_name, verstr)
 
 

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.ui import routes_actions
 from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.server_context import ServerContext
+from fakes.clock import FakeClock
 
 PREFIX = "/api/v1"
 RUN = "0.0.1-dev.a"
@@ -71,7 +72,7 @@ def _refuse(*args, **kwargs):
 
 def _client(ws, jobs, read_only=False, rows=()):
     ctx = ServerContext(FakeManager(ws), FakeSource(), TTLCache(5), open_workspace_storage=_refuse,
-                        open_edit_storage=_refuse, probe_store=_refuse, app_exists=_refuse)
+                        open_edit_storage=_refuse, probe_store=_refuse, app_exists=_refuse, clock=FakeClock())
     app = FastAPI()
     routes_actions.register(app, PREFIX, ctx, jobs, FakeLeaderboards(list(rows)), read_only)
     return TestClient(app)

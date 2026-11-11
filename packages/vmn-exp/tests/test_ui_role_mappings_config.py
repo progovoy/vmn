@@ -11,11 +11,11 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator  # noqa: E402
 from vmn_exp.ui.auth.principal import Principal  # noqa: E402
 from vmn_exp.ui.cli import build_server, server_app  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 
 def _app(tmp_path):
-    storage = open_storage(f"file://{tmp_path / 'store'}", area=RUNS)
+    storage = open_storage(f"file://{tmp_path / 'store'}", area=RUNS, clock=RealClock())
     storage.save("app", "0.0.1-dev.abc.r1", {"verstr": "0.0.1-dev.abc.r1"}, {})
     p = tmp_path / "server.yml"
     p.write_text(f"""

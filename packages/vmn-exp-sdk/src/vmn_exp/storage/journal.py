@@ -173,7 +173,7 @@ def _adopt(inner, states):
 
 
 def journaled(inner, sink=None, writer_id=None, retries=3,
-              backoff=_default_backoff, clock=time.time):
+              backoff=_default_backoff, *, clock):
     """*inner* as a :class:`JournaledStorage` (a backend without a journal
     sink is returned as is)."""
     if isinstance(inner, JournaledStorage):

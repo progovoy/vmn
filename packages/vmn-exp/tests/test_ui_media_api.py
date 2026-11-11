@@ -7,7 +7,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from vmn_exp.core.png import encode_png
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom, real_io
@@ -21,14 +21,14 @@ BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments/{V}"
 def storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    st = open_storage(root=local_store_root(str(root)), area="runs")
+    st = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return st
 
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, V, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, V, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()

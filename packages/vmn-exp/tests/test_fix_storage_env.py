@@ -19,7 +19,7 @@ from vmn_exp.core.writer import (
     merge_env_into_params,
 )
 from vmn_exp.sdk import start_run
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 BUCKET = "ml-exps"
 ENV_KEYS = (
@@ -100,7 +100,7 @@ def s3():
 def _bucket_runs():
     return [m["verstr"] for m in open_storage(
         s3_uri(BUCKET, "vmn"),
-        area="runs",
+        area="runs", clock=RealClock(),
     ).list_snapshots("trainer")]
 
 
@@ -113,7 +113,7 @@ def test_start_run_in_a_pod_records_straight_to_the_bucket(tmp_path, monkeypatch
     assert _bucket_runs() == [run.id]
     log = open_storage(
         s3_uri(BUCKET, "vmn"),
-        area="runs",
+        area="runs", clock=RealClock(),
     ).load_merged_log("trainer", run.id)
     assert any(e.get("values", {}).get("loss") == 0.25 for e in log)
 

@@ -18,7 +18,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import reader
 from vmn_exp.sdk.ranks import NoOpRun
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
@@ -124,7 +124,7 @@ def storage(tmp_path):
 
 
 def test_define_metric_round_trips_through_storage_and_reader(storage):
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
     run.define_metric("val_*", step_metric="epoch")
     for step in range(3):
@@ -145,7 +145,7 @@ def test_define_metric_round_trips_through_storage_and_reader(storage):
 
 
 def test_define_metric_rejects_a_bad_step_metric(storage):
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     with pytest.raises(ValueError):
         run.define_metric("acc", step_metric=7)
 

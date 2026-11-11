@@ -11,7 +11,7 @@ from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.ui.readers.experiments import sort_rows
 from vmn_exp.storage.areas import local_store_root
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -24,7 +24,7 @@ def _ts(i):
 def _client(tmp_path, use_index=True):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager

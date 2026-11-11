@@ -9,13 +9,14 @@ from similar_seed import features, finished, seed, verstr
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.similar_rows import SnapshotRows, StoreRows
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 
 
 @pytest.fixture
 def both(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
     outer = seed(storage, APP, verstr(1), name="outer", note="sweep")
     inner = seed(storage, APP, verstr(2), parent=outer, intent={"text": "focal"},
                  changes=features(["a.py"]), goal=("loss", "min"), metrics={"loss": 1.0})

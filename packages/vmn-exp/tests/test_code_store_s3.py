@@ -136,7 +136,7 @@ def test_runs_straight_to_s3_without_a_local_dir(app_layout, s3, tarballs):
 
     assert len(tarballs) == 1
     assert len(_code_objects(s3, app_layout.app_name)) == 1
-    reader = open_storage(f"s3://{BUCKET}/exp", None, area="runs")
+    reader = open_storage(f"s3://{BUCKET}/exp", None, area="runs", clock=RealClock())
     for verstr in ids:
         meta, patches = reader.load(app_layout.app_name, verstr)
         assert meta["code"]
@@ -148,7 +148,7 @@ def test_an_incomplete_s3_code_object_is_rewritten_and_flagged_meanwhile(
 ):
     _bootstrap(app_layout)
     _dirty(app_layout)
-    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs")
+    storage = open_storage(f"s3://{BUCKET}/exp", None, area="runs", clock=RealClock())
     with start_run(app_layout.app_name, storage=storage) as run:
         pass
     marker = next(k for k in _keys(s3) if "/code/" in k and k.endswith(METADATA_FILE))

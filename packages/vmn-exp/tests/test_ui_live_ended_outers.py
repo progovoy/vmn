@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from vmn_exp.core.app_settings_store import write_settings  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -61,7 +61,7 @@ def store(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     for n, parent, state in RUNS_OF:
         meta = {"verstr": _v(n), "timestamp": "2026-01-01T00:00:00Z"}
         if parent:

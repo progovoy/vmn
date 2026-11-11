@@ -228,11 +228,11 @@ class WorkspaceManager:
             shutil.rmtree(ws.path, ignore_errors=True)
 
 
-def workspace_storage(ws):
+def workspace_storage(ws, clock):
     """A ``store`` workspace's experiment storage, else None."""
     if ws.kind != "store":
         return None
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
 
-    return open_storage(ws.store, area=RUNS, writer=False)
+    return open_storage(ws.store, area=RUNS, writer=False, clock=clock)

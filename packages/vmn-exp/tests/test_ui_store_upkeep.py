@@ -15,7 +15,7 @@ from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.ui.store_upkeep import AppUpkeep, StoreUpkeep
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 CODE = "0.0.1-dev.abc.def"
@@ -29,7 +29,7 @@ def _run(storage, parent=None, exit_code="none", points=True):
     """A run; *exit_code* None = running, an int = finished, "none" = no state."""
     verstr = create_run(storage, APP, CODE, {"timestamp": _now()}, {}, parent=parent)
     if points:
-        w = MetricWriter(storage, APP, verstr, "w")
+        w = MetricWriter(storage, APP, verstr, "w", clock=time.time)
         for step in range(1, 4):
             w.add("loss", 1.0 / step, step=step)
         w.flush()
@@ -198,7 +198,7 @@ def test_a_served_store_workspace_gets_its_markers_back(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path / 'store'}"
-    store = open_storage(store=uri, area="runs")
+    store = open_storage(store=uri, area="runs", clock=RealClock())
     outer = _run(store, points=False)
     kid = _run(store, parent=outer, points=False)
     store.unmark_child(APP, outer, kid)

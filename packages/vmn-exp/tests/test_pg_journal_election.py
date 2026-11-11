@@ -39,7 +39,7 @@ def _until(check, timeout=5):
 
 @pytest.fixture
 def store(tmp_path):
-    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1")
+    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1", clock=time.time)
 
 
 def _write(store, app, verstr):

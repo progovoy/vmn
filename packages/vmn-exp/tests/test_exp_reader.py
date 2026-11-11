@@ -9,6 +9,7 @@ import yaml
 from exp_helpers import _storage
 
 from vmn_exp.sdk.reader import get_run, list_runs
+from vmn_exp.core.real_io import RealClock
 
 
 def _iso(dt):
@@ -570,7 +571,7 @@ def _git_free_run(tmp_path, app_name, exp_root):
     from vmn_exp.core.from_snapshot import create_from_snapshot
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(root=str(exp_root), area="runs")
+    storage = open_storage(root=str(exp_root), area="runs", clock=RealClock())
     verstr, err = create_from_snapshot(
         storage, app_name, _snapshot_meta(tmp_path, app_name)
     )

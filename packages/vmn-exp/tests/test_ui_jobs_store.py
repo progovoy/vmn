@@ -20,7 +20,7 @@ from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.jobs import MAX_ARCHIVE_BATCH, JobRunner, start_daemon
 from vmn_exp.ui.jobs_store import STORE_ACTIONS, build_store_action
-from vmn_exp.core.real_io import RealProcesses, RealRandom, real_io
+from vmn_exp.core.real_io import RealClock, RealProcesses, RealRandom, real_io
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"
@@ -29,7 +29,7 @@ _VOLATILE = {"timestamp", "ts", "writer", "writer_id", "actor", "seq", "created_
 
 def _store(tmp_path, name):
     uri = f"file://{tmp_path}/{name}"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     for step in range(5):
         append_to_log(storage, APP, V, create_log_entry("metrics", values={"loss": step}, step=step))

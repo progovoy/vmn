@@ -91,7 +91,7 @@ class WorkspaceIndex:
     indexes and the versions cache live in this object's memory only.
     """
 
-    def __init__(self, root_path, db_dir=None, *, processes):
+    def __init__(self, root_path, db_dir=None, *, processes, clock):
         self.root_path = root_path
         self._processes = processes  # lists the app's tags (the versions cache key)
         self._db_path = None
@@ -101,7 +101,7 @@ class WorkspaceIndex:
         self._lock = threading.Lock()
         self._in_memory = {}  # app name -> unpersisted ExperimentIndex
         self._cache = SqliteStore(self._db_path or ":memory:")
-        self._storage = exp_reader.experiment_storage(root_path)
+        self._storage = exp_reader.experiment_storage(root_path, clock)
 
     @property
     def db_path(self):

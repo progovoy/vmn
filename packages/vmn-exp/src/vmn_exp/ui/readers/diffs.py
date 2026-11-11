@@ -207,9 +207,9 @@ def _delta_from_sides(side1, side2, schema=None):
     return _metrics_delta(side1[2], side2[2], side1[3:], side2[3:], schema)
 
 
-def experiment_diff(root_path, app_name, ref1, ref2, schema=None):
+def experiment_diff(root_path, app_name, ref1, ref2, schema=None, *, clock):
     """Compare two experiments. Returns (result, error_message_or_None)."""
-    storage = experiment_storage(root_path)
+    storage = experiment_storage(root_path, clock)
     verstrs, err = _resolve_pair(storage, app_name, ref1, ref2)
     if err:
         return None, err
@@ -229,15 +229,15 @@ def experiment_diff(root_path, app_name, ref1, ref2, schema=None):
     return result, None
 
 
-def cached_experiment_diff(root_path, app_name, ref1, ref2, schema=None):
+def cached_experiment_diff(root_path, app_name, ref1, ref2, schema=None, *, clock):
     """:func:`experiment_diff` through :data:`DIFF_CACHE` (may raise DiffBusy)."""
-    storage = experiment_storage(root_path)
+    storage = experiment_storage(root_path, clock)
     verstrs, err = _resolve_pair(storage, app_name, ref1, ref2)
     if err:
         return None, err
     key = (root_path, app_name) + tuple(_record_key(storage, app_name, v) for v in verstrs)
     return DIFF_CACHE.run(
-        key, lambda: experiment_diff(root_path, app_name, *verstrs, schema=schema)
+        key, lambda: experiment_diff(root_path, app_name, *verstrs, schema=schema, clock=clock)
     )
 
 

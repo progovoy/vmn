@@ -20,6 +20,7 @@ import types
 
 import pytest
 import yaml
+from vmn_exp.core.real_io import RealClock
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +347,7 @@ def test_snapshot_meta_mode_captures(tmp_path, monkeypatch):
         "base_version: 0.0.1\nbase_commit: abc\nbranch: master\n"
     )
 
-    storage = open_storage(root=str(tmp_path / "exp"), area="runs")
+    storage = open_storage(root=str(tmp_path / "exp"), area="runs", clock=RealClock())
 
     env = capture_env()
     verstr, err = create_from_snapshot(

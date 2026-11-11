@@ -6,12 +6,13 @@ import pytest
 
 from vmn_exp.snapshot import LocalSnapshotStorage, open_storage
 from vmn_exp.core.index import ExperimentIndex, direct_rows
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 
 
 def _storage(root):
-    return open_storage(root=str(root), area="runs")
+    return open_storage(root=str(root), area="runs", clock=RealClock())
 
 
 def _make(storage, i, entries_by_writer=None, run_state=None, note=None):
@@ -277,7 +278,7 @@ def test_cached_storage_with_a_remote_folds_like_the_reader(tmp_path, monkeypatc
         storage = open_storage(
             s3_uri("vmn-bucket", "exps"),
             root=str(tmp_path / "repo"),
-            area="runs",
+            area="runs", clock=RealClock(),
         )
         verstrs = _seed(storage, n=2)
         storage.sync_log_to_remote(APP, verstrs[0], "w0")

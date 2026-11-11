@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.cli import build_server, open_control_plane, server_app  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -74,7 +74,7 @@ def test_single_tenancy_leaves_rls_off(tmp_path, pg_dsn):
 @pytest.fixture
 def client(tmp_path, pg_dsn):
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     args = _config(tmp_path, pg_dsn, store=uri)
     manager, cfg, cp = build_server(args, env={})
@@ -102,7 +102,7 @@ class _Ws:
 
 def _seed(tmp_path, name, verstr):
     uri = f"file://{tmp_path}/{name}"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return _Ws(name, uri), storage
 

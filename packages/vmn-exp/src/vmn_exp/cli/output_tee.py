@@ -20,12 +20,13 @@ from vmn_exp.core.output_log import OutputArtifact, output_cap_bytes, pump
 _DRAIN_TIMEOUT_SEC = 5
 
 
-def output_artifact(storage, app_name, verstr, args):
-    """The run's ``output.log``, or None under ``--no-capture-output``."""
+def output_artifact(storage, app_name, verstr, args, clock):
+    """The run's ``output.log``, or None under ``--no-capture-output``;
+    *clock* (monotonic) throttles its uploads."""
     if not getattr(args, "capture_output", True):
         return None
     cap = output_cap_bytes(getattr(args, "output_cap_mb", None))
-    return OutputArtifact(storage, app_name, verstr, cap)
+    return OutputArtifact(storage, app_name, verstr, cap, clock=clock)
 
 
 def popen_kwargs(env):

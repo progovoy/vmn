@@ -25,6 +25,7 @@ import sys
 import time
 
 import yaml
+from vmn_exp.core.real_io import RealClock
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -100,7 +101,7 @@ def seed(root, profile, app=fgm_records.APP, workers=None, now=None, progress=Fa
     os.makedirs(os.path.join(store, "runs", app))
     _write(os.path.join(store, ".gitignore"), "*\n")
     _write(os.path.join(store, MARKER), yaml.safe_dump(new_marker()))
-    write_settings(open_storage(root=store, area="runs"), app, _yaml(SETTINGS), actor=WRITER)
+    write_settings(open_storage(root=store, area="runs", clock=RealClock()), app, _yaml(SETTINGS), actor=WRITER)
     workers = max(1, workers or os.cpu_count() or 1)
     parts = max(1, -(-workers * 2 // profile.launches))
     tasks = [(root, profile, n, k, parts, now, app)

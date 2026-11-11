@@ -18,7 +18,7 @@ from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.store_marker import forget_checked
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 T0 = 1_700_000_000_000_001
 
@@ -116,7 +116,7 @@ def _v1_local(tmp_path, **kw):
 
 def _local_storage(tmp_path):
     forget_checked()
-    return open_storage(None, str(tmp_path), area="runs")
+    return open_storage(None, str(tmp_path), area="runs", clock=RealClock())
 
 
 def test_metrics_entries_leave_the_jsonl_for_a_vmx_per_writer(tmp_path):
@@ -210,7 +210,7 @@ def test_s3_store_converts_metrics(s3):
     assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     assert {k: s3.get(k) for k in s3.keys()} == before
     forget_checked()
-    _assert_readers_match(open_storage("s3://bkt/team", None, area="runs"))
+    _assert_readers_match(open_storage("s3://bkt/team", None, area="runs", clock=RealClock()))
 
 
 def test_log_files_a_compacted_log_supersedes_are_dropped(tmp_path):

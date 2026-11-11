@@ -4,7 +4,6 @@ Delivery never raises: a sink that fails is logged (a warning the first time
 per sink, debug after) and the others still get the alert.
 """
 import threading
-import time
 
 from vmn_exp._base import VMN_LOGGER, now_iso
 from vmn_exp.core.background import join_all
@@ -39,7 +38,7 @@ def make_alert(trigger, app_name, run_id, title, text="", level="info",
 class Alerter:
     """Sends alerts to one config's sinks; rate-limits by title on request."""
 
-    def __init__(self, config, clock=time.monotonic):
+    def __init__(self, config, *, clock):
         self.config = config
         self._clock = clock
         self._last_sent = {}  # title -> clock()

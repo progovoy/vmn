@@ -17,7 +17,7 @@ from exp_helpers import _bootstrap
 from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk import signals, start_run
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.areas import local_store_root
@@ -221,7 +221,7 @@ def local_runs(tmp_path, monkeypatch):
 
     def make(verstr):
         local.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
-        made.append(Run(local, APP, verstr, 3600, clock=RealClock(), host=RealHost(), random=RealRandom()))
+        made.append(Run(local, APP, verstr, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks()))
         return made[-1]
 
     try:

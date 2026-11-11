@@ -10,6 +10,7 @@ from vmn_exp.core.log import load_log
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.ui.readers import experiment_detail, segment_cache
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+import time
 
 APP, V = "app", "1.0.0-dev.a"
 S = "w~o1"
@@ -33,7 +34,7 @@ def _log_segment(storage, seq, entry):
 
 
 def _metric_segment(storage, steps):
-    w = MetricWriter(storage, APP, V, S)
+    w = MetricWriter(storage, APP, V, S, clock=time.time)
     for step in steps:
         w.add("loss", 1 / (step + 1), step=step, ts_us=T0 + 10 * step)
         w.add("epoch", float(step // 4), step=step, ts_us=T0 + 10 * step)

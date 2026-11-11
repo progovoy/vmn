@@ -10,7 +10,7 @@ from migrate_fixtures import (
 from object_store_fakes import FakeContainerClient, FakeGCSClient, MatchConditions
 from vmn_exp.cli.migrate import migrate_objects, run_migrate
 from vmn_exp.storage.store_marker import forget_checked
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 
 @pytest.fixture(autouse=True)
@@ -117,6 +117,6 @@ def test_s3_shared_prefix_keeps_snapshots_with_code_verstr(s3):
 
     from vmn_exp.storage.open import open_storage
 
-    store = open_storage("s3://bkt/team", None, area="snapshots", writer=False)
+    store = open_storage("s3://bkt/team", None, area="snapshots", writer=False, clock=RealClock())
     assert set(store.list_verstrs("my/app")) == set(snaps)
     assert store.load_metadata("my/app", "c2")["dirty_states"] == ["modified"]

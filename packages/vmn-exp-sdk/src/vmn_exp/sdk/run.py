@@ -108,8 +108,6 @@ ABANDONED_EXIT_CODE = 1
 # installed at the first run open (``_install_process_hooks``), not on import.
 _uncaught_exception = None
 _EXIT_NOTE = ExitCodeNote()
-# A Run built without ``install_hooks`` installs this process's real hooks.
-_PROCESS_HOOKS_DEFAULT = object()
 
 
 def _note_uncaught_exception(exc_value):
@@ -370,9 +368,9 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         on_sigterm=release.FAIL,
         sigterm_exit=release.KILL,
         export_env=True,
-        install_hooks=_PROCESS_HOOKS_DEFAULT,
         writer=None,
         *,
+        install_hooks,
         clock,
         host,
         random,
@@ -383,9 +381,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         # The writer id of this run's own streams; None: the process's.
         self._writer = writer
         # Installs the process's excepthook and atexit finalizer at open;
-        # left out, the real ones; None installs none.
-        if install_hooks is _PROCESS_HOOKS_DEFAULT:
-            install_hooks = _real_process_hooks()
+        # None installs none.
         self._install_hooks = install_hooks
         self._export_env = export_env
         self._on_sigterm = on_sigterm
@@ -436,7 +432,8 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._heartbeat = Heartbeat(self._gate.wrap(self._beat), heartbeat_interval_sec)
         self._media_uploads = MediaUploads(self._gate.wrap(self._save_artifact_file))
         self._output = (
-            RunOutput(storage, app_name, verstr, self._gate) if capture_output else None
+            RunOutput(storage, app_name, verstr, self._gate, clock=clock.monotonic)
+            if capture_output else None
         )
         # No pid: this process *is* the workload.
         self._sampler = sysmetrics.Sampler(self._log_unstepped, system_metrics, clock=clock)

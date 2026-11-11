@@ -14,7 +14,7 @@ from s3_helpers import cached_host, meta, mocked_bucket, s3_storage
 from vmn_exp.core.state_cas import compare_and_save
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 from vmn_exp.sdk import manage
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage, local_side
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
@@ -45,7 +45,7 @@ def storage(request):
 
 
 def _attempts(storage):
-    a, b = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom()), Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    a, b = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks()), Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     a._open()
     b._open()
     return a, b
@@ -194,7 +194,7 @@ def test_manage_finish_also_lands_in_a_cache_without_the_record(two_hosts):
 
 def test_a_loser_on_another_host_caches_the_winners_state(two_hosts):
     first, second = two_hosts
-    a, b = Run(first, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom()), Run(second, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    a, b = Run(first, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks()), Run(second, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     a._open()
     b._open()
 

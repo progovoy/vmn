@@ -11,6 +11,7 @@ from vmn_exp.storage import store_marker
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.store_marker import StoreLayoutError
 from vmn_exp.storage.uri import s3_uri
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +31,7 @@ def _refused(where, root):
     for writer in (True, False):
         store_marker.forget_checked()
         with pytest.raises(StoreLayoutError, match="vmn-exp migrate"):
-            storage = open_storage(where, root, area="runs", writer=writer)
+            storage = open_storage(where, root, area="runs", writer=writer, clock=RealClock())
             store_marker.require_store(storage)
     assert not os.path.exists(os.path.join(root, "store.yml")) if root else True
 
@@ -56,7 +57,7 @@ def test_repo_local_conf_files_are_no_records(tmp_path):
     _touch(str(tmp_path / ".vmn" / "my" / "app" / "experiments" / ".gitignore"), "*\n")
     _touch(str(tmp_path / ".vmn" / "my" / "app" / "snapshots" / "s1" / "notes.txt"))
     root = str(tmp_path / ".vmn" / "store")
-    open_storage(None, root, area="runs")
+    open_storage(None, root, area="runs", clock=RealClock())
     assert os.path.exists(os.path.join(root, "store.yml"))
 
 
@@ -66,6 +67,6 @@ def test_default_object_prefixes_refused(monkeypatch, prefix):
         client = boto3.client("s3")
         client.put_object(Bucket=BUCKET, Key=f"{prefix}/my-app/r1/metadata.yml", Body=b"x")
         with pytest.raises(StoreLayoutError, match="vmn-exp migrate"):
-            open_storage(s3_uri(BUCKET), area="runs")
+            open_storage(s3_uri(BUCKET), area="runs", clock=RealClock())
         listed = client.list_objects_v2(Bucket=BUCKET, Prefix="vmn/")
         assert listed.get("KeyCount", 0) == 0

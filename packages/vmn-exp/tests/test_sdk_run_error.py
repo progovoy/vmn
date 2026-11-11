@@ -11,6 +11,7 @@ from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.ranks import NoOpRun
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 VERSTR = "0.0.1-dev.abc1234.def5678"
 
@@ -40,7 +41,7 @@ def container(tmp_path, monkeypatch):
 
 
 def _storage(store):
-    return open_storage(root=str(store), area="runs")
+    return open_storage(root=str(store), area="runs", clock=RealClock())
 
 
 def _state(store, run_id):

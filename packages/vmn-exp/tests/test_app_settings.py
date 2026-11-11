@@ -14,6 +14,7 @@ from vmn_exp.core.journal_keys import decode_key
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.local import LocalSnapshotStorage
+import time
 
 APP = "root_app/svc"
 TEXT = """\
@@ -31,7 +32,7 @@ ui:
 
 def _store(tmp_path, sink=None):
     local = LocalSnapshotStorage(str(tmp_path / "store"), "runs")
-    return journaled(local, sink=sink, writer_id="host", backoff=lambda a: None) if sink else local
+    return journaled(local, sink=sink, writer_id="host", backoff=lambda a: None, clock=time.time) if sink else local
 
 
 class RecordingSink:

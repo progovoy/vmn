@@ -7,6 +7,7 @@ from vmn_exp.core.log import experiment_row
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.snapshot import LocalSnapshotStorage
+import time
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -38,7 +39,7 @@ def _fields(row):
 
 
 def _log_points(st, writer, n, rng, step0=0):
-    w = MetricWriter(st, APP, V, writer)
+    w = MetricWriter(st, APP, V, writer, clock=time.time)
     for i in range(n):
         ts = T0 + (step0 + i) * 1000 + rng.randint(0, 999)
         w.add("loss", rng.random(), step=step0 + i, ts_us=ts)
@@ -67,7 +68,7 @@ def test_stream_fold_matches_the_entry_fold(tmp_path):
 
 def test_a_rewind_refolds_the_streams(tmp_path):
     st = _storage(tmp_path)
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for step in range(10):
         w.add("loss", float(step), step=step, ts_us=T0 + step)
     w.flush()
@@ -82,7 +83,7 @@ def test_a_rewind_refolds_the_streams(tmp_path):
 
 def test_a_grown_stream_reads_only_its_new_headers(tmp_path, monkeypatch):
     st = _storage(tmp_path)
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for step in range(2000):
         w.add("loss", float(step), step=step, ts_us=T0 + step)
     w.flush()

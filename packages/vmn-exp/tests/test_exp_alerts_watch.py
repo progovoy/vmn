@@ -18,6 +18,7 @@ from vmn_exp.core.alerts import (
     watch_app,
 )
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
+import time
 
 
 def _iso(dt):
@@ -55,7 +56,7 @@ def _stuck_state(heartbeat):
 def _alerter(url, on):
     return Alerter(load_alert_config("app", exp_conf={"alerts": {
         "on": on, "sinks": [{"type": "webhook", "url": url}],
-    }}))
+    }}), clock=time.monotonic)
 
 
 def _an_hour_ago():

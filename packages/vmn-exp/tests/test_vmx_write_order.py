@@ -17,6 +17,7 @@ from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.core.vmx_write_order import indexed_entries
 from vmn_exp.snapshot import LocalSnapshotStorage
+import time
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -114,7 +115,7 @@ def _compacted_run(tmp_path, old=False):
     *old*, rewritten with an older vmn-exp's footer)."""
     st = LocalSnapshotStorage(str(tmp_path), area="runs")
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for step, ts, value in zip(STEPS, TS, VALUES):
         w.add("best", value, step=step, ts_us=T0 + ts)
     w.flush()
@@ -134,7 +135,7 @@ def test_an_old_footers_rewind_check_reads_its_true_earliest_write(tmp_path):
     # reach the file and step 7's 100.0 stayed in the max.
     st = LocalSnapshotStorage(str(tmp_path), area="runs")
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for step, sec, value in ((5, 1, 1.0), (6, 2, 2.0), (7, 3, 100.0), (0, 5, 10.0), (1, 6, 11.0)):
         w.add("x", value, step=step, ts_us=T0 + sec * 1_000_000)
     w.flush()

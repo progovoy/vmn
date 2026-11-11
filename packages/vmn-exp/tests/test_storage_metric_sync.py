@@ -12,6 +12,7 @@ from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.journal import journaled
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealClock
+import time
 
 APP, V, W = "app", "1.0.0-dev.abc.0001", "w"
 
@@ -101,7 +102,7 @@ class _Sink:
 def test_every_metric_write_is_journaled(tmp_path):
     sink = _Sink()
     store = journaled(LocalSnapshotStorage(str(tmp_path), "runs"), sink=sink,
-                      writer_id="host_1", backoff=lambda attempt: None)
+                      writer_id="host_1", backoff=lambda attempt: None, clock=time.time)
     store.save(APP, V, meta(V), {})
     before = len(sink.keys)
     store.append_metric_block(APP, V, W, _block(1.0))

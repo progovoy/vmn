@@ -53,7 +53,7 @@ def _dead_run(storage, segments=3):
     for seq in range(1, segments + 1):
         line = json.dumps({"type": "params", "timestamp": _now(), "params": {f"p{seq}": seq}})
         storage.put_log_segment(APP, verstr, "w", seq, (line + "\n").encode())
-        w = MetricWriter(storage, APP, verstr, "w")
+        w = MetricWriter(storage, APP, verstr, "w", clock=time.time)
         w.add("loss", 1.0 / seq, step=seq)
         w.flush()
     state = {"state": "finished", "pid": 1, "host": "h", "started_at": _now(),

@@ -4,12 +4,13 @@ import pytest
 from vmn_exp.core.query import QueryError
 from vmn_exp.sdk.reader import param_importance
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 
 
 def _storage(tmp_path):
-    return open_storage(root=str(tmp_path), area="runs")
+    return open_storage(root=str(tmp_path), area="runs", clock=RealClock())
 
 
 def _run(storage, i, loss, **params):

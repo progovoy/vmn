@@ -10,10 +10,11 @@ from vmn_exp.core import index_store_schema, index_store_upgrade, index_vmx_chec
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.core.index_vmx_check import VmxCheck
 from journal_index_helpers import APP
+import time
 
 
 def _check(db):
-    check = VmxCheck(lambda store=SqliteStore(db): store, APP)
+    check = VmxCheck(lambda store=SqliteStore(db): store, APP, clock=time.monotonic)
     check.load()
     return check
 

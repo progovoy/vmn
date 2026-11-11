@@ -13,7 +13,7 @@ from moto import mock_aws
 from exp_helpers import _PY, _SRC_PATH
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.snapshot import open_storage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 BUCKET = "ml-exps"
 APP = "trainer"
@@ -62,12 +62,12 @@ def _container(tmp_path, monkeypatch):
 
 
 def _local_runs(root):
-    local = open_storage(root=str(root), area="runs")
+    local = open_storage(root=str(root), area="runs", clock=RealClock())
     return local.list_snapshots(APP)
 
 
 def _bucket_runs():
-    storage = open_storage(s3_uri(BUCKET, "vmn"), area="runs")
+    storage = open_storage(s3_uri(BUCKET, "vmn"), area="runs", clock=RealClock())
     return storage.list_snapshots(APP)
 
 

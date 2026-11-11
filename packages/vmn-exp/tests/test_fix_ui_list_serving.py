@@ -16,7 +16,7 @@ from vmn_exp.core import index as experiment_index
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui import leaderboard_cache
 from vmn_exp.ui.readers import experiments as exp_reader
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -29,7 +29,7 @@ def _ts(i):
 def _app(tmp_path, **opts):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
 
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
@@ -141,9 +141,9 @@ def test_the_app_list_is_cached_per_workspace(served, monkeypatch):
     calls = []
     real = exp_reader.list_apps
 
-    def counted(root_path):
+    def counted(root_path, clock):
         calls.append(root_path)
-        return real(root_path)
+        return real(root_path, clock)
 
     monkeypatch.setattr(exp_reader, "list_apps", counted)
     first = client.get("/api/v1/workspaces/ws/apps").json()

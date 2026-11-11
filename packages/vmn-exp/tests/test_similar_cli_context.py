@@ -9,7 +9,7 @@ import yaml
 from exp_helpers import _bootstrap, _exp, _init_app, _run_vmn_init, _stamp_app, _storage
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli.main import vmn_exp_run
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 from vmn_exp.snapshot import open_storage
 
 
@@ -178,7 +178,7 @@ def test_git_free_similar_takes_a_ref(container, capfd):
     code, out = _git_free(container, capfd, "create", "trainer", "--intent", "label smoothing")
     assert code == 0, out.err
     created = out.out.strip().splitlines()[-1]
-    other = seed(open_storage(root=str(container), area="runs"), "trainer", verstr(1),
+    other = seed(open_storage(root=str(container), area="runs", clock=RealClock()), "trainer", verstr(1),
                  intent={"text": "label smoothing again"})
 
     code, out = _git_free(container, capfd, "similar", "trainer", "-v", created, "--json")

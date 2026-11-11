@@ -4,6 +4,7 @@ org of the request that opened it."""
 import threading
 
 import pytest
+from vmn_exp.core.real_io import RealClock
 
 pytest.importorskip("psycopg")
 
@@ -22,7 +23,7 @@ class _Ws:
 
 def _seed(tmp_path):
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return _Ws("ws", uri), storage
 

@@ -9,6 +9,7 @@ import yaml
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.core.similar_search import conf_schema_of, find
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 CHANGES = features(["train.py"], [TRAIN_STEP])
@@ -16,7 +17,7 @@ CHANGES = features(["train.py"], [TRAIN_STEP])
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs")
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
 
 
 def _verstrs(items):

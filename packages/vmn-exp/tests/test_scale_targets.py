@@ -20,6 +20,7 @@ import pytest
 import scale_store
 from bench_scale import SRC, checkout
 from uiload import seed_records
+from vmn_exp.core.real_io import RealClock
 
 APP = scale_store.APP
 TARGET_SEC = {"show": 0.2, "get_run": 0.2, "last20": 1.0, "query": 2.0, "refresh": 0.2}
@@ -52,7 +53,7 @@ def child(case, work, exact, out, import_only):
     if case == "get_run":
         run(APP, exact)
     elif case == "refresh":
-        storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs")
+        storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs", clock=RealClock())
         assert experiment_index.shared_index(storage, APP).sync()
     elif case is not None:
         argv = {"show": ["show", APP, "-v", exact], "last20": ["list", APP, "--last", "20"],
@@ -112,7 +113,7 @@ def _private_store(root, n):
 def _change(work, verstrs, note):
     from vmn_exp.snapshot import open_storage
 
-    storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs")
+    storage = open_storage(root=os.path.join(work, ".vmn", "store"), area="runs", clock=RealClock())
     for verstr in verstrs:
         storage.update_note(APP, verstr, note)
 

@@ -14,7 +14,7 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.cli import server_app  # noqa: E402
 from vmn_exp.ui.jobs_store import build_store_action  # noqa: E402
 from vmn_exp.ui.workspaces import WorkspaceManager  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -27,7 +27,7 @@ def _serve(tmp_path):
 
 
 def _rewind(tmp_path):
-    storage = open_storage(f"file://{tmp_path}/store", area=RUNS)
+    storage = open_storage(f"file://{tmp_path}/store", area=RUNS, clock=RealClock())
     storage.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     action, err = build_store_action("exp_rewind", APP, {"verstr": V, "step": 0})
     assert err is None

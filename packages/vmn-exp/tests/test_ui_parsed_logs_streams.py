@@ -7,6 +7,8 @@ from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers import parsed_logs
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.core.real_io import RealClock
+import time
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -16,7 +18,7 @@ T0 = 1_767_225_600_000_001
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(root=str(tmp_path), area="runs")
+    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock())
     s.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     s.append_log_entry(APP, V, "w", {"timestamp": "2026-01-01T00:00:00.000001Z",
                                      "type": "create", "params": {"lr": 0.1}})
@@ -24,7 +26,7 @@ def storage(tmp_path):
 
 
 def _log(storage, writer, start, stop):
-    w = MetricWriter(storage, APP, V, writer)
+    w = MetricWriter(storage, APP, V, writer, clock=time.time)
     for step in range(start, stop):
         w.add("loss", step / 7, step=step, ts_us=T0 + 10 * step)
     w.flush()

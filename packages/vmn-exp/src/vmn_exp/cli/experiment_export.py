@@ -20,7 +20,7 @@ from version_stamp.api import VMN_LOGGER, export_tree, measure_runtime_decorator
 
 
 @measure_runtime_decorator
-def experiment_restore(vcs, params, storage, args):
+def experiment_restore(vcs, params, storage, args, clock):
     from vmn_exp.cli import experiment as _exp
 
     verstr, err = _exp._resolve_experiment_version(storage, vcs, args, default_latest=True)
@@ -29,8 +29,8 @@ def experiment_restore(vcs, params, storage, args):
         return 1
 
     record = load_code_record(
-        vcs, params, verstr, app_name=_exp._app_name(vcs, args), exp_storage=storage
-    )
+        vcs, params, verstr, app_name=_exp._app_name(vcs, args), exp_storage=storage,
+        clock=clock)
     if record is None:
         return 1
     return _restore_with_safety_net(vcs, dict(params, force=args.force), *record)

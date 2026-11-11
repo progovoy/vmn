@@ -10,6 +10,7 @@ import vmn_exp.storage.s3_base as s3_base
 from vmn_exp.sdk.models import download_model, register_model
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.registry import location_local_path, open_store
+from vmn_exp.core.real_io import RealClock
 
 STORE_ENDPOINT = "http://minio.test:9000"
 OTHER_ENDPOINT = "http://other.test:9000"
@@ -39,7 +40,7 @@ def endpoints(monkeypatch):
 def _store(tmp_path):
     """The store a run resolves: the remote fronted by a local root."""
     return open_storage(f"s3://{BUCKET}/{PREFIX}?endpoint_url={STORE_ENDPOINT}",
-                        root=str(tmp_path / "local"), area="runs")
+                        root=str(tmp_path / "local"), area="runs", clock=RealClock())
 
 
 def _download(storage, artifact_path):

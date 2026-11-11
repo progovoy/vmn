@@ -7,7 +7,7 @@ from buffer_recover_fakes import APP, V, kept_buffer
 from deferred_ship_fakes import FakeBucket
 from s3_helpers import meta
 
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
@@ -41,13 +41,13 @@ def test_the_kept_buffer_warning_names_buffers_ship(monkeypatch, tmp_path, bucke
 
 def test_a_log_buffer_runs_failed_final_upload_names_buffers_ship(tmp_path, bucket):
     storage = BufferedRemoteStorage(bucket, str(tmp_path / "base"), area="runs", clock=RealClock())
-    run = Run(storage, APP, V, 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, V, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
 
     assert run._not_uploaded("state", OSError("bucket down")).endswith(f"bucket down; {HINT}")
 
 
 def test_a_local_first_runs_failed_final_upload_does_not(tmp_path, bucket):
     local = LocalSnapshotStorage(str(tmp_path / "local"), "runs")
-    run = Run(CachedSnapshotStorage(local, bucket), APP, V, 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(CachedSnapshotStorage(local, bucket), APP, V, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
 
     assert HINT not in run._not_uploaded("state", OSError("bucket down"))

@@ -30,6 +30,7 @@ from vmn_exp.core.writer import append_to_log, flush_log, save_artifact, save_ru
 from vmn_exp.sdk.media_uploads import MediaUploads, staging_dir
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.storage.local import LocalSnapshotStorage
+import time
 
 APP = "app"
 X = "0.0.1-dev.abc1234.0000001"
@@ -82,7 +83,7 @@ def test_artifact_on_local_only_run_stays_local(tmp_path):
 
 def test_output_log_on_local_only_run_stays_local(tmp_path):
     host = _local_only(tmp_path)
-    output = OutputArtifact(host, APP, X, cap_bytes=1024)
+    output = OutputArtifact(host, APP, X, cap_bytes=1024, clock=time.monotonic)
     output.write(b"hello\n")
     output.seal()
     assert output.upload()

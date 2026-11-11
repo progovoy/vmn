@@ -15,12 +15,12 @@ from vmn_exp.snapshot import _get_storage
 from version_stamp.api import VMN_LOGGER
 
 
-def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None, *, clock=None):
+def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None, *, clock):
     """``(metadata, patches)`` of *verstr*, or None after logging why not.
 
     *params* are experiment storage params (``experiment_storage_params``);
     *exp_storage* is the already-open experiment storage, if the caller has one;
-    without it the storage is opened on *clock* (a ``Clock`` port).
+    the stores it opens itself take *clock* (a ``Clock`` port).
     """
     app_name = app_name or vcs.name
     if exp_storage is None:
@@ -28,7 +28,7 @@ def load_code_record(vcs, params, verstr, app_name=None, exp_storage=None, *, cl
     metadata, patches = _try_load(exp_storage, app_name, verstr, "experiment")
     if metadata is None:
         metadata, patches = _load_snapshot(
-            _open_snapshot_storage(vcs, params), app_name, verstr, exp_storage
+            _open_snapshot_storage(vcs, params, clock), app_name, verstr, exp_storage
         )
     if metadata is None:
         VMN_LOGGER.error(
@@ -48,9 +48,9 @@ def _open_experiment_storage(vcs, params, clock):
         return None
 
 
-def _open_snapshot_storage(vcs, params):
+def _open_snapshot_storage(vcs, params, clock):
     try:
-        return _get_storage(vcs, params)
+        return _get_storage(vcs, params, clock)
     except Exception:
         VMN_LOGGER.debug("Could not open the snapshot store", exc_info=True)
         return None

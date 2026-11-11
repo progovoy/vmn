@@ -179,10 +179,10 @@ def build_app(
     # storage_access/storage.open still applies.
     ctx = ServerContext(
         manager, source, TTLCache(APPS_TTL_SEC),
-        open_workspace_storage=lambda ws: workspace_storage(ws),
+        open_workspace_storage=lambda ws: workspace_storage(ws, deps.io.clock),
         open_edit_storage=lambda uri: open_storage(uri, area=RUNS, buffer_logs=True, clock=deps.io.clock),
         probe_store=lambda uri: storage_access.probe_store(uri, random=deps.io.random),
-        app_exists=lambda *args: app_exists(*args),
+        app_exists=lambda *args: app_exists(*args), clock=deps.io.clock,
     )
     leaderboards = LeaderboardCache(conf_of=ctx.board_conf)
     if refresher.background:  # requests after a refresh pay no base or search build
@@ -190,7 +190,7 @@ def build_app(
     job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
         os.path.join(manager.data_dir, "index") if use_index else None, refresher.background,
-        journal_of=source.journal_of,
+        journal_of=source.journal_of, clock=wall_seconds(deps.io.clock),
     )
 
     for router in chain.routers():

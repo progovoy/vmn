@@ -20,7 +20,7 @@ from vmn_exp.storage.areas import local_store_root  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.job_argv import ACTIONS  # noqa: E402
 from vmn_exp.ui.jobs_store import STORE_ACTIONS  # noqa: E402
-from vmn_exp.core.real_io import RealRandom, real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, RealRandom, real_io
 
 TOKEN = "t"
 ISSUER = "https://idp.example"
@@ -60,8 +60,8 @@ def _manager(tmp_path):
 
     checkout = tmp_path / "checkout"
     os.makedirs(checkout / ".git")
-    _seed_runs(open_storage(root=local_store_root(str(checkout)), area="runs"))
-    _seed_runs(open_storage(root=str(tmp_path / "store"), area="runs"))
+    _seed_runs(open_storage(root=local_store_root(str(checkout)), area="runs", clock=RealClock()))
+    _seed_runs(open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock()))
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(checkout))
     manager.add_store("st", f"file://{tmp_path / 'store'}")

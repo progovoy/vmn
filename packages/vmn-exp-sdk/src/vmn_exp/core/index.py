@@ -161,7 +161,7 @@ class ExperimentIndex:
         self._pool = LoadPool(_REMOTE_WORKERS, "vmn-index-load")  # kept across a bulk load's chunks
         self._rests = set()  # records a bulk load read rows-first, the rest to read
         self._unreadable = Unreadable(app_name, lambda: _monotonic())
-        self._vmx = VmxCheck(lambda: self._io or self._store, app_name)  # an upgrade's check
+        self._vmx = VmxCheck(lambda: self._io or self._store, app_name, clock=time.monotonic)  # an upgrade's check
         self._io_unreadable = None  # the I/O helper's Unreadable.summary(), after its refresh
         self._lock = TracedLock(f"index refresh:{app_name}")
         self._published = threading.Event()  # a first snapshot, or a refresh that failed

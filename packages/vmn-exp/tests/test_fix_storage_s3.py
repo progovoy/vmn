@@ -16,6 +16,7 @@ from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.core.status import derive_status, load_run_state
 from vmn_exp.core.writer import allocate_run_verstr
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-bucket"
 
@@ -40,7 +41,7 @@ def _host(tmp_path, name):
     return open_storage(
         s3_uri(BUCKET, "exps"),
         root=str(tmp_path / name),
-        area="runs",
+        area="runs", clock=RealClock(),
     )
 
 

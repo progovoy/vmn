@@ -14,7 +14,7 @@ from vmn_exp.core.log import sort_by_metric
 from vmn_exp.core.tree import subtree_status
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.store_marker import new_marker
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -91,7 +91,7 @@ def test_subtree_status_reads_each_subtree_run_once_and_knows_its_depth():
 def _storage(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    return str(root), open_storage(root=local_store_root(str(root)), area="runs")
+    return str(root), open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
 
 
 def _runs(storage, n, loss=0.1):
@@ -248,9 +248,9 @@ def test_one_s3_storage_per_workspace(s3_ws, monkeypatch):
     built = []
     real = server_mod.workspace_storage
 
-    def counted(ws):
+    def counted(ws, clock):
         built.append(ws.store)
-        return real(ws)
+        return real(ws, clock)
 
     monkeypatch.setattr(server_mod, "workspace_storage", counted)
     client = TestClient(server_mod.create_app(s3_ws, io=real_io()))

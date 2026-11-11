@@ -314,7 +314,7 @@ class _Supervision:
         self.sync = BackgroundSync(self._sync_once, self._sync_final, wait)
         self.state_uploads = StateUploads(storage, app_name, verstr, wait, self.guard)
         self.forwarder = SignalForwarder(*_kill_graces(args, io.env), self.clock)
-        self.output = output_artifact(storage, app_name, verstr, args)
+        self.output = output_artifact(storage, app_name, verstr, args, self.clock)
         self.tee = None
         # Every stream the metrics were appended to: an adopted child that
         # compacts its own stream moves the copy on to a new owner's.
@@ -585,7 +585,7 @@ class _Supervision:
                 f"Experiment {self.verstr}: the failure alert did not finish in time")
 
     def _alert_if_failed(self):
-        alerter = Alerter(load_alert_config(self.app_name, self.exp_conf))
+        alerter = Alerter(load_alert_config(self.app_name, self.exp_conf), clock=self.clock)
         alert_if_failed(
             self.storage, self.app_name, self.verstr,
             getattr(self, "run_state", None), alerter,

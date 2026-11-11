@@ -11,6 +11,7 @@ import yaml
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 RUNS = 3000
@@ -71,7 +72,7 @@ def _refresh(index, touched):
 
 
 def _storage(tmp_path):
-    storage = open_storage(root=local_store_root(str(tmp_path)), area="runs")
+    storage = open_storage(root=local_store_root(str(tmp_path)), area="runs", clock=RealClock())
     return storage, _track_record_reads(storage)
 
 

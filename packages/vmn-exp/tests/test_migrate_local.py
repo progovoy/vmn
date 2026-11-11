@@ -12,7 +12,7 @@ from migrate_fixtures import (
 from vmn_exp.cli import migrate as migrate_mod
 from vmn_exp.cli.migrate import run_migrate
 from vmn_exp.storage.store_marker import StoreLayoutError, forget_checked
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 
 @pytest.fixture(autouse=True)
@@ -125,7 +125,7 @@ def test_writers_refuse_while_migrating(tmp_path, monkeypatch):
     assert _marker(tmp_path)["migrating"] is True
     forget_checked()
     with pytest.raises(StoreLayoutError, match="migrating"):
-        open_storage(None, str(tmp_path), area="runs")
+        open_storage(None, str(tmp_path), area="runs", clock=RealClock())
 
 
 def test_resumes_after_a_kill(tmp_path, monkeypatch):

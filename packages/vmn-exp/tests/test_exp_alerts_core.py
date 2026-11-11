@@ -153,7 +153,7 @@ def test_unreachable_sinks_never_raise_and_fail_fast(monkeypatch):
     monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", dead_url())
     monkeypatch.setenv("VMN_EXP_ALERT_SLACK_URL", dead_url())
     monkeypatch.setenv("VMN_EXP_ALERT_COMMAND", "exit 1")
-    alerter = Alerter(load_alert_config("app", exp_conf={"alerts": {"timeout_sec": 2}}))
+    alerter = Alerter(load_alert_config("app", exp_conf={"alerts": {"timeout_sec": 2}}), clock=time.monotonic)
     start = time.monotonic()
     assert alerter.send(_alert()) is False
     assert time.monotonic() - start < 10
@@ -163,7 +163,7 @@ def test_one_working_sink_is_enough_for_a_delivery(monkeypatch):
     with WebhookReceiver() as hook:
         monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", hook.url)
         monkeypatch.setenv("VMN_EXP_ALERT_COMMAND", "exit 1")
-        assert Alerter(load_alert_config("app", exp_conf={})).send(_alert()) is True
+        assert Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic).send(_alert()) is True
         assert hook.wait_for(1)
 
 
@@ -183,9 +183,9 @@ def test_wants_needs_the_trigger_and_a_sink(monkeypatch):
     for var in ("VMN_EXP_ALERT_WEBHOOK_URL", "VMN_EXP_ALERT_SLACK_URL",
                 "VMN_EXP_ALERT_COMMAND", "VMN_EXP_ALERT_ON"):
         monkeypatch.delenv(var, raising=False)
-    assert not Alerter(load_alert_config("app", exp_conf={})).wants("alert")
+    assert not Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic).wants("alert")
     monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", "http://example/a")
-    alerter = Alerter(load_alert_config("app", exp_conf={}))
+    alerter = Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic)
     assert alerter.wants("alert")
     assert not alerter.wants("failed")
 
@@ -193,7 +193,7 @@ def test_wants_needs_the_trigger_and_a_sink(monkeypatch):
 def test_send_async_delivers_and_drain_waits(monkeypatch):
     with WebhookReceiver() as hook:
         monkeypatch.setenv("VMN_EXP_ALERT_WEBHOOK_URL", hook.url)
-        alerter = Alerter(load_alert_config("app", exp_conf={}))
+        alerter = Alerter(load_alert_config("app", exp_conf={}), clock=time.monotonic)
         alerter.send_async(_alert())
         alerter.drain(5)
         assert len(hook.requests) == 1

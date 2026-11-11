@@ -10,6 +10,7 @@ from vmn_exp.core.log import experiment_row
 from vmn_exp.core.metric_compact import compact_writer
 from vmn_exp.core.metric_entries import points_to_entries
 from vmn_exp.core.metric_stream import MetricWriter
+import time
 
 CASES = {
     "same_step": [("sys_cpu", 10.0, None), ("sys_cpu", 30.0, None)],
@@ -19,7 +20,7 @@ CASES = {
 
 
 def _write(storage, points, one_block):
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for key, value, step in points:
         w.add(key, value, step=step, ts_us=1_000)
         if not one_block:

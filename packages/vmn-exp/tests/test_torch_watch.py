@@ -10,7 +10,7 @@ from vmn_exp.core.histogram import histogram
 from vmn_exp.core.media import MAX_HISTOGRAM_STEPS, media_index
 from vmn_exp.integrations import torch_watch
 from vmn_exp.integrations.torch_watch import unwatch, watch
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
@@ -28,7 +28,7 @@ def storage(tmp_path):
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()

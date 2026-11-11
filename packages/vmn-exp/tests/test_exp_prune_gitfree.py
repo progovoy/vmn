@@ -6,7 +6,7 @@ import yaml
 
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "trainer"
 RUNS = [f"1.2.0-dev.abc1234.r{i}" for i in range(3)]
@@ -20,7 +20,7 @@ def _finished():
 @pytest.fixture
 def store_root(tmp_path, monkeypatch):
     root = tmp_path / "exps"
-    storage = open_storage(None, str(root), area="runs")
+    storage = open_storage(None, str(root), area="runs", clock=RealClock())
     for i, verstr in enumerate(RUNS):
         storage.save(APP, verstr, {"verstr": verstr,
                                    "timestamp": f"2026-01-01T00:00:0{i}Z"}, {})
@@ -35,7 +35,7 @@ def store_root(tmp_path, monkeypatch):
 
 
 def _left(root):
-    storage = open_storage(None, str(root), area="runs")
+    storage = open_storage(None, str(root), area="runs", clock=RealClock())
     return [v for v in RUNS if storage.exists(APP, v)]
 
 

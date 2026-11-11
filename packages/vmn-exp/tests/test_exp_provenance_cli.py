@@ -6,7 +6,7 @@ import types
 import pytest
 from empty_storage import EmptyStorage
 from version_stamp.core.logging import init_stamp_logger
-from vmn_exp.core.real_io import RealConsole
+from vmn_exp.core.real_io import RealClock, RealConsole
 
 
 @pytest.fixture(autouse=True)
@@ -271,7 +271,7 @@ def test_restore_imported_refuses_with_commit_hint(monkeypatch, caplog):
     )
 
     with caplog.at_level(logging.DEBUG, logger="vmn"):
-        ret = exp_mod.experiment_restore(None, {}, storage, _args())
+        ret = exp_mod.experiment_restore(None, {}, storage, _args(), RealClock())
 
     assert ret == 1
     # Should mention source commit as a hint or the tool name

@@ -9,6 +9,7 @@ from vmn_exp.core.similar_corpus import file_scope, memory_conn
 from vmn_exp.core.similar_filing import SnapshotFiler
 from vmn_exp.core.similar_search import search, snapshot_scope, text_target
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 RUNS = 8
@@ -19,7 +20,7 @@ pytestmark = pytest.mark.skipif(not similar_fts.fts5_available(),
 
 @pytest.fixture
 def indexed(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
     for n in range(RUNS):
         seed(storage, APP, verstr(n), intent={"text": f"focal loss try {n}"},
              changes=features([f"f{n}.py"]), goal=("loss", "min"), metrics={"loss": n})

@@ -7,7 +7,7 @@ from frozen_holders import finishes_within, frozen_in, in_thread
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import get_writer_id
 from vmn_exp.sdk import run as sdk_run
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.ship_state import FINALIZING_WAIT_SEC
@@ -31,7 +31,7 @@ def _note(text):
 
 def test_the_sigterm_finalizer_records_a_run_whose_append_was_interrupted(tmp_path):
     storage = _storage(tmp_path)
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
     run.log_note("before")
     run._log_buffer.flush()  # the frozen append below is the next storage append

@@ -23,6 +23,7 @@ from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.server import build_app, create_app
 from vmn_exp.ui.store_upkeep import StoreUpkeep
 from vmn_exp.ui.workspaces import WorkspaceManager
+from vmn_exp.core.real_io import RealClock
 
 RUN = "0.0.1-dev.a"
 SERVER = dict(control_plane=None, background_refresh=False, read_only=False, keep_warm=None)
@@ -35,7 +36,7 @@ def _io():
 
 def _manager(tmp_path):
     store = tmp_path / "store"
-    open_storage(root=str(store), area="runs").save(
+    open_storage(root=str(store), area="runs", clock=RealClock()).save(
         "app", RUN, {"verstr": RUN, "timestamp": "2026-01-01T00:00:00Z"}, {})
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("st", f"file://{store}")

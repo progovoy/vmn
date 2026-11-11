@@ -11,6 +11,7 @@ from s3_helpers import meta
 from vmn_exp.sdk import run as run_module
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
+from vmn_exp.sdk.run import _real_process_hooks
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -32,7 +33,7 @@ PATCHED_NAMES = (
 def _run(tmp_path):
     storage = LocalSnapshotStorage(str(tmp_path / "s"), "runs")
     storage.save(APP, VERSTR, meta(VERSTR), {})
-    run = run_module.Run(storage, APP, VERSTR, 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = run_module.Run(storage, APP, VERSTR, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
     return run, storage
 

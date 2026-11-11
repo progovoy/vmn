@@ -11,6 +11,7 @@ from vmn_exp.core.png import encode_png
 from vmn_exp.sdk import start_run
 from vmn_exp.sdk.reader import get_run
 from vmn_exp.storage.local import LocalSnapshotStorage
+import time
 
 APP = "trainer"
 PNG = encode_png(bytes(3 * 2 * 2), 2, 2, 3)
@@ -122,7 +123,7 @@ def test_console_output_is_stored_under_outputs(store, tmp_path):
     from vmn_exp.core.output_log import OutputArtifact
 
     with start_run() as run:
-        output = OutputArtifact(store, APP, run.id, cap_bytes=1024)
+        output = OutputArtifact(store, APP, run.id, cap_bytes=1024, clock=time.monotonic)
         output.write(b"hello\n")
         output.seal()
         assert output.upload()

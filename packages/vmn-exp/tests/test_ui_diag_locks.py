@@ -71,7 +71,7 @@ def teardown_module():
 
 def test_a_report_index_held_by_a_journal_catch_up_names_its_waiters(tmp_path):
     ws = types.SimpleNamespace(name=_unique("ws"), store=None, path=str(tmp_path))
-    index = ReportIndexes(background=False)._new(ws, LocalSnapshotStorage(str(tmp_path)))
+    index = ReportIndexes(background=False, clock=time.time)._new(ws, LocalSnapshotStorage(str(tmp_path)))
     release, holder = _hold(index._lock, "vmn-ui-reports")
     request = threading.Thread(target=index.refresh, name="request-1", daemon=True)
     request.start()

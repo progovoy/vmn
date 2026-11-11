@@ -1,7 +1,7 @@
 # AUTO-GENERATED (KNOWN_IO) by: python packages/vmn-exp/tests/test_io_boundary.py --regen
 # KNOWN_IO only shrinks. REAL_IO and REAL_WIRED are hand-kept and survive --regen.
 
-REAL_IO = {'vmn_exp.core.real_io': 'the thin stdlib classes behind vmn_exp.core.ports and real_io(), which entry points build (plan 44 G2)', 'vmn_exp.storage.buffer_owner': "storage: a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.buffer_host': "storage: finds, locks and removes this host's log buffer dirs: the real local implementation (plan 40 C6)", 'vmn_exp.cli.buffers_cmd': "run_buffers is the `vmn-exp buffers` entry point: it builds the command's real IO (plan 40 C6)", 'vmn_exp.cli.plugin': 'the command handler shims are composition roots: vmn calls them with vmn_ctx or args only, so each invocation builds real_io() until core vmn passes vmn_ctx.io (plan 44 G7)', 'vmn_exp.storage.host_dirs': 'storage: resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)', 'vmn_exp.storage.local': 'storage: the local-disk SnapshotStorage backend itself (plan 44 G14)', 'vmn_exp.storage.local_metrics': 'storage: its metric streams: O_APPEND writes to metrics/<stream>.vms (plan 44 G14)', 'vmn_exp.storage.stream_owner': 'storage: the owner files that pick the stream a local record copy appends to (LocalStreams) (plan 44 G14)', 'vmn_exp.storage.files': 'storage: atomic write (temp + rename) and patch-file helpers shared by the backends (plan 44 G14)', 'vmn_exp.storage.store_marker': 'storage: store.yml create-if-absent (O_EXCL-style link) at the store root (plan 44 G14)', 'vmn_exp.storage.listing': 'storage: directory listings of local records (scandir/stat), the cost the index is built around (plan 44 G14)', 'vmn_exp.storage.child_markers': "storage: empty children/<verstr> marker objects in a parent's record (plan 44 G14)", 'vmn_exp.storage.children_flag': "storage: the .children_complete flag file beside an app's records (plan 44 G14)", 'vmn_exp.storage.ship_state': "storage: per-record ship state shared by the copy's processes (file + lock) (plan 44 G14)", 'vmn_exp.storage.s3': 'storage: download paths only: writes downloaded objects to local files (plan 44 G14)', 'vmn_exp.storage.buffered': 'storage: the local log buffer directory of a direct-to-bucket run; its files are real, its clock is injected (plan 44 G14, G10)', 'vmn_exp.core.sqlite_conn': 'storage: the one SQLite connection policy (CLAUDE.md invariant) (plan 44 G14)', 'vmn_exp.core.sqlite_files': 'storage: rebuilds a SQLite cache file under its readers (rename, link) (plan 44 G14)', 'vmn_exp.core.index_io_process': "storage: a helper process whose whole job is the index's filesystem work; also a process root (G11) (plan 44 G14)", 'vmn_exp.ui.diag.gc_pauses': 'measures the real process: GC pause times on a module-level singleton (PAUSES) the gc callbacks feed (plan 44 G19)', 'vmn_exp.ui.diag.latency': "measures the real process: the event loop's and a pool thread's lag, sampled on real time (plan 44 G19)", 'vmn_exp.ui.leaderboard_cache': 'a per-process cache salt: _NONCE keeps ETags from before a restart from matching (plan 44 G13)', 'vmn_exp.ui.settled_subtree': 'a per-process cache salt: _NONCE keys its memo to this process (plan 44 G13)'}
+REAL_IO = {'vmn_exp.core.real_io': 'the thin stdlib classes behind vmn_exp.core.ports and real_io(), which entry points build (plan 44 G2)', 'vmn_exp.storage.buffer_owner': "storage: a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.buffer_host': "storage: finds, locks and removes this host's log buffer dirs: the real local implementation (plan 40 C6)", 'vmn_exp.cli.buffers_cmd': "run_buffers is the `vmn-exp buffers` entry point: it builds the command's real IO (plan 40 C6)", 'vmn_exp.cli.plugin': 'the command handler shims are composition roots: vmn calls them with vmn_ctx or args only, so each invocation builds real_io() until core vmn passes vmn_ctx.io (plan 44 G7)', 'vmn_exp.storage.host_dirs': 'storage: resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)', 'vmn_exp.storage.local': 'storage: the local-disk SnapshotStorage backend itself (plan 44 G14)', 'vmn_exp.storage.local_metrics': 'storage: its metric streams: O_APPEND writes to metrics/<stream>.vms (plan 44 G14)', 'vmn_exp.storage.stream_owner': 'storage: the owner files that pick the stream a local record copy appends to (LocalStreams) (plan 44 G14)', 'vmn_exp.storage.files': 'storage: atomic write (temp + rename) and patch-file helpers shared by the backends (plan 44 G14)', 'vmn_exp.storage.store_marker': 'storage: store.yml create-if-absent (O_EXCL-style link) at the store root (plan 44 G14)', 'vmn_exp.storage.listing': 'storage: directory listings of local records (scandir/stat), the cost the index is built around (plan 44 G14)', 'vmn_exp.storage.child_markers': "storage: empty children/<verstr> marker objects in a parent's record (plan 44 G14)", 'vmn_exp.storage.children_flag': "storage: the .children_complete flag file beside an app's records (plan 44 G14)", 'vmn_exp.storage.ship_state': "storage: per-record ship state shared by the copy's processes (file + lock) (plan 44 G14)", 'vmn_exp.storage.s3': 'storage: download paths only: writes downloaded objects to local files (plan 44 G14)', 'vmn_exp.storage.buffered': 'storage: the local log buffer directory of a direct-to-bucket run; its files are real, its clock is injected (plan 44 G14, G10)', 'vmn_exp.core.sqlite_conn': 'storage: the one SQLite connection policy (CLAUDE.md invariant) (plan 44 G14)', 'vmn_exp.core.sqlite_files': 'storage: rebuilds a SQLite cache file under its readers (rename, link) (plan 44 G14)', 'vmn_exp.core.index_io_process': "storage: a helper process whose whole job is the index's filesystem work; also a process root (G11) (plan 44 G14)", 'vmn_exp.ui.diag.gc_pauses': 'measures the real process: GC pause times on a module-level singleton (PAUSES) the gc callbacks feed (plan 44 G19)', 'vmn_exp.ui.diag.latency': "measures the real process: the event loop's and a pool thread's lag, sampled on real time (plan 44 G19)", 'vmn_exp.ui.leaderboard_cache': 'a per-process cache salt: _NONCE keeps ETags from before a restart from matching (plan 44 G13)', 'vmn_exp.ui.settled_subtree': 'a per-process cache salt: _NONCE keys its memo to this process (plan 44 G13)', 'vmn_exp.core.gc_policy': "tunes the real process's garbage collector (gc thresholds, a daemon collector on real time): a process-level tuner, not logic (plan 44 G11)"}
 REAL_WIRED = {'start_run': ('vmn_exp.sdk.run', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the run attempt id, and the clock and host the Run reads (plan 44 G13, G10)'), 'resolve_storage': ('vmn_exp.sdk.store_resolve', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the clock the core storage resolver takes (plan 44 G10)'), 'configured_storage': ('vmn_exp.sdk.store_resolve', 'the SDK functions that resolve a storage themselves reach the core resolver through it, an SDK entry point: the clock it takes (plan 44 G10)'), 'finish_run': ('vmn_exp.sdk.manage', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the final attempt id (plan 44 G13)'), 'finish_runs': ('vmn_exp.sdk.manage', 'a public SDK function is an entry point that builds real IO (owner decision G7/G10): the Random of the final attempt ids (plan 44 G13)')}
 
 KNOWN_IO = {
@@ -48,7 +48,7 @@ KNOWN_IO = {
     'vmn_exp.core.activity': {'time': 6},
     'vmn_exp.core.adopt': {'fs': 1},
     'vmn_exp.core.alerts.config': {'env': 3},
-    'vmn_exp.core.alerts.dispatch': {'real_default': 1, 'thread': 1},
+    'vmn_exp.core.alerts.dispatch': {'thread': 1},
     'vmn_exp.core.alerts.sinks': {'env': 1, 'net': 1, 'subprocess': 1},
     'vmn_exp.core.alerts.transitions': {'time': 1},
     'vmn_exp.core.app_conf': {'fs': 1},
@@ -70,14 +70,12 @@ KNOWN_IO = {
     'vmn_exp.core.index_store_conn': {'clock_alias': 1},
     'vmn_exp.core.index_store_upgrade': {'fs': 3},
     'vmn_exp.core.index_sweep': {'clock_alias': 1},
-    'vmn_exp.core.index_vmx_check': {'real_default': 1},
     'vmn_exp.core.index_workers': {'console': 3, 'env': 1, 'subprocess': 1, 'thread': 1},
     'vmn_exp.core.journal_reader': {'thread': 1},
     'vmn_exp.core.log': {'fs': 1},
     'vmn_exp.core.metric_compact': {'fs': 4, 'thread': 1, 'time': 1},
     'vmn_exp.core.metric_entries': {'time': 1},
-    'vmn_exp.core.metric_stream': {'real_default': 1},
-    'vmn_exp.core.output_log': {'env': 1, 'fs': 2, 'real_default': 1},
+    'vmn_exp.core.output_log': {'env': 1, 'fs': 2},
     'vmn_exp.core.panel_spec': {'console': 1},
     'vmn_exp.core.real_io': {'console': 4, 'env': 3, 'process_self': 2, 'random': 4, 'subprocess': 2, 'time': 3},
     'vmn_exp.core.record_files': {'fs': 3},
@@ -104,7 +102,6 @@ KNOWN_IO = {
     'vmn_exp.registry.datasets': {'fs': 1},
     'vmn_exp.registry.digest': {'fs': 2},
     'vmn_exp.registry.fold': {'time': 1},
-    'vmn_exp.reports.index': {'real_default': 1},
     'vmn_exp.reports.store': {'time': 3},
     'vmn_exp.sdk': {'env': 1},
     'vmn_exp.sdk.autolog': {'fs': 1},
@@ -141,7 +138,7 @@ KNOWN_IO = {
     'vmn_exp.storage.files': {'fs': 12},
     'vmn_exp.storage.fs_type': {'fs': 3},
     'vmn_exp.storage.host_dirs': {'env': 6, 'fs': 4, 'process_self': 1},
-    'vmn_exp.storage.journal': {'process_self': 2, 'real_default': 1, 'time': 2},
+    'vmn_exp.storage.journal': {'process_self': 2, 'time': 2},
     'vmn_exp.storage.journal_sinks': {'fs': 4},
     'vmn_exp.storage.listing': {'fs': 8, 'thread': 1, 'time': 1},
     'vmn_exp.storage.listing_workers': {'console': 3},

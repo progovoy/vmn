@@ -15,6 +15,7 @@ from vmn_exp.core.log import (
 )
 from vmn_exp.ui.readers import parsed_logs
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -31,7 +32,7 @@ def _metric(i, **values):
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(root=str(tmp_path), area="runs")
+    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock())
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.append_log_entry(APP, V, "w", {"timestamp": _ts(0), "type": "create", "params": {"lr": 0.1}})
     return s

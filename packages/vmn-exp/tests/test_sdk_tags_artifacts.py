@@ -14,7 +14,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.core.log import experiment_row
 from vmn_exp.sdk import manage, reader, start_run
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 APP = "app"
@@ -30,7 +30,7 @@ def storage(tmp_path):
 
 @pytest.fixture
 def run(storage):
-    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, VERSTR, 60, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
     yield run
     run.finish()

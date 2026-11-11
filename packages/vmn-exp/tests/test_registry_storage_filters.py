@@ -10,6 +10,7 @@ from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from vmn_exp.ui.readers.experiments import list_apps, list_apps_from_storage
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-test-bucket"
 PREFIX = "exps"
@@ -31,7 +32,7 @@ def _aws_env(monkeypatch):
 
 
 def test_artifact_uri_local(tmp_path):
-    storage = open_storage(root=local_store_root(str(tmp_path)), area="runs")
+    storage = open_storage(root=local_store_root(str(tmp_path)), area="runs", clock=RealClock())
     uri = storage.artifact_uri("myapp", "0.0.1-dev.abc", "artifacts/model.pkl")
     assert uri.startswith("file://")
     assert "myapp" in uri
@@ -60,7 +61,7 @@ def test_artifact_uri_s3():
 
 def test_local_list_apps_ignores_registry(tmp_path):
     root = str(tmp_path)
-    storage = open_storage(root=local_store_root(root), area="runs")
+    storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock())
     storage.save("myapp", "0.0.1", {"verstr": "0.0.1"}, {})
     ensure_model(storage, "resnet")
     assert storage.list_apps() == ["myapp"]
@@ -72,8 +73,8 @@ def test_ui_list_apps_ignores_registry(tmp_path):
     os.makedirs(app_dir)
     with open(os.path.join(app_dir, "conf.yml"), "w") as f:
         f.write("{}\n")
-    ensure_model(open_storage(root=local_store_root(root), area="runs"), "resnet")
-    names = [r["name"] for r in list_apps(root)]
+    ensure_model(open_storage(root=local_store_root(root), area="runs", clock=RealClock()), "resnet")
+    names = [r["name"] for r in list_apps(root, RealClock())]
     assert "myapp" in names
     assert "resnet" not in names
 

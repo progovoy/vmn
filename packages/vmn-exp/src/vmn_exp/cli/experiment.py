@@ -336,7 +336,7 @@ def handle_experiment(vmn_ctx, io):
     elif action == "diff":
         return experiment_diff(vcs, params, storage, args, io.console)
     elif action == "restore":
-        return experiment_restore(vcs, params, storage, args)
+        return experiment_restore(vcs, params, storage, args, io.clock)
     elif action == "export":
         return experiment_export(vcs, params, storage, args, io.console)
     elif action == "prune":
@@ -348,7 +348,7 @@ def handle_experiment(vmn_ctx, io):
     elif action == "watch":
         from vmn_exp.cli.watch import experiment_watch
 
-        return experiment_watch(vcs, storage, _app_name(vcs, args), args)
+        return experiment_watch(vcs, storage, _app_name(vcs, args), args, io.clock)
     elif action == "rewind":
         return experiment_rewind(vcs, params, storage, args)
     elif action == "export-metrics":

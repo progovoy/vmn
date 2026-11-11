@@ -10,7 +10,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -27,7 +27,7 @@ def _manager(tmp_path, matching=3, other=2, archived=()):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     storage.save(APP, JOB, {"verstr": JOB, "timestamp": "2026-01-01T00:00:00Z"}, {})
     for i in range(matching + other):
         meta = {"verstr": _v(i), "timestamp": "2026-01-01T00:00:01Z", "parent": JOB,

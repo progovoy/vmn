@@ -7,6 +7,7 @@ from vmn_exp.core import sqlite_conn
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_store import SqliteStore
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 
@@ -27,7 +28,7 @@ def _persisted(path):
 
 
 def test_a_busy_save_is_retried_by_the_next_refresh(tmp_path):
-    storage = open_storage(root=str(tmp_path / "repo"), area="runs")
+    storage = open_storage(root=str(tmp_path / "repo"), area="runs", clock=RealClock())
     first = _save(storage, 0)
     path = str(tmp_path / "idx.sqlite")
     index = ExperimentIndex(storage, APP, cache_path=path)
@@ -49,7 +50,7 @@ def test_a_busy_save_is_retried_by_the_next_refresh(tmp_path):
 
 
 def test_a_failed_removal_is_retried_too(tmp_path):
-    storage = open_storage(root=str(tmp_path / "repo"), area="runs")
+    storage = open_storage(root=str(tmp_path / "repo"), area="runs", clock=RealClock())
     first, second = _save(storage, 0), _save(storage, 1)
     path = str(tmp_path / "idx.sqlite")
     index = ExperimentIndex(storage, APP, cache_path=path)

@@ -8,6 +8,7 @@ from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.log import load_log, metric_series
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 V = "1.0.0-dev.a"
@@ -35,7 +36,7 @@ def clock(monkeypatch):
 @pytest.fixture
 def storage(tmp_path):
     (tmp_path / ".git").mkdir()
-    s = open_storage(root=str(tmp_path), area="runs")
+    s = open_storage(root=str(tmp_path), area="runs", clock=RealClock())
     s.save(APP, V, {"verstr": V, "timestamp": _ts(0)}, {})
     s.save_file(APP, V, "run_state.yml", "state: running\n")
     for i, loss in ((1, 1.0), (2, 0.5), (3, 0.25)):

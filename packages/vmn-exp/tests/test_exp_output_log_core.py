@@ -11,6 +11,7 @@ import threading
 from exp_helpers import _bootstrap, _exp, _storage, extract_dev_verstr
 
 from vmn_exp.core import output_log as ol
+import time
 
 
 def test_small_output_is_kept_verbatim():
@@ -123,7 +124,7 @@ def test_output_artifact_uploads_output_log_only_when_changed(app_layout, capfd)
     verstr = extract_dev_verstr(capfd.readouterr().out)
     storage = _storage(app_layout)
 
-    art = ol.OutputArtifact(storage, app_layout.app_name, verstr, cap_bytes=1000)
+    art = ol.OutputArtifact(storage, app_layout.app_name, verstr, cap_bytes=1000, clock=time.monotonic)
     assert art.upload() is False  # nothing written yet
     art.write(b"line 1\n")
     assert art.upload() is True

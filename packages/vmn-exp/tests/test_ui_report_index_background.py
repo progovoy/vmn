@@ -6,6 +6,7 @@ import types
 
 from vmn_exp.ui import report_index
 from vmn_exp.ui.report_index import ReportIndexes
+import time
 
 
 class _SlowIndex:
@@ -22,7 +23,7 @@ class _SlowIndex:
 
 def test_get_returns_at_once_while_a_refresh_runs_elsewhere(monkeypatch):
     slow = _SlowIndex()
-    indexes = ReportIndexes(background=True)
+    indexes = ReportIndexes(background=True, clock=time.time)
     monkeypatch.setattr(indexes, "_new", lambda ws, storage: slow)
     monkeypatch.setattr(report_index, "FOLLOW_INTERVAL_SEC", 0)
     ws = types.SimpleNamespace(name="ws")
@@ -42,7 +43,7 @@ def test_get_returns_at_once_while_a_refresh_runs_elsewhere(monkeypatch):
 def test_without_background_refresh_a_request_sees_every_write(monkeypatch):
     slow = _SlowIndex()
     slow.release.set()
-    indexes = ReportIndexes(background=False)
+    indexes = ReportIndexes(background=False, clock=time.time)
     monkeypatch.setattr(indexes, "_new", lambda ws, storage: slow)
 
     indexes.get(types.SimpleNamespace(name="ws"), None)

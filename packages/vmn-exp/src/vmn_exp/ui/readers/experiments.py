@@ -28,8 +28,8 @@ from vmn_exp.ui.readers.versions import version_counts
 from vmn_exp.ui.sibling_durations import SiblingDurations
 
 
-def experiment_storage(root_path):
-    return open_storage(None, local_store_root(root_path), area=RUNS, writer=False)
+def experiment_storage(root_path, clock):
+    return open_storage(None, local_store_root(root_path), area=RUNS, writer=False, clock=clock)
 
 
 def experiment_conf(root_path, app_name):
@@ -71,7 +71,7 @@ def split_by_of(ui):
         return None
 
 
-def list_apps(root_path):
+def list_apps(root_path, clock):
     """All vmn apps in a checkout: configured (.vmn/<app>/conf.yml) plus any
     with experiment/snapshot data. Returns rows with experiment counts."""
     vmn_dir = os.path.join(root_path, ".vmn")
@@ -97,7 +97,7 @@ def list_apps(root_path):
                 apps.add(name)
 
     rows = []
-    storage = experiment_storage(root_path)
+    storage = experiment_storage(root_path, clock)
     apps.update(storage.list_apps())
     apps.update(storage.in_area(SNAPSHOTS).list_apps())
     ver_counts = version_counts(root_path)

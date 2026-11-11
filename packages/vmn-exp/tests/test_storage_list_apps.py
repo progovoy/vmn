@@ -10,7 +10,7 @@ from vmn_exp.registry.store import ensure_model, register_version
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 REAL_APPS = ["my_app", "root/svc"]
 
@@ -54,7 +54,7 @@ def test_s3_storage_lists_its_apps_without_registry(bucket):
 
 
 def test_cached_storage_merges_local_and_remote_apps(bucket, tmp_path):
-    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), area="runs")
+    storage = open_storage(f"s3://{bucket}/exps", str(tmp_path), area="runs", clock=RealClock())
     _record(storage._remote, "remote_app")
     _record(storage._local, "local_app")
     assert storage.list_apps() == ["local_app", "remote_app"]

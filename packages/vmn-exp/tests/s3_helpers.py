@@ -9,6 +9,7 @@ from moto import mock_aws
 
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.storage.store_marker import forget_checked
+from vmn_exp.core.real_io import RealClock
 
 BUCKET = "vmn-bucket"
 PREFIX = "exps"
@@ -44,7 +45,7 @@ def cached_host(tmp_path, name):
     return open_storage(
         s3_uri(BUCKET, PREFIX),
         root=str(tmp_path / name),
-        area="runs",
+        area="runs", clock=RealClock(),
     )
 
 

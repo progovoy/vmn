@@ -37,7 +37,7 @@ def _stuck_run(storage):
                  "timestamp": f"2026-01-01T00:00:00.{seq:06d}Z"}
         storage.create_log_segment(APP, V, S, seq, (json.dumps(entry) + "\n").encode())
     for seq in range(SEGMENTS):
-        writer = MetricWriter(storage, APP, V, S)
+        writer = MetricWriter(storage, APP, V, S, clock=time.time)
         writer.add("cv0.loss", 1 / (seq + 1), step=seq, ts_us=T0 + seq)
         writer.flush()
 

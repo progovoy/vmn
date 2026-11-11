@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -88,7 +88,7 @@ def server(tmp_path, clock):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     _fleet(storage)
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))
@@ -241,7 +241,7 @@ def _server_with(tmp_path, extra):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     _fleet(storage)
     extra(storage)
     write_settings(storage, APP, SETTINGS)

@@ -62,7 +62,7 @@ def open_configured_snapshot_stores(vcs, params, clock):
     writer = not params.get("read_only")
     runs = _get_experiment_storage(vcs, storage_params, writer=writer, clock=clock)
     records = open_storage(where, local_store_root(vcs.vmn_root_path), area=SNAPSHOTS,
-                           writer=writer)
+                           writer=writer, clock=clock)
     if not writer:
         require_store(records, where)
     return ConfiguredStores(RecordsWithCode(records, runs), code_storage(runs), where, runs)

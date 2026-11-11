@@ -222,7 +222,7 @@ def _write_all(
     # valid MLflow data and must be preserved per the import spec.
     metrics, entries = split_metric_entries(entries)
     if metrics:
-        record_metric_entries(MetricWriter(storage, app_name, verstr, IMPORT_WRITER), metrics)
+        record_metric_entries(MetricWriter(storage, app_name, verstr, IMPORT_WRITER, clock=None), metrics)
     storage.append_log_entries(app_name, verstr, IMPORT_WRITER, entries)
 
     save_run_state(storage, app_name, verstr, _build_run_state(run))

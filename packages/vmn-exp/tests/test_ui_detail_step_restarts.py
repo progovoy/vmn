@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}/experiments"
@@ -27,7 +27,7 @@ def _metric(i, step, value):
 def ws(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
     storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": _ts(0)}, {})
     storage.append_log_entry(APP, VERSTR, "w", {"timestamp": _ts(0), "type": "create"})
 

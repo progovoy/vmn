@@ -17,13 +17,13 @@ from version_stamp.api import VMN_LOGGER
 DEFAULT_WITHIN = "1d"
 
 
-def experiment_watch(vcs, storage, app_name, args):
+def experiment_watch(vcs, storage, app_name, args, clock):
     try:
         within_sec = _parse_duration(args.within or DEFAULT_WITHIN).total_seconds()
     except ValueError as exc:
         VMN_LOGGER.error(str(exc))
         return 1
-    alerter = Alerter(load_alert_config(app_name, experiment_conf(vcs)))
+    alerter = Alerter(load_alert_config(app_name, experiment_conf(vcs)), clock=clock.monotonic)
     compact = getattr(args, "compact", False)
     if not compact and not alerter.wants("failed") and not alerter.wants("stuck"):
         VMN_LOGGER.error(

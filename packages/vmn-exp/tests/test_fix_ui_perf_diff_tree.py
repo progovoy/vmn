@@ -14,7 +14,7 @@ from vmn_exp.ui.readers import tree as tree_reader
 from vmn_exp.ui.server import create_app
 from vmn_exp.ui.workspaces import WorkspaceManager
 from vmn_exp.storage.areas import local_store_root
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 DIFF = f"/api/v1/workspaces/ws/apps/{APP}/experiments-diff"
@@ -31,7 +31,7 @@ def ws(tmp_path):
     _git(root, "init", "-q")
     _git(root, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q",
          "--allow-empty", "-m", "init")
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
     return TestClient(create_app(manager, io=real_io())), storage, root

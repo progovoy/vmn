@@ -8,7 +8,7 @@ import yaml
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "trainer"
 CODE = "1.2.0-dev.abc1234.def5678"
@@ -23,7 +23,7 @@ def _finished():
 def store_root(tmp_path, monkeypatch):
     """An outer run whose child lost its marker, in a store next to no checkout."""
     root = tmp_path / "exps"
-    storage = open_storage(None, str(root), area="runs")
+    storage = open_storage(None, str(root), area="runs", clock=RealClock())
     outer = create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:00Z"}, {})
     kid = create_run(storage, APP, CODE, {"timestamp": "2026-01-01T00:00:01Z"}, {},
                      parent=outer)
@@ -40,7 +40,7 @@ def store_root(tmp_path, monkeypatch):
 
 
 def _children(root, outer):
-    return open_storage(None, str(root), area="runs").list_children(APP, outer)
+    return open_storage(None, str(root), area="runs", clock=RealClock()).list_children(APP, outer)
 
 
 def test_backfill_children_without_a_checkout_takes_the_store_flag(store_root, capfd):

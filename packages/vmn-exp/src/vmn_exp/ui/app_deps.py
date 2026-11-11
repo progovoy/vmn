@@ -5,7 +5,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from vmn_exp.core.ports import IO
+from vmn_exp.core.ports import IO, wall_seconds
 from vmn_exp.ui.audit import AuditLog
 from vmn_exp.ui.auth.tokens import TokenService
 from vmn_exp.ui.jobs import JobRunner, start_daemon
@@ -22,12 +22,6 @@ class ServerDeps:
     audit: Any  # AuditLog, or None without a control plane
     token_service: Any  # TokenService, or None without a control plane
     event_sleep: Any  # async sleep(sec) between a live-event stream's ticks
-
-
-def wall_seconds(clock):
-    """*clock*'s wall time as epoch seconds, the time base of the audit log,
-    tokens, sessions, the control-plane sweep and the change journal."""
-    return lambda: clock.now().timestamp()
 
 
 def real_deps(io, control_plane, background_refresh, read_only, keep_warm):

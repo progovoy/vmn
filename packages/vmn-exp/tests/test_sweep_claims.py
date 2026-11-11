@@ -14,13 +14,14 @@ from vmn_exp.core.sweep.claims import (
 from vmn_exp.core.sweep.spec import parse_spec
 from vmn_exp.core.sweep.suggest import grid_point
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "my_app"
 SWEEP = "0.0.1-dev.aaaaaaa.bbbbbbb"
 
 
 def _local(tmp_path):
-    return open_storage(None, str(tmp_path), area="runs")
+    return open_storage(None, str(tmp_path), area="runs", clock=RealClock())
 
 
 def _grid(run_cap=None, n_values=6):

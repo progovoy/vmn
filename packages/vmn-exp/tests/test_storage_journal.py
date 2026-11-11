@@ -1,5 +1,7 @@
 """The change-journal writer (plan 11 §5.2, phase 2a): every write that
 changes what a reader sees puts one empty object under ``journal/``."""
+import time
+
 import pytest
 import yaml
 
@@ -25,7 +27,7 @@ class RecordingSink:
 
 def _store(tmp_path, sink, **kw):
     return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), sink=sink,
-                     writer_id="host_1", backoff=lambda attempt: None, **kw)
+                     writer_id="host_1", backoff=lambda attempt: None, clock=time.time, **kw)
 
 
 @pytest.fixture

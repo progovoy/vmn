@@ -8,6 +8,7 @@ from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.metric_time import us_to_iso
 from vmn_exp.snapshot import LocalSnapshotStorage
+import time
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -21,7 +22,7 @@ def _storage(tmp_path):
 
 
 def _points(st, writer, n, rng, step0=0):
-    w = MetricWriter(st, APP, V, writer)
+    w = MetricWriter(st, APP, V, writer, clock=time.time)
     for i in range(n):
         ts = T0 + (step0 + i) * 1000 + rng.randint(0, 999)
         w.add("loss", rng.random(), step=step0 + i, ts_us=ts)

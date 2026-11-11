@@ -7,7 +7,7 @@ from test_ui_diff_summary import _log_define_metric, _log_metrics, _log_params, 
 from vmn_exp.core import index as experiment_index
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.ui.readers import diffs as diff_reader
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 V1, V2 = "1.0.0-dev.aaa.bbb", "1.0.0-dev.ccc.ddd"
 
@@ -76,7 +76,7 @@ def test_the_store_route_answers_from_the_snapshot(tmp_path, monkeypatch):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path / 'store'}"
-    store = open_storage(store=uri, area="runs")
+    store = open_storage(store=uri, area="runs", clock=RealClock())
     _save_exp(store, "myapp", V1)
     _first(store, V1)
     _save_exp(store, "myapp", V2, ts="2025-01-02T00:00:00Z")

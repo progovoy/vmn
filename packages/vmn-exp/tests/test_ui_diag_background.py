@@ -99,7 +99,7 @@ def test_a_journal_tick_is_recorded_per_journal():
 
 def test_a_report_index_refresh_is_recorded_per_workspace(monkeypatch):
     ws = types.SimpleNamespace(name=_unique("ws"))
-    indexes = ReportIndexes(background=True)
+    indexes = ReportIndexes(background=True, clock=time.time)
     monkeypatch.setattr(indexes, "_new", lambda ws, storage: _Index("reports"))
     monkeypatch.setattr(report_index, "FOLLOW_INTERVAL_SEC", 0)
     indexes.get(ws, None)

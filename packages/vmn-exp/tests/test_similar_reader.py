@@ -10,6 +10,7 @@ from vmn_exp.sdk import start_run
 from vmn_exp.sdk.ranks import NoOpRun
 from vmn_exp.sdk.reader import similar_runs
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 ITEM_KEYS = {"app", "verstr", "name", "score", "reasons", "signals", "group_size", "author",
@@ -19,7 +20,7 @@ CHANGES = features(["train.py"], [TRAIN_STEP])
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs")
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
 
 
 def _verstrs(items):

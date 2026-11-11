@@ -12,13 +12,14 @@ from vmn_exp.core.index_list import list_view
 from vmn_exp.core.index_point import index_path, shared_store
 from vmn_exp.core.similar_search import find
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 
 
 @pytest.fixture
 def storage(tmp_path):
-    st = open_storage(root=str(tmp_path / "store"), area="runs")
+    st = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
     seed(st, APP, verstr(1), intent={"text": "focal loss for imbalance"})
     seed(st, APP, verstr(2), intent={"text": "label smoothing"})
     return st

@@ -8,13 +8,14 @@ import pytest
 from similar_seed import WRITER, features, finished, seed, verstr
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs")
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
 
 
 @pytest.fixture

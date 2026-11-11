@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from vmn_exp.snapshot import open_storage
 from vmn_exp.storage.areas import local_store_root
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -24,7 +24,7 @@ BLOCKED = 48  # more than the default 40-thread pool
 def _client(tmp_path):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True, exist_ok=True)
-    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage = open_storage(root=local_store_root(str(root)), area="runs", clock=RealClock())
     storage.save(APP, "1.0.0-dev.a", {"verstr": "1.0.0-dev.a",
                                       "timestamp": "2026-01-01T00:00:00Z"}, {})
 

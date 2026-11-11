@@ -53,7 +53,7 @@ def _list_fn(storage):
 
 
 class ReportIndex:
-    def __init__(self, storage, cache=None, clock=time.time, full_sweep_sec=FULL_SWEEP_SEC,
+    def __init__(self, storage, cache=None, *, clock, full_sweep_sec=FULL_SWEEP_SEC,
                  name=None):
         self._storage = storage
         self._cache = cache

@@ -29,6 +29,7 @@ from vmn_exp.core.metric_compact import compact_record, compact_writer, seal_wri
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.readers.parsed_logs import ParsedLogs
+from vmn_exp.core.real_io import RealClock
 
 FINISHED = "state: finished\nexit_code: 0\n"
 # The other clone's writes arrive through the remote, which signs no record:
@@ -101,7 +102,7 @@ def test_one_shot_turns_keep_each_entry_once_and_each_index_exact(tmp_path, seed
 
 
 def _offline(tmp_path):
-    return open_storage(None, root=str(tmp_path / "b"), area="runs")
+    return open_storage(None, root=str(tmp_path / "b"), area="runs", clock=RealClock())
 
 
 def _read(kind, tmp_path, cache):

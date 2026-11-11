@@ -6,6 +6,7 @@ from similar_seed import WRITER, seed, verstr
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.similar_search import find
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "trainer"
 
@@ -18,7 +19,7 @@ def root(tmp_path):
 def _fresh(root, monkeypatch):
     """A new process's storage over the same store and index."""
     monkeypatch.setattr(experiment_index, "_SHARED", {})
-    return open_storage(root=root, area="runs")
+    return open_storage(root=root, area="runs", clock=RealClock())
 
 
 def _found(storage, text):
@@ -26,7 +27,7 @@ def _found(storage, text):
 
 
 def test_a_search_sees_an_intent_edited_since_the_index_was_saved(root, monkeypatch):
-    storage = open_storage(root=root, area="runs")
+    storage = open_storage(root=root, area="runs", clock=RealClock())
     a = seed(storage, APP, verstr(1), intent={"text": "focal loss for imbalance"})
     seed(storage, APP, verstr(2), intent={"text": "label smoothing"})
     assert _found(storage, "focal loss") == [a]  # indexes the app

@@ -13,7 +13,7 @@ from pg_locks import until  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.search_pg import PgRowSearch  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 SEARCH = "/api/v1/search"
@@ -42,7 +42,7 @@ def _hits(client):
 @pytest.fixture
 def store(tmp_path):
     uri = f"file://{tmp_path}/store"
-    return uri, open_storage(uri, area=RUNS)
+    return uri, open_storage(uri, area=RUNS, clock=RealClock())
 
 
 def test_followers_search_what_the_index_leader_refreshed(tmp_path, pg_dsn, store):

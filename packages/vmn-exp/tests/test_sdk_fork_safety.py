@@ -23,7 +23,7 @@ import os, sys, threading, time
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import context, fork_safety
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 
 POOL_LOCK = threading.Lock()   # boto3's connection-pool lock, say
@@ -49,7 +49,8 @@ class SlowStorage(CachedSnapshotStorage):
 
 storage = SlowStorage(LocalSnapshotStorage(sys.argv[1], area="runs"))
 storage.save("app", "0.0.1-dev.a.b", {"verstr": "0.0.1-dev.a.b"}, {})
-run = Run(storage, "app", "0.0.1-dev.a.b", 60, clock=RealClock(), host=RealHost(), random=RealRandom())
+run = Run(storage, "app", "0.0.1-dev.a.b", 60, clock=RealClock(), host=RealHost(), random=RealRandom(),
+          install_hooks=_real_process_hooks())
 run._open()
 run.log_note("flushed by the background flusher")
 assert IN_FLIGHT.wait(10), "the flusher never started its write"

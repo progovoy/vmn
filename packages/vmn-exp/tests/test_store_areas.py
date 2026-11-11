@@ -8,6 +8,7 @@ from vmn_exp.storage import areas
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.registry import open_store
+from vmn_exp.core.real_io import RealClock
 
 VERSTR = "1.0.0-dev.abc1234"
 
@@ -59,7 +60,7 @@ def test_file_uri_root_is_the_dir(tmp_path):
 
 
 def test_in_area_reaches_a_sibling_area(tmp_path):
-    storage = open_storage(None, str(tmp_path), area=areas.RUNS)
+    storage = open_storage(None, str(tmp_path), area=areas.RUNS, clock=RealClock())
     storage.in_area(areas.CODE).save("app", "k", {"verstr": "k"}, {})
     assert os.path.isfile(tmp_path / "code" / "app" / "k" / "metadata.yml")
     assert storage.list_apps() == []

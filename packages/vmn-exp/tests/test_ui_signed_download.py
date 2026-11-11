@@ -12,7 +12,7 @@ from s3_helpers import BUCKET, PREFIX, mocked_bucket  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.storage.uri import s3_uri  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"
@@ -33,7 +33,7 @@ def _client(tmp_path, downloads):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = s3_uri(BUCKET, PREFIX)
-    open_storage(uri, area=RUNS).save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    open_storage(uri, area=RUNS, clock=RealClock()).save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
     manager = WorkspaceManager(os.path.join(tmp_path, "ui"))
     manager.add_store("ws", uri, downloads=downloads)
     return TestClient(create_app(manager, io=real_io()))

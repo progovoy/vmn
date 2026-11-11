@@ -11,12 +11,13 @@ from vmn_exp.core.metric_files import is_indexed_file
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.vmx_check import needs_refold
 from vmn_exp.snapshot import LocalSnapshotStorage
+import time
 
 
 def _run(tmp_path, steps, old=False, values=None):
     st = LocalSnapshotStorage(str(tmp_path), area="runs")
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for i, step in enumerate(steps):
         w.add("best", (values or [0.5] * len(steps))[i], step=step, ts_us=T0 + TS[i])
     w.flush()

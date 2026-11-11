@@ -192,7 +192,7 @@ def append_metric_entries(storage, app_name, verstr, entries, inherited=False, w
     """Record sanitized ``metrics`` *entries* as one block of this writer's
     (or *writer*'s) metric stream (plan 12 §4.1); True when stored."""
     stream = own_stream(storage, app_name, verstr, writer)
-    writer = MetricWriter(storage, app_name, verstr, stream)
+    writer = MetricWriter(storage, app_name, verstr, stream, clock=None)  # entries carry their time
     if not record_metric_entries(writer, entries, inherited=inherited):
         return False
     points = sum(len(e.get("values") or {}) for e in entries)

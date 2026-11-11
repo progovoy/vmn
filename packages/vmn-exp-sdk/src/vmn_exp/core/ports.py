@@ -84,3 +84,9 @@ class IO:
     random: Random
     host: Host
     console: Console
+
+
+def wall_seconds(clock):
+    """*clock*'s wall time as epoch seconds, the time base of the audit log,
+    tokens, sessions, the control-plane sweep and the change journal."""
+    return lambda: clock.now().timestamp()

@@ -20,7 +20,7 @@ from vmn_exp.core.index_sweep import Sweep  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.freshness import STUCK_REFRESH_SEC, freshness, freshness_key  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "my_app"
 STATUS = f"/api/v1/workspaces/ws/apps/{APP}/experiments-status"
@@ -35,7 +35,7 @@ IDLE = {"as_of": OCT_22, "refreshing": False, "phase": "idle", "progress": None}
 def _seed(tmp_path):
     uri = f"file://{tmp_path}/store"
     v = "0.0.1-dev.0000abcd.0"
-    open_storage(uri, area=RUNS).save(APP, v, {"verstr": v, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    open_storage(uri, area=RUNS, clock=RealClock()).save(APP, v, {"verstr": v, "timestamp": "2026-01-01T00:00:00Z"}, {})
     return uri
 
 

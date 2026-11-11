@@ -128,7 +128,7 @@ class ExperimentSource:
         """The git workspace's read cache (in memory only with ``--no-index``)."""
         with self._lock:
             if ws.name not in self._indexes:
-                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir, processes=self._processes)
+                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir, processes=self._processes, clock=self._clock)
             return self._indexes[ws.name]
 
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):

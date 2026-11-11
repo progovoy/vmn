@@ -3,6 +3,7 @@ the series SLOs (plan 12 §10 4b) measured against a real in-process server.
 The full profile is never run here, only its tiny variant."""
 import os
 import sys
+from vmn_exp.core.real_io import RealClock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -70,7 +71,7 @@ def seeded(tmp_path_factory):
 
 
 def _storage(root):
-    return open_storage(root=local_store_root(root), area="runs")
+    return open_storage(root=local_store_root(root), area="runs", clock=RealClock())
 
 
 def test_tiny_seed_writes_one_vmx_per_run_and_no_metric_log_lines(seeded):

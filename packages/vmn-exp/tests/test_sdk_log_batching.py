@@ -25,7 +25,7 @@ from vmn_exp.storage import buffered
 from vmn_exp.storage.buffered import BufferedRemoteStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 
 APP = "app"
 VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
@@ -61,7 +61,7 @@ def storage(tmp_path):
 
 
 def _open_run(storage, heartbeat=60):
-    run = Run(storage, APP, VERSTR, heartbeat, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(storage, APP, VERSTR, heartbeat, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
     return run
 
@@ -142,11 +142,12 @@ from vmn_exp.core.metric_block import read_headers
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.sdk import log_buffer
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.core.real_io import RealClock, RealHost, RealRandom
 log_buffer.FLUSH_INTERVAL_SEC = 3600
 st = CachedSnapshotStorage(LocalSnapshotStorage(sys.argv[1], area="runs"))
-run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
+run = Run(st, "app", "0.0.1-dev.aaaaaaa.bbbbbbb", 3600, clock=RealClock(), host=RealHost(), random=RealRandom(),
+          install_hooks=_real_process_hooks())
 run._open()
 for step in range(25):
     run.log_metric("loss", 0.5, step=step)

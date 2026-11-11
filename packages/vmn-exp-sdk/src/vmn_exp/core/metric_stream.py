@@ -8,7 +8,6 @@ ones under :func:`stepless_twin`, which the reader merges back (§3.1).
 Values arrive coerced (:mod:`vmn_exp.core.values`); the writer only records.
 """
 import threading
-import time
 from array import array
 
 from vmn_exp.core.metric_block import encode_block
@@ -61,7 +60,9 @@ class _Buffer:
 
 
 class MetricWriter:
-    def __init__(self, storage, app_name, verstr, writer_id, clock=time.time):
+    def __init__(self, storage, app_name, verstr, writer_id, *, clock):
+        """*clock* (epoch seconds) times a point added without one; None when
+        every point the caller adds carries its own."""
         self._storage, self._clock = storage, clock
         self._target = (app_name, verstr, writer_id)
         self._stepped, self._stepless = {}, {}

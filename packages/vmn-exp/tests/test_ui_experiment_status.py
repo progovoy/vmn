@@ -8,7 +8,7 @@ import yaml
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 API = "/api/v1/workspaces/main/apps"
 
@@ -118,7 +118,7 @@ def _index(app_layout):
 
     return WorkspaceIndex(
         app_layout.repo_path, db_dir=os.path.join(app_layout.base_dir, "ui_index"),
-        processes=real_io().processes,
+        processes=real_io().processes, clock=RealClock(),
     )
 
 

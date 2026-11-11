@@ -7,6 +7,7 @@ import time
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import open_storage
 from vmn_exp.ui.refresher import InlineRefresher, NotingRefresher, Refresher
+from vmn_exp.core.real_io import RealClock
 
 
 class _Index:
@@ -49,7 +50,7 @@ def test_a_noting_refresher_notes_the_index_then_asks_its_refresher():
 
 
 def test_an_inline_snapshot_leaves_the_shared_sweep_interval_alone(tmp_path):
-    storage = open_storage(root=str(tmp_path / "store"), area="runs")
+    storage = open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
     index = ExperimentIndex(storage, "app", full_sweep_sec=300)
     InlineRefresher().snapshot(index)
     assert index.full_sweep_sec == 300

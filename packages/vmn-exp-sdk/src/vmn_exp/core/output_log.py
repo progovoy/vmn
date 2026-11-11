@@ -10,7 +10,6 @@ import hashlib
 import os
 import tempfile
 import threading
-import time
 
 from vmn_exp.core.writer import create_log_entry, save_artifact
 from vmn_exp.storage.files import OUTPUTS_DIR
@@ -109,7 +108,7 @@ class OutputArtifact:
     :meth:`seal` the final log uploads on the next call, unthrottled.
     """
 
-    def __init__(self, storage, app_name, verstr, cap_bytes, clock=time.monotonic):
+    def __init__(self, storage, app_name, verstr, cap_bytes, *, clock):
         self._storage = storage
         self._app_name = app_name
         self._verstr = verstr

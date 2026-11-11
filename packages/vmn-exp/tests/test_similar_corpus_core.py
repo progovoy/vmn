@@ -10,11 +10,12 @@ from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.similar_corpus import file_scope
 from vmn_exp.snapshot import open_storage
 from similar_fixtures import similar_runs
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(root=str(tmp_path / "store"), area="runs")
+    return open_storage(root=str(tmp_path / "store"), area="runs", clock=RealClock())
 
 
 def _text(text):

@@ -10,7 +10,7 @@ from s3_helpers import meta
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk.background_gate import BackgroundGate
-from vmn_exp.sdk.run import Run
+from vmn_exp.sdk.run import Run, _real_process_hooks
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
@@ -129,7 +129,7 @@ def test_finish_warns_that_the_final_state_was_not_uploaded(tmp_path, monkeypatc
     remote = LocalSnapshotStorage(str(tmp_path / "remote"), "runs")
     for side in (local, remote):
         side.save(APP, X, meta(X), {})
-    run = Run(CachedSnapshotStorage(local, _StateRefusingRemote(remote)), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom())
+    run = Run(CachedSnapshotStorage(local, _StateRefusingRemote(remote)), APP, X, 3600, clock=RealClock(), host=RealHost(), random=RealRandom(), install_hooks=_real_process_hooks())
     run._open()
 
     with caplog.at_level(logging.WARNING):

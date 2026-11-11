@@ -12,6 +12,7 @@ from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.writer import own_stream
+import time
 
 
 def _series(storage, rewinds=()):
@@ -46,7 +47,7 @@ def test_a_compacted_writer_is_not_compacted_again(tmp_path):
 
 def test_compaction_applies_the_rewinds(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for step in range(5):
         w.add("loss", float(step), step=step, ts_us=1_000 + step)
     w.flush()
@@ -57,7 +58,7 @@ def test_compaction_applies_the_rewinds(tmp_path):
 
 def test_rebuild_drops_what_a_newer_rewind_hides(tmp_path):
     storage = _storage(tmp_path)
-    w = MetricWriter(storage, APP, V, "w")
+    w = MetricWriter(storage, APP, V, "w", clock=time.time)
     for step in range(5):
         w.add("loss", float(step), step=step, ts_us=1_000 + step)
     w.flush()

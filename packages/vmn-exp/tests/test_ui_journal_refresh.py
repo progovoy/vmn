@@ -11,7 +11,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.journal_follow import WorkspaceJournal
 from vmn_exp.ui.refresher import Refresher
-from vmn_exp.core.real_io import RealRandom
+from vmn_exp.core.real_io import RealClock, RealRandom
 
 FINISHED = "state: finished\nexit_code: 0\n"
 
@@ -30,7 +30,7 @@ class FakeIndex:
 
 @pytest.fixture
 def store(tmp_path):
-    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1")
+    return journaled(LocalSnapshotStorage(str(tmp_path), "runs"), writer_id="w1", clock=time.time)
 
 
 @pytest.fixture
@@ -140,9 +140,9 @@ def test_the_refresher_shows_a_new_run_through_the_journal(tmp_path):
     from vmn_exp.core.index import ExperimentIndex
 
     root = str(tmp_path / "store")
-    writer = open_storage(None, root, area="runs")
+    writer = open_storage(None, root, area="runs", clock=RealClock())
     _write(writer, "app", "1.0.0-dev.a")
-    reader = open_storage(None, root, area="runs", writer=False)
+    reader = open_storage(None, root, area="runs", writer=False, clock=RealClock())
     index = ExperimentIndex(reader, "app", full_sweep_sec=3600)
     journal = _journal(journal_list_fn(reader))
     refresher = Refresher(interval_sec=0.02, idle_sec=60, clock=time.monotonic)

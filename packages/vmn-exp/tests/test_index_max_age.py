@@ -10,6 +10,7 @@ from vmn_exp.core.alerts import watch_app
 from vmn_exp.core.index import ExperimentIndex, indexed_snapshot
 from vmn_exp.sdk import reader
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import RealClock
 
 APP = "my_app"
 FINISHED = "state: finished\nexit_code: 0\n"
@@ -38,7 +39,7 @@ def clock(monkeypatch, tmp_path):
 
 @pytest.fixture
 def storage(tmp_path):
-    return open_storage(None, str(tmp_path / "store"), area="runs")
+    return open_storage(None, str(tmp_path / "store"), area="runs", clock=RealClock())
 
 
 @pytest.fixture

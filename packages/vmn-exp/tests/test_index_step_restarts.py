@@ -12,6 +12,7 @@ from vmn_exp.core.metric_columns import key_summary
 from vmn_exp.core.metric_index_reader import MetricIndexReader
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.snapshot import LocalSnapshotStorage
+import time
 
 T0 = 1_700_000_000_000_001
 RESTARTED = {"best": {"from": 120, "to": 5}}
@@ -36,7 +37,7 @@ def _row(st):
 def _stream(tmp_path, steps):
     st = LocalSnapshotStorage(str(tmp_path), area="runs")
     st.save(APP, V, {"verstr": V, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    w = MetricWriter(st, APP, V, "w")
+    w = MetricWriter(st, APP, V, "w", clock=time.time)
     for i, step in enumerate(steps):
         w.add("best", 0.5, step=step, ts_us=T0 + i)
     w.flush()

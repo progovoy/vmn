@@ -13,7 +13,7 @@ from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui import settings_cache  # noqa: E402
 from vmn_exp.ui.settings_cache import SettingsCache, request_scope  # noqa: E402
-from vmn_exp.core.real_io import real_io  # noqa: E402
+from vmn_exp.core.real_io import RealClock, real_io
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -37,7 +37,7 @@ def _client(tmp_path):
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
-    storage = open_storage(uri, area=RUNS)
+    storage = open_storage(uri, area=RUNS, clock=RealClock())
     verstr = "0.0.1-dev.abc1234.def5678.r1"
     storage.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:01Z"}, {})
     storage.save_file(APP, verstr, "run_state.yml", "state: finished\nexit_code: 0\n")

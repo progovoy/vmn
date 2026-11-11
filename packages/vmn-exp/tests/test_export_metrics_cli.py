@@ -8,6 +8,7 @@ from exp_helpers import _bootstrap, _exp, _experiment, _storage, extract_dev_ver
 
 from vmn_exp.core.metric_stream import MetricWriter
 from vmn_exp.core.series_reader import SeriesReader
+import time
 
 T0 = 1_767_225_600_000_000
 COLUMNS = ["run", "writer", "key", "step", "ts", "value"]
@@ -19,7 +20,7 @@ def _run(app_layout, capfd, writers=("w",)):
     verstr = extract_dev_verstr(capfd.readouterr().out)
     storage = _storage(app_layout)
     for name in writers:
-        w = MetricWriter(storage, app_layout.app_name, verstr, name)
+        w = MetricWriter(storage, app_layout.app_name, verstr, name, clock=time.time)
         for step in (1, 2):
             w.add("loss", 1.0 / step, step=step, ts_us=T0 + step)
             w.add("acc", 0.5 * step, step=step, ts_us=T0 + step)
