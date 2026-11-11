@@ -3,7 +3,7 @@
 Self-contained on purpose: this package depends only on vmn_exp.core,
 vmn_exp.storage, vmn_exp.registry and vmn_exp._base — never on version_stamp,
 vmn_exp.snapshot, vmn_exp.ui or vmn_exp.cli (vmn_exp.gitmode only lazily) —
-so it ships as its own distribution (tests/test_packaging_split.py).
+so it ships as its own distribution (packages/vmn-exp/tests/test_packaging_split.py).
 """
 import os
 

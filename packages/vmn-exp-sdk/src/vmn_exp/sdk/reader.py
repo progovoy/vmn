@@ -20,8 +20,8 @@ is cached is the folded files: :func:`list_runs` reads through the experiment
 index (:mod:`vmn_exp.core.index`, persisted as
 a per-host cache file, :mod:`vmn_exp.storage.host_dirs`), which re-reads only what changed.
 
-Depends on ``version_stamp.core`` and the snapshot storage helpers only, never
-on ``vmn_exp.ui``, so the experiment feature can be lifted out later. The
+Depends on ``vmn_exp.core`` and the storage helpers only, never on
+``version_stamp`` or ``vmn_exp.ui``, so it ships in the SDK wheel. The
 log folding it shares with the CLI and the ui lives in
 :mod:`vmn_exp.core.log`.
 """
@@ -162,7 +162,7 @@ def list_runs(
         status: keep only these statuses — a list or a comma-separated string.
         query: an experiment query (``metrics.loss < 0.5 and params.model = "xgb"``),
             ANDed with *status* and applied before *last* and *sort*. Raises
-            :class:`~version_stamp.core.experiment_query.QueryError` when it will
+            :class:`~vmn_exp.core.query.QueryError` when it will
             not compile — a caller wants the error, not a silent empty list.
         use_index: read through the incremental experiment index cached at
             the per-host cache dir (:mod:`vmn_exp.storage.host_dirs`) — what ``vmn-exp list`` and the

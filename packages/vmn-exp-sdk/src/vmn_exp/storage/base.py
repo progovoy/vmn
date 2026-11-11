@@ -5,8 +5,8 @@ A record is a directory (or key prefix) ``<base>/<verstr>/`` holding
 ``metadata.yml``, the patches, the per-writer JSONL logs, ``run_state.yml`` and
 ``artifacts/``. ``metadata.yml`` is written last and is what makes a record
 exist: a claimed but unfinished record, or what a deleted one left behind, is
-invisible. Backends: :mod:`snapshot_storage_local`, :mod:`snapshot_storage_s3`,
-and the local-first :mod:`snapshot_storage_cached`.
+invisible. Backends: :mod:`vmn_exp.storage.local`, :mod:`vmn_exp.storage.s3`,
+and the local-first :mod:`vmn_exp.storage.cached`.
 
 The defaults here keep duck-typed or older backends working; the real
 backends override them with cheaper, atomic versions.
