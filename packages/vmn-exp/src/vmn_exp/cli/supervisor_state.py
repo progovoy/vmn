@@ -46,14 +46,15 @@ class StateUploads:
             self._remote = Coalescing(self._upload, "vmn-run-state")
 
     def publish(self, run_state, final=False):
-        """Queue *run_state* for the remote, then write it locally (raises
-        on a failed local write, like the storage call it replaces)."""
+        """Write *run_state* locally, then queue it for the remote (raises
+        on a failed local write, like the storage call it replaces, and then
+        queues nothing: the remote never holds a state the local copy lacks)."""
         data = dump_state(run_state)
+        if self._local is not None and self._holds_record():
+            self._local.save_file(*self._where, data)
         if self._remote is not None:
             self._final_submitted = self._final_submitted or final
             self._remote.submit((data, final))
-        if self._local is not None and self._holds_record():
-            self._local.save_file(*self._where, data)
 
     def _holds_record(self):
         """Whether the local side may be written: never a record that exists

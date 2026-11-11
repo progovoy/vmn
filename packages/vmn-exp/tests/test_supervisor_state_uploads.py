@@ -12,6 +12,7 @@ from vmn_exp.cli import supervisor
 from vmn_exp.cli.supervisor import supervision_guard
 from vmn_exp.cli.supervisor_state import StateUploads
 from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.local import LocalSnapshotStorage
 
 RUNNING = {"state": "running", "heartbeat_seq": 1}
@@ -134,3 +135,23 @@ def test_a_record_the_remote_does_not_hold_is_not_uploaded(tmp_path):
     assert uploads.close(WAIT_SEC) is True
     assert remote.state_saves == []
     assert _state(storage._local.load_file(APP, V, RUN_STATE_FILE)) == FINISHED
+
+
+class _FailingLocal(LocalSnapshotStorage):
+    def save_file(self, app_name, verstr, filename, data):
+        if filename == RUN_STATE_FILE:
+            raise OSError("disk full")
+        return super().save_file(app_name, verstr, filename, data)
+
+
+def test_a_failed_local_write_queues_nothing_for_the_remote(tmp_path):
+    remote = FakeRemote(str(tmp_path / "remote"))
+    storage = CachedSnapshotStorage(_FailingLocal(str(tmp_path / "local"), "runs"), remote)
+    storage.save(APP, V, meta(V), {})
+    uploads = _uploads(storage)
+
+    with pytest.raises(OSError):
+        uploads.publish(FINISHED, final=True)
+
+    assert uploads.close(WAIT_SEC) is True
+    assert remote.state_saves == []
