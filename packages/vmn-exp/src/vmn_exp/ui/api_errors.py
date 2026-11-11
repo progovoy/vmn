@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Error bodies that tell a client why: ``{"detail": <message>, "code": <reason>}``."""
+import logging
+
 from fastapi import HTTPException
 
 from vmn_exp.core.resolve_ref import AMBIGUOUS_REF, INVALID_REF, RUN_NOT_FOUND
@@ -7,6 +9,7 @@ from vmn_exp.ui.responses import SafeJSONResponse
 
 APP_NOT_FOUND = "app_not_found"
 REF_STATUS = {RUN_NOT_FOUND: 404, AMBIGUOUS_REF: 409, INVALID_REF: 400}
+_LOGGER = logging.getLogger(__name__)
 
 
 class CodedError(Exception):
@@ -20,6 +23,16 @@ def install(app):
     async def _coded(request, exc: CodedError):
         body = {"detail": exc.detail, "code": exc.code}
         return SafeJSONResponse(body, status_code=exc.status)
+
+    @app.exception_handler(ValueError)
+    async def _value_error(request, exc: ValueError):
+        # Storage refuses names that are not a single path component; any
+        # other ValueError is logged so a server bug answered 400 is seen.
+        _LOGGER.warning(
+            "400 for ValueError on %s %s", request.method, request.url.path,
+            exc_info=exc,
+        )
+        return SafeJSONResponse({"detail": str(exc)}, status_code=400)
 
 
 def raise_read_error(err):

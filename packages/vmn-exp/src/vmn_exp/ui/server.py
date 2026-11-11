@@ -266,11 +266,6 @@ def create_app(
         SelectiveGZipMiddleware, minimum_size=GZIP_MIN_BYTES, compresslevel=GZIP_LEVEL
     )
 
-    @app.exception_handler(ValueError)
-    async def _bad_path(request: Request, exc: ValueError):
-        # Storage refuses names that are not a single path component.
-        return JSONResponse({"detail": str(exc)}, status_code=400)
-
     api_errors.install(app)
 
     def _app_name(app_tag):
