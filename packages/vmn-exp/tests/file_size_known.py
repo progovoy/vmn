@@ -2,7 +2,7 @@
 # Modules over 300 lines and their line counts. Entries only go down.
 
 KNOWN_OVERSIZED = {
-    'vmn_exp.cli.experiment': 1222,
+    'vmn_exp.cli.experiment': 411,
     'vmn_exp.cli.model_cmd': 346,
     'vmn_exp.cli.prune': 340,
     'vmn_exp.cli.run': 623,
