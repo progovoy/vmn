@@ -279,6 +279,7 @@ class FakeContainerClient:
         self.objects = {}
         self.refused_deletes = set()
         self.delete_blobs_calls = 0
+        self.list_blobs_kwargs = []
         self.lock = threading.Lock()
 
     @classmethod
@@ -291,9 +292,13 @@ class FakeContainerClient:
     def _names(self, prefix):
         return [n for n in sorted(self.objects) if n.startswith(prefix or "")]
 
-    def list_blobs(self, name_starts_with=None):
+    def list_blobs(self, name_starts_with=None, **kwargs):
+        """``start_from`` is inclusive, as the service's ``startFrom``."""
+        self.list_blobs_kwargs.append(kwargs)
+        start = kwargs.get("start_from") or ""
         for name in self._names(name_starts_with):
-            yield BlobProperties(name, self.objects[name])
+            if name >= start:
+                yield BlobProperties(name, self.objects[name])
 
     def walk_blobs(self, name_starts_with=None, delimiter="/"):
         seen = set()

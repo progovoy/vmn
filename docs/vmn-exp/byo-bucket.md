@@ -141,6 +141,13 @@ On GCS and Azure, grant the same prefixes to the server's service account or
 managed identity: object read and list on the prefix, plus object create on
 the edit paths for read + edits.
 
+On Azure, listings start past a key server-side (List Blobs `startFrom`) when
+the installed `azure-storage-blob` sends `start_from`: an index refresh then
+lists consecutive records in one walk of their key range (about one LIST per
+1000 objects) and skips past a big `artifacts/` subtree. With an older SDK
+every listing starts at the prefix and skips keys client-side, so a refresh
+reads every object under the prefix and costs about three LISTs per record.
+
 ## Journal lifecycle rule
 
 Journal objects are empty and only useful for a few minutes, but they pile up.

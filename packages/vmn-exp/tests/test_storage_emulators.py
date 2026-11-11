@@ -125,3 +125,22 @@ def test_conformance_checks_pass_on_azurite(azurite_connection_string):
                                     if_not_modified=MatchConditions.IfNotModified)
 
     assert _failures(make_store) == []
+
+
+def test_conformance_checks_pass_on_azurite_listing_from_a_start_key(
+        azurite_connection_string):
+    from azure.core import MatchConditions
+    from azure.storage.blob import ContainerClient
+    from vmn_exp.storage.azure import AzureSnapshotStorage, sdk_sends_start_from
+
+    assert sdk_sends_start_from()
+    container = ContainerClient.from_connection_string(azurite_connection_string, "startfrom")
+    container.create_container()
+    fresh = itertools.count()
+
+    def make_store():
+        return AzureSnapshotStorage("startfrom", prefix=f"p{next(fresh)}", container=container,
+                                    if_not_modified=MatchConditions.IfNotModified,
+                                    supports_start_from=True)
+
+    assert _failures(make_store) == []

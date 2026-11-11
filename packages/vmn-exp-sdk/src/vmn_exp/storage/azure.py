@@ -11,6 +11,7 @@ The account: ``AZURE_STORAGE_CONNECTION_STRING``, else an account URL
 in the URL).
 """
 import functools
+import inspect
 import logging
 import os
 
@@ -28,12 +29,13 @@ def _obj(props):
 
 
 class AzureObjectClient(ObjectClient):
-    server_side_start_after = False  # list_blobs/walk_blobs take no start key
-
-    def __init__(self, container, if_not_modified):
+    def __init__(self, container, if_not_modified, supports_start_from=False):
+        """*supports_start_from*: the SDK sends ``list_blobs(start_from=)``
+        (:func:`sdk_sends_start_from`), so a flat listing starts at a key."""
         super().__init__()
         self._container = container
         self._if_not_modified = if_not_modified  # azure.core.MatchConditions.IfNotModified
+        self.server_side_start_after = supports_start_from
 
     def _blob(self, key):
         return self._container.get_blob_client(key)
@@ -75,12 +77,19 @@ class AzureObjectClient(ObjectClient):
             listing = self._container.walk_blobs(name_starts_with=prefix or None,
                                                  delimiter=delimiter)
         else:
-            listing = self._container.list_blobs(name_starts_with=prefix or None)
+            listing = self._container.list_blobs(name_starts_with=prefix or None,
+                                                 **self._start_from(start_after))
         for item in listing:
-            if item.name <= start_after:
+            if item.name <= start_after:  # the service's start key is inclusive
                 continue
             # walk_blobs yields a BlobPrefix (it has .prefix) per "directory".
             yield item.name if getattr(item, "prefix", None) else _obj(item)
+
+    def _start_from(self, start_after):
+        """walk_blobs gets none: a delimited listing takes a one-level key only."""
+        if start_after and self.server_side_start_after:
+            return {"start_from": start_after}
+        return {}
 
     def _remove(self, key):
         try:
@@ -125,10 +134,12 @@ class AzureSnapshotStorage(S3SnapshotStorage):
     scheme = "az"
 
     def __init__(self, container_name, prefix="vmn/snapshots", container=None,
-                 if_not_modified=None, client_factory=None, options=None):
+                 if_not_modified=None, client_factory=None, options=None,
+                 supports_start_from=False):
         """*client_factory* (an :class:`AzureObjectClient` builder, used
         instead of *container*) builds the client again in a forked child."""
-        client = None if client_factory else AzureObjectClient(container, if_not_modified)
+        client = None if client_factory else AzureObjectClient(
+            container, if_not_modified, supports_start_from=supports_start_from)
         super().__init__(container_name, prefix=prefix, client=client,
                          client_factory=client_factory, options=options)
 
@@ -140,6 +151,21 @@ def _sdk():
     except ImportError:
         raise missing_extra("azure-storage-blob", "azure") from None
     return ContainerClient, MatchConditions
+
+
+def sdk_sends_start_from():
+    """Whether the installed azure-storage-blob sends ``list_blobs``'
+    ``start_from``: its generated List Blobs operation names it. An older SDK
+    hands the unknown keyword to the HTTP transport, so it is not passed."""
+    try:
+        from azure.storage.blob._generated.operations import ContainerOperations
+    except ImportError:
+        return False  # laid out otherwise: list from the start, filter client-side
+    return takes_start_from(ContainerOperations.list_blob_flat_segment)
+
+
+def takes_start_from(list_operation):
+    return "start_from" in inspect.signature(list_operation).parameters
 
 
 def _container_client(container_cls, name, account_url):
@@ -167,7 +193,7 @@ def _default_adapter(name, account_url):
     """A client of its own: container client, credential and token cache."""
     container_cls, match = _sdk()
     return AzureObjectClient(_container_client(container_cls, name, account_url),
-                             match.IfNotModified)
+                             match.IfNotModified, supports_start_from=sdk_sends_start_from())
 
 
 def open_azure_store(uri, area):
