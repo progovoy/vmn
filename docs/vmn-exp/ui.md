@@ -199,6 +199,13 @@ and `Job timed out after 1800s: the store did not answer`. That call is not
 cancelled, so the workspace takes no new action until it returns: meanwhile
 a submit answers `409` `The previous action is still waiting for the store`.
 
+On a bucket store an edit is written to the server's buffer before it is
+uploaded. An edit whose upload fails is pending, not lost: its job fails with
+the error and `The edit is kept on the server and is pending until it ships`,
+and the next action on that workspace uploads it first. If that upload fails
+again, the new action does not run and its job says `An earlier edit is still
+pending`; a server that exits ships what is still pending.
+
 There is no Rerun action: [`vmn-exp rerun`](experiments.md#rerun) supervises
 its command for as long as it runs. The run header's **Reproduce** menu copies
 the `vmn-exp restore`, `rerun` (runs that recorded a command) and `export`

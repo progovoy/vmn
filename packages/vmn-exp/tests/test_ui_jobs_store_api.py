@@ -117,3 +117,43 @@ def test_a_store_action_request_returns_while_the_store_hangs(tmp_path, monkeypa
     finally:
         gate.set()
     assert _wait(client, r.json()["id"])["status"] == "succeeded"
+
+
+class _StuckUpload:
+    """The edit storage holding an earlier edit whose upload keeps failing."""
+
+    def __init__(self, storage):
+        self._storage = storage
+
+    def __getattr__(self, name):
+        return getattr(self._storage, name)
+
+    def has_pending(self):
+        return True
+
+    def ship_pending(self):
+        raise ConnectionError("the store is out of reach")
+
+
+def stuck_edit_storage(monkeypatch):
+    """Make the UI server's edit storage a :class:`_StuckUpload`."""
+    import vmn_exp.storage.open as storage_open
+
+    real_open = storage_open.open_storage
+
+    def open_edit_storage(uri, **kwargs):
+        storage = real_open(uri, **kwargs)
+        return _StuckUpload(storage) if kwargs.get("buffer_logs") else storage
+
+    monkeypatch.setattr(storage_open, "open_storage", open_edit_storage)
+
+
+def test_a_store_action_first_retries_an_earlier_pending_edit(tmp_path, monkeypatch):
+    stuck_edit_storage(monkeypatch)
+    client, _ = _setup(tmp_path, capabilities=["read", "edit"])
+    r = client.post(f"{BASE}/actions/exp_tag", json={"verstr": V, "set": {"k": "v"}})
+    job = _wait(client, r.json()["id"])
+    assert job["status"] == "failed"
+    assert "An earlier edit is still pending" in job["log"]
+    detail = client.get(f"{BASE}/experiments/{V}").json()
+    assert not [e for e in detail["log"] if e["type"] == "tags"]

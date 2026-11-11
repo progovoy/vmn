@@ -627,3 +627,7 @@ for `read`, and a create-if-absent write of a probe key under
 `<root>/server/probe/` for `edit`. The result is saved with the workspace.
 Without `edit`, edit requests get `403`. Git workspaces keep running their
 actions as `vmn` subprocesses in the checkout.
+
+Each edit is a job bounded by the job timeout, and an edit whose upload
+failed is retried before the next action on the workspace; see
+[ui.md](ui.md#actions).

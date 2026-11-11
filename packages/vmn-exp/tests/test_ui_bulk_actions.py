@@ -186,3 +186,15 @@ def test_a_viewer_is_refused(tmp_path):
     assert client.post(url, json=body, headers={"Authorization": "Bearer v"}).status_code == 403
     r = client.post(url, json=body, headers={"Authorization": "Bearer e"})
     assert r.status_code == 200 and r.json()["count"] == 3
+
+
+def test_a_bulk_store_action_first_retries_an_earlier_pending_edit(tmp_path, monkeypatch):
+    from test_ui_jobs_store_api import stuck_edit_storage
+
+    stuck_edit_storage(monkeypatch)
+    client = _client(tmp_path, matching=3, other=2)
+    r = client.post(f"{BASE}/actions/exp_archive", json=QUERY)
+    job = _wait(client, r.json()["id"])
+    assert job["status"] == "failed"
+    assert "An earlier edit is still pending" in job["log"]
+    assert not any(row.get("archived") for row in _rows(client).values())

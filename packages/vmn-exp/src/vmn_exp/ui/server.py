@@ -156,6 +156,7 @@ def create_app(
     from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
     from vmn_exp.ui.jobs import JobRunner, build_command
     from vmn_exp.ui.jobs_store import build_store_action
+    from vmn_exp.ui.pending_edits import ship_pending_first
     from vmn_exp.ui.storage_access import EDIT, READ
     from vmn_exp.ui.store_upkeep import StoreUpkeep
 
@@ -647,7 +648,10 @@ def create_app(
             return JSONResponse(spec.preview(verstrs))
         if ws.kind == "store":
             storage, reads = _edit_storage(ws), _exp_storage_for(ws)
-            act = partial(spec.apply, storage, hint=lambda app, v: source.touched(ws, app, reads))
+            apply = partial(spec.apply, storage, hint=lambda app, v: source.touched(ws, app, reads))
+
+            def act(batch):
+                return ship_pending_first(storage, partial(apply, batch))
         else:
             act = partial(spec.run_in_checkout, jobs.run_command, ws.path)
         job, err = jobs.submit_bulk(ws.name, spec.label, resolve, act)
@@ -666,8 +670,8 @@ def create_app(
         def hint(app, verstr):
             source.touched(ws, app, reads)
 
-        job, err = jobs.submit_call(
-            ws.name, store_action.command, lambda: store_action.run(storage, hint))
+        job, err = jobs.submit_call(ws.name, store_action.command, lambda: ship_pending_first(
+            storage, lambda: store_action.run(storage, hint)))
         if err:
             raise HTTPException(409, err)
         return job

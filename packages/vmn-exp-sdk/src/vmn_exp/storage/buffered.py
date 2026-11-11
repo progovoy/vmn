@@ -220,6 +220,18 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         super().sync_metrics_to_remote(app_name, verstr, writer_id)
         self._unshipped_metrics.discard(key)
 
+    def has_pending(self):
+        """Whether appends an earlier ship left behind are still buffered."""
+        self._this_process()
+        return bool(self._unshipped or self._unshipped_metrics)
+
+    def ship_pending(self):
+        """Ship what an earlier ship left behind; raises while it still fails."""
+        for key in list(self._unshipped):
+            self.sync_log_to_remote(*key)
+        for key in list(self._unshipped_metrics):
+            self.sync_metrics_to_remote(*key)
+
     def _cleanup_buffer(self):
         """Drop the buffer dir: a later append starts a fresh buffer, under a
         new owner. Idempotent: ``rmtree`` on an already-gone directory is a
