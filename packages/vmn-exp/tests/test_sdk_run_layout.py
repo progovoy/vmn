@@ -1,0 +1,59 @@
+"""Characterization: names tests patch on ``vmn_exp.sdk.run`` keep reaching
+the code that uses them.
+
+Tests (test_sdk_detach.py, test_exp_push_metrics.py, test_sdk_finalize_bounds.py,
+test_sdk_run_error.py) ``setattr`` these names on the run module. Moving the
+code that calls them into another module would make those patches silently
+stop applying; these tests fail first.
+"""
+from s3_helpers import meta
+
+from vmn_exp.sdk import run as run_module
+from vmn_exp.snapshot import LocalSnapshotStorage
+
+APP = "app"
+VERSTR = "0.0.1-dev.aaaaaaa.bbbbbbb"
+
+PATCHED_NAMES = (
+    "Run",
+    "start_run",
+    "_finalize_open_runs",
+    "_finalize_signaled",
+    "install_signal_handlers",
+    "final_upload_timeout_sec",
+    "FINAL_REMOTE_TIMEOUT_SEC",
+    "compact_by",
+    "sync_to_remote",
+    "error_from_exception",
+)
+
+
+def _run(tmp_path):
+    storage = LocalSnapshotStorage(str(tmp_path / "s"), "runs")
+    storage.save(APP, VERSTR, meta(VERSTR), {})
+    run = run_module.Run(storage, APP, VERSTR, 3600)
+    run._open()
+    return run, storage
+
+
+def test_run_module_still_exposes_its_public_and_patched_names():
+    missing = [name for name in PATCHED_NAMES if not hasattr(run_module, name)]
+    assert missing == []
+
+
+def test_patching_compact_by_on_the_run_module_reaches_the_close_path(tmp_path, monkeypatch):
+    compacted = []
+    monkeypatch.setattr(run_module, "compact_by", lambda *args: compacted.append(args[:3]))
+    run, storage = _run(tmp_path)
+    run.finish()
+    assert compacted == [(storage, APP, VERSTR)]
+
+
+def test_patching_sync_to_remote_on_the_run_module_reaches_the_sync_worker(
+    tmp_path, monkeypatch
+):
+    synced = []
+    monkeypatch.setattr(run_module, "sync_to_remote", lambda *args: synced.append(args[:3]))
+    run, storage = _run(tmp_path)
+    run.finish()
+    assert (storage, APP, VERSTR) in synced
