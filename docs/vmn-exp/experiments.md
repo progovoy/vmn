@@ -1817,20 +1817,21 @@ factory)` does the same at runtime. The contract:
   [How records are stored](#how-records-are-stored)), `metrics/` (see [Metric storage](#metric-storage)),
   `run_state.yml`, `outputs/` and `artifacts/`.
   `metadata.yml` makes a record exist: write it last, delete it first.
-  Implement the abstract methods (`save`, `load_record`, `list_snapshots`,
-  `update_note`, `delete`, `load_file`, `save_file`, `save_artifact_file`,
-  `local_record_dir`) and override the defaulted ones your store does
-  better (`list_verstrs`, `exists`, `update_metadata`, `list_files`,
+  Implement the abstract methods (`save`, `create_exclusive`, `load_record`,
+  `list_snapshots`, `update_note`, `delete`, `load_file`, `save_file`,
+  `save_artifact_file`, `local_record_dir`) and override the defaulted ones
+  your store does better (`list_verstrs`, `exists`, `update_metadata`, `list_files`,
   `read_file_from`, the log methods, `list_artifacts`, `artifact_uri`).
   Every backend implements `list_apps()`.
 - **`create_exclusive` must be atomic**: of any number of hosts racing for a
   verstr exactly one gets `True`. A store `vmn-exp push` can target also takes
   `create_exclusive(..., claim_token=)`: a claim holding the same token but no
   `metadata.yml` is the caller's own crashed attempt and is resumed (`True`);
-  other claims and records stay taken. The base-class default (check, then
-  save) is *not* safe on a shared store — use a conditional create (`O_EXCL`
-  mkdir, S3 `If-None-Match: *`, GCS `if_generation_match=0`, Azure
-  `overwrite=False`). `update_metadata` should be a compare-and-swap.
+  other claims and records stay taken. There is no base-class default (a
+  subclass without it cannot be constructed); check, then save is *not* safe
+  on a shared store — use a conditional create (`O_EXCL` mkdir, S3
+  `If-None-Match: *`, GCS `if_generation_match=0`, Azure `overwrite=False`).
+  `update_metadata` should be a compare-and-swap.
 - **Segments are created, never overwritten**: a local root ships its streams
   through `create_log_segment(app, verstr, stream, seq, data)` and
   `create_metric_segment(...)`, which store segment *seq* only if it does not
@@ -1855,6 +1856,27 @@ An object store with conditional create and overwrite gets all of this by
 subclassing `vmn_exp.storage.s3.S3SnapshotStorage` with a
 `vmn_exp.storage.object_client.ObjectClient` adapter — how the GCS and Azure
 backends are built.
+
+**Check your backend.** `vmn_exp.storage.conformance` runs the record
+contract against a factory of fresh, empty stores: the save/load round trip,
+`metadata.yml` making a record exist, `create_exclusive` claiming once and
+under racing threads, delete, files, `update_metadata` and `list_apps`.
+`check_store` returns `(check name, error or None)` for each of `CHECKS`; it
+needs no pytest:
+
+```python
+import tempfile
+
+from vmn_exp.storage.conformance import check_store
+
+def test_my_store_conforms():
+    results = check_store(lambda: MyStore(tempfile.mkdtemp()))
+    assert [(name, err) for name, err in results if err is not None] == []
+```
+
+Each call of the factory must return an empty store. Passing the race check
+does not prove a check-then-save `create_exclusive` safe (it can pass by
+luck); only a conditional create is.
 
 ### How records are stored
 

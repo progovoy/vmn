@@ -40,6 +40,9 @@ class _OldSignatureStore(SnapshotStorage):
     def save(self, app_name, verstr, metadata, patches):
         pass
 
+    def create_exclusive(self, app_name, verstr, metadata, patches):
+        return True
+
     def save_file(self, app_name, verstr, filename, data):
         return True
 

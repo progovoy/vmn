@@ -11,6 +11,9 @@ class EmptyStorage(SnapshotStorage):
     def save(self, app_name, verstr, metadata, patches):
         pass
 
+    def create_exclusive(self, app_name, verstr, metadata, patches):
+        return True
+
     def load_record(self, app_name, verstr):
         return None, None
 

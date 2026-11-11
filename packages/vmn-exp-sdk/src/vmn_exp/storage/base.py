@@ -109,12 +109,12 @@ class SnapshotStorage(ABC):
         metadata, _ = self.load_record(app_name, verstr)
         return metadata is not None
 
+    @abstractmethod
     def create_exclusive(self, app_name, verstr, metadata, patches):
-        """Save only if *verstr* is free. Backends override this atomically."""
-        if self.exists(app_name, verstr):
-            return False
-        self.save(app_name, verstr, metadata, patches)
-        return True
+        """Save only if *verstr* is free, atomically: of any number of racing
+        writers exactly one gets True (a conditional create, never check
+        then save). :mod:`vmn_exp.storage.conformance` checks it."""
+        ...
 
     # -- child markers (:mod:`vmn_exp.storage.child_markers`) ------------------
 

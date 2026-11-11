@@ -138,6 +138,7 @@ KNOWN_IO = {
     'vmn_exp.storage.buffered': {'fs': 2, 'process_self': 4, 'random': 1, 'time': 4},
     'vmn_exp.storage.child_markers': {'fs': 4},
     'vmn_exp.storage.children_flag': {'fs': 5, 'random': 1},
+    'vmn_exp.storage.conformance': {'thread': 1},
     'vmn_exp.storage.fanout': {'process_self': 3, 'thread': 1},
     'vmn_exp.storage.files': {'fs': 12},
     'vmn_exp.storage.fs_type': {'fs': 3},
