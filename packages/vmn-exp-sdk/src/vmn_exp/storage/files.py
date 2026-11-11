@@ -15,7 +15,7 @@ from vmn_exp.core.logfiles import (  # noqa: F401  (re-exported)
     log_writer_and_seq,
     parse_jsonl,
 )
-from vmn_exp.core.index_metric_reads import relisted
+from vmn_exp.core.metric_object_reads import relisted
 from vmn_exp.core.rewind import drop_rewound
 from vmn_exp.core.series_reader import SeriesReader
 from vmn_exp.core.streams import display_writer

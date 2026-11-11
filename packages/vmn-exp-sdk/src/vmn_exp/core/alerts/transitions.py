@@ -12,12 +12,25 @@ import datetime
 import yaml
 
 from vmn_exp._base import VMN_LOGGER, iso_z, now_iso, yaml_safe_load
-from vmn_exp.core import index as experiment_index
 from vmn_exp.core.alerts.dispatch import make_alert
 from vmn_exp.core.run_error import state_error_summary
 from vmn_exp.core.status import FAILED, STUCK, derive_status, last_alive_at, parse_iso
 
 ALERTS_FILE = "alerts_sent.yml"
+
+
+def _experiment_index():
+    """:mod:`vmn_exp.core.index`, imported on first use so ``import
+    vmn_exp.sdk`` does not load the index modules (plan 41 D1)."""
+    from vmn_exp.core import index
+
+    return index
+
+
+def __getattr__(name):
+    if name == "experiment_index":
+        return _experiment_index()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _now(now=None):
@@ -127,7 +140,7 @@ def watch_app(storage, app_name, alerter, within_sec, now=None):
     if not wanted:
         return []
     now = _now(now)
-    snap = experiment_index.indexed_snapshot(storage, app_name, wait=True)
+    snap = _experiment_index().indexed_snapshot(storage, app_name, wait=True)
     fired = []
     for verstr, run_state, status in _candidates(snap, wanted, within_sec, now):
         name = (snap.row(verstr) or {}).get("name")

@@ -11,7 +11,7 @@ its key. Pure apart from the duck-typed storage reads of :meth:`from_storage`.
 """
 import heapq
 
-from vmn_exp.core.index_metric_reads import object_read
+from vmn_exp.core.metric_object_reads import object_read
 from vmn_exp.core.metric_block import decode_blocks, intact_length
 from vmn_exp.core.metric_columns import Columns
 from vmn_exp.core.metric_entries import is_metric_entry, points_to_entries
