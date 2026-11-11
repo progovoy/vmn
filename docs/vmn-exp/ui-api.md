@@ -116,6 +116,19 @@ Unknown `/api/...` paths are a JSON 404. A query parameter the route does not
 take is a 400 naming it (`Unknown query parameter 'limt'; did you mean 'limit'?`),
 never silently ignored; the web page's own URLs are not affected.
 
+`.../experiments` answers one of three shapes, picked by its parameters; a
+combination the table refuses is a 400 naming the parameters that conflict:
+
+| Mode | Selected by | Its own parameters | Refused |
+|---|---|---|---|
+| Flat page | neither of the two below | `last`, `cursor`, `match_subtree` | |
+| [Groups](#grouped-runs) | `group=` | `agg`, `rows_per_group`, `group_key`, `collapse_all` (with `top`) | `last`, `cursor` |
+| [Tree page](#outer-runs-scope-and-search) | `children_of=` | `last`, `cursor`, `match_subtree` | `group`, a `q` reading `comments` |
+| Jobs view (with any of the three) | `top=1\|jobs\|singles` | `top_q`, `job_agg`, `job_agg_by`, `job_agg_value`, `job_agg_metric`, `job_agg_nested` | each of these without `top` |
+
+`offset`, `limit` (groups, for a grouped page), `sort`, `order`, `status`, `q`,
+`scope` and `archived` page, filter and order every mode.
+
 Routes that resolve a run ref (run detail, its log page, `experiments-diff`)
 answer a ref they cannot resolve with `{"detail": "<message>", "code": "<code>"}`:
 `run_not_found` (no such verstr or prefix, `@N` out of range, no runs) is a

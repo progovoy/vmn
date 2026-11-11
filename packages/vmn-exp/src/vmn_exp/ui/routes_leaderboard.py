@@ -50,7 +50,7 @@ tags.kind?", :mod:`~vmn_exp.core.query_hints`); the web page's own URL params
 """
 from functools import partial
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from vmn_exp.core.app_settings import tree_columns_of
 from vmn_exp.core.query import QueryError
 from vmn_exp.ui.attention import pinned, queries_of
@@ -68,6 +68,15 @@ from vmn_exp.ui.leaderboard_comments import (
     reads_comments,
 )
 from vmn_exp.ui.leaderboard_group_fields import DEFAULT_AGGREGATE, UnknownGroup
+from vmn_exp.ui.leaderboard_params import (
+    GROUPED,
+    TREE,
+    GroupParams,
+    JobAggParams,
+    PageParams,
+    TreeParams,
+    resolve_mode,
+)
 from vmn_exp.ui.leaderboard_scope import UnknownScope, top_filter
 from vmn_exp.ui.memo import LRU
 from vmn_exp.ui.readers.experiments import ORDERS, split_by_of
@@ -102,85 +111,66 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         request: Request,
         ws_name: str,
         app_tag: str,
-        sort: str = None,
-        last: int = None,
-        offset: int = 0,
-        limit: int = None,
-        status: str = None,
-        q: str = None,
-        order: str = None,
-        archived: bool = False,
-        group: str = None,
-        agg: str = None,
-        rows_per_group: int = 10,
-        group_key: str = None,
-        scope: str = None,
-        top: str = None,
-        match_subtree: bool = False,
-        cursor: str = None,
-        children_of: str = None,
-        top_q: str = None,
-        job_agg: str = None,
-        job_agg_by: str = None,
-        job_agg_value: str = None,
-        job_agg_metric: str = None,
-        job_agg_nested: bool = None,
-        collapse_all: bool = False,
+        page: PageParams = Depends(),
+        grouping: GroupParams = Depends(),
+        tree: TreeParams = Depends(),
+        job_agg: JobAggParams = Depends(),
     ):
         snapshot, schema = inputs(ws_name, app_tag)
-        _check_order(order)
-        top, q, top_q = _top(top), _pinned(q), _pinned(top_q)
-        if top_q and not top:
-            raise HTTPException(400, "top_q needs top=1")
-        if collapse_all and not (top and group is not None):
-            raise HTTPException(400, "collapse_all needs group and top")
-        aggregate = _job_agg(ws_name, app_tag, top, agg=job_agg, by=job_agg_by,
-                             value=job_agg_value, metric=job_agg_metric, nested=job_agg_nested)
-        tree = children_of is not None
-        attention = queries_of(attention_of(ws_name, app_tag)) if top or tree else ()
-        offset, limit = clamp_page(offset, limit, cache.max_page)
-        params = dict(offset=offset, limit=limit, sort=sort, status=status, query=q,
-                      order=order, archived=archived, scope=_scope(scope), top=top,
-                      top_query=top_q, **aggregate)
-        # A Jobs view's summaries (throughput, ETA) follow the minute; the
-        # etag carries the live bucket already.
-        clock = dict(minute=minute()) if top or tree else {}
-        counts, generation = comments_of(ws_name, app_tag)
+        _check_order(page.order)
+        top, q, top_q = _top(page.top), _pinned(page.q), _pinned(page.top_q)
         try:
             by_comments = reads_comments(q)
         except QueryError as e:
             raise HTTPException(400, str(e))
-        if tree:
-            _scope(children_of)
-            _check_tree(group, by_comments)
+        mode = resolve_mode(page, grouping, tree, job_agg, top=top, by_comments=by_comments)
+        aggregate = _job_agg(ws_name, app_tag, job_agg) if mode.jobs else {}
+        live = mode.jobs or mode.shape == TREE
+        attention = queries_of(attention_of(ws_name, app_tag)) if live else ()
+        offset, limit = clamp_page(page.offset, page.limit, cache.max_page)
+        params = dict(offset=offset, limit=limit, sort=page.sort, status=page.status, query=q,
+                      order=page.order, archived=page.archived, scope=_scope(page.scope),
+                      top=top, top_query=top_q, **aggregate)
+        # A Jobs view's summaries (throughput, ETA) follow the minute; the
+        # etag carries the live bucket already.
+        clock = dict(minute=minute()) if live else {}
+        counts, generation = comments_of(ws_name, app_tag)
+        if mode.shape == TREE:
+            _scope(tree.children_of)
             return _tree_page(request, ws_name, app_tag, snapshot, schema, counts,
-                              dict(params, last=last, cursor=cursor, children_of=children_of,
-                                   match_subtree=match_subtree),
+                              dict(params, last=page.last, cursor=page.cursor,
+                                   children_of=tree.children_of,
+                                   match_subtree=page.match_subtree),
                               attention, comments=generation, **clock)
-        if group is not None:
-            if last or cursor is not None:
-                raise HTTPException(400, "last and cursor cannot be combined with group")
-            if group_key is None:
-                params["limit"], rows_per_group = grouped_page(limit, rows_per_group)
-                # One row per group (plan 34 §1): the headers alone.
-                rows_per_group = 0 if collapse_all else rows_per_group
-            params.update(agg=agg or aggregate_of(ws_name, app_tag),
-                          rows_per_group=rows_per_group, group_key=group_key)
-            compute = (partial(groups_by_comments, cache, counts=counts) if by_comments
-                       else cache.groups)
-            return _answer(request, _with_hints(_with_main(lambda s, sc, **p: joined_groups(
-                compute(s, sc, group, **p), counts), top)),
-                           snapshot, schema, params, comments=generation, group=group,
-                           **clock)
+        if mode.shape == GROUPED:
+            return _grouped_page(request, ws_name, app_tag, snapshot, schema, counts, params,
+                                 grouping, top, by_comments, comments=generation, **clock)
         if by_comments:
             compute = partial(page_by_comments, cache, counts=counts)
         else:
-            compute = partial(cache.page, match_subtree=match_subtree, attention=attention)
-        page = _with_hints(_with_main(lambda *a, **p: joined(compute(*a, **p), counts), top))
-        return _answer(request, page, snapshot,
-                       schema, dict(params, last=last, cursor=cursor), comments=generation,
-                       match_subtree=match_subtree and not by_comments, attention=attention,
+            compute = partial(cache.page, match_subtree=page.match_subtree, attention=attention)
+        answer = _with_hints(_with_main(lambda *a, **p: joined(compute(*a, **p), counts), top))
+        return _answer(request, answer, snapshot, schema,
+                       dict(params, last=page.last, cursor=page.cursor), comments=generation,
+                       match_subtree=page.match_subtree and not by_comments, attention=attention,
                        **clock)
+
+    def _grouped_page(request, ws_name, app_tag, snapshot, schema, counts, params, grouping,
+                      top, by_comments, **tag_extra):
+        """A grouped page: *params*' groups by ``grouping.group``."""
+        rows_per_group = grouping.rows_per_group
+        if grouping.group_key is None:
+            params["limit"], rows_per_group = grouped_page(params["limit"], rows_per_group)
+            # One row per group (plan 34 §1): the headers alone.
+            rows_per_group = 0 if grouping.collapse_all else rows_per_group
+        params.update(agg=grouping.agg or aggregate_of(ws_name, app_tag),
+                      rows_per_group=rows_per_group, group_key=grouping.group_key)
+        compute = (partial(groups_by_comments, cache, counts=counts) if by_comments
+                   else cache.groups)
+        group = grouping.group
+        return _answer(request, _with_hints(_with_main(lambda s, sc, **p: joined_groups(
+            compute(s, sc, group, **p), counts), top)),
+                       snapshot, schema, params, group=group, **tag_extra)
 
     @app.get(f"{base}/experiments-columns", dependencies=[require(VIEWER)])
     def experiment_columns(
@@ -282,15 +272,10 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
             return dict(body, hints=found) if found else body
         return answer
 
-    def _job_agg(ws_name, app_tag, top, **given):
-        """``{job_agg: JobAgg}`` of a Jobs view request (none without *top*,
-        400 when it names one anyway or a bad value)."""
-        if not top:
-            if any(value is not None for value in given.values()):
-                raise HTTPException(400, "job_agg needs top=1")
-            return {}
+    def _job_agg(ws_name, app_tag, job_agg):
+        """``{job_agg: JobAgg}`` of a Jobs view request (400 for a bad value)."""
         try:
-            return {"job_agg": job_agg_of(ui_of(ws_name, app_tag), **given)}
+            return {"job_agg": job_agg_of(ui_of(ws_name, app_tag), **job_agg.given())}
         except ValueError as e:
             raise HTTPException(400, str(e))
 
@@ -336,13 +321,6 @@ def grouped_page(limit, rows_per_group):
     groups = MAX_GROUPS if limit is None else max(1, min(int(limit), MAX_GROUPS))
     rows = max(1, min(int(rows_per_group), MAX_ROWS_PER_GROUP, MAX_GROUPED_ROWS // groups))
     return groups, rows
-
-
-def _check_tree(group, by_comments):
-    if group is not None:
-        raise HTTPException(400, "children_of cannot be combined with group")
-    if by_comments:
-        raise HTTPException(400, "children_of cannot be combined with a comments query")
 
 
 def _check_order(order):
