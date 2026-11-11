@@ -753,7 +753,9 @@
             "best",
             "median",
             "min",
-            "max"
+            "max",
+            "best10",
+            "worst10"
           ]
         },
         "scope": {
