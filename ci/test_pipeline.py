@@ -127,6 +127,19 @@ def test_the_webui_stage_fails_on_a_test_failure(mod):
         mod.tests_webui(FailingOn("_test_ui"))
 
 
+def test_the_webui_stage_runs_lint_after_the_tests(mod):
+    ctx = FakeCtx()
+    mod.tests_webui(ctx)
+    assert [cmd for cmd, _ in ctx.calls] == [
+        ["make", "_build_ui"], ["make", "_test_ui"], ["make", "_lint_ui"],
+    ]
+
+
+def test_the_webui_stage_fails_on_a_lint_error(mod):
+    with pytest.raises(RuntimeError):
+        mod.tests_webui(FailingOn("_lint_ui"))
+
+
 # ---- lint --------------------------------------------------------------
 
 

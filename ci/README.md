@@ -46,7 +46,7 @@ graph LR
     lint["lint<br/><i>ruff check</i>"]
     tests_core["tests_core<br/><i>pytest tests -n 29</i>"]
     tests_exp["tests_exp<br/><i>pytest packages/vmn-exp/tests -n 29</i>"]
-    tests_webui["tests_webui<br/><i>make _test_ui</i>"]
+    tests_webui["tests_webui<br/><i>make _test_ui _lint_ui</i>"]
     typecheck["typecheck<br/><i>mypy</i>"]
     tests_core --> tests_exp
     tests_webui --> tests_exp
@@ -69,7 +69,7 @@ graph LR
 | `lint` | Runs `ruff check` on `version_stamp/` | No |
 | `tests_core` | Runs the core vmn suite, `pytest tests -n 29` (parallel, 29 workers; `vmn_exp` is unimportable in it), produces JUnit XML + HTML report | Yes, on `packages/vmn`, `tests`, `pyproject.toml` |
 | `tests_exp` | Builds the git-ignored web UI bundle (`make _build_ui`), then runs the vmn-exp suite, `pytest packages/vmn-exp/tests -n 29 -m "not serial"`, then the `serial`-marked timing benchmarks alone (`tests_exp_serial` reports), produces JUnit XML + HTML reports | Yes, on `packages`, `tests`, `pyproject.toml` |
-| `tests_webui` | Builds the web UI (`make _build_ui`: `npm install`, `tsc -b`, `vite build`), then runs its vitest suite (`make _test_ui`, JUnit report `reports/tests_webui.xml`). Blocking | Yes, on `packages/vmn-exp/webui` |
+| `tests_webui` | Builds the web UI (`make _build_ui`: `npm install`, `tsc -b`, `vite build`), then runs its vitest suite (`make _test_ui`, JUnit report `reports/tests_webui.xml`) and ESLint with `react-hooks/rules-of-hooks` and `react-hooks/exhaustive-deps` as errors (`make _lint_ui`). Blocking | Yes, on `packages/vmn-exp/webui` |
 | `typecheck` | Runs `mypy` on `version_stamp/` | No |
 | `stamp` | **Optional.** `make _<mode>` (`vmn stamp`) when `--param stamp=<mode>` is set | No |
 | `build` | **Optional.** `make _build` (wheel) when `--param build=1` is set | No |

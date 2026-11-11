@@ -154,8 +154,8 @@ def tests_exp(ctx):
     _pytest(ctx, "packages/vmn-exp/tests", "tests_exp_serial", workers=(), marker="serial")
 
 
-# The web client's vitest suite. Blocking: ctx.run's check=True fails the
-# stage on a test failure.
+# The web client's vitest suite, then ESLint (rules-of-hooks, exhaustive-deps).
+# Blocking: ctx.run's check=True fails the stage on a test or lint error.
 # `make _build_ui` installs the node modules and type-checks (tsc -b).
 @stage(
     requires=REQUIRES,
@@ -166,6 +166,7 @@ def tests_exp(ctx):
 def tests_webui(ctx):
     ctx.run(["make", "_build_ui"])
     ctx.run(["make", "_test_ui"])
+    ctx.run(["make", "_lint_ui"])
 
 
 @stage(requires=REQUIRES)
