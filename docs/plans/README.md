@@ -60,3 +60,19 @@ Architecture rule (revised 2026-10-02, see [11-central-server.md §2](11-central
 depends on the server being up.** A server (and a database as cache) is allowed; clients write
 straight to storage with their own storage access (the server never issues credentials). It replaces the earlier
 "no server in the data path" rule.
+
+## Solo check
+
+Solo engineers are the primary user, and nothing may make the single-user case
+worse. Every plan from 37 on carries a `Solo impact:` line (plan 36 is exempt),
+and `test_plans_index.py` reports one without it. A plan's solo case is:
+
+1. A fresh local store: no `server.yml`, no token, no outer runs.
+2. One command opens the UI (`vmn-exp ui`).
+3. No new setup step.
+4. The runs board shows the runs and their metrics
+   (`test_solo_store_board.py`, `test_solo_store_api.py`).
+5. Cold start is not slower.
+
+A plan may carry a negative solo impact only when its `Solo impact:` line
+states the trade-off and a setting keeps the solo default.

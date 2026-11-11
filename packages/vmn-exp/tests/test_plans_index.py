@@ -51,6 +51,16 @@ def test_agreeing_rows_including_in_progress_and_done_except_are_clean():
     assert plans_index_problems(index, files) == []
 
 
+def test_a_plan_from_37_on_without_a_solo_impact_line_is_reported():
+    index = _index(("36", "done", "36-a.md"), ("37", "done", "37-b.md"), ("38", "done", "38-c.md"))
+    files = {
+        "36-a.md": "Status: done.\n",
+        "37-b.md": "Status: done.\n\nSolo impact: none.\n",
+        "38-c.md": "Status: done.\n",
+    }
+    assert plans_index_problems(index, files) == ["38-c.md: no 'Solo impact:' line"]
+
+
 def test_the_plans_index_agrees_with_the_plan_files():
     files = {}
     for path in glob.glob(os.path.join(PLANS_DIR, "[0-9]*.md")):
