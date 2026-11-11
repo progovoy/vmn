@@ -12,7 +12,7 @@ from s3_helpers import mocked_bucket, put_raw, s3_storage
 from object_store_fakes import FakeContainerClient, FakeGCSClient, MatchConditions
 from vmn_exp.core.alerts.transitions import ALERTS_FILE
 from vmn_exp.core.manage import set_archived
-from vmn_exp.core.push_run import COLLISION, FAILED, NEW, UPDATE, push_run
+from vmn_exp.cli.pushing.push_run import COLLISION, FAILED, NEW, UPDATE, push_run
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.files import log_object_name
 

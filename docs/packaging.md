@@ -96,8 +96,9 @@ subpackage belongs to exactly one distribution.
 - Reaches `version_stamp` only through `version_stamp.api`.
 - Command-line code lives here, not in the SDK: the `vmn-exp model` handlers
   and parser (`cli/model_cmd.py`, `cli/model_parser.py`, store flags in
-  `cli/storage_flags.py`) and `vmn_exp.reports`. The registry functions they
-  call stay in the SDK.
+  `cli/storage_flags.py`), the engine of `vmn-exp push` and `vmn-exp buffers
+  ship` (`cli/pushing/`) and `vmn_exp.reports`. The registry functions and
+  storage they call stay in the SDK.
 
 ### vmn-exp-sdk
 

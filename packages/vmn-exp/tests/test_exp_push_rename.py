@@ -20,12 +20,12 @@ from push_helpers import (
 )
 from s3_helpers import mocked_bucket, s3_storage
 from vmn_exp._base import now_iso
-from vmn_exp.core import push_rename
+from vmn_exp.cli.pushing import push_rename
 from vmn_exp.core.code_store import drop_unused_code, stored_code
-from vmn_exp.core.push_code import CodePusher
-from vmn_exp.core.push_ledger import PushLedger
-from vmn_exp.core.push_rename import SKIPPED, push_or_rename
-from vmn_exp.core.push_run import FAILED, NEW, UP_TO_DATE, UPDATE, push_run
+from vmn_exp.cli.pushing.push_code import CodePusher
+from vmn_exp.cli.pushing.push_ledger import PushLedger
+from vmn_exp.cli.pushing.push_rename import SKIPPED, push_or_rename
+from vmn_exp.cli.pushing.push_run import FAILED, NEW, UP_TO_DATE, UPDATE, push_run
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import own_stream
 

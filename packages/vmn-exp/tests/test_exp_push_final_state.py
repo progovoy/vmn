@@ -3,7 +3,7 @@ but never brought to its final state, and only for the same attempt."""
 import yaml
 from push_helpers import APP, X, local_root, make_run, set_state
 
-from vmn_exp.core.push_run import push_run
+from vmn_exp.cli.pushing.push_run import push_run
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage.local import LocalSnapshotStorage
 

@@ -3,7 +3,7 @@ root's runs (e.g. recorded under ``VMN_EXP_OFFLINE``) to the remote store.
 
 The target is the store the flags, ``VMN_EXPERIMENT_STORE`` or conf name;
 ``VMN_EXP_OFFLINE`` never hides it here. Each run goes through
-:func:`vmn_exp.core.push_rename.push_or_rename`, parents before children.
+:func:`vmn_exp.cli.pushing.push_rename.push_or_rename`, parents before children.
 ``--dry-run`` reads the ledger and one remote metadata object per run that
 is not up to date, and writes nothing. ``--adopt`` first makes this checkout
 the owner of the streams each run inherited (:mod:`vmn_exp.core.adopt`).
@@ -13,13 +13,11 @@ from collections import Counter
 from dataclasses import asdict
 
 from vmn_exp._base import VMN_LOGGER
-from vmn_exp.core.adopt import adopt_streams
-from vmn_exp.core.fork import resolve_run
-from vmn_exp.core.push_code import CodePusher
-from vmn_exp.core.push_ledger import PushLedger
-from vmn_exp.core.push_plan import parents_first, plan_push
-from vmn_exp.core.push_rename import SKIPPED, push_or_rename
-from vmn_exp.core.push_run import (
+from vmn_exp.cli.pushing.push_code import CodePusher
+from vmn_exp.cli.pushing.push_ledger import PushLedger
+from vmn_exp.cli.pushing.push_plan import parents_first, plan_push
+from vmn_exp.cli.pushing.push_rename import SKIPPED, push_or_rename
+from vmn_exp.cli.pushing.push_run import (
     COLLISION,
     FAILED,
     NEW,
@@ -28,6 +26,8 @@ from vmn_exp.core.push_run import (
     Outcome,
     require_push_target,
 )
+from vmn_exp.core.adopt import adopt_streams
+from vmn_exp.core.fork import resolve_run
 from vmn_exp.core.storage_resolve import experiment_dir, store_uri
 from vmn_exp.registry.view import registered_runs
 from vmn_exp.storage.areas import RUNS

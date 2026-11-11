@@ -142,3 +142,12 @@ def test_sdk_wheel_builds_no_argparse_parsers():
     calls = [c for path in sorted((SRC["vmn-exp-sdk"] / "vmn_exp").rglob("*.py"))
              for c in _parser_builder_calls(path)]
     assert calls == []
+
+
+def test_sdk_wheel_ships_no_push_modules():
+    # `vmn-exp push` and `vmn-exp buffers ship` are commands; their engine is
+    # in vmn_exp.cli.pushing.
+    core = SRC["vmn-exp-sdk"] / "vmn_exp" / "core"
+    shipped = sorted(p.name for p in core.glob("*.py")
+                     if p.name.startswith("push_") or p.name == "buffer_recover.py")
+    assert shipped == []

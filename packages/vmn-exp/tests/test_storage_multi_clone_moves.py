@@ -30,7 +30,7 @@ from multi_clone_helpers import (
 )
 from s3_helpers import cached_host, meta, s3_storage
 from vmn_exp.core.metric_compact import compact_record, compact_writer
-from vmn_exp.core.push_metrics import push_metrics
+from vmn_exp.cli.pushing.push_metrics import push_metrics
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage import stream_owner
 from vmn_exp.storage.buffered import BufferedRemoteStorage

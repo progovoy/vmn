@@ -96,7 +96,7 @@ def test_pruning_a_child_drops_its_marker(app_layout, capfd):
 
 def test_pushing_an_offline_child_marks_its_parent_on_the_remote(tmp_path, s3):
     from push_helpers import APP as PUSH_APP, X, local_root, make_run
-    from vmn_exp.core.push_run import NEW, push_run
+    from vmn_exp.cli.pushing.push_run import NEW, push_run
 
     local = local_root(tmp_path)
     outer = make_run(local, tmp_path, verstr=X + ".outer")

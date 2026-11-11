@@ -10,8 +10,8 @@ from buffer_recover_fakes import (
 )
 from s3_helpers import meta
 
-from vmn_exp.core import buffer_recover
-from vmn_exp.core.buffer_recover import kept_buffers, ship_buffer
+from vmn_exp.cli.pushing import buffer_recover
+from vmn_exp.cli.pushing.buffer_recover import kept_buffers, ship_buffer
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.storage import buffered
 from vmn_exp.storage.local import LocalSnapshotStorage

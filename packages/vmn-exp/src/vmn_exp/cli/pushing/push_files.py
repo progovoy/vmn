@@ -1,6 +1,6 @@
 """A run's files other than its logs, for ``vmn exp push``.
 
-- Metric objects go by :mod:`vmn_exp.core.push_metrics`, not here.
+- Metric objects go by :mod:`vmn_exp.cli.pushing.push_metrics`, not here.
 - Top-level files (``env.yml``, ``run_state.yml``, ``alerts_sent.yml``, ...) go by sha256 against the ledger. ``run_state.yml``
   is never clobbered when the remote copy changed since this host last pushed
   it (its ETag differs from the ledger's), except by the same attempt's final

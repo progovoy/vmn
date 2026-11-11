@@ -17,8 +17,8 @@ from multi_clone_helpers import (
 )
 from s3_helpers import cached_host, meta, s3_storage
 from vmn_exp.core.metric_compact import compact_writer
-from vmn_exp.core.push_logs import push_logs
-from vmn_exp.core.push_metrics import push_metrics
+from vmn_exp.cli.pushing.push_logs import push_logs
+from vmn_exp.cli.pushing.push_metrics import push_metrics
 from vmn_exp.core.status import RUN_STATE_FILE
 from vmn_exp.core.writer import own_stream
 from vmn_exp.storage.local import LocalSnapshotStorage

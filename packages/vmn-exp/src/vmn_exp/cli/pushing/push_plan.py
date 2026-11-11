@@ -1,7 +1,7 @@
 """Selection helpers for ``vmn exp push``: the order runs are pushed in and
 what a push would do to one run (``--dry-run``), without remote writes."""
-from vmn_exp.core.push_identity import run_identity
-from vmn_exp.core.push_run import (
+from vmn_exp.cli.pushing.push_identity import run_identity
+from vmn_exp.cli.pushing.push_run import (
     COLLISION, NEW, UP_TO_DATE, UPDATE, ledger_entry, up_to_date,
 )
 

@@ -1,5 +1,5 @@
 """The real IO of finding, locking and removing this host's log buffers
-(:mod:`vmn_exp.core.buffer_recover` takes it as a parameter; plan 40 C6)."""
+(:mod:`vmn_exp.cli.pushing.buffer_recover` takes it as a parameter; plan 40 C6)."""
 import json
 import os
 import shutil

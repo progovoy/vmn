@@ -20,8 +20,8 @@ keyed by its name), would be orphaned by a rename. Those are skipped.
 import os
 
 from vmn_exp.core.children import mark_parent, unmark_parent
-from vmn_exp.core.push_identity import run_identity
-from vmn_exp.core.push_run import COLLISION, FAILED, NEW, Outcome, push_run
+from vmn_exp.cli.pushing.push_identity import run_identity
+from vmn_exp.cli.pushing.push_run import COLLISION, FAILED, NEW, Outcome, push_run
 from vmn_exp.core.status import (
     RUNNING, STUCK, derive_status, load_run_state, run_state_observed_at,
 )

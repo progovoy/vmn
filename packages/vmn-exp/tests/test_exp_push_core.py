@@ -10,10 +10,10 @@ from push_helpers import (
 from s3_helpers import mocked_bucket, put_raw, record_calls, s3_storage
 
 from vmn_exp.core.code_store import code_storage, stored_code
-from vmn_exp.core.push_code import CodePusher
-from vmn_exp.core.push_identity import run_identity
-from vmn_exp.core.push_ledger import PushLedger, remote_id
-from vmn_exp.core.push_run import (
+from vmn_exp.cli.pushing.push_code import CodePusher
+from vmn_exp.cli.pushing.push_identity import run_identity
+from vmn_exp.cli.pushing.push_ledger import PushLedger, remote_id
+from vmn_exp.cli.pushing.push_run import (
     COLLISION, FAILED, NEW, UP_TO_DATE, UPDATE, push_run, require_push_target,
 )
 from vmn_exp.core.status import RUN_STATE_FILE

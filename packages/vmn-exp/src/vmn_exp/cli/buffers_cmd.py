@@ -3,7 +3,7 @@ this host's kept or orphaned direct-to-bucket log buffers (plan 40 C6).
 
 ``list`` is read-only and takes no repo lock. ``ship`` ships each buffer of
 the store it is given whose owner lock it can take
-(:mod:`vmn_exp.core.buffer_recover`), one line per buffer, and exits 1 only
+(:mod:`vmn_exp.cli.pushing.buffer_recover`), one line per buffer, and exits 1 only
 when a buffer it locked could not be shipped; skipped buffers do not fail it.
 """
 import argparse
@@ -12,7 +12,7 @@ import sys
 import time
 
 from vmn_exp.cli.duration_text import humanize_sec
-from vmn_exp.core import buffer_recover
+from vmn_exp.cli.pushing import buffer_recover
 from vmn_exp.core.status import parse_iso
 
 

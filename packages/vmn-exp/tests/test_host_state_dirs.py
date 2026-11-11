@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from vmn_exp.core.push_ledger import PushLedger
+from vmn_exp.cli.pushing.push_ledger import PushLedger
 from vmn_exp.storage import host_dirs
 from vmn_exp.storage.local import LocalSnapshotStorage
 

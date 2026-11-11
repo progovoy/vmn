@@ -139,10 +139,10 @@ def test_a_failed_backfill_leaves_the_flag_off(local, monkeypatch):
 def test_a_renamed_pushed_child_marks_its_parent_on_the_remote(tmp_path, s3):
     from push_helpers import APP as PUSH_APP, CODE as PUSH_CODE, X, local_root, \
         make_run, run_meta
-    from vmn_exp.core.push_code import CodePusher
-    from vmn_exp.core.push_ledger import PushLedger
-    from vmn_exp.core.push_rename import push_or_rename
-    from vmn_exp.core.push_run import NEW, push_run
+    from vmn_exp.cli.pushing.push_code import CodePusher
+    from vmn_exp.cli.pushing.push_ledger import PushLedger
+    from vmn_exp.cli.pushing.push_rename import push_or_rename
+    from vmn_exp.cli.pushing.push_run import NEW, push_run
 
     local = local_root(tmp_path)
     outer = make_run(local, tmp_path, verstr=PUSH_CODE + ".outer")

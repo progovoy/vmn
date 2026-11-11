@@ -6,10 +6,10 @@ Steps, each resumable (a failed push is simply run again):
 2. claim the name with the run identity as claim token (a crashed claim of
    ours resumes), or match an existing remote record by identity; then
    re-check the code object (a remote prune may have raced step 1);
-3. the other top-level files by sha (:mod:`vmn_exp.core.push_files`);
-4. the logs per writer from the remote offset (:mod:`vmn_exp.core.push_logs`);
+3. the other top-level files by sha (:mod:`vmn_exp.cli.pushing.push_files`);
+4. the logs per writer from the remote offset (:mod:`vmn_exp.cli.pushing.push_logs`);
 5. metric objects and artifacts missing remotely or of another size
-   (:mod:`vmn_exp.core.push_metrics`);
+   (:mod:`vmn_exp.cli.pushing.push_metrics`);
 6. the three-way merge of ``archived``/``note``;
 7. a final LIST for the ETags, then the ledger entry.
 
@@ -23,12 +23,12 @@ from dataclasses import dataclass, field
 from vmn_exp._base import now_iso
 from vmn_exp.core.adopt import inherited_note, missing_inherited
 from vmn_exp.core.children import mark_parent
-from vmn_exp.core.push_code import MISSING, CodePusher
-from vmn_exp.core.push_files import merge_fields, push_artifacts, push_files
-from vmn_exp.core.push_identity import record_fingerprint, run_identity
-from vmn_exp.core.push_ledger import PushLedger
-from vmn_exp.core.push_logs import push_logs
-from vmn_exp.core.push_metrics import push_metrics
+from vmn_exp.cli.pushing.push_code import MISSING, CodePusher
+from vmn_exp.cli.pushing.push_files import merge_fields, push_artifacts, push_files
+from vmn_exp.cli.pushing.push_identity import record_fingerprint, run_identity
+from vmn_exp.cli.pushing.push_ledger import PushLedger
+from vmn_exp.cli.pushing.push_logs import push_logs
+from vmn_exp.cli.pushing.push_metrics import push_metrics
 from vmn_exp.core.status import run_finished
 
 NEW, UPDATE, UP_TO_DATE, COLLISION, FAILED = (
@@ -48,7 +48,7 @@ class Outcome:
     """What pushing *verstr* did: ``status`` is one of :data:`NEW`,
     :data:`UPDATE`, :data:`UP_TO_DATE`, :data:`COLLISION`, :data:`FAILED`;
     ``detail`` explains a collision or failure; ``renamed_from`` is the old
-    name of a run a collision renamed (:mod:`vmn_exp.core.push_rename`)."""
+    name of a run a collision renamed (:mod:`vmn_exp.cli.pushing.push_rename`)."""
 
     verstr: str
     status: str
