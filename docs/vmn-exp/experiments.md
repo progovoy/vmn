@@ -551,7 +551,7 @@ vmn-exp create my_app --parent @2 --input "train=s3://bucket/train.csv#sha256:ab
 | Flag | Description |
 |---|---|
 | `--note <text>` | a note |
-| `--metrics k=v …` | metrics to record |
+| `--metrics k=v …` | metrics to record; repeatable, a later `--metrics` adds to the earlier ones (`--metrics=loss=0.4 --metrics=acc=0.9`) |
 | `-f <yaml>` | [params/hypothesis/tags](#structured-notes--params) |
 | `--name <text>` | a human-readable name (shown quoted in `list`; row/query field `name`) |
 | `--parent <ref>` | make it an inner job (default: `$VMN_EXPERIMENT_ID`) |

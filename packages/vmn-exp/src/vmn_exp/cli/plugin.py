@@ -84,8 +84,9 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--note", default=None, help="Note or description")
     pexp.add_argument("-f", "--file", default=None,
                       help="YAML file with structured notes/params")
-    pexp.add_argument("--metrics", nargs="*", default=None,
-                      help="Metrics as key=value pairs (e.g., loss=0.34 acc=0.91)")
+    pexp.add_argument("--metrics", nargs="*", action="extend", default=None,
+                      help="Metrics as key=value pairs (e.g., loss=0.34 acc=0.91); "
+                           "repeatable, each --metrics adds to the earlier ones")
     pexp.add_argument("--attach", default=None, help="File to attach as artifact")
     pexp.add_argument("--sort", default=None,
                       help="Sort list by a metric name, newest first by "
