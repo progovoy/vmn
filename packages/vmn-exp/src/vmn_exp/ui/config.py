@@ -11,6 +11,8 @@ from typing import Optional, Tuple
 
 import yaml
 
+from vmn_exp.ui.auth.oidc import OIDCError, require_https
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8265
 DEFAULT_DATA_DIR = os.path.join(os.path.expanduser("~"), ".vmn-ui")
@@ -133,6 +135,14 @@ def _choice(value, choices, where):
     return value
 
 
+def checked_https(url, where):
+    """*url* when https (or loopback http), else a :class:`ConfigError` naming *where*."""
+    try:
+        return require_https(url, where)
+    except OIDCError as e:
+        raise ConfigError(str(e))
+
+
 def _server(data):
     data = dict(data or {})
     if "endpoint_allowlist" in data:
@@ -152,6 +162,7 @@ def _auth(data):
     data = dict(data)
     if data.get("oidc") is not None:
         data["oidc"] = _build(OIDCSection, data["oidc"], "auth.oidc")
+        checked_https(data["oidc"].issuer, "auth.oidc.issuer")
     data["role_mappings"] = tuple(
         _build(RoleMapping, m, f"auth.role_mappings[{i}]")
         for i, m in enumerate(data.get("role_mappings") or ())

@@ -132,3 +132,26 @@ def test_data_dir_expands_user(tmp_path, monkeypatch):
     path = _write(tmp_path, "data_dir: ~/vmn-data\n")
     cfg = resolve_config(_args(config=path), env={})
     assert cfg.data_dir == str(tmp_path / "vmn-data")
+
+
+def _oidc_config(issuer="https://idp.example", public_url="https://vmn.example"):
+    from vmn_exp.ui.config import parse_config
+
+    return parse_config({"server": {"public_url": public_url},
+                         "auth": {"oidc": {"issuer": issuer, "client_id": "c"}}})
+
+
+def test_oidc_issuer_must_be_https():
+    with pytest.raises(ConfigError) as e:
+        _oidc_config(issuer="http://idp.example")
+    assert "auth.oidc.issuer" in str(e.value) and "loopback" in str(e.value)
+    assert _oidc_config(issuer="http://127.0.0.1:5556").auth.oidc.issuer
+
+
+def test_public_url_must_be_https_with_oidc():
+    from vmn_exp.ui.cli import _oidc_chain
+
+    with pytest.raises(ConfigError) as e:
+        _oidc_chain(_oidc_config(public_url="http://vmn.example"), None, env={})
+    assert "server.public_url" in str(e.value)
+    assert _oidc_chain(_oidc_config(public_url="http://localhost:8265"), None, env={})

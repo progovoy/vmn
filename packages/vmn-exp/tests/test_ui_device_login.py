@@ -175,3 +175,14 @@ def test_server_app_wires_the_control_plane(tmp_path):
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     app = server_app(WorkspaceManager(str(tmp_path / "ui")), None, cp, args)
     assert app.state.control_plane is cp and app.state.audit is not None
+
+
+def test_device_start_refuses_http_device_endpoint(tmp_path):
+    class HttpDeviceIdP(FakeDeviceIdP):
+        def get_json(self, url):
+            return {**super().get_json(url),
+                    "device_authorization_endpoint": "http://idp.example/device"}
+
+    client, _ = _server(tmp_path, HttpDeviceIdP())
+    r = client.post("/auth/device/start", json={})
+    assert r.status_code == 502 and "device_authorization_endpoint" in r.json()["detail"]

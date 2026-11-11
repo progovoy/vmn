@@ -148,13 +148,14 @@ def build_server(args, env=None):
 def _oidc_chain(cfg, control_plane, env):
     from vmn_exp.ui.auth import AuthenticatorChain
     from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
-    from vmn_exp.ui.config import ConfigError
+    from vmn_exp.ui.config import ConfigError, checked_https
 
     oidc = cfg.auth.oidc
     if oidc is None:
         return None
     if not cfg.server.public_url:
         raise ConfigError("auth.oidc needs server.public_url for its redirect URI")
+    checked_https(cfg.server.public_url, "server.public_url")
     config = OIDCConfig(
         issuer=oidc.issuer,
         client_id=oidc.client_id,

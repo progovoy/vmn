@@ -3,17 +3,20 @@
 
 The id_token is read from the token endpoint's direct TLS response, so per
 OIDC Core 3.1.3.7 its issuer, audience, expiry and nonce are checked but its
-signature is not (no JWT library needed). The resulting principal lives in a
-server-side session; the browser holds only an opaque ``HttpOnly``,
+signature is not (no JWT library needed). That TLS is enforced: the issuer
+and every discovered endpoint must be https (http only on a loopback host)
+and a redirected answer is refused (:mod:`oidc_http`). The resulting
+principal lives in a server-side session; the browser holds only an opaque ``HttpOnly``,
 ``SameSite=Lax``, ``Secure`` cookie. CSRF stays covered by ``RequestGuard``.
 """
 import base64
 import hashlib
+import ipaddress
 import json
 import secrets
 import time
 from dataclasses import asdict, dataclass, field, is_dataclass
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from vmn_exp.ui.auth.oidc_http import UrllibHttp
 from vmn_exp.ui.auth.principal import Principal, check_roles, stronger
@@ -22,6 +25,9 @@ from vmn_exp.ui.auth.sessions import SessionService
 SESSION_COOKIE = "vmn_session"
 LOGIN_STATE_TTL_SEC = 600
 DISCOVERY_PATH = "/.well-known/openid-configuration"
+# Discovered URLs the server calls or sends browsers to: https only.
+DISCOVERED_ENDPOINTS = ("authorization_endpoint", "token_endpoint",
+                        "device_authorization_endpoint")
 
 
 class OIDCError(Exception):
@@ -37,6 +43,25 @@ class OIDCConfig:
     scopes: tuple = ("openid", "profile", "email")
     groups_claim: str = "groups"
     role_mappings: list = field(default_factory=list)  # {group, workspace, role}
+
+
+def _is_loopback(host):
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def require_https(url, what):
+    """*url* unchanged when it is https, or http on a loopback host (a local
+    IdP in development); else :class:`OIDCError` naming *what*."""
+    parts = urlsplit(url or "")
+    scheme = parts.scheme.lower()
+    if scheme == "https" or (scheme == "http" and _is_loopback(parts.hostname)):
+        return url
+    raise OIDCError(f"{what} must be an https URL (http only on a loopback host), got {url!r}")
 
 
 def _b64url(raw):
@@ -86,6 +111,9 @@ class OIDCAuthenticator:
                 raise OIDCError("discovery failed") from exc
             if meta.get("issuer") != self.config.issuer:
                 raise OIDCError("discovery issuer mismatch")
+            for key in DISCOVERED_ENDPOINTS:
+                if meta.get(key) is not None:
+                    require_https(meta[key], key)
             self._metadata = meta
         return self._metadata
 

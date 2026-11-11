@@ -165,3 +165,41 @@ def test_discovery_issuer_mismatch_fails_login_cleanly(tmp_path):
     r = client.get("/auth/login", follow_redirects=False)
     assert r.status_code == 502
     assert "issuer" in r.json()["detail"]
+
+
+class _DiscoveryOverride(FakeIdP):
+    """FakeIdP whose discovery document carries *overrides*."""
+
+    def __init__(self, **overrides):
+        super().__init__()
+        self.overrides = overrides
+
+    def get_json(self, url):
+        return {**super().get_json(url), **self.overrides}
+
+
+def test_discovery_with_http_token_endpoint_is_refused(tmp_path):
+    idp = _DiscoveryOverride(token_endpoint="http://idp.example/token")
+    r = _client(tmp_path, idp).get("/auth/login", follow_redirects=False)
+    assert r.status_code == 502 and "token_endpoint" in r.json()["detail"]
+
+
+def test_discovery_with_http_authorization_endpoint_is_refused(tmp_path):
+    idp = _DiscoveryOverride(authorization_endpoint="http://idp.example/authorize")
+    r = _client(tmp_path, idp).get("/auth/login", follow_redirects=False)
+    assert r.status_code == 502 and "authorization_endpoint" in r.json()["detail"]
+
+
+def test_loopback_http_issuer_is_allowed():
+    issuer = "http://127.0.0.1:5556"
+
+    class LoopbackIdP:
+        def get_json(self, url):
+            assert url == f"{issuer}/.well-known/openid-configuration"
+            return {"issuer": issuer, "authorization_endpoint": f"{issuer}/authorize",
+                    "token_endpoint": f"{issuer}/token"}
+
+    config = OIDCConfig(issuer=issuer, client_id="vmn-exp",
+                        redirect_uri="http://localhost:8265/auth/callback")
+    meta = OIDCAuthenticator(config, store=None, http=LoopbackIdP()).metadata()
+    assert meta["token_endpoint"] == f"{issuer}/token"

@@ -443,6 +443,20 @@ sign-in page reads:
 `login_url` is `null` without OIDC. `GET /api/v1/meta` carries the same hints
 under `auth`.
 
+OIDC runs over TLS only. The ID token's signature is not checked: OIDC Core
+3.1.3.7 allows that for a token read straight from the token endpoint over
+TLS, so the server enforces TLS:
+
+- `auth.oidc.issuer` and, with OIDC, `server.public_url` must be `https://`
+  URLs. Otherwise the server does not start, and the error names the key.
+- The discovery document's `authorization_endpoint`, `token_endpoint` and
+  `device_authorization_endpoint` must be `https://` too, or login answers 502.
+- A redirected answer from discovery or the token endpoint is refused.
+- Plain `http://` is accepted only on a loopback host (`localhost`,
+  `127.0.0.0/8`, `::1`), for a local IdP in development. There is no flag
+  to allow anything else. Behind a TLS-terminating proxy, set `public_url`
+  to the `https://` URL browsers use.
+
 Only an HMAC-SHA256 of each API token's secret is stored. Its key is generated
 once per control plane and kept in it. Secrets are 256-bit random, so a slow
 password hash would add cost and no safety. Expired sessions and login states
