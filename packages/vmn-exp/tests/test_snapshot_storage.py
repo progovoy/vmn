@@ -104,6 +104,9 @@ def test_s3_snapshot_list():
 def test_s3_snapshot_endpoint_url():
     """Test S3 backend passes endpoint_url to boto3."""
     with mock_patch("boto3.session.Session") as mock_session:
+        # s3_stats keeps every client's pool size for the process's later
+        # diag dumps, which sort them: a MagicMock one would break those.
+        mock_session.return_value.client.return_value.meta.config.max_pool_connections = 1
         S3SnapshotStorage("test-bucket", endpoint_url="http://localhost:9000")
         mock_session.return_value.client.assert_called_once_with(
             "s3", config=ANY, endpoint_url="http://localhost:9000")
