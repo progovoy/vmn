@@ -171,7 +171,11 @@ use.
 temporary cache from a remote store. An absolute `artifact_path` is fetched
 from where it points: a local path (or `file://`) as is, an `s3://`/`gs://`/
 `az://` (or plugin-scheme) URI through that scheme's storage backend — a
-missing backend package names the extra to install. Inside an open run it records a use of
+missing backend package names the extra to install. A URI of the experiment
+store's scheme borrows the store URI's options (an `s3://` store's
+`endpoint_url`, e.g. MinIO, a `gs://` `endpoint_url`, an `az://`
+`account_url`), so another bucket on the same service needs none; the URI's
+own `?endpoint_url=`/`?account_url=` wins. Inside an open run it records a use of
 the version ([Using versions](#using-versions)); `record=False` opts out. A
 reference dataset, or a version with no artifact path, raises `ValueError`.
 `list_models()` lists both kinds; `vmn_exp.registry.store.list_models(storage,
