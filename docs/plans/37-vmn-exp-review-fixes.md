@@ -380,6 +380,32 @@ and E10 (done upstream), parked D17, E7b, E5b, E12c2 and E12e, and added C15,
 C16, F16, F17 and F18. The milestones, conflicts and invariants in this file
 describe the reworked plans.
 
+### Second round of owner answers (2026-11-11)
+
+Taken while M0 and M1 were being implemented. They win over the list below and
+over any item text that still says otherwise; items not yet started must be
+read with these applied.
+
+| Topic | Answer |
+|---|---|
+| Deprecations (F9, D5, D7, D9, D11) | **No deprecation period.** Old forms are removed or made errors at once, with no warning stage: positional `start_run` arguments, positional `app_name`/`ref` on `get_metric_history`, incomplete `list_runs` rows raise, the default `create_exclusive` is abstract. Everything ships together in one release, each change with an `upgrading.md` row. F9 keeps the row rule and the format ratchet and drops the removal distance. The `FutureWarning` question is moot. |
+| Real-wired defaults (G4, G11) | **Required everywhere.** No fallback to the real clock or IO in `create_app`, `WorkspaceManager`, `ExperimentIndex`, `Run` and the other widely built names: every construction site passes its IO, about 1,200 edits, mostly in tests (approved). `derive_status` takes a required `now`. |
+| A5 shipping | Per record copy is accepted; no storage change. The CLAUDE.md stream-owner line is reworded to say the owner is the record copy. |
+| A5 guest stream | Named `<writer>-sdk~<owner>`. |
+| C15 supervisor | After a signal, the child wait and the final upload together fit 25 s; the unsignalled path keeps the long budget. |
+| CLAUDE.md | Three more edits approved: the stream-owner invariant (A5, C6), `reports` in the vmn-exp package list (D3), real IO in the index helper's `main()` (G11). |
+| E5a old tokens | Kept; `upgrading.md` documents how to revoke. |
+| E1 `prune` | The UI job action refuses `keep=0` (requires `keep >= 1`); the CLI is unchanged. |
+| C16 failed UI edit | The next action on the workspace first retries the pending upload; the job result says the edit is pending until it ships. |
+| F12 Python | Client job images are all on 3.10+: raise both floors now. |
+| F16 autolog tests | Fakes first, plus lightgbm and catboost in the exp test requirements for one real test each. |
+| Guard tests | A guard that cannot be red on arrival gets a deliberate-break check: break the code once, record the failing output, restore. |
+| B7 | The no-repo path rejects stray positionals with exit 2 too. |
+| E3 | RS256 only; other algorithms are refused with a clear error. |
+| F5 / E13 | The model registry endpoint table lives in `ui-api.md`; `models.md` links to it. |
+
+Still open after this round: the port shapes to agree with plan 35 (G2).
+
 ### Still open for the owner
 
 Raised by the rework; none blocks M0 or M1 except where a line says so.
