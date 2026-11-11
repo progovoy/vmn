@@ -11,11 +11,15 @@ The account: ``AZURE_STORAGE_CONNECTION_STRING``, else an account URL
 in the URL).
 """
 import functools
+import logging
 import os
 
 from vmn_exp.storage.object_client import BAD_RANGE, Body, ObjectClient, ObjectStoreError
 from vmn_exp.storage.registry import default_prefix, missing_extra
 from vmn_exp.storage.s3 import S3SnapshotStorage
+
+_DELETE_BATCH = 256  # the most blobs one blob batch request takes
+_LOGGER = logging.getLogger(__name__)
 
 
 def _obj(props):
@@ -85,6 +89,22 @@ class AzureObjectClient(ObjectClient):
             if getattr(e, "status_code", None) != 404:
                 raise
 
+    def _remove_many(self, keys):
+        chunks = [keys[i:i + _DELETE_BATCH] for i in range(0, len(keys), _DELETE_BATCH)]
+        return [failure for chunk in chunks for failure in self._remove_batch(chunk)]
+
+    def _remove_batch(self, keys):
+        try:
+            responses = list(self._container.delete_blobs(*keys, raise_on_any_failure=False))
+        except Exception as e:
+            if getattr(e, "status_code", None) is None:
+                raise
+            # Some account types refuse blob batch: slower, never silent.
+            _LOGGER.warning("Azure refused a batch delete (%s); deleting %d blobs one by one",
+                            e, len(keys))
+            return super()._remove_many(keys)
+        return _failed_deletes(keys, responses)
+
     def _upload(self, src, key):
         with open(src, "rb") as f:
             self._blob(key).upload_blob(f, overwrite=True)
@@ -92,6 +112,13 @@ class AzureObjectClient(ObjectClient):
     def _download(self, key, dest):
         with open(dest, "wb") as f:
             self._blob(key).download_blob().readinto(f)
+
+
+def _failed_deletes(keys, responses):
+    """``[(key, error text)]`` from a blob batch's sub-responses, in request
+    order; a 404 (already gone) is a success."""
+    return [(key, f"HTTP {r.status_code}") for key, r in zip(keys, responses)
+            if r.status_code != 404 and not 200 <= r.status_code < 300]
 
 
 class AzureSnapshotStorage(S3SnapshotStorage):

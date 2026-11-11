@@ -11,6 +11,8 @@ import contextlib
 import itertools
 import threading
 
+from vmn_exp.storage.s3_base import parallel_map
+
 MISSING, TAKEN, BAD_RANGE = "404", "412", "416"
 _ERROR_CODES = {404: MISSING, 409: TAKEN, 412: TAKEN, 416: BAD_RANGE}
 _PAGE_SIZE = 1000
@@ -76,6 +78,9 @@ class ObjectClient:
     - ``_iter(prefix, delimiter, start_after)`` -> object dicts and, with a
       delimiter, common-prefix strings; only names after *start_after*
     - ``_remove(key)`` (missing is fine), ``_upload(src, key)``, ``_download(key, dest)``
+    - optionally ``_remove_many(keys)`` -> ``[(key, error text)]`` of the keys
+      not deleted (missing is fine): a store with a batch delete overrides
+      the default, one ``_remove`` per key sent concurrently
 
     A store whose SDK cannot start a listing after a key sets
     ``server_side_start_after = False``: its ``_iter`` then skips client-side,
@@ -112,9 +117,21 @@ class ObjectClient:
         return {}
 
     def delete_objects(self, Bucket, Delete):
-        for obj in Delete["Objects"]:
-            self.delete_object(Bucket, obj["Key"])
-        return {"Errors": []}
+        failed = self._remove_many([obj["Key"] for obj in Delete["Objects"]])
+        return {"Errors": [{"Key": key, "Message": message} for key, message in failed]}
+
+    def _remove_many(self, keys):
+        errors = parallel_map(self._remove_error, keys)
+        return [(key, error) for key, error in zip(keys, errors) if error is not None]
+
+    def _remove_error(self, key):
+        """Why *key* was not deleted, or None when it was."""
+        try:
+            with translated_errors():
+                self._remove(key)
+        except Exception as e:
+            return str(e) or type(e).__name__
+        return None
 
     def upload_file(self, Filename, Bucket, Key):
         with translated_errors():

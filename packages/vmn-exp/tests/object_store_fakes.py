@@ -48,6 +48,10 @@ class RequestRangeNotSatisfiable(Exception):
     code = 416
 
 
+class Forbidden(Exception):
+    code = 403
+
+
 class FakeBlob:
     def __init__(self, bucket, name, obj=None):
         self.bucket, self.name = bucket, name
@@ -115,6 +119,7 @@ class FakeGCSBucket:
     def __init__(self, name):
         self.name = name
         self.objects = {}
+        self.refused_deletes = set()
         self.lock = threading.Lock()
 
     def blob(self, blob_name):
@@ -125,6 +130,8 @@ class FakeGCSBucket:
         return FakeBlob(self, blob_name, obj) if obj else None
 
     def delete_blob(self, blob_name):
+        if blob_name in self.refused_deletes:
+            raise Forbidden(blob_name)
         if self.objects.pop(blob_name, None) is None:
             raise NotFound(blob_name)
 
@@ -194,6 +201,11 @@ class HttpResponseError(Exception):
         self.status_code = status_code
 
 
+class _SubResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
 class MatchConditions:
     IfNotModified = "if-not-modified"
 
@@ -260,9 +272,13 @@ class FakeBlobClient:
 
 
 class FakeContainerClient:
+    _MAX_BATCH = 256
+
     def __init__(self, name="c"):
         self.container_name = name
         self.objects = {}
+        self.refused_deletes = set()
+        self.delete_blobs_calls = 0
         self.lock = threading.Lock()
 
     @classmethod
@@ -292,8 +308,27 @@ class FakeContainerClient:
             yield BlobProperties(name, self.objects[name])
 
     def delete_blob(self, blob):
+        if blob in self.refused_deletes:
+            raise HttpResponseError(403)
         if self.objects.pop(blob, None) is None:
             raise ResourceNotFoundError(blob)
+
+    def delete_blobs(self, *blobs, raise_on_any_failure=True):
+        """One batch request; an iterator of sub-responses, as the SDK returns."""
+        if len(blobs) > self._MAX_BATCH:
+            raise HttpResponseError(400)
+        self.delete_blobs_calls += 1
+        responses = [_SubResponse(self._delete_status(b)) for b in blobs]
+        if raise_on_any_failure and any(r.status_code >= 300 for r in responses):
+            raise HttpResponseError(207)
+        return iter(responses)
+
+    def _delete_status(self, blob):
+        try:
+            self.delete_blob(blob)
+        except (HttpResponseError, ResourceNotFoundError) as e:
+            return e.status_code
+        return 202
 
 
 def install_fake_azure(monkeypatch, container_cls=FakeContainerClient):
