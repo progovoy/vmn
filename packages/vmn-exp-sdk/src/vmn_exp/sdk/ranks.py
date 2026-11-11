@@ -130,10 +130,16 @@ class NoOpRun:
         """No runs: a run that records nothing has nothing to compare."""
         return []
 
+    def define_metric(
+        self, name, step_metric=None, summary=None, goal=None, hidden=None, chart=None,
+    ):
+        """Records nothing; an unknown keyword fails as on a real run."""
+        return None
+
     def _ignore(self, *args, **kwargs):
         return None
 
-    set_tag = set_tags = remove_tag = define_metric = alert = set_intent = set_progress = _ignore
+    set_tag = set_tags = remove_tag = alert = set_intent = set_progress = _ignore
     mark_range = _ignore
     log_dict = log_text = log_figure = log_artifacts = _ignore
     log_table = log_image = log_histogram = register_model = _ignore

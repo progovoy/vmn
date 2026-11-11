@@ -3,9 +3,10 @@
 ranked and shown.
 
 Kept apart from :mod:`vmn_exp.sdk.run` so other per-metric declarations can
-compose into the same call; every keyword lands in the ``define_metric`` log
-entry (see :mod:`vmn_exp.core.step_metric`, :mod:`vmn_exp.core.metric_summary`
-and :mod:`vmn_exp.core.metric_schema`).
+compose into the same call; each named keyword lands in the ``define_metric``
+log entry, and any other keyword is a TypeError (see
+:mod:`vmn_exp.core.step_metric`, :mod:`vmn_exp.core.metric_summary` and
+:mod:`vmn_exp.core.metric_schema`).
 """
 from vmn_exp.core.metric_schema import chart_fields, hidden_fields
 from vmn_exp.core.metric_summary import summary_fields
@@ -17,7 +18,6 @@ class MetricDefinitions:
 
     def define_metric(
         self, name, step_metric=None, summary=None, goal=None, hidden=None, chart=None,
-        **fields,
     ):
         """Declare metric *name* (exact or an ``fnmatch`` glob like ``val_*``).
 
@@ -46,7 +46,5 @@ class MetricDefinitions:
 
         Later declarations of the same *name* override earlier ones per field.
         """
-        fields.update(summary_fields(summary, goal))
-        fields.update(hidden_fields(hidden))
-        fields.update(chart_fields(chart))
+        fields = {**summary_fields(summary, goal), **hidden_fields(hidden), **chart_fields(chart)}
         self._append(create_define_metric_entry(name, step_metric=step_metric, **fields))

@@ -339,6 +339,8 @@ run.define_metric("grad_*", hidden=True)         # out of the UI's default colum
   (including `"none"`) raises `ValueError`.
 - `hidden` (a bool) is display-only: the metric still sorts, queries and
   summarizes.
+- Any other keyword (a typo like `gaol="min"`) raises `TypeError`, on every
+  rank and in disabled mode alike; nothing is recorded.
 - The declaration is a `define_metric` log entry, so it travels with the run
   and needs no conf.yml; later declarations override per field.
   `vmn-exp add <app> -v <ref> --define-metric NAME [--goal] [--summary]
