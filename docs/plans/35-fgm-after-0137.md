@@ -9,7 +9,7 @@
 >
 > Paths: `ui/` = `packages/vmn-exp/src/vmn_exp/ui/`; web = `packages/vmn-exp/webui/src`.
 
-Status: **in progress** (2026-11-11).
+Status: **done** (2026-11-11).
 
 ## 1. Bugs
 
