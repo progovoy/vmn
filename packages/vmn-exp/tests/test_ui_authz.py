@@ -238,3 +238,51 @@ def test_static_token_is_admin_everywhere(tmp_path):
 def test_no_auth_allows_everything(tmp_path):
     client = TestClient(_app(tmp_path))
     assert client.post("/api/v1/workspaces", json={}, headers=JSON).status_code == 422
+
+
+def _job_in(app, workspace, org_id=0):
+    from vmn_exp.ui.tenancy import org_context
+
+    with org_context(org_id):  # what the org middleware binds for a request
+        job, err = app.state.jobs.submit_call(workspace, ["exp", "tag"], lambda: "ok")
+    assert err is None
+    return f"/api/v1/jobs/{job['id']}"
+
+
+def _with_job(tmp_path, workspace):
+    app = _app(tmp_path, PRINCIPALS)
+    return TestClient(app), _job_in(app, workspace)
+
+
+def test_job_of_other_workspace_is_404_for_scoped_viewer(tmp_path):
+    client, url = _with_job(tmp_path, "other")
+    r = _call(client, "v", "GET", url)
+    assert (r.status_code, r.json()["detail"]) == (404, "Job not found")
+
+
+def test_job_visible_to_viewer_of_its_workspace(tmp_path):
+    client, url = _with_job(tmp_path, "ws")
+    assert _call(client, "v", "GET", url).status_code == 200
+
+
+def test_job_visible_to_star_admin(tmp_path):
+    client, url = _with_job(tmp_path, "other")
+    assert _call(client, "a", "GET", url).status_code == 200
+
+
+def test_job_visible_without_auth(tmp_path):
+    app = _app(tmp_path)
+    assert TestClient(app).get(_job_in(app, "other")).status_code == 200
+
+
+def test_job_of_other_org_is_404_in_same_named_workspace(tmp_path):
+    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.workspaces import WorkspaceManager
+
+    principals = {"Bearer o1": Principal("o1", "o1", {"ws": VIEWER}, org_id=1),
+                  "Bearer o2": Principal("o2", "o2", {"ws": VIEWER}, org_id=2)}
+    manager = WorkspaceManager(str(tmp_path), tenancy="multi")
+    app = create_app(manager, auth=AuthenticatorChain([_Fixed(principals)]))
+    client, url = TestClient(app), _job_in(app, "ws", org_id=1)
+    assert _call(client, "o1", "GET", url).status_code == 200
+    assert _call(client, "o2", "GET", url).status_code == 404

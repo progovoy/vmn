@@ -41,6 +41,16 @@ def allowed(principal, workspace, role, mappings=()):
     return held is not None and ROLES.index(held) >= ROLES.index(role)
 
 
+def can_read_job(request, workspace, org_id):
+    """A job is readable by a viewer of its *workspace* in its *org_id*
+    (plan 42 E6); everyone may read it with no authentication configured."""
+    state = request.app.state
+    if not getattr(state, "auth_enabled", False):
+        return True
+    principal, mappings = request.state.principal, getattr(state, "role_mappings", ())
+    return request.state.org_id == org_id and allowed(principal, workspace, VIEWER, mappings)
+
+
 class RoleCheck:
     """The dependency ``require(role)`` installs; ``role`` is introspectable."""
 

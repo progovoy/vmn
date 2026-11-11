@@ -29,6 +29,7 @@ from vmn_exp.ui.jobs_exp_meta import (  # noqa: F401  (_metric_args: tests)
     exp_rewind_command,
     exp_tag_command,
 )
+from vmn_exp.ui.tenancy import SINGLE_TENANT_ORG, effective_org
 
 # A job that waits on a credential prompt or a lock must not pin its workspace
 # forever: it fails after this long and frees the slot.
@@ -141,6 +142,9 @@ class Job:
         self.exit_code = None
         self.log = ""
         self.progress = None
+        # Who may read it (plan 42 E6); never in the payload.
+        self.workspace = None
+        self.org_id = SINGLE_TENANT_ORG
 
     def to_dict(self):
         job = {
@@ -174,6 +178,12 @@ class JobRunner:
         with self._lock:
             job = self._jobs.get(job_id)
             return job.to_dict() if job else None
+
+    def get_scoped(self, job_id):
+        """``(job_dict, workspace, org_id)`` of *job_id*, or ``None``."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return (job.to_dict(), job.workspace, job.org_id) if job else None
 
     def _evict_finished(self):
         """Forget the oldest finished jobs beyond the cap; running ones stay."""
@@ -234,6 +244,8 @@ class JobRunner:
         return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
     def _start(self, workspace_name, job, target):
+        # The org the submitting request is bound to (0 in single tenancy).
+        job.workspace, job.org_id = workspace_name, effective_org(SINGLE_TENANT_ORG)
         with self._lock:
             if workspace_name in self._active_workspaces:
                 return None, "Another action is already running in this workspace"

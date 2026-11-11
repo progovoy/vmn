@@ -503,6 +503,9 @@ There are three roles per workspace, `viewer < editor < admin`:
 A principal's role in a workspace is the strongest of its own entry for that
 workspace, its `*` entry, and every `role_mappings` entry whose `group` is in
 its OIDC groups claim. With authentication off, everything is allowed.
+A job (`GET /api/v1/jobs/{id}`) belongs to the workspace and org it was
+started in: a principal without a role there gets `404 Job not found`, the
+answer for an unknown id, so a job id is never confirmed.
 
 OIDC browser sessions and `vmn-exp login` tokens store the user's groups,
 never roles: the role is derived from the groups and the current

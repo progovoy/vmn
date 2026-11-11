@@ -54,6 +54,7 @@ Newest first.
 
 | Version | Date | What changed | What to do | Plan item |
 |---|---|---|---|---|
+| 0.1.38 | 2026-11-11 | With authentication on, `GET /api/v1/jobs/{id}` answers `404 Job not found` unless the caller is a viewer of the job's workspace in the job's org; before, any role in any workspace could read any job | Poll a job with a token or session that has a role in the workspace that ran it | [42 E6](../plans/42-vmn-exp-server-security-api.md#e6) |
 
 ## Formats
 

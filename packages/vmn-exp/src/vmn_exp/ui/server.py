@@ -24,7 +24,7 @@ from vmn_exp.ui.app_presence import app_exists
 from vmn_exp.ui.attention_built_in import with_built_in
 from vmn_exp.ui.audit import AuditLog, install_audit_middleware
 from vmn_exp.ui.auth import build_chain
-from vmn_exp.ui.auth.authz import require, require_action
+from vmn_exp.ui.auth.authz import can_read_job, require, require_action
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER
 from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
 from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
@@ -171,7 +171,7 @@ def create_app(
     app.state.manager = manager
     app.state.read_only = read_only
     app.state.role_mappings = list(role_mappings)
-    jobs = JobRunner()
+    jobs = app.state.jobs = JobRunner()
     app.state.control_plane = control_plane
     app.state.audit = AuditLog(control_plane) if control_plane else None
     if control_plane:
@@ -669,11 +669,12 @@ def create_app(
         return job
 
     @app.get(f"{API_PREFIX}/jobs/{{job_id}}", dependencies=[require(VIEWER)])
-    def get_job(job_id: str):
-        job = jobs.get(job_id)
-        if job is None:
+    def get_job(job_id: str, request: Request):
+        # 404, not 403, for another workspace's or org's job: an id is never confirmed.
+        scoped = jobs.get_scoped(job_id)
+        if scoped is None or not can_read_job(request, *scoped[1:]):
             raise HTTPException(404, "Job not found")
-        return job
+        return scoped[0]
 
     @app.get(f"{API_PREFIX}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-diff", dependencies=[require(VIEWER)])
     @slow_read

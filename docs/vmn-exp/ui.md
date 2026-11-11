@@ -143,7 +143,9 @@ Mutations on a git workspace are asynchronous jobs:
    answers `202` + the job (`{"id", "command", "status", "exit_code", "log"}`),
    `400` for a bad body, `409` while another action runs in that workspace.
 2. `GET /api/v1/jobs/{id}` polls it: `status` is `running`, `succeeded` or
-   `failed`, with the exit code and the captured log.
+   `failed`, with the exit code and the captured log. With authentication on,
+   only a viewer of the job's workspace in its org sees it; anyone else gets
+   the same `404` as for an unknown id.
 
 | Action | Body | Runs |
 |---|---|---|
