@@ -1,5 +1,6 @@
 """In-memory fakes of the google-cloud-storage and azure-storage-blob client
-objects vmn's GCS/Azure backends call — same method names, arguments,
+objects vmn's GCS/Azure backends call — same method names, arguments (kept
+in step with the real SDKs by test_object_store_fakes_parity.py),
 precondition semantics and exception ``code``/``status_code`` attributes.
 
 Listings page two items at a time so paging paths are exercised.
@@ -116,24 +117,24 @@ class FakeGCSBucket:
         self.objects = {}
         self.lock = threading.Lock()
 
-    def blob(self, name):
-        return FakeBlob(self, name)
+    def blob(self, blob_name):
+        return FakeBlob(self, blob_name)
 
-    def get_blob(self, name):
-        obj = self.objects.get(name)
-        return FakeBlob(self, name, obj) if obj else None
+    def get_blob(self, blob_name):
+        obj = self.objects.get(blob_name)
+        return FakeBlob(self, blob_name, obj) if obj else None
 
-    def delete_blob(self, name):
-        if self.objects.pop(name, None) is None:
-            raise NotFound(name)
+    def delete_blob(self, blob_name):
+        if self.objects.pop(blob_name, None) is None:
+            raise NotFound(blob_name)
 
 
 class FakeGCSClient:
     def __init__(self, *args, **kwargs):
         self.buckets = {}
 
-    def bucket(self, name):
-        return self.buckets.setdefault(name, FakeGCSBucket(name))
+    def bucket(self, bucket_name):
+        return self.buckets.setdefault(bucket_name, FakeGCSBucket(bucket_name))
 
     def list_blobs(self, bucket_or_name, prefix=None, delimiter=None,
                    start_offset=None, max_results=None):
