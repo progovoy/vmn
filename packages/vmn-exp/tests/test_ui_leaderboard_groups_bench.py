@@ -5,8 +5,8 @@ import statistics
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
 N = 100_000
@@ -35,9 +35,8 @@ def fleet():
 # parent: 50 sweeps among single runs; code_verstr: a group per run;
 # status: a few groups of tens of thousands of rows each.
 @pytest.mark.parametrize("group,slack", [("parent", 0.05), ("code_verstr", 0.3), ("status", 0.05)])
-def test_a_grouped_page_costs_about_what_a_flat_page_costs(monkeypatch, fleet, group, slack):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    cache = LeaderboardCache()
+def test_a_grouped_page_costs_about_what_a_flat_page_costs(fleet, group, slack):
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     snap = fleet.snapshot()
     flat = lambda: cache.page(snap, SCHEMA, sort="loss", limit=50)  # noqa: E731
     grouped = lambda: cache.groups(snap, SCHEMA, group, sort="loss", limit=50)  # noqa: E731

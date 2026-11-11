@@ -7,6 +7,7 @@ its log and its metric segments are folded afterwards, into the same row."""
 import json
 import threading
 import time
+from datetime import datetime, timezone
 
 import pytest
 
@@ -101,7 +102,8 @@ def test_a_cold_load_publishes_rows_before_reading_segments(s3, tmp_path):
         assert not gave_up.is_set()
         assert all(r["params"] == {"lr": 0.1} for r in rows)
         states = index.snapshot().run_states.values()
-        assert [derive_status(s) for s in states] == [FAILED] * N
+        now = datetime.now(timezone.utc)
+        assert [derive_status(s, now) for s in states] == [FAILED] * N
     finally:
         release.set()
     index.wait_revalidated(30)

@@ -8,6 +8,7 @@ import time
 
 import pytest
 import yaml
+from vmn_exp.core.real_io import RealClock
 
 moto = pytest.importorskip("moto")
 import boto3  # noqa: E402
@@ -58,7 +59,7 @@ def test_compact_merges_dead_runs_log_segments_and_leaves_a_running_one(s3, capf
     _run(s3, "0.0.2", exit_code=None, interval=0.1)  # stuck once its window passes
     time.sleep(1.5)
     _run(s3, "0.0.3", exit_code=None)
-    dead = runs_with_status(s3, APP, DEAD)
+    dead = runs_with_status(s3, APP, DEAD, clock=RealClock())
     assert dead == ["0.0.1", "0.0.2"]
 
     assert compact_runs(s3, APP, dead) == 0

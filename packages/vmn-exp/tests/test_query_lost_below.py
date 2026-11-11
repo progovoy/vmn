@@ -3,16 +3,14 @@ counted like the other ``*_below`` fields (stop at the nearest archived
 run), the board reading it from its rollups' ``lost``; ``failed_below`` and
 ``failed_pct`` keep counting lost runs."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.query import BELOW_FIELDS, filter_rows
 from vmn_exp.core.query_below import below_extra
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
 
-@pytest.fixture(autouse=True)
-def _clock(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+CLOCK = FakeClock(start=T0)
 
 
 def _lost():
@@ -43,20 +41,20 @@ def test_lost_below_is_a_below_field():
 
 def test_lost_below_counts_the_lost_runs_up_to_the_archived_one(tree):
     fleet, v = tree
-    extra = below_extra(LeaderboardCache().rows(fleet.snapshot(), archived=True))
+    extra = below_extra(LeaderboardCache(now=CLOCK.now).rows(fleet.snapshot(), archived=True))
     counts = {k: extra["lost_below"](verstr) for k, verstr in v.items()}
     assert counts == dict(launch=2, date=2, shelved=1, failing=0)
 
 
 def test_failed_below_keeps_counting_the_lost_runs(tree):
     fleet, v = tree
-    extra = below_extra(LeaderboardCache().rows(fleet.snapshot(), archived=True))
+    extra = below_extra(LeaderboardCache(now=CLOCK.now).rows(fleet.snapshot(), archived=True))
     assert (extra["failed_below"](v["launch"]), extra["failed_pct"](v["launch"])) == (2, 50.0)
 
 
 def test_the_board_reads_the_rollups_lost(tree):
     fleet, _ = tree
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=CLOCK.now), fleet.snapshot()
     rows = cache.rows(snap, archived=True)
     extra, rollups = below_extra(rows), cache.job_rollups(snap, {})
     for row in rows:
@@ -66,14 +64,14 @@ def test_the_board_reads_the_rollups_lost(tree):
 
 def test_top_q_lost_below_keeps_the_trees_with_lost_runs(tree):
     fleet, v = tree
-    page = LeaderboardCache().page(fleet.snapshot(), {}, limit=100, top=True,
+    page = LeaderboardCache(now=CLOCK.now).page(fleet.snapshot(), {}, limit=100, top=True,
                                    top_query="lost_below > 0")
     assert [r["verstr"] for r in page["rows"]] == [v["launch"]]
 
 
 @pytest.mark.parametrize("seed", range(3))
 def test_core_and_board_agree_over_generations(seed):
-    fleet, cache = Fleet(seed), LeaderboardCache()
+    fleet, cache = Fleet(seed), LeaderboardCache(now=CLOCK.now)
     fleet.seed(60, T0, sweeps=5, live=12)
     for _ in range(5):
         snap = fleet.snapshot()

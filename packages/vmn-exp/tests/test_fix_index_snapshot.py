@@ -4,8 +4,10 @@ import dataclasses
 import sqlite3
 import threading
 import time
+from datetime import datetime, timezone
 
 import pytest
+from fakes.clock import FakeClock
 
 from vmn_exp.snapshot import LocalSnapshotStorage, _resolve_verstr
 from vmn_exp.core import index as experiment_index
@@ -164,20 +166,19 @@ def test_reading_a_snapshot_touches_neither_lock_nor_storage(st, tmp_path, monke
     assert snap is index.snapshot()
 
 
-def test_refresh_if_stale_skips_a_fresh_index(st, tmp_path, monkeypatch):
-    clock = [100.0]
-    monkeypatch.setattr(experiment_index, "_monotonic", lambda: clock[0])
+def test_refresh_if_stale_skips_a_fresh_index(st, tmp_path):
+    clock = FakeClock(start=datetime.now(timezone.utc), monotonic=100.0)
     a, _, _ = _seed(st)
-    index = _index(st, tmp_path)
+    index = ExperimentIndex(st, APP, cache_path=str(tmp_path / "idx.sqlite"), clock=clock)
     assert index.last_refresh_at is None
 
     first = index.refresh_if_stale(5)
     assert index.last_refresh_at == 100.0
     st.save_file(APP, a, "run_state.yml", "state: running\nheartbeat: 'x'\n")
 
-    clock[0] += 4
+    clock.advance(4)
     assert index.refresh_if_stale(5) is first
-    clock[0] += 2
+    clock.advance(2)
     assert index.refresh_if_stale(5).run_states[a]["heartbeat"] == "x"
     assert index.last_refresh_at == 106.0
 

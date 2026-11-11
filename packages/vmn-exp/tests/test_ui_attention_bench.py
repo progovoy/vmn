@@ -3,12 +3,11 @@ attention counts are built once per generation within budget, answer a
 repeat poll in microseconds, move to the next generation by its deltas (an
 ``ago()`` query included, within its minute) and rebuild an ``ago()``
 query at most once a minute. Timed, so serial."""
-import datetime
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.attention import attention_payload, queries_of
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
@@ -35,10 +34,8 @@ def fleet():
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    at = {"now": T0}
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or at["now"])
-    return at
+def clock():
+    return FakeClock(start=T0)
 
 
 def _counts(cache, snap):
@@ -47,7 +44,7 @@ def _counts(cache, snap):
 
 @pytest.mark.serial
 def test_attention_counts_are_built_once_and_moved_by_deltas(fleet, clock):
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     cache.page(snap, SCHEMA, limit=50)  # the board is warm
     built, counts = _timed(lambda: _counts(cache, snap))
     warm, again = _timed(lambda: _counts(cache, snap))
@@ -55,7 +52,7 @@ def test_attention_counts_are_built_once_and_moved_by_deltas(fleet, clock):
         fleet.edit(i, values={"loss": 0.1})
     nxt = fleet.snapshot()
     moved, _ = _timed(lambda: _counts(cache, nxt))
-    clock["now"] = T0 + datetime.timedelta(minutes=1)
+    clock.advance(60)
     minute, _ = _timed(lambda: _counts(cache, nxt))
     jobs, _ = _timed(lambda: cache.attention.summaries(nxt, SCHEMA, queries_of(ENTRIES)))
     print(f"\nattention at {len(fleet.rows)} runs: built {built * 1000:.0f} ms, "

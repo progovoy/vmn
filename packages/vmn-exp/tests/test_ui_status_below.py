@@ -3,17 +3,16 @@ running or stuck (its rollup's counts), readable by ``top_query`` like
 ``live_below`` — so the outer runs' status chips match an outer run whose
 own status and ``tree_status`` read ``failed`` while its runs still run."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(7)
     launch = fleet.append(state=finished(1))
     fleet.append(parent=launch, state=finished(1))
@@ -23,7 +22,7 @@ def board(monkeypatch):
     fleet.append(parent=date, state=running(T0, age=3600))
     done = fleet.append(state=finished(0))
     fleet.append(parent=done, state=finished(0))
-    return fleet, (launch, hung, done), LeaderboardCache()
+    return fleet, (launch, hung, done), LeaderboardCache(now=CLOCK.now)
 
 
 def _top(cache, snap, top_query):

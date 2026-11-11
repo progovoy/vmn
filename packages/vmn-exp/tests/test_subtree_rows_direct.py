@@ -1,6 +1,7 @@
 """``subtree_rows_direct``: an outer run's rows found through its child
 markers — no listing of the app's records, so an outer run's page answers
 while the index of a 46k-run store is still loading."""
+from datetime import datetime, timezone
 import threading
 import time
 
@@ -106,7 +107,7 @@ def test_by_default_each_child_is_probed_for_children_in_the_same_wave(outer24):
 
 def test_rows_are_the_index_rows_of_the_metadata_and_states_feed_status(outer24):
     found = subtree_rows_direct(outer24, APP, OUTER)
-    rows = annotate_rows(found.rows, found.run_states)
+    rows = annotate_rows(found.rows, found.run_states, now=datetime.now(timezone.utc))
     by = {r["verstr"]: r for r in rows}
 
     outer = by[OUTER]

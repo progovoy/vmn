@@ -5,6 +5,7 @@ import os
 import sqlite3
 
 import pytest
+from fakes.clock import FakeClock
 from similar_seed import seed, verstr
 from vmn_exp.core import index_store, sqlite_files
 from vmn_exp.core.index import ExperimentIndex, shared_index
@@ -51,21 +52,21 @@ def listings(storage, monkeypatch):
 
 
 def test_a_similar_search_opens_the_index_file_once(storage, connects):
-    find(storage, APP, "latest", context="focal loss")
+    find(storage, APP, "latest", context="focal loss", clock=FakeClock())
     path = os.path.realpath(sqlite_files.live_path(index_path(storage, APP)))
     assert connects.count(path) == 1
 
 
 def test_a_warm_similar_search_lists_record_names_once(storage, listings):
-    find(storage, APP, "latest", context="focal loss")
+    find(storage, APP, "latest", context="focal loss", clock=FakeClock())
     listings.clear()
-    find(storage, APP, "latest", context="focal loss")
+    find(storage, APP, "latest", context="focal loss", clock=FakeClock())
     assert len(listings) == 1
 
 
 def test_the_process_index_persists_through_the_shared_store(storage):
     path = index_path(storage, APP)
-    assert shared_index(storage, APP)._store is shared_store(path)
+    assert shared_index(storage, APP, clock=FakeClock())._store is shared_store(path)
 
 
 def test_a_recreated_index_file_gets_a_new_store(tmp_path):
@@ -78,8 +79,8 @@ def test_a_recreated_index_file_gets_a_new_store(tmp_path):
 
 
 def test_repeated_syncs_load_the_persisted_rows_once(storage, monkeypatch):
-    find(storage, APP, "latest", context="focal loss")  # persists the index
-    index = ExperimentIndex(storage, APP, cache_path=index_path(storage, APP))
+    find(storage, APP, "latest", context="focal loss", clock=FakeClock())  # persists the index
+    index = ExperimentIndex(storage, APP, cache_path=index_path(storage, APP), clock=FakeClock())
     loads = []
     real = index_store.SqliteStore.load_lazy
     monkeypatch.setattr(index_store.SqliteStore, "load_lazy",
@@ -89,17 +90,17 @@ def test_repeated_syncs_load_the_persisted_rows_once(storage, monkeypatch):
 
 
 def test_a_listing_reads_through_the_index_store(storage, connects):
-    assert list_view(storage, APP) is not None
+    assert list_view(storage, APP, clock=FakeClock()) is not None
     path = os.path.realpath(sqlite_files.live_path(index_path(storage, APP)))
     assert connects.count(path) == 1
 
 
 def test_the_store_and_the_index_name_their_file(storage):
     path = index_path(storage, APP)
-    index = shared_index(storage, APP)
+    index = shared_index(storage, APP, clock=FakeClock())
     assert shared_store(path).path == path
     assert index.path == path
-    assert ExperimentIndex(storage, APP).path is None
+    assert ExperimentIndex(storage, APP, clock=FakeClock()).path is None
 
 
 def test_index_path_is_none_without_a_cache_path():

@@ -5,14 +5,15 @@ used to forget every baseline, so the next refresh re-listed the whole store:
 more of the requests the store was refusing (at ~490k S3 records, hours of
 LISTs behind serving)."""
 import os
+from datetime import datetime, timezone
 
 import pytest
 from botocore.exceptions import ClientError
+from fakes.clock import FakeClock
 from s3_helpers import meta, s3_storage
 from test_fix_index_io_process import offloaded  # noqa: F401  (fixture)
 from test_fix_index_refresh_scale import clock, live_store  # noqa: F401  (fixtures)
 from test_index_metric_reads_s3 import APP, V, s3  # noqa: F401  (fixture)
-from vmn_exp.core import index as experiment_index
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_io_process import IOProcessError
 from vmn_exp.core.index_store import SqliteStore
@@ -47,7 +48,8 @@ class Listings:
 
 def _statuses(index):
     snapshot = index.refresh().snapshot()
-    return {r["verstr"]: snapshot.status_of(r["verstr"]) for r in snapshot.rows}
+    now = datetime.now(timezone.utc)
+    return {r["verstr"]: snapshot.status_of(r["verstr"], now) for r in snapshot.rows}
 
 
 def test_a_throttled_listing_is_followed_by_no_full_listing(s3, tmp_path, monkeypatch):
@@ -73,14 +75,6 @@ def test_a_throttled_listing_is_followed_by_no_full_listing(s3, tmp_path, monkey
 
 RECONCILE_SEC = 10
 FINISHED = "state: finished\nexit_code: 0\n"
-
-
-class Clock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
 
 
 def _make(st, i):
@@ -114,12 +108,11 @@ class _SaveFailsOnce:
 def test_a_failed_save_after_the_check_relists_and_persists_what_it_found(
     tmp_path, monkeypatch
 ):
-    clock = Clock()
-    monkeypatch.setattr(experiment_index, "_monotonic", clock)
+    clock = FakeClock(start=datetime.now(timezone.utc), monotonic=1000.0)
     st = LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
     runs = [_make(st, i) for i in range(10)]
     cache = str(tmp_path / "i.sqlite")
-    index = ExperimentIndex(st, APP, cache, full_sweep_sec=RECONCILE_SEC)
+    index = ExperimentIndex(st, APP, cache, full_sweep_sec=RECONCILE_SEC, clock=clock)
     index.journaled = True
     index.refresh()
     _metric(st, runs[0], 0.75)  # unannounced: the next check's slice finds it
@@ -127,12 +120,12 @@ def test_a_failed_save_after_the_check_relists_and_persists_what_it_found(
     save = _SaveFailsOnce(index._store, monkeypatch)
     save.armed = True
 
-    clock.now += 1
+    clock.advance(1)
     with pytest.raises(OSError):
         index.refresh()
     assert any(runs[0] in (keys or ()) for keys in listings.calls)  # the check took it
     listings.calls.clear()
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
 
     assert any(runs[0] in (keys or ()) for keys in listings.calls)

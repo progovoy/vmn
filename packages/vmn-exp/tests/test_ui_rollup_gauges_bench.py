@@ -7,9 +7,9 @@ import datetime
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from prometheus_parse import label_sets, parse
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.prometheus import exposition
 from vmn_exp.ui.rollup_gauges import MAX_OUTER_RUNS, app_samples, new_families
@@ -27,10 +27,8 @@ def _timed(fn):
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    at = {"now": T0}
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or at["now"])
-    return at
+def clock():
+    return FakeClock(T0)
 
 
 def _fleet():
@@ -45,7 +43,7 @@ def _fleet():
 
 def _scrape(cache, snap):
     families = new_families()
-    for gauge, labels, value in app_samples(LABELS, cache, snap, {}, ENTRIES, status_mod._now(),
+    for gauge, labels, value in app_samples(LABELS, cache, snap, {}, ENTRIES, cache.now(),
                                             24 * 3600):
         families[gauge].add(labels, value)
     return exposition(families.values())
@@ -54,11 +52,11 @@ def _scrape(cache, snap):
 @pytest.mark.serial
 def test_a_scrape_of_a_warm_100k_run_board_walks_only_its_outer_runs(clock):
     snap = _fleet().snapshot()
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     warm, _ = _timed(lambda: cache.warm(snap))  # the refresher, off the scrape
     first, text = _timed(lambda: _scrape(cache, snap))
     again, _ = _timed(lambda: _scrape(cache, snap))
-    clock["now"] = T0 + datetime.timedelta(minutes=1)
+    clock.advance(datetime.timedelta(minutes=1).total_seconds())
     minute, _ = _timed(lambda: _scrape(cache, snap))
     print(f"\nwarm {warm * 1000:.0f} ms; scrape {first * 1000:.0f} ms, again "
           f"{again * 1000:.1f} ms, next minute {minute * 1000:.0f} ms")

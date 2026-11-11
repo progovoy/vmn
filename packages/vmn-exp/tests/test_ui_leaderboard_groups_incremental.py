@@ -5,9 +5,9 @@ import datetime
 import random
 
 import pytest
+from fakes.clock import FakeClock
 from job_rollup_reference import annotated, closes_children
 from leaderboard_fleet import T0, Fleet, finished, running
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 from vmn_exp.ui import leaderboard_groups as groups_mod
 from vmn_exp.ui.leaderboard_group_fields import NONE
@@ -34,8 +34,8 @@ CASES = [
 ]
 
 
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
+def _at(fake_clock, when):
+    fake_clock.advance((when - fake_clock.now()).total_seconds())
 
 
 def _strip(value):
@@ -71,7 +71,7 @@ def _assert_same(cache, snap, builds=None):
     got = _answers(cache, snap)
     if builds:
         builds.on = False
-    want = _answers(lb.LeaderboardCache(bucket_sec=cache.bucket_sec), snap)
+    want = _answers(lb.LeaderboardCache(bucket_sec=cache.bucket_sec, now=cache.now), snap)
     for case, mine, theirs in zip(CASES, got, want):
         assert mine == theirs, case
 
@@ -81,11 +81,11 @@ def _assert_same(cache, snap, builds=None):
 def test_moved_groupings_equal_a_fresh_cache(monkeypatch, seed, clock):
     rng = random.Random(seed)
     now = T0
-    _at(monkeypatch, now)
+    fake_clock = FakeClock(now)
     fleet = Fleet(seed, links=True)
     fleet.seed(rng.randrange(150, 300), now)
     builds = _Builds(monkeypatch)
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=fake_clock.now)
     closing, steady, full = None, 0, None
 
     def check():
@@ -98,7 +98,7 @@ def test_moved_groupings_equal_a_fresh_cache(monkeypatch, seed, clock):
         snap = fleet.snapshot()
         before = builds.calls
         _assert_same(cache, snap, builds)
-        now_closing, built = _closing_outers(snap), builds.calls - before
+        now_closing, built = _closing_outers(snap, cache.now()), builds.calls - before
         if full is None:
             full = built
         if closing is not None and now_closing - closing:
@@ -110,49 +110,49 @@ def test_moved_groupings_equal_a_fresh_cache(monkeypatch, seed, clock):
     for _ in range(8):
         if clock == "moving":
             now += datetime.timedelta(seconds=rng.choice([1, 7, 25, 61]))
-            _at(monkeypatch, now)
+            _at(fake_clock, now)
         fleet.mutate(now, rng.randrange(1, 5))
         check()
         if clock == "moving":
             now += datetime.timedelta(seconds=rng.choice([3, 45]))
-            _at(monkeypatch, now)
+            _at(fake_clock, now)
             check()
     # About once per case; every later generation and bucket moved it on
     # (16 answers per case: rebuilding each would count 160).
     assert steady <= 2 * len(CASES)
 
 
-def _closing_outers(snap):
+def _closing_outers(snap, now):
     """The outer runs that close their children now (brute force)."""
-    rows = annotated(snap)
+    rows = annotated(snap, now)
     by_verstr = {row["verstr"]: row for row in rows}
     return {r["verstr"] for r in rows if r["children"] and closes_children(r, by_verstr)}
 
 
-def test_live_runs_under_one_sweep_move_between_status_groups(monkeypatch):
-    _at(monkeypatch, T0)
+def test_live_runs_under_one_sweep_move_between_status_groups():
+    fake_clock = FakeClock(T0)
     fleet = Fleet(3)
     roots = fleet.seed(200, T0, sweeps=2, live=30)
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=fake_clock.now)
     rng = random.Random(3)
     _assert_same(cache, fleet.snapshot())
     for step in range(1, 5):
         now = T0 + datetime.timedelta(seconds=20 * step)
-        _at(monkeypatch, now)
+        _at(fake_clock, now)
         for _ in range(5):
             fleet.append(parent=rng.choice(roots), state=running(now, rng.choice([0, 70])))
         fleet.set_state(rng.randrange(len(fleet.specs)), finished(1))
         snap = fleet.snapshot()
         _assert_same(cache, snap)
-        _at(monkeypatch, now + datetime.timedelta(seconds=65))
+        _at(fake_clock, now + datetime.timedelta(seconds=65))
         _assert_same(cache, snap)
 
 
-def test_a_large_delta_still_matches(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_large_delta_still_matches():
+    fake_clock = FakeClock(T0)
     fleet = Fleet(5)
     fleet.seed(120, T0)
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=fake_clock.now)
     _assert_same(cache, fleet.snapshot())
     fleet.remove(3)  # every later row moves
     _assert_same(cache, fleet.snapshot())
@@ -161,7 +161,7 @@ def test_a_large_delta_still_matches(monkeypatch):
 def _loose(cache, snap, link, **params):
     """The loose rows of a link grouping (plan 22 F12), checked against a fresh cache."""
     out = cache.groups(snap, SCHEMA, link, rows_per_group=100, limit=1000, **params)
-    fresh = lb.LeaderboardCache(bucket_sec=cache.bucket_sec).groups(
+    fresh = lb.LeaderboardCache(bucket_sec=cache.bucket_sec, now=cache.now).groups(
         snap, SCHEMA, link, rows_per_group=100, limit=1000, **params)
     assert _strip(out) == _strip(fresh)
     loose = [g for g in out["groups"] if g["key"] == NONE]
@@ -171,11 +171,11 @@ def _loose(cache, snap, link, **params):
 @pytest.mark.parametrize("link", ["parent", "forked_from", "rerun_of"])
 @pytest.mark.parametrize("archived", [False, True])
 def test_a_run_leaves_the_loose_rows_with_its_first_link_and_returns_with_its_last(
-        monkeypatch, link, archived):
-    _at(monkeypatch, T0)
+        link, archived):
+    fake_clock = FakeClock(T0)
     fleet = Fleet(4)
     head, other = fleet.append(state=finished()), fleet.append(state=finished())
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=fake_clock.now)
     assert _loose(cache, fleet.snapshot(), link, archived=archived) == [head, other]
 
     def linked(state):
@@ -195,12 +195,12 @@ def test_a_run_leaves_the_loose_rows_with_its_first_link_and_returns_with_its_la
     assert _loose(cache, fleet.snapshot(), link, archived=archived) == [head, other]
 
 
-def test_a_filter_that_cuts_a_heads_group_makes_it_loose_incrementally(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_filter_that_cuts_a_heads_group_makes_it_loose_incrementally():
+    fake_clock = FakeClock(T0)
     fleet = Fleet(5)
     head = fleet.append(state=finished())
     fleet.append(parent=head, state=finished(1))
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=fake_clock.now)
     assert _loose(cache, fleet.snapshot(), "parent", status="succeeded") == [head]
     fleet.set_state(1, finished(0))  # its child passes the filter now
     assert _loose(cache, fleet.snapshot(), "parent", status="succeeded") == []

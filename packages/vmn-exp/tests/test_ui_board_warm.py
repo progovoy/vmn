@@ -5,13 +5,12 @@ request is a memo hit. A generation already superseded is not warmed."""
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from test_fix_ui_refresher import _wait_for
 from vmn_exp.ui import leaderboard_cache, leaderboard_facets
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.refresher import Refresher
-
-from vmn_exp.core import status as status_mod
 
 # What webui's firstPage sends: sort=idx, offset 0, limit PAGE_SIZE.
 DEFAULT = dict(sort="idx", offset=0, limit=200)
@@ -19,8 +18,8 @@ TOPS = ("jobs", "singles", True, False)
 
 
 @pytest.fixture
-def frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def frozen():
+    return FakeClock(T0)
 
 
 def _fleet():
@@ -46,7 +45,7 @@ class _Builds:
 
 def test_a_warmed_generation_answers_the_default_pages_from_the_memo(frozen, monkeypatch):
     snap = _fleet().snapshot()
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=frozen.now)
     builds = _Builds(monkeypatch)
     cache.warm(snap)
     builds.calls.clear()
@@ -59,7 +58,7 @@ def test_a_warmed_generation_answers_the_default_pages_from_the_memo(frozen, mon
 
 def test_the_singles_page_is_newest_first(frozen):
     snap = _fleet().snapshot()
-    rows = LeaderboardCache().page(snap, {}, top="singles", **DEFAULT)["rows"]
+    rows = LeaderboardCache(now=frozen.now).page(snap, {}, top="singles", **DEFAULT)["rows"]
     idx = [row["idx"] for row in rows]
     assert idx == sorted(idx, reverse=True)
     assert all(row["kind"] == "single" for row in rows)
@@ -80,7 +79,7 @@ def test_after_a_refresh_publishes_the_default_singles_request_is_a_memo_hit(fro
         def snapshot(self):
             return self.snap
 
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=frozen.now)
     warmed = []
     refresher = Refresher(interval_sec=0.02, idle_sec=5, clock=time.monotonic,
                           on_refresh=lambda s: cache.warm(s) or warmed.append(s))
@@ -100,7 +99,7 @@ def test_a_superseded_generation_is_not_warmed(frozen, monkeypatch):
     old = fleet.snapshot()
     fleet.append(state=fleet.ended(T0))
     new = fleet.snapshot()
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=frozen.now)
     cache.warm(new)
     builds = _Builds(monkeypatch)
     cache.warm(old)
@@ -110,5 +109,5 @@ def test_a_superseded_generation_is_not_warmed(frozen, monkeypatch):
 def test_warming_never_fails_the_refresh(frozen, monkeypatch):
     monkeypatch.setattr(leaderboard_cache.LeaderboardCache, "page",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=frozen.now)
     cache.warm(_fleet().snapshot())  # logged, not raised

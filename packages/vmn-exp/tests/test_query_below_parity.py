@@ -4,18 +4,16 @@ rollups) agree on every job, generation after generation of a random fleet
 — archiving, re-linking, starting and finishing runs — so the board's
 ``top_q`` and its printed ``vmn-exp list`` line cannot drift apart."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_live_below import BELOW
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.query import LIVE_BELOW_FIELDS, filter_rows
 from vmn_exp.core.query_below import below_extra
 
 
-@pytest.fixture(autouse=True)
-def _clock(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+CLOCK = FakeClock(start=T0)
 
 
 def _ui_counts(rollups, verstr):
@@ -39,7 +37,7 @@ def _core_top(rows, query):
 
 @pytest.mark.parametrize("seed", range(4))
 def test_core_and_board_count_the_same_runs_below(seed):
-    fleet, cache = Fleet(seed), LeaderboardCache()
+    fleet, cache = Fleet(seed), LeaderboardCache(now=CLOCK.now)
     fleet.seed(60, T0, sweeps=5, live=12)
     for _ in range(6):
         snap = fleet.snapshot()
@@ -58,6 +56,6 @@ def test_a_query_without_them_never_counts(monkeypatch):
 
     fleet = Fleet(1)
     fleet.seed(20, T0)
-    rows = LeaderboardCache().rows(fleet.snapshot(), archived=True)
+    rows = LeaderboardCache(now=CLOCK.now).rows(fleet.snapshot(), archived=True)
     monkeypatch.setattr(query_below, "below_counts", lambda rows: pytest.fail("counted"))
     assert filter_rows(rows, 'status = "running"', extra=below_extra(rows))

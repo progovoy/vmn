@@ -10,9 +10,9 @@ import os
 import time
 
 import pytest
+from fakes.clock import FakeClock
 
 from vmn_exp.snapshot import LocalSnapshotStorage
-from vmn_exp.core import index as experiment_index
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_sweep import Sweep
 
@@ -43,7 +43,8 @@ SETTLED_STATUSES = (CREATED_RS, STUCK_RS, SUCCEEDED_RS, FAILED_RS)
 
 
 def _steady_state(run_state, sig=("s", 1), touched=None):
-    sweep = Sweep(None, APP, full_sweep_sec=FULL_SWEEP_SEC)
+    sweep = Sweep(None, APP, full_sweep_sec=FULL_SWEEP_SEC,
+                  clock=FakeClock(start=datetime.datetime.now(datetime.timezone.utc)))
     sweep._sigs = {"v": sig}
     if touched is not None:
         sweep._touched["v"] = touched
@@ -77,19 +78,9 @@ def test_a_settled_status_stays_listed_within_the_touched_window(run_state):
 # -- through the index, with real storage ------------------------------------
 
 
-class Clock:
-    def __init__(self):
-        self.now = 1000.0
-
-    def __call__(self):
-        return self.now
-
-
 @pytest.fixture
-def clock(monkeypatch):
-    c = Clock()
-    monkeypatch.setattr(experiment_index, "_monotonic", c)
-    return c
+def clock():
+    return FakeClock(start=datetime.datetime.now(datetime.timezone.utc), monotonic=1000.0)
 
 
 @pytest.fixture
@@ -134,11 +125,11 @@ def test_created_and_stuck_records_settle_like_finished_ones(st, listed, clock):
     stuck = _make(st, 2, "state: running\nheartbeat: '2000-01-01T00:00:00Z'\n")
     _backdate_run_state(st, stuck, seconds_ago=10_000)
     live = _make(st, 3, f"state: running\nheartbeat: '{_now_iso()}'\n")
-    index = ExperimentIndex(st, APP, full_sweep_sec=FULL_SWEEP_SEC)
+    index = ExperimentIndex(st, APP, full_sweep_sec=FULL_SWEEP_SEC, clock=clock)
     index.refresh()
     assert listed == [None]  # the first refresh is always a full sweep
 
-    clock.now += 1
+    clock.advance(1)
     index.refresh()
     assert listed[1:] == [{live}]
     # Nothing was lost: all three are still in the index.

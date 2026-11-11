@@ -1,5 +1,6 @@
 """``vmn-exp rerun``: a run's recorded command, executed again against the
 run's own code in a throwaway workspace, recorded as a new linked run."""
+from datetime import datetime, timezone
 import os
 
 import pytest
@@ -153,7 +154,7 @@ def test_child_exit_code_propagates_and_status_failed(app_layout):
     orig = original_run(app_layout)
     rc, new = rerun(app_layout, orig, run_cmd=[_PY, "-c", "raise SystemExit(3)"])
     assert rc == 3
-    assert derive_status(_state(app_layout, new)) == FAILED
+    assert derive_status(_state(app_layout, new), now=datetime.now(timezone.utc)) == FAILED
 
 
 def test_output_log_captured(app_layout):

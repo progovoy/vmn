@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from fakes.clock import FakeClock
 import vmn_exp.core.index as experiment_index
 import vmn_exp.core.index_list as index_list
 from vmn_exp.cli.experiment import experiment_list
@@ -63,7 +64,7 @@ def test_a_loaded_index_lists_without_a_warning(storage):
 def _list(storage):
     return experiment_list(None, None, storage, SimpleNamespace(
         name=APP, query=None, archived=False, last=None, sort=None, top=None, json=False),
-        RealConsole())
+        RealConsole(), FakeClock())
 
 
 def test_vmn_exp_list_says_on_stderr_its_listing_is_incomplete(storage, monkeypatch, capsys):

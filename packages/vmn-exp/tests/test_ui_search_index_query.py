@@ -2,6 +2,7 @@
 the search index's candidates, verified by the query matcher — so a page is
 exactly what the plain filter-and-sort answers, generation after generation."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0
 from search_fleet import TextFleet
 from vmn_exp.core.query import parse_query
@@ -10,7 +11,6 @@ from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.readers.experiments import apply_filters, sort_rows
 from vmn_exp.ui.search_index import SearchIndex
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import search_prefilter
 
 SCHEMA = {"loss": {"goal": "min"}}
@@ -32,14 +32,10 @@ QUERIES = [
 
 
 def _expected(snap, query, sort=None):
-    rows = [r for r in annotate_rows(snap.rows, snap.run_states, snap.run_state_observed_at)
+    rows = [r for r in annotate_rows(snap.rows, snap.run_states, snap.run_state_observed_at,
+                                     now=T0)
             if not r.get("archived")]
     return [r["verstr"] for r in sort_rows(apply_filters(rows, query=query), SCHEMA, sort=sort)]
-
-
-@pytest.fixture(autouse=True)
-def _frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
 
 
 def _fleet(seed):
@@ -63,7 +59,7 @@ def test_candidates_cover_only_clauses_the_index_can_answer():
 @pytest.mark.parametrize("seed", range(3))
 def test_pages_with_a_text_clause_match_the_plain_filter(seed):
     fleet = _fleet(seed)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     for step in range(6):
         snap = fleet.snapshot()
         for query in QUERIES:
@@ -76,7 +72,7 @@ def test_pages_with_a_text_clause_match_the_plain_filter(seed):
 
 def test_the_index_answers_the_text_clause(monkeypatch):
     snap = _fleet(1).snapshot()
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     cache.page(snap, SCHEMA, limit=50)
     seen = []
     real = search_prefilter.candidates

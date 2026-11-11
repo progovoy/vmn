@@ -19,6 +19,7 @@ from vmn_exp.core.alerts import (
 )
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
 import time
+from vmn_exp.core.real_io import RealClock
 
 
 def _iso(dt):
@@ -71,9 +72,9 @@ def test_stuck_run_alerts_once_per_transition(app_layout, capfd):
 
     with WebhookReceiver() as hook:
         alerter = _alerter(hook.url, ["stuck"])
-        fired = watch_app(storage, app_layout.app_name, alerter, within_sec=86400)
+        fired = watch_app(storage, app_layout.app_name, alerter, within_sec=86400, clock=RealClock())
         assert fired == [(verstr, "stuck")]
-        assert watch_app(storage, app_layout.app_name, alerter, within_sec=86400) == []
+        assert watch_app(storage, app_layout.app_name, alerter, within_sec=86400, clock=RealClock()) == []
 
         # The run came back to life and got stuck again: a new transition.
         state = _stuck_state(_an_hour_ago())
@@ -82,7 +83,7 @@ def test_stuck_run_alerts_once_per_transition(app_layout, capfd):
             datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=30)
         )
         _age_run_state(app_layout, verstr, state)
-        assert watch_app(storage, app_layout.app_name, alerter, within_sec=86400) == [
+        assert watch_app(storage, app_layout.app_name, alerter, within_sec=86400, clock=RealClock()) == [
             (verstr, "stuck")
         ]
 
@@ -101,7 +102,7 @@ def test_watch_skips_triggers_that_are_not_opted_in(app_layout, capfd):
     _age_run_state(app_layout, verstr, _stuck_state(_an_hour_ago()))
     with WebhookReceiver() as hook:
         alerter = _alerter(hook.url, ["failed"])
-        assert watch_app(_storage(app_layout), app_layout.app_name, alerter, 86400) == []
+        assert watch_app(_storage(app_layout), app_layout.app_name, alerter, 86400, clock=RealClock()) == []
     assert hook.requests == []
 
 
@@ -112,7 +113,7 @@ def test_watch_ignores_transitions_older_than_the_window(app_layout, capfd):
     _age_run_state(app_layout, verstr, _stuck_state("2020-01-01T00:00:00Z"), hours=24 * 365)
     with WebhookReceiver() as hook:
         alerter = _alerter(hook.url, ["stuck"])
-        assert watch_app(_storage(app_layout), app_layout.app_name, alerter, 86400) == []
+        assert watch_app(_storage(app_layout), app_layout.app_name, alerter, 86400, clock=RealClock()) == []
     assert hook.requests == []
 
 
@@ -122,9 +123,9 @@ def test_undelivered_alert_is_retried_on_the_next_watch(app_layout, capfd):
     _age_run_state(app_layout, verstr, _stuck_state(_an_hour_ago()))
     storage = _storage(app_layout)
 
-    assert watch_app(storage, app_layout.app_name, _alerter(dead_url(), ["stuck"]), 86400) == []
+    assert watch_app(storage, app_layout.app_name, _alerter(dead_url(), ["stuck"]), 86400, clock=RealClock()) == []
     with WebhookReceiver() as hook:
-        fired = watch_app(storage, app_layout.app_name, _alerter(hook.url, ["stuck"]), 86400)
+        fired = watch_app(storage, app_layout.app_name, _alerter(hook.url, ["stuck"]), 86400, clock=RealClock())
     assert fired == [(verstr, "stuck")]
 
 
@@ -202,7 +203,7 @@ def test_a_watch_tick_reads_only_the_candidates_markers(app_layout, capfd, monke
     storage = _storage(app_layout)
     with WebhookReceiver() as hook:
         alerter = _alerter(hook.url, ["stuck", "failed"])
-        assert watch_app(storage, app_layout.app_name, alerter, 86400) == [(stuck, "stuck")]
+        assert watch_app(storage, app_layout.app_name, alerter, 86400, clock=RealClock()) == [(stuck, "stuck")]
 
         reads = []
         real_load_file, real_load_metadata = storage.load_file, storage.load_metadata
@@ -210,5 +211,5 @@ def test_a_watch_tick_reads_only_the_candidates_markers(app_layout, capfd, monke
             reads.append((v, name)) or real_load_file(app, v, name)))
         monkeypatch.setattr(storage, "load_metadata", lambda app, v: (
             reads.append((v, "metadata")) or real_load_metadata(app, v)))
-        assert watch_app(storage, app_layout.app_name, alerter, 86400) == []
+        assert watch_app(storage, app_layout.app_name, alerter, 86400, clock=RealClock()) == []
     assert reads == [(stuck, ALERTS_FILE)]

@@ -3,6 +3,7 @@
 rollup's progress, rate and ETA; the run counts stay beside it."""
 import datetime
 
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, iso
 from vmn_exp.core.progress import DEFAULT_NAMES, declared_progress, progress_names
 from vmn_exp.ui.job_rollup_payload import job_payload, job_summary
@@ -103,16 +104,14 @@ def test_the_compact_summary_carries_it_so_the_jobs_view_sorts_on_it():
     assert summary["progress"] == 0.25
 
 
-def test_the_jobs_view_and_the_page_read_it_off_the_cache_and_follow_new_values(monkeypatch):
+def test_the_jobs_view_and_the_page_read_it_off_the_cache_and_follow_new_values():
     from leaderboard_fleet import Fleet
-    from vmn_exp.core import status as status_mod
     from vmn_exp.ui.job_views import JobViews
     from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
     fleet = Fleet(7)
     root = fleet.seed_jobs(1, 20, T0)[0]
-    views = JobViews(LeaderboardCache())
+    views = JobViews(LeaderboardCache(now=FakeClock(start=T0).now))
     for done in (5, 41):
         fleet.edit(fleet.index(root), values={"progress": done, "progress_total": 60})
         snap = fleet.snapshot()

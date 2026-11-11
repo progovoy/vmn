@@ -48,8 +48,8 @@ def _verstrs(text, rows=ROWS):
     ('timestamp < ago("0m")', '"2026-10-28T12:00:30Z"'),
     ('timestamp < ago( "90m" )', '"2026-10-28T10:30:30Z"'),
 ])
-def test_ago_pins_to_the_iso_time_that_long_before_now(clock, text, expected):
-    assert pin_ago(text) == f"timestamp < {expected}"
+def test_ago_pins_to_the_iso_time_that_long_before_now(text, expected):
+    assert pin_ago(text, now=NOW) == f"timestamp < {expected}"
 
 
 def test_pin_ago_takes_an_explicit_now():
@@ -63,9 +63,9 @@ def test_waiting_for_over_an_hour(clock):
     assert _verstrs('not timestamp < ago("1h")') == ["new", "none"]
 
 
-def test_every_ago_of_a_query_is_pinned(clock):
+def test_every_ago_of_a_query_is_pinned():
     text = 'timestamp > ago("3d") and timestamp < ago("1h") or idx = 1'
-    assert pin_ago(text) == ('timestamp > "2026-10-25T12:00:30Z" and '
+    assert pin_ago(text, now=NOW) == ('timestamp > "2026-10-25T12:00:30Z" and '
                              'timestamp < "2026-10-28T11:00:30Z" or idx = 1')
 
 
@@ -82,9 +82,9 @@ def test_parse_query_answers_the_pinned_tree(clock):
         "cmp", ("path", ("timestamp",)), "<", "2026-10-28T11:00:30Z")
 
 
-def test_a_query_without_ago_is_unchanged(clock):
+def test_a_query_without_ago_is_unchanged():
     for text in ('note ~ "chicago"', 'note ~ \'ago("1h")\'', "idx > 1", "", None):
-        assert pin_ago(text) == text
+        assert pin_ago(text, now=NOW) == text
     assert _verstrs('note ~ "ago(1h)"', [_row("x", None, note="ago(1h)")]) == ["x"]
 
 
@@ -96,19 +96,19 @@ def test_a_query_without_ago_is_unchanged(clock):
     'timestamp != ago("1h")', 'timestamp ~ ago("1h")', 'timestamp in (ago("1h"))',
     'ago("1h") > timestamp', 'ago = 1',
 ])
-def test_bad_ago_is_a_query_error(clock, text):
+def test_bad_ago_is_a_query_error(text):
     with pytest.raises(QueryError):
         compile_query(text)
     with pytest.raises(QueryError):
-        pin_ago(text)
+        pin_ago(text, now=NOW)
 
 
-def test_a_bad_ago_reports_its_own_offset(clock):
+def test_a_bad_ago_reports_its_own_offset():
     with pytest.raises(QueryError, match="at offset 16"):
         compile_query('timestamp < ago("1x")')
 
 
-def test_an_error_after_ago_reports_the_offset_in_the_text_given(clock):
+def test_an_error_after_ago_reports_the_offset_in_the_text_given():
     with pytest.raises(QueryError, match="at offset 32"):
         compile_query('timestamp < ago("1h") and idx > statuz')
 

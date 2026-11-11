@@ -4,10 +4,8 @@ runs are lost reads its own status, and only a run that exited with a
 non-zero code below makes it ``failed`` — on every path (the core's
 annotation, one run's subtree, the board's builds, its derived generations
 and its live buckets)."""
-import datetime
-
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.status import CREATED, FAILED, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_tree, run_status
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
@@ -19,10 +17,6 @@ def _row(verstr, status, parent=None):
 
 def _tree(*rows):
     return {r["verstr"]: r for r in annotate_tree(list(rows))}
-
-
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
 
 
 class TestAnnotate:
@@ -52,8 +46,8 @@ class TestAnnotate:
 def test_one_runs_subtree_agrees():
     parent_of = {"a": "o", "l": "o"}
     states = {"o": finished(0), "a": finished(0), "l": running(T0, age=3600)}
-    assert run_status("o", parent_of, states.get)["tree_status"] == SUCCEEDED
-    lost = run_status("l", parent_of, states.get)
+    assert run_status("o", parent_of, states.get, now=T0)["tree_status"] == SUCCEEDED
+    lost = run_status("l", parent_of, states.get, now=T0)
     assert (lost["settled"], lost["tree_status"]) == ("lost", None)
 
 
@@ -68,37 +62,36 @@ def _fleet():
     return fleet
 
 
-def test_the_board_build_reads_the_outers_own_status(monkeypatch):
-    _at(monkeypatch, T0)
+def test_the_board_build_reads_the_outers_own_status():
     fleet = _fleet()
     outer = fleet.append(state=finished(0))
     fleet.append(parent=outer, state=finished(0))
     fleet.append(parent=outer, state=running(T0, age=3600))
-    assert _rows(LeaderboardCache(), fleet.snapshot())[outer] == SUCCEEDED
+    cache = LeaderboardCache(now=FakeClock(start=T0).now)
+    assert _rows(cache, fleet.snapshot())[outer] == SUCCEEDED
 
 
-def test_a_derived_generation_agrees(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_derived_generation_agrees():
     fleet = _fleet()
     outer = fleet.append(state=running(T0))
     fleet.append(parent=outer, state=finished(0))
     fleet.append(parent=outer, state=running(T0, age=3600))
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(start=T0).now)
     assert _rows(cache, fleet.snapshot())[outer] == STUCK
     fleet.set_state(fleet.index(outer), finished(0))  # it ends: its stuck run is lost
     snap = fleet.snapshot()
     assert _rows(cache, snap)[outer] == SUCCEEDED
-    assert _rows(cache, snap) == _rows(LeaderboardCache(), snap)
+    assert _rows(cache, snap) == _rows(LeaderboardCache(now=cache.now), snap)
 
 
-def test_a_live_run_that_goes_lost_between_buckets_agrees(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_live_run_that_goes_lost_between_buckets_agrees():
+    clock = FakeClock(start=T0)
     fleet = _fleet()
     outer = fleet.append(state=finished(0))
     fleet.append(parent=outer, state=finished(0))
     fleet.append(parent=outer, state=running(T0))
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     assert _rows(cache, snap)[outer] == "running"
-    _at(monkeypatch, T0 + datetime.timedelta(seconds=600))
+    clock.advance(600)
     assert _rows(cache, snap)[outer] == SUCCEEDED
-    assert _rows(cache, snap) == _rows(LeaderboardCache(), snap)
+    assert _rows(cache, snap) == _rows(LeaderboardCache(now=cache.now), snap)

@@ -1,6 +1,7 @@
 """`vmn-exp run -- python train.py` with ``start_run()`` in train.py is one
 run (plan 38 A5): the script records into the supervisor's run, in a stream
 of its own, and the supervisor records how the process ended. Real git."""
+from datetime import datetime, timezone
 import os
 
 import pytest
@@ -77,7 +78,7 @@ def test_adopted_run_status_and_exit_code_are_the_processs(app_layout):
     assert _run(app_layout, body) == 3
 
     state = load_run_state(_storage(app_layout), app_layout.app_name, _only_run(app_layout))
-    assert state["exit_code"] == 3 and derive_status(state) == "failed"
+    assert state["exit_code"] == 3 and derive_status(state, now=datetime.now(timezone.utc)) == "failed"
 
 
 def test_exactly_one_run_entry_and_one_final_state_are_recorded(app_layout):

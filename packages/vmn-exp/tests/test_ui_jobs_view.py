@@ -2,10 +2,10 @@
 ``job`` (its compact rollup, null for a single run) and ``job:*`` sorts over
 those summaries."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 FIELDS = {"total", "counts", "done", "expected", "progress", "failed_pct",
@@ -13,8 +13,7 @@ FIELDS = {"total", "counts", "done", "expected", "progress", "failed_pct",
 
 
 @pytest.fixture
-def board(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def board():
     fleet = Fleet(11)
     jobs = fleet.seed_jobs(4, 30, T0, live=10)
     singles = [fleet.append(state=fleet.ended(T0)) for _ in range(5)]
@@ -22,7 +21,7 @@ def board(monkeypatch):
     nested = fleet.append(parent=jobs[2])
     for _ in range(3):
         fleet.append(parent=nested, state=fleet.ended(T0, code=1))
-    return fleet, jobs, singles, LeaderboardCache()
+    return fleet, jobs, singles, LeaderboardCache(now=FakeClock(T0).now)
 
 
 def _page(cache, snap, **params):

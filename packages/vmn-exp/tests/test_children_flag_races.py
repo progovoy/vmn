@@ -2,10 +2,10 @@
 over a drop that landed while it listed, a cached store whose remote drop
 failed keeps the drop locally (and replays it), and the UI's store upkeep
 sets it after a clean pass through the same conditional write."""
-import time
 from types import SimpleNamespace
 
 import pytest
+from fakes.clock import FakeClock
 from s3_helpers import mocked_bucket, s3_storage
 
 from vmn_exp.cli import backfill_children
@@ -201,7 +201,12 @@ def test_a_scan_through_the_cache_clears_the_kept_drop(cached, s3, monkeypatch):
 
 
 def _snap(storage):
-    return experiment_index.indexed_snapshot(storage, APP, wait=True)
+    return experiment_index.indexed_snapshot(storage, APP, wait=True, clock=FakeClock())
+
+
+def _upkeep(storage):
+    clock = FakeClock()
+    return AppUpkeep(storage, APP, clock.monotonic, now=clock.now)
 
 
 def _markerless_tree(storage):
@@ -214,7 +219,7 @@ def _markerless_tree(storage):
 def test_upkeep_flags_the_app_after_a_clean_pass(local):
     _markerless_tree(local)
 
-    AppUpkeep(local, APP, time.monotonic).run(_snap(local))
+    _upkeep(local).run(_snap(local))
 
     assert local.children_complete(APP)
 
@@ -223,7 +228,7 @@ def test_upkeep_does_not_flag_after_a_failed_mark(local, monkeypatch):
     _markerless_tree(local)
     monkeypatch.setattr(local, "mark_child", _broken)
 
-    assert AppUpkeep(local, APP, time.monotonic).run(_snap(local))["failed"] == 1
+    assert _upkeep(local).run(_snap(local))["failed"] == 1
 
     assert not local.children_complete(APP)
 
@@ -233,7 +238,7 @@ def test_upkeep_does_not_flag_over_a_drop_during_its_check(local, monkeypatch):
     snapshot = _snap(local)
     _race_the_listing(local, monkeypatch, outer)
 
-    AppUpkeep(local, APP, time.monotonic).run(snapshot)
+    _upkeep(local).run(snapshot)
 
     assert not local.children_complete(APP)
 
@@ -244,7 +249,7 @@ def test_upkeep_marks_a_run_its_snapshot_lacks_before_flagging(local):
     late = _run(local, parent=outer)
     local.unmark_child(APP, outer, late)
 
-    AppUpkeep(local, APP, time.monotonic).run(snapshot)
+    _upkeep(local).run(snapshot)
 
     assert local.list_children(APP, outer) == [late]
     assert local.children_complete(APP)
@@ -256,6 +261,6 @@ def test_upkeep_leaves_a_flagged_app_alone(local, monkeypatch):
     snapshot = _snap(local)
     monkeypatch.setattr(local, "list_verstrs", lambda app: pytest.fail("listed"))
 
-    AppUpkeep(local, APP, time.monotonic).run(snapshot)
+    _upkeep(local).run(snapshot)
 
     assert local.children_complete(APP)

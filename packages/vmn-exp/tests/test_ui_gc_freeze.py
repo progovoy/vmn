@@ -8,17 +8,16 @@ import gc
 import weakref
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
 
 @pytest.fixture(autouse=True)
-def _unfrozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def _unfrozen():
     gc.unfreeze()
     yield
     gc.unfreeze()
@@ -31,7 +30,7 @@ def _fleet():
 
 
 def test_a_built_base_leaves_the_collected_generations():
-    fleet, cache = _fleet(), LeaderboardCache()
+    fleet, cache = _fleet(), LeaderboardCache(now=CLOCK.now)
     snap = fleet.snapshot()
 
     cache.page(snap, SCHEMA, sort="loss", limit=50)
@@ -40,7 +39,7 @@ def test_a_built_base_leaves_the_collected_generations():
 
 
 def test_an_old_base_is_still_freed_once_the_caches_drop_it():
-    fleet, cache = _fleet(), LeaderboardCache()
+    fleet, cache = _fleet(), LeaderboardCache(now=CLOCK.now)
     snap = fleet.snapshot()
     cache.page(snap, SCHEMA, sort="loss", limit=50)
     first = weakref.ref(cache._base(snap)[0])

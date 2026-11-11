@@ -11,12 +11,14 @@ import yaml
 
 pytest.importorskip("fastapi")
 import vmn_exp.core.status as status_mod
+from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
+from unit_deps import fake_deps
 from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.local import LocalSnapshotStorage
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import RealClock, real_io
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -67,28 +69,21 @@ def _fleet(storage):
     _run(storage, 9, 6, health="unstable")
 
 
-class _Clock:
-    def __init__(self):
-        self.now = T0 + datetime.timedelta(minutes=90)
+@pytest.fixture
+def clock():
+    return FakeClock(T0 + datetime.timedelta(minutes=90))
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    c = _Clock()
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or c.now)
-    return c
-
-
-@pytest.fixture
-def store(tmp_path):
-    from vmn_exp.ui.server import create_app
+def store(tmp_path, clock):
+    from vmn_exp.ui.server import build_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
     storage = open_storage(uri, area=RUNS, clock=RealClock())
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return (lambda: TestClient(create_app(manager, io=real_io()))), storage
+    return (lambda: TestClient(build_app(manager, fake_deps(clock)))), storage
 
 
 def _client(store, settings=SETTINGS):
@@ -126,7 +121,7 @@ def test_no_attention_queries_no_attention_field(store, clock):
 def test_an_ago_count_follows_the_clock(store, clock):
     client = _client(store)
     assert _counts(_status(client))["waiting"] == 1
-    clock.now += datetime.timedelta(minutes=30)
+    clock.advance(30 * 60)
     assert _counts(_status(client))["waiting"] == 2
 
 
@@ -186,7 +181,9 @@ def test_without_attention_queries_jobs_carry_none(store, clock):
     assert all("attention" not in row["job"] for row in _jobs(_client(store, settings=None)))
 
 
-def test_an_ago_board_follows_the_clock(store, clock):
+def test_an_ago_board_follows_the_clock(store, clock, monkeypatch):
+    # The board's and the pivot's ago() still read status._now (G11 Part B set-aside).
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or clock.now())
     client = _client(store)
     q = 'status = "created" and timestamp < ago("1h")'
 
@@ -194,7 +191,7 @@ def test_an_ago_board_follows_the_clock(store, clock):
         return client.get(f"{BASE}/experiments", params={"q": q, "limit": 10}).json()["total"]
 
     assert total() == 1
-    clock.now += datetime.timedelta(minutes=30)
+    clock.advance(30 * 60)
     assert total() == 2
 
 
@@ -205,7 +202,7 @@ def test_a_bad_ago_on_the_board_is_400(store, clock):
 
 
 def test_a_checkout_conf_names_attention_queries_too(tmp_path, clock):
-    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.server import build_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     root = tmp_path / "repo"
@@ -219,13 +216,15 @@ def test_a_checkout_conf_names_attention_queries_too(tmp_path, clock):
         yaml.dump({"conf": {"experiment": {"ui": {"attention": attention}}}}, f)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.attach_path("ws", str(root))
-    assert _counts(_status(TestClient(create_app(manager, io=real_io())))) == {"failing": 1}
+    assert _counts(_status(TestClient(build_app(manager, fake_deps(clock))))) == {"failing": 1}
 
 
 
-def test_an_ago_pivot_of_a_settled_outer_run_follows_the_clock(store, clock):
+def test_an_ago_pivot_of_a_settled_outer_run_follows_the_clock(store, clock, monkeypatch):
     """Outer r6's runs r7 (minute 4) and r8 (5) ended: its pivot is kept
     across generations, never its clock."""
+    # The board's and the pivot's ago() still read status._now (G11 Part B set-aside).
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or clock.now())
     client = _client(store)
     params = {"rows": "status", "cols": "parent", "scope": _v(6),
               "q": 'timestamp < ago("1h")'}
@@ -235,7 +234,7 @@ def test_an_ago_pivot_of_a_settled_outer_run_follows_the_clock(store, clock):
         assert r.status_code == 200, r.text
         return r.json()["total"]
 
-    clock.now = T0 + datetime.timedelta(minutes=65, seconds=30)
+    clock.advance((T0 + datetime.timedelta(minutes=65, seconds=30) - clock.now()).total_seconds())
     assert total() == 1
-    clock.now += datetime.timedelta(minutes=1)
+    clock.advance(60)
     assert total() == 2

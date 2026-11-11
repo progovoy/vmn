@@ -5,12 +5,12 @@ first page answers from a built base."""
 import pytest
 
 pytest.importorskip("fastapi")
+from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
 from leaderboard_fleet import T0, Fleet
 from test_fix_ui_list_serving import BASE, _app, _run
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache
 
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
@@ -26,8 +26,7 @@ def _count_base_builds(monkeypatch):
 
 
 def test_a_warmed_snapshot_serves_its_first_page_without_building(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    fleet, cache = Fleet(1), LeaderboardCache()
+    fleet, cache = Fleet(1), LeaderboardCache(now=FakeClock(T0).now)
     fleet.seed(500, T0, sweeps=2, live=5)
     snap = fleet.snapshot()
 

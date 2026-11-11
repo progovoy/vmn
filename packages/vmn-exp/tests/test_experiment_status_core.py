@@ -294,7 +294,7 @@ def test_run_status_is_the_runs_status_fields_plus_its_tree():
         reads.append(v)
         return states[v]
 
-    status = tr.run_status("s", parent_of, read)
+    status = tr.run_status("s", parent_of, read, now=datetime.datetime.now(datetime.timezone.utc))
     assert status["status"] == st.RUNNING and status["pid"] == 4242
     assert status["tree_status"] == st.FAILED
     assert status["kind"] == tr.OUTER and sorted(status["children"]) == ["t", "u"]
@@ -304,7 +304,8 @@ def test_run_status_is_the_runs_status_fields_plus_its_tree():
 def test_run_status_weighs_the_store_write_time():
     stale = _running(heartbeat_age=3600)
     fresh = datetime.datetime.now(datetime.timezone.utc)
-    status = tr.run_status("a", {"a": None}, lambda v: stale, observed_at=lambda v: fresh)
+    status = tr.run_status("a", {"a": None}, lambda v: stale, observed_at=lambda v: fresh,
+                           now=datetime.datetime.now(datetime.timezone.utc))
     assert status["status"] == st.RUNNING and status["tree_status"] == st.RUNNING
 
 
@@ -326,7 +327,7 @@ def test_outer_counts_its_direct_children_by_status():
 def test_run_status_counts_direct_children_by_status():
     parent_of = {"t1": "s", "t2": "s"}
     states = {"s": None, "t1": None, "t2": None}
-    status = tr.run_status("s", parent_of, states.get)
+    status = tr.run_status("s", parent_of, states.get, now=datetime.datetime.now(datetime.timezone.utc))
     assert sum(status["child_counts"].values()) == 2
 
 

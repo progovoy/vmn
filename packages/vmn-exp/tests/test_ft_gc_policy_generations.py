@@ -8,6 +8,7 @@ client), far below what shortens the clock (``MUCH_GARBAGE``)."""
 import gc
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0
 from test_ui_generation_memory import SCHEMA, _fleet, _serve, _snapshot
 from s3_helpers import mocked_bucket, s3_storage
@@ -15,7 +16,6 @@ from test_fix_ui_list_serving import BASE, _app, _run
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.snapshot import LocalSnapshotStorage
 
 PER_S3_REFRESH = 100
@@ -23,8 +23,7 @@ PER_HTTP_POLL = 50
 
 
 @pytest.fixture(autouse=True)
-def _collector_off(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def _collector_off():
     was = gc.isenabled()
     gc.disable()
     yield
@@ -39,7 +38,7 @@ def _publish(fleet, cache):
 
 
 def test_serving_a_generation_makes_no_cyclic_garbage():
-    fleet, cache = _fleet(), LeaderboardCache()
+    fleet, cache = _fleet(), LeaderboardCache(now=FakeClock(T0).now)
     _publish(fleet, cache)
     gc.collect()
     garbage = []
@@ -58,7 +57,8 @@ def test_an_index_refresh_makes_no_cyclic_garbage(tmp_path):
 
     for i in range(200):
         add(i)
-    index = ExperimentIndex(st, "app", cache_path=str(tmp_path / "idx.sqlite"))
+    index = ExperimentIndex(st, "app", cache_path=str(tmp_path / "idx.sqlite"),
+                            clock=FakeClock(T0))
     index.refresh()
     gc.collect()
     garbage = []
@@ -95,7 +95,8 @@ def test_an_s3_index_refresh_makes_little_cyclic_garbage(monkeypatch, tmp_path):
         st = s3_storage()
         for i in range(100):
             _save_s3(st, i)
-        index = ExperimentIndex(st, "app", cache_path=str(tmp_path / "idx.sqlite"), full_sweep_sec=0)
+        index = ExperimentIndex(st, "app", cache_path=str(tmp_path / "idx.sqlite"), full_sweep_sec=0,
+                                clock=FakeClock(T0))
         index.refresh()
         gc.collect()
         try:

@@ -4,23 +4,22 @@ children carrying its ``job`` summary (attention counted over its own
 subtree, split counts when a split is given) and every row an ``open``
 hint (attention or live runs below)."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, running
 from vmn_exp.ui import leaderboard_cache as cache_mod
 from vmn_exp.ui.attention import AttentionQuery
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_scope import UnknownScope
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 
 
 @pytest.fixture
-def tree(monkeypatch):
+def tree():
     """Launch L: D1 (3 ended), D2 (2 ended, 1 running), D3 (25 ended),
     D4 -> study S -> 3 ended (one of them ``bad``), and a leaf directly under
     L; a second launch L2 with 2 ended runs."""
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
     fleet = Fleet(5)
     end = lambda: fleet.ended(T0, code=0)  # noqa: E731
     launch = fleet.append(state=running(T0))
@@ -40,7 +39,7 @@ def tree(monkeypatch):
         fleet.append(parent=other, state=end())
     names = dict(launch=launch, d1=d1, d2=d2, d3=d3, d4=d4, study=study, bad=leaves[0],
                  leaf=leaf, other=other)
-    return fleet, names, LeaderboardCache()
+    return fleet, names, LeaderboardCache(now=CLOCK.now)
 
 
 def _bad(names):

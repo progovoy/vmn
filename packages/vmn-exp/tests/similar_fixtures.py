@@ -63,8 +63,8 @@ class FakeSnapshot:
     def row(self, verstr):
         return self._by_verstr.get(verstr)
 
-    def status_of(self, verstr):
-        return derive_status(self.run_states.get(verstr))
+    def status_of(self, verstr, now=None):
+        return derive_status(self.run_states.get(verstr), now=now)
 
     def outputs_of(self, verstr):
         return {}
@@ -89,10 +89,11 @@ def similar_runs_multi(scopes, target, **kwargs):
 
 
 def similar_runs(snapshot, target, *, top=10, rows_filter=None, schema=None, weights=None,
-                 app=None, deadline=None):
+                 app=None, deadline=None, monotonic=None):
     """:func:`similar_runs_multi` over one app's *snapshot* (or :class:`Scope`)."""
     return similar_runs_multi([(app, snapshot, schema)], target, top=top,
-                              rows_filter=rows_filter, weights=weights, deadline=deadline)
+                              rows_filter=rows_filter, weights=weights, deadline=deadline,
+                              monotonic=monotonic)
 
 
 def _scope(scope):

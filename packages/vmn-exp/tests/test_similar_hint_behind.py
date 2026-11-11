@@ -5,6 +5,7 @@ import argparse
 
 import pytest
 from exp_helpers import _bootstrap, _exp, _storage
+from fakes.clock import FakeClock
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli import similar_hint
 from vmn_exp.core import similar_fts
@@ -35,7 +36,8 @@ def _warm(app_layout):
 
 def _hint(storage, app_layout, new, capfd):
     capfd.readouterr()
-    similar_hint.print_hint(storage, app_layout.app_name, new, argparse.Namespace(), {})
+    similar_hint.print_hint(storage, app_layout.app_name, new, argparse.Namespace(), {},
+                            clock=FakeClock())
     return capfd.readouterr().err
 
 

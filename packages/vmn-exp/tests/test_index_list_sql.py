@@ -5,11 +5,15 @@ exactly what the full-snapshot path printed."""
 import datetime
 import json
 
+from types import SimpleNamespace
+
 import pytest
 from exp_helpers import _exp, _storage
+from fakes.clock import FakeClock
+from fakes.console import FakeConsole
+from vmn_exp.cli.list_layout import experiment_list
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core import index_lean_store, index_list, index_list_sql, index_store
-from vmn_exp.core import status as experiment_status
 from vmn_exp.core.index_snapshot import RowCache
 
 FINISHED = "state: finished\nexit_code: 0\n"
@@ -86,6 +90,14 @@ def _list(capfd, layout, *args):
     rc = _exp(layout.app_name, action="list", extra_args=list(args))
     out = capfd.readouterr().out
     return rc, _timeless(out, "--json" in args)
+
+
+def _list_json_at(clock, layout, query):
+    console = FakeConsole()
+    args = SimpleNamespace(name=layout.app_name, query=query, archived=False, last=None,
+                           sort=None, top=None, json=True)
+    rc = experiment_list(None, None, _storage(layout), args, console, clock)
+    return rc, _timeless(console.stdout, True)
 
 
 def _full_path(monkeypatch):
@@ -171,9 +183,7 @@ def test_list_sees_runs_changed_created_and_removed_since(store, capfd, monkeypa
 def test_a_running_run_gone_stale_since_it_was_indexed_lists_as_stuck(
         store, capfd, monkeypatch):
     _list(capfd, store)
-    real_now = experiment_status._now
-    later = real_now() + datetime.timedelta(hours=2)
-    monkeypatch.setattr(experiment_status, "_now", lambda now=None: now or later)
+    later = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
     _no_full_read(monkeypatch)
-    rc, rows = _list(capfd, store, "--query", 'status = "stuck"', "--json")
+    rc, rows = _list_json_at(FakeClock(start=later), store, 'status = "stuck"')
     assert sorted(r["verstr"] for r in rows) == sorted([I2, LIVE])

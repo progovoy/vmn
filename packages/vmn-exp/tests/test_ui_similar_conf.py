@@ -5,6 +5,7 @@ import os
 
 import pytest
 import yaml
+from fakes.clock import FakeClock
 from similar_ui_fixture import OTHER, TARGET, TWIN, client_for
 from vmn_exp.core.app_conf import read_experiment_conf
 from vmn_exp.core.similar_search import find
@@ -58,9 +59,9 @@ def test_the_ui_ranks_like_the_cli_and_sdk_under_the_same_conf(client, tmp_path)
     _write_weights(root, BRANCH_ONLY)
     storage = open_storage(root=local_store_root(root), area="runs", clock=RealClock())
 
-    expected = find(storage, "app1", TARGET, read_experiment_conf("app1", root))
+    expected = find(storage, "app1", TARGET, read_experiment_conf("app1", root), clock=FakeClock())
 
     items = _items(client.get(f"{APP1}/experiments/{TARGET}/similar"))
     assert _ranked(items) == _ranked(expected)
-    default = find(storage, "app1", TARGET, {})
+    default = find(storage, "app1", TARGET, {}, clock=FakeClock())
     assert _ranked(items) != _ranked(default)

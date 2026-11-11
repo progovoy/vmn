@@ -6,6 +6,7 @@ finishes its open runs with ``128 + 15`` and then lets the signal do what it
 would have done anyway — the process still dies of SIGTERM, and a handler the
 workload installed itself still runs.
 """
+from datetime import datetime, timezone
 import os
 import signal
 import subprocess
@@ -179,7 +180,7 @@ def _assert_killed_by_sigterm(app_layout, verstr):
     assert state["exit_code"] == 128 + signal.SIGTERM, state
     assert state["received_signal"] == "SIGTERM"
     assert state["state"] == "finished"
-    assert derive_status(state) == "failed"
+    assert derive_status(state, now=datetime.now(timezone.utc)) == "failed"
 
 
 def test_a_run_opened_off_the_main_thread_is_finalized_on_sigterm(app_layout):

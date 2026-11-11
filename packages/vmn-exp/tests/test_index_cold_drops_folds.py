@@ -10,6 +10,7 @@ objects (readers diff generations by identity)."""
 import gc
 import os
 import shutil
+from datetime import datetime, timezone
 
 import pytest
 import scale_store
@@ -76,12 +77,13 @@ def _reachable(obj):
 def _answers(index):
     snap = index.snapshot()
     verstrs = [row["verstr"] for row in snap.rows]
+    now = datetime.now(timezone.utc)
     return {
         "rows": index.rows(with_create_note=True),
         "run_states": index.run_states(),
         "summarized": list(snap.summarized(SCHEMA).rows),
         "sides": {v: (snap.features_of(v), snap.intent_of(v), snap.hypothesis_of(v),
-                      snap.notes_of(v), snap.status_of(v)) for v in verstrs},
+                      snap.notes_of(v), snap.status_of(v, now)) for v in verstrs},
         "resolved": [snap.resolve(f"@{n}") for n in range(1, 21)],
     }
 
@@ -113,9 +115,9 @@ def test_a_no_change_refresh_keeps_the_generation(store_root, tmp_path):
 
 def _change(storage, snap):
     """Append metrics to a finished run, end a running one, add one, delete one."""
-    by_status = {}
+    by_status, now = {}, datetime.now(timezone.utc)
     for row in snap.rows:
-        by_status.setdefault(snap.status_of(row["verstr"]), []).append(row["verstr"])
+        by_status.setdefault(snap.status_of(row["verstr"], now), []).append(row["verstr"])
     finished, running = by_status["succeeded"][0], by_status["running"][0]
     gone = by_status["failed"][0]
     storage.append_log_entry(APP, finished, "w9", {
@@ -138,7 +140,7 @@ def test_refresh_deltas_after_the_drop_match_a_warm_restart(store_root, tmp_path
     after = cold.snapshot()
     assert after.generation > before.generation
     assert after.row(finished)["metrics"]["late"] == 1.0
-    assert after.status_of(running) == "succeeded"
+    assert after.status_of(running, datetime.now(timezone.utc)) == "succeeded"
     assert after.row("9.9.9") is not None and after.row(gone) is None
     assert _answers(cold) == _answers(_warm(store_root, db, full_sweep_sec=0))
     reference, _ = direct_rows(_storage(store_root), APP, with_create_note=True)

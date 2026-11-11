@@ -7,11 +7,11 @@ import statistics
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, finished, running
 from search_fleet import TextFleet
 from vmn_exp.ui.search_index import SearchIndex
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 
 JOBS, TRIALS, SINGLES = 20, 4500, 10_000
@@ -76,15 +76,10 @@ def fleet():
     return fleet
 
 
-@pytest.fixture(autouse=True)
-def _frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-
-
 @pytest.mark.serial
 def test_search_at_100k_runs(fleet):
     snap = fleet.snapshot()
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=FakeClock(T0).now)
     cache.page(snap, SCHEMA, limit=50)  # the base, as a live dashboard has it
     build = _timed(lambda: cache._search.get(snap))
     index = cache._search.get(snap)
@@ -107,7 +102,7 @@ def test_search_at_100k_runs(fleet):
 @pytest.mark.serial
 def test_list_text_search_without_the_index_for_reference(fleet, monkeypatch):
     snap = fleet.snapshot()
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=FakeClock(T0).now)
     cache.page(snap, SCHEMA, limit=50)
     monkeypatch.setattr(cache, "_candidates", lambda *args, **kwargs: None)
     listed = [_timed(lambda t=t: cache.page(snap, SCHEMA, query=_board_clause(t), limit=50))

@@ -5,11 +5,15 @@ import argparse
 import threading
 import time
 
+import datetime
+
 import pytest
 from exp_helpers import _bootstrap, _exp, _storage
+from fakes.clock import FakeClock
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli import similar_hint
 from vmn_exp.core import similar_match
+from vmn_exp.core.real_io import RealClock
 
 CHANGES = features(["train.py"], [TRAIN_STEP], author="alice@x.io")
 
@@ -33,10 +37,23 @@ def _warm_app_with_priors(app_layout, count):
     return storage, seed(storage, app, verstr(count + 1, commit="0000000"), changes=CHANGES)
 
 
-def _hint(storage, app_layout, new, capfd):
+def _hint(storage, app_layout, new, capfd, clock):
     capfd.readouterr()
-    similar_hint.print_hint(storage, app_layout.app_name, new, argparse.Namespace(), {})
+    similar_hint.print_hint(storage, app_layout.app_name, new, argparse.Namespace(), {},
+                            clock=clock)
     return [line for line in capfd.readouterr().err.splitlines() if "similar run" in line]
+
+
+class _TenthEach:
+    """A clock whose monotonic time is *monotonic* (the budget's and the
+    search's); its wall time stands still."""
+
+    def __init__(self, monotonic):
+        self.monotonic = monotonic
+        self._now = datetime.datetime.now(datetime.timezone.utc)
+
+    def now(self):
+        return self._now
 
 
 def _hint_threads():
@@ -52,7 +69,7 @@ def test_the_hint_searches_on_the_calling_thread(app_layout, capfd, monkeypatch)
         return real(*args, **kwargs)
 
     monkeypatch.setattr(similar_hint, "search", recorded)
-    assert len(_hint(storage, app_layout, new, capfd)) == 1
+    assert len(_hint(storage, app_layout, new, capfd, FakeClock())) == 1
     assert threads == [threading.current_thread()]
 
 
@@ -67,14 +84,13 @@ def test_a_hint_over_budget_prints_nothing_and_leaves_no_thread_behind(app_layou
         return real(*args, **kwargs)
 
     monkeypatch.setattr(similar_hint, "search", slow)
-    assert _hint(storage, app_layout, new, capfd) == []
+    assert _hint(storage, app_layout, new, capfd, RealClock()) == []
     assert _hint_threads() == []
 
 
 def test_the_budget_interrupts_the_search_in_sqlite(app_layout, capfd, monkeypatch):
     storage, new = _warm_app_with_priors(app_layout, 3)
     now, looks = [0.0], []
-    monkeypatch.setattr(similar_hint, "_clock", lambda: now[0])
     monkeypatch.setattr(similar_hint, "BUDGET_SEC", 0.3)
     monkeypatch.setattr(similar_match, "PROGRESS_OPS", 1)
 
@@ -83,6 +99,5 @@ def test_the_budget_interrupts_the_search_in_sqlite(app_layout, capfd, monkeypat
         now[0] += 0.1
         return now[0]
 
-    monkeypatch.setattr(similar_match, "_clock", a_tenth_each)
-    assert _hint(storage, app_layout, new, capfd) == []
+    assert _hint(storage, app_layout, new, capfd, _TenthEach(a_tenth_each)) == []
     assert len(looks) > 2  # the progress handler stopped a query under way

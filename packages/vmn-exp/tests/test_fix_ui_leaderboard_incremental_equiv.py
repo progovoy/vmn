@@ -6,8 +6,8 @@ import random
 
 import pytest
 
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 
 VOLATILE = ("stale_sec", "duration_sec")
@@ -20,8 +20,8 @@ QUERIES = [None, 'status = "running"', 'tree_status = "stuck"', "metrics.loss < 
            'kind = "inner" and not tree_status = "succeeded"']
 
 
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
+def _at(at, when):
+    at.advance((when - at.now()).total_seconds())
 
 
 def _rows(result, strip):
@@ -82,7 +82,7 @@ def _assert_same(cache, snap, seed, strip, annotations=None):
     got = _answers(cache, snap, cases)
     if annotations:
         annotations.on = False
-    want = _answers(lb.LeaderboardCache(bucket_sec=cache.bucket_sec), snap, cases)
+    want = _answers(lb.LeaderboardCache(bucket_sec=cache.bucket_sec, now=cache.now), snap, cases)
     for (params, mine), (_, theirs) in zip(got, want):
         if "rows" in mine:
             assert mine["total"] == theirs["total"], params
@@ -96,52 +96,51 @@ def _assert_same(cache, snap, seed, strip, annotations=None):
 def test_derived_generations_equal_a_fresh_cache(monkeypatch, seed, clock):
     rng = random.Random(seed)
     now = T0
-    _at(monkeypatch, now)
+    at = FakeClock(start=now)
     fleet = Fleet(seed)
     fleet.seed(rng.randrange(150, 300), now)
     annotations = _Annotations(monkeypatch)
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=at.now)
     for generation in range(8):
         if clock == "moving":
             now += datetime.timedelta(seconds=rng.choice([1, 7, 25, 61]))
-            _at(monkeypatch, now)
+            _at(at, now)
         fleet.mutate(now, rng.randrange(1, 5))
         snap = fleet.snapshot()
         _assert_same(cache, snap, seed, strip=clock == "moving", annotations=annotations)
         if clock == "moving":
             # A later time bucket of the same generation re-derives the live rows.
             now += datetime.timedelta(seconds=rng.choice([3, 45]))
-            _at(monkeypatch, now)
+            _at(at, now)
             _assert_same(cache, snap, seed, strip=True, annotations=annotations)
     # Every generation after the first was derived, never re-annotated.
     assert annotations.calls == 1
 
 
-def test_many_live_rows_under_one_sweep_roll_up(monkeypatch):
-    _at(monkeypatch, T0)
+def test_many_live_rows_under_one_sweep_roll_up():
+    at = FakeClock(start=T0)
     fleet = Fleet(3)
     roots = fleet.seed(200, T0, sweeps=2, live=30)
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=at.now)
     rng = random.Random(3)
     _assert_same(cache, fleet.snapshot(), 7, strip=False)
     for step in range(1, 6):
         now = T0 + datetime.timedelta(seconds=20 * step)
-        _at(monkeypatch, now)
+        _at(at, now)
         for _ in range(5):
             fleet.append(parent=rng.choice(roots), state=running(now, rng.choice([0, 70])))
         fleet.set_state(fleet.index(roots[0]), running(now))
         fleet.set_state(rng.randrange(len(fleet.specs)), finished(1))
         snap = fleet.snapshot()
         _assert_same(cache, snap, 7, strip=True)
-        _at(monkeypatch, now + datetime.timedelta(seconds=65))
+        _at(at, now + datetime.timedelta(seconds=65))
         _assert_same(cache, snap, 7, strip=True)
 
 
-def test_a_large_delta_or_a_parent_cycle_still_matches(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_large_delta_or_a_parent_cycle_still_matches():
     fleet = Fleet(5)
     fleet.seed(120, T0)
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=FakeClock(start=T0).now)
     _assert_same(cache, fleet.snapshot(), 7, strip=False)
 
     fleet.remove(3)  # every later row moves: a delta larger than the snapshot's tenth
@@ -156,12 +155,11 @@ def test_a_large_delta_or_a_parent_cycle_still_matches(monkeypatch):
     _assert_same(cache, fleet.snapshot(), 7, strip=False)
 
 
-def test_two_lineages_of_the_same_app_name_never_mix(monkeypatch):
-    _at(monkeypatch, T0)
+def test_two_lineages_of_the_same_app_name_never_mix():
     one, two = Fleet(1), Fleet(2)
     one.seed(150, T0)
     two.seed(150, T0)
-    cache = lb.LeaderboardCache(bucket_sec=2)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=FakeClock(start=T0).now)
     for _ in range(3):
         for fleet in (one, two):
             fleet.mutate(T0, 3, reparent=False)

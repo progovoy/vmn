@@ -4,6 +4,7 @@ running in every rollup and keeps its own children open; the index moves it
 when the outer ends, when it ends itself and when a live outer goes stuck."""
 import datetime
 
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
 from test_settled_rollup import _count_builds, _same_as_a_fresh_build
 from vmn_exp.core.query import filter_rows
@@ -12,8 +13,6 @@ from vmn_exp.core.status import CREATED, FAILED, RUNNING, STUCK, SUCCEEDED
 from vmn_exp.core.tree import annotate_tree, fleet_summary, subtree_status, sweep_unfinished
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.status_summary import status_summary
-
-from vmn_exp.core import status as status_mod
 
 OUTLIVED = "outlived"
 
@@ -71,18 +70,18 @@ class TestPure:
 
     def test_the_fleet_counts_it_running(self):
         states = {"a": {"state": "running", "heartbeat": "2999-01-01T00:00:00Z"}}
-        fleet = fleet_summary("o", {"o": ["a"]}, states.get, closed=True)
+        fleet = fleet_summary("o", {"o": ["a"]}, states.get, closed=True, now=T0)
         assert fleet["counts"][RUNNING] == 1 and fleet["lost"] == 0
 
     def test_one_run_reads_its_parent_to_know_it(self):
         states = {"o": {"state": "finished", "exit_code": 0},
                   "a": {"state": "running", "heartbeat": "2999-01-01T00:00:00Z"}}
-        _, tree = subtree_status("a", {"a": "o"}, states.get)
+        _, tree = subtree_status("a", {"a": "o"}, states.get, now=T0)
         assert tree["settled"] == OUTLIVED
 
 
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
+def _at(clock, when):
+    clock.advance((when - clock.now()).total_seconds())
 
 
 def _settled(cache, snap):
@@ -97,12 +96,12 @@ def _big_fleet(seed):
 
 
 def test_an_outer_that_ends_outlives_its_running_child_by_delta(monkeypatch):
-    _at(monkeypatch, T0)
+    clock = FakeClock(start=T0)
     fleet = _big_fleet(1)
     outer = fleet.append(state=running(T0))
     live = fleet.append(parent=outer, state=running(T0))
     fleet.append(parent=outer, state=finished(0))
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     assert _settled(cache, fleet.snapshot())[live] is None
     builds = _count_builds(monkeypatch)
 
@@ -123,12 +122,12 @@ def test_an_outer_that_ends_outlives_its_running_child_by_delta(monkeypatch):
     _same_as_a_fresh_build(cache, snap, [outer])
 
 
-def test_an_outer_that_starts_again_takes_it_back(monkeypatch):
-    _at(monkeypatch, T0)
+def test_an_outer_that_starts_again_takes_it_back():
+    clock = FakeClock(start=T0)
     fleet = _big_fleet(2)
     outer = fleet.append(state=finished(0))
     live = fleet.append(parent=outer, state=running(T0))
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     assert _settled(cache, fleet.snapshot())[live] == OUTLIVED
     fleet.set_state(fleet.index(outer), running(T0))
     snap = fleet.snapshot()
@@ -136,15 +135,15 @@ def test_an_outer_that_starts_again_takes_it_back(monkeypatch):
     _same_as_a_fresh_build(cache, snap, [outer])
 
 
-def test_a_live_outer_that_goes_stuck_outlives_its_running_child(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_live_outer_that_goes_stuck_outlives_its_running_child():
+    clock = FakeClock(start=T0)
     fleet = _big_fleet(3)
     later = T0 + datetime.timedelta(seconds=600)
     outer = fleet.append(state=running(T0))
     live = fleet.append(parent=outer, state=running(later))  # still beating then
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     assert _settled(cache, snap)[live] is None
-    _at(monkeypatch, later)
+    _at(clock, later)
     rows = {r["verstr"]: r for r in cache.rows(snap, archived=True)}
     assert rows[outer]["status"] == STUCK
     assert (rows[live]["status"], rows[live]["settled"]) == (RUNNING, OUTLIVED)
@@ -152,12 +151,12 @@ def test_a_live_outer_that_goes_stuck_outlives_its_running_child(monkeypatch):
     _same_as_a_fresh_build(cache, snap, [outer])
 
 
-def test_an_outlived_child_that_goes_stuck_is_lost(monkeypatch):
-    _at(monkeypatch, T0)
+def test_an_outlived_child_that_goes_stuck_is_lost():
+    clock = FakeClock(start=T0)
     fleet = Fleet(4)
     outer = fleet.append(state=finished(0))
     live = fleet.append(parent=outer, state=running(T0))
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     assert _settled(cache, snap)[live] == OUTLIVED
-    _at(monkeypatch, T0 + datetime.timedelta(seconds=600))
+    _at(clock, T0 + datetime.timedelta(seconds=600))
     assert _settled(cache, snap)[live] == "lost"

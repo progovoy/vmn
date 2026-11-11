@@ -3,6 +3,7 @@ side, and still searches them in the store's app order."""
 import threading
 
 import pytest
+from fakes.clock import FakeClock
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.core import similar_search
 from vmn_exp.snapshot import open_storage
@@ -23,16 +24,17 @@ def test_other_apps_are_refreshed_side_by_side_in_app_order(storage, monkeypatch
     both_refreshing = threading.Barrier(2, timeout=5)
     real = similar_search.app_snapshot
 
-    def refresh(store, app, schema=None):
+    def refresh(store, app, schema=None, clock=None):
         if app != "trainer":
             both_refreshing.wait()  # breaks unless the other app refreshes meanwhile
-        return real(store, app, schema)
+        return real(store, app, schema, clock=clock)
 
     monkeypatch.setattr(similar_search, "app_snapshot", refresh)
 
-    scopes = similar_search._other_scopes(storage, "trainer", None, True)
+    scopes = similar_search._other_scopes(storage, "trainer", None, True, FakeClock())
 
     assert [s.label for s in scopes] == [a for a in storage.list_apps() if a != "trainer"]
     assert [s.rows.snapshot.app_name for s in scopes] == [s.label for s in scopes]
-    found = similar_search.find(storage, "trainer", target, {}, all_apps=True)
+    found = similar_search.find(storage, "trainer", target, {}, all_apps=True,
+                                clock=FakeClock())
     assert {item["app"] for item in found} == {"alpha", "beta"}

@@ -1,5 +1,6 @@
 """Run trees stay iterative however deep, and a run page's tree lookup costs a
 dict lookup when its edges provider is cheap."""
+from datetime import datetime, timezone
 from collections.abc import Mapping
 
 from vmn_exp.core import status as st
@@ -23,12 +24,12 @@ def test_subtree_status_of_a_5000_deep_chain():
     parent_of = _chain(DEPTH)
     failed = f"r{DEPTH - 1}"
     state, tree = subtree_status(
-        "r0", parent_of, lambda v: _state(st.FAILED if v == failed else st.SUCCEEDED)
+        "r0", parent_of, lambda v: _state(st.FAILED if v == failed else st.SUCCEEDED), now=datetime.now(timezone.utc)
     )
     assert tree["tree_status"] == st.FAILED
     assert tree["children"] == ["r1"] and tree["kind"] == "outer"
 
-    _, leaf = subtree_status(failed, parent_of, lambda v: _state(st.SUCCEEDED))
+    _, leaf = subtree_status(failed, parent_of, lambda v: _state(st.SUCCEEDED), now=datetime.now(timezone.utc))
     assert leaf["depth"] == DEPTH - 1
     assert leaf["kind"] == "inner" and leaf["children"] == []
 

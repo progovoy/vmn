@@ -9,6 +9,7 @@
 * an older entry's ``changed``/``commits`` survive when the code is gone.
 """
 import pytest
+from fakes.clock import FakeClock
 from backfill_helpers import (
     CODE,
     CREATOR,
@@ -45,7 +46,8 @@ def _cli_backfill(app_layout, capfd):
 
 def _backfill(store, app):
     return {verstr: (status, detail)
-            for verstr, status, detail in similar_backfill.backfill_app(store, app)}
+            for verstr, status, detail
+            in similar_backfill.backfill_app(store, app, clock=FakeClock())}
 
 
 def _flaky_code_reads(store, failing, monkeypatch, fail=lambda name: None):

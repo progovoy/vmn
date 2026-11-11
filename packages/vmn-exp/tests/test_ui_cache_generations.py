@@ -5,20 +5,14 @@ generations are served, so each app keeps its newest GENERATIONS_KEPT and the
 older ones' entries are dropped as it advances; other apps keep theirs."""
 import weakref
 
-import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import GENERATIONS_KEPT, LeaderboardCache
 from vmn_exp.ui.memo import LRU
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 TOKENS_BELOW = 10**6  # base tokens count up from 1; id()-keyed entries are far larger
-
-
-@pytest.fixture(autouse=True)
-def _clock(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
 
 
 def _lrus(obj, depth=0, seen=None):
@@ -59,7 +53,7 @@ def _fleet(seed):
 
 
 def test_an_app_keeps_only_its_newest_generations():
-    fleet, cache = _fleet(1), LeaderboardCache()
+    fleet, cache = _fleet(1), LeaderboardCache(now=CLOCK.now)
     tokens = []
     for _ in range(12):
         fleet.mutate(T0, 10, reparent=False)
@@ -71,7 +65,7 @@ def test_an_app_keeps_only_its_newest_generations():
 def test_another_app_keeps_its_generation_while_one_advances():
     busy, idle = _fleet(1), _fleet(2)
     idle.app = "other"
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=CLOCK.now)
     idle_snap = idle.snapshot()
     idle_token = _serve(cache, idle_snap)
     for _ in range(8):
@@ -82,7 +76,7 @@ def test_another_app_keeps_its_generation_while_one_advances():
 
 
 def test_an_old_snapshot_is_not_kept_alive_by_the_caches():
-    fleet, cache = _fleet(1), LeaderboardCache()
+    fleet, cache = _fleet(1), LeaderboardCache(now=CLOCK.now)
     snap = fleet.snapshot()
     _serve(cache, snap)
     first = weakref.ref(snap)

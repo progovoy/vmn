@@ -5,6 +5,7 @@ that moves run states only writes none; another process sees them."""
 import sqlite3
 
 import pytest
+from fakes.clock import FakeClock
 from similar_seed import WRITER, features, finished, seed, verstr
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import open_storage
@@ -34,7 +35,7 @@ def _docs(path):
 
 
 def _refresh(storage, path):
-    ExperimentIndex(storage, APP, path, full_sweep_sec=0).refresh()
+    ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock()).refresh()
 
 
 def test_a_build_files_one_document_per_run(storage, path):
@@ -50,7 +51,7 @@ def test_a_build_files_one_document_per_run(storage, path):
 def test_a_refresh_refiles_what_changed_and_forgets_what_went(storage, path):
     a = seed(storage, APP, verstr(1), intent={"text": "focal loss"})
     b = seed(storage, APP, verstr(2), intent={"text": "label smoothing"})
-    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0)
+    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock())
     index.refresh()
     storage.append_log_entry(APP, a, WRITER, {"type": "intent", "text": "mixup instead",
                                               "timestamp": "2026-01-02T00:00:00Z",
@@ -66,7 +67,7 @@ def test_a_refresh_refiles_what_changed_and_forgets_what_went(storage, path):
 def test_a_rewind_keeps_one_current_document(storage, path):
     a = seed(storage, APP, verstr(1), intent={"text": "focal loss"},
              changes=features(["loss.py"]))
-    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0)
+    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock())
     index.refresh()
     storage.append_log_entry(APP, a, WRITER, {"type": "metrics", "step": 5, "values": {"x": 1}})
     storage.append_log_entry(APP, a, WRITER, {"type": "rewind", "step": 2})
@@ -77,18 +78,18 @@ def test_a_rewind_keeps_one_current_document(storage, path):
 
 def test_a_refresh_moving_run_states_only_refiles_nothing(storage, path):
     a = seed(storage, APP, verstr(1), intent={"text": "focal loss"})
-    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0)
+    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock())
     index.refresh()
     before = _docs(path)
     finished(storage, APP, a)
     index.refresh()
-    assert index.snapshot().status_of(a) == "succeeded"
+    assert index.snapshot().status_of(a, FakeClock().now()) == "succeeded"
     assert _docs(path) == before
 
 
 def test_a_run_state_naming_a_command_refiles_the_run(storage, path):
     a = seed(storage, APP, verstr(1))
-    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0)
+    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock())
     index.refresh()
     storage.save_file(APP, a, "run_state.yml",
                       "state: running\npid: 1\nhost: h\ncommand: [python, train.py]\n")

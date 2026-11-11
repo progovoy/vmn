@@ -89,9 +89,9 @@ def test_remote_run_state_is_never_cached_locally(tmp_path):
         datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=10)
     ).isoformat()
     b.save_file("app", "v", "run_state.yml", f"state: running\nheartbeat: '{old}'\n")
-    assert derive_status(load_run_state(a, "app", "v")) == "stuck"
+    assert derive_status(load_run_state(a, "app", "v"), now=datetime.datetime.now(datetime.timezone.utc)) == "stuck"
     b.save_file("app", "v", "run_state.yml", "state: finished\nexit_code: 0\n")
-    assert derive_status(load_run_state(a, "app", "v")) == "succeeded"
+    assert derive_status(load_run_state(a, "app", "v"), now=datetime.datetime.now(datetime.timezone.utc)) == "succeeded"
 
 
 def test_cached_merged_log_unions_local_and_remote_writers(tmp_path):

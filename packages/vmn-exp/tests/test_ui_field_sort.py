@@ -7,8 +7,8 @@ import random
 
 import pytest
 from duration_fleet import DurationFleet, ended_after
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, running
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 
 SORTS = ["duration_sec", "queue_sec", "duration_ratio", "status", "tags.kind", "params.opt",
@@ -18,10 +18,8 @@ QUERIES = [None, "queue_sec > 600", "duration_ratio > 1.2", 'tags.kind = "refit"
 
 
 @pytest.fixture
-def clock(monkeypatch):
-    at = {"now": T0}
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or at["now"])
-    return at
+def clock():
+    return FakeClock(start=T0)
 
 
 def _verstrs(page):
@@ -33,7 +31,7 @@ def _cases():
 
 
 def _check_same(cache, snap):
-    fresh = lb.LeaderboardCache()
+    fresh = lb.LeaderboardCache(now=cache.now)
     for params in _cases():
         mine = cache.page(snap, {}, limit=10**6, **params)
         theirs = fresh.page(snap, {}, limit=10**6, **params)
@@ -45,7 +43,7 @@ def _check_same(cache, snap):
 def test_field_orders_moved_across_generations_equal_a_fresh_cache(clock, seed):
     fleet = DurationFleet(seed)
     fleet.seed_tree(T0)
-    cache = lb.LeaderboardCache(size=512)
+    cache = lb.LeaderboardCache(size=512, now=clock.now)
     rng = random.Random(seed)
     for _ in range(8):
         snap = fleet.snapshot()
@@ -65,7 +63,7 @@ def test_a_field_order_keeps_missing_values_last_both_ways(clock, sort):
     fleet = DurationFleet(1)
     fleet.seed_tree(T0)
     snap = fleet.snapshot()
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=clock.now)
     for order, reverse in (("asc", False), ("desc", True)):
         rows = cache.page(snap, {}, sort=sort, order=order, limit=10**6)["rows"]
         values = [_value(row, sort) for row in rows]
@@ -80,21 +78,21 @@ def test_live_rows_move_in_a_duration_order_as_time_passes(clock):
     slow = fleet.add(root, "trial", ended_after(T0, 300))
     live = fleet.add(root, "trial", running(T0))
     snap = fleet.snapshot()
-    cache = lb.LeaderboardCache(bucket_sec=2)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
 
     def order():
         return _verstrs(cache.page(snap, {}, sort="duration_sec", order="desc", limit=10))
 
-    clock["now"] = T0 + datetime.timedelta(seconds=30)
+    clock.advance(30)
     assert order().index(slow) < order().index(live)
-    clock["now"] = T0 + datetime.timedelta(seconds=40)  # the live run beats again
-    fleet.set_state(fleet.index(live), running(clock["now"]))
+    clock.advance(10)  # the live run beats again
+    fleet.set_state(fleet.index(live), running(clock.now()))
     snap = fleet.snapshot()
-    clock["now"] = T0 + datetime.timedelta(seconds=50)
+    clock.advance(10)
     assert order().index(slow) < order().index(live)
     fleet.set_state(fleet.index(live), running(T0 + datetime.timedelta(seconds=400)))
     snap = fleet.snapshot()
-    clock["now"] = T0 + datetime.timedelta(seconds=401)
+    clock.advance(351)
     assert order()[:2] == [live, slow]
 
 
@@ -103,7 +101,7 @@ def test_keyset_pages_over_a_field_order_cover_it_once(clock, sort):
     fleet = DurationFleet(4)
     fleet.seed_tree(T0)
     snap = fleet.snapshot()
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=clock.now)
     whole = _verstrs(cache.page(snap, {}, sort=sort, order="desc", limit=10**6))
     seen, cursor = [], None
     while True:

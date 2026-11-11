@@ -47,7 +47,7 @@ def test_a_deadline_in_the_past_raises_before_any_query(monkeypatch):
     snapshot = _snapshot()
     ranked = _counting(monkeypatch, similar, "rank")
     with pytest.raises(SimilarDeadlineExceeded):
-        similar_runs(snapshot, _target(), deadline=-1.0)
+        similar_runs(snapshot, _target(), deadline=-1.0, monotonic=_Clock())
     assert ranked == []
 
 
@@ -55,25 +55,21 @@ def test_a_deadline_passing_mid_query_interrupts_it(monkeypatch):
     snapshot = _snapshot()
     similar_runs(snapshot, _target())  # filed: what follows is the query alone
     clock = _Clock(expire_after=3)
-    monkeypatch.setattr(similar_match, "_clock", clock)
     monkeypatch.setattr(similar_match, "PROGRESS_OPS", 10)
     with pytest.raises(SimilarDeadlineExceeded):
-        similar_runs(snapshot, _target(), deadline=1.0)
+        similar_runs(snapshot, _target(), deadline=1.0, monotonic=clock)
     assert clock.reads > 3
-    monkeypatch.setattr(similar_match, "_clock", _Clock())
-    assert len(similar_runs(snapshot, _target(), top=RUNS)) == RUNS
+    assert len(similar_runs(snapshot, _target(), top=RUNS, monotonic=_Clock())) == RUNS
 
 
-def test_a_search_within_its_deadline_answers_as_without_one(monkeypatch):
-    monkeypatch.setattr(similar_match, "_clock", _Clock())
+def test_a_search_within_its_deadline_answers_as_without_one():
     snapshot = _snapshot()
-    assert (verstrs(similar_runs(snapshot, _target(), deadline=1.0))
+    assert (verstrs(similar_runs(snapshot, _target(), deadline=1.0, monotonic=_Clock()))
             == verstrs(similar_runs(snapshot, _target())))
 
 
-def test_the_multi_app_search_takes_the_deadline_too(monkeypatch):
-    monkeypatch.setattr(similar_match, "_clock", _Clock())
+def test_the_multi_app_search_takes_the_deadline_too():
     scopes = [("a", _snapshot("a"), None), ("b", _snapshot("b"), None)]
     with pytest.raises(SimilarDeadlineExceeded):
-        similar_runs_multi(scopes, _target(), deadline=-1.0)
-    assert len(similar_runs_multi(scopes, _target(), deadline=1.0)) == 10
+        similar_runs_multi(scopes, _target(), deadline=-1.0, monotonic=_Clock())
+    assert len(similar_runs_multi(scopes, _target(), deadline=1.0, monotonic=_Clock())) == 10

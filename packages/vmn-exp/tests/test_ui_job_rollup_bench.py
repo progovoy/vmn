@@ -6,10 +6,10 @@ import statistics
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 
 JOBS, INNERS, LIVE = 20, 5000, 4000
 SCHEMA = {"loss": {"goal": "min", "primary": True}, "acc": {"goal": "max"}}
@@ -34,9 +34,8 @@ def fleet():
 
 
 @pytest.mark.serial
-def test_job_rollups_are_o1_warm_and_cheap_per_generation(monkeypatch, fleet):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+def test_job_rollups_are_o1_warm_and_cheap_per_generation(fleet):
+    cache, snap = LeaderboardCache(now=FakeClock(T0).now), fleet.snapshot()
     jobs = [spec["verstr"] for spec in fleet.specs[:JOBS]]
     flat = lambda: cache.page(snap, SCHEMA, sort="loss", limit=50)  # noqa: E731
     rollups = lambda: cache.job_rollups(snap, SCHEMA)  # noqa: E731

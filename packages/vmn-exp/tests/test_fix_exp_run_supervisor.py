@@ -5,6 +5,7 @@ sync that raises must never kill the supervisor — that orphans the child and
 leaves the run claiming ``running`` forever.
 """
 
+from datetime import datetime, timezone
 import os
 import subprocess
 import threading
@@ -69,7 +70,7 @@ def test_failing_heartbeat_writes_do_not_kill_the_supervisor(
     assert code == 0
     state = _run_state(app_layout, verstr)
     assert state["exit_code"] == 0
-    assert st.derive_status(state) == st.SUCCEEDED
+    assert st.derive_status(state, now=datetime.now(timezone.utc)) == st.SUCCEEDED
 
 
 def test_failing_metric_ingestion_does_not_kill_the_supervisor(

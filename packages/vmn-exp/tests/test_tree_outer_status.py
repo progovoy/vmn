@@ -8,6 +8,7 @@ rollup: if all 16 children succeeded, tree_status should be "succeeded", not
 An outer that DID run (has a run state: SDK parent, vmn-exp run orchestrator)
 still participates in the rollup: a failed orchestrator fails its tree.
 """
+from datetime import datetime, timezone
 import pytest
 
 from vmn_exp.core.tree import annotate_tree, annotate_rows, rollup_status
@@ -137,7 +138,7 @@ class TestAnnotateRowsContainerOuter:
         for i in range(4):
             run_states[f"inner.{i}"] = _run_state(exit_code=0, state="finished")
         # outer has NO run_state entry
-        rows = annotate_rows([outer] + children, run_states)
+        rows = annotate_rows([outer] + children, run_states, now=datetime.now(timezone.utc))
         by_v = {r["verstr"]: r for r in rows}
         assert by_v["outer.1"]["status"] == CREATED
         assert by_v["outer.1"]["tree_status"] == SUCCEEDED
@@ -155,7 +156,7 @@ class TestAnnotateRowsContainerOuter:
         }
         for i in range(4):
             run_states[f"inner.{i}"] = _run_state(exit_code=0, state="finished")
-        rows = annotate_rows([outer] + children, run_states)
+        rows = annotate_rows([outer] + children, run_states, now=datetime.now(timezone.utc))
         by_v = {r["verstr"]: r for r in rows}
         assert by_v["outer.1"]["status"] == FAILED
         assert by_v["outer.1"]["tree_status"] == FAILED

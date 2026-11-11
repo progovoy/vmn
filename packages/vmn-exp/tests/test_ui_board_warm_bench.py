@@ -5,12 +5,12 @@ and what the default first pages cost a request afterwards. Timed, so serial."""
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from test_ui_board_warm import DEFAULT, TOPS
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 INNERS, SINGLES, LIVE = 27_000, 19_000, 50
 GENERATIONS = 10
 NEW_PER_GENERATION = 20
@@ -26,11 +26,6 @@ def _ms(seconds):
     return round(seconds * 1000, 1)
 
 
-@pytest.fixture
-def frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-
-
 def _requests(cache, snap):
     """The first browser requests: facets, then each top view's first page."""
     times = [_timed(lambda: cache.facets_payload(snap))]
@@ -39,17 +34,17 @@ def _requests(cache, snap):
 
 
 @pytest.mark.serial
-def test_the_board_warm_up_is_bounded_and_makes_the_first_pages_memo_hits(frozen):
+def test_the_board_warm_up_is_bounded_and_makes_the_first_pages_memo_hits():
     fleet = Fleet(7)
     jobs = fleet.seed_jobs(3, INNERS // 3, T0, live=LIVE)
     for _ in range(SINGLES):
         fleet.append(state=fleet.ended(T0))
     snap = fleet.snapshot()
 
-    cold_cache = LeaderboardCache()
+    cold_cache = LeaderboardCache(now=CLOCK.now)
     cold_requests = _requests(cold_cache, snap)
 
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=CLOCK.now)
     first = _timed(lambda: cache.warm(snap))
     warm_requests = _requests(cache, snap)
 

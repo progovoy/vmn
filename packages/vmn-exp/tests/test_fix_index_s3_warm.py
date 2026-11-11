@@ -7,13 +7,14 @@ bounded by ceil(N*8/1000)+2 for N runs.
 """
 import math
 import time
+from datetime import datetime, timezone
 
 import pytest
+from fakes.clock import FakeClock
 from s3_helpers import mocked_bucket, op_counts, record_calls, s3_storage
 
 moto = pytest.importorskip("moto")
 
-from vmn_exp.core import index_sweep  # noqa: E402
 from vmn_exp.core.index import ExperimentIndex, indexed_snapshot  # noqa: E402
 
 APP = "myapp"
@@ -102,9 +103,9 @@ def test_changed_record_reads_only_its_files(s3_env, monkeypatch):
     # S3 signs no record: a finished one's append shows up at the next full
     # sweep (plan 25 F2), due once 300 s passed since the last one.
     later = time.time() + 301
-    monkeypatch.setattr(index_sweep, "_wall", lambda: later)
     calls = record_calls(storage2._s3)
-    idx2 = ExperimentIndex(storage2, APP, cache_path=cache)
+    idx2 = ExperimentIndex(storage2, APP, cache_path=cache,
+                           clock=FakeClock(start=datetime.fromtimestamp(later, timezone.utc)))
     idx2.refresh()
 
     counts = op_counts(calls)

@@ -4,20 +4,14 @@ keeps waiting only when there is nothing to answer from."""
 import threading
 import time
 
-import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from test_fix_ui_refresher import _wait_for
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.memo import LRU
 
-from vmn_exp.core import status as status_mod
-
+CLOCK = FakeClock(start=T0)
 DEFAULT = dict(sort="idx", offset=0, limit=200)
-
-
-@pytest.fixture
-def frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
 
 
 def _fleet(seed=3):
@@ -43,12 +37,12 @@ def _building(cache):
     return _wait_for(lambda: cache._bases._in_flight)
 
 
-def test_a_slow_new_generation_answers_from_the_previous_one(frozen, monkeypatch):
+def test_a_slow_new_generation_answers_from_the_previous_one(monkeypatch):
     fleet = _fleet()
     old = fleet.snapshot()
     fleet.append(state=fleet.ended(T0))
     new = fleet.snapshot()
-    cache = LeaderboardCache(base_wait_sec=0.1)
+    cache = LeaderboardCache(base_wait_sec=0.1, now=CLOCK.now)
     previous = cache.page(old, {}, **DEFAULT)
     release = _slow_build(monkeypatch, new)
     warming = threading.Thread(target=cache.warm, args=(new,), daemon=True)
@@ -86,17 +80,17 @@ def _waits_for_the_build(cache, snap, release):
     return waiting, answers[0]
 
 
-def test_with_no_previous_generation_the_request_waits(frozen, monkeypatch):
+def test_with_no_previous_generation_the_request_waits(monkeypatch):
     snap = _fleet().snapshot()
-    cache = LeaderboardCache(base_wait_sec=0.05)
+    cache = LeaderboardCache(base_wait_sec=0.05, now=CLOCK.now)
     waiting, answer = _waits_for_the_build(cache, snap, _slow_build(monkeypatch, snap))
     assert waiting
     assert answer["total"] == len(snap.rows)
 
 
-def test_another_index_of_the_same_app_is_never_the_previous_answer(frozen, monkeypatch):
+def test_another_index_of_the_same_app_is_never_the_previous_answer(monkeypatch):
     mine, theirs = _fleet().snapshot(), _fleet(7).snapshot()
-    cache = LeaderboardCache(base_wait_sec=0.05)
+    cache = LeaderboardCache(base_wait_sec=0.05, now=CLOCK.now)
     cache.page(theirs, {}, **DEFAULT)
     waiting, answer = _waits_for_the_build(cache, mine, _slow_build(monkeypatch, mine))
     assert waiting

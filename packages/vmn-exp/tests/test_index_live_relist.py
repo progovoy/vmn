@@ -7,8 +7,11 @@ import os
 
 import pytest
 
-from test_index_journal_hint import _journaled, _make, _reset, clock, spy, st  # noqa: F401
+from test_index_journal_hint import (  # noqa: F401
+    RECONCILE_SEC, _journaled, _make, _reset, clock, spy, st,
+)
 from vmn_exp.core import index_sweep, status
+from vmn_exp.core.index import ExperimentIndex
 
 APP = "app"
 TICK = 1
@@ -73,12 +76,25 @@ class Wall:
     def __call__(self, now=None):
         return now or self.base + datetime.timedelta(seconds=self.clock.now - 1000.0)
 
+    def now(self):
+        return self()
+
+    def monotonic(self):
+        return self.clock.now
+
+    def time(self):
+        return self().timestamp()
+
 
 @pytest.fixture
-def wall(clock, monkeypatch):
-    w = Wall(clock)
-    monkeypatch.setattr(status, "_now", w)
-    return w
+def wall(clock):
+    return Wall(clock)
+
+
+def _journaled_on(st, wall):
+    index = ExperimentIndex(st, APP, full_sweep_sec=RECONCILE_SEC, clock=wall)
+    index.journaled = True
+    return index
 
 
 def _beat(st, verstr, interval, wall):
@@ -95,16 +111,16 @@ def test_a_beating_run_never_reads_stuck_and_a_silent_one_soon_does(st, spy, clo
                                                                     interval):
     live = _make(st, 1, None)
     _beat(st, live, interval, wall)
-    index = _journaled(st).refresh()
+    index = _journaled_on(st, wall).refresh()
     window = status.stale_after_sec({"heartbeat_interval_sec": interval})
     for offset in range(1, int(3 * window) + 1, TICK):
         clock.now += TICK
         if offset % interval == 0:
             _beat(st, live, interval, wall)
         index.refresh()
-        assert index.snapshot().status_of(live) == status.RUNNING, offset
+        assert index.snapshot().status_of(live, wall()) == status.RUNNING, offset
 
     for offset in range(1, int(window) + TICK + 1, TICK):
         clock.now += TICK
         index.refresh()
-    assert index.snapshot().status_of(live) == status.STUCK
+    assert index.snapshot().status_of(live, wall()) == status.STUCK

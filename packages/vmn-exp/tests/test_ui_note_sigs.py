@@ -6,6 +6,7 @@ latest note signature; a job's timeline counts signatures per minute
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, finished, iso
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
@@ -17,7 +18,6 @@ from vmn_exp.ui.leaderboard_answers import TOP_NOTE_SIGS
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.query_sql import compile_sql
 
-from vmn_exp.core import status as status_mod
 
 SIGTERM = "Received SIGTERM at step <n>"
 OOM = "OOMKilled, retry <n>"
@@ -103,13 +103,13 @@ def _snap(note_sigs):
 
 
 @pytest.fixture
-def now(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def now():
+    return FakeClock(T0)
 
 
 def test_board_rows_carry_the_note_fields_and_cluster_failures_by_them(now):
     snap = _snap({"f1": _sigs(sigterm=(1, 3)), "f2": _sigs(sigterm=(2, 4)), "ok": None})
-    rows = {r["verstr"]: r for r in LeaderboardCache().page(snap, {}, limit=10)["rows"]}
+    rows = {r["verstr"]: r for r in LeaderboardCache(now=now.now).page(snap, {}, limit=10)["rows"]}
     assert rows["f1"]["note_sig"] == SIGTERM
     assert rows["f1"]["failure_sig"] == rows["f2"]["failure_sig"]
     assert "note_sig" not in rows["ok"]
@@ -119,17 +119,17 @@ def test_scoped_facets_list_the_top_signatures_by_runs(now):
     many = {f"r{i}": _sigs(**{f"sig {chr(97 + i % 26)}{i // 26}": (1, 5)}) for i in range(30)}
     snap = _snap({"f1": _sigs(sigterm=(3, 3), oom=(1, 9)), "f2": _sigs(sigterm=(1, 4)),
                   "ok": None, **many})
-    got = LeaderboardCache().facets(snap, scope="job")["note_sigs"]
+    got = LeaderboardCache(now=now.now).facets(snap, scope="job")["note_sigs"]
     assert len(got) == TOP_NOTE_SIGS == 20
     assert got[0] == {"sig": SIGTERM, "runs": 2, "count": 4}
     assert got[1] == {"sig": OOM, "runs": 1, "count": 1}
-    filtered = LeaderboardCache().facets(snap, scope="job", status="failed")["note_sigs"]
+    filtered = LeaderboardCache(now=now.now).facets(snap, scope="job", status="failed")["note_sigs"]
     assert [s["sig"] for s in filtered] == [SIGTERM, OOM]
 
 
 def test_scoped_facets_without_notes_have_no_signatures(now):
     snap = _snap({"a": None, "b": None})
-    assert "note_sigs" not in LeaderboardCache().facets(snap, scope="job")
+    assert "note_sigs" not in LeaderboardCache(now=now.now).facets(snap, scope="job")
 
 
 def test_the_sql_backend_refuses_notes():

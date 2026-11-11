@@ -2,8 +2,11 @@
 names once and re-reads only what moved; a full stat sweep runs at most every
 ``full_sweep_sec`` (300 s) across processes."""
 import os
+import time
+from datetime import datetime, timezone
 
 import pytest
+from fakes.clock import FakeClock
 
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core import index_sweep
@@ -24,12 +27,10 @@ class Clock:
 
 
 @pytest.fixture
-def clocks(monkeypatch):
-    """``(monotonic, wall)``: each process gets its own monotonic origin."""
-    mono, wall = Clock(1000.0), Clock(1_800_000_000.0)
-    monkeypatch.setattr(experiment_index, "_monotonic", mono)
-    monkeypatch.setattr(index_sweep, "_wall", wall)
-    return mono, wall
+def clocks():
+    """``(monotonic, wall)``: each process gets its own monotonic origin.
+    The wall starts at the real now, the time run statuses were judged at."""
+    return Clock(1000.0), Clock(time.time())
 
 
 @pytest.fixture
@@ -73,7 +74,9 @@ class Process:
 
         monkeypatch.setattr(self.storage, "list_files", list_files)
         monkeypatch.setattr(experiment_index, "update_record", update_record)
-        self.index = ExperimentIndex(self.storage, APP, cache_path=cache)
+        self.clock = FakeClock(start=datetime.fromtimestamp(wall.now, timezone.utc),
+                               monotonic=mono.now)
+        self.index = ExperimentIndex(self.storage, APP, cache_path=cache, clock=self.clock)
 
     def refresh(self):
         self.index.refresh()
@@ -200,7 +203,8 @@ def test_baselines_are_per_app(root, process):
     _make(st, 1)
     process().refresh()
     other = process()
-    other.index = ExperimentIndex(other.storage, "other", cache_path=other.index._cache_path)
+    other.index = ExperimentIndex(other.storage, "other", cache_path=other.index._cache_path,
+                                  clock=other.clock)
     st.save("other", "0.0.2", {"verstr": "0.0.2", "timestamp": "t"}, {})
     other.refresh()
     assert other.listed == [None]

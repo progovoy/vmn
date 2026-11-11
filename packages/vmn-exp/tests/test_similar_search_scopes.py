@@ -1,6 +1,7 @@
 """:func:`vmn_exp.core.similar_search.search` over several ready scopes (what
 ``vmn-exp ui`` searches, each labelled by its workspace and app), and items
 without their features (the UI's payload has none)."""
+from fakes.clock import FakeClock
 from similar_fixtures import FakeSnapshot, changed, run
 from vmn_exp.core.similar_corpus import snapshot_scope
 from vmn_exp.core.similar_items import item_payload
@@ -20,7 +21,7 @@ def _scope(label, *verstrs):
 
 def test_a_search_ranks_over_every_scope_it_is_given():
     scopes = [_scope(("ws1", "app"), "a"), _scope(("ws2", "app"), "b")]
-    found = search(None, None, scopes, TARGET, with_features=False)
+    found = search(None, None, scopes, TARGET, with_features=False, clock=FakeClock())
     # Labels come back as lists: an item is JSON-shaped (utf8_safe).
     assert sorted((item["app"], item["verstr"]) for item in found) == [
         (["ws1", "app"], "a"), (["ws2", "app"], "b")]
@@ -29,7 +30,7 @@ def test_a_search_ranks_over_every_scope_it_is_given():
 
 def test_an_item_without_features_leaves_them_out():
     scope = _scope("app", "a")
-    [found] = search(None, None, [scope], TARGET)
+    [found] = search(None, None, [scope], TARGET, clock=FakeClock())
     assert "features" in found
     item = {"verstr": "a", "row": scope.rows.snapshot.rows[0], "app": "app", "score": 1.0,
             "reasons": [], "signals": {}, "group_size": 1}

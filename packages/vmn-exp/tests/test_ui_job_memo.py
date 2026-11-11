@@ -5,6 +5,7 @@ for every completion."""
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished
 from vmn_exp.ui.job_rollup_payload import failure_counts
 from vmn_exp.ui.job_tally import RollupSpec, Tally
@@ -30,35 +31,34 @@ def _idle_job(inners=40):
     return fleet, job
 
 
-def test_patched_rows_are_built_once_per_bucket(monkeypatch):
-    _at(monkeypatch, 0)
+def test_patched_rows_are_built_once_per_bucket():
     fleet = Fleet(50)
     fleet.seed_jobs(2, 30, T0, live=5)
-    base, bucket = LeaderboardCache()._base(fleet.snapshot())
+    base, bucket = LeaderboardCache(now=FakeClock(T0).now)._base(fleet.snapshot())
     patched = base.patched(bucket)
     assert patched is base.patched(bucket)
     assert patched == dict(zip(base.patch.changed, base.changed_at(bucket)))
 
 
-def test_a_jobs_subtree_rows_come_from_the_memoized_scope(monkeypatch):
-    _at(monkeypatch, 0)
+def test_a_jobs_subtree_rows_come_from_the_memoized_scope():
     fleet, job = _idle_job()
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     views, snap = JobViews(cache), fleet.snapshot()
     views.failures(snap, SCHEMA, job)
     assert job in cache._base(snap)[0].scopes
 
 
-def test_rollups_and_summaries_are_one_answer_per_minute_while_nothing_is_live(monkeypatch):
+def test_rollups_and_summaries_are_one_answer_per_minute_while_nothing_is_live():
     fleet, job = _idle_job()
-    cache = LeaderboardCache()
+    clock = FakeClock(T0)
+    cache = LeaderboardCache(now=clock.now)
     views, snap = JobViews(cache), fleet.snapshot()
-    _at(monkeypatch, 5)
+    clock.advance(5)
     rollups, summary = cache.job_rollups(snap, SCHEMA), views.summary(snap, SCHEMA, job)
-    _at(monkeypatch, 25)
+    clock.advance(20)
     assert cache.job_rollups(snap, SCHEMA) is rollups
     assert views.summary(snap, SCHEMA, job) is summary
-    _at(monkeypatch, 65)
+    clock.advance(40)
     assert cache.job_rollups(snap, SCHEMA) is not rollups
 
 
@@ -70,7 +70,6 @@ def test_failure_counts_read_only_the_parts():
 
 
 def test_the_summary_top_reads_a_slice_of_the_scoped_order(monkeypatch):
-    _at(monkeypatch, 0)
     fleet, job = _idle_job(inners=200)
     seen = []
     real = job_views.top_rows
@@ -81,20 +80,19 @@ def test_the_summary_top_reads_a_slice_of_the_scoped_order(monkeypatch):
         return real(rows, *args, **kw)
 
     monkeypatch.setattr(job_views, "top_rows", counted)
-    summary = JobViews(LeaderboardCache()).summary(fleet.snapshot(), SCHEMA, job)
+    summary = JobViews(LeaderboardCache(now=FakeClock(T0).now)).summary(fleet.snapshot(), SCHEMA, job)
     assert len(summary["top"]) == 10
     assert seen and max(seen) < 50
 
 
 def test_failures_read_the_rows_failure_sig(monkeypatch):
-    _at(monkeypatch, 0)
     fleet, job = _idle_job(inners=60)
 
     def recomputed(row):
         raise AssertionError("signature recomputed")
 
     monkeypatch.setattr(job_failures, "signature", recomputed)
-    body = JobViews(LeaderboardCache()).failures(fleet.snapshot(), SCHEMA, job)
+    body = JobViews(LeaderboardCache(now=FakeClock(T0).now)).failures(fleet.snapshot(), SCHEMA, job)
     assert body["total_failed"] == sum(c["count"] for c in body["clusters"]) > 0
 
 
@@ -106,13 +104,12 @@ def _scored_job(inners):
 
 
 def test_job_importance_is_not_rerun_for_every_completion(monkeypatch):
-    _at(monkeypatch, 0)
     fleet, job = _scored_job(100)
     calls = []
     real = leaderboard_answers.param_importance
     monkeypatch.setattr(leaderboard_answers, "param_importance",
                         lambda *a, **kw: calls.append(1) or real(*a, **kw))
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=FakeClock(T0).now)
     first = cache.importance(fleet.snapshot(), SCHEMA, "loss", scope=job)
     kid = fleet.append(parent=job, state=fleet.ended(T0, code=0))
     fleet.edit(fleet.index(kid), values={"loss": 0.33})

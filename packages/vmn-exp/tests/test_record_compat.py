@@ -3,6 +3,7 @@ a reader reads the records any older SDK wrote in the same store layout and
 record format. Each format this reader accepts keeps one golden record, frozen
 as the SDK that last wrote it laid it out, under ``golden/record_format_<N>/``
 (plan 43 F11)."""
+from datetime import datetime, timezone
 import os
 
 from empty_storage import EmptyStorage
@@ -80,7 +81,7 @@ def test_a_format_2_record_written_by_0_1_37_folds_to_the_same_metrics_params_an
     }
     assert row["tags"] == {"team": "vision", "stage": "eval"}
     assert row["name"] == "golden-run"
-    assert status_fields(state)["status"] == SUCCEEDED
+    assert status_fields(state, now=datetime.now(timezone.utc))["status"] == SUCCEEDED
 
 
 def test_a_log_line_of_an_unknown_type_adds_nothing_to_the_fold():

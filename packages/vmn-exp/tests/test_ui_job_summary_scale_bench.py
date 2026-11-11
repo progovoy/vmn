@@ -6,13 +6,13 @@ by each chunk's delta instead of being rebuilt. Timed, so serial."""
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui import job_rollup
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_delta import MAX_DELTA_SHARE
 
-from vmn_exp.core import status as status_mod
 
 INNERS, SINGLES, LIVE = 27_000, 19_000, 50
 CHUNK = 500  # records a cold load publishes at a time (core/index.py _REMOTE_CHUNK)
@@ -26,8 +26,8 @@ def _timed(fn):
 
 
 @pytest.fixture
-def frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def frozen():
+    return FakeClock(T0)
 
 
 @pytest.mark.serial
@@ -37,7 +37,7 @@ def test_a_27k_run_outer_summary_and_first_page_answer_within_a_second(frozen):
     for _ in range(SINGLES):
         fleet.append(state=fleet.ended(T0))
     snap = fleet.snapshot()
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=frozen.now)
     views = JobViews(cache)
     base = _timed(lambda: cache.warm(snap))  # the refresher, off the request path
     summary = _timed(lambda: views.summary(snap, {}, job))
@@ -59,7 +59,7 @@ def test_loading_chunks_move_the_rollups_on_instead_of_rebuilding(frozen, monkey
         lambda cls, base, spec: builds.append(len(base.rows)) or build(cls, base, spec)))
     fleet = Fleet(6)
     job = fleet.append(state=None)
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=frozen.now)
     views = JobViews(cache)
     times = []
     for _ in range(CHUNKS):

@@ -6,6 +6,7 @@ import datetime
 
 from vmn_exp.core import status as st
 from vmn_exp.core.alerts import transitions as tr
+from fakes.clock import FakeClock
 
 NOW = datetime.datetime(2026, 11, 7, 12, 0, 0, tzinfo=datetime.timezone.utc)
 
@@ -63,7 +64,8 @@ def _watch(monkeypatch, run_state, observed_at, within_sec, now=NOW, storage=Non
     snap = _Snap("0.0.1-dev.1", run_state, observed_at)
     monkeypatch.setattr(tr.experiment_index, "indexed_snapshot", lambda *a, **k: snap)
     alerter = _Alerter()
-    fired = tr.watch_app(storage or _Storage(), "app", alerter, within_sec, now=now)
+    fired = tr.watch_app(storage or _Storage(), "app", alerter, within_sec, now=now,
+                         clock=FakeClock(now))
     return fired, alerter
 
 

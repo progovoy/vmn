@@ -1,8 +1,10 @@
 """Follower mode: an ExperimentIndex fed only by a shared CacheStore's
 ``load_since`` deltas builds the same snapshots as the leader."""
 import random
+from datetime import datetime, timezone
 
 import pytest
+from fakes.clock import FakeClock
 
 from vmn_exp.core import index_store
 from vmn_exp.core.index import ExperimentIndex
@@ -123,19 +125,18 @@ def test_unchanged_store_keeps_the_snapshot(st, db):
     assert follower.refresh().snapshot() is snap
 
 
-def test_past_the_horizon_falls_back_to_a_full_load(st, db, monkeypatch):
+def test_past_the_horizon_falls_back_to_a_full_load(st, db):
     rng = random.Random(2)
-    leader = ExperimentIndex(st, APP, cache_path=db)
-    follower = ExperimentIndex.follower(SqliteStore(db), APP)
+    clock = FakeClock(start=datetime.now(timezone.utc))
+    leader = ExperimentIndex(st, APP, cache_path=db, clock=clock)
+    follower = ExperimentIndex.follower(SqliteStore(db, clock=clock), APP, clock=clock)
     for i in range(3):
         _make(st, i, rng)
     leader.refresh()
     follower.refresh()
-    clock = [1e9]
-    monkeypatch.setattr(index_store, "_now", lambda: clock[0])
     st.delete(APP, _verstr(0))
     leader.refresh()
-    clock[0] += index_store.TOMBSTONE_TTL_SEC + 1
+    clock.advance(index_store.TOMBSTONE_TTL_SEC + 1)
     _make(st, 5, rng)
     leader.refresh()  # trims the tombstone: the follower is past the horizon
     _equal(leader.snapshot(), follower.refresh().snapshot())

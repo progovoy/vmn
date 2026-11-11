@@ -2,6 +2,7 @@
 facts and run states in one query each from the persisted index, and a
 snapshot sync skips the runs whose row and command did not move."""
 import pytest
+from fakes.clock import FakeClock
 from similar_seed import features, finished, seed, verstr
 from vmn_exp.core import similar_filing, similar_fts
 from vmn_exp.core.index import ExperimentIndex
@@ -26,7 +27,7 @@ def indexed(tmp_path):
              changes=features([f"f{n}.py"]), goal=("loss", "min"), metrics={"loss": n})
         finished(storage, APP, verstr(n))
     path = str(tmp_path / "index.sqlite")
-    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0)
+    index = ExperimentIndex(storage, APP, path, full_sweep_sec=0, clock=FakeClock())
     yield storage, index, path
     index.close()
 
@@ -35,12 +36,12 @@ def test_the_shown_runs_facts_are_read_in_one_query_each(indexed):
     storage, index, path = indexed
     snapshot = index.refresh().snapshot()
     expected = search(storage, APP, snapshot_scope(APP, snapshot), text_target("focal"),
-                      top=RUNS)
+                      top=RUNS, clock=FakeClock())
     scope = file_scope(APP, path)
     statements = []
     scope.conn.set_trace_callback(statements.append)
     try:
-        got = search(storage, APP, scope, text_target("focal"), top=RUNS)
+        got = search(storage, APP, scope, text_target("focal"), top=RUNS, clock=FakeClock())
     finally:
         scope.conn.set_trace_callback(None)
     assert len(got) == RUNS and got == expected

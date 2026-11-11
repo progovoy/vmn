@@ -7,6 +7,7 @@ git checkout.  No app_layout fixture means no Docker dependency.
 Test 5 requires ray (pytest.importorskip) and is expected to skip in environments
 where ray is not installed.
 """
+from datetime import datetime, timezone
 import pytest
 import yaml
 from vmn_exp.core.real_io import RealClock
@@ -228,7 +229,7 @@ def test_trial_error_marks_run_failed(container):
     assert state.get("exit_code") == 1, (
         f"error trial must have exit_code=1, got {state.get('exit_code')!r}"
     )
-    status = derive_status(state)
+    status = derive_status(state, now=datetime.now(timezone.utc))
     assert status == FAILED, f"error trial status should be {FAILED!r}, got {status!r}"
 
 

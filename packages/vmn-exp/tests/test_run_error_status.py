@@ -1,4 +1,5 @@
 """A failed run's recorded ``error`` reaches its status fields, rows and queries."""
+from datetime import datetime, timezone
 from vmn_exp.core import tree
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.status import status_fields
@@ -18,30 +19,30 @@ _FAILED = {
 
 
 def test_status_fields_carry_the_error_summary():
-    fields = status_fields(_FAILED)
+    fields = status_fields(_FAILED, now=datetime.now(timezone.utc))
     assert fields["error_summary"] == "torch.cuda.OutOfMemoryError: CUDA out of memory"
 
 
 def test_status_fields_carry_the_signal():
-    fields = status_fields(dict(_FAILED, exit_code=137, signal="SIGKILL"))
+    fields = status_fields(dict(_FAILED, exit_code=137, signal="SIGKILL"), now=datetime.now(timezone.utc))
     assert fields["signal"] == "SIGKILL"
 
 
 def test_status_fields_without_an_error():
-    fields = status_fields({"state": "finished", "exit_code": 0})
+    fields = status_fields({"state": "finished", "exit_code": 0}, now=datetime.now(timezone.utc))
     assert fields["error_summary"] is None
     assert fields["signal"] is None
-    assert status_fields(None)["error_summary"] is None
+    assert status_fields(None, now=datetime.now(timezone.utc))["error_summary"] is None
 
 
 def test_status_fields_never_carry_the_traceback():
-    assert "error" not in status_fields(_FAILED)
+    assert "error" not in status_fields(_FAILED, now=datetime.now(timezone.utc))
 
 
 def test_annotated_rows_carry_the_error_summary():
     rows = tree.annotate_rows(
         [{"verstr": "0.0.1"}, {"verstr": "0.0.2"}],
-        {"0.0.1": _FAILED, "0.0.2": {"state": "finished", "exit_code": 0}},
+        {"0.0.1": _FAILED, "0.0.2": {"state": "finished", "exit_code": 0}}, now=datetime.now(timezone.utc),
     )
     by = {r["verstr"]: r for r in rows}
     assert by["0.0.1"]["error_summary"].startswith("torch.cuda.OutOfMemoryError")
@@ -56,7 +57,7 @@ def _rows():
             "0.0.2": {"state": "finished", "exit_code": 0},
             "0.0.3": dict(_FAILED, error=None, exit_code=143, signal="SIGTERM",
                           end_reason="stopped"),
-        },
+        }, now=datetime.now(timezone.utc),
     )
 
 
@@ -76,7 +77,7 @@ def test_signal_and_end_reason_are_queryable():
 
 def test_status_fields_of_the_slim_index_state_carry_the_summary():
     from vmn_exp.core.run_error import slim_run_state
-    fields = status_fields(slim_run_state(_FAILED))
+    fields = status_fields(slim_run_state(_FAILED), now=datetime.now(timezone.utc))
     assert fields["error_summary"] == "torch.cuda.OutOfMemoryError: CUDA out of memory"
 
 

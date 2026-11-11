@@ -1,5 +1,6 @@
 """One read path for the ui: shared sort/tree helpers in core, one leaderboard
 pipeline, cached detail reads, streamed S3 artifacts, validated query params."""
+from datetime import datetime, timezone
 import os
 
 import pytest
@@ -75,7 +76,7 @@ def test_subtree_status_reads_each_subtree_run_once_and_knows_its_depth():
         reads.append(verstr)
         return states.get(verstr)
 
-    state, tree = subtree_status("outer", parent_of, read)
+    state, tree = subtree_status("outer", parent_of, read, now=datetime.now(timezone.utc))
 
     assert state == states["outer"]
     assert sorted(reads) == ["a", "b", "outer"]

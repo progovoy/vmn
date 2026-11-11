@@ -2,6 +2,7 @@
 (before plan 18, or after a failed capture) the ``features`` entry their code
 implies, under this host's writer id — and leave everything else alone."""
 import pytest
+from fakes.clock import FakeClock
 from backfill_helpers import (
     BACKFILLER,
     COMMITS,
@@ -59,7 +60,8 @@ def test_a_dirty_run_gets_its_codes_files_symbols_commits_and_author(app_layout,
     assert entry["author"] == {"git_user_email": "alice@x.io", "source": "commit",
                                "writer": CREATOR}
     assert feature_writers(store, app, V1) == [BACKFILLER]
-    assert indexed_snapshot(store, app, wait=True).features_of(V1)["commits"] == COMMITS
+    assert indexed_snapshot(store, app, wait=True, clock=FakeClock()).features_of(V1)[
+        "commits"] == COMMITS
 
 
 def test_a_second_backfill_skips_every_run(app_layout, store, capfd):
@@ -128,7 +130,7 @@ def test_an_older_entry_keeps_its_author_and_untracked_files(app_layout, store, 
 
     assert _backfill(app_layout, capfd)[0] == 0
 
-    entry = indexed_snapshot(store, app, wait=True).features_of(V1)
+    entry = indexed_snapshot(store, app, wait=True, clock=FakeClock()).features_of(V1)
     assert entry["features_version"] == FEATURES_VERSION and entry["source"] == "backfill"
     assert entry["author"] == author
     assert sorted(entry["changed"]["files"]) == FILES
@@ -204,4 +206,4 @@ def test_a_backfill_refiles_the_runs_it_gave_features(app_layout, store, capfd):
     assert _backfill(app_layout, capfd)[0] == 0
     target = {"row": {"code_verstr": "0.0.9-dev.fffffff.0000001"},
               "features": {"changed": {"files": [], "symbols": ["src/loss.py::focal_loss"]}}}
-    assert [item["verstr"] for item in find(store, app, None, {}, target=target)] == [V1]
+    assert [item["verstr"] for item in find(store, app, None, {}, target=target, clock=FakeClock())] == [V1]

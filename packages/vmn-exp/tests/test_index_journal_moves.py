@@ -3,10 +3,13 @@ local store, a refresh between full sweeps neither lists nor signs every
 record directory — what was created, changed or removed since the previous
 listing comes from the store's change journal — and still re-reads exactly
 the records that moved."""
+from datetime import datetime, timezone
+
 import pytest
+from fakes.clock import FakeClock
 
 from vmn_exp.core import index as experiment_index
-from vmn_exp.core import index_journal_moves, index_sweep
+from vmn_exp.core import index_journal_moves
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.journal import journaled
@@ -29,11 +32,14 @@ def journal_at_any_size(monkeypatch):
 
 
 @pytest.fixture
-def clocks(monkeypatch):
-    mono, wall = Clock(1000.0), Clock(1_800_000_000.0)
-    monkeypatch.setattr(experiment_index, "_monotonic", mono)
-    monkeypatch.setattr(index_sweep, "_wall", wall)
-    return mono, wall
+def clocks():
+    return Clock(1000.0), Clock(1_800_000_000.0)
+
+
+def _index_clock(clocks):
+    """An index clock at the test's ``(monotonic, wall)`` now."""
+    mono, wall = clocks
+    return FakeClock(start=datetime.fromtimestamp(wall.now, timezone.utc), monotonic=mono.now)
 
 
 def _make(st, i):
@@ -71,7 +77,8 @@ class Process:
 
         monkeypatch.setattr(LocalSnapshotStorage, "list_record_names", list_record_names)
         monkeypatch.setattr(LocalSnapshotStorage, "list_record_keys", list_record_keys)
-        self.index = ExperimentIndex(self.storage, APP, cache_path=cache)
+        self.index = ExperimentIndex(self.storage, APP, cache_path=cache,
+                                     clock=_index_clock(clocks))
 
     def rows(self):
         return {r["verstr"]: r for r in self.index.refresh().rows()}
@@ -162,10 +169,11 @@ def test_a_journal_too_busy_to_read_falls_back_to_signing(process, seeded, monke
 def test_an_unjournaled_store_signs_every_record(tmp_path, clocks, monkeypatch):
     storage = LocalSnapshotStorage(str(tmp_path / "store"), area="runs")
     verstr = _make(storage, 1)
-    index = ExperimentIndex(storage, APP, cache_path=str(tmp_path / "index.sqlite"))
+    clock = _index_clock(clocks)
+    index = ExperimentIndex(storage, APP, cache_path=str(tmp_path / "index.sqlite"), clock=clock)
     index.refresh()
     storage.update_note(APP, verstr, "seen by its signature")
-    clocks[0].now += 1.0
+    clock.advance(1.0)
     assert index.refresh().rows()[0]["note"] == "seen by its signature"
 
 

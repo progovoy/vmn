@@ -90,7 +90,8 @@ def test_patching_load_run_state_on_the_experiment_module_reaches_show(
     v = seed(storage, APP, verstr(1))
     reads = []
     monkeypatch.setattr(experiment, "load_run_state", lambda s, a, run: reads.append(run))
-    experiment._print_status_block(storage, APP, v, storage.load_metadata(APP, v), print)
+    experiment._print_status_block(storage, APP, v, storage.load_metadata(APP, v), print,
+                                   now=FakeClock().now())
     assert reads == [v]
     assert "Status:" in capsys.readouterr().out
 

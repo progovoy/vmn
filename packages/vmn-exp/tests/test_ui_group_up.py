@@ -3,9 +3,9 @@
 columns read it, and orders and groupings moved across generations follow an
 ancestor whose value changed."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished
 from leaderboard_group_rows import run, snapshot, v
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.query import filter_rows
 from vmn_exp.core.query_extra import lean_extra
 from vmn_exp.ui import leaderboard_cache as lb
@@ -28,8 +28,8 @@ def _tree():
 
 
 def _groups(snap, group, cache=None, **params):
-    out = (cache or lb.LeaderboardCache()).groups(snap, SCHEMA, group, rows_per_group=100,
-                                                  limit=100, **params)
+    out = (cache or lb.LeaderboardCache(now=FakeClock(T0).now)).groups(
+        snap, SCHEMA, group, rows_per_group=100, limit=100, **params)
     return {g["key"]: g for g in out["groups"]}
 
 
@@ -83,7 +83,8 @@ def test_grouped_with_a_query_and_a_status():
 
 def test_chart_columns_read_ancestor_values():
     snap = _tree()
-    out = lb.LeaderboardCache().columns(snap, SCHEMA, ["group:up.params.date", "up.params.date"])
+    out = lb.LeaderboardCache(now=FakeClock(T0).now).columns(
+        snap, SCHEMA, ["group:up.params.date", "up.params.date"])
     by_verstr = dict(zip(out["verstrs"], out["columns"]["group:up.params.date"]))
     assert by_verstr[v(3)] == "d1" and by_verstr[v(8)] == NONE
     values = dict(zip(out["verstrs"], out["columns"]["up.params.date"]))
@@ -122,22 +123,23 @@ def _answers(cache, snap):
     return group, [r["verstr"] for r in page]
 
 
-def test_an_ancestor_whose_value_changes_moves_the_runs_below_it(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def test_an_ancestor_whose_value_changes_moves_the_runs_below_it():
+    clock = FakeClock(T0)
     fleet = _fleet()
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=clock.now)
     _answers(cache, fleet.snapshot())
     for i, opt in ((1, "lion"), (0, "tiger"), (1, "adam")):
         fleet.edit(i, opt=opt)
         snap = fleet.snapshot()
-        assert _answers(cache, snap) == _answers(lb.LeaderboardCache(bucket_sec=2), snap)
+        assert _answers(cache, snap) == _answers(
+            lb.LeaderboardCache(bucket_sec=2, now=clock.now), snap)
     assert _answers(cache, snap)[1] == []
 
 
 def test_other_changes_move_orders_on_without_a_rebuild(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+    clock = FakeClock(T0)
     fleet = _fleet()
-    cache = lb.LeaderboardCache(bucket_sec=2, size=256)
+    cache = lb.LeaderboardCache(bucket_sec=2, size=256, now=clock.now)
     fleet.edit(1, opt="lion")
     _answers(cache, fleet.snapshot())
     fleet.edit(5, values={"loss": 0.1})  # a leaf
@@ -147,4 +149,4 @@ def test_other_changes_move_orders_on_without_a_rebuild(monkeypatch):
     builds = _Builds(monkeypatch)
     mine = _answers(cache, snap)
     assert builds.calls == 0
-    assert mine == _answers(lb.LeaderboardCache(bucket_sec=2), snap)
+    assert mine == _answers(lb.LeaderboardCache(bucket_sec=2, now=clock.now), snap)

@@ -12,11 +12,13 @@ from prometheus_parse import label_sets, parse, value
 
 pytest.importorskip("fastapi")
 import vmn_exp.core.status as status_mod
+from fakes.clock import FakeClock
 from fastapi.testclient import TestClient
+from unit_deps import fake_deps
 from vmn_exp.core.app_settings_store import write_settings
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
-from vmn_exp.core.real_io import RealClock, real_io
+from vmn_exp.core.real_io import RealClock
 
 APP = "app"
 BASE = f"/api/v1/workspaces/ws/apps/{APP}"
@@ -71,20 +73,14 @@ def _fleet(storage):
     _run(storage, 9, 10, state="failed")
 
 
-class _Clock:
-    now = NOW
-
-
 @pytest.fixture
-def clock(monkeypatch):
-    c = _Clock()
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or c.now)
-    return c
+def clock():
+    return FakeClock(NOW)
 
 
 @pytest.fixture
 def server(tmp_path, clock):
-    from vmn_exp.ui.server import create_app
+    from vmn_exp.ui.server import build_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
@@ -93,7 +89,7 @@ def server(tmp_path, clock):
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return lambda **kw: TestClient(create_app(manager, io=real_io(), **kw))
+    return lambda **kw: TestClient(build_app(manager, fake_deps(clock), **kw))
 
 
 def _status(client):
@@ -176,7 +172,7 @@ def test_the_outer_run_series_are_capped_live_first(server, monkeypatch):
 def test_index_freshness_is_the_age_of_the_last_refresh(server, clock):
     client = server()
     _status(client)
-    clock.now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=600)
+    clock.advance(600)
     age = value(_scrape(client), "vmn_index_freshness_seconds", **LABELS)
     assert age is not None and 600 <= age <= 630
 
@@ -217,6 +213,8 @@ def test_label_values_are_escaped(server):
 def test_an_apps_gauges_are_computed_once_per_snapshot_and_minute(server, clock, monkeypatch):
     from vmn_exp.ui import metrics_feed
 
+    # The feed's memo key minute() still reads status._now (G11 Part B set-aside).
+    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or clock.now())
     calls = []
     real = metrics_feed.app_samples
     monkeypatch.setattr(metrics_feed, "app_samples", lambda *a: calls.append(1) or real(*a))
@@ -224,7 +222,7 @@ def test_an_apps_gauges_are_computed_once_per_snapshot_and_minute(server, clock,
     _status(client)
     first = _scrape(client)
     assert _scrape(client) == first and len(calls) == 1
-    clock.now = NOW + datetime.timedelta(minutes=1)
+    clock.advance(60)
     _scrape(client)
     assert len(calls) == 2
 
@@ -236,8 +234,8 @@ def test_the_metrics_route_keeps_its_auth(server):
     assert r.status_code == 200
 
 
-def _server_with(tmp_path, extra):
-    from vmn_exp.ui.server import create_app
+def _server_with(tmp_path, extra, clock):
+    from vmn_exp.ui.server import build_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     uri = f"file://{tmp_path}/store"
@@ -247,7 +245,7 @@ def _server_with(tmp_path, extra):
     write_settings(storage, APP, SETTINGS)
     manager = WorkspaceManager(str(tmp_path / "data"))
     manager.add_store("ws", uri)
-    return TestClient(create_app(manager, io=real_io()))
+    return TestClient(build_app(manager, fake_deps(clock)))
 
 
 def test_the_built_in_outlived_part_is_a_gauge_zero_included(server, tmp_path, clock):
@@ -255,6 +253,7 @@ def test_the_built_in_outlived_part_is_a_gauge_zero_included(server, tmp_path, c
     _status(client)
     assert value(_scrape(client), "vmn_attention", **LABELS, key="outlived") == 0
     # r10 still beats under outer r5, which ended 3 h ago.
-    client = _server_with(tmp_path / "b", lambda s: _run(s, 10, 170, parent=5, state="live"))
+    client = _server_with(tmp_path / "b", lambda s: _run(s, 10, 170, parent=5, state="live"),
+                          clock)
     (part,) = [p for p in _status(client)["attention"] if p["key"] == "outlived"]
     assert value(_scrape(client), "vmn_attention", **LABELS, key="outlived") == part["count"] == 1

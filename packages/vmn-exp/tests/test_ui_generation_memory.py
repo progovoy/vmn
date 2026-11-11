@@ -12,23 +12,23 @@ import gc
 import weakref
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import APP, T0, Fleet
 from vmn_exp.core.index import ExperimentIndex
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.index_views import SchemaRows
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.snapshot import LocalSnapshotStorage
 
+CLOCK = FakeClock(start=T0)
 SCHEMA = {"loss": {"goal": "min", "primary": True}}
 MAX = {"loss": {"goal": "max", "primary": True}}
 LOWEST, HIGHEST = -1.0, 99.0
 
 
 @pytest.fixture(autouse=True)
-def _collector(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
+def _collector():
     was = gc.isenabled()
     gc.unfreeze()
     gc.enable()
@@ -112,14 +112,14 @@ def _generations(fleet, cache, count):
 
 
 def test_old_generations_are_freed_once_the_caches_move_past_them():
-    fleet, cache = _fleet(), LeaderboardCache()
+    fleet, cache = _fleet(), LeaderboardCache(now=CLOCK.now)
     refs = _generations(fleet, cache, 8)
     gc.collect()
     assert [[ref() is None for ref in gen] for gen in refs[:4]] == [[True] * 3] * 4
 
 
 def test_old_generations_need_no_cyclic_collection_to_be_freed():
-    fleet, cache = _fleet(), LeaderboardCache()
+    fleet, cache = _fleet(), LeaderboardCache(now=CLOCK.now)
     _generations(fleet, cache, 1)
     gc.disable()
     refs = _generations(fleet, cache, 8)
@@ -127,7 +127,7 @@ def test_old_generations_need_no_cyclic_collection_to_be_freed():
 
 
 def test_a_cycle_alive_when_a_generation_is_derived_is_still_collected():
-    fleet, cache = _fleet(), LeaderboardCache()
+    fleet, cache = _fleet(), LeaderboardCache(now=CLOCK.now)
     _generations(fleet, cache, 1)
     cycle = _Cycle()
     ref = weakref.ref(cycle)
@@ -144,7 +144,7 @@ def test_a_board_built_from_scratch_freezes_no_garbage_cycle():
     gc.collect()  # it reaches the oldest generation, still referenced
     ref = weakref.ref(cycle)
     del cycle
-    _generations(_fleet(), LeaderboardCache(), 1)
+    _generations(_fleet(), LeaderboardCache(now=CLOCK.now), 1)
     gc.enable()
     gc.collect()
     assert ref() is None

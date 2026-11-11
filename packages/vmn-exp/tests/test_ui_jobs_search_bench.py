@@ -3,6 +3,7 @@ live, 10k single runs) a Jobs view page searching every run
 (``match_subtree``, the board's free-text clause, a new text each time)
 answers in <= 100 ms. Timed, so serial; ``-s`` prints the numbers."""
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, finished
 from test_ui_search_index_bench import (
     SCHEMA,
@@ -13,7 +14,6 @@ from test_ui_search_index_bench import (
     _timed,
 )
 
-from vmn_exp.core import status as status_mod
 from vmn_exp.ui import leaderboard_cache as lb
 
 JOBS, TRIALS, LIVE, SINGLES = 20, 4500, 4000, 10_000
@@ -29,15 +29,10 @@ def fleet():
     return fleet
 
 
-@pytest.fixture(autouse=True)
-def _frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-
-
 @pytest.mark.serial
 def test_jobs_view_search_over_every_run_at_100k(fleet):
     snap = fleet.snapshot()
-    cache = lb.LeaderboardCache()
+    cache = lb.LeaderboardCache(now=FakeClock(T0).now)
     cache.page(snap, SCHEMA, limit=50, top=True)  # the base and the Jobs view order
     cache.search(snap, "warm", 20)  # the search index, as the refresher warms it
     texts = [f"{t}{suffix}" for suffix in ("", "0", "1") for t in TEXTS]

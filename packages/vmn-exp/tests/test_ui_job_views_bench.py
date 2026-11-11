@@ -6,12 +6,12 @@ import statistics
 import time
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.readers.experiment_detail import status_detail
 
-from vmn_exp.core import status as status_mod
 
 JOBS, INNERS, LIVE = 20, 5000, 4000
 SCHEMA = {"loss": {"goal": "min", "primary": True}, "acc": {"goal": "max"}}
@@ -39,9 +39,8 @@ def fleet():
 
 
 @pytest.fixture
-def warm(monkeypatch, fleet):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or T0)
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+def warm(fleet):
+    cache, snap = LeaderboardCache(now=FakeClock(T0).now), fleet.snapshot()
     cache.page(snap, SCHEMA, sort="loss", limit=50)
     cache.job_rollups(snap, SCHEMA)  # the Jobs view warmed the rollups
     return JobViews(cache), snap, [spec["verstr"] for spec in fleet.specs[:JOBS]]
@@ -72,7 +71,7 @@ def _detail(snap, job, job_status=None):
         None, "app", job, {}, [], lambda storage, app_name: snap.edges,
         read_run_state=lambda storage, app_name, v: snap.run_states.get(v),
         read_observed_at=lambda storage, app_name, v: None,
-        read_child_row=snap.row, job_status=job_status,
+        read_child_row=snap.row, job_status=job_status, now=T0,
     )
 
 

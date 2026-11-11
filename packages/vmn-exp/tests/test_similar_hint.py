@@ -15,6 +15,7 @@ from exp_helpers import (
     _storage,
     extract_dev_verstr,
 )
+from fakes.clock import FakeClock
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli import similar_hint
 from vmn_exp.core.index import ExperimentIndex
@@ -157,7 +158,7 @@ def test_the_hint_reads_the_index_cache_and_never_lists_the_store(app_layout, ca
         monkeypatch.setattr(LocalSnapshotStorage, listing, _never)
 
     similar_hint.print_hint(_storage(app_layout), app_layout.app_name, new,
-                            argparse.Namespace(), {})
+                            argparse.Namespace(), {}, clock=FakeClock())
 
     [line] = _hints(capfd.readouterr().err)
     assert line.startswith(HEAD + prior)

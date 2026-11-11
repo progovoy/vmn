@@ -6,6 +6,7 @@ stops, and ``run_state.yml`` says ``state: released`` with no exit code, so
 the run derives as ``created`` (waiting) at once instead of ``running`` until
 it goes ``stuck``. ``start_run(run_id=...)`` reopens it, counting the attempt.
 """
+from datetime import datetime, timezone
 import time
 
 import pytest
@@ -46,7 +47,7 @@ def test_a_released_run_is_waiting_and_closed_here(app_layout):
     assert state["release_reason"] == "evicted"
     assert state["released_at"]
     assert "signal" not in state
-    assert derive_status(state) == CREATED
+    assert derive_status(state, now=datetime.now(timezone.utc)) == CREATED
     assert run not in open_runs() and current_run() is None
 
     log = _storage(app_layout).load_merged_log(app_layout.app_name, run.id)
@@ -76,7 +77,7 @@ def test_atexit_leaves_a_released_run_alone(app_layout):
     _bootstrap(app_layout)
     run = _released_run(app_layout)
     run_module._finalize_open_runs()
-    assert derive_status(_state(app_layout, run.id)) == CREATED
+    assert derive_status(_state(app_layout, run.id), now=datetime.now(timezone.utc)) == CREATED
 
 
 def test_reopening_a_released_run_counts_the_attempt(app_layout):
@@ -86,7 +87,7 @@ def test_reopening_a_released_run_counts_the_attempt(app_layout):
 
     resumed = start_run(app_layout.app_name, run_id=first.id)
     state = _state(app_layout, first.id)
-    assert derive_status(state) == RUNNING
+    assert derive_status(state, now=datetime.now(timezone.utc)) == RUNNING
     assert state["resume_count"] == 1
     assert state.get("end_reason") is None
     # The last release stays on record: an eviction wave outlives its retries.
@@ -95,7 +96,7 @@ def test_reopening_a_released_run_counts_the_attempt(app_layout):
     resumed.finish()
 
     state = _state(app_layout, first.id)
-    assert derive_status(state) == SUCCEEDED and state["resume_count"] == 1
+    assert derive_status(state, now=datetime.now(timezone.utc)) == SUCCEEDED and state["resume_count"] == 1
     log = _storage(app_layout).load_merged_log(app_layout.app_name, first.id)
     steps = sorted(e["step"] for e in log
                    if e.get("type") == "metrics" and "loss" in (e.get("values") or {}))

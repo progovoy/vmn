@@ -8,6 +8,7 @@ from test_sweep_cli import _status, _trials, _vmn_exp
 from test_sweep_sdk_trials import _sdk_sweep
 from vmn_exp.core.status import load_run_state
 from vmn_exp.core.sweep.summary import trial_rows
+from vmn_exp.core.real_io import RealClock
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +29,7 @@ def test_trial_metric_is_the_trial_runs_own_and_metric_source_is_the_trial(
     assert not any(r.get("parent") in {t["verstr"] for t in trials}
                    for r in _storage(app_layout).list_snapshots(app_layout.app_name))
     spec = _storage(app_layout).load_metadata(app_layout.app_name, sweep)["sweep"]
-    rows = trial_rows(_storage(app_layout), app_layout.app_name, sweep, spec)
+    rows = trial_rows(_storage(app_layout), app_layout.app_name, sweep, spec, clock=RealClock())
     assert all(r["metric_source"] == r["verstr"] for r in rows)
     assert _status(app_layout, sweep, capsys)["best"]["verstr"] == trials[1]["verstr"]
 

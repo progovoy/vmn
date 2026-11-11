@@ -2,6 +2,7 @@
 refresh — a run edited in place since the index was last saved is searched
 as it now is, not only runs created or removed since."""
 import pytest
+from fakes.clock import FakeClock
 from similar_seed import WRITER, seed, verstr
 from vmn_exp.core import index as experiment_index
 from vmn_exp.core.similar_search import find
@@ -23,7 +24,8 @@ def _fresh(root, monkeypatch):
 
 
 def _found(storage, text):
-    return [item["verstr"] for item in find(storage, APP, None, text_only=True, context=text)]
+    return [item["verstr"] for item in find(storage, APP, None, text_only=True, context=text,
+                                                 clock=FakeClock())]
 
 
 def test_a_search_sees_an_intent_edited_since_the_index_was_saved(root, monkeypatch):

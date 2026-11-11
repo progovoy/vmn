@@ -48,7 +48,7 @@ def _show_args(v, **over):
 def test_list_writes_one_line_per_row_to_the_console(storage, capsys):
     a, b = seed(storage, APP, verstr(1), note="first"), seed(storage, APP, verstr(2))
     console = FakeConsole()
-    assert experiment.experiment_list(None, None, storage, _list_args(), console) == 0
+    assert experiment.experiment_list(None, None, storage, _list_args(), console, FakeClock()) == 0
     lines = console.stdout.splitlines()
     assert [line.split()[:2] for line in lines] == [["[1]", a], ["[2]", b]]
     assert lines[0].endswith(" - first")
@@ -58,13 +58,13 @@ def test_list_writes_one_line_per_row_to_the_console(storage, capsys):
 def test_list_json_is_the_whole_stdout(storage):
     v = seed(storage, APP, verstr(1))
     console = FakeConsole()
-    assert experiment.experiment_list(None, None, storage, _list_args(json=True), console) == 0
+    assert experiment.experiment_list(None, None, storage, _list_args(json=True), console, FakeClock()) == 0
     assert [row["verstr"] for row in json.loads(console.stdout)] == [v]
 
 
 def test_list_of_an_empty_app_says_so_on_out(storage):
     console = FakeConsole()
-    assert experiment.experiment_list(None, None, storage, _list_args(), console) == 0
+    assert experiment.experiment_list(None, None, storage, _list_args(), console, FakeClock()) == 0
     assert console.stdout == f"No experiments found for {APP}\n"
 
 

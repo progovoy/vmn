@@ -5,20 +5,14 @@ is still loading it chunk by chunk, reports its freshness only; an app that
 fails to read is left out, never the scrape."""
 import datetime
 
-import pytest
+from fakes.clock import FakeClock
 from prometheus_parse import label_sets, parse, value
-from vmn_exp.core import status as status_mod
 from vmn_exp.core.index_bulk import loading_snapshot
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.metrics_feed import MetricsFeed
 from vmn_exp.ui.prometheus import Family, exposition, label_value
 
 NOW = datetime.datetime(2026, 3, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
-
-
-@pytest.fixture(autouse=True)
-def frozen(monkeypatch):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or NOW)
 
 
 def test_label_values_escape_backslash_quote_and_newline():
@@ -62,7 +56,7 @@ class _Source:
 
 
 def _feed(apps):
-    return MetricsFeed(_Source(apps), _Ws, LeaderboardCache())
+    return MetricsFeed(_Source(apps), _Ws, LeaderboardCache(now=FakeClock(NOW).now))
 
 
 def test_an_unpublished_or_loading_index_reports_its_freshness_only():

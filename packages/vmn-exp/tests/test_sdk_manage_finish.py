@@ -6,6 +6,7 @@ is written directly, with no heartbeat and no ``running`` state first. A run
 another attempt is still heartbeating (by both clocks), or one that already
 finished, is refused unless forced.
 """
+from datetime import datetime, timezone
 import os
 import time
 
@@ -38,7 +39,7 @@ def _state(storage):
 
 
 def _status(storage):
-    return status_fields(_state(storage))
+    return status_fields(_state(storage), now=datetime.now(timezone.utc))
 
 
 def _row(storage):

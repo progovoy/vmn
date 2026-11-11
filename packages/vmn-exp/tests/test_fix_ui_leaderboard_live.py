@@ -8,6 +8,7 @@ import random
 
 import pytest
 
+from fakes.clock import FakeClock
 from vmn_exp.core import status as status_mod
 from vmn_exp.core.index_snapshot import IndexSnapshot
 from vmn_exp.core.log import experiment_row
@@ -144,8 +145,8 @@ def _big_snapshot(n, live):
 def test_successive_buckets_do_not_sort_or_annotate_every_row(monkeypatch):
     live = {11, 5000, 19999}
     snap = _big_snapshot(20000, live)
-    cache = lb.LeaderboardCache(bucket_sec=2)
-    _at(monkeypatch, T0)
+    clock = FakeClock(start=T0)
+    cache = lb.LeaderboardCache(bucket_sec=2, now=clock.now)
     params = dict(sort="loss", order="asc", offset=0, limit=50)
     cache.page(snap, {}, **params)
     cache.page(snap, {}, sort="timestamp", limit=50)
@@ -157,7 +158,7 @@ def test_successive_buckets_do_not_sort_or_annotate_every_row(monkeypatch):
     _counted(monkeypatch, exp_reader, "sort_by_metric", calls)
     for step in range(1, 6):
         # Past 60s the heartbeat is stale: the live rows move from running to stuck.
-        _at(monkeypatch, T0 + datetime.timedelta(seconds=20 * step))
+        clock.advance(20)
         got = cache.page(snap, {}, status="stuck", limit=50)
         assert got["total"] == (3 if step >= 4 else 0)
         cache.page(snap, {}, **params)

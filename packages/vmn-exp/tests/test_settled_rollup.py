@@ -7,6 +7,7 @@ its subtree once), and equal to a from-scratch build."""
 import datetime
 
 import pytest
+from fakes.clock import FakeClock
 from leaderboard_fleet import T0, Fleet, finished, running
 from vmn_exp.ui.job_rollup_payload import job_payload
 from vmn_exp.ui.job_tally import RollupSpec, Tally
@@ -14,14 +15,12 @@ from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache, _Base
 from vmn_exp.ui.status_summary import status_summary
 
-from vmn_exp.core import status as status_mod
-
 NEVER, LOST = "never_started", "lost"
 SPEC = RollupSpec({})
 
 
-def _at(monkeypatch, when):
-    monkeypatch.setattr(status_mod, "_now", lambda now=None: now or when)
+def _at(clock, when):
+    clock.advance((when - clock.now()).total_seconds())
 
 
 def _stale():
@@ -95,7 +94,7 @@ def _rows(cache, snap):
 
 
 def _same_as_a_fresh_build(cache, snap, outers):
-    fresh = LeaderboardCache()
+    fresh = LeaderboardCache(now=cache.now)
     assert _rows(cache, snap) == _rows(fresh, snap)
     for outer in outers:
         got, want = cache.job_rollup(snap, {}, outer), fresh.job_rollup(snap, {}, outer)
@@ -104,10 +103,10 @@ def _same_as_a_fresh_build(cache, snap, outers):
 
 
 def test_an_outer_that_ends_settles_its_children_once(monkeypatch):
-    _at(monkeypatch, T0)
+    clock = FakeClock(start=T0)
     fleet = _fleet(1)
     outer, kids = _job(fleet, running(T0), [None, None, None, _stale(), finished(0), finished(1)])
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     rollup = cache.job_rollup(fleet.snapshot(), {}, outer)
     assert (rollup["counts"]["waiting"], rollup["counts"]["stuck"], rollup[NEVER]) == (3, 1, 0)
     builds = _count_builds(monkeypatch)
@@ -133,12 +132,12 @@ def test_an_outer_that_ends_settles_its_children_once(monkeypatch):
 
 
 def test_a_never_started_container_passes_the_settlement_down(monkeypatch):
-    _at(monkeypatch, T0)
+    clock = FakeClock(start=T0)
     fleet = _fleet(2)
     top = fleet.append(state=running(T0))
     mid = fleet.append(parent=top)
     leaves = [fleet.append(parent=mid) for _ in range(3)]
-    cache = LeaderboardCache()
+    cache = LeaderboardCache(now=clock.now)
     assert cache.job_rollup(fleet.snapshot(), {}, top)["counts"]["waiting"] == 4
     builds = _count_builds(monkeypatch)
     fleet.set_state(fleet.index(top), finished(0))
@@ -150,46 +149,47 @@ def test_a_never_started_container_passes_the_settlement_down(monkeypatch):
     _same_as_a_fresh_build(cache, snap, [top, mid])
 
 
-def test_a_live_child_of_an_ended_outer_turns_lost_between_buckets(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_live_child_of_an_ended_outer_turns_lost_between_buckets():
+    clock = FakeClock(start=T0)
     fleet = Fleet(3)
     outer, (live, _) = _job(fleet, finished(0), [running(T0), None])
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     rollup = cache.job_rollup(snap, {}, outer)
     assert (rollup["counts"]["running"], rollup[NEVER], rollup[LOST]) == (1, 1, 0)
-    _at(monkeypatch, T0 + datetime.timedelta(seconds=600))
+    _at(clock, T0 + datetime.timedelta(seconds=600))
     rollup = cache.job_rollup(snap, {}, outer)
     assert (rollup["counts"]["running"], rollup["counts"]["stuck"], rollup[LOST]) == (0, 0, 1)
     rows = _rows(cache, snap)
     assert rows[live] == ("stuck", LOST, None) and rows[outer][2] == "succeeded"
 
 
-def test_the_run_detail_fleet_counts_settled_runs_apart(monkeypatch):
-    _at(monkeypatch, T0)
+def test_the_run_detail_fleet_counts_settled_runs_apart():
+    clock = FakeClock(start=T0)
     fleet = Fleet(4)
     outer, _ = _job(fleet, finished(0), [None, _stale(), finished(0)])
-    cache, snap = LeaderboardCache(), fleet.snapshot()
+    cache, snap = LeaderboardCache(now=clock.now), fleet.snapshot()
     fleet_counts = JobViews(cache).detail_status(snap, {}, outer)["fleet"]
     assert (fleet_counts[NEVER], fleet_counts[LOST]) == (1, 1)
     assert fleet_counts["counts"]["created"] == 0 and fleet_counts["counts"]["stuck"] == 0
 
 
 @pytest.mark.parametrize("seed", range(4))
-def test_random_generations_match_a_fresh_build(monkeypatch, seed):
+def test_random_generations_match_a_fresh_build(seed):
     fleet = Fleet(seed)
     roots = fleet.seed(200, T0, sweeps=5, live=8)
     for root in roots:  # nested outers, some never started
         fleet.append(parent=root)
-    cache, now = LeaderboardCache(), T0
+    clock = FakeClock(start=T0)
+    cache, now = LeaderboardCache(now=clock.now), T0
     for _ in range(10):
-        _at(monkeypatch, now)
+        _at(clock, now)
         snap = fleet.snapshot()
         outers = [r["verstr"] for r in cache.rows(snap, archived=True) if r["children"]]
         _same_as_a_fresh_build(cache, snap, outers)
         assert status_summary(cache.rows(snap), now) == status_summary(
-            LeaderboardCache().rows(snap), now)
+            LeaderboardCache(now=clock.now).rows(snap), now)
         now += datetime.timedelta(seconds=fleet.rng.choice([0, 3, 70]))
-        _at(monkeypatch, now)  # a later bucket: live outer runs may go stuck
+        _at(clock, now)  # a later bucket: live outer runs may go stuck
         _same_as_a_fresh_build(cache, snap, outers)
         fleet.mutate(now, fleet.rng.choice([1, 4, 12]))
         for root in fleet.rng.sample(roots, 2):  # outers end and start again
@@ -198,11 +198,11 @@ def test_random_generations_match_a_fresh_build(monkeypatch, seed):
                     [finished(0), finished(1), running(now), _stale(), None]))
 
 
-def test_a_grouped_board_counts_lost_runs_failed_and_never_started_ones_in_the_total(monkeypatch):
-    _at(monkeypatch, T0)
+def test_a_grouped_board_counts_lost_runs_failed_and_never_started_ones_in_the_total():
+    clock = FakeClock(start=T0)
     fleet = Fleet(5)
     outer, _ = _job(fleet, finished(0), [None, None, _stale(), finished(0)])
-    groups = LeaderboardCache().groups(fleet.snapshot(), {}, group="parent")["groups"]
+    groups = LeaderboardCache(now=clock.now).groups(fleet.snapshot(), {}, group="parent")["groups"]
     (group,) = [g for g in groups if g["key"] == outer]
     assert group["counts"] == {"total": 4, "running": 0, "waiting": 0, "done": 1, "failed": 1,
                                "stuck": 0}
