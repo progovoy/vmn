@@ -5,7 +5,8 @@ coverage
 toml
 filelock
 boto3
-moto[s3]
+# 5.2.4's Request.from_primitives drops a user:pass@ netloc, so the mock is bypassed
+moto[s3]<5.2.4
 git-cliff==2.5.0
 fastapi; python_version >= "3.9"
 httpx
