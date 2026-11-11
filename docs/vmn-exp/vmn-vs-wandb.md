@@ -153,8 +153,6 @@ project. Per-project permissions: **not planned**.
 
 - LightGBM and CatBoost autolog: **planned** (today: scikit-learn, XGBoost,
   Keras, Lightning, Transformers; [sdk.md](sdk.md#autologging)).
-- A notebook display of the run object: **planned**. Notebooks work today
-  ([notebooks.md](notebooks.md)).
 - Autologging a plain PyTorch loop: **not offered by design**; use `watch()`
   plus `log_metric` ([sdk.md](sdk.md#pytorch--watch)).
 

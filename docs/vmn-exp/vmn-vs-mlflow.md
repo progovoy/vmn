@@ -32,7 +32,7 @@ stronger on everything downstream of a finished run.
 | --- | --- | --- |
 | Params / metrics / notes / artifacts | Yes | Yes |
 | Per-step metric series + charts | Yes | Yes |
-| Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`) | Broader (incl. lightgbm, spark, statsmodels, paddle, LLM libs) |
+| Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`); lightgbm and catboost **planned**; a plain PyTorch loop is not autologged by design (`watch()` plus `log_metric`) | Broader (incl. lightgbm, spark, statsmodels, paddle, LLM libs) |
 | Optuna / Ray Tune integration | `start_study_run` + `StudyTracker`; `TuneRecorder` + `VmnTuneCallback` (driver-side) — see `vmn_exp.integrations.*` | Optuna/Ray callbacks available |
 | System metrics (CPU/mem/GPU) | Yes, on by default, sampled on the heartbeat (GPU with `pynvml`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
@@ -51,7 +51,8 @@ stronger on everything downstream of a finished run.
 | Model registry (versions, aliases, deprecation) | **Yes** — `vmn-exp model register\|alias\|list\|show\|…`; SDK `register_model`/`set_alias`/`download_model`; UI Models page — see [models.md](models.md) | Yes — a core feature; also has stages approval workflow |
 | Model serving / packaging | **Absent** | `mlflow models serve`, pyfunc flavors, SageMaker/Docker targets |
 | Artifact rendering in the UI | Logged images, tables and histograms inline; other artifacts download | Inline images, plots, tables, HTML |
-| `evaluate()`, LLM/prompt tracing, Projects | **Absent** | Yes |
+| `evaluate()`, Projects | **Absent** | Yes |
+| LLM/prompt tracing | **Not offered by design**: a different product | Yes |
 | Plugin ecosystem | Storage backends through the `vmn_exp.storage` entry point ([experiments.md](experiments.md#storage-backends-plugins)); no wider ecosystem | Extensive: tracking, artifact and registry stores, auth, deployment, evaluation |
 | Scale | Cached SQLite index; measured at 100k runs and on one 737k-run store, at a memory cost that grows with the store ([ui.md](ui.md#large-stores-run-the-ui-on-free-threaded-python)) | DB-backed; scales with the database |
 
@@ -145,10 +146,13 @@ targets. vmn stops at recording what happened.
 ### Logging from somewhere else
 
 vmn clients write straight to a filesystem or object store. A worker with no
-access to either can only record locally (`VMN_EXP_OFFLINE=1`) and upload later
-with `vmn-exp push`. MLflow's tracking server accepts runs over HTTP from
-anywhere, which is the easier story for heterogeneous or externally-managed
-compute.
+access to either records locally (`VMN_EXP_OFFLINE=1`) and uploads later with
+`vmn-exp push` ([experiments.md](experiments.md#offline-recording-and-push)).
+MLflow's tracking server accepts runs over HTTP from anywhere, which is the
+easier story for heterogeneous or externally-managed compute. An HTTP logging
+endpoint is **not offered by design**: training never depends on a server, and
+offline recording plus `vmn-exp push` is the answer for a worker without
+storage access.
 
 ### More than one kind of user
 
