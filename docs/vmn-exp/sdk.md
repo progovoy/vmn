@@ -40,7 +40,9 @@ app `vmn_examples`.
 - [Slim install](#slim-install)
 
 Public names in `vmn_exp.sdk`: `start_run`, `create_run`, `create_runs`, `Run`, `NoOpRun`, `current_run`,
-`install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`, and the
+`RunExistsError`, `install_signal_handlers`, `autolog`, `autolog_disable`, `sweep_params`,
+the fork-safety helpers `pause_background`, `resume_background`,
+`background_paused`, and the
 registry functions `register_model`, `set_alias`, `remove_alias`,
 `get_model_version`, `list_models`, `download_model`, `register_dataset`,
 `get_dataset_version`, `use_model`, `use_dataset`. Readers live in
