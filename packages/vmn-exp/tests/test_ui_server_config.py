@@ -175,3 +175,12 @@ def test_public_url_must_be_https_with_oidc():
         _oidc_chain(_oidc_config(public_url="http://vmn.example"), None, env={})
     assert "server.public_url" in str(e.value)
     assert _oidc_chain(_oidc_config(public_url="http://localhost:8265"), None, env={})
+
+
+def test_oidc_chain_wires_a_jwks_verifier_on_the_authenticators_http():
+    from vmn_exp.ui.auth.jwks import JwksVerifier
+    from vmn_exp.ui.cli import _oidc_chain
+
+    (oidc,) = _oidc_chain(_oidc_config(), None, env={}).authenticators
+    assert isinstance(oidc.verifier, JwksVerifier)
+    assert oidc.verifier.http is oidc.http

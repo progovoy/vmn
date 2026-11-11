@@ -449,14 +449,24 @@ sign-in page reads:
 `login_url` is `null` without OIDC. `GET /api/v1/meta` carries the same hints
 under `auth`.
 
-OIDC runs over TLS only. The ID token's signature is not checked: OIDC Core
-3.1.3.7 allows that for a token read straight from the token endpoint over
-TLS, so the server enforces TLS:
+The ID token's signature is checked against the keys the IdP publishes at its
+discovery document's `jwks_uri`, before its issuer, audience, expiry and
+nonce. Only **RS256** is accepted, with keys of at least 2048 bits. An IdP that
+signs ID tokens with another algorithm (ES256, PS256, ...) or not at all, or
+whose discovery document has no `jwks_uri`, cannot log anyone in: the browser
+login answers 400 `Login failed: id_token alg 'ES256' is not supported: only
+RS256 is accepted` (or `... has no jwks_uri`), and `vmn-exp login` fails with
+`invalid_grant`. Configure the IdP's client to sign ID tokens with RS256 (the
+OIDC default). The key set is cached; a token whose `kid` is not in it
+re-fetches the set at most once a minute, so a key rotation is picked up.
+
+OIDC runs over TLS only:
 
 - `auth.oidc.issuer` and, with OIDC, `server.public_url` must be `https://`
   URLs. Otherwise the server does not start, and the error names the key.
-- The discovery document's `authorization_endpoint`, `token_endpoint` and
-  `device_authorization_endpoint` must be `https://` too, or login answers 502.
+- The discovery document's `authorization_endpoint`, `token_endpoint`,
+  `device_authorization_endpoint` and `jwks_uri` must be `https://` too, or
+  login answers 502.
 - A redirected answer from discovery or the token endpoint is refused.
 - Plain `http://` is accepted only on a loopback host (`localhost`,
   `127.0.0.0/8`, `::1`), for a local IdP in development. There is no flag

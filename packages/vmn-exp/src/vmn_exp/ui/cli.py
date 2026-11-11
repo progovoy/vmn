@@ -148,7 +148,9 @@ def build_server(args, env=None):
 
 def _oidc_chain(cfg, control_plane, env):
     from vmn_exp.ui.auth import AuthenticatorChain
+    from vmn_exp.ui.auth.jwks import JwksVerifier
     from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
+    from vmn_exp.ui.auth.oidc_http import UrllibHttp
     from vmn_exp.ui.config import ConfigError, checked_https
 
     oidc = cfg.auth.oidc
@@ -165,8 +167,9 @@ def _oidc_chain(cfg, control_plane, env):
         groups_claim=oidc.groups_claim,
         role_mappings=[dataclasses.asdict(m) for m in cfg.auth.role_mappings],
     )
+    http = UrllibHttp()
     return AuthenticatorChain([OIDCAuthenticator(
-        config, control_plane, clock=time.time,
+        config, control_plane, JwksVerifier(http, time.time), http=http, clock=time.time,
         session_ttl_sec=oidc.session_ttl_hours * 3600,
         login_token_ttl_sec=oidc.login_token_ttl_days * 24 * 3600)])
 

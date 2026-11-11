@@ -1,16 +1,16 @@
 """OIDC authorization code + PKCE login against a minimal fake IdP."""
 import base64
 import hashlib
-import json
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
+from oidc_test_keys import JWKS_URI, jwks, signed_jwt
 from vmn_exp.ui.auth import AuthenticatorChain
 from vmn_exp.ui.auth.authz import effective_role
+from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.control_plane import SQLiteControlPlane
@@ -23,8 +23,7 @@ def _b64(raw):
 
 
 def _jwt(claims):
-    head = _b64(json.dumps({"alg": "RS256"}).encode())
-    return f"{head}.{_b64(json.dumps(claims).encode())}.sig"
+    return signed_jwt(claims)
 
 
 class FakeIdP:
@@ -45,11 +44,14 @@ class FakeIdP:
         return code, q["state"]
 
     def get_json(self, url):
+        if url == JWKS_URI:
+            return jwks()
         assert url == f"{ISSUER}/.well-known/openid-configuration"
         return {
             "issuer": self.issuer,
             "authorization_endpoint": f"{ISSUER}/authorize",
             "token_endpoint": f"{ISSUER}/token",
+            "jwks_uri": JWKS_URI,
         }
 
     def post_form(self, url, data):
@@ -80,7 +82,7 @@ def _client(tmp_path, idp):
         {"group": "everyone", "workspace": "*", "role": VIEWER},
     ]
     store = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
-    oidc = OIDCAuthenticator(config, store, http=idp)
+    oidc = OIDCAuthenticator(config, store, JwksVerifier(idp, lambda: 0.0), http=idp)
     app = create_app(WorkspaceManager(str(tmp_path / "ui")), auth=AuthenticatorChain([oidc]),
                      role_mappings=mappings)
 
@@ -206,5 +208,33 @@ def test_loopback_http_issuer_is_allowed():
 
     config = OIDCConfig(issuer=issuer, client_id="vmn-exp",
                         redirect_uri="http://localhost:8265/auth/callback")
-    meta = OIDCAuthenticator(config, store=None, http=LoopbackIdP()).metadata()
+    idp = LoopbackIdP()
+    meta = OIDCAuthenticator(config, None, JwksVerifier(idp, lambda: 0.0), http=idp).metadata()
     assert meta["token_endpoint"] == f"{issuer}/token"
+
+
+def _unsigned(token):
+    head, body, _ = token.split(".")
+    return f"{head}.{body}.sig"
+
+
+class _UnsignedIdP(FakeIdP):
+    """FakeIdP whose token endpoint answers an id_token with no valid signature."""
+
+    def post_form(self, url, data):
+        reply = super().post_form(url, data)
+        return {**reply, "id_token": _unsigned(reply["id_token"])}
+
+
+def test_complete_refuses_unsigned_id_token(tmp_path):
+    idp = _UnsignedIdP()
+    client = _client(tmp_path, idp)
+    r = _login(client, idp)
+    assert r.status_code == 400 and "signature" in r.json()["detail"]
+    assert client.get("/api/v1/_whoami").status_code == 401
+
+
+def test_discovery_with_http_jwks_uri_is_refused(tmp_path):
+    idp = _DiscoveryOverride(jwks_uri="http://idp.example/jwks")
+    r = _client(tmp_path, idp).get("/auth/login", follow_redirects=False)
+    assert r.status_code == 502 and "jwks_uri" in r.json()["detail"]

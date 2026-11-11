@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """OIDC login for browsers: authorization code + PKCE (S256) via discovery.
 
-The id_token is read from the token endpoint's direct TLS response, so per
-OIDC Core 3.1.3.7 its issuer, audience, expiry and nonce are checked but its
-signature is not (no JWT library needed). That TLS is enforced: the issuer
-and every discovered endpoint must be https (http only on a loopback host)
+The id_token's RS256 signature is checked against the IdP's JWKS
+(:mod:`jwks`; any other alg is refused), then its issuer, audience, expiry
+and nonce. OIDC Core 3.1.3.7 would allow skipping the signature for a token
+read from the token endpoint over TLS; checking it also covers a compromised
+TLS-terminating proxy. That TLS is enforced: the issuer and every discovered
+endpoint, ``jwks_uri`` included, must be https (http only on a loopback host)
 and a redirected answer is refused (:mod:`oidc_http`). The resulting
 principal lives in a server-side session; the browser holds only an opaque ``HttpOnly``,
 ``SameSite=Lax``, ``Secure`` cookie. CSRF stays covered by ``RequestGuard``.
@@ -30,7 +32,7 @@ LOGIN_TOKEN_TTL_SEC = 90 * 24 * 3600
 DISCOVERY_PATH = "/.well-known/openid-configuration"
 # Discovered URLs the server calls or sends browsers to: https only.
 DISCOVERED_ENDPOINTS = ("authorization_endpoint", "token_endpoint",
-                        "device_authorization_endpoint")
+                        "device_authorization_endpoint", "jwks_uri")
 
 
 class OIDCError(Exception):
@@ -96,10 +98,12 @@ def roles_for_groups(groups, mappings):
 
 
 class OIDCAuthenticator:
-    def __init__(self, config, store, http=None, clock=time.time,
+    def __init__(self, config, store, verifier, http=None, clock=time.time,
                  session_ttl_sec=SESSION_TTL_SEC, login_token_ttl_sec=LOGIN_TOKEN_TTL_SEC):
+        """*verifier* checks the id_token signature (:class:`jwks.JwksVerifier`)."""
         self.config = config
         self.store = store
+        self.verifier = verifier
         self.http = http or UrllibHttp()
         self.clock = clock
         self.sessions = SessionService(store, clock=clock, ttl_sec=session_ttl_sec)
@@ -164,6 +168,7 @@ class OIDCAuthenticator:
 
     def checked_claims(self, id_token, nonce=None):
         """*id_token*'s claims; *nonce* is checked unless ``None`` (device flow)."""
+        self.verifier.verify(id_token, self.metadata().get("jwks_uri"))
         claims = jwt_claims(id_token)
         aud = claims.get("aud")
         auds = aud if isinstance(aud, list) else [aud]

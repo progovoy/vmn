@@ -7,12 +7,12 @@ import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
-
-from test_ui_auth_oidc import ISSUER, _jwt
-
+from oidc_test_keys import JWKS_URI, jwks
+from test_ui_auth_oidc import ISSUER, _jwt, _unsigned
 from vmn_exp.cli import login as login_cli
 from vmn_exp.ui.audit import AuditLog
 from vmn_exp.ui.auth import AuthenticatorChain
+from vmn_exp.ui.auth.jwks import JwksVerifier
 from vmn_exp.ui.auth.oidc import OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR
 from vmn_exp.ui.control_plane import SQLiteControlPlane
@@ -30,10 +30,13 @@ class FakeDeviceIdP:
         self.approved = False
 
     def get_json(self, url):
+        if url == JWKS_URI:
+            return jwks()
         assert url == f"{ISSUER}/.well-known/openid-configuration"
         return {"issuer": ISSUER, "authorization_endpoint": f"{ISSUER}/authorize",
                 "token_endpoint": f"{ISSUER}/token",
-                "device_authorization_endpoint": f"{ISSUER}/device"}
+                "device_authorization_endpoint": f"{ISSUER}/device",
+                "jwks_uri": JWKS_URI}
 
     def post_form(self, url, data):
         if url == f"{ISSUER}/device":
@@ -60,7 +63,7 @@ def _server(tmp_path, idp, **oidc_kw):
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     config = OIDCConfig(issuer=ISSUER, client_id="vmn-exp",
                         redirect_uri=f"{SERVER}/auth/callback")
-    oidc = OIDCAuthenticator(config, cp, http=idp, **oidc_kw)
+    oidc = OIDCAuthenticator(config, cp, JwksVerifier(idp, lambda: 0.0), http=idp, **oidc_kw)
     app = create_app(WorkspaceManager(str(tmp_path / "ui")),
                      auth=AuthenticatorChain([oidc]), control_plane=cp,
                      role_mappings=ML_TEAM_EDITOR)
@@ -224,3 +227,20 @@ def test_device_start_refuses_http_device_endpoint(tmp_path):
     client, _ = _server(tmp_path, HttpDeviceIdP())
     r = client.post("/auth/device/start", json={})
     assert r.status_code == 502 and "device_authorization_endpoint" in r.json()["detail"]
+
+
+def test_device_poll_refuses_unsigned_id_token(tmp_path):
+    class Unsigned(FakeDeviceIdP):
+        def post_form(self, url, data):
+            reply = super().post_form(url, data)
+            if "id_token" in reply:
+                reply = {**reply, "id_token": _unsigned(reply["id_token"])}
+            return reply
+
+    client, cp = _server(tmp_path, Unsigned(pending_polls=0))
+    handle = client.post("/auth/device/start", json={}).json()["device_code"]
+    r = client.post("/auth/device/token", json={"device_code": handle})
+    assert r.status_code == 400 and r.json()["error"] == "invalid_grant"
+    from vmn_exp.ui.auth.tokens import TokenService
+
+    assert TokenService(cp).list() == []
