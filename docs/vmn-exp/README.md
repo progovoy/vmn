@@ -8,18 +8,47 @@ as plain files locally or in an object store (S3, GCS, Azure).
 server or database is required to record or read runs, and the optional team
 server ([server.md](server.md)) keeps only a rebuildable cache.
 
+## Quickstart
+
+Work inside a git repo with at least one commit and a git identity
+(`user.name`/`user.email`); a throwaway one is fine:
+
 ```sh
-pip install vmn-exp              # "vmn-exp[ui]" adds the dashboard, [s3] for buckets
-vmn-exp run my_app -- python train.py
-vmn-exp list my_app --sort loss
-vmn-exp ui
+pip install "vmn-exp[ui]"        # [ui] is the dashboard; add [s3] for buckets
+git init demo && cd demo && git commit --allow-empty -m init
 ```
 
-Jobs that only record metrics need just `pip install vmn-exp-sdk`
-(see [packaging](../packaging.md)).
+Save this as `train.py`:
+
+```python
+from vmn_exp.sdk import start_run
+
+with start_run("my_app") as run:
+    for step in range(5):
+        run.log_metric("loss", 1.0 / (step + 1), step=step)
+    print(run.id)
+```
+
+```sh
+python train.py
+vmn-exp list my_app --sort loss
+vmn-exp ui                       # http://127.0.0.1:8265
+```
+
+The first run cold-starts tracking: it commits vmn's init files (`.vmn/`) and
+tags the baseline `my_app_0.0.0` in your local repo; nothing is pushed.
+
+- A script you cannot edit: `vmn-exp run my_app -- python train.py`. When
+  it is the app's first run and the repo has a remote, it also pushes the
+  baseline commit and tag to that remote.
+- No git checkout (a container, a notebook): see
+  [Runs without a git checkout](sdk.md#runs-without-a-git-checkout-containers).
+- Jobs that only record metrics need just `pip install vmn-exp-sdk`
+  (see [packaging](../packaging.md)).
 
 ## Guides
 
+- [Runnable examples](../../packages/vmn-exp/examples/README.md) — five small SDK scripts.
 - [Architecture](architecture.md) — diagrams: how vmn, the SDK, the CLI, the
   dashboard and the store fit together, and how clients use them.
 - [Client guide](client-guide.md) — start here: a project end to end (store,
@@ -27,7 +56,6 @@ Jobs that only record metrics need just `pip install vmn-exp-sdk`
   cleanup).
 - [Notebooks](notebooks.md) — one run across cells, re-run cells, kernel
   restarts, and what the snapshot captures.
-- [Runnable examples](../../packages/vmn-exp/examples/README.md) — five small SDK scripts.
 - [Migrating from MLflow](migrating-from-mlflow.md) and
   [vmn-exp vs MLflow](vmn-vs-mlflow.md).
 - [Driving the UI fleet counts](ai-fleet-tracking.md) — for AI agents
