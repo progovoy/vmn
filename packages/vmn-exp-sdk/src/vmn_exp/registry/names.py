@@ -40,7 +40,7 @@ _ABSOLUTE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
 
 def valid_model_name(name: str) -> bool:
     """Return True iff *name* is a valid model name."""
-    if not _MODEL_CHARS_RE.match(name):
+    if not isinstance(name, str) or not _MODEL_CHARS_RE.match(name):
         return False
     if _VERSION_SUFFIX_RE.search(name):
         return False
@@ -49,7 +49,7 @@ def valid_model_name(name: str) -> bool:
 
 def valid_alias_name(name: str) -> bool:
     """Return True iff *name* is a valid, non-reserved alias name."""
-    if not name:
+    if not isinstance(name, str) or not name:
         return False
     if name == 'latest' or name.isdigit():
         return False

@@ -152,6 +152,10 @@ status: 400 `bad_request`, 401 `unauthorized`, 403 `forbidden`, 404
 `/auth/login`, `/auth/callback` and `/auth/device/start` errors;
 `POST /auth/device/token` keeps its RFC 8628 `{"error"}` body.
 
+A request body that is not a JSON object is a 422; a body field of the wrong
+type (a number where a string goes, a list where an object goes) is a 400 or
+a 422 naming the field, never a 500. Unknown body fields are ignored.
+
 ### Outer runs, scope and search
 
 - **Rows** carry `root` (the top-level ancestor's verstr, null at the top) and

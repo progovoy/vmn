@@ -37,6 +37,7 @@ from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDE
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
 from vmn_exp.ui.baseline_views import BaselineViews
+from vmn_exp.ui.body_checks import workspace_fields
 from vmn_exp.ui.job_views import JobViews
 from vmn_exp.ui.leaderboard_cache import LeaderboardCache
 from vmn_exp.ui.leaderboard_scope import UnknownScope
@@ -344,15 +345,12 @@ def create_app(
     def add_workspace(body: dict):
         if read_only:
             raise HTTPException(403, "Server is read-only")
+        name, remote, path = workspace_fields(body)
         try:
-            if body.get("remote"):
-                ws = manager.clone_remote(
-                    body["name"], body["remote"], path=body.get("path")
-                )
+            if remote:
+                ws = manager.clone_remote(name, remote, path=path)
             else:
-                ws = manager.attach_path(body["name"], body["path"])
-        except KeyError as e:
-            raise HTTPException(422, f"Missing field: {e}")
+                ws = manager.attach_path(name, path)
         except WorkspaceError as e:
             raise HTTPException(400, str(e))
         return ws.to_public_dict()

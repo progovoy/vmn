@@ -54,6 +54,8 @@ class DeviceFlow:
     def poll(self, handle):
         """``(plaintext token, record, principal)`` once approved, else raises
         :class:`DeviceFlowError`."""
+        if handle is not None and not isinstance(handle, str):
+            raise DeviceFlowError("invalid_request")
         key = _KEY + (handle or "")
         pending = self.oidc.store.get("login", key, now=self.oidc.clock())
         if pending is None:
