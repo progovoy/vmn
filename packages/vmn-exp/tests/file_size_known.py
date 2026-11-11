@@ -4,7 +4,6 @@
 KNOWN_OVERSIZED = {
     'vmn_exp.cli.experiment': 1223,
     'vmn_exp.cli.model_cmd': 346,
-    'vmn_exp.cli.plugin': 347,
     'vmn_exp.cli.prune': 340,
     'vmn_exp.cli.run': 623,
     'vmn_exp.cli.skill': 419,

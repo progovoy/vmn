@@ -31,83 +31,9 @@ def _add_experiment_parser(subparsers, name):
     return add_experiment_parser(subparsers, name)
 
 
-def _add_ui_parser(subprasers):  # noqa: N802
-    from vmn_exp.cli import views
-
-    pui = subprasers.add_parser(
-        "ui", help="Serve the vmn web UI (experiments, stamp tree, actions)"
-    )
-    pui.add_argument("ui_args", nargs="*",
-                     metavar="cache resync|rebuild | onboarding | backup <path> | diag",
-                     help="Maintenance: 'cache resync' re-checks every record of the "
-                          "cache, 'cache rebuild' rebuilds it; 'onboarding' prints the "
-                          "BYO-bucket IAM policy for --store; 'backup <path>' copies the "
-                          "SQLite control plane (Postgres: prints the pg_dump command); "
-                          "'diag' takes a diagnostic dump of a running server "
-                          "(--url, --pid or --summarize FILE)")
-    pui.add_argument("--workspace", default=None,
-                     help="cache: the workspace to resync (default: every one)")
-    pui.add_argument("--config", default=None,
-                     help="Server config file (server.yml); flags override its values")
-    pui.add_argument("--db", default=None,
-                     help="Control-plane DB DSN (sqlite:///path or postgresql://...; or "
-                          "VMN_UI_DB). Keeps the workspace registry in the DB; "
-                          "Postgres also holds the shared cache for replicas")
-    pui.add_argument("--host", default="127.0.0.1", help="Bind address")
-    pui.add_argument("--port", type=int, default=8265, help="Port (default 8265)")
-    pui.add_argument("--allowed-host", action="append", default=None,
-                     help="Extra hostname clients may reach the server by (repeatable).")
-    pui.add_argument("--token", default=None,
-                     help="Bearer token required for API access (or VMN_UI_TOKEN env)")
-    pui.add_argument("--data-dir", default=None,
-                     help="Server data dir for the workspace registry and index "
-                          "(default: ~/.vmn-ui)")
-    pui.add_argument("--repo", action="append", default=None,
-                     help="Attach a local checkout as a workspace (repeatable)")
-    pui.add_argument("--store", default=None,
-                     help="Read-only experiment store URI (s3://, gs://, az://, file://)")
-    pui.add_argument("--read-only", action="store_true", default=False,
-                     help="Disable all mutation endpoints")
-    pui.add_argument("--no-browser", action="store_true", default=False,
-                     help="Do not open a browser on start")
-    pui.add_argument("--no-index", action="store_true", default=False,
-                     help="Keep no on-disk read cache (the index lives in memory only)")
-    pui.add_argument("--keep-warm", dest="keep_warm", action="store_const", const=True,
-                     default=None,
-                     help="Keep refreshing every index once loaded, with nobody watching "
-                          "(default: on for store workspaces, off for checkouts; or "
-                          "server.keep_warm)")
-    pui.add_argument("--no-keep-warm", dest="keep_warm", action="store_const", const=False,
-                     help="Let an index nobody asked for in 60 s stop refreshing")
-    pui.add_argument("--metrics-ended-hours", type=views.positive_int, default=None, metavar="H",
-                     help="Keep an ended outer run on /metrics for H hours (default 24; "
-                          "or server.metrics_ended_hours)")
-    pui.add_argument("--diag-every", type=float, default=None, metavar="SEC",
-                     help="Write a diagnostic dump to <data-dir>/diag/ every SEC seconds "
-                          "(keeps the last 20; SIGUSR1 writes one on demand)")
-    pui.add_argument("--edits", action="store_true", default=False,
-                     help="onboarding: also grant the puts server-side edits need")
-    pui.add_argument("--format", dest="onboarding_format", default="json",
-                     choices=("json", "cloudformation", "terraform"),
-                     help="onboarding: output format (default: json)")
-    pui.add_argument("--account-id", default=None,
-                     help="onboarding: the AWS account the role trusts")
-    pui.add_argument("--external-id", default=None,
-                     help="onboarding: the org's AssumeRole external id")
-    pui.add_argument("--origin", action="append", default=None,
-                     help="onboarding: a browser origin allowed by bucket CORS (repeatable)")
-    pui.add_argument("--url", dest="diag_url", default=None,
-                     help="diag: the server's base URL (e.g. http://host:8265)")
-    pui.add_argument("--pid", dest="diag_pid", type=int, default=None,
-                     help="diag: signal this vmn-exp ui process (SIGUSR1) to write a dump "
-                          "into <data-dir>/diag/")
-    pui.add_argument("--wait", dest="diag_wait", type=float, default=30,
-                     help="diag --pid: seconds to wait for the dump (default: 30)")
-    pui.add_argument("--summarize", dest="diag_summarize", default=None, metavar="FILE",
-                     help="diag: print the summary of an existing dump")
-    pui.add_argument("-o", "--output", dest="diag_output", default=None, metavar="FILE",
-                     help="diag: where to write the dump (default: "
-                          "vmn-exp-diag-<ts>.json; --pid: the server's file)")
+def _add_ui_parser(subparsers):
+    from vmn_exp.ui.cli_parser import add_ui_parser
+    return add_ui_parser(subparsers)
 
 
 # ---------------------------------------------------------------------------
@@ -129,19 +55,22 @@ def _handle_sweep(vmn_ctx):
     return handle_sweep(vmn_ctx)
 
 
-def _handle_ui(vmn_ctx):
+def _handle_ui_args(args):
     from vmn_exp.ui.cli import handle_ui
-    return handle_ui(vmn_ctx.args)
+    return handle_ui(args)
 
 
-def _ui_run_without_repo(args):
+def _handle_ui(vmn_ctx):
+    return _handle_ui_args(vmn_ctx.args)
+
+
+def _ui_run_without_repo(args, handle_ui=_handle_ui_args):
     """An explicit source (--repo, --store, --config) needs no enclosing
     checkout, nor does `ui diag` (a dump of a running server); a bare
     `vmn-exp ui` falls through to serve that checkout."""
     diag = (getattr(args, "ui_args", None) or [None])[0] == "diag"
     if not (diag or args.repo or args.store or args.config):
         return None
-    from vmn_exp.ui.cli import handle_ui
     return handle_ui(args)
 
 

@@ -416,6 +416,10 @@ You can also trigger it by hand:
 | CLI | `vmn-exp ui cache resync [--workspace <name>]` | `vmn-exp ui cache rebuild [--workspace <name>]` |
 | UI | **Resync** button on the workspace dashboard | **Rebuild** button |
 
+The CLI asks the server at `--host`/`--port` (or `--config`'s); those two
+flags go before the verb: `vmn-exp ui --port 9000 cache rebuild`. `--config`,
+`--db`, `--token` and `--data-dir` go before or after it.
+
 Both POSTs answer `202` and need the `admin` role. The UI buttons only appear
 for admins and show a progress line (`rebuilding: 41,000 / 100,000 records`).
 

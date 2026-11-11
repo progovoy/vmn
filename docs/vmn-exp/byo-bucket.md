@@ -131,7 +131,9 @@ vmn-exp ui onboarding --store s3://acme-ml/vmn --edits --format cloudformation|t
 ```
 
 `--edits` adds the read + edits puts. `--format cloudformation|terraform` needs
-`--account-id` and `--external-id`. Only `s3://` stores are supported. The same
+`--account-id` and `--external-id`. Only `s3://` stores are supported. The
+serve flags (`--port`, `--host`, ...) are not flags of `onboarding`: passing
+one is a usage error (exit 2). The same
 helpers are available in Python from `vmn_exp.ui.onboarding`
 (`permission_policy(bucket, prefix, edits=)`, `trust_policy`,
 `lifecycle_rule`, `cors_rules`, `bucket_settings`, `cloudformation`,

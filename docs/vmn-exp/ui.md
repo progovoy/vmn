@@ -64,6 +64,17 @@ any directory, inside a git checkout or not.
 | `--no-browser` | off | Don't open a browser (one opens only for a loopback `--host`) |
 | `--diag-every` | off | Write a [diagnostic dump](#diagnostic-dumps) every N seconds (keeps the last 20) |
 
+`vmn-exp ui` serves by default. Its maintenance verbs are subcommands, each
+with its own flags (`vmn-exp ui <verb> --help` lists them):
+`cache resync|rebuild [--workspace]` ([server.md](server.md#self-healing-and-resync)),
+`onboarding` ([byo-bucket.md](byo-bucket.md)), `backup <path>`
+([server.md](server.md#standalone-vs-configured)) and [`diag`](#vmn-exp-ui-diag). The source flags
+`--config`, `--db`, `--token`, `--data-dir`, `--repo` and `--store` go before
+or after the verb; the serve flags above go before it and only matter to
+`cache` (its `--host`/`--port` find a running server). A flag of another mode,
+such as `vmn-exp ui --pid 3` or `vmn-exp ui onboarding --port 1`, is a usage
+error (exit 2).
+
 ## Workspaces
 
 A **workspace** is one isolated source of data:
