@@ -80,12 +80,17 @@ def add_experiment_parser(subparsers, name):
         choices=EXPERIMENT_ACTIONS,
         help="Experiment action (default: create)",
     )
-    pexp.add_argument("name", help="The application's name")
-    pexp.add_argument("refs", nargs="*", default=None,
-                      help="tag/archive/unarchive: run refs (verstr, prefix, @N, latest); "
-                           "tag also takes key=value pairs")
+    add_positionals(pexp)
     for add_group in GROUPS.values():
         add_group(pexp)
+
+
+def add_positionals(parser):
+    """The app name and the run refs every action takes."""
+    parser.add_argument("name", help="The application's name")
+    parser.add_argument("refs", nargs="*", default=None,
+                        help="tag/archive/unarchive: run refs (verstr, prefix, @N, latest); "
+                             "tag also takes key=value pairs")
 
 
 def group_flags(group):

@@ -83,7 +83,7 @@ def _version_help(capsys):
     assert exc.value.code == 0
     out = _flat(capsys.readouterr().out)
     start = out.index("-v VERSION, --version VERSION")
-    return out[start:out.index("--note NOTE", start)]
+    return out[start:out.index("--top TOP", start)]
 
 
 def test_the_similar_docs_call_the_working_tree_default_the_one_exception(capsys):

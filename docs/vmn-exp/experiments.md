@@ -606,6 +606,11 @@ reported before the repo or the store is touched, with exit code 2:
 list' (see 'vmn-exp list --help')`. A flag given its default value (for
 example `--max-bytes 200000` on `list`) is not reported.
 
+`vmn-exp <action> --help` (also `vmn-exp exp <action> --help`) lists only the
+flags that action takes, under `usage: vmn-exp <action>`; `vmn-exp exp --help`
+lists every experiment flag. A `--help` after `--` belongs to the wrapped
+command (`vmn-exp run my_app -- python train.py --help` runs it).
+
 ### `create`
 
 Capture the current state as a run without running anything (status

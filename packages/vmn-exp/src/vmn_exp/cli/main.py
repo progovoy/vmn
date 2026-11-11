@@ -8,6 +8,7 @@ through ``version_stamp.api``, with only its own commands registered.
 import sys
 
 from version_stamp.api import VMN_ARGS, Frontend, vmn_run
+from vmn_exp.cli.exp_parser.help import action_parser, help_action
 from vmn_exp.cli.plugin import EXPERIMENT_ACTIONS, register_all
 from vmn_exp.cli.version import display_version, installed_version
 
@@ -68,9 +69,14 @@ def run_argv(argv, read_version):
             file=sys.stderr,
         )
         return 2, None
+    vmn_argv = _to_vmn_argv(argv)
+    action = help_action(vmn_argv)
+    if action:
+        action_parser(action).print_help()
+        raise SystemExit(0)
     frontend = Frontend(prog="vmn-exp", version=display_version(read_version),
                         builtins=False, epilog=EPILOG)
-    return vmn_run(_to_vmn_argv(argv), frontend=frontend)
+    return vmn_run(vmn_argv, frontend=frontend)
 
 
 def vmn_exp_run(argv):
