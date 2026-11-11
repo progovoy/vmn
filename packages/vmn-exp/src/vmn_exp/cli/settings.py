@@ -36,7 +36,7 @@ def settings_run_without_repo(args):
 def _set(storage, args):
     if not args.file:
         print("settings set needs -f <file>", file=sys.stderr)
-        return 1
+        return 2
     try:
         text = read_file_arg(args.file, "-f")
         check_settings(text)

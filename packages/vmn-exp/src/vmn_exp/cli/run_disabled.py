@@ -16,7 +16,7 @@ NOTICE = "vmn-exp: VMN_MODE=disabled - running the command without recording a r
 
 def exec_if_disabled(args):
     """Under ``VMN_MODE=disabled`` replace this process with ``args.run_cmd``
-    (1 when there is no command); None otherwise, for the normal ``run``."""
+    (2, a usage error, when there is no command); None otherwise, for the normal ``run``."""
     if not is_disabled():
         return None
     run_cmd = getattr(args, "run_cmd", None)
@@ -24,7 +24,7 @@ def exec_if_disabled(args):
         VMN_LOGGER.error(
             "No command to run. Usage: vmn-exp run <app> -- <command> [args...]"
         )
-        return 1
+        return 2
     print(NOTICE, file=sys.stderr)
     sys.stdout.flush()
     sys.stderr.flush()

@@ -160,9 +160,9 @@ def _exp_run_without_repo(args):
     is_experiment = getattr(args, "command", None) in ("experiment", "exp")
     action = getattr(args, "action", None)
     if is_experiment:
-        from vmn_exp.cli.exp_parser.ownership import refuse_foreign_flags
+        from vmn_exp.cli.exp_parser.ownership import refuse_usage_errors
 
-        usage_error = refuse_foreign_flags(args)
+        usage_error = refuse_usage_errors(args)
         if usage_error:
             return usage_error
     if is_experiment and action == "run":

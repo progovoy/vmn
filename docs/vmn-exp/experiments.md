@@ -611,6 +611,22 @@ flags that action takes, under `usage: vmn-exp <action>`; `vmn-exp exp --help`
 lists every experiment flag. A `--help` after `--` belongs to the wrapped
 command (`vmn-exp run my_app -- python train.py --help` runs it).
 
+### Exit codes
+
+Every `vmn-exp` command (the experiment actions, `settings`, `model`,
+`sweep`, `ui`, `buffers`, ...) exits with one of these, and no others:
+
+| Code | Means |
+|---|---|
+| 0 | success |
+| 1 | the command ran and failed: a run or app not found, a store error, a refused change |
+| 2 | the invocation was wrong: an argparse error, a flag the action does not own, run refs on an action that takes none (`vmn-exp list my_app stray`), a missing required argument (`settings set` without `-f`, `run` with no command after `--`) |
+
+A usage error is reported before the repo or the store is touched, inside a
+checkout or not. `run`, `rerun` and `sweep agent` return the wrapped
+command's own exit code instead (`128 + N` when signal N ended it), so a
+child that exits 2 cannot be told from a usage error by the code alone.
+
 ### `create`
 
 Capture the current state as a run without running anything (status

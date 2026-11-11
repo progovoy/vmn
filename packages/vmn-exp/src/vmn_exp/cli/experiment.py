@@ -12,11 +12,7 @@ import yaml
 from vmn_exp.cli import fork
 from vmn_exp.cli.code_record import load_code_record
 from vmn_exp.cli.compare_view import compare_payload, compare_text
-from vmn_exp.cli.manage import (
-    MANAGE_ACTIONS,
-    experiment_manage,
-    refuse_stray_refs,
-)
+from vmn_exp.cli.manage import experiment_manage
 from vmn_exp.cli.prune import experiment_prune as _experiment_prune
 
 # `vmn-exp run` lives in its own module; these names stay importable from here.
@@ -28,7 +24,8 @@ from vmn_exp.cli.run import (  # noqa: F401
 )
 from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.duration_text import duration_text
-from vmn_exp.cli.exp_parser.ownership import refuse_foreign_flags
+from vmn_exp.cli.exp_parser.actions import MANAGE_ACTIONS
+from vmn_exp.cli.exp_parser.ownership import refuse_usage_errors
 from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.list_hints import print_query_hints
@@ -355,7 +352,7 @@ def handle_experiment(vmn_ctx):
     vcs = vmn_ctx.vcs
     args = vmn_ctx.args
     action = args.action
-    usage_error = refuse_foreign_flags(args)
+    usage_error = refuse_usage_errors(args)
     if usage_error:
         return usage_error
 
@@ -381,8 +378,6 @@ def handle_experiment(vmn_ctx):
 
     if action in MANAGE_ACTIONS:
         return experiment_manage(_app_name(vcs, args), storage, args)
-    if refuse_stray_refs(args):
-        return 1
     if action == "create":
         return experiment_create(
             vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)

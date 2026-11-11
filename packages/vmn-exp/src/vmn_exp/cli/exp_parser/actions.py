@@ -41,3 +41,6 @@ ACTION_FLAGS = {
 }
 
 EXPERIMENT_ACTIONS = list(ACTION_FLAGS)
+
+# The only actions whose positionals after the app name are run refs.
+MANAGE_ACTIONS = ("tag", "archive", "unarchive")

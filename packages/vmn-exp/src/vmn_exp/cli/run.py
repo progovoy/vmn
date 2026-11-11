@@ -243,7 +243,7 @@ def experiment_run(vcs, params, storage, args, repo_lock=None):
         VMN_LOGGER.error(
             "No command to run. Usage: vmn-exp run <app> -- <command> [args...]"
         )
-        return 1
+        return 2
     intent, err = read_intent(args)
     if err is not None:
         return err

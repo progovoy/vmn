@@ -23,17 +23,7 @@ from vmn_exp.core.refs import resolve_experiment
 from vmn_exp.sdk import manage
 from version_stamp.api import VMN_LOGGER
 
-MANAGE_ACTIONS = ("tag", "archive", "unarchive")
 DRY_RUN_SAMPLE = 10
-
-
-def refuse_stray_refs(args):
-    """True (and logged) when an action that takes no refs was given some."""
-    stray = getattr(args, "refs", None)
-    if stray and args.action not in MANAGE_ACTIONS:
-        VMN_LOGGER.error(f"Unexpected arguments for 'exp {args.action}': {' '.join(stray)}")
-        return True
-    return False
 
 
 def _split_refs(args):
