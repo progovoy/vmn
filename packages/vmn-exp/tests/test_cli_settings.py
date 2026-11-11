@@ -54,7 +54,7 @@ def test_set_refuses_invalid_settings(store_dir, tmp_path, capsys):
 
 
 def test_set_needs_a_file(store_dir, capsys):
-    assert _run("settings", APP, "set", "--dir", store_dir) == 1
+    assert _run("settings", APP, "set", "--dir", store_dir) == 2
 
 
 def _store_run(storage, n, loss):
