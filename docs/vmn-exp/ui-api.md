@@ -46,14 +46,21 @@ under `/api/v1`; `{app}` is the app's tag form (`root_app-service1` for
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}` | [Run detail](#run-detail-is-bounded) (`latest`, `@N`, prefixes resolve) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/log?offset=&limit=` | A page of the log, `{"entries", "total"}`, oldest first |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/artifacts/{path}` | [Artifact download](#diffs-and-artifacts) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/outputs/{path}` | [One of vmn's own outputs](#diffs-and-artifacts) (`output.log`, media, tables) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/table/{path}` | A page of a logged [table](#media) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/histograms/{name}` | One histogram key's [steps](#media) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/lineage` | [Run lineage](#lineage) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/patch?max_bytes=` | [The run's patch and changed files](#run-code-patch-and-baselines) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/baselines` | [Runs to diff it against](#run-code-patch-and-baselines) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/sweep` | The sweep's spec, summary and trials ([sweeps.md](sweeps.md#status)) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/summary?split=` | [An outer run's rollup](#outer-runs-scope-and-search) |
+| `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/failures?limit=` | [An outer run's failure clusters](#outer-runs-scope-and-search) |
+| `GET` | `/workspaces/{ws}/apps/{app}/search?text=&limit=` | [⌘K run search](#outer-runs-scope-and-search) over the app's runs |
+| `GET` | `/workspaces/{ws}/apps/{app}/events?scope=` | [Change stream](#outer-runs-scope-and-search) (Server-Sent Events) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments/{verstr}/similar?top=&all_apps=&archived=&q=` | [Runs most like this one](#similar-runs) |
 | `GET` | `/workspaces/{ws}/apps/{app}/similar?text=&top=&all_apps=&archived=&q=` | [Runs matching a text](#similar-runs) |
+| `GET` | `/similar?text=&top=&archived=&q=` | [Runs matching a text](#similar-runs) over every workspace the caller may view |
+| `GET` | `/search?q=&limit=&archived=` | The [query language](#filtering-with-a-query) over every app of every workspace the caller may view ([server.md](server.md#postgres-and-replicas)) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments-columns` | [Whole-set chart columns](#columns-for-whole-set-charts) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments-importance` | [Parameter importance](#parameter-importance) |
 | `GET` | `/workspaces/{ws}/apps/{app}/experiments-facets` | [Filter vocabulary](#facets) |
@@ -75,7 +82,35 @@ under `/api/v1`; `{app}` is the app's tag form (`root_app-service1` for
 | `GET` | `/workspaces/{ws}/apps/{app}/deps?v=&to=` | Dependency pins of `v` (default latest), or their drift to `to` (git) |
 | `GET` | `/workspaces/{ws}/apps/{app}/changelog?v=&from=` | Conventional commits grouped between `from` (default: `v`'s previous version) and `v` (default latest) (git) |
 | `GET` | `/workspaces/{ws}/apps/{app}/config?v=` | `{"conf", "text"}` of the app's `conf.yml`, from the working tree or as of version `v` (git) |
+| `GET` | `/workspaces/{ws}/apps/{app}/reports?verstr=` | [Reports](reports.md#report-api) whose panels show this app (or run) |
+| `GET` / `POST` | `/workspaces/{ws}/reports` | List / create [reports](reports.md#report-api) |
+| `GET` / `PATCH` / `DELETE` | `/workspaces/{ws}/reports/{rid}` | A report's header and latest revision / its title, archived, pinned / delete it |
+| `POST` | `/workspaces/{ws}/reports/{rid}/revisions` | Save a [revision](reports.md#revisions-and-conflicts) (409 on conflict) |
+| `GET` | `/workspaces/{ws}/reports/{rid}/revisions/{n}` | One revision |
+| `GET` | `/workspaces/{ws}/reports/{rid}/revisions/{n}/data/{panel}` | A [published](reports.md#live-vs-published) panel's data |
+| `POST` | `/workspaces/{ws}/reports/{rid}/publish` | Publish a revision with its panels' data |
+| `GET` / `POST` | `/workspaces/{ws}/comments` | List / add [comments](reports.md#comments) on a target |
+| `PATCH` / `DELETE` | `/workspaces/{ws}/comments/{target}/{id}` | Edit or resolve / delete a comment |
+| `GET` | `/workspaces/{ws}/cache/status` | The [cache's state](server.md#self-healing-and-resync) (admin) |
+| `POST` | `/workspaces/{ws}/cache/resync?full=` | [Resync the cache](server.md#self-healing-and-resync) (admin) |
+| `GET` / `POST` | `/tokens` | List / create [API tokens](server.md#authentication) (admin) |
+| `DELETE` | `/tokens/{id}` | Revoke a token (admin) |
+| `DELETE` | `/tokens?owner=` | Revoke every token of an owner and close their sessions (admin) |
+| `GET` | `/audit?offset=&limit=` | A page of the [audit log](server.md#roles) (admin) |
+| `GET` | `/audit/export` | The audit log as JSONL (admin) |
+| `GET` | `/diag` | A [diagnostic dump](ui.md#diagnostic-dumps) (admin) |
 | | `/workspaces/{ws}/models/...` | [Model registry](#model-registry-api) |
+
+Two groups of routes are served outside `/api/v1`, at these full paths:
+
+| Method | Path | Answers |
+|---|---|---|
+| `GET` | `/metrics` | [Prometheus gauges](server.md#prometheus-metrics) (viewer) |
+| `GET` | `/auth/login` | Start the [OIDC](server.md#authentication) browser sign-in |
+| `GET` | `/auth/callback` | The OIDC redirect URI; sets the session cookie |
+| `POST` | `/auth/logout` | Close the browser session |
+| `POST` | `/auth/device/start` | Start the device flow of `vmn-exp login` |
+| `POST` | `/auth/device/token` | Poll the device flow for a login token |
 
 Unknown `/api/...` paths are a JSON 404. A query parameter the route does not
 take is a 400 naming it (`Unknown query parameter 'limt'; did you mean 'limit'?`),
@@ -1143,18 +1178,18 @@ curl -G -H "Authorization: Bearer $VMN_UI_TOKEN" \
 
 ### Model registry API
 
-Under `/api/v1/workspaces/{ws}/models` (concepts and rules in
+Under `/api/v1` like the rest (concepts and rules in
 [models.md](models.md)):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/models[?kind=model\|dataset][&offset=&limit=]` | `{"models": [row...]}`, name-ordered, each row with its `kind`; any other `kind` is a 400; with `offset`/`limit` one page plus `"total"` (after the `kind` filter) |
-| `GET` | `/models/{name}` | `{name, kind, description, versions, aliases, audit}` |
-| `GET` | `/models/{name}/versions/{n}/lineage` | Producer and consumer runs ([Lineage](#lineage)) |
-| `POST` | `/models/{name}/versions` | Register a run-backed version; body `{"run": {"app", "verstr"}, "artifact_path"?, "alias"?, "description"?}` → `201 {"version": N}` |
-| `POST` | `/models/{name}/aliases` | Move an alias; body `{"alias", "version", "expect"?}`; 409 on an `expect` mismatch |
-| `DELETE` | `/models/{name}/aliases/{alias}` | Remove an alias |
-| `POST` | `/models/{name}/versions/{n}/status` | Body `{"status": "active"\|"deprecated"\|"deleted"}`; 400 when deleting a version an alias points at |
+| `GET` | `/workspaces/{ws}/models[?kind=model\|dataset][&offset=&limit=]` | `{"models": [row...]}`, name-ordered, each row with its `kind`; any other `kind` is a 400; with `offset`/`limit` one page plus `"total"` (after the `kind` filter) |
+| `GET` | `/workspaces/{ws}/models/{name}` | `{name, kind, description, versions, aliases, audit}` |
+| `GET` | `/workspaces/{ws}/models/{name}/versions/{n}/lineage` | Producer and consumer runs ([Lineage](#lineage)) |
+| `POST` | `/workspaces/{ws}/models/{name}/versions` | Register a run-backed version; body `{"run": {"app", "verstr"}, "artifact_path"?, "alias"?, "description"?}` → `201 {"version": N}` |
+| `POST` | `/workspaces/{ws}/models/{name}/aliases` | Move an alias; body `{"alias", "version", "expect"?}`; 409 on an `expect` mismatch |
+| `DELETE` | `/workspaces/{ws}/models/{name}/aliases/{alias}` | Remove an alias |
+| `POST` | `/workspaces/{ws}/models/{name}/versions/{n}/status` | Body `{"status": "active"\|"deprecated"\|"deleted"}`; 400 when deleting a version an alias points at |
 
 The list answers from an in-memory snapshot of the registry, refreshed in
 the background (every 30 s, re-reading only the models whose files changed)
