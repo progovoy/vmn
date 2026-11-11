@@ -22,6 +22,7 @@ from vmn_exp.sdk import _resolve_app_name
 from vmn_exp.sdk.create import (
     SNAPSHOT_METADATA_ENV,
     gitmode,
+    require_checkout_here,
     snapshot_app_names,
     snapshot_mode_storage,
 )
@@ -73,6 +74,7 @@ def locate(app_name, ref, storage, action="resume"):
         app_name = _resolve_app_name(app_name, lambda: snapshot_app_names(meta_path))
         storage = storage or snapshot_mode_storage()
     else:
+        require_checkout_here()
         checkout = gitmode()
         app_name = _resolve_app_name(app_name, checkout.stamped_apps)
         vcs = checkout.build_vcs(app_name)

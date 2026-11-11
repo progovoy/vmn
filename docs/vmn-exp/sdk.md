@@ -185,6 +185,14 @@ Where it records:
 Readers honour the same variables, so `list_runs()` in the job finds its own
 runs (see [Reading runs back](#reading-runs-back)).
 
+Without `VMN_SNAPSHOT_METADATA`, a run records the git checkout it starts in.
+`start_run()` (also with `run_id=`), `create_run()` and `create_runs()` in a
+directory that is not inside one (looked up from `VMN_WORKING_DIR`, else the
+cwd) raise `RuntimeError` naming the directory and the two ways out: make it a
+checkout (`git init && git commit --allow-empty -m init`), or set
+`VMN_SNAPSHOT_METADATA`. This comes before the app name is resolved and
+before the slim-install check below, since neither would help there.
+
 ---
 
 ## Logging
@@ -1533,6 +1541,8 @@ pip install vmn-exp-sdk    # + [s3]/[gcs]/[azure] for a bucket, [pandas] for Dat
 needs: no vmn, no GitPython, no git binary. Creating a run from a git checkout
 needs `vmn-exp`; in a slim install `start_run()` in a checkout raises a
 `RuntimeError` pointing at `pip install vmn-exp` or the git-free variables
-([Runs without a git checkout](#runs-without-a-git-checkout-containers)). A
+([Runs without a git checkout](#runs-without-a-git-checkout-containers));
+outside a checkout it raises the not-a-checkout `RuntimeError` described
+there instead. A
 missing store extra raises `ImportError` naming it. See
 [packaging.md](../packaging.md) for the package split.

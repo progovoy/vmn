@@ -130,11 +130,16 @@ def _is_root(path):
     )
 
 
-def resolve_root_path():
-    """The nearest directory at or above the working dir holding .git or .vmn."""
-    path = os.path.realpath(
+def working_dir():
+    """``$VMN_WORKING_DIR``, else the cwd: where the checkout is looked for."""
+    return os.path.realpath(
         os.path.expanduser(os.environ.get("VMN_WORKING_DIR", os.getcwd()))
     )
+
+
+def resolve_root_path():
+    """The nearest directory at or above the working dir holding .git or .vmn."""
+    path = working_dir()
     while not _is_root(path):
         parent = os.path.realpath(os.path.join(path, ".."))
         if parent == path:

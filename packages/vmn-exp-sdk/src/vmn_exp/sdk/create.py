@@ -14,7 +14,7 @@ import contextlib
 import os
 
 import yaml
-from vmn_exp._base import ensure_logger
+from vmn_exp._base import ensure_logger, working_dir
 from vmn_exp.core import create_batch
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.env import (
@@ -23,7 +23,7 @@ from vmn_exp.core.env import (
 )
 from vmn_exp.core.from_snapshot import exported_features, snapshot_record
 from vmn_exp.core.refs import resolve_parent
-from vmn_exp.core.storage_resolve import _get_experiment_storage
+from vmn_exp.core.storage_resolve import _get_experiment_storage, try_repo_root
 from vmn_exp.core.writer import create_run as record_run
 from vmn_exp.core.writer import get_repo_lock, merge_env_into_params
 from vmn_exp.sdk import _resolve_app_name, context
@@ -132,8 +132,16 @@ def record_source(app_name, parent, nested, storage, capture_env, python_exe=Non
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
     if meta_path:
         return snapshot_source(app_name, meta_path, parent, nested, storage, capture_env)
+    require_checkout_here()
     return gitmode().checkout_source(
         app_name, parent, nested, storage, capture_env=capture_env, python_exe=python_exe)
+
+
+def require_checkout_here():
+    """RuntimeError unless the working dir is inside a git checkout."""
+    from vmn_exp.sdk.checkout_guard import require_checkout
+
+    require_checkout(try_repo_root(), working_dir())
 
 
 def creation_failed(app_name, err):
