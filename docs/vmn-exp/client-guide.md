@@ -413,7 +413,7 @@ from vmn_exp.sdk.reader import get_metric_history, param_importance, runs_datafr
 
 df = runs_dataframe("my_app", query='status = "succeeded"')    # needs vmn-exp-sdk[pandas]
 df.sort_values("metrics.val_loss").head()
-curve = get_metric_history("val_loss", "my_app", ref="@9")      # step, timestamp, value
+curve = get_metric_history("val_loss", app_name="my_app", ref="@9")  # step, timestamp, value
 param_importance("my_app", "val_loss")[:3]
 ```
 

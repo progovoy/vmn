@@ -41,6 +41,15 @@ def checked_artifact_name(name):
     return name
 
 
+def require_str(value, param, call):
+    """TypeError naming *call*'s argument order when *param* is not a str."""
+    if not isinstance(value, str):
+        raise TypeError(
+            f"{call}: {param} must be a str, got {type(value).__name__}; "
+            "the arguments look swapped"
+        )
+
+
 def checked_stored_path(path):
     """*path*, a record-relative ``artifacts/…``/``outputs/…`` path; ValueError if not."""
     if not valid_artifact_path(path):
@@ -109,12 +118,14 @@ class RunArtifacts:
 
     def log_dict(self, obj, name):
         """*obj* as JSON (``.json``) or YAML (``.yaml``/``.yml``), by *name*'s extension."""
+        require_str(name, "name", "log_dict(obj, name)")
         writer = _DICT_WRITERS.get(os.path.splitext(name)[1].lower())
         if writer is None:
             raise ValueError(f"log_dict needs a .json, .yaml or .yml name, got {name!r}")
         self._log_produced(name, lambda path: _write_text(path, lambda f: writer(obj, f)))
 
     def log_text(self, text, name):
+        require_str(text, "text", "log_text(text, name)")
         self._log_produced(name, lambda path: _write_text(path, lambda f: f.write(text)))
 
     def log_figure(self, figure, name, **savefig_kwargs):
@@ -122,6 +133,7 @@ class RunArtifacts:
 
         Duck-typed: nothing here imports matplotlib.
         """
+        require_str(name, "name", "log_figure(figure, name)")
         self._log_produced(name, lambda path: figure.savefig(path, **savefig_kwargs))
 
     def log_artifacts(self, local_dir, prefix=None):

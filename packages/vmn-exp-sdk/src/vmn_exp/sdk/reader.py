@@ -373,7 +373,7 @@ def runs_dataframe(app_name=None, **list_runs_kwargs):
     return frames.to_dataframe(records, frames.run_columns(records))
 
 
-def get_metric_history(metric, app_name=None, ref="latest", *, storage=None,
+def get_metric_history(metric, *, app_name=None, ref="latest", storage=None,
                        step_range=None, max_points=None):
     """Every recorded value of *metric* in one run, as a DataFrame.
 

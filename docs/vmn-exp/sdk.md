@@ -232,6 +232,13 @@ Every call appends to the run's log; nothing is rewritten.
 | `register_model(...)`, `use_model(ref)`, `use_dataset(ref)` | [registry](#model-registry) shortcuts bound to this run |
 | `set_intent(text, keywords=None, generator=None)` | what the run is for ([similar runs](#similar-runs)); the latest intent wins. Also on a finished run, synced to the remote at once |
 
+Argument order comes in two families: file artifacts take the payload, then the
+file name (`log_dict(obj, name)`, `log_text(text, name)`, `log_figure(fig, name)`);
+keyed media take the key, then the payload (`log_table(name, data)`,
+`log_image(name, image)`, `log_histogram(name, values)`). A name that is not a
+`str` (and `log_text` text that is not one) raises `TypeError` saying the
+arguments look swapped.
+
 `Run` attributes: `id` (verstr), `app_name`, `name`, `step`, `start_step` (the
 step a fork/rewind continues from, else `None`), `pid` (the owning process),
 `disabled`. `run.similar(top=10)` reads instead of recording: the past runs
@@ -1079,7 +1086,7 @@ only when a checkout is found and `app_name`/`storage` are not both given.
 | `similar_runs(app_name=None, ref="latest", *, storage=None, top=10, query=None, context=None, text_only=False, all_apps=False)` | the past runs most like run `ref`, most similar first; see [Similar runs](#similar-runs) |
 | `param_importance(app_name=None, metric=None, *, storage=None, query=None, status=None, include_archived=False)` | `[{"param", "importance", "correlation", "spearman", "kind", "n"}]`, most important first, over the runs `list_runs` would return. `importance` is a random-forest share (sums to 1); correlations are `None` for categorical params ([details](experiments.md#importance)). `ValueError` when no run carries `metric` |
 | `runs_dataframe(app_name=None, **list_runs_kwargs)` | pandas, below |
-| `get_metric_history(metric, app_name=None, ref="latest", *, storage=None, step_range=None, max_points=None)` | pandas, below |
+| `get_metric_history(metric, *, app_name=None, ref="latest", storage=None, step_range=None, max_points=None)` | pandas, below. `app_name` and `ref` are keyword-only: the metric comes first, unlike `get_run` |
 
 A row carries each metric's [summary](#metric-goals-and-summaries) (the last
 value unless declared otherwise), `params`, `tags`, `inputs`, `outputs`, `name`,
@@ -1108,7 +1115,7 @@ from vmn_exp.sdk.reader import get_metric_history, runs_dataframe
 df = runs_dataframe("my_app", query="metrics.loss < 0.5", status="succeeded")
 df.sort_values("metrics.loss").head()
 
-loss = get_metric_history("loss", "my_app", ref="@3")   # columns: step, timestamp, value
+loss = get_metric_history("loss", app_name="my_app", ref="@3")   # columns: step, timestamp, value
 ```
 
 - `runs_dataframe` is `list_runs` as one flat DataFrame (like

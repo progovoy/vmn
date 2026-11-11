@@ -186,7 +186,7 @@ def test_get_metric_history(app_layout):
     pd = pytest.importorskip("pandas")
     _seed(app_layout)
     df = get_metric_history(
-        "loss", app_layout.app_name, "0.0.1", storage=_storage(app_layout)
+        "loss", app_name=app_layout.app_name, ref="0.0.1", storage=_storage(app_layout)
     )
 
     assert isinstance(df, pd.DataFrame)
@@ -199,7 +199,7 @@ def test_get_metric_history_of_an_unknown_metric_is_empty(app_layout):
     pytest.importorskip("pandas")
     _seed(app_layout)
     df = get_metric_history(
-        "nope", app_layout.app_name, "0.0.1", storage=_storage(app_layout)
+        "nope", app_name=app_layout.app_name, ref="0.0.1", storage=_storage(app_layout)
     )
     assert df.empty
     assert list(df.columns) == ["step", "timestamp", "value"]
