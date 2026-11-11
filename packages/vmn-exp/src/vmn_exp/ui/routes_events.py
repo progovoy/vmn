@@ -8,6 +8,7 @@ paying for it, so without one (an embedded ``create_app``) the route is a
 ``MAX_STREAMS`` open streams it is a 503 (the client polls too)."""
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
+from vmn_exp.ui.api_errors import error_body
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 
@@ -46,13 +47,15 @@ def register(app, prefix, reader_for, background, segment):
              dependencies=[require(VIEWER)])
     async def app_events(ws_name: str, app_tag: str, scope: str = None):
         if not background:
-            return JSONResponse({"detail": "Live events need the background refresher",
-                                 "reason": NO_LIVE_EVENTS}, status_code=404)
+            return JSONResponse(error_body("Live events need the background refresher",
+                                           NO_LIVE_EVENTS, reason=NO_LIVE_EVENTS),
+                                status_code=404)
         if scope is not None:
             segment(scope, "scope")
         read = await run_in_threadpool(reader_for, ws_name, app_tag)
         if not slots.acquire():
-            return JSONResponse({"detail": "Too many live streams", "reason": TOO_MANY_STREAMS},
+            return JSONResponse(error_body("Too many live streams", TOO_MANY_STREAMS,
+                                           reason=TOO_MANY_STREAMS),
                                 status_code=503, headers={"Retry-After": "30"})
         stream = live_events.event_stream(lambda: run_in_threadpool(read), scope)
         return EventStreamResponse(stream, slots.release)

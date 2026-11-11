@@ -136,6 +136,22 @@ answer a ref they cannot resolve with `{"detail": "<message>", "code": "<code>"}
 (a malformed ref such as `@x`) a 400. Clients branch on `code`, never on the
 message.
 
+**Errors.** A JSON error is `{"detail": "<message>", "code": "<code>"}`. A
+route with a specific reason sets `code` to it (`run_not_found`,
+`app_not_found`, `not_a_repo`, `no_live_events`, `too_many_streams`, the
+`experiments-diff` materialize reasons, ...); the routes that answered
+`reason` before keep it as an extra key with the same value, and the 401
+keeps its `auth` sign-in hints. Any other error's `code` comes from its
+status: 400 `bad_request`, 401 `unauthorized`, 403 `forbidden`, 404
+`not_found`, 405 `method_not_allowed`, 409 `conflict`, 413 `too_large`, 415
+`unsupported_media_type`, 422 `invalid_body`, 429 `busy`, 500
+`internal_error`, 501 `not_implemented`, 502 `bad_gateway`, 503
+`unavailable` (another status: `http_<status>`). Not yet covered: a
+`ValueError` 400 and FastAPI's own request-validation 422 still answer
+`detail` alone, as do the multi-tenancy 403 (no organization) and the
+`/auth/login`, `/auth/callback` and `/auth/device/start` errors;
+`POST /auth/device/token` keeps its RFC 8628 `{"error"}` body.
+
 ### Outer runs, scope and search
 
 - **Rows** carry `root` (the top-level ancestor's verstr, null at the top) and

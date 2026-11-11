@@ -3,12 +3,29 @@
 import logging
 
 from fastapi import HTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from vmn_exp.core.resolve_ref import AMBIGUOUS_REF, INVALID_REF, RUN_NOT_FOUND
 from vmn_exp.ui.responses import SafeJSONResponse
 
 APP_NOT_FOUND = "app_not_found"
 REF_STATUS = {RUN_NOT_FOUND: 404, AMBIGUOUS_REF: 409, INVALID_REF: 400}
+STATUS_CODES = {
+    400: "bad_request",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    405: "method_not_allowed",
+    409: "conflict",
+    413: "too_large",
+    415: "unsupported_media_type",
+    422: "invalid_body",
+    429: "busy",
+    500: "internal_error",
+    501: "not_implemented",
+    502: "bad_gateway",
+    503: "unavailable",
+}
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -18,11 +35,25 @@ class CodedError(Exception):
         self.status, self.detail, self.code = status, detail, code
 
 
+def error_body(detail, code, **extra):
+    """The one error envelope: *detail*, *code*, then any *extra* keys."""
+    return {"detail": detail, "code": code, **extra}
+
+
+def status_code_name(status):
+    """The ``code`` of an error that names none: from its HTTP *status*."""
+    return STATUS_CODES.get(status, f"http_{status}")
+
+
 def install(app):
     @app.exception_handler(CodedError)
     async def _coded(request, exc: CodedError):
-        body = {"detail": exc.detail, "code": exc.code}
-        return SafeJSONResponse(body, status_code=exc.status)
+        return SafeJSONResponse(error_body(exc.detail, exc.code), status_code=exc.status)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http(request, exc: StarletteHTTPException):
+        body = error_body(exc.detail, status_code_name(exc.status_code))
+        return SafeJSONResponse(body, status_code=exc.status_code, headers=exc.headers)
 
     @app.exception_handler(ValueError)
     async def _value_error(request, exc: ValueError):

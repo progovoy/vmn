@@ -10,8 +10,9 @@ export const BASE = "/api/v1";
 /** App names appear in URLs in vmn's dashed tag form (`/` -> `-`). */
 export const appTag = (name: string) => name.replaceAll("/", "-");
 
-/** What every request throws: the message plus the HTTP status. */
-export type HttpError = Error & { status?: number; body?: unknown };
+/** What every request throws: the message, the HTTP status and the error
+ *  body's `code` (an older server's `reason` when it sent no code). */
+export type HttpError = Error & { status?: number; code?: string; body?: unknown };
 
 export function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const token = sessionStorage.getItem(TOKEN_KEY);
@@ -72,6 +73,7 @@ async function parse<T>(res: Response, reportAs: string | null): Promise<T> {
     // query, say) and is shown next to the input, not as a page error.
     throw Object.assign(new Error(body.detail || `HTTP ${res.status}`), {
       status: res.status,
+      code: body.code ?? body.reason,
       body,
     });
   }

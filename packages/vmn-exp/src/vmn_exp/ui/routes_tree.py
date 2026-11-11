@@ -4,6 +4,7 @@
 import git
 from fastapi import HTTPException
 
+from vmn_exp.ui.api_errors import error_body
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import tree as tree_reader
@@ -14,7 +15,7 @@ from vmn_exp.ui.tree_cache import TREES
 def _not_a_repo_response(path):
     """409 when the workspace path is not a valid git repository."""
     return SafeJSONResponse(
-        {"detail": "Not a git repository", "reason": "not_a_repo", "path": str(path)},
+        error_body("Not a git repository", "not_a_repo", reason="not_a_repo", path=str(path)),
         status_code=409,
     )
 

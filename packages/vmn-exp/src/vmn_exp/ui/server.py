@@ -19,7 +19,13 @@ from vmn_exp.core.similar_search import conf_weights
 from vmn_exp.storage.areas import app_key
 from vmn_exp.storage.files import FILE_TREES, valid_artifact_path
 from vmn_exp.storage.store_marker import require_store
-from vmn_exp.ui.api_errors import APP_NOT_FOUND, CodedError, raise_read_error
+from vmn_exp.ui.api_errors import (
+    APP_NOT_FOUND,
+    CodedError,
+    error_body,
+    raise_read_error,
+    status_code_name,
+)
 from vmn_exp.ui.app_presence import app_exists
 from vmn_exp.ui.attention_built_in import with_built_in
 from vmn_exp.ui.audit import AuditLog, install_audit_middleware
@@ -247,7 +253,7 @@ def create_app(
         principal = await _principal(request) if chain else None
         request.state.principal = principal
         if chain and principal is None and request.url.path.startswith("/api"):
-            return JSONResponse({"detail": "Unauthorized", "auth": auth_hints(chain)},
+            return JSONResponse(error_body("Unauthorized", "unauthorized", auth=auth_hints(chain)),
                                 status_code=401, headers={"WWW-Authenticate": "Bearer"})
         return await call_next(request)
 
@@ -260,7 +266,7 @@ def create_app(
         )
         if refused:
             status, detail = refused
-            return JSONResponse({"detail": detail}, status_code=status)
+            return JSONResponse(error_body(detail, status_code_name(status)), status_code=status)
         return await call_next(request)
 
     app.add_middleware(
@@ -711,7 +717,7 @@ def create_app(
             raise HTTPException(429, "Too many diffs in progress; retry shortly")
         except diff_reader.DiffMaterializeError as exc:
             return SafeJSONResponse(
-                {"detail": exc.detail, "reason": exc.reason},
+                error_body(exc.detail, exc.reason, reason=exc.reason),
                 status_code=422,
             )
         if err:
