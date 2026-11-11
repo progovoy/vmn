@@ -253,6 +253,19 @@ outlives the pod (a ReadWriteOnce PersistentVolumeClaim or a hostPath, not an
 `emptyDir`): a buffer kept after a store outage or a kill is then still on
 disk for another pod to ship.
 
+Many runs of one code version: each new pod lists that code version's run
+names once to pick its `.rN`, so a fleet or sweep of thousands of pods does
+quadratic listing work in all. Give each pod its own writer id and it lists
+only its own names, or have the launcher name the runs
+(`create_run(run_id=...)`, no listing) and each pod open its run with
+`start_run(run_id=...)`
+([Many runs of one code version](experiments.md#many-runs-of-one-code-version)):
+
+```yaml
+      - name: VMN_WRITER_ID                                          # runs named <code>.<pod name>
+        valueFrom: {fieldRef: {fieldPath: metadata.name}}
+```
+
 `--from-snapshot <path>` is the flag form of `VMN_SNAPSHOT_METADATA`. A job
 that only needs the SDK can skip `vmn-exp run` and call `start_run()` with the
 same variables ([Runs without a git checkout](sdk.md#runs-without-a-git-checkout-containers)).

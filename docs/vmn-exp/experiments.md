@@ -80,6 +80,26 @@ Untracked (non-ignored) files are captured within size caps: files over
 (`VMN_SNAPSHOT_MAX_FILE_MB` / `VMN_SNAPSHOT_MAX_TOTAL_MB`). Skipped paths are
 logged and recorded as `untracked_skipped`.
 
+### Many runs of one code version
+
+To pick a `.rN` name, each new process lists that code version's run names
+once (names only, not records; scoped to the code version where the backend
+can), then claims upward from the highest it claimed for the rest of the
+process. A fleet of single-run processes on one code version (pods, array
+jobs, sweep trials) therefore lists once per process, and the total listing
+work grows with the square of the run count. For fleets and sweeps of
+thousands of runs, use one of the two names that need no such listing:
+
+- **A writer id per process**: set `$VMN_WRITER_ID` (for `vmn-exp run`,
+  `--writer-id` or conf `writer_id` too), unique per pod or task, e.g. the pod
+  name. Runs are named `<code_verstr>.<writer_id>[.N]` and a process lists
+  only the names under its own suffix.
+- **An exact run id**: `create_run(run_id="<code_verstr>.<suffix>")` (or
+  `create_runs` items with `run_id`) is one exclusive create with no listing;
+  the worker then opens it with `start_run(run_id=...)`
+  ([sdk.md](sdk.md#nesting)). A launcher that pre-registers its runs
+  with `create_runs` without `run_id` lists once per batch, not per run.
+
 ---
 
 ## Recording an experiment
