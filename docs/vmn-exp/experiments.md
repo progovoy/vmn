@@ -597,7 +597,7 @@ Flags shared by most actions:
 | `--experiment-dir <dir>` | local root instead of the checkout's `.vmn/` (or `$VMN_EXPERIMENT_DIR`) |
 | `--writer-id <id>` | this process's writer id; `$VMN_WRITER_ID` > `--writer-id` > conf `experiment.storage.writer_id` > `$HOSTNAME` > the host name (a `~` in it becomes `-`; see [streams](#how-records-are-stored)) |
 | `--from-snapshot <path>` | git-free mode against a tree from `vmn-exp export`; see [Git-free mode](#git-free-mode) |
-| `--json` | machine-readable output (`list`, `show`, `importance`, `lineage`, `similar`, `push`, `rerun --print`) |
+| `--json` | machine-readable output (`list`, `show`, `compare`, `importance`, `lineage`, `similar`, `push`, `rerun --print`) |
 
 ### `create`
 
@@ -896,14 +896,22 @@ recent; `-v` repeatable). Reads only metadata and logs, never code, so
 comparing many runs stays cheap. With two runs it prints the matching `diff`
 command. A value whose summary isn't `last` names it (`0.2 (min)`), and a row
 whose runs summarize the metric differently ends `summaries differ: min vs
-last` (a run's own `define_metric` beats conf.yml). Numeric params follow in
-their own `param` table; a param also logged as a metric is compared in the
-`metric` table.
+last` (a run's own `define_metric` beats conf.yml). Params (strings
+included) follow in their own `param` table; a param also logged as a metric
+is compared in the `metric` table.
 
 ```sh
 vmn-exp compare my_app --last 3
 vmn-exp compare my_app -v @1 -v @4 -v @7
+vmn-exp compare my_app --last 3 --json
 ```
+
+`--json` prints one object instead of the tables and the `diff` hint (keys
+sorted, non-finite values as `null`): `runs`, one per run in column order,
+each with `verstr`, `metrics` (logged metrics only), `metric_policy` (the
+summary behind each value that isn't `last`) and `params`; `metrics` and
+`params`, the row keys in table order; and `conflicts`, `{metric: "summaries
+differ: ..."}` for the rows that end with that note.
 
 ### `diff`
 

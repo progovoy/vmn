@@ -9,7 +9,7 @@ KNOWN_IO = {
     'vmn_exp.cli.backfill_children': {'console': 3},
     'vmn_exp.cli.comment': {'console': 4},
     'vmn_exp.cli.compact': {'console': 1},
-    'vmn_exp.cli.experiment': {'console': 43, 'env': 5, 'fs': 7},
+    'vmn_exp.cli.experiment': {'console': 42, 'env': 5, 'fs': 7},
     'vmn_exp.cli.export_metrics': {'console': 1, 'fs': 1},
     'vmn_exp.cli.fork': {'console': 3},
     'vmn_exp.cli.importance': {'console': 3},

@@ -164,7 +164,8 @@ def _add_experiment_parser(subprasers, name):  # noqa: N802
     pexp.add_argument("--yes", "-y", action="store_true", default=False,
                       help="prune --query: confirm deletion")
     pexp.add_argument("--json", action="store_true", default=False,
-                      help="list/show/importance/push/similar: print machine-readable JSON")
+                      help="list, show, compare, importance, lineage, push, rerun, "
+                           "similar: print machine-readable JSON")
     pexp.add_argument("--from-snapshot", default=None,
                       help="Path to vmn_metadata.yml or directory containing it. "
                            "Records against a tree from 'vmn-exp export' (no git required). "
