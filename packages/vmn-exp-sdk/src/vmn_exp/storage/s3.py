@@ -180,7 +180,9 @@ class S3SnapshotStorage(
             size = self._s3.head_object(Bucket=self.bucket, Key=key)["ContentLength"]
         except Exception:
             return None
-        digest = hashlib.sha256(f"{self.bucket}/{key}".encode()).hexdigest()[:32]
+        # The endpoint (which may carry credentials) only ever enters the hash.
+        where = f"{self.endpoint_url or ''}\n{self.bucket}/{key}"
+        digest = hashlib.sha256(where.encode()).hexdigest()[:32]
         cache_dir = os.path.join(tempfile.gettempdir(), "vmn-artifact-cache", digest)
         path = artifact_file_path(cache_dir, name)
         if os.path.isfile(path) and os.path.getsize(path) == size:

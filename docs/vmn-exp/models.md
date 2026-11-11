@@ -175,7 +175,10 @@ missing backend package names the extra to install. A URI of the experiment
 store's scheme borrows the store URI's options (an `s3://` store's
 `endpoint_url`, e.g. MinIO, a `gs://` `endpoint_url`, an `az://`
 `account_url`), so another bucket on the same service needs none; the URI's
-own `?endpoint_url=`/`?account_url=` wins. Inside an open run it records a use of
+own `?endpoint_url=`/`?account_url=` wins. With no remote store, a configured
+`endpoint_url` (`--endpoint-url`, `VMN_EXPERIMENT_ENDPOINT_URL`, conf
+`experiment.storage.endpoint_url`) still applies to an `s3://` URI. Downloads
+are cached per endpoint, bucket and key. Inside an open run it records a use of
 the version ([Using versions](#using-versions)); `record=False` opts out. A
 reference dataset, or a version with no artifact path, raises `ValueError`.
 `list_models()` lists both kinds; `vmn_exp.registry.store.list_models(storage,

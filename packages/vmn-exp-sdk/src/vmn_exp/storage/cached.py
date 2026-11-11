@@ -29,9 +29,13 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
     """Local-first storage with optional S3 sync. All ops hit local disk;
     S3 provides durability and distribution."""
 
-    def __init__(self, local_storage, remote_storage=None):
+    def __init__(self, local_storage, remote_storage=None, lent_options=None):
+        """*lent_options* (``{scheme: options}``) stand in for a missing
+        remote's :meth:`uri_options`: a configured ``endpoint_url`` with no
+        remote store still reaches an absolute ``s3://`` download."""
         self._local = local_storage
         self._remote = remote_storage
+        self._lent_options = lent_options or {}
         self._presence = RemotePresence(local_storage, remote_storage)
         self._init_logs()
 
@@ -41,7 +45,7 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
 
     def _open_area(self, name):
         remote = self._remote.in_area(name) if self._remote else None
-        return CachedSnapshotStorage(self._local.in_area(name), remote)
+        return CachedSnapshotStorage(self._local.in_area(name), remote, self._lent_options)
 
     def _local_patches(self, patches):
         """What of a record's body the local copy keeps: all of it, unless
@@ -227,7 +231,9 @@ class CachedSnapshotStorage(CachedChildren, CachedMetrics, CachedLogs, SnapshotS
         return path_of(app_name) if path_of else None
 
     def uri_options(self, scheme):
-        return self._remote.uri_options(scheme) if self._remote else {}
+        if self._remote:
+            return self._remote.uri_options(scheme)
+        return dict(self._lent_options.get(scheme, {}))
 
     def cache_identity(self):
         remote = self._remote.cache_identity() if self._remote else None

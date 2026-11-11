@@ -14,7 +14,8 @@ from vmn_exp.storage.registry import open_store
 from vmn_exp.storage.store_marker import check_store
 
 
-def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, writer=True):
+def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, writer=True,
+                 lent_options=None):
     """*area*'s storage for *store* (a URI, or None) over the local store
     *root* (laid out ``<root>/<area>/...``).
 
@@ -24,6 +25,9 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
 
     A *writer* checks each root's ``store.yml`` now (store_marker), creating
     it when absent; readers check lazily (``store_marker.require_store``).
+
+    *lent_options* (``{scheme: URI options}``): what a storage with no remote
+    lends absolute downloads in its place (:class:`CachedSnapshotStorage`).
     """
     raw = open_store(store, area=area) if store else None
     if writer and raw is not None:
@@ -32,10 +36,11 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
         check_store(LocalSnapshotStorage(root, area), writer)
     remote = journaled(raw) if raw is not None else None
     if remote is not None and not remote.is_remote():
-        return CachedSnapshotStorage(remote, None)
+        return CachedSnapshotStorage(remote, None, lent_options)
     if root:
         local = LocalSnapshotStorage(root, area)
-        return CachedSnapshotStorage(local if remote else journaled(local), remote)
+        return CachedSnapshotStorage(local if remote else journaled(local), remote,
+                                     lent_options)
     if remote is None:
         raise ValueError(
             "No experiment storage: pass --store/--dir (or set "

@@ -108,7 +108,14 @@ def _open(root, params, writer=True):
 
     params = drop_remote_if_offline(params, root)
     return open_storage(store_uri(params), root, area=RUNS, buffer_logs=True,
-                        writer=writer)
+                        writer=writer, lent_options=_lent_options(params))
+
+
+def _lent_options(params):
+    """A configured ``endpoint_url`` for absolute ``s3://`` downloads when
+    no remote store carries it."""
+    endpoint_url = params.get("endpoint_url")
+    return {"s3": {"endpoint_url": endpoint_url}} if endpoint_url else None
 
 
 def try_repo_root() -> "str | None":
