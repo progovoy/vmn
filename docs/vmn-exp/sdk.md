@@ -605,7 +605,15 @@ yourself when a `with` block doesn't fit. It is idempotent.
   in `run_state.yml`), so an OOM-killed or lost job goes
   [`stuck`](experiments.md#run-status-did-my-job-die) instead of `running`
   forever. Remote state and log uploads run off that thread; a hung PUT never
-  delays a beat.
+  delays a beat. A failing heartbeat upload warns once (`vmn: could not
+  upload the state of run X: <error>`) and is repaired by the next beat; a
+  failing periodic log sync stays at debug and is caught up by the next.
+- **The final state and the final log sync are retried** (after 0.5, 1, 2,
+  then every 5 s) until they land or `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` runs
+  out. One that never landed is a warning, never silent: `vmn: the final
+  state of run X was not uploaded: <error>` (or `... is still uploading` when
+  the upload was still in flight at the deadline, with no error).
+  `finish()`'s return value does not change.
 - **SIGTERM finalizes every open run** with exit code 143 and
   `received_signal: SIGTERM` (so it reads `failed`, never `stuck`) — or
   releases it, for a run opened with `on_sigterm="release"` — waits for

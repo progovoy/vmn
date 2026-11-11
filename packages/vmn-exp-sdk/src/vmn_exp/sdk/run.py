@@ -18,10 +18,10 @@ import os
 import signal
 import socket
 import sys
+import threading
 import time
 
 from vmn_exp._base import ensure_logger, now_iso
-from vmn_exp.core.background import Coalescing
 from vmn_exp.core.best_effort import BestEffort, quiet
 from vmn_exp.core.inputs import create_input_entry
 from vmn_exp.core.intent import build_intent_entry
@@ -67,6 +67,7 @@ from vmn_exp.sdk import fork_safety  # noqa: F401  (registers the fork handlers)
 from vmn_exp.sdk.background_gate import BackgroundGate, RunBackground
 from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.log_buffer import LogBuffer
+from vmn_exp.sdk.log_sync import LogSync
 from vmn_exp.sdk.metric_defs import MetricDefinitions
 from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
@@ -364,23 +365,14 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         # and the fork handlers (fork_safety) hold them all.
         self._gate = BackgroundGate()
         self._state_publisher = RunStatePublisher(
-            storage, app_name, verstr, self._gate, resumes=prior_state)
+            storage, app_name, verstr, self._gate, resumes=prior_state,
+            abandon=threading.Event())
         self._log_buffer = LogBuffer(
             functools.partial(append_entries_to_log, storage, app_name, verstr),
             self._gate,
         )
         self._chore_guard = quiet(_LOGGER)
-        self._log_sync = Coalescing(
-            self._gate.wrap(functools.partial(
-                self._chore_guard,
-                "experiment log sync",
-                sync_to_remote,
-                storage,
-                app_name,
-                verstr,
-            )),
-            "vmn-exp-sync",
-        )
+        self._log_sync = LogSync(self._sync_log, self._gate, threading.Event())
         self._heartbeat = Heartbeat(self._gate.wrap(self._beat), heartbeat_interval_sec)
         self._media_uploads = MediaUploads(self._gate.wrap(self._save_artifact_file))
         self._output = (
@@ -570,7 +562,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             # finished must also see everything it logged.
             self._record_guard("buffered log", self._log_buffer.close)
             self._record_guard("final state", self._publish, final_state, final=True)
-            self._log_sync.submit(None)
+            self._log_sync.submit(final=True)
             if alerts:
                 self._record_guard("alerts", self._finish_alerts, ALERT_DRAIN_SEC)
         except BaseException:
@@ -587,17 +579,29 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         try:
             # One deadline for all: they upload in parallel, so waiting for each
             # in turn would double the worst case.
-            for what in self._close_writers(deadline):
-                _LOGGER.warning(f"vmn: the final {what} of run {self.id} is still uploading")
+            for what, error in self._close_writers(deadline):
+                _LOGGER.warning(self._not_uploaded(what, error))
             compact_by(self._storage, self.app_name, self.id,
                        own_stream(self._storage, self.app_name, self.id), deadline)
         finally:
             context.closed(self)
 
     def _close_writers(self, deadline):
-        """Close the remote writers; the names of those still uploading."""
-        return [what for what, writer in self._remote_writers()
+        """Close the remote writers; ``(name, last error or None)`` of each
+        whose final upload did not land."""
+        return [(what, getattr(writer, "last_error", None))
+                for what, writer in self._remote_writers()
                 if not writer.close(_left(deadline))]
+
+    def _not_uploaded(self, what, error):
+        if error is None:
+            return f"vmn: the final {what} of run {self.id} is still uploading"
+        return f"vmn: the final {what} of run {self.id} was not uploaded: {error}"
+
+    def _sync_log(self):
+        # sync_to_remote is looked up here, at call time: tests patch it on
+        # this module.
+        sync_to_remote(self._storage, self.app_name, self.id)
 
     def _remote_writers(self):
         writers = [("log", self._log_sync), ("state", self._state_publisher)]
@@ -787,7 +791,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         if time.monotonic() - self._last_sync < self._sync_interval_sec:
             return
         self._last_sync = time.monotonic()
-        self._log_sync.submit(None)
+        self._log_sync.submit()
         if self._output is not None:
             self._output.request_upload()
 
