@@ -39,6 +39,7 @@ from vmn_exp.ui.metrics_feed import MetricsFeed
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.query_params import refuse_unknown_params
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.ui.readers.models import ModelListing
 from vmn_exp.ui.registry_snapshot import RegistrySnapshots
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.responses import (
@@ -801,7 +802,8 @@ def create_app(
     def _ws_storage(ws_name):
         return _any_exp_storage(_experiment_workspace(ws_name))
 
-    routes_models.register(app, API_PREFIX, _ws_storage)
+    routes_models.register(app, API_PREFIX, _ws_storage,
+                           RegistrySnapshots(refresher.background, ModelListing.read))
     routes_reports.register(app, API_PREFIX, _ws_storage, _report_index)
     routes_comments.register(app, API_PREFIX, _ws_storage)
 

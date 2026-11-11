@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
-from vmn_exp.registry.store import (
-    get_version, header_kind, list_models, list_versions, load_header, registry_listing,
-)
+from vmn_exp.registry.names import HEADER_RECORD
+from vmn_exp.registry.store import get_version, header_kind, list_versions, load_header
+from vmn_exp.storage.files import METADATA_FILE
+from vmn_exp.storage.s3_base import parallel_map
+from vmn_exp.ui.registry_snapshot import read_models
 
 
 def _actor_str(actor) -> str:
@@ -94,7 +96,7 @@ def model_detail_response(storage, model_name: str) -> tuple:
     fold = fold_registry(entries)
 
     # Load each version's raw metadata once, reuse in both version list and audit.
-    version_metas = {n: get_version(storage, model_name, n) for n in ns}
+    version_metas = dict(zip(ns, parallel_map(lambda n: get_version(storage, model_name, n), ns)))
 
     alias_by_version: dict = {}
     for alias, ver_n in fold["aliases"].items():
@@ -113,32 +115,54 @@ def model_detail_response(storage, model_name: str) -> tuple:
     }, None
 
 
-def list_models_response(storage, kind=None) -> dict:
-    """Return ``{"models": [ModelRow ...]}`` for the list endpoint, only
-    *kind* (``model``/``dataset``) entries when given."""
-    listing = registry_listing(storage)
-    rows = []
-    for name in list_models(storage, listing=listing):
-        header = load_header(storage, name)
-        if header is None or kind not in (None, header_kind(header)):
-            continue
-        ns = list_versions(storage, name, listing[name])
-        entries = read_entries(storage, name)
-        fold = fold_registry(entries)
+class _ModelRow:
+    """One model's ModelRow (None without a header), read when its *files*
+    listing changes: its header, log and latest version concurrently."""
 
-        latest = max(ns) if ns else None
-        updated = None
-        if ns:
-            last_meta = get_version(storage, name, ns[-1])
-            updated = (last_meta or {}).get("timestamp")
+    __slots__ = ("files", "row")
 
-        rows.append({
+    def __init__(self, storage, name, files):
+        self.files = files
+        records = {r for r, f in files.items() if METADATA_FILE in f}
+        if HEADER_RECORD not in records:
+            self.row = None
+            return
+        ns = list_versions(storage, name, records)
+        header, entries, last = parallel_map(lambda read: read(), [
+            lambda: load_header(storage, name),
+            lambda: read_entries(storage, name),
+            lambda: get_version(storage, name, ns[-1]) if ns else None,
+        ])
+        self.row = None if header is None else {
             "name": name,
             "kind": header_kind(header),
             "description": header.get("description"),
-            "latest_version": latest,
-            "aliases": fold["aliases"],
+            "latest_version": ns[-1] if ns else None,
+            "aliases": fold_registry(entries)["aliases"],
             "versions_count": len(ns),
-            "updated": updated,
-        })
-    return {"models": rows}
+            "updated": (last or {}).get("timestamp"),
+        }
+
+
+class ModelListing:
+    """Every model's ModelRow, as the Models page lists them."""
+
+    def __init__(self, models):
+        self._models = models
+
+    @classmethod
+    def read(cls, storage, previous=None):
+        """*storage*'s listing, reusing *previous*'s unchanged models."""
+        return cls(read_models(storage, previous._models if previous is not None else {}, _ModelRow))
+
+    def response(self, kind=None) -> dict:
+        """``{"models": [ModelRow ...]}``, name-ordered, only *kind*
+        (``model``/``dataset``) entries when given."""
+        rows = (self._models[name].row for name in sorted(self._models))
+        return {"models": [row for row in rows if row and kind in (None, row["kind"])]}
+
+
+def list_models_response(storage, kind=None) -> dict:
+    """Return ``{"models": [ModelRow ...]}`` for the list endpoint, only
+    *kind* (``model``/``dataset``) entries when given."""
+    return ModelListing.read(storage).response(kind)

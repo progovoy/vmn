@@ -13,17 +13,19 @@ from vmn_exp.ui.jobs_models import (
     validate_register_body,
     validate_status_body,
 )
-from vmn_exp.ui.readers.models import list_models_response, model_detail_response
+from vmn_exp.ui.readers.models import model_detail_response
 from vmn_exp.registry.log import remove_alias, set_alias, set_version_status
 from vmn_exp.registry.names import KINDS, valid_alias_name, valid_model_name
 from vmn_exp.registry.store import ensure_model, register_version
 
 
-def register(app, api_prefix, any_exp_storage):
+def register(app, api_prefix, any_exp_storage, listings):
     """Register model registry routes on *app*.
 
     *any_exp_storage(ws_name)* — callable returning the experiment storage
     for a workspace, raising HTTPException(404) when the workspace is unknown.
+    *listings* — the :class:`~vmn_exp.ui.readers.models.ModelListing` of a
+    storage (``get``), refreshed at once after a write here (``refresh``).
     """
     base = f"{api_prefix}/workspaces/{{ws_name}}/models"
 
@@ -49,8 +51,7 @@ def register(app, api_prefix, any_exp_storage):
     def list_models_route(ws_name: str, kind: str = None):
         if kind is not None and kind not in KINDS:
             raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
-        storage = any_exp_storage(ws_name)
-        return list_models_response(storage, kind=kind)
+        return listings.get(any_exp_storage(ws_name)).response(kind)
 
     @app.get(f"{base}/{{model_name}}", dependencies=[require(VIEWER)])
     def get_model_route(ws_name: str, model_name: str):
@@ -94,6 +95,7 @@ def register(app, api_prefix, any_exp_storage):
             except Exception:
                 pass
 
+        listings.refresh(storage)
         return {"version": n}
 
     @app.post(f"{base}/{{model_name}}/aliases", status_code=200, dependencies=[require(EDITOR)])
@@ -117,6 +119,7 @@ def register(app, api_prefix, any_exp_storage):
         except ValueError as exc:
             # expect mismatch → 409; invalid input caught earlier
             raise HTTPException(409, str(exc))
+        listings.refresh(storage)
         return {}
 
     @app.delete(f"{base}/{{model_name}}/aliases/{{alias}}", status_code=200, dependencies=[require(EDITOR)])
@@ -129,6 +132,7 @@ def register(app, api_prefix, any_exp_storage):
             remove_alias(storage, model_name, alias)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
+        listings.refresh(storage)
         return {}
 
     @app.post(f"{base}/{{model_name}}/versions/{{version_n}}/status", status_code=200, dependencies=[require(EDITOR)])
@@ -144,4 +148,5 @@ def register(app, api_prefix, any_exp_storage):
             set_version_status(storage, model_name, version_n, status)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
+        listings.refresh(storage)
         return {}

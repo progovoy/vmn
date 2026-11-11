@@ -45,8 +45,24 @@ class _Model:
         self.header = load_header(storage, name) if HEADER_RECORD in records else None
         self.fold = fold_registry(read_entries(storage, name) if HEADER_RECORD in records else [])
         self.uses = read_uses(storage, name) if USES_RECORD in records else {}
-        self.versions = {n: get_version(storage, name, n)
-                         for n in list_versions(storage, name, records)}
+        ns = list_versions(storage, name, records)
+        self.versions = dict(zip(ns, parallel_map(lambda n: get_version(storage, name, n), ns)))
+
+
+def read_models(storage, old, build):
+    """``{model: build(storage, name, files)}`` of every model of *storage*'s
+    registry (*files*: its listing), each built concurrently; an entry of
+    *old* whose ``files`` still match is kept, not rebuilt."""
+    reg = registry_storage(storage)
+    names = [name for name in reg.list_apps() if valid_model_name(name)]
+    listings = parallel_map(reg.list_files, names)
+
+    def model(item):
+        name, files = item
+        kept = old.get(name)
+        return kept if kept is not None and kept.files == files else build(storage, name, files)
+
+    return dict(zip(names, parallel_map(model, list(zip(names, listings)))))
 
 
 class RegistrySnapshot:
@@ -60,17 +76,7 @@ class RegistrySnapshot:
     @classmethod
     def read(cls, storage, previous=None):
         """*storage*'s registry, reusing *previous*'s unchanged models."""
-        reg = registry_storage(storage)
-        names = [name for name in reg.list_apps() if valid_model_name(name)]
-        listings = parallel_map(reg.list_files, names)
-        old = previous._models if previous is not None else {}
-
-        def model(item):
-            name, files = item
-            kept = old.get(name)
-            return kept if kept is not None and kept.files == files else _Model(storage, name, files)
-
-        return cls(dict(zip(names, parallel_map(model, list(zip(names, listings))))))
+        return cls(read_models(storage, previous._models if previous is not None else {}, _Model))
 
     def models_of(self, app, verstr):
         return self._run_models.get((app, verstr), ())
@@ -117,25 +123,37 @@ class _Entry:
 
 
 class RegistrySnapshots:
-    """A :class:`RegistrySnapshot` per storage, refreshed as configured."""
+    """A snapshot per storage — ``read(storage, previous)``'s, by default a
+    :class:`RegistrySnapshot` — refreshed as configured."""
 
-    def __init__(self, background=False):
+    def __init__(self, background=False, read=RegistrySnapshot.read):
         self._background = background
+        self._read = read
         self._entries = weakref.WeakKeyDictionary()  # storage -> _Entry
         self._lock = threading.Lock()
 
     def get(self, storage):
+        entry = self._entry(storage)
+        if not self._background or entry.snapshot is None:
+            with entry.lock:
+                if not self._background or entry.snapshot is None:
+                    self._refresh(storage, entry)
+            return entry.snapshot
+        self._refresh_when_due(storage, entry)
+        return entry.snapshot
+
+    def refresh(self, storage):
+        """Refresh *storage*'s snapshot now (after a write of this server's)."""
+        entry = self._entry(storage)
+        with entry.lock:
+            self._refresh(storage, entry)
+
+    def _entry(self, storage):
         with self._lock:
             entry = self._entries.get(storage)
             if entry is None:
                 entry = self._entries[storage] = _Entry()
-        if not self._background or entry.snapshot is None:
-            with entry.lock:
-                if not self._background or entry.snapshot is None:
-                    _refresh(storage, entry)
-            return entry.snapshot
-        self._refresh_when_due(storage, entry)
-        return entry.snapshot
+            return entry
 
     def _refresh_when_due(self, storage, entry):
         with self._lock:
@@ -148,14 +166,13 @@ class RegistrySnapshots:
     def _refresh_later(self, storage, entry):
         try:
             with activity("registry snapshot refresh"), entry.lock:
-                _refresh(storage, entry)
+                self._refresh(storage, entry)
         except Exception:
             _LOGGER.warning("Refreshing the registry snapshot failed", exc_info=True)
         finally:
             with self._lock:
                 entry.at, entry.refreshing = time.monotonic(), False
 
-
-def _refresh(storage, entry):
-    entry.snapshot = RegistrySnapshot.read(storage, entry.snapshot)
-    entry.at = time.monotonic()
+    def _refresh(self, storage, entry):
+        entry.snapshot = self._read(storage, entry.snapshot)
+        entry.at = time.monotonic()
