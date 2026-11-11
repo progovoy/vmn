@@ -8,6 +8,7 @@ import dataclasses
 import logging
 import os
 import re
+import time
 
 from version_stamp.api import VMN_LOGGER
 from vmn_exp.ui.security import LOOPBACK_HOSTS
@@ -164,7 +165,10 @@ def _oidc_chain(cfg, control_plane, env):
         groups_claim=oidc.groups_claim,
         role_mappings=[dataclasses.asdict(m) for m in cfg.auth.role_mappings],
     )
-    return AuthenticatorChain([OIDCAuthenticator(config, control_plane)])
+    return AuthenticatorChain([OIDCAuthenticator(
+        config, control_plane, clock=time.time,
+        session_ttl_sec=oidc.session_ttl_hours * 3600,
+        login_token_ttl_sec=oidc.login_token_ttl_days * 24 * 3600)])
 
 
 def server_app(manager, cfg, control_plane, args, env=None, token=None, **kwargs):

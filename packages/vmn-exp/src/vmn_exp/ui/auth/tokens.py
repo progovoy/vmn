@@ -5,8 +5,9 @@ Only ``hmac-sha256$<hex>`` of the secret is stored, keyed by the server's
 ``token_hmac`` key (:meth:`~vmn_exp.ui.control_plane.ControlPlaneStore.server_key`):
 the secrets are 256 random bits, so a slow KDF would add nothing but cost per
 request, and a leaked table can't be checked without the key. The id locates
-the record. Tokens carry roles per workspace, an optional expiry, and are
-revoked by id.
+the record. Tokens carry roles per workspace or, for a ``vmn-exp login``
+token, the user's groups (roles derived per request); an optional expiry; and
+are revoked by id or all of one owner's at once.
 """
 import hashlib
 import hmac
@@ -32,6 +33,7 @@ class TokenRecord:
     expires_at: float
     revoked: bool
     secret_hash: str
+    groups: tuple = ()
 
 
 def hash_secret(secret, key):
@@ -56,7 +58,7 @@ class TokenService:
         self.store = store
         self.clock = clock
 
-    def create(self, name, roles, owner="", ttl_sec=None):
+    def create(self, name, roles, owner="", ttl_sec=None, groups=()):
         """``(plaintext, record)``; the plaintext is shown once, never stored."""
         token_id, secret = secrets.token_hex(8), secrets.token_urlsafe(32)
         now = self.clock()
@@ -64,6 +66,7 @@ class TokenService:
             id=token_id, name=name, roles=check_roles(roles), owner=owner,
             created_at=now, expires_at=now + ttl_sec if ttl_sec else 0,
             revoked=False, secret_hash=hash_secret(secret, self._key()),
+            groups=tuple(groups),
         )
         self.store.put("token", token_id, asdict(record))
         return f"{PREFIX}_{token_id}_{secret}", record
@@ -84,24 +87,40 @@ class TokenService:
             return None
         if record.expires_at and self.clock() >= record.expires_at:
             return None
-        return Principal(f"token:{record.id}", record.name, dict(record.roles), org_id=org_id)
+        return Principal(f"token:{record.id}", record.name, dict(record.roles),
+                         groups=record.groups, org_id=org_id)
 
     def revoke(self, token_id):
         record = self._get(token_id)
         if record is None:
             return False
-        self.store.put("token", token_id, {**asdict(record), "revoked": True})
+        self._mark_revoked(record)
         return True
 
+    def revoke_owner(self, owner):
+        """Revoke every live token of *owner*; how many."""
+        live = [r for r in self.list() if r.owner == owner and not r.revoked]
+        for record in live:
+            self._mark_revoked(record)
+        return len(live)
+
+    def _mark_revoked(self, record):
+        self.store.put("token", record.id, {**asdict(record), "revoked": True})
+
     def list(self):
-        return [TokenRecord(**doc) for doc in self.store.list("token")]
+        return [_record(doc) for doc in self.store.list("token")]
 
     def _key(self):
         return self.store.server_key(KEY_NAME)
 
     def _get(self, token_id):
         doc = self.store.get("token", token_id)
-        return TokenRecord(**doc) if doc else None
+        return _record(doc) if doc else None
+
+
+def _record(doc):
+    """A stored token; JSON gives ``groups`` back as a list."""
+    return TokenRecord(**{**doc, "groups": tuple(doc.get("groups", ()))})
 
 
 class ApiTokenAuthenticator:

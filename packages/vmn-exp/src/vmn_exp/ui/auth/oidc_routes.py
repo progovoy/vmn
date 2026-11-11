@@ -16,7 +16,7 @@ def _audit_login(request, principal, method):
 
 def oidc_router(oidc):
     router = APIRouter()
-    device = DeviceFlow(oidc)
+    device = DeviceFlow(oidc, ttl_sec=oidc.login_token_ttl_sec)
 
     @router.get("/auth/login")
     def _login():

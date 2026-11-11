@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import ADMIN
+from vmn_exp.ui.auth.sessions import SessionService
 from vmn_exp.ui.auth.tokens import TokenService
 from vmn_exp.ui.http_params import clamp_page
 
@@ -58,6 +59,14 @@ def register(app, api_prefix):
     def revoke_token(token_id: str):
         if not _tokens().revoke(token_id):
             raise HTTPException(404, f"Unknown token {token_id!r}")
+
+    @app.delete(f"{api_prefix}/tokens", dependencies=[require(ADMIN)])
+    def revoke_owner(owner: str = ""):
+        """Cut one user off: every token they own and every browser session."""
+        if not owner:
+            raise HTTPException(422, "Query parameter 'owner' is required")
+        return {"tokens": _tokens().revoke_owner(owner),
+                "sessions": SessionService(_control_plane(app)).close_principal(owner)}
 
     @app.get(f"{api_prefix}/audit", dependencies=[require(ADMIN)])
     def audit_page(offset: int = 0, limit: int = 100):

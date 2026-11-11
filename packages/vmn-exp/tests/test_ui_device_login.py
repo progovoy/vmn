@@ -50,18 +50,20 @@ class FakeDeviceIdP:
         return {"access_token": "at", "id_token": _jwt(claims)}
 
 
-def _server(tmp_path, idp):
+ML_TEAM_EDITOR = [{"group": "ml-team", "workspace": "ml", "role": EDITOR}]
+
+
+def _server(tmp_path, idp, **oidc_kw):
     from vmn_exp.ui.server import create_app
     from vmn_exp.ui.workspaces import WorkspaceManager
 
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     config = OIDCConfig(issuer=ISSUER, client_id="vmn-exp",
-                        redirect_uri=f"{SERVER}/auth/callback",
-                        role_mappings=[{"group": "ml-team", "workspace": "ml",
-                                        "role": EDITOR}])
-    oidc = OIDCAuthenticator(config, cp, http=idp)
+                        redirect_uri=f"{SERVER}/auth/callback")
+    oidc = OIDCAuthenticator(config, cp, http=idp, **oidc_kw)
     app = create_app(WorkspaceManager(str(tmp_path / "ui")),
-                     auth=AuthenticatorChain([oidc]), control_plane=cp)
+                     auth=AuthenticatorChain([oidc]), control_plane=cp,
+                     role_mappings=ML_TEAM_EDITOR)
     return TestClient(app, base_url=SERVER), cp
 
 
@@ -94,17 +96,53 @@ def test_login_writes_a_0600_credentials_file_with_a_working_token(tmp_path, mon
     assert logins and logins[-1]["actor"] == "oidc:u1"
 
 
-def test_token_carries_the_mapped_roles(tmp_path, monkeypatch):
+def test_login_token_carries_groups_not_roles(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=0))
     assert login_cli.login(SERVER, post_json=_transport(client),
                            sleep=lambda s: None, say=lambda m: None) == 0
+    from vmn_exp.ui.auth.authz import effective_role
     from vmn_exp.ui.auth.tokens import TokenService
 
     token = login_cli.load_token(SERVER)
     principal = TokenService(cp).verify(token)
-    assert principal.roles == {"ml": EDITOR} and principal.id.startswith("token:")
+    assert principal.roles == {} and principal.groups == ("ml-team",)
+    assert principal.id.startswith("token:")
+    assert effective_role(principal, "ml", ML_TEAM_EDITOR) == EDITOR
     assert (tmp_path / "xdg" / "vmn-exp" / "credentials").exists()
+
+
+def test_login_token_ttl_from_config(tmp_path, monkeypatch):
+    import argparse
+
+    from vmn_exp.ui.auth.tokens import TokenService
+    from vmn_exp.ui.cli import build_server, server_app
+
+    path = tmp_path / "server.yml"
+    path.write_text(f"""
+data_dir: {tmp_path / 'data'}
+server: {{public_url: "{SERVER}"}}
+auth:
+  oidc: {{issuer: "{ISSUER}", client_id: vmn-exp, session_ttl_hours: 2,
+          login_token_ttl_days: 7}}
+""")
+    args = argparse.Namespace(host="127.0.0.1", port=8265, token=None, data_dir=None,
+                              db=None, config=str(path), repo=None, store=None,
+                              read_only=False, no_index=True, allowed_host=None)
+    manager, cfg, cp = build_server(args, env={})
+    app = server_app(manager, cfg, cp, args, env={})
+    oidc = next(a for a in app.state.auth_chain.authenticators
+                if isinstance(a, OIDCAuthenticator))
+    assert oidc.sessions.ttl_sec == 2 * 3600
+    assert oidc.login_token_ttl_sec == 7 * 24 * 3600
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    client, cp = _server(tmp_path, FakeDeviceIdP(pending_polls=0),
+                         login_token_ttl_sec=oidc.login_token_ttl_sec)
+    assert login_cli.login(SERVER, post_json=_transport(client),
+                           sleep=lambda s: None, say=lambda m: None) == 0
+    (record,) = TokenService(cp).list()
+    assert record.expires_at - record.created_at == 7 * 24 * 3600
 
 
 def test_unknown_device_code_is_refused(tmp_path):

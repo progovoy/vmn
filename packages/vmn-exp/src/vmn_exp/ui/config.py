@@ -50,6 +50,8 @@ class OIDCSection:
     client_id: str
     client_secret_env: Optional[str] = None
     groups_claim: str = "groups"
+    session_ttl_hours: int = 12
+    login_token_ttl_days: int = 90
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,8 @@ def _auth(data):
     if data.get("oidc") is not None:
         data["oidc"] = _build(OIDCSection, data["oidc"], "auth.oidc")
         checked_https(data["oidc"].issuer, "auth.oidc.issuer")
+        _positive(data["oidc"].session_ttl_hours, "auth.oidc.session_ttl_hours")
+        _positive(data["oidc"].login_token_ttl_days, "auth.oidc.login_token_ttl_days")
     data["role_mappings"] = tuple(
         _build(RoleMapping, m, f"auth.role_mappings[{i}]")
         for i, m in enumerate(data.get("role_mappings") or ())

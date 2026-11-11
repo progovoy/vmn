@@ -8,6 +8,8 @@ and every discovered endpoint must be https (http only on a loopback host)
 and a redirected answer is refused (:mod:`oidc_http`). The resulting
 principal lives in a server-side session; the browser holds only an opaque ``HttpOnly``,
 ``SameSite=Lax``, ``Secure`` cookie. CSRF stays covered by ``RequestGuard``.
+The principal carries the user's groups, never roles: :mod:`authz` derives
+roles from the groups and the server's current role mappings on each request.
 """
 import base64
 import hashlib
@@ -20,10 +22,11 @@ from urllib.parse import urlencode, urlsplit
 
 from vmn_exp.ui.auth.oidc_http import UrllibHttp
 from vmn_exp.ui.auth.principal import Principal, check_roles, stronger
-from vmn_exp.ui.auth.sessions import SessionService
+from vmn_exp.ui.auth.sessions import SESSION_TTL_SEC, SessionService
 
 SESSION_COOKIE = "vmn_session"
 LOGIN_STATE_TTL_SEC = 600
+LOGIN_TOKEN_TTL_SEC = 90 * 24 * 3600
 DISCOVERY_PATH = "/.well-known/openid-configuration"
 # Discovered URLs the server calls or sends browsers to: https only.
 DISCOVERED_ENDPOINTS = ("authorization_endpoint", "token_endpoint",
@@ -42,7 +45,8 @@ class OIDCConfig:
     client_secret: str = None
     scopes: tuple = ("openid", "profile", "email")
     groups_claim: str = "groups"
-    role_mappings: list = field(default_factory=list)  # {group, workspace, role}
+    # Unused: roles come from app.state.role_mappings on each request.
+    role_mappings: list = field(default_factory=list)
 
 
 def _is_loopback(host):
@@ -92,12 +96,14 @@ def roles_for_groups(groups, mappings):
 
 
 class OIDCAuthenticator:
-    def __init__(self, config, store, http=None, clock=time.time):
+    def __init__(self, config, store, http=None, clock=time.time,
+                 session_ttl_sec=SESSION_TTL_SEC, login_token_ttl_sec=LOGIN_TOKEN_TTL_SEC):
         self.config = config
         self.store = store
         self.http = http or UrllibHttp()
         self.clock = clock
-        self.sessions = SessionService(store, clock=clock)
+        self.sessions = SessionService(store, clock=clock, ttl_sec=session_ttl_sec)
+        self.login_token_ttl_sec = login_token_ttl_sec
         self._metadata = None
 
     def authenticate(self, request):
@@ -173,8 +179,7 @@ class OIDCAuthenticator:
     def principal_for(self, claims):
         groups = claims.get(self.config.groups_claim) or []
         name = claims.get("name") or claims.get("email") or claims["sub"]
-        roles = roles_for_groups(groups, self.config.role_mappings)
-        return Principal(f"oidc:{claims['sub']}", name, roles, tuple(groups))
+        return Principal(f"oidc:{claims['sub']}", name, {}, tuple(groups))
 
     def router(self):
         from vmn_exp.ui.auth.oidc_routes import oidc_router

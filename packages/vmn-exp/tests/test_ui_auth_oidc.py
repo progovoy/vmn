@@ -10,6 +10,7 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from vmn_exp.ui.auth import AuthenticatorChain
+from vmn_exp.ui.auth.authz import effective_role
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator, OIDCConfig
 from vmn_exp.ui.auth.principal import EDITOR, VIEWER
 from vmn_exp.ui.control_plane import SQLiteControlPlane
@@ -73,19 +74,22 @@ def _client(tmp_path, idp):
         client_id="vmn-exp",
         client_secret="shh",
         redirect_uri="https://testserver/auth/callback",
-        role_mappings=[
-            {"group": "ml-team", "workspace": "ml", "role": EDITOR},
-            {"group": "everyone", "workspace": "*", "role": VIEWER},
-        ],
     )
+    mappings = [
+        {"group": "ml-team", "workspace": "ml", "role": EDITOR},
+        {"group": "everyone", "workspace": "*", "role": VIEWER},
+    ]
     store = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
     oidc = OIDCAuthenticator(config, store, http=idp)
-    app = create_app(WorkspaceManager(str(tmp_path / "ui")), auth=AuthenticatorChain([oidc]))
+    app = create_app(WorkspaceManager(str(tmp_path / "ui")), auth=AuthenticatorChain([oidc]),
+                     role_mappings=mappings)
 
     @app.get("/api/v1/_whoami")
     def _whoami(request: fastapi.Request):
         p = request.state.principal
-        return {"id": p.id, "name": p.name, "roles": p.roles}
+        roles = {ws: effective_role(p, ws, request.app.state.role_mappings)
+                 for ws in ("ml", "other")}
+        return {"id": p.id, "name": p.name, "roles": roles}
 
     # Ahead of the SPA/API catch-alls create_app registered last.
     app.router.routes.insert(0, app.router.routes.pop())
@@ -107,7 +111,8 @@ def test_login_flow_sets_session_and_principal(tmp_path):
     assert r.status_code in (302, 303, 307)
     r = client.get("/api/v1/_whoami")
     assert r.status_code == 200
-    assert r.json() == {"id": "oidc:u1", "name": "Alice", "roles": {"ml": EDITOR}}
+    assert r.json() == {"id": "oidc:u1", "name": "Alice",
+                        "roles": {"ml": EDITOR, "other": None}}
 
 
 def test_session_cookie_flags(tmp_path):

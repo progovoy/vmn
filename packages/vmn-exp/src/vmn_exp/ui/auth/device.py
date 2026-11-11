@@ -5,15 +5,14 @@ The CLI never talks to the IdP: it asks the server to start a device
 authorization, shows the user code, and polls the server. The IdP's
 device_code stays server-side under an opaque handle. On approval the server
 checks the id_token like the browser flow and mints an API token carrying
-the user's roles (group mappings resolved at login).
+the user's groups; its roles follow the server's role mappings per request.
 """
 import secrets
 
-from vmn_exp.ui.auth.oidc import OIDCError
+from vmn_exp.ui.auth.oidc import LOGIN_TOKEN_TTL_SEC, OIDCError
 from vmn_exp.ui.auth.tokens import TokenService
 
 DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
-LOGIN_TOKEN_TTL_SEC = 90 * 24 * 3600
 PENDING_ERRORS = ("authorization_pending", "slow_down")
 _KEY = "device:"
 
@@ -70,8 +69,8 @@ class DeviceFlow:
         except OIDCError as exc:
             raise DeviceFlowError("invalid_grant") from exc
         token, record = self.tokens.create(
-            f"vmn-exp login ({principal.name})", principal.roles,
-            owner=principal.id, ttl_sec=self.ttl_sec)
+            f"vmn-exp login ({principal.name})", {}, owner=principal.id,
+            ttl_sec=self.ttl_sec, groups=principal.groups)
         return token, record, principal
 
     def _exchange(self, device_code):

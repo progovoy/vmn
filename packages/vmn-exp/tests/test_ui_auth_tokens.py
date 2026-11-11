@@ -97,3 +97,39 @@ def test_api_token_authenticates_requests(tmp_path, svc):
     assert client.get("/api/v1/workspaces").status_code == 401
     r = client.get("/api/v1/workspaces", headers={"Authorization": f"Bearer {secret}"})
     assert r.status_code == 200
+
+
+def test_revoke_owner_revokes_all_of_that_owner_only(svc):
+    tokens, _, _ = svc
+    a1, _ = tokens.create("a1", {}, owner="oidc:alice", groups=("ml",))
+    a2, _ = tokens.create("a2", {"ml": VIEWER}, owner="oidc:alice")
+    b1, _ = tokens.create("b1", {}, owner="oidc:bob", groups=("ml",))
+    assert tokens.revoke_owner("oidc:alice") == 2
+    assert tokens.verify(a1) is None and tokens.verify(a2) is None
+    assert tokens.verify(b1) is not None
+    assert tokens.revoke_owner("oidc:alice") == 0
+
+
+def test_record_without_groups_field_still_loads(svc):
+    tokens, _, _ = svc
+    secret, record = tokens.create("old", {"ml": EDITOR}, owner="oidc:a")
+    stored = tokens.store.get("token", record.id)
+    del stored["groups"]
+    tokens.store.put("token", record.id, stored)
+    principal = tokens.verify(secret)
+    assert principal.roles == {"ml": EDITOR} and principal.groups == ()
+    assert [t.groups for t in tokens.list()] == [()]
+
+
+def test_admin_created_token_keeps_explicit_roles(svc):
+    tokens, _, _ = svc
+    secret, record = tokens.create("ci", {"ml": EDITOR}, owner="oidc:admin")
+    principal = tokens.verify(secret)
+    assert principal.roles == {"ml": EDITOR} and principal.groups == ()
+    assert record.groups == ()
+
+
+def test_login_token_returns_its_groups(svc):
+    tokens, _, _ = svc
+    secret, _ = tokens.create("login", {}, owner="oidc:a", groups=("ml", "ops"))
+    assert tokens.verify(secret).groups == ("ml", "ops")

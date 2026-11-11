@@ -69,6 +69,8 @@ auth:
     client_id: vmn-exp
     client_secret_env: VMN_OIDC_SECRET  # env var holding the client secret
     groups_claim: groups                # default "groups"
+    session_ttl_hours: 12               # browser session lifetime (default 12)
+    login_token_ttl_days: 90            # `vmn-exp login` token lifetime (default 90)
   role_mappings:
     - {group: ml-admins, workspace: "*", role: admin}
     - {group: ml-team,   workspace: ml-team, role: editor}
@@ -430,7 +432,7 @@ is the standalone behaviour.
 | Method | For | Notes |
 |---|---|---|
 | Static token (`--token`, or the env var named by `auth.static_token_env`) | standalone, scripts | `Authorization: Bearer <token>`; acts as `admin` in every workspace |
-| OIDC (`auth.oidc`) | browsers | authorization-code flow against the issuer's discovery document. Routes: `/auth/login`, `/auth/callback` (the redirect URI is `<public_url>/auth/callback`), `POST /auth/logout`. The session cookie `vmn_session` is `HttpOnly`, `Secure`, `SameSite=Lax` and lasts 12 h |
+| OIDC (`auth.oidc`) | browsers | authorization-code flow against the issuer's discovery document. Routes: `/auth/login`, `/auth/callback` (the redirect URI is `<public_url>/auth/callback`), `POST /auth/logout`. The session cookie `vmn_session` is `HttpOnly`, `Secure`, `SameSite=Lax` and lasts `auth.oidc.session_ttl_hours` (default 12 h) |
 | API tokens | scripts and CLI calls to the server API | `vmnx_<id>_<secret>` bearer tokens. Needs a control plane (`--config` or `--db`) |
 
 An unauthenticated `/api` request gets a 401 with `WWW-Authenticate: Bearer`
@@ -469,11 +471,18 @@ GET    /api/v1/tokens                       list (no secrets)
 POST   /api/v1/tokens  {"name", "roles": {"<ws>|*": "<role>"}, "ttl_sec"?}
                                             -> {"token", "record"}; the secret is shown once
 DELETE /api/v1/tokens/{id}                  revoke
+DELETE /api/v1/tokens?owner=<principal id>  revoke every token of that owner and close
+                                            their browser sessions
+                                            -> {"tokens": n, "sessions": m}
 ```
+
+The owner of a `vmn-exp login` token and the id of a browser session is
+`oidc:<sub>` (the `owner` field of a listed token), so one call cuts a user
+off on every channel.
 
 `vmn-exp login --server <url>` runs the OIDC device flow through the server
 (`/auth/device/start`, `/auth/device/token`) and stores the API token it gets
-(valid 90 days) in `~/.config/vmn-exp/credentials`, mode 0600 (honours
+(valid `auth.oidc.login_token_ttl_days`, default 90 days) in `~/.config/vmn-exp/credentials`, mode 0600 (honours
 `$XDG_CONFIG_HOME`). Jobs never need it.
 
 None of these grant storage access.
@@ -491,6 +500,16 @@ There are three roles per workspace, `viewer < editor < admin`:
 A principal's role in a workspace is the strongest of its own entry for that
 workspace, its `*` entry, and every `role_mappings` entry whose `group` is in
 its OIDC groups claim. With authentication off, everything is allowed.
+
+OIDC browser sessions and `vmn-exp login` tokens store the user's groups,
+never roles: the role is derived from the groups and the current
+`role_mappings` on every request, so a mapping removed from `server.yml` takes
+effect at the next restart. Group membership itself is read from the IdP at
+login, so a user removed from an IdP group keeps it until their session or
+login token expires (`auth.oidc.session_ttl_hours`,
+`auth.oidc.login_token_ttl_days`). For an urgent removal, call
+`DELETE /api/v1/tokens?owner=oidc:<sub>`. Admin-created API tokens carry the
+explicit roles they were created with.
 
 The audit log records mutations and logins. Admins page it with
 `GET /api/v1/audit?offset=&limit=` (one indexed page per request), or stream it

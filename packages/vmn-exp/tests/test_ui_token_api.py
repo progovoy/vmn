@@ -60,3 +60,33 @@ def test_tokens_need_admin(client):
     assert client.get("/api/v1/tokens", headers=E).status_code == 403
     assert client.post("/api/v1/tokens", json={"name": "x", "roles": {}},
                        headers=E).status_code == 403
+
+
+def _control_plane(client):
+    return client.app.state.control_plane
+
+
+def test_delete_tokens_by_owner_is_admin_only(client):
+    from vmn_exp.ui.auth.tokens import TokenService
+
+    secret, _ = TokenService(_control_plane(client)).create("login", {}, owner="oidc:al")
+    assert client.delete("/api/v1/tokens?owner=oidc:al", headers=E).status_code == 403
+    assert TokenService(_control_plane(client)).verify(secret) is not None
+    assert client.delete("/api/v1/tokens", headers=A).status_code == 422
+    assert client.delete("/api/v1/tokens?owner=", headers=A).status_code == 422
+
+
+def test_delete_tokens_by_owner_closes_sessions(client):
+    from vmn_exp.ui.auth.sessions import SessionService
+    from vmn_exp.ui.auth.tokens import TokenService
+
+    cp = _control_plane(client)
+    tokens, sessions = TokenService(cp), SessionService(cp)
+    mine, _ = tokens.create("login", {}, owner="oidc:al", groups=("ml",))
+    other, _ = tokens.create("login", {}, owner="oidc:bo", groups=("ml",))
+    sid, bob_sid = sessions.open(Principal("oidc:al", "Al")), sessions.open(
+        Principal("oidc:bo", "Bo"))
+    r = client.delete("/api/v1/tokens?owner=oidc:al", headers=A)
+    assert r.status_code == 200 and r.json() == {"tokens": 1, "sessions": 1}
+    assert tokens.verify(mine) is None and sessions.principal(sid) is None
+    assert tokens.verify(other) is not None and sessions.principal(bob_sid) is not None
