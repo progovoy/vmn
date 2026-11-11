@@ -127,7 +127,7 @@ function GridTable({
   }, [full]);
   const layout = useMemo(() => ({ ...windowLayout(full, cols), density }), [full, cols, density]);
   const scroll = useScrollMemory();
-  const list = rows ?? [];
+  const list = useMemo(() => rows ?? [], [rows]);
   const places = useMemo(() => memberPlaces(list), [list]);
   const virtualizer = useVirtualizer({
     count: list.length,

@@ -20,6 +20,7 @@ export interface JoinedSeries<T> {
 export function useJoinedSeries<T extends object>(
   xMap: XMap, fetchJoined: ((xMap: XMap) => Promise<T>) | undefined, token: unknown,
 ): JoinedSeries<T> {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- token and fetchJoined only trigger a new generation
   const refresh = useMemo(() => ++generation, [token, fetchJoined]);
   const mapHash = hashKey([xMap]);
   const query = useQuery({

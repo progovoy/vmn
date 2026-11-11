@@ -151,7 +151,6 @@ export function useLeaderboardColumns(
   const orderedCellKeys = useMemo(
     () => orderedKeys(defaultKeys, order, pins),
     // order/pinned are stable arrays from useParamList in the view hook
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [defaultKeys, order, pins],
   );
 

@@ -32,7 +32,7 @@ export function useBoardRows(ws: string, app: string, filter: RowsFilter, groupi
       return data && groupItems(data, shut, groups.more, keep, filterOver);
     }
     return flat.rows && (keep ? flat.rows.filter(keep) : flat.rows);
-  }, [grouped, data, group, collapsed, collapseAll, groups.more, keep, filterOver, flat.rows]);
+  }, [grouped, data, collapsed, collapseAll, groups.more, keep, filterOver, flat.rows]);
 
   if (!grouped) {
     const remaining = flat.total - (flat.rows?.length ?? 0);

@@ -45,6 +45,7 @@ export default function MetricKeyPicker({ fetchPage, selected, onToggle }: {
     }, () => { if (pending.current === id) pending.current = null; });
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load is rebuilt each render; it reads only refs and setters
   useEffect(() => { load(prefix, 0); }, [prefix, fetchPage]);
 
   const names = loaded.prefix === prefix ? loaded.names : [];
@@ -57,6 +58,7 @@ export default function MetricKeyPicker({ fetchPage, selected, onToggle }: {
   const items = v.getVirtualItems();
   const lastShown = items.length ? items[items.length - 1].index : -1;
   const more = names.length > 0 && names.length < loaded.total && lastShown >= names.length - 1;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load is rebuilt each render; it reads only refs and setters
   useEffect(() => { if (more) load(prefix, names.length); }, [more, prefix, names.length]);
 
   const chosen = new Set(selected);

@@ -102,6 +102,7 @@ function UPlotChart({ options, data, hidden, focus = null, onCursor, keepX }: Pr
     // Without a scale reset, so the zoom is never reported as undone.
     u.setData(data, !kept);
     if (kept) u.setScale("x", { min: kept[0], max: kept[1] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keepX is a ref, read when new data lands
   }, [data]);
 
   // Only the curves whose visibility changed: each setSeries resets scales.

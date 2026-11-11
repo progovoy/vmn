@@ -102,7 +102,8 @@ export function useGroupedRows(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, keyHash]);
 
-  const refresh = useCallback(() => query.refetch().then((r) => r.data), [query.refetch]);
+  const { refetch } = query;
+  const refresh = useCallback(() => refetch().then((r) => r.data), [refetch]);
 
   return {
     data,
