@@ -1819,6 +1819,13 @@ of a better/worse tone.
 from local and remote stores alike; a remote object streams straight through.
 Downloads are never gzipped, carry a `Content-Type` guessed from the name, and
 an RFC 5987 `filename*`.
+A file in a local record dir (a `file://` store or a git workspace) is
+served only when it resolves inside that dir: a symlink, or a file under a
+symlinked directory, that leads out of the run's record answers 404, the same
+as a missing file (the same holds for `.../table/{path}`). Symlinks between
+files of one record still work. A store laid out by hand with artifacts
+symlinked to another volume no longer serves them through the UI; job-side SDK
+reads are unaffected.
 
 ### Media
 

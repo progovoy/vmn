@@ -141,3 +141,26 @@ def within(base, candidate):
         return os.path.commonpath([base_real, cand_real]) == base_real
     except ValueError:  # different drives on Windows
         return False
+
+
+def _lexically_within(base, candidate):
+    """Whether *candidate* names a path under *base*, symlinks not followed."""
+    base_abs = os.path.abspath(base)
+    try:
+        return os.path.commonpath([base_abs, os.path.abspath(candidate)]) == base_abs
+    except ValueError:  # different drives on Windows
+        return False
+
+
+def contained_artifact_path(storage, app_name, verstr, name):
+    """The local path of stored file *name* the server may serve, or None.
+
+    A path under the run's record dir must also resolve inside it: anyone who
+    can write the record (a job on a shared filesystem) could otherwise plant
+    a symlink to a file the server user can read. A path elsewhere was built
+    by the backend itself (an object-store download cache) and passes."""
+    path = storage.artifact_local_path(app_name, verstr, name)
+    record_dir = storage.local_record_dir(app_name, verstr)
+    if path and record_dir and _lexically_within(record_dir, path):
+        return path if within(record_dir, path) else None
+    return path

@@ -311,3 +311,66 @@ def test_unsafe_diff_refs_are_400(layout):
         params={"v": "../../secret", "to": "latest"},
     )
     assert r.status_code == 400
+
+
+SYMLINK_V = "1.0.0-dev.link"
+SYMLINK_BASE = f"/api/v1/workspaces/ws/apps/app/experiments/{SYMLINK_V}"
+
+
+@pytest.fixture
+def symlinked(tmp_path):
+    """A file:// store with one run, plus a secret file outside it; returns
+    (client, the run's record dir, the secret's dir)."""
+    from vmn_exp.snapshot import open_storage
+    from vmn_exp.storage.areas import local_store_root
+
+    root = tmp_path / "repo"
+    (root / ".git").mkdir(parents=True)
+    storage = open_storage(root=local_store_root(str(root)), area="runs")
+    storage.save("app", SYMLINK_V, {"verstr": SYMLINK_V, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    src = tmp_path / "real.txt"
+    src.write_text("real bytes")
+    storage.save_artifact_file("app", SYMLINK_V, str(src), name="artifacts/real.txt")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret").write_text(SECRET)
+    (outside / "table.json").write_text(f'{{"columns": [{{"name": "{SECRET}"}}], "data": [[1]], "rows": 1}}')
+    manager = WorkspaceManager(str(tmp_path / "data"))
+    manager.attach_path("ws", str(root))
+    record = storage.local_record_dir("app", SYMLINK_V)
+    return TestClient(create_app(manager)), record, outside
+
+
+def test_artifact_symlink_leaving_record_dir_is_404(symlinked):
+    client, record, outside = symlinked
+    os.symlink(outside / "secret", os.path.join(record, "artifacts", "leak.txt"))
+    r = client.get(f"{SYMLINK_BASE}/artifacts/leak.txt")
+    assert r.status_code == 404
+    assert SECRET not in r.text
+
+
+def test_artifact_under_symlinked_parent_dir_is_404(symlinked):
+    client, record, outside = symlinked
+    os.symlink(outside, os.path.join(record, "artifacts", "dir"))
+    r = client.get(f"{SYMLINK_BASE}/artifacts/dir/secret")
+    assert r.status_code == 404
+    assert SECRET not in r.text
+
+
+def test_symlink_inside_record_dir_is_still_served(symlinked):
+    client, record, _ = symlinked
+    artifacts = os.path.join(record, "artifacts")
+    os.symlink(os.path.join(artifacts, "real.txt"), os.path.join(artifacts, "alias.txt"))
+    r = client.get(f"{SYMLINK_BASE}/artifacts/alias.txt")
+    assert r.status_code == 200
+    assert r.content == b"real bytes"
+
+
+def test_table_symlink_leaving_record_dir_is_404(symlinked):
+    client, record, outside = symlinked
+    tables = os.path.join(record, "outputs", "tables", "t")
+    os.makedirs(tables)
+    os.symlink(outside / "table.json", os.path.join(tables, "0.json"))
+    r = client.get(f"{SYMLINK_BASE}/table/outputs/tables/t/0.json")
+    assert r.status_code == 404
+    assert SECRET not in r.text

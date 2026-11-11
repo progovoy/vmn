@@ -48,7 +48,12 @@ from vmn_exp.ui.responses import (
     SafeJSONResponse,
     json_response,
 )
-from vmn_exp.ui.security import RequestGuard, safe_app_name, safe_segment
+from vmn_exp.ui.security import (
+    RequestGuard,
+    contained_artifact_path,
+    safe_app_name,
+    safe_segment,
+)
 from vmn_exp.ui.settings_cache import request_scope
 from vmn_exp.ui.shell_meta import auth_hints, meta_payload, workspace_role
 from vmn_exp.ui.slow_reads import slow_read
@@ -549,7 +554,7 @@ def create_app(
                     "Content-Length": str(size),
                 },
             )
-        path = storage.artifact_local_path(app_name, verstr, filename)
+        path = contained_artifact_path(storage, app_name, verstr, filename)
         if not path or not os.path.isfile(path):
             raise HTTPException(404, f"Artifact {filename} not found")
         return FileResponse(path, filename=download_name)
