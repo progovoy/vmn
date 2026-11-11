@@ -3,6 +3,10 @@
 Both use the adapter defaults (``get_params()``, ``score()``, a pickle), so all
 they add is where ``fit`` lives.
 """
+import contextlib
+import sys
+import threading
+
 from vmn_exp.sdk.autolog_adapter import _adapter, _fit_owners, _import
 
 
@@ -30,7 +34,48 @@ def _sklearn_estimator_classes():
     all_estimators = getattr(utils, "all_estimators", None)
     if not callable(all_estimators):
         return []
-    return [cls for _name, cls in all_estimators()]
+    with _refusing_imports(_FOREIGN_ARRAY_SHIMS):
+        return [cls for _name, cls in all_estimators()]
+
+
+#: sklearn's vendored array-API shims for other libraries. They hold no
+#: estimators, but ``all_estimators()`` walks them all the same, and each
+#: imports its library: ``...torch`` imports torch (on macOS, a second OpenMP
+#: runtime that crashes LightGBM and xgboost fits later in the process).
+_FOREIGN_ARRAY_SHIMS = tuple(
+    f"sklearn.externals.array_api_compat.{lib}" for lib in ("torch", "cupy", "dask")
+)
+
+
+class _RefuseImports:
+    """A ``sys.meta_path`` finder refusing the *names* and their submodules.
+
+    Only on the thread that installed it: another thread (a data loader
+    importing torch, say) imports as usual. ``pkgutil.walk_packages`` skips a package whose import fails, and a failed
+    import is not cached, so a later import of it still works.
+    """
+
+    def __init__(self, names):
+        self._names = names
+        self._subtrees = tuple(f"{name}." for name in names)
+        self._thread = threading.get_ident()
+
+    def find_spec(self, name, path=None, target=None):
+        if threading.get_ident() != self._thread:
+            return None
+        if name in self._names or name.startswith(self._subtrees):
+            raise ImportError(f"vmn autolog discovery skips {name}", name=name)
+        return None
+
+
+@contextlib.contextmanager
+def _refusing_imports(names):
+    finder = _RefuseImports(names)
+    sys.meta_path.insert(0, finder)
+    try:
+        yield
+    finally:
+        sys.meta_path.remove(finder)
 
 
 def _discover_xgboost(module):
