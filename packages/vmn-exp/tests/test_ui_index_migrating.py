@@ -21,7 +21,7 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui import index as ui_index  # noqa: E402
 from vmn_exp.ui.cache_health import SqliteHealth  # noqa: E402
 from vmn_exp.ui.cache_resync import WorkspaceCache  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "my_app"
 API = "/api/v1/workspaces/ws"

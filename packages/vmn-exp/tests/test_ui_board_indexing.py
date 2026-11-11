@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.local import LocalSnapshotStorage  # noqa: E402
 from vmn_exp.ui.experiment_source import ExperimentSource  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "app"
 PARENT, CHILD = "1.0.0-dev.a", "1.0.0-dev.b"

@@ -1,6 +1,8 @@
 """The UI composition root (plan 44 G4): ``build_app(manager, deps)`` serves
 with the collaborators it is given, ``real_deps(io, ...)`` builds the real
 ones from the given IO, and ``create_app`` requires that IO."""
+import argparse
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -10,9 +12,11 @@ from fakes.env import FakeEnv
 from fakes.host import FakeHost
 from fakes.processes import FakeProcesses
 from fakes.random import FakeRandom
+from vmn_exp.core import writer
 from vmn_exp.core.ports import IO
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.app_deps import ServerDeps, real_deps
+from vmn_exp.ui.cli import server_app
 from vmn_exp.ui.control_plane import SQLiteControlPlane
 from vmn_exp.ui.jobs import JobRunner
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
@@ -117,6 +121,24 @@ def test_create_app_wires_a_background_refresher_only_when_asked(tmp_path):
     assert isinstance(create_app(manager, io=_io()).state.refresher, InlineRefresher)
     assert isinstance(create_app(manager, io=_io(), background_refresh=True).state.refresher,
                       Refresher)
+
+
+def test_create_app_requires_its_io(tmp_path):
+    with pytest.raises(TypeError, match="io"):
+        create_app(_manager(tmp_path))
+
+
+def test_server_app_builds_on_the_given_io(tmp_path, monkeypatch):
+    monkeypatch.setattr(writer, "_WRITER_ID", writer._WRITER_ID)  # server_app sets it
+    io = _io()
+    args = argparse.Namespace(host="127.0.0.1", read_only=False, no_index=False,
+                              allowed_host=None)
+    app = server_app(_manager(tmp_path), None, SQLiteControlPlane(str(tmp_path / "cp.db")),
+                     args, io=io, env={})
+
+    io.clock.advance(3)
+
+    assert app.state.audit.clock() == io.clock.now().timestamp()
 
 
 @pytest.mark.parametrize("background_refresh, read_only, built", [

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"

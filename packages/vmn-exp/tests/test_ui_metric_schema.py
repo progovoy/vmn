@@ -10,7 +10,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.sdk import start_run  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "app"
 

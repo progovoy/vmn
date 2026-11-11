@@ -20,7 +20,7 @@ from vmn_exp.core.index_sweep import Sweep  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.freshness import STUCK_REFRESH_SEC, freshness, freshness_key  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "my_app"
 STATUS = f"/api/v1/workspaces/ws/apps/{APP}/experiments-status"

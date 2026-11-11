@@ -10,6 +10,7 @@ from vmn_exp.ui.workspaces import (
     WorkspaceManager,
     YamlWorkspaceRegistry,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def test_default_registry_is_yaml_file(tmp_path):
@@ -109,7 +110,7 @@ auth:
     args = _cfg_args(tmp_path, text, read_only=False, no_index=True, allowed_host=None)
     env = {"SEC": "shh"}
     manager, cfg, cp = build_server(args, env=env)
-    app = server_app(manager, cfg, cp, args, env=env)
+    app = server_app(manager, cfg, cp, args, io=real_io(), env=env)
     assert app.state.role_mappings[0].group == "g"
     oidc = [a for a in app.state.auth_chain.authenticators
             if isinstance(a, OIDCAuthenticator)]

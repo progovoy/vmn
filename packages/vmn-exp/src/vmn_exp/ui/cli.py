@@ -296,6 +296,7 @@ def handle_ui(args, io):
         )
         return 1
 
+    from vmn_exp.core.real_io import real_io
     from vmn_exp.ui import server_logging
     from vmn_exp.ui.config import ConfigError
     from vmn_exp.ui.workspace_uri import missing_storage_extra
@@ -313,9 +314,8 @@ def handle_ui(args, io):
     host = cfg.server.host if cfg else args.host
     port = cfg.server.port if cfg else args.port
     token = cfg.token() if cfg else args.token or os.environ.get("VMN_UI_TOKEN")
-    refusal = bind_refusal(host, has_token=bool(token),
-                           has_oidc=cfg is not None and cfg.auth.oidc is not None,
-                           read_only=args.read_only)
+    refusal = bind_refusal(host, has_token=bool(token), read_only=args.read_only,
+                           has_oidc=cfg is not None and cfg.auth.oidc is not None)
     if refusal:
         level, message = refusal
         if level == "error":
@@ -324,7 +324,7 @@ def handle_ui(args, io):
         VMN_LOGGER.warning(message)
 
     try:
-        app = server_app(manager, cfg, control_plane, args, token=token,
+        app = server_app(manager, cfg, control_plane, args, io=real_io(), token=token,
                          background_refresh=True)
     except ConfigError as e:
         VMN_LOGGER.error(str(e))

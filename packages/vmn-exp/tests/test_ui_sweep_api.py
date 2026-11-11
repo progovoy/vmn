@@ -10,7 +10,7 @@ from test_sweep_sdk_trials import _sdk_sweep
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 API = "/api/v1/workspaces/main/apps"
 

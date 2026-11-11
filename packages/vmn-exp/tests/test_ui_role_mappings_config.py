@@ -11,6 +11,7 @@ from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.auth.oidc import SESSION_COOKIE, OIDCAuthenticator  # noqa: E402
 from vmn_exp.ui.auth.principal import Principal  # noqa: E402
 from vmn_exp.ui.cli import build_server, server_app  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 
 def _app(tmp_path):
@@ -30,7 +31,7 @@ auth:
                               db=None, config=str(p), repo=None, store=None,
                               read_only=False, no_index=True, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    return server_app(manager, cfg, cp, args, env={}, token="t")
+    return server_app(manager, cfg, cp, args, io=real_io(), env={}, token="t")
 
 
 def test_static_token_on_viewer_route_with_role_mappings(tmp_path):

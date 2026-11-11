@@ -19,7 +19,7 @@ from vmn_exp.storage.areas import local_store_root  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.job_argv import ACTIONS  # noqa: E402
 from vmn_exp.ui.jobs_store import STORE_ACTIONS  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 TOKEN = "t"
 ISSUER = "https://idp.example"

@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.storage.files import safe_verstr  # noqa: E402
 from vmn_exp.ui import api_errors  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 
 def _client():

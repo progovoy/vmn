@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.ui.cli import build_server, server_app  # noqa: E402
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "app"
 V = "0.0.1-dev.abc.r1"
@@ -31,7 +32,7 @@ def client(tmp_path, pg_dsn):
                               db=None, config=str(path), repo=None, store=None,
                               read_only=False, no_index=False, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    c = TestClient(server_app(manager, cfg, cp, args, env={}, token="t"),
+    c = TestClient(server_app(manager, cfg, cp, args, io=real_io(), env={}, token="t"),
                    headers={"Authorization": "Bearer t"})
     assert c.get(f"/api/v1/workspaces/ws/apps/{APP}/experiments").status_code == 200
     return c

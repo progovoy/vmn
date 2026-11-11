@@ -41,7 +41,6 @@ def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
         io=io,
         jobs=JobRunner(),
         refresher=refresher,
-        # Markers and compaction a store lacks, written by the server itself.
         upkeep=StoreUpkeep() if background_refresh and not read_only else None,
         audit=AuditLog(control_plane, clock=wall_seconds) if control_plane else None,
         token_service=TokenService(control_plane, clock=wall_seconds) if control_plane else None,

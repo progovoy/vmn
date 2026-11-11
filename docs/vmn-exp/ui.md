@@ -280,9 +280,12 @@ restart.
   store settings, so the first request after a refresh is a cache hit.
   The app list is cached per workspace for 5 seconds.
 
-Embedding `create_app()` directly (tests, scripts) leaves the background
-refresher off unless you pass `background_refresh=True`; each request then
-refreshes first and sees every earlier write.
+Embedding `create_app(manager, io=real_io())` directly (tests, scripts;
+`real_io` is in `vmn_exp.core.real_io`) leaves the background refresher off
+unless you pass `background_refresh=True`; each request then refreshes first
+and sees every earlier write. `io` is required: the server reads its clock
+from it. `build_app(manager, deps)` serves with a job runner, refresher and
+other collaborators you build (`vmn_exp.ui.app_deps.ServerDeps`).
 
 ### Store upkeep
 

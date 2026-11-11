@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from vmn_exp.ui.auth import AuthenticatorChain  # noqa: E402
 from vmn_exp.ui.auth.principal import ADMIN, EDITOR, VIEWER, Principal  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 PRINCIPALS = {
     "Bearer ws-viewer": Principal("u1", "Uma", {"ml": VIEWER}),

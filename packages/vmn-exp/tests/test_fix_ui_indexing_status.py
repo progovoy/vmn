@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import vmn_exp.core.index as index_module  # noqa: E402
 from vmn_exp.storage.s3 import S3SnapshotStorage  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "app"
 CHUNK = 5

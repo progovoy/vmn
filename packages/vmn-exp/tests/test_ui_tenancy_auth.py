@@ -12,7 +12,7 @@ from vmn_exp.ui.auth.principal import Principal  # noqa: E402
 from vmn_exp.ui.auth.sessions import SessionService  # noqa: E402
 from vmn_exp.ui.auth.tokens import TokenService  # noqa: E402
 from vmn_exp.ui.tenancy import current_org, org_context  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 
 @pytest.fixture

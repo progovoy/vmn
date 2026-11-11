@@ -10,7 +10,7 @@ from vmn_exp.core.lineage import artifact_ref_uri
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 API = "/api/v1/workspaces/main/apps"
 SHA = "d" * 64

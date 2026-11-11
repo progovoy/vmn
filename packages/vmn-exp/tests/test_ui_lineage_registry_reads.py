@@ -13,7 +13,7 @@ from vmn_exp.storage.areas import REGISTRY
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 MODELS = "/api/v1/workspaces/main/models"
 READS = ("list_apps", "list_files", "list_record_names", "load_file", "load_merged_log",

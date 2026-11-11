@@ -12,7 +12,7 @@ from s3_helpers import BUCKET, PREFIX, mocked_bucket  # noqa: E402
 from vmn_exp.storage.areas import RUNS  # noqa: E402
 from vmn_exp.storage.open import open_storage  # noqa: E402
 from vmn_exp.storage.uri import s3_uri  # noqa: E402
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"

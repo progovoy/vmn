@@ -134,7 +134,7 @@ auth:
                               db=None, config=str(path), repo=None, store=None,
                               read_only=False, no_index=True, allowed_host=None)
     manager, cfg, cp = build_server(args, env={})
-    app = server_app(manager, cfg, cp, args, env={})
+    app = server_app(manager, cfg, cp, args, io=real_io(), env={})
     oidc = next(a for a in app.state.auth_chain.authenticators
                 if isinstance(a, OIDCAuthenticator))
     assert oidc.sessions.ttl_sec == 2 * 3600
@@ -215,7 +215,7 @@ def test_server_app_wires_the_control_plane(tmp_path):
 
     args = argparse.Namespace(host="127.0.0.1", read_only=False, no_index=False)
     cp = SQLiteControlPlane(str(tmp_path / "cp.sqlite3"))
-    app = server_app(WorkspaceManager(str(tmp_path / "ui")), None, cp, args)
+    app = server_app(WorkspaceManager(str(tmp_path / "ui")), None, cp, args, io=real_io())
     assert app.state.control_plane is cp and app.state.audit is not None
 
 

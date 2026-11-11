@@ -125,12 +125,10 @@ class SettingsScope:
             await self.app(scope, receive, send)
 
 
-def create_app(manager, io=None, background_refresh=False, keep_warm=None, read_only=False,
+def create_app(manager, io, background_refresh=False, keep_warm=None, read_only=False,
                control_plane=None, **options):
     """``build_app`` with the collaborators :func:`~vmn_exp.ui.app_deps.real_deps` builds on *io*."""
-    from vmn_exp.core.real_io import real_io
-
-    deps = real_deps(io or real_io(), control_plane, background_refresh, read_only, keep_warm)
+    deps = real_deps(io, control_plane, background_refresh, read_only, keep_warm)
     return build_app(manager, deps, read_only=read_only, control_plane=control_plane, **options)
 
 
