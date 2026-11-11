@@ -44,5 +44,5 @@ KNOWN_OVERSIZED = {
     'vmn_exp.ui.readers.parsed_logs': 303,
     'vmn_exp.ui.refresher': 352,
     'vmn_exp.ui.routes_leaderboard': 328,
-    'vmn_exp.ui.server': 855,
+    'vmn_exp.ui.server': 355,
 }

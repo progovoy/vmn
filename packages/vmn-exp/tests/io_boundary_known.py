@@ -207,7 +207,6 @@ KNOWN_IO = {
     'vmn_exp.ui.routes_similar': {'time': 1},
     'vmn_exp.ui.schema_cache': {'fs': 1},
     'vmn_exp.ui.security': {'fs': 2},
-    'vmn_exp.ui.server': {'fs': 1},
     'vmn_exp.ui.server_logging': {'console': 1, 'time': 1},
     'vmn_exp.ui.settled_subtree': {'random': 1},
     'vmn_exp.ui.similar_corpora': {'fs': 1, 'thread': 2, 'time': 1},
