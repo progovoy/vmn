@@ -44,6 +44,7 @@ from vmn_exp.core.writer import (
     create_tags_entry,
     own_stream,
     save_artifact,
+    split_for_append,
     stamped_entry,
     sync_to_remote,
 )
@@ -373,9 +374,12 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._state_publisher = RunStatePublisher(
             storage, app_name, verstr, self._gate, resumes=prior_state,
             abandon=threading.Event())
+        self._refused_warned = False
         self._log_buffer = LogBuffer(
             functools.partial(append_entries_to_log, storage, app_name, verstr),
             self._gate,
+            split=split_for_append,
+            on_refused=self._warn_refused_once,
         )
         self._chore_guard = quiet(_LOGGER)
         self._log_sync = LogSync(self._sync_log, self._gate, threading.Event())
@@ -770,6 +774,13 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         entry = sanitize_entry(entry)
         if entry is not None:
             self._log_buffer.append(entry)
+
+    def _warn_refused_once(self, count):
+        if self._refused_warned:
+            return
+        self._refused_warned = True
+        _LOGGER.warning(f"vmn: run {self.id} no longer exists in the store; "
+                        f"{count} entries were not recorded")
 
     def _publish(self, updates=(), final=False):
         self._state.update(updates)

@@ -238,3 +238,51 @@ def test_the_log_flusher_thread_is_not_named_like_the_run_heartbeat():
         assert "vmn-heartbeat" not in names
     finally:
         buf.close()
+
+
+class _LogFailsOnceStorage(_CountingStorage):
+    """The metric block lands, then the log append that follows raises once."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        self.log_failures = 1
+
+    def append_log_entries(self, app_name, verstr, writer_id, entries):
+        if self.log_failures:
+            self.log_failures -= 1
+            raise OSError("disk full")
+        return super().append_log_entries(app_name, verstr, writer_id, entries)
+
+
+def test_a_log_append_failure_does_not_duplicate_the_metric_block(tmp_path, monkeypatch):
+    monkeypatch.setattr(log_buffer, "FLUSH_INTERVAL_SEC", 3600)
+    storage = _LogFailsOnceStorage(str(tmp_path))
+    storage.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
+    run = _open_run(storage, heartbeat=3600)
+    run.log_metric("loss", 0.5, step=3)
+    run.log_note("checkpoint")
+
+    with pytest.raises(OSError):
+        run._log_buffer.flush()
+    run.finish()
+
+    assert storage.blocks == [1]
+    assert _logged_steps(storage) == [3]
+
+
+def test_logging_to_a_deleted_run_warns_once(storage, monkeypatch, caplog):
+    monkeypatch.setattr(log_buffer, "FLUSH_INTERVAL_SEC", 3600)
+    run = _open_run(storage, heartbeat=3600)
+    storage.delete(APP, VERSTR)
+
+    with caplog.at_level("WARNING", logger="vmn_exp.sdk.run"):
+        run.log_metric("loss", 0.5, step=1)
+        run.log_note("lost")
+        run._log_buffer.flush()
+        run.log_metric("loss", 0.4, step=2)
+        run._log_buffer.flush()
+
+    warnings = [r.getMessage() for r in caplog.records if "no longer exists" in r.getMessage()]
+    assert warnings == [f"vmn: run {run.id} no longer exists in the store; "
+                        "1 entries were not recorded"]
+    run._log_buffer.discard()

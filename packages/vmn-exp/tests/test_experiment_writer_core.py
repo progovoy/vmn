@@ -93,6 +93,34 @@ def test_append_to_log_writes_through_the_per_writer_jsonl(monkeypatch):
     assert display_writer(stream) == "pod-7"
 
 
+class _SealFailingStorage(_FakeStorage):
+    """Stores metric blocks; listing the stream to seal it raises."""
+
+    def __init__(self):
+        super().__init__()
+        self.blocks = []
+
+    def append_metric_block(self, app_name, verstr, writer_id, data):
+        self.blocks.append(data)
+        return True
+
+    def metric_objects(self, app_name, verstr):
+        raise OSError("listing failed")
+
+
+def test_a_failed_seal_does_not_fail_the_metric_append(monkeypatch):
+    from vmn_exp.core import metric_compact
+    from vmn_exp.core.writer import append_metric_entries
+
+    monkeypatch.setattr(metric_compact, "SEAL_POINTS", 1)
+    storage = _SealFailingStorage()
+    entry = {"type": "metrics", "step": 0, "timestamp": "2026-01-01T00:00:00Z",
+             "values": {"loss": 0.5}}
+
+    assert append_metric_entries(storage, "app", "0.0.1", [entry]) is True
+    assert len(storage.blocks) == 1
+
+
 # ---------------------------------------------------------------------------
 # run state
 # ---------------------------------------------------------------------------

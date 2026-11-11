@@ -193,8 +193,20 @@ def append_metric_entries(storage, app_name, verstr, entries, inherited=False):
     if not record_metric_entries(writer, entries, inherited=inherited):
         return False
     points = sum(len(e.get("values") or {}) for e in entries)
-    note_points(storage, app_name, verstr, stream, points)
+    try:
+        note_points(storage, app_name, verstr, stream, points)
+    except Exception:
+        # The block is stored: failing here would have it appended twice.
+        # Sealing is retried at the next threshold and at finish compaction.
+        logging.getLogger(__name__).debug(
+            f"Sealing {app_name} {verstr} stream {stream} failed", exc_info=True)
     return True
+
+
+def split_for_append(entries):
+    """*entries* as the parts :func:`append_entries_to_log` stores one after
+    the other: the metric entries, then the others (empty parts left out)."""
+    return [part for part in split_metric_entries(entries) if part]
 
 
 def append_entries_to_log(storage, app_name, verstr, entries):
