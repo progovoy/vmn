@@ -5,6 +5,7 @@ vmn_exp.storage, vmn_exp.registry and vmn_exp._base — never on version_stamp,
 vmn_exp.snapshot, vmn_exp.ui or vmn_exp.cli (vmn_exp.gitmode only lazily) —
 so it ships as its own distribution (packages/vmn-exp/tests/test_packaging_split.py).
 """
+import importlib
 import os
 
 APP_NAME_ENV = "VMN_APP_NAME"
@@ -39,17 +40,8 @@ def _resolve_app_name(app_name, candidates):
 
 from vmn_exp.sdk.autolog import autolog, autolog_disable  # noqa: E402
 from vmn_exp.sdk.context import current_run  # noqa: E402
-from vmn_exp.sdk.models import (  # noqa: E402
-    download_model,
-    get_model_version,
-    list_models,
-    register_model,
-    remove_alias,
-    set_alias,
-)
 from vmn_exp.core.writer import RunExistsError  # noqa: E402
 from vmn_exp.sdk.create import create_run, create_runs  # noqa: E402
-from vmn_exp.sdk.datasets import get_dataset_version, register_dataset  # noqa: E402
 from vmn_exp.sdk.ranks import NoOpRun  # noqa: E402
 from vmn_exp.sdk.run import Run, install_signal_handlers, start_run  # noqa: E402  (needs the helper above)
 from vmn_exp.sdk.sweep import sweep_params  # noqa: E402
@@ -58,7 +50,34 @@ from vmn_exp.sdk.fork_safety import (  # noqa: E402
     pause_background,
     resume_background,
 )
-from vmn_exp.sdk.usage import use_dataset, use_model  # noqa: E402
+
+# Registry names load on first use: their modules pull in the registry store,
+# which a metrics-only job never needs (plan 41 D2).
+_LAZY = {
+    "download_model": "vmn_exp.sdk.models",
+    "get_model_version": "vmn_exp.sdk.models",
+    "list_models": "vmn_exp.sdk.models",
+    "register_model": "vmn_exp.sdk.models",
+    "remove_alias": "vmn_exp.sdk.models",
+    "set_alias": "vmn_exp.sdk.models",
+    "get_dataset_version": "vmn_exp.sdk.datasets",
+    "register_dataset": "vmn_exp.sdk.datasets",
+    "use_dataset": "vmn_exp.sdk.usage",
+    "use_model": "vmn_exp.sdk.usage",
+}
+
+
+def __getattr__(name):
+    if name not in _LAZY:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(importlib.import_module(_LAZY[name]), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY))
+
 
 __all__ = [
     "NoOpRun",

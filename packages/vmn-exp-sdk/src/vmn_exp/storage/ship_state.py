@@ -24,7 +24,6 @@ try:
 except ImportError:  # not POSIX
     fcntl = None
 
-from filelock import FileLock, Timeout
 from vmn_exp.storage.files import atomic_write
 from vmn_exp.storage.fs_type import filesystem_type, is_network_fs
 from vmn_exp.storage.per_process import PerProcess, PerProcessLock
@@ -223,6 +222,8 @@ def _lock_file(path, name):
     """Take the cross-process lock of the file at *path* (its thread lock
     held); returns its release."""
     if fcntl is None or _on_network_fs(path):  # a lock file per hold
+        from filelock import FileLock, Timeout  # imports asyncio and sqlite3
+
         file_lock = FileLock(path)
         try:
             file_lock.acquire(timeout=_wait_sec())

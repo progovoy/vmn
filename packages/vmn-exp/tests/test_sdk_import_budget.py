@@ -24,7 +24,7 @@ FORBIDDEN = (
     "vmn_exp.core.sqlite",
     "vmn_exp.core.journal_reader",
 )
-BUDGET = 159
+BUDGET = 143
 
 
 def _path_of(module):
@@ -137,3 +137,19 @@ def test_relisted_still_importable_from_index_metric_reads():
 
     for name in ("MetricObjectGone", "object_read", "relisted"):
         assert getattr(index_metric_reads, name) is getattr(metric_object_reads, name)
+
+
+def test_sdk_import_closure_has_only_the_registry_names_leaf():
+    registry = {m for m in sdk_closure() if m.startswith("vmn_exp.registry")}
+    assert registry <= {"vmn_exp.registry", "vmn_exp.registry.names"}, sorted(registry)
+
+
+_HEAVY_STDLIB = """\
+import sys
+import vmn_exp.sdk
+print(sorted(m for m in ("sqlite3", "asyncio") if m in sys.modules))
+"""
+
+
+def test_import_sdk_loads_no_sqlite3_or_asyncio():
+    assert _run(_HEAVY_STDLIB) == "[]"
