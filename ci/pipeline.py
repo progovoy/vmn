@@ -131,6 +131,19 @@ def tests_core(ctx):
     _pytest(ctx, "tests", "tests_core")
 
 
+# The vmn-exp unit lane: packages/vmn-exp/tests/unit runs on fakes (no Docker,
+# no real sleep or subprocess), in one process, first; tests_exp waits for it.
+# Its test count and wall time measure the IO-behind-interfaces migration.
+@stage(
+    requires=REQUIRES,
+    deterministic=True,
+    inputs=["packages", "tests", "pyproject.toml"],
+    outputs=["reports/tests_exp_unit.xml", "reports/tests_exp_unit.html"],
+)
+def tests_exp_unit(ctx):
+    _pytest(ctx, "packages/vmn-exp/tests/unit", "tests_exp_unit", workers=())
+
+
 @stage(
     requires=REQUIRES,
     deterministic=True,
@@ -142,8 +155,9 @@ def tests_core(ctx):
         "reports/tests_exp_serial.html",
     ],
     # One 29-worker suite at a time; tests_webui first, as both run
-    # `make _build_ui` and two npm installs in one tree race.
-    after=["tests_core", "tests_webui"],
+    # `make _build_ui` and two npm installs in one tree race. The unit lane
+    # fails fast before the long pass starts.
+    after=["tests_core", "tests_webui", "tests_exp_unit"],
 )
 def tests_exp(ctx):
     # The web bundle is build output, not committed: the dashboard/export tests
@@ -259,6 +273,6 @@ def upload(ctx):
 
 pipeline = Pipeline(
     "vmn-ci",
-    stages=[lint, tests_core, tests_webui, tests_exp, tests_storage_emulators, typecheck, stamp, build, upload],
+    stages=[lint, tests_core, tests_webui, tests_exp_unit, tests_exp, tests_storage_emulators, typecheck, stamp, build, upload],
     workspace="..",
 )

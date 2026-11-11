@@ -353,3 +353,23 @@ def test_the_pipeline_runs_the_storage_emulator_stage(mod):
     markers = [cmd[cmd.index("-m") + 1] for cmd, _ in exp.calls if "-m" in cmd]
     assert markers == ["not serial and not emulator", "serial"]
     assert "tests_storage_emulators" in mod.pipeline.get_stage("stamp").after
+
+
+# ---- tests_exp_unit ----------------------------------------------------
+# The vmn-exp unit lane (plan 44 G3): packages/vmn-exp/tests/unit, fakes only,
+# no Docker. It runs first; the full exp suite waits for it.
+
+
+def test_exp_unit_stage_exists_and_tests_exp_runs_after_it(mod):
+    order = [s.name for s in mod.pipeline.topological_order()]
+    assert order.index("tests_exp_unit") < order.index("tests_exp")
+    assert "tests_exp_unit" in mod.pipeline.get_stage("tests_exp").after
+    ctx = FakeCtx()
+    mod.tests_exp_unit(ctx)
+    cmd = ctx.calls[0][0]
+    assert cmd[:2] == ["pytest", "packages/vmn-exp/tests/unit"]
+    assert "--junitxml=reports/tests_exp_unit.xml" in cmd
+    spec = mod.pipeline.get_stage("tests_exp_unit")
+    assert spec.deterministic is True and spec.outputs
+    # The unit conftest reuses the parent exp conftest and tests/'s fixtures.
+    assert set(spec.inputs) == {"packages", "tests", "pyproject.toml"}

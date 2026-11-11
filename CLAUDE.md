@@ -116,6 +116,8 @@ Two suites (vmn-exp will become a separate product):
   (includes the core file). A test that needs `vmn_exp` or a vmn-exp command
   belongs here; one asserting vmn works *without* vmn-exp belongs in core.
 
+New vmn-exp behaviour gets its first test in `packages/vmn-exp/tests/unit/` (shared fakes in `tests/fakes/`); a guard there fails a test that sleeps, spawns a process or asks for `app_layout`.
+
 Tests require Docker. Activate the test venv first — the suites run through the
 active interpreter's `coverage`/`pytest`, and the release-notes tests need the
 `git-cliff` binary that `tests/test_requirements.txt` installs into it.
@@ -123,6 +125,7 @@ active interpreter's `coverage`/`pytest`, and the release-notes tests need the
 source ./venv/bin/activate
 ./tests/run_pytest.sh                        # core suite (= --suite core)
 ./packages/vmn-exp/tests/run_pytest.sh       # exp suite (= tests/run_pytest.sh --suite exp)
+./tests/run_pytest.sh --suite exp-unit       # packages/vmn-exp/tests/unit: fakes only, no Docker, no real sleep or subprocess
 make _test_ui                                # web client vitest suite (CI stage tests_webui; needs npm)
 make _lint_ui                                # web client ESLint, hooks rules (same stage)
 ```

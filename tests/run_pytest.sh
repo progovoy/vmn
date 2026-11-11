@@ -6,7 +6,7 @@ set -o pipefail
 usage()
 {
 cat << EOF
-    Usage: run_pytest.sh [--suite core|exp (the default is core)]
+    Usage: run_pytest.sh [--suite core|exp|exp-unit (the default is core)]
            [--color] [--base_log_dir (the default is /tmp)]
            [--specific_test <test_name>]
            [--skip_test <test_name>]
@@ -14,7 +14,8 @@ cat << EOF
            [--ci_coverage] (turns on pytest coverage for codecov, pytest-coverage should be installed)
            [-h or --help for this usage message]
     Suites: core = vmn alone (tests/, vmn's source root only);
-            exp  = vmn-exp (packages/vmn-exp/tests/, all three source roots).
+            exp  = vmn-exp (packages/vmn-exp/tests/, all three source roots);
+            exp-unit = vmn-exp's unit lane (packages/vmn-exp/tests/unit/: fakes only, no Docker).
     Default values: --base_log_dir='/tmp'
 EOF
 }
@@ -67,6 +68,10 @@ case ${suite} in
            COV_PACKAGES='--cov=version_stamp'
            ;;
     exp )  SUITE_DIR=${REPO_ROOT}/packages/vmn-exp/tests
+           SRC_PATH=${REPO_ROOT}/packages/vmn/src:${REPO_ROOT}/packages/vmn-exp-sdk/src:${REPO_ROOT}/packages/vmn-exp/src
+           COV_PACKAGES='--cov=vmn_exp'
+           ;;
+    exp-unit ) SUITE_DIR=${REPO_ROOT}/packages/vmn-exp/tests/unit
            SRC_PATH=${REPO_ROOT}/packages/vmn/src:${REPO_ROOT}/packages/vmn-exp-sdk/src:${REPO_ROOT}/packages/vmn-exp/src
            COV_PACKAGES='--cov=vmn_exp'
            ;;
