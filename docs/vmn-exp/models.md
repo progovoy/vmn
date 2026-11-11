@@ -168,7 +168,10 @@ Status and aliases are not in it; read them from `vmn-exp model show --json`
 use.
 
 `download_model` returns the on-disk path on local storage and downloads to a
-temporary cache from a remote store. Inside an open run it records a use of
+temporary cache from a remote store. An absolute `artifact_path` is fetched
+from where it points: a local path (or `file://`) as is, an `s3://`/`gs://`/
+`az://` (or plugin-scheme) URI through that scheme's storage backend — a
+missing backend package names the extra to install. Inside an open run it records a use of
 the version ([Using versions](#using-versions)); `record=False` opts out. A
 reference dataset, or a version with no artifact path, raises `ValueError`.
 `list_models()` lists both kinds; `vmn_exp.registry.store.list_models(storage,
@@ -234,7 +237,10 @@ the current run; with no run open they only resolve). Each use writes:
   (never the alias), with `kind` `model` or `dataset`. A run-backed version
   gets its artifact's `vmn://<app>/<verstr>/<path>` URI and digest (what
   `run.use_artifact` records, so lineage links the run to its producer); a
-  reference dataset gets `vmn-registry://<name>@<N>`.
+  version at an absolute `artifact_path` (`s3://…`, `/data/…`) gets that
+  location, which lineage links to the run that registered the version there
+  (the `<name>@<N>` one when several did); a reference dataset gets
+  `vmn-registry://<name>@<N>`.
 - a `use` entry in the registry record `registry/<name>/uses` (never the model's own
   log): `{"type": "use", "version": N, "run": {"app", "verstr"}, "ts",
   "writer", "pos", "actor"}`. Best-effort: a failure is a warning.

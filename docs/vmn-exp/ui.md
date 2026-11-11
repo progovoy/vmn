@@ -1949,7 +1949,8 @@ Under `/api/v1/workspaces/{ws}/models` (concepts and rules in
 The list answers from an in-memory snapshot of the registry, refreshed in
 the background (every 30 s, re-reading only the models whose files changed)
 and at once after a write through these routes; its first build reads each
-model's header, log and latest version concurrently. A version's
+model's header, log and latest version concurrently. It and the lineage
+routes' registry snapshot share one registry listing per refresh. A version's
 `artifact_uri` is its `artifact_path` as is when that is absolute (any
 `scheme://` URI or an absolute path), else the path in its run's record.
 
