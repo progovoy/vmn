@@ -4,13 +4,14 @@ Everything here is exercised against a fake, duck-typed storage: the point of
 ``core.experiment_writer`` is that it knows how to shape an experiment record
 without knowing anything about git, argparse or S3.
 """
+import datetime
 import hashlib
 import os
 
 import pytest
 import yaml
 from vmn_exp.core.record_format import RECORD_FORMAT_VERSION
-from vmn_exp.core.status import RUN_STATE_FILE
+from vmn_exp.core.status import CREATED, RUN_STATE_FILE, derive_status, load_run_state
 from vmn_exp.core.streams import display_writer
 from vmn_exp.core.writer import (
     allocate_run_verstr,
@@ -144,6 +145,19 @@ def test_save_run_state_without_updates_republishes_the_current_state():
     save_run_state(storage, "app", "0.0.1", state)
 
     assert yaml.safe_load(storage.load_file("app", "0.0.1", RUN_STATE_FILE)) == state
+
+
+@pytest.mark.parametrize("empty", ["", b""])
+def test_an_empty_run_state_file_reads_as_no_state(empty):
+    """experiments.md "Durability": a host crash can leave a just-renamed
+    run_state.yml empty; readers take it as a run with no state yet."""
+    storage = _FakeStorage()
+    storage.save_file("app", "0.0.1", RUN_STATE_FILE, empty)
+
+    state = load_run_state(storage, "app", "0.0.1")
+
+    assert state is None
+    assert derive_status(state, now=datetime.datetime(2026, 11, 11, tzinfo=datetime.timezone.utc)) == CREATED
 
 
 # ---------------------------------------------------------------------------

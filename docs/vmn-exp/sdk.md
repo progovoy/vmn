@@ -243,7 +243,9 @@ to the run's log buffer: shipping it to the bucket (its first lines at once,
 then at most every 5 s) is left to the run's `vmn-exp-sync` thread, so a hung
 store never stalls `log_metric` or the heartbeat. A run opened with a raw
 remote store as `start_run(storage=...)` still writes to it from the caller's
-thread.
+thread. Local writes survive a process crash but are not fsynced, so a host
+crash can lose the last seconds of them; the remote copy is the durable one
+(see [Durability](experiments.md#durability)).
 
 **Metrics are not JSONL lines.** `log_metric`/`log_metrics` values go to the
 record copy's columnar metric stream (`metrics/<writer>~<owner>.vms`, one

@@ -2018,6 +2018,21 @@ so a new optional method needs a row here.
   to upgrade, and records without it (v1) with a warning to run
   `vmn-exp migrate`.
 
+### Durability
+
+Local writes are safe against a **process** crash, not a **host** crash.
+Whole-file writes (`metadata.yml`, `run_state.yml`, `env.yml`, ...) are temp +
+rename, so a reader or a killed process sees the old file or the new one,
+never half of one; log and metric appends are whole lines. None of it is
+fsynced: a host crash or power loss can lose what the OS had not yet written
+back, at most the last seconds of appended lines, and, on a filesystem that
+does not flush a rename-replace, rarely leave a just-written state file empty.
+Readers take an empty `run_state.yml` as no state yet (the run lists as
+`created`). fsync is deliberately not used: it is slow on the NFS, Lustre and
+network block devices training jobs write to. The remote copy is the durable
+one: for runs that must survive losing the host, record to a remote store or
+upload with [`vmn-exp push`](#offline-recording-and-push).
+
 ### The experiment index (per-host cache)
 
 `list`, `show`, `compare`, `similar`, ref resolution, the SDK readers and the
