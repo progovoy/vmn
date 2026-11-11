@@ -1047,7 +1047,7 @@ def test_exp_run_requires_double_dash(app_layout, capfd):
     capfd.readouterr()
     # No command after --
     ret = _experiment(app_layout.app_name, action="run")
-    assert ret == 1
+    assert ret == 2
 
 
 def test_exp_run_cold_start_fresh_repo(app_layout, capfd):
