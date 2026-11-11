@@ -44,6 +44,7 @@ from vmn_exp.cli.views import (
     print_patch,
     show_payload,
     shown_policies,
+    split_params,
     with_policy,
 )
 from vmn_exp.core.app_conf import experiment_conf
@@ -67,7 +68,13 @@ import vmn_exp.core.writer as experiment_writer
 from vmn_exp.core.from_snapshot import (
     create_from_snapshot as _experiment_create_from_snapshot,
 )
-from vmn_exp.core.fold import fold_inputs_dict, fold_log, fold_metrics
+from vmn_exp.core.fold import (
+    fold_inputs_dict,
+    fold_log,
+    fold_metrics,
+    fold_values,
+    logged_params,
+)
 from vmn_exp.core.log import (
     DATE_SORTS,
     IDX_SORT,
@@ -892,6 +899,11 @@ def experiment_show(vcs, params, storage, args):
             print(f"  {ln}")
 
     metrics, summary, overrides = fold_metrics(_fold, schema)
+    metrics, run_params = _split_fold_params(_fold, metrics)
+    if run_params:
+        print("\n  Params:")
+        for name, value in sorted(run_params.items()):
+            print(f"    {name}: {value}")
     if metrics:
         print("\n  Metrics:")
         shown = shown_policies(metrics, overrides, SchemaPolicies(schema))
@@ -1050,9 +1062,38 @@ def _metrics_with_policies(log, schema, policies):
     return metrics, shown_policies(metrics, overrides, policies)
 
 
+def _split_fold_params(fold, metrics):
+    """:func:`split_params` of *fold*'s *metrics*: ``(logged metrics, params)``."""
+    return split_params(metrics, fold_values(fold, "params"), logged_params(fold))
+
+
+def _compare_column(log, schema, policies):
+    """A run's compare column: ``(logged metrics, their policies, folded params)``."""
+    fold = fold_log(log)
+    metrics, _, overrides = fold_metrics(fold, schema)
+    logged, _ = _split_fold_params(fold, metrics)
+    folded = {k: v for k, v in metrics.items() if k not in logged}
+    return logged, shown_policies(logged, overrides, policies), folded
+
+
+def _compare_table(label, experiments, keys, cell, note=lambda key: None):
+    """The lines of a compare table: a *label* column of *keys*, one column per
+    run, *cell(i, key)* its values and *note(key)* an optional suffix."""
+    headers = [label] + [e[0]["verstr"][-20:] for e in experiments]
+    col_widths = [max(len(h), 12) for h in headers]
+    header_line = "  ".join(h.ljust(w) for h, w in zip(headers, col_widths))
+    lines = [header_line, "-" * len(header_line)]
+    for key in keys:
+        row = [key] + [cell(i, key) for i in range(len(experiments))]
+        line = "  ".join(str(v).ljust(w) for v, w in zip(row, col_widths))
+        suffix = note(key)
+        lines.append(f"{line}  {suffix}" if suffix else line)
+    return lines
+
+
 def _compare_cell(metrics, shown, key):
     """A compare table's cell: ``0.2 (min)``, ``-`` without a value."""
-    return "-" if metrics.get(key) is None else with_policy(format_number(metrics[key]), shown[key])
+    return "-" if metrics.get(key) is None else with_policy(format_number(metrics[key]), shown.get(key))
 
 
 @measure_runtime_decorator
@@ -1070,12 +1111,8 @@ def experiment_compare(vcs, params, storage, args):
     # Metrics comparison table
     schema = metrics_schema(vcs, storage, app_name)
     policies = SchemaPolicies(schema)
-    all_keys = set()
-    exp_metrics = []
-    for meta, patches, log in experiments:
-        m, shown = _metrics_with_policies(log, schema, policies)
-        exp_metrics.append((m, shown))
-        all_keys.update(m.keys())
+    columns = [_compare_column(log, schema, policies) for _, _, log in experiments]
+    all_keys = set().union(*(m for m, _, _ in columns))
 
     if schema:
         col_order = [k for k in schema if k in all_keys]
@@ -1085,18 +1122,23 @@ def experiment_compare(vcs, params, storage, args):
     else:
         col_order = sorted(all_keys)
 
+    tables = []
     if col_order:
-        headers = ["metric"] + [e[0]["verstr"][-20:] for e in experiments]
-        col_widths = [max(len(h), 12) for h in headers]
-        header_line = "  ".join(h.ljust(w) for h, w in zip(headers, col_widths))
-        print(header_line)
-        print("-" * len(header_line))
-
-        for key in col_order:
-            row = [key] + [_compare_cell(m, shown, key) for m, shown in exp_metrics]
-            line = "  ".join(str(v).ljust(w) for v, w in zip(row, col_widths))
-            conflict = policy_conflict(shown[key] for m, shown in exp_metrics if m.get(key) is not None)
-            print(f"{line}  {conflict}" if conflict else line)
+        tables.append(_compare_table(
+            "metric", experiments, col_order,
+            lambda i, key: _compare_cell(columns[i][0], columns[i][1], key),
+            lambda key: policy_conflict(
+                shown[key] for m, shown, _ in columns if m.get(key) is not None
+            ),
+        ))
+    param_keys = sorted(set().union(*(p for _, _, p in columns)))
+    if param_keys:
+        tables.append(_compare_table(
+            "param", experiments, param_keys,
+            lambda i, key: _compare_cell(columns[i][2], {}, key),
+        ))
+    if tables:
+        print("\n\n".join("\n".join(table) for table in tables))
 
     if len(experiments) == 2:
         v1 = experiments[0][0]["verstr"]

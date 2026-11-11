@@ -783,9 +783,11 @@ fields (`children`, `kind`, `depth`, `settled`, `tree_status`).
 Full details of one run (default: latest): branch, base, created, note,
 `Deps:`, `Env:`, `Output:`, the status block, `Parent:`/`Children:`/
 `Subtree:`, `Rerun of:`, `Forked from: <verstr> @ step N`, one
-`Rewound to step N` line per rewind, patch sizes, `Inputs:`, `Metrics:` (each
+`Rewound to step N` line per rewind, patch sizes, `Inputs:`, `Params:` (every
+param as given, strings included), `Metrics:` (logged metrics only, each
 at its [summary value](#best-value-summaries-summary), with last/min/max where
-they differ), `Media:`, and the newest 50 log entries (`--full-log` for all).
+they differ; a param also logged as a metric appears in both), `Media:`, and
+the newest 50 log entries (`--full-log` for all).
 
 ```sh
 vmn-exp show my_app -v @1 --full-log
@@ -831,7 +833,9 @@ recent; `-v` repeatable). Reads only metadata and logs, never code, so
 comparing many runs stays cheap. With two runs it prints the matching `diff`
 command. A value whose summary isn't `last` names it (`0.2 (min)`), and a row
 whose runs summarize the metric differently ends `summaries differ: min vs
-last` (a run's own `define_metric` beats conf.yml).
+last` (a run's own `define_metric` beats conf.yml). Numeric params follow in
+their own `param` table; a param also logged as a metric is compared in the
+`metric` table.
 
 ```sh
 vmn-exp compare my_app --last 3

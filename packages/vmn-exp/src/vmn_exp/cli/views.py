@@ -18,7 +18,7 @@ from version_stamp.api import _list_tarball_members
 from vmn_exp.core.app_conf import experiment_conf
 from vmn_exp.core.app_settings_store import app_metrics_schema
 from vmn_exp.core.code_store import CODE_MISSING
-from vmn_exp.core.fold import fold_features, fold_log, fold_row
+from vmn_exp.core.fold import fold_features, fold_log, fold_row, is_folded_param
 from vmn_exp.core.intent import cap_utf8
 from vmn_exp.core.media import media_counts
 from vmn_exp.core.metric_summary import value_policy
@@ -265,3 +265,11 @@ def dumps(payload):
     return json.dumps(
         _finite_or_none(payload), indent=2, sort_keys=True, allow_nan=False, default=str
     )
+
+
+def split_params(metrics, params, logged):
+    """``(logged metrics, params)`` of a run: *metrics* without the params'
+    numbers folded into them (a param also logged as a metric, in *logged*,
+    stays), and every param."""
+    shown = {k: v for k, v in metrics.items() if not is_folded_param(k, params, logged)}
+    return shown, dict(params)
