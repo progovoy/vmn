@@ -365,7 +365,7 @@ milestone list, the recommendation list below or a workstream plan still says.
 
 | Item | Decision |
 |---|---|
-| G2 ports | Duplicated small Protocols in both packages with a parity test and shared fakes. |
+| G2 ports | Duplicated small Protocols in both packages with a parity test and shared fakes, in plan 35's port shapes (second round). |
 | G7, G10 | Handlers take `io` explicitly; shims build the real one until plan 35 provides it. |
 | G14 | `SnapshotStorage` is the filesystem interface; local storage implementations are exempt with a reason each. |
 | G11 Part B, G17 | **(differs)** Both in plan 44: the status clock migration and the `core/index.py` split. |
@@ -403,8 +403,7 @@ read with these applied.
 | B7 | The no-repo path rejects stray positionals with exit 2 too. |
 | E3 | RS256 only; other algorithms are refused with a clear error. |
 | F5 / E13 | The model registry endpoint table lives in `ui-api.md`; `models.md` links to it. |
-
-Still open after this round: the port shapes to agree with plan 35 (G2).
+| G2 port shapes | **Plan 35's port shapes** (owner, 2026-11-11): `Processes.run(cmd, ...)` returns a `CompletedProcess`, or `None` for a missing binary. Where plan 35 is silent G2's shape stays: `Clock.now()` an aware UTC datetime, `Random`'s methods, and the vmn-exp-only `Host` and `Processes.popen`. |
 
 ### Still open for the owner
 
@@ -443,8 +442,7 @@ IO and roadmap:
 
 18. **G4, G11** Widely built names (`ExperimentIndex`, `LeaderboardCache`, `SqliteStore`, `WorkspaceManager`, `create_app`, `open_storage`, `Refresher`, the three index functions) still resolve an omitted clock or IO to the real one, which CLAUDE.md forbids in new code. The alternative is about 1,200 construction-site edits no plan names.
 19. **G11** `derive_status` with a required `now`: is an `upgrading.md` row enough, or does F9's deprecation window apply, since experiments.md names the call?
-20. **G2** Port shapes to agree with plan 35 before either `ports.py` is written: `Clock.now()` as an aware UTC datetime, `Processes.popen`, `Host`, and whether `Processes.run` returns `None` or raises for a missing binary.
-21. **F16** Whether to add lightgbm and catboost to the exp test requirements; without them the real-library tests skip.
+20. **F16** Whether to add lightgbm and catboost to the exp test requirements; without them the real-library tests skip.
 
 Unknowns the implementer settles, recorded in each item's Risk, not owner
 questions: whether `uv run`, `conda run` and Windows launchers exec or spawn
@@ -530,7 +528,7 @@ and the roadmap rows for A9 and A10.
     - architecture.md: A5, D3, F2, F5, G17. vmn-vs-mlflow.md: F1, F2, F6, F14, F16.
     - cli/skill.py text changes (A4/A5 `--no-adopt`, B5b, B8, C6 `buffers`) regenerate docs/vmn-exp/agent-skill.md in the same commit.
 19. RELEASE RULE - F9 against the deprecating items. F9 lands in M0, before any behaviour change. D5, D7, D9 and D11 take Deprecations rows and cite its removal rule; D8 and D3 take Behaviour rows; D10 takes neither. Two loose ends: the removal distance is proposed, not confirmed, and F9's rule text says `DeprecationWarning` where D5 and D7 use `FutureWarning`.
-20. CORE VMN touched by vmn-exp streams. A2 (version_stamp/core/utils.py), B1 (cli/args.py, entry.py, plugin_api.py, api.py) and G2 (which may create version_stamp/core/ports.py if it lands before plan 35 stage 0) change core, and G7 waits for plan 35's `vmn_ctx.io`. Plan 35 owns core IO and is still proposed: whichever lands second rebases, and the port shapes are agreed first (open question 20).
+20. CORE VMN touched by vmn-exp streams. A2 (version_stamp/core/utils.py), B1 (cli/args.py, entry.py, plugin_api.py, api.py) and G2 (which may create version_stamp/core/ports.py if it lands before plan 35 stage 0) change core, and G7 waits for plan 35's `vmn_ctx.io`. Plan 35 owns core IO and is still proposed: whichever lands second rebases; the port shapes are plan 35's (owner, 2026-11-11).
 21. ci/pipeline.py is edited by E14a (`tests_webui`), G3 (`tests_exp_unit`), D15 stage 2 (the emulator stage; `tests/run_pytest.sh` marker becomes `not serial and not emulator`) and F10 (release lane note). E14a and D15 put their stage tests in ci/test_pipeline.py; G3 still names packages/vmn-exp/tests/test_ci_pipeline_stages.py and should use ci/test_pipeline.py too. Any new cached test stage must declare outputs, or `test_test_stages_are_cached_on_the_sources_they_read` fails.
 22. RECORD FORMAT - F11's golden record against A5 and A10. A5 changes no record format; it adds a stream-name pattern, `<writer>-sdk~<owner>`, which F11's golden record should include once A5 has shipped. A10's spike must say whether `RECORD_FORMAT_VERSION` changes, before F11 records the golden. F9's read-before-write rule for a format bump cannot be met while one constant serves writer and reader; that is a condition on a future bump.
 23. cli/sweep/agent.py: A12 (trial call site, `--no-adopt`), C15 (`wait`), F17 (ASHA stopper), then plan 44 (the direct `time.monotonic()` at :134). Order A12 -> F17 -> G.
