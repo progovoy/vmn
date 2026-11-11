@@ -607,17 +607,19 @@ with start_run("my_app", note="rbf baseline") as run:
 |---|---|---|
 | `sklearn` | every estimator's `fit` | incl. meta-estimators and inherited `fit` |
 | `xgboost` | `XGBClassifier.fit`, `XGBRegressor.fit` | the scikit-learn wrappers; native `xgboost.train` is left alone |
+| `lightgbm` | `LGBMClassifier.fit`, `LGBMRegressor.fit`, `LGBMRanker.fit` | the scikit-learn wrappers; native `lightgbm.train` is left alone |
+| `catboost` | `fit` of `CatBoostClassifier`, `CatBoostRegressor`, `CatBoostRanker`, `CatBoost` | `get_params()` holds only the parameters you set, so the params row is short |
 | `keras`, `tensorflow` | `keras.Model.fit` | Keras 3, any backend; the two names patch the same method once |
 | `lightning`, `pytorch_lightning` | `Trainer.fit` of each package | both record under the `lightning_` prefix |
 | `transformers` | `Trainer.train` | injects a [`VmnCallback`](#hugging-face-transformers--vmncallback); patched when `transformers.trainer` is imported |
 
 What each records:
 
-| | scikit-learn / xgboost | Keras | Lightning |
-|---|---|---|---|
-| params | `sklearn_estimator` (class name), `sklearn_<k>` for every `get_params()` key (non-scalars as `repr`, addresses stripped; a meta-estimator's own `estimator` param as `sklearn_param_estimator`), search estimators' `sklearn_best_<param>` | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (call `save_hyperparameters()`) |
-| metrics | `sklearn_score` (training set; prefer the CV score), `sklearn_best_cv_score` for search estimators | per epoch: `keras_loss` and each compiled metric, stepped by the real epoch (`initial_epoch` respected) | the final `trainer.callback_metrics`, e.g. `lightning_train_loss`; no per-epoch series |
-| `log_models=True` | pickle `sklearn_<Class>.pkl` (`_<n>` for the n-th of a class) | `keras_<Class>.keras` | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`; skipped with a warning when `trainer.world_size > 1` |
+| | scikit-learn / xgboost | LightGBM / CatBoost | Keras | Lightning |
+|---|---|---|---|---|
+| params | `sklearn_estimator` (class name), `sklearn_<k>` for every `get_params()` key (non-scalars as `repr`, addresses stripped; a meta-estimator's own `estimator` param as `sklearn_param_estimator`), search estimators' `sklearn_best_<param>` | as scikit-learn, under `lightgbm_` / `catboost_`, plus `<label>_best_iteration` once training picked one (LightGBM early stopping; CatBoost with an eval set) | `keras_estimator`, `keras_optimizer`, `keras_learning_rate`, `keras_loss_fn`, `keras_parameter_count` | `lightning_estimator`, `lightning_max_epochs`, `lightning_precision`, plus every `LightningModule.hparams` key (call `save_hyperparameters()`) |
+| metrics | `sklearn_score` (training set; prefer the CV score), `sklearn_best_cv_score` for search estimators | `<label>_score` (training set); per iteration, one series per eval dataset and metric: `lightgbm_valid_0_l2` from `evals_result_`, `catboost_validation_RMSE` from `get_evals_result()`. `best_score_` is not logged | per epoch: `keras_loss` and each compiled metric, stepped by the real epoch (`initial_epoch` respected) | the final `trainer.callback_metrics`, e.g. `lightning_train_loss`; no per-epoch series |
+| `log_models=True` | pickle `sklearn_<Class>.pkl` (`_<n>` for the n-th of a class) | LightGBM: pickle as scikit-learn; CatBoost: `catboost_<Class>.cbm` via `save_model` | `keras_<Class>.keras` | `lightning_<Class>.ckpt` via `trainer.save_checkpoint`; skipped with a warning when `trainer.world_size > 1` |
 
 Guarantees:
 
@@ -640,7 +642,8 @@ Guarantees:
 autologged route.
 
 Adding a framework is one `_adapter(...)` entry in `SUPPORTED_FRAMEWORKS`
-(`vmn_exp/sdk/autolog.py`). Only `discover(module)` (the `(owner, attr)` pairs
+(`vmn_exp/sdk/autolog.py`), or a loader returning one to keep its module off
+the `import vmn_exp.sdk` path (as `lightgbm` and `catboost` do). Only `discover(module)` (the `(owner, attr)` pairs
 to wrap) is required, or `method_owners` when the entry point is not `fit`;
 `watch` names the module(s) whose import triggers patching. The rest default to
 the scikit-learn behaviour: `subject(call)` (the trained object), `params(call)`,

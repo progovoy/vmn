@@ -324,3 +324,60 @@ def test_autolog_disable_restores_xgboost(app_layout):
     autolog_disable()
 
     assert xgboost.XGBClassifier.__dict__["fit"] is original
+
+
+# --- lightgbm and catboost (plan 43 F16) ------------------------------------
+
+# Arrays, since LightGBM refuses nested lists, and an eval set apart from the
+# training data: LightGBM names one that *is* the training data "training".
+GBDT_X = [[float(i)] for i in range(20)]
+GBDT_Y = [float(i % 5) for i in range(20)]
+GBDT_EVAL = ([[0.5], [7.5], [12.5]], [0.5, 2.5, 2.5])
+
+
+def _gbdt_data():
+    numpy = pytest.importorskip("numpy")
+    train = (numpy.asarray(GBDT_X), numpy.asarray(GBDT_Y))
+    return train, tuple(numpy.asarray(part) for part in GBDT_EVAL)
+
+
+def test_real_lightgbm_regressor_records_params_and_a_validation_curve(app_layout):
+    lightgbm = pytest.importorskip("lightgbm")
+    from vmn_exp.core.log import metric_series
+
+    _bootstrap(app_layout)
+    train, valid = _gbdt_data()
+    model = lightgbm.LGBMRegressor(n_estimators=3, min_child_samples=1, verbose=-1)
+    row = _fit_in_a_run(
+        app_layout,
+        lambda: model.fit(*train, eval_set=[valid]),
+        frameworks=["lightgbm"],
+    )
+
+    assert row["params"]["lightgbm_estimator"] == "LGBMRegressor"
+    assert row["params"]["lightgbm_n_estimators"] == 3
+    curve = metric_series(row["log"])["lightgbm_valid_0_l2"]
+    assert [point["step"] for point in curve] == [0, 1, 2]
+    assert "lightgbm_best_cv_score" not in row["metrics"]
+
+
+def test_real_catboost_regressor_records_params_and_a_validation_curve(app_layout):
+    catboost = pytest.importorskip("catboost")
+    from vmn_exp.core.log import metric_series
+
+    _bootstrap(app_layout)
+    train, valid = _gbdt_data()
+    model = catboost.CatBoostRegressor(iterations=3, verbose=False, allow_writing_files=False)
+    row = _fit_in_a_run(
+        app_layout,
+        lambda: model.fit(*train, eval_set=valid),
+        log_models=True,
+        frameworks=["catboost"],
+    )
+
+    assert row["params"]["catboost_estimator"] == "CatBoostRegressor"
+    assert row["params"]["catboost_iterations"] == 3
+    assert row["params"]["catboost_best_iteration"] >= 0
+    curve = metric_series(row["log"])["catboost_validation_RMSE"]
+    assert [point["step"] for point in curve] == [0, 1, 2]
+    assert row["artifacts"][0]["name"] == "artifacts/catboost_CatBoostRegressor.cbm"

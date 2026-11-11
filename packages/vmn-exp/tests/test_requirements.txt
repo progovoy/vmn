@@ -10,6 +10,8 @@ orjson
 psutil
 scikit-learn
 xgboost
+lightgbm
+catboost
 torch
 lightning
 pytorch-lightning

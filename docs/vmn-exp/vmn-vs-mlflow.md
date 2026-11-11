@@ -32,7 +32,7 @@ stronger on everything downstream of a finished run.
 | --- | --- | --- |
 | Params / metrics / notes / artifacts | Yes | Yes |
 | Per-step metric series + charts | Yes | Yes |
-| Autologging | sklearn, xgboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`); lightgbm and catboost **planned**; a plain PyTorch loop is not autologged by design (`watch()` plus `log_metric`) | Broader (incl. lightgbm, spark, statsmodels, paddle, LLM libs) |
+| Autologging | sklearn, xgboost, lightgbm, catboost, keras/tensorflow, lightning, **transformers** (`VmnCallback` via autolog or manually from `vmn_exp.integrations.hf`); a plain PyTorch loop is not autologged by design (`watch()` plus `log_metric`) | Broader (incl. spark, statsmodels, paddle, LLM libs) |
 | Optuna / Ray Tune integration | `start_study_run` + `StudyTracker`; `TuneRecorder` + `VmnTuneCallback` (driver-side) — see `vmn_exp.integrations.*` | Optuna/Ray callbacks available |
 | System metrics (CPU/mem/GPU) | Yes, on by default, sampled on the heartbeat (GPU with `pynvml`) | Yes |
 | Nested runs | Yes, with a `tree_status` rollup over the subtree | Yes (no rollup) |
