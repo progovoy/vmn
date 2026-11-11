@@ -1,6 +1,7 @@
 """Every ``_Supervision`` a run handler builds offers the run to its child
 unless adoption is turned off (plan 38 A4)."""
 import argparse
+import threading
 
 from empty_storage import EmptyStorage
 
@@ -31,7 +32,8 @@ def test_run_supervision_with_no_adopt_does_not():
 
 
 def _supervision(adopt):
-    sup = _Supervision(EmptyStorage(), "app", VERSTR, _args(), cwd="/work", adopt=adopt)
+    sup = _Supervision(EmptyStorage(), "app", VERSTR, _args(), cwd="/work", adopt=adopt,
+                       wait=threading.Event().wait)
     sup.metrics_path = "/tmp/metrics"
     sup.samples_tree = False
     return sup
@@ -47,5 +49,6 @@ def test_supervision_child_env_carries_the_token_only_when_adopting():
 
 
 def test_supervision_does_not_adopt_unless_asked():
-    sup = _Supervision(EmptyStorage(), "app", VERSTR, _args(), None, None, None, "/work")
+    sup = _Supervision(EmptyStorage(), "app", VERSTR, _args(), None, None, None, "/work",
+                       wait=threading.Event().wait)
     assert sup.adopt is False
