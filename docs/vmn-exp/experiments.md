@@ -1847,6 +1847,15 @@ backends are built.
   processes under one lock. Readers merge all streams. Log batches are
   written as whole lines in one write (one PUT), so readers never see a
   partial line.
+- **Straight to a bucket**: with no local copy, a process appends to a
+  private log buffer (`vmn-log-buffer-<id>` in the temp dir) and ships it as
+  segments. The buffer also holds the only local copy of a run's
+  `run_state.yml`, so a finished run's buffer is removed only once the
+  bucket holds a final state. At process exit the buffer's final states the
+  bucket never received are uploaded once more (only over a state of the
+  same attempt that is not final); when that upload fails the buffer is kept,
+  and the warning names its directory and the runs whose final state it
+  holds.
 - **Caching**: immutable files fetched from a remote (metadata, patches) are
   cached locally; `run_state.yml` and logs never are, so another host's run
   shows its live status.

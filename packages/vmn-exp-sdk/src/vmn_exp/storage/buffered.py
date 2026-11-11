@@ -24,8 +24,10 @@ import time
 import uuid
 
 from vmn_exp._base import VMN_LOGGER, parse_record_metadata
+from vmn_exp.core.status import run_finished
 from vmn_exp.core.streams import new_owner, owner_of
 from vmn_exp.storage.areas import RUNS
+from vmn_exp.storage.buffer_state import unpublished_final_states
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
 from vmn_exp.storage.local import LocalSnapshotStorage
@@ -214,10 +216,15 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         if self._unshipped or self._unshipped_metrics:
             return
         _PENDING.discard(self)
-        # Nothing left to ship, and the run is done: no atexit safety net is
-        # coming, so the buffer dir must go now or it never will.
-        if self._run_finished(app_name, verstr):
+        if not self._run_finished(app_name, verstr):
+            return
+        # Nothing left to ship, and the run is done: the buffer dir goes now,
+        # unless it holds the only copy of the final state; then the exit
+        # flush publishes that and decides.
+        if run_finished(self._remote, app_name, verstr):
             self._cleanup_buffer()
+        else:
+            _PENDING.add(self)
 
     # -- metric streams ---------------------------------------------------------
 
@@ -263,11 +270,13 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         shutil.rmtree(self._buffer_root, ignore_errors=True)
         self._owner = new_owner()
 
-    def _keep_buffer(self):
-        """Leave the buffer dir on disk, the only copy of what did not ship,
-        and move on to a fresh buffer: a later append never touches it."""
+    def _keep_buffer(self, unpublished):
+        """Leave the buffer dir on disk, the only copy of what did not ship
+        (and of the final states of *unpublished*), and move on to a fresh
+        buffer: a later append never touches it."""
+        states = f", with the final state of {', '.join(unpublished)}" if unpublished else ""
         VMN_LOGGER.warning(
-            f"What did not ship is kept in {self._buffer_root}: nothing ships "
+            f"What did not ship is kept in {self._buffer_root}{states}: nothing ships "
             "it later (`vmn-exp push` does not read a buffer), recover it by hand"
         )
         self._start_buffer(self._remote, self._local.area)
@@ -292,8 +301,9 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
             for key in list(keys)
         ]
         _PENDING.discard(self)
-        if not all(shipped):
-            return self._keep_buffer()
+        unpublished = unpublished_final_states(self._local, self._remote)
+        if not all(shipped) or unpublished:
+            return self._keep_buffer(unpublished)
         # A later append starts a fresh buffer, under a new owner.
         self._metrics_flushed_at.clear()
         self._flushed_at.clear()
