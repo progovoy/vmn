@@ -26,7 +26,6 @@ log folding it shares with the CLI and the ui lives in
 :mod:`vmn_exp.core.log`.
 """
 import os
-import warnings
 
 import vmn_exp.core.index as experiment_index
 from vmn_exp.core.app_conf import read_experiment_conf
@@ -38,10 +37,9 @@ from vmn_exp.core.log import (
     history_points,
     list_artifacts,
     metric_series,
-    sort_by_metric,
 )
 from vmn_exp.core.lineage import DEFAULT_LIMIT
-from vmn_exp.core.load_progress import IndexingWarning, incomplete_text
+from vmn_exp.core.load_progress import IndexingWarning  # noqa: F401 (re-exported)
 from vmn_exp.core.log import load_log as _load_log
 from vmn_exp.core.importance import param_importance as _param_importance
 from vmn_exp.core.media import media_index
@@ -60,6 +58,7 @@ from vmn_exp.core.tree import annotate_rows, run_status
 from vmn_exp.registry.lineage import app_indexes, run_lineage
 from vmn_exp.sdk import _resolve_app_name, frames
 from vmn_exp.sdk.create import SNAPSHOT_METADATA_ENV, snapshot_app_names
+from vmn_exp.sdk.reader_select import check_loading, select
 from vmn_exp.sdk.run_states import read_run_state, read_run_states
 
 
@@ -104,7 +103,7 @@ def _metrics_schema(storage, root_path, app_name):
 # ---------------------------------------------------------------------------
 
 
-def _rows_and_declared(app_name, storage, use_index=True, schema=None):
+def _rows_and_declared(app_name, storage, use_index=True, schema=None, incomplete=None):
     """``(rows, declared schema, extra)``: every run of an app,
     status-annotated, in storage order (oldest first); the goals/hidden flags
     the runs declare (:mod:`vmn_exp.core.metric_schema`) and what a query
@@ -113,25 +112,21 @@ def _rows_and_declared(app_name, storage, use_index=True, schema=None):
     With *use_index* the rows come from the experiment index, which re-reads
     only what changed since the last call; without, every run's log and run
     state is read (and ``similar()`` searches a ``:memory:`` database).
+    An index still loading raises :class:`IndexingWarning`, or with
+    *incomplete* ``"warn"`` warns it at the public reader's caller
+    (:func:`~vmn_exp.sdk.reader_select.check_loading`).
     Asking about a single run goes through :func:`_subtree_row` instead.
     """
     if use_index:
         snap = experiment_index.indexed_snapshot(storage, app_name, wait=True, schema=schema)
         extra = store_extra(storage, app_name, snap)
-        _warn_loading(snap)
     else:
         snap = experiment_index.direct_snapshot(
             storage, app_name, schema, read_log=_load_log, read_run_state=load_run_state)
         extra = rows_extra(snap)
+    check_loading(snap.loading, incomplete, stacklevel=3)
     rows = annotate_rows(row_copies(snap, False), snap.run_states, snap.run_state_observed_at)
     return rows, snap.declared_schema(), extra
-
-
-def _warn_loading(snap):
-    """Warn :class:`IndexingWarning` when *snap*'s index is still loading:
-    its rows are some of the app's, not all."""
-    if snap.loading is not None:
-        warnings.warn(incomplete_text(snap.loading), IndexingWarning, stacklevel=4)
 
 
 # ---------------------------------------------------------------------------
@@ -144,21 +139,31 @@ def list_runs(
     *,
     storage=None,
     sort=None,
+    descending=None,
     last=None,
+    limit=None,
     status=None,
     query=None,
     use_index=True,
     include_archived=False,
+    incomplete=None,
 ):
-    """Runs of an app, oldest first unless *sort* or a primary metric reorders.
+    """Runs of an app: ordered by *sort*, else by the app's primary metric
+    when one is configured, else in storage order (oldest first).
 
     Args:
         app_name: the vmn app; inferred from the current repo when omitted.
         storage: a snapshot storage backend; the local checkout's when omitted.
             Passing one together with *app_name* skips the checkout entirely, so
             there is no conf.yml to take sort direction from.
-        sort: a metric name to order by.
-        last: keep only the *last* runs (applied before sorting).
+        sort: a metric name to order by; ``"timestamp"`` or ``"idx"`` for
+            newest first.
+        descending: force the direction of *sort* (by default the metric's
+            goal; newest first for ``"timestamp"``/``"idx"``).
+        last: keep only the *last* runs in storage order, applied before
+            sorting: the newest N, then sorted.
+        limit: keep the first *limit* rows after sorting: the best N.
+            A positive int (ValueError otherwise).
         status: keep only these statuses — a list or a comma-separated string.
         query: an experiment query (``metrics.loss < 0.5 and params.model = "xgb"``),
             ANDed with *status* and applied before *last* and *sort*. Raises
@@ -171,21 +176,24 @@ def list_runs(
             every run straight from storage (and writes no index file).
         include_archived: also return archived runs (hidden by default; see
             :mod:`vmn_exp.sdk.manage`).
+        incomplete: while the index is still loading its rows are some of
+            the app's: by default (or ``"raise"``) that raises
+            :class:`IndexingWarning`; ``"warn"`` warns it and returns the
+            rows loaded so far.
     """
     app_name, storage, root_path = _resolve(app_name, storage)
     schema = _metrics_schema(storage, root_path, app_name)
-    rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema)
+    rows, declared, extra = _rows_and_declared(app_name, storage, use_index, schema, incomplete)
     rows = filter_archived(rows, include_archived)
     rows = filter_rows(filter_by_status(rows, status), query, extra=extra)
-    if last:
-        rows = rows[-int(last) :]
     # Summaries follow the conf schema only; direction also what runs declare.
-    return sort_by_metric(rows, effective_schema(schema, declared), sort=sort)
+    return select(rows, effective_schema(schema, declared), last=last, sort=sort,
+                  descending=descending, limit=limit)
 
 
 def param_importance(
     app_name=None, metric=None, *, storage=None, query=None, status=None,
-    include_archived=False,
+    include_archived=False, incomplete=None,
 ):
     """Which params drive *metric*: ``[{param, importance, correlation,
     spearman, kind, n}]`` over the runs :func:`list_runs` would return for
@@ -193,10 +201,11 @@ def param_importance(
     :mod:`vmn_exp.core.importance`).
 
     Raises ValueError when no run carries *metric*, ``QueryError`` on a bad
-    *query*.
+    *query*, :class:`IndexingWarning` while the index loads unless
+    *incomplete* is ``"warn"`` (as in :func:`list_runs`).
     """
     app_name, storage, _ = _resolve(app_name, storage)
-    rows, _, extra = _rows_and_declared(app_name, storage)
+    rows, _, extra = _rows_and_declared(app_name, storage, incomplete=incomplete)
     rows = filter_archived(rows, include_archived)
     matching = filter_rows(filter_by_status(rows, status), query, extra=extra)
     return _param_importance(matching, metric, universe=rows)

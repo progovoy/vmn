@@ -1,6 +1,7 @@
 """While the app's index snapshot is still loading, the readers never present
 the partial runs as the whole app (plan 33 §2.2): ``list_runs`` (and every
-reader of the same rows) warns :class:`IndexingWarning`, ``vmn-exp list``
+reader of the same rows) raises :class:`IndexingWarning`, or warns it with
+``incomplete="warn"``; ``vmn-exp list``
 prints ``indexing 120k/734k runs — results incomplete`` on stderr."""
 import dataclasses
 import warnings
@@ -36,14 +37,20 @@ def _loading_snapshots(monkeypatch, state):
 def test_list_runs_warns_while_the_index_loads(storage, monkeypatch):
     _loading_snapshots(monkeypatch, (120_000, 734_000))
     with pytest.warns(reader.IndexingWarning, match=INCOMPLETE):
-        rows = reader.list_runs(APP, storage=storage)
+        rows = reader.list_runs(APP, storage=storage, incomplete="warn")
     assert [r["verstr"] for r in rows] == [RUN]
+
+
+def test_list_runs_raises_by_default_while_the_index_loads(storage, monkeypatch):
+    _loading_snapshots(monkeypatch, (120_000, 734_000))
+    with pytest.raises(reader.IndexingWarning, match=INCOMPLETE):
+        reader.list_runs(APP, storage=storage)
 
 
 def test_list_runs_names_what_it_loaded_before_the_total_is_known(storage, monkeypatch):
     _loading_snapshots(monkeypatch, (950, None))
     with pytest.warns(reader.IndexingWarning, match="indexing 950 runs — results incomplete"):
-        reader.list_runs(APP, storage=storage)
+        reader.list_runs(APP, storage=storage, incomplete="warn")
 
 
 def test_a_loaded_index_lists_without_a_warning(storage):
