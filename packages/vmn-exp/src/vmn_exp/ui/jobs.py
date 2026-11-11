@@ -14,10 +14,18 @@ import threading
 import uuid
 from collections import OrderedDict
 
-from vmn_exp.ui.jobs_exp_meta import (
+from vmn_exp.ui.job_argv import ACTIONS, opt, positional, switch
+from vmn_exp.ui.jobs_exp_meta import (  # noqa: F401  (_metric_args: tests)
     MAX_ARCHIVE_BATCH,
+    _metric_args,
+    _valid_verstr,
+    exp_add_command,
     exp_archive_command,
+    exp_create_command,
+    exp_note_command,
+    exp_prune_command,
     exp_push_command,
+    exp_restore_command,
     exp_rewind_command,
     exp_tag_command,
 )
@@ -52,127 +60,76 @@ def _as_text(output):
     return output
 
 
-def _metric_args(metrics):
-    """Validate a {name: value} mapping and render it as ``--metrics k=v ...``.
+_RELEASE_MODES = ("major", "minor", "patch", "hotfix")
 
-    Returns (args, error_message_or_None); ``([], None)`` when there are none.
-    A name starting with ``-`` would parse as a flag of its own, not a metric.
-    """
-    metrics = metrics or {}
-    for key in metrics:
-        if (
-            not key
-            or key.startswith("-")
-            or "=" in key
-            or any(c.isspace() for c in key)
-        ):
-            return None, f"Invalid metric name '{key}'"
-    if not metrics:
+
+def _version_args(body):
+    """``--version=<verstr>``, or nothing for a missing or empty verstr."""
+    verstr = body.get("verstr")
+    if verstr is None or verstr == "":
         return [], None
-    return ["--metrics"] + [f"{k}={v}" for k, v in metrics.items()], None
+    if not _valid_verstr(verstr):
+        return None, "A valid verstr is required"
+    return [opt("--version", verstr)], None
+
+
+def _stamp_command(app_name, body):
+    mode, prerelease = body.get("release_mode"), body.get("prerelease")
+    if mode not in _RELEASE_MODES:
+        return None, "release_mode must be major|minor|patch|hotfix"
+    cmd = ["vmn", "stamp", opt("--release-mode", mode)]
+    if prerelease:
+        if not isinstance(prerelease, str) or not prerelease.isprintable():
+            return None, "prerelease must be a printable string"
+        cmd.append(opt("--pr", prerelease))
+    if body.get("dry_run"):
+        cmd.append(switch("--dry-run"))
+    return cmd + [positional(app_name)], None
+
+
+def _core_version_command(verb):
+    """``vmn release|goto [--version=<verstr>] <app>``."""
+    def build(app_name, body):
+        args, err = _version_args(body)
+        if err:
+            return None, err
+        return ["vmn", verb, *args, positional(app_name)], None
+
+    return build
+
+
+def _exp_archive(verb):
+    return lambda app_name, body: exp_archive_command(verb, app_name, body)
+
+
+_BUILDERS = {
+    "stamp": _stamp_command,
+    "release": _core_version_command("release"),
+    "goto": _core_version_command("goto"),
+    "restore": exp_restore_command,
+    "prune": exp_prune_command,
+    "exp_create": exp_create_command,
+    "exp_add": exp_add_command,
+    "note": exp_note_command,
+    "exp_tag": exp_tag_command,
+    "exp_rewind": exp_rewind_command,
+    "exp_push": exp_push_command,
+    "exp_archive": _exp_archive("archive"),
+    "exp_unarchive": _exp_archive("unarchive"),
+}
 
 
 def build_command(action, app_name, body):
-    """Translate an action + request body into a ``vmn`` argv list.
+    """Translate an action + request body into a ``vmn``/``vmn-exp`` argv list.
 
     Returns (argv, error_message_or_None). Kept pure for testing/preview.
     """
-    body = body or {}
-    if action == "stamp":
-        mode = body.get("release_mode")
-        if mode not in ("major", "minor", "patch", "hotfix"):
-            return None, "release_mode must be major|minor|patch|hotfix"
-        cmd = ["vmn", "stamp", "-r", mode]
-        if body.get("prerelease"):
-            cmd += ["--pr", body["prerelease"]]
-        if body.get("dry_run"):
-            cmd += ["--dry-run"]
-        cmd.append(app_name)
-        return cmd, None
-
-    if action == "release":
-        cmd = ["vmn", "release"]
-        if body.get("verstr"):
-            cmd += ["-v", body["verstr"]]
-        cmd.append(app_name)
-        return cmd, None
-
-    if action == "restore":
-        verstr = body.get("verstr")
-        if not verstr:
-            return None, "verstr is required"
-        return ["vmn-exp", "experiment", "restore", app_name, "-v", verstr], None
-
-    if action == "goto":
-        verstr = body.get("verstr")
-        cmd = ["vmn", "goto"]
-        if verstr:
-            cmd += ["-v", verstr]
-        cmd.append(app_name)
-        return cmd, None
-
-    if action == "prune":
-        cmd = ["vmn-exp", "experiment", "prune", app_name]
-        if body.get("keep") is not None:
-            cmd += ["--keep", str(body["keep"])]
-        elif body.get("older_than"):
-            cmd += ["--older-than", body["older_than"]]
-        else:
-            return None, "prune needs keep or older_than"
-        return cmd, None
-
-    if action == "exp_create":
-        cmd = ["vmn-exp", "experiment", "create", app_name]
-        if body.get("note"):
-            cmd += ["--note", body["note"]]
-        metric_args, err = _metric_args(body.get("metrics"))
-        if err:
-            return None, err
-        return cmd + metric_args, None
-
-    if action == "exp_add":
-        verstr = body.get("verstr")
-        if not verstr:
-            return None, "verstr is required"
-        metric_args, err = _metric_args(body.get("metrics"))
-        if err:
-            return None, err
-        note = body.get("note")
-        if not metric_args and not note:
-            return None, "exp_add needs metrics or a note"
-        cmd = ["vmn-exp", "experiment", "add", app_name, "-v", verstr]
-        if note:
-            cmd += ["--note", note]
-        return cmd + metric_args, None
-
-    if action == "note":
-        verstr, note = body.get("verstr"), body.get("note")
-        if not verstr or note is None:
-            return None, "verstr and note are required"
-        return [
-            "vmn-exp",
-            "experiment",
-            "add",
-            app_name,
-            "-v",
-            verstr,
-            "--note",
-            note,
-        ], None
-
-    if action == "exp_tag":
-        return exp_tag_command(app_name, body)
-
-    if action == "exp_rewind":
-        return exp_rewind_command(app_name, body)
-
-    if action == "exp_push":
-        return exp_push_command(app_name, body)
-
-    if action in ("exp_archive", "exp_unarchive"):
-        return exp_archive_command(action.split("_", 1)[1], app_name, body)
-
-    return None, f"Unknown action '{action}'"
+    if action not in ACTIONS:
+        return None, f"Unknown action '{action}'"
+    try:
+        return _BUILDERS[action](app_name, body or {})
+    except ValueError as e:
+        return None, str(e)
 
 
 class Job:

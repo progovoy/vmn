@@ -51,6 +51,6 @@ def test_git_commands_archive_a_batch_at_once_and_tag_run_by_run():
         ["vmn-exp", "experiment", "archive", "root/svc", "a", "b"]]
     tag, _ = BulkSpec.build("exp_tag", "my_app", {"scope": "j", "set": {"k": "v"}, "remove": ["o"]})
     assert tag.commands(["a", "b"]) == [
-        ["vmn-exp", "experiment", "tag", "my_app", "a", "k=v", "--remove", "o"],
-        ["vmn-exp", "experiment", "tag", "my_app", "b", "k=v", "--remove", "o"],
+        ["vmn-exp", "experiment", "tag", "my_app", "a", "k=v", "--remove=o"],
+        ["vmn-exp", "experiment", "tag", "my_app", "b", "k=v", "--remove=o"],
     ]

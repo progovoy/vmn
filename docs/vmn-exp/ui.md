@@ -147,18 +147,31 @@ Mutations on a git workspace are asynchronous jobs:
 
 | Action | Body | Runs |
 |---|---|---|
-| `stamp` | `{"release_mode", "prerelease"?, "dry_run"?}` | `vmn stamp -r <mode> [--pr] [--dry-run]` |
-| `release` | `{"verstr"?}` | `vmn release [-v]` |
-| `goto` | `{"verstr"?}` | `vmn goto [-v]` |
-| `restore` | `{"verstr"}` | `vmn-exp restore -v` |
-| `prune` | `{"keep"}` or `{"older_than"}` | `vmn-exp prune --keep` / `--older-than` |
-| `exp_create` | `{"note"?, "metrics"?: {k: v}}` | `vmn-exp create [--note] [--metrics]` |
-| `exp_add` | `{"verstr", "note"?, "metrics"?}` (one of the two) | `vmn-exp add -v` |
-| `note` | `{"verstr", "note"}` | `vmn-exp add -v --note` |
-| `exp_tag` | `{"verstr", "set"?: {k: v}, "remove"?: [k]}` (at most 100) | `vmn-exp tag` |
-| `exp_archive` / `exp_unarchive` | `{"verstrs": [...]}` (at most 500) | `vmn-exp archive` / `unarchive` |
-| `exp_rewind` | `{"verstr", "step"}` | [`vmn-exp rewind`](experiments.md#rewind) |
-| `exp_push` | `{"verstrs"?: [...]}` (empty: every local run) | [`vmn-exp push`](experiments.md#offline-recording-and-push) |
+| `stamp` | `{"release_mode", "prerelease"?, "dry_run"?}` | `vmn stamp --release-mode=<mode> [--pr=<prerelease>] [--dry-run] <app>` |
+| `release` | `{"verstr"?}` | `vmn release [--version=<verstr>] <app>` |
+| `goto` | `{"verstr"?}` | `vmn goto [--version=<verstr>] <app>` |
+| `restore` | `{"verstr"}` | `vmn-exp experiment restore <app> --version=<verstr>` |
+| `prune` | `{"keep"}` or `{"older_than"}` | `vmn-exp experiment prune <app> --keep=<n>` / `--older-than=<d>` |
+| `exp_create` | `{"note"?, "metrics"?: {k: v}}` | `vmn-exp experiment create <app> [--note=<text>] [--metrics=<k>=<v> ...]` |
+| `exp_add` | `{"verstr", "note"?, "metrics"?}` (one of the two) | `vmn-exp experiment add <app> --version=<verstr> ...` |
+| `note` | `{"verstr", "note"}` | `vmn-exp experiment add <app> --version=<verstr> --note=<text>` |
+| `exp_tag` | `{"verstr", "set"?: {k: v}, "remove"?: [k]}` (at most 100) | `vmn-exp experiment tag <app> <verstr> [k=v ...] [--remove=<k> ...]` |
+| `exp_archive` / `exp_unarchive` | `{"verstrs": [...]}` (at most 500) | `vmn-exp experiment archive` / `unarchive <app> <verstr> ...` |
+| `exp_rewind` | `{"verstr", "step"}` | [`vmn-exp experiment rewind`](experiments.md#rewind) `<app> --version=<verstr> --step=<n>` |
+| `exp_push` | `{"verstrs"?: [...]}` (empty: every local run) | [`vmn-exp experiment push`](experiments.md#offline-recording-and-push) `<app> [--version=<verstr> ...]` |
+
+The job's `command` is that argv: the app and other positionals come first
+and every option is one `--flag=value` token, so no body value can be read as
+a flag, whatever it starts with. Fields are checked before anything runs, and
+a bad one answers `400`:
+
+- `verstr`, `verstrs`: run versions (one path component, not starting with `-`).
+- `release_mode`: `major`, `minor`, `patch` or `hotfix`; `prerelease`: a printable string.
+- `keep`: an integer `>= 0` (`0` deletes every run, as on the CLI); `older_than`: `<N>d`, `<N>w` or `<N>h`.
+- `note`: a string of at most 16 KiB; it may start with `-`.
+- `metrics`: an object; names as on the CLI (not starting with `-`, no `=` or
+  whitespace), values numbers or strings.
+- tag keys and values: printable, not starting with `-`, at most 64 / 256 characters.
 
 Each job runs in the workspace as a subprocess, so it takes the per-repo lock
 like terminal use, and at most one runs per workspace. A job has stdin closed

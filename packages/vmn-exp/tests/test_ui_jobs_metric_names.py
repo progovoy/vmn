@@ -37,10 +37,10 @@ def test_exp_add_rejects_option_like_metric_names(name):
 def test_metric_names_may_contain_a_dash_after_the_first_character():
     args, err = _metric_args({"val-loss": 0.1})
     assert err is None
-    assert args == ["--metrics", "val-loss=0.1"]
+    assert args == ["--metrics=val-loss=0.1"]
 
 
 def test_option_like_metric_values_stay_values():
     args, err = _metric_args({"delta": "-1", "flag": "--attach"})
     assert err is None
-    assert args == ["--metrics", "delta=-1", "flag=--attach"]
+    assert args == ["--metrics=delta=-1", "--metrics=flag=--attach"]
