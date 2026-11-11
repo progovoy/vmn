@@ -39,6 +39,7 @@ def test_token_only(tmp_path):
     r = _unauthorized(_client(tmp_path, token=SECRET))
     assert r.json() == {
         "detail": "Unauthorized",
+        "code": "unauthorized",
         "auth": {"token": True, "oidc": False, "login_url": None},
     }
 
