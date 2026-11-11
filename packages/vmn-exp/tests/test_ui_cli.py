@@ -5,6 +5,7 @@ import pytest
 fastapi = pytest.importorskip("fastapi")
 
 from exp_helpers import _init_app, _run_vmn_init, _stamp_app
+from vmn_exp.core.real_io import real_io  # noqa: E402
 
 
 def test_ui_args_parse():
@@ -147,7 +148,7 @@ def _run_handle_ui(tmp_path, monkeypatch, extra):
 
     data_dir = str(tmp_path / "ui_data")
     args = parse_user_commands(["ui", "--data-dir", data_dir, "--no-browser"] + extra)
-    rc = handle_ui(args)
+    rc = handle_ui(args, real_io())
     return rc, calls
 
 

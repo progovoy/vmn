@@ -10,9 +10,14 @@ On import this module:
      and ``model`` in the plugin_api registry.
   2. Registers a dev-version loader so that ``output._goto_dev_version`` can
      restore a dev-version snapshot without importing this module directly.
+
+The handler shims here are composition roots (plan 44 G7): vmn calls them
+with ``vmn_ctx`` or ``args`` only, so each invocation builds ``real_io()`` and
+hands it to the handler, until core vmn passes ``vmn_ctx.io``.
 """
 from __future__ import annotations
 
+import functools
 import os
 
 from version_stamp.api import (
@@ -24,6 +29,7 @@ from version_stamp.api import (
     register_snapshot_store_opener,
 )
 from vmn_exp.cli.exp_parser.actions import EXPERIMENT_ACTIONS  # noqa: F401  (main.py, tests)
+from vmn_exp.core.real_io import real_io
 
 
 def _add_experiment_parser(subparsers, name):
@@ -42,7 +48,7 @@ def _add_ui_parser(subparsers):
 
 def _handle_experiment(vmn_ctx):
     from vmn_exp.cli.experiment import handle_experiment
-    return handle_experiment(vmn_ctx)
+    return handle_experiment(vmn_ctx, real_io())
 
 
 def _add_sweep_parser(subparsers):
@@ -52,12 +58,12 @@ def _add_sweep_parser(subparsers):
 
 def _handle_sweep(vmn_ctx):
     from vmn_exp.cli.sweep.handler import handle_sweep
-    return handle_sweep(vmn_ctx)
+    return handle_sweep(vmn_ctx, real_io())
 
 
 def _handle_ui_args(args):
     from vmn_exp.ui.cli import handle_ui
-    return handle_ui(args)
+    return handle_ui(args, real_io())
 
 
 def _handle_ui(vmn_ctx):
@@ -131,7 +137,7 @@ def _exp_run_without_repo(args):
 
     dispatch = {
         "create": experiment_create,
-        "run": experiment_run,
+        "run": functools.partial(experiment_run, io=real_io()),
         "add": experiment_add,
         "list": experiment_list,
         "show": experiment_show,
@@ -247,10 +253,10 @@ def register_all() -> None:
     _register(CommandSpec(
         names=("model",),
         add_parser=add_model_parser,
-        handle=lambda ctx: model_run_without_repo(ctx.args),
+        handle=lambda ctx: model_run_without_repo(ctx.args, real_io()),
         access="local",
         read_only_actions=frozenset({"list", "show", "resolve"}),
-        run_without_repo=model_run_without_repo,
+        run_without_repo=lambda args: model_run_without_repo(args, real_io()),
     ))
     _register_reports()
 
@@ -269,8 +275,8 @@ def _register_reports():
         _register(CommandSpec(
             names=names,
             add_parser=add_parser,
-            handle=lambda ctx, run=run: run(ctx.args),
+            handle=lambda ctx, run=run: run(ctx.args, real_io()),
             access="local",
             read_only_actions=frozenset(read_only),
-            run_without_repo=run,
+            run_without_repo=lambda args, run=run: run(args, real_io()),
         ))

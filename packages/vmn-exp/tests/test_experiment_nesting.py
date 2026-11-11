@@ -14,12 +14,13 @@ from exp_helpers import (
     _experiment,
     _storage,
 )
+from vmn_exp.core.real_io import real_io
 
 
 def _exp_argv(*argv):
     """Raw `vmn exp ...` argv — for flag combinations helpers don't model."""
     reset_logger()
-    return vmn_exp_run(["exp"] + list(argv))[0]
+    return vmn_exp_run(["exp"] + list(argv), real_io())[0]
 
 
 def _last_dev_verstr(output):

@@ -8,6 +8,7 @@ from vmn_exp.core.app_settings_store import read_settings_text, write_settings
 from vmn_exp.sdk.reader import list_runs
 from vmn_exp.storage.areas import local_store_root
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 TEXT = "# ours\nmetrics: {loss: {goal: min, primary: true}}\n"
@@ -22,7 +23,7 @@ def store_dir(tmp_path, monkeypatch):
 
 
 def _run(*argv):
-    code, _ = vmn_exp_run(list(argv))
+    code, _ = vmn_exp_run(list(argv), real_io())
     return code
 
 

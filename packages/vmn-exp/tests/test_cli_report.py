@@ -8,6 +8,7 @@ from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.reports import comments, published, store
 from vmn_exp.cli import report_export as rx
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ def store_dir(tmp_path, monkeypatch):
 
 
 def _run(*argv):
-    code, _ = vmn_exp_run(list(argv))
+    code, _ = vmn_exp_run(list(argv), real_io())
     return code
 
 

@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import boto3
 import pytest
 from moto import mock_aws
+from vmn_exp.core.real_io import real_io
 
 BUCKET = "vmn-test-bucket"
 PREFIX = "vmn-experiments"
@@ -103,7 +104,7 @@ def test_in_repo_default_sdk_model_visible_to_vmn_model_list(tmp_path, monkeypat
     )
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rc = model_run_without_repo(args)
+        rc = model_run_without_repo(args, real_io())
 
     assert rc == 0, f"model list failed: {buf.getvalue()}"
     import json as _json

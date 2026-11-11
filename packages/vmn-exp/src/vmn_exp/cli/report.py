@@ -132,5 +132,5 @@ _DISPATCH = {"list": _cmd_list, "show": _cmd_show, "export": _cmd_export,
              "put": _cmd_put, "delete": _cmd_delete}
 
 
-def report_run_without_repo(args):
+def report_run_without_repo(args, io):
     return _DISPATCH[args.action](_get_storage(args), args)

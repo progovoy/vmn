@@ -223,7 +223,7 @@ def _create_experiment(vcs, storage, args, extra_create_data=None):
 
 
 @measure_runtime_decorator
-def experiment_run(vcs, params, storage, args, repo_lock=None):
+def experiment_run(vcs, params, storage, args, repo_lock=None, *, io):
     """Create an experiment, run a command, and record its outcome + metrics.
 
     The child's stdout/stderr stream live and are kept as the ``output.log``

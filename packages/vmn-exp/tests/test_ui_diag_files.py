@@ -10,6 +10,7 @@ import pytest
 
 from vmn_exp.ui import diag
 from vmn_exp.ui.diag import dump_files
+from vmn_exp.core.real_io import real_io
 
 NAME = re.compile(r"^diag-\d{8}T\d{6}Z-%d\.json$" % os.getpid())
 
@@ -97,7 +98,7 @@ def test_vmn_exp_ui_installs_the_signal_and_periodic_dumps(tmp_path, monkeypatch
     data_dir = str(tmp_path / "ui_data")
     args = parse_user_commands(["ui", "--data-dir", data_dir, "--no-browser",
                                 "--token", "tok-SECRET", "--diag-every", "15"])
-    assert handle_ui(args) == 0
+    assert handle_ui(args, real_io()) == 0
     assert ("signal", data_dir) in calls
     assert ("every", data_dir, 15) in calls
     options = [c[1] for c in calls if c[0] == "options"][0]

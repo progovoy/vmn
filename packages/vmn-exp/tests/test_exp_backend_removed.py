@@ -13,6 +13,7 @@ from moto import mock_aws
 from exp_helpers import _PY, _SRC_PATH
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.snapshot import open_storage
+from vmn_exp.core.real_io import real_io
 
 BUCKET = "ml-exps"
 APP = "trainer"
@@ -90,7 +91,7 @@ def test_git_less_run_without_a_bucket_records_to_the_local_dir(tmp_path, monkey
     scratch = tmp_path / "scratch"
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(scratch))
 
-    err, _ = vmn_exp_run(["exp", "create", APP])
+    err, _ = vmn_exp_run(["exp", "create", APP], real_io())
 
     assert err == 0
     assert len(_local_runs(scratch)) == 1
@@ -99,7 +100,7 @@ def test_git_less_run_without_a_bucket_records_to_the_local_dir(tmp_path, monkey
 def test_bucket_flag_alone_selects_s3(tmp_path, monkeypatch, s3):
     _container(tmp_path, monkeypatch)
 
-    err, _ = vmn_exp_run(["exp", "create", APP, "--bucket", BUCKET])
+    err, _ = vmn_exp_run(["exp", "create", APP, "--bucket", BUCKET], real_io())
 
     assert err == 0
     assert len(_bucket_runs()) == 1

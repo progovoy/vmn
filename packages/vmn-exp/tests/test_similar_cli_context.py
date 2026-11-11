@@ -9,6 +9,7 @@ import yaml
 from exp_helpers import _bootstrap, _exp, _init_app, _run_vmn_init, _stamp_app, _storage
 from similar_seed import TRAIN_STEP, features, seed, verstr
 from vmn_exp.cli.main import vmn_exp_run
+from vmn_exp.core.real_io import real_io
 from vmn_exp.snapshot import open_storage
 
 
@@ -169,7 +170,7 @@ def container(tmp_path, monkeypatch):
 
 def _git_free(store, capfd, *argv):
     capfd.readouterr()
-    code = vmn_exp_run(["exp", *argv, "--experiment-dir", str(store)])[0]
+    code = vmn_exp_run(["exp", *argv, "--experiment-dir", str(store)], real_io())[0]
     return code, capfd.readouterr()
 
 

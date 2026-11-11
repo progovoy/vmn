@@ -12,6 +12,7 @@ import pytest
 import yaml
 from exp_helpers import _bootstrap, _exp, _storage, extract_dev_verstr
 from vmn_exp.core.fold import fold_intent, fold_log
+from vmn_exp.core.real_io import real_io
 
 INTENT_MD = (
     "---\n"
@@ -234,16 +235,16 @@ def test_git_free_create_records_the_intent(tmp_path, monkeypatch, capfd):
     monkeypatch.setenv("VMN_SNAPSHOT_METADATA", str(meta))
     store = ["--experiment-dir", str(tmp_path / "store")]
 
-    assert vmn_exp_run(["exp", "create", "trainer", *store, "--intent", "container idea"])[0] == 0
-    assert vmn_exp_run(["exp", "create", "trainer", *store])[0] == 0
+    assert vmn_exp_run(["exp", "create", "trainer", *store, "--intent", "container idea"], real_io())[0] == 0
+    assert vmn_exp_run(["exp", "create", "trainer", *store], real_io())[0] == 0
     capfd.readouterr()
     assert vmn_exp_run(["exp", "list", "trainer", *store,
-                        "--query", "has_intent = true", "--json"])[0] == 0
+                        "--query", "has_intent = true", "--json"], real_io())[0] == 0
     [row] = json.loads(capfd.readouterr().out)
     assert row["has_intent"] is True
     capfd.readouterr()
     assert vmn_exp_run(["exp", "show", "trainer", "-v", row["verstr"], *store,
-                        "--json"])[0] == 0
+                        "--json"], real_io())[0] == 0
     shown = json.loads(capfd.readouterr().out)
     assert [e["text"] for e in shown["log"] if e.get("type") == "intent"] == [
         "container idea"]

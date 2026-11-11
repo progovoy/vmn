@@ -37,7 +37,7 @@ def _parser():
     return p
 
 
-def run_migrate(argv):
+def run_migrate(argv, io):
     args = _parser().parse_args(argv)
     opts = dict(dry_run=args.dry_run, skip_live=args.skip_live)
     if args.dir:

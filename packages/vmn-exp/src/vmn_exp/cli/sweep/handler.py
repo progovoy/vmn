@@ -15,7 +15,7 @@ from vmn_exp.core.writer import append_to_log, flush_log
 from version_stamp.api import VMN_LOGGER
 
 
-def handle_sweep(vmn_ctx):
+def handle_sweep(vmn_ctx, io):
     vcs, args = vmn_ctx.vcs, vmn_ctx.args
     params = experiment_storage_params(vcs, args)
     if args.action == "create":

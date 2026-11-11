@@ -11,6 +11,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from version_stamp.core.logging import VMN_LOGGER  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 STAMP = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z"
 
@@ -58,7 +59,7 @@ def _stderr_of_a_server(tmp_path, monkeypatch, capfd):
     monkeypatch.setattr(threading, "excepthook", threading.excepthook)
     args = parse_user_commands(["ui", "--data-dir", str(tmp_path / "ui_data"), "--no-browser"])
     capfd.readouterr()
-    assert handle_ui(args) == 0
+    assert handle_ui(args, real_io()) == 0
     return capfd.readouterr().err
 
 

@@ -405,7 +405,7 @@ def _parser():
     return parser
 
 
-def run_skill(argv):
+def run_skill(argv, io):
     """Exit code of ``vmn-exp skill`` with *argv* (the args after ``skill``)."""
     args = _parser().parse_args(argv)
     return _run_vmn_skill(

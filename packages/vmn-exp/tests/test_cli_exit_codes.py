@@ -13,6 +13,7 @@ from vmn_exp.cli.plugin import _exp_run_without_repo, register_all
 from vmn_exp.cli.run import experiment_run
 from vmn_exp.cli.run_disabled import exec_if_disabled
 from vmn_exp.cli.settings import settings_run_without_repo
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -28,11 +29,11 @@ def _parse(*argv):
 def test_settings_set_without_a_file_is_a_usage_error(tmp_path):
     args = SimpleNamespace(action="set", name="my_app", file=None, dir=str(tmp_path),
                            store=None, bucket=None, prefix=None, endpoint_url=None)
-    assert settings_run_without_repo(args) == 2
+    assert settings_run_without_repo(args, real_io()) == 2
 
 
 def test_run_without_a_command_is_a_usage_error():
-    assert experiment_run(None, None, None, SimpleNamespace(run_cmd=None)) == 2
+    assert experiment_run(None, None, None, SimpleNamespace(run_cmd=None), io=real_io()) == 2
 
 
 def test_run_without_a_command_is_a_usage_error_when_disabled(monkeypatch):
@@ -42,7 +43,7 @@ def test_run_without_a_command_is_a_usage_error_when_disabled(monkeypatch):
 
 def test_stray_refs_are_a_usage_error():
     args = _parse("list", "my_app", "stray")
-    assert handle_experiment(SimpleNamespace(vcs=None, args=args)) == 2
+    assert handle_experiment(SimpleNamespace(vcs=None, args=args), real_io()) == 2
 
 
 def test_stray_refs_are_a_usage_error_without_a_repo(tmp_path):

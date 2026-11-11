@@ -12,6 +12,7 @@ from vmn_exp.core.storage_resolve import resolve_experiment_storage
 from vmn_exp.core.writer import merge_conf_into_params, merge_env_into_params
 from vmn_exp.storage.open import open_storage
 from vmn_exp.storage.s3 import S3SnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 BUCKET = "ml-exps"
 APP = "trainer"
@@ -172,7 +173,7 @@ def test_cli_store_flag_records_to_the_uri(tmp_path, monkeypatch, s3):
     from vmn_exp.cli.main import vmn_exp_run
 
     _container(tmp_path, monkeypatch)
-    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"s3://{BUCKET}/cli"])
+    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"s3://{BUCKET}/cli"], real_io())
 
     assert err == 0
     assert _keys(s3, "cli/runs/trainer/")
@@ -182,7 +183,7 @@ def test_cli_file_store_records_to_the_path(tmp_path, monkeypatch):
     from vmn_exp.cli.main import vmn_exp_run
 
     _container(tmp_path, monkeypatch)
-    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"file://{tmp_path / 'd'}"])
+    err, _ = vmn_exp_run(["exp", "create", APP, "--store", f"file://{tmp_path / 'd'}"], real_io())
 
     assert err == 0
     assert (tmp_path / "d" / "runs" / APP).is_dir()

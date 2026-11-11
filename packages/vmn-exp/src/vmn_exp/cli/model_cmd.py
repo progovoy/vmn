@@ -269,7 +269,7 @@ def _warn_consumers(storage, model_name, version):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def model_run_without_repo(args):
+def model_run_without_repo(args, io):
     """Handle all ``vmn-exp model`` actions without a git repo.
 
     Returns an int exit code (0 = ok, 1 = error).  Always returns an int

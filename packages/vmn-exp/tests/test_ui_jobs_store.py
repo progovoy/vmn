@@ -20,6 +20,7 @@ from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
 from vmn_exp.ui.jobs import MAX_ARCHIVE_BATCH, JobRunner
 from vmn_exp.ui.jobs_store import STORE_ACTIONS, build_store_action
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"
@@ -71,7 +72,7 @@ def _model_cli(uri, *argv):
     parser = argparse.ArgumentParser()
     add_model_parser(parser.add_subparsers(dest="command"))
     args = parser.parse_args(["model", *argv, "--store", uri])
-    assert model_run_without_repo(args) == 0
+    assert model_run_without_repo(args, real_io()) == 0
 
 
 def _manage(storage, action, refs, remove=None):

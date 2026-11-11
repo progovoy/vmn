@@ -14,6 +14,7 @@ from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.s3 import S3SnapshotStorage
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -705,7 +706,7 @@ def _snapshot_metadata(tmp_path):
 def _vmn_exp(*argv):
     from vmn_exp.cli.main import vmn_exp_run
 
-    code, _ = vmn_exp_run(list(argv))
+    code, _ = vmn_exp_run(list(argv), real_io())
     return code
 
 

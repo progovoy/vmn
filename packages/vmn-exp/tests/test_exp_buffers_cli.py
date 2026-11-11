@@ -12,6 +12,7 @@ from vmn_exp.cli import main as main_module
 from vmn_exp.cli.buffers_cmd import buffers_main
 from vmn_exp.core.status import parse_iso
 from vmn_exp.storage import buffer_owner, buffered
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -136,6 +137,6 @@ def test_buffers_list_takes_no_repo_lock(monkeypatch):
 
     monkeypatch.setattr(main_module, "vmn_run", no_vmn_run)
 
-    code, _ = main_module.run_argv(["buffers", "list"], lambda: "0")
+    code, _ = main_module.run_argv(["buffers", "list"], lambda: "0", real_io())
 
     assert code == 0

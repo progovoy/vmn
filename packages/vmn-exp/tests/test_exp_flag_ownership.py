@@ -16,6 +16,7 @@ from vmn_exp.cli.exp_parser.ownership import foreign_flags
 from vmn_exp.cli.experiment import handle_experiment
 from vmn_exp.cli.plugin import _exp_run_without_repo, register_all
 from vmn_exp.ui.jobs import build_command
+from vmn_exp.core.real_io import real_io
 
 # {dest: (option, default, group)}, as flag_defaults() gives them.
 DEFAULTS = {
@@ -104,7 +105,7 @@ def test_the_error_names_the_flag_the_action_and_its_help(tmp_path, caplog, caps
 
 def test_handle_experiment_rejects_a_foreign_flag_before_touching_the_repo(logger):
     args = _parse("show", "my_app", "--yes")
-    assert handle_experiment(SimpleNamespace(vcs=None, args=args)) == 2
+    assert handle_experiment(SimpleNamespace(vcs=None, args=args), real_io()) == 2
 
 
 def _ui_job_argvs():

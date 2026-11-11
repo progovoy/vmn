@@ -5,6 +5,7 @@ import threading
 
 import pytest
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import real_io
 from vmn_exp.ui import backup_cli
 from vmn_exp.ui.control_plane import SQLiteControlPlane
 
@@ -83,4 +84,4 @@ def test_ui_dispatches_backup(tmp_path, monkeypatch):
     from vmn_exp.ui import cli
 
     monkeypatch.setattr(backup_cli, "handle_backup", lambda args: 7)
-    assert cli.handle_ui(_args(str(tmp_path / "b.db"))) == 7
+    assert cli.handle_ui(_args(str(tmp_path / "b.db")), real_io()) == 7

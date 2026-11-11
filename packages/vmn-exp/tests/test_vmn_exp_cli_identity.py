@@ -8,6 +8,7 @@ import pytest
 
 from vmn_exp.cli.main import _to_vmn_argv, run_argv
 from vmn_exp.cli.version import display_version
+from vmn_exp.core.real_io import real_io
 
 FAKE_VERSION = "7.7.7-fake"
 
@@ -18,7 +19,7 @@ def _fake_reader():
 
 def _exit_output(capsys, argv):
     with pytest.raises(SystemExit) as exc:
-        run_argv(argv, _fake_reader)
+        run_argv(argv, _fake_reader, real_io())
     assert exc.value.code == 0
     return capsys.readouterr().out
 
@@ -50,7 +51,7 @@ def test_ui_help_usage_starts_with_vmn_exp_ui(capsys):
 
 
 def test_stamp_still_points_at_vmn_with_exit_2(capsys):
-    code, _ = run_argv(["stamp", "-r", "patch", "app"], _fake_reader)
+    code, _ = run_argv(["stamp", "-r", "patch", "app"], _fake_reader, real_io())
     assert code == 2
     assert "vmn stamp" in capsys.readouterr().err
 
@@ -79,6 +80,6 @@ def test_help_and_version_pass_through():
 
 
 def test_debug_stamp_still_hits_the_stamping_guard(capsys):
-    code, _ = run_argv(["--debug", "stamp", "-r", "patch", "app"], _fake_reader)
+    code, _ = run_argv(["--debug", "stamp", "-r", "patch", "app"], _fake_reader, real_io())
     assert code == 2
     assert "vmn stamp" in capsys.readouterr().err

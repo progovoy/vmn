@@ -18,6 +18,7 @@ from exp_helpers import (
     _stamp_app,
 )
 from vmn_exp.storage.areas import local_store_root
+from vmn_exp.core.real_io import real_io
 
 
 def _make_dirty(app_layout, filename="dirty.txt", content="dirty"):
@@ -498,7 +499,7 @@ def test_experiment_show_latest_before_name(app_layout, capfd):
     assert verstr is not None
 
     reset_logger()
-    ret = vmn_exp_run(["experiment", "show", app_layout.app_name, "--latest"])[0]
+    ret = vmn_exp_run(["experiment", "show", app_layout.app_name, "--latest"], real_io())[0]
     assert ret == 0, f"show <name> --latest failed with exit code {ret}"
 
 

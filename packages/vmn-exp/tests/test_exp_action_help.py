@@ -8,6 +8,7 @@ import pytest
 from vmn_exp.cli.exp_parser.actions import EXPERIMENT_ACTIONS
 from vmn_exp.cli.exp_parser.help import help_action
 from vmn_exp.cli.main import vmn_exp_run
+from vmn_exp.core.real_io import real_io
 
 
 def test_an_action_with_help_names_the_action():
@@ -36,7 +37,7 @@ def test_a_bare_app_name_is_not_an_action():
 
 def _help(capsys, *argv):
     with pytest.raises(SystemExit) as exc:
-        vmn_exp_run(list(argv))
+        vmn_exp_run(list(argv), real_io())
     return exc.value.code, capsys.readouterr().out
 
 

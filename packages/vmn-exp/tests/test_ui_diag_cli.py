@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 from version_stamp.core.logging import init_stamp_logger
+from vmn_exp.core.real_io import real_io
 from vmn_exp.ui import diag_cli
 
 DUMP = {"format": 1, "taken_at": "2026-10-22T10:00:00Z", "pid": 4242,
@@ -177,4 +178,4 @@ def test_ui_dispatches_diag(monkeypatch):
     from vmn_exp.ui import cli
 
     monkeypatch.setattr(diag_cli, "handle_diag", lambda args: 7)
-    assert cli.handle_ui(_args("--summarize", "x.json")) == 7
+    assert cli.handle_ui(_args("--summarize", "x.json"), real_io()) == 7

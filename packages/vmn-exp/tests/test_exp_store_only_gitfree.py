@@ -8,6 +8,7 @@ import yaml
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.writer import create_run
 from vmn_exp.storage.open import open_storage
+from vmn_exp.core.real_io import real_io
 
 APP = "trainer"
 CODE = "1.2.0-dev.abc1234.def5678"
@@ -45,7 +46,7 @@ def _children(root, outer):
 def test_backfill_children_without_a_checkout_takes_the_store_flag(store_root, capfd):
     root, outer, kid = store_root
     argv = ["exp", "backfill-children", APP, "--store", f"file://{root}"]
-    assert vmn_exp_run(argv)[0] == 0
+    assert vmn_exp_run(argv, real_io())[0] == 0
     assert _children(root, outer) == [kid]
     assert "wrote 1" in capfd.readouterr().out
 
@@ -54,14 +55,14 @@ def test_backfill_children_without_a_checkout_takes_the_env_var(
         store_root, monkeypatch, capfd):
     root, outer, kid = store_root
     monkeypatch.setenv("VMN_EXPERIMENT_STORE", f"file://{root}")
-    assert vmn_exp_run(["exp", "backfill-children", APP])[0] == 0
+    assert vmn_exp_run(["exp", "backfill-children", APP], real_io())[0] == 0
     assert _children(root, outer) == [kid]
 
 
 def test_backfill_children_without_a_checkout_or_store_names_the_flags(
         store_root, capfd):
     root, outer, _ = store_root
-    assert vmn_exp_run(["exp", "backfill-children", APP])[0] == 1
+    assert vmn_exp_run(["exp", "backfill-children", APP], real_io())[0] == 1
     err = capfd.readouterr().err
     assert "--store" in err and "git repository" not in err
     assert _children(root, outer) == []
@@ -72,20 +73,20 @@ def test_other_maintenance_runs_without_a_checkout(store_root, monkeypatch, acti
     root = store_root[0]
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(root))
     extra = ["--all-finished"] if action == "compact" else ["--dry-run"]
-    assert vmn_exp_run(["exp", action, APP, *extra])[0] == 0
+    assert vmn_exp_run(["exp", action, APP, *extra], real_io())[0] == 0
 
 
 @pytest.mark.parametrize("action", ["compact", "similar-backfill"])
 def test_other_maintenance_without_a_store_names_the_flags(store_root, capfd, action):
     extra = ["--all-finished"] if action == "compact" else ["--dry-run"]
-    assert vmn_exp_run(["exp", action, APP, *extra])[0] == 1
+    assert vmn_exp_run(["exp", action, APP, *extra], real_io())[0] == 1
     err = capfd.readouterr().err
     assert "--store" in err and "git repository" not in err
 
 
 def test_a_read_command_still_needs_a_checkout(store_root, monkeypatch, capfd):
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(store_root[0]))
-    assert vmn_exp_run(["exp", "export-metrics", APP])[0] == 1
+    assert vmn_exp_run(["exp", "export-metrics", APP], real_io())[0] == 1
     assert "git repository" in capfd.readouterr().err
 
 
@@ -93,6 +94,6 @@ def test_a_from_snapshot_refusal_does_not_blame_snapshot_mode(
         store_root, monkeypatch, capfd):
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(store_root[0]))
     monkeypatch.setenv("VMN_SNAPSHOT_METADATA", "unused.yml")
-    assert vmn_exp_run(["exp", "lineage", APP])[0] == 1
+    assert vmn_exp_run(["exp", "lineage", APP], real_io())[0] == 1
     err = capfd.readouterr().err
     assert "requires a git repository" in err and "--from-snapshot mode" not in err

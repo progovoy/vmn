@@ -10,6 +10,7 @@ from migrate_fixtures import (
 from object_store_fakes import FakeContainerClient, FakeGCSClient, MatchConditions
 from vmn_exp.cli.migrate import migrate_objects, run_migrate
 from vmn_exp.storage.store_marker import forget_checked
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +49,7 @@ def _write(raw, path, live=False):
 def test_s3_store_migrates(s3, path):
     _write(s3, path)
     uri = f"s3://bkt/{path}" if path else "s3://bkt"
-    assert run_migrate(["--store", uri]) == 0
+    assert run_migrate(["--store", uri], real_io()) == 0
     root = path or "vmn"
     assert s3.keys() == {f"{root}/{k}" for k in expected_v2_keys(v1_records())} | {
         f"{root}/store.yml"}
@@ -60,7 +61,7 @@ def test_s3_store_migrates(s3, path):
 
 def test_s3_shared_prefix_tells_runs_from_snapshots(s3):
     _write(s3, "team")
-    assert run_migrate(["--store", "s3://bkt/team"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     assert "team/snapshots/my-app/s1/metadata.yml" in s3.keys()
     assert "team/runs/my-app/r1/metadata.yml" in s3.keys()
 
@@ -68,19 +69,19 @@ def test_s3_shared_prefix_tells_runs_from_snapshots(s3):
 def test_s3_idempotent_and_dry_run(s3):
     _write(s3, "team")
     before = {k: s3.get(k) for k in s3.keys()}
-    assert run_migrate(["--store", "s3://bkt/team", "--dry-run"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team", "--dry-run"], real_io()) == 0
     assert {k: s3.get(k) for k in s3.keys()} == before
-    assert run_migrate(["--store", "s3://bkt/team"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     after = {k: s3.get(k) for k in s3.keys()}
-    assert run_migrate(["--store", "s3://bkt/team"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     assert {k: s3.get(k) for k in s3.keys()} == after
 
 
 def test_s3_live_runs_stop_unless_skip_live(s3):
     _write(s3, "team", live=True)
-    assert run_migrate(["--store", "s3://bkt/team"]) == 1
+    assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 1
     assert "team/store.yml" not in s3.keys()
-    assert run_migrate(["--store", "s3://bkt/team", "--skip-live"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team", "--skip-live"], real_io()) == 0
     assert "team/my-app/r2/metadata.yml" in s3.keys()
     assert "team/runs/my-app/r1/metadata.yml" in s3.keys()
 
@@ -107,7 +108,7 @@ def test_s3_shared_prefix_keeps_snapshots_with_code_verstr(s3):
         {"verstr": "c1.r2", "code_verstr": "c1", "app_name": "my/app",
          "format_version": 1}).encode())
     s3.put("team/my-app/c1.r2/log.w1.jsonl", b'{"type": "create"}\n')
-    assert run_migrate(["--store", "s3://bkt/team"]) == 0
+    assert run_migrate(["--store", "s3://bkt/team"], real_io()) == 0
     keys = s3.keys()
     assert {f"team/snapshots/my-app/{r}/metadata.yml" for r in snaps} <= keys
     assert not any(k.startswith(("team/runs/my-app/c1/", "team/runs/my-app/c2/"))

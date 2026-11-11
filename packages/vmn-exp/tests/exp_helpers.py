@@ -5,6 +5,7 @@ import os
 import helpers
 from version_stamp.core.logging import reset_logger
 from vmn_exp.cli.main import vmn_exp_run
+from vmn_exp.core.real_io import real_io
 
 # Every helpers name, private ones too (``import *`` would skip those).
 globals().update({k: v for k, v in vars(helpers).items() if not k.startswith("__")})
@@ -87,7 +88,7 @@ def _experiment(
         args_list.extend(run_cmd)
 
     reset_logger()
-    return vmn_exp_run(args_list)[0]
+    return vmn_exp_run(args_list, real_io())[0]
 
 
 def _exp(app_name, **kwargs):

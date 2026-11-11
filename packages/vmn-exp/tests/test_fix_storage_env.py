@@ -19,6 +19,7 @@ from vmn_exp.core.writer import (
     merge_env_into_params,
 )
 from vmn_exp.sdk import start_run
+from vmn_exp.core.real_io import real_io
 
 BUCKET = "ml-exps"
 ENV_KEYS = (
@@ -133,7 +134,7 @@ def test_git_less_cli_create_records_to_the_env_bucket(tmp_path, monkeypatch, s3
 
     _container(tmp_path, monkeypatch)
 
-    err, _ = vmn_exp_run(["exp", "create", "trainer", "--note", "cli pod"])
+    err, _ = vmn_exp_run(["exp", "create", "trainer", "--note", "cli pod"], real_io())
 
     assert err == 0
     assert len(_bucket_runs()) == 1

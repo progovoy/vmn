@@ -348,7 +348,7 @@ def _open_checked_storage(vcs, params, action, args=None):
 
 
 @measure_runtime_decorator
-def handle_experiment(vmn_ctx):
+def handle_experiment(vmn_ctx, io):
     vcs = vmn_ctx.vcs
     args = vmn_ctx.args
     action = args.action
@@ -384,7 +384,7 @@ def handle_experiment(vmn_ctx):
         )
     elif action == "run":
         return experiment_run(
-            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None)
+            vcs, params, storage, args, repo_lock=getattr(vmn_ctx, "repo_lock", None), io=io
         )
     elif action == "rerun":
         from vmn_exp.cli.rerun import experiment_rerun

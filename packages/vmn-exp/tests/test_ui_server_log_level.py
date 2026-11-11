@@ -9,6 +9,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 from version_stamp.core.logging import VMN_LOGGER  # noqa: E402
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +38,7 @@ def _levels_at_serve(tmp_path, monkeypatch, flags):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("uvicorn.run", serve)
 
-    assert handle_ui(args) == 0
+    assert handle_ui(args, real_io()) == 0
     return seen
 
 

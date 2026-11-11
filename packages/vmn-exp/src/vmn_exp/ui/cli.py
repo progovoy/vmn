@@ -264,7 +264,7 @@ def bind_refusal(host, has_token, has_oidc, read_only):
             "to 127.0.0.1/localhost.")
 
 
-def handle_ui(args):
+def handle_ui(args, io):
     if getattr(args, "ui_args", None):
         if args.ui_args[0] == "onboarding":
             from vmn_exp.ui.onboarding_cli import handle_onboarding

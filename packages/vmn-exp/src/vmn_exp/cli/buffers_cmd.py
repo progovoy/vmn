@@ -7,9 +7,7 @@ the store it is given whose owner lock it can take
 when a buffer it locked could not be shipped; skipped buffers do not fail it.
 """
 import argparse
-import os
 import sys
-import time
 
 from vmn_exp.cli.duration_text import humanize_sec
 from vmn_exp.cli.pushing import buffer_recover
@@ -29,17 +27,17 @@ def _parser():
     return p
 
 
-def run_buffers(argv):
-    """The command with this host's real IO."""
+def run_buffers(argv, io):
+    """The command with this host's buffer dirs and *io*."""
     from vmn_exp.storage.buffer_host import LocalBufferHost
     from vmn_exp.storage.host_dirs import log_buffers_bases
     from vmn_exp.storage.open import open_storage
 
     return buffers_main(
         argv, host=LocalBufferHost(), bases=log_buffers_bases(),
-        store_env=os.environ.get("VMN_EXPERIMENT_STORE"),
+        store_env=io.env.get("VMN_EXPERIMENT_STORE"),
         open_remote=lambda uri, area: open_storage(uri, area=area, writer=False),
-        out=sys.stdout, now=time.time())
+        out=sys.stdout, now=io.clock.now().timestamp())
 
 
 def buffers_main(argv, *, host, bases, store_env, open_remote, out, now):

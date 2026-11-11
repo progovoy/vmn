@@ -12,6 +12,7 @@ from vmn_exp.cli.compare_view import compare_payload
 from vmn_exp.cli.experiment import experiment_compare
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.storage.local import LocalSnapshotStorage
+from vmn_exp.core.real_io import real_io
 
 APP = "app"
 
@@ -71,7 +72,7 @@ def test_compare_json_prints_strict_json_and_no_table(tmp_path, capsys):
 
 def test_json_help_names_every_action_that_honours_it(capsys):
     with pytest.raises(SystemExit):
-        vmn_exp_run(["compare", "--help"])
+        vmn_exp_run(["compare", "--help"], real_io())
     out = re.sub(r"\s+", " ", capsys.readouterr().out)
     (owners,) = re.findall(r"--json ([a-z, ]+): print machine-", out)
     assert set(owners.split(", ")) == {

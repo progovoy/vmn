@@ -9,6 +9,7 @@ import vmn_exp.cli.similar as similar_cli
 from exp_helpers import _PROJECT_ROOT
 from vmn_exp.cli.main import vmn_exp_run
 from vmn_exp.core.fold import fold_hypothesis, fold_log
+from vmn_exp.core.real_io import real_io
 from vmn_exp.core.writer import create_log_entry
 from vmn_exp.sdk.reader import similar_runs
 
@@ -79,7 +80,7 @@ def test_the_hint_docs_name_what_warms_its_index_and_not_the_ui():
 
 def _version_help(capsys):
     with pytest.raises(SystemExit) as exc:
-        vmn_exp_run(["similar", "--help"])
+        vmn_exp_run(["similar", "--help"], real_io())
     assert exc.value.code == 0
     out = _flat(capsys.readouterr().out)
     start = out.index("-v VERSION, --version VERSION")

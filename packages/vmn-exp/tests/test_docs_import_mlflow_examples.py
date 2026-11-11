@@ -14,6 +14,7 @@ from exp_helpers import _PROJECT_ROOT
 from mlflow_fixtures import MlflowFixtureBuilder
 from version_stamp.cli.args import parse_user_commands
 from vmn_exp.cli.main import vmn_exp_run
+from vmn_exp.core.real_io import real_io
 
 APP = "my_app"
 COMMAND = "vmn-exp import-mlflow"
@@ -97,6 +98,6 @@ def test_the_documented_mlruns_imports_run_against_a_fake_file_store(tmp_path, m
 
     for argv in file_store_lines:
         _parsed(argv)
-        assert vmn_exp_run(argv)[0] == 0, argv
+        assert vmn_exp_run(argv, real_io())[0] == 0, argv
 
     assert "imported 2," in capsys.readouterr().out

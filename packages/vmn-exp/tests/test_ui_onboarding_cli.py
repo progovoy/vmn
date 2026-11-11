@@ -7,6 +7,7 @@ import pytest
 from version_stamp.core.logging import init_stamp_logger
 from vmn_exp.ui import onboarding
 from vmn_exp.ui.cli import handle_ui
+from vmn_exp.core.real_io import real_io
 
 
 @pytest.fixture(autouse=True)
@@ -17,7 +18,7 @@ def _logger():
 def _run(capsys, *argv):
     from version_stamp.cli.args import parse_user_commands
 
-    rc = handle_ui(parse_user_commands(["ui", "onboarding", *argv]))
+    rc = handle_ui(parse_user_commands(["ui", "onboarding", *argv]), real_io())
     return rc, capsys.readouterr().out
 
 

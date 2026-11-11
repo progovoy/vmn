@@ -46,7 +46,7 @@ def _stored(comment):
     return {k: v for k, v in comment.items() if not (k == "text" and comment["deleted"])}
 
 
-def comment_run_without_repo(args):
+def comment_run_without_repo(args, io):
     return comment_run(_get_storage(args), args)
 
 
@@ -59,7 +59,7 @@ def comment_run(storage, args):
     return 0
 
 
-def comments_run_without_repo(args):
+def comments_run_without_repo(args, io):
     return comments_run(_get_storage(args), args)
 
 

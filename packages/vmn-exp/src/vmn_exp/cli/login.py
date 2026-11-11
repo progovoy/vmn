@@ -7,7 +7,6 @@ mode 0600) for CLI commands that call the server API. Jobs never need it.
 import argparse
 import json
 import os
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -98,8 +97,8 @@ def login(server, post_json=urllib_post_json, sleep=time.sleep, say=print):
     return 0
 
 
-def run_login(argv):
+def run_login(argv, io):
     parser = argparse.ArgumentParser(prog="vmn-exp login", description=__doc__.split("\n")[0])
     parser.add_argument("--server", required=True, help="the vmn-exp server URL")
     args = parser.parse_args(argv)
-    return login(args.server, say=lambda msg: print(msg, file=sys.stderr))
+    return login(args.server, post_json=urllib_post_json, say=io.console.err)
