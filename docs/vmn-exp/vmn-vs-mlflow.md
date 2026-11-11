@@ -16,8 +16,8 @@ backed by a database, with artifacts in blob storage.
 **vmn** approaches tracking from the versioning side. An experiment is a
 *snapshot* plus an append-only log: vmn captures the exact working tree the run
 executed against — committed or not — assigns it a deterministic version string,
-and records metrics against that. There is no server and no database; storage is
-files, locally or in S3. `vmn-exp ui` is a reader you start when you want to look at
+and records metrics against that. No server or database is required
+([server.md](server.md) is an optional cache); storage is files, locally or in S3. `vmn-exp ui` is a reader you start when you want to look at
 them.
 
 That difference in origin explains most of what follows. vmn is stronger on
@@ -110,7 +110,7 @@ so one row tells you a sweep has a problem.
 ### No infrastructure to stand up or keep alive
 
 `pip install vmn-exp-sdk` adds only PyYAML, filelock and psutil and needs no
-server, no database, and no daemon. Runs are files; point `vmn-exp ui` at them when you want to
+server, database or daemon ([server.md](server.md) is optional). Runs are files; point `vmn-exp ui` at them when you want to
 look, or don't. Airgapped, laptop-only, and shared-S3 setups are all the same
 code path. MLflow's local file store covers a single user on one machine; anything
 shared means running a server plus a database.

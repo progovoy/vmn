@@ -2,8 +2,11 @@
 
 Local-first experiment tracking built on [vmn](../../README.md): every run is
 a snapshot of your code plus an append-only log of metrics and notes, stored
-as plain files locally or in an object store (S3, GCS, Azure). No server, no
-database.
+as plain files locally or in an object store (S3, GCS, Azure).
+
+**Storage is the source of truth; training never depends on a server.** No
+server or database is required to record or read runs, and the optional team
+server ([server.md](server.md)) keeps only a rebuildable cache.
 
 ```sh
 pip install vmn-exp              # "vmn-exp[ui]" adds the dashboard, [s3] for buckets

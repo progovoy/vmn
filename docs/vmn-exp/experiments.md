@@ -2,7 +2,8 @@
 
 `vmn-exp` is local-first experiment tracking for any versioned app. An
 experiment is a **snapshot of your working tree plus an append-only log of
-metrics and notes** — no required training script, no server, no database.
+metrics and notes** — no required training script, and no server or database
+required ([server.md](server.md) is optional).
 Runs are plain files under `.vmn/store/runs/<app-key>/` (git-ignored, never
 committed or pushed), each anchored to an exact version and commit, so
 reproducing a result is one `vmn-exp restore` away.
