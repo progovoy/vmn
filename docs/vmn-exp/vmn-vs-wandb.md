@@ -38,7 +38,7 @@ and anything that needs a service in the middle.
 | Custom x axis, metric goals and summaries | `define_metric(step_metric=, goal=, summary=, hidden=)` | `define_metric` |
 | Media | Tables, images, histograms | Images, tables, histograms, audio, video, HTML, 3D objects, molecules |
 | Alerts | `run.alert()` to configured sinks ([experiments.md](experiments.md#alerts)) | `run.alert()` to Slack or email |
-| Sweeps | `vmn-exp sweep`: grid, random, bayes; median-rule early stopping; agents coordinate through the store, no sweep server | Grid, random, bayes; Hyperband early termination; a sweep controller in the W&B service |
+| Sweeps | `vmn-exp sweep`: grid, random, bayes; median-rule and ASHA early stopping; agents coordinate through the store, no sweep server | Grid, random, bayes; Hyperband early termination; a sweep controller in the W&B service |
 | Gradient / parameter histograms | `watch(model)` from `vmn_exp.integrations.torch_watch` | `wandb.watch(model)` |
 | Forking, rewinding, resuming | `fork_from`, rewind, resume | `fork_from`, rewind (`resume_from`, in preview), resume |
 | Run status | **Derived**: `created`/`running`/`stuck`/`succeeded`/`failed`; a run whose heartbeat stopped reads `stuck` | Kept by the service; a run whose heartbeats stop is marked crashed |
@@ -134,8 +134,9 @@ Video: **not planned**.
 ### Hyperband
 
 W&B early-terminates sweep trials with Hyperband. vmn has the median rule
-([sweeps.md](sweeps.md#early-termination-median-rule)). ASHA (successive
-halving, one bracket): **planned**. Full Hyperband with several brackets:
+([sweeps.md](sweeps.md#median-rule)) and ASHA, asynchronous successive
+halving in one bracket (`early_terminate: {type: asha}`,
+[sweeps.md](sweeps.md#asha)). Full Hyperband with several brackets:
 **not planned**.
 
 ### LLM and agent traces
