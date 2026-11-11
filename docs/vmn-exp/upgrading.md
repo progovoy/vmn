@@ -1,0 +1,66 @@
+# Upgrading vmn-exp
+
+vmn-exp and vmn-exp-sdk are released as 0.1.x patch releases only, so a
+version number never signals a breaking change. This page does: it lists
+every behaviour change (removals included) and every store or index format
+change, with the release it shipped in and what to do. The changelog lists
+the commits; this page says what an operator or a user has to know.
+
+## Rules
+
+1. **Every release is a 0.1.x patch.** `release_exp.sh` always bumps the
+   patch number. No release carries meaning in its number; this page and the
+   changelog carry it.
+2. **A behaviour change lands with its row.** A behaviour change is anything
+   a user or operator could have relied on that now acts differently: a
+   documented CLI flag, output or exit code; an HTTP route or response field;
+   an SDK call, default or exception; a default view; an environment
+   variable; a supported interpreter. The change that makes it adds a row to
+   [Behaviour changes](#behaviour-changes) in the same commit series, with the
+   version it will ship in (the next release: the pyproject version's patch
+   plus one), and at least one of its commits is marked with `!`
+   (`fix(sdk)!: ...`) so the changelog lists it under 'Behaviour changes'.
+3. **No deprecation period.** An old call, flag, route, name or default is
+   removed or made an error at once, in the change that replaces it, with no
+   warning stage. That change adds its row to
+   [Behaviour changes](#behaviour-changes), saying what to use instead, like
+   any other behaviour change. Security fixes and guards that reject input
+   which was silently wrong follow the same rule.
+4. **Format changes.**
+   - An *in-place index bump* (the cache's records or derived version,
+     upgraded in place as [server.md](server.md#upgrades) describes) gets a
+     row in [Formats](#formats) in the same change.
+   - A *store layout* or *record format* change, or an index upgrade that
+     *reloads* from storage, also names an earlier release in its
+     'Announced in' cell: this page carried a 'planned' note for it in a
+     release that shipped before. Its row states the cost (time per 100k
+     runs, free disk, what stops serving meanwhile) and the operator's steps,
+     and its commit is marked `!`. So the notice is always at least one
+     release old when the change ships.
+   - *Upgrade order*: the server and CLI first, job images after. A reader
+     reads every older record of its layout and record format; a record of a
+     newer format is skipped with a warning that says to upgrade vmn-exp, and
+     a store of an unknown layout is refused.
+5. **1.0 is not promised.** Nothing here is a stability guarantee beyond
+   these rules.
+
+`packages/vmn-exp/tests/test_upgrading_md.py` checks the Formats table
+against the code's format constants. Behaviour rows are checked in review.
+
+## Behaviour changes
+
+Newest first.
+
+| Version | Date | What changed | What to do | Plan item |
+|---|---|---|---|---|
+
+## Formats
+
+Newest first. Releases before 0.1.30 rebuilt the cache on every index
+change.
+
+| Version | Store layout | Record format | Index records | Index derived | Upgrade | Cost and operator steps | Announced in |
+|---|---|---|---|---|---|---|---|
+| 0.1.36 | 2 | 2 | 20 | 21 | in place | Runs with compacted metrics logged twice are re-checked in the background; nothing to do ([server.md](server.md#upgrades)) | — |
+| 0.1.35 | 2 | 2 | 19 | 21 | in place | Runs with a param named like a logged metric are re-read; the rest re-derive, about a minute per 100k runs; nothing to do | — |
+| 0.1.30 | 2 | 2 | 18 | 19 | in place | Baseline | — |

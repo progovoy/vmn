@@ -171,7 +171,9 @@ the PyPI release.
   prints it plain.
 - `./release_exp.sh` releases vmn-exp and vmn-exp-sdk with a patch bump (a minor
   bump the very first time, past the 0.0.1 placeholders). It refuses a dirty
-  tree. vmn is released on its own (`vmn stamp vmn`, `make _build`,
+  tree. The release is always a patch, so behaviour changes, removals and
+  format changes are announced in
+  [vmn-exp/upgrading.md](vmn-exp/upgrading.md), not by the version number. vmn is released on its own (`vmn stamp vmn`, `make _build`,
   `make upload`).
 - `make upload` sends each file to its project's `~/.pypirc` section
   (`[pypi]` for vmn, `[vmn-exp]`, `[vmn-exp-sdk]`), so per-project tokens

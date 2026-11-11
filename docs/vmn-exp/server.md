@@ -149,6 +149,9 @@ storage on demand. `--no-index` keeps the cache in memory only.
 
 ### Upgrades
 
+Which release changed which cache or store format, and what that upgrade
+costs, is listed in [upgrading.md](upgrading.md#formats).
+
 An upgrade of `vmn-exp ui` never empties the cache it can keep, and never holds
 a write lock on it for longer than a chunk of 500 runs. The cache has two
 versions:
