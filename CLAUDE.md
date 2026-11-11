@@ -77,7 +77,7 @@ Key differentiators vs semantic-release/release-please:
 The repo is a uv workspace of three packages (see docs/packaging.md):
 `packages/vmn` (`version_stamp`), `packages/vmn-exp-sdk` (the job-side
 `vmn_exp.sdk`/`storage`/`core`/`registry`/`integrations`/`_base`) and
-`packages/vmn-exp` (`vmn_exp.cli`/`ui`/`snapshot`/`importers`/`gitmode`, the
+`packages/vmn-exp` (`vmn_exp.cli`/`ui`/`snapshot`/`importers`/`gitmode`/`reports`, the
 `vmn-exp` command and `webui/`). `vmn_exp` is a PEP 420 namespace package split
 across the last two — never add a `vmn_exp/__init__.py`.
 

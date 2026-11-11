@@ -88,7 +88,7 @@ flowchart TB
         vcore --- plug
     end
 
-    subgraph P3["📦 vmn-exp  —  <code>vmn_exp.cli · ui · snapshot · importers · gitmode</code>"]
+    subgraph P3["📦 vmn-exp  —  <code>vmn_exp.cli · ui · snapshot · importers · gitmode · reports</code>"]
         ecli["<code>vmn-exp</code> CLI<br/>supervisor · sweeps · push · rerun"]
         eui["<code>vmn-exp ui</code><br/>FastAPI + React web app"]
         gm["<code>gitmode</code><br/>cold start · snapshot capture"]

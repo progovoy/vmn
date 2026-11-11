@@ -52,7 +52,7 @@ From a checkout (development): see "Repository layout" below, or run `uv sync`.
 | Install | Import packages | Commands | Depends on |
 |---|---|---|---|
 | `vmn` | `version_stamp` | `vmn` | GitPython, PyYAML, Jinja2, git-cliff, … (as today) |
-| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `gcs`, `azure`, `mlflow`, `postgres`, `parquet` |
+| `vmn-exp` | `vmn_exp.cli`, `.ui`, `.snapshot`, `.importers`, `.gitmode`, `.reports` | `vmn-exp` | `vmn<1`, `vmn-exp-sdk==<same version>`; extras `ui`, `s3`, `gcs`, `azure`, `mlflow`, `postgres`, `parquet` |
 | `vmn-exp-sdk` | `vmn_exp.sdk`, `.storage`, `.core`, `.registry`, `.integrations`, `._base` | none | PyYAML, filelock, psutil; extras `s3`, `gcs`, `azure`, `pandas` |
 
 `vmn_exp` is a PEP 420 namespace package: it has no `__init__.py`, and each
@@ -129,7 +129,7 @@ pyproject.toml   workspace root (uv workspace, mypy config); not a package
 packages/
   vmn/          pyproject.toml  src/version_stamp/
   vmn-exp-sdk/  pyproject.toml  src/vmn_exp/{sdk,storage,core,registry,integrations,_base}
-  vmn-exp/      pyproject.toml  src/vmn_exp/{cli,ui,snapshot,importers,gitmode}  webui/
+  vmn-exp/      pyproject.toml  src/vmn_exp/{cli,ui,snapshot,importers,gitmode,reports}  webui/
   vmn-exp/tests/  the vmn-exp suite (all three packages)
 tests/           the core vmn suite (vmn alone)
 ```
