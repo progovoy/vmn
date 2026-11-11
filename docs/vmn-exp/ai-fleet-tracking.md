@@ -101,7 +101,9 @@ vmn-exp run my_app --parent <outer verstr> -- python train.py
 
 Any experiment created while `VMN_EXPERIMENT_ID` is set is parented to that run
 automatically. That includes every `start_run()` and `vmn-exp` call inside
-`vmn-exp run my_app -- ./sweep.sh`.
+`vmn-exp run my_app -- ./sweep.sh`, except the first plain `start_run()` in
+the process `vmn-exp run` started itself, which records into that run
+(`--no-adopt` turns that off).
 
 ## Declaring the outer run's own progress
 

@@ -13,6 +13,7 @@ import os
 import secrets
 
 STREAM_SEP = "~"
+GUEST_WRITER_SUFFIX = "-sdk"
 _PROCESS = {"pid": None, "owner": None}
 
 
@@ -38,6 +39,13 @@ def owned_by(owners):
 def clean_writer_id(writer):
     """*writer* usable in a stream key: its ``~`` replaced."""
     return writer.replace(STREAM_SEP, "-")
+
+
+def guest_writer_id(writer):
+    """The writer id of the run ``vmn-exp run``'s child adopts: *writer* with
+    :data:`GUEST_WRITER_SUFFIX`, a stream of its own beside the supervisor's
+    on the same record copy. A suffix keeps ``log/<writer>*`` policies matching."""
+    return clean_writer_id(writer) + GUEST_WRITER_SUFFIX
 
 
 def new_owner():

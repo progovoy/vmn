@@ -89,7 +89,10 @@ The ideas below explain what you just saw.
    nobody has to mark it.
 4. **Nesting is automatic.** A run created while `VMN_EXPERIMENT_ID` is set
    (which `vmn-exp run` and an open `start_run()` export) becomes an inner job
-   of that run. A sweep is one outer run with its trials under it.
+   of that run. A sweep is one outer run with its trials under it. The one
+   exception: a `start_run()` in the script `vmn-exp run` launched records
+   into that run, so `vmn-exp run my_app -- python train.py` is one run
+   (`--no-adopt` keeps two).
 5. **A ref names a run**: `--latest` in the `show` above is one; so are a
    full verstr, a unique prefix and `@N` (the `[N]` `vmn-exp list` prints).
    Most commands take `-v <ref>`.

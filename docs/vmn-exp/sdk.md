@@ -65,6 +65,12 @@ registry functions `register_model`, `set_alias`, `remove_alias`,
 list/show/compare`, the dashboard and remote sync work on SDK runs unchanged,
 and mixing the two is fine (`vmn-exp add` a number to a run your script opened).
 
+Both at once is one run: under `vmn-exp run my_app -- python train.py`, the
+first plain `start_run()` in `train.py` records into the run `vmn-exp run`
+created, in a stream of its own (`<writer>-sdk`), and the supervisor records
+how the process ended (its exit code wins over `finish(exit_code=)`; exit
+non-zero to fail the run). See [Nesting](#nesting).
+
 One difference: an SDK run records `sys.argv` as its command, with `runner:
 sdk`. So [`vmn-exp rerun`](experiments.md#rerun) needs the command spelled out
 (`vmn-exp rerun my_app -v <ref> -- python train.py`), and the script's
@@ -868,6 +874,21 @@ A run opened with `export_env=False` is not exported (nor does closing it
 restore or re-export anything), so subprocesses don't see it; nested runs in
 the same context still find it.
 
+One exception to the `$VMN_EXPERIMENT_ID` rule: in the process `vmn-exp run`
+started itself (its direct child, not a process further down, such as the
+workers of a shell launcher), the first `start_run()` that names no
+`parent=`, `nested=` or `fork_from=` records into the supervisor's run
+instead of opening an inner one. It appends to its own stream and writes no
+run state, no `run` entry and no finish alerts; `params=`, `note=`, `tags=`
+and `intent=` are appended as entries, `name=` is ignored (use
+`vmn-exp run --name`). A later `start_run()` in the process nests under the
+run as usual. When the script resolves a store that does not hold the run
+(the supervisor was given `--store`), it warns and opens a run of its own.
+`vmn-exp run --no-adopt` or `VMN_EXP_ADOPT=0` keep the two-run shape. Where a
+launcher spawns the script rather than exec'ing it (`conda run`, some `uv run`
+setups), nothing is adopted; put the launcher outside:
+`uv run vmn-exp run my_app -- python train.py`.
+
 To register a run without starting it (a fleet's *waiting* count),
 `create_run("my_app", name=, params=, tags=, note=, parent=)` returns the new
 verstr and opens nothing; it nests like `nested=True`, and its params and tags
@@ -1505,6 +1526,7 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_MODE` | `disabled`: no-op runs, `autolog()` patches nothing |
 | `VMN_RESUME_RUN_ID` | run to reopen (consumed when used) |
 | `VMN_EXPERIMENT_ID` | parent of new runs; exported while a run is open |
+| `VMN_EXP_ADOPT_RUN_ID` / `VMN_EXP_ADOPT_PID` | set by `vmn-exp run` for its direct child: the first plain `start_run()` there records into that run (consumed when used) |
 | `VMN_SNAPSHOT_METADATA` | git-free mode against an exported snapshot |
 | `VMN_EXPERIMENT_DIR` | local experiment root |
 | `VMN_EXPERIMENT_STORE` | remote store URI |

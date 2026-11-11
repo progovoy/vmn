@@ -314,6 +314,9 @@ class _Supervision:
         self.forwarder = SignalForwarder(*_kill_graces(args, os.environ))
         self.output = output_artifact(storage, app_name, verstr, args)
         self.tee = None
+        # Every stream the metrics were appended to: an adopted child that
+        # compacts its own stream moves the copy on to a new owner's.
+        self.appended_streams = set()
 
     def run(self, run_cmd):
         fd, self.metrics_path = tempfile.mkstemp(prefix="vmn-metrics-")
@@ -499,9 +502,9 @@ class _Supervision:
         self._finish_uploads(deadline)
         if self.forwarder.signalled_at is None:
             deadline = time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC
-        self.guard("metric compaction", compact_by, self.storage, self.app_name,
-                   self.verstr, own_stream(self.storage, self.app_name, self.verstr),
-                   deadline)
+        for stream in sorted(self.appended_streams | {self._own_stream()}):
+            self.guard("metric compaction", compact_by, self.storage, self.app_name,
+                       self.verstr, stream, deadline)
         self.guard("failure alert", self._alert_if_failed)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
@@ -579,7 +582,12 @@ class _Supervision:
         self._ingest(self.tailer.poll())
 
     def _ingest(self, records):
+        if records:
+            self.appended_streams.add(self._own_stream())
         _ingest_metric_records(self.storage, self.app_name, self.verstr, records)
+
+    def _own_stream(self):
+        return own_stream(self.storage, self.app_name, self.verstr)
 
     def _sync_once(self):
         # The log first: a slow output PUT must not hold back liveness data.

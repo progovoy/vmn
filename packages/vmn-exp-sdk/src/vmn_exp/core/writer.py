@@ -92,14 +92,17 @@ def get_writer_id(conf_writer_id=None):
     return _WRITER_ID
 
 
-def own_stream(storage, app_name, verstr):
+def own_stream(storage, app_name, verstr, writer=None):
     """The stream this process appends to in *verstr*: ``<writer id>~<owner>``,
     the owner the one *storage* names for the record (its local copy's), else
     this process's. Resolved per call — a compacted stream is never appended
-    to again, so its owner moves on."""
+    to again, so its owner moves on. *writer* (default: this process's
+    writer id) names another writer of the same process, such as an adopted
+    run's own stream (:func:`vmn_exp.core.streams.guest_writer_id`)."""
+    writer = writer or get_writer_id()
     owner_for = getattr(storage, "stream_owner", None)
-    owner = owner_for(app_name, verstr, get_writer_id()) if owner_for else None
-    return stream_key(get_writer_id(), owner or process_owner())
+    owner = owner_for(app_name, verstr, writer) if owner_for else None
+    return stream_key(writer, owner or process_owner())
 
 
 def set_default_writer_id(writer_id):
@@ -185,10 +188,10 @@ def append_to_log(storage, app_name, verstr, entry):
         storage.append_log_entry(app_name, verstr, own_stream(storage, app_name, verstr), entry)
 
 
-def append_metric_entries(storage, app_name, verstr, entries, inherited=False):
+def append_metric_entries(storage, app_name, verstr, entries, inherited=False, writer=None):
     """Record sanitized ``metrics`` *entries* as one block of this writer's
-    metric stream (plan 12 §4.1); True when stored."""
-    stream = own_stream(storage, app_name, verstr)
+    (or *writer*'s) metric stream (plan 12 §4.1); True when stored."""
+    stream = own_stream(storage, app_name, verstr, writer)
     writer = MetricWriter(storage, app_name, verstr, stream)
     if not record_metric_entries(writer, entries, inherited=inherited):
         return False
@@ -209,18 +212,19 @@ def split_for_append(entries):
     return [part for part in split_metric_entries(entries) if part]
 
 
-def append_entries_to_log(storage, app_name, verstr, entries):
+def append_entries_to_log(storage, app_name, verstr, entries, writer=None):
     """Append already-sanitized *entries* in one write where the backend can;
-    ``metrics`` entries go to the metric stream.
+    ``metrics`` entries go to the metric stream (*writer*'s streams, when given).
 
     A duck-typed backend without ``append_log_entries`` gets them one by one.
     """
     metrics, entries = split_metric_entries(entries)
-    if metrics and not append_metric_entries(storage, app_name, verstr, metrics):
+    if metrics and not append_metric_entries(storage, app_name, verstr, metrics,
+                                             writer=writer):
         return False
     if not entries:
         return True
-    stream = own_stream(storage, app_name, verstr)
+    stream = own_stream(storage, app_name, verstr, writer)
     batch = getattr(storage, "append_log_entries", None)
     if batch is not None:
         return batch(app_name, verstr, stream, entries)
@@ -243,10 +247,11 @@ def flush_log(storage, app_name, verstr):
     sync_to_remote(storage, app_name, verstr)
 
 
-def sync_to_remote(storage, app_name, verstr, stream=None):
+def sync_to_remote(storage, app_name, verstr, stream=None, writer=None):
     """Ship the record copy's new log lines, then its new metric blocks,
-    where the backend syncs them (*stream*: this process's, by default)."""
-    stream = stream or own_stream(storage, app_name, verstr)
+    where the backend syncs them (*stream*: this process's, or *writer*'s,
+    by default)."""
+    stream = stream or own_stream(storage, app_name, verstr, writer)
     for method in ("sync_log_to_remote", "sync_metrics_to_remote"):
         sync = getattr(storage, method, None)
         if sync is not None:

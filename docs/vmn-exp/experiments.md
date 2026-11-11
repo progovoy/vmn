@@ -203,6 +203,7 @@ vmn sets these for the child:
 | `VMN_APP_NAME` | the app name |
 | `VMN_METRICS_FILE` | a file your command appends metric lines to |
 | `VMN_EXP_SUPERVISOR_SAMPLES` | `1` when the supervisor samples system metrics |
+| `VMN_EXP_ADOPT_RUN_ID` / `VMN_EXP_ADOPT_PID` | this run and the supervisor's pid, unless `--no-adopt` or `VMN_EXP_ADOPT=0`: a plain `start_run()` in the child records into this run ([below](#outer--inner-jobs-sweeps)) |
 
 Each line appended to `$VMN_METRICS_FILE` is one metrics entry:
 
@@ -435,6 +436,15 @@ vmn-exp run my_app --note "lr sweep" -- ./sweep.sh
 vmn-exp run my_app --parent @3 -- python train.py   # explicit parent (any ref form)
 ```
 
+The command `exp run` starts itself is the exception: the first plain
+`start_run()` in that process (its direct child; not a process further down,
+such as the workers a shell script launches) records into the run `exp run`
+created, so `vmn-exp run my_app -- python train.py` with `start_run()` in
+`train.py` is one run. The script appends to a stream of its own (see
+Streams below) and the supervisor still records the exit code, the `run`
+entry and the final state. `--no-adopt` (or `VMN_EXP_ADOPT=0`) keeps the
+older shape, an outer run with the script's run inside it.
+
 Each run has a `kind`: `outer` (has children), `inner` (has a parent) or
 `single`. An outer job's **`tree_status`** rolls up its subtree with
 precedence `failed > stuck > running > created > succeeded`, so one failed
@@ -627,6 +637,7 @@ Takes every `create` flag except `--metrics`, plus:
 | `--output-cap-mb <mb>` | `$VMN_EXP_OUTPUT_CAP_MB` or `10` | [`output.log`](#console-output-outputlog) cap |
 | `--no-capture-output` | capture on | don't keep `output.log`; the command inherits the terminal |
 | `--no-system-metrics` | sampling on | don't record `sys_*` metrics |
+| `--no-adopt` | adopt on | the child's `start_run()` opens an inner run instead of recording into this one (also `VMN_EXP_ADOPT=0`) |
 
 `run` prints the [similar-runs hint](#the-submission-hint) once the repo lock
 is released, before the command starts. `--intent-file -` reads stdin, which
@@ -1985,9 +1996,13 @@ so a new optional method needs a row here.
   it: the streams a copy *inherited* from its original stay as they are, and
   a sync or push notes on stderr when the remote lacks part of them; adopt
   them with `vmn-exp push --adopt` ([push](#offline-recording-and-push)) once the
-  original checkout is gone. Every
-  process of one checkout appends to the same stream; two clones on one host
-  never share one. Without a local copy (straight to a bucket) the owner is
+  original checkout is gone. The owner is the record copy, not a process:
+  every process of one checkout appends to a stream of that owner, and any
+  of them ships all of the copy's streams; two clones on one host never share
+  one. The script `vmn-exp run` started records into its run with the writer
+  id `<writer>-sdk` (`<writer>-sdk~<owner>`), so the supervisor and the
+  script never append to the same stream; each compacts only the streams it
+  appended to. Without a local copy (straight to a bucket) the owner is
   the process's. Displays (log `_writer`, UI writer columns,
   `export-metrics`, authors) show the writer id only.
 - **Incremental log sync**: a local copy is the only source of its streams,
@@ -2294,7 +2309,7 @@ SDK-only variables (`VMN_RESUME_RUN_ID`, `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`:
 the final-upload wait, 25 s under SIGTERM and 60 s otherwise unless set; raise
 `terminationGracePeriodSeconds` if you raise it) are in [sdk.md](sdk.md). Set **by** vmn for a `run` child:
 `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`, `VMN_METRICS_FILE`,
-`VMN_EXP_SUPERVISOR_SAMPLES`; sweep trials also get `VMN_SWEEP_PARAMS`,
+`VMN_EXP_SUPERVISOR_SAMPLES`, `VMN_EXP_ADOPT_RUN_ID`, `VMN_EXP_ADOPT_PID`; sweep trials also get `VMN_SWEEP_PARAMS`,
 `VMN_SWEEP_ID`, `VMN_SWEEP_TRIAL` ([sweeps.md](sweeps.md)).
 
 ---

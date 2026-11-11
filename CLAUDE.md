@@ -220,7 +220,7 @@ Invariants worth knowing without opening a doc:
 - Packages: `vmn_exp/sdk` depends only on `vmn_exp.core|storage|registry|_base`, never `version_stamp`/`snapshot`/`ui`/`cli`; git-mode creation (`vmn_exp.gitmode`) is imported lazily.
 - Status is derived, never stored (`created`/`running`/`stuck`/`succeeded`/`failed`); `stuck` = stale heartbeat *and* stale store write time past `max(3 * interval, 60s)`.
 - Read-only actions never take the repo lock; `vmn-exp run` and the SDK hold it only for create/auto-init.
-- Run verstrs are claimed atomically (`create_exclusive`); local writes are temp + rename; only a stream's owner appends/ships/compacts it.
+- Run verstrs are claimed atomically (`create_exclusive`); local writes are temp + rename; only a stream's owner appends/ships/compacts it, and the owner is the record copy (every process of one local copy ships all its streams), not a process; each stream still has one appending process (an adopted run writes its own `<writer>-sdk~<owner>` stream).
 - Store layout v2 (`store.yml`, `layout: 2`); v1 stores are refused with a migrate hint. Per-host state (index cache, push ledger) lives outside the store (`storage/host_dirs.py`).
 - Every vmn SQLite file goes through `core/sqlite_conn.py`.
 - The UI reads lock-free index snapshots kept fresh by a background refresher; never add per-request store listing.
@@ -228,7 +228,7 @@ Invariants worth knowing without opening a doc:
 ## Environment Variables
 
 Core: `VMN_WORKING_DIR`, `VMN_LOCK_FILE_PATH` (user override only; vmn never injects it into a child), `GITHUB_TOKEN`/`GH_TOKEN`, `VMN_GIT_PUSH_USER`/`VMN_GIT_PUSH_TOKEN`, `VMN_SNAPSHOT_MAX_FILE_MB`/`VMN_SNAPSHOT_MAX_TOTAL_MB`.
-vmn-exp (`VMN_EXP_*`, `VMN_EXPERIMENT_*`, `VMN_MODE`, `VMN_CAPTURE_ENV`, `VMN_SYSTEM_METRICS`, `VMN_UI_TOKEN`, …): see docs/vmn-exp/experiments.md. `VMN_EXPERIMENT_ID` set in the environment auto-parents any new run.
+vmn-exp (`VMN_EXP_*`, `VMN_EXPERIMENT_*`, `VMN_MODE`, `VMN_CAPTURE_ENV`, `VMN_SYSTEM_METRICS`, `VMN_UI_TOKEN`, …): see docs/vmn-exp/experiments.md. `VMN_EXPERIMENT_ID` set in the environment auto-parents any new run, except the first plain `start_run()` in the direct child of `vmn-exp run`, which records into that run (`--no-adopt` / `VMN_EXP_ADOPT=0` turn it off).
 
 ## Docs Layout
 

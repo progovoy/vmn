@@ -203,6 +203,11 @@ def start_run(
     ``sync_interval_sec`` and at finish. Off by default: the process then
     writes to pipes, not its TTY.
 
+    In the command ``vmn-exp run`` started itself (its direct child), a call
+    naming no *parent*, *nested* or *fork_from* records into the supervisor's
+    run, in a stream of its own (:mod:`vmn_exp.sdk.guest_run`), unless
+    ``--no-adopt`` / ``VMN_EXP_ADOPT=0`` turned the offer off.
+
     ``mode="disabled"`` (or ``VMN_MODE=disabled``; an explicit *mode* wins)
     returns a :class:`NoOpRun` without touching git or the store.
 
@@ -240,6 +245,7 @@ def start_run(
     prior_state, start_step = None, None
     ref, reopen = resume.requested_run_id(run_id, reopen)
     fork.check_modes(ref, fork_from, rewind_to_step)
+    adopted = None if ref else _adopted_record(app_name, storage, parent, nested, fork_from)
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
@@ -248,6 +254,8 @@ def start_run(
         resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id)
         if rewind_to_step is not None:
             start_step = fork.rewind(storage, app_name, verstr, prior_state, rewind_to_step)
+    elif adopted:
+        app_name, storage, verstr, exp_conf = adopted
     else:
         if fork_from:
             app_name, storage, source, fork_step = fork.locate_source(
@@ -260,7 +268,7 @@ def start_run(
         if fork_from:
             start_step = fork.seed(storage, app_name, verstr, source, fork_step)
 
-    run = Run(
+    run = _run_class(adopted)(
         storage,
         app_name,
         verstr,
@@ -284,13 +292,30 @@ def start_run(
         first_step(storage, app_name, verstr, start_step, prior_state is not None)
     )
     run._open()
-    if prior_state is not None:
+    if prior_state is not None or adopted:
         _record_resume_inputs(run, note, params)
     if tags:
         run.set_tags(tags)
     if intent is not None:
         run.set_intent(intent, keywords=intent_keywords)
     return run
+
+
+def _adopted_record(app_name, storage, parent, nested, fork_from):
+    """The record of the run ``vmn-exp run`` offers this process, when it
+    takes it (:mod:`vmn_exp.sdk.guest_run`); None otherwise."""
+    from vmn_exp.sdk.guest_run import adopted_record
+
+    return adopted_record(app_name, storage, parent, nested, fork_from,
+                          context.context_run(), os.environ, os.getppid, resume.locate)
+
+
+def _run_class(adopted):
+    if not adopted:
+        return Run
+    from vmn_exp.sdk.guest_run import GuestRun
+
+    return GuestRun
 
 
 def _check_intent(intent, keywords):
@@ -301,7 +326,8 @@ def _check_intent(intent, keywords):
 
 
 def _record_resume_inputs(run, note, params):
-    """A resumed run's new note/params are appended, like any later entry."""
+    """A resumed or adopted run's new note/params are appended, like any
+    later entry."""
     if params:
         run.log_params(params)
     if note:
@@ -336,8 +362,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         sigterm_exit=release.KILL,
         export_env=True,
         install_hooks=_PROCESS_HOOKS_DEFAULT,
+        writer=None,
     ):
         self._storage = storage
+        # The writer id of this run's own streams; None: the process's.
+        self._writer = writer
         # Installs the process's excepthook and atexit finalizer at open;
         # left out, the real ones; None installs none.
         if install_hooks is _PROCESS_HOOKS_DEFAULT:
@@ -382,7 +411,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             abandon=threading.Event())
         self._refused_warned = False
         self._log_buffer = LogBuffer(
-            functools.partial(append_entries_to_log, storage, app_name, verstr),
+            functools.partial(append_entries_to_log, storage, app_name, verstr, writer=writer),
             self._gate,
             split=split_for_append,
             on_refused=self._warn_refused_once,
@@ -606,7 +635,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             for what, error in self._close_writers(deadline):
                 _LOGGER.warning(self._not_uploaded(what, error))
             compact_by(self._storage, self.app_name, self.id,
-                       own_stream(self._storage, self.app_name, self.id), deadline)
+                       own_stream(self._storage, self.app_name, self.id, self._writer), deadline)
         finally:
             context.closed(self)
 
@@ -637,7 +666,11 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
     def _sync_log(self):
         # sync_to_remote is looked up here, at call time: tests patch it on
         # this module.
-        sync_to_remote(self._storage, self.app_name, self.id)
+        sync_to_remote(self._storage, self.app_name, self.id, **self._writer_arg())
+
+    def _writer_arg(self):
+        """``writer=`` for a run with a writer of its own; nothing otherwise."""
+        return {} if self._writer is None else {"writer": self._writer}
 
     def _remote_writers(self):
         writers = [("log", self._log_sync), ("state", self._state_publisher)]
@@ -763,7 +796,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._append(stamped_entry(build_intent_entry(text, keywords, generator)))
         if self._finished and not self._detached:
             self._record_guard("intent", sync_to_remote, self._storage, self.app_name,
-                               self.id)
+                               self.id, **self._writer_arg())
 
     def similar(self, top=10):
         """The past runs most like this one — its code, changes, params,

@@ -126,7 +126,7 @@ KNOWN_IO = {
     'vmn_exp.sdk.reader': {'env': 1},
     'vmn_exp.sdk.release': {'env': 2},
     'vmn_exp.sdk.resume': {'env': 3, 'time': 1},
-    'vmn_exp.sdk.run': {'env': 1, 'fs': 1, 'process_self': 4, 'time': 6},
+    'vmn_exp.sdk.run': {'env': 2, 'fs': 1, 'process_self': 4, 'time': 6},
     'vmn_exp.sdk.run_artifacts': {'fs': 3},
     'vmn_exp.sdk.run_media': {'fs': 6},
     'vmn_exp.sdk.signals': {'process_self': 2, 'thread': 1},

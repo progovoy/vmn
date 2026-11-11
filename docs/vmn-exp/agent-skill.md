@@ -10,6 +10,8 @@ vmn-exp run <app_name> --note "description" -- <your command>
 
 # Your script writes metrics to $VMN_METRICS_FILE as key=value lines
 # vmn ingests them automatically when the run finishes.
+# Or call start_run() in the script: it records into the same run
+# (--no-adopt keeps a separate inner run).
 
 # Manual experiment (no command to run)
 vmn-exp create <app_name> --metrics loss=0.34 acc=0.91 --note "manual run"
