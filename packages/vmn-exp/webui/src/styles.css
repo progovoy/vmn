@@ -504,6 +504,7 @@ button.link:hover { border: none; text-decoration: underline; }
 .job-dot.running { background: var(--accent); }
 .job-dot.succeeded { background: var(--good); }
 .job-dot.failed { background: var(--bad); }
+.job-dot.unknown { background: var(--text-3); }
 
 /* ---------- misc ---------- */
 .empty { color: var(--text-3); padding: 30px; text-align: center; }

@@ -118,14 +118,14 @@ describe("useJob", () => {
   it("stops polling and reports an error when the job request fails", async () => {
     vi.useFakeTimers();
     m.action.mockResolvedValue({ id: "j1", status: "running" });
-    m.job.mockRejectedValue(Object.assign(new Error("Job not found"), { status: 404 }));
+    m.job.mockRejectedValue(Object.assign(new Error("Internal Server Error"), { status: 500 }));
     const { result } = renderHook(() => useJob());
     await act(async () => { await result.current.run("w", "app", "stamp", {}); });
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
     expect(m.job).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     expect(m.job).toHaveBeenCalledTimes(1);
-    expect(result.current.error).toMatch(/Job not found/);
+    expect(result.current.error).toMatch(/Internal Server Error/);
   });
 });
 

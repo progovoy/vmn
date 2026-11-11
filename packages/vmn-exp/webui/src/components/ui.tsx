@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { api } from "../api";
+import { pollOutcome } from "../jobPoll";
 import type { Job, Workspace } from "../types";
 import { copyText } from "../util";
 
@@ -100,9 +101,9 @@ export function useJob(onDone?: (job: Job) => void) {
             onDone?.(cur);
           }
         } catch (e) {
-          // A server restart forgets its in-memory jobs (404): stop asking.
           stop();
-          setError(String((e as Error).message ?? e));
+          if (pollOutcome(e) === "unknown") setJob((prev) => prev && { ...prev, status: "unknown" });
+          else setError(String((e as Error).message ?? e));
         } finally {
           pending = false;
         }
@@ -119,7 +120,9 @@ export function JobCard({ job }: { job: Job }) {
   const title =
     job.status === "running"
       ? "job running…"
-      : `job ${job.status}${job.exit_code !== null ? ` (exit ${job.exit_code})` : ""}`;
+      : job.status === "unknown"
+        ? "job status unknown: this server no longer has the job. Reload to see the result."
+        : `job ${job.status}${job.exit_code !== null ? ` (exit ${job.exit_code})` : ""}`;
   return (
     <div className="card">
       <div className="job-head">

@@ -97,6 +97,8 @@ export interface Meta {
 export interface Job {
   id: string;
   command: string[];
+  /** "running" | "succeeded" | "failed" from the server; the client sets
+   *  "unknown" when a poll answers 404 (a restart or another replica forgot it). */
   status: string;
   exit_code: number | null;
   log: string;
