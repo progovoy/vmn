@@ -37,6 +37,9 @@ vmn-exp rerun <app_name> -v <version> [-- <other command>]
 vmn-exp rerun <app_name> -v <version> --print --json
 ```
 
+Each action takes only its own flags (plus the store flags and `--from-snapshot`):
+a flag it does not own exits 2 before anything runs, e.g. `list --force`.
+
 ### Driving the UI's fleet counts (total / waiting / running / done / failed / stuck)
 
 `vmn-exp ui` opens an app on its Outer runs view: one row per outer run

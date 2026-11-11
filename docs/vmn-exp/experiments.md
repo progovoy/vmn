@@ -599,6 +599,13 @@ Flags shared by most actions:
 | `--from-snapshot <path>` | git-free mode against a tree from `vmn-exp export`; see [Git-free mode](#git-free-mode) |
 | `--json` | machine-readable output (`list`, `show`, `compare`, `importance`, `lineage`, `similar`, `push`, `rerun --print`) |
 
+Each action accepts only its own flags (the store flags and `--from-snapshot`
+belong to every action). A flag the action does not use is a usage error,
+reported before the repo or the store is touched, with exit code 2:
+`vmn-exp list my_app --force` prints `'--force' is not a flag of 'vmn-exp
+list' (see 'vmn-exp list --help')`. A flag given its default value (for
+example `--max-bytes 200000` on `list`) is not reported.
+
 ### `create`
 
 Capture the current state as a run without running anything (status

@@ -28,6 +28,7 @@ from vmn_exp.cli.run import (  # noqa: F401
 )
 from vmn_exp.cli.define_metric_args import define_metric_entry
 from vmn_exp.cli.duration_text import duration_text
+from vmn_exp.cli.exp_parser.ownership import refuse_foreign_flags
 from vmn_exp.cli.finish_args import apply_finish, finish_flags_error
 from vmn_exp.cli.intent_arg import append_intent, read_intent
 from vmn_exp.cli.list_hints import print_query_hints
@@ -354,6 +355,9 @@ def handle_experiment(vmn_ctx):
     vcs = vmn_ctx.vcs
     args = vmn_ctx.args
     action = args.action
+    usage_error = refuse_foreign_flags(args)
+    if usage_error:
+        return usage_error
 
     params = experiment_storage_params(vcs, args)
 

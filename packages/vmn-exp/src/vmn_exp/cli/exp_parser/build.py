@@ -95,6 +95,19 @@ def group_flags(group):
     return {flag for action in parser._actions for flag in action.option_strings}
 
 
+def flag_defaults():
+    """``{dest: (option, default, group)}`` for every flag, built now: some
+    defaults read a module value when the parser is built (``--max-bytes``)."""
+    defaults = {}
+    for group, add_group in GROUPS.items():
+        parser = argparse.ArgumentParser(add_help=False)
+        add_group(parser)
+        for action in parser._actions:
+            option = max(action.option_strings, key=len)
+            defaults[action.dest] = (option, parser.get_default(action.dest), group)
+    return defaults
+
+
 def owned_flags(action):
     """Every option string *action* owns."""
     return set().union(*(group_flags(group) for group in ACTION_FLAGS[action]))

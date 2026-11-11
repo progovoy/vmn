@@ -10,6 +10,9 @@ import shlex
 import pytest
 
 from version_stamp.cli.args import parse_user_commands
+from vmn_exp.cli.exp_parser.actions import ACTION_FLAGS
+from vmn_exp.cli.exp_parser.build import flag_defaults
+from vmn_exp.cli.exp_parser.ownership import foreign_flags
 from vmn_exp.cli.plugin import register_all
 
 CORPUS = [
@@ -143,3 +146,11 @@ def test_each_corpus_line_sets_exactly_its_attributes(line, changed):
     argv = shlex.split(line)
     expected = dict(DEFAULTS, action=argv[0], **changed)
     assert _parse(argv) == expected
+
+
+@pytest.mark.parametrize("line", [line for line, _ in CORPUS])
+def test_no_corpus_line_has_a_foreign_flag(line):
+    argv = shlex.split(line)
+    register_all()
+    args = parse_user_commands(["experiment", *argv])
+    assert foreign_flags(args, argv[0], flag_defaults(), ACTION_FLAGS) == []
