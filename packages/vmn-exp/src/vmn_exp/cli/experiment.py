@@ -1080,8 +1080,7 @@ def experiment_compare(vcs, params, storage, args):
         return 1
 
     payload = compare_payload(experiments, metrics_schema(vcs, storage, app_name))
-    as_json = getattr(args, "json", False)
-    out = dumps(payload) if as_json else compare_text(payload, app_name)
+    out = dumps(payload) if args.json else compare_text(payload, app_name)
     if out:
         print(out)
     return 0
