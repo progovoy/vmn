@@ -119,6 +119,8 @@ ABANDONED_EXIT_CODE = 1
 # installed at the first run open (``_install_process_hooks``), not on import.
 _uncaught_exception = None
 _EXIT_NOTE = ExitCodeNote()
+# A Run built without ``install_hooks`` installs this process's real hooks.
+_PROCESS_HOOKS_DEFAULT = object()
 
 
 def _note_uncaught_exception(exc_value):
@@ -275,8 +277,7 @@ def start_run(
         on_sigterm=on_sigterm,
         sigterm_exit=sigterm_exit,
         export_env=export_env,
-        install_hooks=functools.partial(
-            _install_process_hooks, _PROCESS_HOOKS, sys, atexit, _EXIT_NOTE),
+        install_hooks=_real_process_hooks(),
     )
     run.start_step = start_step
     run._steps = StepCounter(
@@ -334,11 +335,13 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         on_sigterm=release.FAIL,
         sigterm_exit=release.KILL,
         export_env=True,
-        install_hooks=None,
+        install_hooks=_PROCESS_HOOKS_DEFAULT,
     ):
         self._storage = storage
         # Installs the process's excepthook and atexit finalizer at open;
-        # start_run passes it, a Run built by hand installs none.
+        # left out, the real ones; None installs none.
+        if install_hooks is _PROCESS_HOOKS_DEFAULT:
+            install_hooks = _real_process_hooks()
         self._install_hooks = install_hooks
         self._export_env = export_env
         self._on_sigterm = on_sigterm
@@ -961,6 +964,11 @@ def _install_process_hooks(process_hooks, sys_module, atexit_module, exit_note):
         _note_uncaught_exception)
     exit_note.install(sys_module)
     exit_note.clear()
+
+
+def _real_process_hooks():
+    return functools.partial(
+        _install_process_hooks, _PROCESS_HOOKS, sys, atexit, _EXIT_NOTE)
 
 
 _PROCESS_HOOKS = ProcessHooks(os.getpid)
