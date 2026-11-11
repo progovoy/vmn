@@ -113,7 +113,8 @@ start_run(
 
 Calling `start_run()` again on a thread whose run is still open (a re-run
 notebook cell that never called `finish()`) raises `RuntimeError`; pass
-`nested=True` to nest on purpose, or finish the old run first.
+`nested=True` to nest on purpose, or finish the old run first. More on runs
+in notebooks: [notebooks.md](notebooks.md).
 
 Creating the run snapshots the working tree (dirty or clean) and assigns
 `run.id`. The first run in a repo vmn does not track yet cold-starts it: it

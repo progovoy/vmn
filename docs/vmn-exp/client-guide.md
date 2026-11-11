@@ -285,7 +285,9 @@ What you get without asking:
 Opt-outs (`system_metrics=False`, `capture_env=False`, `VMN_MODE=disabled`)
 and opt-ins (`capture_output=True`, `autolog()` for sklearn, xgboost, Keras,
 Lightning and transformers) are in [sdk.md](sdk.md#starting-a-run) and
-[Autologging](sdk.md#autologging).
+[Autologging](sdk.md#autologging). In a Jupyter notebook, see
+[notebooks.md](notebooks.md): one run across cells, re-run cells and kernel
+restarts.
 
 **Consuming another run's output** links the two runs (lineage):
 

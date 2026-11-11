@@ -25,6 +25,8 @@ Jobs that only record metrics need just `pip install vmn-exp-sdk`
 - [Client guide](client-guide.md) — start here: a project end to end (store,
   submit, SDK in the job, watch, compare, reproduce, resume/rewind/fork, models,
   cleanup).
+- [Notebooks](notebooks.md) — one run across cells, re-run cells, kernel
+  restarts, and what the snapshot captures.
 - [Runnable examples](../../packages/vmn-exp/examples/README.md) — five small SDK scripts.
 - [Migrating from MLflow](migrating-from-mlflow.md) and
   [vmn-exp vs MLflow](vmn-vs-mlflow.md).
