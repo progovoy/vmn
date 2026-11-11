@@ -174,11 +174,7 @@ class RegistrySnapshots:
                 entry.snapshot = entry.snapshot.with_model(storage, name)
 
     def _entry(self, storage):
-        with self._lock:
-            entry = self._entries.get(storage)
-            if entry is None:
-                entry = self._entries[storage] = _Entry()
-            return entry
+        return _entry_of(self, storage, _Entry)
 
     def _refresh_when_due(self, storage, entry):
         with self._lock:
@@ -245,8 +241,14 @@ class RegistryListings:
             entry.listing, entry.generation = None, entry.generation + 1
 
     def _entry(self, storage):
-        with self._lock:
-            entry = self._entries.get(storage)
-            if entry is None:
-                entry = self._entries[storage] = _Listing()
-            return entry
+        return _entry_of(self, storage, _Listing)
+
+
+def _entry_of(cache, storage, make):
+    """*cache*'s entry for *storage* (in its ``_entries`` under its
+    ``_lock``), a new ``make()`` the first time."""
+    with cache._lock:
+        entry = cache._entries.get(storage)
+        if entry is None:
+            entry = cache._entries[storage] = make()
+        return entry

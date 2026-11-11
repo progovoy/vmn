@@ -118,7 +118,6 @@ def parse_registry_uri(uri) -> tuple[str, int] | None:
     return m.group(1), int(m.group(2))
 
 
-
 def absolute_artifact_path(path) -> bool:
     """Whether a version's *artifact_path* names its own location (a URI of
     any scheme, or an absolute path) rather than a file of its run's record."""

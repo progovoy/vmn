@@ -31,14 +31,14 @@ row order and says ``truncated``: its cost is the limit, never the fan-out.
 
 Pure: no storage, no clock.
 """
+from functools import partial
+
 from vmn_exp.core.lineage_index import (  # noqa: F401 (re-exported)
     LineageIndex,
     artifact_ref_uri,
     normalize_digest,
     parse_artifact_uri,
 )
-from functools import partial
-
 from vmn_exp.registry.names import absolute_artifact_path, parse_registry_uri
 
 DEFAULT_LIMIT = 100
@@ -97,15 +97,12 @@ def _downstream_groups(app_name, row, index, registry=None):
 
 def _location_consumers(app_name, verstr, index, registry):
     """``((app, verstr), link)`` of the consumers of the versions run *verstr*
-    registered at an absolute location, but not of those naming another
-    version registered there (a retrained model at the same URI)."""
-    for version in registry.models_of(app_name, verstr):
-        path = version.get("artifact_path")
-        if path not in index.location_consumers:
-            continue
-        others = {_ref(other) for _, other in registry.location_versions(path)} - {_ref(version)}
+    registered at an absolute location that :func:`_registered_runs` links
+    up to it (not those naming another run's version there)."""
+    paths = {v.get("artifact_path") for v in registry.models_of(app_name, verstr)}
+    for path in sorted(paths & index.location_consumers.keys()):
         for consumer, name, digest in index.location_consumers[path]:
-            if name not in others:
+            if (app_name, verstr) in _registered_runs(registry, path, name):
                 yield (app_name, consumer), (name, path, digest, "uri")
 
 
@@ -261,7 +258,7 @@ def annotate_versions(nodes, models_of):
 
 def _version_of(link, versions):
     made = [v for v in versions if v.get("artifact_path") == link["artifact"]]
-    named = [v for v in made if f"{v['model']}@{v['version']}" == link["input"]]
+    named = [v for v in made if _ref(v) == link["input"]]
     return (named or made or [None])[0]
 
 

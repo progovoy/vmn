@@ -72,17 +72,18 @@ class LineageIndex:
                 found.append(("producers", digest, (verstr, path)))
         for name, inp in (row.get("inputs") or {}).items():
             inp = inp or {}
-            ref = parse_artifact_uri(inp.get("uri"))
+            uri, logged = inp.get("uri"), inp.get("digest")
+            ref = parse_artifact_uri(uri)
             if ref:
-                found.append(("uri_consumers", ref[:2], (verstr, name, inp.get("digest"), ref[2])))
+                found.append(("uri_consumers", ref[:2], (verstr, name, logged, ref[2])))
                 continue
-            if parse_registry_uri(inp.get("uri")):
+            if parse_registry_uri(uri):
                 continue
-            digest = normalize_digest(inp.get("digest"))
+            digest = normalize_digest(logged)
             if digest:
-                found.append(("digest_consumers", digest, (verstr, name, inp.get("digest"))))
-            if absolute_artifact_path(inp.get("uri")):
-                found.append(("location_consumers", inp["uri"], (verstr, name, inp.get("digest"))))
+                found.append(("digest_consumers", digest, (verstr, name, logged)))
+            if absolute_artifact_path(uri):
+                found.append(("location_consumers", uri, (verstr, name, logged)))
         return found
 
     @classmethod

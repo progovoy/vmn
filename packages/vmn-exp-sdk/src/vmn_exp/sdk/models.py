@@ -219,7 +219,9 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
         )
 
     if absolute_artifact_path(artifact_path):
-        local = _fetch_location(artifact_path)
+        local = location_local_path(artifact_path)
+        if local is None:
+            raise FileNotFoundError(f"Artifact {artifact_path!r} not found.")
     else:
         local = _fetch_artifact(storage, run_ref["app"], run_ref["verstr"], artifact_path)
     if record:
@@ -234,15 +236,6 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
         return dst_path
 
     return local
-
-
-def _fetch_location(uri) -> str:
-    """A local path for the artifact at absolute *uri* (a path, ``file://``,
-    ``s3://``, ``gs://``, ``az://`` or a plugin scheme)."""
-    path = location_local_path(uri)
-    if path is None:
-        raise FileNotFoundError(f"Artifact {uri!r} not found.")
-    return path
 
 
 def _fetch_artifact(storage, app, verstr, artifact_path) -> str:
