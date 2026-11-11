@@ -54,6 +54,7 @@ Newest first.
 
 | Version | Date | What changed | What to do | Plan item |
 |---|---|---|---|---|
+| 0.1.38 | 2026-11-11 | SDK: under SIGTERM the final uploads are waited for 25 s, not 60 s (`finish()` and exit keep 60 s), and media files still uploading get at most half of that | A job whose scheduler grants more than 30 s and that needs the longer wait sets `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (it sets both waits) | [40 C7](../plans/40-vmn-exp-sdk-write-path.md#c7) |
 | 0.1.38 | 2026-11-11 | With authentication on, `GET /api/v1/jobs/{id}` answers `404 Job not found` unless the caller is a viewer of the job's workspace in the job's org; before, any role in any workspace could read any job | Poll a job with a token or session that has a role in the workspace that ran it | [42 E6](../plans/42-vmn-exp-server-security-api.md#e6) |
 
 ## Formats

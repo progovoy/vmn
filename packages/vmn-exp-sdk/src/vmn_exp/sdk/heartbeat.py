@@ -49,12 +49,14 @@ class Heartbeat:
         )
         self._thread.start()
 
-    def stop(self):
-        """Stop publishing and join the thread. Idempotent."""
+    def stop(self, timeout=None):
+        """Stop publishing and join the thread, for at most *timeout* seconds
+        when given (a publish stuck in IO is left behind). Idempotent."""
         self._stop.set()
         thread, self._thread = self._thread, None
         if thread is not None:
-            thread.join(timeout=self._interval_sec + 5)
+            join = self._interval_sec + 5
+            thread.join(timeout=join if timeout is None else min(join, timeout))
 
     def _loop(self):
         while not self._stop.wait(self._interval_sec):

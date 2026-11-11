@@ -92,6 +92,12 @@ _SYNC_UNSET = object()
 # unless FINAL_UPLOAD_TIMEOUT_ENV overrides it.
 FINAL_REMOTE_TIMEOUT_SEC = 60
 FINAL_UPLOAD_TIMEOUT_ENV = "VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC"
+# The same wait under SIGTERM, unless FINAL_UPLOAD_TIMEOUT_ENV overrides it:
+# it fits a Kubernetes pod's default 30 s grace period.
+SIGTERM_FINAL_TIMEOUT_SEC = 25
+# Under SIGTERM media files get at most this share of what is left, so the
+# final state is written with budget to spare.
+SIGTERM_MEDIA_SHARE = 0.5
 # How long finish() waits for run.alert() deliveries still in flight.
 ALERT_DRAIN_SEC = 5
 
@@ -504,7 +510,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         self._record_guard("error entry", self._append, entry)
         return recorded
 
-    def _record_final(self, exit_code, deadline, error=None, **final_state):
+    def _record_final(self, exit_code, deadline, error=None, media_share=1.0, **final_state):
         """Write the run's last log entries and final state locally, queue their
         upload and close the run. False if it was finished already."""
 
@@ -527,19 +533,21 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             return dict(state="finished", exit_code=exit_code, finished_at=now_iso(),
                         duration_sec=duration, **final_state)
 
-        return self._close_attempt(deadline, outcome, alerts=True)
+        return self._close_attempt(deadline, outcome, alerts=True, media_share=media_share)
 
-    def _record_release(self, deadline, reason=None, signal=None):
+    def _record_release(self, deadline, reason=None, signal=None, media_share=1.0):
         """:meth:`_record_final` of a released attempt (no exit code, no alerts)."""
         return self._close_attempt(
-            deadline, lambda: release.released_state(self._duration(), reason, signal))
+            deadline, lambda: release.released_state(self._duration(), reason, signal),
+            media_share=media_share)
 
-    def _close_attempt(self, deadline, outcome, alerts=False):
+    def _close_attempt(self, deadline, outcome, alerts=False, media_share=1.0):
         """Stop recording, write *outcome()*'s state last, queue the uploads
         and close the run. False if it was closed already.
 
-        Media files are waited for (until *deadline*) first: their entries are
-        appended as they are stored, so they must land before the final flush.
+        Media files are waited for first, for *media_share* of what is left
+        until *deadline*: their entries are appended as they are stored, so
+        they must land before the final flush.
         """
         if self._finished or not self._in_owner():
             return False
@@ -552,9 +560,9 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             self._record_guard(
                 "media files",
                 self._close_media_uploads,
-                _left(deadline),
+                _left(deadline) * media_share,
             )
-            self._heartbeat.stop()
+            self._heartbeat.stop(_left(deadline))
             final_state = outcome()
             if self._output is not None:
                 self._record_guard("output log", self._record_output)
@@ -796,7 +804,7 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
             self._output.request_upload()
 
 
-def _finalize_open_runs(exit_code=None, **final_state):
+def _finalize_open_runs(exit_code=None, deadline=None, media_share=1.0, **final_state):
     """Never leave a run claiming ``running`` just because nobody finished it.
 
     With no explicit *exit_code* (the atexit case) a clean process exit reads
@@ -808,6 +816,9 @@ def _finalize_open_runs(exit_code=None, **final_state):
     — and so mark failed — the parent's still-running run. A run opened with
     ``on_sigterm="release"`` is released instead when a signal ended it
     (``final_state["signal"]``).
+
+    *deadline* defaults to the final-upload timeout from now; *media_share* is
+    the share of it each run's media files may wait for (see ``_close_attempt``).
     """
     error = None
     if exit_code is None:
@@ -817,20 +828,23 @@ def _finalize_open_runs(exit_code=None, **final_state):
     # spend the whole budget on each run in turn. Media files are waited for
     # while recording (their entries must precede the final flush); the rest
     # of the uploads after every run's final state is written.
-    deadline = _final_upload_deadline()
+    if deadline is None:
+        deadline = _final_upload_deadline()
     recorded = [
         run
         for run in reversed(context.open_runs())
-        if _quietly(_end_attempt, run, deadline, exit_code, error, final_state)
+        if _quietly(_end_attempt, run, deadline, media_share, exit_code, error, final_state)
     ]
     for run in recorded:
         _quietly(run._close_remote_writers, deadline)
 
 
-def _end_attempt(run, deadline, exit_code, error, final_state):
+def _end_attempt(run, deadline, media_share, exit_code, error, final_state):
     if final_state.get("signal") and run._on_sigterm == release.RELEASE:
-        return run._record_release(deadline, signal=final_state["signal"])
-    return run._record_final(exit_code, deadline, error=error, **final_state)
+        return run._record_release(
+            deadline, signal=final_state["signal"], media_share=media_share)
+    return run._record_final(
+        exit_code, deadline, error=error, media_share=media_share, **final_state)
 
 
 def _quietly(step, *args, **kwargs):
@@ -847,8 +861,20 @@ def final_upload_timeout_sec():
     return positive_env_sec(FINAL_UPLOAD_TIMEOUT_ENV, FINAL_REMOTE_TIMEOUT_SEC)
 
 
-def _final_upload_deadline():
-    return time.monotonic() + final_upload_timeout_sec()
+def sigterm_timeout_sec():
+    """How long finalizing under SIGTERM waits: ``VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC``
+    when a positive number, else 25 s (or the final-upload default, if lower)."""
+    timeout = positive_env_sec(FINAL_UPLOAD_TIMEOUT_ENV, None)
+    if timeout is None:
+        return min(FINAL_REMOTE_TIMEOUT_SEC, SIGTERM_FINAL_TIMEOUT_SEC)
+    return timeout
+
+
+def _final_upload_deadline(timeout_sec=None):
+    """The deadline *timeout_sec* (default: the final-upload timeout) from now."""
+    if timeout_sec is None:
+        timeout_sec = final_upload_timeout_sec()
+    return time.monotonic() + timeout_sec
 
 
 def _left(deadline):
@@ -869,8 +895,10 @@ def _finalize_signaled(signum):
     """A run a signal ended exits ``128 + N``, as a shell reports it — or is
     released, when it was opened with ``on_sigterm="release"``."""
     name = signal.Signals(signum).name
+    deadline = _final_upload_deadline(sigterm_timeout_sec())
     with finalizing():
-        _finalize_open_runs(128 + signum, received_signal=name, signal=name)
+        _finalize_open_runs(128 + signum, deadline=deadline, media_share=SIGTERM_MEDIA_SHARE,
+                            received_signal=name, signal=name)
 
 
 def install_signal_handlers():
@@ -880,7 +908,7 @@ def install_signal_handlers():
     again after installing a SIGTERM handler of your own (it is chained), or
     when the SDK is first imported from a worker thread.
     """
-    signals.install(_finalize_signaled, timeout=final_upload_timeout_sec,
+    signals.install(_finalize_signaled, timeout=sigterm_timeout_sec,
                     raises=_sigterm_raises)
 
 

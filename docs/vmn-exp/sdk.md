@@ -617,8 +617,12 @@ yourself when a `with` block doesn't fit. It is idempotent.
 - **SIGTERM finalizes every open run** with exit code 143 and
   `received_signal: SIGTERM` (so it reads `failed`, never `stuck`) — or
   releases it, for a run opened with `on_sigterm="release"` — waits for
-  the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 60; one
-  shared wait for all runs), then calls the previous handler or re-delivers the
+  the final uploads up to `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` (default 25 s
+  under SIGTERM, so it fits a Kubernetes pod's default 30 s grace period; 60 s
+  for `finish()` and exit; one shared wait for all runs; if you raise the
+  variable, raise `terminationGracePeriodSeconds` with it). Media files still
+  uploading get at most half of that wait, and the final state is written
+  before anything else slow is waited for. It then calls the previous handler or re-delivers the
   signal — or, when an open run has `sigterm_exit="raise"` and no Python
   handler sits underneath, raises `SystemExit(143)` in the main thread, so
   the process exits 143 after its `finally` blocks. The handler is installed when `vmn_exp.sdk` is imported on the main
@@ -1465,7 +1469,7 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_CAPTURE_ENV` | `0`/`false`/`no`/`off` disables environment capture |
 | `VMN_EXP_AUTHOR` | the email a new run's `features` author gets when git config has no `user.email` ([experiments.md](experiments.md#what-a-run-records-for-similar)) |
 | `VMN_EXP_OUTPUT_CAP_MB` | `capture_output` size cap (default 10) |
-| `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60) |
+| `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60 s at finish/exit, 25 s under SIGTERM; when set, it is both) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | alert sinks and triggers ([experiments.md](experiments.md#alerts)) |
 | `VMN_SWEEP_PARAMS` | sweep trial params, read by `sweep_params()` |
 | `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) |

@@ -2106,8 +2106,9 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_IMAGE_DIGEST` | container image digest recorded by environment capture |
 | `VMN_LOCK_FILE_PATH` | repo lock path (default `.vmn/vmn.lock`) |
 
-SDK-only variables (`VMN_RESUME_RUN_ID`, `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`)
-are in [sdk.md](sdk.md). Set **by** vmn for a `run` child:
+SDK-only variables (`VMN_RESUME_RUN_ID`, `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC`:
+the final-upload wait, 25 s under SIGTERM and 60 s otherwise unless set; raise
+`terminationGracePeriodSeconds` if you raise it) are in [sdk.md](sdk.md). Set **by** vmn for a `run` child:
 `VMN_EXPERIMENT_ID`, `VMN_APP_NAME`, `VMN_METRICS_FILE`,
 `VMN_EXP_SUPERVISOR_SAMPLES`; sweep trials also get `VMN_SWEEP_PARAMS`,
 `VMN_SWEEP_ID`, `VMN_SWEEP_TRIAL` ([sweeps.md](sweeps.md)).

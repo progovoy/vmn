@@ -7,11 +7,15 @@ another attempt finished the run cannot then flip it back to running and
 erase its exit code. A beat on the token of its own last write still costs
 one conditional PUT and no read.
 """
+import threading
+import time
+
 import pytest
 from pg_locks import until
 from s3_helpers import meta, mocked_bucket, record_calls, s3_storage
 
 from vmn_exp.core.status import RUN_STATE_FILE, load_run_state
+from vmn_exp.sdk.heartbeat import Heartbeat
 from vmn_exp.sdk.run import Run
 from vmn_exp.sdk.state_publisher import RunStatePublisher
 from vmn_exp.snapshot import LocalSnapshotStorage
@@ -200,3 +204,24 @@ def test_a_steady_remote_beat_is_one_conditional_put_and_no_get(bucket):
     assert publisher.close(10)
 
     assert _state_calls(calls) == [("PutObject", True)] * 10
+
+
+def test_stop_waits_at_most_the_given_timeout_for_a_stuck_publish():
+    entered, released = threading.Event(), threading.Event()
+
+    def publish():
+        entered.set()
+        released.wait(10)
+
+    beat = Heartbeat(publish, 0.01)
+    beat.start()
+    assert entered.wait(5)
+
+    started = time.monotonic()
+    try:
+        beat.stop(timeout=0.1)
+        elapsed = time.monotonic() - started
+    finally:
+        released.set()
+
+    assert elapsed < 1, f"stop waited {elapsed:.2f}s"

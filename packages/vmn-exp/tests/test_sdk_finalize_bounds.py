@@ -17,6 +17,7 @@ from exp_helpers import _bootstrap
 from vmn_exp.core.status import load_run_state
 from vmn_exp.sdk import run as run_module
 from vmn_exp.sdk import signals, start_run
+from vmn_exp.sdk.run import Run
 from vmn_exp.snapshot import LocalSnapshotStorage
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.areas import local_store_root
@@ -175,3 +176,130 @@ def test_a_second_sigterm_during_finalization_starts_no_second_finalizer(sigterm
 
     assert calls == [signal.SIGTERM]
     assert chained == [signal.SIGTERM]
+
+
+# ---------------------------------------------------------------------------
+# The SIGTERM budget: a pod's default grace period is 30 s
+# ---------------------------------------------------------------------------
+
+
+def test_the_sigterm_budget_defaults_to_25_seconds(monkeypatch, sigterm_restored):
+    monkeypatch.delenv(TIMEOUT_ENV, raising=False)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+    run_module.install_signal_handlers()
+
+    assert run_module.sigterm_timeout_sec() == 25
+    assert signals._STATE["timeout"]() == 25
+
+
+@pytest.mark.parametrize("value, expected", [("40", 40.0), ("5", 5.0)])
+def test_the_env_timeout_also_sets_the_sigterm_budget(monkeypatch, value, expected):
+    monkeypatch.setenv(TIMEOUT_ENV, value)
+    assert run_module.sigterm_timeout_sec() == expected
+
+
+def test_a_lowered_module_timeout_still_bounds_the_sigterm_budget(monkeypatch):
+    monkeypatch.delenv(TIMEOUT_ENV, raising=False)
+    monkeypatch.setattr(run_module, "FINAL_REMOTE_TIMEOUT_SEC", TIMEOUT)
+    assert run_module.sigterm_timeout_sec() == TIMEOUT
+
+
+APP = "app"
+X = "0.0.1-dev.abc1234.0000001"
+Y = "0.0.1-dev.abc1234.0000002"
+
+
+@pytest.fixture
+def local_runs(tmp_path, monkeypatch):
+    """Runs over a plain local store (no git, no remote); finished afterwards."""
+    for key in ("VMN_EXPERIMENT_ID", "VMN_APP_NAME", TIMEOUT_ENV):
+        monkeypatch.delenv(key, raising=False)
+    local = LocalSnapshotStorage(str(tmp_path), area="runs")
+    made = []
+
+    def make(verstr):
+        local.save(APP, verstr, {"verstr": verstr, "timestamp": "2026-01-01T00:00:00Z"}, {})
+        made.append(Run(local, APP, verstr, 3600))
+        return made[-1]
+
+    try:
+        yield local, make
+    finally:
+        for run in made:
+            run.finish()
+
+
+def _record_deadlines(run, calls):
+    """Wrap *run*'s final writers to record the deadline each is given."""
+    for name, index in (("_record_final", 1), ("_close_remote_writers", 0)):
+        real = getattr(run, name)
+
+        def recording(*args, _real=real, _name=name, _index=index, **kwargs):
+            calls.append((_name, args[_index]))
+            return _real(*args, **kwargs)
+
+        setattr(run, name, recording)
+
+
+def test_finish_and_atexit_keep_the_one_minute_default(local_runs):
+    _, make = local_runs
+    finished, abandoned = make(X), make(Y)
+    calls = []
+    for run in (finished, abandoned):
+        _record_deadlines(run, calls)
+        run._open()
+
+    started = time.monotonic()
+    finished.finish()
+    run_module._finalize_open_runs()
+
+    budgets = [deadline - started for _, deadline in calls]
+    assert len(budgets) == 4
+    assert all(59 < budget <= 60.5 for budget in budgets), budgets
+
+
+def test_the_signal_finalizer_uses_the_deadline_it_is_given(local_runs):
+    local, make = local_runs
+    run = make(X)
+    calls = []
+    _record_deadlines(run, calls)
+    run._open()
+    deadline = time.monotonic() + 7
+
+    run_module._finalize_open_runs(1, deadline=deadline)
+
+    assert calls == [("_record_final", deadline), ("_close_remote_writers", deadline)]
+    assert load_run_state(local, APP, X)["exit_code"] == 1
+
+
+class _HungMediaUploads:
+    """Media uploads whose close hangs until released, as on a stuck store."""
+
+    def __init__(self):
+        self.released = threading.Event()
+        self.waited = None
+
+    def close(self, timeout):
+        self.waited = timeout
+        self.released.wait(timeout)
+        return False
+
+
+def test_hung_media_uploads_do_not_keep_sigterm_from_writing_the_final_state(
+    local_runs, monkeypatch
+):
+    local, make = local_runs
+    budget = 0.4
+    monkeypatch.setenv(TIMEOUT_ENV, str(budget))
+    run = make(X)
+    media = run._media_uploads = _HungMediaUploads()
+    run._open()
+
+    try:
+        run_module._finalize_signaled(signal.SIGTERM)
+    finally:
+        media.released.set()
+
+    assert media.waited <= budget / 2 + 0.01, f"media got {media.waited:.2f}s"
+    assert load_run_state(local, APP, X)["exit_code"] == 128 + signal.SIGTERM
