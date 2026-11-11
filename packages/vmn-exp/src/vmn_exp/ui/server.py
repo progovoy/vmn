@@ -28,11 +28,12 @@ from vmn_exp.ui.api_errors import (
 )
 from vmn_exp.ui.app_presence import app_exists
 from vmn_exp.ui.attention_built_in import with_built_in
-from vmn_exp.ui.audit import AuditLog, install_audit_middleware
+from vmn_exp.ui.app_deps import real_deps
+from vmn_exp.ui.audit import install_audit_middleware
 from vmn_exp.ui.auth import build_chain
 from vmn_exp.ui.auth.authz import can_read_job, require, require_action
 from vmn_exp.ui.auth.principal import ADMIN, VIEWER
-from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator, TokenService
+from vmn_exp.ui.auth.tokens import ApiTokenAuthenticator
 from vmn_exp.ui.config import DEFAULT_AUDIT_RETENTION_DAYS, DEFAULT_METRICS_ENDED_HOURS
 from vmn_exp.ui.experiment_source import ExperimentSource
 from vmn_exp.ui.http_params import attachment, clamp_page, key_list, media_type
@@ -45,7 +46,6 @@ from vmn_exp.ui.memo import TTLCache
 from vmn_exp.ui.metrics_feed import MetricsFeed
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.query_params import refuse_unknown_params
-from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.readers.contained_reads import ContainedReads
 from vmn_exp.ui.readers.models import ModelListing
 from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshots
@@ -125,47 +125,50 @@ class SettingsScope:
             await self.app(scope, receive, send)
 
 
-def create_app(
+def create_app(manager, io=None, background_refresh=False, keep_warm=None, read_only=False,
+               control_plane=None, **options):
+    """``build_app`` with the collaborators :func:`~vmn_exp.ui.app_deps.real_deps` builds on *io*."""
+    from vmn_exp.core.real_io import real_io
+
+    deps = real_deps(io or real_io(), control_plane, background_refresh, read_only, keep_warm)
+    return build_app(manager, deps, read_only=read_only, control_plane=control_plane, **options)
+
+
+def build_app(
     manager,
+    deps,
     token=None,
     read_only=False,
     use_index=True,
     bind_host=None,
     allowed_hosts=None,
-    background_refresh=False,
     auth=None,
     role_mappings=(),
     control_plane=None,
     search_dsn=None,
     cache_dsn=None,
     audit_retention_days=DEFAULT_AUDIT_RETENTION_DAYS,
-    keep_warm=None,
     metrics_ended_hours=DEFAULT_METRICS_ENDED_HOURS,
 ):
-    """The FastAPI app. With *background_refresh* (what ``vmn-exp ui`` runs)
-    watched apps' indexes are refreshed by daemon threads and requests serve
-    the latest snapshot at once, up to about a second behind storage;
-    without it each request refreshes the index first, seeing every write
-    made before it. *auth* is an ``AuthenticatorChain`` tried after the
-    static *token*; with neither the API is open. *role_mappings* map OIDC
-    groups to roles (``{group, workspace or "*", role}``). A *control_plane*
-    enables API tokens (``vmnx_...`` bearer tokens, managed under
-    ``/api/v1/tokens``) and the audit log, kept *audit_retention_days* by its
-    hourly sweep (:mod:`~vmn_exp.ui.control_plane_sweep`). A Postgres *search_dsn* answers
+    """The FastAPI app, serving with *deps*' job runner, refresher, store
+    upkeep, audit log and token service (:class:`~vmn_exp.ui.app_deps.ServerDeps`).
+    *auth* is an ``AuthenticatorChain`` tried after the static *token*; with
+    neither the API is open. *role_mappings* map OIDC groups to roles
+    (``{group, workspace or "*", role}``). A *control_plane* enables API
+    tokens (``vmnx_...`` bearer tokens, managed under ``/api/v1/tokens``) and
+    the audit log, kept *audit_retention_days* by its hourly sweep
+    (:mod:`~vmn_exp.ui.control_plane_sweep`). A Postgres *search_dsn* answers
     ``/api/v1/search`` in SQL; a Postgres *cache_dsn* caches store
-    workspaces' indexes there, refreshed by one elected replica. *keep_warm*
-    keeps a background-refreshed index refreshing with nobody watching (None:
-    store workspaces' indexes only; see :mod:`~vmn_exp.ui.refresher`). An
-    ended outer run stays on ``/metrics`` for *metrics_ended_hours*
+    workspaces' indexes there, refreshed by one elected replica. An ended
+    outer run stays on ``/metrics`` for *metrics_ended_hours*
     (:mod:`~vmn_exp.ui.metrics_feed`)."""
     from vmn_exp.storage.areas import RUNS
     from vmn_exp.storage.open import open_storage
     from vmn_exp.ui.bulk_actions import BulkSpec, is_bulk
-    from vmn_exp.ui.jobs import JobRunner, build_command
+    from vmn_exp.ui.jobs import build_command
     from vmn_exp.ui.jobs_store import build_store_action
     from vmn_exp.ui.pending_edits import ship_pending_first
     from vmn_exp.ui.storage_access import EDIT, READ
-    from vmn_exp.ui.store_upkeep import StoreUpkeep
 
     from vmn_exp.ui import storage_access
 
@@ -180,14 +183,14 @@ def create_app(
     app.state.manager = manager
     app.state.read_only = read_only
     app.state.role_mappings = list(role_mappings)
-    jobs = app.state.jobs = JobRunner()
+    jobs = app.state.jobs = deps.jobs
     app.state.control_plane = control_plane
-    app.state.audit = AuditLog(control_plane) if control_plane else None
+    app.state.audit = deps.audit
     if control_plane:
         control_plane_sweep.install(app, control_plane, audit_retention_days)
     extra = list(auth.authenticators) if auth else []
-    if control_plane:
-        extra.append(ApiTokenAuthenticator(TokenService(control_plane)))
+    if deps.token_service:
+        extra.append(ApiTokenAuthenticator(deps.token_service))
     chain = build_chain(token, extra)
     app.state.auth_chain = chain
     app.state.auth_enabled = bool(chain)
@@ -195,8 +198,7 @@ def create_app(
         bind_host=bind_host, allowed_hosts=allowed_hosts, token_required=bool(chain)
     )
 
-    refresher = Refresher(keep_warm=keep_warm) if background_refresh else InlineRefresher()
-    app.state.refresher = refresher
+    refresher = app.state.refresher = deps.refresher
     search_sql = search_rows = None
     if search_dsn:
         from vmn_exp.ui.search_pg import PgRowSearch
@@ -204,9 +206,7 @@ def create_app(
 
         search_sql = PgRowSearch(search_dsn)
         search_rows = SearchRowsWriter(search_sql)
-    # Markers and compaction a store lacks, written by the server itself.
-    upkeep = StoreUpkeep() if background_refresh and not read_only else None
-    app.state.store_upkeep = upkeep
+    upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
                               store_upkeep=upkeep)
@@ -225,7 +225,7 @@ def create_app(
         refresher.on_refresh = leaderboards.warm
     job_views = JobViews(leaderboards)
     report_indexes = ReportIndexes(
-        os.path.join(manager.data_dir, "index") if use_index else None, background_refresh,
+        os.path.join(manager.data_dir, "index") if use_index else None, refresher.background,
         journal_of=source.journal_of,
     )
     app_lists = TTLCache(APPS_TTL_SEC)
