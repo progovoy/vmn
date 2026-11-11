@@ -107,6 +107,13 @@ def finish_uploads(sync, state_uploads, deadline, clock):
     return state_uploads.close(max(0.0, deadline - clock()))
 
 
+def finish_by(deadline, clock, step):
+    """Run *step* on a worker, waiting for it until *deadline*; whether it finished."""
+    worker = Coalescing(lambda _: step(), "vmn-run-finish")
+    worker.submit()
+    return worker.close(max(0.0, deadline - clock()))
+
+
 def not_uploaded_warning(verstr, error, storage):
     """The warning for a final state that did not reach the remote, with the
     way to upload it later where there is one: ``vmn-exp push`` reads a

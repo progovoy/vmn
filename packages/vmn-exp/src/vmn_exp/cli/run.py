@@ -31,6 +31,7 @@ from vmn_exp.cli.supervisor_state import (
     SIGNAL_CHILD_GRACE_SEC,
     StateUploads,
     final_upload_deadline,
+    finish_by,
     finish_uploads,
     not_uploaded_warning,
 )
@@ -494,12 +495,13 @@ class _Supervision:
         # A request after this would be a periodic sync replacing the final one.
         self._undefer_ships()
         deadline = self._finish_uploads()
-        if self.forwarder.signalled_at is None:
+        signalled = self.forwarder.signalled_at is not None
+        if not signalled:
             deadline = time.monotonic() + _FINAL_SYNC_TIMEOUT_SEC
         for stream in sorted(self.appended_streams | {self._own_stream()}):
             self.guard("metric compaction", compact_by, self.storage, self.app_name,
                        self.verstr, stream, deadline)
-        self.guard("failure alert", self._alert_if_failed)
+        self._alert(deadline if signalled else None)
         VMN_LOGGER.info(f"Experiment {self.verstr}: exited {exit_code} in {duration}s")
         return exit_code
 
@@ -570,6 +572,17 @@ class _Supervision:
         undefer = getattr(self.storage, "undefer_ships", None)
         if undefer is not None:
             undefer(self.app_name, self.verstr)
+
+    def _alert(self, deadline):
+        """The failure alert; after a signal, only until *deadline*."""
+        def alert():
+            self.guard("failure alert", self._alert_if_failed)
+
+        if deadline is None:
+            alert()
+        elif not finish_by(deadline, time.monotonic, alert):
+            VMN_LOGGER.warning(
+                f"Experiment {self.verstr}: the failure alert did not finish in time")
 
     def _alert_if_failed(self):
         alerter = Alerter(load_alert_config(self.app_name, self.exp_conf))

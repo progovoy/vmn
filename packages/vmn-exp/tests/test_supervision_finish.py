@@ -2,11 +2,12 @@
 reach the remote is warned about, within one budget (plan 40 C15). Driven
 without a child process: a stub with a return code stands in for it."""
 import argparse
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from supervisor_fakes import APP, V, FakeRemote, FakeWait, local_first
+from supervisor_fakes import APP, V, WAIT_SEC, FakeRemote, FakeWait, local_first
 
 from vmn_exp.cli import run as runmod
 from vmn_exp.cli import supervisor
@@ -129,7 +130,8 @@ class _Published(_StateUploads):
         pass
 
 
-def test_the_final_upload_budget_starts_when_the_final_state_is_submitted(tmp_path, monkeypatch, logger):
+def _clocked(tmp_path, monkeypatch):
+    """A supervision whose clock is a fake and whose final uploads land at once."""
     clock = _Clock()
     monkeypatch.setattr(runmod, "time", SimpleNamespace(monotonic=clock))
     args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
@@ -138,10 +140,29 @@ def test_the_final_upload_budget_starts_when_the_final_state_is_submitted(tmp_pa
     sup.start, sup.tailer = clock.now, _SlowMetrics(clock)
     sup.sync, sup.state_uploads = _FinalSync(), _Published()
     sup.run_state = {"state": "running", "attempt": "a1", "exit_code": None}
+    return sup, clock
+
+
+def test_the_final_upload_budget_starts_when_the_final_state_is_submitted(tmp_path, monkeypatch, logger):
+    sup, _ = _clocked(tmp_path, monkeypatch)
 
     sup._finish(SimpleNamespace(returncode=0), ["train"])
 
     assert sup.sync.given == runmod._FINAL_SYNC_TIMEOUT_SEC
+
+
+def test_after_a_signal_the_failure_alert_fits_what_is_left_of_the_budget(
+        tmp_path, monkeypatch, logger):
+    sup, clock = _clocked(tmp_path, monkeypatch)
+    sup.forwarder.signalled_at = clock.now - 100  # the signal budget is spent
+    hold, alerted = threading.Event(), []
+    sup._alert_if_failed = lambda: alerted.append(hold.wait(WAIT_SEC))
+
+    sup._finish(SimpleNamespace(returncode=143), ["train"])
+
+    assert alerted == []
+    assert f"Experiment {V}: the failure alert did not finish in time" in _warnings(logger)
+    hold.set()
 
 
 def test_a_log_buffer_gets_no_push_hint(tmp_path):

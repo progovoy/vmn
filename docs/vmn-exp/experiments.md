@@ -327,9 +327,10 @@ after the resumer read the state wins.
 
 `SIGTERM` (Slurm `scancel`, Kubernetes eviction, spot reclaim), `SIGINT` and
 `SIGHUP` to `vmn-exp run` are forwarded to the command, which gets 15 s to
-exit before SIGKILL; the final uploads then get what is left of 25 s from the
-signal, so the whole ending fits a pod's default 30 s grace period
-(`terminationGracePeriodSeconds`). An explicit `--kill-grace-sec`
+exit before SIGKILL; the final uploads, the metric compaction and a failure
+alert then get what is left of 25 s from the signal (an alert still sending
+then is given up, with a warning), so the whole ending fits a pod's default
+30 s grace period (`terminationGracePeriodSeconds`). An explicit `--kill-grace-sec`
 (> `$VMN_EXP_KILL_GRACE_SEC`) replaces the 15 s, and the uploads then get 10 s
 after it: give the pod at least that grace plus 15 s. A stop vmn requests
 itself (a sweep's early stop) waits `--kill-grace-sec` or 30 s.
