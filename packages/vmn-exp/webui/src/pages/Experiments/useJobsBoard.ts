@@ -61,6 +61,7 @@ export function useJobsBoard(ws: string, app: string, shown: View, top: TopRuns 
     status: tree ? undefined : view.status || undefined,
     jobAgg: view.jobAgg.agg ?? undefined, jobAggBy: view.jobAgg.by ?? undefined,
     jobAggValue: view.jobAgg.value ?? undefined, jobAggMetric: view.jobAgg.metric ?? undefined,
+    jobAggNested: view.jobAgg.nested,
     collapseAll: collapseAll || undefined,
   });
 

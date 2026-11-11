@@ -40,6 +40,8 @@ export interface PageOpts {
   jobAggBy?: string;
   jobAggValue?: string;
   jobAggMetric?: string;
+  /** Carriers at any depth (plan 35 §2); unset: the app's. */
+  jobAggNested?: boolean;
 }
 
 /** The Jobs view search's counts (plan 23 W11): every matching run of the app. */
@@ -72,6 +74,7 @@ export function setFilter(p: URLSearchParams, opts: Omit<PageOpts, "offset" | "l
   if (opts.jobAggBy) p.set("job_agg_by", opts.jobAggBy);
   if (opts.jobAggValue) p.set("job_agg_value", opts.jobAggValue);
   if (opts.jobAggMetric) p.set("job_agg_metric", opts.jobAggMetric);
+  if (opts.jobAggNested != null) p.set("job_agg_nested", opts.jobAggNested ? "1" : "0");
   if (opts.limit) p.set("limit", String(opts.limit));
 }
 
@@ -148,7 +151,7 @@ export const api = {
     ws: string, app: string, keys: string[], opts: Omit<PageOpts, "offset" | "last"> = {},
   ) => {
     // The Outer runs aggregate only shapes the board's job rows.
-    const { jobAgg, jobAggBy, jobAggValue, jobAggMetric, ...filter } = opts;
+    const { jobAgg, jobAggBy, jobAggValue, jobAggMetric, jobAggNested, ...filter } = opts;
     const p = new URLSearchParams({ keys: keys.join(",") });
     setFilter(p, filter);
     return get<ExperimentColumns>(`/workspaces/${ws}/apps/${appTag(app)}/experiments-columns?${p}`);

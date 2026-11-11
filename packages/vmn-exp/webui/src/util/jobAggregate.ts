@@ -16,12 +16,17 @@ export interface JobAggParams {
   by: string | null;
   value: JobAggSource | null;
   metric: string | null;
+  /** Carriers at any depth (plan 35 §2); undefined: the app's default. */
+  nested?: boolean;
 }
 export type JobAggPart = keyof JobAggParams;
 
 export const JOB_AGG_PARAMS: Readonly<Record<JobAggPart, string>> = {
   agg: "job_agg", by: "job_agg_by", value: "job_agg_value", metric: "job_agg_metric",
+  nested: "job_agg_nested",
 };
+
+const NESTED: Readonly<Record<string, boolean>> = { 1: true, 0: false };
 
 /** The job_agg values of *params* the server takes, the rest null. */
 export function parseJobAgg(params: URLSearchParams): JobAggParams {
@@ -31,6 +36,7 @@ export function parseJobAgg(params: URLSearchParams): JobAggParams {
     by: by && BY.test(by) ? by : null,
     value: JOB_AGG_SOURCES.find((v) => v === params.get(JOB_AGG_PARAMS.value)) ?? null,
     metric: params.get(JOB_AGG_PARAMS.metric) || null,
+    nested: NESTED[params.get(JOB_AGG_PARAMS.nested) ?? ""],
   };
 }
 
@@ -80,6 +86,16 @@ export const coverageText = (r: JobRolled): string =>
 export const rolledValueText = (r: JobRolled) =>
   r.value == null ? "—" : `${r.approx ? "≈ " : ""}${fmtVal(r.value)}`;
 
+/** Whether *by*'s units are the runs carrying a field (`field:`/`kind:`). */
+export const carriedBy = (by: string | null) => !!by && by !== "children" && by !== "runs";
+
+/** ` · 3 nested under another date, not counted`, or ` · nested dates
+ *  counted` (plan 35 §2); nothing for other units or none left out. */
+function nestedText(r: JobRolled, one: string, many: string): string {
+  if (r.nested) return ` · nested ${many} counted`;
+  return r.nested_skipped ? ` · ${fmtCount(r.nested_skipped)} nested under another ${one}, not counted` : "";
+}
+
 /** A value cell's title: `median of 14/16 dates' own date.best_value · 1
  *  duplicate date left out`, `≈` first for an approximate quantile. */
 export function rolledTitle(r: JobRolled): string {
@@ -87,5 +103,5 @@ export function rolledTitle(r: JobRolled): string {
   const { one, many } = unitNouns(r.by);
   const of = r.by === "runs" ? ofUnits(r) : coverageText(r);
   const dupes = r.conflicts ? ` · ${fmtCount(r.conflicts)} duplicate ${r.conflicts === 1 ? one : many} left out` : "";
-  return `${r.approx ? "≈ " : ""}${aggName(r)} ${of} ${r.metric}${dupes}`;
+  return `${r.approx ? "≈ " : ""}${aggName(r)} ${of} ${r.metric}${dupes}${nestedText(r, one, many)}`;
 }

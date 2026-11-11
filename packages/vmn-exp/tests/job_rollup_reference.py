@@ -238,27 +238,31 @@ def _carries(row, by):
     return (row.get(prefix) or {}).get(name) is not None
 
 
-def units_of(rows, verstr, by):
+def units_of(rows, verstr, by, nested=False, skipped=None):
     """Brute force: ``[(unit row, key)]`` of job *verstr*: its direct
-    children, or the nearest descendants carrying the field/kind per branch."""
+    children, or the nearest descendants carrying the field/kind per branch
+    (*nested*: every carrier below it; else the ones under another carrier
+    go to the list *skipped*)."""
     shown = [row for row in rows if not row.get("archived")]
     by_verstr, children = {row["verstr"]: row for row in shown}, children_by_parent(shown)
     if by == "children":
         return [(by_verstr[k], None) for k in children.get(verstr, ())
                 if k in by_verstr and k != verstr]
     prefix, _, name = by.partition(":")[2].partition(".")
-    out, stack, seen = [], list(children.get(verstr, ())), {verstr}
+    out, stack, seen = [], [(k, False) for k in children.get(verstr, ())], {verstr}
     while stack:
-        kid = stack.pop()
+        kid, under = stack.pop()
         if kid in seen or kid not in by_verstr:
             continue
         seen.add(kid)
         row = by_verstr[kid]
-        if _carries(row, by):
+        carries = _carries(row, by)
+        if carries:
             key = None if by.startswith("kind:") else str((row.get(prefix) or {}).get(name))
-            out.append((row, key))
-        else:
-            stack.extend(children.get(kid, ()))
+            (skipped if under and not nested else out).append((row, key))
+            if skipped is None and not nested:
+                continue
+        stack.extend((k, under or carries) for k in children.get(kid, ()))
     return out
 
 
@@ -275,20 +279,23 @@ def unit_value(rows, unit, metric, source, up):
     return (max(values) if up else min(values)) if values else None
 
 
-def rolled(rows, verstr, by, source, metric, agg, up):
-    """``{value, n, of, conflicts}`` of job *verstr* (``runs``: every run below it)."""
+def rolled(rows, verstr, by, source, metric, agg, up, nested=False):
+    """``{value, n, of, conflicts, nested_skipped}`` of job *verstr*
+    (``runs``: every run below it; ``nested_skipped`` the keys of carriers
+    under another one that no unit holds, 0 with *nested*)."""
     if by == "runs":
         members = members_of(rows, verstr)
         values = [r["metrics"][metric] for r in members if _finite(r["metrics"].get(metric))]
         return {"value": aggregate(values, agg, up, rank=True), "n": len(values),
                 "of": len(members),
                 "conflicts": 0}
-    keyed = {}
-    for row, key in units_of(rows, verstr, by):
+    keyed, skipped = {}, []
+    for row, key in units_of(rows, verstr, by, nested, skipped):
         keyed.setdefault(row["verstr"] if key is None else key, []).append(row)
+    nested_keys = {row["verstr"] if key is None else key for row, key in skipped} - set(keyed)
     conflicts = sum(1 for kept in keyed.values() if len(kept) > 1)
     values = [unit_value(rows, kept[0], metric, source, up) for kept in keyed.values()
               if len(kept) == 1]
     values = [x for x in values if x is not None]
     return {"value": aggregate(values, agg, up), "n": len(values), "of": len(keyed),
-            "conflicts": conflicts}
+            "conflicts": conflicts, "nested_skipped": len(nested_keys)}

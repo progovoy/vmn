@@ -33,7 +33,8 @@ A ``q`` (or ``top_q``) with ``ago()`` is pinned to the minute first (plan 28 P1,
 :func:`~vmn_exp.ui.attention.pinned`), so its ETag and orders follow the
 clock; a Jobs view page's ``job`` carries the app's attention counts.
 With ``top``, each row's ``job`` carries ``rolled``, the aggregate
-``job_agg``/``job_agg_by``/``job_agg_value``/``job_agg_metric`` name over the
+``job_agg``/``job_agg_by``/``job_agg_value``/``job_agg_metric``/
+``job_agg_nested`` (plan 35 §2) name over the
 app's ``experiment.ui.job_aggregate`` (plan 31 §2,
 :mod:`~vmn_exp.ui.job_aggregate`), sortable by ``job:value``; a bad value,
 or one without ``top``, is a 400.
@@ -123,6 +124,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         job_agg_by: str = None,
         job_agg_value: str = None,
         job_agg_metric: str = None,
+        job_agg_nested: bool = None,
         collapse_all: bool = False,
     ):
         snapshot, schema = inputs(ws_name, app_tag)
@@ -133,7 +135,7 @@ def register(app, api_prefix, inputs, cache, comments_of=None, aggregate_of=None
         if collapse_all and not (top and group is not None):
             raise HTTPException(400, "collapse_all needs group and top")
         aggregate = _job_agg(ws_name, app_tag, top, agg=job_agg, by=job_agg_by,
-                             value=job_agg_value, metric=job_agg_metric)
+                             value=job_agg_value, metric=job_agg_metric, nested=job_agg_nested)
         tree = children_of is not None
         attention = queries_of(attention_of(ws_name, app_tag)) if top or tree else ()
         offset, limit = clamp_page(offset, limit, cache.max_page)

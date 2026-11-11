@@ -126,6 +126,10 @@ class JobTree:
         """Whether *job* is a top-level job (under no job)."""
         return job in self.jobs and job not in self._parent
 
+    def parent(self, job):
+        """*job*'s parent job, None for a top-level one."""
+        return self._parent.get(job)
+
     def peers(self, job):
         """The jobs beside *job*: under its parent job, else the top-level ones."""
         parent = self._parent.get(job)

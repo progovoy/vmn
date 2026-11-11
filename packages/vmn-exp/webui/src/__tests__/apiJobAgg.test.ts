@@ -22,3 +22,11 @@ describe("the job_agg request params", () => {
     expect(query({ top: true, jobAgg: "max" })).toEqual({ top: "1", job_agg: "max" });
   });
 });
+
+describe("job_agg_nested (plan 35 §2)", () => {
+  it("travels as 1 or 0, left out when unset", () => {
+    expect(query({ top: true, jobAggNested: true })).toEqual({ top: "1", job_agg_nested: "1" });
+    expect(query({ top: true, jobAggNested: false })).toEqual({ top: "1", job_agg_nested: "0" });
+    expect(query({ top: true })).toEqual({ top: "1" });
+  });
+});

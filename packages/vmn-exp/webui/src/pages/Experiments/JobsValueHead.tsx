@@ -27,6 +27,7 @@ export function jobsValueHead(view: View, board: Board): ColumnHead {
     by: jobAgg.by ?? rolled?.by ?? null,
     value: jobAgg.value ?? rolled?.source ?? null,
     metric: jobAgg.metric ?? rolled?.metric ?? null,
+    nested: jobAgg.nested ?? rolled?.nested,
   };
   return {
     label: rolled ? rolledHeader(rolled) : null,

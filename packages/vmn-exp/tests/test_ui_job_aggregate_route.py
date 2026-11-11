@@ -101,3 +101,13 @@ def test_a_grouped_jobs_view_aggregates_the_rolled_values(tmp_path):
     # pooled: the children of jobs 1 and 5
     assert loss["n"] == 5 and loss["mean"] == pytest.approx((0.9 + 0.5 + 0.1 + 0.4 + 0.3) / 5)
     assert loss["value"] == pytest.approx(0.4)
+
+
+def test_job_agg_nested_is_a_known_parameter(tmp_path):
+    """Plan 35 §2: ``job_agg_nested=1`` is accepted, in the ETag, and needs ``top``."""
+    client, _ = _served(tmp_path)
+    by = "field:params.missing"
+    flat = _get(client, top="1", job_agg_by=by).headers["etag"]
+    nested = _get(client, top="1", job_agg_by=by, job_agg_nested="1")
+    assert nested.headers["etag"] != flat
+    _get(client, status=400, job_agg_nested="1")

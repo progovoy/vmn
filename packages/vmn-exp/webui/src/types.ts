@@ -310,6 +310,8 @@ export interface JobAggChoice {
   goal: "min" | "max" | null;
   /** A tail's percentile (`p90`), else null. */
   percentile: string | null;
+  /** `field:`/`kind:` units only: whether carriers at any depth count (plan 35 §2). */
+  nested?: boolean;
 }
 
 /** An Outer runs row's aggregate: `value` (null without a goal or a unit
@@ -322,6 +324,9 @@ export interface JobRolled extends JobAggChoice {
   conflicts: number;
   verstr: string | null;
   approx: boolean;
+  /** `field:`/`kind:` units only, without `nested`: the carriers left out
+   *  under another carrier (plan 35 §2), outside `n`/`of`. */
+  nested_skipped?: number;
 }
 
 /** A job's compact rollup on its Jobs-view row (plan 23 §10). */

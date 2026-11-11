@@ -187,3 +187,24 @@ describe("the value column's menu", () => {
     expect(urlParams().get("job_agg_value")).toBeNull();
   });
 });
+
+describe("the menu's nesting toggle (plan 35 §2)", () => {
+  it("checks the answered nesting and writes a pick to the URL and the request", async () => {
+    m.experimentsPaged.mockResolvedValue(jobsPage([gridWith({ ...DATES, nested: false, nested_skipped: 3 })]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    expect(cell().querySelector("[title]")?.getAttribute("title")).toMatch(/· 3 nested under another date, not counted$/);
+    openMenu();
+    expect(choice("Nested", "nearest only")).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(choice("Nested", "at any depth"));
+    await waitFor(() => expect(urlParams().get("job_agg_nested")).toBe("1"));
+    await waitFor(() => expect(lastOpts()).toEqual(expect.objectContaining({ jobAggNested: true })));
+  });
+
+  it("is offered only for units carrying a field", async () => {
+    renderExperiments("/ws/test/app/my-app?job_agg_by=children");
+    await screen.findByRole("link", { name: "lr_layers_grid" });
+    openMenu();
+    expect(within(menu()).queryByRole("group", { name: "Nested" })).toBeNull();
+  });
+});

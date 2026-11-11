@@ -102,3 +102,27 @@ describe("the URL's job_agg values", () => {
     expect(parse("job_agg_by=field:name").by).toBeNull();
   });
 });
+
+describe("nested carriers (plan 35 §2)", () => {
+  it("names the carriers left out under another one", () => {
+    expect(rolledTitle(rolled({ agg: "median", ...DATES, n: 11, of: 14, nested: false, nested_skipped: 3 })))
+      .toBe("median of 11/14 dates' own date.best_value · 3 nested under another date, not counted");
+    expect(rolledTitle(rolled({ agg: "median", ...DATES, n: 11, of: 11, nested: false, nested_skipped: 1 })))
+      .toBe("median of 11 dates' own date.best_value · 1 nested under another date, not counted");
+    expect(rolledTitle(rolled({ agg: "median", ...DATES, n: 11, of: 11, nested: false, nested_skipped: 0 })))
+      .toBe("median of 11 dates' own date.best_value");
+  });
+
+  it("says when carriers at any depth count", () => {
+    expect(rolledTitle(rolled({ agg: "median", ...DATES, n: 14, of: 14, nested: true, nested_skipped: 0 })))
+      .toBe("median of 14 dates' own date.best_value · nested dates counted");
+  });
+
+  it("reads job_agg_nested from the URL, absent the app's default", () => {
+    const parse = (q: string) => parseJobAgg(new URLSearchParams(q));
+    expect(parse("job_agg_nested=1").nested).toBe(true);
+    expect(parse("job_agg_nested=0").nested).toBe(false);
+    expect(parse("job_agg_nested=yes").nested).toBeUndefined();
+    expect(parse("").nested).toBeUndefined();
+  });
+});

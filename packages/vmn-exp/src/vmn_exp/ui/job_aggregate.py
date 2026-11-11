@@ -4,10 +4,12 @@
 A :class:`JobAgg` names it: ``agg`` (the group-by vocabulary, the tails
 ``best10``/``worst10`` following the metric's goal), ``by`` (the units:
 ``children``, ``field:<params.k|tags.k>`` — the nearest runs carrying it,
-a duplicate value a counted conflict left out —, ``kind:<tags.kind>`` or
-``runs``, every run below from the merged sketches, ``approx``), ``value``
-(each unit's subtree best or its ``own`` metric, no fallback) and
-``metric`` (default the board's main metric). A metric without a declared
+a duplicate value a counted conflict left out, a carrier under another one
+skipped and counted apart (``nested_skipped``) —, ``kind:<tags.kind>``
+or ``runs``, every run below from the merged sketches, ``approx``),
+``value`` (each unit's subtree best or its ``own`` metric, no fallback),
+``metric`` (default the board's main metric) and ``nested`` (carriers at
+any depth are units, plan 35 §2). A metric without a declared
 goal has no value (plan 32). The app's ``experiment.ui.job_aggregate`` is
 the default, a URL's values override it (:func:`job_agg_of`).
 
@@ -25,24 +27,24 @@ from vmn_exp.core.metric_summary import policy_mix
 from vmn_exp.core.metric_schema import higher_is_better, metric_goal, with_resolved_goals
 from vmn_exp.ui.job_rollup_cache import _SplitRollups
 from vmn_exp.ui.job_rollup_payload import count_fields, metric_fields, policy_fields
-from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, own_value
+from vmn_exp.ui.job_units import UnitSpec, UnitValue, carriers_below, jobs_above, own_value
 from vmn_exp.ui.job_views import child_rows
 from vmn_exp.ui.leaderboard_group_summary import TAILS, of_sorted, stats, tail_quantile
 from vmn_exp.ui.memo import LRU
 
-JobAgg = namedtuple("JobAgg", "agg by value metric",
-                    defaults=("best", "children", "best", None))
+JobAgg = namedtuple("JobAgg", "agg by value metric nested",
+                    defaults=("best", "children", "best", None, False))
 CHILDREN, RUNS = "children", "runs"
 ANSWERS = 64
 # ``runs``: the merged sketch's quantile fields (:func:`metric_fields`).
 _SKETCH = {0.5: "p50", 0.9: "p90", 0.1: "p10"}
 
 
-def job_agg_of(ui, agg=None, by=None, value=None, metric=None):
+def job_agg_of(ui, agg=None, by=None, value=None, metric=None, nested=None):
     """The :class:`JobAgg` of the app's ``experiment.ui`` *ui* with the
     given values over it; ValueError naming a bad one."""
-    given = {k: v for k, v in dict(agg=agg, by=by, value=value, metric=metric).items()
-             if v is not None}
+    given = {k: v for k, v in dict(agg=agg, by=by, value=value, metric=metric,
+                                   nested=nested).items() if v is not None}
     return JobAgg(**{**job_aggregate_of(ui), **check_job_aggregate(given, "job_agg")})
 
 
@@ -64,15 +66,24 @@ def percentile(agg, goal):
     return None if q is None else f"p{round(q * 100)}"
 
 
+def _carried(agg):
+    """Whether *agg*'s units are the runs carrying a field (``field:``/``kind:``)."""
+    return agg.by not in (CHILDREN, RUNS)
+
+
 def _choice(agg, metric, goal):
-    """What names *agg*: ``{agg, by, source, metric, goal, percentile}``."""
-    return {"agg": agg.agg, "by": agg.by, "source": agg.value, "metric": metric, "goal": goal,
-            "percentile": percentile(agg.agg, goal)}
+    """What names *agg*: ``{agg, by, source, metric, goal, percentile}``,
+    plus ``nested`` for carried units (plan 35 §2)."""
+    out = {"agg": agg.agg, "by": agg.by, "source": agg.value, "metric": metric, "goal": goal,
+           "percentile": percentile(agg.agg, goal)}
+    return {**out, "nested": agg.nested} if _carried(agg) else out
 
 
 def _payload(agg, metric, goal, **fields):
     out = {**_choice(agg, metric, goal), "value": None, "n": 0, "of": 0,
            "conflicts": 0, "verstr": None, "approx": False}
+    if _carried(agg):
+        out["nested_skipped"] = 0
     out.update(fields)
     return out
 
@@ -141,8 +152,9 @@ def _of_runs(parts, metric, agg, goal):
 class Pool:
     """One aggregate's answer over a snapshot: each job's ``rolled`` and the
     pooled header of a group of jobs (plan 34 §1). Per job it keeps plain
-    data only: its valued units and its runs' policy overrides (``runs``:
-    its tallies), read once by *entry(job)*, dropped by :meth:`freeze`."""
+    data only: its valued units, its runs' policy overrides and the keys of
+    the carriers it skipped as nested (``runs``: its tallies), read once by
+    *entry(job)*, dropped by :meth:`freeze`."""
 
     def __init__(self, agg, metric, goal, entry):
         self.agg, self.metric, self.goal = agg, metric, goal
@@ -167,7 +179,8 @@ class Pool:
         """The header of *jobs* (the latest attempt first): their pooled
         units' ``rolled`` fields, every aggregate of their values and
         ``from_earlier``; a unit key the jobs share counts from the first
-        job carrying it. {} when no unit has a value."""
+        job carrying it, a nested key from none counts as skipped. {} when
+        no unit has a value."""
         fields, ordered, earlier = self._fields(jobs)
         if not fields.get("n"):
             return {}
@@ -182,15 +195,24 @@ class Pool:
             return {}, None, 0
         read = [self._jobs[job] for job in jobs]
         if self.agg.by == RUNS:
-            parts = [part for tallies, _ in read for part in tallies]
+            parts = [part for tallies, _, _ in read for part in tallies]
             return _of_runs(parts, self.metric, self.agg.agg, self.goal), None, 0
-        keyed, earlier = _latest_wins([units for units, _ in read])
+        keyed, earlier = _latest_wins([units for units, _, _ in read])
         ordered = _ordered(keyed)
-        overrides = Counter()
-        for _, policies in read:
+        overrides, skipped = Counter(), set()
+        for _, policies, nested in read:
             overrides.update(policies)
+            skipped.update(nested)
         fields = {**_of_units(keyed, ordered, self.agg.agg, self.goal), **policy_mix(overrides)}
+        skipped.difference_update(keyed)
+        if skipped:
+            fields["nested_skipped"] = len(skipped)
         return fields, ordered, sum(1 for key in earlier if len(keyed[key]) == 1)
+
+
+def _keys(units):
+    """The unit keys of ``(verstr, key, own)`` *units* (:func:`_valued`'s)."""
+    return {verstr if key is None else key for verstr, key, _ in units}
 
 
 def _latest_wins(attempts):
@@ -269,20 +291,27 @@ class JobAggregates:
         metric, goal, (base, tree, _, parts) = self._inputs(snapshot, schema, agg)
         entry = None
         if metric is not None and agg.by == RUNS:
-            entry = lambda job: (list(parts(job)), None)  # noqa: E731
+            entry = lambda job: (list(parts(job)), None, ())  # noqa: E731
         elif metric is not None:
             value = UnitValue(agg.value, metric, higher_is_better(goal), parts, tree.jobs)
             found = self._units_of(snapshot, base, tree, agg, metric)
-            entry = lambda job: (_valued(found(job), value),  # noqa: E731
-                                 policy_fields(parts(job), metric).get("policies") or {})
+
+            def entry(job):
+                units, skipped = found(job)
+                return (_valued(units, value),
+                        policy_fields(parts(job), metric).get("policies") or {},
+                        _keys(skipped))
         return Pool(agg, metric, goal, entry)
 
     def _units_of(self, snapshot, base, tree, agg, metric):
-        """``job -> [(verstr, key, own)]``: its units by *agg*'s ``by``."""
+        """``job -> ([(verstr, key, own)], skipped)``: its units by *agg*'s
+        ``by`` and the carriers it skips as nested."""
         bucket = self._cache._base(snapshot)[1]
         if agg.by == CHILDREN:
             patched = base.patched(bucket)
-            return lambda job: [(row["verstr"], None, own_value(row, metric))
-                                for row in child_rows(base, patched, job)]
+            return lambda job: ([(row["verstr"], None, own_value(row, metric))
+                                 for row in child_rows(base, patched, job)], ())
         static, live = self._units.sources(snapshot.app_name, base, bucket, (agg.by, metric))
-        return lambda job: carriers_below(job, tree, (static.tallies, live))
+        sources = (static.tallies, live)
+        above = jobs_above(tree, sources)
+        return lambda job: carriers_below(job, tree, sources, agg.nested, above)

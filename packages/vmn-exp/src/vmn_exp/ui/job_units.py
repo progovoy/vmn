@@ -11,7 +11,9 @@ tally: per base, moved across generations by the cache's deltas, a live
 overlay per time bucket. The field is the unit's own, so a change to it is a
 delta of the unit itself. A removal never loses anything (nothing is an
 extreme), so these tallies are never rebuilt. Finding a job's units walks
-only the jobs above them (:func:`carriers_below`), never its leaf rows.
+only the jobs above a tally (:func:`carriers_below`), never its leaf rows;
+a carrier under another one is a unit only with ``nested`` (plan 35 §2),
+else it is skipped and counted.
 
 A unit's value (:class:`UnitValue`) is its own metric (``own``, no
 fallback: missing is missing) or the best over it and its subtree
@@ -81,24 +83,41 @@ class UnitTally:
         return False
 
 
-def carriers_below(job, tree, sources):
-    """``[(verstr, key, own value)]``: the nearest runs below *job* carrying
-    the field, from the per-parent tallies in *sources*, walking down only
-    the (unarchived) jobs that do not carry it."""
-    out, stack, seen = [], [job], {job}
+def carriers_below(job, tree, sources, nested=False, above=None):
+    """``(units, skipped)``, each ``[(verstr, key, own value)]``: the runs
+    below *job* carrying the field, from the per-parent tallies in
+    *sources*, walking down the (unarchived) jobs on the way to a tally
+    (*above*: :func:`jobs_above`). The nearest carrier on each branch is a
+    unit; one under another carrier is a unit too when *nested* (plan 35
+    §2), else it is skipped."""
+    above = jobs_above(tree, sources) if above is None else above
+    units, skipped = [], []
+    stack, seen = [(job, False)], {job}
     while stack:
-        parent = stack.pop()
+        parent, under = stack.pop()
         found = {}
         for tallies in sources:
             if parent in tallies:
                 found.update(dict.fromkeys(tallies[parent].units))
-        out.extend(found)
+        (skipped if under and not nested else units).extend(found)
         carrying = {unit[0] for unit in found}
         for kid in tree.nested.get(parent, ()):
-            if kid not in carrying and kid not in seen and kid not in tree.archived:
+            if kid in above and kid not in seen and kid not in tree.archived:
                 seen.add(kid)
-                stack.append(kid)
-    return out
+                stack.append((kid, under or kid in carrying))
+    return units, skipped
+
+
+def jobs_above(tree, sources):
+    """The jobs holding a tally of *sources* and every job above them: the
+    only ones a walk down to a carrier passes."""
+    above = set()
+    for tallies in sources:
+        for parent in tallies:
+            while parent is not None and parent not in above:
+                above.add(parent)
+                parent = tree.parent(parent)
+    return above
 
 
 class UnitValue:

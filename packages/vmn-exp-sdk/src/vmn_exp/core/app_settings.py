@@ -335,13 +335,15 @@ def tree_columns_of(ui):
 # ``ui.job_aggregate`` (plan 31 §2): the Outer runs row's aggregate ``agg``
 # of one value per unit (``by``: ``children``, ``runs``, ``field:<params.k|
 # tags.k>``, ``kind:<tags.kind>``), each its subtree's best or its own
-# ``metric`` (``value``).
+# ``metric`` (``value``); ``nested`` counts carriers at any depth, not only
+# the nearest on each branch (plan 35 §2).
 JOB_AGG_BY = ("children", "runs")
 JOB_AGG_VALUES = ("best", "own")
 _JOB_AGG_FIELDS = {
     "agg": lambda v: v in GROUP_AGGREGATES,
     "value": lambda v: v in JOB_AGG_VALUES,
     "metric": lambda v: isinstance(v, str) and bool(v.strip()),
+    "nested": lambda v: isinstance(v, bool),
 }
 
 
@@ -361,14 +363,14 @@ def check_job_agg_by(by, where="ui.job_aggregate.by"):
 
 
 def check_job_aggregate(conf, where="ui.job_aggregate"):
-    """*conf* (``{agg?, by?, value?, metric?}``, its ``by`` normalized) when
-    valid, else SettingsError."""
+    """*conf* (``{agg?, by?, value?, metric?, nested?}``, its ``by``
+    normalized) when valid, else SettingsError."""
     _check_mapping(conf, where)
     for key, value in conf.items():
         if key == "by":
             continue
         if key not in _JOB_AGG_FIELDS:
-            raise SettingsError(f"unknown field {where}.{key}; one of agg, by, value, metric")
+            raise SettingsError(f"unknown field {where}.{key}; one of agg, by, value, metric, nested")
         if not _JOB_AGG_FIELDS[key](value):
             raise SettingsError(f"invalid {where}.{key}: {value!r}")
     return {**conf, "by": check_job_agg_by(conf["by"], f"{where}.by")} if "by" in conf else conf
