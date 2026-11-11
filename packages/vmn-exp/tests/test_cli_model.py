@@ -85,7 +85,7 @@ def _make_args(**kwargs):
 
 def _invoke(tmp_path, args_kwargs, env=None):
     """Call model_run_without_repo(args) with VMN_EXPERIMENT_DIR set to tmp_path."""
-    from vmn_exp.registry.cli import model_run_without_repo
+    from vmn_exp.cli.model_cmd import model_run_without_repo
 
     args = _make_args(dir=str(tmp_path), **args_kwargs)
     old_env = {}
@@ -319,7 +319,7 @@ def test_delete_with_alias_refused(tmp_path, capsys):
 
 def test_git_free_via_experiment_dir(tmp_path, monkeypatch, capsys):
     """model_run_without_repo works when VMN_EXPERIMENT_DIR is set (no --dir)."""
-    from vmn_exp.registry.cli import model_run_without_repo
+    from vmn_exp.cli.model_cmd import model_run_without_repo
 
     monkeypatch.setenv("VMN_EXPERIMENT_DIR", str(tmp_path))
 

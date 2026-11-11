@@ -6,8 +6,8 @@ import sys
 from vmn_exp.core.app_settings import SettingsError, check_settings
 from vmn_exp.core.app_settings_store import read_settings_text, write_settings
 from vmn_exp.cli.intent_arg import read_file_arg
-from vmn_exp.registry.cli import _get_storage
-from vmn_exp.registry.cli_parser import _add_storage_args
+from vmn_exp.cli.model_cmd import _get_storage
+from vmn_exp.cli.storage_flags import _add_storage_args
 
 
 def add_settings_parser(subparsers):

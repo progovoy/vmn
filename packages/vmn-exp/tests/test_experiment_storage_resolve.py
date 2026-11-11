@@ -90,7 +90,7 @@ def test_in_repo_default_sdk_model_visible_to_vmn_model_list(tmp_path, monkeypat
 
     # Call the CLI handler with *no* --dir and no env override.
     # _get_storage must auto-detect the repo root.
-    from vmn_exp.registry.cli import model_run_without_repo
+    from vmn_exp.cli.model_cmd import model_run_without_repo
     import io, contextlib
 
     args = SimpleNamespace(

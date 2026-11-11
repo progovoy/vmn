@@ -29,7 +29,7 @@ from vmn_exp.registry.store import (
     artifact_uri_of, ensure_model, list_models, model_kind, register_version,
 )
 from vmn_exp.registry.view import model_state, resolve_ref
-from vmn_exp.registry.cli_parser import add_model_parser  # noqa: F401  (re-exported)
+from vmn_exp.cli.model_parser import add_model_parser  # noqa: F401  (re-exported)
 
 _LOG = logging.getLogger(__name__)
 

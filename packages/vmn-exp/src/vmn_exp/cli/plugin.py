@@ -279,7 +279,7 @@ def register_dev_version() -> None:
 def register_all() -> None:
     """Every command `vmn-exp` serves. Idempotent."""
     from vmn_exp.cli.experiment import READ_ONLY_ACTIONS as EXP_READ_ONLY_ACTIONS
-    from vmn_exp.registry.cli import add_model_parser, model_run_without_repo
+    from vmn_exp.cli.model_cmd import add_model_parser, model_run_without_repo
 
     register_dev_version()
     _register(CommandSpec(

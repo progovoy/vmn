@@ -4,8 +4,8 @@ import sys
 
 from vmn_exp.cli.views import dumps
 from vmn_exp.core.refs import resolve_experiment
-from vmn_exp.registry.cli import _get_storage
-from vmn_exp.registry.cli_parser import _add_storage_args
+from vmn_exp.cli.model_cmd import _get_storage
+from vmn_exp.cli.storage_flags import _add_storage_args
 from vmn_exp.reports import comments
 
 

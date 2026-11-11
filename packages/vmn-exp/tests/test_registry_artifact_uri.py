@@ -52,7 +52,7 @@ def test_the_ui_detail_keeps_an_absolute_uri(tmp_path):
 
 
 def test_model_resolve_keeps_an_absolute_uri(tmp_path, capsys):
-    from vmn_exp.registry.cli import _cmd_resolve
+    from vmn_exp.cli.model_cmd import _cmd_resolve
 
     storage = _registered(tmp_path, ABSOLUTE[0])
     assert _cmd_resolve(storage, SimpleNamespace(model_name="clf@1", json=True)) == 0

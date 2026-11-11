@@ -1,5 +1,5 @@
 """The ``sweep`` command's argparse subparser."""
-from vmn_exp.core.storage_resolve import add_storage_flags
+from vmn_exp.cli.storage_flags import add_storage_flags
 
 SWEEP_ACTIONS = ("create", "agent", "status")
 

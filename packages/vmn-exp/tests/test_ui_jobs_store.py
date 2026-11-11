@@ -13,8 +13,8 @@ import pytest
 from vmn_exp.cli.manage import experiment_manage
 from vmn_exp.cli.rewind import experiment_rewind
 from vmn_exp.core.writer import append_to_log, create_log_entry, flush_log
-from vmn_exp.registry.cli import model_run_without_repo
-from vmn_exp.registry.cli_parser import add_model_parser
+from vmn_exp.cli.model_cmd import model_run_without_repo
+from vmn_exp.cli.model_parser import add_model_parser
 from vmn_exp.registry.log import read_entries
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage

@@ -121,3 +121,24 @@ def test_vmn_names_no_plugin_module():
     # in a string would be an import edge the AST scan above cannot see.
     source = (SRC["vmn"] / "version_stamp" / "cli" / "plugins.py").read_text()
     assert "vmn_exp" not in source
+
+
+_PARSER_BUILDERS = ("add_argument", "add_parser", "add_subparsers")
+
+
+def _parser_builder_calls(path):
+    tree = ast.parse(path.read_text(), filename=str(path))
+    return [
+        f"{_module_name(path)}:{node.lineno} .{node.func.attr}"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in _PARSER_BUILDERS
+    ]
+
+
+def test_sdk_wheel_builds_no_argparse_parsers():
+    # Command-line parsers belong to the vmn-exp command, not the job wheel.
+    calls = [c for path in sorted((SRC["vmn-exp-sdk"] / "vmn_exp").rglob("*.py"))
+             for c in _parser_builder_calls(path)]
+    assert calls == []

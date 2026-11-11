@@ -1,18 +1,8 @@
-"""Argparse setup of the ``vmn-exp model`` command (handlers: ``registry/cli.py``)."""
+"""Argparse setup of the ``vmn-exp model`` command (handlers: ``cli/model_cmd.py``)."""
 from __future__ import annotations
 
-from vmn_exp.core.storage_resolve import add_storage_flags
+from vmn_exp.cli.storage_flags import _add_storage_args
 from vmn_exp.registry.names import KINDS
-
-
-def _add_storage_args(parser):
-    """Add common storage flags to a subcommand parser."""
-    parser.add_argument(
-        "--dir",
-        default=None,
-        help="Experiment storage directory (overrides VMN_EXPERIMENT_DIR)",
-    )
-    add_storage_flags(parser)
 
 
 def add_model_parser(subparsers):

@@ -63,7 +63,7 @@ def test_snapshot_storage_bucket_shorthand_uses_the_vmn_root(s3, tmp_path):
 
 
 def test_model_storage_honours_store(s3):
-    from vmn_exp.registry.cli import _get_storage
+    from vmn_exp.cli.model_cmd import _get_storage
 
     args = SimpleNamespace(dir=None, store=f"s3://{BUCKET}/models",
                            bucket=None, prefix=None, endpoint_url=None)

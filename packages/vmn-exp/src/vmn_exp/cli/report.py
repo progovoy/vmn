@@ -7,8 +7,8 @@ import os
 import sys
 
 from vmn_exp.cli import report_export
-from vmn_exp.registry.cli import _get_storage
-from vmn_exp.registry.cli_parser import _add_storage_args
+from vmn_exp.cli.model_cmd import _get_storage
+from vmn_exp.cli.storage_flags import _add_storage_args
 from vmn_exp.reports import store
 
 
