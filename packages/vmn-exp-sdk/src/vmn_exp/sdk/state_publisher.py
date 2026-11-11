@@ -28,7 +28,6 @@ from vmn_exp.core.state_cas import (
     compare_and_save_token,
     dump_state,
     finished_by_another,
-    pull_record,
     split_storage,
 )
 from vmn_exp.core.status import RUN_STATE_FILE
@@ -77,9 +76,17 @@ class RunStatePublisher:
 
     def _holds_record(self):
         """Whether the local side may be written: a record only the remote
-        holds so far (a run resumed on another host) is fetched first."""
-        return id(self._inline) in self._tokens or pull_record(
-            self._storage, self._inline, *self._where[:2])
+        holds so far (a run resumed on another host, or on a fresh log
+        buffer) gets a home there first — the storage's own, for a buffer
+        only the record's metadata."""
+        if id(self._inline) in self._tokens or self._inline is self._storage:
+            return True
+        app_name, verstr = self._where[:2]
+        self._storage._ensure_local_record(app_name, verstr)
+        if self._inline.exists(app_name, verstr):
+            return True
+        _LOGGER.debug(f"vmn: no record of {verstr} here or remotely; its state is dropped")
+        return False
 
     def _upload(self, item):
         dumped, final = item
