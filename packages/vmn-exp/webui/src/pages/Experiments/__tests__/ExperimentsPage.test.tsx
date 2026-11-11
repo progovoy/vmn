@@ -136,4 +136,25 @@ describe("Jobs | All runs", () => {
     renderExperiments("/ws/test/app/my-app?view=all");
     expect(await screen.findByText(/No runs yet in my\/app/)).toBeInTheDocument();
   });
+
+  it("without facets the Jobs view still lists every top-level run", async () => {
+    renderExperiments();
+    await screen.findByRole("link", { name: "grid" });
+    await screen.findByRole("link", { name: "solo" });
+    expect(m.experimentsPaged).toHaveBeenCalledWith("test", "my-app", expect.objectContaining({ top: true }));
+  });
+});
+
+describe("an app without outer runs", () => {
+  it("an app without outer runs opens the runs board with a metric column", async () => {
+    m.facets.mockResolvedValue({ ...facets, metric_keys: ["loss"], parented: 0, jobs: 0, singles: 2 });
+    m.metricsSchema.mockResolvedValue({ loss: { goal: "min" } });
+    m.experimentsColumns.mockImplementation(() => new Promise(() => {}));
+    m.experimentsPaged.mockResolvedValue(jobsPage([singleRow(1, { name: "solo", metrics: { loss: 0.3 } })]));
+    renderExperiments();
+    await screen.findByRole("link", { name: "solo" });
+    const headers = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim() ?? "");
+    expect(headers.some((h) => h.startsWith("loss"))).toBe(true);
+    expect(pressed("Runs")).toBe("true");
+  });
 });

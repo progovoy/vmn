@@ -20,18 +20,23 @@ export const PREFETCH_DELAY_MS = 1_000;
 type View = ReturnType<typeof useLeaderboardView>;
 export type TopView = "jobs" | "singles" | "top" | "all";
 
+/** The app's top views besides All runs: Outer runs and Single runs, the
+ *  single runs alone (no outer runs), or every top-level run (Runs). */
+export type AppShape = "jobs" | "singles" | "top";
+
+export const appShape = (kind: JobsKindState): AppShape =>
+  kind.kind !== null ? "jobs" : kind.singlesOnly ? "singles" : "top";
+
 /** Each top view's first-page filter as its board builds it after a switch:
  *  the filters stay, the sort/order/grouping are dropped (BOARD_ONLY_PARAMS). */
-export function viewFilters(view: View, withJobs: boolean): Partial<Record<TopView, RowsFilter>> {
+export function viewFilters(view: View, shape: AppShape): Partial<Record<TopView, RowsFilter>> {
   const v = { ...view, sort: null, order: undefined };
   const matchSubtree = hasSearch(view) || undefined;
   const all = boardFilter(v, NO_GROUP, { scope: undefined, top: undefined });
-  if (!withJobs) return { top: boardFilter(v, NO_GROUP, { top: true, matchSubtree }), all };
-  return {
-    jobs: boardFilter(v, NO_GROUP, { top: "jobs" as const, matchSubtree }),
-    singles: boardFilter(v, NO_GROUP, { scope: undefined, top: "singles" as const }),
-    all,
-  };
+  if (shape === "top") return { top: boardFilter(v, NO_GROUP, { top: true, matchSubtree }), all };
+  const singles = boardFilter(v, NO_GROUP, { scope: undefined, top: "singles" as const });
+  if (shape === "singles") return { singles, all };
+  return { jobs: boardFilter(v, NO_GROUP, { top: "jobs" as const, matchSubtree }), singles, all };
 }
 
 /** *shown* is the view on screen (never prefetched; a preset, plan 28
@@ -39,11 +44,11 @@ export function viewFilters(view: View, withJobs: boolean): Partial<Record<TopVi
 export function useViewPrefetch(ws: string, app: string, view: View, shown: TopView | Preset, kind: JobsKindState) {
   const client = useQueryClient();
   const known = kind.counts !== null;
-  const withJobs = kind.kind !== null;
+  const shape = appShape(kind);
   const filters = useMemo(
-    () => (known ? viewFilters(view, withJobs) : {}),
+    () => (known ? viewFilters(view, shape) : {}),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [known, withJobs, view.status, view.query, view.search, view.branch, view.archived],
+    [known, shape, view.status, view.query, view.search, view.branch, view.archived],
   );
   const hash = JSON.stringify(filters);
   useEffect(() => {

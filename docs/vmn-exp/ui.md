@@ -488,6 +488,10 @@ to the app name has `Outer runs (N)`, `Single runs (N)` and `All runs`. The
 counts are the app's; under a filter (`q`, status, a search or a preset) the
 shown side counts what its board matches and the other side shows no number.
 The last view is remembered per app, and `view=`/`kind=` in the URL win.
+An app with single runs and no outer runs reads `Runs | All runs` and opens
+`Runs` on the Single runs board: its goal metrics are columns, as in All runs.
+An app whose runs are not counted yet (or that has none) lists every
+top-level run under `Runs` in the outer-run table.
 - **Outer runs** has one row per top-level outer run. Each row shows:
   - its tree status, and a run bar with `1,412/2,000 · 3 failed · 2 stuck · 41/min · ETA 14m`. A finished outer run reads `finished 3d ago`, one that ended short reads `ended · 180 never started`, and one with running runs but no completion in 10 min reads `stalled`. Once the outer run itself has ended (succeeded, failed or stuck), its never-started runs are settled: they leave the waiting count (the bar's empty track is then what never ran), and its stuck runs read `N lost`, apart from `N failed` (only those make the tree status `failed`; the bar draws both in its failed share, what did not finish), and the status reads `succeeded · 1 lost` (see [settled runs](experiments.md#outer--inner-jobs-sweeps)). A lost run's own pill reads `stuck · lost`, on the board, in the tree and on its page.
   - An outer run whose own row carries finite metrics `progress` and `progress_total` (`run.set_progress(done, total, unit)`; the unit is the `progress_unit` param) declares its progress: the bar fills that share, the line leads with it and the runs follow (`41/60 dates · 1,415 runs · 3 failed · 20 dates/h · ETA 14m`), and the rate and ETA are the declared progress since the outer run started. Use it when the inner-run count grows as work gets planned. Metrics under other names count once `experiment.ui.progress: {done: <metric>, total: <metric>, unit: <label>}` (conf.yml or the [store settings](server.md#app-settings)) names them; a settings change shows at once.
