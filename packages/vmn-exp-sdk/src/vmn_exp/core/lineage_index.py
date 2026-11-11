@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """The digest and URI maps lineage joins rows over, and the ``vmn://``
 artifact URIs and digests they are keyed by (see :mod:`vmn_exp.core.lineage`).
+Inputs at an absolute location (``s3://…``, ``/data/…``) are also keyed by
+it, for the registry versions registered there.
 
 Pure: no storage, no clock.
 """
 from operator import itemgetter
 
-from vmn_exp.registry.names import parse_registry_uri
+from vmn_exp.registry.names import absolute_artifact_path, parse_registry_uri
 
 SCHEME = "vmn://"
-_KINDS = ("producers", "digest_consumers", "uri_consumers")
+_KINDS = ("producers", "digest_consumers", "uri_consumers", "location_consumers")
 
 
 def artifact_ref_uri(app_name, verstr, path):
@@ -52,6 +54,7 @@ class LineageIndex:
         self.producers = {}  # digest -> [(verstr, artifact path)]
         self.digest_consumers = {}  # digest -> [(verstr, input name, input digest)]
         self.uri_consumers = {}  # (app, verstr) -> [(verstr, input name, input digest, path)]
+        self.location_consumers = {}  # absolute URI -> [(verstr, input name, input digest)]
         for row in self.row_list:
             self.rows[row["verstr"]] = row
             for kind, key, entry in self.entries(row):
@@ -73,9 +76,13 @@ class LineageIndex:
             if ref:
                 found.append(("uri_consumers", ref[:2], (verstr, name, inp.get("digest"), ref[2])))
                 continue
+            if parse_registry_uri(inp.get("uri")):
+                continue
             digest = normalize_digest(inp.get("digest"))
-            if digest and not parse_registry_uri(inp.get("uri")):
+            if digest:
                 found.append(("digest_consumers", digest, (verstr, name, inp.get("digest"))))
+            if absolute_artifact_path(inp.get("uri")):
+                found.append(("location_consumers", inp["uri"], (verstr, name, inp.get("digest"))))
         return found
 
     @classmethod

@@ -20,27 +20,35 @@ from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries, read_uses
 from vmn_exp.registry.names import version_record_name
 from vmn_exp.registry.store import get_version, model_kind, model_records, run_of
-from vmn_exp.registry.view import run_models
+from vmn_exp.registry.view import by_location, run_models
 
 
 class RegistryLinks:
     """The registry lookups lineage makes, read from *storage*:
-    :func:`resolve_lineage`'s *registry* (``models_of``, ``version_live``)
-    and :func:`version_lineage`'s (``version``, ``kind``, ``status``,
+    :func:`resolve_lineage`'s *registry* (``models_of``, ``location_versions``,
+    ``version_live``) and :func:`version_lineage`'s (``version``, ``kind``, ``status``,
     ``uses``). The run → versions map is read once per walk, not once per
     node. The ui passes a snapshot with the same methods instead
     (:mod:`vmn_exp.ui.registry_snapshot`), so a request reads no store."""
 
     def __init__(self, storage):
         self.storage = storage
-        self._run_models = None
+        self._run_models = self._locations = None
         self._records = {}  # model -> its listed records
         self._status = {}  # model -> {version: status}
 
     def models_of(self, app, verstr):
+        return self._models().get((app, verstr), ())
+
+    def location_versions(self, uri):
+        if self._locations is None:
+            self._locations = by_location(self._models())
+        return self._locations.get(uri, ())
+
+    def _models(self):
         if self._run_models is None:
             self._run_models = run_models(self.storage)
-        return self._run_models.get((app, verstr), ())
+        return self._run_models
 
     def version_live(self, name, n):
         """Whether version *n* of *name* is listed and not deleted: a version

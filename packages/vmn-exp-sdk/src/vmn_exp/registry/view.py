@@ -30,6 +30,7 @@ from vmn_exp.registry.fold import fold_registry
 from vmn_exp.registry.log import read_entries
 from vmn_exp.registry.names import (
     HEADER_RECORD,
+    absolute_artifact_path,
     parse_ref,
     parse_version_record,
 )
@@ -154,6 +155,17 @@ def run_models(storage) -> dict:
     """``{(app, verstr): [version entry]}`` of every run with live versions
     (shared cache: read, never mutate)."""
     return _run_models(storage)
+
+
+def by_location(run_models) -> dict:
+    """``{absolute artifact_path: [((app, verstr), version entry)]}`` of a
+    :func:`run_models` map: the versions registered at their own location."""
+    found = {}
+    for run, versions in run_models.items():
+        for version in versions:
+            if absolute_artifact_path(version.get("artifact_path")):
+                found.setdefault(version["artifact_path"], []).append((run, version))
+    return found
 
 
 # ---------------------------------------------------------------------------

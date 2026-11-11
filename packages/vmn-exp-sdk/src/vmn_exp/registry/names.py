@@ -35,6 +35,7 @@ _MODEL_CHARS_RE = re.compile(r'^[A-Za-z0-9_][A-Za-z0-9_.]*$')
 _VERSION_SUFFIX_RE = re.compile(r'\.v\d+$')
 _VERSION_RECORD_RE = re.compile(r'^v([1-9]\d*)$')
 _ALIAS_CHARS_RE = re.compile(r'^[A-Za-z0-9_.\-]+$')
+_ABSOLUTE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
 
 
 def valid_model_name(name: str) -> bool:
@@ -116,3 +117,9 @@ def parse_registry_uri(uri) -> tuple[str, int] | None:
         return None
     return m.group(1), int(m.group(2))
 
+
+
+def absolute_artifact_path(path) -> bool:
+    """Whether a version's *artifact_path* names its own location (a URI of
+    any scheme, or an absolute path) rather than a file of its run's record."""
+    return isinstance(path, str) and bool(_ABSOLUTE_URI.match(path) or path.startswith("/"))

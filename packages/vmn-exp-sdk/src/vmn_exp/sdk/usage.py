@@ -6,7 +6,9 @@ A use writes two things:
   versions of one model both survive the latest-wins input fold). A version
   backed by a run artifact gets the ``vmn://`` URI ``run.use_artifact`` would
   record, with the producer output's digest, so lineage links the consumer to
-  its producer run; a reference dataset gets ``vmn-registry://<name>@<N>``.
+  its producer run; one at an absolute ``artifact_path`` (``s3://…``,
+  ``/data/…``) gets that location, which lineage links through the registry;
+  a reference dataset gets ``vmn-registry://<name>@<N>``.
 * a ``use`` entry in the registry's ``uses`` record — best-effort: a
   failed registry write is warned about, never raised.
 
@@ -24,7 +26,7 @@ from vmn_exp.core.best_effort import BestEffort
 from vmn_exp.core.lineage import artifact_ref_uri
 from vmn_exp.registry.datasets import producer_output
 from vmn_exp.registry.log import record_use
-from vmn_exp.registry.names import parse_ref, registry_uri
+from vmn_exp.registry.names import absolute_artifact_path, parse_ref, registry_uri
 from vmn_exp.registry.store import model_kind, run_of
 from vmn_exp.registry.view import resolve_ref
 from vmn_exp.sdk import context
@@ -95,7 +97,9 @@ def _version_input(storage, meta, kind) -> dict:
     name, n = meta["model"], meta["n"]
     uri, digest = registry_uri(name, n), meta.get("digest")
     producer, path = run_of(meta), meta.get("artifact_path")
-    if producer and path:
+    if absolute_artifact_path(path):
+        uri = path
+    elif producer and path:
         uri = artifact_ref_uri(*producer, path)
         # A copied dataset recorded its producer's digest; a model did not.
         digest = digest or (producer_output(storage, *producer, path) or {}).get("digest")

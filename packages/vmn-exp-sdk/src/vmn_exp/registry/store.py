@@ -26,8 +26,6 @@ not import ``version_stamp.*`` except ``version_stamp.api`` (rule 11).
 """
 from __future__ import annotations
 
-import re
-
 from vmn_exp._base import yaml_safe_load
 from vmn_exp.core.record_format import readable, stamped
 from vmn_exp.registry.fold import now_iso
@@ -37,13 +35,13 @@ from vmn_exp.storage.s3_base import parallel_map
 from vmn_exp.registry.names import (
     HEADER_RECORD,
     KINDS,
+    absolute_artifact_path,
     parse_version_record,
     valid_model_name,
     version_record_name,
 )
 
 _MAX_REGISTER_RETRIES = 200
-_ABSOLUTE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://")
 
 
 def registry_storage(storage):
@@ -105,7 +103,7 @@ def artifact_uri_of(storage, meta) -> str | None:
     path = (meta or {}).get("artifact_path")
     if not path:
         return None
-    if _ABSOLUTE_URI.match(path) or path.startswith("/"):
+    if absolute_artifact_path(path):
         return path
     run = run_of(meta)
     return storage.artifact_uri(*run, path) if run else None

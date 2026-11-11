@@ -26,7 +26,7 @@ from vmn_exp.registry.store import (
     complete_records, get_versions, header_kind, list_versions, load_header, registry_storage,
     run_of,
 )
-from vmn_exp.registry.view import version_entry
+from vmn_exp.registry.view import by_location, version_entry
 from vmn_exp.storage.s3_base import parallel_map
 
 REFRESH_SEC = 30.0
@@ -72,6 +72,7 @@ class RegistrySnapshot:
     def __init__(self, models):
         self._models = models
         self._run_models = _run_models(models)
+        self._locations = by_location(self._run_models)
 
     @classmethod
     def read(cls, storage, previous=None):
@@ -80,6 +81,9 @@ class RegistrySnapshot:
 
     def models_of(self, app, verstr):
         return self._run_models.get((app, verstr), ())
+
+    def location_versions(self, uri):
+        return self._locations.get(uri, ())
 
     def version_live(self, name, n):
         return self.version(name, n) is not None and self.status(name, n) != "deleted"

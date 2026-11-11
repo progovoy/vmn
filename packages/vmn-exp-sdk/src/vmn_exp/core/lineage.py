@@ -14,6 +14,10 @@ lineage is a join over rows: no log is read. Two kinds of edge:
   paths ``outputs`` rows are keyed by. ``<app>`` is the tag form (``/`` →
   ``-``; app names never contain ``-``).
 * **digest** — any other input whose digest equals an output's sha256.
+* **location** (with a *registry*) — an input at an absolute URI or path
+  (``s3://…``, ``/data/…``) links to the run that registered a version
+  there, as a ``uri`` link: the version its input is named after
+  (``<name>@<N>``), else every one registered there.
 
 A ``vmn-registry://<name>@<N>`` input (a reference dataset, which no run
 made) is no edge: it is listed in ``datasets`` instead.
@@ -33,35 +37,55 @@ from vmn_exp.core.lineage_index import (  # noqa: F401 (re-exported)
     normalize_digest,
     parse_artifact_uri,
 )
-from vmn_exp.registry.names import parse_registry_uri
+from functools import partial
+
+from vmn_exp.registry.names import absolute_artifact_path, parse_registry_uri
 
 DEFAULT_LIMIT = 100
 
 
-def _upstream_groups(app_name, row, index):
+def _upstream_groups(app_name, row, index, registry=None):
     """``(group, context, edges)`` of the runs *row* consumed from; *edges*
     yields ``((app, verstr), link)`` lazily. *group* (None: never repeats)
     and *context* determine the links, see :meth:`_Walk._walked`."""
     for name, inp in sorted((row.get("inputs") or {}).items()):
         inp = inp or {}
-        ref = parse_artifact_uri(inp.get("uri"))
+        uri = inp.get("uri")
+        ref = parse_artifact_uri(uri)
         if ref:
             yield None, None, [(ref[:2], (name, ref[2], inp.get("digest"), "uri"))]
-        elif not parse_registry_uri(inp.get("uri")):
+        elif not parse_registry_uri(uri):
             digest = normalize_digest(inp.get("digest"))
             producers = index.producers.get(digest, ())
             yield ("producers", digest), (name, inp.get("digest")), (
                 ((app_name, verstr), (name, path, inp.get("digest"), "digest"))
                 for verstr, path in producers
             )
+            if registry is not None and absolute_artifact_path(uri):
+                yield None, None, [(run, (name, uri, inp.get("digest"), "uri"))
+                                   for run in _registered_runs(registry, uri, name)]
 
 
-def _downstream_groups(app_name, row, index):
+def _registered_runs(registry, uri, name):
+    """The runs that registered a version at *uri*: the one input *name*
+    names (``<model>@<N>``), else every one."""
+    found = registry.location_versions(uri)
+    named = [run for run, version in found if _ref(version) == name]
+    return named or [run for run, _ in found]
+
+
+def _ref(version):
+    return f"{version['model']}@{version['version']}"
+
+
+def _downstream_groups(app_name, row, index, registry=None):
     """``(group, context, edges)`` of the runs that consumed *row*'s outputs."""
     yield None, None, (
         ((app_name, verstr), (name, path, digest, "uri"))
         for verstr, name, digest, path in index.uri_consumers.get((app_name, row["verstr"]), ())
     )
+    if registry is not None and index.location_consumers:
+        yield None, None, _location_consumers(app_name, row["verstr"], index, registry)
     for path, out in sorted(index.outputs_of(row["verstr"]).items()):
         digest = normalize_digest((out or {}).get("digest"))
         consumers = index.digest_consumers.get(digest, ()) if digest else ()
@@ -69,6 +93,20 @@ def _downstream_groups(app_name, row, index):
             ((app_name, verstr), (name, path, logged, "digest"))
             for verstr, name, logged in consumers
         )
+
+
+def _location_consumers(app_name, verstr, index, registry):
+    """``((app, verstr), link)`` of the consumers of the versions run *verstr*
+    registered at an absolute location, but not of those naming another
+    version registered there (a retrained model at the same URI)."""
+    for version in registry.models_of(app_name, verstr):
+        path = version.get("artifact_path")
+        if path not in index.location_consumers:
+            continue
+        others = {_ref(other) for _, other in registry.location_versions(path)} - {_ref(version)}
+        for consumer, name, digest in index.location_consumers[path]:
+            if name not in others:
+                yield (app_name, consumer), (name, path, digest, "uri")
 
 
 def _link(name, path, digest, via):
@@ -184,16 +222,17 @@ def resolve_lineage(
     most *limit* nodes. *datasets* lists the run's ``vmn-registry://`` inputs.
 
     *registry* (``models_of(app, verstr)`` → the live versions registered from
-    a run; ``version_live(name, n)``) adds ``model``/``version``/``kind`` to
-    each upstream ``uri`` link naming a registered artifact, and each
-    dataset's ``found``. Raises KeyError when the run itself is unknown.
+    a run; ``location_versions(uri)`` → ``[((app, verstr), version)]`` of the
+    live versions registered at absolute *uri*; ``version_live(name, n)``)
+    adds the location links, ``model``/``version``/``kind`` to each upstream
+    ``uri`` link naming a registered artifact, and each dataset's ``found``. Raises KeyError when the run itself is unknown.
     """
     index = index_for(app_name)
     if index is None or verstr not in index.rows:
         raise KeyError(f"Experiment '{verstr}' not found for {app_name}")
     start = (app_name, verstr)
     walks = [
-        _Walk(start, index_for, edges, status_of, limit)
+        _Walk(start, index_for, partial(edges, registry=registry), status_of, limit)
         for edges in (_upstream_groups, _downstream_groups)
     ]
     upstream, downstream = (w.run(max(int(depth), 1)) for w in walks)
