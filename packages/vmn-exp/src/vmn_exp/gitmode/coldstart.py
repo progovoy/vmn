@@ -2,15 +2,21 @@
 """Auto-initialize vmn for ``start_run`` in a fresh repo — locally only.
 
 ``vmn-exp create``/``run`` init the repo and stamp a ``0.0.0`` baseline on first
-use; the SDK does the same through the very same CLI helpers. Unlike the CLI it
-never pushes: a training script must not publish commits and tags as a side
-effect (and must not crash in a checkout that has no remote at all). The
+use; the SDK does the same through the very same helper (``init_tracking``).
+Unlike the CLI, which pushes when there is a remote, it never pushes: a
+training script must not publish commits and tags as a side effect (and must
+not crash in a checkout that has no remote at all). The
 baseline commit and tag stay local until the user pushes them
 (``git push --follow-tags``) or the next ``vmn stamp`` does.
 """
 import contextlib
 
-from version_stamp.api import VMN_BE_TYPE_GIT, get_repo_lock, resolve_root_path
+from version_stamp.api import (
+    VMN_BE_TYPE_GIT,
+    app_name_to_tag_name,
+    get_repo_lock,
+    resolve_root_path,
+)
 
 # The states `vmn-exp create` (and so the SDK's cold start) lets an init run in.
 DIRTY_OK = frozenset({"pending", "outgoing"})
@@ -74,13 +80,32 @@ def cold_start(vcs, status):
     if not status.error:
         return
 
-    # The init commits: a CI checkout detached at a remote tip commits on
-    # that branch, as `vmn stamp` does.
-    vcs.ensure_on_branch()
-    with local_only(vcs.backend):
-        err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
+    err, _ = init_tracking(vcs, auto_init_if_needed, push=False)
     if err:
         raise RuntimeError(_failure(vcs.name))
+
+
+def init_tracking(vcs, init, push):
+    """Run *init* (``auto_init_if_needed``) on *vcs*; ``(err, initialized)``.
+
+    The init commits: a CI checkout detached at a remote tip commits on that
+    branch, as `vmn stamp` does. Without *push* nothing reaches a remote.
+    """
+    vcs.ensure_on_branch()
+    pushing = contextlib.nullcontext() if push else local_only(vcs.backend)
+    with pushing:
+        return init(vcs, extra_optional=DIRTY_OK)
+
+
+def cold_start_notice(app, repo_missing, app_missing, pushed, remote):
+    """What a first run commits, tags and pushes, for the user to read."""
+    commits = int(repo_missing) + int(app_missing)
+    plural = "" if commits == 1 else "s"
+    tag = f" and the tag {app_name_to_tag_name(app)}_0.0.0" if app_missing else ""
+    head = f"First run of '{app}': vmn records it in git with {commits} commit{plural}{tag}."
+    if pushed:
+        return f"{head} They are pushed to {remote}."
+    return f"{head} Nothing is pushed; share them with 'git push --follow-tags'."
 
 
 @contextlib.contextmanager

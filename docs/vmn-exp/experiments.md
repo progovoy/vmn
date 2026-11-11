@@ -65,9 +65,15 @@ explicit writer id — `$VMN_WRITER_ID`, `--writer-id` or conf `writer_id` — u
 a writer-id suffix instead; see [Offline recording](#offline-recording-and-push).)
 
 The first `create`/`run` in a fresh repo **cold-starts**: it initializes vmn
-and stamps a `0.0.0` baseline (the repo needs a git remote). A new app name in
-a repo that already has other apps is refused as a likely typo unless you pass
-`--new-app`.
+and stamps a `0.0.0` baseline, which is one commit for vmn's tracking files
+(a new repo only), one for the app, and the tag `<app>_0.0.0`; it says so as
+it does it. With a git remote the CLI pushes those commits and the tag (a CI
+checkout's first run publishes its baseline); without one they stay local and
+the run goes on (`git push --follow-tags` shares them later). The SDK's
+`start_run()` cold start never pushes. In a shared repo, let one person push
+the baseline: teammates who each cold-start locally create different
+`<app>_0.0.0` tags. A new app name in a repo that already has other apps is
+refused as a likely typo unless you pass `--new-app`.
 
 Untracked (non-ignored) files are captured within size caps: files over
 50 MB are skipped and at most 200 MB is collected per snapshot

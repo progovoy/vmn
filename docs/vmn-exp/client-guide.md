@@ -58,7 +58,11 @@ pip install pynvml                 # optional: GPU sys_* metrics
 
 No `init` step is needed. The first run in a repo sets up vmn tracking and
 stamps a `0.0.0` baseline, so it needs a git identity (`user.name`,
-`user.email`) to commit.
+`user.email`) to commit. That is up to two commits (vmn's tracking files, then
+the app) and the tag `<app>_0.0.0`, and the first `vmn-exp run`/`create` names
+them as it makes them. With a git remote, `vmn-exp` pushes them; without one
+they stay local and the run goes on. `start_run()` never pushes. In a shared
+repo one person pushes the baseline (`git push --follow-tags`).
 
 ---
 

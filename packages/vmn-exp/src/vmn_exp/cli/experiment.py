@@ -54,7 +54,7 @@ from vmn_exp.core.storage_resolve import _get_experiment_storage, store_uri
 from vmn_exp.storage.store_marker import require_store
 from vmn_exp.gitmode import capture
 from vmn_exp.gitmode.checkout import record_run
-from vmn_exp.gitmode.coldstart import DIRTY_OK
+from vmn_exp.gitmode.coldstart import cold_start_notice, init_tracking
 from vmn_exp.gitmode.features import capture_features
 from vmn_exp.snapshot import (
     _diff_real_tree,
@@ -283,14 +283,14 @@ def experiment_storage_params(vcs, args):
 def auto_init(vmn_ctx):
     """Initialize the repo and the app when either is untracked (a zero-setup
     cold start). Returns 1 on failure, None otherwise."""
-    from version_stamp.api import auto_init_if_needed, init_needed
+    from version_stamp.api import init_needed
 
     vcs = vmn_ctx.vcs
     repo_missing, app_missing = init_needed(vcs)
 
     # A brand-new app name in a repo that already has other apps is far more
     # likely a typo than a deliberate new app, and unlike `vmn show`/`vmn goto`
-    # this path commits, tags and pushes as a side effect. Refuse unless the
+    # this path commits and tags (and pushes, with a remote). Refuse unless the
     # repo is genuinely uninitialized (no other app could exist yet) or the
     # user opted in with --new-app.
     if app_missing and not repo_missing and not getattr(vmn_ctx.args, "new_app", False):
@@ -299,12 +299,27 @@ def auto_init(vmn_ctx):
             VMN_LOGGER.error(_new_app_guard_error(vcs.name, other_apps))
             return 1
 
-    # The init commits and pushes: a CI checkout detached at a remote tip
-    # commits on that branch, as `vmn stamp` does.
-    if repo_missing or app_missing:
-        vcs.ensure_on_branch()
-    err, _ = auto_init_if_needed(vcs, extra_optional=DIRTY_OK)
-    return err or None
+    if not (repo_missing or app_missing):
+        return None
+    return _announced_init(vcs, repo_missing, app_missing) or None
+
+
+def _announced_init(vcs, repo_missing, app_missing):
+    """Init, pushing only when there is a remote to push to (plan 17 F6: a CI
+    checkout's first run publishes its baseline), and say what it did."""
+    from version_stamp.api import auto_init_if_needed
+
+    remote = vcs.backend.selected_remote
+    remote_name = remote.name if remote is not None else None
+    notice = cold_start_notice(
+        vcs.name, repo_missing, app_missing, pushed=remote is not None, remote=remote_name,
+    )
+    if remote is not None:
+        VMN_LOGGER.info(notice)
+    err, _ = init_tracking(vcs, auto_init_if_needed, push=remote is not None)
+    if remote is None and not err:
+        VMN_LOGGER.info(notice)
+    return err
 
 
 # Actions that never write the store (they take no repo lock either).
