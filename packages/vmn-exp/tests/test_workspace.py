@@ -4,6 +4,7 @@ See docs/packaging.md. `pip install x[typo]` only warns, and a stale pin only
 bites after a release, so these are checked here rather than discovered by users.
 """
 import pathlib
+import re
 
 import pytest
 import toml
@@ -69,6 +70,30 @@ def test_git_cliff_uses_a_range_not_an_exact_pin():
     # other packages' constraints.
     [cliff] = [r for r in _project("vmn")["dependencies"] if r.startswith("git-cliff")]
     assert "==" not in cliff and ">=" in cliff and "<" in cliff
+
+
+def _first_parser(commit_parsers, message):
+    # git-cliff applies the first parser that matches; these match the subject.
+    return next(p for p in commit_parsers
+                if "message" in p and re.search(p["message"], message))
+
+
+def test_the_exp_changelog_config_reads_only_vmn_exp_tags_and_user_facing_commits():
+    git = toml.load(ROOT / "packages" / "vmn-exp" / "cliff.toml")["git"]
+    assert re.search(git["tag_pattern"], "vmn_exp_0.1.37")
+    assert not re.search(git["tag_pattern"], "vmn_0.10.2")
+    assert re.search(git["skip_tags"], "vmn_exp_0.0.0")
+    assert not re.search(git["skip_tags"], "vmn_exp_0.1.0")
+    assert git["filter_commits"] and git["filter_unconventional"]
+    parsers = git["commit_parsers"]
+    for kept in ("feat(sdk): a", "fix: b", "perf(exp-ui): c"):
+        parser = _first_parser(parsers, kept)
+        assert not parser.get("skip") and "Behaviour changes" not in parser["group"]
+    for skipped in ("test(exp): a", "refactor: b", "docs(exp): changelog",
+                    "chore: c", "style: d", "vmn_exp: Stamped version 0.1.37"):
+        assert _first_parser(parsers, skipped).get("skip") is True
+    for breaking in ("fix(sdk)!: a", "feat!: b", "docs(exp)!: c"):
+        assert "Behaviour changes" in _first_parser(parsers, breaking)["group"]
 
 
 def test_gitpython_uses_a_range_not_an_exact_pin():

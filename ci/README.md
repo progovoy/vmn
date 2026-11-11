@@ -119,6 +119,10 @@ builds at the version `vmn show <app>` reports for HEAD (`build_dist.sh`), so
 after `stamp=rc` the wheel embeds `0.10.2-rc.N`, and after a `vmn release` it
 embeds `0.10.2`; it refuses a HEAD that is not a stamped version.
 
+The lane does not regenerate vmn-exp's changelog yet (`release_exp.sh` does,
+after its upload); after a vmn_exp release from here, run
+`make _changelog NAME=vmn_exp`.
+
 You can also set these on a schedule via its `params` object, e.g. a weekly
 release schedule with `{"stamp": "patch", "build": "1", "upload": "1"}`.
 

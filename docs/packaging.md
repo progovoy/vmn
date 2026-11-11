@@ -173,8 +173,14 @@ the PyPI release.
   bump the very first time, past the 0.0.1 placeholders). It refuses a dirty
   tree. The release is always a patch, so behaviour changes, removals and
   format changes are announced in
-  [vmn-exp/upgrading.md](vmn-exp/upgrading.md), not by the version number. vmn is released on its own (`vmn stamp vmn`, `make _build`,
-  `make upload`).
+  [vmn-exp/upgrading.md](vmn-exp/upgrading.md), not by the version number.
+  After the upload it runs `make _changelog NAME=vmn_exp`, which rebuilds
+  [packages/vmn-exp/CHANGELOG.md](../packages/vmn-exp/CHANGELOG.md) with
+  git-cliff (`packages/vmn-exp/cliff.toml`) from the `vmn_exp_` tags, scoped to
+  the two exp packages, then commits it as `docs(exp): changelog` and pushes.
+  The file is never edited by hand; a rerun is a no-op and repairs a failed
+  push. So a release tag holds the changelog up to the previous release.
+  vmn is released on its own (`vmn stamp vmn`, `make _build`, `make upload`).
 - `make upload` sends each file to its project's `~/.pypirc` section
   (`[pypi]` for vmn, `[vmn-exp]`, `[vmn-exp-sdk]`), so per-project tokens
   work; a missing section falls back to `[pypi]`, for one account-wide token.

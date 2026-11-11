@@ -3,8 +3,9 @@
 vmn-exp and vmn-exp-sdk are released as 0.1.x patch releases only, so a
 version number never signals a breaking change. This page does: it lists
 every behaviour change (removals included) and every store or index format
-change, with the release it shipped in and what to do. The changelog lists
-the commits; this page says what an operator or a user has to know.
+change, with the release it shipped in and what to do. The
+[changelog](../../packages/vmn-exp/CHANGELOG.md) lists the commits; this page
+says what an operator or a user has to know.
 
 ## Rules
 
