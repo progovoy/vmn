@@ -52,6 +52,8 @@ Fifteen items. Two more are dropped: B5c (absorbed into plan 42 E1) and B9c (mea
 - The env-probe subprocess costs at most 0.05 s, so B9c is dropped.
 - The no-op wrap splits as about 0.2 s process start and imports, 0.09 s stamper init, 0.17 s create and finish.
 
+**Git processes, counted (B9a, at 286c7b4e, in-process on a bootstrapped app; `packages/vmn-exp/tests/test_exp_run_git_budget.py`).** `vmn-exp run app -- true`: 16. SDK `start_run`: 16. A second `start_run` in the same process: 16. Bounds are these plus 2. The `start_run` calls by subcommand: 3 remote, 3 diff, 2 rev-parse, 2 cat-file, 2 tag, 1 each of ls-files, rev-list, format-patch, config (`git config user.email`, a plain `subprocess.run`, also counted because the patched `git_cmd.subprocess` is the `subprocess` module itself). `remote get-url --all origin` three times and `tag --points-at HEAD` twice are the first candidates for B9d.
+
 **New bug found while measuring:** `vmn-exp --debug run app -- true` fails with `usage: vmn ... invalid choice: 'run'`, because `_to_vmn_argv` passes any argv starting with `-` through unchanged. Folded into B1.
 
 **Order.** B9a, B9b, B1, B2, B4a, B4b, B4c, B6, B3, B5a, B5b with B5d (one release), B8, B7, B9d. Constraints from other plans:
