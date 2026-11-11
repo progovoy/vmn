@@ -16,13 +16,15 @@ from exp_helpers import _PROJECT_ROOT
 ENDPOINT_DOC = "docs/vmn-exp/ui-api.md"
 API_PREFIX = "/api/v1"
 TABLE_HEADER = "| Method | Path |"
-# Framework pages and the JSON 404 catch-all: not endpoints a client calls.
+# Framework pages and the catch-alls (the JSON 404 one without a built web
+# bundle, the SPA shell one with it): not endpoints a client calls.
 EXCLUDED = {
     ("GET", "/api/openapi.json"),
     ("GET", "/api/docs"),
     ("GET", "/docs/oauth2-redirect"),
     ("GET", "/redoc"),
     ("GET", "/api/{rest:path}"),
+    ("GET", "/{full_path:path}"),
 }
 _PARAM = re.compile(r"\{[^}]*\}")
 _CELL_SPLIT = re.compile(r"(?<!\\)\|")
