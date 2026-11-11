@@ -135,7 +135,7 @@ class CachedLogs:
         )
 
     def _append_locally(self, append, app_name, verstr, writer_id, payload):
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         return append(app_name, verstr, self._owned_stream(app_name, verstr, writer_id), payload)
 

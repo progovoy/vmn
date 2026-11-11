@@ -155,3 +155,26 @@ def test_a_failed_local_write_queues_nothing_for_the_remote(tmp_path):
 
     assert uploads.close(WAIT_SEC) is True
     assert remote.state_saves == []
+
+
+class _CheckedStorage(CachedSnapshotStorage):
+    def __init__(self, local, remote):
+        super().__init__(local, remote)
+        self.checked = []
+
+    def ensure_local_record(self, app_name, verstr):
+        self.checked.append((app_name, verstr))
+        return super().ensure_local_record(app_name, verstr)
+
+
+def test_the_local_record_check_goes_through_the_public_storage_method(tmp_path):
+    local = LocalSnapshotStorage(str(tmp_path / "local"), "runs")
+    local.save(APP, V, meta(V), {})
+    storage = _CheckedStorage(local, FakeRemote(str(tmp_path / "remote")))
+    uploads = _uploads(storage)
+
+    uploads.publish(RUNNING)
+
+    assert uploads.close(WAIT_SEC) is True
+    assert storage.checked == [(APP, V)]
+    assert _state(local.load_file(APP, V, RUN_STATE_FILE)) == RUNNING

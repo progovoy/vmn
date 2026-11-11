@@ -99,7 +99,7 @@ class RunStatePublisher:
         if id(self._inline) in self._tokens or self._inline is self._storage:
             return True
         app_name, verstr = self._where[:2]
-        self._storage._ensure_local_record(app_name, verstr)
+        self._storage.ensure_local_record(app_name, verstr)
         if self._inline.exists(app_name, verstr):
             return True
         _LOGGER.debug(f"vmn: no record of {verstr} here or remotely; its state is dropped")

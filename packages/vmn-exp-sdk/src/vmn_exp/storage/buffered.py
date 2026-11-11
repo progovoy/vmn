@@ -123,7 +123,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
     def load_file(self, app_name, verstr, filename):
         return self._remote.load_file(app_name, verstr, filename)
 
-    def _ensure_local_record(self, app_name, verstr):
+    def ensure_local_record(self, app_name, verstr):
         """A home for appends: the record's metadata, never its body."""
         if self._local.exists(app_name, verstr):
             return True
@@ -150,7 +150,7 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
 
     def save_artifact_file(self, app_name, verstr, src_path, name=None):
         # Straight up: a multi-GB checkpoint must not be copied to /tmp first.
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         return self._remote.save_artifact_file(app_name, verstr, src_path, name=name)
 

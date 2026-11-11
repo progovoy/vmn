@@ -61,7 +61,7 @@ class StateUploads:
         nowhere (it would come back as a zombie); one only the remote holds
         is fetched first."""
         if not self._has_home:
-            self._has_home = self._storage._ensure_local_record(*self._where[:2])
+            self._has_home = self._storage.ensure_local_record(*self._where[:2])
         return self._has_home
 
     def _upload(self, item):

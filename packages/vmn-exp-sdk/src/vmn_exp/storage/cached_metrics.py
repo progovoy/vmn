@@ -92,7 +92,7 @@ class CachedMetrics:
         """Append to the local copy's stream: one named for an owner the copy
         does not own (a one-off one, named while the record could not be
         fetched) is the copy's own stream of its writer."""
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         writer_id = self._owned_stream(app_name, verstr, writer_id)
         return self._local.append_metric_block(app_name, verstr, writer_id, data)
@@ -142,7 +142,7 @@ the copy's ship lock."""
         the remote has; it goes to the remote, then here. One built from the
         remote's objects goes to the remote only. A stream the copy inherited
         is compacted only by its owner."""
-        if not self._ensure_local_record(app_name, verstr):
+        if not self.ensure_local_record(app_name, verstr):
             return False
         if owner_of(writer_id) in self._local.inherited_owners(app_name, verstr):
             return False
