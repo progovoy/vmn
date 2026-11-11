@@ -11,7 +11,7 @@
 > Paths are relative to `packages/vmn-exp/webui/src/` unless they start with
 > `packages/`, `ui/` (= `packages/vmn-exp/src/vmn_exp/ui/`) or `docs/`.
 
-Status: **proposal** (2026-10-12). Three proposals were merged into this plan: terminal,
+Status: **done** (proposed and built 2026-10-12; confirmed in code 2026-11-11). Three proposals were merged into this plan: terminal,
 provenance and operate. §1 records the decisions, §2 the contracts, §3 the work units,
 §4 the integration and verification steps. Revised after an adversarial review (2026-10-12) against the code at `fd20fbc4`: the facts it rests on are in §0.
 

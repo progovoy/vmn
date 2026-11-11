@@ -1,5 +1,7 @@
 # Plan 9: record offline, push later (`VMN_EXP_OFFLINE=1` + `vmn exp push`)
 
+Status: **done** (2026-09-29; confirmed in code 2026-11-11).
+
 Inspired by `WANDB_MODE=offline` + `wandb sync`.
 
 > **Base:** re-verified against `master` @ `0096782` (after the `feature-parity` merge and

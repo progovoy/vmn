@@ -1,5 +1,7 @@
 # Plan 6 (remaining): datasets in the registry + recorded model/dataset usage
 
+Status: **done** (2026-09-29; confirmed in code 2026-11-11).
+
 > Master already has **run-level lineage**: `vmn-exp lineage <app> -v <ref> [--depth N] [--json]`
 > (`packages/vmn-exp/src/vmn_exp/cli/lineage.py`), SDK `vmn_exp.sdk.reader.get_lineage`
 > (`packages/vmn-exp-sdk/src/vmn_exp/sdk/reader.py:248`), UI

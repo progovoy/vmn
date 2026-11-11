@@ -1,5 +1,7 @@
 # Plan 10: `vmn snapshot` back as a vmn command; experiments reuse it
 
+Status: **done** (2026-09-29; confirmed in code 2026-11-11).
+
 > Base: master @ f5a2b2d (rerun workspace merged: `apply._apply_patches_to_workdir` returns failed steps;
 > facade has `island_layout`/`create_dep_worktree`/`remove_registered_worktree`; code store has
 > `publish_code`/`find_code_key`).

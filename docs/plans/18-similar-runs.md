@@ -7,7 +7,7 @@
 > `packages/`, `tests/` or `docs/`; `cli/`, `gitmode/`, `importers/` and `ui/` are under
 > `packages/vmn-exp/src/vmn_exp/`.
 
-Status: **implemented** (2026-10). This document describes what was built; the user
+Status: **done** (2026-10). This document describes what was built; the user
 docs are [experiments.md `similar`](../vmn-exp/experiments.md#similar),
 [Intent](../vmn-exp/experiments.md#intent-what-a-run-is-for),
 [sdk.md](../vmn-exp/sdk.md#similar-runs), [ui.md](../vmn-exp/ui.md#similar-runs) and

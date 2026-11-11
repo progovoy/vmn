@@ -1,6 +1,6 @@
 # 12 — Columnar metric storage
 
-Status: **design, not started**. Builds on [11-central-server.md](11-central-server.md)
+Status: **done** (designed 2026-10-02, built from 2026-10-02; confirmed in code 2026-11-11). Builds on [11-central-server.md](11-central-server.md)
 (journal, read-only server). No old clients need supporting, so this plan changes the
 record format outright (§9 covers existing data).
 
