@@ -147,9 +147,11 @@ class ModelListing:
         self._models = models
 
     @classmethod
-    def read(cls, storage, previous=None):
-        """*storage*'s listing, reusing *previous*'s unchanged models."""
-        return cls(read_models(storage, previous and previous._models, _ModelRow))
+    def read(cls, storage, previous=None, listing=None):
+        """*storage*'s listing (from the registry *listing*, see
+        :func:`~vmn_exp.ui.registry_snapshot.read_models`), reusing
+        *previous*'s unchanged models."""
+        return cls(read_models(storage, previous and previous._models, _ModelRow, listing))
 
     def with_model(self, storage, name):
         """This listing with *name* re-read (after a write to it)."""

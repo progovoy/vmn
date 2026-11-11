@@ -12,6 +12,11 @@ builds the snapshot — racing requests share that build — and later ones
 start a refresh on a daemon thread at most every :data:`REFRESH_SEC`,
 reading the snapshot as it is; else each request refreshes first, so it
 sees every write before it — like the experiment indexes.
+
+With background refresh this snapshot and the Models list's
+(:class:`~vmn_exp.ui.readers.models.ModelListing`) share one registry
+listing per refresh (:class:`RegistryListings`); each still builds its own
+models from it.
 """
 import logging
 import threading
@@ -48,21 +53,27 @@ class _Model:
         self.versions = get_versions(storage, name, list_versions(storage, name, records))
 
 
-def read_models(storage, old, build):
-    """``{model: build(storage, name, files)}`` of every model of *storage*'s
-    registry (*files*: its listing), each built concurrently; an entry of
-    *old* (a dict like it, or None) whose ``files`` still match is kept."""
-    old = old or {}
+def list_registry(storage):
+    """``{model: files}``: the listing of each model of *storage*'s registry."""
     reg = registry_storage(storage)
     names = [name for name in reg.list_apps() if valid_model_name(name)]
-    listings = parallel_map(reg.list_files, names)
+    return dict(zip(names, parallel_map(reg.list_files, names)))
+
+
+def read_models(storage, old, build, listing=None):
+    """``{model: build(storage, name, files)}`` of every model of *storage*'s
+    registry (*files*: its *listing*, by default listed now), each built
+    concurrently; an entry of *old* (a dict like it, or None) whose
+    ``files`` still match is kept."""
+    old = old or {}
+    listing = list_registry(storage) if listing is None else listing
 
     def model(item):
         name, files = item
         kept = old.get(name)
         return kept if kept is not None and kept.files == files else build(storage, name, files)
 
-    return dict(zip(names, parallel_map(model, list(zip(names, listings)))))
+    return dict(zip(listing, parallel_map(model, list(listing.items()))))
 
 
 class RegistrySnapshot:
@@ -75,9 +86,10 @@ class RegistrySnapshot:
         self._locations = by_location(self._run_models)
 
     @classmethod
-    def read(cls, storage, previous=None):
-        """*storage*'s registry, reusing *previous*'s unchanged models."""
-        return cls(read_models(storage, previous and previous._models, _Model))
+    def read(cls, storage, previous=None, listing=None):
+        """*storage*'s registry (from *listing*, see :func:`read_models`),
+        reusing *previous*'s unchanged models."""
+        return cls(read_models(storage, previous and previous._models, _Model, listing))
 
     def models_of(self, app, verstr):
         return self._run_models.get((app, verstr), ())
@@ -127,12 +139,16 @@ class _Entry:
 
 
 class RegistrySnapshots:
-    """A snapshot per storage — ``read(storage, previous)``'s, by default a
-    :class:`RegistrySnapshot` — refreshed as configured."""
+    """A snapshot per storage — ``read(storage, previous, listing)``'s, by
+    default a :class:`RegistrySnapshot` — refreshed as configured. With
+    background refresh it reads the registry listing through *listings* (a
+    :class:`RegistryListings` the other snapshots of the server share), and
+    a snapshot is as old as its listing."""
 
-    def __init__(self, background=False, read=RegistrySnapshot.read):
+    def __init__(self, background=False, read=RegistrySnapshot.read, listings=None):
         self._background = background
         self._read = read
+        self._listings = listings if background else None
         self._entries = weakref.WeakKeyDictionary()  # storage -> _Entry
         self._lock = threading.Lock()
 
@@ -148,8 +164,10 @@ class RegistrySnapshots:
 
     def refresh_model(self, storage, name):
         """Re-read model *name* of *storage*'s snapshot now (after this
-        server wrote to it); without background refresh, the next ``get``
-        reads it anyway."""
+        server wrote to it), and drop the shared listing that predates the
+        write; without background refresh, the next ``get`` reads it anyway."""
+        if self._listings is not None:
+            self._listings.forget(storage)
         entry = self._entry(storage)
         with entry.lock:
             if self._background and entry.snapshot is not None:
@@ -176,10 +194,59 @@ class RegistrySnapshots:
                 self._refresh(storage, entry)
         except Exception:
             _LOGGER.warning("Refreshing the registry snapshot failed", exc_info=True)
+            entry.at = time.monotonic()
         finally:
             with self._lock:
-                entry.at, entry.refreshing = time.monotonic(), False
+                entry.refreshing = False
 
     def _refresh(self, storage, entry):
-        entry.snapshot = self._read(storage, entry.snapshot)
-        entry.at = time.monotonic()
+        if self._listings is None:
+            at, listing = time.monotonic(), None
+        else:
+            at, listing = self._listings.get(storage)
+        entry.snapshot = self._read(storage, entry.snapshot, listing)
+        entry.at = at
+
+
+class _Listing:
+    def __init__(self):
+        self.listing, self.at, self.generation = None, None, 0
+        self.lock = threading.Lock()  # one listing at a time
+
+
+class RegistryListings:
+    """One registry listing (:func:`list_registry`) per storage, shared by the
+    snapshots refreshed from it: one younger than :data:`REFRESH_SEC` is
+    reused, racing reads wait for one listing, and :meth:`forget` (a write
+    through this server) drops it — and any listing in flight then."""
+
+    def __init__(self):
+        self._entries = weakref.WeakKeyDictionary()  # storage -> _Listing
+        self._lock = threading.Lock()
+
+    def get(self, storage):
+        """``(monotonic time it was taken, listing)`` of *storage*'s registry."""
+        entry = self._entry(storage)
+        with entry.lock:
+            with self._lock:
+                if entry.listing is not None and time.monotonic() - entry.at < REFRESH_SEC:
+                    return entry.at, entry.listing
+            while True:
+                generation, at = entry.generation, time.monotonic()
+                listing = list_registry(storage)
+                with self._lock:
+                    if entry.generation == generation:
+                        entry.listing, entry.at = listing, at
+                        return at, listing
+
+    def forget(self, storage):
+        entry = self._entry(storage)
+        with self._lock:
+            entry.listing, entry.generation = None, entry.generation + 1
+
+    def _entry(self, storage):
+        with self._lock:
+            entry = self._entries.get(storage)
+            if entry is None:
+                entry = self._entries[storage] = _Listing()
+            return entry

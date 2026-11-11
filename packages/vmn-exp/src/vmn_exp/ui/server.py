@@ -40,7 +40,7 @@ from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.query_params import refuse_unknown_params
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.readers.models import ModelListing
-from vmn_exp.ui.registry_snapshot import RegistrySnapshots
+from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshots
 from vmn_exp.ui.report_index import ReportIndexes
 from vmn_exp.ui.responses import (
     GZIP_LEVEL,
@@ -786,7 +786,8 @@ def create_app(
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
     routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
-    registries = RegistrySnapshots(refresher.background)
+    listings = RegistryListings()  # one registry listing per refresh for both snapshots
+    registries = RegistrySnapshots(refresher.background, listings=listings)
     routes_lineage.register(app, API_PREFIX, _lineage_inputs, _segment, registries.get)
     routes_lineage.register_version_lineage(app, API_PREFIX, _workspace_lineage_inputs,
                                             registries.get)
@@ -803,7 +804,7 @@ def create_app(
         return _any_exp_storage(_experiment_workspace(ws_name))
 
     routes_models.register(app, API_PREFIX, _ws_storage,
-                           RegistrySnapshots(refresher.background, ModelListing.read))
+                           RegistrySnapshots(refresher.background, ModelListing.read, listings))
     routes_reports.register(app, API_PREFIX, _ws_storage, _report_index)
     routes_comments.register(app, API_PREFIX, _ws_storage)
 
