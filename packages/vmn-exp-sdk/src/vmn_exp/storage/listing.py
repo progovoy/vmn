@@ -71,18 +71,31 @@ def _sig(st, log_mtime_ns=None):
     return local_log_sig(st, log_mtime_ns)
 
 
-def _scan_files(path, prefix="", log_mtime_ns=None):
+def _scan_files(path, record, prefix="", log_mtime_ns=None):
     files = {}
     for f in os.scandir(path):
-        if f.is_file() and not f.name.startswith("."):
+        if f.is_file() and not f.name.startswith(".") and not _leaves(f, record):
             files[prefix + f.name] = _sig(f.stat(), log_mtime_ns)
     return files
+
+
+def _leaves(entry, record):
+    """Whether *entry* is a symlink whose target is outside directory
+    *record*; a regular entry answers from its scan, without a syscall."""
+    if not entry.is_symlink():
+        return False
+    record_real, target = os.path.realpath(record), os.path.realpath(entry.path)
+    try:
+        return os.path.commonpath([record_real, target]) != record_real
+    except ValueError:  # different drives on Windows
+        return True
 
 
 def files_in(path, identity=False):
     """``{filename: (size, mtime_ns)}`` of the regular, non-hidden files in
     *path* and in its ``log/`` and ``metrics/`` folders (named ``log/<file>``,
-    ``metrics/<file>``); with *identity*, a log file's signature is
+    ``metrics/<file>``), less any symlink whose target is outside *path*
+    (a server must not index or serve it); with *identity*, a log file's signature is
     :func:`~vmn_exp.core.logfiles.local_log_sig`'s."""
     log_sig = _dir_sig(os.path.join(path, LOG_DIR)) if identity else None
     return _files_in(path, log_sig[0] if log_sig else None)
@@ -92,16 +105,18 @@ def _files_in(path, log_mtime_ns):
     # Only the folders the directory has are opened: most have no metrics/.
     files, folders = {}, set()
     for f in os.scandir(path):
+        if f.name.startswith(".") or _leaves(f, path):
+            continue
         if f.name in _SUBDIRS and f.is_dir():
             folders.add(f.name)
-        elif f.is_file() and not f.name.startswith("."):
+        elif f.is_file():
             files[f.name] = _sig(f.stat())
     for sub in _SUBDIRS:
         if sub not in folders:
             continue
         mtime_ns = log_mtime_ns if sub == LOG_DIR else None
         try:
-            files.update(_scan_files(os.path.join(path, sub), sub + "/", mtime_ns))
+            files.update(_scan_files(os.path.join(path, sub), path, sub + "/", mtime_ns))
         except (FileNotFoundError, NotADirectoryError):
             pass  # replaced since its parent's scan
     return files

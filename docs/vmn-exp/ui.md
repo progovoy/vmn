@@ -108,6 +108,16 @@ vmn-exp ui --host 0.0.0.0 --token "$VMN_UI_TOKEN" --data-dir /srv/vmn-ui
   neither header are unaffected.
 - **Paths**: URL app names, verstrs and artifact paths are validated (400 on
   `..` and the like); the SPA fallback serves only files inside `static/`.
+- **Symlinks in a record**: in a `file://` store or a git workspace, a run
+  file that is a symlink whose target is outside the run's record dir is
+  never served. It is left out of the record's listing, so it is neither
+  indexed nor parsed, and it is left out of the artifact list. Reading it
+  answers as a missing file: an artifact download, a table or the
+  `output_tail` 404s or is empty, and a linked-out `metadata.yml` hides the
+  run. A symlink that stays inside the record dir still works. Job-side SDK
+  reads do not check this, so a job can still read back a checkpoint it
+  linked in from another volume. The UI does not show that file; to see it
+  there, copy it into the record.
 
 Behind a proxy that rewrites `Host`, or when users reach the server by another
 name, list that name:

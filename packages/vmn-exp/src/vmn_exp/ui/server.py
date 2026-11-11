@@ -39,6 +39,7 @@ from vmn_exp.ui.metrics_feed import MetricsFeed
 from vmn_exp.ui.middleware import SelectiveGZipMiddleware
 from vmn_exp.ui.query_params import refuse_unknown_params
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
+from vmn_exp.ui.readers.contained_reads import ContainedReads
 from vmn_exp.ui.readers.models import ModelListing
 from vmn_exp.ui.registry_snapshot import RegistryListings, RegistrySnapshots
 from vmn_exp.ui.report_index import ReportIndexes
@@ -224,6 +225,7 @@ def create_app(
     # prefix probes are worth keeping across requests.
     store_storages = {}
     edit_storages = {}
+    served_storages = {}  # id(storage) -> (storage, its ContainedReads)
 
     for router in chain.routers():
         app.include_router(router)
@@ -316,8 +318,15 @@ def create_app(
         return store_storages[ws.name]
 
     def _any_exp_storage(ws):
-        """The workspace's experiment storage, local checkout or store."""
-        return _exp_storage_for(ws) or source.workspace_index(ws).storage
+        """The workspace's experiment storage, local checkout or store, read
+        only inside each run's record dir (one wrapper per storage, so its
+        cache identity holds)."""
+        storage = _exp_storage_for(ws) or source.workspace_index(ws).storage
+        held = served_storages.get(id(storage))
+        if held is None or held[0] is not storage:
+            held = (storage, ContainedReads(storage, os.path.realpath))
+            served_storages[id(storage)] = held
+        return held[1]
 
     @app.get(f"{API_PREFIX}/meta", dependencies=[require(VIEWER)])
     def meta(request: Request):
