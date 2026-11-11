@@ -58,7 +58,7 @@ def test_sweep_endpoint_serves_the_attributed_trials(app_layout, swept, capsys):
     assert first["status"] == "succeeded"
     assert first["params"] == {"x": 3}
     assert first["value"] == pytest.approx(3.25)
-    assert first["metric_source"] != first["verstr"]  # the nested SDK run
+    assert first["metric_source"] == first["verstr"]  # adopted: the trial itself
     assert first["stopped_early"] is False
 
     # The same answer as the CLI's status.
