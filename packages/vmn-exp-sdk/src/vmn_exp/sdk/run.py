@@ -74,7 +74,8 @@ from vmn_exp.sdk.metric_defs import MetricDefinitions
 from vmn_exp.sdk.mode import is_disabled
 from vmn_exp.sdk.output_capture import RunOutput
 from vmn_exp.sdk.process_hooks import ProcessHooks
-from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank
+from vmn_exp.sdk import run_repr
+from vmn_exp.sdk.ranks import NoOpRun, is_secondary_rank, process_rank
 from vmn_exp.sdk.run_alerts import RunAlerts
 from vmn_exp.sdk.run_artifacts import RunArtifacts, checked_artifact_name
 from vmn_exp.storage.ship_state import finalizing
@@ -251,7 +252,7 @@ def start_run(
     if is_disabled(mode):
         return NoOpRun(app_name, disabled=True)
     if not all_ranks and is_secondary_rank():
-        return NoOpRun(app_name)
+        return NoOpRun(app_name, rank=process_rank())
     # The reused CLI helpers log through VMN_LOGGER, which raises until something
     # initializes it — and a library must not call init_stamp_logger.
     ensure_logger()
@@ -487,6 +488,16 @@ class Run(RunMetrics, MetricDefinitions, RunArtifacts, RunMedia, RunAlerts, RunB
         if self._output is not None:
             self._chore_guard("output capture", self._output.start)
         self._heartbeat.start()
+
+    def __repr__(self):
+        return run_repr.text(*self._repr_fields())
+
+    def _repr_html_(self):
+        return run_repr.html(*self._repr_fields())
+
+    def _repr_fields(self):
+        state = self._state
+        return self.app_name, self.id, self.name, state.get("state"), state.get("exit_code")
 
     def finish(self, exit_code=0, error=None):
         """Finalize the run. Idempotent: a second call changes nothing.

@@ -6,6 +6,7 @@ run a restarted kernel left open. The cells below run as written, in order
 (`packages/vmn-exp/tests/test_docs_notebook_cells.py` runs them).
 
 - [One run across cells](#one-run-across-cells)
+- [What a cell ending in `run` shows](#what-a-cell-ending-in-run-shows)
 - [Re-running the start cell](#re-running-the-start-cell)
 - [Leave `capture_output` off](#leave-capture_output-off)
 - [The notebook is part of the snapshot](#the-notebook-is-part-of-the-snapshot)
@@ -44,6 +45,20 @@ the run finishes when the cell does, and an exception in it marks the run
 with start_run("my_app", params={"lr": 1e-3}) as run:
     run.log_metric("loss", 0.5, step=0)
 ```
+
+## What a cell ending in `run` shows
+
+A cell whose last line is `run` renders a small table: the app, the run id,
+the name if it has one, the state (with the exit code once finished) and the
+command that shows the run, for example `vmn-exp show my_app -v
+0.0.1-dev.a1b2c3d.r1`. `print(run)` and logs get the same facts on one line:
+
+```text
+<Run my_app 0.0.1-dev.a1b2c3d.r1 "baseline" finished exit 0>
+```
+
+The state is this kernel's view of the run (`running` until `finish()`), read
+from memory; another reader derives its own status, which can be `stuck`.
 
 ## Re-running the start cell
 

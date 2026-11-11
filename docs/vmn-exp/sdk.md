@@ -132,6 +132,15 @@ notebook cell that never called `finish()`) raises `RuntimeError`; pass
 `nested=True` to nest on purpose, or finish the old run first. More on runs
 in notebooks: [notebooks.md](notebooks.md).
 
+A run shows itself: `repr(run)` is one line, `<Run my_app
+0.1.2-dev.3f9a.r4 "baseline" running>` (`finished exit 1` once finished), and
+a notebook cell ending in `run` renders a small table (app, run id, name,
+state) with the `vmn-exp show <app> -v <id>` command for it. Both read only
+what the run holds in memory, never the store: the state is this process's
+view (`running`), not the [derived status](experiments.md#run-status-did-my-job-die)
+another reader sees. A `NoOpRun` says it records nothing and why
+(`disabled` or `rank N`).
+
 Creating the run snapshots the working tree (dirty or clean) and assigns
 `run.id`. The first run in a repo vmn does not track yet cold-starts it: it
 commits vmn's init files and tags `<app>_0.0.0` **locally, never pushing**

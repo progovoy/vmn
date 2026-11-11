@@ -10,6 +10,7 @@ recording nothing, with no heartbeat thread and no git or storage access.
 import contextlib
 import os
 
+from vmn_exp.sdk import run_repr
 from vmn_exp.sdk.steps import StepCounter
 
 
@@ -56,12 +57,16 @@ class NoOpRun:
     name = None
     start_step = None
 
-    def __init__(self, app_name=None, disabled=False):
+    def __init__(self, app_name=None, disabled=False, rank=None):
         self.app_name = app_name
         self.disabled = disabled
+        self.rank = rank
         self.pid = os.getpid()
         # Counted like a real run's, so `run.step` in user code works anywhere.
         self._steps = StepCounter()
+
+    def __repr__(self):
+        return run_repr.noop_text(self.app_name, self.disabled, self.rank)
 
     @property
     def step(self):
