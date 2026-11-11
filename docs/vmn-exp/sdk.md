@@ -1517,7 +1517,7 @@ Read (or set) by the SDK. CLI-only variables are in [experiments.md](experiments
 | `VMN_EXP_FINAL_UPLOAD_TIMEOUT_SEC` | wait for final uploads at finish/SIGTERM/exit (default 60 s at finish/exit, 25 s under SIGTERM; when set, it is both) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | alert sinks and triggers ([experiments.md](experiments.md#alerts)) |
 | `VMN_SWEEP_PARAMS` | sweep trial params, read by `sweep_params()` |
-| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) |
+| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger, direct-to-bucket log buffers) |
 | `VMN_INDEX_CACHE_DIR` | index cache root only; `none` disables |
 | `VMN_EXP_MIN_STALE_SEC` | floor of the `stuck` window when readers derive status (default 60) |
 | `VMN_EXP_HEARTBEAT_SEC` | heartbeat cadence when `start_run(heartbeat_interval_sec=)` is not given (beats conf `experiment.heartbeat_interval_sec`; default 30; non-positive/invalid skipped) |

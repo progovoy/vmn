@@ -127,7 +127,7 @@ _ABANDON_ON_A_BUFFER = """
             return True
 
     remote = RemoteDir(os.environ["STORE"], "runs")
-    run = start_run("app", storage=BufferedRemoteStorage(remote, area="runs"),
+    run = start_run("app", storage=BufferedRemoteStorage(remote, os.environ["TMPDIR"], area="runs"),
                     system_metrics=False, heartbeat_interval_sec=3600)
     run.log_note("first")
     run.log_note("last")

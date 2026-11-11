@@ -78,10 +78,10 @@ def test_local_first_put_indexed_reaches_the_remote(host, tmp_path):
     assert host.metric_objects(APP, V)[W] == [(indexed_name(W), 7)]
 
 
-def test_buffered_storage_ships_blocks_to_the_bucket():
+def test_buffered_storage_ships_blocks_to_the_bucket(tmp_path):
     remote = s3_storage()
     remote.save(APP, V, meta(V), {})
-    pod = BufferedRemoteStorage(remote, area="runs")
+    pod = BufferedRemoteStorage(remote, str(tmp_path), area="runs")
     pod.append_metric_block(APP, V, W, _block(1.0))
     pod.append_metric_block(APP, V, W, _block(2.0))
     pod.close()

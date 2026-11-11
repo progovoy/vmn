@@ -60,8 +60,8 @@ def test_a_finalizer_ship_never_rolls_up(tmp_path):
     assert len(_objects(stream)) == ROLLUP + 1
 
 
-def test_an_exit_flush_never_rolls_up():
-    pod = BufferedRemoteStorage(s3_storage(), area="runs", flush_interval_sec=0)
+def test_an_exit_flush_never_rolls_up(tmp_path):
+    pod = BufferedRemoteStorage(s3_storage(), str(tmp_path), area="runs", flush_interval_sec=0)
     pod.save(APP, V, meta(V), {})
     stream = own_stream(pod, APP, V)
     for i in range(ROLLUP):

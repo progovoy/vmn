@@ -1,7 +1,7 @@
 # AUTO-GENERATED (KNOWN_IO) by: python packages/vmn-exp/tests/test_io_boundary.py --regen
 # KNOWN_IO only shrinks. REAL_IO and REAL_WIRED are hand-kept and survive --regen.
 
-REAL_IO = {}
+REAL_IO = {'vmn_exp.storage.buffer_owner': "a log buffer's marker file and owner flock: the real local implementation (plan 40 C5)", 'vmn_exp.storage.host_dirs': 'resolves the per-host dirs from the environment, the filesystem type and the temp dir: the real implementation (plan 40 C5)'}
 REAL_WIRED = {}
 
 KNOWN_IO = {
@@ -135,14 +135,15 @@ KNOWN_IO = {
     'vmn_exp.sdk.sysmetrics_gpu': {'env': 1},
     'vmn_exp.storage.azure': {'env': 2, 'fs': 2},
     'vmn_exp.storage.base': {'fs': 2},
-    'vmn_exp.storage.buffered': {'fs': 2, 'process_self': 4, 'random': 1, 'time': 4},
+    'vmn_exp.storage.buffer_owner': {'fs': 3, 'process_self': 2},
+    'vmn_exp.storage.buffered': {'fs': 1, 'process_self': 4, 'random': 1, 'time': 4},
     'vmn_exp.storage.child_markers': {'fs': 4},
     'vmn_exp.storage.children_flag': {'fs': 5, 'random': 1},
     'vmn_exp.storage.conformance': {'thread': 1},
     'vmn_exp.storage.fanout': {'process_self': 3, 'thread': 1},
     'vmn_exp.storage.files': {'fs': 12},
     'vmn_exp.storage.fs_type': {'fs': 3},
-    'vmn_exp.storage.host_dirs': {'env': 4, 'fs': 4, 'process_self': 1},
+    'vmn_exp.storage.host_dirs': {'env': 6, 'fs': 4, 'process_self': 1},
     'vmn_exp.storage.journal': {'process_self': 2, 'real_default': 1, 'time': 2},
     'vmn_exp.storage.journal_sinks': {'fs': 4},
     'vmn_exp.storage.listing': {'fs': 8, 'thread': 1, 'time': 1},

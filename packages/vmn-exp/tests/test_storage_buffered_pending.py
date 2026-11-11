@@ -21,10 +21,10 @@ def _bucket(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def pod():
+def pod(tmp_path):
     remote = s3_storage()
     remote.save(APP, V, meta(V), {})
-    return BufferedRemoteStorage(remote, area="runs")
+    return BufferedRemoteStorage(remote, str(tmp_path), area="runs")
 
 
 def _unreachable(*args, **kwargs):

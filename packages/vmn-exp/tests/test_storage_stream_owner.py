@@ -153,7 +153,8 @@ def test_each_log_buffer_has_a_stream_of_its_own(tmp_path, monkeypatch):
     with mocked_bucket(monkeypatch):
         monkeypatch.setenv("VMN_WRITER_ID", "gpu07")
         s3_storage().save(APP, V, meta(V), {})
-        one, two = BufferedRemoteStorage(s3_storage()), BufferedRemoteStorage(s3_storage())
+        one = BufferedRemoteStorage(s3_storage(), str(tmp_path))
+        two = BufferedRemoteStorage(s3_storage(), str(tmp_path))
 
         assert own_stream(one, APP, V) != own_stream(two, APP, V)
         assert own_stream(one, APP, V) == own_stream(one, APP, V)

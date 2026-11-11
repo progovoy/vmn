@@ -1751,7 +1751,7 @@ refuse an unknown layout, and a v1 store (records but no `store.yml`) is
 refused with a hint to run [`vmn-exp migrate`](#migrate). Per-host state
 (the [index cache](#the-experiment-index-per-host-cache) and the [push](#offline-recording-and-push) ledger) lives
 outside the store, in the user cache/state dirs (`$VMN_EXP_CACHE_DIR`
-overrides both).
+overrides both), and so do direct-to-bucket log buffers.
 
 **Resolution.** `--store` > `VMN_EXPERIMENT_STORE` > conf
 `experiment.storage.uri`. `--bucket`/`--prefix`/`--endpoint-url` (env
@@ -1917,10 +1917,19 @@ luck); only a conditional create is.
   written as whole lines in one write (one PUT), so readers never see a
   partial line.
 - **Straight to a bucket**: with no local copy, a process appends to a
-  private log buffer (`vmn-log-buffer-<id>` in the temp dir) and ships it as
-  segments. The buffer also holds the only local copy of a run's
-  `run_state.yml`, so a finished run's buffer is removed only once the
-  bucket holds a final state. At process exit the buffer's final states the
+  private log buffer and ships it as segments. The buffer is a directory
+  `log-buffers/<store-id>/vmn-log-buffer-<id>` under the per-host state dir
+  (`$VMN_EXP_CACHE_DIR`, else `$XDG_STATE_HOME/vmn-exp`, else
+  `~/Library/Application Support/vmn-exp` on macOS or
+  `~/.local/state/vmn-exp`); a state dir on a network filesystem or not
+  writable is warned about once and replaced by
+  `$TMPDIR/vmn-exp-state-<uid>` (a buffer takes a write a second), while a
+  `VMN_EXP_CACHE_DIR` is used as given. Its first write records the owning
+  process in `buffer.json` (pid, host, start time, store, area) and takes an
+  exclusive lock on `.buffer-owner.lock`, held while that process owns the
+  buffer: a buffer whose lock can be taken has no live owner. The buffer
+  also holds the only local copy of a run's `run_state.yml`, so a finished
+  run's buffer is removed only once the bucket holds a final state. At process exit the buffer's final states the
   bucket never received are uploaded once more (only over a state of the
   same attempt that is not final); when that upload fails the buffer is kept,
   and the warning names its directory and the runs whose final state it
@@ -2178,7 +2187,7 @@ Read by `vmn-exp` (most also by the SDK):
 | `VMN_EXP_SIGTERM_EXIT` | SDK: `start_run(sigterm_exit=)` when not given — `kill` (default) re-delivers SIGTERM, `raise` raises `SystemExit(143)` so `finally` blocks run ([sdk.md](sdk.md#finishing-failures-and-the-heartbeat)) |
 | `VMN_EXP_ALERT_WEBHOOK_URL` / `_SLACK_URL` / `_COMMAND` / `_ON` | [alert](#alerts) sinks and triggers |
 | `VMN_SNAPSHOT_MAX_FILE_MB` / `_TOTAL_MB` | untracked-file capture caps (50 / 200) |
-| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger) instead of the XDG cache/state dirs |
+| `VMN_EXP_CACHE_DIR` | base dir for per-host state (index cache, push ledger, direct-to-bucket log buffers) instead of the XDG cache/state dirs |
 | `VMN_EXP_S3_PREFIX_CONCURRENCY` | S3 calls in flight per key prefix (`<root>/<area>/<scope>`), process-wide (default 64; 0/invalid = default) |
 | `VMN_INDEX_CACHE_DIR` | index cache root only (`none` disables) |
 | `VMN_IMAGE_DIGEST` | container image digest recorded by environment capture |

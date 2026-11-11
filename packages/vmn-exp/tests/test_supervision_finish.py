@@ -109,7 +109,7 @@ def test_the_final_sync_and_the_final_state_share_one_budget():
 
 
 def test_a_log_buffer_gets_no_push_hint(tmp_path):
-    buffer = BufferedRemoteStorage(FakeRemote(str(tmp_path / "remote")))
+    buffer = BufferedRemoteStorage(FakeRemote(str(tmp_path / "remote")), str(tmp_path / "buffers"))
 
     assert not_uploaded_warning(V, OSError("bucket down"), buffer) == (
         f"Experiment {V}: the final run state was not uploaded: bucket down")

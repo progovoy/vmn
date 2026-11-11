@@ -127,7 +127,7 @@ def test_buffered_delegates_to_remote_index_cache_path(monkeypatch, tmp_path):
         from vmn_exp.storage.s3 import S3SnapshotStorage
 
         remote = S3SnapshotStorage("test-bucket", prefix="exps")
-        buf = BufferedRemoteStorage(remote)
+        buf = BufferedRemoteStorage(remote, str(tmp_path / "buffers"))
 
         s3_path = remote.index_cache_path("myapp")
         buf_path = buf.index_cache_path("myapp")

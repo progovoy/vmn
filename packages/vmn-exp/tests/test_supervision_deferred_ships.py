@@ -59,7 +59,7 @@ class _Sync:
 
 
 def _supervision(bucket):
-    pod = BufferedRemoteStorage(bucket, area="runs")
+    pod = BufferedRemoteStorage(bucket, bucket.root + "-buffers", area="runs")
     args = argparse.Namespace(capture_output=False, kill_grace_sec=1)
     sup = _Supervision(pod, APP, V, args, wait=FakeWait())
     sup.sync = _Sync(pod, bucket)

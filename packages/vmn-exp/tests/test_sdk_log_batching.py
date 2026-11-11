@@ -300,7 +300,7 @@ def hung_bucket(tmp_path, monkeypatch):
     hold = threading.Event()
     bucket = FakeBucket(str(tmp_path / "bucket"), hold=hold)
     bucket.save(APP, VERSTR, {"verstr": VERSTR, "timestamp": "2026-01-01T00:00:00Z"}, {})
-    yield BufferedRemoteStorage(bucket, area="runs"), hold
+    yield BufferedRemoteStorage(bucket, str(tmp_path), area="runs"), hold
     hold.set()
     buffered.close_all()
 

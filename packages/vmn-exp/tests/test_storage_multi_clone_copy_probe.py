@@ -47,7 +47,7 @@ class _Probe:
     def __init__(self, tmp_path, rng):
         self.tmp, self.rng = tmp_path, rng
         self.roots, self.live, self.keys, self.values = ["a", "b", "c"], {}, [], []
-        self.buf = BufferedRemoteStorage(s3_storage())
+        self.buf = BufferedRemoteStorage(s3_storage(), str(tmp_path / "buffers"))
 
     def step(self, step):
         op, root = self.rng.random(), self.rng.choice(self.roots)

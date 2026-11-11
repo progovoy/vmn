@@ -139,11 +139,11 @@ def test_a_finalizer_ship_never_rolls_up(host):
     assert not any(is_indexed_file(n) for n, _ in _remote())
 
 
-def test_an_exit_flush_never_rolls_up():
+def test_an_exit_flush_never_rolls_up(tmp_path):
     from vmn_exp.storage import buffered
     from vmn_exp.storage.buffered import BufferedRemoteStorage
 
-    pod = BufferedRemoteStorage(s3_storage(), area="runs", flush_interval_sec=0)
+    pod = BufferedRemoteStorage(s3_storage(), str(tmp_path), area="runs", flush_interval_sec=0)
     try:
         pod.save(APP, V, meta(V), {})
         for i in range(ROLLUP + LAG):

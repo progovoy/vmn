@@ -3,7 +3,9 @@
 
 A pod with a bucket and no scratch dir used to append each log entry by
 reading the writer's whole log object back and rewriting it: quadratic in the
-log's length. Here appends land in a private temp dir and ship as segments
+log's length. Here appends land in a private buffer dir (one per buffer,
+under the per-host ``buffers_dir``, :mod:`~vmn_exp.storage.buffer_owner`
+marks and locks it) and ship as segments
 (the local-first backend's machinery): the first append at once, later ones at
 most every ``flush_interval_sec`` (a sooner sync — the run's heartbeat, its
 finish, process exit — ships them earlier).
@@ -19,18 +21,18 @@ from the remote's size like any local copy's.
 import atexit
 import os
 import shutil
-import tempfile
 import time
 import uuid
+import weakref
 
 from vmn_exp._base import VMN_LOGGER, parse_record_metadata
 from vmn_exp.core.status import run_finished
 from vmn_exp.core.streams import new_owner, owner_of
+from vmn_exp.storage import buffer_owner
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.buffer_state import unpublished_final_states
 from vmn_exp.storage.cached import CachedSnapshotStorage
 from vmn_exp.storage.files import METADATA_FILE
-from vmn_exp.storage.local import LocalSnapshotStorage
 
 DEFAULT_FLUSH_INTERVAL_SEC = 5
 
@@ -52,10 +54,6 @@ def close_all():
             storage.close()
 
 
-def _new_buffer_root():
-    return os.path.join(tempfile.gettempdir(), f"vmn-log-buffer-{uuid.uuid4().hex}")
-
-
 atexit.register(close_all)
 
 
@@ -65,9 +63,13 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
     def __init__(
         self,
         remote,
+        buffers_dir,
         area=RUNS,
         flush_interval_sec=DEFAULT_FLUSH_INTERVAL_SEC,
     ):
+        """*buffers_dir*: where this storage's buffer dirs go
+        (:func:`vmn_exp.storage.host_dirs.log_buffers_dir`)."""
+        self._buffers_dir = buffers_dir
         self._flush_interval_sec = flush_interval_sec
         self._start_buffer(remote, area)
 
@@ -77,8 +79,11 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._pid = os.getpid()
         for name in _PROCESS_STATE:
             self.__dict__.pop(name, None)
-        self._buffer_root = _new_buffer_root()
-        super().__init__(LocalSnapshotStorage(self._buffer_root, area), remote)
+        self._buffer_root = os.path.join(
+            self._buffers_dir, f"vmn-log-buffer-{uuid.uuid4().hex}")
+        local = buffer_owner.BufferDir(self._buffer_root, area, remote)
+        weakref.finalize(self, local.release).atexit = False  # collected: no owner
+        super().__init__(local, remote)
         self._owner = new_owner()
         self._flushed_at = {}
         self._unshipped = set()  # (app, verstr, writer) with lines not yet shipped
@@ -109,7 +114,8 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         self._start_buffer(self._remote, self.__dict__["_local"].area)
 
     def _open_area(self, name):
-        return BufferedRemoteStorage(self._remote.in_area(name), name, self._flush_interval_sec)
+        return BufferedRemoteStorage(
+            self._remote.in_area(name), self._buffers_dir, name, self._flush_interval_sec)
 
     def load_record(self, app_name, verstr):
         return self._remote.load_record(app_name, verstr)
@@ -266,19 +272,23 @@ class BufferedRemoteStorage(CachedSnapshotStorage):
         """Drop the buffer dir: a later append starts a fresh buffer, under a
         new owner. Idempotent: ``rmtree`` on an already-gone directory is a
         safe no-op, so a later call (``close()``, or another writer's sync)
-        costs nothing."""
+        costs nothing. The owner lock goes first: an fd left open on a
+        network filesystem would leave an ``.nfsXXXX`` file behind."""
+        self._local.release()
         shutil.rmtree(self._buffer_root, ignore_errors=True)
         self._owner = new_owner()
 
     def _keep_buffer(self, unpublished):
         """Leave the buffer dir on disk, the only copy of what did not ship
         (and of the final states of *unpublished*), and move on to a fresh
-        buffer: a later append never touches it."""
+        buffer: a later append never touches it. Its owner lock is released:
+        no live process owns it any more."""
         states = f", with the final state of {', '.join(unpublished)}" if unpublished else ""
         VMN_LOGGER.warning(
-            f"What did not ship is kept in {self._buffer_root}{states}: nothing ships "
-            "it later (`vmn-exp push` does not read a buffer), recover it by hand"
+            f"What did not ship is kept in the log buffer {self._buffer_root}{states}; "
+            "nothing ships it automatically (`vmn-exp push` does not read a buffer)"
         )
+        self._local.release()
         self._start_buffer(self._remote, self._local.area)
 
     def close(self):

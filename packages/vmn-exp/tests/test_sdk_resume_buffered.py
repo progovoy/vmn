@@ -47,7 +47,7 @@ def _git_free(tmp_path, monkeypatch):
 
 
 def _pod(remote):
-    return BufferedRemoteStorage(remote, area="runs")
+    return BufferedRemoteStorage(remote, remote.root + "-buffers", area="runs")
 
 
 def _released_run(remote):

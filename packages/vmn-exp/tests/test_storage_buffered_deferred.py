@@ -31,8 +31,8 @@ def bucket(tmp_path):
 
 
 @pytest.fixture
-def pod(bucket):
-    return BufferedRemoteStorage(bucket, area="runs")
+def pod(bucket, tmp_path):
+    return BufferedRemoteStorage(bucket, str(tmp_path / "buffers"), area="runs")
 
 
 class _Requests:

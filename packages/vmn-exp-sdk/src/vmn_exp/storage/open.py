@@ -20,7 +20,8 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
     *root* (laid out ``<root>/<area>/...``).
 
     ``buffer_logs``: without a local root, still buffer logs locally (a
-    private temp dir) and ship them as segments — for writers; a pure-remote
+    private dir under :func:`~vmn_exp.storage.host_dirs.log_buffers_dir`)
+    and ship them as segments — for writers; a pure-remote
     reader has no use for it.
 
     A *writer* checks each root's ``store.yml`` now (store_marker), creating
@@ -48,6 +49,7 @@ def open_storage(store=None, root=None, area=SNAPSHOTS, buffer_logs=False, write
         )
     if buffer_logs:
         from vmn_exp.storage.buffered import BufferedRemoteStorage
+        from vmn_exp.storage.host_dirs import log_buffers_dir
 
-        return BufferedRemoteStorage(remote, area=area)
+        return BufferedRemoteStorage(remote, log_buffers_dir(remote.cache_identity()), area=area)
     return remote

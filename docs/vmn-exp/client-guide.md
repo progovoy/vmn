@@ -236,12 +236,22 @@ containers:
       - {name: VMN_EXPERIMENT_ID, value: "<outer verstr>"}
       - {name: VMN_EXPERIMENT_STORE, value: "file:///mnt/fsx"}   # a shared volume, mounted below
       # - {name: VMN_EXPERIMENT_STORE, value: "s3://team-experiments/ml"}  # or a bucket + AWS creds
+      - {name: VMN_EXP_CACHE_DIR, value: /var/vmn-exp}               # log buffers, on a volume
     volumeMounts:
       - {name: shared, mountPath: /mnt/fsx}
+      - {name: vmn-state, mountPath: /var/vmn-exp}
 volumes:
   - name: shared
     persistentVolumeClaim: {claimName: fsx-experiments}
+  - name: vmn-state
+    persistentVolumeClaim: {claimName: vmn-exp-state}   # ReadWriteOnce, or a hostPath
 ```
+
+With a bucket store a pod appends its logs to a local buffer under
+`VMN_EXP_CACHE_DIR` and ships it to the bucket. Put that dir on a volume that
+outlives the pod (a ReadWriteOnce PersistentVolumeClaim or a hostPath, not an
+`emptyDir`): a buffer kept after a store outage or a kill is then still on
+disk for another pod to ship.
 
 `--from-snapshot <path>` is the flag form of `VMN_SNAPSHOT_METADATA`. A job
 that only needs the SDK can skip `vmn-exp run` and call `start_run()` with the
