@@ -179,3 +179,46 @@ def test_ui_starts_read_write_when_safely_configured(tmp_path, monkeypatch, capf
     assert len(calls) == 1
     captured = capfd.readouterr()
     assert "[ERROR]" not in captured.err
+
+
+def test_bind_refusal_none_for_oidc_without_token():
+    from vmn_exp.ui.cli import bind_refusal
+
+    assert bind_refusal("0.0.0.0", has_token=False, has_oidc=True, read_only=False) is None
+
+
+def test_bind_refused_with_control_plane_only():
+    """A control plane alone mints no credential: API tokens need a first admin."""
+    from vmn_exp.ui.cli import bind_refusal
+
+    level, message = bind_refusal("0.0.0.0", has_token=False, has_oidc=False,
+                                  read_only=False)
+    assert level == "error"
+    assert "auth.oidc" in message
+
+
+def test_bind_refused_without_any_auth():
+    from vmn_exp.ui.cli import bind_refusal
+
+    level, message = bind_refusal("10.0.0.5", has_token=False, has_oidc=False,
+                                  read_only=False)
+    assert level == "error"
+    for way_out in ("--token", "auth.oidc", "--read-only"):
+        assert way_out in message
+
+
+def test_read_only_bind_without_auth_warns():
+    from vmn_exp.ui.cli import bind_refusal
+
+    level, message = bind_refusal("0.0.0.0", has_token=False, has_oidc=False,
+                                  read_only=True)
+    assert level == "warning"
+    assert "--read-only" in message
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+def test_loopback_never_refused(host):
+    from vmn_exp.ui.cli import bind_refusal
+
+    assert bind_refusal(host, has_token=False, has_oidc=False, read_only=False) is None
+    assert bind_refusal(host, has_token=False, has_oidc=False, read_only=True) is None

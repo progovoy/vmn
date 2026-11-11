@@ -91,6 +91,7 @@ vmn-exp ui --host 0.0.0.0 --token "$VMN_UI_TOKEN" --data-dir /srv/vmn-ui
 - **Auth**: one shared bearer token; every `/api` request sends
   `Authorization: Bearer <token>`. Binding beyond loopback without a token
   refuses to start (the Host allowlist below is not authentication) unless
+  `auth.oidc` is configured (see [server.md](server.md#authentication)) or
   `--read-only` is given, which still serves reads to anyone who can reach
   the port.
 - **TLS and users**: put a reverse proxy (nginx, Caddy) in front; vmn does not

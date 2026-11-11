@@ -109,8 +109,14 @@ with the server's own read access. The bucket then needs CORS for the
 dashboard's origin (see [byo-bucket.md](byo-bucket.md#cors-for-redirect-downloads)).
 `stream` (the default) passes the bytes through the server.
 
-The server refuses to bind beyond localhost without a token unless
-`--read-only` is given. This is the same rule as standalone mode.
+The server refuses to bind beyond localhost without authentication: a static
+token or `auth.oidc`. `--read-only` lets it start without either, with a
+warning, since reads are then open to anyone who can reach the port. A control
+plane alone does not count: API tokens cannot be minted without a first admin.
+
+The static token acts as `admin` in every workspace, so it is optional once
+`auth.oidc` is configured. An OIDC-only server needs at least one
+`role_mappings` entry granting `admin` on `"*"`, or nobody can administer it.
 
 ## The cache
 

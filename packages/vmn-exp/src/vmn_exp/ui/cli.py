@@ -233,6 +233,29 @@ def _server_log_level(debug):
         logging.getLogger().setLevel(logging.INFO)
 
 
+def bind_refusal(host, has_token, has_oidc, read_only):
+    """``("error"|"warning", message)`` for binding *host* with this auth, or None.
+
+    Beyond localhost a request must be authenticated: a static token or
+    auth.oidc. A control plane alone does not count, since API tokens cannot
+    be minted without a first admin.
+    """
+    if host in LOOPBACK_HOSTS or has_token or has_oidc:
+        return None
+    if read_only:
+        return ("warning",
+                "Binding beyond localhost without --token or auth.oidc: --read-only "
+                "keeps mutations blocked, but the Host-header allowlist is not "
+                "authentication for reads.")
+    return ("error",
+            f"Refusing to bind {host} beyond localhost without authentication: "
+            "the Host-header allowlist is not authentication, so any host that "
+            "can reach this port could forge it and get full read-write access. "
+            "Pass --token (or set VMN_UI_TOKEN), configure auth.oidc in the "
+            "server config, pass --read-only to serve reads only, or bind --host "
+            "to 127.0.0.1/localhost.")
+
+
 def handle_ui(args):
     if getattr(args, "ui_args", None):
         if args.ui_args[0] == "onboarding":
@@ -282,20 +305,15 @@ def handle_ui(args):
     host = cfg.server.host if cfg else args.host
     port = cfg.server.port if cfg else args.port
     token = cfg.token() if cfg else args.token or os.environ.get("VMN_UI_TOKEN")
-    if host not in LOOPBACK_HOSTS and not token and not args.read_only:
-        VMN_LOGGER.error(
-            f"Refusing to bind {host} beyond localhost without --token: "
-            "the Host-header allowlist is not authentication, so any host that "
-            "can reach this port could forge it and get full read-write access. "
-            "Pass --token (or set VMN_UI_TOKEN), pass --read-only to serve reads "
-            "only, or bind --host to 127.0.0.1/localhost."
-        )
-        return 1
-    if host not in LOOPBACK_HOSTS and not token:
-        VMN_LOGGER.warning(
-            "Binding beyond localhost without --token — --read-only keeps mutations "
-            "blocked, but the Host-header allowlist is not authentication for reads."
-        )
+    refusal = bind_refusal(host, has_token=bool(token),
+                           has_oidc=cfg is not None and cfg.auth.oidc is not None,
+                           read_only=args.read_only)
+    if refusal:
+        level, message = refusal
+        if level == "error":
+            VMN_LOGGER.error(message)
+            return 1
+        VMN_LOGGER.warning(message)
 
     try:
         app = server_app(manager, cfg, control_plane, args, token=token,
