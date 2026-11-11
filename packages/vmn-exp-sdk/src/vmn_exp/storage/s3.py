@@ -168,7 +168,14 @@ class S3SnapshotStorage(
     def artifact_local_path(self, app_name, verstr, name):
         if not valid_artifact_path(name):
             return None
-        key = f"{self._record_prefix(app_name, verstr)}/{name}"
+        return self._cached_download(f"{self._record_prefix(app_name, verstr)}/{name}", name)
+
+    def object_local_path(self, key):
+        """A local copy of object *key* of this bucket (any key, not only a
+        record's file), or None when it is missing."""
+        return self._cached_download(key, os.path.basename(key))
+
+    def _cached_download(self, key, name):
         try:
             size = self._s3.head_object(Bucket=self.bucket, Key=key)["ContentLength"]
         except Exception:

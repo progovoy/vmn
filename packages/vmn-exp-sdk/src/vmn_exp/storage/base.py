@@ -257,6 +257,11 @@ class SnapshotStorage(ABC):
         path = artifact_file_path(record_dir, name) if record_dir else None
         return path if path and os.path.isfile(path) else None
 
+    def object_local_path(self, key):
+        """A local copy of object *key* of the backend's bucket, or None when
+        it is missing (``download_model`` of an absolute ``artifact_path``)."""
+        raise NotImplementedError(f"{type(self).__name__} cannot fetch an object by its key")
+
     def log_sizes(self, app_name, verstr):
         """``{stream: bytes}`` of the record's logs.
 

@@ -23,11 +23,12 @@ import shutil
 
 from vmn_exp.registry.log import remove_alias as _log_remove_alias
 from vmn_exp.registry.log import set_alias as _log_set_alias
-from vmn_exp.registry.names import valid_model_name
+from vmn_exp.registry.names import absolute_artifact_path, valid_model_name
 from vmn_exp.registry.store import ensure_model
 from vmn_exp.registry.store import list_models as _list_models
 from vmn_exp.registry.store import register_version
 from vmn_exp.registry.view import resolve_ref
+from vmn_exp.storage.registry import location_local_path
 
 
 def check_model_name(name):
@@ -217,10 +218,10 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
             f"Model version for {ref!r} has no artifact_path — nothing to download."
         )
 
-    app = run_ref["app"]
-    verstr = run_ref["verstr"]
-
-    local = _fetch_artifact(storage, app, verstr, artifact_path)
+    if absolute_artifact_path(artifact_path):
+        local = _fetch_location(artifact_path)
+    else:
+        local = _fetch_artifact(storage, run_ref["app"], run_ref["verstr"], artifact_path)
     if record:
         from vmn_exp.sdk.usage import record_current_use
 
@@ -233,6 +234,15 @@ def download_model(ref, dst=None, *, storage=None, record=True) -> str:
         return dst_path
 
     return local
+
+
+def _fetch_location(uri) -> str:
+    """A local path for the artifact at absolute *uri* (a path, ``file://``,
+    ``s3://``, ``gs://``, ``az://`` or a plugin scheme)."""
+    path = location_local_path(uri)
+    if path is None:
+        raise FileNotFoundError(f"Artifact {uri!r} not found.")
+    return path
 
 
 def _fetch_artifact(storage, app, verstr, artifact_path) -> str:

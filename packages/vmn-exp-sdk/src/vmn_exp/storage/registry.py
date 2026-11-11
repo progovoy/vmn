@@ -12,11 +12,12 @@ A factory is called as ``factory(uri, area=...)`` with the parsed
 (:mod:`vmn_exp.storage.areas`), and returns a :class:`~vmn_exp.storage.base.SnapshotStorage`. See
 docs/vmn-exp/experiments.md ("Storage backends") for the contract it must meet.
 """
+import os
 from importlib import import_module
 from importlib.metadata import entry_points
 
 from vmn_exp.storage.areas import RUNS, area_prefix
-from vmn_exp.storage.uri import parse_store_uri
+from vmn_exp.storage.uri import StoreURI, parse_store_uri
 
 ENTRY_POINT_GROUP = "vmn_exp.storage"
 
@@ -66,6 +67,18 @@ def open_store(uri, area=RUNS):
     """The backend storage *uri* names (a string or a parsed ``StoreURI``)."""
     parsed = parse_store_uri(uri) if isinstance(uri, str) else uri
     return _factory(parsed.scheme)(parsed, area=area)
+
+
+def location_local_path(uri):
+    """A local path to the object at absolute *uri*, or None when it is
+    missing: a file (a path or ``file://``) is its own path; an object of
+    another scheme is downloaded through that scheme's backend, which says
+    which extra to install when its package is missing."""
+    parsed = parse_store_uri(uri)
+    if parsed.scheme == "file":
+        return parsed.path if os.path.isfile(parsed.path) else None
+    bucket = StoreURI(parsed.scheme, parsed.location, "", parsed.options)
+    return open_store(bucket).object_local_path(parsed.path)
 
 
 def _factory(scheme):
