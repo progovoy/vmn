@@ -194,9 +194,8 @@ KNOWN_IO = {
     'vmn_exp.ui.diag.routes': {'thread': 1},
     'vmn_exp.ui.diag.stacks': {'fs': 2, 'process_self': 1},
     'vmn_exp.ui.diag_cli': {'console': 4, 'env': 1, 'fs': 13, 'net': 1, 'process_self': 2, 'time': 6},
-    'vmn_exp.ui.git_context': {'subprocess': 1},
     'vmn_exp.ui.index': {'fs': 2},
-    'vmn_exp.ui.jobs': {'fs': 1, 'random': 3, 'subprocess': 1, 'thread': 1},
+    'vmn_exp.ui.jobs': {'thread': 1},
     'vmn_exp.ui.latest_worker': {'thread': 1},
     'vmn_exp.ui.leaderboard_cache': {'random': 1},
     'vmn_exp.ui.memo': {'time': 1},
@@ -225,6 +224,5 @@ KNOWN_IO = {
     'vmn_exp.ui.storage_access': {'random': 1},
     'vmn_exp.ui.store_upkeep': {'thread': 1},
     'vmn_exp.ui.tenancy': {'random': 1},
-    'vmn_exp.ui.tree_cache': {'subprocess': 1},
     'vmn_exp.ui.workspaces': {'fs': 10},
 }

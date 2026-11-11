@@ -75,7 +75,7 @@ def test_detail_uses_the_snapshot_store_time_with_a_refresher():
     from vmn_exp.ui.refresher import Refresher
 
     source = ExperimentSource("/nonexistent", refresher=Refresher(clock=time.monotonic),
-                              clock=real_io().clock)
+                              clock=real_io().clock, processes=real_io().processes)
     options = source.detail_options(None, snap)
     assert options["read_observed_at"](None, "app", "v") is observed
 

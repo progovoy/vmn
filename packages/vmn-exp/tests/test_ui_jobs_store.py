@@ -18,9 +18,9 @@ from vmn_exp.cli.model_parser import add_model_parser
 from vmn_exp.registry.log import read_entries
 from vmn_exp.storage.areas import RUNS
 from vmn_exp.storage.open import open_storage
-from vmn_exp.ui.jobs import MAX_ARCHIVE_BATCH, JobRunner
+from vmn_exp.ui.jobs import MAX_ARCHIVE_BATCH, JobRunner, start_daemon
 from vmn_exp.ui.jobs_store import STORE_ACTIONS, build_store_action
-from vmn_exp.core.real_io import real_io
+from vmn_exp.core.real_io import RealProcesses, RealRandom, real_io
 
 APP = "my_app"
 V = "0.0.1-dev.abc.def"
@@ -154,7 +154,7 @@ def test_bad_bodies_are_rejected(action, body):
 def test_failed_action_marks_the_job_failed(tmp_path):
     _, storage = _store(tmp_path, "job")
     job, _ = build_store_action("exp_tag", APP, {"verstr": "0.0.9-dev.x.y", "set": {"k": "v"}})
-    runner = JobRunner()
+    runner = JobRunner(processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     submitted, err = runner.submit_call("ws", job.command, lambda: job.run(storage, lambda *_: None))
     assert err is None
     done = _wait(runner, submitted["id"])
@@ -172,7 +172,7 @@ def _held_call(gate, entered=None):
 
 
 def test_an_in_process_job_past_the_timeout_reads_failed():
-    gate, runner = threading.Event(), JobRunner(timeout_sec=0)
+    gate, runner = threading.Event(), JobRunner(timeout_sec=0, processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     try:
         submitted, err = runner.submit_call("ws", ["note"], _held_call(gate))
         assert err is None
@@ -185,7 +185,7 @@ def test_an_in_process_job_past_the_timeout_reads_failed():
 
 
 def test_the_workspace_slot_stays_taken_until_the_call_returns():
-    gate, runner = threading.Event(), JobRunner(timeout_sec=0)
+    gate, runner = threading.Event(), JobRunner(timeout_sec=0, processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     submitted, _ = runner.submit_call("ws", ["note"], _held_call(gate))
     _wait(runner, submitted["id"])
     assert runner.submit_call("ws", ["note"], lambda: "ok")[1] is not None
@@ -195,7 +195,7 @@ def test_the_workspace_slot_stays_taken_until_the_call_returns():
 
 
 def test_a_submit_behind_a_timed_out_call_says_the_store_is_slow():
-    gate, runner = threading.Event(), JobRunner(timeout_sec=0)
+    gate, runner = threading.Event(), JobRunner(timeout_sec=0, processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     try:
         submitted, _ = runner.submit_call("ws", ["note"], _held_call(gate))
         _wait(runner, submitted["id"])
@@ -206,7 +206,7 @@ def test_a_submit_behind_a_timed_out_call_says_the_store_is_slow():
 
 
 def test_a_bulk_job_bounds_each_batch_and_stops_after_a_timed_out_one():
-    gate, entered, runner, acted = threading.Event(), threading.Event(), JobRunner(timeout_sec=0), []
+    gate, entered, runner, acted = threading.Event(), threading.Event(), JobRunner(timeout_sec=0, processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon), []
 
     def act(batch):
         acted.append(batch[0])
@@ -226,7 +226,8 @@ def test_a_bulk_job_bounds_each_batch_and_stops_after_a_timed_out_one():
 def test_a_bulk_job_of_many_quick_batches_is_not_timed_out_as_a_whole():
     # Run inline: every batch has returned before its bound is checked, so
     # only a bound on the whole job (0 s, long passed) could fail it.
-    runner = JobRunner(timeout_sec=0, start_thread=lambda target, *args: target(*args))
+    runner = JobRunner(timeout_sec=0, processes=RealProcesses(), random=RealRandom(),
+                       start_thread=lambda target, *args: target(*args))
     verstrs = [f"v{i}" for i in range(3 * MAX_ARCHIVE_BATCH)]
     submitted, _ = runner.submit_bulk("ws", ["exp_archive", APP], lambda: verstrs, lambda b: "ok")
     done = runner.get(submitted["id"])

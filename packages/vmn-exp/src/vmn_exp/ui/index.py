@@ -91,8 +91,9 @@ class WorkspaceIndex:
     indexes and the versions cache live in this object's memory only.
     """
 
-    def __init__(self, root_path, db_dir=None):
+    def __init__(self, root_path, db_dir=None, *, processes):
         self.root_path = root_path
+        self._processes = processes  # lists the app's tags (the versions cache key)
         self._db_path = None
         if db_dir is not None:
             os.makedirs(db_dir, exist_ok=True)
@@ -140,7 +141,7 @@ class WorkspaceIndex:
             return self._in_memory[app_name]
 
     def list_versions(self, app_name):
-        fp = versions_fingerprint(self.root_path, app_name)
+        fp = versions_fingerprint(self.root_path, app_name, self._processes)
         with self._lock:
             rows = self._cache.kv_get(f"ver:{app_name}", fp)
         if rows is None:

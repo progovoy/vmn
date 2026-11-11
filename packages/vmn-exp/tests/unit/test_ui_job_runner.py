@@ -1,0 +1,79 @@
+"""The UI job runner on injected processes, ids and a thread starter (plan 44
+G5): no real child process, no real thread, no polling."""
+import subprocess
+import sys
+
+from fakes.processes import HANG, FakeProcesses
+from fakes.random import FakeRandom
+from vmn_exp.ui.jobs import JobRunner
+
+STAMP = ["vmn", "stamp", "--release-mode=patch", "app"]
+
+
+def _done(argv, code=0, out="", err=""):
+    return subprocess.CompletedProcess(argv, code, stdout=out, stderr=err)
+
+
+def _inline(target, *args):
+    target(*args)
+
+
+def _runner(script, start_thread=_inline, **kwargs):
+    processes = FakeProcesses(script)
+    runner = JobRunner(processes=processes, random=FakeRandom(), start_thread=start_thread, **kwargs)
+    return runner, processes
+
+
+def test_submit_runs_the_command_and_records_exit_code_and_log():
+    runner, processes = _runner({tuple(STAMP): _done(STAMP, 3, "out\n", "err\n")})
+    submitted, err = runner.submit("ws", "/repo", STAMP)
+    assert err is None
+    job = runner.get(submitted["id"])
+    assert (job["status"], job["exit_code"], job["log"]) == ("failed", 3, "out\nerr\n")
+    assert processes.calls[0][0] == STAMP and processes.calls[0][1]["cwd"] == "/repo"
+
+
+def test_job_ids_come_from_the_given_random():
+    runner, _ = _runner({tuple(STAMP): _done(STAMP)})
+    random = FakeRandom()
+    first, _ = runner.submit("ws", "/repo", STAMP)
+    assert first["id"] == random.hex_id()
+
+
+def test_timeout_fails_the_job_with_exit_code_minus_one_and_frees_the_workspace():
+    runner, processes = _runner({tuple(STAMP): HANG}, timeout_sec=7)
+    submitted, _ = runner.submit("ws", "/repo", STAMP)
+    job = runner.get(submitted["id"])
+    assert (job["status"], job["exit_code"]) == ("failed", -1)
+    assert "timed out after 7s" in job["log"]
+    assert processes.calls[0][1]["timeout"] == 7
+    assert runner.submit("ws", "/repo", STAMP)[1] is None
+
+
+def test_second_submit_in_a_busy_workspace_is_refused():
+    held = []
+    runner, _ = _runner({}, start_thread=lambda target, *args: held.append((target, args)))
+    runner.submit("ws", "/repo", STAMP)
+    assert runner.submit("ws", "/repo", STAMP) == (None, "Another action is already running in this workspace")
+    assert runner.submit("other", "/repo", STAMP)[1] is None
+
+
+def test_missing_console_script_falls_back_to_python_dash_m():
+    fallback = [sys.executable, "-m", "version_stamp.cli"] + STAMP[1:]
+    runner, processes = _runner({tuple(fallback): _done(fallback, 0, "stamped")})
+    submitted, _ = runner.submit("ws", "/repo", STAMP)
+    assert runner.get(submitted["id"])["log"] == "stamped"
+    assert [argv for argv, _ in processes.calls] == [STAMP, fallback]
+
+
+def test_job_stdin_is_closed():
+    runner, processes = _runner({tuple(STAMP): _done(STAMP)})
+    runner.submit("ws", "/repo", STAMP)
+    assert processes.calls[0][1]["stdin"] is subprocess.DEVNULL
+
+
+def test_finished_jobs_beyond_max_jobs_are_evicted_oldest_first():
+    runner, _ = _runner({tuple(STAMP): _done(STAMP)}, max_jobs=2)
+    ids = [runner.submit(f"ws{n}", "/repo", STAMP)[0]["id"] for n in range(3)]
+    assert runner.get(ids[0]) is None
+    assert [runner.get(job_id)["id"] for job_id in ids[1:]] == ids[1:]

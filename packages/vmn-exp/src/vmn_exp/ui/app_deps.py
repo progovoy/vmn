@@ -8,7 +8,7 @@ from typing import Any
 from vmn_exp.core.ports import IO
 from vmn_exp.ui.audit import AuditLog
 from vmn_exp.ui.auth.tokens import TokenService
-from vmn_exp.ui.jobs import JobRunner
+from vmn_exp.ui.jobs import JobRunner, start_daemon
 from vmn_exp.ui.refresher import InlineRefresher, Refresher
 from vmn_exp.ui.store_upkeep import StoreUpkeep
 
@@ -45,7 +45,7 @@ def real_deps(io, control_plane, background_refresh, read_only, keep_warm):
                  if background_refresh else InlineRefresher())
     return ServerDeps(
         io=io,
-        jobs=JobRunner(),
+        jobs=JobRunner(processes=io.processes, random=io.random, start_thread=start_daemon),
         refresher=refresher,
         upkeep=(StoreUpkeep(clock=io.clock.monotonic)
                 if background_refresh and not read_only else None),

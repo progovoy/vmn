@@ -117,7 +117,8 @@ def _index(app_layout):
     from vmn_exp.ui.index import WorkspaceIndex
 
     return WorkspaceIndex(
-        app_layout.repo_path, db_dir=os.path.join(app_layout.base_dir, "ui_index")
+        app_layout.repo_path, db_dir=os.path.join(app_layout.base_dir, "ui_index"),
+        processes=real_io().processes,
     )
 
 

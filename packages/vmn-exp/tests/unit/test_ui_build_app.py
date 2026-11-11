@@ -49,7 +49,7 @@ def _deps(**changes):
 
 class RecordingRunner(JobRunner):
     def __init__(self):
-        super().__init__()
+        super().__init__(processes=FakeProcesses(), random=FakeRandom(), start_thread=None)
         self.submitted = []
 
     def submit_call(self, ws, command, call):

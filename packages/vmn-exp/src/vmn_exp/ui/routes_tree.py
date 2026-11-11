@@ -9,7 +9,7 @@ from vmn_exp.ui.auth.authz import require
 from vmn_exp.ui.auth.principal import VIEWER
 from vmn_exp.ui.readers import tree as tree_reader
 from vmn_exp.ui.responses import SafeJSONResponse
-from vmn_exp.ui.tree_cache import TREES
+from vmn_exp.ui.tree_cache import TREES, versions_fingerprint
 
 
 def _not_a_repo_response(path):
@@ -20,9 +20,14 @@ def _not_a_repo_response(path):
     )
 
 
-def register(app, prefix, checkout_for, optional_segment):
-    """Add the routes; *checkout_for(ws_name, app_tag)* → ``(root_path, app_name)``."""
+def register(app, prefix, checkout_for, optional_segment, processes):
+    """Add the routes; *checkout_for(ws_name, app_tag)* → ``(root_path, app_name)``;
+    *processes* lists the app's tags."""
     base = f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}"
+
+    def cached(root, app_name, kind, compute, *args):
+        fingerprint = versions_fingerprint(root, app_name, processes)
+        return TREES.get(fingerprint, root, app_name, kind, compute, *args)
 
     @app.exception_handler(git.InvalidGitRepositoryError)
     @app.exception_handler(git.NoSuchPathError)
@@ -33,12 +38,12 @@ def register(app, prefix, checkout_for, optional_segment):
     @app.get(f"{base}/tree", dependencies=[require(VIEWER)])
     def version_tree(ws_name: str, app_tag: str):
         root, app_name = checkout_for(ws_name, app_tag)
-        return TREES.get(root, app_name, "dag", lambda: tree_reader.version_dag(root, app_name))
+        return cached(root, app_name, "dag", lambda: tree_reader.version_dag(root, app_name))
 
     @app.get(f"{base}/tree/root", dependencies=[require(VIEWER)])
     def root_tree(ws_name: str, app_tag: str):
         root, app_name = checkout_for(ws_name, app_tag)
-        return TREES.get(
+        return cached(
             root, app_name, "root", lambda: tree_reader.root_topology(root, app_name)
         )
 
@@ -46,7 +51,7 @@ def register(app, prefix, checkout_for, optional_segment):
     def dep_graph(ws_name: str, app_tag: str, v: str = None, to: str = None):
         root, app_name = checkout_for(ws_name, app_tag)
         verstr, to_verstr = optional_segment(v), optional_segment(to)
-        graph, err = TREES.get(
+        graph, err = cached(
             root,
             app_name,
             "deps",

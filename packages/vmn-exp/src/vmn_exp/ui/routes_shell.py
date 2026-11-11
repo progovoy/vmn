@@ -37,7 +37,8 @@ STATUS_BODIES = 256
 
 
 def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards,
-             freshness_of, attention_of=None, schema_of=None, views_of=None, ui_of=None):
+             freshness_of, attention_of=None, schema_of=None, views_of=None, ui_of=None, *,
+             processes):
     """Add the routes; *git_workspace(ws_name)* raises the route's 400/404,
     *status_snapshot(ws_name, app_tag)* -> the app's snapshot (raising its
     404 when there is no such app), *app_tags(ws_name)* -> the workspace's
@@ -46,7 +47,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     *attention_of(ws_name, app_tag)* -> its attention entries,
     *schema_of(ws_name, app_tag, snapshot)* -> the board's metrics schema,
     *views_of(ws_name, app_tag)* -> its team views, *ui_of(ws_name,
-    app_tag)* -> its ``experiment.ui``. Returns
+    app_tag)* -> its ``experiment.ui``; *processes* runs ``git status``. Returns
     ``forget(ws_name)``, which drops a removed workspace's git context."""
     contexts = TTLCache(GIT_TTL_SEC)
     summaries = LRU(STATUS_BODIES)
@@ -88,7 +89,7 @@ def register(app, prefix, git_workspace, status_snapshot, app_tags, leaderboards
     @app.get(f"{prefix}/workspaces/{{ws_name}}/git", dependencies=[require(VIEWER)])
     def workspace_git(ws_name: str):  # sync: git runs in the threadpool
         path = git_workspace(ws_name).path
-        return contexts.get(ws_name, lambda: git_context(path))
+        return contexts.get(ws_name, lambda: git_context(path, processes))
 
     @app.get(
         f"{prefix}/workspaces/{{ws_name}}/apps/{{app_tag}}/experiments-status",

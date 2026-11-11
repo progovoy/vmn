@@ -206,7 +206,7 @@ def build_app(
     upkeep = app.state.store_upkeep = deps.upkeep
     source = ExperimentSource(manager.data_dir, use_index=use_index, refresher=refresher,
                               cache_dsn=cache_dsn, search_rows=search_rows,
-                              store_upkeep=upkeep, clock=deps.io.clock)
+                              store_upkeep=upkeep, clock=deps.io.clock, processes=deps.io.processes)
     def _board_conf(snapshot):
         """``(metrics schema, experiment.ui)`` of *snapshot*'s app, as a request reads them."""
         owner = source.owner_of(snapshot)
@@ -799,10 +799,10 @@ def build_app(
 
     forget_git = routes_shell.register(
         app, API_PREFIX, _git_workspace, _status_snapshot, _app_tags, leaderboards, _freshness,
-        _attention_entries, _status_schema, _views, _experiment_ui)
+        _attention_entries, _status_schema, _views, _experiment_ui, processes=deps.io.processes)
     routes_run_search.register(app, API_PREFIX, _status_snapshot, leaderboards)
     routes_media.register(app, API_PREFIX, _series_storage, _segment)
-    routes_tree.register(app, API_PREFIX, _checkout, _optional_segment)
+    routes_tree.register(app, API_PREFIX, _checkout, _optional_segment, deps.io.processes)
     listings = RegistryListings(deps.io.clock.monotonic)  # one listing per refresh for both
     registries, model_lists = (RegistrySnapshots(refresher.background, read, listings,
                                                  clock=deps.io.clock.monotonic)

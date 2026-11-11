@@ -7,11 +7,9 @@ captured per job without touching vmn's process-global logger. At most one
 mutation runs per workspace at a time; a crashing job can't take the server
 down.
 """
-import shutil
 import subprocess
 import sys
 import threading
-import uuid
 from collections import OrderedDict
 
 from vmn_exp.ui.job_argv import ACTIONS, opt, positional, switch
@@ -54,7 +52,8 @@ def _tail(text):
     )
 
 
-def _start_daemon(target, *args):
+def start_daemon(target, *args):
+    """The real thread starter :class:`JobRunner` takes: a daemon thread."""
     threading.Thread(target=target, args=args, daemon=True).start()
 
 
@@ -173,7 +172,7 @@ class JobRunner:
     """
 
     def __init__(self, timeout_sec=DEFAULT_JOB_TIMEOUT_SEC, max_jobs=MAX_JOBS, *,
-                 start_thread=_start_daemon):
+                 processes, random, start_thread):
         self._jobs = OrderedDict()
         self._lock = threading.Lock()
         self._active_workspaces = set()
@@ -181,7 +180,7 @@ class JobRunner:
         self._waiting_workspaces = set()
         self._timeout_sec = timeout_sec
         self._max_jobs = max_jobs
-        self._start_thread = start_thread
+        self._processes, self._random, self._start_thread = processes, random, start_thread
 
     def get(self, job_id):
         with self._lock:
@@ -205,19 +204,19 @@ class JobRunner:
 
     def submit(self, workspace_name, cwd, command):
         """Start a job. Returns (job_dict, error_message_or_None)."""
-        return self._start(workspace_name, Job(uuid.uuid4().hex, command, cwd), self._run)
+        return self._start(workspace_name, Job(self._random.hex_id(), command, cwd), self._run)
 
     def submit_call(self, workspace_name, command, call):
         """Start an in-process job: *call()* returns its log text; raising
         fails the job with the exception's message as its log."""
-        job = Job(uuid.uuid4().hex, command, None)
+        job = Job(self._random.hex_id(), command, None)
         return self._start(workspace_name, job, lambda ws, j: self._call(ws, j, self._bounded(call)))
 
     def submit_bulk(self, workspace_name, command, resolve, act):
         """Start a bulk job (plan 23 S4): *resolve()* names its runs when it
         starts, *act(batch)* acts on each :data:`MAX_ARCHIVE_BATCH` of them
         (returning log text, raising to fail); ``progress`` counts them."""
-        job = Job(uuid.uuid4().hex, command, None)
+        job = Job(self._random.hex_id(), command, None)
         job.progress = {"done": 0, "total": None}
 
         def call():
@@ -236,21 +235,19 @@ class JobRunner:
         """Run *command* as a job does; ``(exit_code, output)``, raising
         :class:`subprocess.TimeoutExpired` past the job timeout."""
         # Prefer the real console script (faithful to the CLI equivalent
-        # shown to the user); fall back to the current interpreter otherwise.
-        if shutil.which(command[0]):
-            argv = command
-        else:
-            argv = [sys.executable, "-m", _CLI_MODULES[command[0]]] + command[1:]
-        proc = subprocess.run(
-            argv,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            # The server's stdin is not the job's: a prompt must fail, not hang.
-            stdin=subprocess.DEVNULL,
-            timeout=self._timeout_sec,
-        )
+        # shown to the user); fall back to the current interpreter without it.
+        proc = self._run_argv(command, cwd)
+        if proc is None:
+            proc = self._run_argv([sys.executable, "-m", _CLI_MODULES[command[0]]] + command[1:], cwd)
         return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+
+    def _run_argv(self, argv, cwd):
+        """*argv*'s finished process, or None when its binary is missing."""
+        return self._processes.run(
+            argv, cwd=cwd, capture_output=True, text=True,
+            # The server's stdin is not the job's: a prompt must fail, not hang.
+            stdin=subprocess.DEVNULL, timeout=self._timeout_sec,
+        )
 
     def _start(self, workspace_name, job, target):
         # The org the submitting request is bound to (0 in single tenancy).

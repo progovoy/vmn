@@ -2,7 +2,8 @@
 import sys
 import time
 
-from vmn_exp.ui.jobs import MAX_JOB_LOG_BYTES, JobRunner
+from vmn_exp.ui.jobs import MAX_JOB_LOG_BYTES, JobRunner, start_daemon
+from vmn_exp.core.real_io import RealProcesses, RealRandom
 
 
 def _wait(runner, job_id, timeout=30):
@@ -22,7 +23,7 @@ def _py(code):
 
 
 def test_job_stdin_is_not_inherited():
-    runner = JobRunner()
+    runner = JobRunner(processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     job, err = runner.submit(
         "ws", ".", _py("import sys; print(repr(sys.stdin.read()))")
     )
@@ -33,7 +34,7 @@ def test_job_stdin_is_not_inherited():
 
 
 def test_job_timeout_fails_the_job_and_frees_the_workspace():
-    runner = JobRunner(timeout_sec=0.5)
+    runner = JobRunner(timeout_sec=0.5, processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     job, _ = runner.submit("ws", ".", _py("import time; time.sleep(30)"))
     done = _wait(runner, job["id"], timeout=15)
     assert done["status"] == "failed"
@@ -44,7 +45,7 @@ def test_job_timeout_fails_the_job_and_frees_the_workspace():
 
 
 def test_job_table_keeps_only_recent_finished_jobs():
-    runner = JobRunner(max_jobs=3)
+    runner = JobRunner(max_jobs=3, processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     ids = []
     for i in range(5):
         job, _ = runner.submit(f"ws{i}", ".", _py("print('x')"))
@@ -55,7 +56,7 @@ def test_job_table_keeps_only_recent_finished_jobs():
 
 
 def test_job_log_is_capped_to_its_tail():
-    runner = JobRunner()
+    runner = JobRunner(processes=RealProcesses(), random=RealRandom(), start_thread=start_daemon)
     n = MAX_JOB_LOG_BYTES * 2
     job, _ = runner.submit(
         "ws", ".", _py(f"import sys; sys.stdout.write('a' * {n} + 'END')")

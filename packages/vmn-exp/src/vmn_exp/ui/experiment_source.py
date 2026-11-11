@@ -93,7 +93,7 @@ def _open_journal(ws, storage, cache_path, clock):
 
 class ExperimentSource:
     def __init__(self, data_dir, use_index=True, refresher=None, cache_dsn=None,
-                 search_rows=None, store_upkeep=None, *, clock):
+                 search_rows=None, store_upkeep=None, *, clock, processes):
         self._db_dir = os.path.join(data_dir, "index")
         # --no-index: git workspaces' indexes are kept in memory only.
         self._ws_db_dir = self._db_dir if use_index else None
@@ -108,7 +108,7 @@ class ExperimentSource:
         # Inline refreshes see every write made before the request.
         self._settings = SettingsCache(SETTINGS_RECHECK_SEC if self.refresher.background else 0, clock.monotonic)
         self._lock = threading.Lock()
-        self._search_rows, self._upkeep, self._clock = search_rows, store_upkeep, clock
+        self._search_rows, self._upkeep, self._clock, self._processes = search_rows, store_upkeep, clock, processes
         self._owners = SnapshotOwners()
         self.refresher.add_listener(self._owners.refreshed)
         if store_upkeep is not None:
@@ -128,7 +128,7 @@ class ExperimentSource:
         """The git workspace's read cache (in memory only with ``--no-index``)."""
         with self._lock:
             if ws.name not in self._indexes:
-                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir)
+                self._indexes[ws.name] = ui_index.WorkspaceIndex(ws.path, self._ws_db_dir, processes=self._processes)
             return self._indexes[ws.name]
 
     def snapshot(self, ws, app_name, s3_storage=None, schema=None):
