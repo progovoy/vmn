@@ -65,9 +65,26 @@ def check_reopenable(app_name, verstr, prior_state, reopen, from_env):
     )
 
 
-def locate(app_name, ref, storage, action="resume"):
+_UNKNOWN_ARG_HINT = (
+    "start_run(run_id=...) reopens an existing run; to create a run with this "
+    "exact id call create_run(run_id=...) first, or pass name= for a display name"
+)
+_UNKNOWN_ENV_HINT = f"{RESUME_ENV} names a run that does not exist in this store"
+
+
+def existing_run(storage, app_name, ref, from_env):
+    """The verstr of the run *ref* names; ValueError saying ``run_id=`` (or
+    ``VMN_RESUME_RUN_ID`` when *from_env*) reopens and does not create."""
+    try:
+        return resolve_run(storage, app_name, ref, "resume")
+    except ValueError as exc:
+        hint = _UNKNOWN_ENV_HINT if from_env else _UNKNOWN_ARG_HINT
+        raise ValueError(f"{exc}. {hint}.") from None
+
+
+def locate(app_name, ref, storage, action="resume", from_env=False):
     """``(app_name, storage, verstr, prior_state, exp_conf)``; ValueError if not
-    found."""
+    found (for ``action="resume"``, with the hint of :func:`existing_run`)."""
     meta_path = os.environ.get(SNAPSHOT_METADATA_ENV)
     exp_conf = {}
     if meta_path:
@@ -82,7 +99,10 @@ def locate(app_name, ref, storage, action="resume"):
         if storage is None:
             storage = checkout.build_storage(vcs)
 
-    verstr = resolve_run(storage, app_name, ref, action)
+    if action == "resume":
+        verstr = existing_run(storage, app_name, ref, from_env)
+    else:
+        verstr = resolve_run(storage, app_name, ref, action)
     prior_state = load_run_state(storage, app_name, verstr) or {}
     return app_name, storage, verstr, prior_state, exp_conf
 

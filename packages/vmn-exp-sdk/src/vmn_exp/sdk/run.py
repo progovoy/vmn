@@ -188,6 +188,12 @@ def start_run(
     With ``rewind_to_step=N`` too, the reopened run's history past step N is
     hidden (refused while the run is live elsewhere).
 
+    =========================  ===========================================
+    ``start_run(run_id=X)``    takes the existing run X (ValueError if none)
+    ``create_run(run_id=X)``   registers a new run named exactly X
+    ``name=``                  a display label; never looked up
+    =========================  ===========================================
+
     ``fork_from`` (a run ref, optionally ``"<ref>?_step=N"``) with
     ``fork_step=N`` creates a NEW run that starts with that run's metrics and
     params up to step N (all of them without a step) and continues from N + 1;
@@ -249,7 +255,7 @@ def start_run(
     if ref:
         # Resume: locate the existing run; env stays as originally captured.
         app_name, storage, verstr, prior_state, exp_conf = resume.locate(
-            app_name, ref, storage
+            app_name, ref, storage, from_env=not run_id
         )
         resume.check_reopenable(app_name, verstr, prior_state, reopen, not run_id)
         if rewind_to_step is not None:

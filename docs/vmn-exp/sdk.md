@@ -701,8 +701,15 @@ The run is reopened (same verstr, `running` again with this pid/host) and this
 process appends its own log segment. `started_at` is kept, so `duration_sec`
 spans every attempt; `resume_count` and `resumed_at` record the restarts. A
 `note`/`params` passed on resume is appended. An unknown ref raises
-`ValueError`. `$VMN_RESUME_RUN_ID` is removed from the environment when used, so
+`ValueError` (`run_id=` never creates a run; the error points at `create_run`).
+`$VMN_RESUME_RUN_ID` is removed from the environment when used, so
 neither later runs nor subprocesses resume it again; an explicit `run_id` wins.
+
+| Call | Means |
+|---|---|
+| `start_run(run_id=X)` | reopen the existing run X |
+| `create_run(run_id=X)` | register a new run named exactly X (`RunExistsError` if taken) |
+| `name=` | a display label; never looked up |
 
 Only an unfinished run (created, released, running or stuck) resumes as is. A
 **finished** run — succeeded or failed, including a SIGTERM'd one under the
